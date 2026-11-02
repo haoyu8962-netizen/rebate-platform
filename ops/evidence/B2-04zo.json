@@ -1,0 +1,151 @@
+{
+  "task": "B2-04zo",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "spec_commit": "972341a98ea9593123f12426dd19da674fab1a98",
+  "red_tests": [
+    "test/spec/ledger/asset-snapshot-schedule/advance-alert.int.test.ts > [AC-B2-04zo#13] 合计 > 阈值：按各平台合计判定，告警一次（sum_fen、threshold_fen 为整数分），之后的 tick 不再告警",
+    "test/spec/ledger/asset-snapshot-schedule/advance-alert.int.test.ts > [AC-B2-04zo#14] 等于阈值不告警；未设置不告警；占位值 0 是有效阈值，合计 1 分即告警",
+    "test/spec/ledger/asset-snapshot-schedule/advance-alert.int.test.ts > [AC-B2-04zo#15] 阈值改了下一日立即生效，超过的每一天各告警一次",
+    "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#4] 生产组合根：worker 入口注册定时器并拿到 EVENT_BUS（快照写库、垫资告警落 event_log），不新增队列；API 入口同一个库同一时刻不写",
+    "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#5] 缺 EVENT_BUS：有库有队列时 app.module 给的模块启动即被拒（LedgerError INVALID_INPUT），不写快照",
+    "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#6] 惰性：没有队列或没有数据库时不注册，启动不报错（此时也不要 EVENT_BUS），时间过去也不写、不发",
+    "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#7] 预估走 settlement 的真实来源：waiting / estimated 为人工算出的份额；来源的配置读取落在快照传入的只读事务上，不开第二个连接",
+    "test/spec/ledger/asset-snapshot-schedule/assembly.test.ts > [AC-B2-04zo#1] 装配：worker 入口的 app.module 恰调用一次 LedgerAssetSnapshotModule.forWorker；api、stream、admin、payout 入口一次都不调用",
+    "test/spec/ledger/asset-snapshot-schedule/assembly.test.ts > [AC-B2-04zo#2] 装配（源码）：app.module 调 forWorker 并注入 createPendingEarningsSource；ledger 的调度文件不导入 settlement 或 content；asset-snapshot.ts 的 B2-04zb 调度 TODO 已删",
+    "test/spec/ledger/asset-snapshot-schedule/assembly.test.ts > [AC-B2-04zo#3] 定时常量导出：调度文件导出首次延迟 15 秒与间隔 60 秒",
+    "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#16] 停机两天后恢复：补两天，由旧到新；00:30 后写的 waiting_comparable=false 且 timed_out（状态仍 complete），00:30 内写的 comparable",
+    "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#17] 00:30 的边界：00:29:59 写的 comparable，00:30:00 写的 waiting_comparable=false 且 timed_out",
+    "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#18] 没有历史的 app 不造历史：只写最新到期的 D，之后的 tick 也不往前补",
+    "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#19] 缺口正好 7 天：全部补上，不报错",
+    "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#20] 缺口超过 7 天：只补最新的 7 天，更早的不补，只写一条 error 日志，之后的 tick 不再报也不再补",
+    "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#21] 补写跨月、跨闰日：按日历逐日写，迟到的不可比、最新一天可比",
+    "test/spec/ledger/asset-snapshot-schedule/isolation.int.test.ts > [AC-B2-04zo#22] 跨 App 不串：各 app 的金额、应收、阈值与补写进度各算各的；只有订单没有账本账户的 app 不写",
+    "test/spec/ledger/asset-snapshot-schedule/isolation.int.test.ts > [AC-B2-04zo#23] 一个 app 抛错其余照写；下个 tick 自然重试；日志只记 app，不含报错文本里的个人数据",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#25] 补写中较旧的一天写失败：本 tick 不写该 app 更新的天，别的 app 照写；故障解除后从缺的最旧一天起由旧到新补齐",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#26] newest 之前的空洞：最新一行已到最新到期的 D 也要补；金额照该日，迟到的不可比且 timed_out，别的行不动",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#27] 空洞跨出 7 天窗口：窗口内的补上，更早的不补，只写一条 error 日志",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#28] 确认事务失败：行已提交且不可比；00:30 前的下一次 tick 确认成可比，不写第二行，不发超时告警",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#29] 新进程在 00:29:59 看到未确认的行：照样确认成可比（看的是库里的行，不是进程内状态）",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#30] 确认失败、过了 00:30 才恢复：行保持不可比，超时事件与日志各一条，之后的 tick 和新进程都不再碰",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#31] 未确认行的窗口边界：窗口最旧一天（D−6）过了 00:30、没有事件的告警一次并保持不可比，窗口外（D−7）的不碰",
+    "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#35] 超时事件按 (app, D) 判：同 app 别的天、别的 app 同一天已有事件都挡不住；(APP, D+1) 与 (OTHER, D) 的事件与日志各新增一条",
+    "test/spec/ledger/asset-snapshot-schedule/settlement-wait.int.test.ts > [AC-B2-04zo#24] 到点前批次等快照（snapshot_pending，状态 pending）；tick 写完后状态 complete，同一批次经真实端口执行到 DONE",
+    "test/spec/ledger/asset-snapshot-schedule/tick.int.test.ts > [AC-B2-04zo#32] 每次 tick 重新枚举 app：一轮 tick 跑完之后才开第一个账户的 app，下一次 tick 写它最新到期的 D",
+    "test/spec/ledger/asset-snapshot-schedule/tick.int.test.ts > [AC-B2-04zo#33] 枚举 app 失败：不写、不把定时器卡死，故障解除后下一次 tick 写该写的天",
+    "test/spec/ledger/asset-snapshot-schedule/tick.int.test.ts > [AC-B2-04zo#34] 定时的下界：差 1 秒到首次延迟时没有 tick；首次 tick 之后差 1 秒到 60 秒时也没有",
+    "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#8] 定时：启动时不立刻跑，约 15 秒后首次 tick，之后每 60 秒一次",
+    "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#9] 到点：D+1 00:00:59 不写 D，00:01:00 写 D；字段照 BR-FUND-18，余额与应收按 accounting_date ≤ D，waiting / estimated 取运行时刻",
+    "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#10] 再次 tick：迟到的一天与准点的一天都不重复写、不重复告警（行不变，事件与告警日志各 1 条）",
+    "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#11] 两个进程同一时刻 tick：同一天只有一行、一套应收、一条告警，两边都不报错",
+    "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#12] 在途 tick：慢 tick 期间不重入，销毁等它写完；销毁后不再写，新进程从快照行接着写下一天"
+  ],
+  "risk_note": "RV2 by path. A new worker-only ledger module writes asset_snapshots: first tick after 15 s, then every 60 s, for every app with ledger accounts, D is due at D+1 00:01 +08:00. No new queue, no new table: the row is its own completion mark. Backfill within a 7-day window, oldest first, stops the app at the first failed day; older gaps only log an error; an app with no rows gets only the newest due day. Unconfirmed rows are replayed before 00:30; after 00:30 only when event_log has no asset_snapshot.timed_out of that (app, D), matched by name, app and date (read-only query on a table ledger does not own, FU-EVENT-LOG-READ-PORT). The existing runner writes amounts and alerts, unchanged. ledger.advance_alert_fen unset means no alert (BR-FUND-20, D10-589 1); the key is registered by test-change B2-04zo, #2282. Missing EVENT_BUS refuses to start. No contract, no migration.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "972341a98ea9593123f12426dd19da674fab1a98",
+      "tree": "53c025f533f182cc85cd2814439173225daf5bd3",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T22:01:10Z",
+      "finished_at": "2026-11-02T22:03:37Z",
+      "red_tests": [
+        "test/spec/ledger/asset-snapshot-schedule/advance-alert.int.test.ts > [AC-B2-04zo#13] 合计 > 阈值：按各平台合计判定，告警一次（sum_fen、threshold_fen 为整数分），之后的 tick 不再告警",
+        "test/spec/ledger/asset-snapshot-schedule/advance-alert.int.test.ts > [AC-B2-04zo#14] 等于阈值不告警；未设置不告警；占位值 0 是有效阈值，合计 1 分即告警",
+        "test/spec/ledger/asset-snapshot-schedule/advance-alert.int.test.ts > [AC-B2-04zo#15] 阈值改了下一日立即生效，超过的每一天各告警一次",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#4] 生产组合根：worker 入口注册定时器并拿到 EVENT_BUS（快照写库、垫资告警落 event_log），不新增队列；API 入口同一个库同一时刻不写",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#5] 缺 EVENT_BUS：有库有队列时 app.module 给的模块启动即被拒（LedgerError INVALID_INPUT），不写快照",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#6] 惰性：没有队列或没有数据库时不注册，启动不报错（此时也不要 EVENT_BUS），时间过去也不写、不发",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts > [AC-B2-04zo#7] 预估走 settlement 的真实来源：waiting / estimated 为人工算出的份额；来源的配置读取落在快照传入的只读事务上，不开第二个连接",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.test.ts > [AC-B2-04zo#1] 装配：worker 入口的 app.module 恰调用一次 LedgerAssetSnapshotModule.forWorker；api、stream、admin、payout 入口一次都不调用",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.test.ts > [AC-B2-04zo#2] 装配（源码）：app.module 调 forWorker 并注入 createPendingEarningsSource；ledger 的调度文件不导入 settlement 或 content；asset-snapshot.ts 的 B2-04zb 调度 TODO 已删",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.test.ts > [AC-B2-04zo#3] 定时常量导出：调度文件导出首次延迟 15 秒与间隔 60 秒",
+        "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#16] 停机两天后恢复：补两天，由旧到新；00:30 后写的 waiting_comparable=false 且 timed_out（状态仍 complete），00:30 内写的 comparable",
+        "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#17] 00:30 的边界：00:29:59 写的 comparable，00:30:00 写的 waiting_comparable=false 且 timed_out",
+        "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#18] 没有历史的 app 不造历史：只写最新到期的 D，之后的 tick 也不往前补",
+        "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#19] 缺口正好 7 天：全部补上，不报错",
+        "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#20] 缺口超过 7 天：只补最新的 7 天，更早的不补，只写一条 error 日志，之后的 tick 不再报也不再补",
+        "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts > [AC-B2-04zo#21] 补写跨月、跨闰日：按日历逐日写，迟到的不可比、最新一天可比",
+        "test/spec/ledger/asset-snapshot-schedule/isolation.int.test.ts > [AC-B2-04zo#22] 跨 App 不串：各 app 的金额、应收、阈值与补写进度各算各的；只有订单没有账本账户的 app 不写",
+        "test/spec/ledger/asset-snapshot-schedule/isolation.int.test.ts > [AC-B2-04zo#23] 一个 app 抛错其余照写；下个 tick 自然重试；日志只记 app，不含报错文本里的个人数据",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#25] 补写中较旧的一天写失败：本 tick 不写该 app 更新的天，别的 app 照写；故障解除后从缺的最旧一天起由旧到新补齐",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#26] newest 之前的空洞：最新一行已到最新到期的 D 也要补；金额照该日，迟到的不可比且 timed_out，别的行不动",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#27] 空洞跨出 7 天窗口：窗口内的补上，更早的不补，只写一条 error 日志",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#28] 确认事务失败：行已提交且不可比；00:30 前的下一次 tick 确认成可比，不写第二行，不发超时告警",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#29] 新进程在 00:29:59 看到未确认的行：照样确认成可比（看的是库里的行，不是进程内状态）",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#30] 确认失败、过了 00:30 才恢复：行保持不可比，超时事件与日志各一条，之后的 tick 和新进程都不再碰",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#31] 未确认行的窗口边界：窗口最旧一天（D−6）过了 00:30、没有事件的告警一次并保持不可比，窗口外（D−7）的不碰",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts > [AC-B2-04zo#35] 超时事件按 (app, D) 判：同 app 别的天、别的 app 同一天已有事件都挡不住；(APP, D+1) 与 (OTHER, D) 的事件与日志各新增一条",
+        "test/spec/ledger/asset-snapshot-schedule/settlement-wait.int.test.ts > [AC-B2-04zo#24] 到点前批次等快照（snapshot_pending，状态 pending）；tick 写完后状态 complete，同一批次经真实端口执行到 DONE",
+        "test/spec/ledger/asset-snapshot-schedule/tick.int.test.ts > [AC-B2-04zo#32] 每次 tick 重新枚举 app：一轮 tick 跑完之后才开第一个账户的 app，下一次 tick 写它最新到期的 D",
+        "test/spec/ledger/asset-snapshot-schedule/tick.int.test.ts > [AC-B2-04zo#33] 枚举 app 失败：不写、不把定时器卡死，故障解除后下一次 tick 写该写的天",
+        "test/spec/ledger/asset-snapshot-schedule/tick.int.test.ts > [AC-B2-04zo#34] 定时的下界：差 1 秒到首次延迟时没有 tick；首次 tick 之后差 1 秒到 60 秒时也没有",
+        "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#8] 定时：启动时不立刻跑，约 15 秒后首次 tick，之后每 60 秒一次",
+        "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#9] 到点：D+1 00:00:59 不写 D，00:01:00 写 D；字段照 BR-FUND-18，余额与应收按 accounting_date ≤ D，waiting / estimated 取运行时刻",
+        "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#10] 再次 tick：迟到的一天与准点的一天都不重复写、不重复告警（行不变，事件与告警日志各 1 条）",
+        "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#11] 两个进程同一时刻 tick：同一天只有一行、一套应收、一条告警，两边都不报错",
+        "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts > [AC-B2-04zo#12] 在途 tick：慢 tick 期间不重入，销毁等它写完；销毁后不再写，新进程从快照行接着写下一天"
+      ],
+      "expected": [
+        "test/spec/ledger/asset-snapshot-schedule/advance-alert.int.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.int.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/assembly.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/backfill.int.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/isolation.int.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/recovery.int.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/settlement-wait.int.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/tick.int.test.ts",
+        "test/spec/ledger/asset-snapshot-schedule/timing.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "46bf735dd2fc5cc646fc761a694ac65229c5b3bb781eaf4bc4e4bf92abab300b"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "2791433480ebd17109077ff3409c61fed21d252ca8700ead88f8f7862c798d0b"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 pass with no findings, static review only"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude, 35 tests under test/spec/ledger/asset-snapshot-schedule through the real worker entry, three writes; round 1 fail with two S1 on recovery, round 2 fail with two S1 (fixture, lookup by app and day); r3 为编排批准的增量轮（D10-589 后，05:3x），增量 only, pass with one S2 on filtering by event name, which the implementation does"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "77f923531c56e84e28e22ec851d1ceda29099761",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

@@ -26,6 +26,8 @@ export type {
 export { assembleAssetSnapshot } from './application/asset-snapshot-assembly.ts';
 export type { AssetSnapshotAssembly } from './application/asset-snapshot-assembly.ts';
 export { createAssetSnapshotAlertQueue } from './infra/asset-snapshot-alert-queue.ts';
+export { LedgerAssetSnapshotModule } from './asset-snapshot.module.ts';
+export type { LedgerAssetSnapshotWorkerOptions } from './asset-snapshot.module.ts';
 export {
   registerReconDiff,
   registerReconDiffOnce,

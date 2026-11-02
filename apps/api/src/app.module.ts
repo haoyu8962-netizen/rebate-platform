@@ -9,7 +9,7 @@ import {
   orderKey,
   type UnionProductPayload,
 } from '@couli/domain';
-import { addFen } from '@couli/money';
+import { addFen, parseFen } from '@couli/money';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import {
   ADMIN_ACTIVE_STATUS,
@@ -226,6 +226,7 @@ import {
 import {
   EarningsSummaryModule,
   LedgerAdminModule,
+  LedgerAssetSnapshotModule,
   LedgerDailyCheckModule,
   LedgerModule,
   WalletLedgerModule,
@@ -4177,6 +4178,42 @@ function ledgerDailyCheckModule(): DynamicModule {
   });
 }
 
+/**
+ * B2-04zo (BR-FUND-18, BR-FUND-20): the worker's asset daily snapshot schedule, over settlement's
+ * PendingEarningsSource (built per read, config reads on the snapshot's read transaction, as
+ * walletSummaryDependencies does) and content's ledger.advance_alert_fen, unset = no alert.
+ */
+function ledgerAssetSnapshotModule(): DynamicModule {
+  return LedgerAssetSnapshotModule.forWorker({
+    pendingEarnings: (clock) => {
+      const pendingSource = (trx: Transaction<Database>) =>
+        createPendingEarningsSource({
+          clock,
+          config: {
+            get: async (appId, key) =>
+              (await createContentReader({ db: trx, clock }).configValue(appId, key))?.value,
+          },
+          readSnapshot: readCommissionSnapshot,
+          readTljDeductFen,
+        });
+      return {
+        readUser: (handle, input) =>
+          onReadTransaction(handle, (trx) => pendingSource(trx).forUser(trx, input)),
+        readAppTotals: (handle, input) =>
+          onReadTransaction(handle, (trx) => pendingSource(trx).forApp(trx, input)),
+      };
+    },
+    advanceAlertFen: (db, clock) => async (appId) => {
+      // A new reader per read: a changed threshold applies to the next day at once.
+      const item = await createContentReader({ db, clock }).configValue(
+        appId,
+        'ledger.advance_alert_fen',
+      );
+      return item === null ? null : parseFen(item.value);
+    },
+  });
+}
+
 function payoutProcessOptions(): PayoutProcessOptions {
   return {
     lockUsersForUpdate,
@@ -4740,6 +4777,8 @@ export class AppModule {
               // B2-02q (BR-FUND-19): the daily ledger check at 01:00 +08:00 for D−1 (queue
               // ledger-check), its seed / heal timer and the B2-02p ports assembled above.
               ledgerDailyCheckModule(),
+              // B2-04zo (BR-FUND-18): the asset daily snapshot timer, D+1 00:01 +08:00 per app.
+              ledgerAssetSnapshotModule(),
               // B2-04ze (D10-443): settlement's queue settle (bill / batch_execute), its daily bill
               // seed and due batch scan, over the owners' exports. readAttribution must be
               // commission's readCommissionAttribution (HANDOFF 10-27). Switches as they are:

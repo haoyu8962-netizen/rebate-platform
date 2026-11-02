@@ -124,7 +124,6 @@ const STORE: SnapshotWriteStore = {
 /** Bounded retries of the read snapshot on a serialization failure (SQLSTATE 40001). */
 const READ_ATTEMPTS = 3;
 
-// TODO(规划/11 §4.2): worker 在会计日 D+1 00:01 +08:00 按 app 调度本运行器 — blocked on B2-04zb（调度接线，本任务路径之外）
 export function createAssetSnapshot(dependencies: AssetSnapshotDependencies): AssetSnapshotRunner {
   const { clock, pendingEarnings, logger } = dependencies;
   const context: SnapshotWriteContext = {

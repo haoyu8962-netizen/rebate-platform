@@ -25,5 +25,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/asset-snapshot-schedule/**'
-status: todo
-pr: null
+status: done
+pr: 2288
