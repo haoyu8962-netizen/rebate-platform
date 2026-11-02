@@ -63,7 +63,7 @@ function inertLifecycle(): SettleWorkerLifecycle {
 /** Nest injection token for the pre-credit rebate port (orders' rebate.onImported / onUpdated). */
 export const REBATE_PORT = Symbol('REBATE_PORT');
 
-/** Standalone module only; orders worker wiring belongs to B2-04zb. */
+/** register is the standalone module; app.module assembles the orders worker's rebate port. */
 export class SettlementModule {
   static register(deps: RebateDependencies): DynamicModule {
     return {

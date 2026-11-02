@@ -22,7 +22,7 @@
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
 import type { Ledger, OrderNetSelection, OrderNets } from '../../ledger/index.ts';
-import type { Clock, FieldCrypto } from '../../platform/index.ts';
+import type { Clock, EventBus, FieldCrypto } from '../../platform/index.ts';
 import type { RiskStateBatchReader } from '../../risk/index.ts';
 import type { BillSourceDependencies } from '../bill/infra/bill-source.ts';
 import type { BillJobDependencies } from '../bill/job.ts';
@@ -62,8 +62,15 @@ export interface SettlementWorkerPorts {
   readonly registerDiff: BillJobDependencies['registerDiff'];
   /** ledger getOrderNets (the beneficiary supplement credit). */
   readonly readOrderNets: (trx: Transaction<DB>, input: OrderNetSelection) => Promise<OrderNets>;
-  /** ledger createLedger over the worker's clock. */
-  readonly ledger: (clock: Clock) => Pick<Ledger, 'openUserAccount' | 'lockBalances' | 'post'>;
+  /**
+   * ledger createLedger over the worker's clock and EVENT_BUS, with payout's recovery hook
+   * (account.went_negative, BR-WDR-05 (a); D10-587). The worker always passes events; a caller
+   * outside the settle handler may omit them and then publishes nothing.
+   */
+  readonly ledger: (
+    clock: Clock,
+    events?: EventBus,
+  ) => Pick<Ledger, 'openUserAccount' | 'lockBalances' | 'post'>;
   /** identity lockUsersForUpdate. */
   readonly lockUsers: (trx: Transaction<DB>, input: LockUsersInput) => Promise<ReadonlySet<string>>;
   /** identity createUserDeletionStatusReader. */

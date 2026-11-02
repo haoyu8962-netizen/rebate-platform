@@ -1,0 +1,104 @@
+{
+  "task": "B2-04zn",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "spec_commit": "a1b2ac71fb54c5d71136c2fa70b2551ccbd9c0b7",
+  "red_tests": [
+    "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#9] 扣回事务失败：同事务里事件已写，回滚后 event_log、余额、订单都没有留下；重投后恰好一条",
+    "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#10] 入账事务失败：同事务里拦截已解除，回滚后拦截、余额、订单都回到原样；接管重跑后才解除",
+    "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#11] 跨 App 不串（变负）：A 的扣回只在 A 留事件；投递后 A 的提现被驳回，B 的提现、余额与事件不动",
+    "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#12] 跨 App 不串（回正）：A 的入账只解除 A 的拦截，B 同样被拦的单与余额不动",
+    "test/spec/settlement/ledger-hooks/recovery.int.test.ts > [AC-B2-04zn#6] 结算入账（R5）使余额由 <0 回到 ≥0（边界：正好 0）：拦截解除，updated_at 取 worker 时钟、row_version + 1、状态不变；没被拦截的单不动，不发 account.went_negative",
+    "test/spec/settlement/ledger-hooks/recovery.int.test.ts > [AC-B2-04zn#7] 入账后仍 <0：不解除，行不动；下一笔回到 ≥0 才解除",
+    "test/spec/settlement/ledger-hooks/recovery.int.test.ts > [AC-B2-04zn#8] 补记（R5a）同样解除：冻结会员的 R5 不进余额、拦截不动；恢复正常后的补记 500 使余额回到 ≥0，拦截解除",
+    "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#1] 扣回使余额由 ≥0 变 <0：event_log 恰好一条 account.went_negative，负载是该用户；payout 订阅收到后，未发起转账的待审单被 W3 驳回（NEGATIVE_BALANCE，退回冻结），已发起转账的单被 blocked_reason 拦截",
+    "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#2] 余额本来已负的再次扣回：不重复发，只有跨过 0 的那次一条",
+    "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#3] 边界：扣回后正好 0 不发（0 不算变负）；再一笔扣到 -1 发一条",
+    "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#4] 没跨过 0 的入账和扣回：不发事件，不动拦截；同一会员之后真跨过 0 才发",
+    "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#5] 回正后再次变负是新的一次跨越：再发一条，共两条",
+    "test/spec/settlement/ledger-hooks/wiring.test.ts > [AC-B2-04zn#13] 生产组合根：扣回用的账本带入口的 EVENT_BUS 和 payout 的回正钩子（同步与维权导入共用这一份）",
+    "test/spec/settlement/ledger-hooks/wiring.test.ts > [AC-B2-04zn#14] 生产组合根：结算 worker 的 R5 与 R5a 用的账本带入口的 EVENT_BUS 和 payout 的回正钩子"
+  ],
+  "risk_note": "RV2 by path. Assembly only: the settlement worker's ledger and the orders clawback ledger now carry the entry's EVENT_BUS and payout's balance recovered hook (D10-587), so a clawback that takes a balance below 0 publishes account.went_negative in the same transaction and in-flight withdrawals are held, and a credit that brings it back to 0 or above lifts NEGATIVE_BALANCE. No change inside ledger, payout, clawback or credit. ports.ledger takes events as an optional second argument because the frozen ports.int.test.ts:77 calls it with the clock alone; assemble.ts always passes them and wiring.test.ts pins the production composition. Stale B2-04zb comments removed. No contract, no migration.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a1b2ac71fb54c5d71136c2fa70b2551ccbd9c0b7",
+      "tree": "f1b19ee4d2541fcb72652a05372816a31ccda85c",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T21:04:42Z",
+      "finished_at": "2026-11-02T21:05:03Z",
+      "red_tests": [
+        "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#9] 扣回事务失败：同事务里事件已写，回滚后 event_log、余额、订单都没有留下；重投后恰好一条",
+        "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#10] 入账事务失败：同事务里拦截已解除，回滚后拦截、余额、订单都回到原样；接管重跑后才解除",
+        "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#11] 跨 App 不串（变负）：A 的扣回只在 A 留事件；投递后 A 的提现被驳回，B 的提现、余额与事件不动",
+        "test/spec/settlement/ledger-hooks/atomicity.int.test.ts > [AC-B2-04zn#12] 跨 App 不串（回正）：A 的入账只解除 A 的拦截，B 同样被拦的单与余额不动",
+        "test/spec/settlement/ledger-hooks/recovery.int.test.ts > [AC-B2-04zn#6] 结算入账（R5）使余额由 <0 回到 ≥0（边界：正好 0）：拦截解除，updated_at 取 worker 时钟、row_version + 1、状态不变；没被拦截的单不动，不发 account.went_negative",
+        "test/spec/settlement/ledger-hooks/recovery.int.test.ts > [AC-B2-04zn#7] 入账后仍 <0：不解除，行不动；下一笔回到 ≥0 才解除",
+        "test/spec/settlement/ledger-hooks/recovery.int.test.ts > [AC-B2-04zn#8] 补记（R5a）同样解除：冻结会员的 R5 不进余额、拦截不动；恢复正常后的补记 500 使余额回到 ≥0，拦截解除",
+        "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#1] 扣回使余额由 ≥0 变 <0：event_log 恰好一条 account.went_negative，负载是该用户；payout 订阅收到后，未发起转账的待审单被 W3 驳回（NEGATIVE_BALANCE，退回冻结），已发起转账的单被 blocked_reason 拦截",
+        "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#2] 余额本来已负的再次扣回：不重复发，只有跨过 0 的那次一条",
+        "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#3] 边界：扣回后正好 0 不发（0 不算变负）；再一笔扣到 -1 发一条",
+        "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#4] 没跨过 0 的入账和扣回：不发事件，不动拦截；同一会员之后真跨过 0 才发",
+        "test/spec/settlement/ledger-hooks/went-negative.int.test.ts > [AC-B2-04zn#5] 回正后再次变负是新的一次跨越：再发一条，共两条",
+        "test/spec/settlement/ledger-hooks/wiring.test.ts > [AC-B2-04zn#13] 生产组合根：扣回用的账本带入口的 EVENT_BUS 和 payout 的回正钩子（同步与维权导入共用这一份）",
+        "test/spec/settlement/ledger-hooks/wiring.test.ts > [AC-B2-04zn#14] 生产组合根：结算 worker 的 R5 与 R5a 用的账本带入口的 EVENT_BUS 和 payout 的回正钩子"
+      ],
+      "expected": [
+        "test/spec/settlement/ledger-hooks/atomicity.int.test.ts",
+        "test/spec/settlement/ledger-hooks/recovery.int.test.ts",
+        "test/spec/settlement/ledger-hooks/went-negative.int.test.ts",
+        "test/spec/settlement/ledger-hooks/wiring.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "efa1ce55e7a64a8e40a728ef9102f1fd8929610af81d500bbda5e9db8f51a61b"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "fd299b1ca99771907f24570cd3bf9e8b5cdddf414e63dfe057cfdd7c6412d643"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 pass with no findings, static review only"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude, 14 tests under test/spec/settlement/ledger-hooks through the real worker entry; red check ok with all 14 red on assertions"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ed753e102a3f396f9afd987cf28bc8e91ecde284",
+    "specs": "242c82f497fb866ceec0a6619e38ad2ac0f07e81"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

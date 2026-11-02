@@ -153,7 +153,7 @@ export interface BillJob {
 
 // ---------------------------------------------------------------------------
 // 实现（BR-FUND-04 ③④⑤⑨⑫、BR-FUND-18）。
-// 不接线调度（B2-04zb）；orders 事实、淘礼金扣减、快照读口与差错登记都经依赖注入。
+// 调度在 worker/schedule.ts；orders 事实、淘礼金扣减、快照读口与差错登记都经依赖注入。
 // settle_jobs.status 只经 ./settle-job.ts（生成的 settle-job transition()，按旧状态 CAS）。
 
 const JOB = 'bill';

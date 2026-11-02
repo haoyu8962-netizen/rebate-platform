@@ -16,7 +16,7 @@ import type { RiskStateBatchReader } from '../../risk/index.ts';
 // UserDeletionStatusReader and RealnameStatusBatchReader): identity/index.ts re-exports its Nest
 // modules, whose parameter decorators the erasable-syntax `test` project cannot compile, so even
 // a type-only import of it from here would pull them into every test that imports this file.
-// The assembly (B2-04zb) passes identity's real exports, which satisfy these shapes.
+// The assembly passes identity's real exports, which satisfy these shapes.
 export interface LockUsersInput {
   readonly appId: string;
   readonly userIds: readonly string[];
@@ -64,8 +64,8 @@ export interface MinorSelection extends BeneficiarySelection {
 }
 
 /**
- * Users identified as under 18 at `at` (BR-ID-26; birth date of a verified realname). No exported
- * identity port answers this yet: assembly supplies it (待编排裁定, B2-04zb).
+ * Users identified as under 18 at `at` (BR-ID-26; birth date of a verified realname). The assembly
+ * supplies it (identity createMinorStatusBatchReader).
  */
 export interface MinorStatusReader {
   read(trx: Transaction<DB>, input: MinorSelection): Promise<ReadonlySet<string>>;

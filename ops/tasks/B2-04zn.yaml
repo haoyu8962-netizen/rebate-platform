@@ -26,5 +26,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/ledger-hooks/**'
-status: todo
-pr: null
+status: done
+pr: 2281

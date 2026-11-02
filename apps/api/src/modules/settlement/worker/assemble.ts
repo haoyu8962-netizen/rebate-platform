@@ -96,7 +96,7 @@ export function createSettleWorkerHandler(
 ): JobHandler {
   const { db, clock, crypto, events, logger } = runtime;
   const config = ports.config(db, clock);
-  const ledger = ports.ledger(clock);
+  const ledger = ports.ledger(clock, events);
   const gate = createBeneficiaryGate({
     clock,
     lockUsers: ports.lockUsers,

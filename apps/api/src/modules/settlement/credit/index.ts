@@ -1,5 +1,5 @@
 // B2-04m: the single-order credit transaction and its BeneficiaryGate port. Module-internal entry;
-// settlement's index.ts re-exports what app.module needs when B2-04zb assembles it.
+// settlement's index.ts re-exports what app.module needs.
 export { createCreditOrder } from './credit-order.ts';
 export type {
   BeneficiaryEventInput,
