@@ -101,6 +101,43 @@ const allAvailable: DeletionCleanupPorts = {
   catalog: noop,
 };
 
+it('[AC-B1-02zr] the re-verification data goes inside the cleanup transaction, scoped to the user, before the ports', async () => {
+  const { db, queries } = scriptedDb({
+    status: 'processing',
+    cleaned_at: null,
+    apple_revoke_attempts: 0,
+    apple_revoke_result: null,
+  });
+  const portCalls: number[] = [];
+  const h = harness(db, {
+    ...allAvailable,
+    linking: async () => void portCalls.push(queries.length),
+  });
+  await h.runner.runOnce();
+  const texts = queries.map((q) => q.text);
+  const update = queries.find((q) => /^update "app"\."users" set "nickname"/.test(q.text));
+  const removal = queries.find((q) => /^delete from "app"\."reverified_devices"/.test(q.text));
+  for (const column of [
+    'last_active_at',
+    'last_login_device_hash',
+    'reverify_flagged_at',
+    'reverify_trusted',
+    'reverify_fail_day',
+  ]) {
+    expect(update?.text).toContain(`"${column}" = $`);
+  }
+  expect(update?.text).toContain('"reverify_fail_count" = $');
+  expect(update?.text).not.toContain('reverify_fail_epoch');
+  expect(removal?.values).toEqual([APP, USER]);
+  const removedAt = texts.indexOf(removal!.text);
+  const begun = texts.indexOf('begin');
+  expect(begun).toBeGreaterThanOrEqual(0);
+  expect(removedAt).toBeGreaterThan(begun);
+  expect(removedAt).toBeLessThan(texts.indexOf('commit'));
+  expect(portCalls).toHaveLength(1);
+  expect(removedAt).toBeLessThan(portCalls[0]!);
+});
+
 it('[AC-B1-15g] a stop requested before the round: no statement, scanned 0', async () => {
   const { db, queries } = scriptedDb({
     status: 'processing',

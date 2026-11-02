@@ -1,0 +1,81 @@
+{
+  "task": "B1-02zr",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "spec_commit": "335b20926ab8c082a709bd6262581beed9dfed95",
+  "red_tests": [
+    "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#1] 进 processing 的清理事务提交后：六列全部清空（失败计数归 0），该用户 reverified_devices 全删；此时单还没完成，手机号还在",
+    "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#2] 与清理同一事务：删 reverified_devices 时等锁期间外部看不到任何变化；这句被取消 → 整笔回滚、列与行都不变，下一轮才清掉",
+    "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#3] 与清理同一事务：最后一个端口（catalog 删收藏）失败 → 这些列与行随整笔回滚不变，下一轮才清掉",
+    "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#4] 只动这个用户：同设备的同 app 其他账号、别的 app 账号，users 行与 reverified_devices 行都不变",
+    "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#5] 墓碑不留：完成后 users 墓碑这些列仍是空的，deleted_identities 无这些列，也不含只在加验数据里出现的设备哈希",
+    "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#6] 幂等：端口未上线的清理每轮重跑，已清理的 users 行不再动（row_version、updated_at 不变）；完成后再跑也不动",
+    "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#7] 没有标记的账号照常走完不报错：从未有加验数据的不受影响，只有活动列和失败计数的同样清空"
+  ],
+  "risk_note": "RV1 identity: account deletion's cleanup step clears the six old-number re-verification columns of users and deletes the user's reverified_devices rows, in the same transaction as the other cleanup (BR-ID-28 细则「待加验记录」). reverify_fail_epoch stays: a generation counter, not personal data. In-flight requests can still write back after cleanup: B1-02zy, must merge before launch. Frozen integration: spec/identity 2003 pass, 0 fail, on the base before the last rebase.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "335b20926ab8c082a709bd6262581beed9dfed95",
+      "tree": "4b4882e9c35d4068eb4edcc220313a37fc2e2617",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T14:04:44Z",
+      "finished_at": "2026-11-02T14:05:00Z",
+      "red_tests": [
+        "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#1] 进 processing 的清理事务提交后：六列全部清空（失败计数归 0），该用户 reverified_devices 全删；此时单还没完成，手机号还在",
+        "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#2] 与清理同一事务：删 reverified_devices 时等锁期间外部看不到任何变化；这句被取消 → 整笔回滚、列与行都不变，下一轮才清掉",
+        "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#3] 与清理同一事务：最后一个端口（catalog 删收藏）失败 → 这些列与行随整笔回滚不变，下一轮才清掉",
+        "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#4] 只动这个用户：同设备的同 app 其他账号、别的 app 账号，users 行与 reverified_devices 行都不变",
+        "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#5] 墓碑不留：完成后 users 墓碑这些列仍是空的，deleted_identities 无这些列，也不含只在加验数据里出现的设备哈希",
+        "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#6] 幂等：端口未上线的清理每轮重跑，已清理的 users 行不再动（row_version、updated_at 不变）；完成后再跑也不动",
+        "test/spec/identity/reverify-deletion/cleanup.int.test.ts > [AC-B1-02zr#7] 没有标记的账号照常走完不报错：从未有加验数据的不受影响，只有活动列和失败计数的同样清空"
+      ],
+      "expected": ["test/spec/identity/reverify-deletion/cleanup.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "d06c033a647902c4342f34b095effa60841e2ac3d908083264e171104786f32a"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money round 1 pass; the reviewer read the code and confirmed the same trx for the six columns, the delete and the other cleanup (spec-test left that as an out-of-scope S1: no test catches a commit-then-clean version)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "codex-run.sh review --review-type spec-test round 1 pass; refs are empty, so the pass does not claim BR coverage."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e35fe34d1f8a46f4f77a629588c5244d1a4ebf46",
+    "specs": "242c82f497fb866ceec0a6619e38ad2ac0f07e81"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

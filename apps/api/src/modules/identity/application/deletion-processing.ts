@@ -7,9 +7,10 @@
 // line and the round goes on; a stop request is honoured between requests. Per request, three
 // steps, each with its own Clock reading:
 //   ① cleanup transaction (cleaned_at still NULL): users row, then the request; sessions revoked
-//      (account_deleted), nickname / avatar reset, real name cleared or retained (tax_retained),
-//      payout accounts anonymized, login_logs detached, the cross-module ports; cleaned_at = now
-//      only when every port is available.
+//      (account_deleted), nickname / avatar reset, the old-number re-verification data removed
+//      (B1-02zr), real name cleared or retained (tax_retained), payout accounts anonymized,
+//      login_logs detached, the cross-module ports; cleaned_at = now only when every port is
+//      available.
 //   ② Apple revocation outside any transaction (cleaned_at set, apple_revoke_result NULL): at most
 //      one attempt per round, the third failure is final (failed) and alerts, never blocking done.
 //      B1-27h (BR-ID-40 细则「副本请求与注销状态」): the same transaction cancels the user's open
@@ -203,8 +204,11 @@ export function createDeletionProcessing(options: DeletionProcessingOptions): De
         afterRevoked,
       );
 
-      // Nickname and avatar (BR-ID-28). Written only when something changes, so a blocked cleanup
-      // that runs again every round does not bump row_version each time.
+      // Nickname, avatar and the re-verification columns (BR-ID-28, BR-ID-28 细则「待加验记录」;
+      // reverify_fail_count is NOT NULL, its empty value is 0). Written only when something
+      // changes, so a blocked cleanup that runs again every round does not bump row_version each
+      // time. reverify_fail_epoch stays: a generation counter, not personal data, and a late
+      // releaseFailure already finds no reverify_fail_day to match.
       // TODO(规划/11 §2.3): 删除自定义头像文件 — blocked on 头像上传（尚未实现，avatar 只存引用）
       await trx
         .withSchema('app')
@@ -214,6 +218,12 @@ export function createDeletionProcessing(options: DeletionProcessingOptions): De
           avatar: DEFAULT_AVATAR,
           nickname_change_month: null,
           nickname_change_count: 0,
+          last_active_at: null,
+          last_login_device_hash: null,
+          reverify_flagged_at: null,
+          reverify_trusted: null,
+          reverify_fail_count: 0,
+          reverify_fail_day: null,
           row_version: eb('row_version', '+', 1),
           updated_at: now,
         }))
@@ -225,8 +235,23 @@ export function createDeletionProcessing(options: DeletionProcessingOptions): De
             eb('avatar', '<>', DEFAULT_AVATAR),
             eb('nickname_change_month', 'is not', null),
             eb('nickname_change_count', '<>', 0),
+            eb('last_active_at', 'is not', null),
+            eb('last_login_device_hash', 'is not', null),
+            eb('reverify_flagged_at', 'is not', null),
+            eb('reverify_trusted', 'is not', null),
+            eb('reverify_fail_count', '<>', 0),
+            eb('reverify_fail_day', 'is not', null),
           ]),
         )
+        .execute();
+
+      // The devices that passed re-verification, this user's rows only: the same device under
+      // another account keeps its own.
+      await trx
+        .withSchema('app')
+        .deleteFrom('reverified_devices')
+        .where('app_id', '=', appId)
+        .where('user_id', '=', userId)
         .execute();
 
       // Real name (D10-137 ②): kept read-only and marked when a withdrawal was paid out, cleared
