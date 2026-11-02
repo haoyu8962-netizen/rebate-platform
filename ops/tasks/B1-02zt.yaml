@@ -1,0 +1,16 @@
+id: B1-02zt
+repo: rebate-platform
+title: 测试修改（B1-02zp 前置，D10-569）：same-device-login 的 [AC-B1-03zh#11] 比较 users 时排除加验活动五列，其余字段照旧逐字段比，只放开被登录账号
+type: test-change
+# 2026-11-02 入账（admin-backend，编排 12:1x ②）。B1-02zp 的 red_exempt 到 51 条超上限 50，把这个文件拆出先合。放宽后主干现状与 B1-02zp 合并后都绿；正向断言由 B1-02zp 的其余 21 条覆盖。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/risk/rule-toggle-identity/same-device-login.int.test.ts'
+  - 'ops/tasks/B1-02zt.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

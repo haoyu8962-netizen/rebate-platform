@@ -4,10 +4,14 @@ title: 旧号加验打标与三接口——建立会话 / 刷新时覆盖 last_a
 type: impl
 # 2026-10-31 入账（identity-lane，D10-453 ⑥ (b)）。依据 BR-WDR-01 细则（07_WDR 123–135 行）、契约 CT-26c（20005 带 fail_limit / fail_remaining，20004 / 50305 不计失败）。依赖 B1-02zo 存储；契约只去 planned 标记，落地报契约槽。
 # 2026-11-02 admin 接手（编排 09:2x）。D10-567：标题里「并号先判手机号账号、迁入身份不算可信」挪到 B1-20c，本单不实现、不写测试（FU-MERGE-REVERIFY）。
+# 2026-11-02 money r2：失败计数退回要独立代次（reverify_fail_epoch），加一列，占迁移队列（编排 12:11）。
 refs: []
 refs_hash: {}
-deps: [B1-02zo]
+deps: [B1-02zo, B1-02zt]
 paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
   - 'apps/api/src/modules/identity/**'
   - 'apps/api/src/app.module.ts'
   - 'contracts/openapi.yaml'
@@ -16,9 +20,164 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/identity/reverify/**'
+  - 'test/spec/identity/sms-login/branches.int.test.ts'
+  - 'test/spec/identity/sms-login/http.int.test.ts'
+  - 'test/spec/identity/oauth-login/branches.int.test.ts'
+  - 'test/spec/growth/landing-review/login.int.test.ts'
 impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/identity/reverify/**'
+red_exempt:
+  - file: test/spec/growth/landing-review/login.int.test.ts
+    test: '[AC-B1-11f#10] 真实短信登录注入 growth 复核，命中也返回有效会话、不通知双方'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#15][BR-ID-01] wechat 受限登录查不到绑定 → 403/10405 no_account：不建号、不写同意与日志、尝试已消费'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#15][BR-ID-01] apple 受限登录查不到绑定 → 403/10405 no_account：不建号、不写同意与日志、尝试已消费'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#17][BR-ID-27] wechat 绑定账号 status=deleting → 403/10007 data.stage=processing，不建号、不签发'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#17][BR-ID-27] apple 绑定账号 status=deleting → 403/10007 data.stage=processing，不建号、不签发'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#18][BR-ID-31] wechat 封禁用户（即使带自己的令牌）照常登录，不返回 10006'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#18][BR-ID-31] apple 封禁用户（即使带自己的令牌）照常登录，不返回 10006'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#19][BR-ID-05] wechat 首次登录撞同设备注册上限 → 403/44001，不建号、不写 user_oauth'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#19][BR-ID-05] apple 首次登录撞同设备注册上限 → 403/44001，不建号、不写 user_oauth'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#20][BR-ID-04] wechat 同一身份两个首次登录并发：只建一个号，两次各得一个会话，后到者 is_new_user=false'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/oauth-login/branches.int.test.ts
+    test: '[AC-B1-02d#20][BR-ID-04] apple 同一身份两个首次登录并发：只建一个号，两次各得一个会话，后到者 is_new_user=false'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#1][BR-ID-01] 受限判定失败时，非法手机号也不能抢先返回，验证码与建号均不执行'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#33][BR-ID-04/05] 已完成注销的手机号正常登录重新建号，旧账号保留'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#34][BR-INV-06] 新号空邀请码 "" 不调用绑定、不包含 invite_bind'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#34][BR-INV-06] 新号空邀请码 "   " 不调用绑定、不包含 invite_bind'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#34][BR-INV-06] 新号空邀请码 "　" 不调用绑定、不包含 invite_bind'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#35][BR-ID-05] 建号失败 50001 不写登录记录、不签会话'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#36][BR-ID-05] 已有账号不受建号黑名单或设备注册上限影响'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#37][BR-ID-01] 缺少客户端版本且配置最低版本时受限，缺渠道则不判定'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-S1-78#3][BR-ID-05] 判定作用域后规范化失败，20001 精确字段且不核销、不写库'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#2][BR-ID-04/05] 验证码 20002 先于查号建号，无登录记录'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#2][BR-ID-04/05] 验证码 20003 先于查号建号，无登录记录'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-S1-83#16][BR-ID-01] 受限登录 missing 无账号时无任何 PG 写入'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-S1-83#16][BR-ID-01] 受限登录 deleted 无账号时无任何 PG 写入'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-S1-83#18][BR-ID-01] 受限判定后最低版本被删除，仍不建号，错误携带当前 null'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#3][BR-ID-01] 查账号在验证码核销之后，核销期间出现的账号以已有账号登录'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#4][BR-INV-06] 已有账号不校验邀请码 undefined，只有非空才含 invite_bind'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#4][BR-INV-06] 已有账号不校验邀请码 ""，只有非空才含 invite_bind'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#4][BR-INV-06] 已有账号不校验邀请码 "   "，只有非空才含 invite_bind'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#4][BR-INV-06] 已有账号不校验邀请码 " bad-code "，只有非空才含 invite_bind'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#5][BR-ID-04] 新号建号后写同意、日志和会话；建号上下文来自当前设备'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#6][BR-ID-05] 三个同设备账号后返回 44001，验证码已校验且不留下注册或登录写入'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#7][BR-ID-05] 手机号黑名单扩展点在建号前，仅收到 app 与手机号 HMAC'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#8][BR-ID-31] 风控封禁仍校验验证码并签发会话，不返回 10006'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#9][BR-ID-01] 同手机号其他 app 的账号不可被受限登录找到'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 ios/1.0.9/1.1.0 签发 deletion_only'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 android//1.1.0 签发 deletion_only'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 harmony/bad/1.1.0 签发 deletion_only'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 ios/1.10.0/1.2.0 签发 full'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 android/1.1.0/1.1.0 签发 full'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 ios/bad/null 签发 full'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 h5/bad/3.0.0 签发 full'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/branches.int.test.ts
+    test: '[AC-B1-02j#10][BR-ID-01] 每次请求版本 admin/bad/3.0.0 签发 full'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/http.int.test.ts
+    test: '[AC-S1-83#16][BR-ID-01] 真签名 HTTP 受限新号返回 403/10405 完整外壳，不建号且核销验证码'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/http.int.test.ts
+    test: '[AC-B1-02j#39][BR-ID-05] 真签名 HTTP 同设备注册上限返回 403/44001 契约外壳，不建号'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/http.int.test.ts
+    test: '[AC-B1-02j#29][BR-ID-04] 真签名 HTTP 缺少 legal_versions 返回契约 20001，验证码未被消耗'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/http.int.test.ts
+    test: '[AC-B1-02j#29][BR-ID-04] 真签名 HTTP 缺少 consent_at 返回契约 20001，验证码未被消耗'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/http.int.test.ts
+    test: '[AC-B1-02j#30][BR-ID-04/05] HTTP 新号成功响应符合 LoginResponse，重复码错误外壳符合契约'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/http.int.test.ts
+    test: '[AC-B1-02j#31][BR-ID-05] HTTP 错码 20002 不写记录，非法手机号带 phone_invalid'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
+  - file: test/spec/identity/sms-login/http.int.test.ts
+    test: '[AC-B1-02j#32][04 §6.1] 已注册登录路由执行签名与设备来源检查，客户端不能替换 app 身份'
+    reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
 status: todo
