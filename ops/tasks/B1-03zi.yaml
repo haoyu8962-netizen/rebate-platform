@@ -1,0 +1,24 @@
+id: B1-03zi
+repo: rebate-platform
+title: 提现设备黑名单线上生效：③a 查发起请求的设备，⑨ 查该会员会话关联过的所有设备（FU-DEVICE-USER-ID，方案 B）
+type: impl
+# 2026-11-02 pay（账号 5）入账（编排 D10-571，方案 B；identity 11-06 回来复核）。生产代码从不写 devices.user_id，blocklist-match 与 ⑨ 按它查设备，设备维度的提现黑名单线上永不命中（漏拦，非误拦）。
+# 口径（08 未定义「会员的设备」，交 Jev，编排回写 08）：③a 直接拒绝 44001，取发起请求的设备，0.99（置信 0.98）；⑨ 只转人工，取该会员会话关联过的所有设备，含已吊销，0.90（置信 0.85），与 BR-ID-28 deletion-processing 同。最近登录者口径不采用。
+# 不写 devices.user_id、不动登录路径、不加迁移。sessions 的 SELECT 已授 couli_app（0013）；worker 实际角色由集成测试确认，没权限再报编排加迁移。devices.user_id 变死字段，FU-DEVICES-USER-ID-COLUMN 归 identity。
+# B2-11f chain-kit 手工绑 user_id，但也用同一设备建 session，改走 sessions 后 ⑨ 设备用例照过，不用 test-change。refs 留空，任务书 §2b 摘 BR-ID-31、BR-WDR-03 ③a、BR-WDR-29 ⑨。
+refs: []
+refs_hash: {}
+deps: [B2-11f, B2-05c]
+paths:
+  - 'apps/api/src/modules/risk/ports/blocklist-match.ts'
+  - 'apps/api/src/modules/risk/ports/blocklist-match.test.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/risk/blocklist-device-scope/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/risk/blocklist-device-scope/**'
+status: todo
+pr: null
