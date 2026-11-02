@@ -64,4 +64,5 @@ red_exempt:
   - file: test/spec/contracts/admin-order-actions/operations.test.ts
     test: '[AC-CT-24n#3] channel 导入的额外权限和动态码仅条件适用'
     reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
-status: todo
+status: done
+pr: 2252

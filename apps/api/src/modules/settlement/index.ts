@@ -57,6 +57,10 @@ export type { SettlementFundMetrics } from './application/metrics-read.ts';
 // B2-04l: orders' rights ports (rights.record; rebate.adminHold / adminUnhold, R11).
 export { createRebateAdminCommandPort, createRightsCommandPort } from './rights/index.ts';
 export type { RebateAdminDependencies, RightsCommandDependencies } from './rights/index.ts';
+// B1-10n: what the worker's rights port and sync hook are assembled from (R8 / R9 / R9b).
+export { createClawbackOrder } from './clawback/index.ts';
+export type { ClawbackDependencies, ClawbackOrder } from './clawback/index.ts';
+export { createBeneficiaryGate } from './credit/index.ts';
 // B2-04ze (D10-443): the worker entry's settle queue (bill seed, due batch scan, handler).
 export {
   createSettleJobHandler,

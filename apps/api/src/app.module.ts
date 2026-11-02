@@ -359,8 +359,10 @@ import {
   createInviteRewardOrderFacts,
   type ClaimEvidenceFactory,
   createOrderQueries,
+  createClawbackPendingPort,
   createOrderSourcePorts,
   type OrderSourcePorts,
+  type OrderRebateAssembly,
   type OrderRebatePortFactory,
   type PlatformRestoreDiffPort,
   readPersonalDataCopyOrders,
@@ -407,6 +409,7 @@ import {
   type RequestCheckPlan,
   isContractSignedRoute,
   isHttpEntry,
+  createImportStore,
 } from './modules/platform/index.ts';
 import {
   blocklistHmacContexts,
@@ -447,8 +450,13 @@ import {
   createEarningsOrdersSource,
   createOrderFiguresReader,
   createPendingEarningsSource,
+  createBeneficiaryGate,
+  createClawbackOrder,
   createRebateAdminCommandPort,
   createRebatePort,
+  createRightsCommandPort,
+  type ClawbackOrder,
+  type RebatePort,
   readOrderIdsByKey,
 } from './modules/settlement/index.ts';
 import {
@@ -1879,12 +1887,14 @@ const ORDER_SYNC_APP_ID = 'couli';
  * entry's field keyring (`keyring` answers undefined only in local / test without one, and step ③
  * is then skipped); suffixVoidEnabled, content's attr.blacklist.order_suffix_void_enabled of the
  * order's App, anything but true being off (08's default; BR-ATTR-26).
+ * B1-10n: `rightsImports`, what the rights_import job needs; see orderSyncWorker.
  */
 function orderSyncPorts(
   union: DynamicModule,
   quota: OrdersWorkerOptions['quota'],
   keyring: () => FieldCrypto | undefined,
   rebate: OrderRebatePortFactory,
+  rightsImports: NonNullable<OrdersWorkerOptions['rightsImports']>,
 ): OrdersWorkerOptions {
   return {
     union,
@@ -1895,6 +1905,7 @@ function orderSyncPorts(
     snapshots: (db, clock, logger) => orderSnapshotPort(db, clock, logger),
     platformRestore: (clock) => orderPlatformRestorePort(clock),
     rebate,
+    rightsImports,
     blocklist: (_db, clock) => {
       const crypto = keyring();
       return crypto === undefined ? undefined : createOrderBlocklistPorts({ clock, crypto });
@@ -1922,13 +1933,53 @@ function orderSyncPorts(
  * Outside local / test a missing keyring refuses the runtime (the worker does not start), the same
  * rule as linking's and agent's item_ref: production never loses step ③ silently. In local / test
  * without one the step is skipped with one warning line, as a config without keys is normal there.
+ * B1-10n: the sync's rebate hook is the factory's port followed by the clawback's onUpdated: rebate
+ * first (R9b copies the amount rows and totals of the new commission_version), because the clawback
+ * reads the snapshot of the current version (D10-565). One clawback serves that hook and the rights
+ * command of the rights_import job; both are built once, when the runtime is. The beneficiary gate
+ * needs the field keyring: without one (local / test only, see above) neither is built, with one
+ * warning line, and the settle worker does not run there either, so no order is credited.
  */
 function orderSyncWorker(
   union: DynamicModule,
   source: UnionQuotaSource,
-  rebate: OrderRebatePortFactory,
+  rebate: (assembly: OrderRebateAssembly) => ProductionRebatePort,
 ): DynamicModule {
   let entry: (UnionQuotaDeps & OrderSyncKeyring) | undefined;
+  let wired:
+    | { readonly port: ProductionRebatePort; readonly clawback: ClawbackOrder | undefined }
+    | undefined;
+  const wire = (assembly: OrderRebateAssembly) => {
+    if (wired !== undefined) return wired;
+    if (entry === undefined) throw new Error('orders: the clawback needs the worker entry');
+    const port = rebate(assembly);
+    if (entry.crypto === undefined) {
+      entry.logger.warn({ step: 'clawback' }, 'order_clawback_skipped');
+      wired = { port, clawback: undefined };
+      return wired;
+    }
+    const clawback = orderClawback(assembly, entry.crypto);
+    wired = {
+      clawback,
+      port: {
+        ...port,
+        onUpdated: async (trx, change, statusSource) => {
+          await port.onUpdated(trx, change, statusSource);
+          await clawback.onUpdated(trx, change, statusSource);
+        },
+      },
+    };
+    return wired;
+  };
+  const rightsImports: NonNullable<OrdersWorkerOptions['rightsImports']> = (assembly) => {
+    const { port, clawback } = wire(assembly);
+    if (clawback === undefined || entry === undefined) return undefined;
+    const { clock, logger, events } = assembly;
+    return {
+      store: createImportStore({ appEnv: entry.appEnv, logger }),
+      rights: createRightsCommandPort({ clock, logger, events, clawback, rebate: port }),
+    };
+  };
   const keyring = (): FieldCrypto | undefined => {
     if (entry === undefined) throw new Error('orders: the blacklist step needs the worker entry');
     return orderBlacklistKeyring(entry);
@@ -1941,7 +1992,8 @@ function orderSyncWorker(
         return unionQuota(endpoint, entry, source);
       },
       keyring,
-      rebate,
+      (assembly) => wire(assembly).port,
+      rightsImports,
     ),
   );
   const runtime = orderSyncToken();
@@ -2076,6 +2128,40 @@ export function orderSnapshotPort(
   });
 }
 
+/** B1-10n: the sync's hooks plus the R6 / R7 command of the rights command. */
+type ProductionRebatePort = ReturnType<OrderRebatePortFactory> & Pick<RebatePort, 'apply'>;
+
+/**
+ * B1-10n: settlement's post-credit clawback (R8 / R9 / R9b) on the worker, over the same owners'
+ * exports as the settle handler's credit. Building it reads nothing. orders' own pending port takes
+ * CLAWBACK_NO_COMMISSION. config.get takes no transaction, as in rebatePortFactory.
+ */
+function orderClawback(assembly: OrderRebateAssembly, crypto: FieldCrypto): ClawbackOrder {
+  const { db, clock, logger, events } = assembly;
+  return createClawbackOrder({
+    clock,
+    logger,
+    events,
+    ledger: createLedger({ clock }),
+    gate: createBeneficiaryGate({
+      clock,
+      lockUsers: lockUsersForUpdate,
+      deletionStatus: createUserDeletionStatusReader({ db }),
+      realnameStatus: createRealnameStatusBatchReader({ db }),
+      riskState: createRiskStateBatchReader({ db }),
+      minors: createMinorStatusBatchReader({ crypto }),
+    }),
+    readSnapshot: readCommissionSnapshot,
+    // commission's writer takes the clock as its third argument, as in the settle handler.
+    appendBeneficiaryEvent: (trx, input) => appendBeneficiaryEvent(trx, input, { clock }),
+    pending: createClawbackPendingPort({ clock }),
+    config: {
+      get: async (appId, key) =>
+        (await createContentReader({ db, clock }).configValue(appId, key))?.value,
+    },
+  });
+}
+
 /**
  * B1-09n (D10-548, D10-550, FU-REBATE-PORT-WIRING): the production rebate port. One factory per
  * entry (AppModule.forEntry): its first call builds settlement's port, every later call returns
@@ -2090,8 +2176,8 @@ export function orderSnapshotPort(
  *   orders calls it only for an uncredited order; a credited one gets the review event from orders
  *   and no amount changes (BR-ATTR-26).
  */
-export function rebatePortFactory(): OrderRebatePortFactory {
-  let port: ReturnType<OrderRebatePortFactory> | undefined;
+export function rebatePortFactory(): (assembly: OrderRebateAssembly) => ProductionRebatePort {
+  let port: ProductionRebatePort | undefined;
   return ({ db, clock, logger, events }) => {
     if (port !== undefined) return port;
     const rebate = createRebatePort({

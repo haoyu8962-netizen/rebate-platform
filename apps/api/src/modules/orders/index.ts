@@ -175,6 +175,7 @@ export { orderSyncToken } from './worker-runtime.ts';
 export type {
   OrderRebateAssembly,
   OrderRebatePortFactory,
+  OrderRightsImportPorts,
   OrderSyncRebatePort,
   OrderSyncReadPorts,
   OrderSyncRuntime,

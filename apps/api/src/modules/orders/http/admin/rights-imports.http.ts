@@ -1,8 +1,7 @@
 // B1-09g: the handlers of POST / GET /admin/v1/rights-imports and GET
 // /admin/v1/rights-imports/{import_id} (contract adminCreateRightsImport / adminListRightsImports /
-// adminGetRightsImport). Not mounted (J-1 / J-22): no Nest decorator here and no route on any entry;
-// B1-09n wraps this in the admin controller. The admin request check has verified the admin token
-// before these run.
+// adminGetRightsImport). No Nest decorator here: rights-imports.controller.ts (B1-10n) mounts it on
+// the admin entry. The admin request check has verified the admin token before these run.
 //
 // create: the operation guard checks the account and permission point order.claim (no step-up tier)
 // first; only inside its callback is the multipart body read (so a refused account never consumes

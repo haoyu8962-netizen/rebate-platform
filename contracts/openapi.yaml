@@ -13669,7 +13669,6 @@ paths:
         `duplicate_rows`; uploading the same file again creates a new import task (新任务), whose
         already imported rows count as `duplicate_rows`.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003
@@ -13800,7 +13799,6 @@ paths:
         `created_by_name` (display_name, else the username; null when the account is deleted).
         Reading does not write an audit record.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -13879,7 +13877,6 @@ paths:
         unknown `import_id` or a task of another app is 20001 with `data.fields=[import_id]` (no
         404). Reading does not write an audit record.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403

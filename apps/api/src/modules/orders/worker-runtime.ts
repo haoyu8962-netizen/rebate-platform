@@ -40,6 +40,11 @@
 //   logger plus `rightsImports` (the import store, the column template registry and the per-kind row
 //   processors). Without `rightsImports` such a job throws, so the queue retries and dead-letters it
 //   (nothing of a task is touched); the other job names are routed as before.
+// - B1-10n: when ports.rightsImports is given (app.module's real import store and settlement's
+//   rights command), the runtime assembles `rightsImports` itself, at assembly and reading nothing:
+//   the rights / punish processors over that command, the channel processor over the same risk
+//   blocklist ports step ③ uses and this runtime's union access. It answers undefined only where
+//   the field keyring is missing (local / test). No column template is registered yet (K-3).
 // - B1-04zm: job name 'rescan.window' is routed to jobs/order-rescan.ts on both branches, and
 //   scheduledPlatforms() are the platforms it accepts. With ports.rescanConfig given, start() also
 //   arms the rescan loops of those platforms and stop() stops them; absent → no rescan timer.
@@ -71,6 +76,10 @@ import {
 import { ORDER_RESCAN_JOB, createOrderRescanScheduler } from './application/order-rescan.ts';
 import { createOrderPipeline } from './application/pipeline-port.ts';
 import type { OrderPipelineDeps, OrderPipelinePort } from './application/pipeline-types.ts';
+import {
+  createChannelImportProcessor,
+  type ChannelBlocklistPort,
+} from './application/channel-import.ts';
 import type { OrderSourcePorts } from './application/source-backfill.ts';
 import type {
   OrderBlacklistDeps,
@@ -107,7 +116,9 @@ import type {
   RightsImportProcessors,
   RightsImportTemplates,
 } from './application/rights-import-ports.ts';
+import { createRightsImportProcessors } from './application/rights-import-rows.ts';
 import { RIGHTS_IMPORT_JOB } from './application/rights-imports.ts';
+import type { RightsCommandPort } from './application/rights-ports.ts';
 import { handleRightsImport } from './jobs/rights-import.ts';
 import { handleManualSyncJob, isManualSyncJob } from './jobs/manual-sync.ts';
 import { createOrderSyncRequestProgress } from './infra/order-sync-requests.ts';
@@ -164,7 +175,10 @@ export interface OrderSyncReadPorts {
    * and reading nothing until used. Absent, or B1-09n undefined (no field keyring in local / test;
    * app.module refuses that elsewhere) → step ③ (BR-ATTR-26) is skipped.
    */
-  readonly blocklist?: (db: Kysely<DB>, clock: Clock) => OrderBlacklistPorts | undefined;
+  readonly blocklist?: (
+    db: Kysely<DB>,
+    clock: Clock,
+  ) => (OrderBlacklistPorts & Partial<ChannelBlocklistPort>) | undefined;
   /**
    * B1-09b: attr.blacklist.order_suffix_void_enabled of one App. Absent → always false (08 default:
    * suffix hits are only recorded for manual review).
@@ -184,6 +198,11 @@ export interface OrderSyncReadPorts {
    * without it keeps a no-op port; the production worker always gives it.
    */
   readonly rebate?: OrderRebatePortFactory;
+  /**
+   * B1-10n: what the rights_import job needs from other modules; building it reads nothing.
+   * Absent or undefined → the job throws, as without `rightsImports`.
+   */
+  readonly rightsImports?: (assembly: OrderRebateAssembly) => OrderRightsImportPorts | undefined;
   /**
    * B1-04zm: reads order_sync.rescan.<platform>.enabled / .days, called once at assembly and
    * reading nothing until used. Absent → no rescan timer; 'rescan.window' jobs are routed either way.
@@ -212,6 +231,16 @@ export interface OrderRightsImportDeps {
   readonly templates: RightsImportTemplates;
   readonly processors: RightsImportProcessors;
 }
+
+/** B1-10n: the other modules' side of the rights_import job. */
+export interface OrderRightsImportPorts {
+  readonly store: ImportStore;
+  /** settlement's rights.record, with its clawback and the worker's one rebate port. */
+  readonly rights: RightsCommandPort;
+}
+
+// TODO(规划/11 §4.5): 各联盟的导入列模板 — blocked on 真实导出样本（K-3）；模板未登记时每行记 invalid_row
+const NO_RIGHTS_IMPORT_TEMPLATES: RightsImportTemplates = { find: () => undefined };
 
 const ORDER_SYNC = Symbol('ORDER_SYNC');
 
@@ -341,7 +370,27 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
   });
 
   const handler = { access, cursors, registry, pipeline, logger };
-  const rightsImports = deps.rightsImports;
+  const importPorts = deps.ports.rightsImports?.({ db, clock, logger, events });
+  const rightsImports: OrderRightsImportDeps | undefined =
+    deps.rightsImports ??
+    (importPorts === undefined
+      ? undefined
+      : {
+          store: importPorts.store,
+          templates: NO_RIGHTS_IMPORT_TEMPLATES,
+          processors: {
+            ...createRightsImportProcessors({ db, clock, ports: { rights: importPorts.rights } }),
+            ...(blocklist?.importChannels === undefined
+              ? {}
+              : {
+                  channel: createChannelImportProcessor({
+                    db,
+                    blocklist: { importChannels: blocklist.importChannels.bind(blocklist) },
+                    accounts: access,
+                  }),
+                }),
+          },
+        });
   const importJob = (job: ReceivedJob): Promise<void> => {
     if (rightsImports === undefined) {
       return Promise.reject(new Error('orders: rights_import is not configured on this worker'));

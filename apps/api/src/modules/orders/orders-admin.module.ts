@@ -2,8 +2,9 @@
 // /admin/v1/claims, GET /admin/v1/claims/{claim_id}) and, B1-10i, the console's order list and
 // detail (GET /admin/v1/orders, GET /admin/v1/orders/{order_id}) and, B1-09i, the manual order
 // sync (POST / GET /admin/v1/order-syncs, GET /admin/v1/order-syncs/limits) and, B1-10m, the write
-// side: claim item approve / reject and order hold / unhold / reassign. app.module imports this module on the admin
-// entry only; the api and stream entries do not serve /admin/v1. Permission checks go through
+// side: claim item approve / reject and order hold / unhold / reassign and, B1-10n, the Excel import
+// tasks (POST / GET /admin/v1/rights-imports, GET /admin/v1/rights-imports/{import_id}). app.module
+// imports this module on the admin entry only; the api and stream entries do not serve /admin/v1. Permission checks go through
 // platform's AdminOperationGuard, which the admin module provides on the admin entry (orders never
 // imports admin). Other modules' reads (identity's masked phones, admin's reviewer names,
 // linking's link_logs time and scene) come in as one factory from app.module, so this module
@@ -13,12 +14,15 @@ import { Module, type DynamicModule } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
 import type { Kysely, Selectable, Transaction } from 'kysely';
 import {
+  APP_CONFIG,
   CLOCK,
   DB,
   EVENT_BUS,
   FIELD_CRYPTO,
   JOB_QUEUE,
   ROOT_LOGGER,
+  createImportStore,
+  type AppConfig,
   type AuditPort,
   type Clock,
   type EventBus,
@@ -41,12 +45,17 @@ import { AdminClaims, type AdminClaimPorts } from './application/admin-claims.ts
 import { AdminOrders, type AdminOrderPorts } from './application/admin-orders.ts';
 import type { ClaimReviewDeps } from './application/claim-review.ts';
 import type { CommissionSnapshotPort } from './application/commission-snapshot-step.ts';
+import type { RightsImportDeps } from './application/rights-imports.ts';
 import type { OrderRightsPorts } from './application/rights-ports.ts';
 import type { OrderSourcePorts } from './application/source-backfill.ts';
 import { AdminClaimReviewController } from './http/admin/claim-review.controller.ts';
 import { AdminClaimsController } from './http/admin/claims.controller.ts';
 import { AdminOrderActionsController } from './http/admin/order-actions.controller.ts';
 import { AdminOrdersController } from './http/admin/orders.controller.ts';
+import {
+  ADMIN_RIGHTS_IMPORTS,
+  AdminRightsImportsController,
+} from './http/admin/rights-imports.controller.ts';
 import { ADMIN_WRITE_DEPS, type AdminWriteDeps } from './http/admin/write-deps.ts';
 import { createAdminClaimReads } from './infra/admin-claim-reads.ts';
 import { createAdminOrderReads } from './infra/admin-order-reads.ts';
@@ -105,6 +114,7 @@ export class OrdersAdminModule {
         AdminOrdersController,
         AdminOrderActionsController,
         AdminOrderSyncsController,
+        AdminRightsImportsController,
       ],
       providers: [
         {
@@ -166,6 +176,35 @@ export class OrdersAdminModule {
               assign: { ...attribution, targets: ports.targets, details },
             };
           },
+        },
+        {
+          // B1-10n: the import tasks. Building the store reads nothing; where it has no backend
+          // (staging / prod before B1-30) every put fails, so an upload rolls back to a 50001.
+          provide: ADMIN_RIGHTS_IMPORTS,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            APP_CONFIG,
+            { token: DB, optional: true },
+            { token: JOB_QUEUE, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            config: AppConfig,
+            db?: Kysely<Database>,
+            queue?: JobQueue,
+          ): RightsImportDeps | null =>
+            db === undefined || queue === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  queue,
+                  logger,
+                  store: createImportStore({ appEnv: config.appEnv, logger }),
+                  auditOn: options.writePorts(db, clock, logger).auditOn,
+                },
         },
         {
           // B1-09i: the console's manual sync. union's sync access on the admin entry has no
