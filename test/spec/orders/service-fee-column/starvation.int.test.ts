@@ -158,11 +158,31 @@ it('[AC-B1-08v#14] 100 张有服务费的拼多多 pending 刷新后，下一轮
   ]);
 });
 
-it.each(['missing_fee', 'platform_modified', 'taobao'] as const)(
-  '[AC-B1-08v#15] 100 张必然跳过的 %s 候选排后，首轮就处理京东且跳过单不变',
+it.each(['platform_paid_at_missing', 'platform_modified', 'taobao'] as const)(
+  '[AC-B1-08v#15] 100 张必然跳过的 %s 候选排后，首轮就处理京东且跳过单不变；拼多多服务费列为空不再算必然跳过',
   async (skip) => {
     await requireFeeColumn(db);
-    const { f, before, jdRow } = await cohort(skip);
+    // 对照：服务费列为空的拼多多单不跳过，到期扫描照常调端口，N 是 est。
+    const unskipped = await setup(db);
+    await setFee(db, unskipped.ctx.app_id, null);
+    unskipped.clock.advanceMs(HOUR);
+    await unskipped.scan();
+    expect(unskipped.port.create).toHaveBeenCalledTimes(1);
+    expect(unskipped.port.create.mock.calls[0]?.[1]).toMatchObject({
+      platform: 'pdd',
+      nBaseFen: 789n,
+    });
+
+    const { f, before, jdRow } = await cohort(skip === 'platform_paid_at_missing' ? 'none' : skip);
+    if (skip === 'platform_paid_at_missing') {
+      // paid_at_source 是 platform 而 paid_at 为空：paidAt 不可恢复，扫描必然 skip。
+      await db
+        .updateTable('orders')
+        .set({ paid_at: null })
+        .where('app_id', '=', f.ctx.app_id)
+        .where('platform', '=', 'pdd')
+        .execute();
+    }
     const ordersBefore = (await f.read()).orders;
     await f.scan();
     expect(f.port.create).toHaveBeenCalledTimes(1);

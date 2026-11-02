@@ -97,11 +97,15 @@ it('[AC-B1-10k#33] DEPOSIT_PAID 通过不生成快照（skip）', () => {
   expect(plan).toEqual({ kind: 'skip' });
 });
 
-it('[AC-B1-10k#34] 拼多多没有服务费：不调端口，落待处理 SERVICE_FEE_RATE_MISSING', () => {
+it('[AC-B1-10k#34] 拼多多 est 为空（报文没给服务费）：不调端口，落待处理 SERVICE_FEE_RATE_MISSING；est 已是净额时照常建', () => {
   const plan = planCommissionSnapshot(
-    claimSnapshotInput(order({ platform: 'pdd' }), U, null, null, NOW),
+    claimSnapshotInput(order({ platform: 'pdd', est_commission_fen: null }), U, null, null, NOW),
   );
   expect(plan).toEqual({ kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' });
+  const known = planCommissionSnapshot(
+    claimSnapshotInput(order({ platform: 'pdd' }), U, null, null, NOW),
+  );
+  expect(known.kind).toBe('call');
 });
 
 it('[AC-B1-10k#35] 淘礼金推广位按 rebate_mode=none、红包面额空；无付款时间取首条已付历史', () => {

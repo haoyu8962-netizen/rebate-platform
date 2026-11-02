@@ -1,12 +1,6 @@
 import { expect, it } from 'vitest';
 import type { ReadSnapshotBeneficiary } from '../domain/snapshot-read.ts';
-import {
-  frozenBase,
-  netCommission,
-  planVersion,
-  storedN,
-  type FrozenTerms,
-} from './estimate-plan.ts';
+import { frozenBase, planVersion, storedN, type FrozenTerms } from './estimate-plan.ts';
 
 const person = (
   role: ReadSnapshotBeneficiary['role'],
@@ -27,15 +21,6 @@ const terms: FrozenTerms = {
   subsidyCommissionFen: 0n,
   beneficiaries: [person('indirect', 500), person('self', 5000), person('direct', 1000)],
 };
-
-it('[AC-B2-03q] netCommission：空佣金与缺服务费是未知，服务费 0 是已知值，不扣费平台不看列', () => {
-  expect(netCommission(null, true, 200n)).toBeNull();
-  expect(netCommission(2000n, true, null)).toBeNull();
-  expect(netCommission(2000n, true, 0n)).toBe(2000n);
-  expect(netCommission(2000n, true, 200n)).toBe(1800n);
-  expect(netCommission(150n, true, 200n)).toBe(-50n);
-  expect(netCommission(2000n, false, null)).toBe(2000n);
-});
 
 it('[AC-B2-03q] frozenBase：负 N 为 0，不受没收影响', () => {
   expect(frozenBase(terms, 2000n)).toBe(1700n);

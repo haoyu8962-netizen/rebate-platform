@@ -83,8 +83,15 @@ it.each(['no published rule version', 'missing platform rule', 'missing reserve'
 it.each(['AMOUNT_PARSE_FAILED', 'SERVICE_FEE_RATE_MISSING'])(
   '[AC-B1-08k#29] 计划 pending %s 不调端口但写来源、待处理并通知 settlement',
   async (reason) => {
+    // 对照：est 有值时本次报文缺服务费不进计划 pending，调端口，N 就是 est。
+    const known = await fresh(db, { service_fee_fen: null });
+    const knownPort = fakePort();
+    expect(await runFresh(known, knownPort)).toMatchObject({ ok: true });
+    expect(knownPort.create).toHaveBeenCalledTimes(1);
+    expect(knownPort.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 789n });
+
     const f = await fresh(db, {
-      est_commission_fen: reason === 'AMOUNT_PARSE_FAILED' ? null : 789n,
+      est_commission_fen: null,
       service_fee_fen: reason === 'SERVICE_FEE_RATE_MISSING' ? null : 31n,
     });
     const port = fakePort();
@@ -134,8 +141,18 @@ it('[AC-B1-08k#39] 淘礼金面额未匹配仍调用快照，传 null 面额与 
 it.each(['port', 'plan'])(
   '[AC-B1-08k#30] update 首次 %s pending 写待处理并通知 settlement',
   async (mode) => {
+    // 对照：更新时 est 有值、本次报文缺服务费不进计划 pending，调端口，N 就是 est。
+    const known = await scenario(db, { raw_status: 'deposit', service_fee_fen: null });
+    const knownPort = fakePort();
+    expect(await runUpdate(known, knownPort, known.next({ raw_status: 'paid' }))).toMatchObject({
+      ok: true,
+    });
+    expect(knownPort.create).toHaveBeenCalledTimes(1);
+    expect(knownPort.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 789n });
+
     const f = await scenario(db, {
       raw_status: 'deposit',
+      est_commission_fen: mode === 'plan' ? null : 789n,
       service_fee_fen: mode === 'plan' ? null : 31n,
     });
     const port = fakePort();

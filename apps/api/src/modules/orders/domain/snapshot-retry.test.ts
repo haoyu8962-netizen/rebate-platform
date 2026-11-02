@@ -50,7 +50,7 @@ it('[AC-B1-08t#U1] 重试对象只认三种快照类原因；到期与 24 小时
   expect(isSnapshotRetryExhausted(at('2026-10-17T12:00:00.001Z'), now)).toBe(false);
 });
 
-it('[AC-B1-08t#U2] 佣金基数结算优先、两者都空 pending；拼多多服务费未知 skip、为空 pending、已知则扣除', () => {
+it('[AC-B1-08t#U2] 佣金基数结算优先、两者都空 pending；拼多多 N 为空且没有服务费进 SERVICE_FEE_RATE_MISSING，N 已知不看服务费', () => {
   expect(planSnapshotRetry(input())).toMatchObject({ kind: 'call', input: { nBaseFen: 789n } });
   const settled = input({
     order: { ...input().order, settle_commission_fen: 0n },
@@ -59,17 +59,22 @@ it('[AC-B1-08t#U2] 佣金基数结算优先、两者都空 pending；拼多多�
   const empty = input({ order: { ...input().order, est_commission_fen: null } });
   expect(planSnapshotRetry(empty)).toEqual({ kind: 'pending', reason: 'AMOUNT_PARSE_FAILED' });
   const pdd = { ...input().order, platform: 'pdd' as const };
-  expect(planSnapshotRetry(input({ order: pdd }))).toEqual({
-    kind: 'skip',
-    reason: 'service_fee_unknown',
+  const noEst = { ...pdd, est_commission_fen: null };
+  expect(planSnapshotRetry(input({ order: pdd }))).toMatchObject({
+    kind: 'call',
+    input: { nBaseFen: 789n },
   });
-  expect(planSnapshotRetry(input({ order: pdd, serviceFeeFen: null }))).toEqual({
+  expect(planSnapshotRetry(input({ order: noEst }))).toEqual({
+    kind: 'pending',
+    reason: 'SERVICE_FEE_RATE_MISSING',
+  });
+  expect(planSnapshotRetry(input({ order: noEst, serviceFeeFen: null }))).toEqual({
     kind: 'pending',
     reason: 'SERVICE_FEE_RATE_MISSING',
   });
   expect(planSnapshotRetry(input({ order: pdd, serviceFeeFen: 31n }))).toMatchObject({
     kind: 'call',
-    input: { nBaseFen: 758n },
+    input: { nBaseFen: 789n },
   });
 });
 
@@ -119,17 +124,17 @@ it('[AC-B1-08t#U3] paidAt 按库内来源恢复；platform_modified 与缺值 sk
 
 // —— B1-08v：扫描读订单服务费列；必然 skip 的单排在候选末尾 ——
 
-it('[AC-B1-08v#U1] 拼多多服务费按传入值扣除（结算优先，大整数不丢精度）；服务费 0 不扣、未知仍 skip', () => {
+it('[AC-B1-08v#U1] 拼多多 N 不看传入的服务费（est 已是净额，结算优先，大整数不丢精度）；有值、0、未知都一样', () => {
   const pdd = { ...input().order, platform: 'pdd' as const };
   expect(planSnapshotRetry(input({ order: pdd, serviceFeeFen: 47n }))).toMatchObject({
     kind: 'call',
-    input: { nBaseFen: 742n },
+    input: { nBaseFen: 789n },
   });
   expect(
     planSnapshotRetry(
       input({ order: { ...pdd, settle_commission_fen: 901n }, serviceFeeFen: 31n }),
     ),
-  ).toMatchObject({ kind: 'call', input: { nBaseFen: 870n } });
+  ).toMatchObject({ kind: 'call', input: { nBaseFen: 901n } });
   expect(planSnapshotRetry(input({ order: pdd, serviceFeeFen: 0n }))).toMatchObject({
     kind: 'call',
     input: { nBaseFen: 789n },
@@ -141,10 +146,10 @@ it('[AC-B1-08v#U1] 拼多多服务费按传入值扣除（结算优先，大整�
         serviceFeeFen: 9_007_199_254_740_993n,
       }),
     ),
-  ).toMatchObject({ kind: 'call', input: { nBaseFen: 789n } });
-  expect(planSnapshotRetry(input({ order: pdd, serviceFeeFen: 'unknown' }))).toEqual({
-    kind: 'skip',
-    reason: 'service_fee_unknown',
+  ).toMatchObject({ kind: 'call', input: { nBaseFen: 9_007_199_254_741_782n } });
+  expect(planSnapshotRetry(input({ order: pdd, serviceFeeFen: 'unknown' }))).toMatchObject({
+    kind: 'call',
+    input: { nBaseFen: 789n },
   });
 });
 
@@ -195,7 +200,7 @@ it('[AC-B1-08v#U2] isScanSkipCertain 与扫描路径的 planSnapshotRetry 逐格
   expect(cases).toBe(240);
 });
 
-it('[AC-B1-08v#U3] 必然 skip 的三类：拼多多服务费为空、platform_modified、淘宝；佣金都空时是 pending 不算', () => {
+it('[AC-B1-08v#U3] 必然 skip 的两类：platform_modified、淘宝；拼多多服务费为空不再算；佣金都空时是 pending 不算', () => {
   const base: ScanSkipOrder = {
     platform: 'jd',
     est_commission_fen: 789n,
@@ -205,7 +210,7 @@ it('[AC-B1-08v#U3] 必然 skip 的三类：拼多多服务费为空、platform_m
     paid_at: at('2026-10-17T10:00:00.000Z'),
   };
   expect(isScanSkipCertain(base)).toBe(false);
-  expect(isScanSkipCertain({ ...base, platform: 'pdd' })).toBe(true);
+  expect(isScanSkipCertain({ ...base, platform: 'pdd' })).toBe(false);
   expect(isScanSkipCertain({ ...base, platform: 'pdd', service_fee_fen: 31n })).toBe(false);
   expect(isScanSkipCertain({ ...base, platform: 'pdd', service_fee_fen: 0n })).toBe(false);
   expect(isScanSkipCertain({ ...base, paid_at_source: 'platform_modified' })).toBe(true);

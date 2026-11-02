@@ -8,7 +8,6 @@
 // - N（BR-CALC-02 取值阶段）：结算收入非空只取结算收入，否则取预估收入；两者都空不按 0 兜底。
 //   拼多多的联盟佣金含软件服务费，N = 佣金 − 服务费（BR-CALC-03；D10-42 / D10-66），服务费缺失进待处理。
 // 金额只经 @couli/money（整数分，可为负）。
-import { subFen } from '@couli/money';
 import type { OrderPlatformState } from '@couli/domain';
 import type { components } from '@couli/contracts-ts';
 import { findPlatformRules } from './platform-rules/index.ts';
@@ -146,15 +145,17 @@ export function planCommissionSnapshot(input: PlanCommissionSnapshotInput): Comm
   const { order } = input;
   // BR-CALC-02 取值阶段：结算收入一旦非空只取结算收入（写库后的值）。
   const commission = order.settle_commission_fen ?? order.est_commission_fen;
-  if (commission === null) return { kind: 'pending', reason: 'AMOUNT_PARSE_FAILED' };
-  let nBaseFen = commission;
-  if (findPlatformRules(order.platform)?.serviceFeeDeducted === true) {
-    // BR-CALC-03：拼多多 promotion_amount 含软件服务费；服务费缺失不得按 0 处理。
-    // 查规则表的 serviceFeeDeducted（只有拼多多打开）；未登记的平台代码不扣。
-    const fee = input.incoming.service_fee_fen;
-    if (fee === null) return { kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' };
-    nBaseFen = subFen(commission, fee);
+  if (commission === null) {
+    // BR-CALC-03：est 已是净额（适配器扣，B1-08zh）；为空且本次没有服务费 = 缺费率，不按 0。
+    const feeMissing =
+      findPlatformRules(order.platform)?.serviceFeeDeducted === true &&
+      input.incoming.service_fee_fen === null;
+    return {
+      kind: 'pending',
+      reason: feeMissing ? 'SERVICE_FEE_RATE_MISSING' : 'AMOUNT_PARSE_FAILED',
+    };
   }
+  const nBaseFen = commission;
   const paid = chooseSnapshotPaidAt(input);
   // BR-CALC-19 / 27：淘礼金面额匹配（tlj_grants）未实现，一律视为匹配不到 → 照常生成、rebate_mode=none、
   // 红包面额记空（D10-68；待处理与告警由调用方写）；非淘礼金 rebate_mode 为空、红包 0。

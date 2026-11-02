@@ -111,27 +111,25 @@ function called(platform: PlatformCode, nBaseFen: bigint, taolijin = false) {
   };
 }
 
-it('[AC-B1-08za#11] 服务费入基数（首次快照）：只有拼多多 N = 佣金 − 服务费、服务费缺失进待处理；京东 / 淘宝不扣、缺失也照常生成', () => {
+it('[AC-B1-08za#11] 服务费与基数（首次快照）：N 一律是 settle ?? est，不再减服务费；只有拼多多在 est 为空且缺服务费时进 SERVICE_FEE_RATE_MISSING；京东 / 淘宝缺失也照常生成', () => {
   for (const platform of REGISTERED_PLATFORMS) {
     const rules = rulesOf(platform);
     const deduct = PINNED[platform].serviceFeeDeducted;
     expect(rules.serviceFeeDeducted, platform).toBe(deduct);
     const plan = (patch: Parameters<typeof snapshotInput>[1]) =>
       planCommissionSnapshot(snapshotInput(platform, patch));
-    expect(plan({ fee: 150n }), platform).toEqual(called(platform, deduct ? 850n : 1000n));
+    expect(plan({ fee: 150n }), platform).toEqual(called(platform, 1000n));
     expect(plan({ fee: 0n }), platform).toEqual(called(platform, 1000n));
-    expect(plan({ fee: 1200n }), platform).toEqual(called(platform, deduct ? -200n : 1000n));
-    expect(plan({ fee: 150n, settle: 2000n }), platform).toEqual(
-      called(platform, deduct ? 1850n : 2000n),
-    );
-    expect(plan({ fee: 150n, settle: -51n }), platform).toEqual(
-      called(platform, deduct ? -201n : -51n),
-    );
-    expect(plan({ fee: null }), platform).toEqual(
-      deduct ? { kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' } : called(platform, 1000n),
-    );
-    // The amount is judged before the fee: no commission at all is AMOUNT_PARSE_FAILED everywhere.
+    expect(plan({ fee: 1200n }), platform).toEqual(called(platform, 1000n));
+    expect(plan({ fee: 150n, settle: 2000n }), platform).toEqual(called(platform, 2000n));
+    expect(plan({ fee: 150n, settle: -51n }), platform).toEqual(called(platform, -51n));
+    expect(plan({ fee: null }), platform).toEqual(called(platform, 1000n));
     expect(plan({ fee: null, est: null }), platform).toEqual({
+      kind: 'pending',
+      reason: deduct ? 'SERVICE_FEE_RATE_MISSING' : 'AMOUNT_PARSE_FAILED',
+    });
+    // The fee is there, so a missing amount is AMOUNT_PARSE_FAILED everywhere.
+    expect(plan({ fee: 150n, est: null }), platform).toEqual({
       kind: 'pending',
       reason: 'AMOUNT_PARSE_FAILED',
     });
@@ -139,33 +137,33 @@ it('[AC-B1-08za#11] 服务费入基数（首次快照）：只有拼多多 N = �
   expect(REGISTERED_PLATFORMS.filter((p) => PINNED[p].serviceFeeDeducted)).toEqual(['pdd']);
 });
 
-it('[AC-B1-08za#12] 服务费入基数（补偿重试）：拼多多 unknown → skip、报文没给 → 待处理、有值扣减；京东 / 淘宝三种都不扣', () => {
+it('[AC-B1-08za#12] 服务费与基数（补偿重试）：N 已知时服务费有值、没给、unknown 都调端口，N = settle ?? est；只有拼多多 N 为空且 unknown 或没给时进 SERVICE_FEE_RATE_MISSING', () => {
   for (const platform of REGISTERED_PLATFORMS) {
     const rules = rulesOf(platform);
     const deduct = PINNED[platform].serviceFeeDeducted;
     expect(rules.serviceFeeDeducted, platform).toBe(deduct);
     const plan = (patch: Parameters<typeof retryInput>[1]) =>
       planSnapshotRetry(retryInput(platform, patch));
-    expect(plan({ fee: 150n }), platform).toEqual(called(platform, deduct ? 850n : 1000n));
+    expect(plan({ fee: 150n }), platform).toEqual(called(platform, 1000n));
     expect(plan({ fee: 0n }), platform).toEqual(called(platform, 1000n));
-    expect(plan({ fee: 150n, settle: 2000n }), platform).toEqual(
-      called(platform, deduct ? 1850n : 2000n),
-    );
-    expect(plan({ fee: null }), platform).toEqual(
-      deduct ? { kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' } : called(platform, 1000n),
-    );
-    // The promotion slot's scene is known (null) here, so only the fee can skip.
-    expect(plan({ fee: 'unknown', pidScene: null }), platform).toEqual(
-      deduct ? { kind: 'skip', reason: 'service_fee_unknown' } : called(platform, 1000n),
-    );
-    expect(plan({ fee: 'unknown', est: null }), platform).toEqual({
+    expect(plan({ fee: 150n, settle: 2000n }), platform).toEqual(called(platform, 2000n));
+    expect(plan({ fee: null }), platform).toEqual(called(platform, 1000n));
+    expect(plan({ fee: 'unknown', pidScene: null }), platform).toEqual(called(platform, 1000n));
+    const missing = {
+      kind: 'pending',
+      reason: deduct ? 'SERVICE_FEE_RATE_MISSING' : 'AMOUNT_PARSE_FAILED',
+    };
+    expect(plan({ fee: null, est: null }), platform).toEqual(missing);
+    expect(plan({ fee: 'unknown', est: null }), platform).toEqual(missing);
+    // The fee is there, so a missing amount is AMOUNT_PARSE_FAILED everywhere.
+    expect(plan({ fee: 150n, est: null }), platform).toEqual({
       kind: 'pending',
       reason: 'AMOUNT_PARSE_FAILED',
     });
   }
 });
 
-it('[AC-B1-08za#13] 扫描必然 skip：拼多多服务费列为空 → true（0 或有值 → false），京东永不因服务费 skip，淘宝因推广位场景恒 true；佣金基数不可得一律 false', () => {
+it('[AC-B1-08za#13] 扫描必然 skip：拼多多、京东都不因服务费 skip（列为空、0、有值 → false），拼多多 paidAt 不可恢复仍 true，淘宝因推广位场景恒 true；佣金基数不可得一律 false', () => {
   const scan = (platform: string, service_fee_fen: bigint | null, commission: bigint | null) =>
     isScanSkipCertain({
       platform,
@@ -182,7 +180,7 @@ it('[AC-B1-08za#13] 扫描必然 skip：拼多多服务费列为空 → true（0
       [150n, false],
     ],
     pdd: [
-      [null, true],
+      [null, false],
       [0n, false],
       [150n, false],
     ],
@@ -203,6 +201,20 @@ it('[AC-B1-08za#13] 扫描必然 skip：拼多多服务费列为空 → true（0
   }
   for (const platform of [...UNREGISTERED, 'PDD', 'TAOBAO', '']) {
     expect(scan(platform, null, 1000n), platform).toBe(false);
+  }
+  // paidAt that cannot be recovered still skips for certain on pdd, whatever the fee column says.
+  for (const service_fee_fen of [null, 150n]) {
+    const unrecoverable = (paid_at_source: string, paid_at: Date | null) =>
+      isScanSkipCertain({
+        platform: 'pdd',
+        est_commission_fen: 1000n,
+        settle_commission_fen: null,
+        service_fee_fen,
+        paid_at_source,
+        paid_at,
+      });
+    expect(unrecoverable('platform', null)).toBe(true);
+    expect(unrecoverable('platform_modified', PAID)).toBe(true);
   }
 });
 
@@ -232,14 +244,11 @@ it('[AC-B1-08za#15] 淘礼金推广位场景（补偿重试）：只有淘宝在
   for (const platform of REGISTERED_PLATFORMS) {
     const rules = rulesOf(platform);
     const byScene = PINNED[platform].taolijinPidScene;
-    const deduct = PINNED[platform].serviceFeeDeducted;
     expect(rules.taolijinPidScene, platform).toBe(byScene);
     expect(planSnapshotRetry(retryInput(platform, { pidScene: 'unknown' })), platform).toEqual(
-      byScene
-        ? { kind: 'skip', reason: 'pid_scene_unknown' }
-        : called(platform, deduct ? 850n : 1000n),
+      byScene ? { kind: 'skip', reason: 'pid_scene_unknown' } : called(platform, 1000n),
     );
-    // Judged in order amount → fee → paidAt → scene: an earlier outcome wins over the scene.
+    // Judged in order amount → paidAt → scene: an earlier outcome wins over the scene.
     expect(
       planSnapshotRetry(retryInput(platform, { pidScene: 'unknown', paid: null })),
       platform,
@@ -251,13 +260,7 @@ it('[AC-B1-08za#15] 淘礼金推广位场景（补偿重试）：只有淘宝在
     expect(
       planSnapshotRetry(retryInput(platform, { pidScene: 'unknown', fee: null })),
       platform,
-    ).toEqual(
-      deduct
-        ? { kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' }
-        : byScene
-          ? { kind: 'skip', reason: 'pid_scene_unknown' }
-          : called(platform, 1000n),
-    );
+    ).toEqual(byScene ? { kind: 'skip', reason: 'pid_scene_unknown' } : called(platform, 1000n));
   }
   expect(REGISTERED_PLATFORMS.filter((p) => PINNED[p].taolijinPidScene)).toEqual(['taobao']);
 });

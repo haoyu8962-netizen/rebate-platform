@@ -118,7 +118,13 @@ it.each([0, 2])('[AC-B2-03q#73] 快照 existing（版本 %i）：版本不动，
 
 it.each([
   ['端口 pending（规则缺预留）', 'pending', 'jd', false, {}],
-  ['计划 pending（拼多多服务费缺失）', 'pending', 'pdd', true, {}],
+  [
+    '计划 pending（拼多多 est 为空且缺服务费）',
+    'pending',
+    'pdd',
+    true,
+    { est_commission_fen: null, service_fee_fen: null },
+  ],
   [
     '计划 skip（预售定金阶段）',
     'none',
@@ -133,8 +139,18 @@ it.each([
     },
   ],
 ] as const)(
-  '[AC-B2-03q#74] %s：版本不动，不写金额行',
+  '[AC-B2-03q#74] %s：版本不动，不写金额行；拼多多 est 有值、服务费列为空不算这一类',
   async (_name, snapshot, platform, reserves, patch) => {
+    // 对照：拼多多 est 有值、服务费列为空照常生成快照：1200 × 85% = 1020；本人 510。
+    const known = await fixture(h);
+    await snapshotRules(known.db, known.appId);
+    const priced = await known.order({ platform: 'pdd', service_fee_fen: null });
+    const pricedRef = portOrderOf(priced);
+    assigned(await known.assign(priced, {}, { deps: { snapshots: portOf(known) } }));
+    expect(known.rebate.onAdminAssigned.mock.calls[0]?.[1]).toMatchObject({ snapshot: 'created' });
+    expect(await orderRow(known.db, pricedRef)).toMatchObject({ commission_version: 1 });
+    expect(await amountsAt(known.db, pricedRef, 1)).toEqual([['self', 1020n, 510n]]);
+
     for (const version of [0, 2]) {
       const f = await fixture(h);
       await snapshotRules(f.db, f.appId, { reserves });

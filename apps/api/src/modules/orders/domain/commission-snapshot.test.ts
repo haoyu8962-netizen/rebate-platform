@@ -1,5 +1,4 @@
 // B1-08k 源码旁单元测试：第 ⑥ 步快照判定的纯函数（资格跨入、paid_at 降级、N 取值与服务费、淘礼金、来源列）。
-import { InvalidAmount } from '@couli/money';
 import { expect, it } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import {
@@ -113,15 +112,15 @@ it('[AC-B1-08k#U2] paid_at 三档：平台尾款时间 → 迁到 PAID 那次的
   ).toEqual({ paidAt: NOW, paidAtSource: 'observed' });
 });
 
-it('[AC-B1-08k#U3] N 取写库后结算收入优先；拼多多扣服务费（可为负），其他平台不扣', () => {
+it('[AC-B1-08k#U3] N 取写库后结算收入优先；拼多多 est 已是净额不再减，其他平台同样不减', () => {
   expect(planCommissionSnapshot(input())).toMatchObject({
     kind: 'call',
-    input: { nBaseFen: 480n },
+    input: { nBaseFen: 500n },
   });
   const settled = { ...input().order, settle_commission_fen: 10n };
   expect(planCommissionSnapshot(input({ order: settled }))).toMatchObject({
     kind: 'call',
-    input: { nBaseFen: -10n },
+    input: { nBaseFen: 10n },
   });
   expect(
     planCommissionSnapshot(
@@ -133,17 +132,21 @@ it('[AC-B1-08k#U3] N 取写库后结算收入优先；拼多多扣服务费（�
   ).toMatchObject({ kind: 'call', input: { nBaseFen: 500n } });
 });
 
-it('[AC-B1-08k#U4] 金额缺失与服务费缺失进 pending，不按 0；超出 int64 的差由 money 拒绝', () => {
+it('[AC-B1-08k#U4] 金额缺失与服务费缺失进 pending，不按 0；N 已知时本次缺服务费不影响', () => {
   const noAmount = { ...input().order, est_commission_fen: null };
   expect(planCommissionSnapshot(input({ order: noAmount }))).toEqual({
     kind: 'pending',
     reason: 'AMOUNT_PARSE_FAILED',
   });
   expect(
-    planCommissionSnapshot(input({ incoming: { modified_at: MODIFIED, service_fee_fen: null } })),
+    planCommissionSnapshot(
+      input({ order: noAmount, incoming: { modified_at: MODIFIED, service_fee_fen: null } }),
+    ),
   ).toEqual({ kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' });
-  const huge = { ...input().order, est_commission_fen: -9223372036854775808n };
-  expect(() => planCommissionSnapshot(input({ order: huge }))).toThrow(InvalidAmount);
+  // N 已知时本次缺服务费不影响（est 已是净额）。
+  expect(
+    planCommissionSnapshot(input({ incoming: { modified_at: MODIFIED, service_fee_fen: null } })),
+  ).toMatchObject({ kind: 'call', input: { nBaseFen: 500n } });
 });
 
 it('[AC-B1-08k#U5] 入参逐字段：淘礼金 none + 红包空，非淘礼金红包 0；补贴、活动、归属照传', () => {
@@ -159,7 +162,7 @@ it('[AC-B1-08k#U5] 入参逐字段：淘礼金 none + 红包空，非淘礼金�
       orderType: 'self',
       activityType: 'unit-activity',
       rebateMode: null,
-      nBaseFen: 480n,
+      nBaseFen: 500n,
       subsidyCommissionFen: 7n,
       tljDeductFen: 0n,
       tljRedpacketFen: 0n,

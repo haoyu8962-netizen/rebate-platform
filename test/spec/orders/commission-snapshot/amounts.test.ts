@@ -3,7 +3,7 @@ import { planCommissionSnapshot } from '../../../../apps/api/src/modules/orders/
 import type { CreateCommissionSnapshotInput } from '../../../../apps/api/src/modules/commission/application/snapshot.ts';
 import { input, PAID } from './plan-kit.ts';
 
-it('[AC-B1-08k#8] 快照端口逐字段：PDD 扣服务费，归属/类型/活动/时间不混淆', () => {
+it('[AC-B1-08k#8] 快照端口逐字段：N 就是 est，归属/类型/活动/时间不混淆', () => {
   // Structural compatibility with the real port is also checked by tsc.
   const actual: { kind: string; input?: CreateCommissionSnapshotInput } =
     planCommissionSnapshot(input());
@@ -18,7 +18,7 @@ it('[AC-B1-08k#8] 快照端口逐字段：PDD 扣服务费，归属/类型/活�
       orderType: 'share',
       activityType: 'synthetic-activity',
       rebateMode: null,
-      nBaseFen: 970n,
+      nBaseFen: 1001n,
       subsidyCommissionFen: 0n,
       tljDeductFen: 0n,
       tljRedpacketFen: 0n,
@@ -28,14 +28,14 @@ it('[AC-B1-08k#8] 快照端口逐字段：PDD 扣服务费，归属/类型/活�
 });
 
 it.each([0n, 501n, -51n, 9007199254740993n])(
-  '[AC-B1-08k#9] 结算非空优先且保留整数精度和符号：%s',
+  '[AC-B1-08k#9] 结算非空优先，不再减服务费，保留整数精度和符号：%s',
   (settle_commission_fen) => {
     const i = input();
     const expected = new Map<bigint, bigint>([
-      [0n, -31n],
-      [501n, 470n],
-      [-51n, -82n],
-      [9007199254740993n, 9007199254740962n],
+      [0n, 0n],
+      [501n, 501n],
+      [-51n, -51n],
+      [9007199254740993n, 9007199254740993n],
     ]);
     expect(
       planCommissionSnapshot({ ...i, order: { ...i.order, settle_commission_fen } }),
@@ -78,10 +78,17 @@ it('[AC-B1-08k#11] 两种收入全空进入金额待处理，不用零兜底', (
   );
 });
 
-it('[AC-B1-08k#12] PDD 服务费缺失待处理，明确的零费有效', () => {
+it('[AC-B1-08k#12] PDD est 有值时本次报文缺服务费照常生成；est 为空且缺服务费待处理，明确的零费有效', () => {
   const i = input();
   expect(
     planCommissionSnapshot({ ...i, incoming: { ...i.incoming, service_fee_fen: null } }),
+  ).toMatchObject({ kind: 'call', input: { nBaseFen: 1001n } });
+  expect(
+    planCommissionSnapshot({
+      ...i,
+      order: { ...i.order, est_commission_fen: null },
+      incoming: { ...i.incoming, service_fee_fen: null },
+    }),
   ).toEqual({ kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' });
   expect(
     planCommissionSnapshot({ ...i, incoming: { ...i.incoming, service_fee_fen: 0n } }),

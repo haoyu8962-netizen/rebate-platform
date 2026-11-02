@@ -40,7 +40,7 @@ it('[AC-B1-08k#32] 真实端口落一个快照；同单重放及 P3 金额变化
     rule_version_id: port.version.rule_version_id,
     paid_at: f.incoming.paid_at,
     paid_at_source: 'platform',
-    raw_n_fen: 758n,
+    raw_n_fen: 789n,
   });
   expect(await runFresh(f, port)).toMatchObject({ ok: true, value: { kind: 'unchanged' } });
   const updateDeps: OrderUpdateDeps & { snapshots: typeof port } = {

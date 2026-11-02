@@ -23,7 +23,8 @@ it.each(sources)(
       },
       raw_status: '4',
       raw_payload_id: null,
-      est_commission_fen: 76543n,
+      // 佣金 76543 − 服务费 4321（BR-CALC-03）。
+      est_commission_fen: 72222n,
       settle_commission_fen: null,
     });
     // 保留全部 PddOrderFields 的原有单位、接口字段白名单及空值语义。
@@ -63,7 +64,7 @@ it.each(sources)(
 );
 
 it.each(sources)(
-  '[AC-B1-08e-SHAPE#2] %s 不解析归因串，零状态与零佣金不是缺失，不推导结算佣金',
+  '[AC-B1-08e-SHAPE#2] %s 不解析归因串，零状态与零佣金不是缺失，净额可为负，不推导结算佣金',
   async (source) => {
     const dto = await one(
       source,
@@ -82,7 +83,8 @@ it.each(sources)(
         sub_union_id: null,
       },
       raw_status: '0',
-      est_commission_fen: 0n,
+      // 佣金 0 − 服务费 500：负值保留，不夹成 0。
+      est_commission_fen: -500n,
       settle_commission_fen: null,
       commission_fen: 0n,
       order_status: 0,
@@ -107,11 +109,17 @@ it.each(sources)('[AC-B1-08e-SHAPE#3] %s 缺失推广位、归因、状态统一
 });
 
 it.each(sources)(
-  '[AC-B1-08e-SHAPE#4] %s 预估佣金保留整数分上界，不扣服务费、不并补贴',
+  '[AC-B1-08e-SHAPE#4] %s 预估佣金保留整数分上界，扣服务费、不并补贴；服务费缺失 est 为 null',
   async (source) => {
     const dto = await one(source, sourceRow(source, { promotion_amount: 9007199254740991 }));
-    expect(value(dto, 'est_commission_fen')).toBe(9007199254740991n);
+    // 9007199254740991 − 4321，逐分准确。
+    expect(value(dto, 'est_commission_fen')).toBe(9007199254736670n);
     expect(value(dto, 'settle_commission_fen')).toBeNull();
     expect(dto.commission_fen).toBe(9007199254740991n);
+
+    const missing = await one(source, sourceRow(source, { duo_id_service_fee: null }));
+    expect(value(missing, 'est_commission_fen')).toBeNull();
+    expect(value(missing, 'service_fee_fen')).toBeNull();
+    expect(missing.commission_fen).toBe(76543n);
   },
 );

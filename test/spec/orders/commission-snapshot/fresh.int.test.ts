@@ -70,7 +70,7 @@ it.each(['paid', 'received', 'settled'])(
       orderType: 'share',
       activityType: null,
       rebateMode: null,
-      nBaseFen: 758n,
+      nBaseFen: 789n,
       subsidyCommissionFen: 0n,
       tljDeductFen: 0n,
       tljRedpacketFen: 0n,

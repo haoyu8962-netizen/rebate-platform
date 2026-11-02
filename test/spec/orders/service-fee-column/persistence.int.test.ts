@@ -80,9 +80,22 @@ it.each(['null', 'omitted', 'zero'] as const)(
       delete (incoming as { service_fee_fen?: bigint | null }).service_fee_fen;
     expect(await f.process(incoming)).toMatchObject({ kind: 'updated' });
     expect((await readFee(db, f.ctx.app_id))[0]?.service_fee_fen).toBe(mode === 'zero' ? 0n : null);
+    // 这一列只留存，不进 N：est 789、报文服务费 47，重试的 N 仍是 789。
+    const charged = await setup(db);
+    expect(await charged.process({ ...charged.next(), service_fee_fen: 47n })).toMatchObject({
+      kind: 'updated',
+    });
+    expect(charged.port.create).toHaveBeenCalledTimes(1);
+    expect(charged.port.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 789n });
     if (mode !== 'zero') {
-      expect(f.port.create).not.toHaveBeenCalled();
-      expect(await f.pending()).toContainEqual(
+      // est 为空的新单（真实报文缺服务费就是这样）：不调端口，待处理原因是 SERVICE_FEE_RATE_MISSING。
+      const g = await setup(db, { est_commission_fen: null, service_fee_fen: null });
+      const again = { ...g.next(), service_fee_fen: null };
+      if (mode === 'omitted') delete (again as { service_fee_fen?: bigint | null }).service_fee_fen;
+      expect(await g.process(again)).toMatchObject({ kind: 'updated' });
+      expect((await readFee(db, g.ctx.app_id))[0]?.service_fee_fen).toBeNull();
+      expect(g.port.create).not.toHaveBeenCalled();
+      expect(await g.pending()).toContainEqual(
         expect.objectContaining({ reason: 'SERVICE_FEE_RATE_MISSING' }),
       );
     }

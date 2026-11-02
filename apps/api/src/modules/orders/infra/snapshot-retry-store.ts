@@ -4,7 +4,6 @@ import type { DB } from '@couli/db';
 import { sql, type Kysely, type Selectable, type Transaction } from 'kysely';
 import {
   PID_SCENE_PLATFORM,
-  SERVICE_FEE_PLATFORM,
   SNAPSHOT_RETRY_DUE_MS,
   SNAPSHOT_RETRY_HANDOFF_NOTE,
   SNAPSHOT_RETRY_REASONS,
@@ -106,8 +105,7 @@ export async function readOrderByKey(
  */
 const SCAN_SKIP_CERTAIN = sql<boolean>`coalesce(bool_or(
   coalesce(o.settle_commission_fen, o.est_commission_fen) is not null and (
-    (o.platform = ${SERVICE_FEE_PLATFORM} and o.service_fee_fen is null)
-    or (o.paid_at_source is not distinct from 'platform' and o.paid_at is null)
+    (o.paid_at_source is not distinct from 'platform' and o.paid_at is null)
     or (o.paid_at_source is not null and o.paid_at_source not in ('platform', 'observed'))
     or o.platform = ${PID_SCENE_PLATFORM}
   )

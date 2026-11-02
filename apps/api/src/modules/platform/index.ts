@@ -106,6 +106,7 @@ export { TICK_STOP_WAIT_MS, waitForTickStop } from './lifecycle/bounded-stop.ts'
 // Prometheus /metrics (B1-01zzh): the worker's whole-database gauges, process metrics everywhere.
 export {
   collectWorkerMetrics,
+  countPddServiceFeeMissing,
   createMetricsRegistry,
   startMetricsServer,
 } from './metrics/index.ts';

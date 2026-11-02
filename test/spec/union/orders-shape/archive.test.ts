@@ -88,7 +88,7 @@ it.each(sources)(
       expect(order).toMatchObject({
         sub_order_id: '000000000000000000000000012345-SYN',
         raw_payload_id: null,
-        est_commission_fen: 76543n,
+        est_commission_fen: 72222n,
         commission_fen: 76543n,
       });
       expect(h.logger.error).toHaveBeenCalledTimes(1);

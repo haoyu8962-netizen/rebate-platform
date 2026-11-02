@@ -35,7 +35,7 @@ it('[AC-B1-08t#1] 合法内容更新触发重试；成功处置后再次更新�
     orderId: f.current.order_id,
     ownerUserId: f.userId,
     paidAt: f.current.paid_at,
-    nBaseFen: 758n,
+    nBaseFen: 789n,
   });
   await f.process(f.next());
   expect(port.create).toHaveBeenCalledTimes(1);

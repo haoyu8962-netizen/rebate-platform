@@ -223,7 +223,7 @@ it(
 
 // 只断言金额行：钱包不扣服务费，归 FU-PDD-NET-N。v1 由快照端口写，v2 由 estimates.refresh 写。
 it(
-  '[AC-B1-09n#22] 拼多多佣金变化：v2 金额行按 N = 佣金 − service_fee_fen 重算（BR-CALC-03，BR-FUND-03）',
+  '[AC-B1-09n#22] 拼多多佣金变化：est 已是净额，v2 金额行按 N = est 重算，不再减 service_fee_fen（BR-CALC-03，BR-FUND-03）',
   async () => {
     await withFixture(
       db,
@@ -232,13 +232,14 @@ it(
         expect(await f.row()).toMatchObject({
           platform: 'pdd',
           rebate_status: 'ESTIMATED',
+          est_commission_fen: 900n,
           service_fee_fen: 100n,
           commission_version: 1,
         });
-        await f.sync(f.touch(1, { est_commission_fen: 800n, commission_fen: 800n }));
+        await f.sync(f.touch(1, { est_commission_fen: 700n, commission_fen: 800n }));
         expect(await f.row()).toMatchObject({
           rebate_status: 'ESTIMATED',
-          est_commission_fen: 800n,
+          est_commission_fen: 700n,
           service_fee_fen: 100n,
           commission_version: 2,
         });
@@ -257,7 +258,7 @@ it(
           [2, 700n, 700n],
         ]);
       },
-      { platform: 'pdd' },
+      { platform: 'pdd', patch: { est_commission_fen: 900n } },
     );
   },
   TIMEOUT,

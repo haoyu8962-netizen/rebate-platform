@@ -3,7 +3,7 @@
 // 即使出现在报文里也不读、不校验、不进 DTO；从不 spread 整份报文。金额 / 费率 / 时间都是 JSON 整数，
 // 非安全整数或非整数一律 invalid_dto（不舍入）；金额经 @couli/money 的 parseFen。
 // 状态映射（specs/order-status-map/pdd.csv）、可分配基数扣减、时间窗拆分都不在这里。
-import { InvalidAmount, parseFen } from '@couli/money';
+import { InvalidAmount, parseFen, subFen } from '@couli/money';
 import { makeUnionOrder } from '../../domain/dto.ts';
 import {
   UnionError,
@@ -390,11 +390,14 @@ export function pddRowIdentity(input: unknown): OrderRowIdentity {
 /**
  * 一条拼多多订单 → UnionOrder。order_id 取 order_sn；platform_order_id 取列表的 order_id（只有
  * increment 的 probe 见到，其余为 null）；推广位：列表 p_id、详情 pid 统一到 pid。
- * commission_fen = promotion_amount（含软件服务费，不是可分配基数；基数 = promotion_amount −
- * duo_id_service_fee，在 orders / 分账层扣），service_fee_fen = duo_id_service_fee。
+ * commission_fen = promotion_amount（毛额，含软件服务费，不入库），service_fee_fen = duo_id_service_fee。
+ * est_commission_fen = 净额 = promotion_amount − duo_id_service_fee（B1-08zh，BR-CALC-03：扣除只在这一处，
+ * 下游不再减，可为负）；服务费缺失时 est 为 null，绝不按 0。字段含义见 docs-mirror/pdd/api/
+ * pdd.ddk.order.list.increment.get.md。duo_id_service_fee 含基础加奖励佣金的费、这里只从基础佣金扣，
+ * 有等级奖励时 N 偏小（负责人 2026-10-02 定的公式，偏保守），待 CAP-PDD-04 实测。
  * subsidy_* 单列透传，不并入任何金额。return_status 只读详情接口。
  * B1-08e：另填平台无关字段（sub_order_id = order_sn，promotion_slot = pid，attr_params 只填原样的
- * custom_parameters，raw_status = String(order_status)，五个时刻由秒转 Date，est = commission_fen，
+ * custom_parameters，raw_status = String(order_status)，五个时刻由秒转 Date，
  * settle = null）；raw_payload_id 由调用方给出该页报文的归档行 id，没有为 null。
  * B1-08p：shop_id = mall_id 的十进制字符串（缺失或不合格为 null，见 shopId）。
  */
@@ -428,6 +431,7 @@ export function mapPddOrder(
   const receiveTime = f.seconds('order_receive_time');
   const settleTime = f.seconds('order_settle_time');
   const modifyAt = f.seconds('order_modify_at');
+  const serviceFeeFen = f.fen('duo_id_service_fee');
   return Object.freeze({
     ...base,
     platform_order_id: f.text('order_id'),
@@ -437,7 +441,7 @@ export function mapPddOrder(
     order_status_desc: f.text('order_status_desc'),
     fail_reason: f.text('fail_reason'),
     return_status: f.integer('return_status'),
-    service_fee_fen: f.fen('duo_id_service_fee'),
+    service_fee_fen: serviceFeeFen,
     goods_price_fen: f.fen('goods_price'),
     platform_discount_fen: f.fen('platform_discount'),
     sep_market_fee_fen: f.fen('sep_market_fee'),
@@ -470,7 +474,7 @@ export function mapPddOrder(
     received_at: instant(receiveTime, page.like),
     settled_at: instant(settleTime, page.like),
     modified_at: instant(modifyAt, page.like),
-    est_commission_fen: base.commission_fen,
+    est_commission_fen: serviceFeeFen === null ? null : subFen(base.commission_fen, serviceFeeFen),
     // TODO(规划/11 §4.5): 拼多多结算佣金 — blocked on CAP-PDD-07（现有映射没有单独字段，不臆造）
     settle_commission_fen: null,
     raw_payload_id: page.rawPayloadId,

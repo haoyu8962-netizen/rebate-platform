@@ -138,8 +138,14 @@ it.each(['CLAWED_BACK', 'unattributed'] as const)(
 it('[AC-B1-08u#12] 新原因插新行且 created_at=Clock，同键刷新不延后时间，耗尽仍定位最早原因', async () => {
   const f = await fixture(db, 'pipeline');
   const first = (await f.pending())[0]!;
+  // 新原因要 N 未知才出现：库内与报文的 est 都为空，且报文缺服务费。
+  await db
+    .updateTable('orders')
+    .set({ est_commission_fen: null })
+    .where('app_id', '=', f.ctx.app_id)
+    .execute();
   f.clock.advanceMs(HOUR);
-  const missingFee = { ...f.next(), service_fee_fen: null };
+  const missingFee = { ...f.next(), est_commission_fen: null, service_fee_fen: null };
   expect(await capture(() => f.process(missingFee))).toMatchObject({ ok: true });
   const rows = await f.pending();
   expect(rows).toHaveLength(2);
@@ -153,7 +159,7 @@ it('[AC-B1-08u#12] 新原因插新行且 created_at=Clock，同键刷新不延�
   });
   expect(changed.id).not.toBe(first.id);
   f.clock.advanceMs(HOUR);
-  await f.process({ ...f.next(), service_fee_fen: null });
+  await f.process({ ...f.next(), est_commission_fen: null, service_fee_fen: null });
   expect(await f.pending()).toEqual([
     first,
     expect.objectContaining({
@@ -165,7 +171,7 @@ it('[AC-B1-08u#12] 新原因插新行且 created_at=Clock，同键刷新不延�
   ]);
   expect(f.events()).toEqual([]);
   f.clock.advanceMs(24 * HOUR);
-  await f.process({ ...f.next(), service_fee_fen: null });
+  await f.process({ ...f.next(), est_commission_fen: null, service_fee_fen: null });
   assertAlert(f, first);
   expect((await f.pending()).map((p) => [p.id, p.status, p.created_at, p.resolution_note])).toEqual(
     [

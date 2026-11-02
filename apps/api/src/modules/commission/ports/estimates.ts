@@ -7,7 +7,6 @@ import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';
 import {
   frozenBase,
-  netCommission,
   planVersion,
   storedN,
   type FrozenTerms,
@@ -58,16 +57,17 @@ export interface EstimateOrder {
   readonly rebate_status: string;
   readonly est_commission_fen: bigint | null;
   readonly settle_commission_fen: bigint | null;
-  /** Null on a platform that deducts the fee means unknown: no N, never a fee of zero. */
-  readonly service_fee_fen: bigint | null;
 }
 
 export interface CommissionEstimatesDependencies {
+  /**
+   * Not read since B1-08zh: est is already net of the fee. Kept optional so the frozen kit of
+   * test/spec/commission/estimate-port compiles unchanged (FU-ESTIMATES-FEE-DEP-CLEANUP).
+   */
+  serviceFeeDeducted?(platform: string): boolean;
   readonly clock: Clock;
   /** The order row re-read on the caller's transaction, which holds the order lock. */
   readOrder(trx: Transaction<DB>, ref: EstimateOrderRef): Promise<EstimateOrder | undefined>;
-  /** The platform's commission includes the service fee (BR-CALC-03): N = commission − fee. */
-  serviceFeeDeducted(platform: string): boolean;
 }
 
 /** B2-03r: the commission a new version is valued on when it is not the orders columns' (R7). */
@@ -98,19 +98,6 @@ function frozenTerms(split: SplitRow): FrozenTerms {
 }
 
 /** The effective commission net of the fee: settlement wins, 0 and negatives are known values. */
-function effectiveN(
-  order: EstimateOrder,
-  estFen: bigint | null,
-  settleFen: bigint | null,
-  deps: CommissionEstimatesDependencies,
-): bigint | null {
-  return netCommission(
-    settleFen ?? estFen,
-    deps.serviceFeeDeducted(order.platform),
-    order.service_fee_fen,
-  );
-}
-
 export function createCommissionEstimates(
   deps: CommissionEstimatesDependencies,
 ): CommissionEstimates {
@@ -161,8 +148,8 @@ export function createCommissionEstimates(
   ): Promise<void> {
     const n =
       value === undefined
-        ? effectiveN(order, order.est_commission_fen, order.settle_commission_fen, deps)
-        : effectiveN(order, value.commissionFen, null, deps);
+        ? (order.settle_commission_fen ?? order.est_commission_fen)
+        : value.commissionFen;
     if (n === null) return;
     const terms = frozenTerms(split);
     const shares = await readShareStates(trx, ref.appId, ref.orderId, terms.beneficiaries);
@@ -197,8 +184,8 @@ export function createCommissionEstimates(
       const split = await findSplit(trx, input.appId, input.orderId);
       if (split === undefined) return { before: null, after: null };
       const latest = await selectLatestTotals(trx, input.appId, input.orderId);
-      const order = await orderOf(trx, input);
-      const n = effectiveN(order, input.estAfter, input.settleCommissionFen, deps);
+      await orderOf(trx, input);
+      const n = input.settleCommissionFen ?? input.estAfter;
       const terms = frozenTerms(split);
       const bases = {
         before: latest?.base_fen ?? null,

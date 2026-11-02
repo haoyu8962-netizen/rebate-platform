@@ -52,6 +52,14 @@ groups:
         annotations:
           summary: 'Order sync watermark of {{ $labels.platform }} lags more than 30 minutes'
           description: 'now minus the oldest sync cursor of the platform, in seconds.'
+      - alert: CouliPddServiceFeeMissing
+        expr: 'increase(couli_pdd_service_fee_missing_total[1h]) > 0'
+        for: '5m'
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Pinduoduo reports lack the service fee on orders that have an estimate'
+          description: 'The estimate stays at its last net value until the fee comes back (BR-CALC-03, B1-08zh).'
   - name: couli-redis
     rules:
       - alert: CouliRedisDown

@@ -246,7 +246,6 @@ import {
 } from './modules/ledger/index.ts';
 // B1-02zn: GET /v1/me's balance reads the wallet summary query through ledger's read-only entry.
 import { getWalletSummary } from './modules/ledger/read.ts';
-import { findPlatformRules } from './modules/orders/domain/platform-rules/index.ts';
 import { readOrder } from './modules/orders/infra/pipeline-store.ts';
 import { PaymentModule } from './modules/payment/index.ts';
 import {
@@ -2098,8 +2097,6 @@ function orderPlatformRestorePort(clock: Clock): PlatformRestoreDiffPort {
 const orderEstimateSource = {
   readOrder: (trx: Transaction<Database>, ref: { appId: string; orderId: string; attrAt: Date }) =>
     readOrder(trx, { app_id: ref.appId, order_id: ref.orderId, attr_at: ref.attrAt }),
-  serviceFeeDeducted: (platform: string) =>
-    findPlatformRules(platform)?.serviceFeeDeducted === true,
 };
 
 /**

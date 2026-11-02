@@ -111,7 +111,7 @@ it('[AC-B1-08k#38] R3a 同次 SETTLED 用写库后的结算收入而非本次预
       }),
     ),
   ).toMatchObject({ ok: true });
-  expect(port.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 470n });
+  expect(port.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 501n });
   expect((await f.read()).orders[0]).toMatchObject({
     settle_commission_fen: 501n,
     est_commission_fen: 999n,

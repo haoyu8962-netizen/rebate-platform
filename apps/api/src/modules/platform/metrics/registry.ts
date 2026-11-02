@@ -13,6 +13,7 @@ import type { EntryName } from '../entries.ts';
 import type { AutoPayoutDailySnapshot } from './auto-payout.ts';
 import type { WorkerMetricsSnapshot } from './collect.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
+import { pddServiceFeeMissingTotal } from './pdd-service-fee.ts';
 import { REVIEW_OVERDUE_GAUGE, type ReviewOverdueSnapshot } from './review-overdue.ts';
 
 export interface MetricsRegistryOptions {
@@ -171,6 +172,16 @@ function renderFamily(family: Family): string {
   return out;
 }
 
+/** B1-08zh: has a sample from the start, or increase() misses the first count. */
+function pddServiceFeeFamily(): Family {
+  return {
+    name: 'couli_pdd_service_fee_missing_total',
+    help: 'Pinduoduo reports without the service fee on orders that already have an estimate.',
+    type: 'counter',
+    samples: [{ value: pddServiceFeeMissingTotal() }],
+  };
+}
+
 /** The process-level metrics, under the names the standard Node.js client exports. */
 function processFamilies(): Family[] {
   const cpu = process.cpuUsage();
@@ -327,6 +338,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...autoPayout,
         ...reviewOverdue,
         ...taobaoSearch,
+        pddServiceFeeFamily(),
         ...processFamilies(),
       ]
         .map(renderFamily)

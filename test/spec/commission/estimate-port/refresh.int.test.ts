@@ -425,18 +425,18 @@ it('[AC-B2-03q#30] 跨 App、跨订单不串：只写传入的这一单，同一
   ]);
 });
 
-it('[AC-B2-03q#56][BR-CALC-02][BR-CALC-03][BR-CALC-27] 拼多多：N 按佣金减服务费，四段金额都用这个 N', async () => {
+it('[AC-B2-03q#56][BR-CALC-02][BR-CALC-03][BR-CALC-27] 拼多多：est 已是净额，N 不再减服务费，四段金额都用这个 N', async () => {
   const f = await fixture(p.db);
   const o = await f.order({
     platform: 'pdd',
-    estFen: 1200n,
+    estFen: 1000n,
     patch: { service_fee_fen: 200n },
   });
-  await f.move(o, { estAfter: 2000n });
+  await f.move(o, { estAfter: 1800n });
 
   await f.refresh(o);
 
-  // N = 2000 − 200 = 1800；B = 1530；765 / 153 / 76，合计 994。
+  // N = 1800；B = 1530；765 / 153 / 76，合计 994。
   expect(await amountsAt(p.db, o, 2)).toEqual([
     ['self', 1530n, 765n],
     ['direct', 1530n, 153n],
@@ -452,14 +452,14 @@ it('[AC-B2-03q#56][BR-CALC-02][BR-CALC-03][BR-CALC-27] 拼多多：N 按佣金�
   });
 });
 
-it('[AC-B2-03q#57][BR-CALC-02][BR-CALC-03] 拼多多结算优先：结算额同样减服务费，预估不参与', async () => {
+it('[AC-B2-03q#57][BR-CALC-02][BR-CALC-03] 拼多多结算优先：结算额按已扣服务费处理，不再减，预估不参与', async () => {
   const f = await fixture(p.db);
   const o = await f.order({
     platform: 'pdd',
     rebateStatus: 'WAITING',
     platformStatus: 'SETTLED',
-    estFen: 1200n,
-    settleFen: 2000n,
+    estFen: 1000n,
+    settleFen: 1800n,
     patch: { service_fee_fen: 200n },
   });
   await f.move(o, { estAfter: 9999n });
@@ -474,18 +474,30 @@ it('[AC-B2-03q#57][BR-CALC-02][BR-CALC-03] 拼多多结算优先：结算额同�
   expect(await totalsAt(p.db, o, 2)).toMatchObject({ n_total_fen: 1800n, base_fen: 1530n });
 });
 
-it('[AC-B2-03q#58][BR-CALC-03] 拼多多服务费缺失：什么也不写、不抛错，不按服务费 0 算', async () => {
+it('[AC-B2-03q#58][BR-CALC-03] 拼多多 est 为空：什么也不写、不抛错，不按 0 算；服务费列为空而 est 有值：正常写，N 就是 est', async () => {
   const f = await fixture(p.db);
   const o = await f.order({
     platform: 'pdd',
-    estFen: 1200n,
+    estFen: null,
+    commissionVersion: 2,
     patch: { service_fee_fen: null },
   });
-  await f.move(o, { estAfter: 2000n });
 
   await f.refresh(o);
 
   expect(await storedVersions(p.db, o)).toEqual({ amounts: [1], totals: [1] });
+
+  const known = await f.order({
+    platform: 'pdd',
+    estFen: 1000n,
+    patch: { service_fee_fen: null },
+  });
+  await f.move(known, { estAfter: 1800n });
+
+  await f.refresh(known);
+
+  expect(await storedVersions(p.db, known)).toEqual({ amounts: [1, 2], totals: [1, 2] });
+  expect(await totalsAt(p.db, known, 2)).toMatchObject({ n_total_fen: 1800n, base_fen: 1530n });
 });
 
 it('[AC-B2-03q#59][BR-CALC-03] 拼多多服务费 0 是已知值：照常写，N 等于佣金', async () => {

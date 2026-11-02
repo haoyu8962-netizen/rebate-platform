@@ -247,28 +247,31 @@ it.each([
   expect(updatedValue(updates[0]!, 'service_fee_fen')).toBe(expected);
 });
 
-it('[AC-B1-08v#U6] 扫描读订单当前服务费列：非空扣除（结算优先），为空 skip service_fee_unknown', async () => {
+it('[AC-B1-08v#U6] 扫描的 N 不看服务费列（est 已是净额，结算优先）；N 为空且列空进 SERVICE_FEE_RATE_MISSING，不再 skip service_fee_unknown', async () => {
   const { db, statements } = recordingDb();
   const clock = new FixedClock(NOW);
   const plan = (row: Row) =>
     db.transaction().execute((trx) => readSnapshotRetryInput(trx, row, clock));
   await expect(plan(current)).resolves.toMatchObject({
     kind: 'call',
-    input: { nBaseFen: 758n, platform: 'pdd', paidAtSource: 'platform' },
+    input: { nBaseFen: 789n, platform: 'pdd', paidAtSource: 'platform' },
   });
   await expect(plan({ ...current, service_fee_fen: 47n })).resolves.toMatchObject({
     kind: 'call',
-    input: { nBaseFen: 742n },
+    input: { nBaseFen: 789n },
   });
   await expect(plan({ ...current, settle_commission_fen: 901n })).resolves.toMatchObject({
     kind: 'call',
-    input: { nBaseFen: 870n },
+    input: { nBaseFen: 901n },
   });
-  await expect(plan({ ...current, service_fee_fen: null })).resolves.toEqual({
-    kind: 'skip',
-    reason: 'service_fee_unknown',
+  await expect(plan({ ...current, service_fee_fen: null })).resolves.toMatchObject({
+    kind: 'call',
+    input: { nBaseFen: 789n },
   });
-  // 京东不扣服务费，列为空也照常计算。
+  await expect(
+    plan({ ...current, est_commission_fen: null, service_fee_fen: null }),
+  ).resolves.toEqual({ kind: 'pending', reason: 'SERVICE_FEE_RATE_MISSING' });
+  // 京东同样不看这一列。
   await expect(plan({ ...current, platform: 'jd', service_fee_fen: null })).resolves.toMatchObject({
     kind: 'call',
     input: { nBaseFen: 789n, platform: 'jd' },
@@ -289,7 +292,7 @@ it('[AC-B1-08v#U7] 候选排序首键是「扫描必然 skip」，其后才是�
   const id = orderBy.indexOf('min("p"."id")');
   expect(skipKey).toBeLessThan(detected);
   expect(detected).toBeLessThan(id);
-  expect(orderBy).toContain('o.service_fee_fen is null');
+  expect(orderBy).not.toContain('o.service_fee_fen');
   expect(orderBy).toContain("o.paid_at_source not in ('platform', 'observed')");
-  expect(parameters).toEqual(expect.arrayContaining(['pdd', 'taobao', 100]));
+  expect(parameters).toEqual(expect.arrayContaining(['taobao', 100]));
 });

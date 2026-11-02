@@ -209,44 +209,48 @@ it('[AC-B2-03q#12] 跨 App 不串：别的 App 的订单在本 App 下读不到�
   ).toEqual({ before: null, after: null });
 });
 
-it('[AC-B2-03q#52][BR-CALC-02][BR-CALC-03] 拼多多：after 按佣金减服务费换算，结算额同样减；佣金不高于服务费时 N 为 0', async () => {
+it('[AC-B2-03q#52][BR-CALC-02][BR-CALC-03] 拼多多：est、结算额已是净额，after 直接换算，不再减服务费；净额不大于 0 时 after 是 0', async () => {
   const f = await fixture(db);
   const o = await f.order({
     platform: 'pdd',
-    estFen: 1200n,
+    estFen: 1000n,
     patch: { service_fee_fen: 200n },
   });
-  // (2000 − 200) × 85% = 1530。
-  expect(await f.bases(o, { estAfter: 2000n, settleCommissionFen: null })).toEqual({
+  // 1800 × 85% = 1530。
+  expect(await f.bases(o, { estAfter: 1800n, settleCommissionFen: null })).toEqual({
     before: 850n,
     after: 1530n,
   });
-  // 结算优先：(3000 − 200) × 85% = 2380，预估不参与。
-  expect(await f.bases(o, { estAfter: 2000n, settleCommissionFen: 3000n })).toEqual({
+  // 结算优先：2800 × 85% = 2380，预估不参与。
+  expect(await f.bases(o, { estAfter: 1800n, settleCommissionFen: 2800n })).toEqual({
     before: 850n,
     after: 2380n,
   });
-  // 等于服务费与低于服务费都是 0：R6 看的就是这个 0。
-  expect(await f.bases(o, { estAfter: 200n, settleCommissionFen: null })).toEqual({
+  // 净额为 0 与为负都是 0：R6 看的就是这个 0。
+  expect(await f.bases(o, { estAfter: 0n, settleCommissionFen: null })).toEqual({
     before: 850n,
     after: 0n,
   });
-  expect(await f.bases(o, { estAfter: 150n, settleCommissionFen: null })).toEqual({
+  expect(await f.bases(o, { estAfter: -50n, settleCommissionFen: null })).toEqual({
     before: 850n,
     after: 0n,
   });
 });
 
-it('[AC-B2-03q#53][BR-CALC-03] 拼多多服务费缺失：after 是 null，不按服务费 0 换算；服务费 0 是已知值，照常换算', async () => {
+it('[AC-B2-03q#53][BR-CALC-03] 拼多多 est 为空：after 是 null，不按 0 换算；服务费列为空而 est 有值、服务费 0，都照常换算', async () => {
   const f = await fixture(db);
   const unknown = await f.order({
     platform: 'pdd',
-    estFen: 1200n,
+    estFen: null,
     patch: { service_fee_fen: null },
+  });
+  expect(await f.bases(unknown, { estAfter: null, settleCommissionFen: null })).toEqual({
+    before: 850n,
+    after: null,
   });
   expect(await f.bases(unknown, { estAfter: 2000n, settleCommissionFen: null })).toEqual({
     before: 850n,
-    after: null,
+    after: 1700n,
   });
   const free = await f.order({ platform: 'pdd', estFen: 1200n, patch: { service_fee_fen: 0n } });
   expect(await f.bases(free, { estAfter: 2000n, settleCommissionFen: null })).toEqual({

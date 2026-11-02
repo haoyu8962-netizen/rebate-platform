@@ -35,17 +35,6 @@ export interface VersionPlan {
   readonly totals: PlannedTotals;
 }
 
-/** The union commission net of the service fee (BR-CALC-03); a missing fee is unknown, never 0. */
-export function netCommission(
-  commissionFen: bigint | null,
-  feeDeducted: boolean,
-  serviceFeeFen: bigint | null,
-): bigint | null {
-  if (commissionFen === null) return null;
-  if (!feeDeducted) return commissionFen;
-  return serviceFeeFen === null ? null : subFen(commissionFen, serviceFeeFen);
-}
-
 /** N of a stored version: n_total_fen holds N + the frozen subsidy (BR-CALC-27 ①). */
 export function storedN(terms: FrozenTerms, nTotalFen: bigint): bigint {
   return subFen(nTotalFen, terms.subsidyCommissionFen);

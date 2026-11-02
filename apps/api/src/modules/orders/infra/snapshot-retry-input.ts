@@ -17,7 +17,7 @@ function orderBuyType(value: string | null): 'self' | 'share' {
 
 /** 扫描只从持久化订单与状态历史恢复输入，不从夹具或当前报文恢复。
  * 拼多多服务费取订单当前列 orders.service_fee_fen（B1-08v，最近一次写库报文原样写入）：非空 → 佣金基数扣除它；
- * 为空（存量未回填或报文没给）→ skip service_fee_unknown。platform_modified 缺首次迁移报文时同样 skip，由扫描器记 warn。
+ * 为空（报文没给）且 N 为空 → SERVICE_FEE_RATE_MISSING；N 已知时服务费不参与（B1-08zh）。platform_modified 缺首次迁platform_modified 缺首次迁移报文时同样 skip，由扫描器记 warn。
  * 佣金基数：结算收入非空取结算、否则预估（BR-CALC-02）；observed 的 paidAt 取状态历史首条到 PAID+ 的时刻。
  * 扫描路径没有推广位场景端口：淘宝单（可能是淘礼金）同样 skip，其余平台按非淘礼金。只读，不写库。
  */

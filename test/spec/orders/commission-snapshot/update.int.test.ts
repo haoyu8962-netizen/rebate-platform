@@ -57,7 +57,7 @@ it('[AC-B1-08k#23] P2 按库内预估收入调用，P3 不重建，paid_at_sourc
   });
   expect(port.create).toHaveBeenCalledTimes(1);
   expect(port.create.mock.calls[0]?.[1]).toMatchObject({
-    nBaseFen: 758n,
+    nBaseFen: 789n,
     paidAt: incoming.modified_at,
     paidAtSource: 'platform_modified',
   });

@@ -140,6 +140,7 @@ it('[AC-B1-08e-UNIT#3] 平台无关字段：子单号、推广位、原样归因
       order_pay_time: 1,
       order_receive_time: 0,
       order_modify_at: 1791936007,
+      duo_id_service_fee: 3,
     },
     'increment',
     { rawPayloadId: '42', like: meta.like },
@@ -155,7 +156,7 @@ it('[AC-B1-08e-UNIT#3] 平台无关字段：子单号、推广位、原样归因
     received_at: null,
     settled_at: null,
     modified_at: new Date('2026-10-14T00:00:07.000Z'),
-    est_commission_fen: 10n,
+    est_commission_fen: 7n,
     settle_commission_fen: null,
     raw_payload_id: '42',
   });

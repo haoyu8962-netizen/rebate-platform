@@ -275,17 +275,17 @@ it('[AC-B2-03q#46][BR-FUND-01] CREDITED 分支：版本没前进时没有新版�
   expect(await storedVersions(p.db, o)).toEqual({ amounts: [1, 2], totals: [1, 2] });
 });
 
-it('[AC-B2-03q#62][BR-FUND-01][BR-CALC-03] R7 拼多多：真实 bases 与 refresh 都按减服务费后的 N', async () => {
+it('[AC-B2-03q#62][BR-FUND-01][BR-CALC-03] R7 拼多多：est 已是净额，真实 bases 与 refresh 都按这个 N，不再减服务费', async () => {
   const f = await fixture(p.db);
   const o = await f.order({
     platform: 'pdd',
-    estFen: 1200n,
+    estFen: 1000n,
     patch: { service_fee_fen: 200n },
   });
   const rebate = rebateOf(f.clock, f.estimates);
 
   await p.db.transaction().execute(async (trx) => {
-    const { change, source } = await syncColumns(trx, o, { estAfter: 2000n });
+    const { change, source } = await syncColumns(trx, o, { estAfter: 1800n });
     await rebate.onUpdated(trx, change, source);
   });
 
@@ -296,17 +296,35 @@ it('[AC-B2-03q#62][BR-FUND-01][BR-CALC-03] R7 拼多多：真实 bases 与 refre
   ]);
 });
 
-it('[AC-B2-03q#63][BR-FUND-07][BR-CALC-03] R6 拼多多：佣金等于服务费时新基数是 0，订单 VOID，不走 R7', async () => {
+it('[AC-B2-03q#63][BR-FUND-07][BR-CALC-03] R6 拼多多：est 变 0 时新基数是 0，订单 VOID，不走 R7；净额恰好等于服务费不是 0，不作废', async () => {
   const f = await fixture(p.db);
   const o = await f.order({
     platform: 'pdd',
-    estFen: 1200n,
+    estFen: 1000n,
     patch: { service_fee_fen: 200n },
   });
   const rebate = rebateOf(f.clock, f.estimates);
 
+  // 对照：净额 200 等于服务费，但已扣过，不再减：200 × 85% = 170，走 R7。
+  const kept = await f.order({
+    platform: 'pdd',
+    estFen: 1000n,
+    patch: { service_fee_fen: 200n },
+  });
   await p.db.transaction().execute(async (trx) => {
-    const { change, source } = await syncColumns(trx, o, { estAfter: 200n });
+    const { change, source } = await syncColumns(trx, kept, { estAfter: 200n });
+    await rebate.onUpdated(trx, change, source);
+  });
+  const keptOrder = await p.db
+    .selectFrom('orders')
+    .select(['rebate_status', 'reason'])
+    .where('app_id', '=', kept.appId)
+    .where('order_id', '=', kept.orderId)
+    .executeTakeFirstOrThrow();
+  expect(keptOrder).toEqual({ rebate_status: 'ESTIMATED', reason: null });
+
+  await p.db.transaction().execute(async (trx) => {
+    const { change, source } = await syncColumns(trx, o, { estAfter: 0n });
     await rebate.onUpdated(trx, change, source);
   });
 

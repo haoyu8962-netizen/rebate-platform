@@ -17,17 +17,17 @@ import {
 const p = databaseFixture(createTestDatabase);
 
 it(
-  '[AC-B2-03r#15] 拼多多 R7：缺服务费的单不推版本、不写新行、不抛错，迁移照常记 R7，钱包读取不抛错；同批有服务费的单（佣金 1200、服务费 200、应扣 400）推到 v2，金额行按 1200 − 400 − 200 = 600：510 → 255 / 51 / 25',
+  '[AC-B2-03r#15] 拼多多 R7：est 为空的单（缺服务费）不推版本、不写新行、不抛错，只记录不迁移，钱包读取不抛错；同批 est 是净额的单（净额 1000、服务费 200、应扣 400）推到 v2，金额行按 1000 − 400 = 600，不再减服务费：510 → 255 / 51 / 25',
   async () => {
     const h = await harness(p.db);
     const missing = await h.estimated({
       platform: 'pdd',
-      estFen: 1200n,
+      estFen: null,
       patch: { service_fee_fen: null },
     });
     const known = await h.estimated({
       platform: 'pdd',
-      estFen: 1200n,
+      estFen: 1000n,
       patch: { service_fee_fen: 200n },
     });
 
@@ -37,12 +37,10 @@ it(
     expect(await h.read(missing)).toMatchObject({
       rebate_status: 'ESTIMATED',
       commission_version: 1,
-      est_commission_fen: 1200n,
+      est_commission_fen: null,
     });
     expect(await storedVersions(p.db, missing)).toEqual({ amounts: [1], totals: [1] });
-    expect(await h.rebateHistory(missing)).toEqual([
-      { event: 'RIGHTS_PARTIAL', from_status: 'ESTIMATED', to_status: 'ESTIMATED' },
-    ]);
+    expect(await h.rebateHistory(missing)).toEqual([]);
     await expect(h.walletOf(missing.user('self'))).resolves.toBeDefined();
 
     expect((await h.read(known)).commission_version).toBe(2);
@@ -57,12 +55,12 @@ it(
 );
 
 it(
-  '[AC-B2-03r#30] 拼多多有服务费的单比的是减服务费后的 N：佣金 1200、服务费 200，应扣 0，净 N 1000 等于当前 N，不推版本；再扣 400 才到 v2，n_total 600',
+  '[AC-B2-03r#30] 拼多多 est 已是净额，比的就是它：净额 1000、服务费 200，应扣 0，净 N 1000 等于当前 N，不推版本；再扣 400 才到 v2，n_total 600',
   async () => {
     const h = await harness(p.db);
     const o = await h.estimated({
       platform: 'pdd',
-      estFen: 1200n,
+      estFen: 1000n,
       patch: { service_fee_fen: 200n },
     });
 

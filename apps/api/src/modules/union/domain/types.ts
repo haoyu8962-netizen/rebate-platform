@@ -308,7 +308,7 @@ export interface UnionOrderNeutralFields {
   readonly received_at: Date | null;
   readonly settled_at: Date | null;
   readonly modified_at: Date | null;
-  /** 预估佣金（整数分）；拼多多 = commission_fen（promotion_amount，含服务费）。 */
+  /** 预估佣金（整数分，已扣技术服务费，BR-CALC-02 / 03）；拼多多 = promotion_amount − 服务费，缺服务费为 null。 */
   readonly est_commission_fen: bigint | null;
   /** 结算佣金（整数分）；拼多多暂无单独字段 → null（TODO 待 CAP-PDD-07）。 */
   readonly settle_commission_fen: bigint | null;
@@ -326,8 +326,8 @@ export interface UnionOrder
   readonly shop_id?: string | null;
   readonly order_id: string;
   readonly paid_fen: bigint;
-  /** PDD: promotion_amount 含软件服务费，不是可分配基数；基数 = promotion_amount −
-   * duo_id_service_fee，在 orders / 分账层扣。subsidy_* 不并入此金额。 */
+  /** PDD: promotion_amount，毛额，含软件服务费，不是可分配基数；净额在适配器算进
+   * est_commission_fen（B1-08zh）。subsidy_* 不并入此金额。 */
   readonly commission_fen: bigint;
 }
 

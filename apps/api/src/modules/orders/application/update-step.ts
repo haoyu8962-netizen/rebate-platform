@@ -47,7 +47,7 @@
 import type { DB } from '@couli/db';
 import type { OrderPlatformState } from '@couli/domain';
 import type { Selectable, Transaction } from 'kysely';
-import type { EventBus } from '../../platform/index.ts';
+import { countPddServiceFeeMissing, type EventBus } from '../../platform/index.ts';
 import type { RegisteredPlatform, UnionOrder, UnionOrderAttrParams } from '../../union/index.ts';
 import {
   crossesSnapshotEligibility,
@@ -124,6 +124,7 @@ import {
   type PlatformRestoreDiffPort,
   type PlatformRestoreOutcome,
 } from './platform-restore-step.ts';
+import { findPlatformRules } from '../domain/platform-rules/index.ts';
 
 export interface OrderUpdateChange {
   readonly app_id: string;
@@ -895,6 +896,17 @@ export function createOrderUpdateStep(
       { ...base, outcome: 'updated', rule: plan.rule, attributed_now: attributedNow },
       'order updated',
     );
+    // B1-08zh（D10-574）：已有 est 的单后续缺服务费，est 不覆盖、版本不前进（planOrderSyncColumns）；
+    // 不进待处理（那是快照重试的信号），只计数并告警。不带金额和单号。
+    if (
+      findPlatformRules(platform)?.serviceFeeDeducted === true &&
+      (incoming.service_fee_fen ?? null) === null &&
+      (incoming.est_commission_fen ?? null) === null &&
+      current.est_commission_fen !== null
+    ) {
+      countPddServiceFeeMissing();
+      log?.warn({ platform, order_id: current.order_id }, 'pdd_service_fee_missing');
+    }
     return { kind: 'updated', order_id: current.order_id };
   }
 

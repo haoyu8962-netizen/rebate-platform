@@ -7,6 +7,7 @@ export type {
   AutoPayoutDailySnapshot,
 } from './auto-payout.ts';
 export { cacheFundCollector } from './cache.ts';
+export { countPddServiceFeeMissing } from './pdd-service-fee.ts';
 export { collectWorkerMetrics } from './collect.ts';
 export type { WorkerMetricsSnapshot } from './collect.ts';
 export type { FundMetricsSnapshot } from './fund.ts';

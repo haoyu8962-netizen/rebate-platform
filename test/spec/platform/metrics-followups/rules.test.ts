@@ -138,8 +138,9 @@ it('[AC-B1-01zzo#9] Redis 拒绝写入告警：唯一读 redis_errors_total 的�
   expect(description as string).not.toMatch(/\b5\s*(m\b|min|minute)/i);
 });
 
-it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名、表达式、for 与标签与 B1-01zzh 一致，只有拒绝写入一条的窗口变成 [10m]', () => {
+it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名、表达式、for 与标签与 B1-01zzh 一致，只有拒绝写入一条的窗口变成 [10m]，couli-sync 组另加 CouliPddServiceFeeMissing 一条', () => {
   const all = rules();
+  const lastSync = EXPECTED.findIndex((rule) => rule.alert === 'CouliSyncWatermarkLag');
   expect([...new Set(all.map((rule) => rule.group))]).toEqual([
     'couli-queue',
     'couli-sync',
@@ -163,7 +164,18 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
       for: holdFor,
       labels,
     })),
-  ).toEqual([...EXPECTED, fallbackAlert]);
+  ).toEqual([
+    ...EXPECTED.slice(0, lastSync + 1),
+    {
+      group: 'couli-sync',
+      alert: 'CouliPddServiceFeeMissing',
+      expr: 'increase(couli_pdd_service_fee_missing_total[1h]) > 0',
+      for: '5m',
+      labels: { severity: 'warning' },
+    },
+    ...EXPECTED.slice(lastSync + 1),
+    fallbackAlert,
+  ]);
   for (const rule of all) {
     const summary = rule.annotations['summary'];
     expect(summary, `${rule.alert}.annotations.summary`).toEqual(expect.any(String));

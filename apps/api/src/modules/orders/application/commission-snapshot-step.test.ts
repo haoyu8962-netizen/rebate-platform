@@ -104,7 +104,7 @@ const callInput: CommissionSnapshotCallInput = {
   orderType: 'self',
   activityType: null,
   rebateMode: null,
-  nBaseFen: 480n,
+  nBaseFen: 500n,
   subsidyCommissionFen: 0n,
   tljDeductFen: 0n,
   tljRedpacketFen: 0n,
@@ -365,7 +365,7 @@ it('[AC-B1-08k#U11] 首次入库：paid_at_source 随 INSERT，端口在 history
       expect(imported).toMatchObject({ snapshot: 'created' });
       expect(insert.sql).toContain('"paid_at_source"');
       expect(insert.parameters).toContain('platform');
-      expect(port.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 480n, orderType: 'share' });
+      expect(port.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 500n, orderType: 'share' });
       const historyAt = sqls.findIndex((s) =>
         s.startsWith('insert into "app"."order_status_history"'),
       );
@@ -459,7 +459,7 @@ it('[AC-B1-08k#U12] 更新 P2：来源并入 CAS UPDATE，端口在 history 后�
   expect(port.create.mock.calls[0]?.[1]).toMatchObject({
     paidAt: union().modified_at,
     paidAtSource: 'platform_modified',
-    nBaseFen: 480n,
+    nBaseFen: 500n,
   });
   expect(
     sqls.findIndex((s) => s.startsWith('insert into "app"."order_status_history"')),

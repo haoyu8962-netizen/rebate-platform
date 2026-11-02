@@ -225,7 +225,7 @@ it('[AC-B1-08t#19] 超时后端口抛错也转人工，不能无限重试或提�
   expect(f.alerts()).toHaveLength(1);
 });
 
-it('[AC-B1-08t#25] 拼多多扫描缺持久化服务费时跳过，不调用端口、不处置且记录 warn', async () => {
+it('[AC-B1-08t#25] 拼多多扫描缺持久化服务费：est 有值照常调端口，N 是 est；est 为空待处理 SERVICE_FEE_RATE_MISSING，不调用端口、不处置', async () => {
   const f = await setup(db);
   // B1-08v adds app.orders.service_fee_fen and stores the reported fee on import; this case needs
   // the order without a persisted fee, so clear it when the column exists (B1-08x test-change,
@@ -241,15 +241,38 @@ it('[AC-B1-08t#25] 拼多多扫描缺持久化服务费时跳过，不调用端�
     );
   }
   f.clock.advanceMs(HOUR + 1);
-  const before = await f.pending();
   const orderBefore = (await f.read()).orders;
   f.logger.warn.mockClear();
   await f.scan();
-  expect(f.port.create).not.toHaveBeenCalled();
-  expect(await f.pending()).toEqual(before);
+  expect(f.port.create).toHaveBeenCalledTimes(1);
+  expect(f.port.create.mock.calls[0]?.[1]).toMatchObject({
+    nBaseFen: 789n,
+    paidAt: f.current.paid_at,
+    paidAtSource: 'platform',
+  });
   expect((await f.read()).orders).toEqual(orderBefore);
-  expect(f.logger.warn.mock.calls.map(([fields]) => fields)).toEqual([
-    expect.objectContaining({ event: 'snapshot_retry_skipped', reason: 'service_fee_unknown' }),
-  ]);
+  expect(f.logger.warn.mock.calls.map(([fields]) => fields)).not.toContainEqual(
+    expect.objectContaining({ event: 'snapshot_retry_skipped' }),
+  );
   expect(f.alerts()).toEqual([]);
+
+  const missing = await setup(db, { est_commission_fen: null, service_fee_fen: null });
+  const row = (await missing.pending())[0]!;
+  expect(row).toMatchObject({ reason: 'SERVICE_FEE_RATE_MISSING', status: 'open' });
+  const unpriced = (await missing.read()).orders;
+  missing.clock.advanceMs(HOUR + 1);
+  await missing.scan();
+  expect(missing.port.create).not.toHaveBeenCalled();
+  expect((await missing.read()).orders).toEqual(unpriced);
+  expect(await missing.pending()).toEqual([
+    expect.objectContaining({
+      id: row.id,
+      reason: 'SERVICE_FEE_RATE_MISSING',
+      status: 'open',
+      resolved_at: null,
+      created_at: row.created_at,
+      detected_at: missing.clock.now(),
+    }),
+  ]);
+  expect(missing.alerts()).toEqual([]);
 });
