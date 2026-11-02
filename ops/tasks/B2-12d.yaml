@@ -1,0 +1,38 @@
+id: B2-12d
+repo: rebate-platform
+title: 注销调减单：ACCOUNT_CLOSED 预填、adminApproveAdjustment、adminRejectAdjustment 去 planned，closingAdjustmentState 换真端口
+type: impl
+# 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。D10-590 优先：现是替身门，有余额的注销全卡死。③ 驳回后门继续 pending 并告警，处理轮次发现 pending 且无 PENDING 单时每个会计日补建一张。⑦ 驳回走 readOnly。
+refs: [BR-FUND-24, BR-ID-28, BR-FUND-16]
+refs_hash:
+  BR-FUND-24: 840bb53b7227
+  BR-ID-28: f6b22fd0bba1
+  BR-FUND-16: 077f6d412d5a
+deps: [B2-12c]
+paths:
+  - 'apps/api/src/modules/ledger/application/admin-adjustment-closing*.ts'
+  - 'apps/api/src/modules/ledger/http/admin/adjustments*.controller*.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/modules/ledger/ledger.module.ts'
+  - 'apps/api/src/modules/identity/application/deletion-expiry.ts'
+  - 'apps/api/src/modules/identity/application/deletion-processing.ts'
+  - 'apps/api/src/modules/identity/deletion-expiry.module.ts'
+  - 'apps/api/src/modules/identity/ports/deletion-cleanup.ts'
+  - 'apps/api/src/modules/identity/ports/closing-adjustment-prefill.ts'
+  - 'apps/api/src/modules/identity/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/ledger/admin-adjustments-closing/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-adjustments-closing/**'
+status: todo

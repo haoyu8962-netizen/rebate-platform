@@ -1,0 +1,21 @@
+id: B2-12g
+repo: rebate-platform
+title: 关联账户风控标记：坏账核销给同实名、同设备、同收款账号的账户打标（只留痕、不改提现结果）
+type: impl
+# 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。D10-590 ⑤：开工时再定形状，先最小实现；要影响提现另回写 BR-WDR-29。
+refs: [BR-FUND-12]
+refs_hash:
+  BR-FUND-12: d1b1d1e718f6
+deps: [B2-12f]
+paths:
+  - 'apps/api/src/modules/risk/application/bad-debt-linked*.ts'
+  - 'apps/api/src/modules/risk/index.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/risk/bad-debt-linked/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/risk/bad-debt-linked/**'
+status: todo

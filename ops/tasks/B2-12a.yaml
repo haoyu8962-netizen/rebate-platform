@@ -1,0 +1,33 @@
+id: B2-12a
+repo: rebate-platform
+title: 迁移：admin_adjustments、bad_debt_writeoffs 两表，加状态机 admin-adjustment、bad-debt-writeoff
+type: impl
+# 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。占迁移 0123（在 pay 的 B2-04zh 0122 之后）。
+refs: [BR-FUND-24, BR-FUND-12, BR-FUND-16]
+refs_hash:
+  BR-FUND-24: 840bb53b7227
+  BR-FUND-12: d1b1d1e718f6
+  BR-FUND-16: 077f6d412d5a
+deps: [B2-04zh]
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'specs/state-machines/admin-adjustment.yaml'
+  - 'specs/state-machines/bad-debt-writeoff.yaml'
+  - 'packages/domain/src/state-machines/admin-adjustment.gen.ts'
+  - 'packages/domain/src/state-machines/bad-debt-writeoff.gen.ts'
+  - 'packages/domain/src/state-machines/index.ts'
+  - 'packages/domain/src/index.ts'
+test_paths:
+  - 'test/spec/db/admin-adjustments/**'
+  - 'test/spec/domain/state-machines/admin-adjustment/**'
+  - 'test/spec/domain/state-machines/bad-debt-writeoff/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/db/admin-adjustments/**'
+  - 'test/spec/domain/state-machines/admin-adjustment/**'
+  - 'test/spec/domain/state-machines/bad-debt-writeoff/**'
+status: todo

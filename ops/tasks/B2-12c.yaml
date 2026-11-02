@@ -1,0 +1,40 @@
+id: B2-12c
+repo: rebate-platform
+title: 调账读与一步提交：adminListAdjustments、adminGetAdjustment、adminCreateAdjustment 去 planned（含红冲、无权限审计、站内信）
+type: impl
+# 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。D10-590 ④：deleting 用户不受理新的人工单，只允许红冲 ACCOUNT_CLOSED 调减单。⑧ 流水先不跳转、显示 hint（FU-LEDGER-ADJUST-JUMP）。对方科目按 specs/ledger-rules.md §6 方案 A。
+refs: [BR-FUND-24, BR-FUND-10, BR-FUND-16, BR-TEXT-19]
+refs_hash:
+  BR-FUND-24: 840bb53b7227
+  BR-FUND-10: 5dbb4715dec2
+  BR-FUND-16: 077f6d412d5a
+  BR-TEXT-19: 49112cf6e025
+deps: [B2-12a, B2-12b, CT-26n]
+paths:
+  - 'apps/api/src/modules/ledger/application/admin-adjustment*.ts'
+  - 'apps/api/src/modules/ledger/http/admin/adjustments*.controller*.ts'
+  - 'apps/api/src/modules/ledger/infra/admin-adjustments-store*.ts'
+  - 'apps/api/src/modules/ledger/ledger.module.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/modules/notification/application/balance-adjusted-message*.ts'
+  - 'apps/api/src/modules/notification/index.ts'
+  - 'apps/api/src/modules/payout/application/withdrawal-adjust-ref*.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/orders/index.ts'
+  - 'apps/api/src/modules/identity/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/ledger/admin-adjustments/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-adjustments/**'
+status: todo

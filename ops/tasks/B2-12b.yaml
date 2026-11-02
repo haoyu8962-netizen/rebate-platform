@@ -1,0 +1,25 @@
+id: B2-12b
+repo: rebate-platform
+title: ADMIN_ADJUST 红冲可使 available 为负（受信 reversal_kind，BR-FUND-24 细则）
+type: impl
+# 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。D10-590 ①：以 BR-FUND-24 为准；冻结 AC-B2-02i#10 只覆盖通用 ledger.reverse，保持不动。
+refs: [BR-FUND-10, BR-FUND-16, BR-FUND-24]
+refs_hash:
+  BR-FUND-10: 5dbb4715dec2
+  BR-FUND-16: 077f6d412d5a
+  BR-FUND-24: 840bb53b7227
+deps: []
+paths:
+  - 'packages/domain/src/ledger/ledger.ts'
+  - 'packages/domain/src/ledger/ledger.test.ts'
+  - 'apps/api/src/modules/ledger/application/ledger.ts'
+test_paths:
+  - 'test/spec/ledger/admin-adjust-reverse/**'
+  - 'test/spec/domain/ledger-adjust-reverse/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-adjust-reverse/**'
+  - 'test/spec/domain/ledger-adjust-reverse/**'
+status: todo

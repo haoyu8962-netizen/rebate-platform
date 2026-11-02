@@ -1,0 +1,25 @@
+id: CT-26n
+repo: rebate-platform
+title: 契约：调账接口文字（D10-590）——驳回示例改掉「用户已撤回注销申请」、deleting 用户不受理新的人工调账单（只允许红冲 ACCOUNT_CLOSED 调减单）、校验顺序写明 schema 先于守卫；只改文字
+type: contract
+# 2026-11-03 入账（admin-backend，编排 D10-590 ③④⑥）。排在 B2-12c 之前。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
