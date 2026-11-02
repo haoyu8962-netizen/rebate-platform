@@ -201,6 +201,19 @@ function cardFields(source: AgentOrderItem): AgentOrderItem {
   };
 }
 
+/**
+ * The card cut from the order detail. The detail keeps the month of an overdue order; the card shows
+ * no expired month (BR-FUND-17 row 12), as the orders module's own card projection already does.
+ */
+function detailCardFields(
+  detail: AgentOrderItem & { readonly credit_overdue: boolean },
+): AgentOrderItem {
+  return cardFields({
+    ...detail,
+    expected_credit_period: detail.credit_overdue ? null : detail.expected_credit_period,
+  });
+}
+
 function orderStatusCard(entry: AgentOrderItem): UnnumberedCard {
   return {
     type: 'order_status',
@@ -409,7 +422,7 @@ export function createExplainOrderHandler(deps: OrderToolsDeps): ToolHandler {
       const ref = await deps.refs.resolve(cardId, ctx);
       if (ref.kind !== 'order') return rejected();
       const detail = await deps.orders.get(subjectOf(ctx, userId), ref.orderId);
-      entry = detail === null ? null : cardFields(detail);
+      entry = detail === null ? null : detailCardFields(detail);
     } catch {
       return failed();
     }

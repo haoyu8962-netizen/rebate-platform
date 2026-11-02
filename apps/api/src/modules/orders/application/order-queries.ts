@@ -180,8 +180,9 @@ export function createUnknownOrderFigures(): OrderFiguresReader {
 }
 
 /**
- * The month on the timeline's credit_expected node. BR-FUND-17 row 12 shows no expired month, while
- * the top-level expected_credit_period keeps it; the timeline hides a month only when given null.
+ * The month on the timeline's credit_expected node and the Agent order card. BR-FUND-17 row 12 shows
+ * no expired month, while the detail's top-level expected_credit_period keeps it; the timeline and
+ * the card hide a month only when given null.
  */
 export function timelineCreditPeriod(
   figures: Pick<OrderFigures, 'expected_credit_period' | 'credit_overdue'>,
@@ -374,7 +375,8 @@ function toAgentItem(view: OrderView): AgentOrderItem {
     display_status: base.display_status,
     reason: base.reason,
     est_rebate_fen: base.est_rebate_fen,
-    expected_credit_period: view.figures.expected_credit_period,
+    // BR-FUND-17 row 12: same rule as the timeline; the card has no credit_overdue of its own.
+    expected_credit_period: timelineCreditPeriod(view.figures),
   };
 }
 

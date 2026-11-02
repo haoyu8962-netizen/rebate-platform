@@ -1,0 +1,97 @@
+{
+  "task": "B1-09q",
+  "spec_ref": "deb521c2bcb740571a01c2dc128f40abb40c37a2",
+  "spec_commit": "1833a945bc80faf2da2a04bd05aa2c5efa017776",
+  "red_tests": [
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#1][BR-FUND-17] list_my_orders：账单日 + 宽限当天月份保留，次日逾期卡片为 null，详情字段仍是月份",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#1][BR-FUND-17] explain_order 按单号：账单日 + 宽限当天月份保留，次日逾期卡片为 null，详情字段仍是月份",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#1][BR-FUND-17] explain_order 按卡片：账单日 + 宽限当天月份保留，次日逾期卡片为 null，详情字段仍是月份",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#2][BR-FUND-04] list_my_orders：已有 union_settled_at 时按其所在月的账单日 + 宽限判逾期",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#2][BR-FUND-04] explain_order 按单号：已有 union_settled_at 时按其所在月的账单日 + 宽限判逾期",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#2][BR-FUND-04] explain_order 按卡片：已有 union_settled_at 时按其所在月的账单日 + 宽限判逾期",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#3][BR-FUND-04] list_my_orders：settle.bill_day 与 settle.statement.grace_days 读配置，22 + 5 → 12-27",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#3][BR-FUND-04] explain_order 按单号：settle.bill_day 与 settle.statement.grace_days 读配置，22 + 5 → 12-27",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#3][BR-FUND-04] explain_order 按卡片：settle.bill_day 与 settle.statement.grace_days 读配置，22 + 5 → 12-27",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#4][BR-FUND-17] list_my_orders：按 credit_overdue 判而不是 display_status，逾期的 NO_REBATE 单同样不带月份",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#4][BR-FUND-17] explain_order 按单号：按 credit_overdue 判而不是 display_status，逾期的 NO_REBATE 单同样不带月份",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#4][BR-FUND-17] explain_order 按卡片：按 credit_overdue 判而不是 display_status，逾期的 NO_REBATE 单同样不带月份",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#5][BR-FUND-17][BR-AI-07] list_my_orders 多单各判各的：第 10、12 行与分享单都不带月份，未逾期的单留月份",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#6][BR-FUND-17][BR-AI-07] explain_order 按主单号命中多个子单：各判各的",
+    "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#7][BR-FUND-17][BR-TEXT-02] explain_order 按卡片读分享单：逾期不带月份，详情字段仍是月份"
+  ],
+  "risk_note": "RV2 by path. An overdue order's Agent order_status card carries no past month (BR-FUND-17 row 12): toAgentItem and byCard give null when credit_overdue is true, the three Agent paths covered. The detail field stays (frozen [AC-B1-09p#24]), cardFields stays a plain copy. No money movement, no contract, no migration. Prerequisite test change B1-09r is #2210.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1833a945bc80faf2da2a04bd05aa2c5efa017776",
+      "tree": "991603b31f72b1bca872da62140c1b050d8b104a",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-01T23:57:59Z",
+      "finished_at": "2026-11-01T23:58:10Z",
+      "red_tests": [
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#1][BR-FUND-17] list_my_orders：账单日 + 宽限当天月份保留，次日逾期卡片为 null，详情字段仍是月份",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#1][BR-FUND-17] explain_order 按单号：账单日 + 宽限当天月份保留，次日逾期卡片为 null，详情字段仍是月份",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#1][BR-FUND-17] explain_order 按卡片：账单日 + 宽限当天月份保留，次日逾期卡片为 null，详情字段仍是月份",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#2][BR-FUND-04] list_my_orders：已有 union_settled_at 时按其所在月的账单日 + 宽限判逾期",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#2][BR-FUND-04] explain_order 按单号：已有 union_settled_at 时按其所在月的账单日 + 宽限判逾期",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#2][BR-FUND-04] explain_order 按卡片：已有 union_settled_at 时按其所在月的账单日 + 宽限判逾期",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#3][BR-FUND-04] list_my_orders：settle.bill_day 与 settle.statement.grace_days 读配置，22 + 5 → 12-27",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#3][BR-FUND-04] explain_order 按单号：settle.bill_day 与 settle.statement.grace_days 读配置，22 + 5 → 12-27",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#3][BR-FUND-04] explain_order 按卡片：settle.bill_day 与 settle.statement.grace_days 读配置，22 + 5 → 12-27",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#4][BR-FUND-17] list_my_orders：按 credit_overdue 判而不是 display_status，逾期的 NO_REBATE 单同样不带月份",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#4][BR-FUND-17] explain_order 按单号：按 credit_overdue 判而不是 display_status，逾期的 NO_REBATE 单同样不带月份",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#4][BR-FUND-17] explain_order 按卡片：按 credit_overdue 判而不是 display_status，逾期的 NO_REBATE 单同样不带月份",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#5][BR-FUND-17][BR-AI-07] list_my_orders 多单各判各的：第 10、12 行与分享单都不带月份，未逾期的单留月份",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#6][BR-FUND-17][BR-AI-07] explain_order 按主单号命中多个子单：各判各的",
+        "test/spec/agent/order-card-overdue/overdue.int.test.ts > [AC-B1-09q#7][BR-FUND-17][BR-TEXT-02] explain_order 按卡片读分享单：逾期不带月份，详情字段仍是月份"
+      ],
+      "expected": ["test/spec/agent/order-card-overdue/overdue.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b0866567201605b296792d6f456f4a69692649235b5bc50af815bf2566208196"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "pass, no S0 or S1"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude, 15 tests under test/spec/agent/order-card-overdue, on real database rows through OrderQueries; round 1 pass, no findings."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3208d8208278f7c3ebc41091f1618ffe858251d3",
+    "specs": "81162dd1f14b9998534e12edbd04c10478c7b260"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
