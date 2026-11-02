@@ -1,0 +1,21 @@
+id: CT-06zzy
+repo: rebate-platform
+title: 依赖：开发依赖审计 high 补丁升级（vite 8.3.5、vitest 5.0.5、undici、source-map-js），dependabot #2221–#2223 处理
+type: deps
+# 2026-11-02 be 入账（编排 18:21，照 CT-06zzx）。pnpm audit --prod 已是 0，#2221 的安全补丁都在开发依赖：pnpm audit 全量 9 high、19 moderate、1 low。升 vite 8.3.5（GHSA-587h-7wmj-h5pm 等）、vitest 与 @vitest/* 5.0.5（GHSA-p458-7748-mcp3、GHSA-qxg6-89mg-rqv8），overrides 加 undici 6.29.1、8.12.2（GHSA-xjj6-f33q-929c）与 source-map-js 1.2.2（GHSA-68fv-2mgg-jv7q），都不跨主版本且满 7 天。试解析后 9 high → 0，共 5 moderate 留下：glob、minimatch 修复版跨主版本且 10-27 才发布，未满 7 天，经 node-pg-migrate、eslint 等开发工具带入，只在本地与 CI 跑。#2221 其余 30 项无安全意义，不并。#2222 @types/node 26 与 Node 24 运行时不符，关；#2223 @readme/openapi-parser 10 是大版本，只用于生成脚本与测试，无安全收益，关。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'package.json'
+  - 'apps/admin/package.json'
+  - 'apps/h5/package.json'
+  - 'test/package.json'
+  - 'pnpm-lock.yaml'
+  - 'pnpm-workspace.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

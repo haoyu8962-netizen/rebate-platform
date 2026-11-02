@@ -1,0 +1,63 @@
+id: B2-15s
+repo: rebate-platform
+title: 停机等待在途 tick 设上限（FU-TICK-STOP-BOUND，B2-15q 后续）
+type: impl
+# 2026-11-02 be 入账（编排 18:21）。B2-15q 让 onModuleDestroy 等在途 tick，但无上限：tick 卡在 pool.connect()（PG 主机失联，连接池没有 connectionTimeoutMillis）时 context.close() 永远等不完，handles.close 走不到，docker 10 秒后 SIGKILL，没有一行日志。改成限时等待：平台层加一个公共函数，超时打 warn（tick 名）后返回，不抛错；定时器 unref、等到就清。TICK_STOP_WAIT_MS = 800：Nest 逐模块串行调 onModuleDestroy（已核源码），五个定时器最坏共 4 秒，加 queue.stop 5 秒共 9 秒，在 docker 10 秒内。超时后 handles.close 自带 5 秒上限，健康的慢 tick 仍能跑完。冻结 [AC-B2-15q#8] 钉 stop 一直等，与上限矛盾，由新鲜独立 Claude 改，编排按 #24 核。只改 B2-15q 动过的四个模块：payment、ledger daily-check、payout（两处）、union auth-expiry。其他无上限等待（deletion-expiry、payout-verify-recheck、settlement assemble、catalog-worker、invite-reward、order-rescan、sync-scheduler、query-recovery-worker、agent sweeper）不在本单。不用全局截止：staging 的 stop_grace_period 是 30 秒，统一 10 秒以内会截断。RV2。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/lifecycle/**'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/modules/payment/payment.module.ts'
+  - 'apps/api/src/modules/ledger/daily-check.module.ts'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'apps/api/src/modules/union/auth-expiry/union-auth.module.ts'
+  - 'test/spec/platform/worker-shutdown-bound/**'
+  - 'test/spec/platform/worker-shutdown/interval-ticks.test.ts'
+test_paths:
+  - 'test/spec/platform/worker-shutdown-bound/**'
+  - 'test/spec/platform/worker-shutdown/interval-ticks.test.ts'
+red_exempt:
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#9] payment-recon：首个 tick 在途时 interval 到点，不叠加新 tick；之后 stop 仍等这个首个 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#9] ledger-daily-check：首个 tick 在途时 interval 到点，不叠加新 tick；之后 stop 仍等这个首个 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#9] payout-recon：首个 tick 在途时 interval 到点，不叠加新 tick；之后 stop 仍等这个首个 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#9] payout-overdue：首个 tick 在途时 interval 到点，不叠加新 tick；之后 stop 仍等这个首个 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#10] payment-recon：后续 interval tick 在途时下一次 interval 到点，不叠加新 tick；之后 stop 仍等这个在途 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#10] ledger-daily-check：后续 interval tick 在途时下一次 interval 到点，不叠加新 tick；之后 stop 仍等这个在途 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#10] payout-recon：后续 interval tick 在途时下一次 interval 到点，不叠加新 tick；之后 stop 仍等这个在途 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#10] payout-overdue：后续 interval tick 在途时下一次 interval 到点，不叠加新 tick；之后 stop 仍等这个在途 tick 结束'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#11] payment-recon：interval tick 失败只记 warn，下一次 tick 照常运行；它在途失败时 stop 同样等它结束后正常返回'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#11] ledger-daily-check：interval tick 失败只记 warn，下一次 tick 照常运行；它在途失败时 stop 同样等它结束后正常返回'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#11] payout-recon：interval tick 失败只记 warn，下一次 tick 照常运行；它在途失败时 stop 同样等它结束后正常返回'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+  - file: test/spec/platform/worker-shutdown/interval-ticks.test.ts
+    test: '[AC-B2-15q#11] payout-overdue：interval tick 失败只记 warn，下一次 tick 照常运行；它在途失败时 stop 同样等它结束后正常返回'
+    reason: '冻结用例测试体未改；只因 worker-shutdown/kit.ts 按计算出的名字加载模块，被认为可能读到本任务新增的 worker-shutdown-bound 文件而整文件连带判定，本条与等待上限无关，新旧实现下都成立'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
