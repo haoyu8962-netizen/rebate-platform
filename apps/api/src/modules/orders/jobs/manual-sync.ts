@@ -24,6 +24,7 @@ import { MANUAL_SYNC_ORDER_NO_PLATFORMS } from '../domain/manual-sync.ts';
 import { parseInstantMs, scheduledPlatforms } from '../domain/sync-window.ts';
 import { fetchWindow } from '../application/fetch-window.ts';
 import type { OrderPipelineContext, OrderPipelinePort } from '../application/pipeline-types.ts';
+import { quarantineRejected } from '../application/row-quarantine.ts';
 import type { SyncAccessPort, SyncLogger, SyncRegistry } from '../application/sync-ports.ts';
 import {
   MANUAL_SYNC_ORDER_NOS_JOB,
@@ -211,9 +212,18 @@ async function fetchAndRecord(
       scene: '-',
       ...m.window,
       requestId,
+      source: 'manual',
     };
     const range = { from: m.window.window_start, to: m.window.window_end };
-    await fetchWindow(range, { adapter, call, onPage: (orders) => processAll(orders, ctx) });
+    await fetchWindow(range, {
+      adapter,
+      call,
+      onPage: (orders) => processAll(orders, ctx),
+      onRejected: async (rows) => {
+        fetched += rows.length;
+        await quarantineRejected(deps.pipeline, rows, ctx);
+      },
+    });
   } else {
     const detail = adapter.getPddOrderDetail;
     if (detail === undefined) {
@@ -236,6 +246,7 @@ async function fetchAndRecord(
       window_start: '',
       window_end: '',
       requestId,
+      source: 'manual',
     };
     for (const orderSn of m.order_nos!) {
       const order = await detail.call(adapter, orderSn, call);

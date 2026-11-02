@@ -112,7 +112,8 @@ export type PendingReason =
   | 'SERVICE_FEE_RATE_MISSING'
   | 'RULE_VERSION_PLATFORM_MISSING'
   | 'TLJ_FACE_VALUE_UNMATCHED'
-  | 'AMOUNT_PARSE_FAILED';
+  | 'AMOUNT_PARSE_FAILED'
+  | 'ORDER_ROW_INVALID';
 
 export interface PendingInput {
   readonly app_id: string;
@@ -168,6 +169,46 @@ export async function writePending(trx: Trx, input: PendingInput): Promise<Pendi
 /** 同 writePending，只要 open 记录的 id；驱动未回行时为 null。 */
 export async function upsertPending(trx: Trx, input: PendingInput): Promise<bigint | null> {
   return (await writePending(trx, input)).id;
+}
+
+/**
+ * B1-04zv：把同键 open 记录置 resolved（系统解决，resolved_by 为空）。只改 status='open' 的行：已 resolved、
+ * dismissed 的不动。没有 open 记录时什么也不写。
+ */
+export async function resolveOpenPending(
+  trx: Trx,
+  key: {
+    readonly app_id: string;
+    readonly platform: string;
+    readonly sub_order_id: string;
+    readonly reason: PendingReason;
+  },
+  resolution: { readonly resolved_at: Date; readonly resolution_note: string },
+): Promise<void> {
+  // 不直接 UPDATE：绝大多数好行没有 open 记录，无事不写，unchanged 路径才是零写入。调用方已持订单 xact 锁，隔离
+  // 写入也持同一把锁，同单上先查后写是串行的。
+  const open = await trx
+    .withSchema('app')
+    .selectFrom('order_sync_pending')
+    .select('id')
+    .where('app_id', '=', key.app_id)
+    .where('platform', '=', key.platform)
+    .where('sub_order_id', '=', key.sub_order_id)
+    .where('reason', '=', key.reason)
+    .where('status', '=', 'open')
+    .limit(1)
+    .executeTakeFirst();
+  if (open === undefined) return;
+  await trx
+    .withSchema('app')
+    .updateTable('order_sync_pending')
+    .set({ ...resolution, status: 'resolved', resolved_by: null })
+    .where('app_id', '=', key.app_id)
+    .where('platform', '=', key.platform)
+    .where('sub_order_id', '=', key.sub_order_id)
+    .where('reason', '=', key.reason)
+    .where('status', '=', 'open')
+    .execute();
 }
 
 /**

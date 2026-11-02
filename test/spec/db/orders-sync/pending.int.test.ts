@@ -34,9 +34,9 @@ const TABLE = 'order_sync_pending';
 
 it('[AC-B1-08c#8] named CHECKs admit exactly nine reasons and three disposition states', async () => {
   await requireTable(app, TABLE);
-  await expectCheck(app, TABLE, 'reason', REASONS);
+  await expectCheck(app, TABLE, 'reason', [...REASONS, 'ORDER_ROW_INVALID']);
   await expectCheck(app, TABLE, 'status', ['open', 'resolved', 'dismissed']);
-  for (const reason of REASONS) {
+  for (const reason of [...REASONS, 'ORDER_ROW_INVALID']) {
     for (const status of ['open', 'resolved', 'dismissed']) {
       const row = await fixture(TABLE, { reason, status });
       expect(await sqlState(insert(app, TABLE, row)), `${reason}/${status}`).toBe('no error');

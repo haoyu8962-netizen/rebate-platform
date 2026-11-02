@@ -1,6 +1,13 @@
 import { expect, it, vi } from 'vitest';
-import { UnionError, type CallCtx, type UnionAdapter, type UnionOrder } from '../../union/index.ts';
+import {
+  UnionError,
+  type CallCtx,
+  type RejectedOrderRow,
+  type UnionAdapter,
+  type UnionOrder,
+} from '../../union/index.ts';
 import { fetchWindow } from './fetch-window.ts';
+import { ORDER_ROW_WHOLE_PAGE_MIN } from './row-quarantine.ts';
 
 const FROM = '2026-10-17T00:00:00.000Z';
 const MID = '2026-10-17T00:30:00.000Z';
@@ -24,14 +31,18 @@ function order(id: string): UnionOrder {
 function setup() {
   const listOrders = vi.fn<UnionAdapter['listOrders']>();
   const pages: string[][] = [];
+  const quarantined: string[][] = [];
   const query = {
     adapter: { listOrders },
     call,
     onPage: async (orders: readonly UnionOrder[]) => {
       pages.push(orders.map((item) => item.order_id));
     },
+    onRejected: async (rows: readonly RejectedOrderRow[]) => {
+      quarantined.push(rows.map((row) => row.row_key));
+    },
   };
-  return { listOrders, pages, query };
+  return { listOrders, pages, quarantined, query };
 }
 
 it('[AC-B1-04zt#u1] 没被拒：逐页取完，只查原窗', async () => {
@@ -86,4 +97,58 @@ it('[AC-B1-04zt#u5] 同一窗内游标重复：报错，不死循环', async () 
     'order_sync_cursor_repeated',
   );
   expect(listOrders).toHaveBeenCalledTimes(2);
+});
+
+function refused(key: string): RejectedOrderRow {
+  return {
+    sub_order_id: key,
+    raw_status: null,
+    raw_payload_id: null,
+    detail: 'synthetic',
+    row_key: key,
+  };
+}
+
+const refusedRows = (count: number): RejectedOrderRow[] =>
+  Array.from({ length: count }, (_, index) => refused(`bad-${index}`));
+
+it('[AC-B1-04zv#u1] 每页带 rowErrors collect，好行先交，坏行随后交给 onRejected', async () => {
+  const { listOrders, pages, quarantined, query } = setup();
+  listOrders.mockResolvedValueOnce({
+    items: [order('a')],
+    nextCursor: null,
+    rejected: [refused('bad')],
+  });
+  await fetchWindow({ from: FROM, to: TO }, query);
+  expect(listOrders.mock.calls[0]?.[2]).toEqual({ ...call, rowErrors: 'collect' });
+  expect(pages).toEqual([['a']]);
+  expect(quarantined).toEqual([['bad']]);
+});
+
+it('[AC-B1-04zv#u2] 没有坏行的页不调 onRejected', async () => {
+  const { listOrders, quarantined, query } = setup();
+  listOrders.mockResolvedValueOnce({ items: [order('a')], nextCursor: null, rejected: [] });
+  await fetchWindow({ from: FROM, to: TO }, query);
+  expect(quarantined).toEqual([]);
+});
+
+it('[AC-B1-04zv#u3] 一页没有好行且坏行达到门槛：坏行照写，窗口失败，后面的页不取', async () => {
+  const { listOrders, quarantined, query } = setup();
+  const rejected = refusedRows(ORDER_ROW_WHOLE_PAGE_MIN);
+  listOrders.mockResolvedValueOnce({ items: [], nextCursor: 'next', rejected });
+  await expect(fetchWindow({ from: FROM, to: TO }, query)).rejects.toThrow(
+    'order_sync_page_all_invalid',
+  );
+  expect(quarantined).toHaveLength(1);
+  expect(listOrders).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  { label: '没到门槛', items: [] as UnionOrder[], count: ORDER_ROW_WHOLE_PAGE_MIN - 1 },
+  { label: '有一条好行', items: [order('a')], count: ORDER_ROW_WHOLE_PAGE_MIN },
+])('[AC-B1-04zv#u4] $label：窗口照常结束', async ({ items, count }) => {
+  const { listOrders, quarantined, query } = setup();
+  listOrders.mockResolvedValueOnce({ items, nextCursor: null, rejected: refusedRows(count) });
+  await fetchWindow({ from: FROM, to: TO }, query);
+  expect(quarantined).toHaveLength(1);
 });

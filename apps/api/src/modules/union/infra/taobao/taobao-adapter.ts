@@ -43,6 +43,7 @@ import {
   type ConvertReq,
   type ConvertResult,
   type ItemRef,
+  type OrderPage,
   type OrderQueryOpt,
   type Page,
   type PunishmentQueryOpt,
@@ -62,6 +63,7 @@ import {
   type UpstreamGate,
 } from '../../domain/types.ts';
 import type { DataokeClient } from '../dataoke/dataoke-client.ts';
+import { collectOrderRows } from '../order-row.ts';
 import type { ArchiveContext, UnionTransport, UnionTransportResponse } from '../replay.ts';
 import {
   createTaobaoItemIdCache,
@@ -109,8 +111,10 @@ import {
   ourRows,
   parseTaobaoOrderBody,
   planTaobaoOrders,
+  requireTaobaoOrder,
   slotAdzones,
   taobaoOrderParameters,
+  taobaoRowIdentity,
   TAOBAO_ORDER_PATH,
   TAOBAO_ORDER_VERSION,
   type TaobaoOrderSlotReader,
@@ -565,8 +569,11 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     return mapPrivilegeLink(data, this.#clock.now(), this.#warn);
   }
 
-  /** B1-04f: one page of 大淘客 get-order-details (see the header and orders.ts). */
-  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<Page<UnionOrder>> {
+  /**
+   * B1-04f: one page of 大淘客 get-order-details (see the header and orders.ts). B1-04zv: under
+   * ctx.rowErrors a row of ours the mapping skips goes to `rejected`; rows of other slots do not.
+   */
+  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage> {
     const source = this.#orderSource;
     const readSlots = this.#orderSlots;
     if (source === undefined || readSlots === undefined) throw unimplemented('listOrders');
@@ -591,8 +598,20 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       rawPayloadId: typeof id === 'string' && /^[0-9]+$/.test(id) ? id : null,
       like: this.#clock.now(),
     };
+    const rows = ourRows(page.rows, adzones, this.#orderWarn);
+    if (ctx?.rowErrors === 'collect') {
+      return {
+        ...collectOrderRows(
+          rows,
+          meta.rawPayloadId,
+          (row) => requireTaobaoOrder(row, meta, this.#orderWarn),
+          (row) => taobaoRowIdentity(row, meta.like),
+        ),
+        nextCursor: nextTaobaoOrderCursor(plan, page),
+      };
+    }
     const items: UnionOrder[] = [];
-    for (const row of ourRows(page.rows, adzones, this.#orderWarn)) {
+    for (const row of rows) {
       const order = mapTaobaoOrder(row, meta, this.#orderWarn);
       if (order !== null) items.push(order);
     }

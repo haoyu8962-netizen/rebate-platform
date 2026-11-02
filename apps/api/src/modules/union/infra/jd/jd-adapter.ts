@@ -18,6 +18,7 @@ import {
   type ConvertReq,
   type ConvertResult,
   type ItemRef,
+  type OrderPage,
   type OrderQueryOpt,
   type Page,
   type ResolvedLink,
@@ -30,6 +31,7 @@ import {
   type UnionItemDetail,
   type UnionOrder,
 } from '../../domain/types.ts';
+import { collectOrderRows } from '../order-row.ts';
 import type { ArchiveContext, UnionTransport, UnionTransportResponse } from '../replay.ts';
 import {
   JD_DETAIL_INNER_CODES,
@@ -59,6 +61,7 @@ import {
   jdOrderCursor,
   jdOrderRows,
   jdOrderWindow,
+  jdRowIdentity,
   mapJdOrder,
   parseJdOrderCursor,
   type JdProductKeyMode,
@@ -412,8 +415,9 @@ export class JdUnionAdapter implements UnionAdapter {
    * 按更新时间取一页：hasMore 为 true 时 nextCursor 指下一页，调用方循环取完。时间窗、查询方式、
    * 游标与商品键模式都在取凭据、发请求之前校验；商品键模式每次调用读一次，不缓存。
    * 不带推广位参数（positionId 不是过滤参数），不按推广位或 validCode 过滤。
+   * B1-04zv：ctx.rowErrors 为 collect 时，mapper 拒绝的行进 rejected，其余行与游标照常。
    */
-  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<Page<UnionOrder>> {
+  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage> {
     if ((opt?.queryMode ?? 'increment') !== 'increment') {
       throw new UnionError('invalid_dto', 'jd listOrders: unsupported queryMode', 'jd');
     }
@@ -433,8 +437,11 @@ export class JdUnionAdapter implements UnionAdapter {
     );
     const { rows, hasMore } = jdOrderRows(inner);
     const page = { rawPayloadId, like: this.#clock.now(), productKeyMode };
+    const map = (row: unknown): UnionOrder => mapJdOrder(row, page);
     return {
-      items: rows.map((row) => mapJdOrder(row, page)),
+      ...(ctx?.rowErrors === 'collect'
+        ? collectOrderRows(rows, rawPayloadId, map, jdRowIdentity)
+        : { items: rows.map(map) }),
       nextCursor: hasMore ? jdOrderCursor(pageIndex + 1) : null,
     };
   }

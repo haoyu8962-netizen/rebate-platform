@@ -39,7 +39,7 @@
 
 ## 金额
 
-元转分用 `@couli/money` 的 `yuanStrToFen`，只认报文数字的原文（BR-CALC-26），两位小数以外数学 floor。要读的金额字段缺失或非数字时整页 `invalid_dto`，不按 0 处理。
+元转分用 `@couli/money` 的 `yuanStrToFen`，只认报文数字的原文（BR-CALC-26），两位小数以外数学 floor。要读的金额字段缺失或非数字时整页 `invalid_dto`，不按 0 处理；订单同步带 `CallCtx.rowErrors: 'collect'` 调用时，逐行映射错误不整页失败，该行进 `rejected`，由 orders 写待处理（`ORDER_ROW_INVALID`，BR-CALC-03、D10-570），`data`、`hasMore` 与商品键模式的错误仍然抛出。
 
 - **`settle_commission_fen`**：京东 Adapter 不写，任何 `validCode` 都是 null，不看 `actualFee`，也不看 `payMonth`。结算额只由联盟结算明细导入写 `order_settlements`（`source=STATEMENT`）。原因：BR-FUND-02 规定 Adapter 只在平台明确已结算时才写这一列，而京东官方的 `validCode` 没有已结算码，17 只是已完成，18 这个码不存在。
 - **`est_commission_fen`**：17 取 `actualFee`，其余取 `estimateFee`。未完成单的 `actualFee` 是 0.0，取它就把预估佣金冲成 0；17 下 `actualFee` 真为 0（如退款后）时才是 0n。

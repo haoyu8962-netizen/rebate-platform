@@ -12,6 +12,7 @@ import {
   type UnionOrder,
   type UnionOrderNeutralFields,
 } from '../../domain/types.ts';
+import type { OrderRowIdentity } from '../order-row.ts';
 import { JdRawNumber, type JdInner, type JdResponseKeys } from './response.ts';
 import { jdTimestamp } from './sign.ts';
 
@@ -205,6 +206,17 @@ function paymentTimes(
   return validCode === DEPOSIT_PAID_CODE
     ? { deposit_paid_at: orderTime, paid_at: null }
     : { deposit_paid_at: null, paid_at: orderTime };
+}
+
+/** B1-04zv：被拒的行还能读出的单号与状态码；读不出就是 null，这里不抛错。 */
+export function jdRowIdentity(input: unknown): OrderRowIdentity {
+  if (!isRecord(input)) return { sub_order_id: null, raw_status: null };
+  const id = scalarText(input.id);
+  const validCode = scalarText(input.validCode);
+  return {
+    sub_order_id: id !== undefined && DECIMAL_ID.test(id) ? id : null,
+    raw_status: validCode !== undefined && VALID_CODE.test(validCode) ? validCode : null,
+  };
 }
 
 /**

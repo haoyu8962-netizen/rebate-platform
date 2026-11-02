@@ -11,6 +11,7 @@ import {
   type UnionOrder,
   type UnionOrderNeutralFields,
 } from '../../domain/types.ts';
+import type { OrderRowIdentity } from '../order-row.ts';
 
 export const PDD_ORDER_INCREMENT = 'pdd.ddk.order.list.increment.get';
 export const PDD_ORDER_RANGE = 'pdd.ddk.order.list.range.get';
@@ -371,6 +372,19 @@ function subsidyList(value: unknown): readonly null[] | null {
 export interface PddOrderPage {
   readonly rawPayloadId: string | null;
   readonly like: Date;
+}
+
+/** B1-04zv：被拒的行还能读出的单号与状态码；读不出就是 null，这里不抛错。 */
+export function pddRowIdentity(input: unknown): OrderRowIdentity {
+  if (!isRecord(input)) return { sub_order_id: null, raw_status: null };
+  const { order_sn: orderSn, order_status: orderStatus } = input;
+  return {
+    sub_order_id: typeof orderSn === 'string' && orderSn.trim() !== '' ? orderSn : null,
+    raw_status:
+      typeof orderStatus === 'number' && Number.isSafeInteger(orderStatus)
+        ? String(orderStatus)
+        : null,
+  };
 }
 
 /**

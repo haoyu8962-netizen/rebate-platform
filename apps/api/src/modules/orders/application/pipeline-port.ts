@@ -20,6 +20,8 @@
 //   不改 user_id、buy_type；未注入时整步跳过。
 // - B1-04zg（D10-529）：京东 14、40 在进事务、走任何分支之前写一条 order_source_mismatch，不改后续流程；
 //   京东 15 待付款的 NO_PAY_TIME 丢弃照记，不写 warn（domain/jd-status.ts）。
+// - B1-04zv（D10-570）：结果是 inserted、updated、unchanged 时，同事务解决该单 open 的 ORDER_ROW_INVALID
+//   （application/row-quarantine.ts），解决写失败整事务回滚；丢弃、app_conflict、stale、整条拒收都不解决。
 // 日志只打平铺字段（platform、app_id、reason、outcome），不打子订单号与买家参数。
 import { accountingDate } from '@couli/domain';
 import type { DB } from '@couli/db';
@@ -60,6 +62,7 @@ import {
   type OrderBlacklistRebatePort,
 } from './blacklist-step.ts';
 import { runCommissionSnapshot, type SnapshotOutcome } from './commission-snapshot-step.ts';
+import { ROW_INVALID_SETTLED_BY, quarantineRows, resolveRowInvalid } from './row-quarantine.ts';
 import { backfillOrderSource, sourceColumns } from './source-backfill.ts';
 import type {
   OrderPipeline,
@@ -526,9 +529,16 @@ export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
       return deps.db.transaction().execute(async (trx) => {
         await lockOrderKey(trx, platform, subOrderId);
         const key = await readOrderKey(trx, platform, subOrderId);
-        if (key !== undefined) return existing(trx, key, order, ctx, platform);
-        return fresh(trx, withSub, ctx, platform);
+        const result =
+          key !== undefined
+            ? await existing(trx, key, order, ctx, platform)
+            : await fresh(trx, withSub, ctx, platform);
+        if (ROW_INVALID_SETTLED_BY.has(result.kind)) {
+          await resolveRowInvalid(trx, deps.clock, withSub, ctx);
+        }
+        return result;
       });
     },
+    quarantine: (rows, ctx) => quarantineRows(deps, rows, ctx),
   };
 }

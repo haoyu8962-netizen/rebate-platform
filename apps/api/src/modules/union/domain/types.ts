@@ -115,6 +115,13 @@ export interface CallCtx {
    * sends the request itself with `signal`.
    */
   readonly gateUpstream?: UpstreamGate;
+  /**
+   * B1-04zv: listOrders only. 'collect' moves a row its mapper refuses to OrderPage.rejected and
+   * keeps going; page shape, window, cursor and configuration errors still throw. Absent: a bad row
+   * fails as it always did. A field of the context, not of OrderQueryOpt: what is asked upstream
+   * does not change, and the governed wrapper passes it through with the rest of the context.
+   */
+  readonly rowErrors?: 'collect';
 }
 
 /** B1-04w: see CallCtx.gateUpstream. The request receives the signal of its own attempt. */
@@ -123,6 +130,25 @@ export type UpstreamGate = <T>(request: (signal: AbortSignal) => Promise<T>) => 
 export interface Page<T> {
   readonly items: readonly T[];
   readonly nextCursor: string | null;
+}
+
+/** B1-04zv: one order row refused under CallCtx.rowErrors; nothing of it is an order yet. */
+export interface RejectedOrderRow {
+  /** The row's sub-order number when it can be read; null otherwise. */
+  readonly sub_order_id: string | null;
+  /** The row's platform status when it can be read; null otherwise. */
+  readonly raw_status: string | null;
+  /** Archive row of the page (same as UnionOrder.raw_payload_id). */
+  readonly raw_payload_id: string | null;
+  /** Field name and reason only, never a value of the row. */
+  readonly detail: string;
+  /** sub_order_id, or `row:` + the first 32 hex digits of the row's sha256 when there is none. */
+  readonly row_key: string;
+}
+
+/** A page of listOrders; `rejected` appears only under CallCtx.rowErrors. */
+export interface OrderPage extends Page<UnionOrder> {
+  readonly rejected?: readonly RejectedOrderRow[];
 }
 
 /** Structurally compatible with packages/domain UnionProductPayload (B1-05b). */
@@ -603,7 +629,7 @@ export interface UnionAdapter {
   resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink>;
   convert(req: ConvertReq, identity: UnionIdentity, ctx: CallCtx): Promise<ConvertResult>;
   bindPublisher?(req: BindReq, ctx: CallCtx): Promise<BindResult>;
-  listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<Page<UnionOrder>>;
+  listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage>;
   /** PDD detail, including optional after-sales status; an idempotent read. */
   getPddOrderDetail?(orderSn: string, ctx: CallCtx): Promise<UnionOrder>;
   /** An idempotent read; B1-04z: `opt` (cursor, Taobao timeBasis) is passed through as is. */

@@ -4,11 +4,16 @@
 // so the queue retries the whole window; the cursor moves only after every page is done.
 // B1-04zt: application/fetch-window.ts takes a window the upstream calls too large apart inside this
 // job; the cursor still moves once, by the job's own window.
+// B1-04zv: a row the adapter refuses does not fail the window: it goes to order_sync_pending
+// (application/row-quarantine.ts), the other rows go on and the cursor moves. Only a page with no
+// good row and enough refused ones still fails the window, so a changed upstream format stops the
+// cursor instead of emptying the window into the pending table.
 import type { ReceivedJob } from '../../platform/index.ts';
 import type { RegisteredPlatform } from '../../union/index.ts';
 import { parseInstantMs, scheduledPlatforms } from '../domain/sync-window.ts';
 import { fetchWindow } from '../application/fetch-window.ts';
 import type { OrderPipelinePort } from '../application/pipeline-port.ts';
+import { quarantineRejected } from '../application/row-quarantine.ts';
 import type {
   OrderSyncWindow,
   SyncAccessPort,
@@ -102,7 +107,7 @@ export async function handleOrderSyncWindow(
   const adapter = deps.registry.get(win.platform);
   const requestId = `order-sync:${job.id}:${job.attempt}`;
   const range = { from: win.window_start, to: win.window_end };
-  const ctx = { ...win, requestId };
+  const ctx = { ...win, requestId, source: 'increment' as const };
   const counts = { pages: 0, count: 0 };
   await fetchWindow(range, {
     adapter,
@@ -114,6 +119,7 @@ export async function handleOrderSyncWindow(
         counts.count += 1;
       }
     },
+    onRejected: (rows) => quarantineRejected(deps.pipeline, rows, ctx),
   });
   const advanced = await deps.cursors.advance(win);
   deps.logger?.info({ ...fields, ...counts, advanced }, 'order_sync_window_done');

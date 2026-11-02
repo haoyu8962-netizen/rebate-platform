@@ -3946,7 +3946,7 @@ CREATE TABLE app.order_sync_pending (
     resolved_at timestamp with time zone,
     resolution_note text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT order_sync_pending_reason_check CHECK ((reason = ANY (ARRAY['UNMAPPED_STATUS'::text, 'UNFREEZE_SIGNAL'::text, 'ILLEGAL_TRANSITION'::text, 'NO_RECEIVED_AT'::text, 'CLAWBACK_NO_COMMISSION'::text, 'SERVICE_FEE_RATE_MISSING'::text, 'RULE_VERSION_PLATFORM_MISSING'::text, 'TLJ_FACE_VALUE_UNMATCHED'::text, 'AMOUNT_PARSE_FAILED'::text]))),
+    CONSTRAINT order_sync_pending_reason_check CHECK ((reason = ANY (ARRAY['UNMAPPED_STATUS'::text, 'UNFREEZE_SIGNAL'::text, 'ILLEGAL_TRANSITION'::text, 'NO_RECEIVED_AT'::text, 'CLAWBACK_NO_COMMISSION'::text, 'SERVICE_FEE_RATE_MISSING'::text, 'RULE_VERSION_PLATFORM_MISSING'::text, 'TLJ_FACE_VALUE_UNMATCHED'::text, 'AMOUNT_PARSE_FAILED'::text, 'ORDER_ROW_INVALID'::text]))),
     CONSTRAINT order_sync_pending_status_check CHECK ((status = ANY (ARRAY['open'::text, 'resolved'::text, 'dismissed'::text])))
 );
 

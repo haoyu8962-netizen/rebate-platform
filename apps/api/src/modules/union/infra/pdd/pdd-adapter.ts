@@ -13,6 +13,7 @@ import {
   type ConvertResult,
   type ItemRef,
   type MaterialReq,
+  type OrderPage,
   type OrderQueryOpt,
   type Page,
   type PddAuthority,
@@ -28,6 +29,7 @@ import {
   type UnionOrder,
   type UpstreamGate,
 } from '../../domain/types.ts';
+import { collectOrderRows } from '../order-row.ts';
 import type { ArchiveContext, UnionTransport, UnionTransportResponse } from '../replay.ts';
 import { pddParameterText, signPddParameters, type PddParameters } from './sign.ts';
 import { pddEnvelopeKey, unwrapPddResponse, type PddWarning } from './response.ts';
@@ -58,6 +60,7 @@ import {
   lastOrderId,
   mapPddOrder,
   type PddOrderPage,
+  type PddOrderSource,
   orderList,
   parseIncrementCursor,
   parsePddOrderEnvelope,
@@ -67,6 +70,7 @@ import {
   PDD_ORDER_DETAIL,
   PDD_ORDER_INCREMENT,
   PDD_ORDER_RANGE,
+  pddRowIdentity,
   rangeCursor,
   rangeWindow,
 } from './orders.ts';
@@ -135,6 +139,19 @@ export function pddArchiveKind(method: string): string {
 }
 
 /** 调用上下文的 app（服务端注入的 ctx.appId）与该方法的用途；没有 app 时不带归档上下文。 */
+/** B1-04zv：一页订单行；ctx.rowErrors 为 collect 时 mapper 拒绝的行进 rejected，否则整页报错。 */
+function orderRows(
+  rows: readonly unknown[],
+  source: PddOrderSource,
+  meta: PddOrderPage,
+  ctx: CallCtx,
+): Pick<OrderPage, 'items' | 'rejected'> {
+  const map = (row: unknown): UnionOrder => mapPddOrder(row, source, meta);
+  return ctx?.rowErrors === 'collect'
+    ? collectOrderRows(rows, meta.rawPayloadId, map, pddRowIdentity)
+    : { items: rows.map(map) };
+}
+
 function archiveContext(method: string, ctx: CallCtx | undefined): ArchiveContext | undefined {
   const appId = ctx?.appId;
   return typeof appId === 'string' ? { appId, kind: pddArchiveKind(method) } : undefined;
@@ -483,15 +500,16 @@ export class PddUnionAdapter implements UnionAdapter {
   /**
    * 不传 queryMode = increment（按更新时间，倒序翻页）；pay_time 按支付时间用 last_order_id 迭代。
    * 时间窗与游标在取凭据、发请求之前校验，不合法报 invalid_dto。游标编码见 orders.ts。
+   * B1-04zv：ctx.rowErrors 为 collect 时，mapper 拒绝的行进 rejected，其余行与游标照常。
    */
-  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<Page<UnionOrder>> {
+  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage> {
     const mode = opt?.queryMode ?? 'increment';
     const send = this.#orderSender(ctx);
-    if (mode === 'pay_time') return await this.#listByPayTime(win, opt.cursor, send);
+    if (mode === 'pay_time') return await this.#listByPayTime(win, opt.cursor, send, ctx);
     if (mode !== 'increment') {
       throw new UnionError('invalid_dto', 'pdd listOrders: unknown queryMode', 'pdd');
     }
-    return await this.#listIncrement(win, opt?.cursor, send);
+    return await this.#listIncrement(win, opt?.cursor, send, ctx);
   }
 
   /**
@@ -515,7 +533,8 @@ export class PddUnionAdapter implements UnionAdapter {
     win: TimeWindow,
     cursor: string | undefined,
     send: OrderSender,
-  ): Promise<Page<UnionOrder>> {
+    ctx: CallCtx,
+  ): Promise<OrderPage> {
     const window = incrementWindow(win, this.#clock.now().getTime());
     // 缓存的是该页实际取回的那次响应：行与那次响应的归档行 id 一起，命中时不重新计量。
     interface FetchedPage {
@@ -536,8 +555,8 @@ export class PddUnionAdapter implements UnionAdapter {
       fetched.set(page, result);
       return result;
     };
-    const pageOf = (page: number, result: FetchedPage): Page<UnionOrder> => ({
-      items: result.rows.map((row) => mapPddOrder(row, 'increment', result.meta)),
+    const pageOf = (page: number, result: FetchedPage): OrderPage => ({
+      ...orderRows(result.rows, 'increment', result.meta, ctx),
       nextCursor: page > 1 ? incrementCursor(page - 1) : null,
     });
 
@@ -580,18 +599,22 @@ export class PddUnionAdapter implements UnionAdapter {
     win: TimeWindow,
     cursor: string | undefined,
     send: OrderSender,
-  ): Promise<Page<UnionOrder>> {
+    ctx: CallCtx,
+  ): Promise<OrderPage> {
     const window = rangeWindow(win);
     const token = cursor === undefined ? undefined : parseRangeCursor(cursor);
     const { envelope, page } = await send(PDD_ORDER_RANGE, {
       ...window,
       ...(token === undefined ? {} : { last_order_id: token }),
     });
-    const items = orderList(envelope).map((row) => mapPddOrder(row, 'range', page));
+    const rows = orderList(envelope);
     const next = lastOrderId(envelope);
-    // 空批、没有迭代器、或迭代器原样不变都结束，避免死循环。
-    const done = items.length === 0 || next === null || next === token;
-    return { items, nextCursor: done ? null : rangeCursor(next) };
+    // 空批、没有迭代器、或迭代器原样不变都结束，避免死循环。空批看报文行数：一批全坏时 items 也是空的。
+    const done = rows.length === 0 || next === null || next === token;
+    return {
+      ...orderRows(rows, 'range', page, ctx),
+      nextCursor: done ? null : rangeCursor(next),
+    };
   }
 
   /** order.detail.get：按 order_sn 查一单，补售后状态 return_status；空白订单号不发请求。 */

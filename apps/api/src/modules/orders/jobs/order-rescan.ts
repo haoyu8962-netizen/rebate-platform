@@ -13,6 +13,7 @@ import type { RegisteredPlatform } from '../../union/index.ts';
 import { parseInstantMs } from '../domain/sync-window.ts';
 import { fetchWindow } from '../application/fetch-window.ts';
 import type { OrderPipelineContext, OrderPipelinePort } from '../application/pipeline-types.ts';
+import { quarantineRejected } from '../application/row-quarantine.ts';
 import type {
   OrderRescanWindow,
   SyncAccessPort,
@@ -89,7 +90,12 @@ async function processPages(
   // OrderPipelineContext's query_kind is the literal 'increment', and the pipeline does not read
   // the field: it takes app, platform and account from the context. The rescan cursor is advanced
   // from `win`, so this value goes nowhere near a cursor.
-  const ctx: OrderPipelineContext = { ...win, query_kind: 'increment', requestId };
+  const ctx: OrderPipelineContext = {
+    ...win,
+    query_kind: 'increment',
+    requestId,
+    source: 'rescan',
+  };
   await fetchWindow(range, {
     adapter,
     call: { appId: win.app_id, requestId, purpose: 'order_sync' },
@@ -101,6 +107,7 @@ async function processPages(
         if (outcome !== undefined && outcome.kind === 'inserted') counts.inserted += 1;
       }
     },
+    onRejected: (rows) => quarantineRejected(deps.pipeline, rows, ctx),
   });
 }
 

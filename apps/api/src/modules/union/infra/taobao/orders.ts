@@ -26,6 +26,7 @@ import {
   type UnionOrder,
   type UnionOrderNeutralFields,
 } from '../../domain/types.ts';
+import type { OrderRowIdentity } from '../order-row.ts';
 
 /**
  * Every Taobao PID (`mm_<memberid>_<siteid>_<adzoneid>`) the platform registered in union_pids for
@@ -39,7 +40,8 @@ export type TaobaoOrderSlotReader = (ctx: CallCtx) => Promise<readonly string[]>
  * - taobao_order_field_invalid: one optional field was missing or invalid and became null
  *   (`field` is the upstream field name);
  * - taobao_order_row_skipped: a row lacked a required field (trade_id, alipay_total_price,
- *   pub_share_pre_fee) or had it invalid, and was left out (`field` names it);
+ *   pub_share_pre_fee) or had it invalid, and was left out (`field` names it); under
+ *   CallCtx.rowErrors also pub_share_fee of a settled row (requireTaobaoOrder);
  * - taobao_order_foreign_slot: once per upstream page that held orders of other promotion slots
  *   (`count` is how many were left out);
  * - taobao_order_no_slots: the slot reader gave no usable PID; nothing was requested.
@@ -474,6 +476,15 @@ class Reader {
     }
   }
 
+  /**
+   * A well-formed negative amount. Reader.fen refuses it like any invalid text; B1-04zv tells it
+   * apart because how to treat it is not decided yet, so it stays as it was (null and a warning).
+   */
+  static negative(value: unknown): boolean {
+    const text = Reader.text(value);
+    return text !== null && text.startsWith('-') && Reader.fen(text.slice(1)) !== null;
+  }
+
   /** Required yuan amount; missing / invalid → the row is skipped. */
   requiredFen(field: string): bigint {
     const value = this.#row[field];
@@ -615,20 +626,62 @@ export function mapTaobaoOrder(
   meta: TaobaoOrderPageMeta,
   warn: Warn,
 ): TaobaoOrder | null {
+  const result = mapOrSkip(input, meta, warn, false);
+  return result instanceof Skip ? null : result;
+}
+
+/**
+ * B1-04zv: the same mapping for CallCtx.rowErrors: a skipped row throws invalid_dto naming the field
+ * (the warning stays), so it can be collected. Stricter on one field: a settled row
+ * (tk_earning_time is valid) needs pub_share_fee, because it is the row's N (BR-CALC-03) and a null
+ * there would be settled on the estimate. Without rowErrors that stays null plus a warning.
+ */
+export function requireTaobaoOrder(
+  input: unknown,
+  meta: TaobaoOrderPageMeta,
+  warn: Warn,
+): TaobaoOrder {
+  const result = mapOrSkip(input, meta, warn, true);
+  if (result instanceof Skip) throw invalid(`${result.field} is missing or invalid`);
+  return result;
+}
+
+/** B1-04zv: what a refused row still says about itself; reading it does not throw or warn. */
+export function taobaoRowIdentity(input: unknown, like: Date): OrderRowIdentity {
+  if (!isRecord(input)) return { sub_order_id: null, raw_status: null };
+  const tradeId = input.trade_id;
+  const tkStatus = new Reader(input, undefined, like).integer('tk_status');
+  return {
+    sub_order_id: typeof tradeId === 'string' && tradeId.trim() !== '' ? tradeId : null,
+    raw_status: tkStatus === null ? null : String(tkStatus),
+  };
+}
+
+function mapOrSkip(
+  input: unknown,
+  meta: TaobaoOrderPageMeta,
+  warn: Warn,
+  strict: boolean,
+): TaobaoOrder | Skip {
   if (!isRecord(input)) {
     warn?.({ event: 'taobao_order_row_skipped' });
-    return null;
+    return new Skip('order row');
   }
   try {
-    return mapRow(input, meta, warn);
+    return mapRow(input, meta, warn, strict);
   } catch (error) {
     if (!(error instanceof Skip)) throw error;
     warn?.({ event: 'taobao_order_row_skipped', field: error.field });
-    return null;
+    return error;
   }
 }
 
-function mapRow(row: Record<string, unknown>, meta: TaobaoOrderPageMeta, warn: Warn): TaobaoOrder {
+function mapRow(
+  row: Record<string, unknown>,
+  meta: TaobaoOrderPageMeta,
+  warn: Warn,
+  strict: boolean,
+): TaobaoOrder {
   const f = new Reader(row, warn, meta.like);
   const tradeId = row.trade_id;
   if (typeof tradeId !== 'string' || tradeId.trim() === '') throw new Skip('trade_id');
@@ -645,6 +698,9 @@ function mapRow(row: Record<string, unknown>, meta: TaobaoOrderPageMeta, warn: W
   // 已结算的判据是 tk_earning_time 有合法时间；未结算时 pub_share_fee（常为 "0.00"）不当结算佣金。
   const settledAt = f.time('tk_earning_time');
   const pubShareFee = f.fen('pub_share_fee');
+  if (strict && settledAt !== null && pubShareFee === null) {
+    if (!Reader.negative(row.pub_share_fee)) throw new Skip('pub_share_fee');
+  }
   const share = row.alimm_share_info_dto;
   let techFee: bigint | null = null;
   let techPreFee: bigint | null = null;

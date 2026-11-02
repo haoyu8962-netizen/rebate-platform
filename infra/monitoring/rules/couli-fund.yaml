@@ -29,6 +29,15 @@ groups:
         annotations:
           summary: 'Platform order status codes outside the status map are waiting for a person'
           description: 'Open order_sync_pending rows with reason UNMAPPED_STATUS (BR-FUND-02): the code was neither dropped nor guessed; add it to the map or resolve the rows.'
+      - alert: CouliOrderRowInvalid
+        expr: 'couli_order_sync_pending_open{reason="ORDER_ROW_INVALID"} > 0'
+        for: '5m'
+        labels:
+          severity: critical
+          fund: 'true'
+        annotations:
+          summary: 'Order rows the union mapper refused are waiting for a person'
+          description: 'Open order_sync_pending rows with reason ORDER_ROW_INVALID (BR-CALC-03, D10-570): the row was not stored and no amount was read as 0, the other rows of the window went on. A later good row of the same order resolves it; a row:<hash> key has no order number and is only resolved by hand. The archived page is raw_payload_id.'
   - name: couli-fund-settlement
     rules:
       - alert: CouliSettleBillJobFailed

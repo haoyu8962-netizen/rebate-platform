@@ -2,7 +2,7 @@ import type { DB } from '@couli/db';
 import type { OrderPlatformState } from '@couli/domain';
 import type { Kysely, Selectable, Transaction } from 'kysely';
 import type { Clock, EventBus } from '../../platform/index.ts';
-import type { RegisteredPlatform, UnionOrder } from '../../union/index.ts';
+import type { RegisteredPlatform, RejectedOrderRow, UnionOrder } from '../../union/index.ts';
 import type { BindingRow } from '../domain/attribution.ts';
 import type { OrderBlacklistDeps, OrderBlacklistRebatePort } from './blacklist-step.ts';
 import type { StatusMap } from '../domain/status-map.ts';
@@ -10,8 +10,13 @@ import type { CommissionSnapshotPort, SnapshotOutcome } from './commission-snaps
 import type { OrderSyncWindow, SyncLogger } from './sync-ports.ts';
 import type { OrderSourcePorts } from './source-backfill.ts';
 
+/** B1-04zv：这次同步走的路径（规划/02 §7.1）；写进自动解决待处理的说明。 */
+export type OrderSyncSource = 'increment' | 'rescan' | 'manual';
+
 export interface OrderPipelineContext extends OrderSyncWindow {
   readonly requestId: string;
+  /** 缺省按 increment：回扫的 query_kind 也写成 increment，所以路径单列一个字段。 */
+  readonly source?: OrderSyncSource;
 }
 
 export interface PidRow {
@@ -104,8 +109,14 @@ export interface OrderPipelineDeps {
 /** Normal resolution includes accepted, dropped, rejected and pending orders. */
 export interface OrderPipelinePort {
   process(order: UnionOrder, ctx: OrderPipelineContext): Promise<void | OrderPipelineResult>;
+  /**
+   * B1-04zv：一页里映射失败的行进待处理（application/row-quarantine.ts）。可选只为测试替身：生产的流水线都有；
+   * 没有它却收到坏行时任务失败，不丢行（quarantineRejected）。
+   */
+  quarantine?(rows: readonly RejectedOrderRow[], ctx: OrderPipelineContext): Promise<void>;
 }
 
 export interface OrderPipeline extends OrderPipelinePort {
   process(order: UnionOrder, ctx: OrderPipelineContext): Promise<OrderPipelineResult>;
+  quarantine(rows: readonly RejectedOrderRow[], ctx: OrderPipelineContext): Promise<void>;
 }
