@@ -14,6 +14,7 @@
 import type { AppEnv } from './app-env.ts';
 import type { DataokeAppConfig } from './dataoke.ts';
 import { readStartupSecretFile } from './startup-secret-file.ts';
+import { KMS_SECRETS, readStartupKmsSecret, type KmsAccess } from '../kms/index.ts';
 
 /** Largest appSecret file accepted. */
 export const DATAOKE_SECRET_FILE_MAX_BYTES = 4096;
@@ -60,9 +61,23 @@ export interface DataokeAppCredentials {
 export async function openDataokeCredentials(
   appEnv: AppEnv,
   dataoke: DataokeAppConfig | null | undefined,
+  kms?: KmsAccess | null,
 ): Promise<() => Promise<DataokeAppCredentials>> {
   if (appEnv === 'local' || appEnv === 'test') throw new DataokeStartupError('live_in_local');
-  if (appEnv !== 'staging') throw new DataokeStartupError('kms_unavailable');
+  if (appEnv !== 'staging') {
+    if (kms === null || kms === undefined) throw new DataokeStartupError('kms_unavailable');
+    if (dataoke === null || dataoke === undefined || dataoke.appKey === '') {
+      throw new DataokeStartupError('credentials_missing');
+    }
+    const appSecret = await readStartupKmsSecret(
+      kms,
+      KMS_SECRETS.union.dataokeAppSecret,
+      DATAOKE_SECRET_FILE_MAX_BYTES,
+      (code) => new DataokeStartupError(code),
+    );
+    const credentials: DataokeAppCredentials = Object.freeze({ appKey: dataoke.appKey, appSecret });
+    return async () => credentials;
+  }
   if (
     dataoke === null ||
     dataoke === undefined ||

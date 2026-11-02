@@ -15,8 +15,9 @@ export const PAY_REASON_CHANNEL_UNCONFIGURED = 'channel_unconfigured';
  */
 export const PAY_REASON_BILL_FORMAT_UNVERIFIED = 'bill_format_unverified';
 /**
- * B2-15k, ruling D10-554: prod reads no key file (BR-PAY-08 ②: KMS only) and no KMS adapter exists
- * yet (FU-KMS-ADAPTER), so every call of both channels in prod answers this. 下单 50306.
+ * B2-15k, ruling D10-554: prod reads no key file (BR-PAY-08 ②: KMS only). B1-30a: a prod channel
+ * whose keys cannot be read from KMS, or any channel when KMS is not configured, answers this on
+ * every call. 下单 50306.
  */
 export const PAY_REASON_KMS_UNAVAILABLE = 'kms_unavailable';
 /**

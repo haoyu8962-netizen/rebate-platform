@@ -17,6 +17,7 @@ import {
   type AppConfig,
   type Clock,
   type RootLogger,
+  kmsAccessOf,
 } from '../platform/index.ts';
 import {
   createTaobaoPriceSettings,
@@ -372,7 +373,7 @@ async function startUnionRegistry(
   let pddLive: PddLiveOptions | undefined;
   if (pdd?.mode === 'live') {
     // Refusals (environment, missing or unreadable credentials) throw PddStartupError: fixed text.
-    const credentials = await openPddCredentials(config.appEnv, config.pdd);
+    const credentials = await openPddCredentials(config.appEnv, config.pdd, kmsAccessOf(config));
     const customParameters = config.pddQueryCustomParameters;
     if (customParameters == null || customParameters === '') {
       logger.warn(PDD_QUERY_CUSTOM_PARAMETERS_ENV);
@@ -393,14 +394,22 @@ async function startUnionRegistry(
   if (taobao?.mode === 'live' && !taobaoUnconfigured) {
     // Checked after pdd, so pdd's own refusals come first. local / test, prod (no KMS yet) and a
     // staging secret file that is unreadable or empty throw TaobaoStartupError (fixed text).
-    const credentials = await openTaobaoCredentials(config.appEnv, config.taobao);
+    const credentials = await openTaobaoCredentials(
+      config.appEnv,
+      config.taobao,
+      kmsAccessOf(config),
+    );
     // B1-04e: the 大淘客 order source only when configured (staging, both DATAOKE_* variables;
     // loadConfig refuses them elsewhere); an unreadable or empty secret file throws
     // DataokeStartupError (fixed text). Neither variable: no order source, nothing logged.
     let orderSource: TaobaoOrderSourceOptions | undefined;
     if (config.dataoke !== null && config.dataoke !== undefined) {
       orderSource = {
-        credentials: await openDataokeCredentials(config.appEnv, config.dataoke),
+        credentials: await openDataokeCredentials(
+          config.appEnv,
+          config.dataoke,
+          kmsAccessOf(config),
+        ),
         transport: archivedTransport(createUnionHttpTransport(), source, clock, logger),
         random: (bound) => randomInt(0, bound),
         baseUrl: DATAOKE_GATEWAY,
@@ -434,7 +443,7 @@ async function startUnionRegistry(
   if (jd?.mode === 'live' && !jdUnconfigured) {
     // Checked after taobao, so taobao's own refusals come first. local / test, prod (no KMS yet) and
     // a staging secret file that is unreadable or empty throw JdStartupError (fixed text).
-    const credentials = await openJdCredentials(config.appEnv, config.jd);
+    const credentials = await openJdCredentials(config.appEnv, config.jd, kmsAccessOf(config));
     jdLive = {
       credentials,
       transport: archivedTransport(createUnionHttpTransport(), source, clock, logger),

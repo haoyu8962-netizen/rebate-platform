@@ -9,11 +9,12 @@
 //   (./dataoke-startup.ts), never here: AppConfig holds the path, never the secret.
 // - prod: DATAOKE_APP_SECRET_FILE is refused (prod only accepts KMS); DATAOKE_APP_KEY alone is not
 //   kept (with taobao live, the union module refuses to start until KMS exists).
-//   TODO(规划/11 §4.5): KMS 取用 — blocked on 云 KMS 选型
+//   With KMS configured (B1-30a, ./kms.ts) the public id is kept; the secret comes from KMS.
 //
 // loadConfig merges the problems in both of its paths (valid and invalid rest of the environment)
 // and puts `dataoke` into its result only when configured (AppConfig.dataoke).
 import type { AppEnv } from './app-env.ts';
+import { kmsVariablesSet } from './kms.ts';
 
 export interface DataokeAppConfig {
   readonly appKey: string;
@@ -39,7 +40,12 @@ export function readDataokeConfig(
             'DATAOKE_APP_SECRET_FILE: must not be set when APP_ENV=prod (prod reads the 大淘客 app secret from KMS only)',
           ],
         }
-      : { dataoke: null, problems: [] };
+      : hasKey && kmsVariablesSet(env)
+        ? {
+            dataoke: Object.freeze({ appKey: env['DATAOKE_APP_KEY']!, secretFile: '' }),
+            problems: [],
+          }
+        : { dataoke: null, problems: [] };
   }
   if (hasKey && hasFile) {
     return {

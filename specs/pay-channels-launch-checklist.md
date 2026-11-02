@@ -24,7 +24,12 @@
 
 ## 2. 环境与密钥
 
-- [ ] KMS 放置密钥（**FU-KMS-ADAPTER，prod 开通前必须完成**）：prod 的收款密钥只存 KMS（BR-PAY-08 ②；裁定 D10-554）。要完成全仓统一的 KMS 读取适配器，并由负责人开通云 KMS。在此之前 prod 不打开任何 `PAY_*_FILE`，两个渠道都不可用：`kms_unavailable`、下单 50306、通知不处理，进程照常启动，启动时每个渠道一条 `pay_channel_unavailable` warn；对账跳过这两个渠道。
+- [ ] KMS 放置密钥（prod 开通前必须完成）：prod 的收款密钥只存 KMS（BR-PAY-08 ②；裁定 D10-554）。读取适配器已有（B1-30a），但**只打桩验证过，没有真连 KMS**，要负责人开通后实测。
+  - 配 `KMS_REGION_ID`、`KMS_ENDPOINT`、`KMS_KEY_ID`、`KMS_RAM_ROLE`；通用凭据一律建成 **text** 类型（binary 会被拒）。
+  - secret 名（`<env>` 是 `prod`）：`couli/<env>/pay/wechat/merchant-private-key`、`pay/wechat/apiv3-key`、`pay/wechat/platform-public-key`、`pay/alipay/app-private-key`，以及 `pay/alipay/public-key`，或证书三件 `pay/alipay/app-cert`、`pay/alipay/public-cert`、`pay/alipay/root-cert`（配 `PAY_ALIPAY_KEY_MODE=cert`）。联盟：`union/pdd/client-secret`、`union/taobao/app-secret`、`union/jd/app-secret`、`union/dataoke/app-secret`。
+  - 字段加密 keyring：用 `apps/api/scripts/keyring-init-kms.ts` 建，主 keyring 和 prior identity keyring 各建一个（不得共用数据密钥，启动时校验），再配 `FIELD_KEY_PROVIDER=kms`、`PRIOR_IDENTITY_KEY_PROVIDER=kms`。
+  - RAM 权限按入口的角色分开：`kms:Decrypt`（`KMS_KEY_ID`）；`kms:GetSecretValue` 收款 secret 只给 api、worker、admin，联盟 secret 只给 api、stream、worker，payout 一个都不给；`kms:Encrypt` 只在建 keyring 时用，不给运行角色。
+  - 启动时读一次，换密钥要重启。读不到时：keyring 和联盟拒启动，收款该渠道不可用（下单 50306）。
 - [ ] 可读进程：只有 api、worker、admin 拿得到密钥，stream、payout 没有挂载也不读（BR-PAY-08 ①）。
 - [ ] 沙箱网关地址：`PAY_ALIPAY_GATEWAY` 的实际地址未实测；微信测试商户走同一个 API 域名（未实测）。
 - [ ] 通知公网可达与限流：`PAY_NOTIFY_BASE_URL` 的 https 证书、网关放行、不重定向、限流（BR-PAY-08 ③）。

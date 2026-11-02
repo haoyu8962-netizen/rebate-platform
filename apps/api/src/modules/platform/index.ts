@@ -53,6 +53,8 @@ export type {
 export { AUDIT_PORT } from './audit/index.ts';
 export type { AuditInput, AuditPort } from './audit/index.ts';
 export { FieldCryptoError, FIELD_CRYPTO_MESSAGES } from './crypto/index.ts';
+export { KMS_SECRETS, KmsError, kmsAccessOf } from './kms/index.ts';
+export type { KmsAccess, KmsErrorCode, KmsSecretName } from './kms/index.ts';
 export type { FieldCrypto, FieldCryptoErrorCode } from './crypto/index.ts';
 export { contractRouteSchema } from './validation/contract-routes.ts';
 export type { ContractOperationId } from './validation/contract-routes.ts';

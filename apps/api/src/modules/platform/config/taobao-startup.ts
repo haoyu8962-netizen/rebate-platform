@@ -6,6 +6,7 @@
 // the underlying error (no `cause`); nothing is logged here; no process.env.
 import type { AppEnv } from './app-env.ts';
 import { readStartupSecretFile } from './startup-secret-file.ts';
+import { KMS_SECRETS, readStartupKmsSecret, type KmsAccess } from '../kms/index.ts';
 import type { TaobaoAppConfig } from './taobao.ts';
 
 /** Largest app_secret file accepted. */
@@ -50,16 +51,30 @@ export interface TaobaoAppCredentials {
  * Decides whether the taobao live adapter may start in `appEnv` and, in staging, reads the secret
  * file once. Resolves with a provider that hands out the credentials read now.
  * - local / test: refused (规划/11 §8; probing runs only in the owner's terminal scripts).
- * - prod: refused until the KMS source exists. TODO(规划/11 §4.5): KMS 取用 — blocked on 云 KMS 选型
+ * - prod: KMS only (B1-30a); without KMS configured refused, without reading anything.
  * - staging: both variables required (the union module does not call this when neither is set);
  *   the file must be a regular, non-empty UTF-8 file.
  */
 export async function openTaobaoCredentials(
   appEnv: AppEnv,
   taobao: TaobaoAppConfig | null | undefined,
+  kms?: KmsAccess | null,
 ): Promise<() => Promise<TaobaoAppCredentials>> {
   if (appEnv === 'local' || appEnv === 'test') throw new TaobaoStartupError('live_in_local');
-  if (appEnv !== 'staging') throw new TaobaoStartupError('kms_unavailable');
+  if (appEnv !== 'staging') {
+    if (kms === null || kms === undefined) throw new TaobaoStartupError('kms_unavailable');
+    if (taobao === null || taobao === undefined || taobao.appKey === '') {
+      throw new TaobaoStartupError('credentials_missing');
+    }
+    const appSecret = await readStartupKmsSecret(
+      kms,
+      KMS_SECRETS.union.taobaoAppSecret,
+      TAOBAO_SECRET_FILE_MAX_BYTES,
+      (code) => new TaobaoStartupError(code),
+    );
+    const credentials: TaobaoAppCredentials = Object.freeze({ appKey: taobao.appKey, appSecret });
+    return async () => credentials;
+  }
   if (taobao === null || taobao === undefined || taobao.appKey === '' || taobao.secretFile === '') {
     throw new TaobaoStartupError('credentials_missing');
   }

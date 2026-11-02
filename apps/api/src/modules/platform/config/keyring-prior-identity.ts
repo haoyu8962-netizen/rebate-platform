@@ -94,7 +94,7 @@
 //                                  generates new keys (so every process start does)
 //         APP_ENV staging / prod → reject `not_configured` (no file is read)
 //      b. APP_ENV prod and provider `local`   → reject `local_in_cloud` (no file is read)
-//      c. provider `kms`                      → reject `kms_unavailable` (no file is read, no cloud
+//      c. provider `kms` without a KMS access → reject `kms_unavailable` (no file is read, no cloud
 //                                               call; the KMS adapter is a later task)
 //      d. PRIOR_IDENTITY_MASTER_KEY_FILE, exactly as ./keyring-startup.ts §1 / §3 c:
 //         cannot be opened, not a regular file, cannot be read → `master_key_unreadable`;
@@ -171,6 +171,8 @@ import {
   type FieldCrypto,
   type WrappedKeyring,
 } from '../crypto/index.ts';
+import type { KeyProvider } from '../crypto/index.ts';
+import type { KmsAccess } from '../kms/index.ts';
 import type { AppEnv } from './app-env.ts';
 import type { KeyringConfig } from './keyring.ts';
 import {
@@ -317,6 +319,7 @@ export async function openPriorIdentityFieldCrypto(
   appEnv: AppEnv,
   priorIdentityKeyring: PriorIdentityKeyringConfig | null,
   keyring: KeyringConfig | null,
+  kms?: KmsAccess | null,
 ): Promise<FieldCrypto> {
   if (priorIdentityKeyring === null) {
     if (appEnv === 'staging' || appEnv === 'prod') {
@@ -327,11 +330,13 @@ export async function openPriorIdentityFieldCrypto(
   if (appEnv === 'prod' && priorIdentityKeyring.provider === 'local') {
     throw new PriorIdentityKeyringError('local_in_cloud');
   }
+  let provider: KeyProvider;
   if (priorIdentityKeyring.provider === 'kms') {
-    throw new PriorIdentityKeyringError('kms_unavailable');
+    if (kms === null || kms === undefined) throw new PriorIdentityKeyringError('kms_unavailable');
+    provider = kms.keyProvider;
+  } else {
+    provider = await readMasterKey(priorIdentityKeyring.masterKeyFile);
   }
-
-  const provider = await readMasterKey(priorIdentityKeyring.masterKeyFile);
   const document = await readKeyringDocument(priorIdentityKeyring.keyringFile);
   let fieldCrypto: FieldCrypto;
   try {
@@ -343,8 +348,10 @@ export async function openPriorIdentityFieldCrypto(
         : 'keyring_invalid',
     );
   }
-  if (keyring !== null && keyring.provider === 'local') {
-    await refuseSharedDataKeys(document, provider, keyring);
+  // B1-30a: the check holds under KMS too, where prod needs it; without a KMS access a kms main keyring
+  // has already refused to open.
+  if (keyring !== null && (keyring.provider === 'local' || (kms !== null && kms !== undefined))) {
+    await refuseSharedDataKeys(document, provider, keyring, kms ?? null);
   }
   return fieldCrypto;
 }
@@ -408,8 +415,9 @@ async function readKeyringDocument(keyringFile: string): Promise<WrappedKeyring>
  */
 async function refuseSharedDataKeys(
   priorDocument: WrappedKeyring,
-  priorProvider: LocalKeyProvider,
-  keyring: Extract<KeyringConfig, { provider: 'local' }>,
+  priorProvider: KeyProvider,
+  keyring: KeyringConfig,
+  kms: KmsAccess | null,
 ): Promise<void> {
   const priorKeys: Uint8Array[] = [];
   const mainKeys: Uint8Array[] = [];
@@ -421,7 +429,10 @@ async function refuseSharedDataKeys(
       throw new PriorIdentityKeyringError('unwrap_failed');
     }
     try {
-      const mainProvider = await readLocalKeyProvider(keyring.masterKeyFile);
+      const mainProvider: KeyProvider =
+        keyring.provider === 'local'
+          ? await readLocalKeyProvider(keyring.masterKeyFile)
+          : (kms as KmsAccess).keyProvider;
       const bytes = await readBoundedFile(
         keyring.keyringFile,
         KEYRING_FILE_MAX_BYTES,
@@ -456,7 +467,7 @@ async function refuseSharedDataKeys(
 /** The plain data keys of a document already validated by `openFieldCrypto`. */
 async function unwrapDataKeys(
   document: WrappedKeyring,
-  provider: LocalKeyProvider,
+  provider: KeyProvider,
 ): Promise<Uint8Array[]> {
   const keys: Uint8Array[] = [];
   try {

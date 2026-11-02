@@ -12,7 +12,8 @@
 // - PAY_CHANNEL_IMPL accepts only `fake`, and prod refuses it. PAY_NOTIFY_BASE_URL must be https.
 // - prod: the gateway is the documented official one; PAY_ALIPAY_GATEWAY set there refuses to start.
 //   Ruling D10-554: the checks stand, but the payment module's factory opens no key file in prod
-//   (keys only in KMS, BR-PAY-08 ②): both channels stay unavailable until FU-KMS-ADAPTER.
+//   (keys only in KMS, BR-PAY-08 ②): B1-30a reads them from KMS; without KMS configured both channels
+//   stay unavailable. PAY_ALIPAY_KEY_MODE says which Alipay secrets KMS holds.
 // - not prod: WeChat Pay needs PAY_WECHAT_TEST_MERCHANT=1, Alipay needs PAY_ALIPAY_GATEWAY other
 //   than the production gateway; otherwise that channel is unavailable (BR-PAY-08 ②).
 import type { EntryName } from '../entries.ts';
@@ -38,6 +39,8 @@ export interface PayAlipayEnv {
   readonly publicCertFile: string | null;
   readonly rootCertFile: string | null;
   readonly gateway: string | null;
+  /** B1-30a: prod only, which Alipay secrets KMS holds; default public_key. */
+  readonly keyMode: 'public_key' | 'cert';
 }
 
 /** Names and paths only, never a key. Absent on the stream and payout entries. */
@@ -87,6 +90,10 @@ export function readPayChannelsConfig(
       'PAY_ALIPAY_GATEWAY: must not be set when APP_ENV=prod (prod uses the official gateway)',
     );
   }
+  const keyMode = set(env, 'PAY_ALIPAY_KEY_MODE');
+  if (keyMode !== null && keyMode !== 'public_key' && keyMode !== 'cert') {
+    problems.push('PAY_ALIPAY_KEY_MODE: must be public_key or cert');
+  }
   return {
     payChannels: {
       appId: set(env, 'PAY_APP_ID'),
@@ -111,6 +118,7 @@ export function readPayChannelsConfig(
         publicCertFile: set(env, 'PAY_ALIPAY_PUBLIC_CERT_FILE'),
         rootCertFile: set(env, 'PAY_ALIPAY_ROOT_CERT_FILE'),
         gateway,
+        keyMode: keyMode === 'cert' ? 'cert' : 'public_key',
       },
     },
     problems,

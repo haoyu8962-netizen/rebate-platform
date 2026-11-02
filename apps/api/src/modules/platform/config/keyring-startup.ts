@@ -30,9 +30,11 @@
 //                                                    still cannot start prod on a local key).
 //                                                    staging opens the local provider like local /
 //                                                    test (规划仓库 docs/adr/0003, 负责人 2026-10-07)
-//      b. provider `kms`                          → reject `kms_unavailable` (no file is read, no
-//                                                    cloud call is made or faked: the KMS provider
-//                                                    arrives with a later task)
+//      b. provider `kms` without a KMS access     → reject `kms_unavailable` (no file is read, no
+//                                                    cloud call is made or faked). With one (B1-30a,
+//                                                    KMS_* configured) step c is skipped: the master
+//                                                    key stays in KMS, the keyring file is read as in
+//                                                    step d and opened with its key provider
 //      c. master key file: cannot be opened, is not a regular file (a directory, /dev/null, …)
 //         or cannot be read                       → `master_key_unreadable`
 //         content not as in §1                    → `master_key_invalid`
@@ -118,10 +120,12 @@ import {
   LocalKeyProvider,
   openFieldCrypto,
   type FieldCrypto,
+  type KeyProvider,
   type WrappedKeyring,
 } from '../crypto/index.ts';
 import type { AppEnv } from './app-env.ts';
 import type { KeyringConfig } from './keyring.ts';
+import type { KmsAccess } from '../kms/index.ts';
 
 /** `keyId` of the LocalKeyProvider built from FIELD_MASTER_KEY_FILE (§1). */
 export const LOCAL_MASTER_KEY_ID = 'local';
@@ -173,13 +177,18 @@ export class KeyringStartupError extends Error {
 export async function openConfiguredFieldCrypto(
   appEnv: AppEnv,
   keyring: KeyringConfig,
+  kms?: KmsAccess | null,
 ): Promise<FieldCrypto> {
   if (appEnv === 'prod' && keyring.provider === 'local') {
     throw new KeyringStartupError('local_in_cloud');
   }
-  if (keyring.provider === 'kms') throw new KeyringStartupError('kms_unavailable');
-
-  const provider = await readLocalKeyProvider(keyring.masterKeyFile);
+  let provider: KeyProvider;
+  if (keyring.provider === 'kms') {
+    if (kms === null || kms === undefined) throw new KeyringStartupError('kms_unavailable');
+    provider = kms.keyProvider;
+  } else {
+    provider = await readLocalKeyProvider(keyring.masterKeyFile);
+  }
   const keyringBytes = await readBoundedFile(
     keyring.keyringFile,
     KEYRING_FILE_MAX_BYTES,

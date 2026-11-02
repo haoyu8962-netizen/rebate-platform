@@ -6,6 +6,7 @@ import {
   PRIOR_IDENTITY_FIELD_CRYPTO,
 } from './config/keyring-prior-identity.ts';
 import { openConfiguredFieldCrypto } from './config/keyring-startup.ts';
+import { kmsAccessOf } from './kms/index.ts';
 import type { FieldCrypto } from './crypto/index.ts';
 import type { ConnectionConfig, DbHandles } from './db/index.ts';
 import type { EntryName } from './entries.ts';
@@ -62,7 +63,11 @@ export class PlatformModule {
             {
               provide: FIELD_CRYPTO,
               useFactory: async () =>
-                await openConfiguredFieldCrypto(options.config.appEnv, keyring),
+                await openConfiguredFieldCrypto(
+                  options.config.appEnv,
+                  keyring,
+                  kmsAccessOf(options.config),
+                ),
             },
           ];
     // The second field keyring (B1-27e, config/keyring-prior-identity.ts §5): provided when it is
@@ -79,7 +84,12 @@ export class PlatformModule {
             // Injecting FIELD_CRYPTO makes the main keyring open (and fail) first.
             inject: keyring === null ? [] : [FIELD_CRYPTO],
             useFactory: async () =>
-              await openPriorIdentityFieldCrypto(appEnv, priorIdentityKeyring, keyring),
+              await openPriorIdentityFieldCrypto(
+                appEnv,
+                priorIdentityKeyring,
+                keyring,
+                kmsAccessOf(options.config),
+              ),
           },
         ]
       : [];

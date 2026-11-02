@@ -17,6 +17,7 @@ import {
   type JwtVerifyKeyConfig,
 } from './jwt.ts';
 import { readKeyringConfig, type KeyringConfig } from './keyring.ts';
+import { readKmsConfig, type KmsConfig } from './kms.ts';
 import {
   readPriorIdentityKeyringConfig,
   type PriorIdentityKeyringConfig,
@@ -140,6 +141,8 @@ export interface AppConfig {
   readonly apiPort: number;
   readonly streamPort: number;
   readonly adminPort: number;
+  /** B1-30a: where KMS is, staging / prod only; absent without KMS_* (./kms.ts). */
+  readonly kms?: KmsConfig | null | undefined;
   readonly keyring: KeyringConfig | null;
   /**
    * PRIOR_IDENTITY_KEY_PROVIDER / PRIOR_IDENTITY_KEYRING_FILE / PRIOR_IDENTITY_MASTER_KEY_FILE
@@ -379,6 +382,7 @@ export function loadConfig(
     const appEnv = z.enum(APP_ENVS).safeParse(input['APP_ENV']);
     if (appEnv.success) {
       problems.push(...startupViolations(appEnv.data, env));
+      problems.push(...readKmsConfig(appEnv.data, env).problems);
       problems.push(...readKeyringConfig(appEnv.data, env).problems);
       problems.push(...readPriorIdentityKeyringConfig(appEnv.data, env).problems);
       problems.push(...readJwt(appEnv.data, env).problems);
@@ -406,6 +410,8 @@ export function loadConfig(
 
   const values = parsed.data;
   const violations = startupViolations(values.APP_ENV, env);
+  const { kms, problems: kmsProblems } = readKmsConfig(values.APP_ENV, env);
+  violations.push(...kmsProblems);
   const { keyring, problems } = readKeyringConfig(values.APP_ENV, env);
   violations.push(...problems);
   const { priorIdentityKeyring, problems: priorIdentityProblems } = readPriorIdentityKeyringConfig(
@@ -528,5 +534,6 @@ export function loadConfig(
     ...(queueLimits === null ? {} : { queueLimits }),
     // Only on the entries that read it (B2-15k), same reason.
     ...(payChannels === null ? {} : { payChannels }),
+    ...(kms === null ? {} : { kms }),
   };
 }

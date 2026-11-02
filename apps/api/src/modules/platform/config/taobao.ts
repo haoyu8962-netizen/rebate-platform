@@ -8,8 +8,9 @@
 //   none → null. The secret file is opened once by the union module's startup factory, never here:
 //   AppConfig holds the path, never the secret.
 // - prod: the file source is refused (prod only accepts KMS); TAOBAO_APP_KEY alone is not kept.
-//   TODO(规划/11 §4.5): KMS 取用 — blocked on 云 KMS 选型
+//   With KMS configured (B1-30a, ./kms.ts) the public id is kept; the secret comes from KMS.
 import type { AppEnv } from './app-env.ts';
+import { kmsVariablesSet } from './kms.ts';
 
 export interface TaobaoAppConfig {
   readonly appKey: string;
@@ -35,7 +36,12 @@ export function readTaobaoConfig(
             'TAOBAO_APP_SECRET_FILE: must not be set when APP_ENV=prod (prod reads the Taobao app secret from KMS only)',
           ],
         }
-      : { taobao: null, problems: [] };
+      : hasKey && kmsVariablesSet(env)
+        ? {
+            taobao: Object.freeze({ appKey: env['TAOBAO_APP_KEY']!, secretFile: '' }),
+            problems: [],
+          }
+        : { taobao: null, problems: [] };
   }
   if (hasKey && hasFile) {
     return {

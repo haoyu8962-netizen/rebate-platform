@@ -7,8 +7,9 @@
 //   The secret file is opened once by the union module's startup factory, never here: AppConfig
 //   holds the path, never the secret.
 // - prod: the file source is refused (prod only accepts KMS); PDD_CLIENT_ID alone is not kept.
-//   TODO(规划/11 §4.5): KMS 取用 — blocked on 云 KMS 选型
+//   With KMS configured (B1-30a, ./kms.ts) the public id is kept; the secret comes from KMS.
 import type { AppEnv } from './app-env.ts';
+import { kmsVariablesSet } from './kms.ts';
 
 export interface PddClientConfig {
   readonly clientId: string;
@@ -34,7 +35,12 @@ export function readPddConfig(
             'PDD_CLIENT_SECRET_FILE: must not be set when APP_ENV=prod (prod reads the Pinduoduo client secret from KMS only)',
           ],
         }
-      : { pdd: null, problems: [] };
+      : hasId && kmsVariablesSet(env)
+        ? {
+            pdd: Object.freeze({ clientId: env['PDD_CLIENT_ID']!, secretFile: '' }),
+            problems: [],
+          }
+        : { pdd: null, problems: [] };
   }
   if (hasId && hasFile) {
     return {

@@ -250,7 +250,7 @@ compose 给 api、worker、admin 写了 `PAY_CHANNEL_IMPL: fake`（不是口令�
 | `PAY_ALIPAY_GATEWAY` | 沙箱网关的 https 地址，不得是生产网关，否则支付宝不可用；地址未实测 |
 
 - 密钥文件只在入口启动时读一次；换文件要重启。
-- 这一节只适用于 staging。prod 不读任何 `PAY_*_FILE`（裁定 D10-554）：FU-KMS-ADAPTER 落地前两个渠道都不可用（`kms_unavailable`），不要照这里的做法把密钥文件放到 prod 节点。
+- 这一节只适用于 staging。prod 不读任何 `PAY_*_FILE`（裁定 D10-554）：密钥从 KMS 读（B1-30a，见 `specs/pay-channels-launch-checklist.md`），没配 KMS 时两个渠道都不可用（`kms_unavailable`），不要照这里的做法把密钥文件放到 prod 节点。
 - `pay.enabled` 与渠道开关仍是关（BR-PAY-09）：切到真实通道也不等于开放收款。
 
 ## 2. 在开发机构建并传到节点

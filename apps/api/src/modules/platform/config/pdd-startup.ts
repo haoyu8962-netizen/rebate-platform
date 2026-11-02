@@ -7,6 +7,7 @@
 import type { AppEnv } from './app-env.ts';
 import type { PddClientConfig } from './pdd.ts';
 import { readStartupSecretFile } from './startup-secret-file.ts';
+import { KMS_SECRETS, readStartupKmsSecret, type KmsAccess } from '../kms/index.ts';
 
 /** Largest client_secret file accepted. */
 export const PDD_SECRET_FILE_MAX_BYTES = 4096;
@@ -49,15 +50,32 @@ export interface PddClientCredentials {
  * Decides whether the pdd live adapter may start in `appEnv` and, in staging, reads the secret
  * file once. Resolves with a provider that hands out the credentials read now.
  * - local / test: refused (规划/11 §8; probing runs only in the owner's terminal scripts).
- * - prod: refused until the KMS source exists. TODO(规划/11 §4.5): KMS 取用 — blocked on 云 KMS 选型
+ * - prod: KMS only (B1-30a); without KMS configured refused, without reading anything.
  * - staging: both variables required; the file must be a regular, non-empty UTF-8 file.
  */
 export async function openPddCredentials(
   appEnv: AppEnv,
   pdd: PddClientConfig | null | undefined,
+  kms?: KmsAccess | null,
 ): Promise<() => Promise<PddClientCredentials>> {
   if (appEnv === 'local' || appEnv === 'test') throw new PddStartupError('live_in_local');
-  if (appEnv !== 'staging') throw new PddStartupError('kms_unavailable');
+  if (appEnv !== 'staging') {
+    if (kms === null || kms === undefined) throw new PddStartupError('kms_unavailable');
+    if (pdd === null || pdd === undefined || pdd.clientId === '') {
+      throw new PddStartupError('credentials_missing');
+    }
+    const clientSecret = await readStartupKmsSecret(
+      kms,
+      KMS_SECRETS.union.pddClientSecret,
+      PDD_SECRET_FILE_MAX_BYTES,
+      (code) => new PddStartupError(code),
+    );
+    const credentials: PddClientCredentials = Object.freeze({
+      clientId: pdd.clientId,
+      clientSecret,
+    });
+    return async () => credentials;
+  }
   if (pdd === null || pdd === undefined || pdd.clientId === '' || pdd.secretFile === '') {
     throw new PddStartupError('credentials_missing');
   }

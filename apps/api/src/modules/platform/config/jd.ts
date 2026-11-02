@@ -8,12 +8,13 @@
 //   none → null. The secret file is opened once by the union module's startup factory, never here:
 //   AppConfig holds the path, never the secret.
 // - prod: the file source is refused (prod only accepts KMS); JD_APP_KEY alone is not kept.
-//   TODO(规划/11 §4.5): KMS 取用 — blocked on 云 KMS 选型
+//   With KMS configured (B1-30a, ./kms.ts) the public id is kept; the secret comes from KMS.
 //
 // JD_SITE_ID (D10-500 ①) is a server setting, not a credential: not listed in ./credential-env.ts,
 // optional in every environment, kept as text (an id may exceed the safe integer range). Link
 // conversion uses it (B1-04zd).
 import type { AppEnv } from './app-env.ts';
+import { kmsVariablesSet } from './kms.ts';
 
 export const JD_SITE_ID_ENV = 'JD_SITE_ID';
 
@@ -44,7 +45,12 @@ export function readJdConfig(
             'JD_APP_SECRET_FILE: must not be set when APP_ENV=prod (prod reads the Jingdong app secret from KMS only)',
           ],
         }
-      : { jd: null, problems: [] };
+      : hasKey && kmsVariablesSet(env)
+        ? {
+            jd: Object.freeze({ appKey: env['JD_APP_KEY']!, secretFile: '' }),
+            problems: [],
+          }
+        : { jd: null, problems: [] };
   }
   if (hasKey && hasFile) {
     return {
