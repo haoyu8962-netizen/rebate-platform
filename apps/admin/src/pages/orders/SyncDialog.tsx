@@ -1,6 +1,7 @@
 // Manual sync dialog of the order list (design-hifi AdmOrderSync; design/specs/admin-orders.md
 // §1, §2, §4; CT-24n). Opening it reads GET /admin/v1/order-syncs/limits (never earlier), which
-// gives the platforms on offer, each one's earliest window start and its order number ceiling.
+// gives the platforms on offer, each one's earliest window start and its order number ceiling
+// (0: no sync by order number, the option is greyed out and choosing that platform leaves it).
 // Exactly one of two forms is sent: by time window (platform, from, to as Beijing time with
 // +08:00) or by order numbers (platform, order_nos, one per line). Out-of-range input is stopped
 // here with a hint next to the field; a 20001 from the server puts the same kind of hint next to
@@ -90,6 +91,7 @@ export function SyncDialog({ onClose, onDone }: SyncDialogProps): ReactElement {
 
   const limit = limits.find((one) => one.platform === platform);
   const maxOrderNos = Math.min(SYNC_MAX_ORDER_NOS, limit?.max_order_nos ?? SYNC_MAX_ORDER_NOS);
+  const noOrderNos = (one: SyncLimit | undefined) => one?.max_order_nos === 0;
 
   /** The body of the chosen form, or the field hints that stop it. */
   const build = (): { readonly body: SyncCreateRequest } | { readonly errors: FieldErrors } => {
@@ -198,7 +200,7 @@ export function SyncDialog({ onClose, onDone }: SyncDialogProps): ReactElement {
             }}
             options={[
               { value: 'byTime', label: t.modeWindow },
-              { value: 'byNumbers', label: t.modeOrderNos },
+              { value: 'byNumbers', label: t.modeOrderNos, disabled: noOrderNos(limit) },
             ]}
           />
         </Form.Item>
@@ -210,6 +212,13 @@ export function SyncDialog({ onClose, onDone }: SyncDialogProps): ReactElement {
             placeholder={t.platformPlaceholder}
             onChange={(value) => {
               setPlatform(value);
+              const chosen = limits.find((one) => one.platform === value);
+              if (mode === 'byNumbers' && noOrderNos(chosen)) {
+                setMode('byTime');
+                setNotice(undefined);
+                setErrors({});
+                return;
+              }
               setErrors({ ...errors, platform: undefined });
             }}
             options={limits.map((one) => ({

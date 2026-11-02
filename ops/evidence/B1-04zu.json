@@ -1,0 +1,97 @@
+{
+  "task": "B1-04zu",
+  "spec_ref": "deb521c2bcb740571a01c2dc128f40abb40c37a2",
+  "spec_commit": "d7967f1736dc8109dd8f6b7ce1f71bf2cbc9822c",
+  "red_tests": [
+    "test/spec/contracts/admin-order-actions/limit-minimum.test.ts > [AC-B1-04zu#7] limits 的 max_order_nos 最小值为 0：0 表示该平台不支持按单号，负数和非整数仍不合法",
+    "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#3] 选中 max_order_nos 为 0 的 jd：按订单号选项置灰，点了也留在按时间窗，单号框不出现",
+    "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#4] limits 把 jd 排第一（接口的实际顺序）：打开对话框默认就是 jd，按订单号一开始就置灰",
+    "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#5] 先选 pdd 按单号再切 jd：自动回到按时间窗，填好的单号不会发出去，提交体恰为时间窗",
+    "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#6] jd 置灰不连累 pdd：切回 pdd 后按订单号可选，提交体恰为 platform + order_nos",
+    "test/spec/orders/jd-sync/window.test.ts > [AC-B1-04zr#5] 手动同步：limits 列出 jd（30 天、不支持按单号报 0），时间窗按 60 分钟切，每窗都过适配器校验",
+    "test/spec/orders/manual-sync/limits.int.test.ts > [AC-B1-09i#30] limits 每个可同步平台一项：earliest_from 为注入时钟减最远回扫范围，max_order_nos pdd 50、jd 0；读不写审计",
+    "test/spec/orders/manual-sync/limits.int.test.ts > [AC-B1-04zu#2] limits 给 jd 报 0、pdd 报 50，POST 校验不变：jd 按单号仍 20001 [order_nos] 不建请求不投递，pdd 按 50 个单号照常建请求",
+    "test/spec/orders/manual-sync/rules.test.ts > [AC-B1-09i#4] limits 按 02 §7.1 的最远回扫范围随时钟给出 earliest_from，单号上限 pdd 50、jd 0",
+    "test/spec/orders/manual-sync/rules.test.ts > [AC-B1-04zu#1] max_order_nos 与 MANUAL_SYNC_ORDER_NO_PLATFORMS 对上：名单内恰 50，名单外恰 0（pdd 50、jd 0）"
+  ],
+  "risk_note": "RV2 by path (admin-adjacent order sync, contract). Makes the manual sync limits honest: max_order_nos minimum goes from 1 to 0, where 0 means the platform has no sync by order number; manualSyncLimits gives 50 to MANUAL_SYNC_ORDER_NO_PLATFORMS and 0 to the rest, so jd reports 0 and pdd stays 50. The Jingdong order API queries by time window only, so no jd order-number sync is added. POST validation is unchanged and uses the same list. SyncDialog disables the by-number option when the chosen limit is 0 and returns to by-time when the platform changes, reading the limit value, never a platform name. No money or attribution. oasdiff reports the lowered response minimum as breaking; ruling D10-562 accepts it in contracts/oasdiff-accepted.txt, because only the console reads this response and it ships with the server.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d7967f1736dc8109dd8f6b7ce1f71bf2cbc9822c",
+      "tree": "c4486319da3bb5dad290fc5ff30227fd1a20487e",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T01:36:06Z",
+      "finished_at": "2026-11-02T01:36:30Z",
+      "red_tests": [
+        "test/spec/contracts/admin-order-actions/limit-minimum.test.ts > [AC-B1-04zu#7] limits 的 max_order_nos 最小值为 0：0 表示该平台不支持按单号，负数和非整数仍不合法",
+        "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#3] 选中 max_order_nos 为 0 的 jd：按订单号选项置灰，点了也留在按时间窗，单号框不出现",
+        "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#4] limits 把 jd 排第一（接口的实际顺序）：打开对话框默认就是 jd，按订单号一开始就置灰",
+        "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#5] 先选 pdd 按单号再切 jd：自动回到按时间窗，填好的单号不会发出去，提交体恰为时间窗",
+        "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts > [AC-B1-04zu#6] jd 置灰不连累 pdd：切回 pdd 后按订单号可选，提交体恰为 platform + order_nos",
+        "test/spec/orders/jd-sync/window.test.ts > [AC-B1-04zr#5] 手动同步：limits 列出 jd（30 天、不支持按单号报 0），时间窗按 60 分钟切，每窗都过适配器校验",
+        "test/spec/orders/manual-sync/limits.int.test.ts > [AC-B1-09i#30] limits 每个可同步平台一项：earliest_from 为注入时钟减最远回扫范围，max_order_nos pdd 50、jd 0；读不写审计",
+        "test/spec/orders/manual-sync/limits.int.test.ts > [AC-B1-04zu#2] limits 给 jd 报 0、pdd 报 50，POST 校验不变：jd 按单号仍 20001 [order_nos] 不建请求不投递，pdd 按 50 个单号照常建请求",
+        "test/spec/orders/manual-sync/rules.test.ts > [AC-B1-09i#4] limits 按 02 §7.1 的最远回扫范围随时钟给出 earliest_from，单号上限 pdd 50、jd 0",
+        "test/spec/orders/manual-sync/rules.test.ts > [AC-B1-04zu#1] max_order_nos 与 MANUAL_SYNC_ORDER_NO_PLATFORMS 对上：名单内恰 50，名单外恰 0（pdd 50、jd 0）"
+      ],
+      "expected": [
+        "test/spec/contracts/admin-order-actions/limit-minimum.test.ts",
+        "test/spec/frontend/admin-orders-sync/order-nos-unsupported.test.ts",
+        "test/spec/orders/jd-sync/window.test.ts",
+        "test/spec/orders/manual-sync/limits.int.test.ts",
+        "test/spec/orders/manual-sync/rules.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "48eec44318079610864e6e52cf33ff635959558f61b2fd01d030c39a903ccebe"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1c5de748432389877bf69e72f3f432caf01ee09ecc54e9e6608e3e6ea6b26018"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings; it checked the max_order_nos consumers and POST validation by reading. Static, nothing executed. Known and left: the order detail page still sends 同步此单 for jd and shows the unsupported message on 20001; a stale TODO in application/manual-sync.ts:144 is outside paths."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by an independent Claude context in 2 attempts; attempt 2 only moved the contract assertion to a new file, because editing syncs.test.ts made red-check judge the whole file. Frozen changes: [AC-B1-04zr#5] jd 50 to 0, [AC-B1-09i#4] and [AC-B1-09i#30] from toBe(50) to per-platform. Round 1 pass, no S0/S1, one S2: the fixture would also pass a hard-coded jd check; the implementation reads the limit. Static review, nothing executed."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ab6ac23b409833bc5f6955f84b3f6d8f50febbe6",
+    "specs": "4e25c356b485066db1097872ec94837e9a85f1e4"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

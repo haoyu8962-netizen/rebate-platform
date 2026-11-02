@@ -51,7 +51,7 @@ it('[AC-B1-09i#3] 平台、时间窗、状态筛选、单号任一不同摘要�
   expect(new Set(digests).size).toBe(digests.length);
 });
 
-it('[AC-B1-09i#4] limits 按 02 §7.1 的最远回扫范围随时钟给出 earliest_from，单号上限 50', () => {
+it('[AC-B1-09i#4] limits 按 02 §7.1 的最远回扫范围随时钟给出 earliest_from，单号上限 pdd 50、jd 0', () => {
   const now = new Date('2026-10-22T02:00:00.000Z');
   const items = manualSyncLimits(now);
   const platforms = items.map((item) => item.platform);
@@ -59,7 +59,7 @@ it('[AC-B1-09i#4] limits 按 02 §7.1 的最远回扫范围随时钟给出 earli
   expect(new Set(platforms).size).toBe(platforms.length);
   for (const item of items) {
     expect(Object.keys(LOOK_BACK_DAYS)).toContain(item.platform);
-    expect(item.max_order_nos).toBe(50);
+    expect(item.max_order_nos).toBe(item.platform === 'pdd' ? 50 : 0);
     const earliest = Date.parse(item.earliest_from);
     const range = LOOK_BACK_DAYS[item.platform] * DAY;
     // The range may be counted from the start of the day; never longer than one extra day.
@@ -78,5 +78,24 @@ it('[AC-B1-09i#5] earliest_from 随时钟移动：两天后的 earliest_from 更
     expect(Date.parse(item.earliest_from)).toBeGreaterThan(Date.parse(first.get(item.platform)!));
     const range = LOOK_BACK_DAYS[item.platform] * DAY;
     expect(Date.parse(item.earliest_from)).toBeGreaterThan(later.getTime() - range - DAY);
+  }
+});
+
+it('[AC-B1-04zu#1] max_order_nos 与 MANUAL_SYNC_ORDER_NO_PLATFORMS 对上：名单内恰 50，名单外恰 0（pdd 50、jd 0）', async () => {
+  // Imported here: a changed import at the top of the file would judge all its tests in the red
+  // check, and the ones this task leaves alone stay green.
+  const { MANUAL_SYNC_ORDER_NO_PLATFORMS } =
+    await import('../../../../apps/api/src/modules/orders/domain/manual-sync.ts');
+  const items = manualSyncLimits(new Date('2026-10-22T02:00:00.000Z'));
+  const maxOf = (platform: string) =>
+    items.find((item) => item.platform === platform)?.max_order_nos;
+  expect(maxOf('jd')).toBe(0);
+  expect(maxOf('pdd')).toBe(50);
+  expect(MANUAL_SYNC_ORDER_NO_PLATFORMS).toContain('pdd');
+  expect(MANUAL_SYNC_ORDER_NO_PLATFORMS).not.toContain('jd');
+  for (const item of items) {
+    expect(item.max_order_nos).toBe(
+      MANUAL_SYNC_ORDER_NO_PLATFORMS.includes(item.platform) ? 50 : 0,
+    );
   }
 });

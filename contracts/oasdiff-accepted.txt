@@ -1,7 +1,9 @@
 # oasdiff breaking --err-ignore list (D10-484). One line per accepted change: HTTP method, path,
 # then the change text exactly as oasdiff 1.32.1 prints it. Only response enum values added
 # (response-property-enum-value-added) may be listed here, and only when an old client cannot
-# receive the new value, plus a widened response maxLength an orchestrator ruling names; never
+# receive the new value, plus a widened response maxLength an orchestrator ruling names, or a
+# lowered response minimum an orchestrator ruling names (only on a response the console alone reads
+# and that ships with the server); never
 # removed fields, type changes or required-ness changes. D10-557: on /admin/v1/** only, a response
 # widening (a field becoming nullable, an enum value added, maxLength widened) may also be listed,
 # because the console ships with the server and has no old client; never removed fields, required
@@ -43,3 +45,8 @@ GET /admin/v1/audit-logs the `data/items/items/actor_id` response property's min
 GET /admin/v1/audit-logs/{id} response property `data/actor_id` list-of-types was widened by adding types `null` to media type `application/json` of response `200`
 GET /admin/v1/audit-logs/{id} the `data/actor_id` response property's maxLength was unset from `64` for the response status `200`
 GET /admin/v1/audit-logs/{id} the `data/actor_id` response property's minLength was unset from `1` for the response status `200`
+# D10-562 (B1-04zu): AdminOrderSyncPlatformLimit max_order_nos minimum goes from 1 to 0; 0 means the
+# platform has no sync by order number. Only the admin console reads this response and it ships with
+# the server (后台同发). An old console that gets 0 has an upper limit of 0 order numbers, so its form
+# stops a by-number request before sending; the server already answers 20001 [order_nos] for jd.
+GET /admin/v1/order-syncs/limits the `data/items/items/max_order_nos` response property's min was decreased from `1.00` to `0.00` for the response status `200`

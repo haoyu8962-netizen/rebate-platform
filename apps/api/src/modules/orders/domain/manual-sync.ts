@@ -5,8 +5,9 @@
 //   Equal filters give equal digests whatever offset the instants were written in.
 // - manualSyncLimits: per platform, the earliest window start the farthest look-back range of 02 §7.1
 //   allows at `now` (taobao 90 days, jd 30 days, pdd 90 days) and the most order numbers one request
-//   may carry (50, 01 F-ORD-10). GET /admin/v1/order-syncs/limits returns it and POST checks it.
-//   Only platforms with a fixed window cap (INCREMENT_WINDOW_CAP_MS: pdd today) are listed.
+//   may carry (50, 01 F-ORD-10; 0 outside MANUAL_SYNC_ORDER_NO_PLATFORMS). GET
+//   /admin/v1/order-syncs/limits returns it and POST checks it. Only platforms with a fixed window
+//   cap (INCREMENT_WINDOW_CAP_MS: pdd and jd today) are listed.
 import { createHash } from 'node:crypto';
 import type { RegisteredPlatform } from '../../union/index.ts';
 import { INCREMENT_WINDOW_CAP_MS, isoAt } from './sync-window.ts';
@@ -46,14 +47,17 @@ export const MANUAL_SYNC_LOOK_BACK_DAYS: Readonly<Record<'taobao' | 'jd' | 'pdd'
  * The platforms a manual sync can run for: a window cap of 02 §7.1 is fixed for them
  * (INCREMENT_WINDOW_CAP_MS) and the worker's order-sync handler takes their windows.
  */
-// TODO(规划/11 §4.5): 淘宝 / 京东手动同步（窗口上限、按单号查询） — blocked on CAP-TB-07 / CAP-JD-07
+// TODO(规划/11 §4.5): 淘宝手动同步（窗口上限、按单号查询） — blocked on CAP-TB-07
 export function manualSyncPlatforms(): readonly (keyof typeof MANUAL_SYNC_LOOK_BACK_DAYS)[] {
   return (
     Object.keys(MANUAL_SYNC_LOOK_BACK_DAYS) as (keyof typeof MANUAL_SYNC_LOOK_BACK_DAYS)[]
   ).filter((platform) => INCREMENT_WINDOW_CAP_MS[platform] !== undefined);
 }
 
-/** Platforms whose order numbers can be fetched one by one (union's getPddOrderDetail). */
+/**
+ * Platforms whose order numbers can be fetched one by one (union's getPddOrderDetail). jd stays out
+ * for good: its order API only queries by time window.
+ */
 export const MANUAL_SYNC_ORDER_NO_PLATFORMS: readonly RegisteredPlatform[] = Object.freeze(['pdd']);
 
 /**
@@ -123,7 +127,9 @@ export function manualSyncLimits(now: Date): readonly ManualSyncPlatformLimit[] 
   return manualSyncPlatforms().map((platform) => ({
     platform,
     earliest_from: isoAt(now, now.getTime() - MANUAL_SYNC_LOOK_BACK_DAYS[platform] * DAY_MS),
-    max_order_nos: MANUAL_SYNC_MAX_ORDER_NOS,
+    max_order_nos: MANUAL_SYNC_ORDER_NO_PLATFORMS.includes(platform)
+      ? MANUAL_SYNC_MAX_ORDER_NOS
+      : 0,
   }));
 }
 

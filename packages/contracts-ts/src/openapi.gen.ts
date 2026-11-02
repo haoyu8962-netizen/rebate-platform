@@ -4941,7 +4941,9 @@ export interface paths {
          *       returns as `earliest_from`. `from` not before `to`, or a `from` earlier than
          *       `earliest_from`, is 20001 with `data.fields=[from, to]` or `[from]`.
          *     - by order numbers: `platform` and `order_nos` (sub-order numbers, 1–50, 01 F-ORD-10;
-         *       `max_order_nos` of the limits); 【同步此单】 of the order detail sends just one.
+         *       `max_order_nos` of the limits); 【同步此单】 of the order detail sends just one. A platform
+         *       whose `max_order_nos` is 0 has no sync by order number: `order_nos` for it is 20001 with
+         *       `data.fields=[order_nos]`.
          *
          *     Mixing the two forms, a value outside an enum, or more than 50 order numbers is 20001 with
          *     `data.fields` naming the field. Identity (app, requesting admin) comes from the admin token,
@@ -4976,7 +4978,8 @@ export interface paths {
          *     `data.reason=admin_permission_denied`. One item per platform the console can sync:
          *     `earliest_from` is the earliest window start the platform's look-back range allows now
          *     (computed from the farthest look-back range of 02 §7.1, so it moves with the clock; not a
-         *     fixed date), `max_order_nos` the most order numbers one request may carry (01 F-ORD-10).
+         *     fixed date), `max_order_nos` the most order numbers one request may carry (01 F-ORD-10),
+         *     0 for a platform without sync by order number.
          *     The values are registered as constants of the orders module from 02 §7.1 and 01 F-ORD-10;
          *     the console limits its inputs with them and POST /admin/v1/order-syncs checks the same
          *     values. Reading does not write an audit record.
@@ -16853,7 +16856,7 @@ export interface components {
             earliest_from: string;
             /**
              * Format: int32
-             * @description The most sub-order numbers one request may carry.
+             * @description The most sub-order numbers one request may carry; 0 means the platform does not support sync by order number.
              */
             max_order_nos: number;
         };
@@ -30346,9 +30349,9 @@ export interface operations {
                      *             "max_order_nos": 50
                      *           },
                      *           {
-                     *             "platform": "taobao",
-                     *             "earliest_from": "2026-07-24T00:00:00+08:00",
-                     *             "max_order_nos": 50
+                     *             "platform": "jd",
+                     *             "earliest_from": "2026-09-22T00:00:00+08:00",
+                     *             "max_order_nos": 0
                      *           }
                      *         ]
                      *       },

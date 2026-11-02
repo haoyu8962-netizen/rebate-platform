@@ -110,13 +110,13 @@ it('[AC-B1-04zr#4] 落后 150 分钟逐轮追赶：窗口首尾相接，每窗�
   ]);
 });
 
-it('[AC-B1-04zr#5] 手动同步：limits 列出 jd（30 天、50 单），时间窗按 60 分钟切，每窗都过适配器校验', () => {
+it('[AC-B1-04zr#5] 手动同步：limits 列出 jd（30 天、不支持按单号报 0），时间窗按 60 分钟切，每窗都过适配器校验', () => {
   const now = new Date(NOW);
   const limit = manualSyncLimits(now).find((item) => item.platform === 'jd');
   expect(limit).toEqual({
     platform: 'jd',
     earliest_from: iso(NOW_MS - 30 * DAY_MS),
-    max_order_nos: 50,
+    max_order_nos: 0,
   });
   const fromMs = NOW_MS - 150 * MINUTE_MS;
   const windows = manualSyncWindows(fromMs, NOW_MS, INCREMENT_WINDOW_CAP_MS.jd!, now);
