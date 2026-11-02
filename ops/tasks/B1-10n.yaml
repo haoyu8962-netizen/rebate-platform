@@ -4,10 +4,14 @@ title: orders：维权 / 违规 / 渠道导入挂载（adminCreateRightsImport�
 type: impl
 # 2026-11-01 入账（admin-backend，编排 D10-528，从 B1-10m 拆出）。deps B2-04lb：B2-04l 台账 D10-470 要求装配维权端口必须在其后，否则部分维权单月结按旧额入账。接线不改用例；私有导入存储未配置时失败关闭。
 # 规则测试新写 test/spec/orders/rights-mounts/（B1-10m 的 [AC-B1-10m#22–#24] 与 imports、store-closed 用例在此重写），补 CREDITED 行的真实扣回用例。
-refs: [BR-ATTR-31]
+# 2026-11-02 admin：refs 换成导入实际依据（原 BR-ATTR-31 不相干），deps 补 B2-03q、B1-10m、B1-09n（createRebatePort 的生产装配在 B1-09n，本单复用同一实例，clawback.onUpdated 路由排在 refresh 之后）。
+refs: [BR-FUND-06, BR-FUND-07, BR-FUND-08, BR-ATTR-26]
 refs_hash:
-  BR-ATTR-31: 372b06f03b05
-deps: [B2-04lb]
+  BR-FUND-06: 2076b932478c
+  BR-FUND-07: 3d63741c52d9
+  BR-FUND-08: 4fad67b21a32
+  BR-ATTR-26: 7070dbe36696
+deps: [B2-04lb, B2-03q, B1-10m, B1-09n]
 paths:
   - 'apps/api/src/modules/orders/orders-admin.module.ts'
   - 'apps/api/src/modules/orders/orders.module.ts'
@@ -32,4 +36,32 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/orders/rights-mounts/**'
+red_exempt:
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#1] post /admin/v1/orders/{order_id}/hold（订单写操作）登记 adminHoldOrder、后台权限和已实现（不再 planned）'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#1] post /admin/v1/orders/{order_id}/unhold（订单写操作）登记 adminUnholdOrder、后台权限和已实现（不再 planned）'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#1] post /admin/v1/orders/{order_id}/reassign（订单写操作）登记 adminReassignOrder、后台权限和已实现（不再 planned）'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#1] post /admin/v1/order-syncs（手动同步）登记 adminCreateOrderSync、后台权限和已实现（不再 planned）'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#1] get /admin/v1/order-syncs（手动同步）登记 adminListOrderSyncs、后台权限和已实现（不再 planned）'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#1] get /admin/v1/order-syncs/limits（手动同步）登记 adminGetOrderSyncLimits、后台权限和已实现（不再 planned）'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#2] /admin/v1/order-syncs 使用后台页码分页'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#2] /admin/v1/rights-imports 使用后台页码分页'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
+  - file: test/spec/contracts/admin-order-actions/operations.test.ts
+    test: '[AC-CT-24n#3] channel 导入的额外权限和动态码仅条件适用'
+    reason: '冻结 CT-24n 用例，测试体未改；本任务只把 [AC-CT-24n#1] 剩下的 planned 块（正好三个 rights-imports 接口）改成已实现。同文件被整体判定'
 status: todo
