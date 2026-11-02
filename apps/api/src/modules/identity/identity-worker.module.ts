@@ -15,6 +15,9 @@
 // Nothing is seeded: generate jobs come from the registration transaction, expire jobs from the
 // generation transaction.
 //
+// B1-02zw: the same registration also works the Apple revocation jobs of a console phone change
+// (./application/apple-unbind-revocation.ts): one handler per queue, so it routes by job name.
+//
 // Also compiled by the `test` project: a class decorator only (dependencies through factories).
 import { type DynamicModule, type FactoryProvider, Module } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
@@ -42,6 +45,10 @@ import {
   type DataCopyInbox,
   type DataCopyWorker,
 } from './application/data-copy-worker.ts';
+import {
+  APPLE_UNBIND_REVOKE_JOB,
+  createAppleUnbindRevocation,
+} from './application/apple-unbind-revocation.ts';
 import type { PayoutAccountConfigPort } from './application/payout-account.ts';
 import { createPayoutAccountVerifyAttempts } from './application/payout-account-verify-attempts.ts';
 import {
@@ -50,6 +57,8 @@ import {
   type PayoutVerifyRecheck,
 } from './application/payout-verify-recheck.ts';
 import { createBankCardVerifier } from './infra/fake-bank-card-verifier.ts';
+import { unconfiguredAppleTokenRevoker } from './infra/unconfigured-apple-token-revoker.ts';
+import type { AppleTokenRevoker } from './ports/apple-token-revoker.ts';
 import type { PersonalDataCopySources } from './ports/personal-data-copy-sources.ts';
 
 /** The other modules' ports of the copy worker, assembled by app.module. */
@@ -74,9 +83,12 @@ export interface IdentityWorkerModuleOptions {
   readonly payoutAccountConfig: Omit<FactoryProvider<PayoutAccountConfigPort>, 'provide'>;
   /** B1-27h: the copy worker's ports; without them the data-copy handler is not registered. */
   readonly dataCopy?: IdentityDataCopyPorts;
+  /** B1-02zw: the Apple revocation (app.module's, as for the deletion flow); default unconfigured. */
+  readonly apple?: Omit<FactoryProvider<AppleTokenRevoker>, 'provide'>;
 }
 
 const WORKER_PAYOUT_ACCOUNT_CONFIG = Symbol('IDENTITY_WORKER_PAYOUT_ACCOUNT_CONFIG');
+const WORKER_APPLE_REVOKER = Symbol('IDENTITY_WORKER_APPLE_REVOKER');
 
 /** Nest token of the worker entry's DataCopyWorker (null when unassembled). */
 export const DATA_COPY_WORKER = Symbol('IDENTITY_DATA_COPY_WORKER');
@@ -88,6 +100,10 @@ export class IdentityWorkerModule {
       module: IdentityWorkerModule,
       providers: [
         { ...options.payoutAccountConfig, provide: WORKER_PAYOUT_ACCOUNT_CONFIG },
+        {
+          ...(options.apple ?? { useFactory: () => unconfiguredAppleTokenRevoker() }),
+          provide: WORKER_APPLE_REVOKER,
+        },
         {
           provide: payoutVerifyRecheckToken(),
           inject: [
@@ -126,6 +142,7 @@ export class IdentityWorkerModule {
             CLOCK,
             ROOT_LOGGER,
             APP_CONFIG,
+            WORKER_APPLE_REVOKER,
             { token: DB, optional: true },
             { token: JOB_QUEUE, optional: true },
             { token: EXPORT_STORE, optional: true },
@@ -135,6 +152,7 @@ export class IdentityWorkerModule {
             clock: Clock,
             logger: RootLogger,
             appConfig: AppConfig,
+            apple: AppleTokenRevoker,
             db?: Kysely<Database>,
             queue?: QueueRuntime,
             store?: ExportStore,
@@ -174,7 +192,10 @@ export class IdentityWorkerModule {
               auditWriter: ports.auditWriter,
               logger,
             });
-            queue.register(DATA_COPY_QUEUE, (job) => worker.handle(job));
+            const revocation = createAppleUnbindRevocation({ crypto, apple, logger });
+            queue.register(DATA_COPY_QUEUE, (job) =>
+              job.name === APPLE_UNBIND_REVOKE_JOB ? revocation.handle(job) : worker.handle(job),
+            );
             return worker;
           },
         },

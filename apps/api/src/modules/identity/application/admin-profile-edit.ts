@@ -18,17 +18,33 @@
 //      (reason phone_changed, with the push token unbinding of app.module's assembly) when the
 //      phone changed, and one audit row user_profile_edit (reason, the changed fields with
 //      before / after values, phones masked 3 + 4); any failure rolls all of it back.
-// TODO(规划/11 §2.3): 后台改号清除待加验标记并解绑可信身份以外的第三方身份（BR-WDR-01 细则） — blocked on 待加验标记的表结构与任务
+//   6. a changed phone of an account flagged for re-verification (BR-WDR-01 细则「清除标记只走人工」;
+//      contract「Pending re-verification」, CT-26j; task B1-02zw), in that same transaction and read
+//      under its row lock: the flag, its instant, the snapshot and the failure count cleared
+//      (reverified_devices stay), every user_oauth row outside the snapshot deleted, and for a
+//      deleted Apple row with a stored token one revocation job carrying only the cipher
+//      (./apple-unbind-revocation.ts, 编排 D10-513 ④). The clearing restarts the dormancy clock:
+//      last_active_at is the save's instant, last_login_device_hash stays (编排 D10-584). The
+//      audit row's `after` says the flag was cleared and, when any row went, which providers were
+//      really unbound; `fields` stays the edited fields only.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports.
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
-import type { AuditPort, Clock, FieldCrypto, RootLogger } from '../../platform/index.ts';
+import type { AuditPort, Clock, FieldCrypto, JobQueue, RootLogger } from '../../platform/index.ts';
 import type { BlocklistService } from '../../risk/index.ts';
 import { maskPhone } from '../domain/mask-phone.ts';
 import { normalize_phone } from '../domain/normalize-phone.ts';
 import { PHONE_BLIND_INDEX_CONTEXT, PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
+import { trustedIdentitiesOf } from '../domain/reverify.ts';
+import {
+  REVERIFY_CLEARED,
+  readReverifyAccount,
+  unbindUntrusted,
+  type ReverifyAccount,
+} from '../infra/reverify-store.ts';
 import type { NicknameReviewPort } from '../ports/nickname-review.ts';
+import { enqueueAppleUnbindRevocation } from './apple-unbind-revocation.ts';
 import { instantPlus } from './config-seconds.ts';
 
 /** The audit action of a successful save (contract adminEditUserProfile). */
@@ -80,11 +96,24 @@ export interface AdminProfileEditOptions {
     trx: Transaction<DB>,
     input: { readonly app_id: string; readonly user_id: string; readonly reason: 'phone_changed' },
   ) => Promise<readonly string[]>;
+  /**
+   * The Apple revocation job's queue. Without it a save that would unbind a stored Apple token
+   * fails and rolls back rather than dropping the revocation.
+   */
+  readonly queue?: Pick<JobQueue, 'send'>;
 }
 
 const PHONE_CHANGED_RETENTION_MS = 180 * 86_400_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NICKNAME_MAX = 16;
+
+/** What `after` adds for a clearing (no token, only the providers whose rows were deleted). */
+function clearingAudit(unbound: readonly string[]) {
+  return {
+    reverify_cleared: true,
+    ...(unbound.length === 0 ? {} : { unbound_providers: [...unbound] }),
+  };
+}
 
 /** The phone took a partial unique index slot another account won after the checks. */
 class PhoneOccupied extends Error {
@@ -304,10 +333,15 @@ export class AdminProfileEdit {
       const refused = await this.#phoneRefusal(trx, command, phone);
       if (refused !== null) throw new PhoneRefused(refused);
     }
+    // Under the row lock, so a flag committed while this save waited for it still counts.
+    const subject = { app_id: command.appId, user_id: command.userId };
+    const reverify = phone === null ? undefined : await readReverifyAccount(app, subject);
+    const flagged = reverify !== undefined && reverify.flagged_at !== null;
 
     const before: Record<string, string | null> = {};
     const after: Record<string, string | null> = {};
     const fields: string[] = [];
+    let unbound: readonly string[] | null = null;
     if (phone !== null || name !== null) {
       const now = clock.now();
       if (phone !== null) {
@@ -338,6 +372,7 @@ export class AdminProfileEdit {
                   phone_hmac: phone.hmac,
                 }),
             ...(name === null ? {} : { nickname: name }),
+            ...(flagged ? { ...REVERIFY_CLEARED, last_active_at: now } : {}),
             updated_at: now,
             row_version: user.row_version + 1,
           })
@@ -368,6 +403,7 @@ export class AdminProfileEdit {
           user_id: command.userId,
           reason: 'phone_changed',
         });
+        if (flagged) unbound = await this.#unbind(trx, command.appId, command.userId, reverify);
       }
     }
     await this.#options.auditOn(trx).append({
@@ -376,9 +412,40 @@ export class AdminProfileEdit {
       action: ADMIN_PROFILE_EDIT_ACTION,
       target: command.userId,
       before,
-      after: { user_id: command.userId, reason: command.body.reason, fields, ...after },
+      after: {
+        user_id: command.userId,
+        reason: command.body.reason,
+        fields,
+        ...after,
+        ...(unbound === null ? {} : clearingAudit(unbound)),
+      },
       ip: command.ip,
     });
     return fields;
+  }
+
+  /**
+   * Step 6: the bindings outside the snapshot; an unreadable snapshot trusts none of them. Returns
+   * the providers of the rows really deleted, sorted.
+   */
+  async #unbind(
+    trx: Transaction<DB>,
+    appId: string,
+    userId: string,
+    reverify: ReverifyAccount,
+  ): Promise<readonly string[]> {
+    const { providers } = trustedIdentitiesOf(reverify.trusted);
+    const unbound = await unbindUntrusted(
+      trx.withSchema('app'),
+      { app_id: appId, user_id: userId },
+      providers,
+    );
+    const cipher = unbound.find((row) => row.provider === 'apple')?.apple_refresh_token_cipher;
+    if (cipher !== null && cipher !== undefined) {
+      const { queue } = this.#options;
+      if (queue === undefined) throw new Error('identity: no queue for the Apple revocation job');
+      await enqueueAppleUnbindRevocation(queue, trx, { appId, cipher });
+    }
+    return unbound.map((row) => row.provider).sort();
   }
 }

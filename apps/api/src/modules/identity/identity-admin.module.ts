@@ -248,6 +248,7 @@ export class IdentityAdminModule {
             APP_CONFIG,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
+            { token: JOB_QUEUE, optional: true },
           ],
           useFactory: (
             clock: Clock,
@@ -255,6 +256,7 @@ export class IdentityAdminModule {
             config: AppConfig,
             db?: Kysely<Database>,
             crypto?: FieldCrypto,
+            queue?: JobQueue,
           ): AdminProfileEdit =>
             db === undefined || crypto === undefined
               ? NO_PROFILE_EDIT
@@ -267,6 +269,7 @@ export class IdentityAdminModule {
                   blocklist: options.blocklist({ db, clock, crypto, logger }),
                   auditOn: (trx: Transaction<Database>) => options.auditWriter(trx, clock),
                   revokeSessions: options.revokeSessions(clock),
+                  ...(queue === undefined ? {} : { queue }),
                 }),
         },
         {

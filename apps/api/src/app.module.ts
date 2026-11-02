@@ -4784,6 +4784,8 @@ export class AppModule {
               IdentityWorkerModule.forWorker({
                 payoutAccountConfig,
                 dataCopy: dataCopyPorts(options.config),
+                // B1-02zw: the Apple revocation of a console phone change, on the data-copy queue.
+                apple: deletionAppleRevoker,
               }),
             ]
           : []),

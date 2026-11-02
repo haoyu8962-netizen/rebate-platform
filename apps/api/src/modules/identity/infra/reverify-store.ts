@@ -14,6 +14,10 @@
 //   pass     one UPDATE clears the count and moves the epoch; every actual pass does, also when a
 //            concurrent pass already recorded this device. It takes the row lock, the device row
 //            (if new) follows in the same transaction.
+//   clear    REVERIFY_CLEARED, joined to the console phone change's write under its row lock: the
+//            flag, its instant, the snapshot and the count go and the epoch moves on, so a place
+//            reserved before it cannot be released against a failure counted after it. The save
+//            sets last_active_at beside it (编排 D10-584): that value is its clock's instant.
 //
 // An account in deletion (BR-ID-28 细则「待加验记录」; B1-02zy). The cleanup of the deletion round runs
 // once, so a request still in flight must not write the data back: reserve and pass write nothing
@@ -214,6 +218,32 @@ export async function settlePassed(
       await alongside?.(trx);
       return true;
     });
+}
+
+/** The columns of the manual clearing (BR-WDR-01 细则「清除标记只走人工」); see the header. */
+export const REVERIFY_CLEARED = {
+  reverify_flagged_at: null,
+  reverify_trusted: null,
+  reverify_fail_count: 0,
+  reverify_fail_day: null,
+  reverify_fail_epoch: sql<number>`reverify_fail_epoch + 1`,
+};
+
+/**
+ * Deletes every binding of the user outside `trusted`. RETURNING hands back the row as deleted, so
+ * an Apple token replaced while this waited for the row is the one returned.
+ */
+export async function unbindUntrusted(
+  trx: Transaction<DB>,
+  subject: ReverifySubject,
+  trusted: readonly ReverifyProvider[],
+) {
+  let unbind = trx
+    .deleteFrom('user_oauth')
+    .where('app_id', '=', subject.app_id)
+    .where('user_id', '=', subject.user_id);
+  if (trusted.length > 0) unbind = unbind.where('provider', 'not in', [...trusted]);
+  return unbind.returning(['provider', 'apple_refresh_token_cipher']).execute();
 }
 
 /** The trusted identities as they are now: a completed real name and the bound providers. */
