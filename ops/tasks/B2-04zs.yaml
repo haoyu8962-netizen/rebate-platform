@@ -1,0 +1,33 @@
+id: B2-04zs
+repo: rebate-platform
+title: 资金台账概览 adminGetFundLedger（FU-UNION-RECEIPTS-API，BR-FUND-20、BR-WDR-18，D10-589）——去 planned；读时算全部已过账分录，不按会计日截断：各平台已入账未回款与合计、负余额合计与人数；W、P 取 payout 的水位读取，无数据或 W 过期时 water_level 为 null，不给默认值；fund.view，无 step-up，不写审计
+type: impl
+# 2026-11-03 pay 入账（D10-564 改派，D10-589，方案 couli-runs/B3-lane/union-receipts-plan-20261103.md）。RV2，新鲜独立 Claude 写规则测试，Codex money。规则测试走 createHttpApp('admin') 与真实 ledger，钉「回款与红冲使应收变化」。
+# 读者放 ledger；水位读取由 app.module 注入 payout 的 reader，不跨模块 import。sumReceivables 按会计日截断，不能直接复用。
+refs: [BR-FUND-20, BR-WDR-18]
+refs_hash:
+  BR-FUND-20: 768e4fe2668e
+  BR-WDR-18: 9247640dde57
+deps: [B2-04zr]
+paths:
+  - 'apps/api/src/modules/ledger/application/**'
+  - 'apps/api/src/modules/ledger/infra/**'
+  - 'apps/api/src/modules/ledger/http/admin/**'
+  - 'apps/api/src/modules/ledger/ledger.module.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/ledger/admin-fund-ledger/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-fund-ledger/**'
+status: todo

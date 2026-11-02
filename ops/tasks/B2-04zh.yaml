@@ -5,6 +5,7 @@ type: impl
 # 2026-11-01 编排 D10-538 ②⑱：回款记录新建表归 settlement（funds），admin 控制器经 funds 端口调用（契约 CT-24zh planned）；迁移排迁移队列（B1-03ze 之后，落地取主干最大 +1）。RV2，独立 Claude 写测试与 money 评审（approvals #36）。
 # 本单只建表与授权（含 db/schema.sql、db.gen.ts 生成物，测试机重快照）；ledger 命令 UNION_RECEIPT 与红冲写入另开单。只加表，不回填。union_ 前缀被 lint-migrations 判为资金表，资金表期望集合加 union_receipts（同 B2-04zfa #2026；tools/** 门禁类，PR 由编排核标签）。
 # SPEC_REF 已升到 deb521c2（#2138，含 couli #247）：04 §3.2 union_receipts 行与 08 BR-FUND-20 细则「整笔红冲」在规划原文里；授权粒度（couli_app 可 INSERT、只可 UPDATE 红冲三列，不可删；只读角色 SELECT）由实现方按 04 写者口径定，报编排核。
+# 2026-11-03 改派 pay（D10-564 先例，D10-589，方案 couli-runs/B3-lane/union-receipts-plan-20261103.md）：占迁移 0122；只读角色给 SELECT（认可）；lint-migrations.test.ts 只加 union_receipts（同 #2026，PR 时编排核标签）。后续 B2-04zr、B2-04zs；admin 的 B2-12a 占 0123，deps 本单。
 refs: [BR-FUND-20, BR-FUND-16]
 refs_hash:
   BR-FUND-20: 768e4fe2668e

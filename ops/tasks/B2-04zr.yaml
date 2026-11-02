@@ -1,0 +1,33 @@
+id: B2-04zr
+repo: rebate-platform
+title: 联盟回款录入、整笔红冲与列表（FU-UNION-RECEIPTS-API，BR-FUND-20 细则「联盟回款凭证」，D10-538、D10-589）——adminCreateUnionReceipt、adminReverseUnionReceipt、adminListUnionReceipts 去 planned；写者 settlement，同一事务写 union_receipts、UNION_RECEIPT 凭证（借现金科目 / 贷 UNION_RECEIVABLE:{platform}，金额为实际到账额）与审计；fund.cash_entry，动态码档，幂等；不与应收比较、不开差错单、不动 W
+type: impl
+# 2026-11-03 pay 入账（D10-564 改派，D10-589，方案 couli-runs/B3-lane/union-receipts-plan-20261103.md）。RV2，新鲜独立 Claude 写规则测试，Codex money。规则测试走 createHttpApp('admin') 与真实 ledger。
+# 红冲走 ledger.reverse（csv 不加 REVERSE 行）；它重放不报错，须 FOR UPDATE 锁记录后先判 reversed_at 才给 20902，并发由测试钉。voucherKind 必须是 UNION_RECEIPT（不变量 05 据此排除）。
+# 补录历史回款：敞口从录入日起下降，不回改历史快照（D10-589 ②）。method 本单只写 ADMIN_ENTRY，R1_RECON 写入口归后续对账（D10-538 ③）。CASH_BANK 判据 payout.channel_enabled.bank_card。
+refs: [BR-FUND-20, BR-FUND-16]
+refs_hash:
+  BR-FUND-20: 768e4fe2668e
+  BR-FUND-16: 077f6d412d5a
+deps: [B2-04zh]
+paths:
+  - 'apps/api/src/modules/settlement/application/**'
+  - 'apps/api/src/modules/settlement/http/admin/**'
+  - 'apps/api/src/modules/settlement/settlement.module.ts'
+  - 'apps/api/src/modules/settlement/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/settlement/admin-union-receipts/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/admin-union-receipts/**'
+status: todo
