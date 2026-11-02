@@ -132,6 +132,11 @@ export const APPROVED_GUARD_CHANGES: Readonly<Record<string, string>> = {
   // passed.
   '0096_settle-jobs-supplement.sql':
     'c4451a18cdbac3cd286d2d55fa0322df92c05b8252e53497bb276145e90d189d',
+  // B1-04zv (D10-570, FU-ORDER-ROW-QUARANTINE): rebuilds order_sync_pending_reason_check on the
+  // attribution table order_sync_pending NOT VALID under the same name with the 0035 values plus
+  // ORDER_ROW_INVALID; it only widens. Validated in 0120.
+  '0119_order-sync-pending-row-invalid.sql':
+    'f7a549c012b28c7aad6e682194ef8a9b4b978d7ee2088aa70cb6eab6c40abf98',
 };
 /** Extensions node-pg-migrate would run from db/migrations besides SQL. */
 const SCRIPT_MIGRATION = /\.(?:js|cjs|mjs|ts|cts|mts|jsx|tsx)$/;

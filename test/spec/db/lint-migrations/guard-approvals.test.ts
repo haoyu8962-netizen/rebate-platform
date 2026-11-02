@@ -131,6 +131,9 @@ it(
     // values plus 'supplement', validated in 0097; orchestrator ruling D10-280 ①). Same pinning as 0057.
     const b204rb = '0096_settle-jobs-supplement.sql';
     const b204rbHash = 'c4451a18cdbac3cd286d2d55fa0322df92c05b8252e53497bb276145e90d189d';
+    // B1-04zv (guard-change): 0119 widens the reason CHECK NOT VALID, validated in 0120. Same pinning as 0057.
+    const b104zv = '0119_order-sync-pending-row-invalid.sql';
+    const b104zvHash = 'f7a549c012b28c7aad6e682194ef8a9b4b978d7ee2088aa70cb6eab6c40abf98';
     expect(module.APPROVED_GUARD_CHANGES).toEqual({
       [APPROVED_FILE]: createHash('sha256').update(bytes).digest('hex'),
       [ct25d]: ct25dHash,
@@ -139,6 +142,7 @@ it(
       [b215i]: b215iHash,
       [b215e]: b215eHash,
       [b204rb]: b204rbHash,
+      [b104zv]: b104zvHash,
     });
     const ct25dPath = join(ROOT, 'db/migrations', ct25d);
     if (existsSync(ct25dPath)) {
