@@ -3,15 +3,16 @@
 // 由 union 模块装配决定）。纯函数：只看传入对象，问题文本只写变量名，不回显取值。
 //
 // - TAOBAO_CONVERT_SOURCE ∈ {baichuan, dataoke}：未设或空串 → baichuan（转链保持现状）。
-// - TAOBAO_SEARCH_SOURCE ∈ {official, dataoke}：未设或空串 → official（搜索保持现状，
-//   adapter_unimplemented 直到官方接口批下）。
+// - TAOBAO_SEARCH_SOURCE ∈ {official, dataoke, official_first}：未设或空串 → official。official_first
+//   （B1-04zy，D10-582）是官方优先、失败或 0 条回落大淘客；这里任何 APP_ENV 都接受（大淘客凭据只有 staging
+//   才有），没有大淘客凭据时由 union 模块装配拒绝启动，不静默退化。
 // - 其他取值（大小写不同也算）→ 问题项，只写变量名。
 
 export const TAOBAO_CONVERT_SOURCE_ENV = 'TAOBAO_CONVERT_SOURCE';
 export const TAOBAO_SEARCH_SOURCE_ENV = 'TAOBAO_SEARCH_SOURCE';
 
 export const TAOBAO_CONVERT_SOURCES = ['baichuan', 'dataoke'] as const;
-export const TAOBAO_SEARCH_SOURCES = ['official', 'dataoke'] as const;
+export const TAOBAO_SEARCH_SOURCES = ['official', 'dataoke', 'official_first'] as const;
 
 export type TaobaoConvertSourceSetting = (typeof TAOBAO_CONVERT_SOURCES)[number];
 export type TaobaoSearchSourceSetting = (typeof TAOBAO_SEARCH_SOURCES)[number];

@@ -19,6 +19,7 @@
 // adapter options stay as before.
 // B1-04zx (D10-582): likewise `taobaoLive.searchSlot` / `searchWarn`; absent, the adapter options
 // stay as before and the official search stays `adapter_unimplemented`.
+// B1-04zy (D10-582): likewise `taobaoLive.searchCounter` / `fallbackWarn`.
 // B1-04ze: likewise only `jdLive` (credentials provider + transport) turns a jd endpoint with
 // mode=live into the real JdUnionAdapter of B1-04za, returned as is; without it jd live / replay
 // stay `adapter_unimplemented`; union.module.ts decides which environments may pass it.
@@ -46,6 +47,8 @@ import type { JdProductKeyMode } from './jd/orders.ts';
 import { PddUnionAdapter, type PddCredentials, type PddQueryIdentity } from './pdd/pdd-adapter.ts';
 import type { PddWarning } from './pdd/response.ts';
 import type { UnionTransport } from './replay.ts';
+import type { TaobaoSearchCounter } from './taobao/search-counter.ts';
+import type { TaobaoSearchFallbackWarning } from './taobao/search-fallback.ts';
 import {
   TaobaoUnionAdapter,
   type TaobaoConvertSource,
@@ -96,6 +99,10 @@ export interface TaobaoLiveOptions {
   readonly searchSlot?: TaobaoSearchSlotReader;
   /** B1-04zx: handed to TaobaoUnionAdapter as `searchWarn` (skipped official search rows). */
   readonly searchWarn?: (event: TaobaoSearchWarning) => void;
+  /** B1-04zy (D10-582): handed to TaobaoUnionAdapter as `searchCounter`. */
+  readonly searchCounter?: TaobaoSearchCounter;
+  /** B1-04zy (D10-582): handed to TaobaoUnionAdapter as `fallbackWarn`. */
+  readonly fallbackWarn?: (event: TaobaoSearchFallbackWarning) => void;
   /**
    * B1-04zn (D10-530): handed to TaobaoUnionAdapter as `orderSlots` (B1-04f): every Taobao PID of
    * ctx.appId in union_pids, retired ones included. Without it listOrders stays unimplemented.
@@ -238,6 +245,9 @@ export function createUnionRegistry(options?: UnionRegistryOptions): UnionRegist
           // B1-04zx: the official search's slot reader and skip hook as they are.
           ...(live.searchSlot === undefined ? {} : { searchSlot: live.searchSlot }),
           ...(live.searchWarn === undefined ? {} : { searchWarn: live.searchWarn }),
+          // B1-04zy: the search counter and the fallback warn hook as they are.
+          ...(live.searchCounter === undefined ? {} : { searchCounter: live.searchCounter }),
+          ...(live.fallbackWarn === undefined ? {} : { fallbackWarn: live.fallbackWarn }),
           ...(live.orderSlots === undefined ? {} : { orderSlots: live.orderSlots }),
           ...(live.orderWarn === undefined ? {} : { orderWarn: live.orderWarn }),
         });

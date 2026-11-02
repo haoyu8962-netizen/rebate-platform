@@ -232,10 +232,11 @@ export interface AppConfig {
   readonly taobaoConvertSource?: 'baichuan' | 'dataoke';
   /**
    * TAOBAO_SEARCH_SOURCE (B1-04zn, D10-530): where the live Taobao adapter searches, 'official'
-   * (default) or 'dataoke'. A server setting, not a credential; any APP_ENV may set it. A
-   * hand-built config without it counts as 'official'.
+   * (default), 'dataoke' or, since B1-04zy, 'official_first' (official, falling back to 大淘客). A
+   * server setting, not a credential; any APP_ENV may set it. A hand-built config without it counts
+   * as 'official'.
    */
-  readonly taobaoSearchSource?: 'official' | 'dataoke';
+  readonly taobaoSearchSource?: 'official' | 'dataoke' | 'official_first';
   /**
    * AGENT_REVIEW_ALIYUN_ACCESS_KEY_ID / _SECRET / AGENT_REVIEW_ALIYUN_ENDPOINT (./agent-review.ts,
    * B3-03m): staging / prod only, the stream entry's content safety review. Absent (the key is

@@ -13,6 +13,11 @@ export type { FundMetricsSnapshot } from './fund.ts';
 export { cacheReviewOverdueCollector } from './review-overdue.ts';
 export type { ReviewOverdueSnapshot } from './review-overdue.ts';
 export { createMetricsRegistry } from './registry.ts';
-export type { MetricsRegistry, MetricsRegistryOptions } from './registry.ts';
+export type {
+  MetricsRegistry,
+  MetricsRegistryOptions,
+  TaobaoSearchMetricSample,
+  TaobaoSearchMetricsSnapshot,
+} from './registry.ts';
 export { startMetricsServer } from './server.ts';
 export type { MetricsServer, MetricsServerOptions } from './server.ts';

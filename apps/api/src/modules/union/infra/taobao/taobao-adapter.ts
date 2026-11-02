@@ -31,6 +31,9 @@
 // taobao.tbk.dg.material.optional.upgrade，搜索 item_id 经 item.info.upgrade.get 按最后一段换成详情口径，
 // 不依赖 orderSource；口径见 official-search.ts，两种请求归档 kind 都是 query。没有 searchSlot 保持
 // adapter_unimplemented（不取凭据、不发请求）。
+// B1-04zy（D10-582）：searchSource 为 official_first 且 searchSlot、orderSource 都有时，第 1 页官方优先、失败或
+// 0 条回落大淘客，续页按游标前缀走；官方这一步单独限时，失败后进程内冷却。口径见 search-fallback.ts，三种开关都
+// 经 searchCounter 计数（search-counter.ts）。两个来源的 ID 缓存分开（见 #officialItemIdCache）。
 // B1-04f（D10-486 ② / D10-488）：listOrders 经注入的大淘客订单源（orderSource）GET
 // /api/tb-service/get-order-details（v1.0.0），只留 orderSlots 给出的推广位的订单；两者缺一即
 // adapter_unimplemented。每次调用取一个上游页（listOrdersMetering = per_request，经 ctx.gateUpstream）。
@@ -39,7 +42,7 @@
 // refunds.ts，不过滤推广位；没有 orderSource → adapter_unimplemented），listPunishments 经 orderSource
 // GET get-foul-order-list（见 punishments.ts，只留 orderSlots 的推广位；缺一即 adapter_unimplemented）。
 // 两者都是每次调用取一个上游页（per_request，经 ctx.gateUpstream），归档 kind = order。
-import type { Clock } from '../../../platform/index.ts';
+import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type { TaobaoPriceOptions, TaobaoPriceSettingsReader } from '../../domain/taobao-price.ts';
 import {
   UnionError,
@@ -77,6 +80,7 @@ import {
   dataokeSearchNextCursor,
   dataokeSearchPage,
   dataokeSearchParameters,
+  isDataokeSearchCursor,
   mapDataokeSearchItem,
   matchConvertedItemIds,
   parseDataokeSearchCursor,
@@ -161,6 +165,15 @@ import {
   type TaobaoRefundWarning,
 } from './refunds.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
+import type { TaobaoSearchCounter, TaobaoSearchMetricSource } from './search-counter.ts';
+import {
+  dataokeFailureReason,
+  officialFailureReason,
+  officialStepLimitMs,
+  TAOBAO_OFFICIAL_COOLDOWN_MS,
+  type TaobaoSearchFallbackReason,
+  type TaobaoSearchFallbackWarning,
+} from './search-fallback.ts';
 import {
   signTaobaoParameters,
   taobaoSignedEntries,
@@ -174,6 +187,7 @@ export type {
   TaobaoSearchSlotReader,
   TaobaoSearchWarning,
 } from './official-search.ts';
+export type { TaobaoSearchFallbackWarning } from './search-fallback.ts';
 export type { TaobaoWarning } from './response.ts';
 export type {
   TaobaoOrderSlotReader,
@@ -219,8 +233,20 @@ export interface TaobaoAdapterOptions {
    * `orderSource` searches through that client (dataoke-search.ts), without one it stays
    * adapter_unimplemented; absent or 'official' searches officially when `searchSlot` is given
    * (official-search.ts), and stays adapter_unimplemented without it (nothing fetched or sent).
+   * B1-04zy: 'official_first' asks the official search first and falls back to 大淘客 (see
+   * search-fallback.ts); it needs both, and stays adapter_unimplemented without either.
    */
   readonly searchSource?: TaobaoSearchSource;
+  /**
+   * B1-04zy (D10-582): the waits of 'official_first' (the official step's own time limit, half the
+   * call's budget). Without it the system scheduler; the cooldown reads `clock`, not this.
+   */
+  readonly scheduler?: Scheduler;
+  /**
+   * B1-04zy (D10-582): couli_taobao_search_total, under every searchSource (see search-counter.ts);
+   * UnionModule passes the one it provides. Without it nothing is counted.
+   */
+  readonly searchCounter?: TaobaoSearchCounter;
   /**
    * B1-04zx (D10-582): the calling app's active query PID, for the official search's adzone_id
    * (see official-search.ts). Without it searchItems stays adapter_unimplemented under 'official'.
@@ -228,6 +254,8 @@ export interface TaobaoAdapterOptions {
   readonly searchSlot?: TaobaoSearchSlotReader;
   /** B1-04zx: skipped official search rows (see TaobaoSearchWarning); never through `warn`. */
   readonly searchWarn?: (event: TaobaoSearchWarning) => void;
+  /** B1-04zy: fallbacks of 'official_first' (see TaobaoSearchFallbackWarning). */
+  readonly fallbackWarn?: (event: TaobaoSearchFallbackWarning) => void;
   /**
    * B1-04f (D10-488 ③): every Taobao PID registered in union_pids, retired ones included; listOrders
    * keeps only the orders of these promotion slots (see orders.ts). Without it listOrders is
@@ -245,8 +273,11 @@ export interface TaobaoAdapterOptions {
 /** B1-04d: the convert data-source switch; the default is 'baichuan' (behaviour unchanged). */
 export type TaobaoConvertSource = 'baichuan' | 'dataoke';
 
-/** B1-04zh: the search data-source switch; the default is 'official'. */
-export type TaobaoSearchSource = 'official' | 'dataoke';
+/**
+ * B1-04zh: the search data-source switch; the default is 'official'. B1-04zy: 'official_first' asks
+ * the official search first and falls back to 大淘客.
+ */
+export type TaobaoSearchSource = 'official' | 'dataoke' | 'official_first';
 
 export interface TaobaoRequestOptions {
   /** The response envelope key registered for this method by the caller (never derived). */
@@ -298,11 +329,19 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   readonly #searchSource: TaobaoSearchSource;
   readonly #searchSlot: TaobaoSearchSlotReader | undefined;
   readonly #searchWarn: ((event: TaobaoSearchWarning) => void) | undefined;
-  /**
-   * B1-04zh: goodsId → 凑狸 item_id, one per adapter instance (see dataoke-search.ts ④). B1-04zx:
-   * the official search ID → detail item_id under the same TTL; one adapter uses one search source.
-   */
+  readonly #fallbackWarn: ((event: TaobaoSearchFallbackWarning) => void) | undefined;
+  readonly #scheduler: Scheduler;
+  readonly #searchCounter: TaobaoSearchCounter | undefined;
+  /** B1-04zy: first pages skip the official search before this instant (epoch ms, on `clock`). */
+  #officialCooldownUntil = 0;
+  /** B1-04zh: goodsId → 凑狸 item_id, one per adapter instance (see dataoke-search.ts ④). */
   readonly #itemIdCache: TaobaoItemIdCache;
+  /**
+   * B1-04zx: the official search ID → detail item_id, under the same TTL. B1-04zy: official_first
+   * uses both searches on one adapter, and no recording shows the two ID spaces are disjoint; the
+   * two conversions also mean different things (last segment, position), so they share no cache.
+   */
+  readonly #officialItemIdCache: TaobaoItemIdCache;
   readonly #orderSlots: TaobaoOrderSlotReader | undefined;
   readonly #orderWarn: ((event: TaobaoOrderWarning) => void) | undefined;
   readonly #refundWarn: ((event: TaobaoRefundWarning) => void) | undefined;
@@ -334,11 +373,18 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#orderSource = options.orderSource;
     // 只有明确的 'dataoke' 打开大淘客转链；缺省与其他值一律是 baichuan（行为不变）。
     this.#convertSource = options.convertSource === 'dataoke' ? 'dataoke' : 'baichuan';
-    // 只有明确的 'dataoke' 打开大淘客搜索；缺省与其他值一律是 official（行为不变）。
-    this.#searchSource = options.searchSource === 'dataoke' ? 'dataoke' : 'official';
+    // 只有明确的 'dataoke' / 'official_first' 用大淘客搜索；缺省与其他值一律是 official（行为不变）。
+    this.#searchSource =
+      options.searchSource === 'dataoke' || options.searchSource === 'official_first'
+        ? options.searchSource
+        : 'official';
     this.#searchSlot = options.searchSlot;
     this.#searchWarn = options.searchWarn;
+    this.#fallbackWarn = options.fallbackWarn;
+    this.#scheduler = options.scheduler ?? systemScheduler();
+    this.#searchCounter = options.searchCounter;
     this.#itemIdCache = createTaobaoItemIdCache(options.clock);
+    this.#officialItemIdCache = createTaobaoItemIdCache(options.clock);
     this.#orderSlots = options.orderSlots;
     this.#orderWarn = options.orderWarn;
     this.#refundWarn = options.refundWarn;
@@ -431,16 +477,126 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   /**
    * B1-04zh: 大淘客 search when switched on (see dataoke-search.ts). B1-04zx: otherwise the official
    * search when a slot reader is injected (see official-search.ts). Neither: unimplemented.
+   * B1-04zy: 'official_first' needs both (see search-fallback.ts).
    */
   async searchItems(q: SearchQuery, ctx: CallCtx): Promise<Page<UnionItem>> {
+    const source = this.#orderSource;
     if (this.#searchSource === 'dataoke') {
-      const source = this.#orderSource;
       if (source === undefined) throw unimplemented('searchItems');
-      return this.#dataokeSearch(source, q, ctx);
+      return this.#countedSearch('dataoke', () => this.#dataokeSearch(source, q, ctx));
     }
     const readSlot = this.#searchSlot;
     if (readSlot === undefined) throw unimplemented('searchItems');
-    return this.#officialSearch(readSlot, q, ctx);
+    if (this.#searchSource === 'official') {
+      return this.#countedSearch('official', () => this.#officialSearch(readSlot, q, ctx));
+    }
+    if (source === undefined) throw unimplemented('searchItems');
+    return this.#officialFirstSearch(readSlot, source, q, ctx);
+  }
+
+  /** B1-04zy: official_first (see search-fallback.ts). */
+  async #officialFirstSearch(
+    readSlot: TaobaoSearchSlotReader,
+    source: DataokeClient,
+    q: SearchQuery,
+    ctx: CallCtx,
+  ): Promise<Page<UnionItem>> {
+    const dataoke = () => this.#countedSearch('dataoke', () => this.#dataokeSearch(source, q, ctx));
+    const cursor = q?.cursor;
+    if (cursor !== undefined) {
+      // 续页留在第 1 页的来源：不回落、不换源，也不看冷却。
+      return isDataokeSearchCursor(cursor)
+        ? dataoke()
+        : this.#countedSearch('official', () => this.#officialSearch(readSlot, q, ctx));
+    }
+    if (this.#clock.now().getTime() < this.#officialCooldownUntil) return dataoke();
+
+    const limit = new AbortController();
+    let reason: TaobaoSearchFallbackReason | undefined;
+    try {
+      const page = await this.#limitedOfficialSearch(readSlot, q, ctx, limit);
+      if (page.items.length > 0) {
+        this.#searchCounter?.record('official', 'ok');
+        return page;
+      }
+      ctx.signal?.throwIfAborted();
+      reason = 'empty';
+    } catch (error) {
+      // 调用方取消先判：取消时传输层也报 upstream_unavailable，只看错误码分不出来。
+      if (ctx.signal?.aborted !== true) {
+        reason = limit.signal.aborted ? 'timeout' : officialFailureReason(error);
+      }
+      if (reason === undefined) {
+        this.#searchCounter?.record('official', 'error');
+        throw error;
+      }
+      this.#officialCooldownUntil = this.#clock.now().getTime() + TAOBAO_OFFICIAL_COOLDOWN_MS;
+    }
+    this.#searchCounter?.record('official', 'fallback');
+    this.#fallbackWarn?.({ event: 'taobao_search_fallback', source: 'official', reason });
+    try {
+      return await dataoke();
+    } catch (error) {
+      this.#fallbackWarn?.({
+        event: 'taobao_search_dataoke_failed',
+        source: 'dataoke',
+        reason: dataokeFailureReason(error),
+      });
+      throw error;
+    }
+  }
+
+  /** B1-04zy: one source's search, counted: ok, empty (no items) or error. */
+  async #countedSearch(
+    source: TaobaoSearchMetricSource,
+    search: () => Promise<Page<UnionItem>>,
+  ): Promise<Page<UnionItem>> {
+    let page: Page<UnionItem>;
+    try {
+      page = await search();
+    } catch (error) {
+      this.#searchCounter?.record(source, 'error');
+      throw error;
+    }
+    this.#searchCounter?.record(source, page.items.length === 0 ? 'empty' : 'ok');
+    return page;
+  }
+
+  /**
+   * B1-04zy: the official step of official_first under its own limit (see search-fallback.ts ③).
+   * At the limit `limit` aborts the official requests and this rejects, whether or not they stop;
+   * the caller tells that from its own cancellation by `limit.signal`.
+   */
+  async #limitedOfficialSearch(
+    readSlot: TaobaoSearchSlotReader,
+    q: SearchQuery,
+    ctx: CallCtx,
+    limit: AbortController,
+  ): Promise<Page<UnionItem>> {
+    const signal =
+      ctx.signal === undefined ? limit.signal : AbortSignal.any([ctx.signal, limit.signal]);
+    const timer = new AbortController();
+    const expired = new Promise<never>((_resolve, reject) => {
+      void this.#scheduler.sleep(officialStepLimitMs(ctx.purpose), timer.signal).then(
+        () => {
+          reject(
+            new UnionError(
+              'upstream_unavailable',
+              'taobao searchItems: official step timed out',
+              'taobao',
+            ),
+          );
+          limit.abort();
+        },
+        // 官方先答完：等待被释放，什么也不做。
+        () => undefined,
+      );
+    });
+    try {
+      return await Promise.race([this.#officialSearch(readSlot, q, { ...ctx, signal }), expired]);
+    } finally {
+      timer.abort();
+    }
   }
 
   /** B1-04zx: one page of the official search (see official-search.ts). */
@@ -595,7 +751,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     const misses = new Set<string>();
     for (const searchId of searchIds) {
       if (out.has(searchId) || misses.has(searchId)) continue;
-      const cached = this.#itemIdCache.get(searchId);
+      const cached = this.#officialItemIdCache.get(searchId);
       if (cached === undefined) misses.add(searchId);
       else out.set(searchId, cached);
     }
@@ -604,7 +760,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       // 15/50001 或 results 为空：本批都换不到，不返回、不写缓存。
       if (rows === null) continue;
       for (const [searchId, itemId] of matchSearchItemIds(batch, rows)) {
-        this.#itemIdCache.set(searchId, itemId);
+        this.#officialItemIdCache.set(searchId, itemId);
         out.set(searchId, itemId);
       }
     }

@@ -5,6 +5,8 @@
 # Sources of the metrics:
 # - couli_queue_* / couli_evt_* / couli_sync_*: the worker's internal /metrics listener
 #   (METRICS_PORT; apps/api/src/modules/platform/metrics), whole-database gauges read per scrape.
+# - couli_taobao_search_total: the api's internal /metrics listener (METRICS_PORT), a counter of
+#   that process; the worker does not export it.
 # - redis_*: redis_exporter (deployment and Alertmanager routing are not in this file, B1-25).
 # Granularity: the common 5m (规划/02 §13). The evt rule uses 1m because its own threshold is 60
 # seconds; a 5m hold would only fire after six minutes.
@@ -76,3 +78,13 @@ groups:
         annotations:
           summary: 'Redis {{ $labels.instance }} rejects writes'
           description: 'OOM, MISCONF or READONLY error replies counted by redis_exporter in the last 10 minutes (a window wider than one missed scrape).'
+  - name: couli-union
+    rules:
+      - alert: CouliTaobaoSearchFallbackHigh
+        expr: 'sum(rate(couli_taobao_search_total{source="official",outcome="fallback"}[15m])) / sum(rate(couli_taobao_search_total{source="official"}[15m])) > 0.5'
+        for: '15m'
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than half of the official Taobao searches fall back to dataoke'
+          description: 'Share of official search attempts that handed over to dataoke (failure, timeout or no result). Only official attempts are counted: searches served during the 60 second cooldown never ask the official search, so they do not dilute the share. Users still get dataoke results; check the reason field of the taobao_search_fallback warnings.'

@@ -108,6 +108,14 @@ export type {
   TaobaoPriceSettingsOptions,
 } from './application/taobao-price-settings.ts';
 export { createUnionRegistry } from './infra/registry.ts';
+// B1-04zy: the couli_taobao_search_total counter UnionModule provides, read by entry.ts on api.
+export { taobaoSearchCounterToken } from './infra/taobao/search-counter.ts';
+export type {
+  TaobaoSearchCounter,
+  TaobaoSearchMetricOutcome,
+  TaobaoSearchMetricSource,
+  TaobaoSearchSample,
+} from './infra/taobao/search-counter.ts';
 export { DemoUnionAdapter, DemoUnionError } from './infra/demo/demo-adapter.ts';
 export type {
   DemoScenario,

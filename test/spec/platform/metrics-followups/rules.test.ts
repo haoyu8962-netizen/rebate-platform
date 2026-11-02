@@ -144,7 +144,17 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
     'couli-queue',
     'couli-sync',
     'couli-redis',
+    'couli-union',
   ]);
+  // B1-04zy adds the Taobao search fallback alert in a group of its own, after the others. Its
+  // window, threshold and hold are not this file's: [AC-B1-04zy#58] pins the expression's shape.
+  const fallbackAlert = {
+    group: 'couli-union',
+    alert: 'CouliTaobaoSearchFallbackHigh',
+    expr: expect.stringContaining('couli_taobao_search_total'),
+    for: expect.stringMatching(/^[1-9][0-9]*[smh]$/),
+    labels: { severity: 'warning' },
+  };
   expect(
     all.map(({ group, alert, expr, for: holdFor, labels }) => ({
       group,
@@ -153,7 +163,7 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
       for: holdFor,
       labels,
     })),
-  ).toEqual(EXPECTED);
+  ).toEqual([...EXPECTED, fallbackAlert]);
   for (const rule of all) {
     const summary = rule.annotations['summary'];
     expect(summary, `${rule.alert}.annotations.summary`).toEqual(expect.any(String));

@@ -133,6 +133,14 @@ export function dataokeSearchCursor(page: number): string {
   return `${CURSOR_PREFIX}${page}`;
 }
 
+/**
+ * B1-04zy: whether a cursor carries this search's prefix, for official_first to pick the source of
+ * a next page; whether it is well formed is still parseDataokeSearchCursor's call.
+ */
+export function isDataokeSearchCursor(cursor: unknown): boolean {
+  return typeof cursor === 'string' && cursor.startsWith(CURSOR_PREFIX);
+}
+
 /** The page a cursor of this search carries; anything else → invalid_dto. */
 export function parseDataokeSearchCursor(cursor: string): number {
   const match = typeof cursor === 'string' ? CURSOR_PATTERN.exec(cursor) : null;

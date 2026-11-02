@@ -9,6 +9,7 @@ import {
   DB,
   PDD_QUERY_CUSTOM_PARAMETERS_ENV,
   ROOT_LOGGER,
+  TAOBAO_SEARCH_SOURCE_ENV,
   UNION_ENDPOINT_OVERRIDE_DIR_ENV,
   openDataokeCredentials,
   openJdCredentials,
@@ -48,6 +49,12 @@ import type {
   TaobaoSearchSlotReader,
   TaobaoSearchWarning,
 } from './infra/taobao/taobao-adapter.ts';
+import {
+  createTaobaoSearchCounter,
+  taobaoSearchCounterToken,
+  type TaobaoSearchCounter,
+} from './infra/taobao/search-counter.ts';
+import type { TaobaoSearchFallbackWarning } from './infra/taobao/search-fallback.ts';
 import type { TaobaoWarning } from './infra/taobao/response.ts';
 import { readActivePddQueryPid } from './pids/query-reader.ts';
 import { readTaobaoOrderSlots } from './pids/taobao-order-slots.ts';
@@ -118,6 +125,10 @@ export const UNION_ENDPOINTS_DIR = fileURLToPath(
  * B1-04zx (D10-582): taobao live always gets a search slot reader over the optional database
  * (the active query PID of ctx.appId) and a skip hook logging only event and reason; neither needs
  * the 大淘客 order source, so the official search runs on the official credentials alone.
+ * B1-04zy (D10-582): TAOBAO_SEARCH_SOURCE=official_first without the 大淘客 order source refuses to
+ * start (UnionError, no silent official-only); taobao live gets the module's search counter (see
+ * search-counter.ts) under every switch value, and a fallback hook logging only event, source and
+ * reason.
  * jd with mode=live (B1-04ze): local / test and prod refuse like taobao, after taobao's own check;
  * staging with both JD_APP_KEY and JD_APP_SECRET_FILE reads the secret file once here and assembles
  * the real JdUnionAdapter over its own archived HTTPS transport (registry option `jdLive`); staging
@@ -247,6 +258,19 @@ function taobaoSearchSlot(source: QueryPidSource): TaobaoSearchSlotReader {
  */
 function logTaobaoSearchWarning(logger: RootLogger, warning: TaobaoSearchWarning): void {
   logger.warn({ event: warning.event, reason: warning.reason }, 'taobao search row skipped');
+}
+
+/**
+ * The search fallback hook (B1-04zy) as flat pino fields: only the event, the source and the
+ * reason, never the keyword.
+ */
+function logTaobaoSearchFallback(logger: RootLogger, warning: TaobaoSearchFallbackWarning): void {
+  logger.warn(
+    { event: warning.event, source: warning.source, reason: warning.reason },
+    warning.event === 'taobao_search_fallback'
+      ? 'taobao search fell back'
+      : 'taobao search fallback failed',
+  );
 }
 
 /** The Jingdong warn hook (B1-04za) as flat pino fields: only the method name and the code. */
@@ -393,6 +417,7 @@ async function startUnionRegistry(
   logger: RootLogger,
   source: QueryPidSource,
   priceConfig: PriceConfigSource | undefined,
+  searchCounter: TaobaoSearchCounter,
 ): Promise<UnionRegistry> {
   const options = {
     endpoints,
@@ -453,6 +478,14 @@ async function startUnionRegistry(
         warn: (warning: DataokeWarning) => logDataokeWarning(logger, warning),
       };
     }
+    // B1-04zy: official_first without 大淘客 would quietly be official alone.
+    if (config.taobaoSearchSource === 'official_first' && orderSource === undefined) {
+      throw new UnionError(
+        'invalid_endpoint',
+        `${TAOBAO_SEARCH_SOURCE_ENV}=official_first needs the 大淘客 credentials`,
+        'taobao',
+      );
+    }
     taobaoLive = {
       credentials,
       transport: archivedTransport(createUnionHttpTransport(), source, clock, logger),
@@ -464,6 +497,10 @@ async function startUnionRegistry(
       // B1-04zx: not tied to the order source; the official search needs only these two.
       searchSlot: taobaoSearchSlot(source),
       searchWarn: (warning: TaobaoSearchWarning) => logTaobaoSearchWarning(logger, warning),
+      // B1-04zy: counted under every switch value; the hook only fires under official_first.
+      searchCounter,
+      fallbackWarn: (warning: TaobaoSearchFallbackWarning) =>
+        logTaobaoSearchFallback(logger, warning),
       ...(orderSource === undefined
         ? {}
         : {
@@ -539,6 +576,8 @@ export class UnionModule {
     const buildConfig = options.config;
     const priceConfig: PriceConfigSource | undefined =
       buildConfig === undefined ? undefined : { reader: undefined };
+    // B1-04zy: one counter per module instance, outside the UNION_REGISTRY factory's dependencies.
+    const searchCounter = createTaobaoSearchCounter();
     return {
       module: UnionModule,
       providers: [
@@ -555,8 +594,18 @@ export class UnionModule {
             config: AppConfig,
             clock: Clock,
             logger: RootLogger,
-          ) => startUnionRegistry(endpoints, config, clock, logger, source, priceConfig),
+          ) =>
+            startUnionRegistry(
+              endpoints,
+              config,
+              clock,
+              logger,
+              source,
+              priceConfig,
+              searchCounter,
+            ),
         },
+        { provide: taobaoSearchCounterToken(), useValue: searchCounter },
         {
           provide: UNION_QUERY_PID_SOURCE,
           inject: [{ token: DB, optional: true }],

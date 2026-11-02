@@ -70,6 +70,7 @@ import {
   type AutoPayoutDailySnapshot,
   type FundMetricsSnapshot,
   type ReviewOverdueSnapshot,
+  type TaobaoSearchMetricsSnapshot,
 } from './modules/platform/metrics/index.ts';
 import { readSettlementFundMetrics } from './modules/settlement/index.ts';
 import {
@@ -81,6 +82,7 @@ import {
   startRiskScanHeal,
   type RedisGenerationRenewal,
 } from './modules/risk/index.ts';
+import { taobaoSearchCounterToken, type TaobaoSearchCounter } from './modules/union/index.ts';
 
 // Keeps a worker process alive until a signal arrives; longer than any deployment lives.
 const KEEP_ALIVE_INTERVAL_MS = 2 ** 30;
@@ -293,19 +295,22 @@ function startGenerationRenewal(
  * gauges from the orders, settlement and payout read ports; the worker hands it in wrapped by
  * `cacheFundCollector`, B1-01zzo) and, since B1-01zzp, `collectAutoPayout` (today's automatic
  * total against the cap, cached per +08:00 day) and, since B2-05o, `collectReviewOverdue` (the
- * withdrawals judged review-overdue still waiting, payout's read-only port). Not on the Nest
- * application, not in the OAS.
+ * withdrawals judged review-overdue still waiting, payout's read-only port). Since B1-04zy only
+ * the api passes `collectTaobaoSearch` (union's in-process search counter, read at scrape time).
+ * Not on the Nest application, not in the OAS.
  */
 async function openMetrics(
   entry: EntryName,
   config: AppConfig,
   logger: RootLogger,
-  collectors?: {
-    readonly collect: () => Promise<WorkerMetricsSnapshot>;
-    readonly collectFund: () => Promise<FundMetricsSnapshot>;
-    readonly collectAutoPayout: () => Promise<AutoPayoutDailySnapshot>;
-    readonly collectReviewOverdue: () => Promise<ReviewOverdueSnapshot>;
-  },
+  collectors?:
+    | {
+        readonly collect: () => Promise<WorkerMetricsSnapshot>;
+        readonly collectFund: () => Promise<FundMetricsSnapshot>;
+        readonly collectAutoPayout: () => Promise<AutoPayoutDailySnapshot>;
+        readonly collectReviewOverdue: () => Promise<ReviewOverdueSnapshot>;
+      }
+    | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot },
 ): Promise<MetricsServer | undefined> {
   if (config.metrics === undefined) return undefined;
   const registry = createMetricsRegistry(
@@ -425,7 +430,19 @@ async function start(
       }
       const port = portOf(entry, config);
       await app.listen(port, config.apiHost);
-      metricsServer = await openMetrics(entry, config, logger);
+      metricsServer = await openMetrics(
+        entry,
+        config,
+        logger,
+        entry === 'api'
+          ? {
+              collectTaobaoSearch: () =>
+                app
+                  .get<TaobaoSearchCounter | null>(taobaoSearchCounterToken(), { strict: false })
+                  ?.snapshot() ?? [],
+            }
+          : undefined,
+      );
       await signals.serve(close, { listening: true, host: config.apiHost, port });
     } catch (error) {
       signals.fail();
