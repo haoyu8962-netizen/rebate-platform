@@ -10,8 +10,8 @@
 //        account_deleting        deletion stage cooling / processing (data.stage, as 10007's)
 //        account_deleted         deletion stage done (no data.stage)
 //        withdrawal_in_progress  any withdrawal outside the BR-WDR-08 terminal set (hasNonTerminal)
+//        reverify_pending        the account carries the flag, whatever its re-verified devices
 //        identity_blacklisted    the current id_no_hmac is on an active id_no blocklist entry
-//      (reverify_pending: TODO(规划/11 §2.3) — blocked on the flag's table and task.)
 //   3. 20001 data.fields=[id_no] — format (parseResidentIdNo, as realname.ts); [name] when the
 //      name is empty after normalizePersonName.
 //   4. 44001 — the new number is on an active id_no blocklist entry; no risk_hits, no appeal.
@@ -49,6 +49,7 @@ import type { AuditPort, Clock, EventBus, FieldCrypto, RootLogger } from '../../
 import { maskName } from '../domain/mask-name.ts';
 import { insertPriorIdentity } from '../infra/realname-prior-identities.ts';
 import { REALNAME_CONTEXT } from '../infra/realname-reader.ts';
+import { readReverifyAccount } from '../infra/reverify-store.ts';
 import { createDeletionStageReader, type DeletionStage } from '../ports/deletion-stage.ts';
 import type {
   RealnameVerificationResult,
@@ -94,7 +95,7 @@ export type AdminRealnameCorrectionRefusal =
       readonly reason: 'realname_not_verified' | 'account_deleted';
     }
   | { readonly reason: 'account_deleting'; readonly stage: 'cooling' | 'processing' }
-  | { readonly reason: 'withdrawal_in_progress' | 'identity_blacklisted' };
+  | { readonly reason: 'withdrawal_in_progress' | 'reverify_pending' | 'identity_blacklisted' };
 
 export type AdminRealnameCorrectionResult =
   | { readonly code: 0; readonly data: AdminUserRealname }
@@ -323,6 +324,12 @@ export class AdminRealnameCorrection {
       return refuse({ reason: 'withdrawal_in_progress' });
     }
 
+    const reverify = await readReverifyAccount(app, {
+      app_id: command.appId,
+      user_id: command.userId,
+    });
+    if (reverify?.flagged_at != null) return refuse({ reason: 'reverify_pending' });
+
     // realname_verified_check guarantees these on a verified row.
     if (
       row.name_cipher === null ||
@@ -349,7 +356,6 @@ export class AdminRealnameCorrection {
     ) {
       return refuse({ reason: 'identity_blacklisted' });
     }
-    // TODO(规划/11 §2.3): 带「待加验」标记的账号不受理（reverify_pending） — blocked on 待加验标记的表结构与任务
     return { kind: 'open', current };
   }
 

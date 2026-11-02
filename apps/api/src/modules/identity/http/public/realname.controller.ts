@@ -34,6 +34,7 @@ interface RawReply {
 
 const ERRORS = {
   10004: { status: 403, msg: '请先阅读并同意相关授权' },
+  10010: { status: 403, msg: '需要先核实是你本人' },
   20001: { status: 400, msg: '填写内容有误，请检查' },
   30405: { status: 422, msg: '该身份证已被其他账号实名' },
   30406: { status: 422, msg: '实名核验未通过，请核对姓名与身份证号' },
@@ -104,6 +105,7 @@ export class RealnameController {
           await realname.submit({
             appId: principal.app_id,
             userId: principal.uid,
+            deviceId: principal.device_id,
             name: request.body.name,
             idNo: request.body.id_no,
             idempotencyKey: key,

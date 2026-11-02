@@ -130,6 +130,7 @@ import {
 } from './application/sms-codes.ts';
 import { createLogout, type Logout } from './application/logout.ts';
 import { createRefreshService, type RefreshService } from './application/refresh.ts';
+import { createDeletionReverifyGate, createReverifyGate } from './application/reverify-gate.ts';
 import { createReverifyService, type ReverifyService } from './application/reverify.ts';
 import { unbindRevoked, type SessionPushTokens } from './application/push-tokens.ts';
 import { createRecordInitialLevel, type InitialLevelLog } from './application/initial-level-log.ts';
@@ -561,6 +562,7 @@ export class IdentityModule {
                   withdrawalInFlight: withdrawalInFlight ?? null,
                   balance: balance ?? null,
                   notice: notice ?? null,
+                  reverify: createDeletionReverifyGate({ db, clock }),
                 }),
         },
         options.accountAssets === undefined
@@ -1291,6 +1293,7 @@ export class IdentityModule {
                   redis: redis ?? null,
                   verifier,
                   logger,
+                  reverify: createReverifyGate({ clock }),
                 }),
         },
         {
@@ -1399,6 +1402,7 @@ export class IdentityModule {
                   cardBin,
                   verifier,
                   ...(config === null ? {} : { config }),
+                  reverify: createReverifyGate({ clock }),
                 }),
         },
         {

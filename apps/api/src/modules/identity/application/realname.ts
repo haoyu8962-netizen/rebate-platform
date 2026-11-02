@@ -8,6 +8,8 @@
 //      or not accepted. The version is not compared (E28).
 //   2. already verified (E26) → 0 with the stored masked name; nothing is checked, counted or
 //      written, the submitted values are ignored.
+//   2a. 10010 — first real name on a flagged account from a device not re-verified (BR-WDR-01 细则
+//      「位置与返回码」; reverify-gate.ts): nothing below runs, no vendor call, no count, no write.
 //   3. 20001 data.fields — the name is empty after normalizePersonName, and/or the ID number fails
 //      parseResidentIdNo (18 characters, date, check digit; trim and trailing x → X).
 //   4. 30407 — under minor.min_realname_age at the Clock instant (BR-ID-26: the birthday's next day
@@ -54,6 +56,7 @@ import {
   type RootLogger,
 } from '../../platform/index.ts';
 import { maskName } from '../domain/mask-name.ts';
+import type { ReverifyGate, ReverifyRefusal } from './reverify-gate.ts';
 import {
   createRealnameAttempts,
   type AttemptOutcome,
@@ -79,6 +82,8 @@ const VERIFIED_ID_NO_KEY = 'realname_verified_id_no_hmac_key';
 export interface SubmitRealnameCommand {
   readonly appId: string;
   readonly userId: string;
+  /** The token's device: the re-verification gate is judged per device. */
+  readonly deviceId: string;
   /** As submitted; normalised here. */
   readonly name: string;
   /** As submitted; normalised here. */
@@ -93,6 +98,7 @@ export type SubmitRealnameResult =
       readonly data: { readonly realname_status: 'verified'; readonly masked_name: string };
     }
   | { readonly code: 10004; readonly data: { readonly consent_type: 'id_verification' } }
+  | ReverifyRefusal
   | { readonly code: 20001; readonly data: { readonly fields: readonly string[] } }
   | { readonly code: 30405 | 30406 | 30407 | 30410 | 50001 | 50301 | 50401 };
 
@@ -113,6 +119,7 @@ export interface RealnameServiceOptions {
   /** Null when no vendor is assembled (staging / prod for now): 50301, not counted. */
   readonly verifier: RealnameVerifierPort | null;
   readonly logger: Pick<RootLogger, 'info' | 'warn'>;
+  readonly reverify: ReverifyGate;
 }
 
 export interface RealnameService {
@@ -149,7 +156,7 @@ function outcomeOf(
 }
 
 export function createRealnameService(options: RealnameServiceOptions): RealnameService {
-  const { clock, crypto, redis, verifier, logger } = options;
+  const { clock, crypto, redis, verifier, logger, reverify } = options;
   // Bound per call: assemblies built without a real database (HTTP unit tests) pass a stub.
   const app = () => options.db.withSchema('app');
   const encrypt = (value: string, context: string) =>
@@ -342,6 +349,8 @@ export function createRealnameService(options: RealnameServiceOptions): Realname
       }
       const already = await storedVerified(command);
       if (already !== undefined) return already;
+      const pending = await reverify.check(options.db, command);
+      if (pending !== null) return pending;
 
       const name = normalizePersonName(command.name);
       const parsed = parseResidentIdNo(command.idNo);

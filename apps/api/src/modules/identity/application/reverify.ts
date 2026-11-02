@@ -28,20 +28,13 @@ import type { Kysely } from 'kysely';
 import type { Clock, FieldCrypto, RootLogger, TokenPrincipal } from '../../platform/index.ts';
 import {
   MANUAL_REQUIREMENT,
-  failuresOn,
-  reverifyRequirement,
   REVERIFY_FAIL_LIMIT,
-  trustedIdentitiesOf,
   type ReverifyRequirement,
-  type TrustedIdentities,
 } from '../domain/reverify.ts';
-import { deviceHashOf } from '../infra/login-accounts.ts';
 import { replaceAppleRefreshToken } from '../infra/oauth-accounts.ts';
 import { REALNAME_CONTEXT } from '../infra/realname-reader.ts';
 import {
   boundUnionId,
-  isReverifiedDevice,
-  readReverifyAccount,
   releaseFailure,
   reserveFailure,
   settlePassed,
@@ -50,17 +43,17 @@ import {
   type ReverifySubject,
 } from '../infra/reverify-store.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
+import {
+  pendingData,
+  reverifyStanding,
+  type ReverifyPendingData,
+  type ReverifyStanding,
+} from './reverify-gate.ts';
 import { credentialsOf, type ThirdPartyIdentity, type ThirdPartyIdentityPort } from './step-up.ts';
-
-type Pending = {
-  readonly method: ReverifyRequirement['method'];
-  readonly providers?: ReverifyRequirement['providers'];
-  readonly fail_limit?: number;
-};
 
 export type ReverifyResult =
   | { readonly code: 0 }
-  | { readonly code: 10010; readonly data: Pending }
+  | { readonly code: 10010; readonly data: ReverifyPendingData }
   | { readonly code: 10403 | 20004 | 50001 }
   | { readonly code: 20001; readonly data: { readonly fields: readonly string[] } }
   | {
@@ -90,27 +83,8 @@ export interface ReverifyOptions {
 
 const PASSED: ReverifyResult = Object.freeze({ code: 0 });
 
-/** The account as the steps above see it. */
-type Standing =
-  | { readonly settled: true }
-  | {
-      readonly settled: false;
-      readonly deviceHash: string;
-      readonly trusted: TrustedIdentities;
-      readonly requirement: ReverifyRequirement;
-    };
-
-/** 10010's data (error-codes.yaml): providers only for oauth, fail_limit unless manual. */
 function pending(requirement: ReverifyRequirement): ReverifyResult {
-  if (requirement.method === 'manual') return { code: 10010, data: { method: 'manual' } };
-  return {
-    code: 10010,
-    data: {
-      method: requirement.method,
-      ...(requirement.method === 'oauth' ? { providers: requirement.providers } : {}),
-      fail_limit: requirement.fail_limit,
-    },
-  };
+  return { code: 10010, data: pendingData(requirement) };
 }
 
 function mismatch(reservation: FailureReservation): ReverifyResult {
@@ -131,25 +105,13 @@ export function createReverifyService(options: ReverifyOptions): ReverifyService
     user_id: principal.uid,
   });
 
-  async function standing(principal: TokenPrincipal): Promise<Standing> {
-    const subject = subjectOf(principal);
-    const account = await readReverifyAccount(db, subject);
-    if (account === undefined) throw new Error('identity: reverify without a user row');
-    if (account.flagged_at === null) return { settled: true };
-    const deviceHash = await deviceHashOf(db, principal.app_id, principal.device_id);
-    if (deviceHash === undefined) throw new Error('identity: reverify without a device row');
-    if (await isReverifiedDevice(db, subject, deviceHash)) return { settled: true };
-    const trusted = trustedIdentitiesOf(account.trusted);
-    const today = accountingDate(clock.now());
-    return {
-      settled: false,
-      deviceHash,
-      trusted,
-      requirement: reverifyRequirement(
-        trusted,
-        failuresOn(today, account.fail_day, account.fail_count),
-      ),
-    };
+  function standing(principal: TokenPrincipal): Promise<ReverifyStanding> {
+    return reverifyStanding(
+      db,
+      subjectOf(principal),
+      principal.device_id,
+      accountingDate(clock.now()),
+    );
   }
 
   /** Gives the place back; a failure only logs (the count stays stricter). */

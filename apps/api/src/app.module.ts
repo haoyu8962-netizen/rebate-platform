@@ -221,6 +221,7 @@ import {
   type MeUnionBindingStatus,
   type PayoutAccountConfigPort,
   type PersonalDataCopySources,
+  createReverifyGate,
 } from './modules/identity/index.ts';
 import {
   EarningsSummaryModule,
@@ -3747,9 +3748,8 @@ function sessionPushTokens(clock: Clock): SessionPushTokens {
  * configuration reader (withdraw.*; a plain read each time, as payoutAccountConfig), risk's state
  * and appeal readers, the read-only blocklist match, identity's real-name, payout-account and
  * labor-agreement ports, ledger's getBalances, the module's own usage / holds readers, the default
- * fee / tax calculator (0 / 0, BR-WDR-19 / 20) and a re-verification gate that reports nothing
- * pending until identity's CT-26c / CT-26e land. Without a database or a keyring the entry gets no
- * use case (the controller answers 50001).
+ * fee / tax calculator (0 / 0, BR-WDR-19 / 20) and identity's re-verification gate (BR-WDR-03 ③b).
+ * Without a database or a keyring the entry gets no use case (the controller answers 50001).
  */
 /**
  * BR-WDR-03 ⑬ 细则 (B2-05c): the member's self-purchase orders of the last 90 × 24 hours that are
@@ -3815,8 +3815,7 @@ function withdrawRuleOptions(
   db: Kysely<Database>,
   crypto: FieldCrypto,
 ): WithdrawRulesOptions {
-  // TODO(规划/11 §2.3): 待加验判定（BR-WDR-03 ③b）接 identity 的加验端口 — blocked on CT-26c
-  const reverify: ReverifyGatePort = { check: () => Promise.resolve(null) };
+  const reverify: ReverifyGatePort = createReverifyGate({ clock });
   const realname = createRealnameReader(crypto);
   const payoutLogger = logger.child({ module: 'payout' });
   const config: PayoutConfigPort = {

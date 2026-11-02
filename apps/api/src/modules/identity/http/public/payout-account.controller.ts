@@ -31,6 +31,7 @@ import type {
   BankCardSubmitResult,
   PayoutAccountChange,
 } from '../../application/payout-bank-card.ts';
+import type { ReverifyRefusal } from '../../application/reverify-gate.ts';
 import { withStepUp } from '../../application/step-up-verify.ts';
 import { PAYOUT_ACCOUNT_CHANGE, PAYOUT_ACCOUNT_READER } from '../../application/tokens.ts';
 import { identityFailure } from './error-envelopes.ts';
@@ -49,10 +50,11 @@ interface RawReply {
   send(body: string): unknown;
 }
 
-type ChangeResult = SaveAlipayResult | BankCardSubmitResult;
+type ChangeResult = SaveAlipayResult | BankCardSubmitResult | ReverifyRefusal;
 
 const ERRORS: Readonly<Record<number, { readonly status: number; readonly msg: string }>> =
   Object.freeze({
+    10010: { status: 403, msg: '需要先核实是你本人' },
     20001: { status: 400, msg: '填写内容有误，请检查' },
     // The key's verification record is of another card: the idempotency module's own 20901
     // (status, msg, no data), since the claim found no stored result to compare the body with.
@@ -142,7 +144,11 @@ export class PayoutAccountController {
     const header = request.headers['idempotency-key'];
     const key = typeof header === 'string' ? header : undefined;
     const body = request.body;
-    const subject = { appId: principal.app_id, userId: principal.uid };
+    const subject = {
+      appId: principal.app_id,
+      userId: principal.uid,
+      deviceId: principal.device_id,
+    };
     const response = await withStepUp(request, () =>
       idempotency.executeInTransaction(
         {

@@ -24,6 +24,7 @@ import {
   withdrawalRules,
   type WithdrawBlock,
   type WithdrawLimits,
+  type WithdrawReverifyBlock,
   type WithdrawRuleInput,
   type WithdrawUsage,
 } from '../domain/withdraw-rules.ts';
@@ -44,14 +45,11 @@ export interface PayoutConfigPort {
 
 /**
  * BR-WDR-03 ③b (BR-WDR-01 细则「旧手机号被二次放号时的提现加验」): identity's verdict for the
- * account on this device, passed through unchanged; null = nothing pending. The error code and
- * data.method belong to identity's contract task (CT-26c / CT-26e), never assigned here.
+ * account on this device, passed through unchanged, data.providers and data.fail_limit included;
+ * null = nothing pending. The error code and its data belong to identity, never assigned here.
  */
 export interface ReverifyGatePort {
-  check(
-    handle: Kysely<DB>,
-    subject: WithdrawActor,
-  ): Promise<{ code: number; data: { method: string } } | null>;
+  check(handle: Kysely<DB>, subject: WithdrawActor): Promise<WithdrawReverifyBlock | null>;
 }
 
 export interface WithdrawHold {

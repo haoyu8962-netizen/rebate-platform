@@ -3,7 +3,10 @@
 //
 // request(trx, subject) — called inside the idempotency claim's transaction (executeInTransaction,
 // wrapped by withStepUp in the controller). Fixed order (§9.2 #3):
-//   ① lockUsersForUpdate on the caller; ② TODO(规划/11 §2.3) pending-reverify code — blocked;
+//   ① lockUsersForUpdate on the caller; ② the session's re-verification gate → 10010, after the
+//      step-up check and before anything below (BR-ID-27, BR-WDR-01 细则「位置与返回码」; a request
+//      that waited for the lock is judged on what it finds, manual in a restricted session; only
+//      the service-layer call without a session, which has no device, skips it);
 //   ③ latest request (apply_at DESC, id DESC) cooling / processing → return it (no new row,
 //      cooling_until unchanged); ④ withdrawalInFlight.hasInFlight → 30412 (before 30416);
 //   ⑤ balance.availableFen < 0 → 30416, data.amount_fen = -available_fen (positive bigint);
@@ -28,6 +31,11 @@ import type { Kysely, Selectable, Transaction } from 'kysely';
 import { newUuidV7, type Clock } from '../../platform/index.ts';
 import { lockUsersForUpdate } from '../ports/lock-users.ts';
 import { instantPlus } from './config-seconds.ts';
+import type {
+  DeletionReverifyGate,
+  DeletionReverifySession,
+  ReverifyRefusal,
+} from './reverify-gate.ts';
 import type { DeletionBalanceReader } from '../ports/deletion-balance.ts';
 import type { DeletionProgressNotice } from '../ports/deletion-progress-notice.ts';
 import type { WithdrawalInFlightReader } from '../ports/withdrawal-in-flight.ts';
@@ -56,6 +64,7 @@ export interface DeletionSubject {
 
 export type RequestDeletionResult =
   | { readonly code: 0; readonly data: DeletionView }
+  | ReverifyRefusal
   | { readonly code: 30412 }
   | { readonly code: 30416; readonly data: { readonly amount_fen: bigint } };
 
@@ -72,13 +81,19 @@ export interface DeletionRequestServiceOptions {
   readonly balance: DeletionBalanceReader | null;
   /** B1-15i: written on the business transaction; absent or null → no message. */
   readonly notice?: DeletionProgressNotice | null;
+  /** B1-02zq: step ②. Absent: POST /v1/me/deletion fails closed (50001, canRequest false). */
+  readonly reverify?: DeletionReverifyGate;
 }
 
 export interface DeletionRequestService {
   /** False when a port of the application is missing: request() would refuse (50001). */
   readonly canRequest: boolean;
   read(subject: DeletionSubject): Promise<DeletionView | null>;
-  request(trx: Transaction<DB>, subject: DeletionSubject): Promise<RequestDeletionResult>;
+  request(
+    trx: Transaction<DB>,
+    subject: DeletionSubject,
+    session?: DeletionReverifySession,
+  ): Promise<RequestDeletionResult>;
   cancel(subject: DeletionSubject): Promise<CancelDeletionResult>;
 }
 
@@ -163,22 +178,34 @@ export function createDeletionRequestService(
 ): DeletionRequestService {
   const { db, clock, withdrawalInFlight, balance } = options;
   const notice = options.notice ?? null;
+  const reverify = options.reverify;
   return Object.freeze({
-    canRequest: withdrawalInFlight !== null && balance !== null,
+    canRequest: withdrawalInFlight !== null && balance !== null && reverify !== undefined,
 
     async read(subject: DeletionSubject): Promise<DeletionView | null> {
       const row = await latest(db, subject);
       return row === undefined ? null : view(row, clock.now());
     },
 
-    async request(trx: Transaction<DB>, subject: DeletionSubject): Promise<RequestDeletionResult> {
+    async request(
+      trx: Transaction<DB>,
+      subject: DeletionSubject,
+      session?: DeletionReverifySession,
+    ): Promise<RequestDeletionResult> {
       if (withdrawalInFlight === null || balance === null) {
         throw new Error('identity: deletion request needs the in-flight and balance ports');
       }
       // ① The caller's users row first: the posting chain locks users before balances
       // (B1-02zf), so the balance read below cannot interleave with a posting for this user.
       await lockSubject(trx, subject);
-      // ② TODO(规划/11 §2.3): 待加验账号申请注销返回待加验码（BR-ID-27 细则、BR-WDR-01 细则）— blocked on 旧号提现加验启用（新码由契约线定义，withdraw.dormant_reverify_days 默认 0）
+      // ② The flag and the device under the lock, before the open request is answered.
+      if (session !== undefined) {
+        if (reverify === undefined) {
+          throw new Error('identity: deletion request needs the re-verification gate');
+        }
+        const refusal = await reverify.check(trx, subject, session);
+        if (refusal !== null) return refusal;
+      }
       // ③ An open request is returned as it is (no new row, cooling_until unchanged).
       const open = await latest(trx, subject);
       if (open !== undefined && (open.status === 'cooling' || open.status === 'processing')) {

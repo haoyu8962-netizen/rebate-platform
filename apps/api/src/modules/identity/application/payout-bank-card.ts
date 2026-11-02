@@ -55,6 +55,10 @@
 // The key's own older record is another request (20901); an older latest record is as if there
 // were none (a new paid verification of the new identity).
 //
+// Re-verification (B1-02zq; BR-WDR-01 细则「位置与返回码」): createPayoutAccountChange judges the gate
+// of reverify-gate.ts first, for both methods: the claim's post-miss checks judged the step-up token
+// before the handler, and nothing is read, reserved or written after a 10010.
+//
 // Invariant: a record's answer only ever binds the card it verified. saveMatched and mismatched
 // refuse (throw) a record whose fingerprint is not this request's; every path that reaches them
 // has compared it already (the key's record above; the fingerprint's records by construction).
@@ -76,6 +80,7 @@ import { newUuidV7, type Clock, type FieldCrypto, type RootLogger } from '../../
 import type { BlocklistService } from '../../risk/index.ts';
 import { REALNAME_CONTEXT } from '../infra/realname-reader.ts';
 import type { BankCardVerifierPort, CardBinPort } from '../ports/bank-card-verifier.ts';
+import type { ReverifyGate, ReverifyRefusal } from './reverify-gate.ts';
 import {
   BANK_CARD_CONTEXT,
   CHANGE_LIMIT_KEY,
@@ -560,17 +565,26 @@ export function createBankCardBinding(options: BankCardBindingOptions): BankCard
 
 /** PUT /v1/me/payout-account's two bodies, as the controller calls them inside the claim. */
 export interface PayoutAccountChange {
-  /** B1-13e's Alipay save, unchanged (9.2 #1). */
-  saveAlipay(trx: Transaction<DB>, command: SaveAlipayCommand): Promise<SaveAlipayResult>;
+  /** B1-13e's Alipay save, unchanged (9.2 #1), behind the re-verification gate. */
+  saveAlipay(
+    trx: Transaction<DB>,
+    command: SaveAlipayCommand & PayoutAccountDevice,
+  ): Promise<SaveAlipayResult | ReverifyRefusal>;
   submitBankCard(
     trx: Transaction<DB>,
-    command: BankCardSubmitCommand,
-  ): Promise<BankCardSubmitResult>;
+    command: BankCardSubmitCommand & PayoutAccountDevice,
+  ): Promise<BankCardSubmitResult | ReverifyRefusal>;
+}
+
+/** The token's device: the re-verification gate is judged per device. */
+export interface PayoutAccountDevice {
+  readonly deviceId: string;
 }
 
 export function createPayoutAccountChange(
-  options: Omit<BankCardBindingOptions, 'accounts'>,
+  options: Omit<BankCardBindingOptions, 'accounts'> & { readonly reverify: ReverifyGate },
 ): PayoutAccountChange {
+  const { reverify } = options;
   const accounts = createPayoutAccountService({
     db: options.db,
     clock: options.clock,
@@ -581,8 +595,11 @@ export function createPayoutAccountChange(
   });
   const binding = createBankCardBinding({ ...options, accounts });
   return Object.freeze({
-    saveAlipay: (trx: Transaction<DB>, command: SaveAlipayCommand) => accounts.save(trx, command),
-    submitBankCard: (trx: Transaction<DB>, command: BankCardSubmitCommand) =>
-      binding.submit(trx, command),
+    saveAlipay: async (trx: Transaction<DB>, command: SaveAlipayCommand & PayoutAccountDevice) =>
+      (await reverify.check(trx, command)) ?? accounts.save(trx, command),
+    submitBankCard: async (
+      trx: Transaction<DB>,
+      command: BankCardSubmitCommand & PayoutAccountDevice,
+    ) => (await reverify.check(trx, command)) ?? binding.submit(trx, command),
   });
 }

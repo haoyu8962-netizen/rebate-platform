@@ -59,7 +59,7 @@ const OLD = { name: '测试旧名', idNo: checkDigit('11010519491231002') };
 const NEW = { name: '测试新名', idNo: checkDigit('44030519960721028') };
 
 /** Answers the statements of the correction; every statement is kept in `seen`. */
-function scriptedDb(seen: CompiledQuery[]): Kysely<DB> {
+function scriptedDb(seen: CompiledQuery[], flag: { at: Date | null }): Kysely<DB> {
   const answer = (query: CompiledQuery): QueryResult<unknown> => {
     seen.push(query);
     const { sql } = query;
@@ -67,6 +67,9 @@ function scriptedDb(seen: CompiledQuery[]): Kysely<DB> {
       return { rows: [{ id: USER, status: 'normal', request_status: null }] };
     }
     if (sql.startsWith('select "id" from "app"."users"')) return { rows: [{ id: USER }] };
+    if (sql.startsWith('select "reverify_flagged_at"')) {
+      return { rows: [{ flagged_at: flag.at, trusted: null, fail_count: 0, fail_day: null }] };
+    }
     if (sql.startsWith('select "id", "status", "name_cipher"')) {
       return {
         rows: [
@@ -167,8 +170,9 @@ function setup() {
   const verify = vi.fn<() => Promise<RealnameVerificationResult>>();
   const audits: AuditInput[] = [];
   const publish = vi.fn(async () => ({ eventId: 'event-1', duplicate: false }));
+  const flag: { at: Date | null } = { at: null };
   const service = new AdminRealnameCorrection({
-    db: scriptedDb(seen),
+    db: scriptedDb(seen, flag),
     clock: new FixedClock(NOW),
     logger: { info: () => undefined, warn: () => undefined },
     crypto,
@@ -196,7 +200,7 @@ function setup() {
     idNo: NEW.idNo,
     reason: '企业微信核对后更正',
   };
-  return { seen, verify, audits, publish, service, command };
+  return { seen, verify, audits, publish, service, command, flag };
 }
 
 it('[AC-B1-27a] 后台实名更正（含二要素不一致）不占用户自助实名的每日次数：REALNAME_ATTEMPTS 计数不变，用户当天仍可提交 3 次', async () => {
@@ -358,4 +362,15 @@ it('[AC-B1-27a] 拒绝也写审计：结果码与新值脱敏串，不含姓名�
   expect(text).toContain('30407');
   expect(text).toContain(`4${'*'.repeat(16)}${minor.slice(-1)}`);
   for (const secret of [minor, NEW.name, OLD.name, OLD.idNo]) expect(text).not.toContain(secret);
+});
+
+it('[AC-B1-02zq#34] 带待加验标记：30419 reverify_pending，不调供应商，留一条审计', async () => {
+  const t = setup();
+  t.flag.at = new Date(NOW);
+  await expect(t.service.correct(t.command)).resolves.toEqual({
+    code: 30419,
+    data: { reason: 'reverify_pending' },
+  });
+  expect(t.verify).not.toHaveBeenCalled();
+  expect(t.audits).toHaveLength(1);
 });

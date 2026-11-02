@@ -31,10 +31,12 @@ import {
   createRealnameAttempts,
 } from './realname-attempts.ts';
 import { createRealnameService } from './realname.ts';
+import type { ReverifyGate } from './reverify-gate.ts';
 
 const NOW = '2026-09-29T10:00:00.000Z';
 const APP = 'couli';
 const USER = '019a0000-0000-7000-8000-000000000042';
+const DEVICE = '019a0000-0000-7000-8000-000000000043';
 const COUNT_KEY = `${APP}:2026-09-29:${USER}`;
 // A syntactically valid resident ID (check digit X) and a name; synthetic.
 const BODY = { name: '测试姓名', idNo: '11010519491231002X' };
@@ -174,6 +176,7 @@ function setup() {
   const redis = scriptedRedis();
   const verify = vi.fn<() => Promise<RealnameVerificationResult>>();
   const clock = new FixedClock(NOW);
+  const gate = vi.fn<ReverifyGate['check']>(() => Promise.resolve(null));
   const service = createRealnameService({
     db: scriptedDb(state),
     clock,
@@ -181,10 +184,11 @@ function setup() {
     redis: redis.handle,
     verifier: { verify },
     logger: { info: () => undefined, warn: () => undefined },
+    reverify: { check: gate },
   });
   const submit = (idempotencyKey: string, name: string = BODY.name) =>
-    service.submit({ appId: APP, userId: USER, ...BODY, name, idempotencyKey });
-  return { state, redis, verify, clock, submit };
+    service.submit({ appId: APP, userId: USER, deviceId: DEVICE, ...BODY, name, idempotencyKey });
+  return { state, redis, verify, clock, submit, gate };
 }
 
 /** Redis keys and values must carry neither the raw key nor the submitted values. */
@@ -389,4 +393,25 @@ it('[AC-B1-13d][BR-ID-25] writes of one day key expire at one instant: the windo
   expect(at('2026-09-29T10:00:00.000Z').getTime() + reserve!.options.ttlSeconds * 1000).toBe(
     at('2026-09-29T12:00:00.000Z').getTime() + release!.options.ttlSeconds * 1000,
   );
+});
+
+it('[AC-B1-02zq#21] 首次实名待加验：回 10010，不占次数、不调供应商、不写实名', async () => {
+  const t = setup();
+  const refusal = { code: 10010, data: { method: 'id_number', fail_limit: 5 } } as const;
+  t.gate.mockResolvedValue(refusal);
+  await expect(t.submit('key-eeeeeeee')).resolves.toEqual(refusal);
+  expect(t.gate.mock.calls[0]?.[1]).toMatchObject({ appId: APP, userId: USER, deviceId: DEVICE });
+  expect(t.verify).not.toHaveBeenCalled();
+  expect(t.redis.store.size).toBe(0);
+  expect(t.state.row).toBeUndefined();
+});
+
+it('[AC-B1-02zq#24] 已实名：不判加验，回存好的掩码姓名', async () => {
+  const t = setup();
+  t.state.row = {
+    status: 'verified',
+    name_cipher: Buffer.from(crypto.encrypt(BODY.name, 'realname.name')),
+  };
+  await expect(t.submit('key-ffffffff')).resolves.toMatchObject({ code: 0 });
+  expect(t.gate).not.toHaveBeenCalled();
 });

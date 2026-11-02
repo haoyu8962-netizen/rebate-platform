@@ -36,7 +36,17 @@ export interface WithdrawUsage {
 
 export interface WithdrawBlock {
   code: number;
-  data: Readonly<Record<string, string | bigint>>;
+  data: Readonly<Record<string, string | bigint | number | readonly string[]>>;
+}
+
+/** ③b: identity's answer (BR-WDR-01 细则「位置与返回码」), its data as the contract's 10010. */
+export interface WithdrawReverifyBlock {
+  code: number;
+  data: {
+    readonly method: string;
+    readonly providers?: readonly string[];
+    readonly fail_limit?: number;
+  };
 }
 
 export interface WithdrawRuleInput {
@@ -45,7 +55,7 @@ export interface WithdrawRuleInput {
   risk_state: 'normal' | 'frozen' | 'banned' | 'appealing';
   prev_risk_state: 'frozen' | 'banned' | null;
   blocklist_risk_msg_code: string | null;
-  reverify: { code: number; data: { method: string } } | null;
+  reverify: WithdrawReverifyBlock | null;
   realname_verified: boolean;
   payout_method: 'alipay' | 'bank_card' | 'wechat' | null;
   names_match: boolean;
@@ -136,7 +146,7 @@ function firstBlock(
   }
   // ③b pending re-verification: the identity port's answer is passed through unchanged
   if (input.reverify !== null) {
-    return { code: input.reverify.code, data: { method: input.reverify.data.method } };
+    return { code: input.reverify.code, data: { ...input.reverify.data } };
   }
   // ④ real name
   if (!input.realname_verified) return plain(30304);

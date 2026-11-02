@@ -12,6 +12,7 @@
 // The idempotent answer is written back from the stored body (parsed, then serialized the same
 // way for the first answer and every replay, so a replay equals the first answer byte for byte).
 // 0 and 3xxxx are stored with the key; the claim answers replays, 20001, 20901, 20903 and 40901.
+// 10010 is stored by nobody and, as a non-zero code, leaves the step-up token usable.
 // `msg` is the package default text of contracts/texts.default.json without placeholders.
 import {
   Controller,
@@ -55,6 +56,7 @@ interface DeletionHttpRequest extends CheckedRequest {
 }
 
 const REFUSALS = Object.freeze({
+  10010: { status: 403, msg: '需要先核实是你本人' },
   10007: { status: 403, msg: '账号注销处理中' },
   30412: { status: 422, msg: '有进行中的提现，提现完成后再申请注销' },
   30416: { status: 422, msg: '账户有待扣回金额，抵扣回正后才能注销' },
@@ -72,6 +74,7 @@ function handlerResult(
   let data: Readonly<Record<string, unknown>> | undefined;
   if (result.code === 30416) data = { amount_fen: fenToJsonNumber(result.data.amount_fen) };
   if (result.code === 10007) data = { stage: result.data.stage };
+  if (result.code === 10010) data = { ...result.data };
   return {
     status: refusal.status,
     envelope: {
@@ -137,7 +140,14 @@ export class DeletionController {
           body: request.body ?? {},
           traceId: request.id,
         },
-        async (trx) => handlerResult(await deletions.request(trx, subject), request.id),
+        async (trx) =>
+          handlerResult(
+            await deletions.request(trx, subject, {
+              deviceId: principal.device_id,
+              scope: principal.scp,
+            }),
+            request.id,
+          ),
       ),
     );
     return stored(response);

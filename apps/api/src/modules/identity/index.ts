@@ -1,5 +1,13 @@
 // Public surface of the identity module. Other modules import only from this file.
 export { createPushSessionValidity } from './ports/push-session-validity.ts';
+// B1-02zq: BR-WDR-03 ③b, the verdict payout's rules chain reads through its ReverifyGatePort.
+export { createReverifyGate } from './application/reverify-gate.ts';
+export type {
+  ReverifyActor,
+  ReverifyGate,
+  ReverifyPendingData,
+  ReverifyRefusal,
+} from './application/reverify-gate.ts';
 export type { PushSessionQuery, PushSessionValidity } from './ports/push-session-validity.ts';
 export { createExportUsersReader } from './application/export-users.ts';
 export type {

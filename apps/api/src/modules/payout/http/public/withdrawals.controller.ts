@@ -116,6 +116,7 @@ const APPLY_ERRORS: Readonly<Record<number, { readonly status: number; readonly 
     10003: { status: 403, msg: '为保障资金安全，请先完成短信验证' },
     10004: { status: 403, msg: '请先阅读并同意相关授权' },
     10006: { status: 403, msg: '账号已被限制使用' },
+    10010: { status: 403, msg: '需要先核实是你本人' },
     30301: { status: 422, msg: '可提现余额不足' },
     30302: { status: 422, msg: '账户有待抵扣金额，抵扣完成前暂不能提现' },
     30303: { status: 422, msg: '暂不满足提现条件' },

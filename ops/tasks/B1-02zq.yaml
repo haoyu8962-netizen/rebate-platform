@@ -20,4 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/identity/reverify-gates/**'
-status: todo
+status: done
+pr: 2250
