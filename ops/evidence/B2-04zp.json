@@ -1,0 +1,121 @@
+{
+  "task": "B2-04zp",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "spec_commit": "4516022e544698cd2d0c65048059145fe9dad50a",
+  "red_tests": [
+    "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#11] STATEMENT 900、之后 API 1000：账单按 900 比对入批（基数 900 相符，不出差错单），合计也是 900，R5 按 900 入账",
+    "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#12] 基数 1000 与 STATEMENT 900 不符：登记 settle_amount_mismatch（基数 1000、结算 900），不入批，不被 API 1000 蒙混过关",
+    "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#13] 批次 settle_seq 是整单最大 seq 而不是决定金额那条的 seq，R5 的 seq 校验通过，真的入账",
+    "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#14] 两条 STATEMENT 之后又有两条 API：金额取 seq 2 的 900，settle_seq 取 4，入账 900",
+    "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#15] 回归：只有 API 行时取最大 seq：settle_seq 2、b_settle 1000、入账 1000，与之前完全一致",
+    "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#16] STATEMENT 晚于截点、API 在截点内：账单按 API；R5 见 seq 变了，settlement_changed 跳过，不报错不入账",
+    "test/spec/settlement/deciding-settlement/clawback.int.test.ts > [AC-B2-04zp#22] 已入账单：STATEMENT 之后收到的等佣金维权不被更晚的 API 回应，保持等待；STATEMENT 之前收到的照常被回应",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#1] 只有 API：取 seq 最大的 API",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#2] 只有 STATEMENT：取 seq 最大的 STATEMENT",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#3] STATEMENT 在 API 之前：取 STATEMENT，seq 更大的 API 不决定金额",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#4] STATEMENT 在 API 之后：取 STATEMENT",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#5] 两条 STATEMENT 取 seq 大的，不看取得时间先后，中间夹的 API 不算",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#6] 唯一的 STATEMENT 晚于截点时不算：退回截点内 seq 最大的 API",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#7] 较新的 STATEMENT 晚于截点时取截点内的旧 STATEMENT，不退回 API",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#8] 晚于截点的 API 同样不算",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#9] 截点相等算在内：STATEMENT 与 API 都是",
+    "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#10] 没有记录、或全部晚于截点：null",
+    "test/spec/settlement/deciding-settlement/supplement.int.test.ts > [AC-B2-04zp#17] 补差同一口径：STATEMENT 900、之后 API 1000，按 900 比对入补充批次，settle_seq 3，R5 按 900 入账",
+    "test/spec/settlement/deciding-settlement/supplement.int.test.ts > [AC-B2-04zp#18] 补差时基数 1000 与 STATEMENT 900 不符：登记 settle_amount_mismatch，不入批，不被 API 1000 蒙混过关",
+    "test/spec/settlement/deciding-settlement/supplement.int.test.ts > [AC-B2-04zp#19] 已入账单的受益人补记项：settle_seq 同样是整单最大 seq，不是决定金额那条的 seq",
+    "test/spec/settlement/deciding-settlement/union-mismatch.int.test.ts > [AC-B2-04zp#20] 账单：VOID 单有 STATEMENT 900、之后 API 1000，union_mismatch 的联盟金额是 900",
+    "test/spec/settlement/deciding-settlement/union-mismatch.int.test.ts > [AC-B2-04zp#21] 补差：VOID 单账单日之后才有记录，union_mismatch 的联盟金额同样是 STATEMENT 的 900"
+  ],
+  "risk_note": "RV2 by path (settlement). Closes the S0 of prod-wiring-gaps item 14 ahead of statement import (BR-FUND-09, D10-588). The bill and the supplement took the highest seq of any source while R5 credits the column, which prefers STATEMENT: with STATEMENT seq 2 at 900 and API seq 3 at 1000 the bill compared 1000 and R5 credited 900. decidingSettlement now picks the latest STATEMENT inside the cutoff, otherwise the latest API, for amount, source and created_at. settle_seq stays the highest seq of the order inside the cutoff, because R5 and R5a compare against that; otherwise the order would be skipped for ever. clawback uses latestDecidingRecordAt so a later API row cannot close a waiting rights record after a STATEMENT. Unreachable today, no STATEMENT row exists yet. API-only behaviour is unchanged.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "4516022e544698cd2d0c65048059145fe9dad50a",
+      "tree": "da3446e1626a47e658f5e7eabc5ec39dc9c86d88",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T21:23:11Z",
+      "finished_at": "2026-11-02T21:23:26Z",
+      "red_tests": [
+        "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#11] STATEMENT 900、之后 API 1000：账单按 900 比对入批（基数 900 相符，不出差错单），合计也是 900，R5 按 900 入账",
+        "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#12] 基数 1000 与 STATEMENT 900 不符：登记 settle_amount_mismatch（基数 1000、结算 900），不入批，不被 API 1000 蒙混过关",
+        "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#13] 批次 settle_seq 是整单最大 seq 而不是决定金额那条的 seq，R5 的 seq 校验通过，真的入账",
+        "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#14] 两条 STATEMENT 之后又有两条 API：金额取 seq 2 的 900，settle_seq 取 4，入账 900",
+        "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#15] 回归：只有 API 行时取最大 seq：settle_seq 2、b_settle 1000、入账 1000，与之前完全一致",
+        "test/spec/settlement/deciding-settlement/bill.int.test.ts > [AC-B2-04zp#16] STATEMENT 晚于截点、API 在截点内：账单按 API；R5 见 seq 变了，settlement_changed 跳过，不报错不入账",
+        "test/spec/settlement/deciding-settlement/clawback.int.test.ts > [AC-B2-04zp#22] 已入账单：STATEMENT 之后收到的等佣金维权不被更晚的 API 回应，保持等待；STATEMENT 之前收到的照常被回应",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#1] 只有 API：取 seq 最大的 API",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#2] 只有 STATEMENT：取 seq 最大的 STATEMENT",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#3] STATEMENT 在 API 之前：取 STATEMENT，seq 更大的 API 不决定金额",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#4] STATEMENT 在 API 之后：取 STATEMENT",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#5] 两条 STATEMENT 取 seq 大的，不看取得时间先后，中间夹的 API 不算",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#6] 唯一的 STATEMENT 晚于截点时不算：退回截点内 seq 最大的 API",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#7] 较新的 STATEMENT 晚于截点时取截点内的旧 STATEMENT，不退回 API",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#8] 晚于截点的 API 同样不算",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#9] 截点相等算在内：STATEMENT 与 API 都是",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts > [AC-B2-04zp#10] 没有记录、或全部晚于截点：null",
+        "test/spec/settlement/deciding-settlement/supplement.int.test.ts > [AC-B2-04zp#17] 补差同一口径：STATEMENT 900、之后 API 1000，按 900 比对入补充批次，settle_seq 3，R5 按 900 入账",
+        "test/spec/settlement/deciding-settlement/supplement.int.test.ts > [AC-B2-04zp#18] 补差时基数 1000 与 STATEMENT 900 不符：登记 settle_amount_mismatch，不入批，不被 API 1000 蒙混过关",
+        "test/spec/settlement/deciding-settlement/supplement.int.test.ts > [AC-B2-04zp#19] 已入账单的受益人补记项：settle_seq 同样是整单最大 seq，不是决定金额那条的 seq",
+        "test/spec/settlement/deciding-settlement/union-mismatch.int.test.ts > [AC-B2-04zp#20] 账单：VOID 单有 STATEMENT 900、之后 API 1000，union_mismatch 的联盟金额是 900",
+        "test/spec/settlement/deciding-settlement/union-mismatch.int.test.ts > [AC-B2-04zp#21] 补差：VOID 单账单日之后才有记录，union_mismatch 的联盟金额同样是 STATEMENT 的 900"
+      ],
+      "expected": [
+        "test/spec/settlement/deciding-settlement/bill.int.test.ts",
+        "test/spec/settlement/deciding-settlement/clawback.int.test.ts",
+        "test/spec/settlement/deciding-settlement/deciding.test.ts",
+        "test/spec/settlement/deciding-settlement/supplement.int.test.ts",
+        "test/spec/settlement/deciding-settlement/union-mismatch.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "3b8fb043bc26b77330ffd21d246adb437326f44ee3096da1b7d2f495e2f09888"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b7fd0e97579dbbf14b2fbd91ebb63257d34604daf8e95d3f461b614b0a8e591a"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings; bill, supplement, R5, R5a and clawback call chains traced. Static, nothing executed. The bill's credited.push branch has no rule test, same shape as the supplement branch that does; Codex was pointed at it. Existing and unchanged: settleAnswer's closeWaitingRights with a null rightsId closes every waiting rights record of the order, Codex confirms this task does not widen it."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by an independent Claude context, attempt 1, through the real worker assembly; the statement rows are fixtures because their writer is B2-04zq. Round 1 pass, no findings. Out of scope, listed: mismatch diff tickets (B2-04zq), negative differences (B2-04zi), and #12, #18 will need review when B2-03s moves the snapshot base. Static review, nothing executed."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e0b8667d1368400b5ee06ae8b5744e329d689c93",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

@@ -15,6 +15,7 @@ import {
 import { addFen, applyReserve, parseFen, splitByBp, subFen } from '@couli/money';
 import type { Kysely, Transaction, Selectable } from 'kysely';
 import { newUuidV7, type Clock, type JobPayload } from '../../platform/index.ts';
+import { decidingSettlement, latestSeqWithin } from '../settlements/index.ts';
 import {
   claimSettleJob,
   completeSettleJob,
@@ -174,11 +175,6 @@ interface BillConfig {
   readonly creditEnabled: boolean;
 }
 
-interface ChosenSettlement {
-  readonly seq: number;
-  readonly commissionFen: bigint;
-}
-
 interface CandidateFacts {
   readonly orderKey: string;
   readonly orderId: string;
@@ -277,19 +273,6 @@ function previousDay(date: string): string {
     }
   }
   throw new RangeError(`cannot derive the day before ${date}`);
-}
-
-/** 截至生成开始时刻（含）我方已取得的最大 seq；不以联盟结算时间排序。 */
-function chooseSettlement(
-  settlements: readonly BillSourceSettlement[],
-  cutoffMs: number,
-): (BillSourceSettlement & ChosenSettlement) | null {
-  let chosen: BillSourceSettlement | null = null;
-  for (const s of settlements) {
-    if (s.createdAt.getTime() > cutoffMs) continue;
-    if (chosen === null || s.seq > chosen.seq) chosen = s;
-  }
-  return chosen;
 }
 
 /** BR-CALC-02：B = max(0, floor(max(0,N) × (10000 − reserve_bp) / 10000) − tlj_deduct_fen)。 */
@@ -445,7 +428,10 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
     let heldCount = 0;
 
     for (const row of rows) {
-      const chosen = chooseSettlement(row.settlements, cutoffMs);
+      // 两个数不是同一条记录（B2-04zp，BR-FUND-09）：金额、来源、取得时间看决定金额的 chosen；settle_seq 看
+      // 截点内整单最大 seq。R5 与 R5a 比的是整单最大 seq（BR-FUND-04 ⑦），记成 chosen.seq 的话，STATEMENT
+      // 之后再来一条 API 的单每轮都会被 settlement_changed 跳过，永远入不了账。
+      const chosen = decidingSettlement(row.settlements, cutoffMs);
       const order = row.order;
       const facts = (snapshots: readonly { commission_version: number; base_fen: bigint }[]) =>
         order === null
@@ -520,7 +506,7 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
           candidates.set(row.orderKey, {
             orderKey: row.orderKey,
             orderId: order.orderId,
-            settleSeq: chosen.seq,
+            settleSeq: latestSeqWithin(row.settlements, cutoffMs, chosen),
             bSettleFen: bSettle,
             commissionFen: chosen.commissionFen,
             beneficiaryFen: sumFen(split.shares),
@@ -564,14 +550,18 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
       } else if (preliminary === 'deferred') {
         heldCount += 1;
       } else if (preliminary === 'already_credited' && order !== null && chosen !== null) {
-        credited.push({ orderKey: row.orderKey, orderId: order.orderId, settleSeq: chosen.seq });
+        credited.push({
+          orderKey: row.orderKey,
+          orderId: order.orderId,
+          settleSeq: latestSeqWithin(row.settlements, cutoffMs, chosen),
+        });
       }
 
       validations.push({
         orderKey: row.orderKey,
         orderId: order === null ? null : order.orderId,
         result,
-        settleSeq: chosen === null ? null : chosen.seq,
+        settleSeq: chosen === null ? null : latestSeqWithin(row.settlements, cutoffMs, chosen),
       });
     }
 

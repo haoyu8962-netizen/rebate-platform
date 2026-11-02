@@ -139,8 +139,8 @@ import {
   closeWaitingRights,
   hasWaitingRights,
   hasWaitingRightsBefore,
-  readLatestSettlementAt,
 } from '../rights/rights-store.ts';
+import { createSettlementRecords } from '../settlements/index.ts';
 import {
   casClawbackOrder,
   casRightsPending,
@@ -416,6 +416,7 @@ function identity(userId: string, role: string): string {
 
 export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
   const { clock, logger, ledger, gate, events } = deps;
+  const settlements = createSettlementRecords({ clock });
 
   interface Locked {
     readonly order: OrderRow;
@@ -1169,8 +1170,11 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     }
 
     // B2-04lb (D10-474 ②): a new settlement record answering a WAIT_COMMISSION rights record.
+    // B2-04zp (BR-FUND-09): only the record that decides the amount answers it. A later API record
+    // beside a STATEMENT leaves orders.settle_commission_fen where it was: the union's new commission
+    // has not arrived, so a rights record received after that STATEMENT keeps waiting.
     if (change.settle_commission_fen !== null && order.settle_commission_fen !== null) {
-      const recordAt = await readLatestSettlementAt(trx, appId, orderId);
+      const recordAt = await settlements.latestDecidingRecordAt(trx, { appId, orderId });
       if (recordAt !== null && (await hasWaitingRightsBefore(trx, appId, orderId, recordAt))) {
         return settleAnswer(trx, order, key, order.settle_commission_fen);
       }
