@@ -28,7 +28,7 @@ function spec(key: string) {
 
 it('[AC-F1-02zj#2] settle.* items are appended after the 29 earlier items, editable config.business', () => {
   const registry = configRegistry();
-  expect(registry).toHaveLength(110);
+  expect(registry).toHaveLength(111);
   expect(registry[28]!.key).toBe('external_hosts');
   expect(registry.slice(29, 45).map((entry) => entry.key)).toStrictEqual(SETTLE_KEYS);
   for (const entry of registry.slice(29, 45)) {

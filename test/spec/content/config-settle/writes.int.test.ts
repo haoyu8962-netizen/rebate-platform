@@ -210,7 +210,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
   // and B1-05s (D10-480) then feed.fallback_pool_id and the two pool.* keys in registration order,
   // and B1-02zs then withdraw.dormant_reverify_days, and B1-06ze (D10-510) then the three Taobao
   // promotion link keys in registration order, and B1-04zq (D10-543) then the four
-  // order_sync.rescan.* keys in registration order.
+  // order_sync.rescan.* keys in registration order, and B2-04zo then ledger.advance_alert_fen.
   const keys = items.map((item) => item.key);
   const tail = [
     ...inviteNow().map((entry) => entry.key),
@@ -273,6 +273,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'order_sync.rescan.pdd.enabled',
     'order_sync.rescan.jd.days',
     'order_sync.rescan.pdd.days',
+    'ledger.advance_alert_fen',
   ];
   const settleEnd = keys.length - tail.length;
   const settleStart = settleEnd - 16;

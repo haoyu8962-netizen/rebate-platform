@@ -257,6 +257,10 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   spec('order_sync.rescan.pdd.enabled', 'boolean', 'config.business'),
   businessInteger('order_sync.rescan.jd.days', 1),
   businessInteger('order_sync.rescan.pdd.days', 1),
+  // B2-04zo (BR-FUND-20 细则): the advance alert threshold in fen, a whole number of at least 0,
+  // config.business. Unset by default (no seed row; unset = the board shows but nothing alerts),
+  // the super admin fills it in before launch; 0 is a valid threshold, not off. Registration only.
+  businessInteger('ledger.advance_alert_fen', 0),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

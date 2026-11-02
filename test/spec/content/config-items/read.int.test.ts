@@ -6,6 +6,7 @@ import { configRegistry } from '../../../../apps/api/src/modules/content/domain/
 import { seed } from '../../admin/accounts/kit.ts';
 import { signedIn, useHarness } from '../../admin/auth/kit.ts';
 import {
+  ADVANCE_ALERT,
   AUTO_ENABLE_CHECK,
   AUTO_PAYOUT,
   EXPECTED,
@@ -53,7 +54,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // B1-05l: + search.hot_words and search.keyword_routes; B1-15zd: + the seven retention.* keys;
   // B2-08cz: + the three tax.SERVICE_FEE.* keys; B1-05s: + feed.fallback_pool_id and pool.*;
   // B1-02zs: + withdraw.dormant_reverify_days; B1-06ze: + the three Taobao promotion link keys;
-  // B1-04zq: + the four order_sync.rescan.* keys.
+  // B1-04zq: + the four order_sync.rescan.* keys; B2-04zo: + ledger.advance_alert_fen.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -67,6 +68,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...REVERIFY,
     ...PROMO_LINK,
     ...ORDER_RESCAN,
+    ...ADVANCE_ALERT,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

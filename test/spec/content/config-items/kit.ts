@@ -348,6 +348,14 @@ export const ORDER_RESCAN_UNSEEDED: readonly string[] = [
   'order_sync.rescan.jd.days',
   'order_sync.rescan.pdd.days',
 ];
+// B2-04zo (BR-FUND-20 细则): the advance alert threshold in fen, registered right after
+// ORDER_RESCAN: editable config.business, options null, with no seed row (unset = no alert, the
+// super admin fills it in; ADVANCE_ALERT_UNSEEDED). Not part of expectedNow() either.
+export const ADVANCE_ALERT: readonly Expected[] = [
+  row('ledger.advance_alert_fen', 'number', 'config.business'),
+];
+/** B2-04zo (BR-FUND-20 细则): unset by default (no alert until filled in), hence no seed row. */
+export const ADVANCE_ALERT_UNSEEDED: readonly string[] = ['ledger.advance_alert_fen'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -363,6 +371,7 @@ export const expectedOf = (key: string): Expected => {
     ...REVERIFY,
     ...PROMO_LINK,
     ...ORDER_RESCAN,
+    ...ADVANCE_ALERT,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

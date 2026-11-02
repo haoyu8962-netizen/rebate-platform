@@ -37,8 +37,8 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // order, then B2-08cz (D10-456 ④) the three tax.SERVICE_FEE.* keys in this order, then B1-05s
 // (D10-480) feed.fallback_pool_id and the two pool.* keys in this order, then B1-02zs
 // withdraw.dormant_reverify_days, then B1-06ze (D10-510) the three Taobao promotion link keys in
-// this order, then B1-04zq (D10-543) the four order_sync.rescan.* keys in this order, and nothing
-// else.
+// this order, then B1-04zq (D10-543) the four order_sync.rescan.* keys in this order, then B2-04zo
+// ledger.advance_alert_fen, and nothing else.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
   const i = keys.indexOf('settle.statement.grace_days');
@@ -108,6 +108,7 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'order_sync.rescan.pdd.enabled',
     'order_sync.rescan.jd.days',
     'order_sync.rescan.pdd.days',
+    'ledger.advance_alert_fen',
   ]);
 });
 
