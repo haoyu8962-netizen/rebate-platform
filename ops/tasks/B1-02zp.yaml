@@ -3,6 +3,7 @@ repo: rebate-platform
 title: 旧号加验打标与三接口——建立会话 / 刷新时覆盖 last_active_at 与 last_login_device_hash，并在开关 > 0、距最近活动 ≥ 开关天数且设备与上次登录设备不同时打待加验标记（记打标时刻、固定可信身份；已有标记不重判；并号先判手机号账号、迁入身份不算可信）；实现 GET /v1/me/reverify（getReverify）、身份证号加验（reverifyByIdNumber，只比对已存实名）、第三方加验（reverifyByOauth），通过只记当前设备为已加验设备；失败计数按账号、+08:00 日切、原子预占（D10-149 / D10-161），连续 5 次当天转 manual 回 10010；去掉三接口 planned
 type: impl
 # 2026-10-31 入账（identity-lane，D10-453 ⑥ (b)）。依据 BR-WDR-01 细则（07_WDR 123–135 行）、契约 CT-26c（20005 带 fail_limit / fail_remaining，20004 / 50305 不计失败）。依赖 B1-02zo 存储；契约只去 planned 标记，落地报契约槽。
+# 2026-11-02 admin 接手（编排 09:2x）。D10-567：标题里「并号先判手机号账号、迁入身份不算可信」挪到 B1-20c，本单不实现、不写测试（FU-MERGE-REVERIFY）。
 refs: []
 refs_hash: {}
 deps: [B1-02zo]
