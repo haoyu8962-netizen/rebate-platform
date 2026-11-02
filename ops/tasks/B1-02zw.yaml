@@ -1,0 +1,19 @@
+id: B1-02zw
+repo: rebate-platform
+title: 后台改号清除旧号加验标记（CT-26j，adminEditUserProfile 的 Pending re-verification 段）——账号带待加验标记时，改手机号与吊销会话同一事务解绑可信身份以外的第三方身份（user_oauth 行）、清标记、打标时刻、可信身份快照与失败计数，已加验设备保留；解绑含 Apple 身份时同事务写撤销作业（带重试，只带存储密文），提交后调 Apple 撤销，失败只重试告警、不回滚改号（BR-WDR-01 细则「清除标记只走人工」、D10-513 ④）；只改昵称或账号无标记时不解绑不清除
+type: impl
+# 2026-11-02 入账（admin-backend，编排 18:59：从 B1-02zq 标题拆出，替换 admin-profile-edit.ts 的 TODO）。动用户身份绑定，不放宽校验。依赖 B1-02zq 之后开工。
+refs: []
+refs_hash: {}
+deps: [B1-02zp, B1-02zq]
+paths:
+  - 'apps/api/src/modules/identity/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/identity/reverify-clear/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/reverify-clear/**'
+status: todo

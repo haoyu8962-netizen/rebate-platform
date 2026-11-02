@@ -1,0 +1,26 @@
+id: B1-02zx
+repo: rebate-platform
+title: 后台登记已加验设备（CT-26j，adminAddUserReverifiedDevice，POST /admin/v1/users/{user_id}/reverified-devices）——权限点 user.phone_change、totp 档 step-up，把用户指定设备记为已加验设备（source admin），标记、打标时刻与可信身份不动，必填原因并写审计；去掉 planned
+type: impl
+# 2026-11-02 入账（admin-backend，编排 18:59：从 B1-02zq 范围拆出）。只核实身份不改号时用，不清标记（BR-WDR-01 细则「清除标记只走人工」）。bindOauthIdentity 是 P1，契约写明开工时才实现，这里不入账。
+refs: []
+refs_hash: {}
+deps: [B1-02zp, B1-02zq]
+paths:
+  - 'apps/api/src/modules/identity/**'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/identity/reverify-admin-device/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/reverify-admin-device/**'
+status: todo
