@@ -56,6 +56,7 @@ import {
   type TokenPrincipal,
 } from '../../platform/index.ts';
 import type { TokenService } from './access-tokens.ts';
+import { recordRefreshActivity } from './reverify-activity.ts';
 import { sessionScope, type MinimumVersionReader } from './session-scope.ts';
 import type { AfterSessionsRevoked, SessionRevokeReason } from './revoke-sessions.ts';
 import { accessExpiry, revokeSession } from './sessions.ts';
@@ -203,6 +204,13 @@ export function createRefreshService(options: RefreshOptions): RefreshService {
         updated_at: now,
       })
       .execute();
+    // BR-WDR-01 细则「判定」: a refresh overwrites the account's two values and never judges.
+    await recordRefreshActivity(trx, {
+      app_id: appId,
+      user_id: session.user_id,
+      device_id: session.device_id,
+      now,
+    });
     const accessToken = await tokens.issueAccess({
       uid: session.user_id,
       app_id: appId,

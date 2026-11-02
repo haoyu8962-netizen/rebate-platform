@@ -226,7 +226,8 @@ it.each(
     expect(bind).not.toHaveBeenCalled();
     expect(f.register).not.toHaveBeenCalled();
     const after = await rows(kit, f.appId);
-    expect(after.users).toEqual(before.users);
+    const { expectOnlyLoginActivity } = await import('../reverify/login-activity.ts');
+    expectOnlyLoginActivity(before.users, after.users, { uid, at: f.clock.now(), hash: f.hash });
     expect(after.registrations).toEqual(before.registrations);
   },
 );

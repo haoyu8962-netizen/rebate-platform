@@ -130,6 +130,7 @@ import {
 } from './application/sms-codes.ts';
 import { createLogout, type Logout } from './application/logout.ts';
 import { createRefreshService, type RefreshService } from './application/refresh.ts';
+import { createReverifyService, type ReverifyService } from './application/reverify.ts';
 import { unbindRevoked, type SessionPushTokens } from './application/push-tokens.ts';
 import { createRecordInitialLevel, type InitialLevelLog } from './application/initial-level-log.ts';
 import {
@@ -177,6 +178,7 @@ import {
   PAYOUT_ACCOUNT_CHANGE,
   PAYOUT_ACCOUNT_READER,
   REFRESH,
+  REVERIFY,
   SMS_CODES,
   SMS_LOGIN,
   STEP_UP,
@@ -196,6 +198,7 @@ import { OauthLoginController } from './http/public/oauth-login.controller.ts';
 import { StepUpController } from './http/public/step-up.controller.ts';
 import { LogoutController } from './http/public/logout.controller.ts';
 import { RefreshController } from './http/public/refresh.controller.ts';
+import { ReverifyController } from './http/public/reverify.controller.ts';
 import { LandingSmsCodesController } from './http/public/landing-sms-codes.controller.ts';
 import { SmsCodesController } from './http/public/sms-codes.controller.ts';
 import { SmsLoginController } from './http/public/sms-login.controller.ts';
@@ -517,6 +520,7 @@ export class IdentityModule {
         TipsController,
         MeController,
         RealnameController,
+        ReverifyController,
         LaborAgreementController,
         PayoutAccountController,
         DeletionController,
@@ -1102,6 +1106,36 @@ export class IdentityModule {
                   keys,
                   config: reader,
                   sms,
+                  attempts,
+                  ...(thirdPartyIdentity === null ? {} : { thirdPartyIdentity }),
+                }),
+        },
+        {
+          // The three interfaces of the re-verification (B1-02zp, BR-WDR-01 细则).
+          provide: REVERIFY,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            OAUTH_ATTEMPTS,
+            THIRD_PARTY_IDENTITY,
+            { token: DB, optional: true },
+            { token: FIELD_CRYPTO, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            attempts: OauthAttemptService | null,
+            thirdPartyIdentity: ThirdPartyIdentityPort | null,
+            db?: Kysely<Database>,
+            fieldCrypto?: FieldCrypto,
+          ): ReverifyService | null =>
+            db === undefined || fieldCrypto === undefined || attempts === null
+              ? null
+              : createReverifyService({
+                  db,
+                  clock,
+                  crypto: fieldCrypto,
+                  logger,
                   attempts,
                   ...(thirdPartyIdentity === null ? {} : { thirdPartyIdentity }),
                 }),

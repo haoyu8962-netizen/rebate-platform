@@ -21,6 +21,9 @@ export const TOKEN_SERVICE = Symbol('TOKEN_SERVICE');
 export const TOKEN_CHECK = Symbol('TOKEN_CHECK');
 
 /** The Logout use case (logout.ts). */
+/** The ReverifyService (reverify.ts); null when the process has no database or field cipher. */
+export const REVERIFY = Symbol('IDENTITY_REVERIFY');
+
 export const LOGOUT = Symbol('LOGOUT');
 
 // Nest token of the SMS login wiring (B1-02j, identity.module.ts).

@@ -31,12 +31,9 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "adminReverseUnionReceipt",
   "adminSearch",
   "bindOauthIdentity",
-  "getReverify",
   "listAgentSessionMessages",
   "loginByHuawei",
   "mergeAccount",
   "reportAgentMessage",
-  "reverifyByIdNumber",
-  "reverifyByOauth",
   "setAgentMessageFeedback",
 ]);

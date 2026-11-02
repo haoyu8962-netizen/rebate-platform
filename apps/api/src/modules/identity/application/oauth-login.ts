@@ -13,6 +13,7 @@ import {
   type LoginCompletionOptions,
 } from './login-completion.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
+import { readDormantReverifyDays } from './reverify-activity.ts';
 import { snapshotRegistrationConfig, type RegistrationService } from './registration.ts';
 import { sessionScope, type MinimumVersionReader } from './session-scope.ts';
 import type { SmsConfigReader } from './sms-codes.ts';
@@ -134,6 +135,8 @@ export function createOauthLoginService(options: OauthLoginOptions): OauthLoginS
         scope === 'deletion_only'
           ? undefined
           : await snapshotRegistrationConfig(options.config, appId);
+      const dormantReverifyDays = await readDormantReverifyDays(options.config, appId);
+      const loginCommand = { ...command, dormantReverifyDays };
 
       async function signIn(
         trx: Transaction<DB>,
@@ -160,7 +163,7 @@ export function createOauthLoginService(options: OauthLoginOptions): OauthLoginS
         return {
           user_id: account.id,
           is_new_user: isNew,
-          tokens: await completeLogin(trx, command, account, scope, provider, options),
+          tokens: await completeLogin(trx, loginCommand, account, scope, provider, options),
         };
       }
 

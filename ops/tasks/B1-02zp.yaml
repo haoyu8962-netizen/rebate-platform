@@ -180,4 +180,5 @@ red_exempt:
   - file: test/spec/identity/sms-login/http.int.test.ts
     test: '[AC-B1-02j#32][04 §6.1] 已注册登录路由执行签名与设备来源检查，客户端不能替换 app 身份'
     reason: '冻结用例，测试体未改；本任务只改同文件的 users 比较（D10-569，#24），同文件被整体判定'
-status: todo
+status: done
+pr: 2242

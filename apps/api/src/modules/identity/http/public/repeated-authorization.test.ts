@@ -139,16 +139,21 @@ it('[BR-ID-01][BR-ID-07] through Node HTTP parsing a valid token followed by `Au
   });
   await app.init();
   const server = app.getHttpAdapter().getInstance();
-  // An unsigned x-auth login GET operation the entry does not implement yet (picked from the
-  // contract, so an implemented route is never shadowed).
+  // An unsigned GET operation that reads the token and that the entry does not implement (picked
+  // from the contract, so an implemented route is never shadowed). Stage ② judges a presented token
+  // alike under x-auth login and optional.
   const probe = contractAuthRoutes().find(
     (route) =>
-      route.auth === 'login' &&
+      route.path.startsWith('/v1/') &&
+      route.auth !== 'none' &&
       route.method === 'GET' &&
       !isContractSignedRoute(route.method, route.path) &&
       !server.hasRoute({ method: route.method, url: route.path }),
   );
-  expect(probe, 'an unimplemented unsigned login GET operation of the contract').toBeDefined();
+  expect(
+    probe,
+    'an unimplemented unsigned GET operation of the contract that reads the token',
+  ).toBeDefined();
   const handler = vi.fn((request: object) => ({ uid: tokenPrincipal(request)?.uid ?? null }));
   server.route({ method: probe!.method, url: probe!.path, handler });
   await server.ready();

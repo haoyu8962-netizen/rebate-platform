@@ -7,7 +7,9 @@
 // (users.phone_hmac set → 20001 fields=[provider], BR-ID-08); payout_bind is WeChat only and
 // carries no action (20001; the contract schema already refuses both). The attempt is bound to the
 // provider, the purpose, the request's verified device (stage ①) and, for step_up and payout_bind,
-// the user (step_up also the action); its nonce is 32 random bytes in hex (≥ 128 bits). Lifetime
+// the user (step_up also the action); purpose=reverify (BR-WDR-01 细则) needs the token's principal
+// and a provider among the identities frozen at flagging (otherwise 20001 fields=[provider], an
+// account with a bound phone included) and is bound to the user; its nonce is 32 random bytes in hex (≥ 128 bits). Lifetime
 // auth.oauth_attempt_ttl_sec of the app (default 600 s), judged on the injected Clock; the Redis
 // TTL only collects the key.
 //
@@ -35,6 +37,7 @@ import {
   type RedisNamespace,
   type TokenPrincipal,
 } from '../../platform/index.ts';
+import { trustedIdentitiesOf } from '../domain/reverify.ts';
 import { configuredSeconds, instantPlus } from './config-seconds.ts';
 import type { SmsConfigReader } from './sms-codes.ts';
 
@@ -184,6 +187,20 @@ export function createOauthAttemptService(options: OauthAttemptOptions): OauthAt
     return row === undefined ? null : row.phone_hmac !== null;
   }
 
+  /** The third-party identities frozen when the account was flagged; null without a user row. */
+  async function trustedProviders(appId: string, uid: string): Promise<readonly string[] | null> {
+    const row = await db
+      .selectFrom('users')
+      .select(['reverify_flagged_at', 'reverify_trusted'])
+      .where('app_id', '=', appId)
+      .where('id', '=', uid)
+      .executeTakeFirst();
+    if (row === undefined) return null;
+    return row.reverify_flagged_at === null
+      ? []
+      : trustedIdentitiesOf(row.reverify_trusted).providers;
+  }
+
   const service: OauthAttemptService = {
     async issue(command: OauthAttemptCommand): Promise<OauthAttemptResult> {
       const { body, verifiedDevice, principal } = command;
@@ -210,6 +227,11 @@ export function createOauthAttemptService(options: OauthAttemptOptions): OauthAt
           if (bound === null) return { code: 10001 };
           // BR-ID-08: an account with a bound phone verifies by SMS.
           if (bound) return { code: 20001, data: { fields: ['provider'] } };
+        }
+        if (purpose === 'reverify') {
+          const trusted = await trustedProviders(appId, principal.uid);
+          if (trusted === null) return { code: 10001 };
+          if (!trusted.includes(provider)) return { code: 20001, data: { fields: ['provider'] } };
         }
       }
       const ttlSeconds = await configuredSeconds(

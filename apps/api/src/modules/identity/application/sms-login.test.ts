@@ -293,6 +293,7 @@ it('[S1][BR-ID-05] 首次登录：注册配置在事务开始前一次读齐，�
     'config:couli:level.default',
     'config:couli:risk.merge_tombstone_dedupe',
     'config:couli:risk.device_register_limit',
+    'config:couli:withdraw.dormant_reverify_days',
   ]);
   expect(events.slice(begin).filter((event) => event.startsWith('config:'))).toEqual([]);
   expect(events.slice(begin)).toEqual(['begin', 'register', 'commit']);

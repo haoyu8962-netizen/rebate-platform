@@ -5920,6 +5920,7 @@ CREATE TABLE app.users (
     reverify_trusted jsonb,
     reverify_fail_count integer DEFAULT 0 NOT NULL,
     reverify_fail_day date,
+    reverify_fail_epoch integer DEFAULT 0 NOT NULL,
     CONSTRAINT users_last_login_device_hash_check CHECK ((last_login_device_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT users_nickname_change_month_check CHECK ((nickname_change_month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'::text)),
     CONSTRAINT users_reverify_fail_count_check CHECK ((reverify_fail_count >= 0)),

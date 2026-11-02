@@ -2142,6 +2142,7 @@ export interface Users {
   registered_channel: string | null;
   reverify_fail_count: Generated<number>;
   reverify_fail_day: Timestamp | null;
+  reverify_fail_epoch: Generated<number>;
   reverify_flagged_at: Timestamp | null;
   reverify_trusted: Json | null;
   row_version: Generated<number>;

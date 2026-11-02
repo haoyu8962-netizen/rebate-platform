@@ -96,12 +96,18 @@ type OauthBody =
   | Schema<'StepUpByAppleRequest'>
   | Schema<'StepUpByHuaweiRequest'>;
 
+/** The credential fields of a provider's body, as login, step-up and re-verification carry them. */
+type OauthCredentialFields =
+  | Pick<Schema<'ReverifyByOauthWechat'>, 'provider' | 'code'>
+  | Pick<Schema<'ReverifyByOauthApple'>, 'provider' | 'identity_token' | 'authorization_code'>
+  | Pick<Schema<'ReverifyByOauthHuawei'>, 'provider' | 'authorization_code'>;
+
 function isSmsBody(body: SmsBody | OauthBody): body is SmsBody {
   return !('provider' in body);
 }
 
 /** The provider's credential fields of the body, without action and attempt_id. */
-function credentialsOf(body: OauthBody): ThirdPartyCredentials {
+export function credentialsOf(body: OauthCredentialFields): ThirdPartyCredentials {
   switch (body.provider) {
     case 'wechat':
       return { provider: 'wechat', code: body.code };

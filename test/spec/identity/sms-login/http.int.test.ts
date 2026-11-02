@@ -146,7 +146,12 @@ it.each([
       scp: scope,
     });
     const after = await rows(kit, 'couli');
-    expect(after.users).toEqual(before.users);
+    const { expectOnlyLoginActivity } = await import('../reverify/login-activity.ts');
+    expectOnlyLoginActivity(before.users, after.users, {
+      uid,
+      at: clock.now(),
+      hash: c.deviceHash,
+    });
     expect(after.registrations).toEqual(before.registrations);
     expect(
       after.consents.filter((row) => row.user_id === uid && row.channel === 'login_page'),

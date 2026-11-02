@@ -53,6 +53,7 @@ import type { Kysely, Transaction } from 'kysely';
 import type { Clock, FieldCrypto, RootLogger } from '../../platform/index.ts';
 import { normalizeInviteCode } from '../domain/login.ts';
 import { completeLogin, type FirstAppLoginReview } from './login-completion.ts';
+import { readDormantReverifyDays } from './reverify-activity.ts';
 export type { FirstAppLoginReview } from './login-completion.ts';
 import { normalize_phone } from '../domain/normalize-phone.ts';
 import { PHONE_BLIND_INDEX_CONTEXT } from '../domain/registration.ts';
@@ -359,13 +360,15 @@ export function createSmsLoginService(options: SmsLoginOptions): SmsLoginService
         reader === undefined || scope === 'deletion_only'
           ? undefined
           : await snapshotRegistrationConfig(reader, appId);
+      const dormantReverifyDays = await readDormantReverifyDays(reader, appId);
+      const loginCommand = { ...command, dormantReverifyDays };
       let signed: Signed;
       try {
         signed = await db
           .transaction()
           .setIsolationLevel('read committed')
           .execute((trx) =>
-            inTransaction(trx, command, phone, phoneHmac, inviteCode, scope, config),
+            inTransaction(trx, loginCommand, phone, phoneHmac, inviteCode, scope, config),
           );
       } catch (error) {
         if (!(error instanceof LoginAbort)) throw error;

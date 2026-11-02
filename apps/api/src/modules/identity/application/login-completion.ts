@@ -20,6 +20,7 @@ import {
 import { deviceHashOf, type LoginAccount } from '../infra/login-accounts.ts';
 import { hasLoginLog, insertLoginLog } from '../infra/login-logs.ts';
 import type { TokenService } from './access-tokens.ts';
+import { recordLoginActivity } from './reverify-activity.ts';
 import type { SessionPushTokens } from './push-tokens.ts';
 import { createSession, type LoginMethod } from './sessions.ts';
 
@@ -30,6 +31,8 @@ export interface LoginCommand {
   readonly platform: ClientPlatform;
   readonly client_ip: string;
   readonly body: Pick<Schema<'LoginBySmsRequest'>, 'consent_at' | 'legal_versions'>;
+  /** withdraw.dormant_reverify_days, read before the transaction (reverify-activity.ts); absent: off. */
+  readonly dormantReverifyDays?: number | undefined;
 }
 /** B1-11 supplies the review; identity selects landing-bound users with no login_logs.
  * Invoke on App platforms only, in the same transaction as the first successful login log.
@@ -161,6 +164,14 @@ export async function completeLogin(
   if (review !== undefined && reviewCandidate && firstLogin) {
     await review.review(trx, { app_id: appId, user_id: userId, device_id_hash: deviceIdHash });
   }
+  // BR-WDR-01 细则「判定」: every login method passes here.
+  await recordLoginActivity(trx, {
+    app_id: appId,
+    user_id: userId,
+    deviceHash,
+    now,
+    days: command.dormantReverifyDays,
+  });
   const pushTokens = options.pushTokens;
   const session = await createSession(
     trx,
