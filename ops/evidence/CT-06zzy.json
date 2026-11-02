@@ -1,0 +1,43 @@
+{
+  "task": "CT-06zzy",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "spec_commit": "542ded8d00a5ce07b1e2e24bddd03fc19727e687",
+  "red_tests": [],
+  "risk_note": "RV2 by path (pnpm-lock.yaml, pnpm-workspace.yaml). Development dependencies only; pnpm audit --prod was already 0 and stays 0. vite 8.3.0 to 8.3.5, vitest and @vitest/* 5.0.1 to 5.0.5, overrides undici 6.29.1 and 8.12.2 and source-map-js 1.2.2, all within their major version and at least 7 days old. Full pnpm audit goes from 9 high, 19 moderate, 1 low to 0 high, 5 moderate: glob and minimatch stay, their fixes cross a major version and were published under 7 days ago, and they sit in development tools (node-pg-migrate, eslint) run only locally and in CI. The rest of dependabot #2221 (30 items) has no security content and is not taken. #2222 (@types/node 26, runtime is Node 24) and #2223 (@readme/openapi-parser 10, generators and tests only) are closed.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings; no production dependency moved. Static only: it read repository usage and the lockfile, not upstream changelogs, and ran nothing. It notes the source-map-js override has no major lower bound (today it only moves 1.2.1 to 1.2.2) and did not itself confirm the count of 5 moderate. The audit numbers are the implementer's check."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "none",
+    "rounds": 0,
+    "last_verdict": "n/a",
+    "note": "deps task, ledger tester: none"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5ced75ad6a1ae3016a9a4f95064a56d680d47a4a",
+    "specs": "242c82f497fb866ceec0a6619e38ad2ac0f07e81"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
