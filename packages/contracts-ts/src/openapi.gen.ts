@@ -4414,8 +4414,10 @@ export interface paths {
          * @description Permission point `user.phone_change` (04 §11.2, 编辑会员信息; the same point as recording a
          *     re-verified device, POST /admin/v1/users/{user_id}/reverified-devices; 编排 D10-513); lacking
          *     it is 10403 with `data.reason=admin_permission_denied`. Read only: no step-up, and listing
-         *     does not write an audit record. Lists the user's devices that are not revoked
-         *     (devices.user_id is this user, revoked_at null), `last_seen_at` descending (then the
+         *     does not write an audit record. Lists the user's devices that are not revoked: a device of
+         *     this user is one a session of this user was bound to, revoked sessions included (D10-571 ⑨,
+         *     D10-585; devices are shared per install and devices.user_id is not written), and the device
+         *     itself has revoked_at null. `last_seen_at` descending (then the
          *     server's internal order for the same time), page by page (`page`, `page_size` ≤ 200, above
          *     that 20001). Each row: `device_id`, `platform`, `app_version`, `created_at`,
          *     `last_seen_at` and `reverified` — the device's re-verified record (`source` self / admin
@@ -4461,9 +4463,12 @@ export interface paths {
          *     with `data.fields` naming the field; an empty reason after trimming is
          *     `data.fields=[reason]`) → an unknown `user_id`, or one of another app, is 20001 with
          *     `data.fields=[user_id]` → a `device_id` that is unknown, of another app, revoked, or not a
-         *     device of this user (devices.user_id is not this user) is 20001 with
+         *     device of this user (no session of this user, revoked sessions included, was bound to it;
+         *     D10-571 ⑨, D10-585) is 20001 with
          *     `data.fields=[device_id]` → the account's deletion is complete is 30419 with
-         *     `data.reason=account_deleted` → the account carries no pending re-verification flag is
+         *     `data.reason=account_deleted`, and an account in deletion (users.status deleting) is 30419
+         *     with `data.reason=account_deleting` and `data.stage` (D10-585) → the account carries no pending
+         *     re-verification flag is
          *     30419 with `data.reason=reverify_not_pending` (a device recorded before a later flag would
          *     bypass that flag; 代理补全的默认, as D10-246).
          *     Effect: one reverified_devices row (app, user, the device's device_hash, source admin) is
