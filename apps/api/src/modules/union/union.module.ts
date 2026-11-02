@@ -42,10 +42,16 @@ import {
   type UnionRegistry,
 } from './infra/registry.ts';
 import type { UnionTransport } from './infra/replay.ts';
-import type { TaobaoOrderSlotReader, TaobaoOrderWarning } from './infra/taobao/taobao-adapter.ts';
+import type {
+  TaobaoOrderSlotReader,
+  TaobaoOrderWarning,
+  TaobaoSearchSlotReader,
+  TaobaoSearchWarning,
+} from './infra/taobao/taobao-adapter.ts';
 import type { TaobaoWarning } from './infra/taobao/response.ts';
 import { readActivePddQueryPid } from './pids/query-reader.ts';
 import { readTaobaoOrderSlots } from './pids/taobao-order-slots.ts';
+import { readTaobaoSearchSlot } from './pids/taobao-search-slot.ts';
 
 /**
  * B1-22q: the second argument of UnionModule.forRoot(directory, options). `config` builds union's
@@ -109,6 +115,9 @@ export const UNION_ENDPOINTS_DIR = fileURLToPath(
  * B1-04zn (D10-530): taobao live also gets TAOBAO_CONVERT_SOURCE / TAOBAO_SEARCH_SOURCE from the
  * passed config, and with the 大淘客 order source an order slot reader over the optional database
  * (union_pids, every Taobao PID of ctx.appId) plus a warn hook logging only event code and count.
+ * B1-04zx (D10-582): taobao live always gets a search slot reader over the optional database
+ * (the active query PID of ctx.appId) and a skip hook logging only event and reason; neither needs
+ * the 大淘客 order source, so the official search runs on the official credentials alone.
  * jd with mode=live (B1-04ze): local / test and prod refuse like taobao, after taobao's own check;
  * staging with both JD_APP_KEY and JD_APP_SECRET_FILE reads the secret file once here and assembles
  * the real JdUnionAdapter over its own archived HTTPS transport (registry option `jdLive`); staging
@@ -210,6 +219,34 @@ function taobaoOrderSlots(source: QueryPidSource): TaobaoOrderSlotReader {
     }
     return readTaobaoOrderSlots(db, ctx.appId);
   };
+}
+
+/**
+ * B1-04zx (D10-582; BR-PROD-07): the live Taobao adapter's search slot reader, the active query PID
+ * of ctx.appId, read again on every official search. Without a database it stays
+ * `adapter_unimplemented` and nothing is read or sent. A failed read is not caught: searchItems
+ * rejects with it.
+ */
+function taobaoSearchSlot(source: QueryPidSource): TaobaoSearchSlotReader {
+  return async (ctx) => {
+    const db = source.db;
+    if (db === undefined) {
+      throw new UnionError(
+        'adapter_unimplemented',
+        'Union adapter for taobao has no database to read the search slot from (searchItems)',
+        'taobao',
+      );
+    }
+    return readTaobaoSearchSlot(db, ctx.appId);
+  };
+}
+
+/**
+ * The official search skip hook (B1-04zx) as flat pino fields: only the event and the reason, never
+ * a value of the row; not an API permission warning (logTaobaoWarning).
+ */
+function logTaobaoSearchWarning(logger: RootLogger, warning: TaobaoSearchWarning): void {
+  logger.warn({ event: warning.event, reason: warning.reason }, 'taobao search row skipped');
 }
 
 /** The Jingdong warn hook (B1-04za) as flat pino fields: only the method name and the code. */
@@ -424,6 +461,9 @@ async function startUnionRegistry(
       // them counts as the defaults); the adapter only acts on 'dataoke' with an order source.
       convertSource: config.taobaoConvertSource ?? 'baichuan',
       searchSource: config.taobaoSearchSource ?? 'official',
+      // B1-04zx: not tied to the order source; the official search needs only these two.
+      searchSlot: taobaoSearchSlot(source),
+      searchWarn: (warning: TaobaoSearchWarning) => logTaobaoSearchWarning(logger, warning),
       ...(orderSource === undefined
         ? {}
         : {

@@ -136,17 +136,24 @@ function promotionsOf(price: Record<string, unknown>): readonly TaobaoPromotion[
   return entries.map(promotionOf);
 }
 
-/** 万分比整数串（或安全整数）→ bp，0..10000；其余 upstream_unavailable。 */
-function commissionBp(value: unknown): bigint {
+/** 万分比整数串（或安全整数）→ bp，0..10000；其余 undefined。 */
+function commissionBp(value: unknown): bigint | undefined {
   let bp: bigint | undefined;
   if (typeof value === 'string' && /^[0-9]{1,5}$/.test(value)) bp = BigInt(value);
   else if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
     bp = BigInt(value);
   }
-  if (bp === undefined || bp > MAX_COMMISSION_BP) {
-    throw unavailable('commission_rate must be an integer per-ten-thousand within 0..10000');
-  }
-  return bp;
+  return bp === undefined || bp > MAX_COMMISSION_BP ? undefined : bp;
+}
+
+function rowTitle(row: Record<string, unknown>): string | undefined {
+  const title = field(recordField(row, 'item_basic_info'), 'title');
+  return typeof title === 'string' && title.trim() !== '' ? title : undefined;
+}
+
+function rowCommissionBp(row: Record<string, unknown>): bigint | undefined {
+  const income = recordField(recordField(row, 'publish_info'), 'income_info');
+  return commissionBp(field(income, 'commission_rate'));
 }
 
 /** 一级类目 ID：非负安全整数或十进制数字串 → 十进制串；其余不填。 */
@@ -154,6 +161,17 @@ function categoryId(value: unknown): string | undefined {
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
   if (typeof value === 'string' && /^[0-9]{1,19}$/.test(value)) return value;
   return undefined;
+}
+
+/**
+ * mapTaobaoDetail 会拒绝这一行的原因（同一判定，先标题后佣金）；合格 → null。官方搜索（B1-04zx）据此
+ * 跳行，合格的行直接交 mapTaobaoDetail，不另写一份解析。
+ */
+export function detailRowFault(
+  row: Record<string, unknown>,
+): 'title_missing' | 'commission_invalid' | null {
+  if (rowTitle(row) === undefined) return 'title_missing';
+  return rowCommissionBp(row) === undefined ? 'commission_invalid' : null;
 }
 
 /**
@@ -169,10 +187,12 @@ export function mapTaobaoDetail(
   if (!isRecord(input)) throw unavailable('result is not an object');
   const basic = recordField(input, 'item_basic_info');
   const price = recordField(input, 'price_promotion_info');
-  const income = recordField(recordField(input, 'publish_info'), 'income_info');
-  const title = field(basic, 'title');
-  if (typeof title !== 'string' || title.trim() === '') throw unavailable('title is missing');
-  const commission = commissionBp(field(income, 'commission_rate'));
+  const title = rowTitle(input);
+  if (title === undefined) throw unavailable('title is missing');
+  const commission = rowCommissionBp(input);
+  if (commission === undefined) {
+    throw unavailable('commission_rate must be an integer per-ten-thousand within 0..10000');
+  }
   const small = field(basic, 'small_images');
   const images = normalizeItemImages({
     main_image_url: field(basic, 'pict_url'),

@@ -27,6 +27,10 @@
 // GET /api/goods/get-dtk-search-goods（version v2.1.2）搜索，goodsId 经 item.info.upgrade.get 换成
 // 凑狸口径 item_id（换不到不返回），映射与缓存见 dataoke-search.ts；两种请求归档 kind 都是 query。
 // 否则 searchItems 保持 adapter_unimplemented（不取凭据、不发请求）。
+// B1-04zx（D10-504 / D10-582）：searchSource 为 official（缺省也是）且有 searchSlot 时，searchItems 走官方
+// taobao.tbk.dg.material.optional.upgrade，搜索 item_id 经 item.info.upgrade.get 按最后一段换成详情口径，
+// 不依赖 orderSource；口径见 official-search.ts，两种请求归档 kind 都是 query。没有 searchSlot 保持
+// adapter_unimplemented（不取凭据、不发请求）。
 // B1-04f（D10-486 ② / D10-488）：listOrders 经注入的大淘客订单源（orderSource）GET
 // /api/tb-service/get-order-details（v1.0.0），只留 orderSlots 给出的推广位的订单；两者缺一即
 // adapter_unimplemented。每次调用取一个上游页（listOrdersMetering = per_request，经 ctx.gateUpstream）。
@@ -79,6 +83,21 @@ import {
   taobaoItemIdBatches,
   type TaobaoItemIdCache,
 } from './dataoke-search.ts';
+import {
+  matchSearchItemIds,
+  officialSearchCandidates,
+  officialSearchNextCursor,
+  officialSearchPage,
+  officialSearchParameters,
+  parseOfficialSearchCursor,
+  reportSearchSkip,
+  searchAdzone,
+  TAOBAO_OFFICIAL_SEARCH,
+  TAOBAO_OFFICIAL_SEARCH_ENVELOPE,
+  TAOBAO_OFFICIAL_SEARCH_SUB_CODES,
+  type TaobaoSearchSlotReader,
+  type TaobaoSearchWarning,
+} from './official-search.ts';
 import {
   detailItemId,
   detailRows,
@@ -150,6 +169,11 @@ import {
 } from './sign.ts';
 
 export type { TaobaoParameter, TaobaoParameters } from './sign.ts';
+export type {
+  TaobaoSearchSkipReason,
+  TaobaoSearchSlotReader,
+  TaobaoSearchWarning,
+} from './official-search.ts';
 export type { TaobaoWarning } from './response.ts';
 export type {
   TaobaoOrderSlotReader,
@@ -191,12 +215,19 @@ export interface TaobaoAdapterOptions {
    */
   readonly convertSource?: TaobaoConvertSource;
   /**
-   * B1-04zh (D10-503 ②): where searchItems gets its results until the official search is
-   * approved. 'dataoke' with an `orderSource` searches through that client (dataoke-search.ts);
-   * absent, 'official', or no `orderSource` leaves searchItems as before (adapter_unimplemented,
-   * nothing fetched or sent).
+   * B1-04zh (D10-503 ②), B1-04zx: where searchItems gets its results. 'dataoke' with an
+   * `orderSource` searches through that client (dataoke-search.ts), without one it stays
+   * adapter_unimplemented; absent or 'official' searches officially when `searchSlot` is given
+   * (official-search.ts), and stays adapter_unimplemented without it (nothing fetched or sent).
    */
   readonly searchSource?: TaobaoSearchSource;
+  /**
+   * B1-04zx (D10-582): the calling app's active query PID, for the official search's adzone_id
+   * (see official-search.ts). Without it searchItems stays adapter_unimplemented under 'official'.
+   */
+  readonly searchSlot?: TaobaoSearchSlotReader;
+  /** B1-04zx: skipped official search rows (see TaobaoSearchWarning); never through `warn`. */
+  readonly searchWarn?: (event: TaobaoSearchWarning) => void;
   /**
    * B1-04f (D10-488 ③): every Taobao PID registered in union_pids, retired ones included; listOrders
    * keeps only the orders of these promotion slots (see orders.ts). Without it listOrders is
@@ -214,7 +245,7 @@ export interface TaobaoAdapterOptions {
 /** B1-04d: the convert data-source switch; the default is 'baichuan' (behaviour unchanged). */
 export type TaobaoConvertSource = 'baichuan' | 'dataoke';
 
-/** B1-04zh: the search data-source switch; the default is 'official' (behaviour unchanged). */
+/** B1-04zh: the search data-source switch; the default is 'official'. */
 export type TaobaoSearchSource = 'official' | 'dataoke';
 
 export interface TaobaoRequestOptions {
@@ -265,7 +296,12 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   readonly #orderSource: DataokeClient | undefined;
   readonly #convertSource: TaobaoConvertSource;
   readonly #searchSource: TaobaoSearchSource;
-  /** B1-04zh: goodsId → 凑狸 item_id, one per adapter instance (see dataoke-search.ts ④). */
+  readonly #searchSlot: TaobaoSearchSlotReader | undefined;
+  readonly #searchWarn: ((event: TaobaoSearchWarning) => void) | undefined;
+  /**
+   * B1-04zh: goodsId → 凑狸 item_id, one per adapter instance (see dataoke-search.ts ④). B1-04zx:
+   * the official search ID → detail item_id under the same TTL; one adapter uses one search source.
+   */
   readonly #itemIdCache: TaobaoItemIdCache;
   readonly #orderSlots: TaobaoOrderSlotReader | undefined;
   readonly #orderWarn: ((event: TaobaoOrderWarning) => void) | undefined;
@@ -300,6 +336,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#convertSource = options.convertSource === 'dataoke' ? 'dataoke' : 'baichuan';
     // 只有明确的 'dataoke' 打开大淘客搜索；缺省与其他值一律是 official（行为不变）。
     this.#searchSource = options.searchSource === 'dataoke' ? 'dataoke' : 'official';
+    this.#searchSlot = options.searchSlot;
+    this.#searchWarn = options.searchWarn;
     this.#itemIdCache = createTaobaoItemIdCache(options.clock);
     this.#orderSlots = options.orderSlots;
     this.#orderWarn = options.orderWarn;
@@ -388,14 +426,87 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   }
 
   // 端口方法：resolveLink 仍 adapter_unimplemented，不取凭据、不发请求
-  // （convert 见 B1-04d，searchItems 见 B1-04zh，listOrders 见 B1-04f）。
+  // （convert 见 B1-04d，searchItems 见 B1-04zh / B1-04zx，listOrders 见 B1-04f）。
 
-  /** B1-04zh: 大淘客 search when switched on (see dataoke-search.ts); otherwise unimplemented. */
+  /**
+   * B1-04zh: 大淘客 search when switched on (see dataoke-search.ts). B1-04zx: otherwise the official
+   * search when a slot reader is injected (see official-search.ts). Neither: unimplemented.
+   */
   async searchItems(q: SearchQuery, ctx: CallCtx): Promise<Page<UnionItem>> {
-    const source = this.#orderSource;
-    if (this.#searchSource !== 'dataoke' || source === undefined) {
-      throw unimplemented('searchItems');
+    if (this.#searchSource === 'dataoke') {
+      const source = this.#orderSource;
+      if (source === undefined) throw unimplemented('searchItems');
+      return this.#dataokeSearch(source, q, ctx);
     }
+    const readSlot = this.#searchSlot;
+    if (readSlot === undefined) throw unimplemented('searchItems');
+    return this.#officialSearch(readSlot, q, ctx);
+  }
+
+  /** B1-04zx: one page of the official search (see official-search.ts). */
+  async #officialSearch(
+    readSlot: TaobaoSearchSlotReader,
+    q: SearchQuery,
+    ctx: CallCtx,
+  ): Promise<Page<UnionItem>> {
+    if (typeof q?.keyword !== 'string' || q.keyword.trim() === '') {
+      throw new UnionError('invalid_dto', 'taobao searchItems: keyword is blank', 'taobao');
+    }
+    // 关键词、游标先校验：不合格的调用不读推广位、不取凭据、不发请求。
+    const page = q.cursor === undefined ? 1 : parseOfficialSearchCursor(q.cursor);
+    const pid = await readSlot(ctx);
+    const adzone = pid === null ? undefined : searchAdzone(pid);
+    if (adzone === undefined) throw unimplemented('searchItems');
+    let inner: unknown;
+    try {
+      inner = await this.request(
+        TAOBAO_OFFICIAL_SEARCH,
+        officialSearchParameters(q.keyword, page, adzone),
+        {
+          envelope: TAOBAO_OFFICIAL_SEARCH_ENVELOPE,
+          archive: archiveOf(ctx, 'query'),
+          businessSubCodes: TAOBAO_OFFICIAL_SEARCH_SUB_CODES,
+          ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+        },
+      );
+    } catch (error) {
+      // 15/50001：上游说没有结果，是空页不是故障。
+      if (error instanceof UnionError && error.code === 'item_unavailable') {
+        return { items: [], nextCursor: null };
+      }
+      throw error;
+    }
+    // BR-PRICE-11：quoted_at 与优惠时间窗都取收到搜索响应时的注入时钟（不是换算响应时）。
+    const receivedAt = this.#clock.now();
+    const { rows, total } = officialSearchPage(inner);
+    if (rows.length === 0) return { items: [], nextCursor: null };
+    const nextCursor = officialSearchNextCursor(page, rows.length, total);
+    const candidates = officialSearchCandidates(rows, this.#searchWarn);
+    if (candidates.length === 0) return { items: [], nextCursor };
+    const itemIds = await this.#convertSearchIds(
+      candidates.map((candidate) => candidate.searchId),
+      ctx,
+    );
+    const priceOptions = await this.#priceOptions(ctx);
+    const items: UnionItem[] = [];
+    for (const candidate of candidates) {
+      const itemId = itemIds.get(candidate.searchId);
+      if (itemId === undefined) {
+        // 换不到的不返回（商品暂不可用），不用搜索 ID 兜底。
+        reportSearchSkip(this.#searchWarn, 'item_unconverted');
+        continue;
+      }
+      items.push(mapTaobaoDetail(candidate.row, itemId, receivedAt, priceOptions));
+    }
+    return { items, nextCursor };
+  }
+
+  /** B1-04zh: one page of the 大淘客 search (see dataoke-search.ts). */
+  async #dataokeSearch(
+    source: DataokeClient,
+    q: SearchQuery,
+    ctx: CallCtx,
+  ): Promise<Page<UnionItem>> {
     if (typeof q?.keyword !== 'string' || q.keyword.trim() === '') {
       throw new UnionError('invalid_dto', 'taobao searchItems: keyword is blank', 'taobao');
     }
@@ -471,7 +582,36 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     return out;
   }
 
-  /** item.info.upgrade.get rows for these goodsIds; 15/50001 or empty results → null. */
+  /**
+   * B1-04zx (D10-582): official search ID → detail item_id, matched by last segment (see
+   * official-search.ts ⑤), so no per-ID retry. Cache hits are not asked again; only successful
+   * conversions are cached; a failed request rejects as it is, it is not "unconverted".
+   */
+  async #convertSearchIds(
+    searchIds: readonly string[],
+    ctx: CallCtx,
+  ): Promise<ReadonlyMap<string, string>> {
+    const out = new Map<string, string>();
+    const misses = new Set<string>();
+    for (const searchId of searchIds) {
+      if (out.has(searchId) || misses.has(searchId)) continue;
+      const cached = this.#itemIdCache.get(searchId);
+      if (cached === undefined) misses.add(searchId);
+      else out.set(searchId, cached);
+    }
+    for (const batch of taobaoItemIdBatches([...misses])) {
+      const rows = await this.#topItemRows(batch, ctx);
+      // 15/50001 或 results 为空：本批都换不到，不返回、不写缓存。
+      if (rows === null) continue;
+      for (const [searchId, itemId] of matchSearchItemIds(batch, rows)) {
+        this.#itemIdCache.set(searchId, itemId);
+        out.set(searchId, itemId);
+      }
+    }
+    return out;
+  }
+
+  /** item.info.upgrade.get rows for these IDs; 15/50001 or empty results → null. */
   async #topItemRows(
     goodsIds: readonly string[],
     ctx: CallCtx,
@@ -543,7 +683,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     return parseShortLink(inner);
   }
 
-  /** The calling app's BR-PRICE-02 settings, read on every getItem; undefined → 08 defaults. */
+  /** The calling app's BR-PRICE-02 settings, read on every call; undefined → 08 defaults. */
   async #priceOptions(ctx: CallCtx): Promise<TaobaoPriceOptions | undefined> {
     return this.#priceSettings === undefined ? undefined : this.#priceSettings.read(ctx.appId);
   }

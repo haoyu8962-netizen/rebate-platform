@@ -17,6 +17,8 @@
 // B1-04d: `taobaoLive.convertSource` is handed to that adapter as is (default 'baichuan').
 // B1-04zn (D10-530): likewise `taobaoLive.searchSource` / `orderSlots` / `orderWarn`; absent, the
 // adapter options stay as before.
+// B1-04zx (D10-582): likewise `taobaoLive.searchSlot` / `searchWarn`; absent, the adapter options
+// stay as before and the official search stays `adapter_unimplemented`.
 // B1-04ze: likewise only `jdLive` (credentials provider + transport) turns a jd endpoint with
 // mode=live into the real JdUnionAdapter of B1-04za, returned as is; without it jd live / replay
 // stay `adapter_unimplemented`; union.module.ts decides which environments may pass it.
@@ -50,7 +52,9 @@ import {
   type TaobaoCredentials,
   type TaobaoOrderSlotReader,
   type TaobaoOrderWarning,
+  type TaobaoSearchSlotReader,
   type TaobaoSearchSource,
+  type TaobaoSearchWarning,
   type TaobaoWarning,
 } from './taobao/taobao-adapter.ts';
 
@@ -84,10 +88,14 @@ export interface TaobaoLiveOptions {
   readonly convertSource?: TaobaoConvertSource;
   /**
    * B1-04zn (D10-530): handed to TaobaoUnionAdapter as `searchSource` (B1-04zh); 'dataoke' searches
-   * through the client built from `orderSource`. Absent (the default 'official') or without
-   * `orderSource`, taobao searchItems is unchanged.
+   * through the client built from `orderSource`. Absent (the default 'official') searches
+   * officially when `searchSlot` is given (B1-04zx).
    */
   readonly searchSource?: TaobaoSearchSource;
+  /** B1-04zx (D10-582): handed to TaobaoUnionAdapter as `searchSlot` (official search adzone). */
+  readonly searchSlot?: TaobaoSearchSlotReader;
+  /** B1-04zx: handed to TaobaoUnionAdapter as `searchWarn` (skipped official search rows). */
+  readonly searchWarn?: (event: TaobaoSearchWarning) => void;
   /**
    * B1-04zn (D10-530): handed to TaobaoUnionAdapter as `orderSlots` (B1-04f): every Taobao PID of
    * ctx.appId in union_pids, retired ones included. Without it listOrders stays unimplemented.
@@ -227,6 +235,9 @@ export function createUnionRegistry(options?: UnionRegistryOptions): UnionRegist
           ...(live.convertSource === undefined ? {} : { convertSource: live.convertSource }),
           // B1-04zn: the search switch, the order slot reader and the order warn hook as they are.
           ...(live.searchSource === undefined ? {} : { searchSource: live.searchSource }),
+          // B1-04zx: the official search's slot reader and skip hook as they are.
+          ...(live.searchSlot === undefined ? {} : { searchSlot: live.searchSlot }),
+          ...(live.searchWarn === undefined ? {} : { searchWarn: live.searchWarn }),
           ...(live.orderSlots === undefined ? {} : { orderSlots: live.orderSlots }),
           ...(live.orderWarn === undefined ? {} : { orderWarn: live.orderWarn }),
         });
