@@ -9,7 +9,7 @@ refs: [BR-WDR-23, BR-WDR-08, BR-WDR-21]
 refs_hash:
   BR-WDR-23: 98981fee10c7
   BR-WDR-08: 8c55a3ce6b57
-  BR-WDR-21: 174182279ca6
+  BR-WDR-21: 89dfa119b6d1
 deps: [B2-07e]
 paths:
   - 'apps/api/src/modules/payout/application/withdrawal-proven-success.ts'

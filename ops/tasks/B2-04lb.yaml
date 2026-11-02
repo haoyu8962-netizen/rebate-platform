@@ -10,7 +10,7 @@ refs_hash:
   BR-FUND-06: 2076b932478c
   BR-FUND-07: 3d63741c52d9
   BR-FUND-08: 4fad67b21a32
-  BR-CALC-15: 84083d5f0e01
+  BR-CALC-15: e18291194b6e
 deps: [B2-04l]
 paths:
   - 'db/migrations/**' # D10-483：order_rights.answered_at timestamptz NULL（联盟回传吸收该条扣减时同事务置位；入账前累计只算为空者；替代 updated_at 对比 order_settlements.created_at，S2）；只授 settlement 写入角色 UPDATE(answered_at)；只加列不回填；迁移号落地时取主干最大 +1（排在 0106 之后，报到即排）。

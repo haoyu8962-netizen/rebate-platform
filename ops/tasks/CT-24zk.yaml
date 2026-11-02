@@ -3,8 +3,10 @@ repo: rebate-platform
 title: 契约：后台字典补四组中文名——调账原因码、回款登记方式、回款账户、资金水位（admin_dict.* 键与 fund-term-keys）
 type: contract
 # 2026-11-02 入账（admin-backend，D10-534 ⑬、D10-538 ⑭；BR-TEXT-25 已回写 couli #256 94921ead2a）。SPEC_REF 未升到含 #256，refs 暂空，取值写在任务书摘录里，升级后补 refs（照 B2-15k 先例）。只加文案键，不改枚举与接口，后台页面由 fe 接。走契约队列，与 be 的 B1-04zu 按报「准备落地（契约）」先后排。
-refs: []
-refs_hash: {}
+# 2026-11-02 编排：SPEC_REF 升到 couli 7acc096（含 #256），refs 补 BR-TEXT-25。
+refs: [BR-TEXT-25]
+refs_hash:
+  BR-TEXT-25: d3e9134dcc9e
 contract_sections: ['11.1']
 deps: []
 paths:

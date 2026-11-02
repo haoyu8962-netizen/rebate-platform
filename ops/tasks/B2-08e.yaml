@@ -5,7 +5,7 @@ type: impl
 # 2026-11-01 入账（admin-backend，编排 D10-544）。identity 批量读口由本单新建（identity/ports 新文件、只读、经 identity/index.ts 导出，不改 identity 既有实现文件），identity 11-06 回来后补评审该文件，照 B2-08b。读当前身份，另列「到账后实名更正」，首次报送前财务 / 税务师核对，列入上线检查清单。读不到实名整任务 failed；超行数失败不截断。export_tasks_resource_check 只允许 users、audit_logs，tax_withdrawals 要迁移放开，故本单占迁移队列。
 refs: [BR-WDR-21]
 refs_hash:
-  BR-WDR-21: 174182279ca6
+  BR-WDR-21: 89dfa119b6d1
 deps: [CT-24zi, B2-08d]
 paths:
   - 'db/migrations/**'

@@ -5,7 +5,7 @@ type: impl
 # 2026-10-31 入账（withdraw 线，D10-456 ④）。后台导出入口（exports 新 kind、权限点「涉税全量导出」契约、step-up 与用途、OSS 签名 URL、审计）属 admin 的导出框架（B1-34c / B1-34e），请编排派给 admin 线另入账（CT + 实现），依赖本端口；本任务只做 payout 侧只读端口与其规则测试。
 refs: [BR-WDR-21]
 refs_hash:
-  BR-WDR-21: 174182279ca6
+  BR-WDR-21: 89dfa119b6d1
 deps: [B2-08b]
 paths:
   - 'apps/api/src/modules/payout/application/tax-export*.ts'

@@ -10,7 +10,7 @@ refs: [BR-PAY-05, BR-PAY-07, BR-PAY-08]
 refs_hash:
   BR-PAY-05: cc6a654d316e
   BR-PAY-07: a98350f4412a
-  BR-PAY-08: 515dd9fe21c1
+  BR-PAY-08: b98994497cac
 deps: [CT-21e, B2-15d]
 paths:
   - 'apps/api/src/modules/payment/**'

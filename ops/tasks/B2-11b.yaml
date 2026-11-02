@@ -9,7 +9,7 @@ type: impl
 refs: [BR-WDR-30, BR-WDR-29]
 refs_hash:
   BR-WDR-30: ec74379ec48c
-  BR-WDR-29: 6d588cc80722
+  BR-WDR-29: c576e429b058
 deps: [B2-05c, B2-11y]
 paths:
   - 'apps/api/src/modules/payout/**'
