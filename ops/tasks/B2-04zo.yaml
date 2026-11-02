@@ -1,0 +1,29 @@
+id: B2-04zo
+repo: rebate-platform
+title: 资产快照调度（B2-04zb 拆单，D10-587）——ledger 新模块，定时器加 heal，D+1 00:01 起按 app 写快照；登记 ledger.advance_alert_fen 占位值；上线前必做
+type: impl
+# 2026-11-03 W1 入账（D10-587）。createAssetSnapshot 无调用方：asset_snapshots 无行，看板无数据，BR-FUND-20 垫资告警不发；不卡入账（00:30 后 timed_out 放行）。写者是 ledger，用 assembleAssetSnapshot，缺 EVENT_BUS 拒启动；pendingEarnings 由 app.module 注入 settlement 的 createPendingEarningsSource。ledger.advance_alert_fen 登记占位值，上线清单写「超管填写」（BR-FUND-20 细则）。删 asset-snapshot.ts:127 的 TODO。
+refs: [BR-FUND-18, BR-FUND-20]
+refs_hash:
+  BR-FUND-18: c7ebd23ee75e
+  BR-FUND-20: 768e4fe2668e
+deps: []
+paths:
+  - 'apps/api/src/modules/ledger/asset-snapshot.module.ts'
+  - 'apps/api/src/modules/ledger/asset-snapshot.module.test.ts'
+  - 'apps/api/src/modules/ledger/application/asset-snapshot.ts'
+  - 'apps/api/src/modules/ledger/application/asset-snapshot-schedule*.ts'
+  - 'apps/api/src/modules/ledger/infra/asset-snapshot-run-store*.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+test_paths:
+  - 'test/spec/ledger/asset-snapshot-schedule/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/asset-snapshot-schedule/**'
+status: todo
+pr: null

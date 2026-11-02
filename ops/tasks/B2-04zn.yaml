@@ -1,0 +1,30 @@
+id: B2-04zn
+repo: rebate-platform
+title: 账本钩子（B2-04zb 拆单，D10-587）——结算 worker 与扣回的 createLedger 传 eventBus 与 balanceRecoveredHook：余额变负发 account.went_negative，回到 ≥0 解除 NEGATIVE_BALANCE；上线前必做
+type: impl
+# 2026-11-03 W1 入账（D10-564 改派，D10-587，方案 couli-runs/B3-lane/b204zb-plan-20261103.md）。扣回是余额变负的主路径，现在不发事件，在途提现拦不住；结算入账回正不解除拦截（BR-WDR-05 (a)）。只动装配。顺手删 clawback/index.ts、credit/index.ts、beneficiary-gate.ts、settlement.module.ts、bill/job.ts 的陈旧注释。
+refs: [BR-WDR-05, BR-FUND-08, BR-FUND-04]
+refs_hash:
+  BR-WDR-05: 99e2e2654ce0
+  BR-FUND-08: 4fad67b21a32
+  BR-FUND-04: 2497ceea4515
+deps: []
+paths:
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/app.module.test.ts'
+  - 'apps/api/src/modules/settlement/worker/ports.ts'
+  - 'apps/api/src/modules/settlement/worker/assemble.ts'
+  - 'apps/api/src/modules/settlement/settlement.module.ts'
+  - 'apps/api/src/modules/settlement/clawback/index.ts'
+  - 'apps/api/src/modules/settlement/credit/index.ts'
+  - 'apps/api/src/modules/settlement/credit/beneficiary-gate.ts'
+  - 'apps/api/src/modules/settlement/bill/job.ts'
+test_paths:
+  - 'test/spec/settlement/ledger-hooks/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/ledger-hooks/**'
+status: todo
+pr: null
