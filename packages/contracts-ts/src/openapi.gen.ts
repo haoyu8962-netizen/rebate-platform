@@ -1235,8 +1235,10 @@ export interface paths {
          *     withdraw. The user cannot cancel after submitting (customer service rejects with
          *     USER_REQUEST, 拍板第二批 FUND-20); review_mode is decided after submission (BR-WDR-30).
          *     An account flagged for re-verification (旧号加验) on a device not yet re-verified → 10010
-         *     with data.method (BR-WDR-03 ③b: after ③a the blacklist 44001, before ④ not realname
-         *     30304; BR-WDR-01 细则「位置与返回码」). 10010 is a 1xxxx code: no idempotency result is
+         *     with data.method (BR-WDR-03 ③b, after ③a the blacklist 44001; BR-WDR-01 细则「位置与返回码」).
+         *     On this POST 30304 not realname still answers first (08 细则「提交接口的检查顺序」, D10-233 ①:
+         *     30304 precedes ③a and ③b); ③a → ③b → ④ is the order of GET /v1/withdrawals/rules.
+         *     10010 is a 1xxxx code: no idempotency result is
          *     written and the step-up token is not consumed; after re-verifying on Reverify the user
          *     submits again with a new Idempotency-Key, nothing is replayed (BR-WDR-07).
          *     The response is the withdrawal as in GET /v1/withdrawals/{withdrawal_id}, time points and
