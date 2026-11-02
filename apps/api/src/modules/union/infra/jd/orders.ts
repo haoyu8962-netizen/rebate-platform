@@ -24,6 +24,8 @@ export const JD_ORDER_KEYS: JdResponseKeys = {
 export const JD_ORDER_PAGE_SIZE = 200;
 /** orderReq.type：3 = 按更新时间。 */
 export const JD_ORDER_QUERY_BY_UPDATE_TIME = 3;
+/** 窗口内订单量超接口上限（规划/02 §7.1）。缩窗归 order-sync，这里只带 windowTooLarge。 */
+export const JD_ORDER_WINDOW_TOO_LARGE_CODES: ReadonlySet<string> = new Set(['2002452']);
 
 /** 单窗不超过 1 小时，起点不早于注入时钟的 90 天前。 */
 const MAX_SPAN_SECONDS = 3_600;

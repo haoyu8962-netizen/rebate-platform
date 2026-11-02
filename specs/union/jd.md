@@ -11,6 +11,8 @@
 - 业务参数只有 `orderReq`：`pageIndex`（从 1）、`pageSize` 200、`type` 3（按更新时间）、`startTime`、`endTime`（GMT+8 的 `yyyy-MM-dd HH:mm:ss`）。
 - 不带 `positionId`：它不是过滤参数。不带 `fields`：只影响商品与类目附加信息，这里不映射。
 - 时间窗按毫秒原值判：from < to、跨度 ≤ 1 小时、from ≥ 当前时刻 − 90 天，不合格 `invalid_dto`、不发请求；拆窗归 order-sync。
+- 内层 2002452（窗口内订单量超接口上限）仍是 `upstream_rejected`，适配器不重试、不缩窗，只在错误上带 `windowTooLarge`。订单侧在同一任务内把窗口对半切开、从第 1 页重查，跨度 ≤ 60 秒不再切，抛原错误；水位只在原窗全部完成后按原窗推进一次（B1-04zt，`orders/application/fetch-window.ts`）。
+- 增量起点早于「当前时刻 − 90 天 + 1 小时」超过 30 分钟时，调度先把水位收到这个时刻（无水位行就插入）再发窗，打 warn `order_sync_start_clamped`；CAS 落空本轮不发（B1-04zt）。
 
 ## 字段对照
 

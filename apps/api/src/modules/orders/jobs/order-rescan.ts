@@ -6,9 +6,12 @@
 // D10-545: a retry finds those rows unchanged, so a window that fails after a first insert still
 // logs found_missing with the counts so far (finished pages and rows), then rethrows.
 // A row seen again is settled by the pipeline's content_hash short-circuit; no branch here.
+// B1-04zt: application/fetch-window.ts takes a window the upstream calls too large apart inside this
+// job; the counts stay one set for the job's window, and the cursor moves once, by that window.
 import type { ReceivedJob } from '../../platform/index.ts';
 import type { RegisteredPlatform } from '../../union/index.ts';
 import { parseInstantMs } from '../domain/sync-window.ts';
+import { fetchWindow } from '../application/fetch-window.ts';
 import type { OrderPipelineContext, OrderPipelinePort } from '../application/pipeline-types.ts';
 import type {
   OrderRescanWindow,
@@ -87,26 +90,18 @@ async function processPages(
   // the field: it takes app, platform and account from the context. The rescan cursor is advanced
   // from `win`, so this value goes nowhere near a cursor.
   const ctx: OrderPipelineContext = { ...win, query_kind: 'increment', requestId };
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-  for (;;) {
-    const result = await adapter.listOrders(
-      range,
-      cursor === undefined ? { queryMode: 'increment' } : { cursor, queryMode: 'increment' },
-      { appId: win.app_id, requestId, purpose: 'order_sync' },
-    );
-    counts.pages += 1;
-    for (const order of result.items) {
-      const outcome = await deps.pipeline.process(order, ctx);
-      counts.count += 1;
-      if (outcome !== undefined && outcome.kind === 'inserted') counts.inserted += 1;
-    }
-    if (result.nextCursor === null) return;
-    // A cursor seen before would loop forever; fail the window instead.
-    if (seen.has(result.nextCursor)) throw new Error('order_sync_cursor_repeated');
-    seen.add(result.nextCursor);
-    cursor = result.nextCursor;
-  }
+  await fetchWindow(range, {
+    adapter,
+    call: { appId: win.app_id, requestId, purpose: 'order_sync' },
+    onPage: async (orders) => {
+      counts.pages += 1;
+      for (const order of orders) {
+        const outcome = await deps.pipeline.process(order, ctx);
+        counts.count += 1;
+        if (outcome !== undefined && outcome.kind === 'inserted') counts.inserted += 1;
+      }
+    },
+  });
 }
 
 export async function handleOrderRescanWindow(

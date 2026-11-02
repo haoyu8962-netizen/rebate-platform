@@ -1,10 +1,18 @@
 // B1-08g: incremental order sync scheduler (规划/02 §7.1). Each enabled union account is one
 // stream (platform, account, 'increment', '-'); every round dispatches only the next continuous
 // window from its cursor. Nothing is dispatched on construction or start: only timer rounds.
+// B1-04zt: a start older than the platform's order query can answer (domain/platform-rules/
+// query-lookback.ts) would dead-letter its window and be sent again every round, so the cursor is
+// moved up first, also when the stream has no row yet: the next round then starts inside the
+// tolerance of clampedIncrementStartMs and sends the same window, or nothing new. A lost
+// compare-and-set sends nothing this round.
 import type { RegisteredPlatform } from '../../union/index.ts';
+import { orderQueryLookbackMs } from '../domain/platform-rules/query-lookback.ts';
 import {
+  clampedIncrementStartMs,
   INCREMENT_WINDOW_CAP_MS,
   intervalSeconds,
+  isoAt,
   nextWindow,
   parseInstantMs,
   scheduledPlatforms,
@@ -107,7 +115,25 @@ async function scheduleAccount(
     deps.logger?.warn(fields, 'order_sync_no_start');
     return;
   }
-  const bounds = nextWindow(parseInstantMs(from, 'cursor_at'), deps.clock.now(), cap);
+  const fromMs = parseInstantMs(from, 'cursor_at');
+  const now = deps.clock.now();
+  const clampedMs = clampedIncrementStartMs(
+    fromMs,
+    now.getTime(),
+    orderQueryLookbackMs(account.platform),
+  );
+  if (clampedMs !== null) {
+    if (deps.cursors.rewind === undefined) {
+      deps.logger?.warn(fields, 'order_sync_start_clamp_unavailable');
+      return;
+    }
+    if (!(await deps.cursors.rewind(stream, cursor, isoAt(now, clampedMs)))) {
+      deps.logger?.info(fields, 'order_sync_cursor_moved');
+      return;
+    }
+    deps.logger?.warn(fields, 'order_sync_start_clamped');
+  }
+  const bounds = nextWindow(clampedMs ?? fromMs, now, cap);
   if (bounds === null) return;
   const payload: OrderSyncWindow = {
     ...stream,

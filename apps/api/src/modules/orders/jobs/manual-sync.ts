@@ -1,8 +1,10 @@
 // B1-09i: the order-sync queue's jobs of a console manual sync (application/manual-sync.ts sends
 // them; 01 F-ORD-10; 02 §7.1). A window job ('manual_window') fetches its fixed
-// [window_start, window_end) like a scheduled window; an order-number job ('manual_order_nos', pdd
-// only) fetches every number through union's getPddOrderDetail. Every order goes to the pipeline in
-// order. sync_cursors is never read nor advanced.
+// [window_start, window_end) like a scheduled window, through application/fetch-window.ts (B1-04zt:
+// a window the upstream calls too large is halved inside the job, its counts one row's); an
+// order-number job ('manual_order_nos', pdd only) fetches every number through union's
+// getPddOrderDetail. Every order goes to the pipeline in order. sync_cursors is never read nor
+// advanced.
 // Write-back (order_sync_requests and the job's own row `sync_seq` in order_sync_request_windows):
 // the first job taken moves the request queued → running; a job ends its row done with its counts
 // once all its orders are processed (fetched = orders returned, stored = pipeline inserted /
@@ -20,6 +22,7 @@ import type { JobPayload, ReceivedJob } from '../../platform/index.ts';
 import type { RegisteredPlatform, UnionOrder } from '../../union/index.ts';
 import { MANUAL_SYNC_ORDER_NO_PLATFORMS } from '../domain/manual-sync.ts';
 import { parseInstantMs, scheduledPlatforms } from '../domain/sync-window.ts';
+import { fetchWindow } from '../application/fetch-window.ts';
 import type { OrderPipelineContext, OrderPipelinePort } from '../application/pipeline-types.ts';
 import type { SyncAccessPort, SyncLogger, SyncRegistry } from '../application/sync-ports.ts';
 import {
@@ -210,20 +213,7 @@ async function fetchAndRecord(
       requestId,
     };
     const range = { from: m.window.window_start, to: m.window.window_end };
-    const seen = new Set<string>();
-    let cursor: string | undefined;
-    for (;;) {
-      const page = await adapter.listOrders(
-        range,
-        cursor === undefined ? { queryMode: 'increment' } : { cursor, queryMode: 'increment' },
-        call,
-      );
-      await processAll(page.items, ctx);
-      if (page.nextCursor === null) break;
-      if (seen.has(page.nextCursor)) throw new Error('order_sync_cursor_repeated');
-      seen.add(page.nextCursor);
-      cursor = page.nextCursor;
-    }
+    await fetchWindow(range, { adapter, call, onPage: (orders) => processAll(orders, ctx) });
   } else {
     const detail = adapter.getPddOrderDetail;
     if (detail === undefined) {

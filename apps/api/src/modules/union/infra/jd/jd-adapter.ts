@@ -55,6 +55,7 @@ import {
   JD_ORDER_PAGE_SIZE,
   JD_ORDER_QUERY_BY_UPDATE_TIME,
   JD_ORDER_ROW_QUERY,
+  JD_ORDER_WINDOW_TOO_LARGE_CODES,
   jdOrderCursor,
   jdOrderRows,
   jdOrderWindow,
@@ -246,7 +247,15 @@ export class JdUnionAdapter implements UnionAdapter {
       ...(signal === undefined ? {} : { signal }),
       ...(archive === undefined ? {} : { archive }),
     });
-    const inner = unwrapJdResponse(JD_ORDER_ROW_QUERY, JD_ORDER_KEYS, response, this.#warn);
+    const inner = unwrapJdResponse(
+      JD_ORDER_ROW_QUERY,
+      JD_ORDER_KEYS,
+      response,
+      this.#warn,
+      undefined,
+      undefined,
+      JD_ORDER_WINDOW_TOO_LARGE_CODES,
+    );
     const id: unknown = Reflect.get(response, 'raw_payload_id');
     return { inner, rawPayloadId: typeof id === 'string' && /^[0-9]+$/.test(id) ? id : null };
   }

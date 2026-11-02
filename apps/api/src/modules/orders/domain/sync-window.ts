@@ -1,5 +1,5 @@
 // B1-08g: pure window arithmetic for incremental order sync (规划/02 §7.1). No Nest, no I/O.
-import type { RegisteredPlatform } from '../../union/index.ts';
+import type { RegisteredPlatform, TimeWindow } from '../../union/index.ts';
 import { PLATFORM_RULES } from './platform-rules/index.ts';
 
 function windowCaps(): Partial<Record<RegisteredPlatform, number>> {
@@ -90,6 +90,45 @@ export const RESCAN_START_MARGIN_MS = 3_600_000;
  * here is still inside what the adapters accept.
  */
 export const RESCAN_CURSOR_TOLERANCE_MS = 30 * 60_000;
+
+/**
+ * B1-04zt: where an increment start the platform's order query can no longer answer moves to:
+ * now − lookback + RESCAN_START_MARGIN_MS. Null when it stays: no lookback, or a start at most
+ * RESCAN_CURSOR_TOLERANCE_MS older than that. The moved-to instant slides with now, so without the
+ * tolerance the cursor left there would be moved again on the next tick while its window is still
+ * queued (rescanStep has the same reason), and the tolerance is under the margin, so a window
+ * starting there is still accepted.
+ */
+export function clampedIncrementStartMs(
+  startMs: number,
+  nowMs: number,
+  lookbackMs: number | null,
+): number | null {
+  if (lookbackMs === null) return null;
+  const floorMs = nowMs - lookbackMs + RESCAN_START_MARGIN_MS;
+  return startMs < floorMs - RESCAN_CURSOR_TOLERANCE_MS ? floorMs : null;
+}
+
+/** B1-04zt: a window this long or shorter is not halved any further (规划/02 §7.1). */
+export const WINDOW_HALVING_MIN_SPAN_MS = 60_000;
+
+/**
+ * B1-04zt: [from, mid) and [mid, to), sharing the one bound so they tile the window; null when the
+ * window is at most WINDOW_HALVING_MIN_SPAN_MS long.
+ */
+export function halveWindow(range: TimeWindow): readonly [TimeWindow, TimeWindow] | null {
+  const fromMs = parseInstantMs(range.from, 'from');
+  const toMs = parseInstantMs(range.to, 'to');
+  if (toMs - fromMs <= WINDOW_HALVING_MIN_SPAN_MS) return null;
+  // The bound comes from the window, never from the current time; a job handler has no Clock whose
+  // Date instantAt could copy.
+  // eslint-disable-next-line no-restricted-syntax
+  const mid = new Date(fromMs + Math.floor((toMs - fromMs) / 2)).toISOString();
+  return [
+    { from: range.from, to: mid },
+    { from: mid, to: range.to },
+  ];
+}
 
 const DAY_MS = 86_400_000;
 const RESCAN_MAX_DAYS = 90;

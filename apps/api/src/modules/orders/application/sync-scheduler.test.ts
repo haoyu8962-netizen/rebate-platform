@@ -71,3 +71,15 @@ it('[AC-B1-08g#u8] 端口未提供 queryableAccount 时行为不变：每个启�
   expect(s.sentAccounts()).toEqual([A, B]);
   expect(s.logger.warn).not.toHaveBeenCalled();
 });
+
+it('[AC-B1-04zt#u6] 起点要收紧而水位存储没有 rewind：打 warn，本轮不发窗', async () => {
+  const { deps, send, logger } = setup();
+  const stale = { ...acct(A), platform: 'jd' as const, sync_start_at: '2026-01-01T00:00:00.000Z' };
+  vi.mocked(deps.access.listEnabledAccounts).mockResolvedValue([stale]);
+  await scheduleOrderSync(deps);
+  expect(send).not.toHaveBeenCalled();
+  expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+    { platform: 'jd', account: A },
+    'order_sync_start_clamp_unavailable',
+  );
+});

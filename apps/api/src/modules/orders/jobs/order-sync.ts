@@ -2,9 +2,12 @@
 // replays the same [window_start, window_end). Every page is archived by union before it is
 // returned (B1-08e); each order then goes to the pipeline port in order. Any failure is rethrown
 // so the queue retries the whole window; the cursor moves only after every page is done.
+// B1-04zt: application/fetch-window.ts takes a window the upstream calls too large apart inside this
+// job; the cursor still moves once, by the job's own window.
 import type { ReceivedJob } from '../../platform/index.ts';
 import type { RegisteredPlatform } from '../../union/index.ts';
 import { parseInstantMs, scheduledPlatforms } from '../domain/sync-window.ts';
+import { fetchWindow } from '../application/fetch-window.ts';
 import type { OrderPipelinePort } from '../application/pipeline-port.ts';
 import type {
   OrderSyncWindow,
@@ -100,27 +103,18 @@ export async function handleOrderSyncWindow(
   const requestId = `order-sync:${job.id}:${job.attempt}`;
   const range = { from: win.window_start, to: win.window_end };
   const ctx = { ...win, requestId };
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-  let page = 0;
-  let count = 0;
-  for (;;) {
-    const result = await adapter.listOrders(
-      range,
-      cursor === undefined ? { queryMode: 'increment' } : { cursor, queryMode: 'increment' },
-      { appId: win.app_id, requestId, purpose: 'order_sync' },
-    );
-    page += 1;
-    for (const order of result.items) {
-      await deps.pipeline.process(order, ctx);
-      count += 1;
-    }
-    if (result.nextCursor === null) break;
-    // A cursor seen before would loop forever; fail the window instead.
-    if (seen.has(result.nextCursor)) throw new Error('order_sync_cursor_repeated');
-    seen.add(result.nextCursor);
-    cursor = result.nextCursor;
-  }
+  const counts = { pages: 0, count: 0 };
+  await fetchWindow(range, {
+    adapter,
+    call: { appId: win.app_id, requestId, purpose: 'order_sync' },
+    onPage: async (orders) => {
+      counts.pages += 1;
+      for (const order of orders) {
+        await deps.pipeline.process(order, ctx);
+        counts.count += 1;
+      }
+    },
+  });
   const advanced = await deps.cursors.advance(win);
-  deps.logger?.info({ ...fields, pages: page, count, advanced }, 'order_sync_window_done');
+  deps.logger?.info({ ...fields, ...counts, advanced }, 'order_sync_window_done');
 }

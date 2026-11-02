@@ -59,12 +59,23 @@ const DEPENDENCY_FAILURE_CODES: ReadonlySet<UnionErrorCode> = new Set<UnionError
 export class UnionError extends Error {
   readonly code: UnionErrorCode;
   readonly platform: Platform | null;
+  /**
+   * B1-04zt: the order query refused this time window as too large, whatever the code says; orders
+   * halves the window on it (application/fetch-window.ts) without knowing the platform.
+   */
+  readonly windowTooLarge: boolean;
 
-  constructor(code: UnionErrorCode, message: string, platform: Platform | null = null) {
+  constructor(
+    code: UnionErrorCode,
+    message: string,
+    platform: Platform | null = null,
+    options: { readonly windowTooLarge?: boolean } = {},
+  ) {
     super(message);
     this.name = 'UnionError';
     this.code = code;
     this.platform = platform;
+    this.windowTooLarge = options.windowTooLarge ?? false;
   }
 }
 

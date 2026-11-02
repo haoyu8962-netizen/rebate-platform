@@ -38,6 +38,13 @@ export interface SyncCursorStore {
   read(stream: SyncStream): Promise<string | null>;
   /** One transaction: insert if absent, otherwise CAS from window_start to window_end. */
   advance(window: OrderSyncWindow | OrderRescanWindow): Promise<boolean>;
+  /**
+   * B1-04zt: one statement moves this stream's cursor to `to`. `expected` a string: CAS of the
+   * existing row, a missing row or another cursor_at writes nothing and resolves false. `expected`
+   * null: insert when the stream has no row, an existing row stays and resolves false. Optional
+   * only for test fakes: without it the scheduler does not dispatch a start that must be moved.
+   */
+  rewind?(stream: SyncStream, expected: string | null, to: string): Promise<boolean>;
 }
 
 /**
