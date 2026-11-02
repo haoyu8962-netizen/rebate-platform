@@ -14,6 +14,11 @@ import type { Logger } from 'pino';
 import type { Ledger } from '../ledger/index.ts';
 import type { Clock, EventBus, QueueRuntime, ReceivedJob } from '../platform/index.ts';
 import { defaultPayoutChannelConfig } from './application/judgement.ts';
+import { createQueryRecovery } from './application/query-recovery.ts';
+import {
+  startQueryRecoveryWorker,
+  type QueryRecoveryWorker,
+} from './application/query-recovery-worker.ts';
 import type { WithdrawApplyOptions } from './application/withdraw-apply.ts';
 import type { PayoutConfigPort } from './application/withdraw-rules.ts';
 import type { DecryptWithdrawalAccount } from './application/withdrawal-reads.ts';
@@ -41,6 +46,11 @@ export interface PayoutStarted {
 export interface PayoutRuntime {
   /** Registers queue `payout`; called once, before the queue starts. */
   start(decision: PayoutModeDecision): PayoutStarted;
+  /**
+   * B2-06i: starts the query chain's crash recovery (at once, then every hour, BR-WDR-14). Once,
+   * after start and after the queue started: the rounds enqueue jobs. Any PAYOUT_MODE.
+   */
+  startRecovery(): QueryRecoveryWorker;
 }
 
 const PAYOUT_RUNTIME = Symbol('PAYOUT_RUNTIME');
@@ -101,7 +111,16 @@ function channelsOf(
 
 export function createPayoutRuntime(options: PayoutRuntimeOptions): PayoutRuntime {
   let started = false;
+  let recoveryStarted = false;
   return {
+    startRecovery() {
+      if (!started) throw new Error('payout runtime: recovery before start');
+      if (recoveryStarted) throw new Error('payout runtime: recovery already started');
+      recoveryStarted = true;
+      const { db, queue, clock, logger, config } = options;
+      const recovery = createQueryRecovery({ attemptsDb: db, config, queue, logger });
+      return startQueryRecoveryWorker({ recovery, db, clock, logger });
+    },
     start(decision) {
       if (started) throw new Error('payout runtime: already started');
       started = true;

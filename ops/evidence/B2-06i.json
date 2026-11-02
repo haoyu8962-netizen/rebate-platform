@@ -1,0 +1,121 @@
+{
+  "risk_note": "RV2 (apps/api/src/modules/payout/**, entry.ts). Production wiring gap 5 (orchestrator 11-02 03:49, moved from withdraw to pay). The payout entry now runs createQueryRecovery (B2-06e, no caller until now): one round once the queue started, then one every hour, in dry_run and live. Without it a PAYING withdrawal whose query job was lost was never queried again nor marked needs_manual (BR-WDR-14). The scan's judgement is unchanged. Rounds never overlap; a failed round is one warn line with the error's name and does not take the process down; stop waits for the round in flight and runs before metrics, queue and context close (D10-553). The runtime stays optional for the entry. No schema, contract or ledger change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 (couli-runs/B2-06i/review-codex.json), no findings. Static review, no tests run."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "fresh Claude, round 1 pass with 1 S2: no rule test stops during a round later than the first. Accepted; covered by the implementer's unit test [AC-B2-06i-U#1] in query-recovery-worker.test.ts."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-06i",
+  "spec_commit": "ac9a405f4e1658022f72c56c3ee7677930ff0055",
+  "spec_ref": "deb521c2bcb740571a01c2dc128f40abb40c37a2",
+  "red_tests": [
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#6] 启动顺序：start(decision)、queue.start 完成之后才调一次 startRecovery，不带参数",
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#7] 停机：最先 worker.stop 并等它完成，之后才关 metrics、queue.stop、context.close",
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#7] 启动失败（metrics 监听失败）：已起的恢复先停并等完，再 queue.stop、context.close，进程以启动失败结束",
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] 运行体可选：throw、null、undefined、没有 start、就是队列、没有 startRecovery，照常起停，不崩、不打日志",
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] COULI_EXIT_AFTER_INIT=1：不调用 startRecovery",
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] 启动过程中已请求停止（建上下文、start、queue.start 期间）：不调用 startRecovery，干净停止",
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] metrics 监听期间请求停止：起过的恢复照样先停，不留定时器",
+    "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式",
+    "test/spec/payout/query-recovery-wiring/recovery-chain.int.test.ts > [AC-B2-06i#9] 真实运行体：start(dry_run) 再 startRecovery，查询任务丢失的 PAYING 单被补投，超过 24 小时的被标 needs_manual；stop 后不挂死",
+    "test/spec/payout/query-recovery-wiring/recovery-switches.int.test.ts > [AC-B2-06i#10] payout.enabled=off 且 queue_paused=true：仍补投查询任务、仍标 needs_manual",
+    "test/spec/payout/query-recovery-wiring/recovery-switches.int.test.ts > [AC-B2-06i#10] live 决定下恢复照样跑：只查库、发任务，日志不含私钥",
+    "test/spec/payout/query-recovery-wiring/runtime.test.ts > [AC-B2-06i#9] start 之前调 startRecovery 抛错且不占用；start 之后第一次起一个 worker，第二次抛错、不起第二个",
+    "test/spec/payout/query-recovery-wiring/runtime.test.ts > [AC-B2-06i#10] live 决定下 startRecovery 一样起：运行体不看模式，日志不含私钥",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#1] 启动后不等定时器立刻第一轮，now 是当时的 clock.now()；不足一小时不跑；满一小时下一轮，now 现取",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#1] 定时器是一小时的 setInterval，已 unref；stop 后不留定时器",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#2] 上一轮没结束：到点这一轮跳过、不并发、结束时也不补跑；下一个整点照常",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#3] 单轮抛错：只有一条 warn，只带 error_name，不含 message；不向外抛；下一轮照常",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#3] 第一轮抛错（异步拒绝或同步抛出）：启动照常返回，只有一条 warn；下一轮照常",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#3] 抛出的不是 Error（字符串、null）：同样只记一条带错误名的 warn，不泄内容，下一轮照常",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#4] stop 等在途一轮结束才 resolve；等待期间和之后都不起新轮；重复 stop 安全",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#4] 在途一轮期间连调两次 stop：两次都等它结束；这一轮抛错时 stop 也不 reject，只记 warn",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#4] 没有在途一轮时 stop 直接完成，之后整点不再有新轮",
+    "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#5] 单轮成功：每轮一条 info，字段只有 scanned、enqueued、manual 三个计数；没有 warn"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ac9a405f4e1658022f72c56c3ee7677930ff0055",
+      "tree": "9b59c9ee8ee8b89874e5d1482b29756ce9af2302",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-01T23:42:57Z",
+      "finished_at": "2026-11-01T23:43:14Z",
+      "red_tests": [
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#6] 启动顺序：start(decision)、queue.start 完成之后才调一次 startRecovery，不带参数",
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#7] 停机：最先 worker.stop 并等它完成，之后才关 metrics、queue.stop、context.close",
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#7] 启动失败（metrics 监听失败）：已起的恢复先停并等完，再 queue.stop、context.close，进程以启动失败结束",
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] 运行体可选：throw、null、undefined、没有 start、就是队列、没有 startRecovery，照常起停，不崩、不打日志",
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] COULI_EXIT_AFTER_INIT=1：不调用 startRecovery",
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] 启动过程中已请求停止（建上下文、start、queue.start 期间）：不调用 startRecovery，干净停止",
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#8] metrics 监听期间请求停止：起过的恢复照样先停，不留定时器",
+        "test/spec/payout/query-recovery-wiring/entry.test.ts > [AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式",
+        "test/spec/payout/query-recovery-wiring/recovery-chain.int.test.ts > [AC-B2-06i#9] 真实运行体：start(dry_run) 再 startRecovery，查询任务丢失的 PAYING 单被补投，超过 24 小时的被标 needs_manual；stop 后不挂死",
+        "test/spec/payout/query-recovery-wiring/recovery-switches.int.test.ts > [AC-B2-06i#10] payout.enabled=off 且 queue_paused=true：仍补投查询任务、仍标 needs_manual",
+        "test/spec/payout/query-recovery-wiring/recovery-switches.int.test.ts > [AC-B2-06i#10] live 决定下恢复照样跑：只查库、发任务，日志不含私钥",
+        "test/spec/payout/query-recovery-wiring/runtime.test.ts > [AC-B2-06i#9] start 之前调 startRecovery 抛错且不占用；start 之后第一次起一个 worker，第二次抛错、不起第二个",
+        "test/spec/payout/query-recovery-wiring/runtime.test.ts > [AC-B2-06i#10] live 决定下 startRecovery 一样起：运行体不看模式，日志不含私钥",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#1] 启动后不等定时器立刻第一轮，now 是当时的 clock.now()；不足一小时不跑；满一小时下一轮，now 现取",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#1] 定时器是一小时的 setInterval，已 unref；stop 后不留定时器",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#2] 上一轮没结束：到点这一轮跳过、不并发、结束时也不补跑；下一个整点照常",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#3] 单轮抛错：只有一条 warn，只带 error_name，不含 message；不向外抛；下一轮照常",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#3] 第一轮抛错（异步拒绝或同步抛出）：启动照常返回，只有一条 warn；下一轮照常",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#3] 抛出的不是 Error（字符串、null）：同样只记一条带错误名的 warn，不泄内容，下一轮照常",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#4] stop 等在途一轮结束才 resolve；等待期间和之后都不起新轮；重复 stop 安全",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#4] 在途一轮期间连调两次 stop：两次都等它结束；这一轮抛错时 stop 也不 reject，只记 warn",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#4] 没有在途一轮时 stop 直接完成，之后整点不再有新轮",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts > [AC-B2-06i#5] 单轮成功：每轮一条 info，字段只有 scanned、enqueued、manual 三个计数；没有 warn"
+      ],
+      "expected": [
+        "test/spec/payout/query-recovery-wiring/entry.test.ts",
+        "test/spec/payout/query-recovery-wiring/recovery-chain.int.test.ts",
+        "test/spec/payout/query-recovery-wiring/recovery-switches.int.test.ts",
+        "test/spec/payout/query-recovery-wiring/runtime.test.ts",
+        "test/spec/payout/query-recovery-wiring/worker.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "653961ec8aa3cd42ac1bd2bc9460cabe318d5f5229c9ef1192d34cc19ff5758d"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b5d320f87874b16bd96f91e815578e898a5f488d851f63f61f1e8cd498685d38"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e63ac5e2163fbad5a5d7630f3868090d1d5d48f5",
+    "specs": "81162dd1f14b9998534e12edbd04c10478c7b260"
+  }
+}

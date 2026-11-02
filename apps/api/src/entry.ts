@@ -202,15 +202,29 @@ function startPayoutRuntime(
   resolve: () => unknown,
   queue: QueueRuntime,
   decision: PayoutModeDecision,
-): void {
+): Partial<PayoutRuntime> | undefined {
   let runtime: Partial<PayoutRuntime> | null | undefined;
   try {
     runtime = resolve() as Partial<PayoutRuntime> | null | undefined;
   } catch {
-    return;
+    return undefined;
   }
-  if (runtime === (queue as unknown) || typeof runtime?.start !== 'function') return;
+  if (runtime === (queue as unknown) || typeof runtime?.start !== 'function') return undefined;
   runtime.start(decision);
+  return runtime;
+}
+
+/**
+ * The query chain's crash recovery (B2-06i, BR-WDR-14): once the queue runs, because its rounds
+ * enqueue jobs; not when a stop was already requested. Optional like the runtime itself: a runtime
+ * without startRecovery starts and stops as before, no crash, no log.
+ */
+function startPayoutRecovery(
+  runtime: Partial<PayoutRuntime> | undefined,
+  stopping: () => boolean,
+): { stop(): Promise<void> } | undefined {
+  if (stopping() || typeof runtime?.startRecovery !== 'function') return undefined;
+  return runtime.startRecovery();
 }
 
 /**
@@ -644,30 +658,36 @@ async function start(
     return;
   }
   let metricsServer: MetricsServer | undefined;
+  let recovery: { stop(): Promise<void> } | undefined;
   try {
     // Queue `payout`'s handler is registered before the queue starts (B2-06f).
-    startPayoutRuntime(
+    const runtime = startPayoutRuntime(
       () => context.get<unknown>(payoutRuntimeToken(), { strict: false }),
       queue,
       decision,
     );
     await queue.start();
+    recovery = startPayoutRecovery(runtime, () => signals.stopping());
     // B1-01zzh: process-level metrics only; payout never reads business tables for them.
     metricsServer = await openMetrics(entry, config, logger);
   } catch (error) {
     signals.fail();
+    // The round in flight needs the queue and the database (D10-553): it stops first.
+    await recovery?.stop();
     await closeQuietly(metricsServer, logger);
     await queue.stop();
     await context.close();
     throw error;
   }
   const servedMetrics = metricsServer;
+  const servedRecovery = recovery;
   // Keep entries alive even while no business module has registered a handler.
   const keepAlive = setInterval(() => undefined, KEEP_ALIVE_INTERVAL_MS);
   await signals.serve(
     async () => {
       try {
         try {
+          await servedRecovery?.stop();
           await servedMetrics?.close();
         } finally {
           await queue.stop();
