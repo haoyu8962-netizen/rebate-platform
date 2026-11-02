@@ -1,7 +1,9 @@
 // Risk's read-only blocklist match for the withdrawal rules (task B2-05c; BR-WDR-03 ③a, BR-ID-31):
 // any of the member's phone HMAC (users.phone_hmac), id-number HMAC (realname.id_no_hmac of the
-// verified record), the device hash of the request's device (devices.device_hash, this member's
-// device) or the current payout account's HMAC (dimension alipay / bank_card / wechat_openid by
+// verified record), the device hash of the device asked about (devices.device_hash; D10-571 B1-03zi:
+// the row is found by app_id and id only, the deviceId comes from the verified token or from the
+// member's sessions, and devices.user_id is never written) or the current payout account's HMAC
+// (dimension alipay / bank_card / wechat_openid by
 // payout method) on an ACTIVE, unexpired blocklist entry of the same app → the hit's text code
 // `blocklist.<violation_type>` (04 §7, as the blocklist service answers 44001). Everything on the
 // caller's handle (READ ONLY transactions included), `now` from the caller's Clock; nothing is
@@ -96,7 +98,6 @@ export function createBlocklistMatchReader(
         .select('device_hash')
         .where('app_id', '=', subject.appId)
         .where('id', '=', subject.deviceId)
-        .where('user_id', '=', subject.userId)
         .executeTakeFirst();
       if (device?.device_hash) values.push({ dimension: 'device', hmac: device.device_hash });
       if (subject.payeeHmac !== null && subject.payoutMethod !== null) {

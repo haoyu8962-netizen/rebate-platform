@@ -3786,15 +3786,18 @@ function autoPayoutPorts(deps: {
           input.payoutMethod === 'wechat'
             ? input.payoutMethod
             : null;
+        // D10-571 (B1-03zi): every device of the member's sessions, revoked ones included, no time
+        // window, as BR-ID-28's deletion does. ⑨ only sends the withdrawal to manual review.
         const devices = await handle
           .withSchema('app')
-          .selectFrom('devices')
-          .select('id')
+          .selectFrom('sessions')
+          .select('device_id')
+          .distinct()
           .where('app_id', '=', input.appId)
           .where('user_id', '=', input.userId)
           .execute();
         const now = clock.now();
-        for (const deviceId of [NO_DEVICE, ...devices.map((device) => device.id)]) {
+        for (const deviceId of [NO_DEVICE, ...devices.map((device) => device.device_id)]) {
           const matched = await blocklist.read(handle, {
             appId: input.appId,
             userId: input.userId,

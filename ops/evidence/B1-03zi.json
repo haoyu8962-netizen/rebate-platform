@@ -1,0 +1,95 @@
+{
+  "risk_note": "RV2 (apps/api/src/modules/risk/**, app.module.ts; the withdrawal application and the auto payout decision). FU-DEVICE-USER-ID, plan B (D10-571; identity reviews it on 11-06). Production never writes devices.user_id, and the blocklist match and ⑨ looked devices up by it, so the device dimension of the withdrawal blocklist never matched: a missed block, not a false one. ③a, a direct refusal with 44001, now looks at the device of the request, found by app_id and id; the id comes from the verified token. ⑨, which only sends the withdrawal to manual review, looks at every device of the member's sessions, revoked ones included, no time window, as BR-ID-28's deletion does. 08 does not define the member's device; these readings were put to Jev by the orchestrator and are to be written back to 08. Effect after this change: a member's withdrawal from a blacklisted device is now refused, and a withdrawal by a member who ever used one now goes to manual review. No write to devices.user_id, no change to the login path, no migration, no contract change. devices.user_id is now a dead column: FU-DEVICES-USER-ID-COLUMN, identity. Reading sessions as the worker's connection role is pinned by a rule test against the test connection; production's worker role follows the repository's connection config.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 (couli-runs/B1-03zi/review-codex.json), no findings. Static review, no tests run."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "fresh Claude each round. r1 fail: 2 S1 (⑨ passable by reading only the earliest device, and by adding a time window), 1 S2 (the rules response not scanned). Fixed by a new independent Claude; r2 pass with no findings. An earlier test-phase run ended on an API connection error with no files and was run again."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-03zi",
+  "spec_commit": "d4abbd6085cf75ceeac2893d9bc1b29e4dcb4e13",
+  "spec_ref": "deb521c2bcb740571a01c2dc128f40abb40c37a2",
+  "red_tests": [
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#1] 真实注册登录后设备哈希进黑名单：从这台设备 POST /v1/withdrawals 得 44001，此时 devices.user_id 是 null",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#2] 真实注册登录后设备哈希进黑名单：从这台设备 GET /v1/withdrawals/rules 的 block_code 是 44001，此时 devices.user_id 是 null",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#3] ③a 只看发起请求的设备：同一账号的设备 X 被拉黑，从 X 发起 44001，从 Y 发起不是 44001",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#4] ⑨ 看用过的所有设备：从 Y 发起的单，设备 X 申请后或申请前被拉黑，自动到账判定都命中 blacklist_hit、转人工",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#5] 多账号不覆盖：A 登过 D、B 后登 D（last_login_sid 已是 B 的），D 被拉黑后 A 从 D 发起 44001，A 从别的设备发起的单 ⑨ 仍命中",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#6] 不牵连：别的用户的设备被拉黑，那个用户命中；本账号（从未登过那台）③a、⑨ 都不命中",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#7] 不牵连：别的 app 同 hash 的黑名单行不算；那个 app 自己的会员命中，本 app 同 hash 设备的会员 ③a、⑨ 都不命中",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#8] 已吊销仍算：会话已退出登录的设备被拉黑，⑨ 仍命中",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#9] 已吊销仍算：撤回同意吊销了的设备被拉黑，⑨ 仍命中",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#10] 其他维度行为不变：设备命中 44001 之外，手机号、身份证、收款账号命中仍 44001，申请后才登记的仍记 ⑨",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#11] 规则启停（B2-11f）：BLACKLIST_DEVICE 启用时命中；停用时 ③a、⑨ 都跳过设备维度；手机号规则停用时往下看到设备维度",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#12] worker 真实角色能读 sessions：真实 worker 入口的判定在 couli_app 连接上命中 ⑨，不是超级用户直连",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#13] 日志与错误不含手机号、设备哈希明文（BR-ID-33）：44001 响应、rules 响应、⑨ 判定及两个入口的日志",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#14] ⑨ 不只看最早的设备：先后登录 X、Y、Z，从 X 发起，拉黑最后登录的 Z 或居中的 Y，都命中 blacklist_hit、转人工",
+    "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#15] ⑨ 不设时间窗：比 T 早 40 天在 X 上真实登录，回到 T 在 Y 上登录并发起，拉黑 X，仍命中 blacklist_hit、转人工"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d4abbd6085cf75ceeac2893d9bc1b29e4dcb4e13",
+      "tree": "9072f0b9bc0ee9efdfd535ba1ab14d2ed59dc037",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-02T06:21:38Z",
+      "finished_at": "2026-11-02T06:21:53Z",
+      "red_tests": [
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#1] 真实注册登录后设备哈希进黑名单：从这台设备 POST /v1/withdrawals 得 44001，此时 devices.user_id 是 null",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#2] 真实注册登录后设备哈希进黑名单：从这台设备 GET /v1/withdrawals/rules 的 block_code 是 44001，此时 devices.user_id 是 null",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#3] ③a 只看发起请求的设备：同一账号的设备 X 被拉黑，从 X 发起 44001，从 Y 发起不是 44001",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#4] ⑨ 看用过的所有设备：从 Y 发起的单，设备 X 申请后或申请前被拉黑，自动到账判定都命中 blacklist_hit、转人工",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#5] 多账号不覆盖：A 登过 D、B 后登 D（last_login_sid 已是 B 的），D 被拉黑后 A 从 D 发起 44001，A 从别的设备发起的单 ⑨ 仍命中",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#6] 不牵连：别的用户的设备被拉黑，那个用户命中；本账号（从未登过那台）③a、⑨ 都不命中",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#7] 不牵连：别的 app 同 hash 的黑名单行不算；那个 app 自己的会员命中，本 app 同 hash 设备的会员 ③a、⑨ 都不命中",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#8] 已吊销仍算：会话已退出登录的设备被拉黑，⑨ 仍命中",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#9] 已吊销仍算：撤回同意吊销了的设备被拉黑，⑨ 仍命中",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#10] 其他维度行为不变：设备命中 44001 之外，手机号、身份证、收款账号命中仍 44001，申请后才登记的仍记 ⑨",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#11] 规则启停（B2-11f）：BLACKLIST_DEVICE 启用时命中；停用时 ③a、⑨ 都跳过设备维度；手机号规则停用时往下看到设备维度",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#12] worker 真实角色能读 sessions：真实 worker 入口的判定在 couli_app 连接上命中 ⑨，不是超级用户直连",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#13] 日志与错误不含手机号、设备哈希明文（BR-ID-33）：44001 响应、rules 响应、⑨ 判定及两个入口的日志",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#14] ⑨ 不只看最早的设备：先后登录 X、Y、Z，从 X 发起，拉黑最后登录的 Z 或居中的 Y，都命中 blacklist_hit、转人工",
+        "test/spec/risk/blocklist-device-scope/device-scope.int.test.ts > [AC-B1-03zi#15] ⑨ 不设时间窗：比 T 早 40 天在 X 上真实登录，回到 T 在 Y 上登录并发起，拉黑 X，仍命中 blacklist_hit、转人工"
+      ],
+      "expected": ["test/spec/risk/blocklist-device-scope/device-scope.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "435fb20be30411dff4eaa7d788826febb068aa012ac78e07f8ed32b75bebbef9"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "72f044e0e37d7a81698f44713e57daa4375d7e4c",
+    "specs": "4e25c356b485066db1097872ec94837e9a85f1e4"
+  }
+}
