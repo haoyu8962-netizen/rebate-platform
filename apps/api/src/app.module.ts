@@ -22,6 +22,7 @@ import {
   createAdminVerifyPhoneReader,
   createAuditWriter,
   createOrderHoldAuditReader,
+  createSystemAuditWriter,
 } from './modules/admin/index.ts';
 import {
   AgentModule,
@@ -74,6 +75,7 @@ import {
   createSelfRebateEstimateReader,
   createBeneficiaryShareReader,
   COMMISSION_QUOTE_CONFIG_KEYS,
+  createCommissionEstimates,
   createCommissionRebateQuoter,
   createCommissionSnapshotPort,
   createRuleSetReader,
@@ -358,6 +360,7 @@ import {
   createOrderQueries,
   createOrderSourcePorts,
   type OrderSourcePorts,
+  type OrderRebatePortFactory,
   type PlatformRestoreDiffPort,
   readPersonalDataCopyOrders,
   type OrdersWorkerOptions,
@@ -408,6 +411,7 @@ import {
   blocklistHmacContexts,
   createBlocklistMatchReader,
   createAppealPrevStateReader,
+  createOrderBlocklistPorts,
   createRiskStateBatchReader,
   RiskAdminModule,
   RiskAppealsAdminModule,
@@ -443,6 +447,7 @@ import {
   createOrderFiguresReader,
   createPendingEarningsSource,
   createRebateAdminCommandPort,
+  createRebatePort,
   readOrderIdsByKey,
 } from './modules/settlement/index.ts';
 import {
@@ -1837,6 +1842,23 @@ function governedUnion(
   };
 }
 
+/** B1-09n: what the blacklist step reads of the worker entry; see orderSyncWorker. */
+interface OrderSyncKeyring {
+  readonly crypto: FieldCrypto | undefined;
+  readonly appEnv: AppConfig['appEnv'];
+  readonly logger: Pick<RootLogger, 'warn'>;
+}
+
+/** B1-09n: the entry's field keyring; undefined (step ③ skipped) only in local / test. */
+export function orderBlacklistKeyring(entry: OrderSyncKeyring): FieldCrypto | undefined {
+  if (entry.crypto !== undefined) return entry.crypto;
+  if (entry.appEnv !== 'local' && entry.appEnv !== 'test') {
+    throw new Error('orders: the blacklist step needs the field keyring outside local / test');
+  }
+  entry.logger.warn({ step: 'blacklist' }, 'order_blacklist_step_skipped');
+  return undefined;
+}
+
 /** The app whose config_items rows hold order_sync.rescan.*; the config port takes no App. */
 const ORDER_SYNC_APP_ID = 'couli';
 
@@ -1852,10 +1874,16 @@ const ORDER_SYNC_APP_ID = 'couli';
  * every get reads again (a fresh content reader per call, so a changed row is seen on the next
  * round). An absent key is undefined, so orders' own defaults apply; a failed read propagates
  * unchanged, so the rescan skips the platform for that round instead of taking the default.
+ * B1-09n: `rebate`, the entry's rebatePortFactory; `blocklist`, risk's order-side ports over the
+ * entry's field keyring (`keyring` answers undefined only in local / test without one, and step ③
+ * is then skipped); suffixVoidEnabled, content's attr.blacklist.order_suffix_void_enabled of the
+ * order's App, anything but true being off (08's default; BR-ATTR-26).
  */
 function orderSyncPorts(
   union: DynamicModule,
   quota: OrdersWorkerOptions['quota'],
+  keyring: () => FieldCrypto | undefined,
+  rebate: OrderRebatePortFactory,
 ): OrdersWorkerOptions {
   return {
     union,
@@ -1865,6 +1893,18 @@ function orderSyncPorts(
     sources: (db, clock, logger) => orderSourcePorts(db, clock, logger),
     snapshots: (db, clock, logger) => orderSnapshotPort(db, clock, logger),
     platformRestore: (clock) => orderPlatformRestorePort(clock),
+    rebate,
+    blocklist: (_db, clock) => {
+      const crypto = keyring();
+      return crypto === undefined ? undefined : createOrderBlocklistPorts({ clock, crypto });
+    },
+    suffixVoidEnabled: (db, clock) => async (appId) =>
+      (
+        await createContentReader({ db, clock }).configValue(
+          appId,
+          'attr.blacklist.order_suffix_void_enabled',
+        )
+      )?.value === true,
     rescanConfig: (db, clock) => ({
       get: async (key) =>
         (await createContentReader({ db, clock }).configValue(ORDER_SYNC_APP_ID, key))?.value,
@@ -1877,14 +1917,31 @@ function orderSyncPorts(
  * the entry's CLOCK, ROOT_LOGGER and REDIS (orders' own module does not inject REDIS). They are
  * handed to the quota port just before the runtime is built (the runtime calls `quota` once per
  * endpoint while it is assembled), so the worker's buckets are the shared union buckets.
+ * B1-09n: the provider also receives FIELD_CRYPTO and APP_CONFIG, for the blacklist step's keyring.
+ * Outside local / test a missing keyring refuses the runtime (the worker does not start), the same
+ * rule as linking's and agent's item_ref: production never loses step ③ silently. In local / test
+ * without one the step is skipped with one warning line, as a config without keys is normal there.
  */
-function orderSyncWorker(union: DynamicModule, source: UnionQuotaSource): DynamicModule {
-  let entry: UnionQuotaDeps | undefined;
+function orderSyncWorker(
+  union: DynamicModule,
+  source: UnionQuotaSource,
+  rebate: OrderRebatePortFactory,
+): DynamicModule {
+  let entry: (UnionQuotaDeps & OrderSyncKeyring) | undefined;
+  const keyring = (): FieldCrypto | undefined => {
+    if (entry === undefined) throw new Error('orders: the blacklist step needs the worker entry');
+    return orderBlacklistKeyring(entry);
+  };
   const module = OrdersModule.forWorker(
-    orderSyncPorts(union, (endpoint) => {
-      if (entry === undefined) throw new Error('orders: union quota needs the worker entry');
-      return unionQuota(endpoint, entry, source);
-    }),
+    orderSyncPorts(
+      union,
+      (endpoint) => {
+        if (entry === undefined) throw new Error('orders: union quota needs the worker entry');
+        return unionQuota(endpoint, entry, source);
+      },
+      keyring,
+      rebate,
+    ),
   );
   const runtime = orderSyncToken();
   return {
@@ -1901,14 +1958,29 @@ function orderSyncWorker(union: DynamicModule, source: UnionQuotaSource): Dynami
       const build = provider.useFactory;
       return {
         provide: runtime,
-        inject: [...inject, CLOCK, ROOT_LOGGER, { token: REDIS, optional: true }],
+        inject: [
+          ...inject,
+          CLOCK,
+          ROOT_LOGGER,
+          APP_CONFIG,
+          { token: REDIS, optional: true },
+          { token: FIELD_CRYPTO, optional: true },
+        ],
         useFactory: (...args: unknown[]): unknown => {
-          const [clock, logger, redis] = args.slice(inject.length) as [
+          const [clock, logger, config, redis, crypto] = args.slice(inject.length) as [
             Clock,
             RootLogger,
+            AppConfig,
             RedisHandle | undefined,
+            FieldCrypto | undefined,
           ];
-          entry = { clock, logger, redis: redis ?? undefined };
+          entry = {
+            clock,
+            logger,
+            redis: redis ?? undefined,
+            crypto: crypto ?? undefined,
+            appEnv: config.appEnv,
+          };
           return build(...args.slice(0, inject.length));
         },
       };
@@ -1969,6 +2041,14 @@ function orderPlatformRestorePort(clock: Clock): PlatformRestoreDiffPort {
   };
 }
 
+/** The order read and fee rule of commission's estimates, for both ports below. */
+const orderEstimateSource = {
+  readOrder: (trx: Transaction<Database>, ref: { appId: string; orderId: string; attrAt: Date }) =>
+    readOrder(trx, { app_id: ref.appId, order_id: ref.orderId, attr_at: ref.attrAt }),
+  serviceFeeDeducted: (platform: string) =>
+    findPlatformRules(platform)?.serviceFeeDeducted === true,
+};
+
 /**
  * B1-08w: orders' commission snapshot port (BR-ATTR-01 ⑥, BR-CALC-10) — commission's
  * createCommissionSnapshotPort over the B2-03p beneficiary resolver (growth's level / parent
@@ -1991,10 +2071,57 @@ export function orderSnapshotPort(
     clock,
     logger,
     beneficiaries,
-    readOrder: (trx, ref) =>
-      readOrder(trx, { app_id: ref.appId, order_id: ref.orderId, attr_at: ref.attrAt }),
-    serviceFeeDeducted: (platform) => findPlatformRules(platform)?.serviceFeeDeducted === true,
+    ...orderEstimateSource,
   });
+}
+
+/**
+ * B1-09n (D10-548, D10-550, FU-REBATE-PORT-WIRING): the production rebate port. One factory per
+ * entry (AppModule.forEntry): its first call builds settlement's port, every later call returns
+ * that instance whatever it is given, so the order sync and B1-10n's rights port share one.
+ * Building reads nothing.
+ * - estimates: commission's port over the same order read and fee rule as orderSnapshotPort.
+ * - audit: admin's system audit on the caller's transaction (commits and rolls back with the hold).
+ * - config: content's config_items, read again on every call on `db`: the port's config.get takes
+ *   no transaction, so like the sync's source ports it uses a second pool connection.
+ * - onBlacklistHit: settlement has no such method. Its apply with BLACKLIST_HIT is R6 from
+ *   UNATTRIBUTED, ESTIMATED and WAITING, decided before any base is read, so the amounts stay null.
+ *   orders calls it only for an uncredited order; a credited one gets the review event from orders
+ *   and no amount changes (BR-ATTR-26).
+ */
+export function rebatePortFactory(): OrderRebatePortFactory {
+  let port: ReturnType<OrderRebatePortFactory> | undefined;
+  return ({ db, clock, logger, events }) => {
+    if (port !== undefined) return port;
+    const rebate = createRebatePort({
+      clock,
+      logger,
+      events,
+      config: {
+        get: async (appId, key) =>
+          (await createContentReader({ db, clock }).configValue(appId, key))?.value,
+      },
+      estimates: createCommissionEstimates({ clock, ...orderEstimateSource }),
+      audit: createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
+    });
+    port = {
+      ...rebate,
+      onBlacklistHit: (trx, hit) =>
+        rebate.apply(
+          trx,
+          {
+            appId: hit.app_id,
+            orderId: hit.order_id,
+            attrAt: hit.attr_at,
+            estBefore: null,
+            estAfter: null,
+            settleCommissionFen: null,
+          },
+          'BLACKLIST_HIT',
+        ),
+    };
+    return port;
+  };
 }
 
 /**
@@ -4077,6 +4204,8 @@ export class AppModule {
     // B1-22v (D10-460): one union quota source per entry, so an entry without REDIS builds at most
     // one fallback whichever of its modules asks first.
     const unionQuotaSource = createUnionQuotaSource(options.config.appEnv);
+    // B1-09n: the entry's one rebate port factory; B1-10n's rights port takes this same one.
+    const rebatePort = rebatePortFactory();
     const linking =
       options.entry === 'api'
         ? LinkingModule.forRoot((db, clock) => createContentReader({ db, clock }), {
@@ -4599,9 +4728,10 @@ export class AppModule {
         // Order sync (B1-08n): the order-sync handler and its scheduler, worked by the worker
         // entry only over its own governed union adapters; entry.ts starts the scheduler after
         // the queue runs. B1-08w: with commission's snapshot port, so step ⑥ and the snapshot
-        // compensation retry (its 15-minute scan, started with the scheduler) run here.
+        // compensation retry (its 15-minute scan, started with the scheduler) run here. B1-09n:
+        // with settlement's rebate port and risk's blacklist step.
         ...(options.entry === 'worker' && union !== undefined
-          ? [orderSyncWorker(union, unionQuotaSource)]
+          ? [orderSyncWorker(union, unionQuotaSource, rebatePort)]
           : []),
         // catalog's product pool refresh (B1-05r, BR-PRICE-11): queue pool-refresh and its seed
         // timer, worker entry only, on this entry's own governed adapters (shared quota bucket).

@@ -19,6 +19,8 @@
 // app.module over the worker's DB, CLOCK and ROOT_LOGGER), built once when the runtime is and
 // passed as the runtime's own snapshots dependency (not among the read ports): step ⑥ and the
 // B1-08t compensation retry then run in production. Not built when the runtime is disabled.
+// B1-09n: options.rebate and options.blocklist reach the runtime among its read ports, and likewise
+// are only called when the runtime is built.
 import { Module, type DynamicModule } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
 import type { Kysely } from 'kysely';

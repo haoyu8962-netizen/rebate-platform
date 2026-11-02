@@ -27,8 +27,10 @@
 //   OrderBlacklistDeps object is built at assembly (no read) and goes to the pipeline and the update
 //   step: step ③ (BR-ATTR-26) runs. The Taobao suffix switch is read through
 //   ports.suffixVoidEnabled; absent → false, the 08 default (suffix hits only recorded for review).
-//   Until settlement wires rebate.onBlacklistHit, an uncredited hit is recorded as manual_review
-//   with a P1 warning and the order is left unchanged.
+//   Without rebate.onBlacklistHit (a runtime built without ports.rebate) an uncredited hit is
+//   recorded as manual_review with a P1 warning and the order is left unchanged.
+// - B1-09n: ports.rebate (app.module's factory over settlement) gives the one rebate port of the
+//   sync: the pipeline and the update step get the same object. Absent → NO_REBATE_PORT below.
 // - B1-08zc: when ports.platformRestore is given (ledger's registerReconDiffOnce as orders' port, from
 //   app.module), it is built once at assembly (no read) and goes to the update step: a VOID /
 //   CLAWED_BACK order restored by the platform registers one platform_restore recon diff
@@ -70,7 +72,11 @@ import { ORDER_RESCAN_JOB, createOrderRescanScheduler } from './application/orde
 import { createOrderPipeline } from './application/pipeline-port.ts';
 import type { OrderPipelineDeps, OrderPipelinePort } from './application/pipeline-types.ts';
 import type { OrderSourcePorts } from './application/source-backfill.ts';
-import type { OrderBlacklistDeps, OrderBlacklistPorts } from './application/blacklist-step.ts';
+import type {
+  OrderBlacklistDeps,
+  OrderBlacklistPorts,
+  OrderBlacklistRebatePort,
+} from './application/blacklist-step.ts';
 import type {
   SyncAccessPort,
   SyncCursorStore,
@@ -116,6 +122,25 @@ export interface OrderSyncRuntime {
   start(): { stop(): Promise<void> };
 }
 
+/**
+ * B1-09n: every rebate hook of the sync, one object: the attribution pipeline and the update step
+ * get this same instance (settlement's createRebatePort plus onBlacklistHit over its BLACKLIST_HIT).
+ */
+export type OrderSyncRebatePort = OrderPipelineDeps['rebate'] &
+  OrderUpdateDeps['rebate'] &
+  OrderBlacklistRebatePort;
+
+/** B1-09n: what the production rebate port is built over; building it reads nothing. */
+export interface OrderRebateAssembly {
+  readonly db: Kysely<DB>;
+  readonly clock: Clock;
+  readonly logger: RootLogger;
+  readonly events: Pick<EventBus, 'publish'>;
+}
+
+/** B1-09n: app.module's factory: built on the first call, the same instance on every later one. */
+export type OrderRebatePortFactory = (assembly: OrderRebateAssembly) => OrderSyncRebatePort;
+
 /** Readers and limits owned by other modules, assembled in app.module (orders imports neither). */
 export interface OrderSyncReadPorts {
   /** identity: users.attr_code → user_id in one App, any status. */
@@ -136,9 +161,10 @@ export interface OrderSyncReadPorts {
   readonly sources?: (db: Kysely<DB>, clock: Clock, logger: RootLogger) => OrderSourcePorts;
   /**
    * B1-09b: risk's order-side blocklist ports (match / recordHit, B1-09a), called once at assembly
-   * and reading nothing until used. Absent → step ③ (BR-ATTR-26) is skipped.
+   * and reading nothing until used. Absent, or B1-09n undefined (no field keyring in local / test;
+   * app.module refuses that elsewhere) → step ③ (BR-ATTR-26) is skipped.
    */
-  readonly blocklist?: (db: Kysely<DB>, clock: Clock) => OrderBlacklistPorts;
+  readonly blocklist?: (db: Kysely<DB>, clock: Clock) => OrderBlacklistPorts | undefined;
   /**
    * B1-09b: attr.blacklist.order_suffix_void_enabled of one App. Absent → always false (08 default:
    * suffix hits are only recorded for manual review).
@@ -153,6 +179,11 @@ export interface OrderSyncReadPorts {
    * registers no platform_restore diff (the P9 warning stays).
    */
   readonly platformRestore?: (clock: Clock) => PlatformRestoreDiffPort;
+  /**
+   * B1-09n: app.module's rebate port factory (FU-REBATE-PORT-WIRING). A runtime built directly
+   * without it keeps a no-op port; the production worker always gives it.
+   */
+  readonly rebate?: OrderRebatePortFactory;
   /**
    * B1-04zm: reads order_sync.rescan.<platform>.enabled / .days, called once at assembly and
    * reading nothing until used. Absent → no rescan timer; 'rescan.window' jobs are routed either way.
@@ -214,12 +245,12 @@ function loadStatusMaps(): (platform: RegisteredPlatform) => StatusMap {
 // TODO(规划/11 §4.5): order_sync.<platform>.interval_seconds 的全局读法 — blocked on 平台级配置口径
 const DEFAULT_INTERVAL: SyncIntervalConfig = { get: async () => undefined };
 
-// TODO(规划/11 §4.5): 返利首态 R1/R2 与更新时的返利迁移 — blocked on settlement 立项
-// Until then an attributed order keeps the column default rebate_status (UNATTRIBUTED).
-const PENDING_SETTLEMENT: OrderPipelineDeps['rebate'] = {
+/**
+ * B1-09n: a runtime built without ports.rebate (never the production worker): an attributed order
+ * keeps the column default rebate_status. No onBlacklistHit, so a hit stays manual_review.
+ */
+const NO_REBATE_PORT: OrderPipelineDeps['rebate'] & OrderUpdateDeps['rebate'] = {
   onImported: async () => undefined,
-};
-const PENDING_SETTLEMENT_UPDATES: OrderUpdateDeps['rebate'] = {
   onUpdated: async () => undefined,
   onUnmappedStatus: async () => undefined,
 };
@@ -276,6 +307,8 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
           suffixVoidEnabled: deps.ports.suffixVoidEnabled?.(db, clock) ?? (async () => false),
         };
   const platformRestore = deps.ports.platformRestore?.(clock);
+  // B1-09n: one rebate object for both steps (built here, read on use).
+  const rebate = deps.ports.rebate?.({ db, clock, logger, events }) ?? NO_REBATE_PORT;
   const updateStep = createOrderUpdateStep({
     clock,
     users,
@@ -283,7 +316,7 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
     pids: readers.pids,
     statusMaps,
     logger,
-    rebate: PENDING_SETTLEMENT_UPDATES,
+    rebate,
     events,
     ...(sources === undefined ? {} : { sources }),
     ...(snapshots === undefined ? {} : { snapshots }),
@@ -298,7 +331,7 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
     accounts: readers.accounts,
     users,
     bindings,
-    rebate: PENDING_SETTLEMENT,
+    rebate,
     updateStep,
     events,
     logger,

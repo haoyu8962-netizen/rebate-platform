@@ -28,5 +28,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/orders/rebate-wiring/**'
-status: todo
-pr: null
+status: done
+pr: 2243

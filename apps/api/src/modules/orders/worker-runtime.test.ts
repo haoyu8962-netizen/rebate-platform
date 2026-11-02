@@ -65,7 +65,7 @@ function rawAdapter(platform: RegisteredPlatform): UnionAdapter {
 
 function setup(
   sources?: OrderSyncReadPorts['sources'],
-  extra: Pick<OrderSyncReadPorts, 'blocklist' | 'suffixVoidEnabled'> = {},
+  extra: Pick<OrderSyncReadPorts, 'blocklist' | 'suffixVoidEnabled' | 'rebate'> = {},
   rightsImports?: OrderRightsImportDeps,
 ) {
   const queries: string[] = [];
@@ -277,6 +277,45 @@ const RIGHTS_IMPORT_JOB = {
   attempt: 1,
   payload: { app_id: 'unit', import_id: '01890000-0000-7000-8000-00000000000a' },
 };
+
+it('[AC-B1-09n#u1] 注入 rebate：工厂在装配时调一次（db、clock、logger、events），同一对象交给归因和更新，装配不查库', () => {
+  const pipeline = vi.spyOn(pipelinePort, 'createOrderPipeline');
+  const update = vi.spyOn(updateStep, 'createOrderUpdateStep');
+  const port = {
+    onImported: vi.fn(),
+    onUpdated: vi.fn(),
+    onUnmappedStatus: vi.fn(),
+    onBlacklistHit: vi.fn(),
+  };
+  const rebate = vi.fn(() => port);
+  const s = setup(undefined, { rebate });
+  expect(rebate).toHaveBeenCalledTimes(1);
+  expect(rebate.mock.calls[0]).toEqual([
+    { db: s.db, clock: s.clock, logger: s.logger, events: expect.anything() },
+  ]);
+  expect(pipeline.mock.calls[0]![0].rebate).toBe(port);
+  expect(update.mock.calls[0]![0].rebate).toBe(port);
+  expect(s.queries).toEqual([]);
+});
+
+it('[AC-B1-09n#u2] 未注入 rebate：归因与更新拿到同一个空端口，没有 onBlacklistHit（命中只记复核）', () => {
+  const pipeline = vi.spyOn(pipelinePort, 'createOrderPipeline');
+  const update = vi.spyOn(updateStep, 'createOrderUpdateStep');
+  setup();
+  const rebate = pipeline.mock.calls[0]![0].rebate;
+  expect(update.mock.calls[0]![0].rebate).toBe(rebate);
+  expect(rebate.onBlacklistHit).toBeUndefined();
+});
+
+it('[AC-B1-09n#u3] blocklist 工厂答 undefined（本地与测试没有字段密钥）：第 ③ 步整步不装配', () => {
+  const pipeline = vi.spyOn(pipelinePort, 'createOrderPipeline');
+  const update = vi.spyOn(updateStep, 'createOrderUpdateStep');
+  const blocklist = vi.fn(() => undefined);
+  setup(undefined, { blocklist });
+  expect(blocklist).toHaveBeenCalledTimes(1);
+  expect(pipeline.mock.calls[0]![0].blacklist).toBeUndefined();
+  expect(update.mock.calls[0]![0].blacklist).toBeUndefined();
+});
 
 it('[AC-B1-09g#u1] rights_import 任务分派到导入处理：读任务行，不调用窗口同步', async () => {
   const store = { put: vi.fn(), get: vi.fn(), delete: vi.fn() };

@@ -1,0 +1,133 @@
+{
+  "task": "B1-09n",
+  "spec_ref": "deb521c2bcb740571a01c2dc128f40abb40c37a2",
+  "spec_commit": "7057dae4a3f6327909a74c75f07d96e1327f1c03",
+  "red_tests": [
+    "test/spec/orders/rebate-wiring/api.int.test.ts > [AC-B1-09n#19][BR-FUND-03][BR-FUND-18] 同步进来的已归因订单：用户订单接口金额非 null，钱包预估与之同数",
+    "test/spec/orders/rebate-wiring/api.int.test.ts > [AC-B1-09n#20][BR-FUND-03] 佣金变化后：钱包不抛错，订单接口与钱包都是 v2 的数",
+    "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#1] 工厂一次构建：同一工厂再要给同一个实例，createRebatePort 只调一次，造端口不查库",
+    "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#2] worker 用的就是工厂给的实例：流水线与更新步骤拿到同一个对象，整个入口只造一份",
+    "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#3] 黑名单第 ③ 步：有字段密钥时流水线与更新步骤共用 risk 的 createOrderBlocklistPorts，用入口的 FIELD_CRYPTO",
+    "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#4] app.module 里只有工厂这一处 new：createRebatePort 的调用恰好一处",
+    "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#12] 规则启用，新订单命中：同事务作废，reason=BLACKLIST，记 void_commission，不生成快照",
+    "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#13] 未入账的已有订单命中（ESTIMATED）：更新时作废，快照与 v1 金额行留存",
+    "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#14] 已入账订单命中：只发 order.blacklist_hit_after_credit，记 manual_review，已入账金额不变",
+    "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#15] 规则停用不判定：名单在，订单照常 ESTIMATED，不写命中、不作废",
+    "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#25] WAITING 订单更新时命中：作废，reason=BLACKLIST，记 void_commission，发 order.invalidated",
+    "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#26] 未归因订单入库时命中：同事务作废，reason=BLACKLIST，记 void_commission，发 order.invalidated",
+    "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#27] 尾号开关：有 config_items 行开启为 true，没有行为 false（BR-ATTR-26 ①）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#5] 同步进来的已归因订单：ESTIMATED，快照 v1，orders.commission_version=1",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#6] 佣金变化：版本 2，有 v2 金额与 totals，v1 不动，返利状态不变（R7）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#7] 未归因订单留在 UNATTRIBUTED，无快照；后续归因走到 ESTIMATED，快照 v1（R1、R3a）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#8] 收货走到 WAITING：settle_period 取收货时间的月份，received_synced_at 取 Clock（R4）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#9] 入库时已收货：同一事务 R2 再 R4，直接 WAITING",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#10] 平台失效走 VOID：reason=REFUND，同事务发 order.invalidated（R6）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#11] 端口的 config 读 config_items：settle.period_basis 配了不认的取值，订单留在 ESTIMATED",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#21] 有效基数由 >0 变 0：R6 作废，reason=COMMISSION_ZERO，同事务发 order.invalidated（BR-FUND-07）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#22] 拼多多佣金变化：v2 金额行按 N = 佣金 − service_fee_fen 重算（BR-CALC-03，BR-FUND-03）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#23] 首见定金：ESTIMATED，不生成快照；付款（P2）同事务生成快照 v1（R2，BR-FUND-03，BR-CALC-10）",
+    "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#24] 首见即失效：同事务 VOID，reason=REFUND，不生成快照，发 order.invalidated（R2 / P13）",
+    "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#16] 未映射状态：hold=true、hold_reason=UNMAPPED_STATUS，写一行 system:risk 审计",
+    "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#17] 同一事务后面失败：hold 与审计行一起回滚，重投后恰好一行",
+    "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#18] 开关 order_sync.unmapped_status_hold.enabled 关：经 content 读到，不 hold、不写审计",
+    "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#28] WAITING 订单遇未映射状态：同样 hold，写一行 system:risk 审计，留一条待处理"
+  ],
+  "risk_note": "RV2 by path. Production wiring of the rebate port and the blacklist step (D10-548, D10-550, D10-551): settlement's createRebatePort replaces the PENDING_SETTLEMENT stub on the order worker, through one factory that B1-10n reuses, with commission's estimates and admin's transactional system audit; orderSyncPorts gets risk's blocklist ports. From here synced orders leave UNATTRIBUTED. Assembly only: no settlement, commission or risk internals change, no contract, no migration. Clawback routing stays with B1-10n. A missing field keyring skips the blacklist step in local and test and refuses to start elsewhere. Known and recorded: pdd estimates shown to users overstate the service fee from here on (FU-PDD-NET-N); config reads take a second connection inside the order lock, as orderSourcePorts already does.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7057dae4a3f6327909a74c75f07d96e1327f1c03",
+      "tree": "cd6420bded358e24aff558bae3a18dd47e8c1468",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T09:43:44Z",
+      "finished_at": "2026-11-02T09:44:17Z",
+      "red_tests": [
+        "test/spec/orders/rebate-wiring/api.int.test.ts > [AC-B1-09n#19][BR-FUND-03][BR-FUND-18] 同步进来的已归因订单：用户订单接口金额非 null，钱包预估与之同数",
+        "test/spec/orders/rebate-wiring/api.int.test.ts > [AC-B1-09n#20][BR-FUND-03] 佣金变化后：钱包不抛错，订单接口与钱包都是 v2 的数",
+        "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#1] 工厂一次构建：同一工厂再要给同一个实例，createRebatePort 只调一次，造端口不查库",
+        "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#2] worker 用的就是工厂给的实例：流水线与更新步骤拿到同一个对象，整个入口只造一份",
+        "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#3] 黑名单第 ③ 步：有字段密钥时流水线与更新步骤共用 risk 的 createOrderBlocklistPorts，用入口的 FIELD_CRYPTO",
+        "test/spec/orders/rebate-wiring/assembly.test.ts > [AC-B1-09n#4] app.module 里只有工厂这一处 new：createRebatePort 的调用恰好一处",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#12] 规则启用，新订单命中：同事务作废，reason=BLACKLIST，记 void_commission，不生成快照",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#13] 未入账的已有订单命中（ESTIMATED）：更新时作废，快照与 v1 金额行留存",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#14] 已入账订单命中：只发 order.blacklist_hit_after_credit，记 manual_review，已入账金额不变",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#15] 规则停用不判定：名单在，订单照常 ESTIMATED，不写命中、不作废",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#25] WAITING 订单更新时命中：作废，reason=BLACKLIST，记 void_commission，发 order.invalidated",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#26] 未归因订单入库时命中：同事务作废，reason=BLACKLIST，记 void_commission，发 order.invalidated",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts > [AC-B1-09n#27] 尾号开关：有 config_items 行开启为 true，没有行为 false（BR-ATTR-26 ①）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#5] 同步进来的已归因订单：ESTIMATED，快照 v1，orders.commission_version=1",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#6] 佣金变化：版本 2，有 v2 金额与 totals，v1 不动，返利状态不变（R7）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#7] 未归因订单留在 UNATTRIBUTED，无快照；后续归因走到 ESTIMATED，快照 v1（R1、R3a）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#8] 收货走到 WAITING：settle_period 取收货时间的月份，received_synced_at 取 Clock（R4）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#9] 入库时已收货：同一事务 R2 再 R4，直接 WAITING",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#10] 平台失效走 VOID：reason=REFUND，同事务发 order.invalidated（R6）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#11] 端口的 config 读 config_items：settle.period_basis 配了不认的取值，订单留在 ESTIMATED",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#21] 有效基数由 >0 变 0：R6 作废，reason=COMMISSION_ZERO，同事务发 order.invalidated（BR-FUND-07）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#22] 拼多多佣金变化：v2 金额行按 N = 佣金 − service_fee_fen 重算（BR-CALC-03，BR-FUND-03）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#23] 首见定金：ESTIMATED，不生成快照；付款（P2）同事务生成快照 v1（R2，BR-FUND-03，BR-CALC-10）",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts > [AC-B1-09n#24] 首见即失效：同事务 VOID，reason=REFUND，不生成快照，发 order.invalidated（R2 / P13）",
+        "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#16] 未映射状态：hold=true、hold_reason=UNMAPPED_STATUS，写一行 system:risk 审计",
+        "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#17] 同一事务后面失败：hold 与审计行一起回滚，重投后恰好一行",
+        "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#18] 开关 order_sync.unmapped_status_hold.enabled 关：经 content 读到，不 hold、不写审计",
+        "test/spec/orders/rebate-wiring/unmapped.int.test.ts > [AC-B1-09n#28] WAITING 订单遇未映射状态：同样 hold，写一行 system:risk 审计，留一条待处理"
+      ],
+      "expected": [
+        "test/spec/orders/rebate-wiring/api.int.test.ts",
+        "test/spec/orders/rebate-wiring/assembly.test.ts",
+        "test/spec/orders/rebate-wiring/blacklist.int.test.ts",
+        "test/spec/orders/rebate-wiring/flow.int.test.ts",
+        "test/spec/orders/rebate-wiring/unmapped.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "518d98d3bbded3a0be7af41148bd8202aa2814b011b79fbff819be9be57a5805"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "3535ee617f1690fe728eef4c9d4cdf9764ee7fdccd9a13f5db5a2cebf82c0621"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh on a rebased head, round 1 pass, no findings. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude, 28 tests under test/spec/orders/rebate-wiring, all through the production composition root; round 1 fail with three S1 (bases not observed, pdd fee, blacklist only from ESTIMATED), fixed by a fresh author context; round 2 pass, no findings. One author run lost to an API connection reset, not counted. [AC-B1-09n#5] in test/spec/orders/rebate-wiring/flow.int.test.ts pins an attributed order reaching ESTIMATED through a real AppModule.forEntry({ entry: 'worker' }): that is what guards against a return to the stub now that frozen [AC-B1-08n#19] accepts both values (orchestrator condition on B1-09s)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5dddb0de09b83a4c7602a96d6f94e96590ea6171",
+    "specs": "242c82f497fb866ceec0a6619e38ad2ac0f07e81"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
