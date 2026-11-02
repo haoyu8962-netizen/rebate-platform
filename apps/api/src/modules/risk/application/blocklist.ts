@@ -201,7 +201,7 @@ export interface BlocklistOptions {
 }
 
 /** Rule code of a blocklist hit on one dimension (BLACKLIST_PHONE, BLACKLIST_DEVICE, …). */
-function blocklistRule(dimension: BlocklistDimension): string {
+export function blocklistRule(dimension: BlocklistDimension): string {
   return `BLACKLIST_${dimension.toUpperCase()}`;
 }
 

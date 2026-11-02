@@ -1,0 +1,124 @@
+{
+  "risk_note": "RV2 (apps/api/src/modules/risk/**, app.module.ts; the withdrawal application and the auto payout decision). GATE-RISK-RULE-TOGGLE (D10-536 (b), D10-537, D10-564, D10-566). createBlocklistMatchReader reads the rule state BLACKLIST_<DIMENSION> before each dimension on the caller's handle: a disabled one is skipped and the next is looked at, the answer keeps its shape, a failed read rejects and never counts as disabled. Both production callers pass the reader: the application's 44001 and the decision's ⑨. No payout code changed: same_device_multi_account was already gated in risk's judgement by B1-03zh, and payout adds no second read (D10-566 ①), as pinned by the rule tests. Thresholds stay in config items; no schema or contract change. The ledger title still names the wider plan; it changes with the done commit (D10-537). Known and out of scope, reported to the orchestrator: production code never writes devices.user_id, so the device dimension does not match in production, before or after this change; the rule fixtures bind the device by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 (couli-runs/B2-11f/review-codex.json), no findings. Static review, no tests run."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "fresh Claude, round 1 pass with 1 S2: no rule test calls GET /v1/withdrawals/rules, so a future split of the rules service from the apply use case would not be caught. Accepted: both share withdrawRuleOptions, where the reader is passed. No red_exempt: every rule test is red first."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-11f",
+  "spec_commit": "40b3c3df92ade775e4def600bc5ad25c1739849b",
+  "spec_ref": "deb521c2bcb740571a01c2dc128f40abb40c37a2",
+  "red_tests": [
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：phone 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：id_no 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：device 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：alipay 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#21] api 入口：启用→停用，配置项周期内仍 44001（不追溯），满周期才放行",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#22] api 入口：停用→启用，配置项周期内仍放行，满周期才恢复 44001",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：phone 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：id_no 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：device 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：alipay 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#24] worker 入口：failed_conditions 顺序不变，停用只去掉 ⑨ 这一项；其他维度命中仍记 ⑨",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#25] worker 入口：启用→停用，配置项周期内的判定仍记 ⑨，满周期才放行；已写的判定不追溯",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#26] worker 入口：停用→启用，配置项周期内仍不记 ⑨，满周期才恢复",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#27] ③ 停用：真实判定函数下 W1 标签不含 ③、不写 risk_hits 与判定行，auto-decision 按未命中；启用照旧出标签；已写入的标签不因之后停用而追溯",
+    "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#28] 日志与错误响应不含手机号、收款账号、姓名明文（BR-ID-33）",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] phone：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] id_no：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] device：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] alipay：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] bank_card：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] wechat_openid：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#2] 跳过后继续：phone 停用且命中、device 启用且命中 → device 那条的 risk_msg_code（形状不变）；phone 启用时仍是 phone；命中的维度全停用 → null",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#3] READ ONLY 事务里能跑：状态只经调用方句柄读，每个维度一次",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#4] 调用方事务里未提交的停用行可见（状态确实读自调用方句柄）；回滚后同一规则按无行生效",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#5] 读状态抛错原样抛出，不当作停用：不返回 null，也不返回命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#6] 启用→停用：周期内按旧状态仍命中（不追溯），满一个配置项周期才生效；再启用同样隔一个周期",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#7] 停用→启用：周期内仍不命中，满一个配置项周期才恢复命中",
+    "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#8] 读状态失败时错误不带手机号摘要、收款账号摘要等主体值（BR-ID-33）"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "40b3c3df92ade775e4def600bc5ad25c1739849b",
+      "tree": "7540d8c2b2c3894c9f5dd163358845f3167a7bf8",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-02T02:44:57Z",
+      "finished_at": "2026-11-02T02:45:11Z",
+      "red_tests": [
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：phone 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：id_no 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：device 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#20] 真实 AppModule api 入口：alipay 规则停用 → POST 不再 44001，照常建单；其他维度命中仍 44001",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#21] api 入口：启用→停用，配置项周期内仍 44001（不追溯），满周期才放行",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#22] api 入口：停用→启用，配置项周期内仍放行，满周期才恢复 44001",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：phone 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：id_no 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：device 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#23] 真实 AppModule worker 入口：alipay 规则停用 → ⑨ blacklist_hit 未命中，不因 ⑨ 转人工；启用时仍转人工",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#24] worker 入口：failed_conditions 顺序不变，停用只去掉 ⑨ 这一项；其他维度命中仍记 ⑨",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#25] worker 入口：启用→停用，配置项周期内的判定仍记 ⑨，满周期才放行；已写的判定不追溯",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#26] worker 入口：停用→启用，配置项周期内仍不记 ⑨，满周期才恢复",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#27] ③ 停用：真实判定函数下 W1 标签不含 ③、不写 risk_hits 与判定行，auto-decision 按未命中；启用照旧出标签；已写入的标签不因之后停用而追溯",
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts > [AC-B2-11f#28] 日志与错误响应不含手机号、收款账号、姓名明文（BR-ID-33）",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] phone：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] id_no：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] device：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] alipay：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] bank_card：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#1] wechat_openid：规则停用时该维度有生效黑名单行也不命中；enabled、active、无规则行以及其他维度全停用时都命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#2] 跳过后继续：phone 停用且命中、device 启用且命中 → device 那条的 risk_msg_code（形状不变）；phone 启用时仍是 phone；命中的维度全停用 → null",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#3] READ ONLY 事务里能跑：状态只经调用方句柄读，每个维度一次",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#4] 调用方事务里未提交的停用行可见（状态确实读自调用方句柄）；回滚后同一规则按无行生效",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#5] 读状态抛错原样抛出，不当作停用：不返回 null，也不返回命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#6] 启用→停用：周期内按旧状态仍命中（不追溯），满一个配置项周期才生效；再启用同样隔一个周期",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#7] 停用→启用：周期内仍不命中，满一个配置项周期才恢复命中",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts > [AC-B2-11f#8] 读状态失败时错误不带手机号摘要、收款账号摘要等主体值（BR-ID-33）"
+      ],
+      "expected": [
+        "test/spec/payout/risk-rule-toggle/chain.int.test.ts",
+        "test/spec/payout/risk-rule-toggle/reader.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "d686c41bb91ee044ada6f2ed511e09b32a46c4f25f61a39b58cee47158dd135c"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "17384eeddc0ceeff958b2cbae7f9b22f5413b5ba",
+    "specs": "4e25c356b485066db1097872ec94837e9a85f1e4"
+  }
+}

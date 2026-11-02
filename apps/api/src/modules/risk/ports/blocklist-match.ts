@@ -7,11 +7,16 @@
 // caller's handle (READ ONLY transactions included), `now` from the caller's Clock; nothing is
 // written: the hit record of a refused request is the caller's to write outside its transaction
 // (BlocklistService.recordHits). Dimension order: phone → id_no → device → payee account.
+// B2-11f (BR-ID-36, D10-537 ②): a dimension whose rule BLACKLIST_<DIMENSION> is disabled is skipped and
+// the next one is looked at; the answer keeps its shape. The state is read on the caller's handle; a
+// failed read rejects, it never counts as disabled. Without `rules` every dimension is in force.
 //
 // Also compiled by the `test` project (through ../index.ts): erasable syntax only, `import type`
 // for type-only imports, relative imports with `.ts`.
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
+import { blocklistRule } from '../application/blocklist.ts';
+import type { RiskRuleStatusReader } from '../application/risk-rule-status.ts';
 
 /** Risk resolves identity-owned HMACs via its existing identity ports. */
 export interface BlocklistMatchReader {
@@ -36,7 +41,14 @@ const PAYEE_DIMENSION: Readonly<Record<'alipay' | 'bank_card' | 'wechat', Dimens
   wechat: 'wechat_openid',
 };
 
-export function createBlocklistMatchReader(): BlocklistMatchReader {
+export interface BlocklistMatchReaderOptions {
+  readonly rules?: RiskRuleStatusReader;
+}
+
+export function createBlocklistMatchReader(
+  options: BlocklistMatchReaderOptions = {},
+): BlocklistMatchReader {
+  const { rules } = options;
   async function match(
     handle: Kysely<DB>,
     appId: string,
@@ -91,6 +103,10 @@ export function createBlocklistMatchReader(): BlocklistMatchReader {
         values.push({ dimension: PAYEE_DIMENSION[subject.payoutMethod], hmac: subject.payeeHmac });
       }
       for (const { dimension, hmac } of values) {
+        if (rules !== undefined) {
+          const key = { app_id: subject.appId, rule_id: blocklistRule(dimension) };
+          if (!(await rules.isEnabled(key, handle))) continue;
+        }
         const violation = await match(handle, subject.appId, dimension, hmac, subject.now);
         if (violation !== null) return { risk_msg_code: `blocklist.${violation}` };
       }

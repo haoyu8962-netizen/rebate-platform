@@ -3693,7 +3693,8 @@ function withdrawRuleOptions(
     config,
     risk: createRiskStateBatchReader({ db }),
     appeal: createAppealPrevStateReader(),
-    blocklist: createBlocklistMatchReader(),
+    // B2-11f (BR-ID-36): a dimension whose rule is disabled does not refuse the application.
+    blocklist: createBlocklistMatchReader({ rules: createRiskRuleStatusReader({ clock }) }),
     reverify,
     realname: { read: realname.read, verified: realname.verified },
     subject: createWithdrawSubjectReader(),
@@ -3732,7 +3733,8 @@ function autoPayoutPorts(deps: {
 }): AutoPayoutPorts {
   const { db, clock, crypto } = deps;
   const realname = crypto === undefined ? null : createRealnameReader(crypto);
-  const blocklist = createBlocklistMatchReader();
+  // B2-11f (BR-ID-36): a dimension whose rule is disabled is no ⑨ hit.
+  const blocklist = createBlocklistMatchReader({ rules: createRiskRuleStatusReader({ clock }) });
   return {
     config: {
       configValue: (appId, key, handle) =>
