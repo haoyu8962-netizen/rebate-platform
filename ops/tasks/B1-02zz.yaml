@@ -1,0 +1,26 @@
+id: B1-02zz
+repo: rebate-platform
+title: 后台会员设备列表（CT-26j，adminListUserDevices，GET /admin/v1/users/{user_id}/devices）——用户的设备按会话判定（D10-585，含已吊销会话），带已加验记录与最近使用时刻，只读、不写审计；去掉 planned；旧号加验启用前必做
+type: impl
+# 2026-11-03 入账（admin-backend，编排 01:49，FU-ADMIN-LIST-USER-DEVICES）。没有这个接口客服在控制台选不了设备，B1-02zx 的登记接口用不上。开关 withdraw.dormant_reverify_days 打开之前必须合并；后台页面绑定留给 fe 另开 F1 单。
+refs: []
+refs_hash: {}
+deps: [B1-02zx, CT-26m]
+paths:
+  - 'apps/api/src/modules/identity/**'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/identity/admin-user-devices/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/admin-user-devices/**'
+status: todo
