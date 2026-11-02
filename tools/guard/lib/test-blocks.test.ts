@@ -12,6 +12,7 @@ import {
   compareTestFile,
   cook,
   listedDirectories,
+  mayImportRuleTest,
   mayReadSupport,
   parseTestFile,
   relativeClosure,
@@ -2420,4 +2421,32 @@ it('[CT-06zxh] helperNamedInLiteral: a string, template or regex literal naming 
     ),
   ).toContain('a literal names "h"');
   expect(helperNamedInLiteral("it('", ['h'], ['h'])).toContain('cannot be read');
+});
+
+it('[AC-CT-06zzz#1] mayImportRuleTest counts only an explicit import of the sibling', () => {
+  const file = 'test/spec/m/a.int.test.ts';
+  const sibling = 'test/spec/m/b.int.test.ts';
+  const loaded = mod(sibling, '');
+  // Loaded by the closure, or a resolved specifier in any of its modules.
+  expect(mayImportRuleTest(sibling, [mod(file, ''), loaded])).toBe(`it loads ${sibling}`);
+  // The sibling exists but the closure does not follow it: only the resolved specifier shows it.
+  const importing = relativeClosure(
+    file,
+    (p) => (p === file ? "import './b.int.test.ts';" : p === sibling ? '' : null),
+    () => false,
+  );
+  expect(mayImportRuleTest(sibling, importing)).toBe(
+    `${file} imports ${sibling} (./b.int.test.ts)`,
+  );
+  // A module that cannot be tokenized may import it: its imports cannot be read.
+  const unreadable = mod(file, "const s = 'unterminated;");
+  expect(unreadable.literals).toBeNull();
+  expect(mayImportRuleTest(sibling, [unreadable])).toBe(`${file} cannot be tokenized`);
+  // A name in the text, a computed import and a listing are mayReadSupport's rules, not these.
+  const computed = mod(
+    file,
+    "await import(`./${name}`); const n = 'b.int.test.ts'; readdirSync('.');",
+  );
+  expect(mayImportRuleTest(sibling, [computed])).toBeNull();
+  expect(mayReadSupport(file, sibling, [computed])).not.toBeNull();
 });

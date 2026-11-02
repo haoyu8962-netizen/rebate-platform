@@ -1,0 +1,20 @@
+id: CT-06zzz
+repo: rebate-platform
+title: red-check：本任务改过的兄弟用例文件只在被显式 import 时才算测试辅助文件（D10-586）
+type: guard-change
+# 2026-11-03 pay（账号 5）入账（编排 D10-586，B1-08zh 被卡而发现；CT-06 系列属主 be 知悉）。文件头写明辅助文件指 helper、fixture、数据文件，实现却把本任务改过的 *.test.ts 也算进去：kit 有计算模块名的动态 import 时，同目录任何改过的用例都让整文件被判定，没改的旧用例被要求先红。改过的用例文件在 expected 里单独判定，不是辅助文件。收窄：只有闭包里的模块显式 import 它才算；闭包不封闭、未解析 import、名字规则对它不再生效。kit、fixture、数据文件一律照旧。不改金额与归属规则，不碰密钥扫描，不放宽先红：改过的用例照样要红，没改的旧用例照样在 CI 跑。门禁改动两家评审（Codex + 新鲜 Claude），按 approvals #16 / #24 由编排加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'tools/guard/lib/red-check.ts'
+  - 'tools/guard/lib/red-check.test.ts'
+  - 'ops/tasks/CT-06zzz.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

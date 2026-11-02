@@ -82,6 +82,10 @@
 // reporter get exemptions. A file that existed at the base and has no new or changed test at all
 // fails (nothing would be shown red; evidence-check wants a red test of every expected file). New
 // files, the expected list (what the red run runs) and every other rule are unchanged.
+// Another rule-test file the task changed is not a test-support file: it is in the expected list
+// and judged on its own (CT-06zzz, D10-586, after B1-08zh). It makes a file judged as a whole only
+// when a module of the file's closure explicitly imports it (mayImportRuleTest); a kit that loads
+// by a computed name no longer counts as reading it. Helpers, fixtures and data files stay as above.
 //
 // Declared exemptions (CT-06r; orchestrator ruling of 2026-10-18 21:5x after B2-01l): a file that
 // existed at the base, whose code outside the tests is unchanged and whose tests compare cleanly,
@@ -160,6 +164,7 @@ import {
   helperImpact,
   helperNamedInLiteral,
   type PathKind,
+  mayImportRuleTest,
   mayReadSupport,
   relativeClosure,
   topLevelHelpers,
@@ -494,6 +499,8 @@ export function ruleTestBaselines(
       if (p !== undefined && matchesAny(p, scope)) support.add(p);
     }
   }
+  // CT-06zzz: the expected files are judged on their own, so they are not helpers of each other.
+  const judged = new Set(expected);
   // Test code only: implementation modules do not read test-support files.
   const follow = (p: string): boolean =>
     p.startsWith('test/') || p.startsWith('packages/testing/') || matchesAny(p, scope);
@@ -582,7 +589,7 @@ export function ruleTestBaselines(
           );
     let why: string | null = null;
     for (const s of others) {
-      why = mayReadSupport(file, s, closure);
+      why = judged.has(s) ? mayImportRuleTest(s, closure) : mayReadSupport(file, s, closure);
       if (why !== null) break;
     }
     set(

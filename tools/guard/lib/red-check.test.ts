@@ -2032,3 +2032,70 @@ it('[CT-06zxe] a registered helper no test calls is void; renames run first; wit
   ).toEqual([legacy, DIFF_FEN]);
   expect(expectedValuesHit([NOTIFY], read, [], [])).toEqual([]);
 });
+
+// CT-06zzz (D10-586, after B1-08zh): a kit that loads by a computed name made every changed sibling
+// rule-test file a possible read, so every unchanged test of the directory had to be red.
+const ZZZ_A = 'test/spec/z/a.int.test.ts';
+const ZZZ_B = 'test/spec/z/b.int.test.ts';
+const ZZZ_KIT = 'test/spec/z/kit.ts';
+const zzzKit = 'export const load = async (name: string) => await import(`./${name}`);\n';
+const zzzFile = (extra: string, body: string): string =>
+  `import { it, expect } from 'vitest';\nimport { load } from './kit.ts';\n${extra}` +
+  `it('kept', async () => { expect(await load('x')).toBe(1); });\n` +
+  `it('changed', () => { expect(${body}).toBe(1); });\n`;
+
+it('[AC-CT-06zzz#2] a kit with a computed import: a changed sibling rule test does not make the file whole, its unchanged test stays exempt', () => {
+  const base = { [ZZZ_A]: zzzFile('', '1'), [ZZZ_B]: zzzFile('', '1'), [ZZZ_KIT]: zzzKit };
+  const head = { ...base, [ZZZ_A]: zzzFile('', '2 - 1'), [ZZZ_B]: zzzFile('', '3 - 2') };
+  const changes: Change[] = [
+    { path: ZZZ_A, status: 'M' },
+    { path: ZZZ_B, status: 'M' },
+  ];
+  const b = ruleTestBaselines([ZZZ_A, ZZZ_B], changes, ['test/spec/z/**'], reader(base, head));
+  expect(b.get(ZZZ_A)?.kind).toBe('tests');
+  expect(b.get(ZZZ_B)?.kind).toBe('tests');
+});
+
+it('[AC-CT-06zzz#3] a rule test that explicitly imports a changed sibling rule test is still judged as a whole', () => {
+  const importing = "import './b.int.test.ts';\n";
+  const base = { [ZZZ_A]: zzzFile(importing, '1'), [ZZZ_B]: zzzFile('', '1'), [ZZZ_KIT]: zzzKit };
+  const head = { ...base, [ZZZ_A]: zzzFile(importing, '2 - 1'), [ZZZ_B]: zzzFile('', '3 - 2') };
+  const changes: Change[] = [
+    { path: ZZZ_A, status: 'M' },
+    { path: ZZZ_B, status: 'M' },
+  ];
+  const b = ruleTestBaselines([ZZZ_A, ZZZ_B], changes, ['test/spec/z/**'], reader(base, head));
+  expect(b.get(ZZZ_A)).toMatchObject({
+    kind: 'support',
+    reason: `it may read a test-support file the task changed: it loads ${ZZZ_B}`,
+  });
+  expect(b.get(ZZZ_B)?.kind).toBe('tests');
+});
+
+it('[AC-CT-06zzz#4] helpers keep the conservative rules: a changed kit or data file is still a possible read through a computed import', () => {
+  const data = 'test/spec/z/data.json';
+  const base = {
+    [ZZZ_A]: zzzFile('', '1'),
+    [ZZZ_B]: zzzFile('', '1'),
+    [ZZZ_KIT]: zzzKit,
+    [data]: '{}',
+  };
+  const head = { ...base, [ZZZ_A]: zzzFile('', '2 - 1'), [data]: '{"a":1}' };
+  const changes: Change[] = [
+    { path: ZZZ_A, status: 'M' },
+    { path: data, status: 'M' },
+  ];
+  const b = ruleTestBaselines([ZZZ_A], changes, ['test/spec/z/**'], reader(base, head));
+  expect(b.get(ZZZ_A)?.kind).toBe('support');
+  // A sibling rule test the task did not put in the expected list is an ordinary support file.
+  const outside = ruleTestBaselines(
+    [ZZZ_A],
+    [
+      { path: ZZZ_A, status: 'M' },
+      { path: ZZZ_B, status: 'M' },
+    ],
+    ['test/spec/z/**'],
+    reader(base, { ...head, [ZZZ_B]: zzzFile('', '3 - 2') }),
+  );
+  expect(outside.get(ZZZ_A)?.kind).toBe('support');
+});

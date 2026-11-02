@@ -1,0 +1,54 @@
+{
+  "risk_note": "RV2, guard change (tools/guard/lib; class 3 protected), orchestrator D10-586, label per approvals #16 / #24. A rule-test file in the expected list is judged on its own, so it counts as a test-support file of another expected file only when a module of the closure imports it, or a module cannot be tokenized. The conservative paths of mayReadSupport (a closure not closed, unresolved imports, the name rules, loading by a computed name) no longer apply to it; helpers, fixtures and data files keep them. Not a loosening of red-first: changed tests must still be red, unchanged ones still run in CI. No money or attribution rule, no secret scan, no fund test touched. Residual risk accepted by the ruling: a module that reads a sibling rule test by a computed name is no longer seen; the reviewer found no such module in test/.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "r1 pass and r2 pass on the final diff (couli-runs/CT-06zzz/codex-r1.json, codex-r2.json). Static, no tests run."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "fresh read-only Claude, pass with 1 S2 (a module that cannot be tokenized hid its imports), fixed before landing with a unit assertion, closed by Codex r2; not re-run after that fix (couli-runs/CT-06zzz/claude-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "none",
+    "rounds": 0,
+    "last_verdict": "n/a",
+    "note": "guard change, ledger tester: none"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-06zzz",
+  "spec_commit": "50ca4c5d0e956bcd600b304865e3d1021cd107c4",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f47e1b28b391dba5f51546d27f5a59337aaac0e2",
+    "specs": "242c82f497fb866ceec0a6619e38ad2ac0f07e81"
+  }
+}

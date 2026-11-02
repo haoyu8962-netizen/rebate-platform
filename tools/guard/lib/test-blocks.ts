@@ -2940,6 +2940,26 @@ export function relativeClosure(
 }
 
 /**
+ * CT-06zzz (D10-586): why a rule-test file may read another rule-test file the same task changed,
+ * or null. A sibling rule-test file is not a helper, fixture or data file: it is judged on its own
+ * (it is in the expected list). So only an explicit import counts: the sibling is one of the
+ * modules the file loads, or one of them has an import specifier resolved to it, or one of them
+ * cannot be tokenized (its imports cannot be read). The conservative
+ * paths of mayReadSupport (a closure that is not closed, unresolved imports, the name rules, loading
+ * by a computed name) do not apply; they stay as they are for every other support file.
+ */
+export function mayImportRuleTest(sibling: string, closure: readonly Module[]): string | null {
+  if (closure.some((m) => m.path === sibling)) return `it loads ${sibling}`;
+  for (const m of closure) {
+    const imported = m.imports.find((i) => i.resolved === sibling);
+    if (imported !== undefined) return `${m.path} imports ${sibling} (${imported.spec})`;
+    // A module that cannot be tokenized has no readable imports: it may import the sibling.
+    if (m.literals === null) return `${m.path} cannot be tokenized`;
+  }
+  return null;
+}
+
+/**
  * Why a rule-test file may read a test-support file the task changed (a helper, fixture or data
  * file inside its test_paths), or null when it cannot (CT-06p; conservative: the file is then
  * judged as a whole). `closure` is the file and the modules it loads (relativeClosure). It may
