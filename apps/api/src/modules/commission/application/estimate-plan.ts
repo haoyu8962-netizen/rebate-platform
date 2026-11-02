@@ -46,6 +46,11 @@ export function netCommission(
   return serviceFeeFen === null ? null : subFen(commissionFen, serviceFeeFen);
 }
 
+/** N of a stored version: n_total_fen holds N + the frozen subsidy (BR-CALC-27 ①). */
+export function storedN(terms: FrozenTerms, nTotalFen: bigint): bigint {
+  return subFen(nTotalFen, terms.subsidyCommissionFen);
+}
+
 function split(
   terms: FrozenTerms,
   nFen: bigint,

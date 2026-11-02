@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DB } from '@couli/db';
 import { addFen } from '@couli/money';
-import type { Selectable, Transaction } from 'kysely';
+import { sql, type Selectable, type Transaction } from 'kysely';
 
 export type OrderRightsRow = Selectable<DB['order_rights']>;
 
@@ -354,4 +354,34 @@ export async function readOpenDeductionTotal(
   let total = 0n;
   for (const fen of deductions) total = addFen(total, fen);
   return total;
+}
+
+/**
+ * B2-03r (BR-FUND-18): readOpenDeductionTotal for many orders of one app, in one statement. Orders
+ * without an open deduction are left out of the map. The ids travel as one array parameter: the
+ * wallet passes every estimating order of the app.
+ */
+export async function readOpenDeductionTotals(
+  trx: Transaction<DB>,
+  appId: string,
+  orderIds: readonly string[],
+): Promise<ReadonlyMap<string, bigint>> {
+  const totals = new Map<string, bigint>();
+  if (orderIds.length === 0) return totals;
+  const rows = await trx
+    .withSchema('app')
+    .selectFrom('order_rights')
+    .select(['order_id', 'deduction_commission_fen'])
+    .where('app_id', '=', appId)
+    .where('order_id', '=', sql<string>`any(${[...orderIds]}::uuid[])`)
+    .where('type', '=', 'RIGHTS')
+    .where('status', '=', 'SUCCEEDED')
+    .where('deduction_commission_fen', 'is not', null)
+    .where('answered_at', 'is', null)
+    .execute();
+  for (const row of rows) {
+    if (row.deduction_commission_fen === null) continue;
+    totals.set(row.order_id, addFen(totals.get(row.order_id) ?? 0n, row.deduction_commission_fen));
+  }
+  return totals;
 }

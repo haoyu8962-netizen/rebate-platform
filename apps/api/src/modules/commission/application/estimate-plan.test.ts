@@ -1,6 +1,12 @@
 import { expect, it } from 'vitest';
 import type { ReadSnapshotBeneficiary } from '../domain/snapshot-read.ts';
-import { frozenBase, netCommission, planVersion, type FrozenTerms } from './estimate-plan.ts';
+import {
+  frozenBase,
+  netCommission,
+  planVersion,
+  storedN,
+  type FrozenTerms,
+} from './estimate-plan.ts';
 
 const person = (
   role: ReadSnapshotBeneficiary['role'],
@@ -67,4 +73,10 @@ it('[AC-B2-03q] 快照缺本人或角色重复：抛错，不猜', () => {
   expect(() =>
     frozenBase({ ...terms, beneficiaries: [person('self', 1000), person('share', 1000)] }, 1n),
   ).toThrow('repeats role');
+});
+
+it('[AC-B2-03r-UNIT#4] storedN：去掉冻结补贴，还原版本的 N，可为负', () => {
+  expect(storedN({ ...terms, subsidyCommissionFen: 111n }, 1111n)).toBe(1000n);
+  expect(storedN({ ...terms, subsidyCommissionFen: 0n }, 1000n)).toBe(1000n);
+  expect(storedN({ ...terms, subsidyCommissionFen: 111n }, 100n)).toBe(-11n);
 });

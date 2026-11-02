@@ -103,13 +103,25 @@ export interface RebateDependencies {
    * the port input carries no previous settle amount), after = the effective base of the current columns.
    * refresh writes the rows of the current version in the supplied transaction, without touching
    * balances. orders has already updated commission_version: refresh must not increment it again.
+   * value (B2-03r, R7): the commission the new version is valued on instead of the columns; the sync
+   * path never gives it, and refresh never reads the open deductions itself (it runs before
+   * closeAnsweredRights there, so they would be subtracted twice).
    */
   readonly estimates: {
     bases(
       trx: Transaction<DB>,
-      input: RebateChangeInput,
-    ): Promise<{ readonly before: bigint | null; readonly after: bigint | null }>;
-    refresh(trx: Transaction<DB>, input: RebateOrderRef): Promise<void>;
+      input: RebateChangeInput & { readonly compareN?: true },
+    ): Promise<{
+      readonly before: bigint | null;
+      readonly after: bigint | null;
+      /** Answered only when asked with compareN and N is known: N differs from the latest version's. */
+      readonly nChanged?: boolean;
+    }>;
+    refresh(
+      trx: Transaction<DB>,
+      input: RebateOrderRef,
+      value?: { readonly commissionFen: bigint },
+    ): Promise<void>;
   };
   /**
    * System-actor audit must commit/roll back with hold. Existing AuditPort accepts admin UUIDs
@@ -128,11 +140,14 @@ interface Draft {
   state: OrderRebateState | null;
   readonly steps: RebateStep[];
   readonly set: MutableSet;
-  readonly guards: { unheld?: boolean; unlocked?: boolean };
+  readonly guards: { unheld?: boolean; unlocked?: boolean; commissionVersion?: number };
   refresh: boolean;
+  refreshValue: EstimateRefreshValue | null;
   invalidated: VoidReason | null;
   audit: RebateHoldAudit | null;
 }
+
+type EstimateRefreshValue = NonNullable<Parameters<RebateDependencies['estimates']['refresh']>[2]>;
 
 interface Plan {
   readonly steps: readonly RebateStep[];
@@ -141,6 +156,7 @@ interface Plan {
   readonly set: RebateSet;
   readonly guards: RebateCasGuards;
   readonly refresh: boolean;
+  readonly refreshValue: EstimateRefreshValue | null;
   readonly invalidated: VoidReason | null;
   readonly audit: RebateHoldAudit | null;
 }
@@ -152,6 +168,7 @@ function draft(state: OrderRebateState | null): Draft {
     set: {},
     guards: {},
     refresh: false,
+    refreshValue: null,
     invalidated: null,
     audit: null,
   };
@@ -168,6 +185,7 @@ function advance(d: Draft, event: OrderRebateEvent): void {
     d.set.reason = reason;
     d.invalidated = reason;
     d.refresh = false;
+    d.refreshValue = null;
   }
 }
 
@@ -183,6 +201,7 @@ function finish(d: Draft, stored: string): Plan | null {
     set,
     guards: d.guards,
     refresh: d.refresh,
+    refreshValue: d.refreshValue,
     invalidated: d.invalidated,
     audit: d.audit,
   };
@@ -240,7 +259,10 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
           payload: { order_id: row.order_id, platform: row.platform, reason: plan.invalidated },
         });
       }
-      if (plan.refresh) await deps.estimates.refresh(trx, ref);
+      if (plan.refresh) {
+        if (plan.refreshValue === null) await deps.estimates.refresh(trx, ref);
+        else await deps.estimates.refresh(trx, ref, plan.refreshValue);
+      }
       if (plan.audit !== null) await deps.audit.append(trx, plan.audit);
       const last = plan.steps.at(-1);
       logger.info(
@@ -430,6 +452,16 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     return finish(d, row.rebate_status);
   }
 
+  /**
+   * B2-03r: only an estimate can move the version on R7. Any settlement record, in the column or in
+   * order_settlements (jd only has the row), keeps it: the bill compares b_settle with the current
+   * version's base, and R5 subtracts the open deductions itself.
+   */
+  async function estimateOnly(trx: Transaction<DB>, row: OrderRow): Promise<boolean> {
+    if (row.settle_commission_fen !== null) return false;
+    return (await readLatestSettlementAt(trx, row.app_id, row.order_id)) === null;
+  }
+
   async function decideApply(
     trx: Transaction<DB>,
     row: OrderRow,
@@ -457,7 +489,8 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       advance(d, event);
       return finish(d, row.rebate_status);
     }
-    const bases = await deps.estimates.bases(trx, input);
+    const repricing = event === 'RIGHTS_PARTIAL' && (await estimateOnly(trx, row));
+    const bases = await deps.estimates.bases(trx, repricing ? { ...input, compareN: true } : input);
     if (
       isPrecredit(state) &&
       isBaseZero({
@@ -471,7 +504,17 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       return finish(d, row.rebate_status);
     }
     advance(d, event);
-    if (row.platform_status !== 'DEPOSIT_PAID') d.refresh = true;
+    if (row.platform_status === 'DEPOSIT_PAID') return finish(d, row.rebate_status);
+    d.refresh = true;
+    // N_new = effective commission − open deductions, floor 0 (rights-command, as credit-order's R5).
+    // BR-CALC-15: a new version only when N differs. Unknown N (a pdd order without its fee) writes
+    // no rows, so it moves nothing. A base of 0 is known: it moves like any other (R7 原 B 已为 0).
+    const nNew = input.settleCommissionFen ?? input.estAfter;
+    if (repricing && bases.after !== null && bases.nChanged === true && nNew !== null) {
+      d.set.commission_version = row.commission_version + 1;
+      d.guards.commissionVersion = row.commission_version;
+      d.refreshValue = { commissionFen: nNew };
+    }
     return finish(d, row.rebate_status);
   }
 

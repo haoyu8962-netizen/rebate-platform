@@ -10,7 +10,12 @@
 import type { DB } from '@couli/db';
 import { addFen } from '@couli/money';
 import { sql, type Transaction } from 'kysely';
-import type { PendingSnapshot, PendingSnapshotInput } from './pending-earnings.ts';
+import { readOpenDeductionTotals } from '../rights/rights-store.ts';
+import {
+  netOfOpenDeduction,
+  type PendingSnapshot,
+  type PendingSnapshotInput,
+} from './pending-earnings.ts';
 import {
   effectiveCommissionFen,
   pendingBaseFen,
@@ -93,11 +98,15 @@ function instant(value: string) {
 }
 
 export function createEarningsOrdersSource(deps: EarningsOrdersDependencies): EarningsOrdersSource {
-  /** BR-CALC-02 / BR-FUND-18：按有效联盟佣金与快照的预留、淘礼金扣减、受益比例重算本单各份额。 */
+  /**
+   * BR-CALC-02 / BR-FUND-18：按有效联盟佣金（B2-03r：减未关闭应扣，与钱包同数）与快照的预留、淘礼金扣减、
+   * 受益比例重算本单各份额。
+   */
   async function priceShares(
     trx: Transaction<DB>,
     appId: string,
     row: PricingRow,
+    openFen: bigint,
   ): Promise<PendingShare[]> {
     // 尚无分佣快照（版本 0）的订单没有可计的份额，不臆造金额。
     if (row.commission_version < 1) return [];
@@ -108,7 +117,10 @@ export function createEarningsOrdersSource(deps: EarningsOrdersDependencies): Ea
     };
     const snapshot = await deps.readSnapshot(trx, input);
     if (snapshot === null) return [];
-    const nFen = effectiveCommissionFen(row.est_commission_fen, row.settle_commission_fen);
+    const nFen = netOfOpenDeduction(
+      effectiveCommissionFen(row.est_commission_fen, row.settle_commission_fen),
+      openFen,
+    );
     const baseFen =
       nFen === null
         ? 0n
@@ -142,14 +154,24 @@ export function createEarningsOrdersSource(deps: EarningsOrdersDependencies): Ea
       .$if(input.platform !== null, (qb) => qb.where('platform', '=', input.platform ?? ''))
       .orderBy('order_id')
       .execute();
+    const isEstimating = (row: { readonly rebate_status: string }) =>
+      (ESTIMATING as readonly string[]).includes(row.rebate_status);
+    const open = await readOpenDeductionTotals(
+      trx,
+      input.appId,
+      rows.filter(isEstimating).map((row) => row.order_id),
+    );
     const own: EarningsOwnOrder[] = [];
     for (const row of rows) {
       const buyType = row.buy_type;
       const paidAt = row.paid_at;
       if ((buyType !== 'self' && buyType !== 'share') || paidAt === null) continue;
-      const estimating = (ESTIMATING as readonly string[]).includes(row.rebate_status);
-      const estFen = estimating
-        ? userShareFen(await priceShares(trx, input.appId, row), input.userId, [buyType])
+      const estFen = isEstimating(row)
+        ? userShareFen(
+            await priceShares(trx, input.appId, row, open.get(row.order_id) ?? 0n),
+            input.userId,
+            [buyType],
+          )
         : 0n;
       own.push({ buyType, paidAt, estFen });
     }
@@ -180,10 +202,15 @@ export function createEarningsOrdersSource(deps: EarningsOrdersDependencies): Ea
       .where('paid_at', '<', instant(input.paidTo))
       .orderBy('order_id')
       .execute();
+    const open = await readOpenDeductionTotals(
+      trx,
+      input.appId,
+      rows.map((row) => row.order_id),
+    );
     const referral: EarningsReferralOrder[] = [];
     for (const row of rows) {
       if (row.paid_at === null) continue;
-      const shares = await priceShares(trx, input.appId, row);
+      const shares = await priceShares(trx, input.appId, row, open.get(row.order_id) ?? 0n);
       if (!shares.some((s) => s.userId === input.userId && REFERRAL_ROLES.includes(s.role))) {
         continue;
       }

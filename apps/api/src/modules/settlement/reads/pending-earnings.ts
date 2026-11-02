@@ -1,8 +1,9 @@
 import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';
 import { expectedSettlementCredit } from '@couli/domain';
-import { addFen } from '@couli/money';
+import { addFen, subFen } from '@couli/money';
 import type { Clock } from '../../platform/index.ts';
+import { readOpenDeductionTotals } from '../rights/rights-store.ts';
 import {
   creditEnabledValue,
   earlierPeriod,
@@ -131,6 +132,16 @@ async function selectPendingOrders(
     .execute();
 }
 
+/**
+ * B2-03r（BR-FUND-18、D10-474 ①、D10-483）：预估中订单的 N 减未关闭应扣，下限 0，与 R5 入账同一写法；
+ * 没有未关闭应扣时原样返回（负数、null 都不动）。CREDITED 不走这里。
+ */
+export function netOfOpenDeduction(nFen: bigint | null, openFen: bigint): bigint | null {
+  if (nFen === null || openFen === 0n) return nFen;
+  const reduced = subFen(nFen, openFen);
+  return reduced > 0n ? reduced : 0n;
+}
+
 /** BR-FUND-18：只读调用方事务，时间取 Clock，日期计算交给 domain。 */
 export function createPendingEarningsSource(
   deps: PendingEarningsDependencies,
@@ -151,6 +162,11 @@ export function createPendingEarningsSource(
   /** BR-CALC-02：份额按有效联盟佣金（结算优先）与快照的预留比例、淘礼金扣减、受益比例重算。 */
   async function priceOrders(trx: Transaction<DB>, appId: string): Promise<PricedOrder[]> {
     const rows = await selectPendingOrders(trx, appId);
+    const open = await readOpenDeductionTotals(
+      trx,
+      appId,
+      rows.map((row) => row.order_id),
+    );
     const priced: PricedOrder[] = [];
     for (const row of rows) {
       const bucket = row.rebate_status === 'WAITING' ? 'waiting' : 'estimated';
@@ -163,7 +179,10 @@ export function createPendingEarningsSource(
       };
       const snapshot = await deps.readSnapshot(trx, input);
       if (snapshot === null) continue;
-      const nFen = effectiveCommissionFen(row.est_commission_fen, row.settle_commission_fen);
+      const nFen = netOfOpenDeduction(
+        effectiveCommissionFen(row.est_commission_fen, row.settle_commission_fen),
+        open.get(row.order_id) ?? 0n,
+      );
       const baseFen =
         nFen === null
           ? 0n

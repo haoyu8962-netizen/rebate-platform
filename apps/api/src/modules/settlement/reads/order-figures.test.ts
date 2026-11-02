@@ -1,7 +1,18 @@
 import type { DB } from '@couli/db';
-import type { Transaction } from 'kysely';
+import {
+  DummyDriver,
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+  type CompiledQuery,
+  type Driver,
+  type Transaction,
+  type TransactionSettings,
+} from 'kysely';
 import { expect, it, vi } from 'vitest';
 import {
+  createOrderFiguresReader,
   needsPricing,
   orderFiguresOf,
   priceOrder,
@@ -203,4 +214,131 @@ it('[AC-B1-09p#U11] 待入账单仍按有效佣金换算并扣淘礼金，不看
   });
   const none = { ...row, est_commission_fen: null, settle_commission_fen: null };
   expect(await priceOrder(pricingPorts(), NO_TRX, VIEWER, none)).toBeNull();
+});
+
+it('[AC-B2-03r-UNIT#1] 预估中的单按有效佣金减未关闭应扣定价，下限 0；CREDITED 不减', async () => {
+  const row: OrderFiguresRow = { ...ROW, commission_version: 1 };
+  expect(await priceOrder(pricingPorts(), NO_TRX, VIEWER, row, 400n)).toEqual({
+    baseFen: 510n,
+    viewerShareFen: 255n,
+  });
+  expect(await priceOrder(pricingPorts(), NO_TRX, VIEWER, row, 1500n)).toEqual({
+    baseFen: 0n,
+    viewerShareFen: 0n,
+  });
+  expect(await priceOrder(pricingPorts(), NO_TRX, VIEWER, HELD_CREDITED, 400n)).toEqual(
+    await priceOrder(pricingPorts(), NO_TRX, VIEWER, HELD_CREDITED),
+  );
+});
+
+type ReadEvent =
+  | { readonly kind: 'begin'; readonly settings: TransactionSettings }
+  | { readonly kind: 'read'; readonly what: string; readonly inTransaction: boolean }
+  | { readonly kind: 'commit' };
+
+const ORDER_ID = '00000000-0000-4000-8000-000000000001';
+
+/** Real SQL compiler, no database or socket: records statements and transaction boundaries. */
+async function recordingReader() {
+  const driver = new DummyDriver();
+  const connection = await driver.acquireConnection();
+  const events: ReadEvent[] = [];
+  driver.acquireConnection = async () => connection;
+  (driver as Driver).beginTransaction = async (_connection, settings) => {
+    events.push({ kind: 'begin', settings });
+  };
+  driver.commitTransaction = async () => {
+    events.push({ kind: 'commit' });
+  };
+  connection.executeQuery = async <R>(query: CompiledQuery) => {
+    const table = /from "app"\."(\w+)"/.exec(query.sql)?.[1] ?? query.sql;
+    events.push({ kind: 'read', what: table, inTransaction: true });
+    const rows: Record<string, readonly object[]> = {
+      orders: [{ ...ROW, order_id: ORDER_ID, commission_version: 1 }],
+      order_rights: [{ order_id: ORDER_ID, deduction_commission_fen: 400n }],
+    };
+    return { rows: (rows[table] ?? []) as R[] };
+  };
+  const db = new Kysely<DB>({
+    dialect: {
+      createDriver: () => driver,
+      createAdapter: () => new PostgresAdapter(),
+      createIntrospector: (handle) => new PostgresIntrospector(handle),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+  });
+  const port = (what: string, handle: Kysely<DB>) => {
+    events.push({ kind: 'read', what, inTransaction: handle.isTransaction });
+  };
+  const reader = createOrderFiguresReader({
+    db,
+    clock: { now: () => NOW },
+    config: { get: () => Promise.resolve(undefined) },
+    readSnapshot: (trx) => {
+      port('snapshot', trx);
+      return pricingPorts().readSnapshot();
+    },
+    readTljDeductFen: (trx) => {
+      port('tlj', trx);
+      return Promise.resolve(0n);
+    },
+    ledger: (handle) => {
+      port('ledger', handle);
+      return Promise.resolve(new Map());
+    },
+    appeals: {
+      pendingOrderIds: () => {
+        events.push({ kind: 'read', what: 'appeals', inTransaction: false });
+        return Promise.resolve(new Set<string>());
+      },
+    },
+  });
+  return { db, reader, events };
+}
+
+it('[AC-B2-03r-UNIT#2] 订单列、未关闭应扣、账本、义务与定价都在同一个只读 REPEATABLE READ 事务里读', async () => {
+  const { db, reader, events } = await recordingReader();
+  const figures = await reader.forOrders(VIEWER, [ORDER_ID]);
+  await db.destroy();
+  expect(figures.get(ORDER_ID)).toMatchObject({ b_est: 510n, est_rebate_fen: 255n });
+  expect(events[0]).toEqual({
+    kind: 'begin',
+    settings: { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  });
+  expect(events.filter((event) => event.kind === 'begin')).toHaveLength(1);
+  const commit = events.findIndex((event) => event.kind === 'commit');
+  const inside = events.slice(1, commit).flatMap((event) => {
+    if (event.kind !== 'read') return [];
+    expect(event.inTransaction).toBe(true);
+    return [event.what];
+  });
+  expect(inside).toEqual([
+    'orders',
+    'ledger',
+    'beneficiary_credits',
+    'order_rights',
+    'snapshot',
+    'tlj',
+  ]);
+  expect(events.slice(commit + 1)).toEqual([
+    { kind: 'read', what: 'appeals', inTransaction: false },
+  ]);
+});
+
+it('[AC-B2-03r-UNIT#3] 调用方已在事务里时沿用它，不另开事务', async () => {
+  const { db, events } = await recordingReader();
+  const trx = await db.startTransaction().setAccessMode('read only').execute();
+  const nested = createOrderFiguresReader({
+    db: trx,
+    clock: { now: () => NOW },
+    config: { get: () => Promise.resolve(undefined) },
+    ...pricingPorts(),
+    ledger: () => Promise.resolve(new Map()),
+    appeals: { pendingOrderIds: () => Promise.resolve(new Set<string>()) },
+  });
+  await nested.forOrders(VIEWER, [ORDER_ID]);
+  await trx.commit().execute();
+  await db.destroy();
+  expect(events.filter((event) => event.kind === 'begin')).toHaveLength(1);
+  expect(events[0]).toEqual({ kind: 'begin', settings: { accessMode: 'read only' } });
 });

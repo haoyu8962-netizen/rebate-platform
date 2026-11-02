@@ -34,5 +34,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/rights-estimate/**'
-status: todo
-pr: null
+status: done
+pr: 2259

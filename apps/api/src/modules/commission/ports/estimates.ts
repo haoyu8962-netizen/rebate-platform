@@ -9,6 +9,7 @@ import {
   frozenBase,
   netCommission,
   planVersion,
+  storedN,
   type FrozenTerms,
 } from '../application/estimate-plan.ts';
 import { readShareStates } from '../application/forfeited-state-read.ts';
@@ -38,12 +39,16 @@ export interface EstimateChangeInput extends EstimateOrderRef {
   readonly estBefore: bigint | null;
   readonly estAfter: bigint | null;
   readonly settleCommissionFen: bigint | null;
+  /** B2-03r (BR-CALC-15): also answer nChanged; the stored N is commission's, settlement cannot read it. */
+  readonly compareN?: true;
 }
 
 /** null means unknown, never zero. */
 export interface EstimateBases {
   readonly before: bigint | null;
   readonly after: bigint | null;
+  /** Only with compareN and a known N: this N (net of the fee) differs from the latest version's. */
+  readonly nChanged?: boolean;
 }
 
 /** The columns bases and refresh need, as the orders row carries them. */
@@ -65,9 +70,18 @@ export interface CommissionEstimatesDependencies {
   serviceFeeDeducted(platform: string): boolean;
 }
 
+/** B2-03r: the commission a new version is valued on when it is not the orders columns' (R7). */
+export interface EstimateRefreshValue {
+  readonly commissionFen: bigint;
+}
+
 export interface CommissionEstimates {
   bases(trx: Transaction<DB>, input: EstimateChangeInput): Promise<EstimateBases>;
-  refresh(trx: Transaction<DB>, input: EstimateOrderRef): Promise<void>;
+  refresh(
+    trx: Transaction<DB>,
+    input: EstimateOrderRef,
+    value?: EstimateRefreshValue,
+  ): Promise<void>;
 }
 
 function frozenTerms(split: SplitRow): FrozenTerms {
@@ -143,8 +157,12 @@ export function createCommissionEstimates(
     order: EstimateOrder,
     split: SplitRow,
     latest: TotalsRow,
+    value: EstimateRefreshValue | undefined,
   ): Promise<void> {
-    const n = effectiveN(order, order.est_commission_fen, order.settle_commission_fen, deps);
+    const n =
+      value === undefined
+        ? effectiveN(order, order.est_commission_fen, order.settle_commission_fen, deps)
+        : effectiveN(order, value.commissionFen, null, deps);
     if (n === null) return;
     const terms = frozenTerms(split);
     const shares = await readShareStates(trx, ref.appId, ref.orderId, terms.beneficiaries);
@@ -181,13 +199,16 @@ export function createCommissionEstimates(
       const latest = await selectLatestTotals(trx, input.appId, input.orderId);
       const order = await orderOf(trx, input);
       const n = effectiveN(order, input.estAfter, input.settleCommissionFen, deps);
-      return {
+      const terms = frozenTerms(split);
+      const bases = {
         before: latest?.base_fen ?? null,
-        after: n === null ? null : frozenBase(frozenTerms(split), n),
+        after: n === null ? null : frozenBase(terms, n),
       };
+      if (input.compareN !== true || n === null || latest === undefined) return bases;
+      return { ...bases, nChanged: n !== storedN(terms, latest.n_total_fen) };
     },
 
-    async refresh(trx, input) {
+    async refresh(trx, input, value) {
       const order = await orderOf(trx, input);
       const version = order.commission_version;
       if (version < 1) return;
@@ -202,7 +223,7 @@ export function createCommissionEstimates(
         await copyLatest(trx, input, version, latest);
         return;
       }
-      await revalue(trx, input, order, split, latest);
+      await revalue(trx, input, order, split, latest, value);
     },
   };
 }

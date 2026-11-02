@@ -1,5 +1,6 @@
 // B2-04j：返利列的读取、CAS 写入与 rebate 历史（只插入）。只写 settlement 拥有的列：rebate_status、reason、
-// hold、hold_reason、settle_period、received_synced_at，以及 row_version / updated_at（BR-FUND-01；02 §18）。
+// hold、hold_reason、settle_period、received_synced_at，以及 row_version / updated_at（BR-FUND-01；02 §18）；
+// B2-03r：R7 重算预估的 commission_version + 1 也在这条 CAS 里（BR-CALC-15）。
 // 调用方已在本事务里取得子订单 advisory 锁。
 import type { DB } from '@couli/db';
 import type { Selectable, Transaction } from 'kysely';
@@ -35,6 +36,7 @@ export interface RebateSet {
   readonly hold_reason?: 'UNMAPPED_STATUS';
   readonly settle_period?: string;
   readonly received_synced_at?: Date;
+  readonly commission_version?: number;
 }
 
 export interface RebateCasGuards {
@@ -42,6 +44,8 @@ export interface RebateCasGuards {
   readonly unheld?: boolean;
   /** R3a：WHERE 另加 locked = false。 */
   readonly unlocked?: boolean;
+  /** R7 推版本：WHERE 另加 commission_version = 旧版本（BR-CALC-15 乐观锁）。 */
+  readonly commissionVersion?: number;
 }
 
 /**
@@ -66,6 +70,9 @@ export async function casUpdateRebate(
     .where('row_version', '=', current.row_version);
   if (guards.unheld === true) query = query.where('hold', '=', false);
   if (guards.unlocked === true) query = query.where('locked', '=', false);
+  if (guards.commissionVersion !== undefined) {
+    query = query.where('commission_version', '=', guards.commissionVersion);
+  }
   const result = await query.executeTakeFirst();
   return (result.numUpdatedRows ?? 0n) > 0n;
 }
