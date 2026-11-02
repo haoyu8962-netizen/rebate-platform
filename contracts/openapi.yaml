@@ -12144,7 +12144,6 @@ paths:
         Idempotency-Key (04 §6.6): a retry is naturally idempotent (`created: false`, one more
         audit record).
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003

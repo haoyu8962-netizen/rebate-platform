@@ -23,6 +23,9 @@
 // The download of a wecom_session copy (B1-27i; BR-ID-40 细则「企业微信会话交付的下载」): the same
 // registrant reads, the field cipher that opens the sealed file and the private export store.
 // Without a database or field cipher the route still registers and every download fails closed.
+// The record of a re-verified device (B1-02zx; BR-WDR-01 细则「清除标记只走人工」): only the database
+// and admin's audit writer. Without a database the route still registers and every record fails
+// closed (50001).
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
@@ -64,6 +67,8 @@ import {
   type AdminProfileEditOptions,
 } from './application/admin-profile-edit.ts';
 import { AdminUserProfileController } from './http/admin/user-profile.controller.ts';
+import { AdminReverifiedDevices } from './application/admin-reverified-device.ts';
+import { AdminUserReverifiedDevicesController } from './http/admin/user-reverified-devices.controller.ts';
 import {
   AdminRealnameCorrection,
   type AdminRealnameCorrectionOptions,
@@ -119,6 +124,11 @@ const NO_REALNAME_CORRECTION = {
   correct: () => Promise.reject(new Error('identity: real-name corrections need the database')),
 } as unknown as AdminRealnameCorrection;
 
+/** Stands in for the record when the entry has no database: fails closed. */
+const NO_REVERIFIED_DEVICES = {
+  record: () => Promise.reject(new Error('identity: device records need the database')),
+} as unknown as AdminReverifiedDevices;
+
 /** Stands in for the copy requests when the entry has no database or job queue: fails closed. */
 const NO_DATA_COPIES: AdminDataCopies = {
   register: () => Promise.reject(new Error('identity: copy requests need the database')),
@@ -140,6 +150,7 @@ export class IdentityAdminModule {
         AdminUsersController,
         AdminUserProfileController,
         AdminUserRealnameController,
+        AdminUserReverifiedDevicesController,
         AdminUserDataExportsController,
       ],
       providers: [
@@ -239,6 +250,23 @@ export class IdentityAdminModule {
                   events,
                 });
           },
+        },
+        {
+          provide: AdminReverifiedDevices,
+          inject: [CLOCK, ROOT_LOGGER, { token: DB, optional: true }],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<Database>,
+          ): AdminReverifiedDevices =>
+            db === undefined
+              ? NO_REVERIFIED_DEVICES
+              : new AdminReverifiedDevices({
+                  db,
+                  clock,
+                  logger,
+                  auditOn: (handle: Kysely<Database>) => options.auditWriter(handle, clock),
+                }),
         },
         {
           provide: AdminProfileEdit,

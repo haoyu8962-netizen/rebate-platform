@@ -246,6 +246,52 @@ export async function unbindUntrusted(
   return unbind.returning(['provider', 'apple_refresh_token_cipher']).execute();
 }
 
+/**
+ * A console record (source admin, B1-02zx): one row, or none when this account already recorded
+ * this device, whatever the source. The caller holds the users row, so the row read back after a
+ * conflict is committed and stays. Answers the row as it stands: the first record's source and
+ * time when nothing was written.
+ */
+export async function addReverifiedDevice(
+  trx: Transaction<DB>,
+  subject: ReverifySubject,
+  input: { readonly deviceHash: string; readonly now: Date },
+): Promise<{
+  readonly source: 'self' | 'admin';
+  readonly created: boolean;
+  readonly created_at: Date;
+}> {
+  const { deviceHash, now } = input;
+  const inserted = await trx
+    .insertInto('reverified_devices')
+    .values({
+      id: newUuidV7(now),
+      app_id: subject.app_id,
+      user_id: subject.user_id,
+      device_hash: deviceHash,
+      source: 'admin',
+      created_at: now,
+    })
+    .onConflict((oc) => oc.columns(['app_id', 'user_id', 'device_hash']).doNothing())
+    .returning(['source', 'created_at'])
+    .executeTakeFirst();
+  const row =
+    inserted ??
+    (await trx
+      .selectFrom('reverified_devices')
+      .select(['source', 'created_at'])
+      .where('app_id', '=', subject.app_id)
+      .where('user_id', '=', subject.user_id)
+      .where('device_hash', '=', deviceHash)
+      .executeTakeFirstOrThrow());
+  return {
+    // reverified_devices_source_check allows nothing else.
+    source: row.source as 'self' | 'admin',
+    created: inserted !== undefined,
+    created_at: row.created_at,
+  };
+}
+
 /** The trusted identities as they are now: a completed real name and the bound providers. */
 export async function trustedIdentitiesNow(trx: Transaction<DB>, subject: ReverifySubject) {
   const realname = await verifiedIdNoHmacExists(trx, subject);
