@@ -23,5 +23,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/query-recovery-wiring/**'
-status: todo
-pr: null
+status: done
+pr: 2212
