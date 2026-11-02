@@ -1,0 +1,24 @@
+id: B1-04zw
+repo: rebate-platform
+title: 淘宝负数金额原样保留（FU-TAOBAO-NEGATIVE-SETTLE，D10-572，淘宝开入账前必做）
+type: impl
+# 2026-11-02 be 入账（D10-572 ②；D10-522 同一套，BR-CALC-26 负数原样保留，BR-CALC-02 联盟 N 为负时 raw_n_fen 记原值、B=0）。现状：Reader.fen 拒绝 - 开头，已结算负 pub_share_fee 置 null，N 回退预估，联盟扣回时我方仍按正的预估入账；负 pub_share_pre_fee、alipay_total_price 整行跳过。改成：settle_commission_fen、est_commission_fen 保留负值（yuanStrToFen 数学 floor），commission_fen、paid_fen 负值取 0。其他可选金额与比例字段的负值现状不变。无冻结用例钉淘宝负数。union 线 11-06 回来复核。RV2。
+refs: [BR-CALC-26, BR-CALC-02]
+refs_hash:
+  BR-CALC-26: 9ad8be74b506
+  BR-CALC-02: 0ffe8a4d0b65
+deps: []
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/orders.ts'
+  - 'apps/api/src/modules/union/infra/taobao/orders.test.ts'
+  - 'test/spec/union/taobao-negative/**'
+  - 'test/spec/orders/taobao-negative/**'
+test_paths:
+  - 'test/spec/union/taobao-negative/**'
+  - 'test/spec/orders/taobao-negative/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
