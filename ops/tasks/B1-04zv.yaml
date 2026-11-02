@@ -1,0 +1,40 @@
+id: B1-04zv
+repo: rebate-platform
+title: 订单坏行隔离：listOrders 单列坏行进待处理表并告警，好行照常入库、水位照常前进（FU-ORDER-ROW-QUARANTINE，D10-522 ⑤）
+type: impl
+# 2026-11-02 be 入账（D10-570 照准 couli-runs/B3-lane/order-row-quarantine-plan-20261102.md）。不建新表：复用 order_sync_pending、union_raw_payloads 页级归档、couli_order_sync_pending_open{reason}。迁移只给 reason CHECK 加 ORDER_ROW_INVALID（先 NOT VALID 再 validate），走迁移队列。 比方案小一处：CallCtx 加可选 rowErrors: 'collect'，只有 orders 的 fetchWindow 打开；不开时 listOrders 行为不变，所以经 listOrders 断言 invalid_dto 的冻结用例一条都不用改，mapper 继续抛错。Page 加可选 rejected。淘宝的 mapTaobaoOrder 现在把缺 trade_id 等行跳过并 warn（行被静默丢弃），collect 模式下这些行也进 rejected。 整页全坏且 ≥ 5 行：坏行仍写待处理，但抛错、水位不动（上游格式变化，D10-570 ⑥）。好行入库或更新时同事务解决同 (app, platform, sub_order_id) 的 open 记录，resolution_note 写来源（增量 / 回扫 / 手动）与好行 raw_payload_id；row:<sha> 占位行不自动解决。detail 不写取值，不按 0，不生成快照。union 线 11-06 回来复核适配器。RV2。
+refs: [BR-CALC-03]
+refs_hash:
+  BR-CALC-03: f2d8ebebbc0c
+deps: []
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'tools/ci/lint-migrations*.ts'
+  - 'infra/monitoring/rules/couli-fund.yaml'
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/index.ts'
+  - 'apps/api/src/modules/union/infra/**'
+  - 'apps/api/src/modules/orders/application/fetch-window*.ts'
+  - 'apps/api/src/modules/orders/application/pipeline-port*.ts'
+  - 'apps/api/src/modules/orders/application/pipeline-types.ts'
+  - 'apps/api/src/modules/orders/application/update-step*.ts'
+  - 'apps/api/src/modules/orders/application/row-quarantine*.ts'
+  - 'apps/api/src/modules/orders/application/sync-ports.ts'
+  - 'apps/api/src/modules/orders/infra/pipeline-store.ts'
+  - 'apps/api/src/modules/orders/jobs/*.ts'
+  - 'apps/api/src/modules/orders/worker-runtime.ts'
+  - 'specs/union/jd.md'
+  - 'test/spec/orders/row-quarantine/**'
+  - 'test/spec/union/row-quarantine/**'
+  - 'test/spec/db/orders-sync/pending.int.test.ts'
+test_paths:
+  - 'test/spec/orders/row-quarantine/**'
+  - 'test/spec/union/row-quarantine/**'
+  - 'test/spec/db/orders-sync/pending.int.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
