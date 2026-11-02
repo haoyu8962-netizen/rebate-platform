@@ -26,6 +26,8 @@
 // The record of a re-verified device (B1-02zx; BR-WDR-01 细则「清除标记只走人工」): only the database
 // and admin's audit writer. Without a database the route still registers and every record fails
 // closed (50001).
+// The list of a member's devices (B1-02zz; adminListUserDevices): only the database. Without one
+// the route still registers and every list fails closed (50001).
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
@@ -69,6 +71,9 @@ import {
 import { AdminUserProfileController } from './http/admin/user-profile.controller.ts';
 import { AdminReverifiedDevices } from './application/admin-reverified-device.ts';
 import { AdminUserReverifiedDevicesController } from './http/admin/user-reverified-devices.controller.ts';
+import { AdminUserDevices, type AdminUserDeviceStore } from './application/admin-user-devices.ts';
+import { AdminUserDevicesController } from './http/admin/user-devices.controller.ts';
+import { createKyselyAdminUserDeviceStore } from './infra/admin-user-device-reads.ts';
 import {
   AdminRealnameCorrection,
   type AdminRealnameCorrectionOptions,
@@ -129,6 +134,12 @@ const NO_REVERIFIED_DEVICES = {
   record: () => Promise.reject(new Error('identity: device records need the database')),
 } as unknown as AdminReverifiedDevices;
 
+/** Stands in for the device reads when the entry has no database: fails closed. */
+const NO_USER_DEVICES: AdminUserDeviceStore = {
+  userExists: () => Promise.reject(new Error('identity: device lists need the database')),
+  page: () => Promise.reject(new Error('identity: device lists need the database')),
+};
+
 /** Stands in for the copy requests when the entry has no database or job queue: fails closed. */
 const NO_DATA_COPIES: AdminDataCopies = {
   register: () => Promise.reject(new Error('identity: copy requests need the database')),
@@ -151,6 +162,7 @@ export class IdentityAdminModule {
         AdminUserProfileController,
         AdminUserRealnameController,
         AdminUserReverifiedDevicesController,
+        AdminUserDevicesController,
         AdminUserDataExportsController,
       ],
       providers: [
@@ -267,6 +279,14 @@ export class IdentityAdminModule {
                   logger,
                   auditOn: (handle: Kysely<Database>) => options.auditWriter(handle, clock),
                 }),
+        },
+        {
+          provide: AdminUserDevices,
+          inject: [{ token: DB, optional: true }],
+          useFactory: (db?: Kysely<Database>): AdminUserDevices =>
+            new AdminUserDevices(
+              db === undefined ? NO_USER_DEVICES : createKyselyAdminUserDeviceStore(db),
+            ),
         },
         {
           provide: AdminProfileEdit,

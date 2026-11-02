@@ -12036,7 +12036,6 @@ paths:
         `data.fields=[user_id]`. This is where the console picks the `device_id` it records as
         re-verified.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
