@@ -1,0 +1,21 @@
+id: CT-24zl
+repo: rebate-platform
+title: 契约：京东结算明细上传与任务查询（等样本）
+type: contract
+# 2026-11-03 be 入账（D10-588）。**等京东结算明细真实样本，暂不开工。** 权限 settle.statement_upload 已登记。先例 rights-imports：multipart、异步任务、逐行结果。列名等样本定。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/**'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

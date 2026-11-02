@@ -1,0 +1,30 @@
+id: B1-04zzb
+repo: rebate-platform
+title: 淘宝订单同步进调度：taobao.csv、20 分钟窗口、回看 90 天、回扫 30 天、调度门（CAP-TB-07 代码部分）
+type: impl
+# 2026-11-03 be 入账（D10-588 ③④）。csv 四行 12、14、3、13，verified=false，须先于调度值（worker 启动读）。syncWindowCapMs 20 分钟（02 §7.1、大促上限）。回扫先单档 30 天，三档记 FU-TB-RESCAN-TIERS。调度门加「有订单源」判断，不能靠端点 demo 挡；没登记 PID 时返回空页水位前进，上线前先登记。14 进 NO_RECEIVED_AT 接受（E-22），核是否逐单告警，会的话淘宝 14 不告警或降级。冻结用例由新鲜独立 Claude 改，编排按 #24 核；kit.ts 连带的用 red_exempt。RV2。
+refs: [BR-FUND-02]
+refs_hash:
+  BR-FUND-02: bffd22853853
+deps: [B1-04zz, B1-04zza]
+paths:
+  - 'specs/order-status-map/taobao.csv'
+  - 'apps/api/src/modules/orders/domain/**'
+  - 'apps/api/src/modules/union/application/order-sync-ports.ts'
+  - 'test/spec/orders/taobao-sync/**'
+  - 'test/spec/orders/platform-rules/**'
+  - 'test/spec/orders/wiring/**'
+  - 'test/spec/orders/rescan/**'
+  - 'test/spec/orders/manual-sync/**'
+test_paths:
+  - 'test/spec/orders/taobao-sync/**'
+  - 'test/spec/orders/platform-rules/**'
+  - 'test/spec/orders/wiring/**'
+  - 'test/spec/orders/rescan/**'
+  - 'test/spec/orders/manual-sync/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

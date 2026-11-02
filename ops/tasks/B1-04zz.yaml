@@ -1,0 +1,22 @@
+id: B1-04zz
+repo: rebate-platform
+title: 淘宝订单适配器修正：N 净额与补贴（BR-CALC-03、18）、jumpType、结算按状态判、归档过滤（CAP-TB-07）
+type: impl
+# 2026-11-03 be 入账（D10-588 ①）。pub_share_fee 含技术服务费，现直接当 N（serviceFeeDeducted=false）。BR-CALC-03：适配器映射已扣服务费的 N，平台给毛收入时 N = gross − ceil(gross × fee_bp / 10000)，fee_bp 优先取报文服务费率，没有再取配置，都没有进待处理；再按 BR-CALC-18 拆 n_base 与 subsidy。同 B1-08zh 的做法，字段映射 verified=false，真实口径由测试单与联盟后台逐单核对后才开入账，credit.enabled.taobao 保持 off。另：分页带 jumpType；settle 只在 tk_status=3 读（BR-FUND-02 按原始状态）；归档在 ourRows 过滤之后，别家订单原文不入库。RV2。
+refs: [BR-CALC-03, BR-CALC-18]
+refs_hash:
+  BR-CALC-03: f2d8ebebbc0c
+  BR-CALC-18: bb50f68578f7
+deps: [B1-08zh]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/**'
+  - 'apps/api/src/modules/orders/domain/platform-rules/taobao.ts'
+  - 'test/spec/union/taobao-net-n/**'
+test_paths:
+  - 'test/spec/union/taobao-net-n/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

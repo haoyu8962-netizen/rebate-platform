@@ -1,0 +1,21 @@
+id: B2-04zq
+repo: rebate-platform
+title: 京东结算明细导入：写 order_settlements（source=STATEMENT）、按 BR-FUND-09 回写列、差错单（等样本）
+type: impl
+# 2026-11-03 be 入账（D10-588 ②）。**等京东结算明细真实样本，暂不开工**：京东 38 份接口文档没有结算明细，只有后台导出，格式未知。差错单暂按比 B_settle 与快照基数走账单金额不一致，明细有、我方无单走 union_mismatch，等样本再定。写列后推进佣金版本（D10-583 ②），负差依赖 B2-04zi。样本到后补 refs 与 test_paths。RV2。
+refs: []
+refs_hash: {}
+deps: [B2-04zp, CT-24zl, B2-04zi]
+paths:
+  - 'apps/api/src/modules/settlement/statement/**'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'test/spec/settlement/statement-import/**'
+test_paths:
+  - 'test/spec/settlement/statement-import/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

@@ -1,0 +1,22 @@
+id: B1-04zza
+repo: rebate-platform
+title: 淘宝维权、违规进调度（listRefunds、listPunishments）
+type: impl
+# 2026-11-03 be 入账（D10-588）。两接口已实现但 modules/orders 没有调用方；订单接口不随维权改金额，不接就扣不回来。02 §7.1 每 30 分钟、回扫 60 天；违规接口只能查 30 天，按 30 天，02 的 60 天记差异。写入走现有 order_rights 路径。开工前读 BR-FUND-06、08 定 refs。RV2。
+refs: []
+refs_hash: {}
+deps: [B1-04zz]
+paths:
+  - 'apps/api/src/modules/orders/jobs/**'
+  - 'apps/api/src/modules/orders/application/**'
+  - 'apps/api/src/modules/orders/worker-runtime.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'test/spec/orders/taobao-rights-sync/**'
+test_paths:
+  - 'test/spec/orders/taobao-rights-sync/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
