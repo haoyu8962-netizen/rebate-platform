@@ -20,5 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/risk/blocklist-device-scope/**'
-status: todo
-pr: null
+status: done
+pr: 2236

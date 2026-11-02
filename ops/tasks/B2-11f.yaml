@@ -31,5 +31,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/risk-rule-toggle/**'
-status: todo
-pr: null
+status: done
+pr: 2229
