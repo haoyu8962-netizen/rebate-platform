@@ -1,0 +1,26 @@
+id: B2-04zi
+repo: rebate-platform
+title: 入账后结算变化（R10）的同步路径——已入账订单收到联盟新结算记录时，结算佣金正数部分归零或有效基数归零按 BR-FUND-08 走 R8 整单扣回，负差即时写 SETTLE_ADJUST，正差进 BR-FUND-09 候选；上线前必做
+type: impl
+# 2026-11-02 入账（admin-backend，编排 D10-579）。来源 B1-10n money r1 S0：clawback-order.ts 的 onUpdated 只在有 WAIT_COMMISSION 维权时看新结算记录（settleAnswer），其余 left to R10，未实现；不是 B1-10n 引入。
+# 与 D10-578 那批（版本推进、FU-CREDITED-AMOUNT-ROWS、FU-NEGATIVE-SETTLE-SNAPSHOT ②、FU-BILL-OPEN-DEDUCTIONS）并成一组，归 funds（11-06）或 w1（R7 之后），编排届时定。上线前必须合并。
+refs: [BR-FUND-01, BR-FUND-08, BR-FUND-09, BR-CALC-23, BR-CALC-02]
+refs_hash:
+  BR-FUND-01: b541996f8582
+  BR-FUND-08: 4fad67b21a32
+  BR-FUND-09: 6b72b55621fb
+  BR-CALC-23: 2fe92d9959ba
+  BR-CALC-02: 0ffe8a4d0b65
+deps: [B1-10n]
+paths:
+  - 'apps/api/src/modules/settlement/clawback/**'
+  - 'apps/api/src/modules/settlement/index.ts'
+  - 'packages/domain/src/settlement/adjust/**'
+test_paths:
+  - 'test/spec/settlement/settle-diff-sync/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/settle-diff-sync/**'
+status: todo

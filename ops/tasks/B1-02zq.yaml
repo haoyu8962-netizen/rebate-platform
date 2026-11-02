@@ -12,6 +12,7 @@ paths:
   - 'apps/api/src/modules/payout/application/withdraw-rules.ts'
   - 'apps/api/src/modules/payout/domain/withdraw-rules.ts'
   - 'apps/api/src/modules/payout/domain/withdraw-rules.test.ts'
+  - 'apps/api/src/modules/payout/http/public/withdrawals.controller.ts' # D10-580 ④：APPLY_ERRORS 补 10010 文案
 test_paths:
   - 'test/spec/identity/reverify-gates/**'
 impl: claude
