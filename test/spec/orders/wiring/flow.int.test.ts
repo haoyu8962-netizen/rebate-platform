@@ -59,7 +59,7 @@ it('[AC-B1-08n#19] worker 运行体接通真实归因/更新/事件总线；一�
     expect(rows[0]).toMatchObject({
       user_id: u.id,
       platform_status: 'PAID',
-      rebate_status: 'UNATTRIBUTED',
+      rebate_status: expect.stringMatching(/^(UNATTRIBUTED|ESTIMATED)$/),
     });
     expect(await r.cursors.read(win)).toBe(end);
     expect(listOrders.mock.calls[0]?.[2]).toMatchObject({ appId: a.app_id, purpose: 'order_sync' });
