@@ -3,6 +3,7 @@ repo: rebate-platform
 title: payout：提现风险标签与自动到账判定按风控规则启停（D10-536，BR-ID-36 细则「规则清单的启停」）——withdraw-risk-flags ③ same_device_multi_account（SAME_DEVICE_MULTI_ACCOUNT）与 ⑨ blacklist_hit（黑名单各维度规则码以 risk 规则目录 blocklistRule(dimension) 为准）、withdraw-rules 的 44001 黑名单检查，在判定前经 risk 的规则状态读口查状态；停用的规则不判定、不写 risk_hits、不出标签；auto-decision 对未判定的标签按未命中；状态按配置项缓存周期生效、不追溯
 type: impl
 # 2026-11-01 入账（withdraw 线，编排 D10-536 (b)）。规则码以 risk 规则目录为准；读口随 B1-03zh 合入（risk/index.ts：按 app_id + rule_id，disabled 不生效、enabled 与写入方登记的 active 生效、无行视为生效），本单排在它之后（#2125 合入后 deps 补 B1-03zh），GATE-RISK-RULE-TOGGLE 的一环。动钱路径（提现建单与自动到账），money 评审。配置阈值仍经配置项，不在规则上另存。
+# 2026-11-02 pay 改派（D10-564）后按主干核：③ 已由 B1-03zh 在 risk 侧 same-device-accounts judge 判定前查读口，payout 不再加第二次读取；D10-537 ② 的按维度跳过（risk/ports/blocklist-match.ts）另开的小单未入账、identity 暂停到 11-06，并入本单，这才是提现 ⑨ / 44001 的真实缺口。
 refs: [BR-ID-36, BR-WDR-29, BR-WDR-30]
 refs_hash:
   BR-ID-36: 2758a53910fa
@@ -18,6 +19,10 @@ paths:
   - 'apps/api/src/modules/payout/application/auto-payout.ts'
   - 'apps/api/src/modules/payout/application/auto-payout.test.ts'
   - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/risk/ports/blocklist-match.ts'
+  - 'apps/api/src/modules/risk/ports/blocklist-match.test.ts'
+  - 'apps/api/src/modules/risk/application/blocklist.ts'
+  - 'apps/api/src/modules/risk/index.ts'
   - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/payout/risk-rule-toggle/**'
