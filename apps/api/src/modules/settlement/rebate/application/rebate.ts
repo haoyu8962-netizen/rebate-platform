@@ -46,6 +46,7 @@ import {
   markRightsAnswered,
   readLatestSettlementAt,
 } from '../../rights/rights-store.ts';
+import { createSettlementRecords } from '../../settlements/index.ts';
 import { IllegalTransition, RebateError } from './errors.ts';
 
 export interface RebateOrderRef {
@@ -221,6 +222,7 @@ function refOf(order: { app_id: string; order_id: string; attr_at: Date }): Reba
 
 export function createRebatePort(deps: RebateDependencies): RebatePort {
   const { logger } = deps;
+  const settlements = createSettlementRecords({ clock: deps.clock });
 
   /**
    * 重读 → 判定 → CAS；CAS 0 行重读一次再判定（02 §18），仍 0 行抛 ORDER_CAS_CONFLICT。
@@ -559,8 +561,10 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
   /**
    * B2-04lb (D10-463 ③, D10-483; BR-FUND-06「等联盟回传新佣金后按 R7/R9 处理并关闭」): before credit,
    * the union's updated commission answers the rights records it absorbed, on the sync transaction.
-   * With a settlement record only a settlement record received after the row counts (BR-FUND-08 ①);
-   * without one, a new estimate. The open SUCCEEDED deductions it absorbed get answered_at (never
+   * With a settlement record only a settlement record received after the row counts (BR-FUND-08 ①),
+   * and only the one that decides orders.settle_commission_fen (BR-FUND-09): a newer API record
+   * beside a STATEMENT absorbs nothing, the order's amount did not come from it. Without one, a new
+   * estimate. The open SUCCEEDED deductions it absorbed get answered_at (never
    * subtracted again); the WAIT_COMMISSION rows it answers close and rights_pending is recomputed.
    * A CREDITED order is left to the clawback's sync hook.
    */
@@ -573,7 +577,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     if (row === undefined || row.rebate_status === 'CREDITED') return;
     let before: Date | null;
     if (change.settle_commission_fen !== null) {
-      before = await readLatestSettlementAt(trx, ref.appId, ref.orderId);
+      before = await settlements.latestDecidingRecordAt(trx, ref);
       if (before === null) return;
     } else {
       if (change.est_after === null || change.est_after === change.est_before) return;
@@ -609,6 +613,9 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
   }
 
   return {
+    // B2-04zj: the sync reaches the settlement records through this one port (BR-FUND-09).
+    settlements,
+
     async onImported(trx: Transaction<DB>, order: ImportedOrder): Promise<void> {
       await execute(trx, refOf(order), 'sync', (row, now) => decideImport(row, now));
     },

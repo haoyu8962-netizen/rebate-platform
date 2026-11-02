@@ -16,8 +16,10 @@ import { expect, it, vi } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import type { UnionOrder } from '../../union/index.ts';
 import type { PlatformStatusEvent, StatusMap } from '../domain/status-map.ts';
+import type { CommissionSnapshotPort } from './commission-snapshot-step.ts';
 import { createOrderPipeline } from './pipeline-port.ts';
 import type { OrderPipelineContext, OrderPipelineDeps } from './pipeline-types.ts';
+import type { OrderSettlementRecordsPort } from './update-step.ts';
 
 const NOW = '2026-10-17T17:30:00.000Z'; // +08:00 日 2026-10-18
 const ATTR = '2026-10-15T16:00:00.000Z'; // +08:00 日 2026-10-16
@@ -360,3 +362,126 @@ it.each([
     expect(sqls).not.toContain('commit');
   },
 );
+
+const SETTLED_AT = at('2026-10-17T04:05:06.000Z');
+
+function settledStatusMap(platform: string): StatusMap {
+  const entries = new Map(statusMap(platform).entries);
+  entries.set('settled', {
+    event: 'PLATFORM_SETTLED',
+    source: 'unit',
+    verified: false,
+    note: '',
+  });
+  return { platform, entries };
+}
+
+/** A pipeline over a status map with a settled code and the record port; both record their call. */
+function settledPipeline(snapshots?: CommissionSnapshotPort) {
+  const { db, statements } = recordingDb();
+  const mark = (sql: string) => {
+    statements.push({ sql, parameters: [] });
+    return Promise.resolve();
+  };
+  const recordApi = vi.fn<OrderSettlementRecordsPort['recordApi']>(() => mark('recordApi'));
+  const pipeline = createOrderPipeline({
+    db,
+    clock: new FixedClock(NOW),
+    statusMaps: settledStatusMap,
+    pids: {
+      find: () => Promise.resolve([{ pid_scene: 'self_buy', status: 'active', site_id: null }]),
+    },
+    accounts: { syncStartAt: () => Promise.resolve(at('2026-10-01T00:00:00.000Z')) },
+    users: { findByAttrCode: () => Promise.resolve(USER) },
+    bindings: { findByRelation: () => Promise.resolve([]) },
+    rebate: {
+      onImported: () => mark('rebate.onImported'),
+      settlements: {
+        recordApi,
+        latestStatementFen: () => Promise.reject(new Error('a first import reads no STATEMENT')),
+      },
+    },
+    ...(snapshots === undefined ? {} : { snapshots }),
+  });
+  return { pipeline, statements, recordApi };
+}
+
+it('[AC-B2-04zj#U7] P12 有结算额：订单行之后、settlement 端口之前记一条，报文原值，订单回退为空', async () => {
+  const { pipeline, statements, recordApi } = settledPipeline();
+  const report = order({
+    raw_status: 'settled',
+    settle_commission_fen: 15n,
+    settled_at: SETTLED_AT,
+  });
+  await expect(pipeline.process(report, ctx)).resolves.toMatchObject({ kind: 'inserted' });
+  expect(recordApi.mock.calls[0]?.[1]).toMatchObject({
+    appId: APP,
+    commissionFen: 15n,
+    reportedSettledAt: SETTLED_AT,
+    orderSettledAt: null,
+  });
+  const sqls = statements.map((s) => s.sql);
+  const inserted = sqls.findIndex((sql) => sql.startsWith('insert into "app"."orders"'));
+  expect(sqls.indexOf('recordApi')).toBeGreaterThan(inserted);
+  expect(sqls.indexOf('rebate.onImported')).toBeGreaterThan(sqls.indexOf('recordApi'));
+  expect(sqls[inserted]).toContain('"settle_commission_fen"');
+  expect(sqls[inserted]).toContain('"union_settled_at"');
+});
+
+it('[AC-B2-04zj#U8] P12 无结算额不记录，union_settled_at 仍随 INSERT 写', async () => {
+  const { pipeline, statements, recordApi } = settledPipeline();
+  const report = order({ raw_status: 'settled', settled_at: SETTLED_AT });
+  await expect(pipeline.process(report, ctx)).resolves.toMatchObject({ kind: 'inserted' });
+  expect(recordApi).not.toHaveBeenCalled();
+  const insert = statements.find((s) => s.sql.startsWith('insert into "app"."orders"'));
+  expect(insert?.parameters).toContainEqual(SETTLED_AT);
+  expect(insert?.sql).toContain('"union_settled_at"');
+});
+
+function snapshotSpy() {
+  const create = vi.fn<CommissionSnapshotPort['create']>(() =>
+    Promise.resolve({ kind: 'existing' }),
+  );
+  return { create };
+}
+
+it('[AC-B2-04zj#U13] P12 有结算额：快照基数取将写入的结算额，不取预估（BR-CALC-02）', async () => {
+  const snapshots = snapshotSpy();
+  const { pipeline } = settledPipeline(snapshots);
+  const report = order({
+    raw_status: 'settled',
+    est_commission_fen: 1000n,
+    settle_commission_fen: 800n,
+    service_fee_fen: 0n,
+    settled_at: SETTLED_AT,
+  });
+  await pipeline.process(report, ctx);
+  expect(snapshots.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 800n });
+});
+
+it('[AC-B2-04zj#U14] P12 结算额为 0 不回退预估；无结算额才取预估', async () => {
+  const zero = snapshotSpy();
+  await settledPipeline(zero).pipeline.process(
+    order({
+      raw_status: 'settled',
+      est_commission_fen: 1000n,
+      settle_commission_fen: 0n,
+      service_fee_fen: 0n,
+      settled_at: SETTLED_AT,
+    }),
+    ctx,
+  );
+  expect(zero.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 0n });
+
+  const none = snapshotSpy();
+  await settledPipeline(none).pipeline.process(
+    order({
+      raw_status: 'settled',
+      est_commission_fen: 1000n,
+      service_fee_fen: 0n,
+      settled_at: SETTLED_AT,
+    }),
+    ctx,
+  );
+  expect(none.create.mock.calls[0]?.[1]).toMatchObject({ nBaseFen: 1000n });
+});

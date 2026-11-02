@@ -16,7 +16,11 @@ import { FixedClock } from '../../platform/index.ts';
 import type { UnionOrder } from '../../union/index.ts';
 import type { PlatformStatusEvent, StatusMap } from '../domain/status-map.ts';
 import type { OrderPipelineContext } from './pipeline-types.ts';
-import { createOrderUpdateStep, type OrderUpdateDeps } from './update-step.ts';
+import {
+  createOrderUpdateStep,
+  type OrderSettlementRecordsPort,
+  type OrderUpdateDeps,
+} from './update-step.ts';
 
 const NOW = '2026-10-17T17:30:00.000Z';
 const PENDING_ID = 77n;
@@ -634,3 +638,119 @@ it.each([
     expect(vi.mocked(d.logger!.error)).toHaveBeenCalledTimes(logs);
   },
 );
+
+const settledMap: StatusMap = {
+  platform: 'pdd',
+  entries: new Map([
+    ...map.entries,
+    ['settled', { event: 'PLATFORM_SETTLED', source: 'unit', verified: false, note: '' }],
+  ]),
+};
+const SETTLED_AT = at('2026-10-17T04:05:06.000Z');
+
+/** deps 加结算记录端口：两个方法都往 order 里记名字。 */
+function withRecords(order: string[], statementFen: bigint | null = null) {
+  const base = deps(order);
+  const recordApi = vi.fn<OrderSettlementRecordsPort['recordApi']>(() => {
+    order.push('recordApi');
+    return Promise.resolve();
+  });
+  const latestStatementFen = vi.fn<OrderSettlementRecordsPort['latestStatementFen']>(() => {
+    order.push('latestStatementFen');
+    return Promise.resolve(statementFen);
+  });
+  const rebate = { ...base.rebate, settlements: { recordApi, latestStatementFen } };
+  return { d: { ...base, statusMaps: () => settledMap, rebate }, recordApi };
+}
+
+function updateSql(log: readonly string[]): string {
+  const sql = log.find((text) => text.startsWith('update "app"."orders"'));
+  if (sql === undefined) throw new Error('no orders update');
+  return sql;
+}
+
+it('[AC-B2-04zj#U3] 结算额算数：读 STATEMENT → 写列 → 记录 → settlement 端口；记录拿报文原值与库内结算时间', async () => {
+  const { db, log } = scriptedDb(
+    () => 1n,
+    () => undefined,
+  );
+  const order: string[] = [];
+  const { d, recordApi } = withRecords(order);
+  const report = incoming({
+    raw_status: 'settled',
+    settle_commission_fen: 15n,
+    settled_at: SETTLED_AT,
+  });
+  await db
+    .transaction()
+    .execute((trx) => createOrderUpdateStep(d).apply(trx, current, report, ctx));
+  expect(order).toEqual(['latestStatementFen', 'recordApi', 'rebate', 'event:order.updated']);
+  expect(recordApi.mock.calls[0]?.[1]).toEqual({
+    appId: current.app_id,
+    orderId: current.order_id,
+    commissionFen: 15n,
+    reportedSettledAt: SETTLED_AT,
+    orderSettledAt: null,
+  });
+  expect(updateSql(log)).toContain('"union_settled_at" =');
+});
+
+it('[AC-B2-04zj#U4] 有 STATEMENT：给 settlement 的是 STATEMENT 金额，记录仍是报文金额', async () => {
+  const { db } = scriptedDb(
+    () => 1n,
+    () => undefined,
+  );
+  const order: string[] = [];
+  const { d, recordApi } = withRecords(order, 12n);
+  const report = incoming({ raw_status: 'settled', settle_commission_fen: 15n });
+  await db
+    .transaction()
+    .execute((trx) => createOrderUpdateStep(d).apply(trx, current, report, ctx));
+  expect(recordApi.mock.calls[0]?.[1]).toMatchObject({
+    commissionFen: 15n,
+    reportedSettledAt: null,
+  });
+  expect(vi.mocked(d.rebate.onUpdated).mock.calls[0]?.[1]).toMatchObject({
+    settle_commission_fen: 12n,
+  });
+});
+
+it('[AC-B2-04zj#U5] 结算额不算数不记录；union_settled_at 报文给了就写，不看状态与结算额；没给不进 UPDATE', async () => {
+  const { db, log } = scriptedDb(
+    () => 1n,
+    () => undefined,
+  );
+  const order: string[] = [];
+  const { d, recordApi } = withRecords(order);
+  const step = createOrderUpdateStep(d);
+  const given = incoming({ raw_status: 'received', settled_at: SETTLED_AT });
+  await db.transaction().execute((trx) => step.apply(trx, current, given, ctx));
+  expect(updateSql(log)).toContain('"union_settled_at" =');
+  log.length = 0;
+  const absent = incoming({ raw_status: 'settled', settle_commission_fen: null });
+  await db.transaction().execute((trx) => step.apply(trx, current, absent, ctx));
+  expect(updateSql(log)).not.toContain('"union_settled_at"');
+  expect(recordApi).not.toHaveBeenCalled();
+});
+
+it('[AC-B2-04zj#U6] CAS 两次未命中不写记录；整条拒收连 STATEMENT 都不读', async () => {
+  const { db } = scriptedDb(
+    () => 0n,
+    () => current,
+  );
+  const order: string[] = [];
+  const { d, recordApi } = withRecords(order);
+  const step = createOrderUpdateStep(d);
+  const report = incoming({ raw_status: 'settled', settle_commission_fen: 15n });
+  await expect(
+    db.transaction().execute((trx) => step.apply(trx, current, report, ctx)),
+  ).rejects.toThrow('ORDER_CAS_CONFLICT');
+  expect(recordApi).not.toHaveBeenCalled();
+
+  order.length = 0;
+  const backward = { ...current, platform_status: 'SETTLED' } as Row;
+  const late = incoming({ raw_status: 'received', settle_commission_fen: 15n });
+  await db.transaction().execute((trx) => step.apply(trx, backward, late, ctx));
+  expect(order).not.toContain('latestStatementFen');
+  expect(recordApi).not.toHaveBeenCalled();
+});

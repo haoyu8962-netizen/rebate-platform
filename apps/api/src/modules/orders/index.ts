@@ -199,6 +199,7 @@ export {
 export type { PendingTracksDeps } from './application/pending-tracks.ts';
 export { createOrderUpdateStep } from './application/update-step.ts';
 export type {
+  OrderSettlementRecordsPort,
   OrderUpdateDeps,
   OrderUpdateChange,
   OrderStatusSource,

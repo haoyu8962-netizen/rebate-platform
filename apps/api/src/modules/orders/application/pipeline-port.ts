@@ -22,6 +22,8 @@
 //   京东 15 待付款的 NO_PAY_TIME 丢弃照记，不写 warn（domain/jd-status.ts）。
 // - B1-04zv（D10-570）：结果是 inserted、updated、unchanged 时，同事务解决该单 open 的 ORDER_ROW_INVALID
 //   （application/row-quarantine.ts），解决写失败整事务回滚；丢弃、app_conflict、stale、整条拒收都不解决。
+// - B2-04zj（BR-FUND-01 P12、BR-FUND-09）：首次入库即已结算且报文给了结算额 → 随 INSERT 写结算佣金列，紧接着同事务
+//   经 rebate.settlements 记一条 API 记录；首次入库没有 STATEMENT 可读。union_settled_at 报文给了就写（BR-FUND-04 ①）。
 // 日志只打平铺字段（platform、app_id、reason、outcome），不打子订单号与买家参数。
 import { accountingDate } from '@couli/domain';
 import type { DB } from '@couli/db';
@@ -42,6 +44,7 @@ import { isAwaitingPaymentDrop, isOrderSourceMismatch } from '../domain/jd-statu
 import { rawItemId, rawPayloadId } from '../domain/order-fields.ts';
 import { incomingShopId, shouldDeferOrderSource } from '../domain/source-shop.ts';
 import { mapPlatformStatus } from '../domain/status-map.ts';
+import { reportedSettleFen } from '../domain/update-plan.ts';
 import { lockOrderKey } from '../infra/order-lock.ts';
 import {
   bumpCounter,
@@ -70,6 +73,7 @@ import type {
   OrderPipelineDeps,
   OrderPipelineResult,
 } from './pipeline-types.ts';
+import type { OrderUpdateDeps } from './update-step.ts';
 
 export type { OrderPipeline, OrderPipelineContext, OrderPipelinePort } from './pipeline-types.ts';
 
@@ -85,7 +89,12 @@ const NO_PARAMS: UnionOrderAttrParams = {
 const IMPORTED_REBATE_STATUS = 'UNATTRIBUTED';
 
 // TODO(规划/11 §4.5): 淘宝 SITE_MISMATCH 判定 — blocked on 淘宝订单映射（无 site_id）。
-export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
+export function createOrderPipeline(
+  deps: OrderPipelineDeps & {
+    /** B2-04zj：更新步用的同一个 rebate 对象；settlements 见 OrderUpdateDeps。 */
+    readonly rebate: Pick<OrderUpdateDeps['rebate'], 'settlements'>;
+  },
+): OrderPipeline {
   const log = deps.logger;
   const onBlacklistHit = deps.rebate.onBlacklistHit;
 
@@ -316,9 +325,10 @@ export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
 
     const orderId = newUuidV7(now);
     const attributed = user.kind === 'attributed';
-    // ⑥ 分佣快照（B1-08k）：判定先于写库。首次入库 before 为空；金额取将写入的列（结算佣金首次入库不写）；
+    // ⑥ 分佣快照（B1-08k）：判定先于写库。首次入库 before 为空；预估与结算佣金取将写入的列（BR-CALC-02）；
     // 本次入库即 PAID+ 时首条已付历史就是本事务写的，时刻为 now。未注入端口整步跳过。
     const paidNow = isPaidOrLater(plan.platform_status);
+    const settleFen = reportedSettleFen(order, plan);
     const snapshotInput: PlanCommissionSnapshotInput = {
       before: null,
       after: {
@@ -336,7 +346,7 @@ export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
         paid_at: order.paid_at ?? null,
         deposit_paid_at: order.deposit_paid_at ?? null,
         est_commission_fen: order.est_commission_fen ?? null,
-        settle_commission_fen: null,
+        settle_commission_fen: settleFen,
         subsidy_commission_fen: null,
       },
       incoming: {
@@ -353,6 +363,8 @@ export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
     const paidAtSource =
       snapshotPlan === null ? null : snapshotPaidAtSource(snapshotInput, snapshotPlan);
 
+    const unionSettledAt = order.settled_at ?? null;
+
     // —— 判定完成，开始写库 ——
     const row: Omit<Insertable<DB['orders']>, 'rebate_status'> = {
       order_id: orderId,
@@ -365,6 +377,7 @@ export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
       shop_id: shop ?? null,
       pay_amount_fen: order.paid_fen,
       est_commission_fen: order.est_commission_fen ?? null,
+      settle_commission_fen: settleFen,
       // B1-08v：联盟报文的平台服务费（只有拼多多给）按本次报文原样写，缺失为 NULL；未归因订单同样写。
       service_fee_fen: order.service_fee_fen ?? null,
       pid: slot,
@@ -381,7 +394,8 @@ export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
       paid_at: order.paid_at ?? null,
       attr_at: attrAt,
       received_at: plan.received_at,
-      settled_at: order.settled_at ?? null,
+      settled_at: unionSettledAt,
+      union_settled_at: unionSettledAt,
       platform_modified_at: order.modified_at ?? null,
       content_hash: orderContentHash(order),
       raw_payload_id: payloadId,
@@ -401,6 +415,15 @@ export function createOrderPipeline(deps: OrderPipelineDeps): OrderPipeline {
       plan.history,
       now,
     );
+    if (settleFen !== null) {
+      await deps.rebate.settlements?.recordApi(trx, {
+        appId: ctx.app_id,
+        orderId,
+        commissionFen: settleFen,
+        reportedSettledAt: unionSettledAt,
+        orderSettledAt: null,
+      });
+    }
     if (plan.pending !== null) {
       await upsertPending(trx, {
         app_id: ctx.app_id,

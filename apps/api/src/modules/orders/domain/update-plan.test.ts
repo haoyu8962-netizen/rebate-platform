@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import type { UnionOrder } from '../../union/index.ts';
 import type { PlatformStatusEvent, StatusMap } from './status-map.ts';
-import { planOrderSyncColumns, planOrderUpdate, type OrderSyncColumns } from './update-plan.ts';
+import {
+  planOrderSyncColumns,
+  planOrderUpdate,
+  reportedSettleFen,
+  type OrderSyncColumns,
+} from './update-plan.ts';
 
 const at = (iso: string) => new FixedClock(iso).now();
 const RECEIVED = '2026-10-16T03:04:05.000Z';
@@ -149,5 +154,29 @@ describe('planOrderSyncColumns', () => {
       plan,
     );
     expect(next).toMatchObject({ received_at: at(RECEIVED), platform_received_at: null });
+  });
+
+  const settledPlan = { ...plan, platform_status: 'SETTLED' as const };
+
+  it('[AC-B2-04zj#U1] 结算额只在迁移后 SETTLED 且报文有值时算数，0 与负数也算；没有 STATEMENT 时列取它', () => {
+    expect(reportedSettleFen(order({ settle_commission_fen: 0n }), settledPlan)).toBe(0n);
+    expect(reportedSettleFen(order({ settle_commission_fen: -5n }), settledPlan)).toBe(-5n);
+    expect(reportedSettleFen(order({ settle_commission_fen: null }), settledPlan)).toBeNull();
+    expect(reportedSettleFen(order({ settle_commission_fen: 9n }), plan)).toBeNull();
+    expect(
+      planOrderSyncColumns(current, order({ settle_commission_fen: 9n }), settledPlan)
+        .settle_commission_fen,
+    ).toBe(9n);
+  });
+
+  it('[AC-B2-04zj#U2] 有 STATEMENT 金额时列取它（含 0），报文不覆盖；都没有保留库内值', () => {
+    const paid = { ...current, settle_commission_fen: 7n };
+    const incoming = order({ settle_commission_fen: 9n });
+    expect(planOrderSyncColumns(paid, incoming, settledPlan, 3n).settle_commission_fen).toBe(3n);
+    expect(planOrderSyncColumns(paid, incoming, settledPlan, 0n).settle_commission_fen).toBe(0n);
+    expect(
+      planOrderSyncColumns(paid, order({ settle_commission_fen: null }), settledPlan)
+        .settle_commission_fen,
+    ).toBe(7n);
   });
 });

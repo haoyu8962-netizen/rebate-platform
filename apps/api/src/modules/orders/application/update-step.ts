@@ -37,6 +37,10 @@
 //   ⑥ 之前同事务判定：库内返利状态 VOID / CLAWED_BACK、reason 属 REFUND / RIGHTS / COMMISSION_ZERO 或进入当前返利
 //   状态的历史事件属 PLATFORM_INVALID / INVALID_AFTER_SETTLE，且本次为 P9 或佣金列由空 / ≤0 变为 >0 → 经端口登记
 //   platform_restore 差错单（键用进入行 id，一次作废 / 扣回一张），新插入才打一条告警；不改返利状态、不写分录。
+// - 结算记录（B2-04zj，BR-FUND-09）：planOrderSyncColumns 之前经 rebate.settlements 读最新 STATEMENT 金额，有就是
+//   结算佣金列的值；本次报文的结算额算数（domain reportedSettleFen）就在 CAS 与 history 之后、待处理与 settlement
+//   端口之前同事务记一条 API 记录，内容不变不加行。判定看算数的结算额，不看事件名；CREDITED 单照记。
+//   union_settled_at（BR-FUND-04 ①）：报文给了 settled_at 就写，不看平台状态与结算额，空值不覆盖。
 // - 返利状态、hold、order_rights、order_settlements 只由 settlement 经端口决定；本模块不写这些列。
 //   端口除 change / info 外另带本次报文的来源（映射事件与原始码），settlement 据此区分维权与处罚（P8）。
 // 日志只打平铺字段（platform、app_id、reason、outcome、rule、event），不打子订单号与买家参数。
@@ -66,6 +70,7 @@ import type { PlatformStatusEvent } from '../domain/status-map.ts';
 import {
   planOrderSyncColumns,
   planOrderUpdate,
+  reportedSettleFen,
   type OrderUpdatePlan,
 } from '../domain/update-plan.ts';
 import { casUpdateOrder, type OrderUpdateSet } from '../infra/order-update-store.ts';
@@ -160,6 +165,31 @@ export interface OrderStatusSource {
   readonly raw_status: string | null;
 }
 
+/**
+ * B2-04zj：settlement 的结算记录端口（order_settlements 唯一写者，BR-FUND-09）的 orders 视角；都在调用方事务、
+ * 订单锁内运行，抛错整事务回滚。
+ */
+export interface OrderSettlementRecordsPort {
+  /** 本次算数的结算额写一条 API 记录；内容与最新 API 记录相同则不写。 */
+  recordApi(
+    trx: Transaction<DB>,
+    input: {
+      readonly appId: string;
+      readonly orderId: string;
+      readonly commissionFen: bigint;
+      /** 报文给的结算时间，没给为 null：这个值是记录内容的一部分。 */
+      readonly reportedSettledAt: Date | null;
+      /** orders.settled_at：记录 settled_at 列的回退，不算内容。 */
+      readonly orderSettledAt: Date | null;
+    },
+  ): Promise<unknown>;
+  /** 最新（seq 最大）STATEMENT 记录的金额；没有为 null。 */
+  latestStatementFen(
+    trx: Transaction<DB>,
+    ref: { readonly appId: string; readonly orderId: string },
+  ): Promise<bigint | null>;
+}
+
 export interface OrderUpdateDeps extends Pick<
   OrderPipelineDeps,
   'clock' | 'users' | 'bindings' | 'statusMaps' | 'logger'
@@ -180,6 +210,11 @@ export interface OrderUpdateDeps extends Pick<
     ): Promise<void>;
     /** B1-09b 第 ③ 步命中且未入账（BR-ATTR-26 → BR-FUND-01 R6）；接线在资金线。 */
     onBlacklistHit?: OrderBlacklistRebatePort['onBlacklistHit'];
+    /**
+     * B2-04zj：结算记录端口；生产由 createRebatePort 一并给出，只有不带 settlement 的替身才没有，
+     * 没有时不读 STATEMENT、不写记录。
+     */
+    readonly settlements?: OrderSettlementRecordsPort;
   };
   /** 第 ③ 步黑名单（B1-09b）；同 OrderPipelineDeps.blacklist，未注入时整步跳过。 */
   readonly blacklist?: OrderBlacklistDeps;
@@ -336,7 +371,10 @@ export function createOrderUpdateStep(
     );
     if (plan.kind === 'pending') return reject(trx, current, incoming, platform, plan);
 
-    const columns = planOrderSyncColumns(current, incoming, plan);
+    const settlements = rebatePort.settlements;
+    const orderRef = { appId: current.app_id, orderId: current.order_id };
+    const statementFen = (await settlements?.latestStatementFen(trx, orderRef)) ?? null;
+    const columns = planOrderSyncColumns(current, incoming, plan, statementFen);
     const now = deps.clock.now();
     const set: OrderUpdateSet = {
       ...columns,
@@ -346,6 +384,10 @@ export function createOrderUpdateStep(
       row_version: current.row_version + 1,
       updated_at: now,
     };
+
+    // BR-FUND-04 ①：不进 planOrderSyncColumns（B1-08i 冻结的同步列集合），空值不覆盖。
+    const unionSettledAt = incoming.settled_at ?? null;
+    if (unionSettledAt !== null) Object.assign(set, { union_settled_at: unionSettledAt });
 
     // 归属参数（BR-ATTR-01）：已归属不覆盖四项参数，变化只告警；未归因写入参并重跑 ②（BR-ATTR-06 / 07）。
     const params = incoming.attr_params ?? NO_PARAMS;
@@ -536,6 +578,16 @@ export function createOrderUpdateStep(
     if (!updated) return 'conflict';
 
     await insertPlatformHistory(trx, current, plan.history, now);
+    // BR-FUND-09：先于 settlement 端口，closeAnsweredRights 读到的最新记录就是这一条。
+    const settleFen = reportedSettleFen(incoming, plan);
+    if (settleFen !== null) {
+      await settlements?.recordApi(trx, {
+        ...orderRef,
+        commissionFen: settleFen,
+        reportedSettledAt: unionSettledAt,
+        orderSettledAt: current.settled_at,
+      });
+    }
     let pendingId: bigint | null = null;
     if (plan.pending !== null) {
       pendingId = await upsertPending(trx, {

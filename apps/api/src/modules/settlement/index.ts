@@ -61,6 +61,15 @@ export type { RebateAdminDependencies, RightsCommandDependencies } from './right
 export { createClawbackOrder } from './clawback/index.ts';
 export type { ClawbackDependencies, ClawbackOrder } from './clawback/index.ts';
 export { createBeneficiaryGate } from './credit/index.ts';
+// B2-04zj (D10-583): the settlement record port (order_settlements' one writer, BR-FUND-09).
+export { createSettlementRecords } from './settlements/index.ts';
+export type {
+  ApiSettlementInput,
+  ApiSettlementResult,
+  SettlementOrderRef,
+  SettlementRecords,
+  SettlementRecordsDependencies,
+} from './settlements/index.ts';
 // B2-04ze (D10-443): the worker entry's settle queue (bill seed, due batch scan, handler).
 export {
   createSettleJobHandler,

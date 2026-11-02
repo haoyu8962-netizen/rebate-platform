@@ -176,17 +176,30 @@ export type OrderSyncColumns = Pick<
   | 'raw_payload_id'
 >;
 
-/** Returns resolved values of sync-owned data columns; CAS/status/attribution are applied separately. */
+/**
+ * BR-FUND-02：本次报文给出且算数的结算额：只在（迁移后）平台明确已结算时才算；否则 null。
+ * 同时决定列与结算记录（BR-FUND-09），两者不会各走一条判定。
+ */
+export function reportedSettleFen(
+  incoming: Pick<UnionOrder, 'settle_commission_fen'>,
+  plan: Pick<OrderUpdatePlan, 'platform_status'>,
+): bigint | null {
+  return plan.platform_status === 'SETTLED' ? (incoming.settle_commission_fen ?? null) : null;
+}
+
+/**
+ * Returns resolved values of sync-owned data columns; CAS/status/attribution are applied separately.
+ * statementFen: the order's latest STATEMENT amount (BR-FUND-09); it wins over the report.
+ */
 export function planOrderSyncColumns(
   current: OrderSyncColumns,
   incoming: UnionOrder,
   plan: OrderUpdatePlan,
+  statementFen: bigint | null = null,
 ): OrderSyncColumns {
   // BR-FUND-07：预估佣金缺失不覆盖；BR-FUND-03：实际变化才 commission_version+1。
   const est = incoming.est_commission_fen ?? null;
   const estChanged = est !== null && est !== current.est_commission_fen;
-  // BR-FUND-02：结算佣金只在（迁移后）平台明确已结算时写。
-  const settle = incoming.settle_commission_fen ?? null;
   // BR-FUND-02：received_at 一旦写入不再覆盖；后到的不同收货时间另存 platform_received_at。
   const incomingReceived = incoming.received_at ?? null;
   const laterReceived =
@@ -198,10 +211,9 @@ export function planOrderSyncColumns(
     pay_amount_fen: incoming.paid_fen,
     est_commission_fen: estChanged ? est : current.est_commission_fen,
     commission_version: estChanged ? current.commission_version + 1 : current.commission_version,
+    // BR-FUND-09：最新 STATEMENT，否则本次算数的结算额（列即最新 API 记录），都没有保留库内值。
     settle_commission_fen:
-      plan.platform_status === 'SETTLED' && settle !== null
-        ? settle
-        : current.settle_commission_fen,
+      statementFen ?? reportedSettleFen(incoming, plan) ?? current.settle_commission_fen,
     received_at: current.received_at ?? plan.received_at,
     platform_received_at: laterReceived ? incomingReceived : current.platform_received_at,
     // 待编排裁定 5：时间入参为 null 一律不覆盖。
