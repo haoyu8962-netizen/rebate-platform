@@ -1,0 +1,26 @@
+id: B1-04zx
+repo: rebate-platform
+title: 淘宝官方搜索 taobao.tbk.dg.material.optional.upgrade（27939 已批，FU-TB-SEARCH-FALLBACK 前置）
+type: impl
+# 2026-11-02 be 入账（D10-582 照准 couli-runs/B3-lane/tb-search-fallback-plan-20261102.md）。现状 searchItems 在非 dataoke 时抛 adapter_unimplemented，官方接口未实现，staging 保持 dataoke 直到本单合并并验过。录制形状在私有库 cap-tests/2026-11-02/taobao/couli-search-shapes.json，规则测试按形状自造，不抄私有库内容。结构同详情（item_basic_info、price_promotion_info、publish_info.income_info），三价走 mapTaobaoPrice，佣金走 commissionBp。商品 ID：实测搜索 item_id 与详情口径整串 0/5 相同、最后一段 5/5 相同，所以默认经 item.info.upgrade.get 换成详情口径再返回（复用 #convertItemIds，一页一次批量），不依赖 staging 核转链；product_key 取最后一段，与订单同口径。价格不合格同详情保留成 price_status=anomaly，由 catalog 记 PRICE_ANOMALY，不跳行；标题缺失、佣金非法、换不到 ID 的行跳过并 warn，不废整页，整页都跳过才抛 invalid_dto；外层键缺失同 request() 是 upstream_unavailable。不舍入。换算按最后一段匹配，不按位置。adzone_id：取该 App 的 query 场景 active 推广位（BR-PROD-07，catalog/search.ts 同口径），只作请求参数，返回的链接不用；没有就 adapter_unimplemented 同款报错、不发请求。回落在 B1-04zy。RV2。
+refs: [BR-PRICE-01, BR-PRICE-11]
+refs_hash:
+  BR-PRICE-01: 9ff41b3629dd
+  BR-PRICE-11: 94a46c6de587
+deps: []
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/**'
+  - 'apps/api/src/modules/union/infra/registry.ts'
+  - 'apps/api/src/modules/union/pids/**'
+  - 'apps/api/src/modules/union/union.module.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'specs/union/**'
+  - 'test/spec/union/taobao-official-search/**'
+test_paths:
+  - 'test/spec/union/taobao-official-search/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
