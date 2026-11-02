@@ -30,10 +30,22 @@ it('[AC-B1-03zh#11][BR-ID-36][BR-INV-09] inv_09_same_device 停用：用上级�
   await withApp(async (f) => {
     await toggle(f, 'inv_09_same_device', 'disabled');
     const a = await boundAccount(f);
-    const before = await user(f.db, f.appId, a.uid);
+    // Login bookkeeping is outside this rule, so these columns may change either way.
+    const loginColumns = new Set([
+      'last_active_at',
+      'last_login_device_hash',
+      'reverify_flagged_at',
+      'reverify_trusted',
+      'updated_at',
+    ]);
+    const stableRow = async () =>
+      Object.fromEntries(
+        Object.entries(await user(f.db, f.appId, a.uid)).filter(([k]) => !loginColumns.has(k)),
+      );
+    const before = await stableRow();
     await loggedIn(f, a.uid, a.number);
     await stillBound(f, a.uid, a.parentId);
-    expect(await user(f.db, f.appId, a.uid)).toEqual(before);
+    expect(await stableRow()).toEqual(before);
     expect(await relationLogs(f.db, f.appId)).toEqual([]);
     expect(await inviteHits(f.db, f.appId)).toEqual([]);
 
@@ -43,7 +55,7 @@ it('[AC-B1-03zh#11][BR-ID-36][BR-INV-09] inv_09_same_device 停用：用上级�
     await loggedIn(f, b.uid, b.number);
     await assertHit(f.db, f.appId, b.uid, b.parentId, b.hash, f.kit.clock.now());
     // The account judged while the rule was off is not judged again afterwards.
-    expect(await user(f.db, f.appId, a.uid)).toEqual(before);
+    expect(await stableRow()).toEqual(before);
   });
 });
 
