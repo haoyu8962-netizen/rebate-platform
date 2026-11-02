@@ -2,29 +2,35 @@ id: B1-08zh
 repo: rebate-platform
 title: 拼多多 N 收到适配器一处：est 写净额（佣金 − 软件服务费），下游不再减，缺服务费不写 est 并告警（FU-PDD-NET-N，D10-574）
 type: impl
-# 2026-11-02 pay（账号 5）入账（编排 D10-574，方案 A；pdd、union、w1、funds 11-06 回来复核）。08 BR-CALC-02 / 03：est / settle 语义是已扣技术服务费，扣除只在 Adapter。平台字段见私有库 docs-mirror/pdd/api/pdd.ddk.order.list.increment.get.md。
-# 服务费缺失：新单 est = null，走现有 SERVICE_FEE_RATE_MISSING 待处理，版本留 0；已有 est 的单不覆盖、版本不前进，B2-03q 遗留的钱包整页失败随之消失，并加计数指标与 warning 告警。不回填（未上线），无迁移、无契约。
-# 已知差口，本单不改：duo_id_service_fee 含基础加奖励佣金的费，只从基础佣金扣，有等级奖励时 N 偏小（偏保守，负责人 2026-10-02 定的公式），待 CAP-PDD-04 实测。settle 按已扣处理；pdd credit.enabled 开启前置：CAP-PDD-07 实测结算额是否已扣，若是毛额在结算写入处换算。
-# 冻结测试（pdd 映射、platform-rules funds #11、commission-snapshot、snapshot-retry、service-fee-column、estimate-port 等）钉的是 est 毛额、下游减，与 08 不符；以完整 verify 为准列清单，另开 test-change 先报。refs 留空，任务书 §2b 摘 BR-CALC-02、03、18。排在 B1-09n 之后。
+# 2026-11-02 pay（账号 5）入账（D10-574 方案 A；pdd、union、w1、funds 11-06 回来复核）。08 BR-CALC-02 / 03：est / settle 已扣技术服务费，扣除只在 Adapter；平台字段见私有库 docs-mirror/pdd/api/pdd.ddk.order.list.increment.get.md。服务费缺失：新单 est = null，走现有 SERVICE_FEE_RATE_MISSING，版本留 0；已有 est 的单不覆盖、版本不前进（消除 B2-03q 遗留的钱包整页失败），计数并 warning 告警。不回填，无迁移、无契约。 已知差口不改：duo_id_service_fee 含基础加奖励佣金的费，只从基础佣金扣，有等级奖励时 N 偏小（偏保守），待 CAP-PDD-04 实测。settle 按已扣处理；pdd credit.enabled 开启前置：CAP-PDD-07 实测结算额是否已扣。 2026-11-02 补 paths 与 test_paths（D10-581，#24 核过清单 couli-runs/B1-08zh/test-change-list.md，D10-327）：冻结用例钉的是 est 毛额、下游减，与 08 不符，新旧实现不能同绿，由新鲜独立 Claude 在作者提交里改，只动用例体。refs 留空，任务书 §2b 摘 BR-CALC-02、03、18。
 refs: []
 refs_hash: {}
 deps: [B1-09n, B2-03q, B1-08v]
 paths:
-  - 'apps/api/src/modules/union/infra/pdd/orders.ts'
-  - 'apps/api/src/modules/union/infra/pdd/orders.test.ts'
+  - 'apps/api/src/modules/union/infra/pdd/orders*.ts'
   - 'apps/api/src/modules/union/domain/types.ts'
-  - 'apps/api/src/modules/orders/domain/commission-snapshot*.ts'
-  - 'apps/api/src/modules/orders/domain/snapshot-retry*.ts'
-  - 'apps/api/src/modules/orders/domain/platform-rules/**'
-  - 'apps/api/src/modules/orders/infra/snapshot-retry-*.ts'
+  - 'apps/api/src/modules/orders/*/commission-snapshot*.ts'
+  - 'apps/api/src/modules/orders/*/snapshot-retry*.ts'
   - 'apps/api/src/modules/orders/application/update-step*.ts'
+  - 'apps/api/src/modules/orders/application/service-fee.test.ts'
+  - 'apps/api/src/modules/orders/domain/claim-review.test.ts'
   - 'apps/api/src/modules/commission/application/estimate-plan*.ts'
   - 'apps/api/src/modules/commission/ports/estimates*.ts'
   - 'apps/api/src/modules/platform/metrics/**'
   - 'infra/monitoring/rules/couli.yaml'
   - 'specs/union/pdd.md'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/union/pdd-net-n/**'
+  - 'test/spec/union/orders-shape/**'
+  - 'test/spec/orders/commission-snapshot/**'
+  - 'test/spec/orders/platform-rules/funds.test.ts'
+  - 'test/spec/orders/service-fee-column/**'
+  - 'test/spec/orders/snapshot-retry*/**'
+  - 'test/spec/commission/estimate-port/**'
+  - 'test/spec/orders/rebate-wiring/**'
+  - 'test/spec/platform/metrics-followups/rules.test.ts'
 impl: claude
 tester: claude-independent
 accept:
