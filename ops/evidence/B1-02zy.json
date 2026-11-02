@@ -1,0 +1,116 @@
+{
+  "task": "B1-02zy",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "spec_commit": "21d0a0c191e48db2d00f88b8c4b0a27d0161e080",
+  "red_tests": [
+    "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#1] 刷新令牌：已读到未吊销的会话、卡在写活动前，注销清理提交（账号 deleted）后放行：最近活动与上次登录设备仍为空，users 不再被写",
+    "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#1] 刷新令牌：已读到未吊销的会话、卡在写活动前，注销清理提交（账号 deleting）后放行：最近活动与上次登录设备仍为空，users 不再被写",
+    "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#2] 第三方加验：比对已通过、settlePassed 之前注销清理提交（账号 deleted）：不留 reverified_devices 行，计数与日期仍为空",
+    "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#2] 第三方加验：比对已通过、settlePassed 之前注销清理提交（账号 deleting）：不留 reverified_devices 行，计数与日期仍为空",
+    "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#3] reserveFailure：占位语句排在注销清理之后，清理提交（账号 deleted）后不占位、不写计数与日期",
+    "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#3] reserveFailure：占位语句排在注销清理之后，清理提交（账号 deleting）后不占位、不写计数与日期",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleted：真实 recordRefreshActivity 不写，users 整行不变，不留 reverified_devices 行",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleting：真实 recordRefreshActivity 不写，users 整行不变，不留 reverified_devices 行",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleted：真实 settlePassed 不写，users 整行不变，不留 reverified_devices 行",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleting：真实 settlePassed 不写，users 整行不变，不留 reverified_devices 行",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleted：真实 reserveFailure 不写，users 整行不变，不留 reverified_devices 行",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleting：真实 reserveFailure 不写，users 整行不变，不留 reverified_devices 行",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#5] 账号已进入 processing、清理还没跑（六列还在）：recordRefreshActivity 同样不写，整行不变",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#5] 账号已进入 processing、清理还没跑（六列还在）：settlePassed 同样不写，整行不变",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#5] 账号已进入 processing、清理还没跑（六列还在）：reserveFailure 同样不写，整行不变",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#6] 不靠先读后写：recordRefreshActivity 已读到 normal、等在 users 行上时状态变 deleting，放行后不写",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#6] 不靠先读后写：settlePassed 已读到 normal、等在 users 行上时状态变 deleting，放行后不写",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#6] 不靠先读后写：reserveFailure 已读到 normal、等在 users 行上时状态变 deleting，放行后不写",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#7] 对照：正常、封禁、冷静期账号 recordRefreshActivity 照旧写入，同一轮 deleting 账号不写（条件不写反、不写宽）",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#7] 对照：正常、封禁、冷静期账号 settlePassed 照旧写入，同一轮 deleting 账号不写（条件不写反、不写宽）",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#7] 对照：正常、封禁、冷静期账号 reserveFailure 照旧写入，同一轮 deleting 账号不写（条件不写反、不写宽）",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#8] 迟到的 releaseFailure 不受影响：清理已清日期（账号 deleted），退回匹配不到、整行不变；之后再占位也不写",
+    "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#8] 迟到的 releaseFailure 不受影响：清理已清日期（账号 deleting），退回匹配不到、整行不变；之后再占位也不写"
+  ],
+  "risk_note": "RV1 identity: recordRefreshActivity, settlePassed and reserveFailure now carry status NOT IN ('deleting','deleted') in the write statement, so an in-flight request after deletion's cleanup writes nothing back; settlePassed with 0 rows inserts no reverified_devices row and skips alongside (BR-ID-28 细则「待加验记录」). Responses unchanged. Frozen integration: spec/identity 2111 pass, 0 fail. Left outside: an Apple refresh token already issued in that window is neither stored nor revoked (FU-APPLE-TOKEN-AFTER-DELETE).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "21d0a0c191e48db2d00f88b8c4b0a27d0161e080",
+      "tree": "baf340e5f961f75647622343c65efc315389d153",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T15:58:40Z",
+      "finished_at": "2026-11-02T15:59:00Z",
+      "red_tests": [
+        "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#1] 刷新令牌：已读到未吊销的会话、卡在写活动前，注销清理提交（账号 deleted）后放行：最近活动与上次登录设备仍为空，users 不再被写",
+        "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#1] 刷新令牌：已读到未吊销的会话、卡在写活动前，注销清理提交（账号 deleting）后放行：最近活动与上次登录设备仍为空，users 不再被写",
+        "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#2] 第三方加验：比对已通过、settlePassed 之前注销清理提交（账号 deleted）：不留 reverified_devices 行，计数与日期仍为空",
+        "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#2] 第三方加验：比对已通过、settlePassed 之前注销清理提交（账号 deleting）：不留 reverified_devices 行，计数与日期仍为空",
+        "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#3] reserveFailure：占位语句排在注销清理之后，清理提交（账号 deleted）后不占位、不写计数与日期",
+        "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts > [AC-B1-02zy#3] reserveFailure：占位语句排在注销清理之后，清理提交（账号 deleting）后不占位、不写计数与日期",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleted：真实 recordRefreshActivity 不写，users 整行不变，不留 reverified_devices 行",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleting：真实 recordRefreshActivity 不写，users 整行不变，不留 reverified_devices 行",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleted：真实 settlePassed 不写，users 整行不变，不留 reverified_devices 行",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleting：真实 settlePassed 不写，users 整行不变，不留 reverified_devices 行",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleted：真实 reserveFailure 不写，users 整行不变，不留 reverified_devices 行",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#4] 账号已是 deleting：真实 reserveFailure 不写，users 整行不变，不留 reverified_devices 行",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#5] 账号已进入 processing、清理还没跑（六列还在）：recordRefreshActivity 同样不写，整行不变",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#5] 账号已进入 processing、清理还没跑（六列还在）：settlePassed 同样不写，整行不变",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#5] 账号已进入 processing、清理还没跑（六列还在）：reserveFailure 同样不写，整行不变",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#6] 不靠先读后写：recordRefreshActivity 已读到 normal、等在 users 行上时状态变 deleting，放行后不写",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#6] 不靠先读后写：settlePassed 已读到 normal、等在 users 行上时状态变 deleting，放行后不写",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#6] 不靠先读后写：reserveFailure 已读到 normal、等在 users 行上时状态变 deleting，放行后不写",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#7] 对照：正常、封禁、冷静期账号 recordRefreshActivity 照旧写入，同一轮 deleting 账号不写（条件不写反、不写宽）",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#7] 对照：正常、封禁、冷静期账号 settlePassed 照旧写入，同一轮 deleting 账号不写（条件不写反、不写宽）",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#7] 对照：正常、封禁、冷静期账号 reserveFailure 照旧写入，同一轮 deleting 账号不写（条件不写反、不写宽）",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#8] 迟到的 releaseFailure 不受影响：清理已清日期（账号 deleted），退回匹配不到、整行不变；之后再占位也不写",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts > [AC-B1-02zy#8] 迟到的 releaseFailure 不受影响：清理已清日期（账号 deleting），退回匹配不到、整行不变；之后再占位也不写"
+      ],
+      "expected": [
+        "test/spec/identity/reverify-after-deletion/in-flight.int.test.ts",
+        "test/spec/identity/reverify-after-deletion/writes.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "0fa5463190b3041e92c8262cc575c67f41b385065527e21ec196aaa97876ccb8"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money round 1 pass; rounding, sign and partial_refund not applicable."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "codex-run.sh review --review-type spec-test round 1 pass; refs are empty, so the pass does not claim BR coverage."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a9b34aaf25413ea94828bd516c4f445d5d408bb7",
+    "specs": "242c82f497fb866ceec0a6619e38ad2ac0f07e81"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

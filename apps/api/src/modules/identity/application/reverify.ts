@@ -19,6 +19,10 @@
 // Nothing here holds a transaction across the exchange: every step commits on its own, so the
 // reservation is visible to a concurrent request before the comparison.
 //
+// An account that entered deletion in between (B1-02zy): the store writes nothing. No place left
+// answers 10010 manual as above; a comparison that passed still answers 0, only without the record
+// and without the passed log.
+//
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
 import type { Schema } from '@couli/contracts-ts';
@@ -193,11 +197,11 @@ export function createReverifyService(options: ReverifyOptions): ReverifyService
       const reservation = await reserve(subject);
       if (reservation === null) return pending(MANUAL_REQUIREMENT);
       if (stored !== submitted) return mismatch(reservation);
-      await settlePassed(db, subject, {
+      const settled = await settlePassed(db, subject, {
         deviceHash: current.deviceHash,
         now: clock.now(),
       });
-      logPassed(subject, 'id_number');
+      if (settled) logPassed(subject, 'id_number');
       return PASSED;
     },
 
@@ -231,7 +235,7 @@ export function createReverifyService(options: ReverifyOptions): ReverifyService
         }
         const refreshToken = provider === 'apple' ? identity.apple_refresh_token : undefined;
         const now = clock.now();
-        await settlePassed(db, subject, {
+        const settled = await settlePassed(db, subject, {
           deviceHash: current.deviceHash,
           now,
           ...(refreshToken === undefined
@@ -250,7 +254,7 @@ export function createReverifyService(options: ReverifyOptions): ReverifyService
               }),
         });
         compared = true;
-        logPassed(subject, 'oauth');
+        if (settled) logPassed(subject, 'oauth');
         return PASSED;
       } finally {
         if (!compared) await release(subject, reservation);

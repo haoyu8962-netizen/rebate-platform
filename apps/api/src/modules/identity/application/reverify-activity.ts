@@ -83,7 +83,11 @@ export async function recordLoginActivity(
     .execute();
 }
 
-/** A refresh: the session's device, read in the statement; never judges. */
+/**
+ * A refresh: the session's device, read in the statement; never judges. Nothing is written once the
+ * account is in deletion (BR-ID-28 细则「待加验记录」): the condition is on the UPDATE itself, so a
+ * refresh that waited for the row behind the deletion cleanup judges it on the row's latest version.
+ */
 export async function recordRefreshActivity(
   trx: Transaction<DB>,
   input: {
@@ -107,5 +111,6 @@ export async function recordRefreshActivity(
     }))
     .where('app_id', '=', appId)
     .where('id', '=', userId)
+    .where('status', 'not in', ['deleting', 'deleted'])
     .execute();
 }

@@ -204,7 +204,8 @@ export function createRefreshService(options: RefreshOptions): RefreshService {
         updated_at: now,
       })
       .execute();
-    // BR-WDR-01 细则「判定」: a refresh overwrites the account's two values and never judges.
+    // BR-WDR-01 细则「判定」: a refresh overwrites the account's two values and never judges (and
+    // leaves an account in deletion alone, BR-ID-28 细则「待加验记录」).
     await recordRefreshActivity(trx, {
       app_id: appId,
       user_id: session.user_id,

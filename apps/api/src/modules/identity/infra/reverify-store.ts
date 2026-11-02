@@ -15,6 +15,14 @@
 //            concurrent pass already recorded this device. It takes the row lock, the device row
 //            (if new) follows in the same transaction.
 //
+// An account in deletion (BR-ID-28 细则「待加验记录」; B1-02zy). The cleanup of the deletion round runs
+// once, so a request still in flight must not write the data back: reserve and pass write nothing
+// when users.status is deleting or deleted. The condition is on the UPDATE itself, not a read before
+// it: a statement that waited for the row behind the cleanup judges it on the row's latest version.
+// A pass that updated the row holds its lock, so the status cannot move before the device row
+// commits, and the cleanup that follows removes that row. release needs no condition: the cleanup
+// cleared the day it matches on.
+//
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
 import type { DB } from '@couli/db';
@@ -107,7 +115,10 @@ export async function boundUnionId(
   return row?.union_id ?? null;
 }
 
-/** Takes one failure place of `today` (+08:00), or null when none is left. */
+/**
+ * Takes one failure place of `today` (+08:00), or null when none is left or the account is in
+ * deletion.
+ */
 export async function reserveFailure(
   db: Kysely<DB>,
   subject: ReverifySubject,
@@ -129,6 +140,7 @@ export async function reserveFailure(
           reverify_fail_day = ${today}::date,
           updated_at = ${now}
         WHERE app_id = ${subject.app_id} AND id = ${subject.user_id}
+          AND status NOT IN ('deleting', 'deleted')
           AND (reverify_fail_day IS DISTINCT FROM ${today}::date
             OR reverify_fail_count < ${REVERIFY_FAIL_LIMIT})
         RETURNING reverify_fail_count, reverify_fail_epoch`.execute(trx);
@@ -160,7 +172,8 @@ export async function releaseFailure(
 
 /**
  * A pass: this device is re-verified (source self), the count is cleared, the flag stays.
- * `alongside` joins the same transaction (a replaced Apple refresh token).
+ * `alongside` joins the same transaction (a replaced Apple refresh token). False: the account is
+ * in deletion, or gone, and nothing was written, `alongside` included.
  */
 export async function settlePassed(
   db: Kysely<DB>,
@@ -170,19 +183,22 @@ export async function settlePassed(
     readonly now: Date;
     readonly alongside?: (trx: Transaction<DB>) => Promise<void>;
   },
-): Promise<void> {
+): Promise<boolean> {
   const { deviceHash, now, alongside } = input;
-  await db
+  return db
     .transaction()
     .setIsolationLevel('read committed')
     .execute(async (trx) => {
       // A pass clears the count even when a concurrent pass already recorded this device.
-      await sql`UPDATE app.users SET
+      const updated = await sql`UPDATE app.users SET
           reverify_fail_count = 0,
           reverify_fail_day = NULL,
           reverify_fail_epoch = reverify_fail_epoch + 1,
           updated_at = ${now}
-        WHERE app_id = ${subject.app_id} AND id = ${subject.user_id}`.execute(trx);
+        WHERE app_id = ${subject.app_id} AND id = ${subject.user_id}
+          AND status NOT IN ('deleting', 'deleted')
+        RETURNING id`.execute(trx);
+      if (updated.rows.length === 0) return false;
       await trx
         .insertInto('reverified_devices')
         .values({
@@ -196,6 +212,7 @@ export async function settlePassed(
         .onConflict((oc) => oc.columns(['app_id', 'user_id', 'device_hash']).doNothing())
         .execute();
       await alongside?.(trx);
+      return true;
     });
 }
 
