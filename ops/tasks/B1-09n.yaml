@@ -13,9 +13,11 @@ refs_hash:
   BR-FUND-06: 2076b932478c
   BR-FUND-07: 3d63741c52d9
 # 2026-11-01 D10-551 更正 D10-550：createRebatePort 要 estimates（commission 估值写口，B2-03q）与事务内 system 审计适配器（B1-34p），现在装不上，两者落地前不开工。B1-10n 标题里的「与 risk blocklist」归本任务，B1-10n 不做。
-deps: [B1-09m, B1-03zh, B2-03q, B1-34p]
+deps: [B1-09m, B1-03zh, B2-03q, B1-34p, B1-09s]
 paths:
   - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/app.module.test.ts'
+  - 'apps/api/src/modules/orders/worker-runtime.test.ts'
   - 'apps/api/src/modules/orders/worker-runtime.ts'
   - 'apps/api/src/modules/orders/orders.module.ts'
   - 'apps/api/src/modules/orders/index.ts'

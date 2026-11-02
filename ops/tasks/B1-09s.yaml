@@ -1,0 +1,16 @@
+id: B1-09s
+repo: rebate-platform
+title: 测试修改（B1-09n 前置）：冻结 [AC-B1-08n#19] 不再钉已归因订单停在 UNATTRIBUTED 的空桩行为
+type: test-change
+# 2026-11-02 W1 入账（编排 14:08，#24 test-change）。flow.int.test.ts 走真实 AppModule，断言已归因 PAID 单 rebate_status=UNATTRIBUTED，钉的正是 D10-548 / D10-550 要修的空桩。放宽这一处，新旧实现下都绿，其余断言与 AC 编号不变；已归因单进 ESTIMATED 由 B1-09n 新规则测试钉。完整 verify 下这是唯一红的冻结用例。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/orders/wiring/flow.int.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
