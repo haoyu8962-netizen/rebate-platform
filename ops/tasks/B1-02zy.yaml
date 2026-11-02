@@ -1,0 +1,23 @@
+id: B1-02zy
+repo: rebate-platform
+title: 注销后在途请求不得写回旧号加验数据——recordRefreshActivity、byOauth 的 settlePassed、reserveFailure 三处写入加账号状态条件，账号已进入 processing 或已注销时不写，不留 reverified_devices 行（BR-ID-28 细则「待加验记录」）；上线前必做
+type: impl
+# 2026-11-02 入账（admin-backend，编排 21:40，FU-REVERIFY-WRITE-AFTER-DELETE）。来源 B1-02zr 实现方：注销清理只在第 ① 步跑一次，这三处写入不查账号状态。不并 B1-02zw。B1-02zr 落地后做，identity 11-06 回来复核。
+refs: []
+refs_hash: {}
+deps: [B1-02zr]
+paths:
+  - 'apps/api/src/modules/identity/application/refresh.ts'
+  - 'apps/api/src/modules/identity/application/refresh.test.ts'
+  - 'apps/api/src/modules/identity/application/reverify.ts'
+  - 'apps/api/src/modules/identity/application/reverify.test.ts'
+  - 'apps/api/src/modules/identity/application/reverify-activity.ts'
+  - 'apps/api/src/modules/identity/infra/reverify-store.ts'
+test_paths:
+  - 'test/spec/identity/reverify-after-deletion/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/reverify-after-deletion/**'
+status: todo
