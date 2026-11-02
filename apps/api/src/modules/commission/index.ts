@@ -19,6 +19,18 @@ export { createRuleSetReader } from './infra/rule-set-reader.ts';
 export type { RuleSetReaderOptions } from './infra/rule-set-reader.ts';
 export { createCommissionSnapshot } from './application/snapshot.ts';
 export { readCommissionSnapshot } from './application/read-snapshot.ts';
+// B2-03q (D10-540, D10-565, D10-568): settlement rebate's estimates port, orders' snapshot port.
+export { createCommissionEstimates, createCommissionSnapshotPort } from './ports/estimates.ts';
+export type {
+  CommissionEstimates,
+  CommissionEstimatesDependencies,
+  CommissionOrderSnapshotPort,
+  CommissionSnapshotPortDependencies,
+  EstimateBases,
+  EstimateChangeInput,
+  EstimateOrder,
+  EstimateOrderRef,
+} from './ports/estimates.ts';
 // B2-09ga (D10-481 ②): the one judgement of a forfeited share.
 export { isShareForfeited } from './application/forfeited-state.ts';
 export type {

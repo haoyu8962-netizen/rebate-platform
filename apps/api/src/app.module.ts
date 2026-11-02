@@ -75,7 +75,7 @@ import {
   createBeneficiaryShareReader,
   COMMISSION_QUOTE_CONFIG_KEYS,
   createCommissionRebateQuoter,
-  createCommissionSnapshot,
+  createCommissionSnapshotPort,
   createRuleSetReader,
   createSnapshotBeneficiaryResolver,
   findBannedRunStart,
@@ -85,6 +85,7 @@ import {
   readCommissionSnapshot,
   readTljDeductFen,
   TljDeductionMissing,
+  type CommissionOrderSnapshotPort,
   type RuleSetReader,
 } from './modules/commission/index.ts';
 import {
@@ -242,6 +243,8 @@ import {
 } from './modules/ledger/index.ts';
 // B1-02zn: GET /v1/me's balance reads the wallet summary query through ledger's read-only entry.
 import { getWalletSummary } from './modules/ledger/read.ts';
+import { findPlatformRules } from './modules/orders/domain/platform-rules/index.ts';
+import { readOrder } from './modules/orders/infra/pipeline-store.ts';
 import { PaymentModule } from './modules/payment/index.ts';
 import {
   AUTO_PAYOUT_SAVE_KEYS,
@@ -354,7 +357,6 @@ import {
   type ClaimEvidenceFactory,
   createOrderQueries,
   createOrderSourcePorts,
-  type CommissionSnapshotPort,
   type OrderSourcePorts,
   type PlatformRestoreDiffPort,
   readPersonalDataCopyOrders,
@@ -1969,23 +1971,30 @@ function orderPlatformRestorePort(clock: Clock): PlatformRestoreDiffPort {
 
 /**
  * B1-08w: orders' commission snapshot port (BR-ATTR-01 ⑥, BR-CALC-10) — commission's
- * createCommissionSnapshot over the B2-03p beneficiary resolver (growth's level / parent history,
- * identity's users.status deletion reader), with the worker's CLOCK and ROOT_LOGGER. The resolver
- * and its two readers are built once here and shared by every call; building reads nothing, and
- * every read runs on the caller's transaction (the order's lock transaction).
+ * createCommissionSnapshotPort over the B2-03p beneficiary resolver (growth's level / parent
+ * history, identity's users.status deletion reader), with the worker's CLOCK and ROOT_LOGGER. The
+ * resolver and its two readers are built once here and shared by every call; building reads
+ * nothing, and every read runs on the caller's transaction (the order's lock transaction).
+ * B2-03q (D10-568): the return type keeps refresh required; without it a created snapshot would
+ * leave the order at version 0 or without rows of its current version, and nothing would throw.
  */
-function orderSnapshotPort(
+export function orderSnapshotPort(
   db: Kysely<Database>,
   clock: Clock,
   logger: RootLogger,
-): CommissionSnapshotPort {
+): CommissionOrderSnapshotPort {
   const beneficiaries = createSnapshotBeneficiaryResolver({
     growth: createGrowthHistory({ logger }),
     deletion: createUserDeletionStatusReader({ db }),
   });
-  return {
-    create: (trx, input) => createCommissionSnapshot(trx, input, { clock, logger, beneficiaries }),
-  };
+  return createCommissionSnapshotPort({
+    clock,
+    logger,
+    beneficiaries,
+    readOrder: (trx, ref) =>
+      readOrder(trx, { app_id: ref.appId, order_id: ref.orderId, attr_at: ref.attrAt }),
+    serviceFeeDeducted: (platform) => findPlatformRules(platform)?.serviceFeeDeducted === true,
+  });
 }
 
 /**

@@ -7,6 +7,8 @@
 // - 淘礼金面额未匹配（BR-CALC-19）：照常调端口（rebate_mode=none、红包面额空，D10-68），另写
 //   TLJ_FACE_VALUE_UNMATCHED 待处理并告警。
 // - 待处理同键 open 已存在时只刷新 detected_at（upsertPending）。不实现自动重试（D10-68 待裁定）。
+// - B2-03q（D10-568）：created 后保持「commission_version ≥ 1 时该版本一定有金额行」：版本 0 同事务置 1；已 ≥ 1 的
+//   经端口 refresh 写当前版本的行。existing / pending / skip 不动；端口没有 refresh（只有 create 的假端口）也不动。
 // 日志只打平铺字段（platform、app_id、reason、outcome），不打子订单号、用户与买家参数。
 import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';
@@ -27,13 +29,18 @@ export type CommissionSnapshotPortResult =
 /**
  * commission 的快照端口（B2-03g `createCommissionSnapshot(trx, input, deps)`；装配为
  * `{ create: (trx, i) => createCommissionSnapshot(trx, i, commissionDeps) }`）。只用调用方事务；
- * 未注入时第 ⑥ 步整步跳过。
+ * 未注入时第 ⑥ 步整步跳过。生产装配用 commission 的 createCommissionSnapshotPort，带 refresh。
  */
 export interface CommissionSnapshotPort {
   create(
     trx: Transaction<DB>,
     input: CommissionSnapshotCallInput,
   ): Promise<CommissionSnapshotPortResult>;
+  /** D10-568：写订单当前版本的金额行与 totals，该版本已有行就不写。 */
+  refresh?(
+    trx: Transaction<DB>,
+    input: { readonly appId: string; readonly orderId: string; readonly attrAt: Date },
+  ): Promise<void>;
 }
 
 export interface SnapshotStepContext {
@@ -86,7 +93,37 @@ export async function runCommissionSnapshot(
     );
     return 'pending';
   }
+  if (result.kind === 'created') await settleVersion(trx, port, ctx);
   return result.kind;
+}
+
+/**
+ * row_version 不动：settlement 的 R3 按调用方写前读到的 row_version 做 CAS；本语句靠 commission_version = 0
+ * 自己的乐观锁，调用方持有子订单锁，同步写版本号的路径都在锁内。
+ */
+async function settleVersion(
+  trx: Transaction<DB>,
+  port: CommissionSnapshotPort,
+  ctx: SnapshotStepContext,
+): Promise<void> {
+  if (port.refresh === undefined) return;
+  const app = trx.withSchema('app');
+  const { attr_at: attrAt } = await app
+    .selectFrom('order_keys')
+    .select('attr_at')
+    .where('app_id', '=', ctx.app_id)
+    .where('order_id', '=', ctx.order_id)
+    .executeTakeFirstOrThrow();
+  const moved = await app
+    .updateTable('orders')
+    .set({ commission_version: 1, updated_at: ctx.now })
+    .where('app_id', '=', ctx.app_id)
+    .where('order_id', '=', ctx.order_id)
+    .where('attr_at', '=', attrAt)
+    .where('commission_version', '=', 0)
+    .executeTakeFirst();
+  if (moved.numUpdatedRows > 0n) return;
+  await port.refresh(trx, { appId: ctx.app_id, orderId: ctx.order_id, attrAt });
 }
 
 async function pending(

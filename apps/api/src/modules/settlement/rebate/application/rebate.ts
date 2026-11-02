@@ -81,7 +81,7 @@ export interface RebateHoldAudit extends RebateOrderRef {
  * Caller owns the transaction and already holds orders.lockOrderKey(platform, sub_order_id).
  * Re-read by app_id/order_id/attr_at; decide before writing; transitionOrderRebate + CAS
  * (old rebate_status AND row_version), re-read after a zero-row CAS. Never open a transaction.
- * CREDITED updates only log. No ledger calls. Imports arrive with DB default UNATTRIBUTED.
+ * CREDITED updates only log, plus a refresh when the version moved. No ledger calls. Imports arrive with DB default UNATTRIBUTED.
  * R1/R2 history starts at null, not that storage default. R2/R3a may chain R4 or R6.
  */
 export type RebatePort = OrderPipelineDeps['rebate'] &
@@ -101,9 +101,8 @@ export interface RebateDependencies {
    * and effective commission (settlement wins); null means unknown, never zero.
    * before = the effective base the order's current estimate was last valued on (commission-stored;
    * the port input carries no previous settle amount), after = the effective base of the current columns.
-   * refresh recomputes estimates in the supplied transaction, without touching balances.
-   * orders has already updated commission_version: refresh must not increment it again.
-   * TODO(规划/11 §7.1): wire the commission estimate writer — blocked on missing public writer port.
+   * refresh writes the rows of the current version in the supplied transaction, without touching
+   * balances. orders has already updated commission_version: refresh must not increment it again.
    */
   readonly estimates: {
     bases(
@@ -187,6 +186,14 @@ function finish(d: Draft, stored: string): Plan | null {
     invalidated: d.invalidated,
     audit: d.audit,
   };
+}
+
+/**
+ * orders moved commission_version with this estimate (BR-FUND-03), past the version 1 the snapshot
+ * writes itself: readCommissionSnapshot needs rows of the new version, whatever the outcome.
+ */
+function versionMoved(row: OrderRow, change: OrderUpdateChange): boolean {
+  return change.est_before !== change.est_after && row.commission_version > 1;
 }
 
 function refOf(order: { app_id: string; order_id: string; attr_at: Date }): RebateOrderRef {
@@ -336,7 +343,11 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     if (state === 'CREDITED') {
       // TODO(规划/11 §4.2): 入账后扣回 / 补差路由 — blocked on B2-04s / B2-04t。
       logger.info({ ...base, outcome: 'credited_noop' }, 'credited order update not routed yet');
-      return null;
+      if (!versionMoved(row, change)) return null;
+      // BR-FUND-01 R9b: archive only, but the clawback reads the current version; it runs after this.
+      const archived = draft(state);
+      archived.refresh = true;
+      return finish(archived, row.rebate_status);
     }
     if (isLocked(state)) {
       if (change.rule === 'P9') {
@@ -403,6 +414,9 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
         advance(d, 'COMMISSION_CHANGED');
         d.refresh = true;
       }
+    }
+    if (versionMoved(row, change) && (d.state === 'ESTIMATED' || d.state === 'WAITING')) {
+      d.refresh = true;
     }
     if (
       change.from_status === 'DEPOSIT_PAID' &&

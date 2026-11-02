@@ -18,7 +18,8 @@ import type {
   CreateCommissionSnapshotInput,
   CreateCommissionSnapshotResult,
 } from '../../commission/index.ts';
-import { FixedClock } from '../../platform/index.ts';
+import { orderSnapshotPort } from '../../../app.module.ts';
+import { FixedClock, createRootLogger } from '../../platform/index.ts';
 import type { UnionOrder } from '../../union/index.ts';
 import type { CommissionSnapshotCallInput } from '../domain/commission-snapshot.ts';
 import type { PlatformStatusEvent, StatusMap } from '../domain/status-map.ts';
@@ -34,6 +35,7 @@ import { createOrderUpdateStep, type OrderUpdateDeps } from './update-step.ts';
 const NOW = '2026-10-17T17:30:00.000Z';
 const at = (iso: string) => new FixedClock(iso).now();
 const OWNER = '019a0000-0000-7000-8000-000000000042';
+const ATTR_AT = at('2026-10-15T16:00:01.000Z');
 
 interface Statement {
   readonly sql: string;
@@ -41,7 +43,7 @@ interface Statement {
 }
 
 /** 记录语句与端口调用的同一时间线；order_status_history 的读回 history()。 */
-function scriptedDb(history: () => { at: Date }[] = () => []) {
+function scriptedDb(history: () => { at: Date }[] = () => [], versionUpdated = 1n) {
   const log: Statement[] = [];
   class ScriptedDriver extends DummyDriver {
     override acquireConnection(): Promise<DatabaseConnection> {
@@ -49,7 +51,11 @@ function scriptedDb(history: () => { at: Date }[] = () => []) {
         executeQuery<R>(compiled: Statement): Promise<QueryResult<R>> {
           log.push({ sql: compiled.sql, parameters: compiled.parameters });
           if (compiled.sql.startsWith('update "app"."orders"')) {
-            return Promise.resolve({ rows: [], numAffectedRows: 1n });
+            const matched = compiled.sql.includes('"commission_version" = $') ? versionUpdated : 1n;
+            return Promise.resolve({ rows: [], numAffectedRows: matched });
+          }
+          if (compiled.sql.startsWith('select "attr_at" from "app"."order_keys"')) {
+            return Promise.resolve({ rows: [{ attr_at: ATTR_AT }] as R[] });
           }
           if (compiled.sql.startsWith('select') && compiled.sql.includes('order_status_history')) {
             return Promise.resolve({ rows: history() as R[] });
@@ -129,6 +135,71 @@ it('[AC-B1-08k#U7] 按结构声明的端口入参与 commission 公开入参同�
   ) => Promise<CreateCommissionSnapshotResult>;
   const wires: Real extends CommissionSnapshotPort['create'] ? true : false = true;
   expect([sameInput, wires]).toEqual([true, true]);
+});
+
+function refreshingPort(mark: (sql: string) => void, kind: 'created' | 'existing' = 'created') {
+  return {
+    ...fakePort(mark, { kind }),
+    refresh: vi.fn<NonNullable<CommissionSnapshotPort['refresh']>>(() => {
+      mark('snapshot.refresh');
+      return Promise.resolve();
+    }),
+  };
+}
+
+const versionWrites = (log: Statement[]) =>
+  log.filter((s) => s.sql.startsWith('update "app"."orders"'));
+
+it('[AC-B2-03q] created、版本 0：置 1 带乐观锁与 attr_at，row_version 不动，不调 refresh', async () => {
+  const { db, log, mark } = scriptedDb();
+  const port = refreshingPort(mark);
+  await db
+    .transaction()
+    .execute((trx) =>
+      runCommissionSnapshot(trx, port, { kind: 'call', input: callInput }, stepCtx, undefined),
+    );
+  const [write] = versionWrites(log);
+  expect(versionWrites(log)).toHaveLength(1);
+  expect(write?.sql).toMatch(/"commission_version" = \$\d+$/);
+  expect(write?.sql).toContain('"attr_at" = $');
+  expect(write?.sql).not.toContain('row_version');
+  expect(port.refresh).not.toHaveBeenCalled();
+});
+
+it('[AC-B2-03q] created、版本已 ≥ 1：UPDATE 零行，经 refresh 写当前版本', async () => {
+  const { db, mark } = scriptedDb(() => [], 0n);
+  const port = refreshingPort(mark);
+  await db.transaction().execute(async (trx) => {
+    await runCommissionSnapshot(trx, port, { kind: 'call', input: callInput }, stepCtx, undefined);
+    expect(port.refresh).toHaveBeenCalledExactlyOnceWith(trx, {
+      appId: stepCtx.app_id,
+      orderId: stepCtx.order_id,
+      attrAt: ATTR_AT,
+    });
+  });
+});
+
+it('[AC-B2-03q] existing 与只有 create 的端口：版本不动，不读 attr_at，也不调 refresh', async () => {
+  const { db, log, mark } = scriptedDb();
+  const existing = refreshingPort(mark, 'existing');
+  await db.transaction().execute(async (trx) => {
+    const call = { kind: 'call', input: callInput } as const;
+    await runCommissionSnapshot(trx, existing, call, stepCtx, undefined);
+    await runCommissionSnapshot(trx, fakePort(mark), call, stepCtx, undefined);
+  });
+  expect(existing.refresh).not.toHaveBeenCalled();
+  expect(versionWrites(log)).toEqual([]);
+  expect(log.some((s) => s.sql.includes('order_keys'))).toBe(false);
+});
+
+it('[AC-B2-03q] 生产组合根的快照端口带 refresh：漏装配时版本停 0 或缺行而不报错', () => {
+  const logger = createRootLogger(
+    { level: 'info', entry: 'test', appEnv: 'test' },
+    { write: () => undefined },
+  );
+  const port = orderSnapshotPort(scriptedDb().db, new FixedClock(NOW), logger);
+  expect(port.refresh).toEqual(expect.any(Function));
+  expect(port.create).toEqual(expect.any(Function));
 });
 
 it('[AC-B1-08k#U8] skip 不调端口；created / existing 原样返回且不写待处理', async () => {
