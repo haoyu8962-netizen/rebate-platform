@@ -31,10 +31,10 @@ test_paths:
   - 'test/spec/commission/estimate-port/**'
   - 'test/spec/orders/rebate-wiring/**'
   - 'test/spec/platform/metrics-followups/rules.test.ts'
+  - 'test/spec/settlement/rights-estimate/pdd.int.test.ts'
 impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-  - 'test/spec/union/pdd-net-n/**'
 status: todo
 pr: null
