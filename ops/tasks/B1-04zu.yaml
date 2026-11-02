@@ -4,11 +4,13 @@ title: 手动同步 limits：不支持按单号的平台 max_order_nos 报 0，�
 type: impl
 # 2026-11-02 be 入账（编排 05:28 第三件，从 B1-04zt 拆出：要动契约与后台）。现状：B1-04zr 后 limits 给 jd 报 50，但 MANUAL_SYNC_ORDER_NO_PLATFORMS 只有 pdd，POST 按单号被 20001 拒。京东订单接口只按时间窗查，没有按单号查询，所以不做 jd 按单号。
 # 改法：契约 AdminOrderSyncPlatformLimit.max_order_nos minimum 1 → 0（0 = 不支持按单号），manualSyncLimits 按 MANUAL_SYNC_ORDER_NO_PLATFORMS 给值，SyncDialog 为 0 时不给按单号选项。pdd 仍 50，POST 校验不变。冻结 [AC-B1-04zr#5] 钉 jd 50，由新鲜独立 Claude 改，编排按 #24 核。RV2。
+# 11-02 编排补 paths：contracts/oasdiff-accepted.txt（D10-562，max_order_nos 最小值 1 → 0 被 oasdiff 判 ERR，逐条登记放行）。
 refs: []
 refs_hash: {}
 deps: []
 paths:
   - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
   - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'

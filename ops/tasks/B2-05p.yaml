@@ -22,5 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/wallet-summary-wiring/**'
-status: todo
-pr: null
+status: done
+pr: 2207
