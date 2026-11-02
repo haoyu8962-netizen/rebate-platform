@@ -6,7 +6,7 @@ type: impl
 # 真实 PG 并发（两连接 + 咨询锁栅栏两种先后、200 轮压力）与 PG 属性测试（PR 200 / 长跑 2000，D16）。资金核心：Opus 高推理实现，Codex 写测试 + money 评审。
 refs: [BR-FUND-10, BR-FUND-13, BR-FUND-16]
 refs_hash:
-  BR-FUND-10: 5dbb4715dec2
+  BR-FUND-10: 3ed330a761d1
   BR-FUND-13: ad7aad8f8846
   BR-FUND-16: 077f6d412d5a
 deps: [B2-02a, B2-02c, B2-01h, B1-08d]

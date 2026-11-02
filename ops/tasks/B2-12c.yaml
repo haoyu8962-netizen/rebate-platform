@@ -5,8 +5,8 @@ type: impl
 # 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。D10-590 ④：deleting 用户不受理新的人工单，只允许红冲 ACCOUNT_CLOSED 调减单。⑧ 流水先不跳转、显示 hint（FU-LEDGER-ADJUST-JUMP）。对方科目按 specs/ledger-rules.md §6 方案 A。
 refs: [BR-FUND-24, BR-FUND-10, BR-FUND-16, BR-TEXT-19]
 refs_hash:
-  BR-FUND-24: 840bb53b7227
-  BR-FUND-10: 5dbb4715dec2
+  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-10: 3ed330a761d1
   BR-FUND-16: 077f6d412d5a
   BR-TEXT-19: 49112cf6e025
 deps: [B2-12a, B2-12b, CT-26n]

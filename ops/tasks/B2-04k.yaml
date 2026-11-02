@@ -6,7 +6,7 @@ type: impl
 # 状态备注：可开（B2-04b、B2-04h 已合并；ledger 内与 w、y 串行）。S4、S21。
 refs: [BR-FUND-10, BR-FUND-19, BR-FUND-22, BR-WDR-05]
 refs_hash:
-  BR-FUND-10: 5dbb4715dec2
+  BR-FUND-10: 3ed330a761d1
   BR-FUND-19: e6205ee4fcc1
   BR-FUND-22: 27d181deaeeb
   BR-WDR-05: 99e2e2654ce0

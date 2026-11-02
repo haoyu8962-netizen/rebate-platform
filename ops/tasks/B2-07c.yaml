@@ -10,7 +10,7 @@ refs: [BR-WDR-23, BR-WDR-15, BR-FUND-24]
 refs_hash:
   BR-WDR-23: 98981fee10c7
   BR-WDR-15: 7e3fa7b3f0f5
-  BR-FUND-24: 840bb53b7227
+  BR-FUND-24: 0f1a6ecb3334
 deps: [B2-07a, B2-07b, B2-06h]
 paths:
   - 'apps/api/src/modules/payout/jobs/recon-*.ts'

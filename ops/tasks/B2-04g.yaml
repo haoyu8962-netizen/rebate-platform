@@ -11,7 +11,7 @@ refs_hash:
   BR-FUND-04: 2497ceea4515
   BR-FUND-08: 4fad67b21a32
   BR-FUND-09: 6b72b55621fb
-  BR-FUND-10: 5dbb4715dec2
+  BR-FUND-10: 3ed330a761d1
 deps: []
 paths:
   - 'packages/domain/src/settlement/adjust/**'
