@@ -13,6 +13,9 @@
 //   清单为空 → 不发请求、返回空页并告警一次；端口未注入 → adapter_unimplemented。
 // - 金额（BR-CALC-26）：元字符串或 JSON 数字原文经 @couli/money yuanStrToFen；比例经 pctStrToBp；
 //   JSON 数字一律取原文（JSON.parse reviver 的 context.source），不经 JS number。
+// - 负数（BR-CALC-26、D10-522、D10-572，与京东同一套）：只有 pub_share_fee、pub_share_pre_fee、
+//   alipay_total_price 的负值是合法值，按数学 floor 保留：结算与预估原样留在 settle_commission_fen、
+//   est_commission_fen，必填非负的 commission_fen、paid_fen 收到 0。其余金额与比例的负值仍是非法值。
 // - 不映射大淘客自算字段（income、income_by_one、price_by_one、day、*_for_commission、*_for_sdy）。
 // TODO(规划/11 §4.5): results 列表键与翻页结束条件按文档字段写，待大淘客订单录制复核 — blocked on 大淘客录制
 import { InvalidAmount, InvalidRatio, pctStrToBp, yuanStrToFen } from '@couli/money';
@@ -477,18 +480,24 @@ class Reader {
   }
 
   /**
-   * A well-formed negative amount. Reader.fen refuses it like any invalid text; B1-04zv tells it
-   * apart because how to treat it is not decided yet, so it stays as it was (null and a warning).
+   * D10-522 / D10-572: the amounts whose negative values are kept (BR-CALC-26), floored like every
+   * other. Only pub_share_fee, pub_share_pre_fee and alipay_total_price are read this way.
    */
-  static negative(value: unknown): boolean {
+  static signedFen(value: unknown): bigint | null {
     const text = Reader.text(value);
-    return text !== null && text.startsWith('-') && Reader.fen(text.slice(1)) !== null;
+    if (text === null) return null;
+    try {
+      return yuanStrToFen(text);
+    } catch (error) {
+      if (error instanceof InvalidAmount) return null;
+      throw error;
+    }
   }
 
-  /** Required yuan amount; missing / invalid → the row is skipped. */
+  /** Required yuan amount, sign kept (Reader.signedFen); missing / invalid → the row is skipped. */
   requiredFen(field: string): bigint {
     const value = this.#row[field];
-    const fen = Reader.absent(value) ? null : Reader.fen(value);
+    const fen = Reader.absent(value) ? null : Reader.signedFen(value);
     if (fen === null) throw new Skip(field);
     return fen;
   }
@@ -501,6 +510,12 @@ class Reader {
   fen(field: string): bigint | null {
     if (this.#absent(field)) return null;
     return this.fenOf(this.#row[field], field);
+  }
+
+  /** Like fen, for an optional amount whose sign is kept (Reader.signedFen). */
+  signedFen(field: string): bigint | null {
+    if (this.#absent(field)) return null;
+    return Reader.signedFen(this.#row[field]) ?? this.#bad(field);
   }
 
   bp(field: string): bigint | null {
@@ -634,7 +649,8 @@ export function mapTaobaoOrder(
  * B1-04zv: the same mapping for CallCtx.rowErrors: a skipped row throws invalid_dto naming the field
  * (the warning stays), so it can be collected. Stricter on one field: a settled row
  * (tk_earning_time is valid) needs pub_share_fee, because it is the row's N (BR-CALC-03) and a null
- * there would be settled on the estimate. Without rowErrors that stays null plus a warning.
+ * there would be settled on the estimate; a negative one is a value (D10-572). Without rowErrors
+ * that stays null plus a warning.
  */
 export function requireTaobaoOrder(
   input: unknown,
@@ -676,6 +692,11 @@ function mapOrSkip(
   }
 }
 
+/** D10-522：commission_fen、paid_fen 必填非负，负值收到 0；真实负值留在 est 与归档报文。 */
+function atLeastZero(fen: bigint): bigint {
+  return fen < 0n ? 0n : fen;
+}
+
 function mapRow(
   row: Record<string, unknown>,
   meta: TaobaoOrderPageMeta,
@@ -685,22 +706,21 @@ function mapRow(
   const f = new Reader(row, warn, meta.like);
   const tradeId = row.trade_id;
   if (typeof tradeId !== 'string' || tradeId.trim() === '') throw new Skip('trade_id');
-  const paidFen = f.requiredFen('alipay_total_price');
+  const paidFen = atLeastZero(f.requiredFen('alipay_total_price'));
   const estFen = f.requiredFen('pub_share_pre_fee');
   const base = makeUnionOrder({
     platform: 'taobao',
     order_id: tradeId,
     item_id: f.string('item_id'),
     paid_fen: paidFen,
-    commission_fen: estFen,
+    commission_fen: atLeastZero(estFen),
   });
   const tkStatus = f.integer('tk_status');
   // 已结算的判据是 tk_earning_time 有合法时间；未结算时 pub_share_fee（常为 "0.00"）不当结算佣金。
+  // 已结算行的负值是这一行的 N，原样保留（BR-CALC-26、BR-CALC-02、D10-572）；未结算行读法照旧，值不用。
   const settledAt = f.time('tk_earning_time');
-  const pubShareFee = f.fen('pub_share_fee');
-  if (strict && settledAt !== null && pubShareFee === null) {
-    if (!Reader.negative(row.pub_share_fee)) throw new Skip('pub_share_fee');
-  }
+  const pubShareFee = settledAt === null ? f.fen('pub_share_fee') : f.signedFen('pub_share_fee');
+  if (strict && settledAt !== null && pubShareFee === null) throw new Skip('pub_share_fee');
   const share = row.alimm_share_info_dto;
   let techFee: bigint | null = null;
   let techPreFee: bigint | null = null;
