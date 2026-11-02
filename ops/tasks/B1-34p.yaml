@@ -27,4 +27,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/admin/system-audit/**'
-status: todo
+status: done
+pr: 2214

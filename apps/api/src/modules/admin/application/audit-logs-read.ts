@@ -3,7 +3,8 @@
 // authenticated principal's. Visibility is enforced here: an account holding audit.view_all (a
 // super admin holds every point) sees every account's records; any other account only its own —
 // the actor filter is forced to the caller, another account's actor_id is an empty page, and
-// another account's record reads as unknown (20001 [id], as for a malformed or foreign id).
+// another account's record reads as unknown (20001 [id], as for a malformed or foreign id). System
+// rows (D10-552) are nobody's own: only audit.view_all sees them, and no actor_id filter matches.
 // Reads only: searching and reading write no audit record.
 //
 // Pure module (no decorators, erasable syntax).
@@ -12,6 +13,7 @@ import {
   AUDIT_VIEW_ALL,
   deriveAudit,
   permissionMatch,
+  systemActorName,
   targetIdMatch,
   targetTypeMatch,
   type AuditCondition,
@@ -52,7 +54,11 @@ export interface AuditQuery {
 
 export interface AuditLogItemView {
   readonly id: string;
-  readonly actorId: string;
+  /** null on a system row. */
+  readonly actorId: string | null;
+  /** Only system rows carry this and systemActor (contract: account rows leave both out). */
+  readonly actorKind?: 'system';
+  readonly systemActor?: string;
   readonly actorName: string | null;
   readonly action: string;
   readonly targetType: string | null;
@@ -137,7 +143,13 @@ export function createAuditLogsReader(deps: {
     return {
       id: deps.ids().encode(row.id),
       actorId: row.adminId,
-      actorName: name,
+      ...(row.systemActor === null || row.systemActor === undefined
+        ? { actorName: name }
+        : {
+            actorKind: 'system' as const,
+            systemActor: row.systemActor,
+            actorName: systemActorName(row.systemActor),
+          }),
       action: row.action,
       targetType: derived.targetType,
       targetId: derived.targetId,

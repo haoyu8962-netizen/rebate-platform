@@ -5,6 +5,11 @@
 // a missing account reads as null). The derived-field filters arrive as condition plans built by
 // ../domain/audit-log-view.ts from its action table, so SQL and the derivation agree.
 //
+// A system row (D10-552) has admin_id null and system_actor set: `l.admin_id = <id>` never matches
+// it, so an actor filter or an actor-scoped read leaves it out without a condition of its own. The
+// two actor columns are selected as raw SQL so this file reads the same with the generated types
+// from before and after the migration.
+//
 // Pure module (no decorators, erasable syntax).
 import type { DB } from '@couli/db';
 import { sql, type Expression, type ExpressionBuilder, type Kysely, type SqlBool } from 'kysely';
@@ -15,7 +20,11 @@ export type AuditSnapshot = DB['audit_logs']['before'];
 
 export interface AuditLogRow {
   readonly id: bigint;
-  readonly adminId: string;
+  /** The account that acted; null on a system row. */
+  readonly adminId: string | null;
+  /** The system identity that acted (system:<name>); null on an account's row. */
+  /** Absent or null on an account's row. */
+  readonly systemActor?: string | null;
   readonly displayName: string | null;
   readonly loginName: string | null;
   readonly action: string;
@@ -116,7 +125,8 @@ export function createAuditLogStore(deps: { readonly db: Kysely<DB> }): AuditLog
       )
       .select([
         'l.id',
-        'l.admin_id',
+        sql<string | null>`l.admin_id`.as('admin_id'),
+        sql<string | null>`l.system_actor`.as('system_actor'),
         'u.display_name',
         'u.login_name',
         'l.action',
@@ -130,6 +140,7 @@ export function createAuditLogStore(deps: { readonly db: Kysely<DB> }): AuditLog
   const toRow = (row: Selected): AuditLogRow => ({
     id: row.id,
     adminId: row.admin_id,
+    systemActor: row.system_actor,
     displayName: row.display_name,
     loginName: row.login_name,
     action: row.action,

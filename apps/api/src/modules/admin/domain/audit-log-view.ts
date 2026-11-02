@@ -18,13 +18,31 @@
 //     (key → its one point) handed in by the caller; an unregistered key is null (no prefix
 //     guessing).
 // Unknown actions derive nothing (all three null).
-import { admin_permission, type AdminPermission } from '@couli/contracts-ts';
+//
+// System rows (D10-552): order_auto_hold has no account and no permission point; the Chinese name
+// of a system identity comes from SYSTEM_ACTOR_NAMES, which mirrors enum audit_system_actor (the
+// generated enum carries the values only).
+import { admin_permission, type AdminPermission, type AuditSystemActor } from '@couli/contracts-ts';
 
 /** Contract bounds of the derived fields (AdminAuditLogListItem). */
 export const AUDIT_TARGET_TYPE_MAX = 64;
 export const AUDIT_TARGET_ID_MAX = 128;
 /** The admin point that widens the search to every account's records (04 §11.1). */
 export const AUDIT_VIEW_ALL = 'audit.view_all';
+/** The audit action of the risk engine's automatic hold (BR-FUND-06), target `orders:<order_id>`. */
+export const ORDER_AUTO_HOLD_ACTION = 'order_auto_hold';
+
+/** Chinese names of contracts/enums/admin.yaml audit_system_actor; a new value must be added here. */
+const SYSTEM_ACTOR_NAMES: Readonly<Record<AuditSystemActor, string>> = Object.freeze({
+  'system:risk': '系统（风控）',
+});
+
+/** The enum's Chinese name of a stored system_actor; null for a value the enum does not have. */
+export function systemActorName(systemActor: string): string | null {
+  return Object.hasOwn(SYSTEM_ACTOR_NAMES, systemActor)
+    ? SYSTEM_ACTOR_NAMES[systemActor as AuditSystemActor]
+    : null;
+}
 
 /** Configuration key → the one admin point that guards changing it (content's registry). */
 export type ConfigPermissions = ReadonlyMap<string, string>;
@@ -128,6 +146,8 @@ const RULES: readonly ActionRule[] = Object.freeze([
     'union_pids:',
     NONE,
   ),
+  // settlement's rebate port through infra/system-audit.ts (B1-34p): a system row, no point.
+  ...rules([ORDER_AUTO_HOLD_ACTION], 'order', 'orders:', NONE),
   // Registered ahead of their writers (B1-10k claim review; B1-34e / B1-34f exports).
   ...rules(
     ['claim_item_approve', 'claim_item_reject'],

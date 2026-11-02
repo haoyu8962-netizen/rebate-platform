@@ -2488,14 +2488,17 @@ CREATE TABLE app.asset_snapshots (
 CREATE TABLE app.audit_logs (
     id bigint NOT NULL,
     app_id text NOT NULL,
-    admin_id uuid NOT NULL,
+    admin_id uuid,
     action text NOT NULL,
     target text,
     before jsonb,
     after jsonb,
     ip inet,
     at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    system_actor text,
+    CONSTRAINT audit_logs_actor_check CHECK (((admin_id IS NULL) <> (system_actor IS NULL))),
+    CONSTRAINT audit_logs_system_actor_check CHECK ((system_actor ~ '^system:[a-z_]+$'::text))
 );
 
 

@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import {
   deriveAudit,
   permissionMatch,
+  systemActorName,
   targetIdMatch,
   targetTypeMatch,
   type AuditCondition,
@@ -125,4 +126,26 @@ it('[AC-B1-34a] every filter plan matches exactly the rows whose derived value e
   );
   expect(permissionMatch('invented.permission', CONFIG)).toEqual([]);
   expect(permissionMatch('not.a.point', CONFIG)).toEqual([]);
+});
+
+it('[AC-B1-34p] order_auto_hold derives the order and no point; order_hold stays underived', () => {
+  const record = { action: 'order_auto_hold', target: `orders:${USER}`, after: null };
+  expect(deriveAudit(record, CONFIG)).toEqual({
+    targetType: 'order',
+    targetId: USER,
+    permission: null,
+  });
+  expect(matches(targetTypeMatch('order'), record)).toBe(true);
+  expect(matches(targetIdMatch(USER), record)).toBe(true);
+  expect(deriveAudit({ ...record, action: 'order_hold' }, CONFIG)).toEqual({
+    targetType: null,
+    targetId: null,
+    permission: null,
+  });
+});
+
+it('[AC-B1-34p] the enum names a system identity; anything else has no name', () => {
+  expect(systemActorName('system:risk')).toBe('系统（风控）');
+  expect(systemActorName('system:new_engine')).toBeNull();
+  expect(systemActorName('toString')).toBeNull();
 });

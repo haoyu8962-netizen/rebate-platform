@@ -59,6 +59,11 @@ function toItem(view: AuditLogItemView): Item {
   return {
     id: view.id,
     actor_id: view.actorId,
+    ...(view.actorKind === undefined ? {} : { actor_kind: view.actorKind }),
+    // The stored value's format is fixed by the table's CHECK; the enum grows with its writers.
+    ...(view.systemActor === undefined
+      ? {}
+      : { system_actor: view.systemActor as NonNullable<Item['system_actor']> }),
     actor_name: view.actorName,
     action: view.action,
     target_type: view.targetType,

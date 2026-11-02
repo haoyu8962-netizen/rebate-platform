@@ -11,6 +11,7 @@ function row(id: bigint, adminId: string, patch: Partial<AuditLogRow> = {}): Aud
   return {
     id,
     adminId,
+    systemActor: null,
     displayName: null,
     loginName: 'ops01',
     action: 'admin.login',
@@ -168,4 +169,55 @@ it('[AC-B1-34e] the export walk passes its fixed bound and continues by keyset a
   await expect(
     reader.list(caller, { page: 2, pageSize: 50, after: 'aud_AAAAAAAAAAAAAAAAAAAAAA' }),
   ).rejects.toThrow(RangeError);
+});
+
+const SYSTEM_ROW: AuditLogRow = {
+  id: 9n,
+  adminId: null,
+  systemActor: 'system:risk',
+  displayName: null,
+  loginName: null,
+  action: 'order_auto_hold',
+  target: `orders:${ME}`,
+  before: { hold: false, hold_reason: null },
+  after: { hold: true, hold_reason: 'UNMAPPED_STATUS' },
+  ip: null,
+  at: new Date(Date.parse('2026-10-08T00:00:00Z')),
+};
+
+function systemSetup(row: AuditLogRow) {
+  const store: AuditLogStore = {
+    count: () => Promise.resolve(1),
+    page: () => Promise.resolve([row]),
+    byId: () => Promise.resolve(row),
+  };
+  return createAuditLogsReader({
+    store,
+    profiles: { permissionKeys: () => Promise.resolve(['audit.view_all']) },
+    ids: () => ids,
+    configPermissions: new Map(),
+  });
+}
+
+it('[AC-B1-34p] a system row reads with the system fields and the enum name, an account row without them', async () => {
+  const reader = systemSetup(SYSTEM_ROW);
+  const { items } = await reader.list(caller, query);
+  expect(items[0]).toMatchObject({
+    actorId: null,
+    actorKind: 'system',
+    systemActor: 'system:risk',
+    actorName: '系统（风控）',
+    targetType: 'order',
+    targetId: ME,
+    permission: null,
+  });
+  const account = await systemSetup(row(1n, ME)).list(caller, query);
+  expect(account.items[0]).not.toHaveProperty('actorKind');
+  expect(account.items[0]).not.toHaveProperty('systemActor');
+});
+
+it('[AC-B1-34p] a system identity the enum does not have yet reads with a null name', async () => {
+  const reader = systemSetup({ ...SYSTEM_ROW, systemActor: 'system:new_engine' });
+  const { items } = await reader.list(caller, query);
+  expect(items[0]).toMatchObject({ systemActor: 'system:new_engine', actorName: null });
 });

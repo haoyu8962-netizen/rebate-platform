@@ -359,7 +359,7 @@ export interface AssetSnapshots {
 
 export interface AuditLogs {
   action: string;
-  admin_id: string;
+  admin_id: string | null;
   after: Json | null;
   app_id: string;
   at: Timestamp;
@@ -367,6 +367,7 @@ export interface AuditLogs {
   created_at: Generated<Timestamp>;
   id: Generated<ColumnType<bigint, bigint, bigint>>;
   ip: string | null;
+  system_actor: string | null;
   target: string | null;
 }
 
