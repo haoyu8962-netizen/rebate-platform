@@ -19,6 +19,7 @@ paths:
   - 'apps/api/src/modules/settlement/rebate/application/rebate.test.ts'
   - 'apps/api/src/modules/settlement/rebate/infra/rebate-store.ts'
   - 'apps/api/src/modules/settlement/rights/rights-store.ts'
+  - 'apps/api/src/modules/settlement/reads/earnings.ts'
   - 'apps/api/src/modules/settlement/reads/pending-earnings.ts'
   - 'apps/api/src/modules/settlement/reads/pending-earnings.test.ts'
   - 'apps/api/src/modules/settlement/reads/order-figures.ts'
