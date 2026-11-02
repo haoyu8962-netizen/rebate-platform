@@ -72,14 +72,18 @@ fund_terms:
     - inbox.title.
     - agent.tool_status.get_rebate_quote.
     # BR-TEXT-25 后台字典（admin_dict.*，默认文案在 contracts/texts.admin.default.json）：提现、打款、调账、核销、
-    # 差错单、月结类枚举整组归资金术语；其余枚举的键逐键列在 ordinary.keys。
+    # 差错单、月结、回款、资金水位类枚举整组归资金术语；其余枚举的键逐键列在 ordinary.keys。
     - admin_dict.admin_adjustments.status.
+    - admin_dict.admin_adjustments.sub_type.
+    - admin_dict.admin_fund_water_level.
     - admin_dict.bad_debt_writeoff.status.
     - admin_dict.recon_diff_status.
     - admin_dict.recon_diff_type.
     - admin_dict.recon_diffs.source.
     - admin_dict.settle_batch.status.
     - admin_dict.settle_mode.
+    - admin_dict.union_receipts.cash_account.
+    - admin_dict.union_receipts.method.
     - admin_dict.withdrawal_status.
     - admin_dict.withdrawals.auto_decision.failed_conditions.
     - admin_dict.withdrawals.review_mode.

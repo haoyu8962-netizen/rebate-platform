@@ -1,0 +1,37 @@
+{
+  "task": "CT-24zk",
+  "spec_ref": "deb521c2bcb740571a01c2dc128f40abb40c37a2",
+  "spec_commit": "8f948b3fc313daa4e4f718becf33791a75c103b4",
+  "red_tests": [],
+  "risk_note": "RV1 (contract only, texts). Eleven admin_dict.* keys for four fund enums (BR-TEXT-25, couli #256; rulings D10-534 ⑬, D10-538 ⑭): admin_adjustments.sub_type, union_receipts.method, union_receipts.cash_account, admin_fund_water_level, all under fund_terms. No enum, interface or schema change. SPEC_REF does not contain #256 yet, so refs stay empty as for B2-15k and the values are quoted in the brief. tester: none, so no red run. Full verification by the required CI checks (04:16 general rule).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "codex-run.sh review --review-type contract: round 1 pass, no findings."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "9d1fb83e4d59cd4a1fb585b930a28f5b221e3d58",
+    "specs": "8ccf9457eec53773c3e49aa9207b3333df34aad2"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
