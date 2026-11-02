@@ -1,0 +1,32 @@
+id: B2-03s
+repo: rebate-platform
+title: 佣金版本推进规则（FU-COMMISSION-VERSION-RULE，D10-578）——有效 N 变了才 +1，结算后只来新预估不推；结算到达或变化推版本并按新 N 写金额行；含负结算 ②、已入账单 R10 金额行
+type: impl
+# 2026-11-03 W1 入账（D10-578、D10-583，方案 couli-runs/B3-lane/version-rule-batch-plan-20261103.md）。planOrderSyncColumns 比前后有效 N；update-step 加 commission_moved；rebate 用它；CREDITED 改按新 N 重算，复制留兜底。「多推一版、金额相同」已认可。B1-08zh 合并后再写规则测试，本单后变基。
+# 冻结用例开工后实测列全报编排，新旧不能同绿的按 D10-327 进 test_paths。
+refs: [BR-CALC-15, BR-CALC-02, BR-CALC-27, BR-FUND-03, BR-CALC-23]
+refs_hash:
+  BR-CALC-15: e18291194b6e
+  BR-CALC-02: 0ffe8a4d0b65
+  BR-CALC-27: ff78446ad011
+  BR-FUND-03: 4b5c1f1d901b
+  BR-CALC-23: 2fe92d9959ba
+deps: [B1-08zh, B2-04zj]
+paths:
+  - 'apps/api/src/modules/orders/domain/update-plan.ts'
+  - 'apps/api/src/modules/orders/domain/update-plan.test.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+  - 'apps/api/src/modules/orders/application/update-step.test.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'apps/api/src/modules/commission/ports/estimates.ts'
+  - 'apps/api/src/modules/commission/application/estimate-plan.ts'
+  - 'apps/api/src/modules/commission/application/estimate-plan.test.ts'
+test_paths:
+  - 'test/spec/commission/version-rule/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/commission/version-rule/**'
+status: todo
+pr: null

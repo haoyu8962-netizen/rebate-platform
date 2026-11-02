@@ -1,0 +1,33 @@
+id: B2-04zj
+repo: rebate-platform
+title: 结算记录写入（FU-PROD-WIRING 第 13 项，D10-583）——同步路径 P4 / P12 写 order_settlements（source=API，内容不同才 seq+1），orders.settle_commission_fen 按 BR-FUND-09 取值，已有 STATEMENT 时 API 不覆盖；上线前必做
+type: impl
+# 2026-11-03 W1 入账（编排 D10-583 ③ S1）。主干没有任何 order_settlements 写入，账单、R5、R10 都没有起点。一列一个写者：settlement 经新端口写 order_settlements；orders 写自己的列。同步时先经端口读最新 STATEMENT 金额，有就以它定列值，API 不覆盖（BR-FUND-09）。写记录排在 rebate.onUpdated 之前，closeAnsweredRights 要读最新结算时间。
+# seq 在订单锁内取最大 +1，created_at 用注入 Clock。首次入库 P12 同样写记录并写列。API 与明细不一致的差错单、明细导入（source=STATEMENT）归 FU-SETTLE-STATEMENT-IMPORT，不在本单。入账后结算变化的处理在 B2-04zi。与 B1-08zh 重叠 update-step，后落地者变基。
+refs: [BR-FUND-02, BR-FUND-04, BR-FUND-09, BR-CALC-02]
+refs_hash:
+  BR-FUND-02: bffd22853853
+  BR-FUND-04: 2497ceea4515
+  BR-FUND-09: 6b72b55621fb
+  BR-CALC-02: 0ffe8a4d0b65
+deps: [B1-09n]
+paths:
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+  - 'apps/api/src/modules/orders/application/update-step.test.ts'
+  - 'apps/api/src/modules/orders/application/pipeline-port.ts'
+  - 'apps/api/src/modules/orders/domain/update-plan.ts'
+  - 'apps/api/src/modules/orders/domain/update-plan.test.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'apps/api/src/modules/settlement/settlements/**'
+  - 'apps/api/src/modules/settlement/index.ts'
+  - 'apps/api/src/modules/orders/index.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/settlement/settlement-records/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/settlement-records/**'
+status: todo
+pr: null

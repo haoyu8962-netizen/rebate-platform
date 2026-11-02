@@ -1,0 +1,24 @@
+id: B2-04zk
+repo: rebate-platform
+title: 已入账单 R9 后金额行等于新应得（FU-CREDITED-AMOUNT-ROWS 余下，D10-583）——clawback apply 之后推版本并按 N_new 写行
+type: impl
+# 2026-11-03 W1 入账。R10 那半在 B2-03s。rights.record 走的 R9 不加版本，同版本主键写不了，要在 apply 更新 booked 之后推版本再 refresh 带 N_new。与 B2-04zi 同文件，排其后。funds 11-06 回来时未开则改给 funds。
+refs: [BR-FUND-08, BR-CALC-15, BR-CALC-27]
+refs_hash:
+  BR-FUND-08: 4fad67b21a32
+  BR-CALC-15: e18291194b6e
+  BR-CALC-27: ff78446ad011
+deps: [B2-04zi]
+paths:
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-store.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
+test_paths:
+  - 'test/spec/settlement/credited-amount-rows/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/credited-amount-rows/**'
+status: todo
+pr: null
