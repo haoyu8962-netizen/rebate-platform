@@ -1,0 +1,37 @@
+id: B2-03r
+repo: rebate-platform
+title: 入账前部分维权的 R7 重算预估生效（FU-R7-RIGHTS-ESTIMATE）——钱包与订单页的 ESTIMATED / WAITING 减未关闭应扣；无结算记录的单推版本并写新金额行
+type: impl
+# 2026-11-02 W1 入账（编排 18:59 照准方案 C，couli-runs/B3-lane/r7-rights-estimate-plan-20261102.md）。N_new = 有效佣金 − 未关闭应扣，下限 0（D10-474、D10-483），不写 orders 佣金列。有结算记录的单 R7 不推版本（账单比 b_settle 与当前 base，推了卡入账）；pdd 缺服务费（bases.after 为 null）也不推（FU-PDD-NET-N）。只动 R7 路径，不碰结算到达的版本规则（D10-578）。账单减未关闭应扣归 FU-BILL-OPEN-DEDUCTIONS，不进本单。
+# 冻结 [AC-B2-04l] expectR7 的夹具有结算记录，按方案 refresh 调用不变，预计不用改；[AC-B2-03q#23、#28] 预计不用改；以完整 verify 为准，红了按 D10-327 报编排补 test_paths。
+refs: [BR-FUND-03, BR-FUND-06, BR-FUND-07, BR-FUND-18, BR-CALC-02, BR-CALC-15, BR-CALC-27]
+refs_hash:
+  BR-FUND-03: 4b5c1f1d901b
+  BR-FUND-06: 2076b932478c
+  BR-FUND-07: 3d63741c52d9
+  BR-FUND-18: c7ebd23ee75e
+  BR-CALC-02: 0ffe8a4d0b65
+  BR-CALC-15: 84083d5f0e01
+  BR-CALC-27: ff78446ad011
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.test.ts'
+  - 'apps/api/src/modules/settlement/rebate/infra/rebate-store.ts'
+  - 'apps/api/src/modules/settlement/rights/rights-store.ts'
+  - 'apps/api/src/modules/settlement/reads/pending-earnings.ts'
+  - 'apps/api/src/modules/settlement/reads/pending-earnings.test.ts'
+  - 'apps/api/src/modules/settlement/reads/order-figures.ts'
+  - 'apps/api/src/modules/settlement/reads/order-figures.test.ts'
+  - 'apps/api/src/modules/commission/ports/estimates.ts'
+  - 'apps/api/src/modules/commission/application/estimate-plan.ts'
+  - 'apps/api/src/modules/commission/application/estimate-plan.test.ts'
+test_paths:
+  - 'test/spec/settlement/rights-estimate/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/rights-estimate/**'
+status: todo
+pr: null
