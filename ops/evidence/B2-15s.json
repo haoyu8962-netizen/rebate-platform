@@ -1,0 +1,139 @@
+{
+  "task": "B2-15s",
+  "spec_ref": "7acc09699b4b3da9b69b6e7001d31fa05da3dfd1",
+  "spec_commit": "049ba7769b19ee8941b28c9ff02ea539cae24e49",
+  "red_tests": [
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] payment-recon：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] ledger-daily-check：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] payout-recon：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] payout-overdue：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] union-auth：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] payment-recon：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] ledger-daily-check：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] payout-recon：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] payout-overdue：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] union-auth：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] payment-recon：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] ledger-daily-check：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] payout-recon：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] payout-overdue：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] union-auth：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] payment-recon：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] ledger-daily-check：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] payout-recon：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] payout-overdue：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] union-auth：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] payment-recon：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] ledger-daily-check：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] payout-recon：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] payout-overdue：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] union-auth：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] payment-recon：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] ledger-daily-check：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] payout-recon：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] payout-overdue：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+    "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] union-auth：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+    "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] payment-recon：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick",
+    "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] ledger-daily-check：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick",
+    "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] payout-recon：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick",
+    "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] payout-overdue：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick"
+  ],
+  "risk_note": "RV2 by path (payment, ledger, payout, union, platform). B2-15q made onModuleDestroy wait for the tick in flight, without a limit: a tick stuck in pool.connect() when the PostgreSQL host is lost kept context.close() waiting, handles.close never ran, and docker's SIGKILL came with no log line. Five timers now wait at most TICK_STOP_WAIT_MS 800 ms through waitForTickStop, then log worker_tick_stop_timed_out and return; the bound timer is unref'd and cleared. 800 ms because Nest calls onModuleDestroy module by module (read in @nestjs/core): five timers are at most 4 s. The worst case with queue.stop 5 s and handles.close 5 s is 14 s, over docker's 10 s, so a hard stop can still be SIGKILLed, but the warn is out by then and it never waits longer than before. Nine other unbounded waits (listed in the ledger) are not covered. No global deadline, because staging's stop_grace_period is 30 s.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "049ba7769b19ee8941b28c9ff02ea539cae24e49",
+      "tree": "6086e89ad88d0c38412ff5e1aac5649ebe60d132",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-02T13:27:45Z",
+      "finished_at": "2026-11-02T13:27:59Z",
+      "red_tests": [
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] payment-recon：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] ledger-daily-check：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] payout-recon：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] payout-overdue：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#1] union-auth：tick 一直不结束时 onModuleDestroy 恰在 800 毫秒后返回，不抛错，打一条 warn，字段含 timer 名、不含业务数据",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] payment-recon：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] ledger-daily-check：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] payout-recon：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] payout-overdue：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#2] union-auth：tick 在上限内结束时等到结束就返回，不打 warn，上限定时器随即清掉",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] payment-recon：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] ledger-daily-check：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] payout-recon：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] payout-overdue：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#3] union-auth：没有在途 tick 时 onModuleDestroy 立即返回，不起上限定时器，不打 warn；有在途 tick 时才起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] payment-recon：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] ledger-daily-check：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] payout-recon：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] payout-overdue：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#4] union-auth：超时返回后 tick 才失败，错误由 tick 自身接住、记它原有的 warn，不产生 unhandledRejection",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] payment-recon：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] ledger-daily-check：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] payout-recon：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] payout-overdue：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#5] union-auth：超时返回后不再起新 tick：在途 tick 结束前后，到点的定时器和再次 bootstrap 都不起",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] payment-recon：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] ledger-daily-check：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] payout-recon：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] payout-overdue：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts > [AC-B2-15s#6] union-auth：上限定时器 unref（真实 setTimeout 的返回值 hasRef() 为 false），不让进程因它多活",
+        "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] payment-recon：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick",
+        "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] ledger-daily-check：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick",
+        "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] payout-recon：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick",
+        "test/spec/platform/worker-shutdown/interval-ticks.test.ts > [AC-B2-15q#8] payout-overdue：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick"
+      ],
+      "expected": [
+        "test/spec/platform/worker-shutdown-bound/bound.test.ts",
+        "test/spec/platform/worker-shutdown/interval-ticks.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ea357518e33e932f5f898fc86bf619fdc302ea28ae3330be4597b01b0d2228a4"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: tick error handling, queue dedupe and restart reseeding traced for the five timers. It states the bound does not guarantee exit inside docker's 10 s, though it does not wait longer than before. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by an independent Claude context in 2 attempts; attempt 2 moved the bound from 3 000 to 800 ms after the author raised Nest's serial hooks, which I confirmed in the source. Frozen change: [AC-B2-15q#8] four cases, from waiting past healIntervalMs*3 to 799 ms pending and returned at 800. Round 1 pass, no S0/S1; the reviewer confirmed the 12 red_exempt entries ([AC-B2-15q#9], #10, #11). One S2: union's interval tick is not held by a test, the code shares one path. Static review, nothing executed.",
+    "red_exempt_confirmed": true
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d1a1a1da57b742578c32190d2c1b675e9bfa1372",
+    "specs": "242c82f497fb866ceec0a6619e38ad2ac0f07e81"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

@@ -14,6 +14,10 @@
 // the drains after an opened gate: with no gate every statement ends in microtasks). Every test is
 // red on the old modules at `stop.outcome()`, because their stop returns at once. Fake module timers
 // and bounded waits as in ticks.test.ts. Top-level it() only (规划/11 §4.3).
+//
+// B2-15s (FU-TICK-STOP-BOUND) changed #8: a stop now waits for the tick in flight 800 ms at most, so
+// #8 pins the bound where it pinned a wait without end. Its 799 and 1 stay inside the test: any
+// change outside the test blocks would judge the whole file (tools/guard/lib/test-blocks.ts).
 import { createDb, type DB } from '@couli/db';
 import type { Kysely, PostgresPool } from 'kysely';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
@@ -151,7 +155,7 @@ async function nextTickHeld(rig: LatchedRig, target: Target): Promise<void> {
 }
 
 it.each(TIMERS)(
-  '[AC-B2-15q#8] %s：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 不返回，tick 结束后才返回，之后不再起新 tick',
+  '[AC-B2-15q#8] %s：首个 tick 已结束，interval 起的 tick 在途时 onModuleDestroy 最多等 800 毫秒上限（799 毫秒时未返回，800 毫秒时返回），期间和之后都不再起新 tick',
   async (name) => {
     const target = targets[name];
     const rig = await firstTickEnded(target);
@@ -162,14 +166,18 @@ it.each(TIMERS)(
     expect(stop.outcome(), 'the stop returned with an interval tick in flight').toBe('pending');
 
     const held = rig.pool.connects();
-    vi.advanceTimersByTime(target.healIntervalMs * 3);
+    vi.advanceTimersByTime(799);
     await drain();
-    expect(stop.outcome(), 'the stop returned with an interval tick in flight').toBe('pending');
+    expect(stop.outcome(), 'the stop returned before the bound').toBe('pending');
+
+    vi.advanceTimersByTime(1);
+    await drain();
+    expect(stop.outcome(), 'the stop did not return at the bound').toBe('returned');
     expect(rig.pool.connects(), 'a tick started during the stop').toBe(held);
 
     rig.pool.open();
-    expect(await stop.settled(), 'the stop did not return after the tick ended').toBe('returned');
     await drain();
+    expect(rig.pool.waiting(), 'fixture: the held tick ended').toBe(0);
     const statements = rig.pool.connects();
     vi.advanceTimersByTime(target.healIntervalMs * 3);
     await drain();

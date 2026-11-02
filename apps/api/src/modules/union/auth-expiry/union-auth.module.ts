@@ -12,7 +12,7 @@
 // started on application bootstrap, seeds every App's next check slot SEED_DELAY_MS later (the
 // queue runtime has started by then; a failed seed is a warn line and is retried on the next
 // tick; so is a failed heal, B2-15q), then heals the chain every HEAL_INTERVAL_MS. The timer stops
-// on module destroy, which waits for the tick in flight (B2-15q).
+// on module destroy, which waits for the tick in flight up to a bound (B2-15q, B2-15s).
 //
 // A class decorator only (no parameter decorators or parameter properties), as in
 // risk/risk-scan.module.ts.
@@ -27,6 +27,7 @@ import {
   FIELD_CRYPTO,
   JOB_QUEUE,
   ROOT_LOGGER,
+  waitForTickStop,
   type AppConfig,
   type Clock,
   type FieldCrypto,
@@ -132,7 +133,7 @@ function chainTimer(monitor: SiteAuthMonitor | null, logger: RootLogger): ChainT
       if (first !== undefined) clearTimeout(first);
       if (interval !== undefined) clearInterval(interval);
       interval = undefined;
-      await inFlight;
+      if (running) await waitForTickStop(inFlight, 'union-auth', logger);
     },
   };
 }

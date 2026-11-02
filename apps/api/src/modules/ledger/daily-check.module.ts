@@ -1,6 +1,7 @@
 // B2-02q: the worker entry's daily ledger check (BR-FUND-19): queue ledger-check's handler
 // (application/daily-check-schedule.ts createDailyCheckJob) and the chain's seed / heal timer
-// (unref, after bootstrap; stopped on destroy, which waits for the tick in flight, B2-15q).
+// (unref, after bootstrap; stopped on destroy, which waits for the tick in flight up to a bound,
+// B2-15q, B2-15s).
 // B2-02r: every tick is healDailyCheck over the run store (the actual state of the queue and the
 // results, no process memory), so a run that failed into ledger-check.dead is sent again and an
 // overdue (app, D) is alerted once. Without a database or queue nothing is registered.
@@ -14,6 +15,7 @@ import {
   DB as DB_TOKEN,
   JOB_QUEUE,
   ROOT_LOGGER,
+  waitForTickStop,
   type Clock,
   type QueueRuntime,
   type RootLogger,
@@ -101,7 +103,9 @@ function dailyCheckTimer(deps: SeedDependencies | null): DailyCheckTimer {
       if (first !== undefined) clearTimeout(first);
       if (interval !== undefined) clearInterval(interval);
       interval = undefined;
-      await inFlight;
+      if (deps !== null && running) {
+        await waitForTickStop(inFlight, 'ledger-daily-check', deps.logger);
+      }
     },
   };
 }

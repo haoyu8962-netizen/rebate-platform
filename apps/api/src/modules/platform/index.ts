@@ -101,6 +101,8 @@ export type { ConnectionConfig, DbHandles } from './db/index.ts';
 export { loadMaintConnectionConfig, createMaintDbHandle } from './db/maint.ts';
 export type { MaintConnectionConfig, MaintDbHandle } from './db/maint.ts';
 export { createWorkerMaintenance, startWorkerServices } from './maintenance/worker.ts';
+// B2-15s: the bounded wait of a background timer's stop for its tick in flight.
+export { TICK_STOP_WAIT_MS, waitForTickStop } from './lifecycle/bounded-stop.ts';
 // Prometheus /metrics (B1-01zzh): the worker's whole-database gauges, process metrics everywhere.
 export {
   collectWorkerMetrics,

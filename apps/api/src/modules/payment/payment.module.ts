@@ -22,7 +22,7 @@
 // again every RECON_HEAL_INTERVAL_MS (application/pay-recon-schedule.ts seedBillRecon with the
 // process's memory of the Apps already started; a failure is a warn line and is retried on the next
 // tick). Only where the pay queue handler is registered; the timer stops on module destroy, which
-// waits for the tick in flight (B2-15q: the database closes only after that).
+// waits for the tick in flight up to a bound (B2-15q: the database closes after that; B2-15s).
 import { Module, type DynamicModule } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import type { DB as Database } from '@couli/db';
@@ -45,6 +45,7 @@ import {
   JOB_QUEUE,
   REDIS,
   ROOT_LOGGER,
+  waitForTickStop,
   type AppConfig,
   type AuditPort,
   type Clock,
@@ -164,7 +165,9 @@ function reconChainTimer(deps: PayReconSeedDeps | null): ReconChainTimer {
       if (first !== undefined) clearTimeout(first);
       if (interval !== undefined) clearInterval(interval);
       interval = undefined;
-      await inFlight;
+      if (deps !== null && running) {
+        await waitForTickStop(inFlight, 'payment-recon', deps.logger);
+      }
     },
   };
 }

@@ -19,6 +19,7 @@ import {
   JOB_QUEUE,
   ROOT_LOGGER,
   registerEventConsumer,
+  waitForTickStop,
   type AppConfig,
   type AuditPort,
   type Clock,
@@ -272,7 +273,7 @@ function systemHoldAudit(logger: RootLogger): AuditPort {
 
 interface ReconChainTimer {
   onApplicationBootstrap(): void;
-  /** Waits for the tick in flight (B2-15q): the database closes only after that. */
+  /** Waits for the tick in flight up to a bound (B2-15q, B2-15s); the database closes after it. */
   onModuleDestroy(): Promise<void>;
 }
 
@@ -322,7 +323,9 @@ function reconChainTimer(
       if (first !== undefined) clearTimeout(first);
       if (interval !== undefined) clearInterval(interval);
       interval = undefined;
-      await inFlight;
+      if (deps !== null && running) {
+        await waitForTickStop(inFlight, 'payout-recon', deps.logger);
+      }
     },
   };
 }
@@ -378,7 +381,9 @@ function overdueChainTimer(
       if (first !== undefined) clearTimeout(first);
       if (interval !== undefined) clearInterval(interval);
       interval = undefined;
-      await inFlight;
+      if (deps !== null && running) {
+        await waitForTickStop(inFlight, 'payout-overdue', deps.logger);
+      }
     },
   };
 }
