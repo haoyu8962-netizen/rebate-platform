@@ -29,5 +29,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/kms/**'
-status: todo
-pr: null
+status: done
+pr: 2217
