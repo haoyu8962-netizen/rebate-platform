@@ -23,6 +23,11 @@ paths:
   - 'apps/api/src/modules/commission/application/estimate-plan.test.ts'
 test_paths:
   - 'test/spec/commission/version-rule/**'
+  - 'test/spec/commission/estimate-port/credited.int.test.ts'
+  - 'test/spec/commission/estimate-port/rebate-wiring.int.test.ts'
+  - 'test/spec/commission/estimate-port/wallet.int.test.ts'
+  - 'test/spec/orders/platform-status/transitions.int.test.ts'
+  - 'test/spec/orders/rights-mounts/credited.int.test.ts'
 impl: claude
 tester: claude-independent
 accept:
