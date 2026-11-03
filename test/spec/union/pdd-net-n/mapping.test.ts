@@ -1,6 +1,6 @@
 // B1-08zh（D10-574，FU-PDD-NET-N）映射：拼多多的扣除只在适配器（BR-CALC-02、BR-CALC-03）。
 // est_commission_fen = promotion_amount − duo_id_service_fee，可为负，负值保留；服务费缺失时 est 为 null，绝不按 0。
-// commission_fen 仍是毛额（不入库），service_fee_fen 仍按本次报文原样。淘宝、京东一字不变。
+// commission_fen 仍是毛额（不入库），service_fee_fen 仍按本次报文原样。京东一字不变；淘宝自 B1-04zz 也是净额，在它自己的适配器里算。
 import { expect, it } from 'vitest';
 import { mapped as jdOrder } from '../jd-orders/kit.ts';
 import { one as taobaoOrder, row as taobaoRow } from '../taobao-orders/kit.ts';
@@ -93,11 +93,11 @@ it('[AC-B1-08zh#4][BR-CALC-03] 净额逐分准确：接近安全整数上限也�
   expect(order.commission_fen).toBe(9007199254740991n);
 });
 
-it('[AC-B1-08zh#5][BR-CALC-03] 只有拼多多减：同一轮里淘宝、京东的 est 与结算额不受影响', async () => {
+it('[AC-B1-08zh#5][BR-CALC-03] 各扣各的：同一轮里拼多多 est 900，淘宝是自己字段的净额（B1-04zz），京东的 est 与结算额不受影响', async () => {
   expect(mapPdd().est_commission_fen).toBe(900n);
 
-  const taobao = await taobaoOrder(taobaoRow());
-  expect(taobao.est_commission_fen).toBe(799n);
+  const taobao = await taobaoOrder(taobaoRow({ pub_share_fee_for_commission: '7.66' }));
+  expect(taobao.est_commission_fen).toBe(724n);
   expect(taobao.settle_commission_fen).toBe(666n);
   const jd = jdOrder({});
   expect(jd.est_commission_fen).toBe(123n);

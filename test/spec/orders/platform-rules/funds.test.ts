@@ -111,10 +111,10 @@ function called(platform: PlatformCode, nBaseFen: bigint, taolijin = false) {
   };
 }
 
-it('[AC-B1-08za#11] 服务费与基数（首次快照）：N 一律是 settle ?? est，不再减服务费；只有拼多多在 est 为空且缺服务费时进 SERVICE_FEE_RATE_MISSING；京东 / 淘宝缺失也照常生成', () => {
+it('[AC-B1-08za#11] 服务费与基数（首次快照）：N 一律是 settle ?? est，不再减服务费；拼多多与淘宝在 est 为空且缺服务费时进 SERVICE_FEE_RATE_MISSING；京东缺失也照常生成', () => {
   for (const platform of REGISTERED_PLATFORMS) {
     const rules = rulesOf(platform);
-    const deduct = PINNED[platform].serviceFeeDeducted;
+    const deduct = platform !== 'jd';
     expect(rules.serviceFeeDeducted, platform).toBe(deduct);
     const plan = (patch: Parameters<typeof snapshotInput>[1]) =>
       planCommissionSnapshot(snapshotInput(platform, patch));
@@ -134,13 +134,16 @@ it('[AC-B1-08za#11] 服务费与基数（首次快照）：N 一律是 settle ??
       reason: 'AMOUNT_PARSE_FAILED',
     });
   }
-  expect(REGISTERED_PLATFORMS.filter((p) => PINNED[p].serviceFeeDeducted)).toEqual(['pdd']);
+  expect(REGISTERED_PLATFORMS.filter((p) => rulesOf(p).serviceFeeDeducted).sort()).toEqual([
+    'pdd',
+    'taobao',
+  ]);
 });
 
-it('[AC-B1-08za#12] 服务费与基数（补偿重试）：N 已知时服务费有值、没给、unknown 都调端口，N = settle ?? est；只有拼多多 N 为空且 unknown 或没给时进 SERVICE_FEE_RATE_MISSING', () => {
+it('[AC-B1-08za#12] 服务费与基数（补偿重试）：N 已知时服务费有值、没给、unknown 都调端口，N = settle ?? est；拼多多与淘宝 N 为空且 unknown 或没给时进 SERVICE_FEE_RATE_MISSING', () => {
   for (const platform of REGISTERED_PLATFORMS) {
     const rules = rulesOf(platform);
-    const deduct = PINNED[platform].serviceFeeDeducted;
+    const deduct = platform !== 'jd';
     expect(rules.serviceFeeDeducted, platform).toBe(deduct);
     const plan = (patch: Parameters<typeof retryInput>[1]) =>
       planSnapshotRetry(retryInput(platform, patch));
@@ -192,7 +195,7 @@ it('[AC-B1-08za#13] 扫描必然 skip：拼多多、京东都不因服务费 ski
   };
   for (const platform of REGISTERED_PLATFORMS) {
     const rules = rulesOf(platform);
-    expect(rules.serviceFeeDeducted, platform).toBe(PINNED[platform].serviceFeeDeducted);
+    expect(rules.serviceFeeDeducted, platform).toBe(platform !== 'jd');
     expect(rules.taolijinPidScene, platform).toBe(PINNED[platform].taolijinPidScene);
     for (const [fee, skip] of expected[platform]) {
       expect(scan(platform, fee, 1000n), `${platform} fee ${fee}`).toBe(skip);

@@ -1,6 +1,7 @@
-// B1-04zw：保留负数不放宽别的。未结算行不读 pub_share_fee；非法写法仍非法；「--」、缺失、null 仍是无值；
+// B1-04zw：保留负数不放宽别的。未结算行不读结算佣金；非法写法仍非法；「--」、缺失、null 仍是无值；
 // 其他可选金额与比例的负值（含「-0.00」）仍是 null 加告警。这些在实现前本来就成立，所以每条先看同页的
-// control()，见 negative-wire.ts。
+// settledControl()，见 negative-wire.ts 的 control()。B1-04zz 改口径（D10-588）：已结算的判据是 tk_status 3，
+// 结算读 pub_share_fee_for_commission 减结算服务费 1.00，这里的行都补上这个字段。
 import { expect, it } from 'vitest';
 import type { TaobaoOrderFields } from '../../../../apps/api/src/modules/union/domain/types.ts';
 import { fieldNamed } from '../row-quarantine/wires.ts';
@@ -16,6 +17,18 @@ import {
   throughAdapter,
 } from './negative-wire.ts';
 
+const SETTLE_FIELD = 'pub_share_fee_for_commission';
+
+/** control() 补上结算佣金字段：负值 -1.00 减结算服务费 1.00 是 -200 分。 */
+function settledControl(): Record<string, unknown> {
+  return { ...control(), [SETTLE_FIELD]: '-1.00' };
+}
+
+/** 同页的另一条已结算行，字段齐全。 */
+function settled(index: number): Record<string, unknown> {
+  return { ...rowOf(index), [SETTLE_FIELD]: '7.66' };
+}
+
 const NOT_SETTLED: readonly { readonly label: string; readonly earning: unknown }[] = [
   { label: '「--」', earning: '--' },
   { label: '缺失', earning: undefined },
@@ -23,34 +36,39 @@ const NOT_SETTLED: readonly { readonly label: string; readonly earning: unknown 
 ];
 
 it.each(inBothModes(NOT_SETTLED))(
-  '[AC-B1-04zw#5] $mode：tk_earning_time $label 的行不读负 pub_share_fee，settle_commission_fen 仍 null',
+  '[AC-B1-04zw#5] $mode：tk_status 12、tk_earning_time $label 的行不读负的结算佣金，settle_commission_fen 仍 null',
   async ({ call, earning }) => {
-    const unsettled = { ...rowOf(2), pub_share_fee: '-1.00', tk_earning_time: earning };
-    const page = await throughAdapter([control(), unsettled], call);
-    expect(orderOf(page.items, control()).settle_commission_fen).toBe(-100n);
+    const unsettled = {
+      ...rowOf(2),
+      tk_status: num('12'),
+      [SETTLE_FIELD]: '-1.00',
+      tk_earning_time: earning,
+    };
+    const page = await throughAdapter([settledControl(), unsettled], call);
+    expect(orderOf(page.items, settledControl()).settle_commission_fen).toBe(-200n);
     expect(orderOf(page.items, unsettled).settle_commission_fen).toBeNull();
     expect(page.rejected).toEqual([]);
   },
 );
 
 it.each(ILLEGAL)(
-  '[AC-B1-04zw#6] 已结算 pub_share_fee $label 仍非法：collect 下进 rejected，不开 collect 是 null 加告警',
+  '[AC-B1-04zw#6] 已结算 pub_share_fee_for_commission $label 仍非法：collect 下进 rejected，不开 collect 是 null 加告警',
   async ({ value }) => {
-    const bad: Record<string, unknown> = { ...rowOf(2), pub_share_fee: value };
-    const collected = await throughAdapter([control(), bad], COLLECT);
-    expect(orderOf(collected.items, control()).settle_commission_fen).toBe(-100n);
+    const bad: Record<string, unknown> = { ...rowOf(2), [SETTLE_FIELD]: value };
+    const collected = await throughAdapter([settledControl(), bad], COLLECT);
+    expect(orderOf(collected.items, settledControl()).settle_commission_fen).toBe(-200n);
     expect(collected.items.map((order) => order.sub_order_id)).toEqual([control().trade_id]);
     expect(collected.rejected).toEqual([
       expect.objectContaining({
         sub_order_id: bad.trade_id,
-        detail: expect.stringMatching(fieldNamed('pub_share_fee')),
+        detail: expect.stringMatching(fieldNamed(SETTLE_FIELD)),
       }),
     ]);
 
     const plain = await throughAdapter([bad], PLAIN);
     expect(orderOf(plain.items, bad).settle_commission_fen).toBeNull();
     expect(plain.warned).toContainEqual(
-      expect.objectContaining({ event: 'taobao_order_field_invalid', field: 'pub_share_fee' }),
+      expect.objectContaining({ event: 'taobao_order_field_invalid', field: SETTLE_FIELD }),
     );
   },
 );
@@ -62,9 +80,9 @@ const REQUIRED_ILLEGAL = ['pub_share_pre_fee', 'alipay_total_price'].flatMap((fi
 it.each(REQUIRED_ILLEGAL)(
   '[AC-B1-04zw#6] 必需字段 $field $label 仍非法：collect 下进 rejected，不开 collect 跳过该行并告警',
   async ({ field, value }) => {
-    const bad = { ...rowOf(2), [field]: value };
-    const collected = await throughAdapter([control(), bad], COLLECT);
-    expect(orderOf(collected.items, control()).settle_commission_fen).toBe(-100n);
+    const bad = { ...settled(2), [field]: value };
+    const collected = await throughAdapter([settledControl(), bad], COLLECT);
+    expect(orderOf(collected.items, settledControl()).settle_commission_fen).toBe(-200n);
     expect(collected.items.map((order) => order.sub_order_id)).toEqual([control().trade_id]);
     expect(collected.rejected).toEqual([
       expect.objectContaining({
@@ -73,7 +91,7 @@ it.each(REQUIRED_ILLEGAL)(
       }),
     ]);
 
-    const plain = await throughAdapter([control(), bad], PLAIN);
+    const plain = await throughAdapter([settledControl(), bad], PLAIN);
     expect(plain.items.map((order) => order.sub_order_id)).toEqual([control().trade_id]);
     expect(plain.warned).toContainEqual(
       expect.objectContaining({ event: 'taobao_order_row_skipped', field }),
@@ -81,7 +99,7 @@ it.each(REQUIRED_ILLEGAL)(
   },
 );
 
-// 已结算行的 pub_share_fee 是这一行的 N（BR-CALC-03）：无值时 collect 下进 rejected，这条的现行为不变。
+// 已结算行的结算佣金是这一行的 N（BR-CALC-03）：无值时 collect 下进 rejected，这条的现行为不变。
 // 告警也不变：缺字段告警一次，「--」和 null 是安静的无值。
 const NO_VALUE: readonly {
   readonly label: string;
@@ -89,25 +107,26 @@ const NO_VALUE: readonly {
   readonly warnedFields: readonly string[];
 }[] = [
   { label: '「--」', value: '--', warnedFields: [] },
-  { label: '缺失', value: undefined, warnedFields: ['pub_share_fee'] },
+  { label: '缺失', value: undefined, warnedFields: [SETTLE_FIELD] },
   { label: 'null', value: null, warnedFields: [] },
 ];
 
 it.each(NO_VALUE)(
-  '[AC-B1-04zw#6] pub_share_fee $label 仍是无值：不开 collect 是 null；collect 下已结算行进 rejected，未结算行照常',
+  '[AC-B1-04zw#6] pub_share_fee_for_commission $label 仍是无值：不开 collect 是 null；collect 下已结算行进 rejected，未结算行照常',
   async ({ value, warnedFields }) => {
-    const empty: Record<string, unknown> = { ...rowOf(2), pub_share_fee: value };
-    const plain = await throughAdapter([control(), empty], PLAIN);
-    expect(orderOf(plain.items, control()).settle_commission_fen).toBe(-100n);
+    const empty: Record<string, unknown> = { ...rowOf(2), [SETTLE_FIELD]: value };
+    const plain = await throughAdapter([settledControl(), empty], PLAIN);
+    expect(orderOf(plain.items, settledControl()).settle_commission_fen).toBe(-200n);
     expect(orderOf(plain.items, empty).settle_commission_fen).toBeNull();
     expect(plain.warned.map((warning) => warning.field)).toEqual(warnedFields);
 
     const unsettled: Record<string, unknown> = {
       ...rowOf(3),
-      pub_share_fee: value,
+      tk_status: num('12'),
+      [SETTLE_FIELD]: value,
       tk_earning_time: '--',
     };
-    const collected = await throughAdapter([control(), empty, unsettled], COLLECT);
+    const collected = await throughAdapter([settledControl(), empty, unsettled], COLLECT);
     expect(collected.items.map((order) => order.sub_order_id)).toEqual([
       control().trade_id,
       unsettled.trade_id,
@@ -115,7 +134,7 @@ it.each(NO_VALUE)(
     expect(collected.rejected).toEqual([
       expect.objectContaining({
         sub_order_id: empty.trade_id,
-        detail: expect.stringMatching(fieldNamed('pub_share_fee')),
+        detail: expect.stringMatching(fieldNamed(SETTLE_FIELD)),
       }),
     ]);
   },
@@ -158,16 +177,37 @@ const OTHER_FIELDS: readonly OtherField[] = [
   topLevel('total_commission_rate', 'total_commission_rate_bp'),
 ];
 
-it.each(inBothModes(OTHER_FIELDS))(
+const SETTLE_FEE = techFee('alimm_tech_service_fee', 'tech_service_fee_fen');
+
+// B1-04zz（编排第 4 次 ①）：结算服务费是已结算行 N 的一部分，这一种在 collect 下不再「行照常返回」，见下一条。
+it.each(
+  inBothModes(OTHER_FIELDS).filter(
+    ({ mode, field }) => !(mode === 'collect' && field === SETTLE_FEE.field),
+  ),
+)(
   '[AC-B1-04zw#6] $mode：$field 的「-1.00」「-0.00」（字符串与 JSON number）仍 null 加告警，行照常返回',
   async ({ call, field, mapped, put }) => {
     for (const value of [...forms('-1.00'), ...forms('-0.00')]) {
-      const other = { ...rowOf(2), ...put(value) };
-      const page = await throughAdapter([control(), other], call);
-      expect(orderOf(page.items, control()).settle_commission_fen).toBe(-100n);
+      const other = { ...settled(2), ...put(value) };
+      const page = await throughAdapter([settledControl(), other], call);
+      expect(orderOf(page.items, settledControl()).settle_commission_fen).toBe(-200n);
       expect(orderOf(page.items, other)[mapped]).toBeNull();
       expect(page.rejected).toEqual([]);
       expect(page.warned).toEqual([{ event: 'taobao_order_field_invalid', field }]);
     }
   },
 );
+
+it('[AC-B1-04zw#6] collect：已结算行结算服务费的「-1.00」「-0.00」（字符串与 JSON number）仍非法，N 拿不到，这一行进 rejected', async () => {
+  for (const value of [...forms('-1.00'), ...forms('-0.00')]) {
+    const other = { ...settled(2), ...SETTLE_FEE.put(value) };
+    const page = await throughAdapter([settledControl(), other], COLLECT);
+    expect(orderOf(page.items, settledControl()).settle_commission_fen).toBe(-200n);
+    expect(page.items.map((order) => order.sub_order_id)).toEqual([control().trade_id]);
+    expect(page.rejected.map((row) => row.sub_order_id)).toEqual([other.trade_id]);
+    expect(page.warned).toContainEqual({
+      event: 'taobao_order_field_invalid',
+      field: SETTLE_FEE.field,
+    });
+  }
+});

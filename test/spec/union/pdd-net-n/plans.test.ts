@@ -1,6 +1,6 @@
 // B1-08zh（D10-574）下游不再减：快照与补偿重试的 N 一律是 settle ?? est（BR-CALC-02 取值阶段），settle 按已扣服务费处理。
-// serviceFeeDeducted 只留一个含义：拼多多的 N 为空且没有服务费时，待处理原因用 SERVICE_FEE_RATE_MISSING。
-// 淘宝、京东行为不变；只作负面用例，放在拼多多的正面断言之后。
+// serviceFeeDeducted 只留一个含义：拼多多（B1-04zz 起还有淘宝）的 N 为空且没有服务费时，待处理原因用 SERVICE_FEE_RATE_MISSING。
+// 京东行为不变；只作负面用例，放在拼多多的正面断言之后。
 import { expect, it } from 'vitest';
 import {
   planCommissionSnapshot,
@@ -143,15 +143,18 @@ it('[AC-B1-08zh#12][BR-CALC-02] 扫描排序：拼多多有 N 而服务费列为
   expect(scan(null, null)).toBe(true);
 });
 
-it('[AC-B1-08zh#13][BR-CALC-03] 其他平台不变：淘宝、京东没有服务费也不进 SERVICE_FEE_RATE_MISSING，N 不受影响', () => {
+it('[AC-B1-08zh#13][BR-CALC-03] 其他平台：N 为空且没有服务费时，淘宝进 SERVICE_FEE_RATE_MISSING（B1-04zz），京东仍是 AMOUNT_PARSE_FAILED；N 已知时都不受影响', () => {
   expect(nOf(snapshotPlan('pdd', { est: 900n }, 100n))).toBe(900n);
 
-  for (const platform of ['taobao', 'jd'] as const) {
+  for (const [platform, noNet] of [
+    ['taobao', FEE_MISSING],
+    ['jd', AMOUNT_FAILED],
+  ] as const) {
     expect(nOf(snapshotPlan(platform, { est: 1000n }, null)), platform).toBe(1000n);
     expect(nOf(snapshotPlan(platform, { est: 1000n }, 150n)), platform).toBe(1000n);
     expect(nOf(snapshotPlan(platform, { est: 1000n, settle: 800n }, null)), platform).toBe(800n);
-    expect(snapshotPlan(platform, { est: null }, null), platform).toEqual(AMOUNT_FAILED);
+    expect(snapshotPlan(platform, { est: null }, null), platform).toEqual(noNet);
     expect(nOf(retryPlan(platform, { est: 1000n }, null)), platform).toBe(1000n);
-    expect(retryPlan(platform, { est: null }, null), platform).toEqual(AMOUNT_FAILED);
+    expect(retryPlan(platform, { est: null }, null), platform).toEqual(noNet);
   }
 });

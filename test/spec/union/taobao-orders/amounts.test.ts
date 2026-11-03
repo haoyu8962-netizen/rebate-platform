@@ -28,7 +28,15 @@ it.each([
   ['0.00', 0n],
 ])('[AC-B1-04f#28] 元字符串「%s」→ %s 分（两位内精确、超两位 floor）', async (text, fen) => {
   const order = await one(
-    row({ alipay_total_price: text, pub_share_pre_fee: text, pub_share_fee: text }),
+    row({
+      alipay_total_price: text,
+      pub_share_pre_fee_for_commission: text,
+      pub_share_fee_for_commission: text,
+      alimm_share_info_dto: {
+        alimm_tech_service_fee: num('0'),
+        alimm_tech_service_pre_fee: num('0'),
+      },
+    }),
   );
   expect(order.paid_fen).toBe(fen);
   expect(order.commission_fen).toBe(fen);
@@ -39,7 +47,7 @@ it.each([
 it('[AC-B1-04f#29] 金额为 JSON number 时取数字原文：0.29999999999999999 元 → 29 分（转 JS number 会得 30）', async () => {
   const order = await one(
     row({
-      pub_share_pre_fee: num('0.29999999999999999'),
+      pub_share_pre_fee_for_commission: num('1.29999999999999999'),
       alimm_share_info_dto: {
         alimm_tech_service_fee: num('2'),
         alimm_tech_service_pre_fee: num('0.29999999999999999'),
@@ -47,8 +55,8 @@ it('[AC-B1-04f#29] 金额为 JSON number 时取数字原文：0.2999999999999999
       },
     }),
   );
-  expect(order.commission_fen).toBe(29n);
-  expect(order.est_commission_fen).toBe(29n);
+  expect(order.commission_fen).toBe(100n);
+  expect(order.est_commission_fen).toBe(100n);
   expect(order.tech_service_pre_fee_fen).toBe(29n);
   expect(order.tech_service_fee_fen).toBe(200n);
 });
@@ -83,7 +91,7 @@ it.each([
   ['item_price', '12.3.4', 'item_price_fen'],
   ['income_rate', '120.00', 'income_rate_bp'],
   ['pub_share_rate', 'abc', 'pub_share_rate_bp'],
-  ['pub_share_fee', 'abc', 'settle_commission_fen'],
+  ['pub_share_fee_for_commission', 'abc', 'settle_commission_fen'],
 ] as const)(
   '[AC-B1-04f#32] 可选字段 %s 非法（「%s」）→ %s 为 null 并告警，该条与同页其他条照常返回',
   async (field, value, mapped) => {
@@ -91,7 +99,7 @@ it.each([
     const { orders } = await collect(s.adapter);
     expect(orders.map((order) => order.order_id)).toEqual([TRADE_ID, rowOf(2).trade_id]);
     expect(orders[0]![mapped]).toBeNull();
-    expect(orders[0]).toMatchObject({ paid_fen: 8880n, commission_fen: 799n });
+    expect(orders[0]).toMatchObject({ paid_fen: 8880n, commission_fen: 724n });
     expect(s.orderWarn).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'taobao_order_field_invalid', field }),
     );

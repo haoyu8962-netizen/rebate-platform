@@ -3,8 +3,8 @@
 // - 请求：queryType 由 OrderQueryOpt.timeBasis 定（update 4 默认 / pay 2 / settle 3 / create 1）；
 //   startTime / endTime 是北京时间「YYYY-MM-DD HH:MM:SS」（由 TimeWindow 换算：from 向下、to 向上取整到秒，
 //   与注入时钟无关），窗口 > 3 小时按 3 小时顺序切窗；每窗首页不带 positionIndex，续页原样带上一页的
-//   position_index，直到 has_next 不为 true；pageSize 100，orderScene 1。每个上游请求经
-//   CallCtx.gateUpstream 各取一个配额（per_request）。
+//   position_index 并带 jumpType=1（B1-04zz，02 §7.1），直到 has_next 不为 true；pageSize 100，orderScene 1。
+//   每个上游请求经 CallCtx.gateUpstream 各取一个配额（per_request）。
 // - 一次 listOrders 取一个上游页；nextCursor 是不透明串，承载查询口径、整个窗口、当前窗起点与
 //   position_index。游标与本次的口径或窗口不符 → invalid_dto（不按游标里的窗口去查）。
 // - has_next 为 true 但 position_index 缺失 / 空串 / 与本次所带相同 → upstream_unavailable（不得不带位点
@@ -13,12 +13,24 @@
 //   清单为空 → 不发请求、返回空页并告警一次；端口未注入 → adapter_unimplemented。
 // - 金额（BR-CALC-26）：元字符串或 JSON 数字原文经 @couli/money yuanStrToFen；比例经 pctStrToBp；
 //   JSON 数字一律取原文（JSON.parse reviver 的 context.source），不经 JS number。
-// - 负数（BR-CALC-26、D10-522、D10-572，与京东同一套）：只有 pub_share_fee、pub_share_pre_fee、
-//   alipay_total_price 的负值是合法值，按数学 floor 保留：结算与预估原样留在 settle_commission_fen、
-//   est_commission_fen，必填非负的 commission_fen、paid_fen 收到 0。其余金额与比例的负值仍是非法值。
-// - 不映射大淘客自算字段（income、income_by_one、price_by_one、day、*_for_commission、*_for_sdy）。
+// - N 是净额（B1-04zz，BR-CALC-03、BR-CALC-18、D10-105、D10-588）：报文给服务费金额，扣除只在这里，下游不再减：
+//   est_commission_fen = pub_share_pre_fee_for_commission − 预估服务费；
+//   settle_commission_fen = pub_share_fee_for_commission − 结算服务费，只在 tk_status=3 读（BR-FUND-02），
+//   不看 tk_earning_time。两边各自 floor 到分再减，可为负。*_for_commission、*_for_sdy 是官方字段；补贴
+//   （*_for_sdy）不进 N，这里不读。pub_share_pre_fee 含补贴，值不用，仍是必需字段；pub_share_fee 不读。
+// - 服务费：dto（alimm_share_info_dto）的金额字段（预估 alimm_tech_service_pre_fee，结算 alimm_tech_service_fee）；
+//   dto 或字段没有值取 alimama_share_fee；dto 字段非法、dto 不是对象都不回退，结果 null；都没有也是 null，绝不按 0。
+//   service_fee_fen 写实际扣的那个数（tk_status=3 是结算服务费，其余是预估服务费）。
+// - 算不出 N（BR-CALC-03）：est 为 null 时 commission_fen 是毛额（佣金字段收到非负，同拼多多），佣金字段也没有
+//   才是 0。CallCtx.rowErrors 下佣金字段拿不到、已结算行拿不到结算额都进 rejected；否则 null 加告警。
+// - 负数（BR-CALC-26、D10-522、D10-572，与京东同一套）：只有 pub_share_pre_fee_for_commission、
+//   pub_share_fee_for_commission、pub_share_pre_fee、alipay_total_price 的负值是合法值，按数学 floor 保留：
+//   净额原样留在 est_commission_fen、settle_commission_fen，必填非负的 commission_fen、paid_fen 收到 0。
+//   其余金额（含服务费）与比例的负值仍是非法值。
+// - 不映射大淘客自算字段（income、income_by_one、price_by_one、day）。
+// TODO(规划/11 §4.5): N 字段映射 verified=false，真实口径待核对 — blocked on 测试单
 // TODO(规划/11 §4.5): results 列表键与翻页结束条件按文档字段写，待大淘客订单录制复核 — blocked on 大淘客录制
-import { InvalidAmount, InvalidRatio, pctStrToBp, yuanStrToFen } from '@couli/money';
+import { InvalidAmount, InvalidRatio, pctStrToBp, subFen, yuanStrToFen } from '@couli/money';
 import { makeUnionOrder } from '../../domain/dto.ts';
 import {
   UnionError,
@@ -44,7 +56,7 @@ export type TaobaoOrderSlotReader = (ctx: CallCtx) => Promise<readonly string[]>
  *   (`field` is the upstream field name);
  * - taobao_order_row_skipped: a row lacked a required field (trade_id, alipay_total_price,
  *   pub_share_pre_fee) or had it invalid, and was left out (`field` names it); under
- *   CallCtx.rowErrors also pub_share_fee of a settled row (requireTaobaoOrder);
+ *   CallCtx.rowErrors also the fields of the row's N (requireTaobaoOrder);
  * - taobao_order_foreign_slot: once per upstream page that held orders of other promotion slots
  *   (`count` is how many were left out);
  * - taobao_order_no_slots: the slot reader gave no usable PID; nothing was requested.
@@ -65,6 +77,8 @@ export const TAOBAO_ORDER_PATH = '/api/tb-service/get-order-details';
 export const TAOBAO_ORDER_VERSION = 'v1.0.0';
 export const TAOBAO_ORDER_PAGE_SIZE = 100;
 export const TAOBAO_ORDER_SCENE = 1;
+/** 续页的翻页方向：沿上一页 position_index 往后（大淘客文档）。 */
+export const TAOBAO_ORDER_JUMP_TYPE = 1;
 /** 大淘客单次查询的时间跨度上限：3 小时。 */
 export const TAOBAO_ORDER_MAX_SPAN_SECONDS = 3 * 3_600;
 
@@ -82,6 +96,12 @@ const BEIJING_TEXT = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 const ABSENT_TEXT = '--';
 const INTEGER_TEXT = /^-?(?:0|[1-9][0-9]*)$/;
 const ID_TEXT = /^(?:0|[1-9][0-9]*)$/;
+/** D10-588：已结算的判据，tk_earning_time 不算。 */
+const TK_STATUS_SETTLED = 3;
+const EST_COMMISSION_FIELD = 'pub_share_pre_fee_for_commission';
+const SETTLE_COMMISSION_FIELD = 'pub_share_fee_for_commission';
+const PRE_FEE_FIELD = 'alimm_share_info_dto.alimm_tech_service_pre_fee';
+const SETTLE_FEE_FIELD = 'alimm_share_info_dto.alimm_tech_service_fee';
 
 type Warn = ((event: TaobaoOrderWarning) => void) | undefined;
 
@@ -101,7 +121,8 @@ const EXPECTED_FIELDS: ReadonlySet<string> = new Set([
   'refund_tag',
   'tk_order_role',
   'item_price',
-  'pub_share_fee',
+  EST_COMMISSION_FIELD,
+  SETTLE_COMMISSION_FIELD,
   'total_commission_fee',
   'alimama_share_fee',
   'subsidy_fee',
@@ -267,7 +288,9 @@ export function taobaoOrderParameters(
     endTime: beijingText(plan.subEnd),
     pageSize: TAOBAO_ORDER_PAGE_SIZE,
     orderScene: TAOBAO_ORDER_SCENE,
-    ...(plan.position === null ? {} : { positionIndex: plan.position }),
+    ...(plan.position === null
+      ? {}
+      : { positionIndex: plan.position, jumpType: TAOBAO_ORDER_JUMP_TYPE }),
   };
 }
 
@@ -481,7 +504,8 @@ class Reader {
 
   /**
    * D10-522 / D10-572: the amounts whose negative values are kept (BR-CALC-26), floored like every
-   * other. Only pub_share_fee, pub_share_pre_fee and alipay_total_price are read this way.
+   * other. Only the two *_for_commission fields, pub_share_pre_fee and alipay_total_price are read
+   * this way.
    */
   static signedFen(value: unknown): bigint | null {
     const text = Reader.text(value);
@@ -516,6 +540,17 @@ class Reader {
   signedFen(field: string): bigint | null {
     if (this.#absent(field)) return null;
     return Reader.signedFen(this.#row[field]) ?? this.#bad(field);
+  }
+
+  /** gross − fee; null when either is; a result outside int64 is invalid like any other amount. */
+  net(gross: bigint | null, fee: bigint | null, field: string): bigint | null {
+    if (gross === null || fee === null) return null;
+    try {
+      return subFen(gross, fee);
+    } catch (error) {
+      if (error instanceof InvalidAmount) return this.#bad(field);
+      throw error;
+    }
   }
 
   bp(field: string): bigint | null {
@@ -647,10 +682,11 @@ export function mapTaobaoOrder(
 
 /**
  * B1-04zv: the same mapping for CallCtx.rowErrors: a skipped row throws invalid_dto naming the field
- * (the warning stays), so it can be collected. Stricter on one field: a settled row
- * (tk_earning_time is valid) needs pub_share_fee, because it is the row's N (BR-CALC-03) and a null
- * there would be settled on the estimate; a negative one is a value (D10-572). Without rowErrors
- * that stays null plus a warning.
+ * (the warning stays), so it can be collected. Stricter on the N (BR-CALC-03, B1-04zz): every row
+ * needs pub_share_pre_fee_for_commission, and a settled row (tk_status 3, whatever tk_earning_time
+ * says) needs pub_share_fee_for_commission and its settlement service fee, because a null there
+ * would be settled on the estimate; a negative commission is a value (D10-572). Without rowErrors
+ * those stay null plus a warning. A missing service fee alone leaves an unsettled row in the page.
  */
 export function requireTaobaoOrder(
   input: unknown,
@@ -692,6 +728,11 @@ function mapOrSkip(
   }
 }
 
+/** JSON objects only: isRecord also takes a TaobaoRawNumber instance (a JSON number). */
+function isShareInfo(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && !(value instanceof TaobaoRawNumber);
+}
+
 /** D10-522：commission_fen、paid_fen 必填非负，负值收到 0；真实负值留在 est 与归档报文。 */
 function atLeastZero(fen: bigint): bigint {
   return fen < 0n ? 0n : fen;
@@ -707,32 +748,42 @@ function mapRow(
   const tradeId = row.trade_id;
   if (typeof tradeId !== 'string' || tradeId.trim() === '') throw new Skip('trade_id');
   const paidFen = atLeastZero(f.requiredFen('alipay_total_price'));
-  const estFen = f.requiredFen('pub_share_pre_fee');
+  // 含补贴，值不进 N（BR-CALC-18）；仍是必需字段。
+  f.requiredFen('pub_share_pre_fee');
+  const tkStatus = f.integer('tk_status');
+  const settled = tkStatus === TK_STATUS_SETTLED;
+  const alimamaFen = f.fen('alimama_share_fee');
+  const share = row.alimm_share_info_dto;
+  const shareFields: Record<string, unknown> = isShareInfo(share) ? share : {};
+  const shareInvalid = !isShareInfo(share) && !Reader.absent(share);
+  if (shareInvalid) warn?.({ event: 'taobao_order_field_invalid', field: 'alimm_share_info_dto' });
+  const techFee = f.fenOf(shareFields.alimm_tech_service_fee, SETTLE_FEE_FIELD);
+  const techPreFee = f.fenOf(shareFields.alimm_tech_service_pre_fee, PRE_FEE_FIELD);
+  // 非法不是缺失：dto 字段非法（tech 已是 null）或 dto 本身非法都不回退 alimama_share_fee。
+  const feeOf = (value: unknown, tech: bigint | null): bigint | null =>
+    shareInvalid || !Reader.absent(value) ? tech : alimamaFen;
+  const preFee = feeOf(shareFields.alimm_tech_service_pre_fee, techPreFee);
+  const settleFee = feeOf(shareFields.alimm_tech_service_fee, techFee);
+  const estGross = f.signedFen(EST_COMMISSION_FIELD);
+  // 未结算行的结算字段常为 0 或「--」，不读，也不告警。
+  const settleGross = settled ? f.signedFen(SETTLE_COMMISSION_FIELD) : null;
+  const estFen = f.net(estGross, preFee, EST_COMMISSION_FIELD);
+  const settleFen = f.net(settleGross, settleFee, SETTLE_COMMISSION_FIELD);
+  const settledAt = f.time('tk_earning_time');
+  if (strict) {
+    if (estGross === null) throw new Skip(EST_COMMISSION_FIELD);
+    // 已结算行缺结算时间：下游收不下结算额，会按预估生成快照（BR-CALC-03，D10-590 后 06:3x）。
+    if (settled && settledAt === null) throw new Skip('tk_earning_time');
+    if (settled && settleGross === null) throw new Skip(SETTLE_COMMISSION_FIELD);
+    if (settled && settleFen === null) throw new Skip(SETTLE_FEE_FIELD);
+  }
   const base = makeUnionOrder({
     platform: 'taobao',
     order_id: tradeId,
     item_id: f.string('item_id'),
     paid_fen: paidFen,
-    commission_fen: atLeastZero(estFen),
+    commission_fen: atLeastZero(estFen ?? estGross ?? 0n),
   });
-  const tkStatus = f.integer('tk_status');
-  // 已结算的判据是 tk_earning_time 有合法时间；未结算时 pub_share_fee（常为 "0.00"）不当结算佣金。
-  // 已结算行的负值是这一行的 N，原样保留（BR-CALC-26、BR-CALC-02、D10-572）；未结算行读法照旧，值不用。
-  const settledAt = f.time('tk_earning_time');
-  const pubShareFee = settledAt === null ? f.fen('pub_share_fee') : f.signedFen('pub_share_fee');
-  if (strict && settledAt !== null && pubShareFee === null) throw new Skip('pub_share_fee');
-  const share = row.alimm_share_info_dto;
-  let techFee: bigint | null = null;
-  let techPreFee: bigint | null = null;
-  if (isRecord(share)) {
-    techFee = f.fenOf(share.alimm_tech_service_fee, 'alimm_share_info_dto.alimm_tech_service_fee');
-    techPreFee = f.fenOf(
-      share.alimm_tech_service_pre_fee,
-      'alimm_share_info_dto.alimm_tech_service_pre_fee',
-    );
-  } else if (!Reader.absent(share)) {
-    warn?.({ event: 'taobao_order_field_invalid', field: 'alimm_share_info_dto' });
-  }
   return Object.freeze({
     ...base,
     // 平台无关字段（D10-20）。
@@ -752,7 +803,8 @@ function mapRow(
     settled_at: settledAt,
     modified_at: f.time('modified_time'),
     est_commission_fen: estFen,
-    settle_commission_fen: settledAt === null ? null : pubShareFee,
+    settle_commission_fen: settleFen,
+    service_fee_fen: settled ? settleFee : preFee,
     raw_payload_id: meta.rawPayloadId,
     // TaobaoOrderFields（官方同名字段原样；不是归因 N，D10-488）。
     tk_status: tkStatus,
@@ -762,7 +814,7 @@ function mapRow(
     site_id: f.id('site_id'),
     special_id: f.id('special_id'),
     item_price_fen: f.fen('item_price'),
-    alimama_share_fen: f.fen('alimama_share_fee'),
+    alimama_share_fen: alimamaFen,
     subsidy_fen: f.fen('subsidy_fee'),
     total_commission_fen: f.fen('total_commission_fee'),
     tech_service_fee_fen: techFee,

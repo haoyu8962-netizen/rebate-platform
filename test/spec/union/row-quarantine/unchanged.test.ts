@@ -22,7 +22,13 @@ it.each([JD, PDD])(
 
 // 淘宝不传 rowErrors 时的现行为是跳过并告警（冻结用例 AC-B1-04f#34），「行为完全不变」指的就是它。
 it('[AC-B1-04zv#2] taobao：同一页 collect 下隔离，不传 rowErrors 时仍跳过该行并告警，页上没有 rejected', async () => {
-  const rows = [TAOBAO.good(1), TAOBAO.bad(2), TAOBAO.good(3)];
+  // B1-04zz：已结算行要有结算佣金字段（kit 的默认行没有）。
+  const settled = { pub_share_fee_for_commission: '7.66' };
+  const rows = [
+    { ...TAOBAO.good(1), ...settled },
+    { ...TAOBAO.bad(2), ...settled },
+    { ...TAOBAO.good(3), ...settled },
+  ];
   const collected = await resolved(() =>
     TAOBAO.adapter(rows).listOrders(TAOBAO.win, {}, TAOBAO.collect),
   );
@@ -31,6 +37,7 @@ it('[AC-B1-04zv#2] taobao：同一页 collect 下隔离，不传 rowErrors 时�
   const s = taobaoSetup(() => taobaoReply(pageData(rows)));
   const plain = await resolved(() => s.adapter.listOrders(TAOBAO.win, {}, TAOBAO.ctx));
   expect(plain.items.map((order) => order.sub_order_id)).toEqual([TAOBAO.idOf(1), TAOBAO.idOf(3)]);
+  expect(plain.items[0]).toMatchObject({ est_commission_fen: 724n, settle_commission_fen: 666n });
   expect(Object.hasOwn(plain, 'rejected')).toBe(false);
   expect(s.orderWarn).toHaveBeenCalledWith(
     expect.objectContaining({ event: 'taobao_order_row_skipped', field: TAOBAO.brokenField }),
@@ -54,7 +61,18 @@ it('[AC-B1-04zv#3] pdd：order_list 损坏，collect 下仍抛 invalid_dto', asy
 });
 
 it('[AC-B1-04zv#3] taobao：results 损坏，collect 下仍抛 upstream_unavailable', async () => {
-  await expectCollecting(TAOBAO);
+  // B1-04zz：已结算行要有结算佣金字段（kit 的默认行没有）；先看净额，这条在新口径之前是红的。
+  const settled = { pub_share_fee_for_commission: '7.66' };
+  const wired = {
+    ...TAOBAO,
+    good: (index: number) => ({ ...TAOBAO.good(index), ...settled }),
+    bad: (index: number) => ({ ...TAOBAO.bad(index), ...settled }),
+  };
+  const net = await resolved(() =>
+    wired.adapter([wired.good(1)]).listOrders(wired.win, {}, wired.collect),
+  );
+  expect(net.items[0]).toMatchObject({ est_commission_fen: 724n, settle_commission_fen: 666n });
+  await expectCollecting(wired);
   const s = taobaoSetup(() => taobaoReply({ results: 'rq-not-an-object' }));
   const error = await refused(() => s.adapter.listOrders(TAOBAO.win, {}, TAOBAO.collect));
   expect(error).toMatchObject({ code: 'upstream_unavailable', platform: 'taobao' });

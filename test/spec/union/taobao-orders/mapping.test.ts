@@ -24,7 +24,7 @@ afterEach(() => {
 const at = (text: string): Date => new Date(text);
 
 it('[AC-B1-04f#18] 已结算订单的平台无关字段按同名官方字段映射', async () => {
-  const order = await one(row());
+  const order = await one(row({ pub_share_fee_for_commission: '7.66' }));
   expect(order).toMatchObject({
     platform: 'taobao',
     order_id: TRADE_ID,
@@ -35,8 +35,8 @@ it('[AC-B1-04f#18] 已结算订单的平台无关字段按同名官方字段映�
     attr_params: { relation_id: null, custom_parameters: null, sub_union_id: null },
     raw_status: '3',
     paid_fen: 8880n,
-    commission_fen: 799n,
-    est_commission_fen: 799n,
+    commission_fen: 724n,
+    est_commission_fen: 724n,
     settle_commission_fen: 666n,
     paid_at: at('2026-10-30T02:00:05Z'),
     settled_at: at('2026-10-30T02:40:00Z'),
@@ -92,7 +92,7 @@ it('[AC-B1-04f#21] 未结算（tk_status 12、tk_earning_time 与 pub_share_fee 
     tk_status: 12,
     settle_commission_fen: null,
     settled_at: null,
-    est_commission_fen: 799n,
+    est_commission_fen: 724n,
     paid_at: at('2026-10-30T02:00:05Z'),
   });
 });

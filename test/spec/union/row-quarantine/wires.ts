@@ -164,7 +164,8 @@ export const TAOBAO: Wire = {
   idField: 'trade_id',
   privateValues: ['88.80', '7.99', TRADE_PARENT_ID],
   idOf: (index) => String(rowOf(index).trade_id),
-  good: (index) => rowOf(index),
+  // B1-04zz：已结算行的结算额读 pub_share_fee_for_commission，kit 的默认行没有；7.66 − 结算服务费 1.00 = 666。
+  good: (index) => ({ ...rowOf(index), pub_share_fee_for_commission: '7.66' }),
   bad: (index) => ({ ...rowOf(index), alipay_total_price: BAD_AMOUNT }),
   nameless: () => taobaoRow({ trade_id: undefined }),
   adapter: (rows, page = {}) =>

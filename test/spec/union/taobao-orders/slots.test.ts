@@ -136,7 +136,7 @@ it('[AC-B1-04f#43] 我方单与别家单同页：别家单不占我方结果，�
   expect(orders[0]).toMatchObject({
     promotion_slot: OUR_ADZONE,
     paid_fen: 8880n,
-    commission_fen: 799n,
+    commission_fen: 724n,
   });
   expect(visible(orders)).not.toContain('2900000000000000401');
   expect(OUR_SLOT.endsWith(`_${OUR_ADZONE}`)).toBe(true);

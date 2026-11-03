@@ -147,12 +147,17 @@ const BROKEN_SETTLE_FEES: readonly {
 ];
 
 it.each(BROKEN_SETTLE_FEES)(
-  '[AC-B1-04zv#1] 淘宝已结算行 pub_share_fee $wording：collect 下进 rejected，未结算行照常；不开 collect 仍是 null 加 warn',
+  '[AC-B1-04zv#1] 淘宝已结算行 pub_share_fee_for_commission $wording：collect 下进 rejected，未结算行照常；不开 collect 仍是 null 加 warn',
   async ({ value }) => {
     const rows = [
-      rowOf(1),
-      { ...rowOf(2), pub_share_fee: value },
-      { ...rowOf(3), pub_share_fee: value, tk_earning_time: '--' },
+      { ...rowOf(1), pub_share_fee_for_commission: '8.00' },
+      { ...rowOf(2), pub_share_fee_for_commission: value },
+      {
+        ...rowOf(3),
+        pub_share_fee_for_commission: value,
+        tk_status: num('12'),
+        tk_earning_time: '--',
+      },
     ];
     const collected = await resolved(() =>
       TAOBAO.adapter(rows, { payloadId: '70107' }).listOrders(TAOBAO.win, {}, TAOBAO.collect),
@@ -166,7 +171,7 @@ it.each(BROKEN_SETTLE_FEES)(
         sub_order_id: TAOBAO.idOf(2),
         raw_status: TAOBAO.rawStatus,
         raw_payload_id: '70107',
-        detail: expect.stringMatching(fieldNamed('pub_share_fee')),
+        detail: expect.stringMatching(fieldNamed('pub_share_fee_for_commission')),
       }),
     ]);
 
@@ -177,10 +182,14 @@ it.each(BROKEN_SETTLE_FEES)(
       TAOBAO.idOf(2),
       TAOBAO.idOf(3),
     ]);
-    expect(plain.items[1]).toMatchObject({ commission_fen: 799n, settle_commission_fen: null });
+    expect(plain.items[0]).toMatchObject({ settle_commission_fen: 700n });
+    expect(plain.items[1]).toMatchObject({ commission_fen: 724n, settle_commission_fen: null });
     expect(Object.hasOwn(plain, 'rejected')).toBe(false);
     expect(s.orderWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'taobao_order_field_invalid', field: 'pub_share_fee' }),
+      expect.objectContaining({
+        event: 'taobao_order_field_invalid',
+        field: 'pub_share_fee_for_commission',
+      }),
     );
   },
 );
@@ -291,7 +300,7 @@ it('[AC-B1-04zv#5] 淘宝：缺 trade_id 的行进 rejected 且原 warn 还在�
   const s = taobaoSetup(() =>
     taobaoReply(
       pageData([
-        rowOf(1),
+        { ...rowOf(1), pub_share_fee_for_commission: '8.00' },
         taobaoRow({ trade_id: undefined }),
         taobaoRow({ trade_id: undefined, adzone_id: num(FOREIGN_ADZONE) }),
         { ...rowOf(4, FOREIGN_ADZONE), alipay_total_price: BAD_AMOUNT },
@@ -301,6 +310,7 @@ it('[AC-B1-04zv#5] 淘宝：缺 trade_id 的行进 rejected 且原 warn 还在�
   );
   const page = await resolved(() => s.adapter.listOrders(taobaoWin, {}, TAOBAO.collect));
   expect(page.items.map((order) => order.sub_order_id)).toEqual([rowOf(1).trade_id]);
+  expect(page.items[0]).toMatchObject({ settle_commission_fen: 700n });
   const rejected = rejectedOf(page);
   expect(rejected).toHaveLength(1);
   expect(rejected[0]).toMatchObject({ sub_order_id: null, raw_payload_id: '70501' });

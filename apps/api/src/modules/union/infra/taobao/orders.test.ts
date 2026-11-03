@@ -176,7 +176,8 @@ function fullRow(overrides: Record<string, unknown> = {}): Record<string, unknow
     alipay_total_price: '10.00',
     item_price: '10.00',
     pub_share_pre_fee: '1.00',
-    pub_share_fee: '0.90',
+    pub_share_pre_fee_for_commission: '1.00',
+    pub_share_fee_for_commission: '0.90',
     total_commission_fee: '1.10',
     alimama_share_fee: '0.05',
     subsidy_fee: '0.00',
@@ -205,23 +206,29 @@ function mapOne(input: Record<string, unknown>) {
   return { order, warnings };
 }
 
-it('[AC-B1-04f-UNIT#8] 未结算（tk_status 12、tk_earning_time 缺失）时 pub_share_fee "0.00" 也不当结算佣金：settle_commission_fen = null，且不告警', () => {
+it('[AC-B1-04f-UNIT#8] 未结算（tk_status 12、tk_earning_time 缺失）时 pub_share_fee_for_commission "0.00" 也不当结算佣金：settle_commission_fen = null，且不告警', () => {
   const { order, warnings } = mapOne(
-    fullRow({ tk_status: 12, pub_share_fee: '0.00', tk_earning_time: undefined }),
+    fullRow({
+      tk_status: 12,
+      pub_share_fee_for_commission: '0.00',
+      tk_earning_time: undefined,
+    }),
   );
   expect(order).toMatchObject({ raw_status: '12', settled_at: null, settle_commission_fen: null });
   expect(warnings).toEqual([]);
-  const dashed = mapOne(fullRow({ tk_status: 12, pub_share_fee: '0.00', tk_earning_time: '--' }));
+  const dashed = mapOne(
+    fullRow({ tk_status: 12, pub_share_fee_for_commission: '--', tk_earning_time: '--' }),
+  );
   expect(dashed.order?.settle_commission_fen).toBeNull();
 });
 
-it('[AC-B1-04f-UNIT#9] 已结算（tk_status 3、tk_earning_time 有合法时间）→ 照 pub_share_fee 换算；结算时间非法 → 两者都为 null', () => {
+it('[AC-B1-04f-UNIT#9] 已结算（tk_status 3）→ 佣金减服务费；结算时间非法只让 settled_at 为 null，结算额照读', () => {
   expect(mapOne(fullRow()).order).toMatchObject({
-    settle_commission_fen: 90n,
+    settle_commission_fen: 85n,
     settled_at: new Date('2026-10-30T02:40:00Z'),
   });
   const bad = mapOne(fullRow({ tk_earning_time: '2026-02-30 00:00:00' }));
-  expect(bad.order).toMatchObject({ settled_at: null, settle_commission_fen: null });
+  expect(bad.order).toMatchObject({ settled_at: null, settle_commission_fen: 85n });
   expect(bad.warnings).toEqual([{ event: 'taobao_order_field_invalid', field: 'tk_earning_time' }]);
 });
 

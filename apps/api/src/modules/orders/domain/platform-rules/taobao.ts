@@ -8,7 +8,8 @@ export const rules: PlatformRules = {
   // BR-ATTR-15 lk：淘宝订单参数里没有 lk。
   parseLinkCode: () => null,
   sceneParamFallback: false,
-  serviceFeeDeducted: false,
+  // BR-CALC-03：N 在适配器按服务费金额算净额（B1-04zz，D10-105）；服务费缺失不得按 0 处理。
+  serviceFeeDeducted: true,
   // BR-CALC-19：推广位场景（淘礼金）决定返利模式；场景取不到时补偿重试 skip pid_scene_unknown。
   taolijinPidScene: true,
   orderNoStripHyphens: false,

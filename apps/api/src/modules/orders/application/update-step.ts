@@ -125,6 +125,7 @@ import {
   type PlatformRestoreOutcome,
 } from './platform-restore-step.ts';
 import { findPlatformRules } from '../domain/platform-rules/index.ts';
+import { alertsServiceFeeMissing } from '../domain/platform-rules/service-fee-alert.ts';
 
 export interface OrderUpdateChange {
   readonly app_id: string;
@@ -899,6 +900,7 @@ export function createOrderUpdateStep(
     // B1-08zh（D10-574）：已有 est 的单后续缺服务费，est 不覆盖、版本不前进（planOrderSyncColumns）；
     // 不进待处理（那是快照重试的信号），只计数并告警。不带金额和单号。
     if (
+      alertsServiceFeeMissing(platform) &&
       findPlatformRules(platform)?.serviceFeeDeducted === true &&
       (incoming.service_fee_fen ?? null) === null &&
       (incoming.est_commission_fen ?? null) === null &&

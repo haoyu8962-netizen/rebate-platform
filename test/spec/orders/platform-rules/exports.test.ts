@@ -75,12 +75,12 @@ it('[AC-B1-08za#21] parseLinkCode 仍从 orders/index.ts 与 domain/source-backf
   }
 });
 
-it('[AC-B1-08za#22] SERVICE_FEE_PLATFORM / PID_SCENE_PLATFORM 仍从 domain/snapshot-retry.ts 导出、字面量类型不变，且各是规则表里唯一打开该项的平台', () => {
+it('[AC-B1-08za#22] SERVICE_FEE_PLATFORM / PID_SCENE_PLATFORM 仍从 domain/snapshot-retry.ts 导出、字面量类型不变；服务费项规则表里拼多多与淘宝打开，场景项淘宝是唯一打开的平台', () => {
   expectTypeOf(SERVICE_FEE_PLATFORM).toEqualTypeOf<'pdd'>();
   expectTypeOf(PID_SCENE_PLATFORM).toEqualTypeOf<'taobao'>();
   const deducting = REGISTERED_PLATFORMS.filter((p) => rulesOf(p).serviceFeeDeducted);
   const byScene = REGISTERED_PLATFORMS.filter((p) => rulesOf(p).taolijinPidScene);
-  expect(deducting).toEqual([SERVICE_FEE_PLATFORM]);
+  expect(deducting.sort()).toEqual([SERVICE_FEE_PLATFORM, 'taobao']);
   expect(byScene).toEqual([PID_SCENE_PLATFORM]);
 });
 
