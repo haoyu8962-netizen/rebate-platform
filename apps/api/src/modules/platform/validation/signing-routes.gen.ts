@@ -1337,6 +1337,11 @@ export const CONTRACT_SIGNING_ROUTES = [
     "signed": false
   },
   {
+    "method": "POST",
+    "path": "/admin/v1/payout-watermarks",
+    "signed": false
+  },
+  {
     "method": "GET",
     "path": "/admin/v1/fund-ledger",
     "signed": false

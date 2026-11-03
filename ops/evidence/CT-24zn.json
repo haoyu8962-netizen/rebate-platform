@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV1 (contract only). One new planned operation, adminCreatePayoutWatermark, POST /admin/v1/payout-watermarks (BR-WDR-18; 04 §3.2 payout_watermarks; ruling D10-592): fund.cash_entry, totp step-up, idempotent, audited; alipay and wechat only, bank_card opens with its channel. 20001 [measured_at] for a reading more than 5 minutes ahead (08), more than 2 hours old or before the channel's latest (design/specs/admin-payouts.md, 代理补全的默认, D10-592). No new error code, no existing operation changes, no migration. B2-09i implements it.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "round 1 (couli-runs/CT-24zn/contract-review-r1.json), no findings. Static, no tests or codegen run by Codex. The review was on the head before the rebase; the rebase only regenerated planned-operations.gen.ts after #2295."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zn",
+  "spec_commit": "12dee39a11f9ec637d3375a9136711adf27475ae",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "17fcd554f61df8b8edc0a17b26dc1732b5aa1094",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

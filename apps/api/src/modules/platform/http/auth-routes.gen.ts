@@ -1337,6 +1337,11 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "admin"
   },
   {
+    "method": "POST",
+    "path": "/admin/v1/payout-watermarks",
+    "auth": "admin"
+  },
+  {
     "method": "GET",
     "path": "/admin/v1/fund-ledger",
     "auth": "admin"

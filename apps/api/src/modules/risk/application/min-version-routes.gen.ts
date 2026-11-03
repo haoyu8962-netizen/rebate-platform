@@ -2695,6 +2695,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "adminCreatePayoutWatermark",
+    "method": "POST",
+    "path": "/admin/v1/payout-watermarks",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "adminGetFundLedger",
     "method": "GET",
     "path": "/admin/v1/fund-ledger",

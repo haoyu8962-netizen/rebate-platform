@@ -9286,6 +9286,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/payout-watermarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enter the available balance W of a payout channel (录入企业支付宝余额)
+         * @description The 【录入企业支付宝余额】 dialog of the payout console and the fund ledger page, and the same
+         *     dialog for the WeChat operating account (01 F-ADM-07, F-ADM-08; BR-WDR-18 and its 细则「W 的
+         *     取数时刻」「多通道的 W」; 04 §3.2 payout_watermarks; design/specs/admin-payouts.md §2;
+         *     rulings D10-223, D10-241, D10-248, D10-285, D10-592). Permission point `fund.cash_entry`; a
+         *     super admin holds every point. Step-up: totp tier (BR-ID-34): without a valid totp-tier
+         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *
+         *     Request (AdminPayoutWatermarkCreateRequest): `channel`, alipay or wechat; bank_card opens
+         *     with its channel and fails at the schema until then (D10-592, as D10-538 ⑥). `available_fen`,
+         *     integer fen ≥ 0, the balance read off the account. `measured_at`, the moment it was read
+         *     (t_W). `note`, optional, at most 500 characters and not blank after trimming. Who entered it
+         *     comes from the session.
+         *
+         *     Order of checks: the route schema comes first, before the permission and step-up checks,
+         *     as on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming
+         *     the field, also for a caller without the permission point or a token, and nothing is
+         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
+         *     step-up (10003) → the checks on a body that fits the schema, each 20001: a blank `note`
+         *     with `data.fields=[note]`; and with `data.fields=[measured_at]`, compared with the injected
+         *     Clock, a `measured_at` more than 5 minutes after now (BR-WDR-18 细则, D10-241, D10-248), more
+         *     than 2 hours before now, or before the channel's latest `measured_at` (design/specs/
+         *     admin-payouts.md, 代理补全的默认, D10-592). Up to 5 minutes ahead counts as clock skew and is
+         *     accepted; the same `measured_at` as the latest is accepted. These are checked here and not
+         *     by a database constraint (D10-241). Entries of one channel are checked one at a time, so
+         *     two racing requests cannot both pass on the same latest row.
+         *
+         *     Effects: one new row of 04 §3.2 payout_watermarks, written by payout and never changed;
+         *     `entered_by` is the admin_users id of the caller. The latest row by `measured_at` is the W
+         *     that the next execution of that channel judges (BR-WDR-18 ①②③), and it goes stale 2 hours
+         *     after `measured_at`. No voucher, no balance, no withdrawal changes. Writes an audit record
+         *     (action payout_watermark_create, with the `watermark_id`, `channel`, `available_fen`,
+         *     `measured_at` and `note`; the table has no note column, the audit record holds it; no
+         *     personal data).
+         *
+         *     `Idempotency-Key` is required: same key and body → the first result; same key with
+         *     another body → 20901; same key while still running → 40901. The step-up token is a header
+         *     and not part of the body hash, so a replay after a 10003 keeps its key.
+         */
+        post: operations["adminCreatePayoutWatermark"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/fund-ledger": {
         parameters: {
             query?: never;
@@ -19279,6 +19335,49 @@ export interface components {
              * @description Balance in fen of UNION_RECEIVABLE:{platform} over all the entries posted so far; below 0 after a collection above the receivable.
              */
             union_receivable_fen: number;
+        };
+        /**
+         * @description The channels whose W can be entered (D10-592); bank_card opens with its channel.
+         * @enum {string}
+         */
+        AdminPayoutWatermarkChannel: "alipay" | "wechat";
+        /** @description One reading of a channel's balance; see POST /admin/v1/payout-watermarks. */
+        AdminPayoutWatermarkCreateRequest: {
+            channel: components["schemas"]["AdminPayoutWatermarkChannel"];
+            /**
+             * Format: int64
+             * @description Integer fen, 0 or above, the balance read off the account (BR-WDR-18 W).
+             */
+            available_fen: number;
+            /**
+             * Format: date-time
+             * @description When W was read off the account (t_W), checked against the injected Clock.
+             */
+            measured_at: string;
+            /** @description Optional, at most 500 characters, not blank after trimming; kept in the audit record. */
+            note?: string;
+        };
+        /** @description One row of 04 §3.2 payout_watermarks. */
+        AdminPayoutWatermark: {
+            watermark_id: components["schemas"]["Id"];
+            channel: components["schemas"]["AdminPayoutWatermarkChannel"];
+            available_fen: components["schemas"]["Fen"];
+            /** Format: date-time */
+            measured_at: string;
+            entered_by: components["schemas"]["Id"];
+            /** @description Current name of that admin (admin_users.display_name, else the username). */
+            entered_by_name: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AdminPayoutWatermarkResult: {
+            watermark: components["schemas"]["AdminPayoutWatermark"];
+        };
+        AdminPayoutWatermarkCreateResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminPayoutWatermarkResult"];
+            trace_id: components["schemas"]["TraceId"];
         };
         /** @description The latest W of the enterprise Alipay channel (BR-WDR-18; 04 §3.2 payout_watermarks). Entered on the payout console, not here. */
         AdminFundLedgerWatermark: {
@@ -39757,6 +39856,86 @@ export interface operations {
             };
             429: components["responses"]["TooManyRequests"];
             /** @description Not reversed (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminCreatePayoutWatermark: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
+                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
+                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
+                 *     optional). Only on admin console operations; app operations use StepUpToken.
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "channel": "alipay",
+                 *       "available_fen": 3000000,
+                 *       "measured_at": "2026-11-03T09:00:00+08:00",
+                 *       "note": "网银余额截图 09:00"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminPayoutWatermarkCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description The row entered, or the first result of the same key. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "watermark": {
+                     *           "watermark_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fb201",
+                     *           "channel": "alipay",
+                     *           "available_fen": 3000000,
+                     *           "measured_at": "2026-11-03T09:00:00+08:00",
+                     *           "entered_by": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
+                     *           "entered_by_name": "ops01",
+                     *           "created_at": "2026-11-03T09:01:00+08:00"
+                     *         }
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminPayoutWatermarkCreateResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not entered (codes in contracts/error-codes.yaml). */
             "4XX": {
                 headers: {
                     "X-Trace-Id": components["headers"]["TraceId"];
