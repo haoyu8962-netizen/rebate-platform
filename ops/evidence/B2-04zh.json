@@ -1,0 +1,117 @@
+{
+  "risk_note": "RV2 (funds table). Migration 0122 adds one empty table app.union_receipts with named constraints, two list indexes and grants: couli_app SELECT, INSERT and UPDATE of the three reversal columns only; couli_readonly SELECT (D10-589). No backfill, no existing object changes, no business code: the writers and readers are B2-04zr. No trigger: the database does not by itself refuse a second reversal, because couli_app may update the reversal columns; that is held by the compare on reversed_at under the row lock in B2-04zr and by the voucher's uniq_key. platform takes the nine PlatformCode values of the contract. tools/ci/lint-migrations.test.ts only adds union_receipts to the funds-table expectation, as #2026 did for settle_runs (protected path, for the orchestrator's label).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 (couli-runs/B2-04zh/money-review-r1.json), no findings. Static review, no tests run."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "fresh Claude, static reading, not run by the reviewer. One S2 accepted: #5 and #12 would not catch a unique key widened with another column; the migration uses the exact keys. Its out_of_scope items (reversal once, voucher sides and signs, exposure after a reversal) are for B2-04zr, kept in couli-runs/B2-04zh/out-of-scope.md. The author ran twice: the first brief wrongly listed three platforms (the implementer's mistake, a truncated read of the enum), and the second round changed only [AC-B2-04zh#7] to the nine values of the contract."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-04zh",
+  "spec_commit": "7735fec7677bfb9a0bf182fe38d179916c99e98f",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [
+    "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#17] couli_app 表级只有 SELECT、INSERT；列级 UPDATE 只在 reversed_at、reversed_by、reversal_voucher_id 上",
+    "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#18] couli_readonly 只有 SELECT；couli_payout、couli_maint 表级与逐列都没有任何权限",
+    "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#19] couli_app 能插入、能写红冲三列；UPDATE 其他任一列、DELETE、TRUNCATE 都以 42501 拒绝，行不变",
+    "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#20] couli_readonly 读到同一行，写、删、清表都以 42501 拒绝；couli_payout、couli_maint 连读也被拒绝；行不变",
+    "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#21] 授权写在建表的同一个迁移里：授给 couli_app 与 couli_readonly，不授其他角色或 PUBLIC，不带 WITH GRANT OPTION",
+    "test/spec/settlement/union-receipts-schema/no-backfill.int.test.ts > [AC-B2-04zh#22] 只加表、不回填：迁移后新表为空，也没有写出 RECEIPT 凭证",
+    "test/spec/settlement/union-receipts-schema/no-backfill.int.test.ts > [AC-B2-04zh#23] 迁移源文件名是 <序号>_union-receipts.sql，里面只有这张新表及其约束、索引、授权，不写数据、不碰已有对象",
+    "test/spec/settlement/union-receipts-schema/no-backfill.int.test.ts > [AC-B2-04zh#24] 新表上没有触发器：不变性靠授权，迁移不引入业务逻辑",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#1] app.union_receipts 恰好 14 列，类型与可空如 04 §3.2：金额 bigint、receipt_date 是 date、note / created_by / 红冲三列可空，其余非空",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#2] 无数据库默认值：receipt_id 等列都由应用给；只有 created_at 可以有默认，且只能是 SQL 时钟",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#3] 主键恰为 receipt_id：同一 receipt_id 不能有第二行（跨 app 也不行）",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#4] 约束与索引在迁移里显式具名，且都已生效（资金表规则，db/AGENTS.md 第 11 条）",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#5] 不设业务键：同平台同日同金额同方式的两笔回款都能插入；唯一索引只落在 receipt_id、voucher_id、reversal_voucher_id 上",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#6] 值域：app_id 不能是空串；platform、method、cash_account 收全部合法值，大小写不符、空串、带空格和未知值以 23514 拒绝",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#7] platform 是契约 PlatformCode 的九个值：九个都能插入，枚举外的值以 23514 拒绝",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#8] amount_fen 必须 > 0：1 分与 bigint 上限可以，0 与负数以 23514 拒绝",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#9] note 可空，长度按字符数 ≤ 500：500 个多字节字符可以，501 个字符以 23514 拒绝",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#10] created_by：ADMIN_ENTRY 必填（为空 23514）；R1_RECON 可为空，也可带操作人",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#11] 非空列显式写 NULL 以 23502 拒绝",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#12] voucher_id 唯一，reversal_voucher_id 唯一（23505）；未红冲的多行可以同时为空",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#13] 四个外键都带 app_id，指向 ledger_vouchers (app_id, id) 或 admin_users (app_id, id)，不级联",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#14] 指向别的 app 的凭证或管理员、指向不存在的 id，都以 23503 拒绝（插入与红冲更新两条路）",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#15] 红冲三列全空或全有：只设一两列以 23514 拒绝（插入与更新两条路），三列都设可以",
+    "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#16] 列表查询有索引：存在一个已生效、非部分索引，键列覆盖 app_id 与 receipt_date（不钉索引名与列序）"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7735fec7677bfb9a0bf182fe38d179916c99e98f",
+      "tree": "1fa9b3e25e550d343ada2465b7ffae9aaabbf18b",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-03T00:26:23Z",
+      "finished_at": "2026-11-03T00:26:31Z",
+      "red_tests": [
+        "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#17] couli_app 表级只有 SELECT、INSERT；列级 UPDATE 只在 reversed_at、reversed_by、reversal_voucher_id 上",
+        "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#18] couli_readonly 只有 SELECT；couli_payout、couli_maint 表级与逐列都没有任何权限",
+        "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#19] couli_app 能插入、能写红冲三列；UPDATE 其他任一列、DELETE、TRUNCATE 都以 42501 拒绝，行不变",
+        "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#20] couli_readonly 读到同一行，写、删、清表都以 42501 拒绝；couli_payout、couli_maint 连读也被拒绝；行不变",
+        "test/spec/settlement/union-receipts-schema/access.int.test.ts > [AC-B2-04zh#21] 授权写在建表的同一个迁移里：授给 couli_app 与 couli_readonly，不授其他角色或 PUBLIC，不带 WITH GRANT OPTION",
+        "test/spec/settlement/union-receipts-schema/no-backfill.int.test.ts > [AC-B2-04zh#22] 只加表、不回填：迁移后新表为空，也没有写出 RECEIPT 凭证",
+        "test/spec/settlement/union-receipts-schema/no-backfill.int.test.ts > [AC-B2-04zh#23] 迁移源文件名是 <序号>_union-receipts.sql，里面只有这张新表及其约束、索引、授权，不写数据、不碰已有对象",
+        "test/spec/settlement/union-receipts-schema/no-backfill.int.test.ts > [AC-B2-04zh#24] 新表上没有触发器：不变性靠授权，迁移不引入业务逻辑",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#1] app.union_receipts 恰好 14 列，类型与可空如 04 §3.2：金额 bigint、receipt_date 是 date、note / created_by / 红冲三列可空，其余非空",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#2] 无数据库默认值：receipt_id 等列都由应用给；只有 created_at 可以有默认，且只能是 SQL 时钟",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#3] 主键恰为 receipt_id：同一 receipt_id 不能有第二行（跨 app 也不行）",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#4] 约束与索引在迁移里显式具名，且都已生效（资金表规则，db/AGENTS.md 第 11 条）",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#5] 不设业务键：同平台同日同金额同方式的两笔回款都能插入；唯一索引只落在 receipt_id、voucher_id、reversal_voucher_id 上",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#6] 值域：app_id 不能是空串；platform、method、cash_account 收全部合法值，大小写不符、空串、带空格和未知值以 23514 拒绝",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#7] platform 是契约 PlatformCode 的九个值：九个都能插入，枚举外的值以 23514 拒绝",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#8] amount_fen 必须 > 0：1 分与 bigint 上限可以，0 与负数以 23514 拒绝",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#9] note 可空，长度按字符数 ≤ 500：500 个多字节字符可以，501 个字符以 23514 拒绝",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#10] created_by：ADMIN_ENTRY 必填（为空 23514）；R1_RECON 可为空，也可带操作人",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#11] 非空列显式写 NULL 以 23502 拒绝",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#12] voucher_id 唯一，reversal_voucher_id 唯一（23505）；未红冲的多行可以同时为空",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#13] 四个外键都带 app_id，指向 ledger_vouchers (app_id, id) 或 admin_users (app_id, id)，不级联",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#14] 指向别的 app 的凭证或管理员、指向不存在的 id，都以 23503 拒绝（插入与红冲更新两条路）",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#15] 红冲三列全空或全有：只设一两列以 23514 拒绝（插入与更新两条路），三列都设可以",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts > [AC-B2-04zh#16] 列表查询有索引：存在一个已生效、非部分索引，键列覆盖 app_id 与 receipt_date（不钉索引名与列序）"
+      ],
+      "expected": [
+        "test/spec/settlement/union-receipts-schema/access.int.test.ts",
+        "test/spec/settlement/union-receipts-schema/no-backfill.int.test.ts",
+        "test/spec/settlement/union-receipts-schema/shape.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "c3031bfba8f04773a37e3a57e07494f85a04fcb19906f233f3a25e21efc4831a"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3c73b5ccc756207cc1d8bdbe95f2a8406d8365af",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

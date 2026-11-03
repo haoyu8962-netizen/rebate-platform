@@ -2088,6 +2088,23 @@ export interface UnionRawPayloads {
   request_summary: Json;
 }
 
+export interface UnionReceipts {
+  amount_fen: ColumnType<bigint, bigint, bigint>;
+  app_id: string;
+  cash_account: string;
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  method: string;
+  note: string | null;
+  platform: string;
+  receipt_date: Timestamp;
+  receipt_id: string;
+  reversal_voucher_id: string | null;
+  reversed_at: Timestamp | null;
+  reversed_by: string | null;
+  voucher_id: string;
+}
+
 export interface UserOauth {
   app_id: string;
   apple_refresh_token_cipher: Buffer | null;
@@ -2365,6 +2382,7 @@ export interface DB {
   union_credentials: UnionCredentials;
   union_pids: UnionPids;
   union_raw_payloads: UnionRawPayloads;
+  union_receipts: UnionReceipts;
   user_oauth: UserOauth;
   user_risk_state: UserRiskState;
   user_tip_reads: UserTipReads;

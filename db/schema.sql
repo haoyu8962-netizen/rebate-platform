@@ -5826,6 +5826,36 @@ ALTER TABLE app.union_raw_payloads ALTER COLUMN id ADD GENERATED ALWAYS AS IDENT
 
 
 --
+-- Name: union_receipts; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.union_receipts (
+    receipt_id uuid NOT NULL,
+    app_id text NOT NULL,
+    platform text NOT NULL,
+    receipt_date date NOT NULL,
+    amount_fen bigint NOT NULL,
+    method text NOT NULL,
+    cash_account text NOT NULL,
+    voucher_id uuid NOT NULL,
+    note text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    reversed_at timestamp with time zone,
+    reversed_by uuid,
+    reversal_voucher_id uuid,
+    CONSTRAINT union_receipts_amount_fen_check CHECK ((amount_fen > 0)),
+    CONSTRAINT union_receipts_app_id_check CHECK ((app_id <> ''::text)),
+    CONSTRAINT union_receipts_cash_account_check CHECK ((cash_account = ANY (ARRAY['CASH_ALIPAY'::text, 'CASH_BANK'::text]))),
+    CONSTRAINT union_receipts_created_by_check CHECK (((method <> 'ADMIN_ENTRY'::text) OR (created_by IS NOT NULL))),
+    CONSTRAINT union_receipts_method_check CHECK ((method = ANY (ARRAY['ADMIN_ENTRY'::text, 'R1_RECON'::text]))),
+    CONSTRAINT union_receipts_note_check CHECK ((char_length(note) <= 500)),
+    CONSTRAINT union_receipts_platform_check CHECK ((platform = ANY (ARRAY['taobao'::text, 'jd'::text, 'pdd'::text, 'meituan'::text, 'vip'::text, 'douyin'::text, 'eleme'::text, 'kuaishou'::text, 'suning'::text]))),
+    CONSTRAINT union_receipts_reversal_check CHECK ((((reversed_at IS NULL) AND (reversed_by IS NULL) AND (reversal_voucher_id IS NULL)) OR ((reversed_at IS NOT NULL) AND (reversed_by IS NOT NULL) AND (reversal_voucher_id IS NOT NULL))))
+);
+
+
+--
 -- Name: user_oauth; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -8099,6 +8129,30 @@ ALTER TABLE ONLY app.union_raw_payloads_default
 
 
 --
+-- Name: union_receipts union_receipts_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_receipts
+    ADD CONSTRAINT union_receipts_pkey PRIMARY KEY (receipt_id);
+
+
+--
+-- Name: union_receipts union_receipts_reversal_voucher_key; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_receipts
+    ADD CONSTRAINT union_receipts_reversal_voucher_key UNIQUE (app_id, reversal_voucher_id);
+
+
+--
+-- Name: union_receipts union_receipts_voucher_key; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_receipts
+    ADD CONSTRAINT union_receipts_voucher_key UNIQUE (app_id, voucher_id);
+
+
+--
 -- Name: user_oauth user_oauth_identity_key; Type: CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -9548,6 +9602,20 @@ CREATE UNIQUE INDEX union_pids_active_account_scene_key ON app.union_pids USING 
 --
 
 CREATE INDEX union_pids_scene_idx ON app.union_pids USING btree (app_id, platform, pid_scene, status);
+
+
+--
+-- Name: union_receipts_list_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX union_receipts_list_idx ON app.union_receipts USING btree (app_id, receipt_date DESC, created_at DESC, receipt_id DESC);
+
+
+--
+-- Name: union_receipts_platform_list_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX union_receipts_platform_list_idx ON app.union_receipts USING btree (app_id, platform, receipt_date DESC, created_at DESC, receipt_id DESC);
 
 
 --
@@ -11502,6 +11570,38 @@ ALTER TABLE ONLY app.union_credentials
 
 ALTER TABLE ONLY app.union_pids
     ADD CONSTRAINT union_pids_account_fkey FOREIGN KEY (app_id, platform, union_account_id) REFERENCES app.union_accounts(app_id, platform, id);
+
+
+--
+-- Name: union_receipts union_receipts_created_by_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_receipts
+    ADD CONSTRAINT union_receipts_created_by_fkey FOREIGN KEY (app_id, created_by) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: union_receipts union_receipts_reversal_voucher_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_receipts
+    ADD CONSTRAINT union_receipts_reversal_voucher_fkey FOREIGN KEY (app_id, reversal_voucher_id) REFERENCES app.ledger_vouchers(app_id, id);
+
+
+--
+-- Name: union_receipts union_receipts_reversed_by_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_receipts
+    ADD CONSTRAINT union_receipts_reversed_by_fkey FOREIGN KEY (app_id, reversed_by) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: union_receipts union_receipts_voucher_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_receipts
+    ADD CONSTRAINT union_receipts_voucher_fkey FOREIGN KEY (app_id, voucher_id) REFERENCES app.ledger_vouchers(app_id, id);
 
 
 --
@@ -16548,6 +16648,35 @@ GRANT SELECT ON TABLE app.union_pids TO couli_readonly;
 
 GRANT SELECT,INSERT ON TABLE app.union_raw_payloads TO couli_app;
 GRANT SELECT ON TABLE app.union_raw_payloads TO couli_readonly;
+
+
+--
+-- Name: TABLE union_receipts; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.union_receipts TO couli_app;
+GRANT SELECT ON TABLE app.union_receipts TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_receipts.reversed_at; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reversed_at) ON TABLE app.union_receipts TO couli_app;
+
+
+--
+-- Name: COLUMN union_receipts.reversed_by; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reversed_by) ON TABLE app.union_receipts TO couli_app;
+
+
+--
+-- Name: COLUMN union_receipts.reversal_voucher_id; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reversal_voucher_id) ON TABLE app.union_receipts TO couli_app;
 
 
 --

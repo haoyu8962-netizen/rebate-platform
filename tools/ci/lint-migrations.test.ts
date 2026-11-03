@@ -226,6 +226,8 @@ it('classifies every table of db/schema.sql: the funds and attribution tables an
     'settle_batch_items',
     // B2-04zfa: settlement's run-level state (settle_ prefix).
     'settle_runs',
+    // B2-04zh: union collection records (union_ prefix, D10-538).
+    'union_receipts',
     'beneficiary_credits',
     'settle_adjust_batches',
     'settle_adjustments',
