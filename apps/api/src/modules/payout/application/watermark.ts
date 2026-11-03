@@ -67,12 +67,19 @@ export interface PayoutWaterLevel {
 }
 
 /** The enterprise Alipay channel's water level at `now`, on the caller's transaction. */
-export async function readAlipayWaterLevel(
+export function readAlipayWaterLevel(
   trx: Transaction<DB>,
   input: { appId: string; now: Date },
 ): Promise<PayoutWaterLevel> {
-  const { appId, now } = input;
-  const channel: PayoutChannelName = 'alipay';
+  return readChannelWaterLevel(trx, { ...input, channel: 'alipay' });
+}
+
+/** One channel's water level at `now` (W and P per channel, D10-285), on the caller's transaction. */
+export async function readChannelWaterLevel(
+  trx: Transaction<DB>,
+  input: { appId: string; channel: PayoutChannelName; now: Date },
+): Promise<PayoutWaterLevel> {
+  const { appId, channel, now } = input;
   const reader = createWatermarkReader();
   const latest = await reader.latest(trx, { appId, channel });
   const forecast = await reader.forecast(trx, { appId, channel, now });

@@ -143,19 +143,38 @@ interface MemberRow {
   readonly blocked_reason: string | null;
 }
 
-type Parsed<T> = { ok: true; value: T } | { ok: false };
+export type PayoutSettingParsed<T> = { ok: true; value: T } | { ok: false };
 
-function parseSwitch(value: unknown): Parsed<boolean> {
+/** A switch as content's registry stores it. */
+export function parsePayoutSwitch(value: unknown): PayoutSettingParsed<boolean> {
   if (typeof value === 'boolean') return { ok: true, value };
   if (value === 'on' || value === 'true') return { ok: true, value: true };
   if (value === 'off' || value === 'false') return { ok: true, value: false };
   return { ok: false };
 }
 
-function parseBp(value: unknown): Parsed<number> {
+/** Basis points, 0 to 10000. */
+export function parsePayoutBp(value: unknown): PayoutSettingParsed<number> {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 10_000
     ? { ok: true, value }
     : { ok: false };
+}
+
+/** A configuration value parsed with `parse`; absent or invalid → the code default (warned). */
+export async function readPayoutSetting<T>(
+  ports: Pick<PayoutExecuteOptions, 'config' | 'logger'>,
+  trx: Transaction<DB>,
+  appId: string,
+  key: string,
+  parse: (value: unknown) => PayoutSettingParsed<T>,
+  fallback: T,
+): Promise<T> {
+  const row = await ports.config.configValue(appId, key, trx);
+  if (row === null) return fallback;
+  const parsed = parse(row.value);
+  if (parsed.ok) return parsed.value;
+  ports.logger.warn({ app_id: appId, config_key: key }, 'payout_config_default');
+  return fallback;
 }
 
 function isChannel(value: string): value is PayoutChannelName {
@@ -168,20 +187,14 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
   const attempts = options.attempts ?? createPayoutAttemptsStore();
   const watermark = options.watermark ?? createWatermarkReader();
 
-  /** A configuration value parsed with `parse`; absent or invalid → the code default (warned). */
-  async function setting<T>(
+  function setting<T>(
     trx: Transaction<DB>,
     appId: string,
     key: string,
-    parse: (value: unknown) => Parsed<T>,
+    parse: (value: unknown) => PayoutSettingParsed<T>,
     fallback: T,
   ): Promise<T> {
-    const row = await config.configValue(appId, key, trx);
-    if (row === null) return fallback;
-    const parsed = parse(row.value);
-    if (parsed.ok) return parsed.value;
-    logger.warn({ app_id: appId, config_key: key }, 'payout_config_default');
-    return fallback;
+    return readPayoutSetting({ config, logger }, trx, appId, key, parse, fallback);
   }
 
   async function readMembers(
@@ -258,7 +271,7 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
       trx,
       appId,
       PAYOUT_EXECUTE_CONFIG_KEYS.enabled,
-      parseSwitch,
+      parsePayoutSwitch,
       PAYOUT_EXECUTE_DEFAULTS.enabled,
     );
     if (!enabled) return { kind: 'rejected', reason: 'payout_disabled' };
@@ -266,7 +279,7 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
       trx,
       appId,
       PAYOUT_EXECUTE_CONFIG_KEYS.queuePaused,
-      parseSwitch,
+      parsePayoutSwitch,
       PAYOUT_EXECUTE_DEFAULTS.queuePaused,
     );
     if (paused) return { kind: 'rejected', reason: 'queue_paused' };
@@ -293,14 +306,14 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
         trx,
         appId,
         PAYOUT_EXECUTE_CONFIG_KEYS.channelEnabled(channel),
-        parseSwitch,
+        parsePayoutSwitch,
         PAYOUT_EXECUTE_DEFAULTS.channelEnabled[channel],
       );
       const stopped = await setting(
         trx,
         appId,
         PAYOUT_EXECUTE_CONFIG_KEYS.channelPaused(channel),
-        parseSwitch,
+        parsePayoutSwitch,
         PAYOUT_EXECUTE_DEFAULTS.channelPaused,
       );
       const value = on && !stopped;
@@ -354,7 +367,7 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
         trx,
         appId,
         PAYOUT_EXECUTE_CONFIG_KEYS.watermarkUsableBp,
-        parseBp,
+        parsePayoutBp,
         PAYOUT_EXECUTE_DEFAULTS.watermarkUsableBp,
       );
       // One EXECUTE per (app, channel) at a time: the Σ PAYING of ③ must see every concurrent

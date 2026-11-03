@@ -39,6 +39,8 @@ import {
   createAutoPayoutConsumer,
   type AutoPayoutOptions,
 } from './application/auto-payout.ts';
+import type { AdminPayoutBatchDeps } from './application/admin-payout-batch.ts';
+import type { AdminPayoutOverviewDeps } from './application/admin-payout-overview.ts';
 import type { AdminWithdrawalReviewDeps } from './application/admin-withdrawal-review.ts';
 import type {
   AdminPayoutWatermarkDeps,
@@ -85,6 +87,11 @@ import type {
   AdminPayeeDecrypt,
   AdminWithdrawalReadDeps,
 } from './application/admin-withdrawals.ts';
+import {
+  ADMIN_PAYOUT_BATCH,
+  ADMIN_PAYOUT_OVERVIEW,
+  AdminPayoutBatchController,
+} from './http/admin/payout-batch.controller.ts';
 import {
   ADMIN_WITHDRAWAL_REVIEW,
   AdminWithdrawalReviewController,
@@ -880,6 +887,9 @@ export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
   readonly lockUsersForUpdate: WithdrawalCommandsOptions['lockUsersForUpdate'];
   readonly ledger: (context: { readonly clock: Clock; readonly eventBus: EventBus }) => Ledger;
   readonly config: (clock: Clock) => NonNullable<WithdrawalCommandsOptions['config']>;
+  /** B2-09l: risk's readers for EXECUTE's withdrawal block (BR-WDR-05). */
+  readonly risk: (db: Kysely<DB>) => RiskStateBatchReader;
+  readonly appeal: () => AppealPrevStateReader;
   /** identity's masked phones (BR-ID-33 3 + 4) over the entry's handle and field cipher. */
   readonly phones: (
     db: Kysely<DB>,
@@ -897,6 +907,8 @@ export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
  * B2-09i: the W entry (POST /admin/v1/payout-watermarks; fund.cash_entry, step-up totp), with the
  * same fail-closed rule without the database or idempotency.
  * B2-09k: the review (batch approve and reject; withdraw.review, step-up totp), the same rule.
+ * B2-09l: the batch (payout.execute, step-up totp; its transfer jobs go on the queue for the payout
+ * process) and the overview (payout.execute or fund.view, read only), the same rule.
  */
 export class PayoutAdminModule {
   static forAdmin(options: PayoutAdminOptions): DynamicModule {
@@ -906,6 +918,7 @@ export class PayoutAdminModule {
         AdminWithdrawalsController,
         AdminPayoutWatermarksController,
         AdminWithdrawalReviewController,
+        AdminPayoutBatchController,
       ],
       providers: [
         {
@@ -976,6 +989,62 @@ export class PayoutAdminModule {
                     eventBus,
                     config: options.config(clock),
                   }),
+                },
+        },
+        {
+          provide: ADMIN_PAYOUT_BATCH,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+            { token: JOB_QUEUE, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+            queue?: QueueRuntime,
+          ): AdminPayoutBatchDeps | null =>
+            db === undefined ||
+            idempotency === undefined ||
+            eventBus === undefined ||
+            queue === undefined
+              ? null
+              : {
+                  clock,
+                  idempotency,
+                  auditOn: (trx) => options.auditWriter(trx, clock),
+                  execute: createPayoutExecute({
+                    config: options.config(clock),
+                    risk: options.risk(db),
+                    appeal: options.appeal(),
+                    ledger: options.ledger({ clock, eventBus }),
+                    queue,
+                    eventBus,
+                    logger: logger.child({ module: 'payout' }),
+                  }),
+                },
+        },
+        {
+          provide: ADMIN_PAYOUT_OVERVIEW,
+          inject: [CLOCK, ROOT_LOGGER, { token: DB_TOKEN, optional: true }],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<DB>,
+          ): AdminPayoutOverviewDeps | null =>
+            db === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  config: options.config(clock),
+                  logger: logger.child({ module: 'payout' }),
+                  adminNames: options.adminNames,
                 },
         },
       ],

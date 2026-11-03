@@ -4605,6 +4605,9 @@ export class AppModule {
                   configValue: (appId, key, handle) =>
                     createContentReader({ db: handle, clock }).configValue(appId, key),
                 }),
+                // B2-09l: EXECUTE's withdrawal block, read on the caller's transaction.
+                risk: (db) => createRiskStateBatchReader({ db }),
+                appeal: createAppealPrevStateReader,
               }),
             ]
           : []),
