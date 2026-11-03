@@ -4584,6 +4584,10 @@ export class AppModule {
                   return (appId, userIds) => reader.maskedPhones(appId, userIds);
                 },
                 decryptPayee: (crypto) => payeeDecrypt.useFactory(crypto ?? undefined),
+                // B2-09i: the W entry's audit record and the name of who entered it.
+                auditWriter: (db, clock) =>
+                  createAuditWriter({ db, clock, sensitiveKeys: SENSITIVE_KEYS }),
+                adminNames: createAdminDisplayNameReader,
               }),
             ]
           : []),

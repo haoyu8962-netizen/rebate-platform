@@ -11,6 +11,7 @@ import type { Kysely } from 'kysely';
 import { BALANCE_RECOVERED_HOOK, createLedger } from '../ledger/index.ts';
 import { createBalanceRecoveredHook } from './application/balance-recovered.ts';
 import {
+  IDEMPOTENCY,
   APP_CONFIG,
   CLOCK,
   DB as DB_TOKEN,
@@ -29,6 +30,7 @@ import {
   type QueueRuntime,
   type ReceivedJob,
   type RootLogger,
+  type Idempotency,
 } from '../platform/index.ts';
 import type { AppealPrevStateReader, RiskStateBatchReader } from '../risk/index.ts';
 import { WENT_NEGATIVE_CONSUMER, createWentNegativeConsumer } from './application/went-negative.ts';
@@ -37,6 +39,10 @@ import {
   createAutoPayoutConsumer,
   type AutoPayoutOptions,
 } from './application/auto-payout.ts';
+import type {
+  AdminPayoutWatermarkDeps,
+  AdminPayoutWatermarkPorts,
+} from './application/admin-payout-watermarks.ts';
 import { createPayoutExecute } from './application/payout-execute.ts';
 import { PAYOUT_LANDING_QUEUE, createLandingJob } from './jobs/landing-job.ts';
 import { anyReviewWaiting, createReviewOverdueCheck } from './application/review-overdue.ts';
@@ -73,6 +79,10 @@ import type {
   AdminPayeeDecrypt,
   AdminWithdrawalReadDeps,
 } from './application/admin-withdrawals.ts';
+import {
+  ADMIN_PAYOUT_WATERMARKS,
+  AdminPayoutWatermarksController,
+} from './http/admin/payout-watermarks.controller.ts';
 import {
   ADMIN_WITHDRAWAL_READS,
   AdminWithdrawalsController,
@@ -855,7 +865,7 @@ export class PayoutModule {
 }
 
 /** B2-09c: what app.module hands in for the console reads (payout imports no identity). */
-export interface PayoutAdminOptions {
+export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
   /** identity's masked phones (BR-ID-33 3 + 4) over the entry's handle and field cipher. */
   readonly phones: (
     db: Kysely<DB>,
@@ -870,12 +880,14 @@ export interface PayoutAdminOptions {
  * withdraw.review or fund.view, read only, no audit), guarded through platform's
  * AdminOperationGuard and read on the primary handle. Without the database or the field cipher
  * the routes still register and fail closed (50001).
+ * B2-09i: the W entry (POST /admin/v1/payout-watermarks; fund.cash_entry, step-up totp), with the
+ * same fail-closed rule without the database or idempotency.
  */
 export class PayoutAdminModule {
   static forAdmin(options: PayoutAdminOptions): DynamicModule {
     return {
       module: PayoutAdminModule,
-      controllers: [AdminWithdrawalsController],
+      controllers: [AdminWithdrawalsController, AdminPayoutWatermarksController],
       providers: [
         {
           provide: ADMIN_WITHDRAWAL_READS,
@@ -899,6 +911,22 @@ export class PayoutAdminModule {
               decryptPayee,
             };
           },
+        },
+        {
+          provide: ADMIN_PAYOUT_WATERMARKS,
+          inject: [
+            CLOCK,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+          ): AdminPayoutWatermarkDeps | null =>
+            db === undefined || idempotency === undefined
+              ? null
+              : { clock, idempotency, ports: options },
         },
       ],
     };

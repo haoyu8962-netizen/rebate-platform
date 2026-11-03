@@ -43,6 +43,7 @@ import {
 } from '../infra/payout-batches-store.ts';
 import {
   createWatermarkReader,
+  lockWatermarkChannel,
   type PayoutChannelName,
   type WatermarkReader,
 } from './watermark.ts';
@@ -361,9 +362,7 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
       // fixed order so two batches never wait on each other crosswise.
       const channels = [...perChannel.keys()].sort();
       for (const channel of channels) {
-        await sql`SELECT pg_advisory_xact_lock(hashtext(${`${appId}:payout-watermark:${channel}`})::bigint)`.execute(
-          trx,
-        );
+        await lockWatermarkChannel(trx, appId, channel);
       }
       for (const channel of channels) {
         const batchNetFen = perChannel.get(channel) ?? 0n;

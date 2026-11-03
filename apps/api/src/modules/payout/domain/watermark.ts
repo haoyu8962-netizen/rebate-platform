@@ -53,6 +53,26 @@ const FORECAST_DAYS = 7n;
 const FORECAST_HORIZON_DAYS = 3n;
 const BP_DENOMINATOR = 10_000n;
 
+/** BR-WDR-18 细则 (D10-241): up to this far ahead of now is clock skew; further is refused. */
+const MAX_READING_AHEAD_MS = 5 * 60_000;
+
+/**
+ * Whether a W may be entered with this measuring time (D10-241, D10-592): at most 5 minutes after
+ * now, at most 2 hours before now (a reading older than that would already be stale), and not
+ * before the channel's latest reading (the same time is fine). Each limit itself passes.
+ */
+export function readingTimeAcceptable(input: {
+  readonly now: Date;
+  readonly measuredMs: number;
+  readonly latest: WatermarkReading | null;
+}): boolean {
+  const { measuredMs, latest } = input;
+  const nowMs = input.now.getTime();
+  if (measuredMs > nowMs + MAX_READING_AHEAD_MS) return false;
+  if (measuredMs < nowMs - MAX_READING_AGE_MS) return false;
+  return latest === null || measuredMs >= latest.measuredAt.getTime();
+}
+
 /** A copy of `at` moved to `ms` (structuredClone + setTime: no `new Date` outside platform/clock). */
 function instant(at: Date, ms: number): Date {
   const copy = structuredClone(at);

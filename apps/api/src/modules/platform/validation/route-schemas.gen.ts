@@ -17247,6 +17247,72 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "adminCreatePayoutWatermark": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "description": "One reading of a channel's balance; see POST /admin/v1/payout-watermarks.",
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "available_fen",
+        "measured_at"
+      ],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "description": "The channels whose W can be entered (D10-592); bank_card opens with its channel.",
+          "enum": [
+            "alipay",
+            "wechat"
+          ]
+        },
+        "available_fen": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0,
+          "description": "Integer fen, 0 or above, the balance read off the account (BR-WDR-18 W)."
+        },
+        "measured_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When W was read off the account (t_W), checked against the injected Clock."
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Optional, at most 500 characters, not blank after trimming; kept in the audit record."
+        }
+      }
+    }
+  },
   "adminListKillSwitches": {
     "headers": {
       "type": "object",

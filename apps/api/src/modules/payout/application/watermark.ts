@@ -40,6 +40,20 @@ function sumFen(value: string | number | bigint | null): bigint {
   return value === null ? 0n : parseFen(typeof value === 'bigint' ? value : String(value));
 }
 
+/**
+ * The channel's lock, held to the end of the transaction: EXECUTE takes it before it reads W and the
+ * Σ PAYING of ③, and the W entry before it judges the channel's latest reading.
+ */
+export async function lockWatermarkChannel(
+  trx: Transaction<DB>,
+  appId: string,
+  channel: PayoutChannelName,
+): Promise<void> {
+  await sql`SELECT pg_advisory_xact_lock(hashtext(${`${appId}:payout-watermark:${channel}`})::bigint)`.execute(
+    trx,
+  );
+}
+
 export function createWatermarkReader(): WatermarkReader {
   return {
     async latest(trx, input) {
