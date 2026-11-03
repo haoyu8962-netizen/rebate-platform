@@ -253,6 +253,69 @@ compose 给 api、worker、admin 写了 `PAY_CHANNEL_IMPL: fake`（不是口令�
 - 这一节只适用于 staging。prod 不读任何 `PAY_*_FILE`（裁定 D10-554）：密钥从 KMS 读（B1-30a，见 `specs/pay-channels-launch-checklist.md`），没配 KMS 时两个渠道都不可用（`kms_unavailable`），不要照这里的做法把密钥文件放到 prod 节点。
 - `pay.enabled` 与渠道开关仍是关（BR-PAY-09）：切到真实通道也不等于开放收款。
 
+### 1.10 淘宝接线与三平台切 live
+
+依据 approvals 第 43 条（staging 连真实联盟：淘宝、京东、拼多多）。本节先给淘宝的节点文件与变量，再给三平台一起切 live 的步骤。1.5 与 1.8 的准备照旧，本节在它们之上做。
+
+注：1.5 写的「pdd 切 live 暂不可用 — blocked on 真实返利报价器（B2-03）」已由 B2-03d / B2-03n 解除：真实返利报价器已经接入，pdd 可以随本节一起切 live。
+
+#### 淘宝节点文件
+
+compose 给 admin、api、stream 与 worker（装配联盟模块的四个入口）只读挂载节点目录 `/etc/couli-taobao`（容器内 `/run/couli-taobao`）；payout 不挂。这个挂载可缺：节点没有该目录时部署照常进行，`deploy.sh` 也不检查它。
+
+节点文件由负责人放入（容器以 uid 1000 运行）：
+
+| 节点路径 | 内容 | 属主与权限 |
+| --- | --- | --- |
+| `/etc/couli-taobao/` | 目录 | 属主 1000，目录 500 |
+| `/etc/couli-taobao/app_secret` | 淘宝联盟（阿里妈妈）应用的密钥原文，文件里只放这一个值 | 属主 1000，文件 400 |
+
+密钥内容不得出现在命令行里（会进 shell 历史和进程列表），也不得放进环境变量或 `staging.env`；用编辑器打开文件粘贴后保存，不要用 `echo` / `printf` 写入密钥。准备步骤（root 执行）：
+
+```sh
+install -d -m 700 /etc/couli-taobao
+vi /etc/couli-taobao/app_secret
+chown -R 1000:1000 /etc/couli-taobao
+chmod 400 /etc/couli-taobao/app_secret
+chmod 500 /etc/couli-taobao
+```
+
+#### 淘宝变量
+
+先放好上面的文件，再在 `/etc/couli/staging.env` 设下面三个变量（值只写在节点上，不进仓库，也不写进本文档）：
+
+| 变量 | 取值 |
+| --- | --- |
+| `TAOBAO_APP_KEY` | 淘宝联盟应用的 app key（不是密钥） |
+| `TAOBAO_APP_SECRET_FILE` | `/run/couli-taobao/app_secret`（容器内路径；只写路径，不写密钥内容） |
+| `TAOBAO_SEARCH_SOURCE` | 商品搜索来源，三选一：`official`（官方接口）、`dataoke`（大淘客）、`official_first`（先官方，需要大淘客凭据，否则启动失败）；未设即 `official` |
+
+- `TAOBAO_APP_KEY` 与 `TAOBAO_APP_SECRET_FILE` 要么都设、要么都不设：只设一个时 admin、api、stream 与 worker 启动即失败。
+- 端点是 demo 时应用不打开密钥文件，所以文件读不到或内容为空要到切 live 后才暴露：那时这四个入口启动即失败。
+
+#### 三平台切 live
+
+顺序：先放好三家密钥文件与三个 live 端点文件，再在 `staging.env` 设变量，再跑 `deploy.sh <标签>`。不能反过来。
+
+1. 三家密钥文件：`/etc/couli-taobao/app_secret`（本节上文）、`/etc/couli-jd/app_secret`（1.8）、`/etc/couli-pdd/client_secret`（1.5）。
+2. 三个端点文件：改现有的 `/etc/couli-pdd/union-endpoints/` 下的 `jd.json`、`pdd.json`、`taobao.json`，把 `"mode": "demo"` 改成 `"mode": "live"`，并把 `baseUrl` 从 `null` 改成该联盟网关的 https 地址（live 的 baseUrl 必须是 https，否则启动失败）。形如 `{"platform":"jd","mode":"live","baseUrl":"https://<联盟网关>","quotaKey":"account:jd"}`。改完按 1.5 保持属主 1000、文件 400、目录 500。镜像内的 `config/union-endpoints/*.json` 保持 demo，不改。
+3. 三个端点文件缺一个时，admin、api、stream 与 worker 四个入口启动即失败（不会退回镜像内的端点）。`UNION_ENDPOINT_OVERRIDE_DIR` 维持 1.5 的 `/run/couli-pdd/union-endpoints`，不改。
+4. 变量：在 `/etc/couli/staging.env` 设齐淘宝三项（上文）、京东三项（1.8）、拼多多三项与 `UNION_ENDPOINT_OVERRIDE_DIR`（1.5）。
+5. 部署：`deploy.sh <标签>`，然后按 1.8 的 CHK-JD-STAGING-CRED 人工核对变量都已设。
+
+#### 真实返利报价器的配置
+
+live 下 api 用真实返利报价器（B2-03d / B2-03n），它读下面三个配置键；缺任何一项时报价失败：
+
+| 配置键 | 说明 |
+| --- | --- |
+| `tech_fee_bp` | 技术服务费比例（万分之一整数），按平台分项，每个平台都要有 |
+| `rebate.taobao.compare_rate_ratio_bp` | 淘宝比价用的佣金比例系数（万分之一整数） |
+| `commission.platforms` | 参与分佣的平台列表 |
+
+- `tech_fee_bp` 与 `rebate.taobao.compare_rate_ratio_bp` 要先在 staging 配好（取值由负责人定，本文不写），再切 live。
+- `commission.platforms` 已在种子里（`db/seeds/0002_commission-rules.sql`），部署时种子会写入，不用另配。
+
 ## 2. 在开发机构建并传到节点
 
 在代码仓库根目录：

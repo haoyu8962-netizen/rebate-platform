@@ -1,0 +1,96 @@
+{
+  "risk_note": "RV2 by the unlisted-path rule (infra/staging). Deployment wiring only: compose mounts the optional node directory /etc/couli-taobao read-only on admin, api, stream and worker (create_host_path, payout not mounted), and README §1.10 documents the Taobao node file and variables, the order for switching the three union endpoints to live, and the config keys the real rebate quoter needs (approvals 43; D10-597 ④). No application code, no amounts, no secret values; §1.5 and §1.8 unchanged; the bundled config/union-endpoints stay demo.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude context via tools/agent/claude-run.sh (Codex not logged in since the 11-03 restart; approvals 36). Round 1 pass with two S2 on README wording, left as follow-ups: TAOBAO_SEARCH_SOURCE=dataoke without 大淘客 credentials silently keeps the official search, and pdd quotes also read the two seeded union.pdd.*_factor_bp keys. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context in 1 attempt (test/spec/infra/staging-taobao, 13 cases). Round 1 pass with two S2 on assertion precision, addressed in the implementation. No frozen test changed; no red_exempt entries.",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] admin 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+    "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] api 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+    "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] stream 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+    "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] worker 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+    "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#2] 淘宝目录只给装配联盟模块的四个入口（payout 不挂），compose 不注入 TAOBAO_ 变量、env_file 不变，deploy.sh 不检查也不提这个目录",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#3] 1.10 是第 1 节的三级小节，排在 1.9 之后、第 2 节之前",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#4] 淘宝节点文件 app_secret 只放密钥原文一个值，属主 1000、目录 500、文件 400",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#5] 三个淘宝变量：APP_KEY 不是密钥，密钥文件变量只写容器内路径，搜索来源三选一且未设即 official，两个 APP_* 同设同不设",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#6] 1.10 与整份 README 不含任何密钥值或 env 文件内容",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#7] 三平台切 live：先放三家密钥文件与三个 live 端点文件（https baseUrl），再设变量，再 deploy.sh <标签>；缺一个端点文件四个入口启动即失败",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#8] live 下真实返利报价器要的配置键先在 staging 配好，否则报价失败",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#9] 1.10 注明 1.5 的「pdd 切 live blocked on B2-03」已由 B2-03d / B2-03n 解除",
+    "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#10] 1.5、1.8 原文不改，镜像内三个端点文件仍是 demo"
+  ],
+  "task": "B1-04zzd",
+  "spec_commit": "d985b0c51f346cad2c2a954b689f5b8d1a77edde",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d985b0c51f346cad2c2a954b689f5b8d1a77edde",
+      "tree": "3be4f60ff2cc41e6cc0906b04aa13cfb9645a43b",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-03T19:31:32Z",
+      "finished_at": "2026-11-03T19:31:38Z",
+      "red_tests": [
+        "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] admin 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+        "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] api 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+        "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] stream 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+        "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#1] worker 有且只有一个只读、可缺的节点淘宝目录挂载，bind 使用块状长语法",
+        "test/spec/infra/staging-taobao/compose.test.ts > [AC-B1-04zzd#2] 淘宝目录只给装配联盟模块的四个入口（payout 不挂），compose 不注入 TAOBAO_ 变量、env_file 不变，deploy.sh 不检查也不提这个目录",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#3] 1.10 是第 1 节的三级小节，排在 1.9 之后、第 2 节之前",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#4] 淘宝节点文件 app_secret 只放密钥原文一个值，属主 1000、目录 500、文件 400",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#5] 三个淘宝变量：APP_KEY 不是密钥，密钥文件变量只写容器内路径，搜索来源三选一且未设即 official，两个 APP_* 同设同不设",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#6] 1.10 与整份 README 不含任何密钥值或 env 文件内容",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#7] 三平台切 live：先放三家密钥文件与三个 live 端点文件（https baseUrl），再设变量，再 deploy.sh <标签>；缺一个端点文件四个入口启动即失败",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#8] live 下真实返利报价器要的配置键先在 staging 配好，否则报价失败",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#9] 1.10 注明 1.5 的「pdd 切 live blocked on B2-03」已由 B2-03d / B2-03n 解除",
+        "test/spec/infra/staging-taobao/readme.test.ts > [AC-B1-04zzd#10] 1.5、1.8 原文不改，镜像内三个端点文件仍是 demo"
+      ],
+      "expected": [
+        "test/spec/infra/staging-taobao/compose.test.ts",
+        "test/spec/infra/staging-taobao/readme.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "c2b05658ec082bfb305cc039e8598af1ee78c9396f320d041ea530e23984eb9d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3778026ced86d5fe9db7c56ef011517d247ac64f",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}
