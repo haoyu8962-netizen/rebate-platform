@@ -70,6 +70,9 @@
 #
 # Environment: COULI_RUNS, COULI_TRUSTED_ROOT, COULI_SPEC_REPO (conventions C7);
 #   COULI_VERIFY_TIMEOUT_SECS (default 3600, at most 3600; CT-06v, CT-06zxf); COULI_VERIFY_PREFIX (default couli-verify;
+#   COULI_VERIFY_VITEST_MAX_WORKERS (default 2, an integer 1..32; CT-06zzza): VITEST_MAX_WORKERS of every
+#   container that runs tests. turbo runs every package's tests at once and each vitest would start one
+#   worker per CPU less one, which starved the AppModule start-up tests past their 5 s on this Mac.
 #   prefix of every container, network and volume this script creates);
 #   PROP_SEED (default 20261001) reaches every run. PROP_RUNS has no default here (D10-499): it is
 #   passed only when the caller sets it, and result.json records it as prop_runs (null when unset).
@@ -283,6 +286,10 @@ DEFAULT_TIMEOUT_SECS=3600
 TIMEOUT_SECS="${COULI_VERIFY_TIMEOUT_SECS:-$DEFAULT_TIMEOUT_SECS}"
 if ! [[ "$TIMEOUT_SECS" =~ ^[1-9][0-9]*$ ]]; then die "COULI_VERIFY_TIMEOUT_SECS must be a positive integer"; fi
 if [ "$TIMEOUT_SECS" -gt "$MAX_TIMEOUT_SECS" ]; then die "COULI_VERIFY_TIMEOUT_SECS is capped at $MAX_TIMEOUT_SECS"; fi
+VITEST_WORKERS="${COULI_VERIFY_VITEST_MAX_WORKERS:-2}"
+if ! [[ "$VITEST_WORKERS" =~ ^[1-9][0-9]*$ ]] || [ "$VITEST_WORKERS" -gt 32 ]; then
+  die "COULI_VERIFY_VITEST_MAX_WORKERS must be an integer 1..32"
+fi
 PROP_SEED_VALUE="${PROP_SEED:-$DEFAULT_PROP_SEED}"
 if ! [[ "$PROP_SEED_VALUE" =~ ^[0-9]+$ ]]; then die "PROP_SEED must be a non-negative integer"; fi
 if [ -n "${PROP_RUNS:-}" ] && ! [[ "$PROP_RUNS" =~ ^[1-9][0-9]*$ ]]; then die "PROP_RUNS must be a positive integer"; fi
@@ -575,6 +582,10 @@ HARDEN=(--init --read-only --cap-drop ALL --security-opt no-new-privileges --pid
 # the same as CI before CT-06zzv (#2116). Every container of a run gets the same 8 GB upper limit as
 # ci.yml; it is only a limit, nothing is reserved. Test content does not change.
 NODE_HEAP=(-e 'NODE_OPTIONS=--max-old-space-size=8192')
+# 2026-11-03 (CT-06zzza, FU-APPMODULE-STARTUP-TIMEOUT): every container that runs tests caps each vitest
+# process at VITEST_WORKERS workers (vitest 5 reads VITEST_MAX_WORKERS; the test scripts pass the
+# environment through with --env-mode=loose). Test content and timeouts do not change.
+VITEST_ENV=(-e "VITEST_MAX_WORKERS=$VITEST_WORKERS")
 TMPFS=(--tmpfs "/work:rw,exec,nosuid,uid=1000,gid=1000,mode=0755" --tmpfs "/tmp:rw,exec,nosuid,uid=1000,gid=1000,mode=1777")
 
 net_created=0
@@ -1254,7 +1265,7 @@ if [ "$SCRIPT" = red ]; then
     ' "$RED_PLAN" "$1"
   }
   red_container() { # <container name> <plan> <1: database network, 0: no network>
-    local env=("${NODE_HEAP[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e RED_PLAN)
+    local env=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e RED_PLAN)
     [ -z "${PROP_RUNS:-}" ] || env+=(-e "PROP_RUNS=$PROP_RUNS")
     local net=(--network none)
     local wrap=()
@@ -1326,7 +1337,7 @@ if [ "$SCRIPT" = browser ]; then
   mkdir -p "$VDIR/out"
   chmod 1733 "$VDIR/out"
   step "running the browser tests ($BROWSER_PROJECTS) in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
-  BROWSER_ENV=("${NODE_HEAP[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS"
+  BROWSER_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS"
     -e "BROWSER_PROJECTS=$BROWSER_PROJECTS")
   [ -z "${PROP_RUNS:-}" ] || BROWSER_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
   rc=0
@@ -1357,7 +1368,7 @@ if [ "$SCRIPT" = 'verify:fast' ]; then
   # verify:fast connects to no database and no network (规划/11 §4.1): no PostgreSQL, no
   # Redis, no network at all.
   step "running pnpm run verify:fast in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
-  FAST_ENV=("${NODE_HEAP[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e "VERIFY_SCRIPT=verify:fast")
+  FAST_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e "VERIFY_SCRIPT=verify:fast")
   [ -z "${PROP_RUNS:-}" ] || FAST_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
   rc=0
   docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" "${HARDEN[@]}" "${TMPFS[@]}" \
@@ -1380,7 +1391,7 @@ else
 fi
 
 step "running pnpm verify in $IMAGE (limit ${TIMEOUT_SECS}s)"
-ENV_ARGS=("${NODE_HEAP[@]}" -e TEST_PG_ADMIN_URL -e TEST_REDIS_URL
+ENV_ARGS=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e TEST_PG_ADMIN_URL -e TEST_REDIS_URL
   -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
 [ -z "${PROP_RUNS:-}" ] || ENV_ARGS+=(-e "PROP_RUNS=$PROP_RUNS")
 rc=0

@@ -450,8 +450,11 @@ it(
       'PROP_SEED',
       'VERIFY_SCRIPT',
       'VERIFY_TIMEOUT_SECS',
+      'VITEST_MAX_WORKERS',
     ]);
     expect(verify?.env['NODE_OPTIONS']).toBe('--max-old-space-size=8192');
+    // CT-06zzza: every container that runs tests caps vitest at 2 workers by default.
+    expect(verify?.env['VITEST_MAX_WORKERS']).toBe('2');
   },
   CLI_TIMEOUT,
 );
@@ -529,8 +532,11 @@ it(
       'PROP_SEED',
       'RED_PLAN',
       'VERIFY_TIMEOUT_SECS',
+      'VITEST_MAX_WORKERS',
     ]);
     expect(red?.env['NODE_OPTIONS']).toBe('--max-old-space-size=8192');
+    // CT-06zzza: every container that runs tests caps vitest at 2 workers by default.
+    expect(red?.env['VITEST_MAX_WORKERS']).toBe('2');
   },
   CLI_TIMEOUT,
 );
@@ -633,6 +639,7 @@ it(
       NODE_OPTIONS: '--max-old-space-size=8192',
       PROP_SEED: '20261001',
       VERIFY_TIMEOUT_SECS: '3600',
+      VITEST_MAX_WORKERS: '2',
       BROWSER_PROJECTS:
         'spec-browser:test:vitest.browser.config.ts build-smoke:test:vitest.build-smoke.config.ts',
     });
@@ -720,8 +727,11 @@ it(
       'PROP_SEED',
       'RED_PLAN',
       'VERIFY_TIMEOUT_SECS',
+      'VITEST_MAX_WORKERS',
     ]);
     expect(offline?.env['NODE_OPTIONS']).toBe('--max-old-space-size=8192');
+    // CT-06zzza: every container that runs tests caps vitest at 2 workers by default.
+    expect(offline?.env['VITEST_MAX_WORKERS']).toBe('2');
     // Two containers, two names; both are removed at the end.
     const names = reds.map((c) => valueOf(c.args, '--name') ?? '');
     expect(new Set(names).size).toBe(2);

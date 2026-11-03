@@ -1,0 +1,23 @@
+id: CT-06zzza
+repo: rebate-platform
+title: CT-06zzza：本机容器 verify 限制每个 vitest 进程的 worker 数（VITEST_MAX_WORKERS，默认 2，COULI_VERIFY_VITEST_MAX_WORKERS 可覆盖），消除 AppModule 启动类用例在本机负载下的 5 秒超时（FU-APPMODULE-STARTUP-TIMEOUT）
+type: guard-change
+# 2026-11-03 入账（ops 线，编排 11-03 续跑：FU-APPMODULE-STARTUP-TIMEOUT，HANDOFF 11-02 21:49）。现象：本机 Colima（8 CPU）完整 / fast verify 里 @couli/api 的 AppModule 启动类单元测试
+# 成片 5 s 超时（B1-09n verify/3 21 条等），CI 上没有。实测：这些用例单跑每条 0.1–0.25 s；超时来自并发挤占——turbo 让全部包的 test 同时跑，每个 vitest 默认开「核数 − 1」个 worker，
+# 8 核容器里几十个 worker。宿主实验 VITEST_MAX_WORKERS=2：全仓 test 5 s 超时 0 条（@couli/api 4333 条全过），spec-tests 25703 条全过、0 超时（1008 s）。
+# 做法：verify-container.sh 给跑测试的四类容器（先红、浏览器、fast、完整）加 -e VITEST_MAX_WORKERS（vitest 5 读该环境变量；test 脚本 --env-mode=loose 传入各包），默认 2，
+# COULI_VERIFY_VITEST_MAX_WORKERS 可覆盖（正整数，1..32）。不改 vitest 配置、package.json scripts、测试超时与任何测试内容；CI 不经 verify-container.sh，不受影响。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.services.test.ts'
+  - 'tools/ops/verify-container.test.ts'
+  - 'ops/tasks/CT-06zzza.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

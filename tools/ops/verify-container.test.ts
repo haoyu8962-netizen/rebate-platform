@@ -143,6 +143,34 @@ it('[CT-06zxg] the host-services lock wait follows the time limit like RuntimeMa
 });
 
 it(
+  '[CT-06zzza] COULI_VERIFY_VITEST_MAX_WORKERS defaults to 2 and must be an integer 1..32',
+  () => {
+    const ok = fixture('workers', 'true');
+    for (const value of ['0', '33', 'x', '1.5', '-1']) {
+      const bad = run(['V1-01', '--worktree', ok, '--dry-run'], {
+        COULI_VERIFY_VITEST_MAX_WORKERS: value,
+      });
+      expect(bad.status, value).toBe(2);
+      expect(bad.stderr, value).toContain(
+        'COULI_VERIFY_VITEST_MAX_WORKERS must be an integer 1..32',
+      );
+    }
+    for (const value of ['1', '8', '32']) {
+      expect(
+        run(['V1-01', '--worktree', ok, '--dry-run'], { COULI_VERIFY_VITEST_MAX_WORKERS: value })
+          .stderr,
+        value,
+      ).not.toContain('COULI_VERIFY_VITEST_MAX_WORKERS must be');
+    }
+    const text = readFileSync(SCRIPT, 'utf8');
+    expect(text).toContain('VITEST_WORKERS="${COULI_VERIFY_VITEST_MAX_WORKERS:-2}"');
+    expect(text).toContain('VITEST_ENV=(-e "VITEST_MAX_WORKERS=$VITEST_WORKERS")');
+    expect(existsSync(join(runs, 'V1-01'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
   '[CT-06v] the time limit defaults to 3600 s (CT-06zxf) and may not go beyond 3600 s',
   () => {
     const ok = fixture('limit', 'true');
