@@ -17047,6 +17047,206 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       "additionalProperties": false
     }
   },
+  "adminListUnionReceipts": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "querystring": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "default": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20
+        },
+        "platform": {
+          "type": "string",
+          "description": "Platform (contracts/enums/platform.yaml platform).",
+          "enum": [
+            "taobao",
+            "jd",
+            "pdd",
+            "meituan",
+            "vip",
+            "douyin",
+            "eleme",
+            "kuaishou",
+            "suning"
+          ]
+        },
+        "date_from": {
+          "type": "string",
+          "format": "date"
+        },
+        "date_to": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "adminCreateUnionReceipt": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "description": "One union collection to enter; see POST /admin/v1/union-receipts.",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "receipt_date",
+        "amount_fen",
+        "cash_account"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "Platform (contracts/enums/platform.yaml platform).",
+          "enum": [
+            "taobao",
+            "jd",
+            "pdd",
+            "meituan",
+            "vip",
+            "douyin",
+            "eleme",
+            "kuaishou",
+            "suning"
+          ]
+        },
+        "receipt_date": {
+          "type": "string",
+          "format": "date",
+          "description": "The day the money arrived (YYYY-MM-DD), not later than the current accounting day."
+        },
+        "amount_fen": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1,
+          "description": "Integer fen above 0, the amount of BR-FUND-20."
+        },
+        "cash_account": {
+          "type": "string",
+          "description": "The subject a union collection debits (contracts/enums/fund.yaml union_receipt_cash_account; BR-FUND-20 细则).",
+          "enum": [
+            "CASH_ALIPAY",
+            "CASH_BANK"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Optional, at most 500 characters, not blank after trimming."
+        }
+      }
+    }
+  },
+  "adminReverseUnionReceipt": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "receipt_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "receipt_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "description": "Body of POST /admin/v1/union-receipts/{receipt_id}/reverse.",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Why the record is reversed; 1–200 characters after trimming, else 20001 with data.fields=[reason]. Kept in the audit record."
+        }
+      }
+    }
+  },
   "adminListKillSwitches": {
     "headers": {
       "type": "object",

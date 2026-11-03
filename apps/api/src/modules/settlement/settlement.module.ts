@@ -26,10 +26,18 @@ import {
   type AdminSettleCommandDeps,
   type AdminSettleCommandPorts,
 } from './application/admin-settle-commands.ts';
+import type {
+  AdminUnionReceiptDeps,
+  AdminUnionReceiptPorts,
+} from './application/admin-union-receipts.ts';
 import {
   ADMIN_RECON_RESTORE,
   AdminReconRestoreController,
 } from './http/admin/recon-restore.controller.ts';
+import {
+  ADMIN_UNION_RECEIPTS,
+  AdminUnionReceiptsController,
+} from './http/admin/union-receipts.controller.ts';
 import {
   ADMIN_SETTLE_BILL_READS,
   AdminSettleBillsController,
@@ -163,15 +171,20 @@ export class SettlementModule {
  * account-appeal restore of BR-FUND-22 ③. Without a database (or, for the writes, idempotency; for
  * the restore also the field cipher, which D10-482's minor check needs) the routes register and
  * fail closed.
+ * B2-04zr: the union collection records (fund.cash_entry, step-up totp; fund.view for the list),
+ * with the same fail-closed rule.
  */
 export class SettlementAdminModule {
-  static forAdmin(ports: AdminSettleCommandPorts & AdminReconRestorePorts): DynamicModule {
+  static forAdmin(
+    ports: AdminSettleCommandPorts & AdminReconRestorePorts & AdminUnionReceiptPorts,
+  ): DynamicModule {
     return {
       module: SettlementAdminModule,
       controllers: [
         AdminSettleBillsController,
         AdminSettleCommandsController,
         AdminReconRestoreController,
+        AdminUnionReceiptsController,
       ],
       providers: [
         {
@@ -240,6 +253,24 @@ export class SettlementAdminModule {
                   appendBeneficiaryEvent: ports.appendBeneficiaryEvent,
                   ledger: ports.ledger({ clock, eventBus }),
                 },
+        },
+        {
+          provide: ADMIN_UNION_RECEIPTS,
+          inject: [
+            CLOCK,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+          ): AdminUnionReceiptDeps | null =>
+            db === undefined || idempotency === undefined || eventBus === undefined
+              ? null
+              : { db, clock, idempotency, eventBus, ports },
         },
       ],
     };

@@ -4624,6 +4624,8 @@ export class AppModule {
                     eventBus,
                     balanceRecoveredHook: createBalanceRecoveredHook({ clock }),
                   }),
+                // B2-04zr: the operators' names on the union collection records.
+                adminNames: createAdminDisplayNameReader,
               }),
             ]
           : []),
