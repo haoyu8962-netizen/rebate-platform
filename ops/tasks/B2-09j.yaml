@@ -4,6 +4,7 @@ title: W < 1.5P 告警（FU-WATERMARK-ENTRY，BR-WDR-18，D10-592）——worker
 type: impl
 # 2026-11-03 pay 入账（D10-592）。RV2，新鲜独立 Claude 写规则测试，Codex money。1.5P 与 2 小时判断复用 B2-04zs 放进 payout domain 的函数，照 review-overdue 的采集做法。
 # 排 B2-04zs 后。冻结的告警规则清单测试若要动，按 D10-327 先列清单报。
+# 2026-11-03 补 paths：gauge 在 entry.ts 接线（同 review-overdue），不动 app.module。冻结 [AC-B1-01zzi#6] 的指标白名单只加 couli_payout_water_low 并钉有规则读它，只增不减（D10-327，#24 报核），由新鲜独立 Claude 在规则测试作者提交里改。
 refs: [BR-WDR-18]
 refs_hash:
   BR-WDR-18: 9247640dde57
@@ -13,10 +14,11 @@ paths:
   - 'apps/api/src/modules/payout/index.ts'
   - 'apps/api/src/modules/platform/metrics/**'
   - 'apps/api/src/modules/platform/index.ts'
-  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/entry.ts'
   - 'infra/monitoring/rules/couli-fund.yaml'
 test_paths:
   - 'test/spec/platform/metrics/water-level/**'
+  - 'test/spec/platform/fund-metrics/rules.test.ts'
 impl: claude
 tester: claude-independent
 accept:
