@@ -356,6 +356,17 @@ export const ADVANCE_ALERT: readonly Expected[] = [
 ];
 /** B2-04zo (BR-FUND-20 细则): unset by default (no alert until filled in), hence no seed row. */
 export const ADVANCE_ALERT_UNSEEDED: readonly string[] = ['ledger.advance_alert_fen'];
+// B2-03t (D10-605 (a)): the two keys the rebate quoter reads, registered right after ADVANCE_ALERT
+// in this order: editable config.business, options null. Not part of expectedNow() either.
+export const QUOTE: readonly Expected[] = [
+  row('tech_fee_bp', 'object', 'config.business'),
+  row('rebate.taobao.compare_rate_ratio_bp', 'number', 'config.business'),
+];
+/** B2-03t (D10-605): BR-CALC-20 / BR-PRICE-07 are still placeholders, hence no seed rows. */
+export const QUOTE_UNSEEDED: readonly string[] = [
+  'tech_fee_bp',
+  'rebate.taobao.compare_rate_ratio_bp',
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -372,6 +383,7 @@ export const expectedOf = (key: string): Expected => {
     ...PROMO_LINK,
     ...ORDER_RESCAN,
     ...ADVANCE_ALERT,
+    ...QUOTE,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

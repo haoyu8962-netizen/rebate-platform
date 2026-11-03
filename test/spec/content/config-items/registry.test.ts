@@ -24,6 +24,8 @@
 // default with no seed rows (ORDER_RESCAN_UNSEEDED).
 // B2-04zo (BR-FUND-20 细则): ledger.advance_alert_fen follows them (kit ADVANCE_ALERT), unset by
 // default with no seed row (ADVANCE_ALERT_UNSEEDED).
+// B2-03t (D10-605 (a)): tech_fee_bp and rebate.taobao.compare_rate_ratio_bp follow it (kit QUOTE),
+// unset by default with no seed rows (QUOTE_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -52,6 +54,8 @@ import {
   POOL_UNSEEDED,
   PROMO_LINK,
   PROMO_LINK_UNSEEDED,
+  QUOTE,
+  QUOTE_UNSEEDED,
   RANK,
   RETENTION,
   REVERIFY,
@@ -97,6 +101,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...PROMO_LINK_UNSEEDED,
         ...ORDER_RESCAN_UNSEEDED,
         ...ADVANCE_ALERT_UNSEEDED,
+        ...QUOTE_UNSEEDED,
       ]),
     ]),
   );
@@ -106,6 +111,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...PROMO_LINK_UNSEEDED,
     ...ORDER_RESCAN_UNSEEDED,
     ...ADVANCE_ALERT_UNSEEDED,
+    ...QUOTE_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -133,6 +139,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...PROMO_LINK,
         ...ORDER_RESCAN,
         ...ADVANCE_ALERT,
+        ...QUOTE,
       ].map((entry) => entry.key),
     ),
   );
@@ -173,7 +180,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       POOL_UNSEEDED.length -
       PROMO_LINK_UNSEEDED.length -
       ORDER_RESCAN_UNSEEDED.length -
-      ADVANCE_ALERT_UNSEEDED.length,
+      ADVANCE_ALERT_UNSEEDED.length -
+      QUOTE_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -308,6 +316,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...PROMO_LINK,
     ...ORDER_RESCAN,
     ...ADVANCE_ALERT,
+    ...QUOTE,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -361,6 +370,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...PROMO_LINK,
     ...ORDER_RESCAN,
     ...ADVANCE_ALERT,
+    ...QUOTE,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -422,6 +432,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...PROMO_LINK,
       ...ORDER_RESCAN,
       ...ADVANCE_ALERT,
+      ...QUOTE,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -436,6 +447,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...PROMO_LINK,
     ...ORDER_RESCAN,
     ...ADVANCE_ALERT,
+    ...QUOTE,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({

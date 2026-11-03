@@ -261,6 +261,12 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // config.business. Unset by default (no seed row; unset = the board shows but nothing alerts),
   // the super admin fills it in before launch; 0 is a valid threshold, not off. Registration only.
   businessInteger('ledger.advance_alert_fen', 0),
+  // B2-03t (D10-605 (a)): the two keys the rebate quoter reads, config.business. tech_fee_bp is an
+  // object keyed by platform (its entries are checked by commission's quote-config on read);
+  // the Taobao compare rate ratio is a whole number of bp in 0..10000. BR-CALC-20 / BR-PRICE-07
+  // are still placeholders, so neither has a seed row. Registration only.
+  spec('tech_fee_bp', 'object', 'config.business'),
+  businessInteger('rebate.taobao.compare_rate_ratio_bp', 0, 10000),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

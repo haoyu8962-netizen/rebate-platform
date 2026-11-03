@@ -15,6 +15,7 @@ import {
   PAYOUT,
   POOL,
   PROMO_LINK,
+  QUOTE,
   RANK,
   REVERIFY,
   RETENTION,
@@ -69,6 +70,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...PROMO_LINK,
     ...ORDER_RESCAN,
     ...ADVANCE_ALERT,
+    ...QUOTE,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(
