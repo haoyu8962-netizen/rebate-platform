@@ -1,0 +1,21 @@
+id: B1-04zzc
+repo: rebate-platform
+title: 淘宝订单归档只存自家推广位的行（别家订单原文不入库）
+type: impl
+# 2026-11-03 be 入账（D10-588；变更记录 20261031-淘宝订单经大淘客 §1 第 24 行「按凑狸的推广位过滤，不入库别家订单」）。联盟账号与优券汇共用，大淘客返回两边全部订单。现在归档在传输层，ourRows 过滤之前，union_raw_payloads 存了别家订单原文。改成过滤后归档，raw_payload_id 仍能回到这一页。先看 infra/archive.ts 的传输包装与 test/spec/union/archive/**。不动金额。RV2。
+refs: []
+refs_hash: {}
+deps: [B1-04zz]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/**'
+  - 'apps/api/src/modules/union/infra/dataoke/**'
+  - 'apps/api/src/modules/union/infra/archive.ts'
+  - 'test/spec/union/taobao-order-archive/**'
+test_paths:
+  - 'test/spec/union/taobao-order-archive/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

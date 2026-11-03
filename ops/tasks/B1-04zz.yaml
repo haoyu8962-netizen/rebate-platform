@@ -2,18 +2,134 @@ id: B1-04zz
 repo: rebate-platform
 title: 淘宝订单适配器修正：N 净额与补贴（BR-CALC-03、18）、jumpType、结算按状态判、归档过滤（CAP-TB-07）
 type: impl
-# 2026-11-03 be 入账（D10-588 ①）。pub_share_fee 含技术服务费，现直接当 N（serviceFeeDeducted=false）。BR-CALC-03：适配器映射已扣服务费的 N，平台给毛收入时 N = gross − ceil(gross × fee_bp / 10000)，fee_bp 优先取报文服务费率，没有再取配置，都没有进待处理；再按 BR-CALC-18 拆 n_base 与 subsidy。同 B1-08zh 的做法，字段映射 verified=false，真实口径由测试单与联盟后台逐单核对后才开入账，credit.enabled.taobao 保持 off。另：分页带 jumpType；settle 只在 tk_status=3 读（BR-FUND-02 按原始状态）；归档在 ourRows 过滤之后，别家订单原文不入库。RV2。
+# 2026-11-03 be 入账（D10-588 ①）。pub_share_fee 含技术服务费，现直接当 N（serviceFeeDeducted=false）。BR-CALC-03：报文给服务费金额时 N = 佣金 − 服务费（D10-105）。est = pub_share_pre_fee_for_commission − 预估服务费，settle = pub_share_fee_for_commission − 结算服务费，补贴（*_for_sdy）不进 N（BR-CALC-18），字段都已在录制里。服务费取 alimm_tech_service_pre_fee / alimm_tech_service_fee，缺则取 alimama_share_fee（录制 16/16 行有，dto 9/16），都缺 est 为 null 走 SERVICE_FEE_RATE_MISSING，serviceFeeDeducted 改 true。同 B1-08zh 的做法，字段映射 verified=false，真实口径由测试单与联盟后台逐单核对后才开入账，credit.enabled.taobao 保持 off。另：分页带 jumpType；settle 只在 tk_status=3 读（BR-FUND-02 按原始状态）。金额字段是 JSON number，走保留字面值的解析，不用浮点。冻结用例钉毛额，由新鲜独立 Claude 改，编排按 #24 核。归档过滤拆到 B1-04zzc。orders 列 subsidy_commission_fen 写入在流水线，本单不动，记 FU-TB-SUBSIDY-COLUMN（B 不受影响，R1 对账要）。RV2。
 refs: [BR-CALC-03, BR-CALC-18]
 refs_hash:
   BR-CALC-03: f2d8ebebbc0c
   BR-CALC-18: bb50f68578f7
-deps: [B1-08zh]
+deps: []
 paths:
   - 'apps/api/src/modules/union/infra/taobao/**'
   - 'apps/api/src/modules/orders/domain/platform-rules/taobao.ts'
+  - 'apps/api/src/modules/orders/domain/platform-rules/service-fee-alert*.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
   - 'test/spec/union/taobao-net-n/**'
+  - 'test/spec/union/taobao-orders/**'
+  - 'test/spec/union/taobao-negative/**'
+  - 'test/spec/union/row-quarantine/**'
+  - 'test/spec/orders/taobao-negative/**'
+  - 'test/spec/orders/row-quarantine/**'
+  - 'test/spec/orders/platform-rules/**'
+  - 'test/spec/union/pdd-net-n/**'
 test_paths:
   - 'test/spec/union/taobao-net-n/**'
+  - 'test/spec/union/taobao-orders/**'
+  - 'test/spec/union/taobao-negative/**'
+  - 'test/spec/union/row-quarantine/**'
+  - 'test/spec/orders/taobao-negative/**'
+  - 'test/spec/orders/row-quarantine/**'
+  - 'test/spec/orders/platform-rules/**'
+  - 'test/spec/union/pdd-net-n/**'
+red_exempt:
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] jd：三行中间一行坏，collect 下 items 2、rejected 1，单号取到，nextCursor 不变，raw_payload_id 是这页的'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] pdd：三行中间一行坏，collect 下 items 2、rejected 1，单号取到，nextCursor 不变，raw_payload_id 是这页的'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] taobao：三行中间一行坏，collect 下 items 2、rejected 1，单号取到，nextCursor 不变，raw_payload_id 是这页的'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] jd：一页全坏，items 空、rejected 全部，nextCursor 仍与全好时相同'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] pdd：一页全坏，items 空、rejected 全部，nextCursor 仍与全好时相同'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] taobao：一页全坏，items 空、rejected 全部，nextCursor 仍与全好时相同'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] jd 16 estimateFee 缺失：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] jd 16 estimateFee 非数字：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] jd 17 actualFee 缺失：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] jd 17 actualFee 非数字：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] pdd 4 promotion_amount 缺失：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] pdd 4 promotion_amount 非数字：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] taobao 3 pub_share_pre_fee 缺失：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] taobao 3 pub_share_pre_fee 非数字：collect 下进 rejected，不按 0 留在 items'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] pdd pay_time：一批全坏时迭代器照常往下走，不把空 items 当成翻完'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#1] 经治理包装：rowErrors 传到适配器，rejected 带回调用方'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] jd：取不到单号的行 sub_order_id 为 null，detail 不含行里的金额与单号原文'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] pdd：取不到单号的行 sub_order_id 为 null，detail 不含行里的金额与单号原文'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] taobao：取不到单号的行 sub_order_id 为 null，detail 不含行里的金额与单号原文'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] jd：取得到单号的坏行，detail 只有字段名与原因，不含坏值、单号与金额原文'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] pdd：取得到单号的坏行，detail 只有字段名与原因，不含坏值、单号与金额原文'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] taobao：取得到单号的坏行，detail 只有字段名与原因，不含坏值、单号与金额原文'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] jd：不是对象的行也进 rejected，单号与状态都是 null'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] pdd：不是对象的行也进 rejected，单号与状态都是 null'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#4] jd：状态码坏的行单号照取，raw_status 为 null'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/rejected.test.ts
+    test: '[AC-B1-04zv#5] pdd：超界 goods_id 的行进 rejected，单号取到，detail 不含那串数字'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/unchanged.test.ts
+    test: '[AC-B1-04zv#2] jd：同一页 collect 下隔离，不传 rowErrors 时仍整页 invalid_dto'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/unchanged.test.ts
+    test: '[AC-B1-04zv#2] pdd：同一页 collect 下隔离，不传 rowErrors 时仍整页 invalid_dto'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/unchanged.test.ts
+    test: '[AC-B1-04zv#3] jd：data 不是数组，collect 下仍抛 invalid_dto'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/unchanged.test.ts
+    test: '[AC-B1-04zv#3] pdd：order_list 损坏，collect 下仍抛 invalid_dto'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/unchanged.test.ts
+    test: '[AC-B1-04zv#3] jd：商品键模式配置错误，collect 下仍抛 invalid_dto'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/unchanged.test.ts
+    test: '[AC-B1-04zv#3] jd：窗口与游标错误，collect 下仍抛 invalid_dto'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
+  - file: test/spec/union/row-quarantine/unchanged.test.ts
+    test: '[AC-B1-04zv#3] jd：窗口过大的拒绝在 collect 下仍带 windowTooLarge 抛出，缩窗照旧'
+    reason: '冻结用例测试体未改；row-quarantine/wires.ts 给 TAOBAO.good 补了 pub_share_fee_for_commission，本文件被整文件连带判定。本条测 jd、pdd 或与淘宝净额无关的行为，新旧实现下都成立'
 impl: claude
 tester: claude-independent
 accept:
