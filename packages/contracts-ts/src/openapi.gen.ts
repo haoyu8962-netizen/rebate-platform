@@ -9464,6 +9464,119 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/payout-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Group the chosen withdrawals into a batch and execute it (批量自动打款、执行所选)
+         * @description The 【批量自动打款】 of the withdrawal review page and the 【执行所选】 of the payout console (01
+         *     F-ADM-07; BR-WDR-11, BR-WDR-12, BR-WDR-18; design/specs/admin-withdrawals.md,
+         *     admin-payouts.md; ruling D10-595). Permission point `payout.execute`; a super admin holds
+         *     every point; the executor may be the reviewer of the same withdrawal (ADD-05). Step-up: totp
+         *     tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *
+         *     Request (AdminPayoutBatchCreateRequest): `withdrawal_ids`, 1 to 200 ids without duplicates
+         *     (200 is 代理补全的默认, D10-595; a duplicate is 20001 with `data.fields=[withdrawal_ids]`).
+         *
+         *     Order of checks: the route schema comes first, before the permission and step-up checks, as
+         *     on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming the
+         *     field, also for a caller without the permission point or a token, and nothing is written.
+         *     Then `payout.execute` (10403 with `data.reason=admin_permission_denied`) → step-up (10003) →
+         *     the duplicate check. After that the answer is 200, and whether the batch ran is in the data.
+         *
+         *     One transaction, the three steps of BR-WDR-12:
+         *
+         *     - ① The whole batch is refused when `payout.enabled` is off or `payout.queue_paused` is on.
+         *     - ② Each id is judged under its row lock: still APPROVED; no withdrawal block of the member
+         *       (BR-WDR-05); no transfer attempt of any result; its channel enabled and not paused. An id
+         *       that does not pass stays APPROVED, or whatever status it had, and is listed in `left`. An
+         *       unknown id, one of another app or one that is not a UUID is listed with `not_approved`,
+         *       the same as one that left APPROVED; a non-UUID id never reaches the database.
+         *     - ③ The watermark of what passed, per channel (BR-WDR-18, D10-285, D10-288). When what
+         *       passed is all on one channel, a failure refuses the whole batch: `rejected`, no
+         *       withdrawal moves, nothing is sent. When it spans several channels, a failing channel's
+         *       withdrawals stay APPROVED and are listed in `left` with the watermark reason, while the
+         *       other channels run; if every channel fails, the outcome is still `executed`, with `paying`
+         *       empty.
+         *
+         *     Answer (AdminPayoutBatchResult): `outcome` is `executed` or `rejected`. `executed`:
+         *     `batch_id`, the new batch (kind=manual); `paying`, the ids that moved APPROVED → PAYING (W4),
+         *     possibly none; `left`, the others with `reason` (not_approved, member_blocked,
+         *     has_transfer_attempt, channel_disabled, or a watermark reason on a batch of several
+         *     channels). `rejected`: `reason` (payout_disabled, queue_paused, watermark_stale,
+         *     watermark_below_forecast, watermark_usable_exceeded), `channel` for a watermark reason, and
+         *     `batch_id` null, `paying` and `left` empty.
+         *
+         *     Effects of `executed`: an APPROVED withdrawal already on another batch is moved to the new
+         *     one first by a CAS and the old batch keeps its item as moved_out (BR-WDR-12), including one
+         *     listed in `left` with member_blocked, has_transfer_attempt or channel_disabled; one left
+         *     with not_approved or a watermark reason is not moved. Each paying withdrawal gets
+         *     `executor_id` the caller, `executed_at` the injected Clock and `execute_seq` + 1, its
+         *     transfer job on the same transaction and wallet.withdrawal_changed. No voucher here: the
+         *     money stays frozen until the result (BR-WDR-09). The transfer itself runs in the payout
+         *     process, which reviews each withdrawal again and may hold it (W9, BR-WDR-13). Writes an
+         *     audit record for either outcome (action payout_batch_execute, with the `outcome`, the
+         *     `batch_id` or `reason`, and the counts and ids of `paying` and `left`; no personal data).
+         *
+         *     `Idempotency-Key` is required: same key and body → the first result, a `rejected` one too;
+         *     same key with another body → 20901; same key while still running → 40901. After fixing what
+         *     refused a batch (a fresh W, say), submit with a new key. The step-up token is a header and
+         *     not part of the body hash, so a replay after a 10003 keeps its key.
+         */
+        post: operations["adminCreatePayoutBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/payout-overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Payout switches, limits and each channel's water level, computed when read
+         * @description The status cards of the payout console (01 F-ADM-07; BR-WDR-11, BR-WDR-17, BR-WDR-18;
+         *     design/specs/admin-payouts.md §2; ruling D10-595). Read only, no step-up. Permission point:
+         *     any of `payout.execute` or `fund.view`; a super admin holds every point. Reading does not
+         *     write an audit record. Every figure is limited to the app of the console and read fresh, with
+         *     the same configuration defaults EXECUTE uses.
+         *
+         *     `payout_enabled` and `queue_paused` are the switches of BR-WDR-12 ①. `single_cap_fen`,
+         *     `daily_cap_fen` and `daily_sent_fen` are the limits of BR-WDR-18 and today's (+08:00) sum of
+         *     kind=transfer attempts with result pending, success or unknown, across channels, as the
+         *     pre-transfer review counts it (BR-WDR-13 ③). `watermark_usable_bp` is
+         *     `payout.watermark_usable_bp`.
+         *
+         *     `channels` has alipay, bank_card and wechat, in that order: `enabled` and `paused` are
+         *     `payout.channel_enabled.<channel>` and `payout.channel_paused.<channel>`; `watermark`,
+         *     `forecast_withdrawal_fen` and `water_level` mean what they mean in GET
+         *     /admin/v1/fund-ledger, per channel (D10-285): `watermark` is null until a row exists, never a
+         *     default; no recent withdrawals give a forecast of 0, not null; `water_level` is `low` when W
+         *     is below 1.5 P, else `normal`, and null when there is no W or it has passed the 2 hour limit,
+         *     while `watermark.measured_at` still shows its age.
+         *
+         *     Not part of this operation: the queue and the unknown results (their lists), and changing a
+         *     switch (adminUpdateKillSwitch).
+         */
+        get: operations["adminGetPayoutOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/fund-ledger": {
         parameters: {
             query?: never;
@@ -19546,6 +19659,65 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["AdminPayoutWatermarkResult"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /** @description The withdrawals to execute; see POST /admin/v1/payout-batches. */
+        AdminPayoutBatchCreateRequest: {
+            withdrawal_ids: components["schemas"]["Id"][];
+        };
+        AdminPayoutBatchLeftItem: {
+            withdrawal_id: components["schemas"]["Id"];
+            /** @enum {string} */
+            reason: "not_approved" | "member_blocked" | "has_transfer_attempt" | "channel_disabled" | "watermark_stale" | "watermark_below_forecast" | "watermark_usable_exceeded";
+        };
+        /** @description Whether the batch ran. On `rejected` nothing moved; see POST /admin/v1/payout-batches. */
+        AdminPayoutBatchResult: {
+            /** @enum {string} */
+            outcome: "executed" | "rejected";
+            batch_id: components["schemas"]["Id"] | null;
+            /** @enum {string|null} */
+            reason: "payout_disabled" | "queue_paused" | "watermark_stale" | "watermark_below_forecast" | "watermark_usable_exceeded" | null;
+            /**
+             * @description The failing channel of a watermark reason, else null.
+             * @enum {string|null}
+             */
+            channel: "alipay" | "bank_card" | "wechat" | null;
+            paying: components["schemas"]["Id"][];
+            left: components["schemas"]["AdminPayoutBatchLeftItem"][];
+        };
+        AdminPayoutBatchCreateResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminPayoutBatchResult"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        AdminPayoutOverviewChannel: {
+            /** @enum {string} */
+            channel: "alipay" | "bank_card" | "wechat";
+            enabled: boolean;
+            paused: boolean;
+            /** @description The channel's latest W; null until one exists, never a default. */
+            watermark: components["schemas"]["AdminFundLedgerWatermark"] | null;
+            forecast_withdrawal_fen: components["schemas"]["Fen"];
+            water_level: components["schemas"]["AdminFundWaterLevel"] | null;
+        };
+        /** @description The payout status cards, computed when read; see GET /admin/v1/payout-overview. */
+        AdminPayoutOverview: {
+            /** Format: date-time */
+            as_of: string;
+            payout_enabled: boolean;
+            queue_paused: boolean;
+            single_cap_fen: components["schemas"]["Fen"];
+            daily_cap_fen: components["schemas"]["Fen"];
+            daily_sent_fen: components["schemas"]["Fen"];
+            /** Format: int32 */
+            watermark_usable_bp: number;
+            channels: components["schemas"]["AdminPayoutOverviewChannel"][];
+        };
+        AdminPayoutOverviewResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminPayoutOverview"];
             trace_id: components["schemas"]["TraceId"];
         };
         /** @description The latest W of the enterprise Alipay channel (BR-WDR-18; 04 §3.2 payout_watermarks). Entered on the payout console, not here. */
@@ -40265,6 +40437,151 @@ export interface operations {
             };
             429: components["responses"]["TooManyRequests"];
             /** @description Not entered (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminCreatePayoutBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
+                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
+                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
+                 *     optional). Only on admin console operations; app operations use StepUpToken.
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "withdrawal_ids": [
+                 *         "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001",
+                 *         "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc002"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminPayoutBatchCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Whether the batch ran, or the first result of the same key. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPayoutBatchCreateResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not processed (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminGetPayoutOverview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The overview at this moment. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "as_of": "2026-11-03T10:00:00+08:00",
+                     *         "payout_enabled": true,
+                     *         "queue_paused": false,
+                     *         "single_cap_fen": 500000,
+                     *         "daily_cap_fen": 5000000,
+                     *         "daily_sent_fen": 120000,
+                     *         "watermark_usable_bp": 9000,
+                     *         "channels": [
+                     *           {
+                     *             "channel": "alipay",
+                     *             "enabled": true,
+                     *             "paused": false,
+                     *             "watermark": {
+                     *               "available_fen": 3000000,
+                     *               "measured_at": "2026-11-03T09:00:00+08:00",
+                     *               "entered_by": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
+                     *               "entered_by_name": "ops01"
+                     *             },
+                     *             "forecast_withdrawal_fen": 2100000,
+                     *             "water_level": "low"
+                     *           },
+                     *           {
+                     *             "channel": "bank_card",
+                     *             "enabled": false,
+                     *             "paused": false,
+                     *             "watermark": null,
+                     *             "forecast_withdrawal_fen": 0,
+                     *             "water_level": null
+                     *           },
+                     *           {
+                     *             "channel": "wechat",
+                     *             "enabled": false,
+                     *             "paused": false,
+                     *             "watermark": null,
+                     *             "forecast_withdrawal_fen": 0,
+                     *             "water_level": null
+                     *           }
+                     *         ]
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminPayoutOverviewResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
             "4XX": {
                 headers: {
                     "X-Trace-Id": components["headers"]["TraceId"];

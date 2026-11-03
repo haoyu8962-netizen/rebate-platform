@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV1 (contract only). Two new planned operations (BR-WDR-11, 12, 13, 17, 18; D10-595): adminCreatePayoutBatch, kind=manual, with the refusal or each withdrawal's result in a 200 answer, and adminGetPayoutOverview, switches, limits and each channel's water level. payout.execute, totp step-up, idempotent, audited; the overview takes payout.execute or fund.view. The text follows executeBatch as it is: all on one channel, a watermark failure refuses the whole batch; across channels, only the failing channel's withdrawals stay (D10-285, D10-288). A rejected answer replays under its key, so a retry after a fresh W takes a new key. No new error code, no existing operation changes, no migration.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Independent Claude via claude-run.sh under approvals 36, Codex not logged in. r1 fail with 2 S1 and 2 S2, all where the text disagreed with executeBatch: batches across channels, the watermark reasons in left, which withdrawals move batch, and non-UUID ids. All fixed, r2 pass with no findings. Static, no tests run by the reviewer."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zq",
+  "spec_commit": "acec9c4002f7e4c21918914c40c8be64c5bad4d6",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8724394a58013ba5d77622c437b114199be2f881",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

@@ -2725,6 +2725,26 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "adminCreatePayoutBatch",
+    "method": "POST",
+    "path": "/admin/v1/payout-batches",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
+    "operationId": "adminGetPayoutOverview",
+    "method": "GET",
+    "path": "/admin/v1/payout-overview",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "adminGetFundLedger",
     "method": "GET",
     "path": "/admin/v1/fund-ledger",

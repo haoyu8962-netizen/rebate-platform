@@ -1352,6 +1352,16 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "admin"
   },
   {
+    "method": "POST",
+    "path": "/admin/v1/payout-batches",
+    "auth": "admin"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/payout-overview",
+    "auth": "admin"
+  },
+  {
     "method": "GET",
     "path": "/admin/v1/fund-ledger",
     "auth": "admin"
