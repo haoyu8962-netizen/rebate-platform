@@ -1,0 +1,20 @@
+id: CT-24zm
+repo: rebate-platform
+title: 契约：联盟回款接口文字（D10-591，同 CT-26n）——adminCreateUnionReceipt、adminReverseUnionReceipt、adminListUnionReceipts 的校验顺序写明路由 schema 先于权限与 step-up；只改文字
+type: contract
+# 2026-11-03 pay 入账（D10-591）。B2-04zr Codex money S1 按 D10-590 ⑥ 关闭后，把 CT-24zh 的文字改成与全仓现状一致；行为不变。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

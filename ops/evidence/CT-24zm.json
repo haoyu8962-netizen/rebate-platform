@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV1 (contract, text only). adminCreateUnionReceipt, adminReverseUnionReceipt and adminListUnionReceipts now say what every admin route does: a body or parameter failing the route schema is 20001 before the permission and step-up checks (ruling D10-591, following D10-590 ⑥). No field, error code or behaviour changes; the only generated file that moves is openapi.gen.ts. The ledger comes with this PR.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "round 1 (couli-runs/CT-24zm/contract-review-r1.json), no findings. Static; B2-04zr is not on this branch, so the implementation was not checked directly and no tests were run."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zm",
+  "spec_commit": "18d54e6993aa2072a94486bcac948d65a1f60bd3",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3c73b5ccc756207cc1d8bdbe95f2a8406d8365af",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

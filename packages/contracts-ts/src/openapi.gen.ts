@@ -9169,8 +9169,10 @@ export interface paths {
          *
          *     Filters combine with AND: `platform`, `date_from` and `date_to` (collection days
          *     YYYY-MM-DD, both inclusive). A platform outside the enum or a value not matching the
-         *     format is 20001 with `data.fields` naming the parameter; `date_from` later than `date_to`
-         *     is 20001 with `data.fields=[date_from, date_to]`. A filter set nothing matches is an empty
+         *     format is 20001 with `data.fields` naming the parameter; the route schema answers that
+         *     before the permission check, as on every admin route (D10-591). After the permission
+         *     check, `date_from` later than `date_to` is 20001 with
+         *     `data.fields=[date_from, date_to]`. A filter set nothing matches is an empty
          *     page (`items=[]`, `total=0`), not an error.
          *
          *     Order: `receipt_date` descending, then `created_at` descending, then `receipt_id`
@@ -9196,11 +9198,14 @@ export interface paths {
          *     goes here. Who entered the record comes from the session; `method` is always ADMIN_ENTRY
          *     here, the request does not carry it.
          *
-         *     Order of checks: `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001 with `data.fields` naming the field: the schema; a blank
-         *     `note`; a `receipt_date` later than the current accounting day of the injected Clock,
-         *     +08:00, with `data.fields=[receipt_date]`; CASH_BANK while 银行卡通道未开通, with
-         *     `data.fields=[cash_account]`). An earlier `receipt_date` has no lower bound. The amount is
+         *     Order of checks: the route schema comes first, before the permission and step-up checks,
+         *     as on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming
+         *     the field, also for a caller without the permission point or a token, and nothing is
+         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
+         *     step-up (10003) → the checks on a body that fits the schema (20001 with `data.fields`
+         *     naming the field: a blank `note`; a `receipt_date` later than the current accounting day of
+         *     the injected Clock, +08:00, with `data.fields=[receipt_date]`; CASH_BANK while 银行卡通道未开通,
+         *     with `data.fields=[cash_account]`). An earlier `receipt_date` has no lower bound. The amount is
          *     not compared with the receivable (BR-FUND-20): a difference shows up in R1, this operation
          *     opens none.
          *
@@ -9249,8 +9254,12 @@ export interface paths {
          *     it again with POST /admin/v1/union-receipts. A record of either `method` can be reversed.
          *     Request (AdminUnionReceiptReverseRequest): `reason`, required.
          *
-         *     Order of checks: `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001 with `data.fields=[reason]`) → an unknown `receipt_id` or one
+         *     Order of checks: the route schema comes first, before the permission and step-up checks,
+         *     as on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming
+         *     the field, also for a caller without the permission point or a token, and nothing is
+         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
+         *     step-up (10003) → a `reason` blank after trimming (20001 with `data.fields=[reason]`) → an
+         *     unknown `receipt_id` or one
          *     of another app is 20001 with `data.fields=[receipt_id]` → a record already reversed is
          *     20902 with `data.resource=union_receipt` (a record can be reversed once, BR-FUND-16; the
          *     console refreshes and shows 已红冲; the unique constraint on the reversal voucher answers
