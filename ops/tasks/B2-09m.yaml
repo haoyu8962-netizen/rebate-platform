@@ -1,0 +1,33 @@
+id: B2-09m
+repo: rebate-platform
+title: 线下打款补录实现 W8（FU-ADMIN-WITHDRAWAL-OPS C，BR-WDR-16、BR-WDR-09，D10-595）——APPROVED → PAID_MANUAL：无 pending / success / unknown 转账尝试、无提现阻断、(app_id, channel_order_id) 唯一、实付金额等于 net_fen；同一事务写成功分录、更新 tax_ytd、通知用户；和 EXECUTE 靠状态 CAS 互斥
+type: impl
+# 2026-11-03 pay 入账（D10-595，方案 couli-runs/B3-lane/admin-withdrawal-ops-plan-20261103.md）。新写资金逻辑，全仓 MANUAL_PAID 只在生成物。RV2，新鲜独立 Claude 写规则测试，money 评审。规则测试走 createHttpApp('admin') 与真实 ledger，并钉和 EXECUTE 并发时只有一方生效。
+# W8 同样要先查询守卫：payer_side_after_transfer 的单，开关 on 时最近查询须为订单不存在或明确失败（BR-WDR-08 W8、BR-WDR-17）。
+refs: [BR-WDR-16, BR-WDR-09, BR-WDR-17]
+refs_hash:
+  BR-WDR-16: c5899cc85558
+  BR-WDR-09: 68225c9af85f
+  BR-WDR-17: f6119a685e00
+deps: [CT-24zr, B2-09l]
+paths:
+  - 'apps/api/src/modules/payout/application/**'
+  - 'apps/api/src/modules/payout/http/admin/**'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/payout/admin-manual-paid/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/admin-manual-paid/**'
+status: todo

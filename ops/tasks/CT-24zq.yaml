@@ -1,0 +1,22 @@
+id: CT-24zq
+repo: rebate-platform
+title: 契约：后台打款批次与概览（FU-ADMIN-WITHDRAWAL-OPS B，BR-WDR-11、12、18，D10-595）——adminCreatePayoutBatch（kind=manual，整批拒绝原因与逐单结果在响应里）、adminGetPayoutOverview；payout.execute，动态码档，幂等，写审计；planned
+type: contract
+# 2026-11-03 pay 入账（D10-595，方案 couli-runs/B3-lane/admin-withdrawal-ops-plan-20261103.md）。校验顺序写明 schema 先于守卫（D10-591）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo

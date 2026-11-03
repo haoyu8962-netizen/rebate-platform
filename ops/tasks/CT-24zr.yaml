@@ -1,0 +1,22 @@
+id: CT-24zr
+repo: rebate-platform
+title: 契约：后台线下打款补录（FU-ADMIN-WITHDRAWAL-OPS C，BR-WDR-16，D10-595）——adminBatchManualPaid（通道流水号、实付时间、实付金额，逐单 CAS、逐单结果）；payout.manual_entry，动态码档，幂等，写审计；planned
+type: contract
+# 2026-11-03 pay 入账（D10-595，方案 couli-runs/B3-lane/admin-withdrawal-ops-plan-20261103.md）。支付宝打款接口验证开通前可能是上线时唯一的出款路径，所以排在 W10 前。校验顺序写明 schema 先于守卫（D10-591）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo

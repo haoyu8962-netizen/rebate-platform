@@ -1,0 +1,34 @@
+id: B2-09k
+repo: rebate-platform
+title: 后台提现审核实现（FU-ADMIN-WITHDRAWAL-OPS A，BR-WDR-10，D10-595）——两个操作去 planned，接已有的 withdrawalCommands.approve / reject：批量通过逐单事务、逐单结果，驳回退冻结并入队通知
+type: impl
+# 2026-11-03 pay 入账（D10-595，方案 couli-runs/B3-lane/admin-withdrawal-ops-plan-20261103.md）。上线阻断：自动到账默认关时提现都走人工审核，现在没有接口。RV2，新鲜独立 Claude 写规则测试，money 评审（Codex 恢复前用独立 Claude，approvals 第 36 条）。规则测试走 createHttpApp('admin') 与真实 ledger。
+# 风控冻结或有生效 withdraw_holds 时可以通过（BR-WDR-10），余额为负或 blocked_reason 非空不得通过；有 pending / success / unknown 转账尝试的单不得驳回。不用迁移，列级授权已有。
+# 驳回要加 withdrawal-commands.ts 现在没有的守卫（CT-24zp 评审 S0）：payer_side_after_transfer 的单，开关 on 时最近查询须为订单不存在或明确失败，否则重复打款（BR-WDR-08 W3、BR-WDR-17）。
+refs: [BR-WDR-10, BR-WDR-05, BR-WDR-17]
+refs_hash:
+  BR-WDR-10: 1db6b508e224
+  BR-WDR-05: 99e2e2654ce0
+  BR-WDR-17: f6119a685e00
+deps: [CT-24zp]
+paths:
+  - 'apps/api/src/modules/payout/application/**'
+  - 'apps/api/src/modules/payout/http/admin/**'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/payout/admin-withdrawal-review/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/admin-withdrawal-review/**'
+status: todo
