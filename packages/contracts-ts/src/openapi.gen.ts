@@ -25046,7 +25046,7 @@ export interface operations {
                      *           }
                      *         },
                      *         "texts": {
-                     *           "withdraw.sla_text": "工作日 24 小时内处理"
+                     *           "withdraw.sla_text": "人工审核，工作日 24 小时内处理，节假日顺延"
                      *         },
                      *         "legal": {
                      *           "privacy": {

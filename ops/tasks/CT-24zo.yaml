@@ -1,0 +1,21 @@
+id: CT-24zo
+repo: rebate-platform
+title: 契约：/v1/config 响应示例的 withdraw.sla_text 改为 BR-TEXT-07 人工审核原文（FU-X-SLA-TEXT-EXAMPLE，D10-594 J2）；只改示例值，字段、键名与行为都不变
+type: contract
+# 2026-11-03 pay 入账（编排 16:25）。三端包内默认配置由这份示例生成，服务端不下发时用户看到的就是示例这句。流程同 CT-24zm。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
