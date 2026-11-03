@@ -4592,6 +4592,19 @@ export class AppModule {
                 auditWriter: (db, clock) =>
                   createAuditWriter({ db, clock, sensitiveKeys: SENSITIVE_KEYS }),
                 adminNames: createAdminDisplayNameReader,
+                // B2-09k: the review's W2 and W3 (identity's lock, the ledger with payout's recovery
+                // hook, content's config read on the caller's handle).
+                lockUsersForUpdate,
+                ledger: ({ clock, eventBus }) =>
+                  createLedger({
+                    clock,
+                    eventBus,
+                    balanceRecoveredHook: createBalanceRecoveredHook({ clock }),
+                  }),
+                config: (clock) => ({
+                  configValue: (appId, key, handle) =>
+                    createContentReader({ db: handle, clock }).configValue(appId, key),
+                }),
               }),
             ]
           : []),

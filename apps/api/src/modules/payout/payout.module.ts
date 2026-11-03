@@ -8,7 +8,7 @@
 import type { DynamicModule, FactoryProvider } from '@nestjs/common';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
-import { BALANCE_RECOVERED_HOOK, createLedger } from '../ledger/index.ts';
+import { BALANCE_RECOVERED_HOOK, createLedger, type Ledger } from '../ledger/index.ts';
 import { createBalanceRecoveredHook } from './application/balance-recovered.ts';
 import {
   IDEMPOTENCY,
@@ -39,6 +39,7 @@ import {
   createAutoPayoutConsumer,
   type AutoPayoutOptions,
 } from './application/auto-payout.ts';
+import type { AdminWithdrawalReviewDeps } from './application/admin-withdrawal-review.ts';
 import type {
   AdminPayoutWatermarkDeps,
   AdminPayoutWatermarkPorts,
@@ -64,7 +65,12 @@ import { FakeChannel } from './infra/channels/fake-channel.ts';
 import type { PayoutChannelName } from './infra/channels/payout-channel.ts';
 import { PAYOUT_QUEUE, type PayoutQueuePausePort } from './jobs/transfer-job.ts';
 import { createPayoutRuntime, payoutRuntimeToken, type PayoutRuntime } from './payout-runtime.ts';
-import type { WithdrawalAttemptsPort } from './application/withdrawal-commands.ts';
+import {
+  createWithdrawalCommands,
+  type WithdrawalAttemptsPort,
+  type WithdrawalCommandsOptions,
+} from './application/withdrawal-commands.ts';
+import { createPayoutAttemptsStore } from './infra/payout-attempts-store.ts';
 import type { WithdrawApplyOptions, WithdrawApplyService } from './application/withdraw-apply.ts';
 import {
   registerWithdrawalAccountDecrypt,
@@ -79,6 +85,10 @@ import type {
   AdminPayeeDecrypt,
   AdminWithdrawalReadDeps,
 } from './application/admin-withdrawals.ts';
+import {
+  ADMIN_WITHDRAWAL_REVIEW,
+  AdminWithdrawalReviewController,
+} from './http/admin/withdrawal-review.controller.ts';
 import {
   ADMIN_PAYOUT_WATERMARKS,
   AdminPayoutWatermarksController,
@@ -866,6 +876,10 @@ export class PayoutModule {
 
 /** B2-09c: what app.module hands in for the console reads (payout imports no identity). */
 export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
+  /** B2-09k: identity's users row lock, ledger's createLedger and content's config. */
+  readonly lockUsersForUpdate: WithdrawalCommandsOptions['lockUsersForUpdate'];
+  readonly ledger: (context: { readonly clock: Clock; readonly eventBus: EventBus }) => Ledger;
+  readonly config: (clock: Clock) => NonNullable<WithdrawalCommandsOptions['config']>;
   /** identity's masked phones (BR-ID-33 3 + 4) over the entry's handle and field cipher. */
   readonly phones: (
     db: Kysely<DB>,
@@ -882,12 +896,17 @@ export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
  * the routes still register and fail closed (50001).
  * B2-09i: the W entry (POST /admin/v1/payout-watermarks; fund.cash_entry, step-up totp), with the
  * same fail-closed rule without the database or idempotency.
+ * B2-09k: the review (batch approve and reject; withdraw.review, step-up totp), the same rule.
  */
 export class PayoutAdminModule {
   static forAdmin(options: PayoutAdminOptions): DynamicModule {
     return {
       module: PayoutAdminModule,
-      controllers: [AdminWithdrawalsController, AdminPayoutWatermarksController],
+      controllers: [
+        AdminWithdrawalsController,
+        AdminPayoutWatermarksController,
+        AdminWithdrawalReviewController,
+      ],
       providers: [
         {
           provide: ADMIN_WITHDRAWAL_READS,
@@ -927,6 +946,37 @@ export class PayoutAdminModule {
             db === undefined || idempotency === undefined
               ? null
               : { clock, idempotency, ports: options },
+        },
+        {
+          provide: ADMIN_WITHDRAWAL_REVIEW,
+          inject: [
+            CLOCK,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+          ): AdminWithdrawalReviewDeps | null =>
+            db === undefined || idempotency === undefined || eventBus === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  idempotency,
+                  auditOn: (trx) => options.auditWriter(trx, clock),
+                  commands: createWithdrawalCommands({
+                    clock,
+                    ledger: options.ledger({ clock, eventBus }),
+                    lockUsersForUpdate: options.lockUsersForUpdate,
+                    attempts: createPayoutAttemptsStore(),
+                    eventBus,
+                    config: options.config(clock),
+                  }),
+                },
         },
       ],
     };

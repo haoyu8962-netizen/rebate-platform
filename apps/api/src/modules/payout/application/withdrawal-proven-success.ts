@@ -31,7 +31,11 @@ import {
   type TaxYtdIdentityKeyReader,
   type TaxYtdLogger,
 } from './tax-ytd.ts';
-import { WithdrawalConflictError } from './withdrawal-commands.ts';
+import {
+  PROVEN_SUCCESS_SWITCH,
+  WithdrawalConflictError,
+  provenSuccessSwitchOn,
+} from './withdrawal-commands.ts';
 
 /** The guard conditions of W11 a call may be refused on (contract data.reason). */
 export type ProvenSuccessRefusal =
@@ -107,7 +111,7 @@ export interface WithdrawalProvenSuccessOptions {
 }
 
 /** content's switch of W11 (08 BR-WDR-08 细则, BR-WDR-17): default on. */
-export const PROVEN_SUCCESS_SWITCH = 'payout.proven_success_writeoff.enabled';
+export { PROVEN_SUCCESS_SWITCH };
 /** The payout process's queue and job of the W11 attempt records (D10-428). */
 export const PAYOUT_ATTEMPT_APPEND_QUEUE = 'payout-attempt-append';
 export const PAYOUT_ATTEMPT_APPEND_JOB = 'append';
@@ -192,13 +196,6 @@ function paidAtOf(line: ProvenBillLine, now: Date): Date {
 }
 
 /** The switch value as the registry stores it (boolean, or its JSON text); unreadable → default on. */
-function switchOn(value: unknown): boolean {
-  if (typeof value === 'boolean') return value;
-  if (value === 'false' || value === 'off' || value === 0) return false;
-  if (value === 'true' || value === 'on' || value === 1) return true;
-  return true;
-}
-
 export function createWithdrawalProvenSuccess(
   options: WithdrawalProvenSuccessOptions,
 ): WithdrawalProvenSuccess {
@@ -262,7 +259,7 @@ export function createWithdrawalProvenSuccess(
     async proveChannelSuccess(trx, input) {
       const { appId, withdrawalId, billLine, now } = input;
       const setting = await config.configValue(appId, PROVEN_SUCCESS_SWITCH, trx);
-      if (setting !== null && !switchOn(setting.value)) {
+      if (setting !== null && !provenSuccessSwitchOn(setting.value)) {
         return { kind: 'refused', reason: 'writeoff_disabled' };
       }
       // The user id for the users lock comes from a first read; everything is judged on the

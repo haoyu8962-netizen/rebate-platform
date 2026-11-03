@@ -11,6 +11,11 @@
 //                while no transfer attempt exists (BR-WDR-08 W3; a definite failure still counts
 //                for the system path); same transaction: WITHDRAW:RETURN `wd:{id}:RETURN`
 //                (frozen −amount / available +amount) through ledger.post under the balance lock.
+//                B2-09k (BR-WDR-08 W3, BR-WDR-17, 决-08 A): hold_reason payer_side_after_transfer with
+//                the switch on: the channel reported a failure but may have paid, so the latest
+//                kind=query attempt must be fail. None, pending or unknown refuses query_required
+//                (「订单不存在」 is recorded as unknown and has no verified code yet); success refuses
+//                query_success (W11 ends it). Rejecting it anyway would pay twice.
 //   system W3    NEGATIVE_BALANCE, reviewer null, note 'system:went_negative'; refused when any
 //                transfer attempt exists (even a failed one).
 // Each change publishes wallet.withdrawal_changed on the same transaction (ids and status only).
@@ -20,6 +25,7 @@ import type { Transaction } from 'kysely';
 import type { Ledger, PostingEntry } from '../../ledger/index.ts';
 import type { Clock, EventBus } from '../../platform/index.ts';
 import type { WithdrawApplyOptions } from './withdraw-apply.ts';
+import type { PayoutConfigPort } from './withdraw-rules.ts';
 
 export type WithdrawalAttemptResult = 'pending' | 'success' | 'unknown' | 'fail';
 export interface WithdrawalAttemptsPort {
@@ -37,6 +43,11 @@ export interface WithdrawalCommandsOptions {
   lockUsersForUpdate: WithdrawApplyOptions['lockUsersForUpdate'];
   attempts: WithdrawalAttemptsPort;
   eventBus: EventBus;
+  /**
+   * B2-09k: content's reader of payout.proven_success_writeoff.enabled for the manual W3's query
+   * guard (BR-WDR-08 W3, BR-WDR-17). Omitted, or no row: the switch's default, on.
+   */
+  config?: PayoutConfigPort;
 }
 export interface WithdrawalCommand {
   appId: string;
@@ -61,7 +72,14 @@ export type WithdrawalCommandResult =
   | {
       kind: 'refused';
       reason:
-        'negative_balance' | 'blocked' | 'reason_required' | 'attempt_exists' | 'invalid_state';
+        | 'negative_balance'
+        | 'blocked'
+        | 'reason_required'
+        | 'attempt_exists'
+        | 'invalid_state'
+        // B2-09k: the manual W3 of hold_reason=payer_side_after_transfer against its latest query.
+        | 'query_required'
+        | 'query_success';
     };
 export interface WithdrawalCommands {
   approve(trx: Transaction<DB>, input: WithdrawalCommand): Promise<WithdrawalCommandResult>;
@@ -101,6 +119,18 @@ interface LockedWithdrawal {
   readonly status: string;
   readonly row_version: number;
   readonly blocked_reason: string | null;
+  readonly hold_reason: string | null;
+}
+
+/** BR-WDR-17: the switch of W11 and of the query guard of W3 and W8; no row means on. */
+export const PROVEN_SUCCESS_SWITCH = 'payout.proven_success_writeoff.enabled';
+const PAYER_SIDE_HOLD = 'payer_side_after_transfer';
+
+/** The switch's value as stored; anything unreadable counts as on, the safe side. */
+export function provenSuccessSwitchOn(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (value === 'false' || value === 'off' || value === 0) return false;
+  return true;
 }
 
 export function createWithdrawalCommands(options: WithdrawalCommandsOptions): WithdrawalCommands {
@@ -114,7 +144,15 @@ export function createWithdrawalCommands(options: WithdrawalCommandsOptions): Wi
     const row = await trx
       .withSchema('app')
       .selectFrom('withdrawals')
-      .select(['id', 'user_id', 'amount_fen', 'status', 'row_version', 'blocked_reason'])
+      .select([
+        'id',
+        'user_id',
+        'amount_fen',
+        'status',
+        'row_version',
+        'blocked_reason',
+        'hold_reason',
+      ])
       .where('app_id', '=', input.appId)
       .where('id', '=', input.withdrawalId)
       .executeTakeFirst();
@@ -211,6 +249,31 @@ export function createWithdrawalCommands(options: WithdrawalCommandsOptions): Wi
     });
   }
 
+  /** The query guard of a payer-side hold: the refusal, or null when W3 may go on. */
+  async function queryGuardRefusal(
+    trx: Transaction<DB>,
+    appId: string,
+    withdrawalId: string,
+  ): Promise<'query_required' | 'query_success' | null> {
+    const setting = await options.config?.configValue(appId, PROVEN_SUCCESS_SWITCH, trx);
+    if (setting !== undefined && setting !== null && !provenSuccessSwitchOn(setting.value)) {
+      return null;
+    }
+    const latest = await trx
+      .withSchema('app')
+      .selectFrom('payout_attempts')
+      .select('result')
+      .where('app_id', '=', appId)
+      .where('withdrawal_id', '=', withdrawalId)
+      .where('kind', '=', 'query')
+      .orderBy('at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    if (latest?.result === 'success') return 'query_success';
+    return latest?.result === 'fail' ? null : 'query_required';
+  }
+
   /**
    * The shared W3: reason already judged by the caller. Locks, reads, checks the attempts rule,
    * CAS, voucher, event.
@@ -251,6 +314,10 @@ export function createWithdrawalCommands(options: WithdrawalCommandsOptions): Wi
             )
           : await attempts.hasAttempt(trx, current.id, ['transfer']);
       if (blocked) return { kind: 'refused', reason: 'attempt_exists' };
+    }
+    if (attemptsRule === 'manual' && current.hold_reason === PAYER_SIDE_HOLD) {
+      const refusal = await queryGuardRefusal(trx, input.appId, current.id);
+      if (refusal !== null) return { kind: 'refused', reason: refusal };
     }
     const now = clock.now();
     await cas(trx, input, transition.to, {
