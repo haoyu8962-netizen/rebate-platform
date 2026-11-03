@@ -32,6 +32,11 @@ import {
   AdminAssetSnapshotsController,
 } from './http/admin/asset-snapshots.controller.ts';
 import {
+  ADMIN_FUND_LEDGER,
+  AdminFundLedgerController,
+} from './http/admin/fund-ledger.controller.ts';
+import type { AdminFundLedgerDeps } from './application/admin-fund-ledger.ts';
+import {
   AdminReconDiffCloseController,
   RECON_DIFF_CLOSE_DEPS,
 } from './http/admin/recon-diff-close.controller.ts';
@@ -96,6 +101,10 @@ export interface LedgerAdminOptions {
     readonly queue: JobQueue;
     readonly eventBus: EventBus;
   }) => ReconDiffWriteOff;
+  /** B2-04zs: payout's water level of the enterprise Alipay channel. */
+  readonly waterLevel: AdminFundLedgerDeps['waterLevel'];
+  /** B2-04zs: admin's createAdminDisplayNameReader. */
+  readonly adminNames: AdminFundLedgerDeps['adminNames'];
 }
 
 /**
@@ -103,7 +112,8 @@ export interface LedgerAdminOptions {
  * guarded through platform's AdminOperationGuard and read on the primary handle. B2-09b: the close
  * (POST /admin/v1/recon-diffs/{recon_diff_id}/close, fund.recon) under platform idempotency, with
  * payout's hold release and admin's audit writer on the closing transaction. B2-09e: the daily
- * asset snapshot list (GET /admin/v1/asset-snapshots, fund.view, read only). Without the database
+ * asset snapshot list (GET /admin/v1/asset-snapshots, fund.view, read only). B2-04zs: the fund
+ * ledger overview (GET /admin/v1/fund-ledger, fund.view, read only). Without the database
  * the routes still register and fail closed (50001).
  */
 export class LedgerAdminModule {
@@ -115,12 +125,21 @@ export class LedgerAdminModule {
         AdminReconDiffCloseController,
         AdminAssetSnapshotsController,
         AdminReconDiffWriteOffController,
+        AdminFundLedgerController,
       ],
       providers: [
         {
           provide: RECON_DIFF_READ_DB,
           inject: [{ token: DB, optional: true }],
           useFactory: (db?: Kysely<Database>): Kysely<Database> | null => db ?? null,
+        },
+        {
+          provide: ADMIN_FUND_LEDGER,
+          inject: [CLOCK, { token: DB, optional: true }],
+          useFactory: (clock: Clock, db?: Kysely<Database>): AdminFundLedgerDeps | null =>
+            db === undefined
+              ? null
+              : { db, clock, waterLevel: options.waterLevel, adminNames: options.adminNames },
         },
         {
           provide: ASSET_SNAPSHOT_READ_DB,

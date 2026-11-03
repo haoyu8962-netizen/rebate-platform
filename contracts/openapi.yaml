@@ -26391,7 +26391,6 @@ paths:
         /admin/v1/asset-snapshots), the records (GET /admin/v1/union-receipts), the alert lines
         and other cards of the water level, and the fund dashboard adminGetFundsReport.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403

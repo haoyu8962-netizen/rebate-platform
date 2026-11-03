@@ -11,7 +11,12 @@
 import type { DB } from '@couli/db';
 import { parseFen } from '@couli/money';
 import { sql, type Transaction } from 'kysely';
-import { forecastFen, forecastWindow, type WatermarkReading } from '../domain/watermark.ts';
+import {
+  forecastFen,
+  forecastWindow,
+  judgeWaterLevel,
+  type WatermarkReading,
+} from '../domain/watermark.ts';
 
 export type PayoutChannelName = 'alipay' | 'bank_card' | 'wechat';
 
@@ -52,6 +57,40 @@ export async function lockWatermarkChannel(
   await sql`SELECT pg_advisory_xact_lock(hashtext(${`${appId}:payout-watermark:${channel}`})::bigint)`.execute(
     trx,
   );
+}
+
+/** W, P and the conclusion of one channel, for the fund ledger page. */
+export interface PayoutWaterLevel {
+  readonly reading: (WatermarkReading & { readonly enteredBy: string }) | null;
+  readonly forecastFen: bigint;
+  readonly level: 'low' | 'normal' | null;
+}
+
+/** The enterprise Alipay channel's water level at `now`, on the caller's transaction. */
+export async function readAlipayWaterLevel(
+  trx: Transaction<DB>,
+  input: { appId: string; now: Date },
+): Promise<PayoutWaterLevel> {
+  const { appId, now } = input;
+  const channel: PayoutChannelName = 'alipay';
+  const reader = createWatermarkReader();
+  const latest = await reader.latest(trx, { appId, channel });
+  const forecast = await reader.forecast(trx, { appId, channel, now });
+  const level = judgeWaterLevel({ now, reading: latest, forecastFen: forecast });
+  if (latest === null) return { reading: null, forecastFen: forecast, level };
+  // The same row as latest(): the same order, on the same transaction.
+  const row = await trx
+    .withSchema('app')
+    .selectFrom('payout_watermarks')
+    .select('entered_by')
+    .where('app_id', '=', appId)
+    .where('channel', '=', channel)
+    .orderBy('measured_at', 'desc')
+    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(1)
+    .executeTakeFirstOrThrow();
+  return { reading: { ...latest, enteredBy: row.entered_by }, forecastFen: forecast, level };
 }
 
 export function createWatermarkReader(): WatermarkReader {

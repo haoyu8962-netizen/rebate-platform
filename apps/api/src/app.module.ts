@@ -250,6 +250,7 @@ import { getWalletSummary } from './modules/ledger/read.ts';
 import { readOrder } from './modules/orders/infra/pipeline-store.ts';
 import { PaymentModule } from './modules/payment/index.ts';
 import {
+  readAlipayWaterLevel,
   AUTO_PAYOUT_SAVE_KEYS,
   PayoutAdminModule,
   PayoutModule,
@@ -4530,6 +4531,9 @@ export class AppModule {
         ...(options.entry === 'admin'
           ? [
               LedgerAdminModule.forAdmin({
+                // B2-04zs: the fund ledger overview reads payout's W and P and admin's names.
+                waterLevel: readAlipayWaterLevel,
+                adminNames: createAdminDisplayNameReader,
                 auditWriter: (db, clock) =>
                   createAuditWriter({ db, clock, sensitiveKeys: SENSITIVE_KEYS }),
                 holdRelease: (clock) => ({

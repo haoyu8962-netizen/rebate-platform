@@ -17313,6 +17313,21 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "adminGetFundLedger": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    }
+  },
   "adminListKillSwitches": {
     "headers": {
       "type": "object",

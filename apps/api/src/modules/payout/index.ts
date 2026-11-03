@@ -162,7 +162,12 @@ export type {
   PayoutLeftReason,
   SystemAutoPayoutExecutor,
 } from './application/payout-execute.ts';
-export { forecastFen, forecastWindow, judgeWatermark } from './domain/watermark.ts';
+export {
+  forecastFen,
+  forecastWindow,
+  judgeWaterLevel,
+  judgeWatermark,
+} from './domain/watermark.ts';
 export type {
   ForecastWindow,
   WatermarkCheckInput,
@@ -170,9 +175,10 @@ export type {
   WatermarkRejectReason,
   WatermarkVerdict,
 } from './domain/watermark.ts';
-export { createWatermarkReader } from './application/watermark.ts';
+export { createWatermarkReader, readAlipayWaterLevel } from './application/watermark.ts';
 export type {
   PayoutChannelName,
+  PayoutWaterLevel,
   WatermarkCommitted,
   WatermarkReader,
 } from './application/watermark.ts';

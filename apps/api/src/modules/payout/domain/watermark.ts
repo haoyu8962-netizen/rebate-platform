@@ -52,6 +52,28 @@ const MAX_READING_AGE_MS = 2 * 3_600_000;
 const FORECAST_DAYS = 7n;
 const FORECAST_HORIZON_DAYS = 3n;
 const BP_DENOMINATOR = 10_000n;
+/** BR-WDR-18: W < 1.5 P alerts finance, as integers W × 10 < P × 15. */
+const LEVEL_W_FACTOR = 10n;
+const LEVEL_P_FACTOR = 15n;
+
+/**
+ * The water level of BR-WDR-18 shown on the fund ledger page: low when W < 1.5 P (the line that
+ * alerts finance), compared exactly as W × 10 < P × 15. Null when there is no reading or it has
+ * passed the same staleness limit as ②: a conclusion from an old W would mislead.
+ */
+export function judgeWaterLevel(input: {
+  readonly now: Date;
+  readonly reading: WatermarkReading | null;
+  readonly forecastFen: bigint;
+}): 'low' | 'normal' | null {
+  const { reading } = input;
+  if (reading === null || input.now.getTime() - reading.measuredAt.getTime() > MAX_READING_AGE_MS) {
+    return null;
+  }
+  const scaledW = mulDivFloor(reading.availableFen, LEVEL_W_FACTOR, 1n);
+  const scaledP = mulDivFloor(input.forecastFen, LEVEL_P_FACTOR, 1n);
+  return scaledW < scaledP ? 'low' : 'normal';
+}
 
 /** BR-WDR-18 细则 (D10-241): up to this far ahead of now is clock skew; further is refused. */
 const MAX_READING_AHEAD_MS = 5 * 60_000;
