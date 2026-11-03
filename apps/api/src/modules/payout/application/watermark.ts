@@ -10,7 +10,7 @@
 // (D10-223); whether several channels share one W is pending the orchestrator's ruling.
 import type { DB } from '@couli/db';
 import { parseFen } from '@couli/money';
-import { sql, type Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import {
   forecastFen,
   forecastWindow,
@@ -27,11 +27,11 @@ export interface WatermarkCommitted {
 
 export interface WatermarkReader {
   latest(
-    trx: Transaction<DB>,
+    trx: Kysely<DB>,
     input: { appId: string; channel: PayoutChannelName },
   ): Promise<WatermarkReading | null>;
   forecast(
-    trx: Transaction<DB>,
+    trx: Kysely<DB>,
     input: { appId: string; channel: PayoutChannelName; now: Date },
   ): Promise<bigint>;
   committed(

@@ -1,0 +1,135 @@
+{
+  "risk_note": "RV2 (funds, read only). BR-WDR-18 asks to alert finance when W < 1.5 P and nothing did. The worker's /metrics exports couli_payout_water_low per app_id: 1 below the line, 0 not; an app with no W or one older than 2 hours has no sample, because 0 means checked and not low. The value comes from payout's read-only port and judgeWaterLevel, the judgement the fund ledger page uses, compared as integers. couli-fund.yaml adds one warning rule. It only alerts: EXECUTE's checks do not change. A failed read fails the scrape, never a 0. WatermarkReader's latest and forecast now take Kysely<DB> instead of Transaction<DB> so the port can read on a read-only handle; a Transaction is a Kysely, callers are unchanged. No write, no migration. Frozen test: [AC-B1-01zzi#6] in test/spec/platform/fund-metrics/rules.test.ts adds couli_payout_water_low to its allowed list and pins that a rule reads it, only additions (D10-327, ledger #2304). Alert routing: there is no Alertmanager configuration under infra/, as for every other rule of this file; finance gets this once the routing exists.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via claude-run.sh under approvals 36, because Codex was not logged in (401, orchestrator 18:34). couli-runs/B2-09j/money-review-r1.json, static, nothing executed. One S2, fixed after it: the alert description named only two of EXECUTE's refusals, and now names the usable share too; annotation text only, rule tests re-run, no second round."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "fresh Claude each round, static, not run by the reviewer. r1 fail with 2 S1 and 2 S2: every total was divisible by 7 and every P even, so P's rounding and a fractional 1.5 P were not pinned, nor a per-app read failure or an equal measured_at. A new independent Claude added #25 to #28, no assertion loosened. r2 on the increment pass, no findings. The implementer renamed the new helper kit.ts to water-harness.ts because the red check took it for the frozen file's ../metrics/kit.ts, and ran prettier on the test directory; imports and format only."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09j",
+  "spec_commit": "9aab07442166a0ba8ce3c47324946bb6121b78f1",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [
+    "test/spec/platform/fund-metrics/rules.test.ts > [AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标",
+    "test/spec/platform/metrics/water-level/cache.test.ts > [AC-B2-09j#17] 默认缓存 5 分钟：差 1 毫秒仍是同一份快照、不再读；满 5 分钟重读并跟随新值",
+    "test/spec/platform/metrics/water-level/cache.test.ts > [AC-B2-09j#18] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+    "test/spec/platform/metrics/water-level/entry.test.ts > [AC-B2-09j#19] worker 的 /metrics 在 scrape 时经本入口库读 W 与 P、导出 couli_payout_water_low（gauge、app_id 标签、值为端口结论）、不写、不读数据库时钟；其余四个入口没有该指标、不做该读",
+    "test/spec/platform/metrics/water-level/entry.test.ts > [AC-B2-09j#20] worker 的水位读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论",
+    "test/spec/platform/metrics/water-level/entry.test.ts > [AC-B2-09j#21] worker 装配走 5 分钟缓存：5 分钟内不再读、值不变，满 5 分钟重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#4] BR-WDR-18 的例子：近 7 日申请合计 ¥49,000（P=¥21,000）。W=¥30,000 值 1；W=¥31,500（恰为 1.5P）值 0；W=¥31,499.99 值 1",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#5] W < P 也是 1：W=¥20,000 时打款已被拒，1.5P 这条线同样成立",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#6] 不下结论没有样本：没有 W 行的 app、W 过期的 app（低或不低都一样）没有样本，恰好 2 小时还有样本、多 1 毫秒没有；别的 app 不受影响",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#7] 多 app：各算各的 W 和 P，每个 app 一个样本（一个 app 有多行 W 也只一个样本）",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#8] 只看 alipay：wechat / bank_card 的 W 和提现都不影响结论；只有别的通道有 W、或 alipay 的 W 过期而别的通道新鲜，都没有样本",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#9] 取的是最新一行 W，端口不缓存：较新的 W 决定结论，再录一行更新的 W 下一次读就跟着变",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#10] P 的口径同 BR-WDR-18：近 7 个完整自然日（+08:00，含起点、不含当日）的 amount_fen，不含 REJECTED；FAILED 计入",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#11] 有 W、近 7 日没有提现时 P=0：下结论「不低」（W=0 也是 0，0 < 0 不成立），不是没有样本",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#12] 只读、只用注入时钟：只读事务可跑、两张表的行前后不变；W 的新旧只看注入时钟（库的 now() 早好几年）；worker registry 以该端口渲染出同样的值",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#25] P 的舍入是 round_half_up(合计 / 7) × 3：Σ=4,900,004 日均 700,000.57 入为 700,001、P=2,100,003、1.5P=3,150,004.5，W=3,150,004 值 1、W=3,150,005 值 0；Σ=4,900,003 日均 700,000.43 舍为 700,000、P=2,100,000、1.5P=3,150,000，W=3,149,999 值 1、W=3,150,000 值 0",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#26] 1.5P 不是整数时不截断：七日合计 7 分，P=3、1.5P=4.5；W=4 值 1（4 < 4.5）、W=5 值 0",
+    "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#28] 取数时间相同时按 created_at 较晚的一行（录错更正）：W=¥30,000 更正为 W=¥31,500 值 0，写入先后颠倒也一样；W=¥31,500 更正为 W=¥30,000 值 1",
+    "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#1] payout 端口经 payout/index.ts 导出：读 payout_watermarks 与 withdrawals（按通道）；不读别的模块的资金表、不写、不读数据库时钟",
+    "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#2] 端口的任一库读失败时端口拒绝（原错误）：W 读失败、P 读失败、第二个 app 的 P 读失败都不以 0 或只含部分 app 的结果代替",
+    "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#3] 整数比较，不用浮点：超过 2^53 的金额仍分得清差 1 分（P = 1.2e16 分，W 比 1.5P 少 1 分值 1，W 恰为 1.5P 值 0）",
+    "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#27] app 列表读成功、某个 app 的 W 读失败时端口也拒绝（原错误）：第一个、第二个 app 都一样，不留没有 key 的结果",
+    "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#13] worker 的 registry 在 scrape 时调 collectWaterLow：有 # HELP 与 # TYPE couli_payout_water_low gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致；其余指标照旧",
+    "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#14] 样本跟随每次快照、不常驻轮询：结论消失的 app 没有样本（不留旧值、不补 0），快照为空时只有 # TYPE 行没有样本",
+    "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#15] 只在 worker 且给了 collectWaterLow 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+    "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#16] collectWaterLow 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把结论编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+    "test/spec/platform/metrics/water-level/rules.test.ts > [AC-B2-09j#22] couli-fund.yaml 有且只有一条读 couli_payout_water_low 的规则：expr 就是 couli_payout_water_low > 0、for 5m、severity warning、labels.fund 为字符串 \"true\"、有 summary 和 description；alert 名在两个文件里唯一",
+    "test/spec/platform/metrics/water-level/rules.test.ts > [AC-B2-09j#23] 阈值边界：值 0（查过，不低）不触发，值 1 触发（严格大于 0，不是 >= 0、不是 > 1）",
+    "test/spec/platform/metrics/water-level/rules.test.ts > [AC-B2-09j#24] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9aab07442166a0ba8ce3c47324946bb6121b78f1",
+      "tree": "c47d370c28d95ef7c1dc6335744a73d49d1f9835",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-03T10:46:04Z",
+      "finished_at": "2026-11-03T10:46:25Z",
+      "red_tests": [
+        "test/spec/platform/fund-metrics/rules.test.ts > [AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标",
+        "test/spec/platform/metrics/water-level/cache.test.ts > [AC-B2-09j#17] 默认缓存 5 分钟：差 1 毫秒仍是同一份快照、不再读；满 5 分钟重读并跟随新值",
+        "test/spec/platform/metrics/water-level/cache.test.ts > [AC-B2-09j#18] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+        "test/spec/platform/metrics/water-level/entry.test.ts > [AC-B2-09j#19] worker 的 /metrics 在 scrape 时经本入口库读 W 与 P、导出 couli_payout_water_low（gauge、app_id 标签、值为端口结论）、不写、不读数据库时钟；其余四个入口没有该指标、不做该读",
+        "test/spec/platform/metrics/water-level/entry.test.ts > [AC-B2-09j#20] worker 的水位读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论",
+        "test/spec/platform/metrics/water-level/entry.test.ts > [AC-B2-09j#21] worker 装配走 5 分钟缓存：5 分钟内不再读、值不变，满 5 分钟重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#4] BR-WDR-18 的例子：近 7 日申请合计 ¥49,000（P=¥21,000）。W=¥30,000 值 1；W=¥31,500（恰为 1.5P）值 0；W=¥31,499.99 值 1",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#5] W < P 也是 1：W=¥20,000 时打款已被拒，1.5P 这条线同样成立",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#6] 不下结论没有样本：没有 W 行的 app、W 过期的 app（低或不低都一样）没有样本，恰好 2 小时还有样本、多 1 毫秒没有；别的 app 不受影响",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#7] 多 app：各算各的 W 和 P，每个 app 一个样本（一个 app 有多行 W 也只一个样本）",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#8] 只看 alipay：wechat / bank_card 的 W 和提现都不影响结论；只有别的通道有 W、或 alipay 的 W 过期而别的通道新鲜，都没有样本",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#9] 取的是最新一行 W，端口不缓存：较新的 W 决定结论，再录一行更新的 W 下一次读就跟着变",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#10] P 的口径同 BR-WDR-18：近 7 个完整自然日（+08:00，含起点、不含当日）的 amount_fen，不含 REJECTED；FAILED 计入",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#11] 有 W、近 7 日没有提现时 P=0：下结论「不低」（W=0 也是 0，0 < 0 不成立），不是没有样本",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#12] 只读、只用注入时钟：只读事务可跑、两张表的行前后不变；W 的新旧只看注入时钟（库的 now() 早好几年）；worker registry 以该端口渲染出同样的值",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#25] P 的舍入是 round_half_up(合计 / 7) × 3：Σ=4,900,004 日均 700,000.57 入为 700,001、P=2,100,003、1.5P=3,150,004.5，W=3,150,004 值 1、W=3,150,005 值 0；Σ=4,900,003 日均 700,000.43 舍为 700,000、P=2,100,000、1.5P=3,150,000，W=3,149,999 值 1、W=3,150,000 值 0",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#26] 1.5P 不是整数时不截断：七日合计 7 分，P=3、1.5P=4.5；W=4 值 1（4 < 4.5）、W=5 值 0",
+        "test/spec/platform/metrics/water-level/port.int.test.ts > [AC-B2-09j#28] 取数时间相同时按 created_at 较晚的一行（录错更正）：W=¥30,000 更正为 W=¥31,500 值 0，写入先后颠倒也一样；W=¥31,500 更正为 W=¥30,000 值 1",
+        "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#1] payout 端口经 payout/index.ts 导出：读 payout_watermarks 与 withdrawals（按通道）；不读别的模块的资金表、不写、不读数据库时钟",
+        "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#2] 端口的任一库读失败时端口拒绝（原错误）：W 读失败、P 读失败、第二个 app 的 P 读失败都不以 0 或只含部分 app 的结果代替",
+        "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#3] 整数比较，不用浮点：超过 2^53 的金额仍分得清差 1 分（P = 1.2e16 分，W 比 1.5P 少 1 分值 1，W 恰为 1.5P 值 0）",
+        "test/spec/platform/metrics/water-level/port.test.ts > [AC-B2-09j#27] app 列表读成功、某个 app 的 W 读失败时端口也拒绝（原错误）：第一个、第二个 app 都一样，不留没有 key 的结果",
+        "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#13] worker 的 registry 在 scrape 时调 collectWaterLow：有 # HELP 与 # TYPE couli_payout_water_low gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致；其余指标照旧",
+        "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#14] 样本跟随每次快照、不常驻轮询：结论消失的 app 没有样本（不留旧值、不补 0），快照为空时只有 # TYPE 行没有样本",
+        "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#15] 只在 worker 且给了 collectWaterLow 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+        "test/spec/platform/metrics/water-level/registry.test.ts > [AC-B2-09j#16] collectWaterLow 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把结论编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+        "test/spec/platform/metrics/water-level/rules.test.ts > [AC-B2-09j#22] couli-fund.yaml 有且只有一条读 couli_payout_water_low 的规则：expr 就是 couli_payout_water_low > 0、for 5m、severity warning、labels.fund 为字符串 \"true\"、有 summary 和 description；alert 名在两个文件里唯一",
+        "test/spec/platform/metrics/water-level/rules.test.ts > [AC-B2-09j#23] 阈值边界：值 0（查过，不低）不触发，值 1 触发（严格大于 0，不是 >= 0、不是 > 1）",
+        "test/spec/platform/metrics/water-level/rules.test.ts > [AC-B2-09j#24] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处"
+      ],
+      "expected": [
+        "test/spec/platform/fund-metrics/rules.test.ts",
+        "test/spec/platform/metrics/water-level/cache.test.ts",
+        "test/spec/platform/metrics/water-level/entry.test.ts",
+        "test/spec/platform/metrics/water-level/port.int.test.ts",
+        "test/spec/platform/metrics/water-level/port.test.ts",
+        "test/spec/platform/metrics/water-level/registry.test.ts",
+        "test/spec/platform/metrics/water-level/rules.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "580f97fc53ae0774875b6230748c2d1186f4dadc728fcc337faa91b4e6873a14"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7f1b94b323937887b6864f1e19d7a74d1df3f98bea3b8f0597ca27121a35038d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5e7ab9277c57ec6b6b8465fb31109153625ac33a",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

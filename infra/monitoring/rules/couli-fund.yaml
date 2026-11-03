@@ -87,6 +87,15 @@ groups:
         annotations:
           summary: 'Withdrawals past their review deadline are still waiting for a person'
           description: 'Withdrawals the review-overdue check judged overdue (review_overdue_at set, BR-WDR-26) that are still PENDING_REVIEW or APPROVED. The finance alert is not subject to quiet hours (BR-WDR-24); the count drops as reviews end (PAYING, PAID_MANUAL or REJECTED).'
+      - alert: CouliPayoutWaterLow
+        expr: 'couli_payout_water_low > 0'
+        for: '5m'
+        labels:
+          severity: warning
+          fund: 'true'
+        annotations:
+          summary: 'The enterprise Alipay balance W is below 1.5 times the forecast withdrawals P'
+          description: 'couli_payout_water_low is 1 for an app whose latest W, read within 2 hours, is below 1.5 P (BR-WDR-18). This only warns finance: it does not refuse payouts. EXECUTE refuses on its own checks (W below P, W stale, or the usable share of W exceeded). There is no sample without a fresh W, so a stale W does not fire this alert; re-enter W on the payout console.'
       - alert: CouliAutoPayoutDailyNearCap
         expr: 'couli_auto_payout_daily_total_fen / couli_auto_payout_daily_cap_fen >= 0.8'
         for: '5m'

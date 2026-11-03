@@ -145,11 +145,13 @@ it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：
     ...FUND_METRIC_NAMES,
     ...AUTO_PAYOUT_METRIC_NAMES,
     ...REVIEW_OVERDUE_METRIC_NAMES,
+    'couli_payout_water_low',
   ];
   expect(named.filter((name) => !allowed.includes(name))).toEqual([]);
   for (const metric of FUND_METRIC_NAMES) {
     expect(named, `some rule reads ${metric}`).toContain(metric);
   }
+  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');
   // The fund gauges are read only by the fund file, never by couli.yaml.
   const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\bcouli_[a-z0-9_]+/g) ?? []);
   expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);

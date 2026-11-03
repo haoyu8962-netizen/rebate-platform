@@ -57,6 +57,7 @@ import {
   payoutRuntimeToken,
   readPayoutFundMetrics,
   readPayoutReviewOverdue,
+  readPayoutWaterLow,
   resolvePayoutMode,
   type PayoutModeDecision,
   type PayoutRuntime,
@@ -65,11 +66,13 @@ import {
   cacheAutoPayoutCollector,
   cacheFundCollector,
   cacheReviewOverdueCollector,
+  cacheWaterLowCollector,
   collectAutoPayoutDaily,
   type AutoPayoutCapFenOf,
   type AutoPayoutDailySnapshot,
   type FundMetricsSnapshot,
   type ReviewOverdueSnapshot,
+  type WaterLowSnapshot,
   type TaobaoSearchMetricsSnapshot,
 } from './modules/platform/metrics/index.ts';
 import { readSettlementFundMetrics } from './modules/settlement/index.ts';
@@ -295,7 +298,8 @@ function startGenerationRenewal(
  * gauges from the orders, settlement and payout read ports; the worker hands it in wrapped by
  * `cacheFundCollector`, B1-01zzo) and, since B1-01zzp, `collectAutoPayout` (today's automatic
  * total against the cap, cached per +08:00 day) and, since B2-05o, `collectReviewOverdue` (the
- * withdrawals judged review-overdue still waiting, payout's read-only port). Since B1-04zy only
+ * withdrawals judged review-overdue still waiting, payout's read-only port) and, since B2-09j,
+ * `collectWaterLow` (W against 1.5 P per app, payout's read-only port). Since B1-04zy only
  * the api passes `collectTaobaoSearch` (union's in-process search counter, read at scrape time).
  * Not on the Nest application, not in the OAS.
  */
@@ -309,6 +313,7 @@ async function openMetrics(
         readonly collectFund: () => Promise<FundMetricsSnapshot>;
         readonly collectAutoPayout: () => Promise<AutoPayoutDailySnapshot>;
         readonly collectReviewOverdue: () => Promise<ReviewOverdueSnapshot>;
+        readonly collectWaterLow: () => Promise<WaterLowSnapshot>;
       }
     | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot },
 ): Promise<MetricsServer | undefined> {
@@ -514,6 +519,12 @@ async function start(
           // way; a failed read fails the scrape (no 0 in its place) and is read again next time.
           collectReviewOverdue: cacheReviewOverdueCollector(
             () => readPayoutReviewOverdue(dbHandles.db),
+            clock,
+          ),
+          // The water level gauge (B2-09j; BR-WDR-18): payout's read-only port, cached the same way;
+          // a failed read fails the scrape (no 0 in its place) and is read again next time.
+          collectWaterLow: cacheWaterLowCollector(
+            () => readPayoutWaterLow(dbHandles.db, clock),
             clock,
           ),
         });

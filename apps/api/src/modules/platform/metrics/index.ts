@@ -13,6 +13,8 @@ export type { WorkerMetricsSnapshot } from './collect.ts';
 export type { FundMetricsSnapshot } from './fund.ts';
 export { cacheReviewOverdueCollector } from './review-overdue.ts';
 export type { ReviewOverdueSnapshot } from './review-overdue.ts';
+export { cacheWaterLowCollector } from './water-low.ts';
+export type { WaterLowSnapshot } from './water-low.ts';
 export { createMetricsRegistry } from './registry.ts';
 export type {
   MetricsRegistry,
