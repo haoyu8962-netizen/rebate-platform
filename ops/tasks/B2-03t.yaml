@@ -1,0 +1,32 @@
+id: B2-03t
+repo: rebate-platform
+title: 测试修改（D10-605 (a)）：config 登记表加 tech_fee_bp（config.business，按平台的对象）与 rebate.taobao.compare_rate_ratio_bp（config.business，整数），不加种子默认值；冻结注册表测试按「无种子行」口径（同 feed.fallback_pool_id）放进对应名单
+type: test-change
+# 2026-11-04 ops 入账（编排 D10-605 (a)）。真实返利报价器（commission/application/rebate-quoter.ts，B2-03d / B2-03n）每次报价都读这两个键，
+# 而 content/domain/config-registry.ts 没有登记，后台 PUT /admin/v1/config-items/{key} 回 20001 data.fields=[key]，staging 与生产都配不了。
+# 本单只登记：两键都归 config.business（totp step-up），tech_fee_bp 类型 object（键为平台、值为万分之一整数，具体校验由 commission 的 quote-config 在读时做）、
+# compare_rate_ratio_bp 类型 number；08 BR-PRICE-07 / BR-CALC-20 仍「待核实 / 占位」，不加种子默认值（D10-605）。
+# 冻结测试（test/spec/content/config-items/registry.test.ts、kit.ts、read.int.test.ts）按 B1-05s feed.fallback_pool_id 的「无种子行」写法改：
+#   只增不减，由新鲜独立 Claude 改（approvals #36），另一新鲜独立 Claude 只读复审「不削弱」，按 approvals #24 请编排加标签。
+# 2026-11-04 补 paths：config-settle、invite-reward-* 的冻结注册表测试把登记表结尾钉在 ledger.advance_alert_fen（「nothing else may follow」），末尾加键须在这四处尾巴后追加（先例 B2-04zo 13dd74ff、B1-05s 2dac355e）。
+# staging 已由 D10-605 (b) 直接插入同值（version 1），本单合并部署后由运营管理员经后台重写一遍（expected_version 1）。RV2。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/**'
+status: todo
