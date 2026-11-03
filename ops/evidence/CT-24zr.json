@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV1 (contract only). One new planned operation, adminBatchManualPaid (W8; BR-WDR-16, 08, 09, 17, 33; D10-595): payout.manual_entry, totp step-up, idempotent, audited, each item on its own transaction with its own result. Guards follow BR-WDR-16 and reuse the query guard of the manual W3; a wechat withdrawal is refused, and an item without a verified real name is that item's result, not a 5xx. Agent defaults stated in the text: 200 items, channel_order_id 1 to 64 characters with no whitespace, paid_at at most 5 minutes after the Clock and not before created_at. Entering and confirming are one submission; 08 also allows a separate confirmation, which is not offered and is reported for a ruling. No new error code, no existing operation changes, no migration.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Independent Claude via claude-run.sh under approvals 36, Codex not logged in. r1 pass with 4 S2, static, no tests run by the reviewer. Two changed in the text afterwards with no second round: paid_fen has no minimum so 0 is an item's amount_mismatch, and the result column is stated to come from the response and not be stored. Two reported to the orchestrator and not changed here: no separate confirmation step, and no way to record a query on a withdrawal returned by W9."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zr",
+  "spec_commit": "e923e308df9d008c94d7c3876515a07e91268fa9",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3eded7dc5f7f70697206116545c3700c2251034a",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

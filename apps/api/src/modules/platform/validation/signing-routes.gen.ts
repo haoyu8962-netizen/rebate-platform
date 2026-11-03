@@ -1283,6 +1283,11 @@ export const CONTRACT_SIGNING_ROUTES = [
   },
   {
     "method": "POST",
+    "path": "/admin/v1/withdrawals/batch-manual-paid",
+    "signed": false
+  },
+  {
+    "method": "POST",
     "path": "/admin/v1/withdrawals/:withdrawal_id/reject",
     "signed": false
   },

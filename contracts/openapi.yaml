@@ -24953,6 +24953,170 @@ paths:
                   $ref: '#/components/examples/AdminTokenExpired'
         5XX:
           $ref: '#/components/responses/ServerError'
+  /admin/v1/withdrawals/batch-manual-paid:
+    post:
+      operationId: adminBatchManualPaid
+      tags:
+        - admin-withdrawals
+      summary: Record withdrawals paid outside the channel interface, each on its own (批量手动打款)
+      description: |
+        The 【批量手动打款】 of the withdrawal page; one withdrawal is a batch of one (01 F-ADM-07;
+        BR-WDR-16, BR-WDR-08 W8, BR-WDR-09, BR-WDR-17; ruling D10-595). Finance has already paid the
+        member from a company account and records it here, so this is the way out while a channel's
+        transfer interface is not open. Permission point `payout.manual_entry`; a super admin holds
+        every point. Step-up: totp tier (BR-ID-34): one valid totp-tier `X-Step-Up-Token` covers the
+        whole request; without one → 10003 with `data.tier=totp`. Entering and confirming are one
+        submission and one person may do both, also the reviewer (BR-WDR-16, ADD-05);
+        `manual_entry_by` and `manual_confirm_by` are both the caller. A separate confirmation step
+        is not offered.
+
+        Request (AdminWithdrawalBatchManualPaidRequest): `items`, 1 to 200 (200 is 代理补全的默认,
+        D10-595), each with `withdrawal_id`, `channel_order_id` (the Alipay or bank transfer serial
+        number, by the withdrawal's snapshot channel; 1 to 64 characters and no whitespace, so that
+        a stray space cannot make the same number look new; compared exactly, case included),
+        `paid_at` (when the money was really paid) and `paid_fen` (integer fen, the amount really
+        paid; any integer reaches the item's own check). A withdrawal may appear only once: a duplicate `withdrawal_id` is 20001 with
+        `data.fields=[items]`.
+
+        Order of checks: the route schema comes first, before the permission and step-up checks, as
+        on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming the
+        field, also for a caller without the permission point or a token, and nothing is written.
+        Then `payout.manual_entry` (10403 with `data.reason=admin_permission_denied`) → step-up
+        (10003) → the duplicate check. After that the answer is 200 and each item has its own
+        result: an item that cannot be recorded never fails the others.
+
+        Each item runs in its own transaction, in the order given, under the member's locks and the
+        withdrawal's row lock, and the first check that fails is its result, in `items`, one per
+        request item in request order: `paid`, or `skipped` with `reason`:
+
+        - `not_found`: an unknown id, one of another app, or one that is not a UUID (which never
+          reaches the database).
+        - `not_approved`: not APPROVED. W8 starts only there (BR-WDR-16). EXECUTE and W8 both
+          require APPROVED under a CAS, and the first to commit wins, so the loser gets this and
+          no money moves twice.
+        - `channel_not_allowed`: a wechat withdrawal; W8 is not open to it (BR-WDR-33 ⑧).
+        - `amount_mismatch`: `paid_fen` is not exactly the withdrawal's `net_fen` (BR-WDR-16).
+        - `paid_at_invalid`: `paid_at` is more than 5 minutes after the injected Clock, or before
+          the withdrawal's `created_at` (代理补全的默认: no one can pay in the future or before the
+          member asked, and the tax export and the watermark read this time).
+        - `has_transfer_attempt`: a kind=transfer attempt with result pending, success or unknown.
+          That money may be out, so such a withdrawal ends through BR-WDR-15. An attempt that
+          definitely failed does not stop W8.
+        - `query_required` or `query_success`: while the switch
+          `payout.proven_success_writeoff.enabled` is on (default on), a withdrawal with
+          `hold_reason=payer_side_after_transfer` is checked against its latest query, because a
+          transfer the channel reported as failed may still have been paid (BR-WDR-08 W8,
+          BR-WDR-17, 决-08 A). No query yet, or a latest query with an unknown result, is
+          `query_required`. A latest query that succeeded is `query_success`: the channel paid, so
+          this withdrawal ends through W11, and recording an offline payment too would pay twice. A
+          latest query with result fail lets it through. BR-WDR-17 also allows 「订单不存在」, but that
+          answer is recorded with result unknown and has no verified channel code yet (BR-WDR-22,
+          BR-WDR-28), so until one is registered it is `query_required`: the safe direction. With
+          the switch off this check does not run.
+        - `member_blocked`: a withdrawal block of the member (BR-WDR-05): risk state frozen, banned
+          or appealing over either, an effective withdraw hold, available below 0, or
+          `blocked_reason` set.
+        - `channel_order_id_taken`: `(app_id, channel_order_id)` is already on a withdrawal,
+          whichever way it was paid, and also an earlier item of this request; two requests racing
+          for one number are settled by the unique index, and the loser gets this.
+        - `identity_missing`: the member has no verified real name, so `tax_ytd` cannot be updated
+          (BR-WDR-20). The money was paid and this needs a person; nothing is written.
+
+        Not checked, because they gate EXECUTE and not W8: `payout.enabled`, `payout.queue_paused`,
+        the channel switches (a bank_card withdrawal has only this way out while that channel is
+        off, BR-WDR-32 ①) and the watermark (BR-WDR-18). An unexpected failure of one item ends the
+        request with 5xx; items already recorded stay recorded, and the same key runs the rest again
+        (those come back `not_approved`).
+
+        Effects of each paid item, on one transaction: APPROVED → PAID_MANUAL (W8) with `paid_at` as
+        given, `channel_order_id`, `manual_entry_by` and `manual_confirm_by`, and `hold_reason` and
+        `hold_at` cleared; the success voucher of BR-WDR-09 with the key `wd:{withdrawal_id}:PAID`
+        and the cash subject of the snapshot channel (WITHDRAW:SUCCESS:CASH_ALIPAY or CASH_BANK), the
+        same as a success through the channel; `tax_ytd` updated (BR-WDR-20);
+        wallet.withdrawal_changed, which sends the member the result message (BR-WDR-26); and an
+        audit record (action withdrawal_manual_paid, with the `withdrawal_id`, the status before and
+        after, `channel_order_id`, `paid_at` and `paid_fen`; no personal data). A withdrawal on a
+        batch stays on it. A skipped item writes nothing: the 执行结果 column of BR-WDR-16 is rendered
+        from this response and is not stored, so after a reload a skipped withdrawal is an ordinary
+        APPROVED row again.
+
+        `Idempotency-Key` is required: same key and body → the first result; same key with another
+        body → 20901; same key while still running → 40901. The step-up token is a header and not
+        part of the body hash, so a replay after a 10003 keeps its key.
+      x-auth: admin
+      x-idempotent: true
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10003
+        - 10403
+        - 20001
+        - 20901
+        - 40901
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminStepUpToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminWithdrawalBatchManualPaidRequest'
+            example:
+              items:
+                - withdrawal_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001
+                  channel_order_id: '20261103220014001'
+                  paid_at: '2026-11-03T09:30:00+08:00'
+                  paid_fen: 9800
+                - withdrawal_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc002
+                  channel_order_id: '20261103220014002'
+                  paid_at: '2026-11-03T09:32:00+08:00'
+                  paid_fen: 10000
+      responses:
+        '200':
+          description: One result per item, or the first result of the same key.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWithdrawalBatchManualPaidResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  items:
+                    - withdrawal_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001
+                      result: paid
+                      reason: null
+                    - withdrawal_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc002
+                      result: skipped
+                      reason: amount_mismatch
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not processed (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                stepUpRequired:
+                  $ref: '#/components/examples/AdminStepUpRequiredTotp'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
   /admin/v1/withdrawals/{withdrawal_id}/reject:
     post:
       operationId: adminRejectWithdrawal
@@ -50817,6 +50981,106 @@ components:
         - USER_REQUEST
         - OTHER
         - NEGATIVE_BALANCE
+    AdminWithdrawalBatchManualPaidRequest:
+      type: object
+      description: The offline payments to record; see POST /admin/v1/withdrawals/batch-manual-paid.
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/AdminWithdrawalManualPaidEntry'
+    AdminWithdrawalManualPaidEntry:
+      type: object
+      description: One offline payment.
+      additionalProperties: false
+      required:
+        - withdrawal_id
+        - channel_order_id
+        - paid_at
+        - paid_fen
+      properties:
+        withdrawal_id:
+          $ref: '#/components/schemas/Id'
+        channel_order_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^\S+$'
+          description: The Alipay or bank transfer serial number; no whitespace, compared exactly.
+        paid_at:
+          type: string
+          format: date-time
+          description: When the money was really paid, checked against the injected Clock.
+        paid_fen:
+          type: integer
+          format: int64
+          description: Integer fen really paid; anything but the withdrawal's net_fen is that item's amount_mismatch.
+    AdminWithdrawalBatchManualPaidItem:
+      type: object
+      description: The result of one item. `reason` is null exactly when `result` is paid.
+      additionalProperties: false
+      required:
+        - withdrawal_id
+        - result
+        - reason
+      properties:
+        withdrawal_id:
+          $ref: '#/components/schemas/Id'
+        result:
+          type: string
+          enum:
+            - paid
+            - skipped
+        reason:
+          type:
+            - string
+            - 'null'
+          enum:
+            - not_found
+            - not_approved
+            - channel_not_allowed
+            - amount_mismatch
+            - paid_at_invalid
+            - has_transfer_attempt
+            - query_required
+            - query_success
+            - member_blocked
+            - channel_order_id_taken
+            - identity_missing
+            - null
+    AdminWithdrawalBatchManualPaid:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: One per request item, in request order.
+          items:
+            $ref: '#/components/schemas/AdminWithdrawalBatchManualPaidItem'
+    AdminWithdrawalBatchManualPaidResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminWithdrawalBatchManualPaid'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
     AdminWithdrawalBatchApproveRequest:
       type: object
       description: The withdrawals to approve; see POST /admin/v1/withdrawals/batch-approve.

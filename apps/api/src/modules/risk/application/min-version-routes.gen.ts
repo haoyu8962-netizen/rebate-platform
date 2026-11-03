@@ -2585,6 +2585,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "adminBatchManualPaid",
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/batch-manual-paid",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "adminRejectWithdrawal",
     "method": "POST",
     "path": "/admin/v1/withdrawals/:withdrawal_id/reject",
