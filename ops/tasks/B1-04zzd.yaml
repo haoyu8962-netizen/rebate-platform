@@ -1,0 +1,29 @@
+id: B1-04zzd
+repo: rebate-platform
+title: 淘宝 staging 接线：compose 给 admin、api、stream、worker 只读挂载节点 /etc/couli-taobao，README 写三平台切 live 的步骤
+type: impl
+# 2026-11-04 ops 入账（FU-STAGING-UNIONS-LIVE，approvals 第 43 条，编排裁定 D10-597 ④）。照 B1-04zf（京东）与 B1-04y（拼多多）的写法：
+# compose 给装配联盟模块的四个入口只读挂载节点 /etc/couli-taobao（容器内 /run/couli-taobao，create_host_path，可缺）。
+# 目录里放淘宝联盟应用密钥 app_secret；大淘客密钥以后也放这里，本单不接大淘客。
+# README 新增 §1.10「淘宝接线与三平台切 live」，内容包括：
+#   - 节点文件与属主权限（1000 / 500 / 400）；
+#   - TAOBAO_APP_KEY、TAOBAO_APP_SECRET_FILE=/run/couli-taobao/app_secret；
+#   - TAOBAO_SEARCH_SOURCE（official）；
+#   - 覆盖目录三个端点 json 切 live 的顺序；
+#   - 真实返利报价器在 live 下所需的配置键（tech_fee_bp、rebate.taobao.compare_rate_ratio_bp）。
+# 同节注明 §1.5「pdd 切 live blocked on B2-03」已由 B2-03d / B2-03n 解除；§1.5、§1.8 原文不改（冻结测试按节读取）。
+# 不在本单：节点放文件、改 staging.env、切 live、推广位登记（由 ops 在节点上做，不进仓库）。payout 不挂。RV2。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'infra/staging/compose.yaml'
+  - 'infra/staging/README.md'
+  - 'test/spec/infra/staging-taobao/**'
+test_paths:
+  - 'test/spec/infra/staging-taobao/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
