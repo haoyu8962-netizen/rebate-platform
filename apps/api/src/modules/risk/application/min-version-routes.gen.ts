@@ -2575,6 +2575,26 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": false
   },
   {
+    "operationId": "adminBatchApproveWithdrawals",
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/batch-approve",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
+    "operationId": "adminRejectWithdrawal",
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/reject",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "listAdminSettleBills",
     "method": "GET",
     "path": "/admin/v1/settle-bills",

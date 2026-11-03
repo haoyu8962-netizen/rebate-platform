@@ -177,6 +177,10 @@ it('identity codes of 08 §13.11 (功能对照补缺 1–3 批) carry their data
     'adjust_user_deleted',
     'adjust_no_balance',
     'writeoff_frozen_pending',
+    // CT-24zp: admin-only withdrawal rejection refusals (BR-WDR-10, BR-WDR-17, D10-595).
+    'reject_attempt_exists',
+    'reject_query_required',
+    'reject_query_success',
   ]);
   expect(errorCodes[30701].sources).toEqual(['规划/04 §7', 'BR-ID-10', 'BR-ID-40']);
 });

@@ -8714,6 +8714,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/withdrawals/batch-approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve the chosen withdrawals, each on its own (批量通过)
+         * @description The 【批量通过】 of the withdrawal review page; one withdrawal is a batch of one (01 F-ADM-07;
+         *     BR-WDR-10, BR-WDR-05; design/specs/admin-withdrawals.md §2, §4; ruling D10-595). Permission
+         *     point `withdraw.review`; a super admin holds every point. Step-up: totp tier (BR-ID-34): one
+         *     valid totp-tier `X-Step-Up-Token` covers the whole request; without one → 10003 with
+         *     `data.tier=totp`.
+         *
+         *     Request (AdminWithdrawalBatchApproveRequest): `withdrawal_ids`, 1 to 200 ids without
+         *     duplicates (200 is 代理补全的默认, D10-595; a duplicate is 20001 with
+         *     `data.fields=[withdrawal_ids]`).
+         *
+         *     Order of checks: the route schema comes first, before the permission and step-up checks, as
+         *     on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming the
+         *     field, also for a caller without the permission point or a token, and nothing is written.
+         *     Then `withdraw.review` (10403 with `data.reason=admin_permission_denied`) → step-up (10003) →
+         *     the duplicate check. After that the answer is 200 and each id has its own result: a
+         *     withdrawal that cannot be approved never fails the others.
+         *
+         *     Each id runs in its own transaction, in the order given: the member's locks, the
+         *     withdrawal read again, then the CAS PENDING_REVIEW → APPROVED (W2) with `reviewer_id` the
+         *     caller and `reviewed_at` the injected Clock. Results, in `items`, one per id in request
+         *     order: `approved`, or `skipped` with `reason`: `not_found` (unknown id or another app's),
+         *     `not_pending` (no longer PENDING_REVIEW, also when another request got there first),
+         *     `negative_balance` (available below 0) or `blocked` (`blocked_reason` set), the guards of W2
+         *     (BR-WDR-05 (a)). A member under a risk freeze or with an effective withdraw hold can be
+         *     approved (BR-WDR-10; those gate the application and the execution, not the review). An
+         *     unexpected failure of one id ends the request with 5xx; ids already approved stay approved,
+         *     and the same key runs the rest again (those come back `not_pending`).
+         *
+         *     Effects of each approved id: the status, `reviewer_id` and `reviewed_at`, wallet.withdrawal_changed
+         *     on the same transaction, and an audit record (action withdrawal_approve, with the
+         *     `withdrawal_id`, the status before and after and no personal data). No voucher: the money
+         *     stays frozen. Approving does not pay: execution is its own step (adminCreatePayoutBatch).
+         *
+         *     `Idempotency-Key` is required: same key and body → the first result; same key with
+         *     another body → 20901; same key while still running → 40901. The step-up token is a header
+         *     and not part of the body hash, so a replay after a 10003 keeps its key.
+         */
+        post: operations["adminBatchApproveWithdrawals"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/withdrawals/{withdrawal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject one withdrawal and return its money to the balance (驳回)
+         * @description The 【驳回】 of the withdrawal review page and detail (01 F-ADM-07; BR-WDR-10, BR-WDR-09;
+         *     design/specs/admin-withdrawals.md; ruling D10-595). Permission point `withdraw.review`; a
+         *     super admin holds every point. Step-up: totp tier (BR-ID-34): without a valid totp-tier
+         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *
+         *     Request (AdminWithdrawalRejectRequest): `reason_code`, one of the five a person can choose
+         *     (RISK_SUSPECT, ORDER_ABNORMAL, PAYEE_INFO_INVALID, USER_REQUEST, OTHER); NEGATIVE_BALANCE
+         *     is written by the system only and fails at the schema. `note`, the internal note, at most
+         *     500 characters and not blank after trimming, required for USER_REQUEST (BR-WDR-10: a member
+         *     cancels through customer service, and the reason must be recorded). The member sees the text
+         *     of the reason code, never the note.
+         *
+         *     Order of checks: the route schema comes first, before the permission and step-up checks, as
+         *     on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming the
+         *     field, also for a caller without the permission point or a token, and nothing is written.
+         *     Then `withdraw.review` (10403 with `data.reason=admin_permission_denied`) → step-up (10003) →
+         *     a blank `note`, or none for USER_REQUEST, is 20001 with `data.fields=[note]` → an unknown
+         *     `withdrawal_id` or one of another app is 20001 with `data.fields=[withdrawal_id]` (no 404) →
+         *     a withdrawal not in PENDING_REVIEW or APPROVED, or changed by another request, is 20902 with
+         *     `data.resource=withdrawal` (refresh) → a transfer attempt with result pending, success or
+         *     unknown is 20001 with `data.fields=[withdrawal_id]` and `data.reason=reject_attempt_exists`:
+         *     such a withdrawal ends only through BR-WDR-15 → while the switch
+         *     `payout.proven_success_writeoff.enabled` is on (default on), a withdrawal with
+         *     `hold_reason=payer_side_after_transfer` is checked against its latest query, because a
+         *     transfer the channel reported as failed may still have been paid (BR-WDR-08 W3, BR-WDR-17,
+         *     决-08 A): no query yet, or a latest query with an unknown result, is 20001 with
+         *     `data.fields=[withdrawal_id]` and `data.reason=reject_query_required`; a latest query that
+         *     succeeded is 20001 with `data.reason=reject_query_success`: the money went out, so this
+         *     withdrawal ends through W11 and rejecting it would pay twice. A latest query with result
+         *     fail, a status `payout.query_status_map` maps to a definite failure (BR-WDR-28), lets the
+         *     rejection through. BR-WDR-17 also allows 「订单不存在」, but that answer is recorded with result
+         *     unknown and has no verified channel code yet (BR-WDR-22, BR-WDR-28), so until one is
+         *     registered it is refused as reject_query_required like every other unknown result: the
+         *     safe direction. `payout.payer_side_codes` is also empty until verified, so no withdrawal
+         *     reaches this state before then. With the switch off this check does not run. Apart from
+         *     these, a transfer attempt that definitely failed does not stop a rejection.
+         *
+         *     Effects, in one transaction under the member's balance lock: W3 with `reject_reason_code`,
+         *     `reject_note`, `reviewer_id` the caller and `reviewed_at` the injected Clock; the voucher
+         *     WITHDRAW:RETURN moving the amount from frozen back to available (BR-WDR-09);
+         *     wallet.withdrawal_changed, from which the member gets the rejection message. Writes an audit
+         *     record (action withdrawal_reject, with the `withdrawal_id`, the status before and after, the
+         *     `reason_code` and the `note`; no personal data).
+         *
+         *     `Idempotency-Key` is required: same key and body → the first result; same key with
+         *     another body → 20901; same key while still running → 40901. A new key for a withdrawal
+         *     already rejected is 20902. The step-up token is a header and not part of the body hash, so
+         *     a replay after a 10003 keeps its key.
+         */
+        post: operations["adminRejectWithdrawal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/settle-bills": {
         parameters: {
             query?: never;
@@ -18440,6 +18562,53 @@ export interface components {
          * @enum {string}
          */
         AdminWithdrawalRejectReason: "RISK_SUSPECT" | "ORDER_ABNORMAL" | "PAYEE_INFO_INVALID" | "USER_REQUEST" | "OTHER" | "NEGATIVE_BALANCE";
+        /** @description The withdrawals to approve; see POST /admin/v1/withdrawals/batch-approve. */
+        AdminWithdrawalBatchApproveRequest: {
+            withdrawal_ids: components["schemas"]["Id"][];
+        };
+        /** @description The result of one id. `reason` is null exactly when `result` is approved. */
+        AdminWithdrawalBatchApproveItem: {
+            withdrawal_id: components["schemas"]["Id"];
+            /** @enum {string} */
+            result: "approved" | "skipped";
+            /** @enum {string|null} */
+            reason: "not_found" | "not_pending" | "negative_balance" | "blocked" | null;
+        };
+        AdminWithdrawalBatchApprove: {
+            /** @description One per id, in request order. */
+            items: components["schemas"]["AdminWithdrawalBatchApproveItem"][];
+        };
+        AdminWithdrawalBatchApproveResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminWithdrawalBatchApprove"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /** @description One rejection; see POST /admin/v1/withdrawals/{withdrawal_id}/reject. */
+        AdminWithdrawalRejectRequest: {
+            /**
+             * @description The five a person can choose; NEGATIVE_BALANCE is written by the system only.
+             * @enum {string}
+             */
+            reason_code: "RISK_SUSPECT" | "ORDER_ABNORMAL" | "PAYEE_INFO_INVALID" | "USER_REQUEST" | "OTHER";
+            /** @description Internal, never shown to the member; not blank after trimming; required for USER_REQUEST. */
+            note?: string;
+        };
+        AdminWithdrawalRejected: {
+            withdrawal_id: components["schemas"]["Id"];
+            /** @enum {string} */
+            status: "REJECTED";
+            reject_reason_code: components["schemas"]["AdminWithdrawalRejectReason"];
+            reviewer_id: components["schemas"]["Id"];
+            /** Format: date-time */
+            reviewed_at: string;
+        };
+        AdminWithdrawalRejectResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminWithdrawalRejected"];
+            trace_id: components["schemas"]["TraceId"];
+        };
         /**
          * @description contracts/enums/fund.yaml withdrawal_manual_resolution (BR-WDR-15).
          * @enum {string}
@@ -38843,6 +39012,166 @@ export interface operations {
             };
             429: components["responses"]["TooManyRequests"];
             /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminBatchApproveWithdrawals: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
+                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
+                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
+                 *     optional). Only on admin console operations; app operations use StepUpToken.
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "withdrawal_ids": [
+                 *         "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001",
+                 *         "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc002"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminWithdrawalBatchApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description One result per id, or the first result of the same key. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "withdrawal_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001",
+                     *             "result": "approved",
+                     *             "reason": null
+                     *           },
+                     *           {
+                     *             "withdrawal_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc002",
+                     *             "result": "skipped",
+                     *             "reason": "negative_balance"
+                     *           }
+                     *         ]
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminWithdrawalBatchApproveResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not processed (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminRejectWithdrawal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
+                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
+                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
+                 *     optional). Only on admin console operations; app operations use StepUpToken.
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The withdrawal (withdrawals.id) as a list row carries it; unknown or of another app → 20001 with data.fields=[withdrawal_id]. */
+                withdrawal_id: components["parameters"]["AdminWithdrawalIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "reason_code": "PAYEE_INFO_INVALID",
+                 *       "note": "收款账号实名与绑定信息不一致"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminWithdrawalRejectRequest"];
+            };
+        };
+        responses: {
+            /** @description The withdrawal rejected, or the first result of the same key. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "withdrawal_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001",
+                     *         "status": "REJECTED",
+                     *         "reject_reason_code": "PAYEE_INFO_INVALID",
+                     *         "reviewer_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
+                     *         "reviewed_at": "2026-11-03T10:00:00+08:00"
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminWithdrawalRejectResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not rejected (codes in contracts/error-codes.yaml). */
             "4XX": {
                 headers: {
                     "X-Trace-Id": components["headers"]["TraceId"];

@@ -1277,6 +1277,16 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "admin"
   },
   {
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/batch-approve",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/reject",
+    "auth": "admin"
+  },
+  {
     "method": "GET",
     "path": "/admin/v1/settle-bills",
     "auth": "admin"

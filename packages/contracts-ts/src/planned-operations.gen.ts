@@ -6,6 +6,7 @@
 export const plannedOperations: ReadonlySet<string> = new Set([
   "adminApproveAdjustment",
   "adminApproveBadDebtWriteoff",
+  "adminBatchApproveWithdrawals",
   "adminChangeInviter",
   "adminChangeUserLevel",
   "adminCreateAdjustment",
@@ -20,6 +21,7 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "adminListInvitees",
   "adminListRiskRules",
   "adminRejectAdjustment",
+  "adminRejectWithdrawal",
   "adminSearch",
   "bindOauthIdentity",
   "listAgentSessionMessages",
