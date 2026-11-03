@@ -1,0 +1,32 @@
+id: B2-09i
+repo: rebate-platform
+title: 水位录入实现（FU-WATERMARK-ENTRY，BR-WDR-18，D10-592）——adminCreatePayoutWatermark 去 planned；写者 payout，只插入 payout_watermarks 并写审计，同通道按 advisory 锁判倒退；entered_by 写 admin_users 的 UUID；不写凭证、不动余额。让自动到账不再因没有 W 一直被拒
+type: impl
+# 2026-11-03 pay 入账（D10-592，方案 couli-runs/B3-lane/watermark-entry-plan-20261103.md）。RV2，新鲜独立 Claude 写规则测试，Codex money。规则测试走 createHttpApp('admin') 与真实 createPayoutExecute，钉「没 W 被拒 → 录入后可执行 → 过 2 小时又拒」。
+# 不用迁移：表、索引、只插入触发器、couli_app 的 INSERT 都已有。备注放审计，不加列。
+refs: [BR-WDR-18]
+refs_hash:
+  BR-WDR-18: 9247640dde57
+deps: [CT-24zn]
+paths:
+  - 'apps/api/src/modules/payout/application/**'
+  - 'apps/api/src/modules/payout/domain/watermark.ts'
+  - 'apps/api/src/modules/payout/http/admin/**'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/payout/admin-watermark-entry/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/admin-watermark-entry/**'
+status: todo

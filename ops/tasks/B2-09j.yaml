@@ -1,0 +1,25 @@
+id: B2-09j
+repo: rebate-platform
+title: W < 1.5P 告警（FU-WATERMARK-ENTRY，BR-WDR-18，D10-592）——worker /metrics 按通道出水位结论 gauge，couli-fund.yaml 加一条 warning 规则；W 或 P 没有、W 过期都不下结论；只告警，不卡打款；上线前必做
+type: impl
+# 2026-11-03 pay 入账（D10-592）。RV2，新鲜独立 Claude 写规则测试，Codex money。1.5P 与 2 小时判断复用 B2-04zs 放进 payout domain 的函数，照 review-overdue 的采集做法。
+# 排 B2-04zs 后。冻结的告警规则清单测试若要动，按 D10-327 先列清单报。
+refs: [BR-WDR-18]
+refs_hash:
+  BR-WDR-18: 9247640dde57
+deps: [B2-09i, B2-04zs]
+paths:
+  - 'apps/api/src/modules/payout/application/**'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/platform/metrics/**'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'infra/monitoring/rules/couli-fund.yaml'
+test_paths:
+  - 'test/spec/platform/metrics/water-level/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/metrics/water-level/**'
+status: todo

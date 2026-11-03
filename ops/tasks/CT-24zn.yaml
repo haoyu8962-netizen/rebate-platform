@@ -1,0 +1,21 @@
+id: CT-24zn
+repo: rebate-platform
+title: 契约：水位录入 adminCreatePayoutWatermark（FU-WATERMARK-ENTRY，BR-WDR-18，D10-592）——POST /admin/v1/payout-watermarks：通道（alipay、wechat）、可用余额、取数时间、备注；fund.cash_entry，动态码档，幂等，写审计；planned
+type: contract
+# 2026-11-03 pay 入账（D10-592，方案 couli-runs/B3-lane/watermark-entry-plan-20261103.md）。取数时间三条服务端都拒：晚于现在超 5 分钟（08 BR-WDR-18 细则）、比该通道上一条倒退、早于现在超 2 小时（规格 admin-payouts.md，代理补全的默认），都是 20001 [measured_at]。bank_card 等银行卡通道开通再开（同 D10-538 ⑥）。校验顺序写明 schema 先于守卫（D10-591）。不新增错误码，不用迁移。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
