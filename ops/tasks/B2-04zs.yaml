@@ -4,6 +4,7 @@ title: 资金台账概览 adminGetFundLedger（FU-UNION-RECEIPTS-API，BR-FUND-2
 type: impl
 # 2026-11-03 pay 入账（D10-564 改派，D10-589，方案 couli-runs/B3-lane/union-receipts-plan-20261103.md）。RV2，新鲜独立 Claude 写规则测试，Codex money。规则测试走 createHttpApp('admin') 与真实 ledger，钉「回款与红冲使应收变化」。
 # 读者放 ledger；水位读取由 app.module 注入 payout 的 reader，不跨模块 import。sumReceivables 按会计日截断，不能直接复用。
+# 2026-11-03 补 paths：水位读取器要多给 entered_by，W < 1.5P 的判断与 2 小时过期放 payout domain，不在 ledger 重写。
 refs: [BR-FUND-20, BR-WDR-18]
 refs_hash:
   BR-FUND-20: 768e4fe2668e
@@ -15,6 +16,9 @@ paths:
   - 'apps/api/src/modules/ledger/http/admin/**'
   - 'apps/api/src/modules/ledger/ledger.module.ts'
   - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/modules/payout/application/watermark.ts'
+  - 'apps/api/src/modules/payout/domain/watermark.ts'
+  - 'apps/api/src/modules/payout/index.ts'
   - 'apps/api/src/app.module.ts'
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/src/planned-operations.gen.ts'
