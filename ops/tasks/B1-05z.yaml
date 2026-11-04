@@ -1,0 +1,24 @@
+id: B1-05z
+repo: rebate-platform
+title: catalog：搜索遇联盟业务拒绝（UnionError upstream_rejected 等）时 HTTP 回 503 / 50304 带 data.platform，不再冒成 500 / 50001（FU-JD-403-500）
+type: impl
+# 2026-11-04 ops 入账（编排 07:11 排序 ⑥）。staging 京东 jd.union.open.goods.query 内层 code 403「无访问权限」：
+# jd/response.ts 归为 UnionError('upstream_rejected')；catalog/search.ts 的 isUnionOutage 只把 upstream_unavailable / rate_limited 收成 50304，
+# 业务拒绝按设计原样抛出（冻结的 [AC-B1-05g#8] 钉住「业务拒绝不得返回旧页」，服务层的这个行为不改）；
+# 而 http/public/search.controller.ts 的 errorResponse 只转换 CatalogError，UnionError 落到全局过滤器成了 500 / 50001（unhandled_error）。
+# 本单只在搜索的 HTTP 层收口：经 searchProducts 冒出的 UnionError（任何 code）回 503 / 50304，带 data.platform（契约：联盟失败且无可用缓存 → 50304 + platform），
+# 并记一条 warn（事件名与 UnionError code，不带报文）。不改服务层、不改适配器分类、不改契约。RV1（catalog）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/http/public/search.controller.ts'
+  - 'apps/api/src/modules/catalog/http/public/search.controller.test.ts'
+  - 'test/spec/catalog/search-union-rejected/**'
+test_paths:
+  - 'test/spec/catalog/search-union-rejected/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
