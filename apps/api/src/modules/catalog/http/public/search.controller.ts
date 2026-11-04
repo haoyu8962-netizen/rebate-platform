@@ -1,7 +1,8 @@
 import { Controller, Get, HttpException, Inject, Query, Req } from '@nestjs/common';
 import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
-import { contractRouteSchema } from '../../../platform/index.ts';
+import { ROOT_LOGGER, contractRouteSchema, type RootLogger } from '../../../platform/index.ts';
+import { UnionError } from '../../../union/index.ts';
 import { CatalogSearchService } from '../../application/search-service.ts';
 import { CatalogError } from '../../domain/rules.ts';
 import type { SearchProductsQuery } from '../../search.ts';
@@ -37,8 +38,28 @@ function fieldsOf(message: string): string[] {
   return ['query'];
 }
 
-/** The error envelope of a CatalogError; undefined for any other failure (global filter, 50001). */
-function errorResponse(error: unknown, traceId: string): HttpException | undefined {
+/**
+ * The error envelope of a CatalogError, or 50304 { platform } for a UnionError the use case lets
+ * through (a business rejection such as JD inner code 403: the contract answers any union failure
+ * without usable cache with 50304). Undefined for any other failure (global filter, 50001).
+ */
+function errorResponse(
+  error: unknown,
+  query: SearchProductsQuery,
+  traceId: string,
+  logger: Pick<RootLogger, 'warn'>,
+): HttpException | undefined {
+  if (error instanceof UnionError) {
+    // Only the event, platform and code: the message may carry the upstream payload.
+    logger.warn(
+      { event: 'search_union_rejected', platform: query.platform, union_code: error.code },
+      'search: union failure answered as 50304',
+    );
+    return new HttpException(
+      { code: 50304, msg: MESSAGES[50304], data: { platform: query.platform }, trace_id: traceId },
+      STATUS[50304]!,
+    );
+  }
   if (!(error instanceof CatalogError)) return undefined;
   const status = STATUS[error.code];
   if (status === undefined) return undefined;
@@ -66,9 +87,11 @@ function errorResponse(error: unknown, traceId: string): HttpException | undefin
  */
 export class SearchController {
   readonly #service: CatalogSearchService;
+  readonly #logger: RootLogger;
 
-  constructor(service: CatalogSearchService) {
+  constructor(service: CatalogSearchService, logger: RootLogger) {
     this.#service = service;
+    this.#logger = logger;
   }
 
   async search(
@@ -79,13 +102,14 @@ export class SearchController {
       const data = await this.#service.search(query);
       return { code: 0, msg: '', data, trace_id: request.id };
     } catch (error: unknown) {
-      throw errorResponse(error, request.id) ?? error;
+      throw errorResponse(error, query, request.id, this.#logger) ?? error;
     }
   }
 }
 
 Controller('v1')(SearchController);
 Inject(CatalogSearchService)(SearchController, undefined, 0);
+Inject(ROOT_LOGGER)(SearchController, undefined, 1);
 const searchMethod = Object.getOwnPropertyDescriptor(SearchController.prototype, 'search')!;
 Get('products/search')(SearchController.prototype, 'search', searchMethod);
 RouteSchema(contractRouteSchema('searchProducts'))(

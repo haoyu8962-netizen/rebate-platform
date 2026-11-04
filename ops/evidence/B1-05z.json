@@ -1,0 +1,127 @@
+{
+  "risk_note": "RV2 by path (test/spec) on a catalog HTTP change: searchProducts now answers a UnionError the use case lets through (e.g. JD inner code 403 classified upstream_rejected) with 503 / 50304 and data.platform, as the contract says for a union failure without usable cache, instead of 500 / 50001; one warn with event, platform and the UnionError code only. The use case, the adapters and the contract are unchanged; the frozen [AC-B1-05g#8] (business rejections never return a stale page) is untouched. No amounts.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude context via tools/agent/claude-run.sh (Codex not logged in; approvals 36). Round 1 pass, no findings. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context in 1 attempt (test/spec/catalog/search-union-rejected). Round 1 pass, no findings. No frozen test changed.",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(adapter_unimplemented) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(invalid_endpoint) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(unsafe_mode) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(invalid_dto) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(invalid_identity) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(item_unavailable) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(link_unrecognized) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(upstream_rejected) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(upstream_unavailable) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(rate_limited) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] taobao 搜索遇联盟业务拒绝 upstream_rejected 回 503 / 50304 { platform }",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] jd 搜索遇联盟业务拒绝 upstream_rejected 回 503 / 50304 { platform }",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] pdd 搜索遇联盟业务拒绝 upstream_rejected 回 503 / 50304 { platform }",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 经真实 searchProducts：京东业务拒绝（内层 403）原样冒出后，HTTP 收成 503 / 50304",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] UnionError(upstream_rejected) 不得回 500 / 50001，响应体不含错误原文、上游报文或错误 code",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] UnionError(invalid_dto) 不得回 500 / 50001，响应体不含错误原文、上游报文或错误 code",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] UnionError(item_unavailable) 不得回 500 / 50001，响应体不含错误原文、上游报文或错误 code",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] 连续多次 UnionError 每次都是 50304，应用照常服务后续成功请求",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] CatalogError 20001 照旧 400 / 20001 带 data.fields，同一应用的 UnionError 回 50304",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] CatalogError 30131 照旧 422 / 30131 不带 data，同一应用的 UnionError 回 50304",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] CatalogError 50304 { platform } 照旧原样回且不带 cause，同一应用的 UnionError 也回 50304",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] taobao 开关关闭的 CatalogError 50304 照旧带 reason=search_disabled 与其文案，UnionError 不带 reason",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] jd 开关关闭的 CatalogError 50304 照旧带 reason=search_disabled 与其文案，UnionError 不带 reason",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] pdd 开关关闭的 CatalogError 50304 照旧带 reason=search_disabled 与其文案，UnionError 不带 reason",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] 非 UnionError、非 CatalogError 的未知错误（Error）仍交全局过滤器 500 / 50001，UnionError 回 50304",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] 非 UnionError、非 CatalogError 的未知错误（TypeError）仍交全局过滤器 500 / 50001，UnionError 回 50304",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 收成 50304 时记一条 warn：带事件名、请求的 platform 与 UnionError code(upstream_rejected)，不带 message 或报文",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 收成 50304 时记一条 warn：带事件名、请求的 platform 与 UnionError code(invalid_dto)，不带 message 或报文",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 收成 50304 时记一条 warn：带事件名、请求的 platform 与 UnionError code(item_unavailable)，不带 message 或报文",
+    "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 每次收成 50304 各记一条 warn，code 与各自的 UnionError 一致，事件名相同"
+  ],
+  "task": "B1-05z",
+  "spec_commit": "f61439b5a4f16801d0e36679ff78c353faf52652",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f61439b5a4f16801d0e36679ff78c353faf52652",
+      "tree": "661bb7bd375964e0ec4ddf4c935e4cef02b495ba",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-04T04:57:00Z",
+      "finished_at": "2026-11-04T04:57:17Z",
+      "red_tests": [
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(adapter_unimplemented) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(invalid_endpoint) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(unsafe_mode) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(invalid_dto) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(invalid_identity) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(item_unavailable) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(link_unrecognized) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(upstream_rejected) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(upstream_unavailable) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 服务层抛出 UnionError(rate_limited) 时 HTTP 回 503 / 50304，data 只有请求的 platform",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] taobao 搜索遇联盟业务拒绝 upstream_rejected 回 503 / 50304 { platform }",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] jd 搜索遇联盟业务拒绝 upstream_rejected 回 503 / 50304 { platform }",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] pdd 搜索遇联盟业务拒绝 upstream_rejected 回 503 / 50304 { platform }",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#1] 经真实 searchProducts：京东业务拒绝（内层 403）原样冒出后，HTTP 收成 503 / 50304",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] UnionError(upstream_rejected) 不得回 500 / 50001，响应体不含错误原文、上游报文或错误 code",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] UnionError(invalid_dto) 不得回 500 / 50001，响应体不含错误原文、上游报文或错误 code",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] UnionError(item_unavailable) 不得回 500 / 50001，响应体不含错误原文、上游报文或错误 code",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#2] 连续多次 UnionError 每次都是 50304，应用照常服务后续成功请求",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] CatalogError 20001 照旧 400 / 20001 带 data.fields，同一应用的 UnionError 回 50304",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] CatalogError 30131 照旧 422 / 30131 不带 data，同一应用的 UnionError 回 50304",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] CatalogError 50304 { platform } 照旧原样回且不带 cause，同一应用的 UnionError 也回 50304",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] taobao 开关关闭的 CatalogError 50304 照旧带 reason=search_disabled 与其文案，UnionError 不带 reason",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] jd 开关关闭的 CatalogError 50304 照旧带 reason=search_disabled 与其文案，UnionError 不带 reason",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] pdd 开关关闭的 CatalogError 50304 照旧带 reason=search_disabled 与其文案，UnionError 不带 reason",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] 非 UnionError、非 CatalogError 的未知错误（Error）仍交全局过滤器 500 / 50001，UnionError 回 50304",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#3] 非 UnionError、非 CatalogError 的未知错误（TypeError）仍交全局过滤器 500 / 50001，UnionError 回 50304",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 收成 50304 时记一条 warn：带事件名、请求的 platform 与 UnionError code(upstream_rejected)，不带 message 或报文",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 收成 50304 时记一条 warn：带事件名、请求的 platform 与 UnionError code(invalid_dto)，不带 message 或报文",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 收成 50304 时记一条 warn：带事件名、请求的 platform 与 UnionError code(item_unavailable)，不带 message 或报文",
+        "test/spec/catalog/search-union-rejected/http.test.ts > [AC-B1-05z#4] 每次收成 50304 各记一条 warn，code 与各自的 UnionError 一致，事件名相同"
+      ],
+      "expected": ["test/spec/catalog/search-union-rejected/http.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "3ade21a0900a425af0351fcf27073bf2bdd0531c8d6f95a7002f1458761895d5"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "196075608c9cbe8c952e5aa3f2615957ae00a287",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}
