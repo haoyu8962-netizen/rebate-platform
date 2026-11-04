@@ -177,6 +177,44 @@ export async function readPayoutSetting<T>(
   return fallback;
 }
 
+/** BR-WDR-05: the member's withdrawal block, judged on the caller's instant (EXECUTE and W8). */
+export async function memberWithdrawalBlocked(
+  trx: Transaction<DB>,
+  appeal: AppealPrevStateReader,
+  input: {
+    readonly appId: string;
+    readonly userId: string;
+    readonly now: Date;
+    readonly riskRows: ReadonlyMap<string, { state: string; frozen_until: Date | null }>;
+    readonly available: ReadonlyMap<string, bigint>;
+  },
+): Promise<boolean> {
+  const { appId, userId, now, riskRows, available } = input;
+  const state = riskRows.get(userId) ?? { state: 'normal', frozen_until: null };
+  // A freeze with an expiry is over the moment the clock reaches it (B1-02zf: judged here).
+  const expired =
+    state.state === 'frozen' &&
+    state.frozen_until !== null &&
+    state.frozen_until.getTime() <= now.getTime();
+  if (!expired && (state.state === 'frozen' || state.state === 'banned')) return true;
+  if (state.state === 'appealing') {
+    const prev = await appeal.read(trx, { appId, userId });
+    if (prev === 'frozen' || prev === 'banned') return true;
+  }
+  if ((available.get(userId) ?? 0n) < 0n) return true;
+  const hold = await trx
+    .withSchema('app')
+    .selectFrom('withdraw_holds')
+    .select('id')
+    .where('app_id', '=', appId)
+    .where('user_id', '=', userId)
+    .where('released_at', 'is', null)
+    .where((eb) => eb.or([eb('hold_until', 'is', null), eb('hold_until', '>', now)]))
+    .limit(1)
+    .executeTakeFirst();
+  return hold !== undefined;
+}
+
 function isChannel(value: string): value is PayoutChannelName {
   return CHANNELS.has(value);
 }
@@ -223,8 +261,7 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
     return new Map(rows.map((row) => [row.id, row]));
   }
 
-  /** BR-WDR-05: the member's withdrawal block, judged on the caller's instant. */
-  async function memberBlocked(
+  function memberBlocked(
     trx: Transaction<DB>,
     appId: string,
     userId: string,
@@ -232,29 +269,7 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
     riskRows: ReadonlyMap<string, { state: string; frozen_until: Date | null }>,
     available: ReadonlyMap<string, bigint>,
   ): Promise<boolean> {
-    const state = riskRows.get(userId) ?? { state: 'normal', frozen_until: null };
-    // A freeze with an expiry is over the moment the clock reaches it (B1-02zf: judged here).
-    const expired =
-      state.state === 'frozen' &&
-      state.frozen_until !== null &&
-      state.frozen_until.getTime() <= now.getTime();
-    if (!expired && (state.state === 'frozen' || state.state === 'banned')) return true;
-    if (state.state === 'appealing') {
-      const prev = await appeal.read(trx, { appId, userId });
-      if (prev === 'frozen' || prev === 'banned') return true;
-    }
-    if ((available.get(userId) ?? 0n) < 0n) return true;
-    const hold = await trx
-      .withSchema('app')
-      .selectFrom('withdraw_holds')
-      .select('id')
-      .where('app_id', '=', appId)
-      .where('user_id', '=', userId)
-      .where('released_at', 'is', null)
-      .where((eb) => eb.or([eb('hold_until', 'is', null), eb('hold_until', '>', now)]))
-      .limit(1)
-      .executeTakeFirst();
-    return hold !== undefined;
+    return memberWithdrawalBlocked(trx, appeal, { appId, userId, now, riskRows, available });
   }
 
   async function executeBatch(

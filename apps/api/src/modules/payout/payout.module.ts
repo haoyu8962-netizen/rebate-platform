@@ -39,6 +39,7 @@ import {
   createAutoPayoutConsumer,
   type AutoPayoutOptions,
 } from './application/auto-payout.ts';
+import type { AdminManualPaidDeps } from './application/admin-manual-paid.ts';
 import type { AdminPayoutBatchDeps } from './application/admin-payout-batch.ts';
 import type { AdminPayoutOverviewDeps } from './application/admin-payout-overview.ts';
 import type { AdminWithdrawalReviewDeps } from './application/admin-withdrawal-review.ts';
@@ -46,6 +47,7 @@ import type {
   AdminPayoutWatermarkDeps,
   AdminPayoutWatermarkPorts,
 } from './application/admin-payout-watermarks.ts';
+import { createWithdrawalManualPaid } from './application/withdrawal-manual-paid.ts';
 import { createPayoutExecute } from './application/payout-execute.ts';
 import { PAYOUT_LANDING_QUEUE, createLandingJob } from './jobs/landing-job.ts';
 import { anyReviewWaiting, createReviewOverdueCheck } from './application/review-overdue.ts';
@@ -87,6 +89,10 @@ import type {
   AdminPayeeDecrypt,
   AdminWithdrawalReadDeps,
 } from './application/admin-withdrawals.ts';
+import {
+  ADMIN_MANUAL_PAID,
+  AdminManualPaidController,
+} from './http/admin/manual-paid.controller.ts';
 import {
   ADMIN_PAYOUT_BATCH,
   ADMIN_PAYOUT_OVERVIEW,
@@ -890,6 +896,8 @@ export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
   /** B2-09l: risk's readers for EXECUTE's withdrawal block (BR-WDR-05). */
   readonly risk: (db: Kysely<DB>) => RiskStateBatchReader;
   readonly appeal: () => AppealPrevStateReader;
+  /** B2-09m: identity's real-name key for W8's tax_ytd row (BR-WDR-20). */
+  readonly identityKey: TaxYtdIdentityKeyReader;
   /** identity's masked phones (BR-ID-33 3 + 4) over the entry's handle and field cipher. */
   readonly phones: (
     db: Kysely<DB>,
@@ -909,6 +917,7 @@ export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
  * B2-09k: the review (batch approve and reject; withdraw.review, step-up totp), the same rule.
  * B2-09l: the batch (payout.execute, step-up totp; its transfer jobs go on the queue for the payout
  * process) and the overview (payout.execute or fund.view, read only), the same rule.
+ * B2-09m: W8, the offline payment entry (payout.manual_entry, step-up totp), the same rule.
  */
 export class PayoutAdminModule {
   static forAdmin(options: PayoutAdminOptions): DynamicModule {
@@ -919,6 +928,7 @@ export class PayoutAdminModule {
         AdminPayoutWatermarksController,
         AdminWithdrawalReviewController,
         AdminPayoutBatchController,
+        AdminManualPaidController,
       ],
       providers: [
         {
@@ -1025,6 +1035,42 @@ export class PayoutAdminModule {
                     ledger: options.ledger({ clock, eventBus }),
                     queue,
                     eventBus,
+                    logger: logger.child({ module: 'payout' }),
+                  }),
+                },
+        },
+        {
+          provide: ADMIN_MANUAL_PAID,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+          ): AdminManualPaidDeps | null =>
+            db === undefined || idempotency === undefined || eventBus === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  idempotency,
+                  auditOn: (trx) => options.auditWriter(trx, clock),
+                  manualPaid: createWithdrawalManualPaid({
+                    ledger: options.ledger({ clock, eventBus }),
+                    lockUsersForUpdate: options.lockUsersForUpdate,
+                    config: options.config(clock),
+                    risk: options.risk(db),
+                    appeal: options.appeal(),
+                    attempts: createPayoutAttemptsStore(),
+                    eventBus,
+                    identityKey: options.identityKey,
                     logger: logger.child({ module: 'payout' }),
                   }),
                 },

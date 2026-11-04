@@ -16583,6 +16583,86 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "adminBatchManualPaid": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "description": "The offline payments to record; see POST /admin/v1/withdrawals/batch-manual-paid.",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "description": "One offline payment.",
+            "additionalProperties": false,
+            "required": [
+              "withdrawal_id",
+              "channel_order_id",
+              "paid_at",
+              "paid_fen"
+            ],
+            "properties": {
+              "withdrawal_id": {
+                "type": "string",
+                "description": "Entity id, a UUIDv7 string (04 §5).",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "channel_order_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[^\\s\\u0000]+$",
+                "description": "The Alipay or bank transfer serial number; no whitespace or NUL, compared exactly."
+              },
+              "paid_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "When the money was really paid, checked against the injected Clock."
+              },
+              "paid_fen": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Integer fen really paid; anything but the withdrawal's net_fen is that item's amount_mismatch."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "adminRejectWithdrawal": {
     "headers": {
       "type": "object",

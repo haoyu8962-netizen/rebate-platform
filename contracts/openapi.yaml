@@ -24972,8 +24972,9 @@ paths:
 
         Request (AdminWithdrawalBatchManualPaidRequest): `items`, 1 to 200 (200 is 代理补全的默认,
         D10-595), each with `withdrawal_id`, `channel_order_id` (the Alipay or bank transfer serial
-        number, by the withdrawal's snapshot channel; 1 to 64 characters and no whitespace, so that
-        a stray space cannot make the same number look new; compared exactly, case included),
+        number, by the withdrawal's snapshot channel; 1 to 64 characters with no whitespace, so that
+        a stray space cannot make the same number look new, and no NUL, which the database cannot
+        store; compared exactly, case included),
         `paid_at` (when the money was really paid) and `paid_fen` (integer fen, the amount really
         paid; any integer reaches the item's own check). A withdrawal may appear only once: a duplicate `withdrawal_id` is 20001 with
         `data.fields=[items]`.
@@ -25045,7 +25046,6 @@ paths:
         part of the body hash, so a replay after a 10003 keeps its key.
       x-auth: admin
       x-idempotent: true
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003
@@ -51008,8 +51008,8 @@ components:
           type: string
           minLength: 1
           maxLength: 64
-          pattern: '^\S+$'
-          description: The Alipay or bank transfer serial number; no whitespace, compared exactly.
+          pattern: '^[^\s\u0000]+$'
+          description: The Alipay or bank transfer serial number; no whitespace or NUL, compared exactly.
         paid_at:
           type: string
           format: date-time

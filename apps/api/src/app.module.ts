@@ -4608,6 +4608,8 @@ export class AppModule {
                 // B2-09l: EXECUTE's withdrawal block, read on the caller's transaction.
                 risk: (db) => createRiskStateBatchReader({ db }),
                 appeal: createAppealPrevStateReader,
+                // B2-09m: W8's tax_ytd row, the same port as W11.
+                identityKey: createRealnameIdentityKeyReader(),
               }),
             ]
           : []),

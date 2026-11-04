@@ -133,6 +133,36 @@ export function provenSuccessSwitchOn(value: unknown): boolean {
   return true;
 }
 
+/**
+ * The query guard of a payer-side hold (BR-WDR-08 W3 and W8, BR-WDR-17): the refusal, or null when
+ * the command may go on. With the switch explicitly off it does not run; no config port, no row or
+ * an unreadable value is the switch's default, on.
+ */
+export async function readPayerSideQueryRefusal(
+  trx: Transaction<DB>,
+  config: PayoutConfigPort | undefined,
+  appId: string,
+  withdrawalId: string,
+): Promise<'query_required' | 'query_success' | null> {
+  const setting = await config?.configValue(appId, PROVEN_SUCCESS_SWITCH, trx);
+  if (setting !== undefined && setting !== null && !provenSuccessSwitchOn(setting.value)) {
+    return null;
+  }
+  const latest = await trx
+    .withSchema('app')
+    .selectFrom('payout_attempts')
+    .select('result')
+    .where('app_id', '=', appId)
+    .where('withdrawal_id', '=', withdrawalId)
+    .where('kind', '=', 'query')
+    .orderBy('at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  if (latest?.result === 'success') return 'query_success';
+  return latest?.result === 'fail' ? null : 'query_required';
+}
+
 export function createWithdrawalCommands(options: WithdrawalCommandsOptions): WithdrawalCommands {
   const { clock, ledger, attempts, eventBus } = options;
 
@@ -249,31 +279,6 @@ export function createWithdrawalCommands(options: WithdrawalCommandsOptions): Wi
     });
   }
 
-  /** The query guard of a payer-side hold: the refusal, or null when W3 may go on. */
-  async function queryGuardRefusal(
-    trx: Transaction<DB>,
-    appId: string,
-    withdrawalId: string,
-  ): Promise<'query_required' | 'query_success' | null> {
-    const setting = await options.config?.configValue(appId, PROVEN_SUCCESS_SWITCH, trx);
-    if (setting !== undefined && setting !== null && !provenSuccessSwitchOn(setting.value)) {
-      return null;
-    }
-    const latest = await trx
-      .withSchema('app')
-      .selectFrom('payout_attempts')
-      .select('result')
-      .where('app_id', '=', appId)
-      .where('withdrawal_id', '=', withdrawalId)
-      .where('kind', '=', 'query')
-      .orderBy('at', 'desc')
-      .orderBy('id', 'desc')
-      .limit(1)
-      .executeTakeFirst();
-    if (latest?.result === 'success') return 'query_success';
-    return latest?.result === 'fail' ? null : 'query_required';
-  }
-
   /**
    * The shared W3: reason already judged by the caller. Locks, reads, checks the attempts rule,
    * CAS, voucher, event.
@@ -316,7 +321,7 @@ export function createWithdrawalCommands(options: WithdrawalCommandsOptions): Wi
       if (blocked) return { kind: 'refused', reason: 'attempt_exists' };
     }
     if (attemptsRule === 'manual' && current.hold_reason === PAYER_SIDE_HOLD) {
-      const refusal = await queryGuardRefusal(trx, input.appId, current.id);
+      const refusal = await readPayerSideQueryRefusal(trx, options.config, input.appId, current.id);
       if (refusal !== null) return { kind: 'refused', reason: refusal };
     }
     const now = clock.now();

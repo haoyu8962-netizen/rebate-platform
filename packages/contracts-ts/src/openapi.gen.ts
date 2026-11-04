@@ -8792,8 +8792,9 @@ export interface paths {
          *
          *     Request (AdminWithdrawalBatchManualPaidRequest): `items`, 1 to 200 (200 is 代理补全的默认,
          *     D10-595), each with `withdrawal_id`, `channel_order_id` (the Alipay or bank transfer serial
-         *     number, by the withdrawal's snapshot channel; 1 to 64 characters and no whitespace, so that
-         *     a stray space cannot make the same number look new; compared exactly, case included),
+         *     number, by the withdrawal's snapshot channel; 1 to 64 characters with no whitespace, so that
+         *     a stray space cannot make the same number look new, and no NUL, which the database cannot
+         *     store; compared exactly, case included),
          *     `paid_at` (when the money was really paid) and `paid_fen` (integer fen, the amount really
          *     paid; any integer reaches the item's own check). A withdrawal may appear only once: a duplicate `withdrawal_id` is 20001 with
          *     `data.fields=[items]`.
@@ -18784,7 +18785,7 @@ export interface components {
         /** @description One offline payment. */
         AdminWithdrawalManualPaidEntry: {
             withdrawal_id: components["schemas"]["Id"];
-            /** @description The Alipay or bank transfer serial number; no whitespace, compared exactly. */
+            /** @description The Alipay or bank transfer serial number; no whitespace or NUL, compared exactly. */
             channel_order_id: string;
             /**
              * Format: date-time

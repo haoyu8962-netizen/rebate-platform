@@ -116,10 +116,10 @@ export { PROVEN_SUCCESS_SWITCH };
 export const PAYOUT_ATTEMPT_APPEND_QUEUE = 'payout-attempt-append';
 export const PAYOUT_ATTEMPT_APPEND_JOB = 'append';
 /** BR-WDR-08 W11: the hold W9 leaves on the returned withdrawal. */
-const PAYER_SIDE_HOLD = 'payer_side_after_transfer';
+export const PAYER_SIDE_HOLD = 'payer_side_after_transfer';
 const APPROVED = 'APPROVED';
 /** BR-WDR-09: the cash subject of the success voucher by channel (specs/ledger-templates.csv). */
-const CASH_SUBJECT: Readonly<Record<string, string>> = {
+export const CASH_SUBJECT: Readonly<Record<string, string>> = {
   alipay: 'CASH_ALIPAY',
   bank_card: 'CASH_BANK',
   wechat: 'CASH_WECHAT',
@@ -162,7 +162,7 @@ type BuiltEntry = {
   sub_type: string | null;
 };
 
-function postingEntries(built: readonly BuiltEntry[], accountId: string): PostingEntry[] {
+export function postingEntries(built: readonly BuiltEntry[], accountId: string): PostingEntry[] {
   return built.map((entry) => ({
     account:
       entry.account.owner_type === 'user'
