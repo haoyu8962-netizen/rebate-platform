@@ -1,0 +1,18 @@
+id: F1-02zzzc
+repo: rebate-platform
+title: 依赖：@noble/curves 2.4.0（apps/api dependencies，精确版本）——F1-02zzzb 的 bridge_origins 用确定性 ES256（RFC 6979）签名，jws 跨重启与多实例逐字节稳定（D10-621）
+type: deps
+# 2026-11-04 ops 入账（编排 D10-621 (A)）。Node 内置 crypto.sign 的 ECDSA 带随机数，jws 跨重启 / 多实例会变，规划/04 §10.1 的强 ETag（data 规范化 JSON 的 sha256）随之变化；
+# 用 @noble/curves 的 p256（RFC 6979 确定性 k，不加 extraEntropy）签 JWS 签名输入，输出 r‖s 64 字节。
+# 版本 2.4.0：2026-08-27 发布（满 7 天，ADR-0001 §2 / pnpm minimumReleaseAge），MIT，唯一依赖 @noble/hashes 2.4.0；锁文件同步，不改别的依赖。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/package.json'
+  - 'pnpm-lock.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

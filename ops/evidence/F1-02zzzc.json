@@ -1,0 +1,46 @@
+{
+  "risk_note": "RV2 by path (apps/api/package.json, pnpm-lock.yaml). deps task: adds @noble/curves 2.4.0 (exact; published 2026-08-27, past the 7-day rule; MIT; only dependency @noble/hashes 2.4.0) so that F1-02zzzb can sign bridge_origins with deterministic ES256 (RFC 6979). The lockfile adds those two packages with integrity; jsdom / vitest / @exodus/bytes entries only gain the optional peer suffix, versions unchanged. pnpm audit --prod: no known vulnerabilities. No source change, scripts unchanged.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh. Adversarial dependency review r1 pass, no findings: exact version, publish date, license, transitive entries and lockfile churn checked; no source change. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 0,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "deps task, tester none (ledger F1-02zzzc, as precedent B1-31a): no rule tests"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "F1-02zzzc",
+  "spec_commit": "11cc425599220ff7d91c471b31b81ab2d6088ba2",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8ada5702900d52c4140c6389f49071586b3da26c",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}
