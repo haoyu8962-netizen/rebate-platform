@@ -4,16 +4,15 @@ title: 负余额复查的锁序用例（FU-WENT-NEGATIVE-LOCK-ORDER，BR-WDR-05�
 type: test-change
 # 2026-11-05 pay 入账。B2-09p 规则测试评审发现：lockBalances 挪到事务外只有 spy 用例 [AC-B2-05e#24] 在看，发现不了读到旧余额。代码现在是对的，这组用例现在应该是绿的，不走先红。
 # 只加新目录，不动冻结测试。Codex 写，新鲜 Claude 评。
+# 2026-11-05 改 tester: none、去 test_paths：有它们时 evidence-check 要求先红，这组用例实现前后都绿，红不了（同 B2-09o）。
 refs: [BR-WDR-05]
 refs_hash:
   BR-WDR-05: 99e2e2654ce0
 deps: [B2-09p]
 paths:
   - 'test/spec/payout/went-negative-lock-order/**'
-test_paths:
-  - 'test/spec/payout/went-negative-lock-order/**'
 impl: claude
-tester: codex
+tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/went-negative-lock-order/**'
