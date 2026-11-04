@@ -89,4 +89,4 @@ retry 怎么查（`guard/lib/test-guard.ts`；编排会话 2026-10-03 按 `ops/a
 | 时钟守卫（禁 `new Date(`、SQL `now()` 等） | 11 §4.2 | TS 部分已由根 `eslint.config.js` 覆盖 `packages/money`、`packages/domain`；资金模块与 SQL 部分待建 |
 | 越界 `ops/`、`docs/` 改动的自动还原 | 11 §2.3 第 6 步 | `path-guard.ts` 现在只报告 |
 
-任务文件 40 行上限的检查在 `tools/ops`（`task.ts check`；`red_exempt` 段不计入，该段单独 ≤ 50 条，CT-06t；`renames` 段同样不计入，该段单独 ≤ 20 条，CT-06zxc 评审 r1 S2-2；`expected_values` 段同样不计入，≤ 20 条，CT-06zxe；三段里的缩进注释行照常计行，CT-06zxh），不在这里。
+任务文件 40 行上限的检查在 `tools/ops`（`task.ts check`；`red_exempt` 段不计入，该段单独 ≤ 150 条，CT-06t，CT-06zzzb 由 50 放到 150；`renames` 段同样不计入，该段单独 ≤ 20 条，CT-06zxc 评审 r1 S2-2；`expected_values` 段同样不计入，≤ 20 条，CT-06zxe；三段里的缩进注释行照常计行，CT-06zxh），不在这里。

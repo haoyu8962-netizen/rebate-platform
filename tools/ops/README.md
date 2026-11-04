@@ -10,7 +10,7 @@
 
 | 脚本 | 做什么 | 出处 |
 | --- | --- | --- |
-| `task.ts check [编号…]` | 校验 `ops/tasks/*.yaml`：字段、文件名、≤40 行（不计 `red_exempt` 段，该段单独 ≤ 50 条，CT-06t）、编号前缀在 05 里存在、`refs` 存在且 `refs_hash` 与规划原文一致、依赖存在、RV2 的实现与规则测试作者不是同一家、契约任务列全生成物（见下文「契约生成物」）。`pnpm ops:task:check` | 11 §2.1 |
+| `task.ts check [编号…]` | 校验 `ops/tasks/*.yaml`：字段、文件名、≤40 行（不计 `red_exempt` 段，该段单独 ≤ 150 条，CT-06t，CT-06zzzb 由 50 放到 150）、编号前缀在 05 里存在、`refs` 存在且 `refs_hash` 与规划原文一致、依赖存在、RV2 的实现与规则测试作者不是同一家、契约任务列全生成物（见下文「契约生成物」）。`pnpm ops:task:check` | 11 §2.1 |
 | `task.ts show <编号> --json` | 任务字段（平铺）加算出的 `risk`、`ask`、`risk_paths` | 11 §1.2 |
 | `task.ts hash <编号>` | 打印可直接粘贴的 `refs_hash` 段 | 11 §5.3 |
 | `state.ts get\|set\|claim\|release\|bump-attempt\|settle\|opus-run\|migrate <编号>` | 在途状态 `couli-runs/state/<编号>.json`（先写临时文件再改名）；领任务 `couli-runs/claims/<编号>/`，租约 20 分钟，`claim --renew` 续期，过期才能被别的会话接手。轮次与失败熔断见下文「轮次怎么计」「失败熔断」；`bump-attempt` 在熔断打开时退出 3 | 11 §2.1、§2.2、§2.5 |

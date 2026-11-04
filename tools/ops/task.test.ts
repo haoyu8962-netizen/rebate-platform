@@ -187,8 +187,8 @@ it('[CT-06t] the red_exempt section is not counted in the line limit; it has its
       class3_gates: [],
     }),
     'ops/tasks/X1-02d.yaml': thirteen,
-    // 51 declarations: over the section's own limit.
-    'ops/tasks/X1-02e.yaml': body({ id: 'X1-02e', red_exempt: entries(51) }),
+    // 151 declarations: over the section's own limit (150 since CT-06zzzb).
+    'ops/tasks/X1-02e.yaml': body({ id: 'X1-02e', red_exempt: entries(151) }),
     // 41 body lines without red_exempt: still over the line limit.
     'ops/tasks/X1-02f.yaml': `${'# padding\n'.repeat(6)}${body({ id: 'X1-02f' })}`,
     // An entry that is not file / test / reason hides nothing in the section.
@@ -201,7 +201,7 @@ it('[CT-06t] the red_exempt section is not counted in the line limit; it has its
     expect(checkTask('X1-02d', opts('RV1'))).toEqual([]);
     expect(loadTask('X1-02d', root).red_exempt).toHaveLength(13);
     expect(checkTask('X1-02e', opts('RV1')).join('\n')).toContain(
-      'red_exempt: 51 entries, the limit is 50',
+      'red_exempt: 151 entries, the limit is 150',
     );
     const long = checkTask('X1-02f', opts('RV1')).join('\n');
     expect(long).toMatch(/41 lines, the limit is 40/);

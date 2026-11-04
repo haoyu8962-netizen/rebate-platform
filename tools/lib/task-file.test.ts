@@ -171,8 +171,10 @@ describe('parseTaskFile', () => {
             `\n  - file: test/spec/a.test.ts\n    test: '[AC-${i + 1}] a'\n    reason: a reason of enough length`,
         ).join(''),
       );
-    expect(parseTaskFile(many(50), 'B2-02a.yaml').red_exempt).toHaveLength(50);
-    expect(messageOf(many(51), 'B2-02a.yaml')).toContain('red_exempt: 51 entries, the limit is 50');
+    expect(parseTaskFile(many(150), 'B2-02a.yaml').red_exempt).toHaveLength(150);
+    expect(messageOf(many(151), 'B2-02a.yaml')).toContain(
+      'red_exempt: 151 entries, the limit is 150',
+    );
     // Not a list, not mappings, the same test twice.
     expect(messageOf(declared(' abc'), 'B2-02a.yaml')).toContain(
       'red_exempt: must be a list of mappings',

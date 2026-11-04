@@ -181,7 +181,10 @@ export const RED_EXEMPT_REASON_MIN = 10;
  * line limit (tools/ops/task.ts countedLines), so it has its own, by entries.
  * 2026-10-24 编排裁定 D10-344：由 20 提到 50（B1-03w 改名冻结测试 40 条）；豁免仍须规则测试评审方在证据里确认。
  */
-export const RED_EXEMPT_MAX = 50;
+// CT-06zzzb (D10-620): raised from 50 to 150. The cap only bounds the task file's length (the section is
+// not counted in the 40-line limit); every exemption is still checked one by one by the orchestrator and
+// red-check still judges every test that is not exempt, so a higher cap does not weaken the red run.
+export const RED_EXEMPT_MAX = 150;
 
 export const TASK_REPOS = ['rebate-platform', 'ios', 'android', 'harmony'] as const;
 export const TASK_TYPES = [

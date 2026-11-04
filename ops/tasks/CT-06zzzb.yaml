@@ -1,0 +1,24 @@
+id: CT-06zzzb
+repo: rebate-platform
+title: CT-06zzzb：台账 red_exempt 段上限由 50 放到 150（tools/lib/task-file.ts RED_EXEMPT_MAX），同步 tools 测试期望与 README（D10-620）
+type: guard-change
+# 2026-11-04 入账（ops 线，编排裁定 D10-620）。起因：F1-02zzzb 改冻结的 test/spec/content/config/delivery.int.test.ts（F1-02c #1 / #2 / #20 只改 bridge_origins 相关钉值），
+# 先红按文件跑，同文件里没改的 125 个用例 / 表行在骨架上本就为绿，需登记 red_exempt，超过上限 50。
+# CT-06t 设上限只为约束任务文件篇幅（red_exempt 段不计入 40 行）；牙齿靠 red-check 对未豁免用例逐条判红，每张台账的豁免名单都由编排逐条核，放到 150 不削弱判红。
+# 只改常量与注释，同步 tools/lib/task-file.test.ts、tools/ops/task.test.ts 里钉「limit is 50」的期望（改为 150 / 151）与 tools/README.md、tools/ops/README.md 两处说明。
+# 按 approvals 第 16 条 / #24 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzb.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
