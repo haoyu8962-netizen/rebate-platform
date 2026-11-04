@@ -5,6 +5,7 @@ type: impl
 # 2026-11-04 pay 入账（D10-619，原 11-03 23:16 编排立单）。RV2，规则测试 Codex 写（不行再用新鲜独立 Claude），money 评审。
 # 消费者跑在 worker 入口（couli_app，有 audit_logs INSERT），payout 进程的 W9 只入队。createAuditWriter 只写 admin_id（uuid），系统行要走 admin 的 createSystemAuditWriter，它现在只会写订单挂起，要加通用写法。
 # audit_logs_system_actor_check 要求 ^system:[a-z_]+$，枚举 audit_system_actor 只有 system:risk，所以追加 system:payout（枚举注明可追加）和中文名。不动冻结测试，实跑若要动按 D10-327 先报。
+# 2026-11-04 补 paths：contracts/oasdiff-accepted.txt。枚举加 system:payout 被 oasdiff 判 response-property-enum-value-added，#2346 contracts-check 红；D10-557 允许 /admin/v1/** 登记（后台与服务端同发）。
 refs: [BR-WDR-10, BR-WDR-05]
 refs_hash:
   BR-WDR-10: 1db6b508e224
@@ -19,6 +20,7 @@ paths:
   - 'apps/api/src/modules/admin/index.ts'
   - 'contracts/enums/admin.yaml'
   - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
