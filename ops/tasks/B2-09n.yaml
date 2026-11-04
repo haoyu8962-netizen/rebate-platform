@@ -1,0 +1,34 @@
+id: B2-09n
+repo: rebate-platform
+title: 批次留下单的归属（FU-BATCH-LEFT-MEMBERSHIP，BR-WDR-11、12，D10-602、D10-609）——留下分支把 batch_id 为 null 的单挂上本批，再组批次时原批次记 moved_out；整批 rejected 仍什么都不写；金额、状态、转账次数不变
+type: impl
+# 2026-11-04 pay 入账（D10-609）。member_blocked、has_transfer_attempt、channel_disabled 和多通道水位留下、原 batch_id 为 null 的写本批（row_version + 1）；已挂别批的水位留下不改挂；not_approved 不挂。
+# 契约 adminCreatePayoutBatch 的文字随之改。08 E-28 由编排回写。RV2，新鲜独立 Claude 写规则测试，money 评审。
+# 冻结用例（D10-327，#24 报核，已实跑）：[AC-B2-09l#13、15、16、23、24、27、31] 和 [AC-B2-06c#3] 四条混通道，只改 batch_id、row_version、updated_at 的期望，只改这些，由新鲜独立 Claude 在规则测试作者提交里改。
+refs: [BR-WDR-11, BR-WDR-12]
+refs_hash:
+  BR-WDR-11: 9193f1c7ed27
+  BR-WDR-12: 15d982e09f01
+deps: [B2-09m]
+paths:
+  - 'apps/api/src/modules/payout/application/payout-execute.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/payout/batch-left-membership/**'
+  - 'test/spec/payout/admin-payout-batch/member-judgement.int.test.ts'
+  - 'test/spec/payout/admin-payout-batch/regroup.int.test.ts'
+  - 'test/spec/payout/admin-payout-batch/watermark.int.test.ts'
+  - 'test/spec/payout/admin-payout-batch/batch-harness.ts'
+  - 'test/spec/payout/execute/watermark.int.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/batch-left-membership/**'
+status: todo
