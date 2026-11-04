@@ -1,0 +1,17 @@
+id: B2-09o
+repo: rebate-platform
+title: 当日已发金额两处口径一致性测试（FU-DAILY-SENT-SINGLE-SOURCE，D10-602）——同一批数据下，概览的 daily_sent_fen 和打款进程 daily_cap 判定用的是同一个数；只加测试，不改代码
+type: test-change
+# 2026-11-04 pay 入账（D10-602 (a)，低优先）。jobs/transfer-job.ts 的 dailySentFen 和 admin-payout-overview.ts 的 readDailySentFen 是两份同样的查询，各有用例按 BR-WDR-13 ③ 钉住，但没有用例直接比较两者。
+# 选一致性测试而不是合并成一份：合并要动 transfer-job（RV2），必须有规则测试作者，而纯移动的规则测试实现前就是绿的，过不了先红。只加新目录，不动冻结测试，新鲜独立 Claude 写（approvals 36）。
+refs: []
+refs_hash: {}
+deps: [B2-09l]
+paths:
+  - 'test/spec/payout/daily-sent-source/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/daily-sent-source/**'
+status: todo
