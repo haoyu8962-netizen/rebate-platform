@@ -65,6 +65,9 @@
 //              "claude-independent" for either (ops/approvals.yaml id 36), and for a ledger tester
 //              claude-independent the reviewer is claude or another claude-independent call.
 //              Every expected file still needs a red test; MONEY_PATHS are unchanged.
+//              CT-06zzzc (D10-623): a ledger with `red_exempt_outside` (files whose changed code
+//              outside the tests keeps their red_exempt in force; red-check lists the changed
+//              lines) needs the same confirmation, red_exempt_confirmed true.
 //              Declared renames (CT-06zxc, D10-347): a rule-test file whose base, with the
 //              ledger's literal `renames` applied, is its spec_commit content is unchanged and
 //              not expected (red-check leaves it out of the red run the same way). When a
@@ -484,7 +487,7 @@ export type RedRequirement = {
    * CT-06r: the red exemptions the trusted ledger declares (`red_exempt`) and who wrote the rule
    * tests; absent or 0 declared: no confirmation required.
    */
-  declared?: { count: number; tester: TaskFile['tester'] };
+  declared?: { count: number; tester: TaskFile['tester']; outside?: number };
   /**
    * CT-06zxc (review r1 S2-1): the ledger's renames that hit a rule-test file of the task (in
    * ledger order) and the files they leave out of the expected list; absent when none hit: no
@@ -754,12 +757,20 @@ export function evidenceProblems(
       }
     });
     // CT-06r: declared red exemptions need the rule-test reviewer's confirmation on record.
-    if (red.required && red.declared !== undefined && red.declared.count > 0) {
+    if (
+      red.required &&
+      red.declared !== undefined &&
+      (red.declared.count > 0 || (red.declared.outside ?? 0) > 0)
+    ) {
       const reviewers = specTestReviewers(red.declared.tester);
       // The message names the usual side; an independent Claude confirmation is accepted too.
       const reviewer = reviewers[0] ?? 'claude';
       const field = 'spec_test_review';
-      const want = `the ledger declares ${red.declared.count} red exemption(s) (red_exempt, CT-06r): the rule-test reviewer (${reviewer}) must confirm them in ${field} (reviewer ${reviewer}, last_verdict pass, red_exempt_confirmed true)`;
+      const outside =
+        (red.declared.outside ?? 0) > 0
+          ? ` and ${red.declared.outside} file(s) whose code outside the tests changed (red_exempt_outside, CT-06zzzc)`
+          : '';
+      const want = `the ledger declares ${red.declared.count} red exemption(s) (red_exempt, CT-06r)${outside}: the rule-test reviewer (${reviewer}) must confirm them in ${field} (reviewer ${reviewer}, last_verdict pass, red_exempt_confirmed true)`;
       const review = doc[field];
       if (!isRecord(review)) {
         at(field, want);
@@ -1185,8 +1196,17 @@ export function redRequirement(
   return {
     required: true,
     expected,
-    ...(ledger.red_exempt.length > 0
-      ? { declared: { count: ledger.red_exempt.length, tester: ledger.tester } }
+    ...(ledger.red_exempt.length > 0 || ledger.red_exempt_outside.length > 0
+      ? {
+          declared: {
+            count: ledger.red_exempt.length,
+            tester: ledger.tester,
+            // CT-06zzzc (D10-623): files whose changed code outside the tests the reviewer confirms.
+            ...(ledger.red_exempt_outside.length > 0
+              ? { outside: ledger.red_exempt_outside.length }
+              : {}),
+          },
+        }
       : {}),
     ...(hit.length > 0 || leftOut.length > 0
       ? { renames: { hit, left_out: leftOut, tester: ledger.tester } }

@@ -1,0 +1,30 @@
+id: CT-06zzzc
+repo: rebate-platform
+title: CT-06zzzc：台账可选段 red_exempt_outside——按文件显式登记「用例外代码改过、仍让本台账 red_exempt 生效」，red-check 列出用例外改动行段供评审确认（D10-623）
+type: guard-change
+# 2026-11-05 入账（ops 线，编排裁定 D10-623）。起因：F1-02zzzb 改冻结的 delivery.int.test.ts（import 新增、#20 顶层表移出 bridge_origins 组）与
+#   config-etag/domain.int.test.ts（import 新增、data() 夹具按契约换签名值）后，red-check 因「code outside the tests changed」整文件判，台账 146 条 red_exempt 不生效。
+# 改法按文件显式登记、可审计，不一刀切放宽：只有列在 red_exempt_outside 的文件，red_exempt 才对「用例外代码改动」整文件判的情形生效；
+#   豁免用例仍须逐块与基线相同，新增 / 改过的用例仍须红，比对做不了照旧不生效；notes 列出这些文件用例外改动的行段，沿用 red_exempt_confirmed。
+# task check：只能列 test_paths 里、在基线（受信根）已存在的规则测试文件，条数沿用 RED_EXEMPT_MAX，理由 ≥ RED_EXEMPT_REASON_MIN。
+# 实现 Opus 子代理；Codex 对抗评审；按 approvals 第 16 条 / #24 由编排核后加标签。
+# 第 2 轮：RED_EXEMPT_MAX 150 → 300（D10-624）；修 Codex r1 S2（do-while 尾部条件等外层结构尾部代码纳入块比较键）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzc.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

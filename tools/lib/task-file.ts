@@ -48,6 +48,17 @@ export type TaskFile = {
    */
   red_exempt: RedExemptDeclaration[];
   /**
+   * CT-06zzzc (orchestrator ruling D10-623, after F1-02zzzb): the rule-test files whose code
+   * outside the tests the task changes (an import, a row group taken out of a top-level table, a
+   * fixture's value) and for which the ledger's `red_exempt` declarations must still apply. Without
+   * an entry such a file is judged as a whole and its declarations do not apply (CT-06r). Each
+   * entry names the file (inside test_paths, existing at the base: tools/ops/task.ts) and a reason
+   * of at least RED_EXEMPT_REASON_MIN characters; red-check lists the changed lines outside the
+   * tests for the rule-test reviewer (spec_test_review.red_exempt_confirmed). Read from the trusted
+   * root like red_exempt. Optional, [] when absent.
+   */
+  red_exempt_outside: RedExemptOutsideDeclaration[];
+  /**
    * CT-06zxc (orchestrator ruling D10-347): literal renames the task makes inside rule-test files
    * that existed at the base (a queue job name 'freeze-expiry' → 'freeze_expiry' its frozen tests
    * must follow). red-check replaces every `from` by its `to` in the base content of such a file,
@@ -89,6 +100,14 @@ export type RedExemptDeclaration = {
   /** The test's full name as the red reporter writes it (`describe > … > title`). */
   test: string;
   /** Why the test cannot be shown red (at least RED_EXEMPT_REASON_MIN characters). */
+  reason: string;
+};
+
+/** One file whose changed code outside the tests the ledger declares (CT-06zzzc, D10-623). */
+export type RedExemptOutsideDeclaration = {
+  /** The rule-test file, repository-relative, inside the task's test_paths, existing at the base. */
+  file: string;
+  /** Why its code outside the tests changes (at least RED_EXEMPT_REASON_MIN characters). */
   reason: string;
 };
 
@@ -184,7 +203,9 @@ export const RED_EXEMPT_REASON_MIN = 10;
 // CT-06zzzb (D10-620): raised from 50 to 150. The cap only bounds the task file's length (the section is
 // not counted in the 40-line limit); every exemption is still checked one by one by the orchestrator and
 // red-check still judges every test that is not exempt, so a higher cap does not weaken the red run.
-export const RED_EXEMPT_MAX = 150;
+// CT-06zzzc (D10-624): raised from 150 to 300, for the same reason as D10-620 (red_exempt_outside
+// shares the cap).
+export const RED_EXEMPT_MAX = 300;
 
 export const TASK_REPOS = ['rebate-platform', 'ios', 'android', 'harmony'] as const;
 export const TASK_TYPES = [
@@ -219,6 +240,7 @@ const KNOWN_KEYS = new Set([
   'test_paths',
   'mechanical_paths',
   'red_exempt',
+  'red_exempt_outside',
   'renames',
   'expected_values',
   'impl',
@@ -332,6 +354,66 @@ function redExemptList(value: unknown, problems: string[]): RedExemptDeclaration
     }
     seen.add(key);
     out.push({ file: file as string, test: test as string, reason: reason as string });
+  });
+  return out;
+}
+
+/**
+ * The `red_exempt_outside` list (CT-06zzzc, D10-623): a list of mappings `file` / `reason`, the
+ * file a repository-relative path named once, the reason at least RED_EXEMPT_REASON_MIN
+ * characters once trimmed, at most RED_EXEMPT_MAX entries (the section is not counted in the
+ * line limit either). Whether the file is a rule-test file of test_paths that exists at the base
+ * and the task has a rule-test author is checked by tools/ops/task.ts.
+ */
+function redExemptOutsideList(value: unknown, problems: string[]): RedExemptOutsideDeclaration[] {
+  const label = 'red_exempt_outside';
+  if (!Array.isArray(value)) {
+    problems.push(`${label}: must be a list of mappings (file / reason)`);
+    return [];
+  }
+  if (value.length > RED_EXEMPT_MAX) {
+    problems.push(
+      `${label}: ${value.length} entries, the limit is ${RED_EXEMPT_MAX} (CT-06zzzc; the section is not counted in the file's line limit, so it has its own)`,
+    );
+  }
+  const out: RedExemptOutsideDeclaration[] = [];
+  const seen = new Set<string>();
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      problems.push(`${label}[${index}]: must be a mapping (file / reason)`);
+      return;
+    }
+    for (const key of Object.keys(item)) {
+      if (!['file', 'reason'].includes(key)) {
+        problems.push(`${label}[${index}].${key}: unknown field`);
+      }
+    }
+    const file = item['file'];
+    const reason = item['reason'];
+    let ok = true;
+    if (typeof file !== 'string' || file === '') {
+      problems.push(`${label}[${index}].file: must be a non-empty repository path`);
+      ok = false;
+    } else {
+      const problem = pathProblem(file);
+      if (problem !== null) {
+        problems.push(`${label}[${index}].file: "${file}" ${problem}`);
+        ok = false;
+      }
+    }
+    if (typeof reason !== 'string' || reason.trim().length < RED_EXEMPT_REASON_MIN) {
+      problems.push(
+        `${label}[${index}].reason: must say why the code outside the tests changes (at least ${RED_EXEMPT_REASON_MIN} characters)`,
+      );
+      ok = false;
+    }
+    if (!ok) return;
+    if (seen.has(file as string)) {
+      problems.push(`${label}[${index}]: "${file as string}" is declared twice`);
+      return;
+    }
+    seen.add(file as string);
+    out.push({ file: file as string, reason: reason as string });
   });
   return out;
 }
@@ -525,6 +607,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
       key !== 'test_paths' &&
       key !== 'mechanical_paths' &&
       key !== 'red_exempt' &&
+      key !== 'red_exempt_outside' &&
       key !== 'renames' &&
       key !== 'expected_values' &&
       !Object.hasOwn(doc, key)
@@ -582,6 +665,9 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
   }
   const redExempt = Object.hasOwn(doc, 'red_exempt')
     ? redExemptList(doc['red_exempt'], problems)
+    : [];
+  const redExemptOutside = Object.hasOwn(doc, 'red_exempt_outside')
+    ? redExemptOutsideList(doc['red_exempt_outside'], problems)
     : [];
   const renames = Object.hasOwn(doc, 'renames') ? renameList(doc['renames'], problems) : [];
   const expectedValues = Object.hasOwn(doc, 'expected_values')
@@ -663,6 +749,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
     test_paths: testPaths,
     mechanical_paths: mechanicalPaths,
     red_exempt: redExempt,
+    red_exempt_outside: redExemptOutside,
     renames,
     expected_values: expectedValues,
     impl: impl as TaskFile['impl'],

@@ -149,17 +149,39 @@
 // When the code outside the tests still differs, the file is
 // judged as a whole, as before (if the head does not make a registered change at all, the file
 // is compared without the entries). Without entries nothing changes.
+//
+// Declared outside changes (CT-06zzzc; orchestrator ruling D10-623 after F1-02zzzb, which must
+// add an import to two frozen rule-test files, take a row group out of a top-level table of one
+// and sign the fixture values of the other): a file whose code outside the tests changed is
+// judged as a whole, so the ledger's red_exempt declarations of its unchanged tests did not
+// apply. The trusted ledger may list such a file (`red_exempt_outside`: file / reason;
+// tools/lib/task-file.ts; tools/ops/task.ts checks it is a rule-test file of test_paths that
+// exists at the base). For a listed file only, after the renames and the registered expected
+// values (in that order; when they leave it unchanged outside the tests nothing more is needed),
+// a file still judged as a whole because its code outside the tests changed is compared with
+// test-blocks.ts compareOutsideChanged: the file is then of kind `support` — every test must be
+// red except the declared ones whose block is the base's (same text, describes, enclosing code,
+// position among the aligned code outside the tests, order), which may pass. A test calling a
+// registered changed helper still counts as changed. A new or changed test must still be red; a
+// file that cannot be compared (not tokenized, JSX, not the red reporter's report, too many
+// changes) stays judged as a whole; a file whose every test is declared still fails. The notes
+// list the head lines of the changes outside the tests (`L10-12, L33`; a removal is shown at the
+// lines around it) with the declared reason, for the rule-test reviewer, who confirms them with
+// the exemptions (spec_test_review.red_exempt_confirmed, also required when the ledger has
+// red_exempt_outside), and for the orchestrator. A file not listed is judged exactly as before.
 import { matchesAny } from '../../lib/glob.ts';
 import type { Change } from '../../lib/git.ts';
 import { RED_EXEMPT_REASON_MIN } from '../../lib/task-file.ts';
 import type {
   ExpectedValueDeclaration,
   RedExemptDeclaration,
+  RedExemptOutsideDeclaration,
   RenameDeclaration,
   TaskFile,
 } from '../../lib/task-file.ts';
 import {
   type ComparedBlock,
+  compareOutsideChanged,
   compareTestFile,
   helperImpact,
   helperNamedInLiteral,
@@ -282,7 +304,16 @@ export type RuleTestBaseline =
      * (CT-06r): the file may read a test-support file the task changed, the reason says which.
      */
     | { kind: 'support'; reason: string; blocks: ComparedBlock[] }
-  ) & { renamed?: RenamedBase; expectedValues?: ExpectedValuesBase };
+  ) & {
+    renamed?: RenamedBase;
+    expectedValues?: ExpectedValuesBase;
+    /**
+     * CT-06zzzc (D10-623): the file is listed in the ledger's `red_exempt_outside`. `lines` (head
+     * lines of the changes outside the tests) is present when the listing applied and the file is
+     * of kind `support` because of it; `void` says why it did not apply or was not needed.
+     */
+    outside?: { reason: string; lines?: string; void?: string };
+  };
 
 /**
  * The base content with the declared renames applied (CT-06zxc): in order, every occurrence of
@@ -403,6 +434,22 @@ export function unusedExpectedValueNotes(
     );
 }
 
+/**
+ * Notes for the red_exempt_outside entries (CT-06zzzc) of files that got no baseline: not an
+ * expected rule-test file that existed at the base.
+ */
+export function unusedOutsideNotes(
+  entries: readonly RedExemptOutsideDeclaration[],
+  baselines: ReadonlyMap<string, RuleTestBaseline>,
+): string[] {
+  return entries
+    .filter((e) => baselines.get(e.file)?.outside === undefined)
+    .map(
+      (e) =>
+        `red_exempt_outside ${e.file}: not applied (not an expected rule-test file that existed at the base)`,
+    );
+}
+
 export type BaselineReader = {
   /** Content of a file at the base, null when it does not exist there. */
   base(path: string): string | null;
@@ -491,6 +538,7 @@ export function ruleTestBaselines(
   read: BaselineReader,
   renames: readonly RenameDeclaration[] = [],
   expectedValues: readonly ExpectedValueDeclaration[] = [],
+  outside: readonly RedExemptOutsideDeclaration[] = [],
 ): Map<string, RuleTestBaseline> {
   const out = new Map<string, RuleTestBaseline>();
   const support = new Set<string>();
@@ -511,6 +559,10 @@ export function ruleTestBaselines(
     const renamedBase = applyRenames(original, renames);
     const before = renamedBase.text;
     let ev: ExpectedValuesBase | undefined;
+    // CT-06zzzc (D10-623): the ledger lists this file in red_exempt_outside.
+    const listed = outside.find((o) => o.file === file);
+    let outsideState: RuleTestBaseline['outside'] =
+      listed === undefined ? undefined : { reason: listed.reason };
     const set = (baseline: RuleTestBaseline): void => {
       out.set(file, {
         ...baseline,
@@ -518,7 +570,13 @@ export function ruleTestBaselines(
           ? {}
           : { renamed: { applied: renamedBase.applied, identical: before === after } }),
         ...(ev === undefined ? {} : { expectedValues: ev }),
+        ...(outsideState === undefined ? {} : { outside: outsideState }),
       });
+    };
+    const outsideVoid = (why: string): void => {
+      if (outsideState !== undefined && outsideState.lines === undefined) {
+        outsideState = { ...outsideState, void: why };
+      }
     };
     if (after === null) {
       set({ kind: 'whole', reason: 'its content in the red run cannot be read' });
@@ -569,6 +627,45 @@ export function ruleTestBaselines(
         }
       }
     }
+    // CT-06zzzc (D10-623): a listed file still judged as a whole because its code outside the
+    // tests changed (after the renames and the registered expected values) is compared with
+    // compareOutsideChanged; its declared exemptions may then apply (kind `support`, below).
+    if (compared.whole && compared.outside === true && listed !== undefined) {
+      const withValues = ev !== undefined && ev.applied.length > 0;
+      const lenient = compareOutsideChanged(withValues ? registered.text : before, after);
+      if (lenient.whole) {
+        outsideVoid(lenient.reason);
+      } else if (withValues && ev !== undefined) {
+        // A test calling a registered changed helper still counts as changed (CT-06zxe).
+        const helpers = [...new Set(ev.applied.map((e) => e.helper))];
+        const found = helperImpact(after, helpers);
+        const named = found.ok ? helperNamedInLiteral(before, found.closure, helpers) : null;
+        if (!found.ok || named !== null) {
+          outsideVoid(`registered expected values: ${found.ok ? (named as string) : found.reason}`);
+        } else {
+          compared = { whole: false, blocks: lenient.blocks };
+          affected = found.affected;
+          delete ev.whole;
+          ev.affected = lenient.blocks.filter((_, i) => found.affected[i]).map((b) => b.title);
+          for (const h of helpers) {
+            const alone = helperImpact(after, [h]);
+            if (alone.ok && !alone.affected.some(Boolean)) {
+              ev.void.push(
+                `the registered helper ${h} is called by no test block: the registration is void`,
+              );
+            }
+          }
+          outsideState = { reason: listed.reason, lines: lenient.lines };
+        }
+      } else {
+        compared = { whole: false, blocks: lenient.blocks };
+        outsideState = { reason: listed.reason, lines: lenient.lines };
+      }
+    } else if (compared.whole) {
+      outsideVoid(`the file is judged as a whole for another reason: ${compared.reason}`);
+    } else {
+      outsideVoid("its code outside the tests is the base's (nothing to declare)");
+    }
     if (compared.whole) {
       set({ kind: 'whole', reason: compared.reason });
       continue;
@@ -592,14 +689,19 @@ export function ruleTestBaselines(
       why = judged.has(s) ? mayImportRuleTest(s, closure) : mayReadSupport(file, s, closure);
       if (why !== null) break;
     }
+    const outsideLines = outsideState?.lines;
+    const reasons = [
+      ...(outsideLines === undefined
+        ? []
+        : [
+            `its code outside the tests changed at ${outsideLines} (declared in red_exempt_outside, D10-623)`,
+          ]),
+      ...(why === null ? [] : [`it may read a test-support file the task changed: ${why}`]),
+    ];
     set(
-      why === null
+      reasons.length === 0
         ? { kind: 'tests', blocks }
-        : {
-            kind: 'support',
-            reason: `it may read a test-support file the task changed: ${why}`,
-            blocks,
-          },
+        : { kind: 'support', reason: reasons.join('; '), blocks },
     );
   }
   return out;
@@ -1153,6 +1255,19 @@ export function checkRedReports(
         );
       }
       for (const why of ev.void) problems.push({ file, test: null, reason: why });
+    }
+    // CT-06zzzc (D10-623): what the file's red_exempt_outside listing did.
+    const listed = baseline?.outside;
+    if (listed !== undefined) {
+      if (listed.lines !== undefined) {
+        notes.push(
+          `${file}: code outside the tests changed at ${listed.lines} (head lines; a removal is shown at the lines around it), declared in red_exempt_outside (D10-623; reason: ${listed.reason}): the ledger's red_exempt declarations apply to its unchanged tests; the rule-test reviewer confirms these changes with the exemptions (evidence spec_test_review.red_exempt_confirmed) and the orchestrator checks them one by one`,
+        );
+      } else {
+        notes.push(
+          `${file}: declared in red_exempt_outside, but the declaration does not apply: ${listed.void ?? (baseline?.kind === 'whole' ? `the file is judged as a whole for another reason: ${baseline.reason}` : 'nothing to declare')}`,
+        );
+      }
     }
     const declaredHere = baselines === undefined ? [] : declared.filter((d) => d.file === file);
     for (const d of declaredHere) declaredSeen.add(d);

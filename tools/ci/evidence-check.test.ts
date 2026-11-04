@@ -1078,6 +1078,64 @@ red_exempt:
   expect(git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe(branch);
 });
 
+it('[CT-06zzzc] a ledger with red_exempt_outside needs the same confirmation (red_exempt_confirmed)', () => {
+  const head = git(repo, ['rev-parse', 'HEAD']);
+  const cfg = loadProtected(REPO);
+  const problemsOf = (doc: Evidence, red: RedRequirement): string =>
+    evidenceProblems(doc, { prDir: repo, head, task: 'B2-01a', cfg, red }).join('\n');
+  const red = { ...RED, declared: { count: 2, tester: 'codex' as const, outside: 1 } };
+  const want =
+    'the ledger declares 2 red exemption(s) (red_exempt, CT-06r) and 1 file(s) whose code outside the tests changed (red_exempt_outside, CT-06zzzc): the rule-test reviewer (claude) must confirm them in spec_test_review (reviewer claude, last_verdict pass, red_exempt_confirmed true)';
+  const confirmed = {
+    reviewer: 'claude',
+    engine: 'claude',
+    rounds: 1,
+    last_verdict: 'pass',
+    red_exempt_confirmed: true,
+    note: 'the listed lines outside the tests only follow the contract',
+  };
+  expect(problemsOf(evidence(), red)).toBe(`spec_test_review: ${want}`);
+  expect(
+    problemsOf(
+      evidence({ spec_test_review: { ...confirmed, red_exempt_confirmed: undefined } }),
+      red,
+    ),
+  ).toBe(`spec_test_review.red_exempt_confirmed: ${want}`);
+  expect(problemsOf(evidence({ spec_test_review: confirmed }), red)).toBe('');
+  // Even with no red_exempt entry counted, the listing alone asks for the confirmation.
+  expect(
+    problemsOf(evidence(), { ...RED, declared: { count: 0, tester: 'codex', outside: 1 } }),
+  ).toContain('spec_test_review: the ledger declares 0 red exemption(s)');
+
+  // The requirement reads the section from the trusted ledger.
+  const trusted = join(SCRATCH, 'trusted-outside');
+  for (const file of [
+    'tools/guard/protected-paths.json',
+    'ops/risk-map.yaml',
+    'tools/guard/legacy-tasks.json',
+  ]) {
+    write(trusted, { [file]: readFileSync(join(TRUSTED, file), 'utf8') });
+  }
+  write(trusted, {
+    'ops/tasks/B2-01a.yaml': `${readFileSync(join(TRUSTED, 'ops/tasks/B2-01a.yaml'), 'utf8').trimEnd()}
+red_exempt:
+  - file: ${FLOOR}
+    test: 'floors the format'
+    reason: structural, holds for the old data too
+red_exempt_outside:
+  - file: ${FLOOR}
+    reason: an import added for the new contract
+`,
+  });
+  const text = JSON.stringify({ task: 'B2-01a', spec_commit: specCommit });
+  const input = { prDir: repo, base, head, headRef: 'task/B2-01a', trusted };
+  expect(redRequirement(input, 'B2-01a', base, text)).toEqual({
+    required: true,
+    expected: [FLOOR],
+    declared: { count: 1, tester: 'codex', outside: 1 },
+  });
+});
+
 it('[legacy flow] a legacy ledger needs no red run and no test_paths, but still the full container verify', () => {
   // A B1-01s-shape ledger: Codex implements, Claude wrote the rule tests, no test_paths; listed
   // on the trusted legacy list.

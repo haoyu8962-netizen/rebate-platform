@@ -9,6 +9,7 @@ import {
   type ModuleImport,
   type PathKind,
   TestParseError,
+  compareOutsideChanged,
   compareTestFile,
   cook,
   listedDirectories,
@@ -2449,4 +2450,147 @@ it('[AC-CT-06zzz#1] mayImportRuleTest counts only an explicit import of the sibl
   );
   expect(mayImportRuleTest(sibling, [computed])).toBeNull();
   expect(mayReadSupport(file, sibling, [computed])).not.toBeNull();
+});
+
+// CT-06zzzc (D10-623): compareOutsideChanged, for a file listed in red_exempt_outside.
+const OUT_BASE = [
+  HEADER,
+  "import { a } from './a.ts';",
+  '',
+  'const GROUPS = [',
+  "  ['alpha', 1],",
+  "  ['bridge_origins', 2],",
+  "  ['gamma', 3],",
+  '];',
+  '',
+  "describe('cfg', () => {",
+  "  it('[AC-1] one', () => {",
+  '    expect(a(1)).toBe(1);',
+  '  });',
+  '',
+  '  for (const [name, n] of GROUPS) {',
+  '    it(`[AC-2] group ${name}`, () => {',
+  '      expect(a(n)).toBe(n);',
+  '    });',
+  '  }',
+  '',
+  "  it('[AC-3] three', () => {",
+  '    expect(a(3)).toBe(3);',
+  '  });',
+  '});',
+  '',
+].join('\n');
+
+function outside(base: string, head: string): { changed: Record<string, boolean>; lines: string } {
+  const c = compareOutsideChanged(base, head);
+  if (c.whole) throw new Error(`judged as a whole: ${c.reason}`);
+  return {
+    changed: Object.fromEntries(c.blocks.map((b) => [b.title, b.changed])),
+    lines: c.lines,
+  };
+}
+
+it('[CT-06zzzc] compareOutsideChanged: an import and a removed table row change no test block; the head lines are listed', () => {
+  const head = OUT_BASE.replace(
+    "import { a } from './a.ts';",
+    "import { a } from './a.ts';\nimport { sign } from './sign.ts';",
+  ).replace("  ['bridge_origins', 2],\n", '');
+  // compareTestFile judges the whole file (code outside the tests changed).
+  expect(compareTestFile(OUT_BASE, head)).toMatchObject({ whole: true, outside: true });
+  expect(outside(OUT_BASE, head)).toEqual({
+    changed: {
+      'cfg > [AC-1] one': false,
+      'cfg > [AC-2] group *': false,
+      'cfg > [AC-3] three': false,
+    },
+    // L3: the import added; L7: the row removed (shown at the lines of the tokens around it).
+    lines: 'L3, L7',
+  });
+  // A changed block is changed; a fixture value spanning lines is a range.
+  const body = head
+    .replace('expect(a(3)).toBe(3);', 'expect(a(3)).toBe(4);')
+    .replace("const GROUPS = [\n  ['alpha', 1],", "const GROUPS = [\n  ['alpha',\n    7],");
+  expect(outside(OUT_BASE, body)).toEqual({
+    changed: {
+      'cfg > [AC-1] one': false,
+      'cfg > [AC-2] group *': false,
+      'cfg > [AC-3] three': true,
+    },
+    lines: 'L3, L6-8',
+  });
+  // Identical files: nothing listed, nothing changed.
+  expect(outside(OUT_BASE, OUT_BASE).lines).toBe('');
+});
+
+it('[CT-06zzzc] compareOutsideChanged: a block wrapped, led by new code, moved past an unchanged statement or into another loop is changed', () => {
+  const wrapped = OUT_BASE.replace(
+    "  it('[AC-1] one', () => {\n    expect(a(1)).toBe(1);\n  });",
+    "  if (a(0)) {\n  it('[AC-1] one', () => {\n    expect(a(1)).toBe(1);\n  });\n  }",
+  );
+  expect(outside(OUT_BASE, wrapped).changed['cfg > [AC-1] one']).toBe(true);
+  const led = OUT_BASE.replace("  it('[AC-1] one'", "  if (a(0)) it('[AC-1] one'");
+  expect(outside(OUT_BASE, led).changed['cfg > [AC-1] one']).toBe(true);
+  // The loop's head changed: the block inside it is changed (it runs over other rows).
+  const loop = OUT_BASE.replace('of GROUPS)', 'of GROUPS.slice(1))');
+  expect(outside(OUT_BASE, loop).changed).toMatchObject({
+    'cfg > [AC-1] one': false,
+    'cfg > [AC-2] group *': true,
+  });
+  // [AC-1] moved past the (unchanged) loop: changed, though its text and describe are the same.
+  const block1 = "  it('[AC-1] one', () => {\n    expect(a(1)).toBe(1);\n  });\n";
+  const moved = OUT_BASE.replace(block1, '').replace(
+    "  it('[AC-3] three'",
+    `${block1}\n  it('[AC-3] three'`,
+  );
+  expect(outside(OUT_BASE, moved).changed).toMatchObject({
+    'cfg > [AC-1] one': true,
+    'cfg > [AC-3] three': false,
+  });
+  // A file that cannot be tokenized is judged as a whole.
+  expect(compareOutsideChanged(OUT_BASE, `${OUT_BASE}\nconst s = 'open`)).toMatchObject({
+    whole: true,
+  });
+});
+
+it('[CT-06zzzc] compareOutsideChanged: the code ending an enclosing statement counts (do-while condition, IIFE arguments; Codex review r1 S2)', () => {
+  const body = "    it('[AC-9] loop', () => {\n      expect(a(n)).toBe(n);\n    });";
+  const doWhile = (cond: string, tail = ''): string =>
+    OUT_BASE.replace(
+      "  it('[AC-3] three'",
+      `  let n = 0;\n  do {\n${body}\n    n += 1;\n  } while (${cond})${tail};\n\n  it('[AC-3] three'`,
+    );
+  const base = doWhile('n < 2');
+  // The condition changed: the block inside the loop is changed (it must be red).
+  expect(outside(base, doWhile('n < 3')).changed).toMatchObject({
+    'cfg > [AC-1] one': false,
+    'cfg > [AC-9] loop': true,
+    'cfg > [AC-3] three': false,
+  });
+  // Unchanged condition, a change elsewhere outside the tests: the block stays unchanged.
+  const elsewhere = doWhile('n < 2').replace("  ['gamma', 3],\n", '');
+  expect(outside(base, elsewhere).changed['cfg > [AC-9] loop']).toBe(false);
+  // A body-less do-while around the block itself: its condition counts as well.
+  const bare = (cond: string): string =>
+    OUT_BASE.replace(
+      "  it('[AC-3] three', () => {\n    expect(a(3)).toBe(3);\n  });",
+      `  do it('[AC-3] three', () => {\n    expect(a(3)).toBe(3);\n  })\n  while (${cond});`,
+    );
+  expect(outside(bare('a(0)'), bare('a(1)')).changed['cfg > [AC-3] three']).toBe(true);
+  expect(outside(bare('a(0)'), bare('a(0)')).changed['cfg > [AC-3] three']).toBe(false);
+  // IIFE tails: the arguments of `}).call(…)` and `})(…)`.
+  const iife = (args: string, call = '.call'): string =>
+    OUT_BASE.replace(
+      "  it('[AC-3] three', () => {\n    expect(a(3)).toBe(3);\n  });",
+      `  (function (k) {\n  it('[AC-3] three', () => {\n    expect(a(k)).toBe(3);\n  });\n  })${call}(${args});`,
+    );
+  expect(outside(iife('this, 3'), iife('this, 4')).changed['cfg > [AC-3] three']).toBe(true);
+  expect(outside(iife('this, 3'), iife('this, 3')).changed['cfg > [AC-3] three']).toBe(false);
+  expect(outside(iife('3', ''), iife('4', '')).changed['cfg > [AC-3] three']).toBe(true);
+  expect(outside(iife('3', ''), iife('3', '')).changed['cfg > [AC-3] three']).toBe(false);
+  // A block statement ends at its line break: a statement after the loop is not its tail.
+  const after = (stmt: string): string =>
+    OUT_BASE.replace('    });\n  }\n', `    });\n  }\n  ${stmt}\n`);
+  expect(outside(after('const z = 1'), after('const z = 2')).changed).toMatchObject({
+    'cfg > [AC-2] group *': false,
+  });
 });

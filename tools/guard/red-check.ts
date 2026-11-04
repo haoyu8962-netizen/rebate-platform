@@ -23,6 +23,9 @@
 // The trusted ledger's `expected_values` (CT-06zxe, D10-371) are applied to each base after the
 // renames: a file whose only changes outside its tests are registered expected values of its
 // top-level helpers needs only the tests that call those helpers red (lib/red-check.ts).
+// The trusted ledger's `red_exempt_outside` (CT-06zzzc, D10-623) lists the files whose changed
+// code outside the tests still lets their red_exempt declarations apply; the notes give the head
+// lines of those changes for the rule-test reviewer (lib/red-check.ts).
 //
 //   node tools/guard/red-check.ts --task <id> --cwd <worktree> --base <ref> --print-expected
 //     prints the expected rule-test files, one per line (tools/ops/verify-container.sh --red uses
@@ -45,6 +48,7 @@ import {
   renamedOnlyNote,
   ruleTestBaselines,
   unusedExpectedValueNotes,
+  unusedOutsideNotes,
 } from './lib/red-check.ts';
 
 /** `<ref>:<path>` in the repository at `cwd`, or null when it does not exist. */
@@ -205,8 +209,10 @@ runCli(
           reader,
           task.renames,
           task.expected_values,
+          task.red_exempt_outside,
         );
         renamedNotes.push(...unusedExpectedValueNotes(task.expected_values, baselines));
+        renamedNotes.push(...unusedOutsideNotes(task.red_exempt_outside, baselines));
       } catch (err) {
         baselines = undefined;
         baselineNote = `cannot compare with the base ${base} (${err instanceof Error ? err.message : String(err)}): every test of every expected file must be red`;

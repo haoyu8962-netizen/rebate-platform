@@ -20,6 +20,7 @@ import {
   ruleTestBaselines,
   scriptFaultConsoleError,
   unusedExpectedValueNotes,
+  unusedOutsideNotes,
   smokeCauseVerdict,
   smokeDiagnosticsOf,
   smokeDiagnosticsVerdict,
@@ -2098,4 +2099,343 @@ it('[AC-CT-06zzz#4] helpers keep the conservative rules: a changed kit or data f
     reader(base, { ...head, [ZZZ_B]: zzzFile('', '3 - 2') }),
   );
   expect(outside.get(ZZZ_A)?.kind).toBe('support');
+});
+
+// CT-06zzzc (D10-623, after F1-02zzzb): red_exempt_outside lets the declared exemptions of a file
+// whose code outside the tests changed apply to its unchanged tests.
+const CFG = 'test/spec/content/config/delivery.int.test.ts';
+const CFG_BASE = [
+  "import { describe, expect, it } from 'vitest';",
+  "import { a } from './a.ts';",
+  '',
+  'const GROUPS = [',
+  "  ['alpha', 1],",
+  "  ['bridge_origins', 2],",
+  "  ['gamma', 3],",
+  '];',
+  '',
+  "describe('cfg', () => {",
+  "  it('[AC-1] one', () => {",
+  '    expect(a(1)).toBe(1);',
+  '  });',
+  '',
+  '  for (const [name, n] of GROUPS) {',
+  '    it(`[AC-2] group ${name}`, () => {',
+  '      expect(a(n)).toBe(n);',
+  '    });',
+  '  }',
+  '',
+  "  it('[AC-3] three', () => {",
+  '    expect(a(3)).toBe(3);',
+  '  });',
+  '',
+  "  it('[AC-4] four', () => {",
+  '    expect(a(4)).toBe(4);',
+  '  });',
+  '});',
+  '',
+].join('\n');
+/** F1-02zzzb's shape: an import added, a row group taken out of the table, [AC-4] changed, [AC-5] new. */
+const CFG_HEAD = CFG_BASE.replace(
+  "import { a } from './a.ts';",
+  "import { a } from './a.ts';\nimport { sign } from './sign.ts';",
+)
+  .replace("  ['bridge_origins', 2],\n", '')
+  .replace('expect(a(4)).toBe(4);', 'expect(sign(a(4))).toBe(4);')
+  .replace(
+    /\n\}\);\n$/,
+    "\n\n  it('[AC-5] five', () => {\n    expect(sign(5)).toBe(5);\n  });\n});\n",
+  );
+const CFG_REASON = 'the import and the bridge_origins group follow the new contract';
+const CFG_OUTSIDE = [{ file: CFG, reason: CFG_REASON }];
+const cfgBaselines = (
+  head = CFG_HEAD,
+  outside: { file: string; reason: string }[] = CFG_OUTSIDE,
+  base = CFG_BASE,
+  file = CFG,
+) =>
+  ruleTestBaselines(
+    [file],
+    [{ path: file, status: 'M' }],
+    ['test/spec/content/**'],
+    reader({ [file]: base }, { [file]: head }),
+    [],
+    [],
+    outside,
+  );
+const CFG_UNCHANGED = [
+  'cfg > [AC-1] one',
+  'cfg > [AC-2] group alpha',
+  'cfg > [AC-2] group gamma',
+  'cfg > [AC-3] three',
+];
+const cfgTests = (green: string[] = CFG_UNCHANGED): RedTest[] =>
+  [...CFG_UNCHANGED, 'cfg > [AC-4] four', 'cfg > [AC-5] five'].map((n) =>
+    green.includes(n) ? [n, 'passed'] : [n, 'failed', 'AssertionError: x'],
+  );
+const cfgDeclared = (tests: string[] = CFG_UNCHANGED) =>
+  tests.map((test) => ({ file: CFG, test, reason: REASON }));
+const CFG_LINES = 'L3, L7';
+
+it('[CT-06zzzc] a file not listed in red_exempt_outside: judged as a whole as before, its declarations do not apply', () => {
+  const b = cfgBaselines(CFG_HEAD, []);
+  expect(b.get(CFG)).toEqual({
+    kind: 'whole',
+    reason:
+      'code outside the tests changed (imports, helpers, hooks, top-level tables or describe titles)',
+  });
+  const result = checkRedReports([redReport(CFG, cfgTests())], [CFG], ROOT, b, cfgDeclared());
+  expect(result.ok).toBe(false);
+  expect(result.problems.map((p) => p.test)).toEqual(CFG_UNCHANGED);
+  expect(result.exempt).toEqual([]);
+  expect(result.notes).toEqual([
+    `${CFG}: existed at the base, judged as a whole (every test must be red): code outside the tests changed (imports, helpers, hooks, top-level tables or describe titles)`,
+    `${CFG}: 4 declared exemption(s) do not apply: code outside the tests changed (imports, helpers, hooks, top-level tables or describe titles) (a declaration applies only to a file judged as a whole because it may read a changed test-support file)`,
+  ]);
+  // Listing another file changes nothing for this one.
+  expect(
+    cfgBaselines(CFG_HEAD, [{ file: 'test/spec/content/x.test.ts', reason: CFG_REASON }]),
+  ).toEqual(b);
+});
+
+it('[CT-06zzzc] listed: the declared unchanged tests may pass, the changed and new ones must be red, the notes give the changed lines', () => {
+  const b = cfgBaselines();
+  expect(b.get(CFG)).toMatchObject({
+    kind: 'support',
+    reason: `its code outside the tests changed at ${CFG_LINES} (declared in red_exempt_outside, D10-623)`,
+    outside: { reason: CFG_REASON, lines: CFG_LINES },
+  });
+  const result = checkRedReports([redReport(CFG, cfgTests())], [CFG], ROOT, b, cfgDeclared());
+  expect(result.problems).toEqual([]);
+  expect(result.ok).toBe(true);
+  expect(result.red).toEqual([`${CFG} > cfg > [AC-4] four`, `${CFG} > cfg > [AC-5] five`]);
+  expect(result.exempt).toEqual(
+    CFG_UNCHANGED.map((test) => ({
+      file: CFG,
+      test,
+      status: 'passed',
+      declared: true,
+      reason: REASON,
+    })),
+  );
+  expect(result.notes.slice(0, 2)).toEqual([
+    `${CFG}: code outside the tests changed at ${CFG_LINES} (head lines; a removal is shown at the lines around it), declared in red_exempt_outside (D10-623; reason: ${CFG_REASON}): the ledger's red_exempt declarations apply to its unchanged tests; the rule-test reviewer confirms these changes with the exemptions (evidence spec_test_review.red_exempt_confirmed) and the orchestrator checks them one by one`,
+    `${CFG}: existed at the base, judged as a whole except the tests the ledger declares exempt (every other test must be red): its code outside the tests changed at ${CFG_LINES} (declared in red_exempt_outside, D10-623)`,
+  ]);
+  // A changed or a new test green on the skeleton has no teeth, declared or not.
+  const green = checkRedReports(
+    [redReport(CFG, cfgTests([...CFG_UNCHANGED, 'cfg > [AC-4] four', 'cfg > [AC-5] five']))],
+    [CFG],
+    ROOT,
+    b,
+    cfgDeclared([...CFG_UNCHANGED, 'cfg > [AC-4] four']),
+  );
+  expect(green.problems.map((p) => p.test)).toEqual(['cfg > [AC-4] four', 'cfg > [AC-5] five']);
+  expect(green.notes).toContain(
+    `${CFG} > cfg > [AC-4] four: declared exempt, but the declaration does not apply: the test is new or changed since the base (only an unchanged test may be declared exempt); the test must be red`,
+  );
+  // An unchanged test that is not declared must still be red.
+  const undeclared = checkRedReports(
+    [redReport(CFG, cfgTests())],
+    [CFG],
+    ROOT,
+    b,
+    cfgDeclared(CFG_UNCHANGED.slice(1)),
+  );
+  expect(undeclared.problems).toEqual([
+    {
+      file: CFG,
+      test: 'cfg > [AC-1] one',
+      reason:
+        'green on the skeleton: the test has no teeth (the file may read a test-support file the task changed and the ledger does not declare this test exempt)',
+    },
+  ]);
+});
+
+it('[CT-06zzzc] listed: a declared test whose own block changed still fails; so do a moved one and a file whose every test is declared', () => {
+  const own = CFG_HEAD.replace('expect(a(1)).toBe(1);', 'expect(a(1)).toBe(2);');
+  const changed = checkRedReports(
+    [redReport(CFG, cfgTests())],
+    [CFG],
+    ROOT,
+    cfgBaselines(own),
+    cfgDeclared(),
+  );
+  expect(changed.problems.map((p) => p.test)).toEqual(['cfg > [AC-1] one']);
+  // [AC-3] wrapped in a new branch: changed, though its text is the base's.
+  const wrapped = CFG_HEAD.replace(
+    "  it('[AC-3] three', () => {\n    expect(a(3)).toBe(3);\n  });",
+    "  if (a(0)) {\n  it('[AC-3] three', () => {\n    expect(a(3)).toBe(3);\n  });\n  }",
+  );
+  expect(
+    checkRedReports(
+      [redReport(CFG, cfgTests())],
+      [CFG],
+      ROOT,
+      cfgBaselines(wrapped),
+      cfgDeclared(),
+    ).problems.map((p) => p.test),
+  ).toEqual(['cfg > [AC-3] three']);
+  // No changed or new test left and every test declared: nothing is shown red.
+  const only = CFG_BASE.replace(
+    "import { a } from './a.ts';",
+    "import { a } from './a.ts';\nimport { sign } from './sign.ts';",
+  );
+  const all = [...CFG_UNCHANGED, 'cfg > [AC-2] group bridge_origins', 'cfg > [AC-4] four'];
+  const every = checkRedReports(
+    [
+      redReport(
+        CFG,
+        all.map((n) => [n, 'passed'] as RedTest),
+      ),
+    ],
+    [CFG],
+    ROOT,
+    cfgBaselines(only),
+    cfgDeclared(all),
+  );
+  expect(every.ok).toBe(false);
+  expect(every.problems).toEqual([
+    {
+      file: CFG,
+      test: null,
+      reason:
+        'existed at the base and every test is declared exempt: nothing is shown red (6 test(s); evidence-check wants a red test of every expected file)',
+    },
+  ]);
+});
+
+it('[CT-06zzzc] listed but not comparable (unreadable, JSX, not the red reporter, nothing changed outside): the listing does not apply', () => {
+  const broken = checkRedReports(
+    [redReport(CFG, cfgTests())],
+    [CFG],
+    ROOT,
+    cfgBaselines(`${CFG_HEAD}\nconst s = 'open`),
+    cfgDeclared(),
+  );
+  expect(broken.problems.map((p) => p.test)).toEqual(CFG_UNCHANGED);
+  expect(broken.notes[0]).toMatch(
+    new RegExp(
+      `^${CFG.replace(/[.]/g, '\\.')}: declared in red_exempt_outside, but the declaration does not apply: the file is judged as a whole for another reason: the file cannot be read as tests`,
+    ),
+  );
+  const JSX = 'test/spec/content/config/page.test.tsx';
+  const jsx = cfgBaselines(CFG_HEAD, [{ file: JSX, reason: CFG_REASON }], CFG_BASE, JSX);
+  expect(jsx.get(JSX)).toMatchObject({ kind: 'whole', outside: { reason: CFG_REASON } });
+  const jsxResult = checkRedReports([redReport(JSX, cfgTests())], [JSX], ROOT, jsx, []);
+  expect(jsxResult.notes[0]).toBe(
+    `${JSX}: declared in red_exempt_outside, but the declaration does not apply: the file is judged as a whole for another reason: only .ts / .js rule-test files are compared test by test (JSX is not read)`,
+  );
+  const plain = checkRedReports(
+    [redReport(CFG, cfgTests(), 'vitest-json')],
+    [CFG],
+    ROOT,
+    cfgBaselines(),
+    cfgDeclared(),
+  );
+  expect(plain.problems.map((p) => p.test)).toEqual(CFG_UNCHANGED);
+  expect(plain.notes).toContain(
+    `${CFG}: 4 declared exemption(s) do not apply: the report is not from the red reporter (a declaration applies only to a file judged as a whole because it may read a changed test-support file)`,
+  );
+  // Nothing changed outside the tests: judged test by test, the listing is not needed.
+  const inside = CFG_BASE.replace('expect(a(4)).toBe(4);', 'expect(a(4)).toBe(5);');
+  const tests = cfgBaselines(inside);
+  expect(tests.get(CFG)).toMatchObject({
+    kind: 'tests',
+    outside: {
+      reason: CFG_REASON,
+      void: "its code outside the tests is the base's (nothing to declare)",
+    },
+  });
+  // A listed file that is not expected: said in the notes.
+  expect(
+    unusedOutsideNotes(
+      [...CFG_OUTSIDE, { file: 'test/spec/content/y.test.ts', reason: CFG_REASON }],
+      tests,
+    ),
+  ).toEqual([
+    'red_exempt_outside test/spec/content/y.test.ts: not applied (not an expected rule-test file that existed at the base)',
+  ]);
+});
+
+it('[CT-06zzzc] with renames and registered expected values: they apply first; a listed file still differing is compared leniently, callers of a changed helper must be red', () => {
+  // Renames first: a rename that explains the only difference outside the tests needs no listing.
+  const renamedHead = CFG_BASE.replace("'bridge_origins'", "'bridge-origins'");
+  const renamed = ruleTestBaselines(
+    [CFG],
+    [{ path: CFG, status: 'M' }],
+    ['test/spec/content/**'],
+    reader({ [CFG]: CFG_BASE }, { [CFG]: renamedHead.replace('toBe(4);', 'toBe(5);') }),
+    [{ from: "'bridge_origins'", to: "'bridge-origins'" }],
+    [],
+    CFG_OUTSIDE,
+  );
+  expect(renamed.get(CFG)).toMatchObject({ kind: 'tests', outside: { void: expect.any(String) } });
+  // Registered expected values next: NOTIFY with an import added as well.
+  const head = NOTIFY_HEAD.replace(
+    "import { describe, expect, it } from 'vitest';",
+    "import { describe, expect, it } from 'vitest';\nimport { sign } from './sign.ts';",
+  );
+  expect(head).not.toBe(NOTIFY_HEAD);
+  const without = notifyBaselines(head);
+  expect(without.get(NOTIFY)?.kind).toBe('whole');
+  const listed = ruleTestBaselines(
+    [NOTIFY],
+    [{ path: NOTIFY, status: 'M' }],
+    ['test/spec/payment/**'],
+    reader({ [NOTIFY]: NOTIFY_BASE }, { [NOTIFY]: head }),
+    [],
+    [DIFF_FEN],
+    [{ file: NOTIFY, reason: CFG_REASON }],
+  );
+  const line = head.split('\n').indexOf("import { sign } from './sign.ts';") + 1;
+  // The inserted import (the alignment may take the next line's `import` for the new one).
+  expect(listed.get(NOTIFY)).toMatchObject({
+    kind: 'support',
+    outside: { lines: `L${line}-${line + 1}` },
+    expectedValues: { applied: [DIFF_FEN] },
+  });
+  expect(listed.get(NOTIFY)).not.toHaveProperty('expectedValues.whole');
+  // Every test declared: the callers of onlyAnomaly still must be red, the others may pass.
+  const all = [...NOTIFY_OTHERS, ...NOTIFY_CALLERS].map((test) => ({
+    file: NOTIFY,
+    test,
+    reason: REASON,
+  }));
+  const ok = checkRedReports([redReport(NOTIFY, notifyTests())], [NOTIFY], ROOT, listed, all);
+  expect(ok.problems).toEqual([]);
+  expect(ok.exempt?.map((e) => e.test)).toEqual(NOTIFY_OTHERS);
+  const green = checkRedReports(
+    [redReport(NOTIFY, notifyTests([...NOTIFY_OTHERS, NOTIFY_CALLERS[0] as string]))],
+    [NOTIFY],
+    ROOT,
+    listed,
+    all,
+  );
+  expect(green.problems.map((p) => p.test)).toEqual([NOTIFY_CALLERS[0]]);
+});
+
+it('[CT-06zzzc] listed: a declared test inside do { … } while (cond) whose condition changed must be red; unchanged it may pass (Codex review r1 S2)', () => {
+  const loop = (cond: string, head: string): string =>
+    head.replace(
+      "  it('[AC-3] three', () => {\n    expect(a(3)).toBe(3);\n  });",
+      `  let n = 0;\n  do {\n  it('[AC-3] three', () => {\n    expect(a(3)).toBe(3);\n  });\n    n += 1;\n  } while (${cond});`,
+    );
+  const base = loop('n < 2', CFG_BASE);
+  const run = (cond: string) =>
+    checkRedReports(
+      [redReport(CFG, cfgTests())],
+      [CFG],
+      ROOT,
+      cfgBaselines(loop(cond, CFG_HEAD), CFG_OUTSIDE, base),
+      cfgDeclared(),
+    );
+  const changed = run('n < 3');
+  expect(changed.problems.map((p) => `${p.test}: ${p.reason}`)).toEqual([
+    'cfg > [AC-3] three: green on the skeleton: the test has no teeth (the file may read a test-support file the task changed and the ledger does not declare this test exempt)',
+  ]);
+  expect(changed.notes).toContain(
+    `${CFG} > cfg > [AC-3] three: declared exempt, but the declaration does not apply: the test is new or changed since the base (only an unchanged test may be declared exempt); the test must be red`,
+  );
+  expect(run('n < 2').ok).toBe(true);
 });

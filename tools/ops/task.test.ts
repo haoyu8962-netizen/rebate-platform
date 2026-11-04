@@ -187,8 +187,8 @@ it('[CT-06t] the red_exempt section is not counted in the line limit; it has its
       class3_gates: [],
     }),
     'ops/tasks/X1-02d.yaml': thirteen,
-    // 151 declarations: over the section's own limit (150 since CT-06zzzb).
-    'ops/tasks/X1-02e.yaml': body({ id: 'X1-02e', red_exempt: entries(151) }),
+    // 301 declarations: over the section's own limit (300 since CT-06zzzc, D10-624).
+    'ops/tasks/X1-02e.yaml': body({ id: 'X1-02e', red_exempt: entries(301) }),
     // 41 body lines without red_exempt: still over the line limit.
     'ops/tasks/X1-02f.yaml': `${'# padding\n'.repeat(6)}${body({ id: 'X1-02f' })}`,
     // An entry that is not file / test / reason hides nothing in the section.
@@ -201,7 +201,7 @@ it('[CT-06t] the red_exempt section is not counted in the line limit; it has its
     expect(checkTask('X1-02d', opts('RV1'))).toEqual([]);
     expect(loadTask('X1-02d', root).red_exempt).toHaveLength(13);
     expect(checkTask('X1-02e', opts('RV1')).join('\n')).toContain(
-      'red_exempt: 151 entries, the limit is 150',
+      'red_exempt: 301 entries, the limit is 300',
     );
     const long = checkTask('X1-02f', opts('RV1')).join('\n');
     expect(long).toMatch(/41 lines, the limit is 40/);
@@ -224,7 +224,7 @@ it('[CT-06t] the red_exempt section is not counted in the line limit; it has its
 });
 
 it('[CT-06zxh] an indented comment line inside the red_exempt / renames / expected_values sections still counts', () => {
-  for (const key of ['red_exempt', 'renames', 'expected_values']) {
+  for (const key of ['red_exempt', 'red_exempt_outside', 'renames', 'expected_values']) {
     const text = `id: X\n${key}:\n  # a note\n  - file: a\n    # another\n    test: b\n\t# a tab\nstatus: todo\n`;
     expect(countedLines(text), key).toBe(5);
     expect(countedLines(text.replace(/^[ \t]+#.*\n/gm, '')), key).toBe(2);
@@ -415,6 +415,104 @@ it('[CT-06zxe] expected_values name rule-test files inside test_paths of a task 
       "id: X\nexpected_values:\n  - file: a\n    helper: h\n    from: 'a: 1'\n    to: 'a: 2'\n# c\nstatus: todo\n",
     ),
   ).toBe(3);
+});
+
+it('[CT-06zzzc] red_exempt_outside names rule-test files of test_paths that exist at the base, with declarations, of a task with a rule-test author; not counted in the line limit', () => {
+  const RULES = 'test/spec/demo/rules.test.ts';
+  const outside = (file: string): string =>
+    `\n  - file: '${file}'\n    reason: import added, a row group taken out of the table`;
+  const exempt = (file: string): string =>
+    `\n  - file: '${file}'\n    test: '[AC-1] a'\n    reason: structural, holds for the old data too`;
+  const body = (fields: Record<string, string>): string => {
+    const base = good({
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      ...fields,
+    });
+    return `${'# padding\n'.repeat(MAX_TASK_LINES - countedLines(base))}${base}`;
+  };
+  // A body of exactly MAX_TASK_LINES lines plus both sections (not counted).
+  const many = Array.from({ length: 20 }, (_, i) => outside(`test/spec/demo/r${i}.test.ts`)).join(
+    '',
+  );
+  const full = body({
+    id: 'X1-02fa',
+    red_exempt: exempt(RULES),
+    red_exempt_outside: outside(RULES),
+  });
+  expect(countedLines(full)).toBe(MAX_TASK_LINES);
+  expect(countedLines(`id: X\nred_exempt_outside:${many}\nstatus: todo\n`)).toBe(2);
+  writeFiles(root, {
+    'tools/guard/protected-paths.json': JSON.stringify({
+      class1_add_only: ['test/spec/**', 'test/properties/**'],
+      class2_verify_config: [],
+      class3_gates: [],
+    }),
+    // The base (the trusted root this check reads) has the rule-test file and a directory.
+    [RULES]: "import { it } from 'vitest';\n",
+    'test/spec/demo/dir.test.ts/x.txt': 'x',
+    'ops/tasks/X1-02fa.yaml': full,
+    // Not at the base (a new file); a directory; outside test_paths; not a rule-test file.
+    'ops/tasks/X1-02fb.yaml': good({
+      id: 'X1-02fb',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      red_exempt:
+        exempt('test/spec/demo/new.test.ts') +
+        exempt('test/spec/demo/dir.test.ts') +
+        exempt('test/spec/demo/kit.ts'),
+      red_exempt_outside:
+        outside('test/spec/demo/new.test.ts') +
+        outside('test/spec/demo/dir.test.ts') +
+        outside('test/spec/other/rules.test.ts') +
+        outside('test/spec/demo/kit.ts'),
+    }),
+    // No red_exempt declaration for the file; no rule-test author.
+    'ops/tasks/X1-02fc.yaml': good({
+      id: 'X1-02fc',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      red_exempt_outside: outside(RULES),
+    }),
+    'ops/tasks/X1-02fd.yaml': good({
+      id: 'X1-02fd',
+      impl: 'claude',
+      tester: 'none',
+      red_exempt_outside: outside(RULES),
+    }),
+  });
+  try {
+    expect(checkTask('X1-02fa', opts('RV1'))).toEqual([]);
+    expect(loadTask('X1-02fa', root).red_exempt_outside).toEqual([
+      { file: RULES, reason: 'import added, a row group taken out of the table' },
+    ]);
+    const fb = checkTask('X1-02fb', opts('RV1'));
+    expect(fb).toContain(
+      'red_exempt_outside: "test/spec/demo/new.test.ts" does not exist at the base (the trusted root): only a rule-test file that existed before the task can keep its declared exemptions',
+    );
+    expect(fb).toContain(
+      'red_exempt_outside: "test/spec/demo/dir.test.ts" does not exist at the base (the trusted root): only a rule-test file that existed before the task can keep its declared exemptions',
+    );
+    expect(fb).toContain(
+      `red_exempt_outside: "test/spec/other/rules.test.ts" is not inside the task's test_paths`,
+    );
+    expect(fb).toContain(
+      'red_exempt_outside: "test/spec/demo/kit.ts" is not a rule-test file (*.test.ts)',
+    );
+    expect(checkTask('X1-02fc', opts('RV1'))).toEqual([
+      `red_exempt_outside: "${RULES}" has no red_exempt declaration: there is nothing for the entry to apply`,
+    ]);
+    expect(checkTask('X1-02fd', opts('RV1'))).toContain(
+      'red_exempt_outside: a task without a rule-test author (tester: none) has no red run to exempt from',
+    );
+  } finally {
+    for (const id of ['X1-02fa', 'X1-02fb', 'X1-02fc', 'X1-02fd'])
+      removeDir(`${root}/ops/tasks/${id}.yaml`);
+    removeDir(`${root}/test`);
+  }
 });
 
 it('[ops/approvals.yaml id 19] test_paths stay inside the rule-test assets of a task with a tester', () => {

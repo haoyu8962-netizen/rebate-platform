@@ -65,6 +65,7 @@ describe('parseTaskFile', () => {
       test_paths: [],
       mechanical_paths: [],
       red_exempt: [],
+      red_exempt_outside: [],
       renames: [],
       expected_values: [],
       tester: 'claude',
@@ -171,9 +172,9 @@ describe('parseTaskFile', () => {
             `\n  - file: test/spec/a.test.ts\n    test: '[AC-${i + 1}] a'\n    reason: a reason of enough length`,
         ).join(''),
       );
-    expect(parseTaskFile(many(150), 'B2-02a.yaml').red_exempt).toHaveLength(150);
-    expect(messageOf(many(151), 'B2-02a.yaml')).toContain(
-      'red_exempt: 151 entries, the limit is 150',
+    expect(parseTaskFile(many(300), 'B2-02a.yaml').red_exempt).toHaveLength(300);
+    expect(messageOf(many(301), 'B2-02a.yaml')).toContain(
+      'red_exempt: 301 entries, the limit is 300',
     );
     // Not a list, not mappings, the same test twice.
     expect(messageOf(declared(' abc'), 'B2-02a.yaml')).toContain(
@@ -187,6 +188,67 @@ describe('parseTaskFile', () => {
     );
     expect(messageOf(twice, 'B2-02a.yaml')).toContain(
       'red_exempt[1]: "test/spec/a.test.ts > [AC-1] a" is declared twice',
+    );
+  });
+
+  it('[CT-06zzzc] red_exempt_outside: a list of file / reason mappings, optional, every malformed entry refused', () => {
+    const declared = (entries: string): string =>
+      EXAMPLE.replace('tester: claude', `tester: claude\nred_exempt_outside:${entries}`);
+    const one = declared(
+      "\n  - file: test/spec/content/config/delivery.int.test.ts\n    reason: 'import 新增、#20 顶层表移出 bridge_origins 组'",
+    );
+    expect(parseTaskFile(one, 'B2-02a.yaml').red_exempt_outside).toEqual([
+      {
+        file: 'test/spec/content/config/delivery.int.test.ts',
+        reason: 'import 新增、#20 顶层表移出 bridge_origins 组',
+      },
+    ]);
+    // An older ledger without the field: [].
+    expect(parseTaskFile(EXAMPLE, 'B2-02a.yaml').red_exempt_outside).toEqual([]);
+    // Not a list, not a mapping, an unknown field, a missing / bad file, a short reason.
+    expect(messageOf(declared(' abc'), 'B2-02a.yaml')).toContain(
+      'red_exempt_outside: must be a list of mappings (file / reason)',
+    );
+    expect(messageOf(declared('\n  - abc'), 'B2-02a.yaml')).toContain(
+      'red_exempt_outside[0]: must be a mapping (file / reason)',
+    );
+    const extra = declared(
+      "\n  - file: test/spec/a.test.ts\n    reason: a reason of enough length\n    test: '[AC-1] a'",
+    );
+    expect(messageOf(extra, 'B2-02a.yaml')).toContain('red_exempt_outside[0].test: unknown field');
+    expect(messageOf(declared('\n  - reason: a reason of enough length'), 'B2-02a.yaml')).toContain(
+      'red_exempt_outside[0].file: must be a non-empty repository path',
+    );
+    const badFile = declared(
+      '\n  - file: ../test/spec/a.test.ts\n    reason: a reason of enough length',
+    );
+    expect(messageOf(badFile, 'B2-02a.yaml')).toContain(
+      'red_exempt_outside[0].file: "../test/spec/a.test.ts" must not contain "." or ".." segments',
+    );
+    for (const reason of ['', "'          '", 'too short']) {
+      const short = declared(`\n  - file: test/spec/a.test.ts\n    reason: ${reason}`);
+      expect(messageOf(short, 'B2-02a.yaml'), reason).toContain(
+        'red_exempt_outside[0].reason: must say why the code outside the tests changes (at least 10 characters)',
+      );
+    }
+    // The same file twice.
+    const twice = declared(
+      '\n  - file: test/spec/a.test.ts\n    reason: a reason of enough length\n  - file: test/spec/a.test.ts\n    reason: another reason of enough length',
+    );
+    expect(messageOf(twice, 'B2-02a.yaml')).toContain(
+      'red_exempt_outside[1]: "test/spec/a.test.ts" is declared twice',
+    );
+    // At most RED_EXEMPT_MAX entries, as red_exempt.
+    const many = (n: number): string =>
+      declared(
+        Array.from(
+          { length: n },
+          (_, i) => `\n  - file: test/spec/a${i}.test.ts\n    reason: a reason of enough length`,
+        ).join(''),
+      );
+    expect(parseTaskFile(many(300), 'B2-02a.yaml').red_exempt_outside).toHaveLength(300);
+    expect(messageOf(many(301), 'B2-02a.yaml')).toContain(
+      'red_exempt_outside: 301 entries, the limit is 300',
     );
   });
 

@@ -759,7 +759,8 @@ export type ComparedBlock = {
 };
 
 export type FileComparison =
-  { whole: true; reason: string } | { whole: false; blocks: ComparedBlock[] };
+  /** `outside` (CT-06zzzc): the file is judged as a whole because its shared rest differs. */
+  { whole: true; reason: string; outside?: true } | { whole: false; blocks: ComparedBlock[] };
 
 /** Positions (in `seq`) of one longest strictly increasing subsequence of `seq`. */
 function longestIncreasing(seq: readonly number[]): Set<number> {
@@ -804,6 +805,7 @@ export function compareTestFile(base: string, head: string): FileComparison {
   if (before.shared !== after.shared) {
     return {
       whole: true,
+      outside: true,
       reason:
         'code outside the tests changed (imports, helpers, hooks, top-level tables or describe titles)',
     };
@@ -834,6 +836,328 @@ export function compareTestFile(base: string, head: string): FileComparison {
       title: b.title,
       changed: !unchanged.has(i),
     })),
+  };
+}
+
+// Declared outside changes (CT-06zzzc; orchestrator ruling D10-623, after F1-02zzzb): a file
+// whose shared rest changed is judged as a whole by compareTestFile. For a file the trusted ledger
+// lists in `red_exempt_outside`, red-check compares it with compareOutsideChanged instead, so its
+// declared exemptions (red_exempt) can apply to its unchanged tests:
+// - The shared tokens of base and head (each with the separator before it, as in the shared rest)
+//   are aligned by a shortest edit script (Myers; more than OUTSIDE_EDITS_MAX edits: the whole
+//   file). The head lines of the inserted tokens, and the head lines around each removal, are the
+//   changed lines outside the tests (`lines`, e.g. "L10-12, L33") the notes show the reviewer.
+// - A test block is unchanged only when the same block — same text, same describes (position and
+//   header), same enclosing brackets (each with the code that opens it back to the statement
+//   start: a loop's head, a describe call, and the code that ends that statement after it closes:
+//   a do-while condition, the arguments of `}).call(…)` / `})()`), same code leading to it in its statement (`if (x)`) —
+//   occurs exactly once at the base and once at the head, sits between the same aligned shared
+//   tokens (an edit elsewhere does not move it; moving it past an unchanged statement does), and
+//   the unchanged blocks keep their relative order. Everything else counts as changed.
+// - What the changed code outside means for the unchanged tests (an import, a table row group, a
+//   fixture value) the comparison cannot tell: the rule-test reviewer confirms the listed lines.
+
+/** The most shared-token edits compareOutsideChanged aligns (above it the whole file is judged). */
+export const OUTSIDE_EDITS_MAX = 2000;
+
+export type OutsideComparison =
+  { whole: true; reason: string } | { whole: false; blocks: ComparedBlock[]; lines: string };
+
+type OutsideView = {
+  /** The shared tokens, normalised with the separator before them (as in the shared rest). */
+  units: string[];
+  /** The 1-based first and last source line of each shared token. */
+  span: [number, number][];
+  blocks: { pattern: RegExp; title: string; key: string; anchor: number }[];
+};
+
+function outsideView(source: string): OutsideView {
+  const { tokens, match, sep, suites, tests } = scanTests(source);
+  const inBlock = new Array<boolean>(tokens.length).fill(false);
+  for (const c of tests) for (let k = c.start; k <= c.end; k += 1) inBlock[k] = true;
+  const breaks: number[] = [];
+  for (const m of source.matchAll(/\r\n|[\n\r\u2028\u2029]/g)) breaks.push(m.index ?? 0);
+  const lineOf = (offset: number): number => {
+    let lo = 0;
+    let hi = breaks.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((breaks[mid] as number) < offset) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo + 1;
+  };
+  const units: string[] = [];
+  const span: [number, number][] = [];
+  const anchor = new Array<number>(tokens.length).fill(0);
+  let pendingNl = false;
+  tokens.forEach((t, k) => {
+    anchor[k] = units.length;
+    if (inBlock[k]) {
+      pendingNl ||= t.nl;
+      return;
+    }
+    const before =
+      units.length === 0 ? '' : pendingNl || t.nl ? '\n' : inBlock[k - 1] === true ? ' ' : sep(k);
+    units.push(`${before}${t.text}`);
+    const start = t.start ?? 0;
+    span.push([lineOf(start), lineOf(start + Math.max(t.text.length - 1, 0))]);
+    pendingNl = false;
+  });
+  // The code back to the start of the statement before token `to` (exclusive): over bracketed
+  // groups, up to `;`, `{`, `}`, an enclosing `(` / `[`, a test block or the start of the file.
+  const lead = (to: number): string => {
+    let k = to - 1;
+    while (k >= 0) {
+      const t = tokens[k] as Token;
+      if (inBlock[k]) break;
+      if (t.kind === 'punct') {
+        if (t.text === ')' || t.text === ']') {
+          k = (match[k] as number) - 1;
+          continue;
+        }
+        if ([';', '{', '}', '(', '['].includes(t.text)) break;
+      }
+      k -= 1;
+    }
+    return k + 1 <= to - 1 ? joinTokens(tokens, k + 1, to - 1, sep) : '';
+  };
+  // The code after the closing bracket `close` up to the end of its statement (CT-06zzzc, Codex
+  // review r1 S2): over bracketed groups (their content, test blocks included), up to and with a
+  // `;`, or up to an enclosing closing bracket, a test block or the end of the file. The body of
+  // a block statement (`{` after `)`, `do`, `else`, `try`, `finally`) ends its statement at a line
+  // break, unless `while`, `else`, `catch` or `finally` follows. Otherwise, without a `;` (ASI),
+  // it runs on into the next statements: more blocks count as changed, never fewer.
+  const BLOCK_HEAD = new Set([')', 'do', 'else', 'try', 'finally']);
+  const CONTINUES = new Set(['while', 'else', 'catch', 'finally']);
+  const trail = (close: number): string => {
+    const t0 = tokens[close] as Token;
+    const blockBody =
+      t0.text === '}' && BLOCK_HEAD.has(tokens[(match[close] as number) - 1]?.text ?? '');
+    let k = close + 1;
+    let end = close; // last token of the trail
+    while (k < tokens.length) {
+      const t = tokens[k] as Token;
+      if (inBlock[k]) break;
+      if (k === close + 1 && blockBody && t.nl && !CONTINUES.has(t.text)) break;
+      if (t.kind === 'punct') {
+        if (t.text === '(' || t.text === '[' || t.text === '{') {
+          end = match[k] as number;
+          k = end + 1;
+          continue;
+        }
+        if (t.text === ')' || t.text === ']' || t.text === '}') break;
+        if (t.text === ';') {
+          end = k;
+          break;
+        }
+      }
+      end = k;
+      k += 1;
+    }
+    return end > close ? joinTokens(tokens, close + 1, end, sep) : '';
+  };
+  const stack: number[] = [];
+  const enclosing = new Map<number, number[]>();
+  const starts = new Set(tests.map((c) => c.start));
+  tokens.forEach((t, k) => {
+    if (starts.has(k)) enclosing.set(k, [...stack]);
+    if (inBlock[k] || t.kind !== 'punct') return;
+    if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(k);
+    else if (t.text === ')' || t.text === ']' || t.text === '}') stack.pop();
+  });
+  const blocks = tests.map((c) => {
+    const around = suites.filter((s) => s.open < c.start && c.start < s.close);
+    const show = (segments: readonly Segment[]): string =>
+      segments.map((x) => (x === null ? '*' : x)).join('');
+    // Each enclosing bracket with the code that opens it and the code that ends its statement
+    // after it closes (Codex review r1 S2: the condition of `do { … } while (n < 2)`, the
+    // arguments of `}).call(…)` or `})()`).
+    const enclosure = (enclosing.get(c.start) ?? [])
+      .map(
+        (o) => `${lead(o)}${sep(o)}${(tokens[o] as Token).text}\u0002${trail(match[o] as number)}`,
+      )
+      .join('\u0001');
+    return {
+      pattern: patternOf(
+        around.map((s) => s.title),
+        c.title,
+      ),
+      title: [...around.map((s) => show(s.title)), show(c.title)].join(' > '),
+      key: [
+        around.map((s) => `${suites.indexOf(s)}:${s.head}`).join('\u0001'),
+        enclosure,
+        lead(c.start),
+        joinTokens(tokens, c.start, c.end, sep),
+        // A block that does not end its statement (`do it(…) while (c)`): the rest of it.
+        (tokens[c.end] as Token).text === ';' ? '' : trail(c.end),
+      ].join('\u0000'),
+      anchor: anchor[c.start] as number,
+    };
+  });
+  return { units, span, blocks };
+}
+
+/**
+ * A shortest edit script between `a` and `b` (Myers): for each element of `b` the index of the
+ * element of `a` it is aligned with (-1: inserted), and the positions in `b` before which
+ * elements of `a` were removed. Null when more than `max` edits are needed.
+ */
+function alignUnits(
+  a: readonly string[],
+  b: readonly string[],
+  max: number,
+): { matchB: Int32Array; removedAt: Set<number> } | null {
+  const n = a.length;
+  const m = b.length;
+  const limit = Math.min(max, n + m);
+  const off = limit + 1;
+  const v = new Int32Array(2 * limit + 3);
+  const trace: Int32Array[] = [];
+  let done = -1;
+  for (let d = 0; d <= limit && done < 0; d += 1) {
+    trace.push(v.slice());
+    for (let k = -d; k <= d; k += 2) {
+      let x =
+        k === -d || (k !== d && (v[off + k - 1] as number) < (v[off + k + 1] as number))
+          ? (v[off + k + 1] as number)
+          : (v[off + k - 1] as number) + 1;
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) {
+        x += 1;
+        y += 1;
+      }
+      v[off + k] = x;
+      if (x >= n && y >= m) {
+        done = d;
+        break;
+      }
+    }
+  }
+  if (done < 0) return null;
+  const matchB = new Int32Array(m).fill(-1);
+  const removedAt = new Set<number>();
+  let x = n;
+  let y = m;
+  for (let d = done; d >= 0; d -= 1) {
+    const w = trace[d] as Int32Array;
+    const k = x - y;
+    const prevK =
+      k === -d || (k !== d && (w[off + k - 1] as number) < (w[off + k + 1] as number))
+        ? k + 1
+        : k - 1;
+    const prevX = d === 0 ? 0 : (w[off + prevK] as number);
+    const prevY = d === 0 ? 0 : prevX - prevK;
+    while (x > prevX && y > prevY) {
+      x -= 1;
+      y -= 1;
+      matchB[y] = x;
+    }
+    if (d > 0) {
+      if (x > prevX) removedAt.add(y); // a[prevX] removed before b[y]
+      x = prevX;
+      y = prevY;
+    }
+  }
+  return { matchB, removedAt };
+}
+
+/** "L3-5, L9": sorted 1-based line numbers as ranges. */
+function lineRanges(lines: ReadonlySet<number>): string {
+  const sorted = [...lines].sort((p, q) => p - q);
+  const out: string[] = [];
+  for (let i = 0; i < sorted.length;) {
+    let j = i;
+    while (j + 1 < sorted.length && (sorted[j + 1] as number) === (sorted[j] as number) + 1) j += 1;
+    out.push(i === j ? `L${sorted[i]}` : `L${sorted[i]}-${sorted[j]}`);
+    i = j + 1;
+  }
+  return out.join(', ');
+}
+
+/**
+ * Compares a rule-test file whose code outside the tests may have changed (CT-06zzzc, D10-623;
+ * see the comment above OUTSIDE_EDITS_MAX): each head block says whether it is the same block as
+ * at the base, and `lines` lists the head lines of the changes outside the tests.
+ */
+export function compareOutsideChanged(base: string, head: string): OutsideComparison {
+  let before: OutsideView;
+  let after: OutsideView;
+  try {
+    before = outsideView(base);
+  } catch (err) {
+    return { whole: true, reason: `the file at the base cannot be read as tests (${String(err)})` };
+  }
+  try {
+    after = outsideView(head);
+  } catch (err) {
+    return { whole: true, reason: `the file cannot be read as tests (${String(err)})` };
+  }
+  const aligned = alignUnits(before.units, after.units, OUTSIDE_EDITS_MAX);
+  if (aligned === null) {
+    return {
+      whole: true,
+      reason: `the code outside the tests changed in more than ${OUTSIDE_EDITS_MAX} tokens`,
+    };
+  }
+  const { matchB, removedAt } = aligned;
+  const changedLines = new Set<number>();
+  matchB.forEach((i, j) => {
+    if (i >= 0) return;
+    const [from, to] = after.span[j] as [number, number];
+    for (let l = from; l <= to; l += 1) changedLines.add(l);
+  });
+  // A removal is shown at the lines of the head tokens around it (the last line of the one before,
+  // the first line of the one after): the alignment may place it anywhere among equal tokens.
+  for (const j of removedAt) {
+    const prev = after.span[j - 1];
+    const next = after.span[j];
+    if (prev !== undefined) changedLines.add(prev[1]);
+    if (next !== undefined) changedLines.add(next[0]);
+    if (prev === undefined && next === undefined) changedLines.add(1);
+  }
+  // The base positions around each head position: the aligned shared tokens before and after.
+  const m = after.units.length;
+  const prevBase = new Int32Array(m + 1).fill(-1);
+  for (let j = 0; j < m; j += 1) {
+    const i = matchB[j] as number;
+    prevBase[j + 1] = i >= 0 ? i : (prevBase[j] as number);
+  }
+  const nextBase = new Int32Array(m + 1).fill(before.units.length);
+  for (let j = m - 1; j >= 0; j -= 1) {
+    const i = matchB[j] as number;
+    nextBase[j] = i >= 0 ? i : (nextBase[j + 1] as number);
+  }
+  const count = (keys: readonly string[]): Map<string, number> => {
+    const c = new Map<string, number>();
+    for (const k of keys) c.set(k, (c.get(k) ?? 0) + 1);
+    return c;
+  };
+  const baseCount = count(before.blocks.map((b) => b.key));
+  const headCount = count(after.blocks.map((b) => b.key));
+  const baseIndex = new Map(before.blocks.map((b, i) => [b.key, i]));
+  const paired: number[] = [];
+  const pairedBase: number[] = [];
+  after.blocks.forEach((b, j) => {
+    if (baseCount.get(b.key) !== 1 || headCount.get(b.key) !== 1) return;
+    const i = baseIndex.get(b.key) as number;
+    const ab = (before.blocks[i] as { anchor: number }).anchor;
+    // Between the same aligned shared tokens: base anchor in (prev aligned, next aligned].
+    if ((prevBase[b.anchor] as number) + 1 <= ab && ab <= (nextBase[b.anchor] as number)) {
+      paired.push(j);
+      pairedBase.push(i);
+    }
+  });
+  const inOrder = longestIncreasing(pairedBase);
+  const unchanged = new Set(paired.filter((_, k) => inOrder.has(k)));
+  return {
+    whole: false,
+    blocks: after.blocks.map((b, j) => ({
+      pattern: b.pattern,
+      title: b.title,
+      changed: !unchanged.has(j),
+    })),
+    lines: lineRanges(changedLines),
   };
 }
 

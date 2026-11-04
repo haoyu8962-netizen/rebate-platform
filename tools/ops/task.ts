@@ -3,7 +3,7 @@
 //   node tools/ops/task.ts check [id...]     validate ops/tasks/*.yaml
 //   node tools/ops/task.ts show <id> --json  task fields plus the computed risk
 //   node tools/ops/task.ts hash <id>         print the refs_hash block to paste
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { matchesAny } from '../lib/glob.ts';
@@ -42,8 +42,10 @@ export function countedLines(text: string): number {
   for (const line of lines) {
     // CT-06zxc (review r1 S2-2): the `renames` section likewise (RENAMES_MAX entries, each a
     // from / to mapping of string literals: nothing else parses there); CT-06zxe: and the
-    // `expected_values` section (EXPECTED_VALUES_MAX entries of file / helper / from / to).
-    if (/^(red_exempt|renames|expected_values):/.test(line)) {
+    // `expected_values` section (EXPECTED_VALUES_MAX entries of file / helper / from / to);
+    // CT-06zzzc (D10-623): and the `red_exempt_outside` section (RED_EXEMPT_MAX entries of file /
+    // reason).
+    if (/^(red_exempt|red_exempt_outside|renames|expected_values):/.test(line)) {
       inExempt = true;
       continue;
     }
@@ -291,6 +293,15 @@ export function missingContractGenerated(
   );
 }
 
+/** True when `path` is a regular file (not a directory or a symbolic link). */
+function regularFile(path: string): boolean {
+  try {
+    return lstatSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** All problems of one task file; an empty list means the file is valid. */
 export function checkTask(id: string, opts: CheckOptions = {}): string[] {
   const root = opts.root ?? repoRoot();
@@ -300,7 +311,7 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
   const lines = countedLines(text);
   if (lines > MAX_TASK_LINES) {
     problems.push(
-      `${lines} lines, the limit is ${MAX_TASK_LINES} (规划/11 §5.1; the red_exempt section is not counted, CT-06t, nor the renames section, CT-06zxc, nor expected_values, CT-06zxe)`,
+      `${lines} lines, the limit is ${MAX_TASK_LINES} (规划/11 §5.1; the red_exempt section is not counted, CT-06t, nor the renames section, CT-06zxc, nor expected_values, CT-06zxe, nor red_exempt_outside, CT-06zzzc)`,
     );
   }
 
@@ -466,6 +477,33 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
         problems.push(`red_exempt: "${entry.file}" is not a rule-test file (*.test.ts)`);
       } else if (!matchesAny(entry.file, task.test_paths)) {
         problems.push(`red_exempt: "${entry.file}" is not inside the task's test_paths`);
+      }
+    }
+  }
+
+  // CT-06zzzc (D10-623): the files whose changed code outside the tests the ledger declares are
+  // rule-test files of the task's own test_paths that exist at the base — the trusted root this
+  // check reads the ledger from (a file the task adds is new: every test of it must be red
+  // anyway) — and only a task with a rule-test author has a red run they matter to.
+  if (task.red_exempt_outside.length > 0) {
+    if (task.tester === 'none') {
+      problems.push(
+        'red_exempt_outside: a task without a rule-test author (tester: none) has no red run to exempt from',
+      );
+    }
+    for (const entry of task.red_exempt_outside) {
+      if (!RULE_TEST_FILE.test(entry.file)) {
+        problems.push(`red_exempt_outside: "${entry.file}" is not a rule-test file (*.test.ts)`);
+      } else if (!matchesAny(entry.file, task.test_paths)) {
+        problems.push(`red_exempt_outside: "${entry.file}" is not inside the task's test_paths`);
+      } else if (!regularFile(join(root, entry.file))) {
+        problems.push(
+          `red_exempt_outside: "${entry.file}" does not exist at the base (the trusted root): only a rule-test file that existed before the task can keep its declared exemptions`,
+        );
+      } else if (!task.red_exempt.some((d) => d.file === entry.file)) {
+        problems.push(
+          `red_exempt_outside: "${entry.file}" has no red_exempt declaration: there is nothing for the entry to apply`,
+        );
       }
     }
   }
