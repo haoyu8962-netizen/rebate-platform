@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV2 by path, test only: no product code changes. test-change (FU-DAILY-SENT-SINGLE-SOURCE, D10-602 (a)). jobs/transfer-job.ts dailySentFen and application/admin-payout-overview.ts readDailySentFen each hold the query of BR-WDR-13 ③, each pinned by its own tests, none comparing them. A new directory test/spec/payout/daily-sent-source drives both on one database, app and clock: with the overview's daily_sent_fen as S, the real pre-transfer review passes at daily_cap = S + n and refuses at S + n - 1, so a change to one side turns it red. Chosen over merging the two because merging touches transfer-job and a pure move cannot go red first. Known gap accepted: the kit seeds alipay and bank_card only, so a change that drops wechat on the transfer-job side alone is not caught; the wechat channel is off by default.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via claude-run.sh under approvals 36, Codex not logged in. couli-runs/B2-09o/money-review-r1.json, static. One S2 accepted: no wechat row, as in risk_note. The test author was a fresh Claude subagent, not claude-run, because this ledger has no test_paths. pay reran it (16 pass) and changed net_fen to amount_fen in transfer-job.ts (16 red, restored); the author reports 18 one-sided changes all turned it red, restored, and did not rerun all of them after a final edit. After the review pay changed only how the harness loads @couli/db/testing (by URL, as ../admin-withdrawals/kit.ts does), because verify-static's depcruise refused the static import; no assertion changed, reran 16 pass, and that change was not reviewed."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09o",
+  "spec_commit": "a7dcd593f4e0f16d65b0b3b5c0dffbb7ccd633fd",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3fa06758b71efa442807baec6508a96bfa9702c4",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}
