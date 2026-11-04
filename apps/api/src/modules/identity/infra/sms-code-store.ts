@@ -60,6 +60,10 @@
 //              T's candidate dropped; the code in force is valid again, its wrong tries plus the
 //              candidate's when the candidate was `s` (five void it). Idempotent; a candidate already
 //              consumed or voided is no longer T's, so release never revives the code it replaced.
+//   consumeCurrent — B1-02zza (staging test phones): the service already matched the node's fixed
+//              code; the current code (n when the candidate is `s`, else h) is consumed exactly as a
+//              match in verify would be, under the same expiry and wrong-try limit. No current code
+//              (never sent, a reserved candidate only, expired, consumed, void) → void.
 //   verify   — a code in v, or the previous code while the candidate is `s`, is void; the current
 //              code is n when the candidate is `s`, else h; a match consumes it, the fifth wrong try
 //              voids it; consuming or voiding moves the current code (and with `s` the previous one)
@@ -390,6 +394,38 @@ end
 return 2
 `;
 
+/**
+ * Consume the current code without comparing (B1-02zza: the caller matched the staging fixed
+ * code): 0 consumed; 3 no valid current code. KEYS[1] code key. ARGV[1] code TTL, [2] now,
+ * [3] lifetime ms, [4] max wrong tries. Same state rules as VERIFY's match branch.
+ */
+const CONSUME_CURRENT = `-- sms:consume
+${VOID_LIB}
+local key = KEYS[1]
+local now, lifetime, max_errors = tonumber(ARGV[2]), tonumber(ARGV[3]), tonumber(ARGV[4])
+local r = redis.call('HMGET', key, 'h', 't', 'e', 'n', 'nt', 'ne', 's', 'v')
+if not r[1] and not r[4] then return 3 end
+local h, n, v = r[1] or '', r[4] or '', r[8] or ''
+local sending = n ~= '' and r[7] == 's'
+local function close()
+  if sending then
+    redis.call('HSET', key, 'h', '', 'e', '0', 'n', '', 'k', '', 'nt', '', 'ne', '0', 's', '',
+      'v', with_void(with_void(v, h), n))
+  else
+    redis.call('HSET', key, 'h', '', 'e', '0', 'v', with_void(v, h))
+  end
+  redis.call('EXPIRE', key, ARGV[1])
+end
+local current, issued, errors = h, tonumber(r[2]) or 0, tonumber(r[3]) or 0
+if sending then
+  current, issued, errors = n, tonumber(r[5]) or 0, tonumber(r[6]) or 0
+end
+if current == '' then return 3 end
+close()
+if now - issued >= lifetime or errors >= max_errors then return 3 end
+return 0
+`;
+
 /** The two keys of one send: the phone's history and the codes of (app, purpose, phone). */
 export interface SmsKeys {
   readonly phoneKey: string;
@@ -423,6 +459,8 @@ export interface SmsCodeStore {
   /** Idempotent. */
   release(keys: SmsKeys, token: string, nowMs: number): Promise<void>;
   verify(codeKey: string, codeHash: string, nowMs: number): Promise<VerifyOutcome>;
+  /** B1-02zza: consumes the current code without comparing ('wrong' never comes back). */
+  consumeCurrent(codeKey: string, nowMs: number): Promise<Exclude<VerifyOutcome, 'wrong'>>;
 }
 
 export interface SmsCodeStoreOptions {
@@ -526,6 +564,19 @@ export function createSmsCodeStore(
       );
       if (reply === 0) return 'consumed';
       if (reply === 2) return 'wrong';
+      if (reply === 3) return 'void';
+      throw new RedisUnavailableError('unexpected_reply');
+    },
+    async consumeCurrent(codeKey: string, nowMs: number): Promise<Exclude<VerifyOutcome, 'wrong'>> {
+      const reply = integer(
+        await eval_(
+          CONSUME_CURRENT,
+          [`c:${codeKey}`],
+          [String(nowMs), String(SMS_CODE_LIFETIME_SECONDS * 1000), String(SMS_CODE_MAX_ERRORS)],
+          SMS_CODE_LIFETIME_SECONDS,
+        ),
+      );
+      if (reply === 0) return 'consumed';
       if (reply === 3) return 'void';
       throw new RedisUnavailableError('unexpected_reply');
     },

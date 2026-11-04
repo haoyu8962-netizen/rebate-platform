@@ -14,6 +14,8 @@
 # admin, api, stream and worker also mount the optional Pinduoduo directory (/etc/couli-pdd -> /run/couli-pdd)
 # the optional Jingdong directory (/etc/couli-jd -> /run/couli-jd) and the optional Taobao
 # directory (/etc/couli-taobao -> /run/couli-taobao); payout mounts none of them.
+# api alone also mounts the optional staging test-phone directory (/etc/couli-staging-test ->
+# /run/couli-staging-test, B1-02zza).
 # Every process starts through boot.mjs (node --import), which also counts container starts.
 # All five health checks require 30s of uptime and a single start until deploy.sh marks the
 # deployment settled, so `up --wait` fails when any process crashed or restarted during it.
@@ -97,6 +99,17 @@ services:
       - type: bind
         source: /etc/couli-taobao
         target: /run/couli-taobao
+        read_only: true
+        bind:
+          create_host_path: true
+      # Staging test phones (B1-02zza, approvals 48, D10-611): node /etc/couli-staging-test holds
+      # only the fixed SMS code file (owned by uid 1000, directory 500, file 400; README 1.11).
+      # The numbers and the file path come only from the node env file. Optional:
+      # create_host_path lets the deployment start without it. Mounted on api only (the entry that
+      # serves SMS login and step-up); stream, worker, admin and payout never get it.
+      - type: bind
+        source: /etc/couli-staging-test
+        target: /run/couli-staging-test
         read_only: true
         bind:
           create_host_path: true

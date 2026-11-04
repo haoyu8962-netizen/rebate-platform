@@ -320,6 +320,46 @@ live 下 api 用真实返利报价器（B2-03d / B2-03n），它读下面三个�
 - 报价要求有一条已发布的分佣规则版本：种子里已有一条（`db/seeds/0002_commission-rules.sql`），部署时种子会写入，不用另发布。
 - `tech_fee_bp` 与 `rebate.taobao.compare_rate_ratio_bp` 现在可以经后台（config.business，B2-03t 已登记）修改：在后台改好取值后再切 live。
 
+### 1.11 测试手机号与固定验证码（只在 staging）
+
+依据 approvals 第 48 条、编排裁定 D10-611（B1-02zza）。名单里的号码在 App 内短信登录与敏感操作二次验证（step_up）时不发真短信，验码时认节点文件里的固定码；其余规则照旧：随机码照常生成并存储，60 秒 / 每小时 5 条 / 每天 10 条等频控、黑名单、人机验证与设备 / IP 限额都不放宽，固定码同样 5 分钟内有效、只能用一次、错 5 次作废，而且每次都要先发码。绑定手机号与落地页注册不受影响，仍然发真短信、不认固定码。**只在 `APP_ENV=staging` 生效**：其他环境设了下面任何一个变量都拒绝启动。号码与码都不写进本仓库。
+
+#### 节点文件
+
+compose 只给 api 只读挂载节点目录 `/etc/couli-staging-test`（容器内 `/run/couli-staging-test`）；stream、worker、admin、payout 都不挂。这个挂载可缺：节点没有该目录时部署照常进行，`deploy.sh` 也不检查它；但只要设了下面两个变量，api 就要求能读到文件，读不到即启动失败。
+
+| 路径 | 内容 | 权限 |
+| --- | --- | --- |
+| `/etc/couli-staging-test/` | 目录 | 属主 1000，目录 500 |
+| `/etc/couli-staging-test/sms_code` | 固定验证码，文件里只放 6 位数字（可带一个结尾换行），不放别的 | 属主 1000，文件 400 |
+
+```bash
+install -d -m 700 /etc/couli-staging-test
+vi /etc/couli-staging-test/sms_code
+chown -R 1000:1000 /etc/couli-staging-test
+chmod 400 /etc/couli-staging-test/sms_code
+chmod 500 /etc/couli-staging-test
+```
+
+文件必须是普通文件（不能是目录、管道或设备），内容不是正好 6 位数字时 api 拒绝启动；报错只写变量名与原因，不带路径和内容。
+
+#### 变量
+
+在 `/etc/couli/staging.env` 里**两个一起设或都不设**，只设一个即拒绝启动：
+
+| 变量 | 取值 |
+| --- | --- |
+| `STAGING_TEST_PHONES` | 测试号码，英文逗号分隔，11 位大陆手机号（不带 +86），1 到 10 个，不重复、不留空项 |
+| `STAGING_TEST_SMS_CODE_FILE` | `/run/couli-staging-test/sms_code`（容器内路径；只写路径，不写码） |
+
+具体号码见私有仓库的说明，不写在这里。启用时 api 启动打一条 warn `staging_test_phones_enabled`，只带号码个数。每次测试号登录或 step_up 成功，api 写一条审计日志 `staging_test_phone_login`（purpose、is_new_user、打码后的号码、user_id），不带完整号码和码。
+
+#### 轮换与停用
+
+- 换固定码：改 `/etc/couli-staging-test/sms_code` 后重启 api（`docker compose -f infra/staging/compose.yaml --env-file /etc/couli/staging.env restart api`，或重新部署）；api 只在启动时读一次文件。
+- 增减号码：改 `staging.env` 里的 `STAGING_TEST_PHONES` 后重新部署（第 3 节）。
+- 停用：从 `staging.env` 删掉两个变量后重新部署；节点目录可以留着，也可以删。
+
 ## 2. 在开发机构建并传到节点
 
 在代码仓库根目录：

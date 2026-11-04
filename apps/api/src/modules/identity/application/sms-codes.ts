@@ -50,18 +50,30 @@
 // listed in infra/sms-code-store.ts.
 // verifyAndConsume(): see its comment.
 //
+// Staging test phones (B1-02zza, FU-STAGING-TEST-PHONE; approvals #48, ruling D10-611): only with
+// appEnv 'staging' (re-checked on every call, and the service refuses to be built with test phones
+// in any other environment), for a listed number and purpose login or step_up on the app route
+// (not bind, not the landing page): send() runs every step above unchanged — the random code is
+// drawn, stored as an HMAC and counted — and only step 6 does not call the sender: the delivery
+// is taken as accepted. verifyAndConsume() also takes the node's fixed code for such a number
+// (timingSafeEqual): equal → the current code of (app, phone, purpose) is consumed under the same
+// expiry / single-use / five-wrong-tries rules; not equal → the ordinary check (a wrong try).
+// The answer then carries staging_test_phone: true so the caller writes its audit line.
+//
 // Nothing is logged that identifies the number or the code: no phone in any form, no code, no
 // captcha_token, no device id or IP (BR-ID-33). Codes and keys are HMACs made by the injected
 // `hmac` (production: the field-encryption blind index, the same in every process).
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators, no Nest.
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import {
   RedisUnavailableError,
+  type AppEnv,
   type Clock,
   type RedisHandle,
   type RootLogger,
+  type StagingTestPhones,
 } from '../../platform/index.ts';
 import { normalize_phone } from '../domain/normalize-phone.ts';
 import {
@@ -195,13 +207,45 @@ export interface SmsCodeOptions {
    * 60-second window, so a slow provider cannot let a second request for the phone through.
    */
   readonly sendTimeoutMs?: number;
+  /**
+   * B1-02zza (D10-611): APP_ENV of the entry. The staging test phones are honoured only when it is
+   * 'staging'; absent counts as not staging.
+   */
+  readonly appEnv?: AppEnv;
+  /**
+   * B1-02zza (FU-STAGING-TEST-PHONE, approvals #48): numbers whose app login / step_up codes are
+   * not handed to the sender (the random code is still drawn, stored and counted, every check and
+   * limit still runs) and whose check also takes the fixed code. Given with an appEnv other than
+   * 'staging', the service refuses to be built. Absent or null: none.
+   */
+  readonly stagingTestPhones?: StagingTestPhones | null;
+}
+/**
+ * The answer of verifyAndConsume. `staging_test_phone: true` only on 0 for a staging test phone
+ * (B1-02zza): the login / step-up service writes its pino audit line (staging_test_phone_login).
+ */
+export interface SmsVerifyResult {
+  readonly code: 0 | 20002 | 20003;
+  readonly staging_test_phone?: true;
+}
+/**
+ * Options of one verifyAndConsume call. `stagingTestCode: false` turns the staging fixed code off
+ * for that call (identity.module passes it for the landing page registration, which is outside
+ * D10-611's scope); absent → on (still only staging, a listed number, login / step_up).
+ */
+export interface SmsVerifyOptions {
+  readonly stagingTestCode?: boolean;
 }
 export interface SmsCodeService {
   send(request: SmsRequest): Promise<SmsResult>;
   verifyAndConsume(
     request: Pick<SmsMessage, 'app_id' | 'phone' | 'purpose' | 'code'>,
-  ): Promise<{ readonly code: 0 | 20002 | 20003 }>;
+    options?: SmsVerifyOptions,
+  ): Promise<SmsVerifyResult>;
 }
+
+/** B1-02zza: event (and message) of the pino audit line of a staging test phone's success. */
+export const STAGING_TEST_PHONE_AUDIT_EVENT = 'staging_test_phone_login';
 
 /** Default bound of one send (review round 1 S3-2). */
 export const SMS_SEND_TIMEOUT_MS = 10_000;
@@ -216,6 +260,8 @@ export const SMS_CODE_DRAWS = 8;
 const ATTEMPTS = 2;
 
 const CODE_FORMAT = /^[0-9]{6}$/;
+/** Purposes a staging test phone covers (D10-611: app login and step_up; never bind). */
+const TEST_PHONE_PURPOSES: ReadonlySet<SmsPurpose> = new Set<SmsPurpose>(['login', 'step_up']);
 const CODE_SPACE = 10 ** SMS_CODE_DIGITS;
 const DELIVERIES: ReadonlySet<unknown> = new Set(['accepted', 'rejected', 'unknown']);
 const TIMED_OUT = Symbol('timed out');
@@ -236,6 +282,26 @@ export function createSmsCodeService(options: SmsCodeOptions): SmsCodeService {
   if (!Number.isSafeInteger(sendTimeoutMs) || sendTimeoutMs < 1) {
     throw new TypeError('createSmsCodeService: sendTimeoutMs must be a positive integer');
   }
+  // B1-02zza: test phones only in staging; anywhere else (absent appEnv included) refuse to build.
+  const testPhones = options.stagingTestPhones ?? null;
+  if (testPhones !== null) {
+    if (options.appEnv !== 'staging') {
+      throw new TypeError(
+        'createSmsCodeService: staging test phones are only allowed when APP_ENV=staging',
+      );
+    }
+    if (typeof testPhones.code !== 'string' || !CODE_FORMAT.test(testPhones.code)) {
+      throw new TypeError('createSmsCodeService: the staging fixed code must be 6 ASCII digits');
+    }
+  }
+  const testPhoneSet: ReadonlySet<string> = new Set(testPhones?.phones ?? []);
+  const fixedCode = testPhones === null ? null : Buffer.from(testPhones.code, 'utf8');
+  /** Whether (phone, purpose) is a staging test phone's; appEnv is judged again on every call. */
+  const isTestPhone = (phone: string, purpose: SmsPurpose): boolean =>
+    options.appEnv === 'staging' &&
+    fixedCode !== null &&
+    TEST_PHONE_PURPOSES.has(purpose) &&
+    testPhoneSet.has(phone);
   const store = createSmsCodeStore(options.redis, {
     inFlightMs: sendTimeoutMs + SMS_IN_FLIGHT_MARGIN_MS,
   });
@@ -261,8 +327,13 @@ export function createSmsCodeService(options: SmsCodeOptions): SmsCodeService {
     return SMS_DEFAULT_BLOCKED_PREFIXES;
   }
 
-  async function deliver(message: SmsMessage): Promise<SmsDelivery> {
+  async function deliver(message: SmsMessage, testPhone: boolean): Promise<SmsDelivery> {
     const fields = { app_id: message.app_id, purpose: message.purpose };
+    // B1-02zza: a staging test phone's code never goes to the sender; it counts as accepted.
+    if (testPhone && isTestPhone(message.phone, message.purpose)) {
+      logger.info(fields, 'sms_staging_test_phone_not_sent');
+      return 'accepted';
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const sending = Promise.resolve().then(() => sender.send(message));
@@ -426,7 +497,10 @@ export function createSmsCodeService(options: SmsCodeOptions): SmsCodeService {
 
         // From the provider call on, the attempt may have sent: never failed unless refused.
         outcome = 'unknown';
-        const delivery = await deliver({ app_id: appId, phone, purpose, code });
+        const delivery = await deliver(
+          { app_id: appId, phone, purpose, code },
+          request.channel !== 'landing',
+        );
         outcome = delivery === 'rejected' ? 'failed' : delivery;
         if (delivery === 'rejected') {
           // A failed release leaves the send counted and the candidate current: stricter, not looser.
@@ -483,11 +557,29 @@ export function createSmsCodeService(options: SmsCodeOptions): SmsCodeService {
      */
     async verifyAndConsume(
       request: Pick<SmsMessage, 'app_id' | 'phone' | 'purpose' | 'code'>,
-    ): Promise<{ readonly code: 0 | 20002 | 20003 }> {
+      verifyOptions?: SmsVerifyOptions,
+    ): Promise<SmsVerifyResult> {
       const normalized = normalize_phone(request.phone);
       if (normalized.code !== 0) return { code: 20003 };
       const { app_id: appId, purpose, code } = request;
       const phone = normalized.phone;
+      // B1-02zza: the fixed code of a staging test phone consumes the current code (same expiry,
+      // single use and wrong-try limit); any other value is checked as usual below.
+      const given =
+        typeof code === 'string' && verifyOptions?.stagingTestCode !== false
+          ? Buffer.from(code, 'utf8')
+          : null;
+      if (
+        given !== null &&
+        fixedCode !== null &&
+        isTestPhone(phone, purpose) &&
+        given.length === fixedCode.length &&
+        timingSafeEqual(given, fixedCode)
+      ) {
+        const consumed = await store.consumeCurrent(keysOf(appId, purpose, phone).codeKey, nowMs());
+        if (consumed !== 'consumed') return { code: 20003 };
+        return { code: 0, staging_test_phone: true };
+      }
       // A value that cannot be a code is a wrong try without being hashed.
       const hash =
         typeof code === 'string' && CODE_FORMAT.test(code)

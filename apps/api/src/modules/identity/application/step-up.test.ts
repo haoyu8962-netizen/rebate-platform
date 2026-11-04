@@ -1,7 +1,12 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { decodeJwt, decodeProtectedHeader, jwtVerify } from 'jose';
 import { expect, it, vi } from 'vitest';
-import { FixedClock, type FieldCrypto, type TokenPrincipal } from '../../platform/index.ts';
+import {
+  FixedClock,
+  createRootLogger,
+  type FieldCrypto,
+  type TokenPrincipal,
+} from '../../platform/index.ts';
 import type { TokenKeyProvider } from './access-tokens.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
 import type { SmsCodeService } from './sms-codes.ts';
@@ -220,4 +225,56 @@ it('[BR-ID-07] a token of another app than the signing device is 10403 before an
   ).toEqual({ code: 10403 });
   expect(context.verifyAndConsume).not.toHaveBeenCalled();
   expect(third.consume).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-02zza#u6] a staging test phone’s SMS step-up writes one pino audit line (masked number, no code); other answers write none', async () => {
+  const phone = '19900000099';
+  const lines: string[] = [];
+  const logger = createRootLogger(
+    { level: 'trace', entry: 'api', appEnv: 'test' },
+    { write: (line: string) => void lines.push(line) },
+  );
+  const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const verifyAndConsume = vi.fn<SmsCodeService['verifyAndConsume']>(async () => ({ code: 0 }));
+  const service = createStepUpService({
+    db: tables({
+      users: { phone_hmac: 'hmac', phone_cipher: Buffer.from(phone, 'utf8') },
+    }) as never,
+    clock: new FixedClock('2026-11-04T02:00:00.000Z'),
+    crypto,
+    keys: {
+      kid: 'unit',
+      privateKey: pair.privateKey,
+      publicKeys: new Map([['unit', pair.publicKey]]),
+    },
+    config: { configValue: async () => null },
+    sms: { send: vi.fn(), verifyAndConsume } as unknown as SmsCodeService,
+    attempts: { issue: vi.fn(), consume: vi.fn() } as unknown as OauthAttemptService,
+    logger,
+  });
+  const command = {
+    principal: PRINCIPAL,
+    verifiedDevice: DEVICE,
+    body: { action: 'withdraw' as const, code: '864213' },
+  };
+  verifyAndConsume.mockResolvedValueOnce({ code: 20002 });
+  expect(await service.verify(command)).toEqual({ code: 20002 });
+  expect((await service.verify(command)).code).toBe(0);
+  const audit = () =>
+    lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((entry) => entry['event'] === 'staging_test_phone_login');
+  expect(audit()).toEqual([]);
+  verifyAndConsume.mockResolvedValueOnce({ code: 0, staging_test_phone: true });
+  expect((await service.verify(command)).code).toBe(0);
+  expect(audit()).toEqual([
+    expect.objectContaining({
+      purpose: 'step_up',
+      is_new_user: false,
+      phone_masked: '199****0099',
+      user_id: PRINCIPAL.uid,
+    }),
+  ]);
+  expect(lines.join('')).not.toContain(phone);
+  expect(lines.join('')).not.toContain('864213');
 });

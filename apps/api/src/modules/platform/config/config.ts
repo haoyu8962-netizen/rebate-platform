@@ -30,6 +30,7 @@ import type { EntryName } from '../entries.ts';
 import { readPayChannelsConfig, type PayChannelsConfig } from './pay-channels.ts';
 import { readQueueConcurrencyConfig } from './queue-concurrency.ts';
 import { readSmsConfig, type SmsConfig } from './sms.ts';
+import { readStagingTestPhoneConfig, type StagingTestPhoneConfig } from './staging-test-phones.ts';
 import { readTaobaoConfig, type TaobaoAppConfig } from './taobao.ts';
 import { readTaobaoSourceConfig } from './taobao-sources.ts';
 import { readTrustedProxies } from './trusted-proxies.ts';
@@ -252,6 +253,12 @@ export interface AppConfig {
    */
   readonly sms?: SmsConfig | null;
   /**
+   * STAGING_TEST_PHONES / STAGING_TEST_SMS_CODE_FILE (./staging-test-phones.ts, B1-02zza, D10-611):
+   * staging only, both or neither; the numbers and the path of the fixed-code file (never the
+   * code). Absent or null: no test phone. A hand-built config without it counts as null.
+   */
+  readonly stagingTestPhones?: StagingTestPhoneConfig | null;
+  /**
    * AGENT_USER_HASH_KEY (./agent-user-hash.ts, B3-09j; BR-AI-22): HMAC key of agent's deletion
    * purge. loadConfig fills it (null when unset outside prod; prod refuses to start without it).
    * A hand-built config without it counts as null: the agent cleanup port stays unavailable.
@@ -402,6 +409,7 @@ export function loadConfig(
     if (appEnv.success)
       problems.push(...readUnionEndpointOverrideConfig(appEnv.data, env).problems);
     if (appEnv.success) problems.push(...readAgentUserHashConfig(appEnv.data, env).problems);
+    if (appEnv.success) problems.push(...readStagingTestPhoneConfig(appEnv.data, env).problems);
     problems.push(...readQueueConcurrencyConfig(env).problems);
     if (appEnv.success && entry !== undefined) {
       problems.push(...readPayChannelsConfig(appEnv.data, env, entry).problems);
@@ -469,6 +477,11 @@ export function loadConfig(
     env,
   );
   violations.push(...agentUserHashProblems);
+  const { stagingTestPhones, problems: stagingTestPhoneProblems } = readStagingTestPhoneConfig(
+    values.APP_ENV,
+    env,
+  );
+  violations.push(...stagingTestPhoneProblems);
   const { queueLimits, problems: queueProblems } = readQueueConcurrencyConfig(env);
   violations.push(...queueProblems);
   if (violations.length > 0) throw new ConfigError(violations);
@@ -515,6 +528,9 @@ export function loadConfig(
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(sms === undefined ? {} : { sms }),
     agentUserHashKey,
+    // Only present when configured (staging only, B1-02zza), so the documented shape of an
+    // unconfigured result is unchanged.
+    ...(stagingTestPhones === null ? {} : { stagingTestPhones }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(values.METRICS_PORT === undefined
       ? {}

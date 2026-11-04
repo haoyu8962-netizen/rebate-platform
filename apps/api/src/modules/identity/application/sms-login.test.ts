@@ -29,7 +29,7 @@ import { createRootLogger, type Clock, type FieldCrypto } from '../../platform/i
 import { createBlocklistService } from '../../risk/index.ts';
 import { createTokenKeyProvider, createTokenService } from './access-tokens.ts';
 import type { RegistrationService } from './registration.ts';
-import type { SmsConfigReader } from './sms-codes.ts';
+import type { SmsConfigReader, SmsVerifyResult } from './sms-codes.ts';
 import { identityRiskPorts } from './risk-ports.ts';
 import { createSmsLoginService, type SmsLoginCommand, type SmsLoginOptions } from './sms-login.ts';
 
@@ -118,9 +118,12 @@ async function setup(
     risk?: (db: Kysely<DB>, clock: Clock, crypto: FieldCrypto) => Partial<SmsLoginOptions>;
     /** users.status the row lock's reread answers (B1-15f); absent, the generic users row. */
     lockedStatus?: string;
+    /** The SMS check's answer (B1-02zza); absent, { code: 0 }. */
+    verify?: SmsVerifyResult;
   } = {},
 ) {
   const statements: Statement[] = [];
+  const lines: string[] = [];
   const events = overrides.events ?? [];
   const connection: DatabaseConnection = {
     executeQuery<R>(compiled: CompiledQuery): Promise<QueryResult<R>> {
@@ -174,9 +177,12 @@ async function setup(
     db,
     clock,
     crypto,
-    logger: createRootLogger({ level: 'silent', entry: 'api', appEnv: 'test' }),
+    logger: createRootLogger(
+      { level: 'info', entry: 'api', appEnv: 'test' },
+      { write: (line: string) => void lines.push(line) },
+    ),
     versions: { minSupportedVersion: async () => null },
-    sms: { verifyAndConsume: async () => ({ code: 0 }) },
+    sms: { verifyAndConsume: async () => overrides.verify ?? { code: 0 } },
     registration: overrides.registration ?? ({} as RegistrationService),
     ...(overrides.config === undefined ? {} : { config: overrides.config }),
     tokens,
@@ -196,7 +202,7 @@ async function setup(
     version: '3.0.0',
     client_ip: '192.0.2.7',
   };
-  return { statements, events, login: () => service.login(command) };
+  return { statements, events, lines, login: () => service.login(command) };
 }
 
 function inserts(statements: readonly Statement[], table: string): Record<string, unknown>[] {
@@ -438,4 +444,28 @@ it('[B1-15f][BR-ID-27] 锁内重读到 deleting → 10007 stage=processing，回
   expect(statements.slice(lock + 1)).toEqual([]);
   expect(statements.filter((statement) => /^(insert|update)/.test(statement.sql))).toEqual([]);
   expect(events).toEqual(['begin', 'rollback']);
+});
+
+it('[AC-B1-02zza#u7] a staging test phone’s SMS login writes one pino audit line (masked number, no code); an ordinary login writes none', async () => {
+  const audit = (lines: readonly string[]) =>
+    lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((entry) => entry['event'] === 'staging_test_phone_login');
+  const plain = await setup();
+  expect((await plain.login()).code).toBe(0);
+  expect(audit(plain.lines)).toEqual([]);
+  const listed = await setup({ verify: { code: 0, staging_test_phone: true } });
+  const result = await listed.login();
+  expect(result.code).toBe(0);
+  expect(audit(listed.lines)).toEqual([
+    expect.objectContaining({
+      purpose: 'login',
+      is_new_user: false,
+      phone_masked: '139****5678',
+      user_id: USER_ID,
+    }),
+  ]);
+  const text = listed.lines.join('') + JSON.stringify(result);
+  expect(text).not.toContain('13912345678');
+  expect(text).not.toContain('123456');
 });

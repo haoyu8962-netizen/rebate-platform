@@ -1,0 +1,128 @@
+{
+  "risk_note": "RV2 by path (platform/config, infra/staging). Staging-only test phone numbers with a fixed code (approvals 48, D10-611): only with APP_ENV=staging, a listed number's login / step_up code is generated and stored as usual but not handed to the SMS channel, and verification also accepts the fixed code read from a node file; landing registration and bind are excluded. Blacklists, captcha / device limits, the four per-phone limits, IP and daily budget, expiry, 5 wrong attempts and single use are unchanged. Any other APP_ENV with either variable refuses to start, and construction refuses too. The code and full numbers never reach logs, responses or the pino audit line. No amounts.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude context via tools/agent/claude-run.sh (Codex not logged in; approvals 36). Round 1 pass, no findings; it checked every verifyAndConsume caller after the implementation's inversion (default-on for staging listed numbers and login / step_up, landing registration wrapped off, bind excluded by purpose). Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context in 1 attempt (test/spec/identity/staging-test-phone). Round 1 pass with two S2: the regular-file check and the module wiring were not pinned; both were made implementation requirements (readStartupSecretFile, identity.module wiring that fails startup) with unit tests. No frozen test changed.",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/identity/staging-test-phone/audit.int.test.ts > [AC-B1-02zza#23] 测试号首次登录成功写一条 pino 审计 staging_test_phone_login（purpose、is_new_user、phone_masked、user_id），日志与响应不含完整号码和固定码",
+    "test/spec/identity/staging-test-phone/audit.int.test.ts > [AC-B1-02zza#24] 测试号已有账号登录写一条审计且 is_new_user=false；核销失败与普通号码登录不写审计",
+    "test/spec/identity/staging-test-phone/audit.int.test.ts > [AC-B1-02zza#25] 测试号 step_up 成功写一条审计（purpose=step_up、is_new_user=false）；核销失败与普通号码不写；日志与响应不含完整号码和固定码",
+    "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#1] 两个变量都未设或为空串时，任何环境都是 null、没有问题项",
+    "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#2] local / test / prod 设了 STAGING_TEST_PHONES 或 STAGING_TEST_SMS_CODE_FILE 任何一个即拒绝启动，问题项不回显取值",
+    "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#3] staging 只设其中一个（另一个未设或为空串）拒绝启动",
+    "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#4] staging 名单有非法号、重复、超过 10 个、空项时拒绝启动",
+    "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#5] staging 两个都设且名单合法（1 到 10 个）时按原顺序保留号码与码文件路径，没有问题项",
+    "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#6] 码文件是正好 6 位数字（可带一个结尾换行）的普通文件时，启动读出固定码",
+    "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#7] 码文件不是正好 6 位数字、读不到或不是普通文件时启动拒绝，报错不带路径、内容与码",
+    "test/spec/identity/staging-test-phone/construction.test.ts > [AC-B1-02zza#8] 服务在 local / test / prod 构造时塞进测试号配置即报错（不带号码与码）；不塞或为 null 照常构造，staging 照常构造",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#9] staging 名单内号码发 login 码：发送器调用 0 次、响应与正常受理相同；固定码核销成功一次，再用 20003",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#9] staging 名单内号码发 step_up 码：发送器调用 0 次、响应与正常受理相同；固定码核销成功一次，再用 20003",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#10] 名单内号码没先发码 20003；码按规范化号码、App、purpose 区分；规范化别名可发可核销",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#11] 名单内号码的固定码 299 秒仍可核销，满 300 秒返回 20003",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#12] 名单内号码错 4 次后固定码仍可核销；错满 5 次后正确的固定码也返回 20003",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#13] staging 名单外号码照常调发送器，提交固定码 20002，收到的码照常核销；名单内号码同时不调发送器",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#14] 名单内号码发 bind 码照常调发送器，固定码不能核销 bind 码；随后 login 不调发送器",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#15] 名单内号码走落地页注册发码（channel=landing）照常调发送器；随后 App 内 step_up 不调发送器",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#16] 名单内号码频控照旧：同号 60 秒内第二次（任一 purpose、别名写法）42901，满 60 秒可发",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#17] 名单内号码频控照旧：自然小时第 6 条 42901，等到整点",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#18] 名单内号码频控照旧：自然日第 11 条 42901，次日零点恢复",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#19] 名单内号码黑名单与号段拦截照旧 44001，被拦的号码没有可核销的码；未被拦的名单内号码不调发送器",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#20] 名单内号码设备与 IP 判定照旧：人机验证 44003、设备额度 42901 照常拦截；受理时尝试照常提交且不记为失败，受理后计数照常",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#21] 运行时硬关：没给 staging 的服务（手工拼的选项、prod）即使带着测试号配置，若能构造也与没配一样——照常调发送器、固定码 20002",
+    "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#22] 名单内号码的发码、错码、核销、限流：日志与响应体都不含固定码与完整号码"
+  ],
+  "task": "B1-02zza",
+  "spec_commit": "2ad51f234c47b8d0f9b5e3681cfab512f7048a4e",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "2ad51f234c47b8d0f9b5e3681cfab512f7048a4e",
+      "tree": "18a23e1b1a577dfd913a72cb4bcb200211b05561",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-04T07:17:48Z",
+      "finished_at": "2026-11-04T07:18:14Z",
+      "red_tests": [
+        "test/spec/identity/staging-test-phone/audit.int.test.ts > [AC-B1-02zza#23] 测试号首次登录成功写一条 pino 审计 staging_test_phone_login（purpose、is_new_user、phone_masked、user_id），日志与响应不含完整号码和固定码",
+        "test/spec/identity/staging-test-phone/audit.int.test.ts > [AC-B1-02zza#24] 测试号已有账号登录写一条审计且 is_new_user=false；核销失败与普通号码登录不写审计",
+        "test/spec/identity/staging-test-phone/audit.int.test.ts > [AC-B1-02zza#25] 测试号 step_up 成功写一条审计（purpose=step_up、is_new_user=false）；核销失败与普通号码不写；日志与响应不含完整号码和固定码",
+        "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#1] 两个变量都未设或为空串时，任何环境都是 null、没有问题项",
+        "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#2] local / test / prod 设了 STAGING_TEST_PHONES 或 STAGING_TEST_SMS_CODE_FILE 任何一个即拒绝启动，问题项不回显取值",
+        "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#3] staging 只设其中一个（另一个未设或为空串）拒绝启动",
+        "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#4] staging 名单有非法号、重复、超过 10 个、空项时拒绝启动",
+        "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#5] staging 两个都设且名单合法（1 到 10 个）时按原顺序保留号码与码文件路径，没有问题项",
+        "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#6] 码文件是正好 6 位数字（可带一个结尾换行）的普通文件时，启动读出固定码",
+        "test/spec/identity/staging-test-phone/config.test.ts > [AC-B1-02zza#7] 码文件不是正好 6 位数字、读不到或不是普通文件时启动拒绝，报错不带路径、内容与码",
+        "test/spec/identity/staging-test-phone/construction.test.ts > [AC-B1-02zza#8] 服务在 local / test / prod 构造时塞进测试号配置即报错（不带号码与码）；不塞或为 null 照常构造，staging 照常构造",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#9] staging 名单内号码发 login 码：发送器调用 0 次、响应与正常受理相同；固定码核销成功一次，再用 20003",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#9] staging 名单内号码发 step_up 码：发送器调用 0 次、响应与正常受理相同；固定码核销成功一次，再用 20003",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#10] 名单内号码没先发码 20003；码按规范化号码、App、purpose 区分；规范化别名可发可核销",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#11] 名单内号码的固定码 299 秒仍可核销，满 300 秒返回 20003",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#12] 名单内号码错 4 次后固定码仍可核销；错满 5 次后正确的固定码也返回 20003",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#13] staging 名单外号码照常调发送器，提交固定码 20002，收到的码照常核销；名单内号码同时不调发送器",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#14] 名单内号码发 bind 码照常调发送器，固定码不能核销 bind 码；随后 login 不调发送器",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#15] 名单内号码走落地页注册发码（channel=landing）照常调发送器；随后 App 内 step_up 不调发送器",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#16] 名单内号码频控照旧：同号 60 秒内第二次（任一 purpose、别名写法）42901，满 60 秒可发",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#17] 名单内号码频控照旧：自然小时第 6 条 42901，等到整点",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#18] 名单内号码频控照旧：自然日第 11 条 42901，次日零点恢复",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#19] 名单内号码黑名单与号段拦截照旧 44001，被拦的号码没有可核销的码；未被拦的名单内号码不调发送器",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#20] 名单内号码设备与 IP 判定照旧：人机验证 44003、设备额度 42901 照常拦截；受理时尝试照常提交且不记为失败，受理后计数照常",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#21] 运行时硬关：没给 staging 的服务（手工拼的选项、prod）即使带着测试号配置，若能构造也与没配一样——照常调发送器、固定码 20002",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts > [AC-B1-02zza#22] 名单内号码的发码、错码、核销、限流：日志与响应体都不含固定码与完整号码"
+      ],
+      "expected": [
+        "test/spec/identity/staging-test-phone/audit.int.test.ts",
+        "test/spec/identity/staging-test-phone/config.test.ts",
+        "test/spec/identity/staging-test-phone/construction.test.ts",
+        "test/spec/identity/staging-test-phone/sms-codes.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a1e705d9c367d118ddd490e4a9f720528bbc171a9c96524263afc42a7c0dc4a7"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "61345efe46567a6395154d645ba6240179c6bdc6585b45a742cb93a8f8f9fd48"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b8ffd1292f238ffdf498421e44a3ac80e17331f9",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

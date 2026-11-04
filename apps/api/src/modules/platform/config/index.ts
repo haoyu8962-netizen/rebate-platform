@@ -111,6 +111,13 @@ export type { StartupSecretFileFailure } from './startup-secret-file.ts';
 // Worker queue concurrency limits (B1-01zzk): per-queue overrides and the shared budget.
 export { readQueueConcurrencyConfig } from './queue-concurrency.ts';
 export type { QueueConcurrencyConfigResult } from './queue-concurrency.ts';
+// Staging test phones with a fixed SMS code (B1-02zza, D10-611): staging only, hard off elsewhere.
+export { openStagingTestPhones, readStagingTestPhoneConfig } from './staging-test-phones.ts';
+export type {
+  StagingTestPhoneConfig,
+  StagingTestPhoneConfigResult,
+  StagingTestPhones,
+} from './staging-test-phones.ts';
 // Union endpoint override directory (B1-04y): staging reads the endpoints from a mounted directory.
 export {
   UNION_ENDPOINT_OVERRIDE_DIR_ENV,

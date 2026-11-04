@@ -10,6 +10,7 @@ import {
   IDEMPOTENCY,
   REDIS,
   ROOT_LOGGER,
+  openStagingTestPhones,
   type AppConfig,
   type Clock,
   type ExportStore,
@@ -20,6 +21,7 @@ import {
   type RequestCheck,
   type RequestCheckInput,
   type RootLogger,
+  type StagingTestPhones,
 } from '../platform/index.ts';
 import {
   DEVICE_SIGNING_KEYS,
@@ -493,6 +495,37 @@ async function verifyOnlyKeys(
 }
 
 /**
+ * B1-02zza (FU-STAGING-TEST-PHONE, approvals #48, D10-611): the staging test phones of the entry
+ * that signs (api), opened once at startup. A verify-only entry (stream) serves neither SMS login
+ * nor step-up and has no mount of the code file: none. Outside staging, or not configured: none.
+ * A code file that cannot be opened rejects, so the entry refuses to start (never «no test
+ * phones»). Only the count is logged, never a number or the code.
+ */
+export const STAGING_TEST_PHONES = Symbol('IDENTITY_STAGING_TEST_PHONES');
+
+export async function openEntryStagingTestPhones(
+  config: AppConfig,
+  logger: RootLogger,
+  verifyOnly: boolean,
+): Promise<StagingTestPhones | null> {
+  const configured = config.stagingTestPhones ?? null;
+  if (verifyOnly || config.appEnv !== 'staging' || configured === null) return null;
+  const opened = await openStagingTestPhones(configured);
+  logger.warn({ test_phone_count: opened.phones.length }, 'staging_test_phones_enabled');
+  return opened;
+}
+
+/**
+ * The landing page registration's view of the SMS codes: the staging fixed code is off there
+ * (D10-611 covers the app's SMS login and step-up only; B1-02zza).
+ */
+export function landingSmsCodes(sms: SmsCodeService): Pick<SmsCodeService, 'verifyAndConsume'> {
+  return {
+    verifyAndConsume: (request) => sms.verifyAndConsume(request, { stagingTestCode: false }),
+  };
+}
+
+/**
  * Stage ⑫ on a verify-only entry: never assembled there (step-up stays off stream); if it ever
  * were, it fails closed instead of judging step-up tokens without the api's wiring.
  */
@@ -702,6 +735,12 @@ export class IdentityModule {
             }
           : { ...options.smsSender, provide: smsSenderToken() },
         {
+          provide: STAGING_TEST_PHONES,
+          inject: [APP_CONFIG, ROOT_LOGGER],
+          useFactory: (config: AppConfig, logger: RootLogger): Promise<StagingTestPhones | null> =>
+            openEntryStagingTestPhones(config, logger, options.tokens === 'verify'),
+        },
+        {
           provide: SMS_CODES,
           inject: [
             APP_CONFIG,
@@ -711,6 +750,7 @@ export class IdentityModule {
             IDENTITY_CONFIG,
             RISK_PORTS,
             SMS_RISK_PORTS,
+            STAGING_TEST_PHONES,
             { token: REDIS, optional: true },
             { token: FIELD_CRYPTO, optional: true },
           ],
@@ -722,6 +762,7 @@ export class IdentityModule {
             reader: SmsConfigReader | null,
             risk: IdentityRiskPorts | null,
             smsRisk: SmsRiskPorts,
+            stagingTestPhones: StagingTestPhones | null,
             redis?: RedisHandle,
             fieldCrypto?: FieldCrypto,
           ): SmsCodeService | null =>
@@ -735,6 +776,8 @@ export class IdentityModule {
                   logger,
                   hmac: createSmsHmac(config.appEnv, fieldCrypto),
                   hooks: { ...(risk === null ? {} : risk.smsHooks), ...smsRisk.smsHooks },
+                  appEnv: config.appEnv,
+                  stagingTestPhones,
                 }),
         },
         {
@@ -929,7 +972,7 @@ export class IdentityModule {
                   crypto: fieldCrypto,
                   logger,
                   idempotency,
-                  sms,
+                  sms: landingSmsCodes(sms),
                   registration: createRegistrationService({
                     clock,
                     config: reader,
@@ -1075,6 +1118,7 @@ export class IdentityModule {
           provide: STEP_UP,
           inject: [
             CLOCK,
+            ROOT_LOGGER,
             IDENTITY_CONFIG,
             TOKEN_KEYS,
             SMS_CODES,
@@ -1085,6 +1129,7 @@ export class IdentityModule {
           ],
           useFactory: (
             clock: Clock,
+            logger: RootLogger,
             reader: IdentityConfigReader | null,
             keys: TokenKeyProvider | TokenVerifyKeyProvider,
             sms: SmsCodeService | null,
@@ -1109,6 +1154,7 @@ export class IdentityModule {
                   config: reader,
                   sms,
                   attempts,
+                  logger,
                   ...(thirdPartyIdentity === null ? {} : { thirdPartyIdentity }),
                 }),
         },

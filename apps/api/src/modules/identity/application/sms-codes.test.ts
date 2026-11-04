@@ -3,29 +3,41 @@
 // here the namespace is a stub that answers each script with a canned reply, to pin the order of
 // checks, the short-circuits of the insertion points and the handling of every sender and Redis
 // outcome.
-import { createHmac } from 'node:crypto';
+import { createHmac, generateKeyPairSync } from 'node:crypto';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { DynamicModule, FactoryProvider } from '@nestjs/common';
 import { expect, it, vi } from 'vitest';
 import {
   FixedClock,
+  ROOT_LOGGER,
   RedisUnavailableError,
   createRootLogger,
+  type AppConfig,
+  type AppEnv,
   type FieldCrypto,
   type RedisHandle,
   type RedisScriptOptions,
+  type StagingTestPhones,
 } from '../../platform/index.ts';
 import type { BlocklistService } from '../../risk/index.ts';
+import { IdentityModule, STAGING_TEST_PHONES, landingSmsCodes } from '../identity.module.ts';
 import { identityRiskPorts } from './risk-ports.ts';
+import { SMS_CODES, STEP_UP } from './tokens.ts';
+import type { StepUpService } from './step-up.ts';
 import {
   createSmsCodeService,
   type SmsHooks,
   type SmsMessage,
+  type SmsCodeService,
   type SmsSender,
 } from './sms-codes.ts';
 
 const NUMBER = '13912345678';
 const START = '2026-10-06T10:00:00+08:00';
 
-type Kind = 'reserve' | 'mark' | 'commit' | 'release' | 'verify';
+type Kind = 'reserve' | 'mark' | 'commit' | 'release' | 'verify' | 'consume';
 interface Call {
   readonly kind: Kind;
   readonly namespace: string;
@@ -48,6 +60,8 @@ function setup(
     mark?: () => unknown;
     config?: unknown;
     sendTimeoutMs?: number;
+    appEnv?: AppEnv;
+    stagingTestPhones?: StagingTestPhones | null;
   } = {},
 ) {
   const clock = new FixedClock(START);
@@ -66,6 +80,7 @@ function setup(
         commit: clock.now().getTime() + 60_000,
         release: 1,
         verify: 3,
+        consume: 0,
       })[kind]);
   const redis: RedisHandle = {
     namespace: (namespace: string) => ({
@@ -106,6 +121,10 @@ function setup(
     config: { configValue },
     ...(overrides.hooks === undefined ? {} : { hooks: overrides.hooks }),
     ...(overrides.sendTimeoutMs === undefined ? {} : { sendTimeoutMs: overrides.sendTimeoutMs }),
+    ...(overrides.appEnv === undefined ? {} : { appEnv: overrides.appEnv }),
+    ...(overrides.stagingTestPhones === undefined
+      ? {}
+      : { stagingTestPhones: overrides.stagingTestPhones }),
   });
   const send = (phone = NUMBER) =>
     service.send({
@@ -115,7 +134,7 @@ function setup(
       device_id: 'd1',
       client_ip: '203.0.113.7',
     });
-  return { clock, lines, calls, messages, hmac, configValue, service, send };
+  return { clock, lines, calls, messages, hmac, configValue, service, send, redis, logger };
 }
 
 it('[BR-ID-05] the blocklist insertion point gets the normalised number, and its 44001 short-circuits the rest', async () => {
@@ -863,4 +882,309 @@ it('[AC-B1-03zh#20][BR-ID-36] 设备注册上限的拒绝命中经 recordDecided
     value_hmac: 'h',
     rule_id: 'DEVICE_REGISTER_LIMIT',
   });
+});
+
+// B1-02zza (D10-611): staging test phones. Synthetic values only.
+const TEST_PHONE = '19900000099';
+const TEST_CODE = '864213';
+const TEST_PHONES: StagingTestPhones = { phones: [TEST_PHONE], code: TEST_CODE };
+
+it('[AC-B1-02zza#u1] staging: a listed number’s app login / step_up code runs every store step but never reaches the sender', async () => {
+  for (const purpose of ['login', 'step_up'] as const) {
+    const f = setup({ appEnv: 'staging', stagingTestPhones: TEST_PHONES });
+    const result = await f.service.send({
+      app_id: 'couli',
+      phone: `+86 ${TEST_PHONE}`,
+      purpose,
+      device_id: 'd1',
+      client_ip: '203.0.113.7',
+    });
+    expect(result).toEqual({ code: 0, data: { resend_after_sec: 60, expires_in_sec: 300 } });
+    expect(f.messages).toEqual([]);
+    expect(f.calls.map((call) => call.kind)).toEqual(['reserve', 'mark', 'commit']);
+    const logs = f.lines.join('');
+    expect(logs).toContain('sms_staging_test_phone_not_sent');
+    expect(logs).not.toContain(TEST_PHONE);
+    expect(logs).not.toContain(TEST_CODE);
+  }
+});
+
+it('[AC-B1-02zza#u2] staging: bind, the landing route and unlisted numbers still go to the sender', async () => {
+  const f = setup({
+    appEnv: 'staging',
+    stagingTestPhones: TEST_PHONES,
+    hooks: {
+      landingQuota: async () => ({
+        code: 0,
+        commit: async () => ({ code: 0, finish: async () => undefined }),
+      }),
+    },
+  });
+  expect((await f.service.send({ app_id: 'couli', phone: TEST_PHONE, purpose: 'bind' })).code).toBe(
+    0,
+  );
+  expect(
+    (
+      await f.service.send({
+        app_id: 'couli',
+        phone: TEST_PHONE,
+        purpose: 'login',
+        channel: 'landing',
+      })
+    ).code,
+  ).toBe(0);
+  expect((await f.send(NUMBER)).code).toBe(0);
+  expect(f.messages.map((message) => [message.phone, message.purpose])).toEqual([
+    [TEST_PHONE, 'bind'],
+    [TEST_PHONE, 'login'],
+    [NUMBER, 'login'],
+  ]);
+});
+
+it('[AC-B1-02zza#u3] verify: the fixed code of a listed login / step_up consumes the current code; anything else is the ordinary check', async () => {
+  const f = setup({ appEnv: 'staging', stagingTestPhones: TEST_PHONES });
+  const verify = (
+    code: string,
+    purpose: 'login' | 'step_up' | 'bind' = 'login',
+    phone = TEST_PHONE,
+    options?: { stagingTestCode?: boolean },
+  ) => f.service.verifyAndConsume({ app_id: 'couli', phone, purpose, code }, options);
+  expect(await verify(TEST_CODE)).toEqual({ code: 0, staging_test_phone: true });
+  expect(f.calls.at(-1)!.kind).toBe('consume');
+  expect(f.calls.at(-1)!.options.keys[0]!.startsWith('c:couli:login:')).toBe(true);
+  expect(await verify(TEST_CODE, 'step_up')).toEqual({ code: 0, staging_test_phone: true });
+  expect(f.calls.at(-1)!.options.keys[0]!.startsWith('c:couli:step_up:')).toBe(true);
+  const consumes = f.calls.filter((call) => call.kind === 'consume').length;
+  // Wrong code, bind, unlisted, landing (stagingTestCode false): the verify script, never consume.
+  expect(await verify('000000')).toEqual({ code: 20003 });
+  expect(await verify(TEST_CODE, 'bind')).toEqual({ code: 20003 });
+  expect(await verify(TEST_CODE, 'login', NUMBER)).toEqual({ code: 20003 });
+  expect(await verify(TEST_CODE, 'login', TEST_PHONE, { stagingTestCode: false })).toEqual({
+    code: 20003,
+  });
+  expect(f.calls.filter((call) => call.kind === 'consume')).toHaveLength(consumes);
+  expect(f.calls.slice(-4).map((call) => call.kind)).toEqual([
+    'verify',
+    'verify',
+    'verify',
+    'verify',
+  ]);
+  expect(f.lines.join('')).not.toContain(TEST_CODE);
+});
+
+it('[AC-B1-02zza#u4] verify: no current code for the fixed code answers 20003 without the staging flag', async () => {
+  const f = setup({
+    appEnv: 'staging',
+    stagingTestPhones: TEST_PHONES,
+    reply: (kind) => (kind === 'consume' ? 3 : 1),
+  });
+  expect(
+    await f.service.verifyAndConsume({
+      app_id: 'couli',
+      phone: TEST_PHONE,
+      purpose: 'login',
+      code: TEST_CODE,
+    }),
+  ).toEqual({ code: 20003 });
+});
+
+it('[AC-B1-02zza#u5] construction: test phones outside staging (or without appEnv) or a malformed fixed code are refused', () => {
+  for (const appEnv of ['local', 'test', 'prod', undefined] as const) {
+    expect(() =>
+      setup({ ...(appEnv === undefined ? {} : { appEnv }), stagingTestPhones: TEST_PHONES }),
+    ).toThrow(/APP_ENV=staging/);
+    expect(() =>
+      setup({ ...(appEnv === undefined ? {} : { appEnv }), stagingTestPhones: null }),
+    ).not.toThrow();
+  }
+  for (const code of ['12345', '1234567', 'abcdef', '']) {
+    expect(() =>
+      setup({ appEnv: 'staging', stagingTestPhones: { phones: [TEST_PHONE], code } }),
+    ).toThrow(/6 ASCII digits/);
+  }
+});
+
+// identity.module's wiring (review-spec r1 S2 ②): the factories of the real module are called with
+// stand-ins, so what reaches createSmsCodeService / createStepUpService is the module's own code.
+function factoryOf(module: DynamicModule, token: symbol): FactoryProvider {
+  const provider = (module.providers ?? []).find(
+    (candidate) =>
+      typeof candidate === 'object' && 'provide' in candidate && candidate.provide === token,
+  );
+  expect(provider).toBeDefined();
+  expect(provider).toHaveProperty('useFactory');
+  return provider as FactoryProvider;
+}
+
+/** The one required option; the factories under test never use the configuration reader. */
+const MODULE_OPTIONS = { config: { useFactory: () => null } };
+
+const ROOT = fileURLToPath(new URL('../../../../../../', import.meta.url));
+
+function stagingConfig(codeFile: string): AppConfig {
+  return {
+    appEnv: 'staging',
+    stagingTestPhones: { phones: [TEST_PHONE], codeFile },
+  } as unknown as AppConfig;
+}
+
+it('[AC-B1-02zza#u10] identity.module opens the code file on the signing entry in staging; a bad file rejects (the entry does not start); stream and other environments open nothing', async () => {
+  const parent = join(ROOT, '.tmp/b1-02zza-identity-module');
+  await mkdir(parent, { recursive: true });
+  const directory = await mkdtemp(join(parent, 'case-'));
+  try {
+    const codeFile = join(directory, 'code');
+    await writeFile(codeFile, `${TEST_CODE}\n`, 'utf8');
+    const lines: string[] = [];
+    const logger = createRootLogger(
+      { level: 'trace', entry: 'api', appEnv: 'test' },
+      { write: (line: string) => void lines.push(line) },
+    );
+    const api = factoryOf(IdentityModule.forRoot(MODULE_OPTIONS), STAGING_TEST_PHONES);
+    expect(api.inject).toEqual([expect.anything(), ROOT_LOGGER]);
+    await expect(api.useFactory(stagingConfig(codeFile), logger)).resolves.toEqual(TEST_PHONES);
+    expect(lines.join('')).toContain('"test_phone_count":1');
+    expect(lines.join('')).not.toContain(TEST_PHONE);
+    expect(lines.join('')).not.toContain(TEST_CODE);
+
+    for (const bad of ['12345\n', 'abcdef']) {
+      await writeFile(codeFile, bad, 'utf8');
+      await expect(api.useFactory(stagingConfig(codeFile), logger)).rejects.toThrow(
+        /STAGING_TEST_SMS_CODE_FILE/,
+      );
+    }
+    await expect(api.useFactory(stagingConfig(join(directory, 'missing')), logger)).rejects.toThrow(
+      /STAGING_TEST_SMS_CODE_FILE/,
+    );
+    await expect(api.useFactory(stagingConfig(directory), logger)).rejects.toThrow(
+      /STAGING_TEST_SMS_CODE_FILE/,
+    );
+
+    const stream = factoryOf(
+      IdentityModule.forRoot({ ...MODULE_OPTIONS, tokens: 'verify' }),
+      STAGING_TEST_PHONES,
+    );
+    await expect(
+      stream.useFactory(stagingConfig(join(directory, 'missing')), logger),
+    ).resolves.toBeNull();
+    for (const appEnv of ['local', 'test', 'prod'] as const) {
+      await expect(
+        api.useFactory(
+          { ...stagingConfig(join(directory, 'missing')), appEnv } as AppConfig,
+          logger,
+        ),
+      ).resolves.toBeNull();
+    }
+    await expect(
+      api.useFactory({ appEnv: 'staging' } as unknown as AppConfig, logger),
+    ).resolves.toBeNull();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('[AC-B1-02zza#u11] identity.module passes APP_ENV and the opened test phones to the SMS code service; the step-up service gets the root logger', async () => {
+  const f = setup();
+  const module = IdentityModule.forRoot(MODULE_OPTIONS);
+  const smsCodes = factoryOf(module, SMS_CODES);
+  expect(smsCodes.inject).toContain(STAGING_TEST_PHONES);
+  const messages: SmsMessage[] = [];
+  const sender: SmsSender = {
+    send: async (message) => {
+      messages.push(message);
+      return 'accepted';
+    },
+  };
+  const fieldCrypto = {
+    blindIndex: (text: string, context: string) =>
+      createHmac('sha256', 'unit').update(`${context}:${text}`).digest('hex'),
+  } as unknown as FieldCrypto;
+  const build = (config: AppConfig, phones: StagingTestPhones | null) =>
+    smsCodes.useFactory(
+      config,
+      f.clock,
+      f.logger,
+      sender,
+      { configValue: async () => null },
+      null,
+      { smsHooks: {} },
+      phones,
+      f.redis,
+      fieldCrypto,
+    ) as SmsCodeService;
+  const staged = build({ appEnv: 'staging' } as AppConfig, TEST_PHONES);
+  expect((await staged.send({ app_id: 'couli', phone: TEST_PHONE, purpose: 'login' })).code).toBe(
+    0,
+  );
+  expect(messages).toEqual([]);
+  expect(
+    await staged.verifyAndConsume({
+      app_id: 'couli',
+      phone: TEST_PHONE,
+      purpose: 'login',
+      code: TEST_CODE,
+    }),
+  ).toEqual({ code: 0, staging_test_phone: true });
+  // The landing registration's view never takes the fixed code.
+  const consumes = f.calls.filter((call) => call.kind === 'consume').length;
+  expect(
+    await landingSmsCodes(staged).verifyAndConsume({
+      app_id: 'couli',
+      phone: TEST_PHONE,
+      purpose: 'login',
+      code: TEST_CODE,
+    }),
+  ).toEqual({ code: 20003 });
+  expect(f.calls.filter((call) => call.kind === 'consume')).toHaveLength(consumes);
+  // The module hands appEnv over: test phones with a prod config refuse to build.
+  expect(() => build({ appEnv: 'prod' } as AppConfig, TEST_PHONES)).toThrow(/APP_ENV=staging/);
+
+  const stepUp = factoryOf(module, STEP_UP);
+  expect(stepUp.inject?.[1]).toBe(ROOT_LOGGER);
+  const lines: string[] = [];
+  const logger = createRootLogger(
+    { level: 'trace', entry: 'api', appEnv: 'test' },
+    { write: (line: string) => void lines.push(line) },
+  );
+  const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const db = {
+    selectFrom: () => {
+      const chain = {
+        select: () => chain,
+        where: () => chain,
+        executeTakeFirst: async () => ({
+          phone_hmac: 'hmac',
+          phone_cipher: Buffer.from(TEST_PHONE, 'utf8'),
+        }),
+      };
+      return chain;
+    },
+  };
+  const service = stepUp.useFactory(
+    f.clock,
+    logger,
+    { configValue: async () => null, minSupportedVersion: async () => null },
+    { kid: 'unit', privateKey: pair.privateKey, publicKeys: new Map([['unit', pair.publicKey]]) },
+    {
+      send: vi.fn(),
+      verifyAndConsume: async () => ({ code: 0, staging_test_phone: true }),
+    },
+    { issue: vi.fn(), consume: vi.fn() },
+    null,
+    db,
+    { decrypt: (text: string) => text },
+  ) as StepUpService;
+  const uid = '019a0000-0000-7000-8000-000000000010';
+  const result = await service.verify({
+    principal: { uid, app_id: 'couli', sid: 's', device_id: 'd', scp: 'full' },
+    verifiedDevice: { appId: 'couli', deviceId: 'd' },
+    body: { action: 'withdraw', code: TEST_CODE },
+  });
+  expect(result.code).toBe(0);
+  const audit = lines
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((entry) => entry['event'] === 'staging_test_phone_login');
+  expect(audit).toEqual([
+    expect.objectContaining({ purpose: 'step_up', user_id: uid, phone_masked: '199****0099' }),
+  ]);
 });

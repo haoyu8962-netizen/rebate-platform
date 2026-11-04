@@ -26,12 +26,17 @@ import { randomUUID } from 'node:crypto';
 import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
-import type { Clock, FieldCrypto, TokenPrincipal } from '../../platform/index.ts';
+import type { Clock, FieldCrypto, RootLogger, TokenPrincipal } from '../../platform/index.ts';
+import { maskPhone } from '../domain/mask-phone.ts';
 import { PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
 import { STEP_UP_AUDIENCE, signScopedToken, type TokenKeyProvider } from './access-tokens.ts';
 import { configuredSeconds, instantPlus } from './config-seconds.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
-import type { SmsCodeService, SmsConfigReader } from './sms-codes.ts';
+import {
+  STAGING_TEST_PHONE_AUDIT_EVENT,
+  type SmsCodeService,
+  type SmsConfigReader,
+} from './sms-codes.ts';
 import { replaceAppleRefreshToken } from '../infra/oauth-accounts.ts';
 
 export type ThirdPartyCredentials =
@@ -83,6 +88,11 @@ export interface StepUpOptions {
   readonly sms: SmsCodeService;
   readonly attempts: OauthAttemptService;
   readonly thirdPartyIdentity?: ThirdPartyIdentityPort;
+  /**
+   * B1-02zza (D10-611): where the pino audit line of a staging test phone's step-up goes
+   * (event staging_test_phone_login, purpose step_up). identity.module passes the root logger.
+   */
+  readonly logger?: RootLogger;
 }
 
 /** Configuration key of the step_up_token lifetime (BR-ID-08). */
@@ -178,7 +188,23 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
       code: body.code,
     });
     if (verified.code !== 0) return { code: verified.code };
-    return issue(principal, body.action);
+    const issued = await issue(principal, body.action);
+    if (verified.staging_test_phone === true && issued.code === 0) {
+      // B1-02zza (D10-611 (4)): the audit line of a staging test phone's step-up; masked number
+      // only, never the full number or the code.
+      options.logger?.info(
+        {
+          event: STAGING_TEST_PHONE_AUDIT_EVENT,
+          app_id: principal.app_id,
+          purpose: 'step_up',
+          is_new_user: false,
+          phone_masked: maskPhone(phone),
+          user_id: principal.uid,
+        },
+        STAGING_TEST_PHONE_AUDIT_EVENT,
+      );
+    }
+    return issued;
   }
 
   async function byThirdParty(

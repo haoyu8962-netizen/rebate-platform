@@ -55,6 +55,7 @@ import { normalizeInviteCode } from '../domain/login.ts';
 import { completeLogin, type FirstAppLoginReview } from './login-completion.ts';
 import { readDormantReverifyDays } from './reverify-activity.ts';
 export type { FirstAppLoginReview } from './login-completion.ts';
+import { maskPhone } from '../domain/mask-phone.ts';
 import { normalize_phone } from '../domain/normalize-phone.ts';
 import { PHONE_BLIND_INDEX_CONTEXT } from '../domain/registration.ts';
 import {
@@ -72,7 +73,11 @@ import {
 } from './registration.ts';
 import type { SessionPushTokens } from './push-tokens.ts';
 import { sessionScope, type MinimumVersionReader } from './session-scope.ts';
-import type { SmsCodeService, SmsConfigReader } from './sms-codes.ts';
+import {
+  STAGING_TEST_PHONE_AUDIT_EVENT,
+  type SmsCodeService,
+  type SmsConfigReader,
+} from './sms-codes.ts';
 
 export { LOGIN_LOGS_DEVICE_ID_CONTEXT } from '../domain/login.ts';
 
@@ -351,6 +356,7 @@ export function createSmsLoginService(options: SmsLoginOptions): SmsLoginService
         code: command.body.code,
       });
       if (verified.code !== 0) return { code: verified.code };
+      const stagingTestPhone = verified.staging_test_phone === true;
       const phoneHmac = crypto.blindIndex(phone, PHONE_BLIND_INDEX_CONTEXT);
       const inviteCode = normalizeInviteCode(command.body.invite_code);
       // Before the transaction: no configuration read inside it (a deletion-only login never
@@ -397,6 +403,21 @@ export function createSmsLoginService(options: SmsLoginOptions): SmsLoginService
         },
         'sms_login_succeeded',
       );
+      if (stagingTestPhone) {
+        // B1-02zza (D10-611 (4)): the audit line of a staging test phone's login; masked number
+        // only, never the full number or the code.
+        logger.info(
+          {
+            event: STAGING_TEST_PHONE_AUDIT_EVENT,
+            app_id: appId,
+            purpose: 'login',
+            is_new_user: signed.is_new_user,
+            phone_masked: maskPhone(phone),
+            user_id: signed.user_id,
+          },
+          STAGING_TEST_PHONE_AUDIT_EVENT,
+        );
+      }
       return {
         code: 0,
         data: {
