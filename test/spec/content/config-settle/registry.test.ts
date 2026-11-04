@@ -38,7 +38,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // in this order; B1-04zq (D10-543): then the four order_sync.rescan.* keys, in this order;
   // B2-04zo: then ledger.advance_alert_fen; B2-03t (D10-605 (a)): then tech_fee_bp and
   // rebate.taobao.compare_rate_ratio_bp, in this order; B2-03u (D10-608): then share_domains;
-  // nothing else may follow.
+  // B2-03v (D10-610): then bridge_origins; nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
   expect(registry.map((entry) => entry.key)).toStrictEqual([
@@ -108,6 +108,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'tech_fee_bp',
     'rebate.taobao.compare_rate_ratio_bp',
     'share_domains',
+    'bridge_origins',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),

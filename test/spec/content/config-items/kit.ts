@@ -372,6 +372,11 @@ export const QUOTE_UNSEEDED: readonly string[] = [
 export const SHARE: readonly Expected[] = [row('share_domains', 'object', 'config.business')];
 /** B2-03u (D10-608): domains differ per environment, hence no seed row. */
 export const SHARE_UNSEEDED: readonly string[] = ['share_domains'];
+// B2-03v (D10-610): bridge_origins, registered right after SHARE: editable config.risk, its value
+// the unsigned {origins} object, options null. Not part of expectedNow() either.
+export const BRIDGE: readonly Expected[] = [row('bridge_origins', 'object', 'config.risk')];
+/** B2-03v (D10-610): unset means F1-02zzzb signs the h5_base_url origin, hence no seed row. */
+export const BRIDGE_UNSEEDED: readonly string[] = ['bridge_origins'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -390,6 +395,7 @@ export const expectedOf = (key: string): Expected => {
     ...ADVANCE_ALERT,
     ...QUOTE,
     ...SHARE,
+    ...BRIDGE,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

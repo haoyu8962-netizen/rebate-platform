@@ -272,6 +272,10 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // with arrayOf(isString), default []). The registry has no array type, and configValueFits'
   // 'object' accepts arrays. Domains differ per environment, so no seed row. Registration only.
   spec('share_domains', 'object', 'config.business'),
+  // B2-03v (D10-610): bridge_origins, config.risk, editable. Stores the unsigned {origins} object;
+  // signing and the save-time shape check are F1-02zzzb's. Until then /v1/config keeps reading it
+  // as it does today (free-form), so behaviour is unchanged. No seed row. Registration only.
+  spec('bridge_origins', 'object', 'config.risk'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(
