@@ -5,6 +5,8 @@
 // member_blocked (blocked_reason; an effective hold; available < 0; risk frozen, banned or appealing),
 // has_transfer_attempt (any result of a kind=transfer attempt), channel_disabled (enabled off or paused
 // on). Requests go through the real admin entry (batch-harness.ts). Top-level it() only (规划/11 §4.3).
+// D10-609 (B2-09n): one left with member_blocked, has_transfer_attempt or channel_disabled that was on no
+// batch is written onto this batch (batch_id, row_version + 1, updated_at); its status and money stay.
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import {
@@ -169,7 +171,14 @@ it('[AC-B2-09l#13] member_blocked（BR-WDR-05）：blocked_reason 非空、有�
       { paying: [free.id], left: stopped.map((row) => [row.id, 'member_blocked']) },
     );
 
-    for (const row of stopped) expect(await rowOf(f, row)).toEqual(row);
+    for (const row of stopped) {
+      expect(await rowOf(f, row)).toEqual({
+        ...row,
+        batch_id: batchId,
+        row_version: row.row_version + 1,
+        updated_at: f.clock.now(),
+      });
+    }
     expect(await rowOf(f, free)).toEqual(asPaying(f, free, batchId, h.executor.id));
     expect(await itemsOf(f)).toEqual(
       orderedItems([
@@ -232,7 +241,14 @@ it('[AC-B2-09l#15] has_transfer_attempt：kind=transfer 的尝试 result 取 pen
       { paying: [free.id], left: tried.map((row) => [row.id, 'has_transfer_attempt']) },
     );
 
-    for (const row of tried) expect(await rowOf(f, row)).toEqual(row);
+    for (const row of tried) {
+      expect(await rowOf(f, row)).toEqual({
+        ...row,
+        batch_id: batchId,
+        row_version: row.row_version + 1,
+        updated_at: f.clock.now(),
+      });
+    }
     expect(await itemsOf(f)).toEqual(
       orderedItems([
         ...tried.map((row) => item(batchId, row, 'blocked', 'has_transfer_attempt')),
@@ -261,19 +277,34 @@ it('[AC-B2-09l#16] channel_disabled：payout.channel_enabled.<channel> 关，或
         [alipay.id, 'channel_disabled'],
       ],
     });
-    expect(await rowOf(f, alipay)).toEqual(alipay);
-    expect(await rowOf(f, bankByDefault)).toEqual(bankByDefault);
+    expect(await rowOf(f, alipay)).toEqual({
+      ...alipay,
+      batch_id: first,
+      row_version: alipay.row_version + 1,
+      updated_at: f.clock.now(),
+    });
+    expect(await rowOf(f, bankByDefault)).toEqual({
+      ...bankByDefault,
+      batch_id: first,
+      row_version: bankByDefault.row_version + 1,
+      updated_at: f.clock.now(),
+    });
     expect(await rowOf(f, wechat)).toEqual(asPaying(f, wechat, first, h.executor.id));
 
     await setSwitch(f, 'payout.channel_paused.wechat', true);
     const paused = await approved(f, h, who, { method: 'wechat' });
     await setSwitch(f, 'payout.channel_enabled.alipay', true);
     await seedW(f, { fen: PLENTY });
-    await expectExecuted(await h.execute([paused.id, alipay.id]), {
+    const second = await expectExecuted(await h.execute([paused.id, alipay.id]), {
       paying: [alipay.id],
       left: [[paused.id, 'channel_disabled']],
     });
-    expect(await rowOf(f, paused)).toEqual(paused);
+    expect(await rowOf(f, paused)).toEqual({
+      ...paused,
+      batch_id: second,
+      row_version: paused.row_version + 1,
+      updated_at: f.clock.now(),
+    });
     expect(await rowOf(f, alipay)).toMatchObject({ status: 'PAYING' });
   });
 });

@@ -4,9 +4,9 @@
 // also when it is then listed in `left` with member_blocked, has_transfer_attempt or channel_disabled.
 // One left with not_approved or a watermark reason is not moved, and a refused batch moves nothing. An
 // old batch's items are never deleted. The withdrawal on an old batch is seeded as W9 leaves it
-// (batch_id and execute_seq kept): payout-execute.ts leaves batch_id null on a withdrawal that was never
-// on a batch when it stays behind (#31). Requests go through the real admin entry (batch-harness.ts).
-// Top-level it() only (规划/11 §4.3).
+// (batch_id and execute_seq kept). D10-609 (B2-09n): a withdrawal that was never on a batch is written
+// onto the batch it stays behind in, so grouping it again moves it like any other (#31). Requests go
+// through the real admin entry (batch-harness.ts). Top-level it() only (规划/11 §4.3).
 import { expect, it } from 'vitest';
 import {
   PLENTY,
@@ -154,7 +154,7 @@ it('[AC-B2-09l#30] 不改挂：not_approved（已挂旧批次的 PAYING、REJECT
   });
 });
 
-it('[AC-B2-09l#31] 从没挂过批次的单第一次留下（channel_disabled）：batch_id 仍是 null（payout-execute.ts 只改挂 batch_id 非空的单），只在那批记 blocked；开通后再执行进 PAYING，第一批不记 moved_out', async () => {
+it('[AC-B2-09l#31] 从没挂过批次的单第一次留下（channel_disabled）：batch_id 写成那批、row_version + 1（D10-609），那批记 blocked；开通后再执行进 PAYING，batch_id 是新批次，第一批记 moved_out、blocked 保留', async () => {
   const f = fixture(s);
   await withBatchAdmin(f, async (h) => {
     const w = await approved(f, h, await payee(f, h));
@@ -164,7 +164,7 @@ it('[AC-B2-09l#31] 从没挂过批次的单第一次留下（channel_disabled）
       left: [[w.id, 'channel_disabled']],
     });
 
-    expect(await rowOf(f, w)).toEqual(w);
+    expect(await rowOf(f, w)).toEqual(asMoved(f, w, first));
     expect(await itemsOf(f)).toEqual([item(first, w, 'blocked', 'channel_disabled')]);
 
     await setSwitch(f, 'payout.channel_enabled.alipay', true);
@@ -173,7 +173,11 @@ it('[AC-B2-09l#31] 从没挂过批次的单第一次留下（channel_disabled）
 
     expect(await rowOf(f, w)).toMatchObject({ status: 'PAYING', batch_id: second, execute_seq: 1 });
     expect(await itemsOf(f)).toEqual(
-      orderedItems([item(first, w, 'blocked', 'channel_disabled'), item(second, w, 'paying')]),
+      orderedItems([
+        item(first, w, 'blocked', 'channel_disabled'),
+        movedOut(first, w, second),
+        item(second, w, 'paying'),
+      ]),
     );
   });
 });

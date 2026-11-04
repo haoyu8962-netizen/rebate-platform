@@ -6,6 +6,8 @@
 // empty and a batch. W, P and the committed sums are per channel. Expected amounts are by hand: usable =
 // W × 9000 / 10000, default of payout.watermark_usable_bp. Requests go through the real admin entry
 // (batch-harness.ts). Top-level it() only (规划/11 §4.3).
+// D10-609 (B2-09n): one left by a failing channel of several that was on no batch is written onto this
+// batch (batch_id, row_version + 1, updated_at); its status and money stay.
 import { expect, it } from 'vitest';
 import {
   FORECAST,
@@ -172,7 +174,12 @@ it('[AC-B2-09l#23] ③ 多通道（D10-288）：alipay 足额、wechat 没有 W 
     });
 
     expect(await rowOf(f, alipay)).toEqual(asPaying(f, alipay, batchId, h.executor.id));
-    expect(await rowOf(f, wechat)).toEqual(wechat);
+    expect(await rowOf(f, wechat)).toEqual({
+      ...wechat,
+      batch_id: batchId,
+      row_version: wechat.row_version + 1,
+      updated_at: f.clock.now(),
+    });
     expect(await itemsOf(f)).toEqual(
       orderedItems([
         item(batchId, alipay, 'paying'),
@@ -208,8 +215,19 @@ it('[AC-B2-09l#24] ③ 多通道两个通道都失败（D10-290）：仍是 exec
       kind: 'manual',
       created_by: h.executor.id,
     });
-    expect(await rowOf(f, alipay)).toEqual(alipay);
-    expect(await rowOf(f, wechat)).toEqual(wechat);
+    // D10-609: status and money do not move; both are now on this batch.
+    expect(await rowOf(f, alipay)).toEqual({
+      ...alipay,
+      batch_id: batchId,
+      row_version: alipay.row_version + 1,
+      updated_at: f.clock.now(),
+    });
+    expect(await rowOf(f, wechat)).toEqual({
+      ...wechat,
+      batch_id: batchId,
+      row_version: wechat.row_version + 1,
+      updated_at: f.clock.now(),
+    });
     expect(await itemsOf(f)).toEqual(
       orderedItems([
         item(batchId, alipay, 'blocked', 'watermark_below_forecast'),
@@ -271,10 +289,15 @@ it('[AC-B2-09l#27] 水位按通道分开算（在途）：wechat 已有 PAYING 9
     await seedW(f, { fen: W_JUST_ENOUGH });
     await seedW(f, { fen: W_JUST_ENOUGH, channel: 'wechat' });
 
-    await expectExecuted(await h.execute([alipay.id, wechat.id]), {
+    const batchId = await expectExecuted(await h.execute([alipay.id, wechat.id]), {
       paying: [alipay.id],
       left: [[wechat.id, 'watermark_usable_exceeded']],
     });
-    expect(await rowOf(f, wechat)).toEqual(wechat);
+    expect(await rowOf(f, wechat)).toEqual({
+      ...wechat,
+      batch_id: batchId,
+      row_version: wechat.row_version + 1,
+      updated_at: f.clock.now(),
+    });
   });
 });

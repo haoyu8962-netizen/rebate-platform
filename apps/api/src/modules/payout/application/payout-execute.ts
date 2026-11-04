@@ -18,6 +18,8 @@
 // { withdrawal_id, execute_seq, app_id }, { trx, singletonKey: `${withdrawal_id}:${execute_seq}` });
 // wallet.withdrawal_changed. A manual member already on another batch is moved first by a CAS on
 // (status = APPROVED, batch_id = the old batch), the old batch getting an item 'moved_out'.
+// D10-609: a member left by ② or by a failing channel that was on no batch joins this one
+// (batch_id, row_version + 1). not_approved never joins, and a whole-batch rejection writes nothing.
 //
 // Locks, in the module's fixed order: the members' balance rows (ledger.lockBalances: the
 // BR-WDR-05 (a) guard reads available_fen under the same lock a clawback holds) → the withdrawal
@@ -466,6 +468,22 @@ export function createPayoutExecute(options: PayoutExecuteOptions): PayoutExecut
           .where('batch_id', '=', entry.row.batch_id)
           .executeTakeFirst();
         if (moved.numUpdatedRows === 1n) movedOut(entry.row);
+      } else if (
+        entry.reason !== 'not_approved' &&
+        entry.row.status === APPROVED &&
+        entry.row.batch_id === null
+      ) {
+        // Never on a batch: it is a member of this one from now on (BR-WDR-11, BR-WDR-12; D10-609),
+        // so a later batch moves it and this one records moved_out.
+        await trx
+          .withSchema('app')
+          .updateTable('withdrawals')
+          .set({ batch_id: batchId, row_version: sql`row_version + 1`, updated_at: now })
+          .where('app_id', '=', appId)
+          .where('id', '=', entry.id)
+          .where('status', '=', APPROVED)
+          .where('batch_id', 'is', null)
+          .executeTakeFirst();
       }
       items.push({
         appId,

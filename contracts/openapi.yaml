@@ -26800,7 +26800,10 @@ paths:
         Effects of `executed`: an APPROVED withdrawal already on another batch is moved to the new
         one first by a CAS and the old batch keeps its item as moved_out (BR-WDR-12), including one
         listed in `left` with member_blocked, has_transfer_attempt or channel_disabled; one left
-        with not_approved or a watermark reason is not moved. Each paying withdrawal gets
+        with not_approved or a watermark reason is not moved. A withdrawal left with any reason but
+        not_approved that was on no batch joins the new one (`batch_id`, BR-WDR-11, D10-609), so a
+        later batch moves it and this one records moved_out. A `rejected` answer writes none of this,
+        and not_approved never joins. Each paying withdrawal gets
         `executor_id` the caller, `executed_at` the injected Clock and `execute_seq` + 1, its
         transfer job on the same transaction and wallet.withdrawal_changed. No voucher here: the
         money stays frozen until the result (BR-WDR-09). The transfer itself runs in the payout

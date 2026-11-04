@@ -81,6 +81,10 @@ async function seedHistory(
  * A mixed-channel batch split by the watermark (D10-288 Q3): one new manual batch; `paying` in
  * PAYING (seq 1, item paying, one job id:1, one event each); `blocked` still APPROVED, never
  * executed, on no batch, no job, item blocked with `reason`; `also` the ② leftovers with their items.
+ * D10-609 (B2-09n): a withdrawal the watermark leaves behind is now on this batch, so the mixed-channel
+ * tests list it under `also` and assert its batch_id, row_version and updated_at themselves; `blocked`
+ * stays empty. This helper is left as it was: a change here would judge every test of the file as
+ * changed in the red check.
  */
 async function expectSplit(
   f: ExecuteFixture,
@@ -397,11 +401,22 @@ it.each([
     const a = await f.seedWithdrawal({ channel: 'alipay' });
     const b = await f.seedWithdrawal({ channel: 'bank_card', userId: await f.newUser() });
     const paying = await f.seedWithdrawal({ status: 'PAYING', userId: await f.newUser() });
-    await expectSplit(f, await f.run(service, [a, b, paying]), {
+    const seeded = await withdrawal(f, b);
+    const result = await f.run(service, [a, b, paying]);
+    await expectSplit(f, result, {
       paying: [a],
-      blocked: [b],
+      blocked: [],
       reason: 'watermark_stale',
-      also: [{ id: paying, reason: 'not_approved', result: 'skipped' }],
+      also: [
+        { id: b, reason: 'watermark_stale', result: 'blocked' },
+        { id: paying, reason: 'not_approved', result: 'skipped' },
+      ],
+    });
+    await expectUntouched(f, b, 'APPROVED');
+    expect(await withdrawal(f, b)).toMatchObject({
+      batch_id: executed(result).batchId,
+      row_version: seeded.row_version + 1,
+      updated_at: NOW,
     });
   },
 );
@@ -415,10 +430,19 @@ it('[AC-B2-06c#3] ③ P 按通道拆：支付宝 W=2999 < 自己的 P=3000 被�
   await f.watermark(300n, ago(10 * MINUTE), 'bank_card');
   const a = await f.seedWithdrawal({ net: 100n, channel: 'alipay' });
   const b = await f.seedWithdrawal({ net: 100n, channel: 'bank_card', userId: await f.newUser() });
-  await expectSplit(f, await f.run(service, [a, b]), {
+  const seeded = await withdrawal(f, a);
+  const result = await f.run(service, [a, b]);
+  await expectSplit(f, result, {
     paying: [b],
-    blocked: [a],
+    blocked: [],
     reason: 'watermark_below_forecast',
+    also: [{ id: a, reason: 'watermark_below_forecast', result: 'blocked' }],
+  });
+  await expectUntouched(f, a, 'APPROVED');
+  expect(await withdrawal(f, a)).toMatchObject({
+    batch_id: executed(result).batchId,
+    row_version: seeded.row_version + 1,
+    updated_at: NOW,
   });
 });
 
@@ -430,11 +454,25 @@ it('[AC-B2-06c#3] ③ 混通道批次、支付宝 Σ 超可用上限：支付宝
   const a1 = await f.seedWithdrawal({ net: 600n, channel: 'alipay' });
   const a2 = await f.seedWithdrawal({ net: 500n, channel: 'alipay' });
   const b = await f.seedWithdrawal({ net: 100n, channel: 'bank_card', userId: await f.newUser() });
-  await expectSplit(f, await f.run(service, [a1, b, a2]), {
+  const seeded = await withdrawal(f, a1);
+  const result = await f.run(service, [a1, b, a2]);
+  await expectSplit(f, result, {
     paying: [b],
-    blocked: [a1, a2],
+    blocked: [],
     reason: 'watermark_usable_exceeded',
+    also: [
+      { id: a1, reason: 'watermark_usable_exceeded', result: 'blocked' },
+      { id: a2, reason: 'watermark_usable_exceeded', result: 'blocked' },
+    ],
   });
+  for (const id of [a1, a2]) {
+    await expectUntouched(f, id, 'APPROVED');
+    expect(await withdrawal(f, id)).toMatchObject({
+      batch_id: executed(result).batchId,
+      row_version: seeded.row_version + 1,
+      updated_at: NOW,
+    });
+  }
 });
 
 it.each([
