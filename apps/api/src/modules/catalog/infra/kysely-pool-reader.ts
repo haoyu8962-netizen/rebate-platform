@@ -28,6 +28,7 @@ const ROW_COLUMNS = [
   'product_key',
   'raw_item_id',
   'title',
+  'image',
   'price_fen',
   'coupon_fen',
   'final_price_fen',
@@ -41,6 +42,7 @@ interface PoolRow {
   readonly product_key: string;
   readonly raw_item_id: string;
   readonly title: string;
+  readonly image: string | null;
   readonly price_fen: bigint;
   readonly coupon_fen: bigint;
   readonly final_price_fen: bigint;
@@ -62,6 +64,8 @@ function candidateOf(appId: string, row: PoolRow): PoolCandidate {
       final_price_fen: row.final_price_fen,
       commission_rate_bp: BigInt(row.commission_rate_bp ?? 0),
       quoted_at: toPlusEight(row.quoted_at.getTime()),
+      // B1-05za: the card image is the row's own image column; nothing fills it from elsewhere.
+      ...(row.image !== null && row.image !== '' ? { main_image_url: row.image } : {}),
     },
     ref: {
       appId,

@@ -21,7 +21,7 @@ export interface CatalogProductQuery {
 /** Display fields of a product; every field is null when it cannot be read. */
 export interface CatalogProductSummary {
   readonly title: string | null;
-  /** The union DTO carries no image yet; null like every card's image. */
+  /** The union detail's main image (cleaned by the adapter); null when it gave none. */
   readonly image: string | null;
   /** The union DTO carries no shop name yet; null. */
   readonly shopName: string | null;
@@ -64,8 +64,8 @@ function nonEmpty(value: string | null | undefined): string | null {
 }
 
 /**
- * TODO(规划/11 §4.5): 主图与店铺名 — blocked on 联盟 DTO 增加商品图与店铺名字段（union/domain/types.ts
- * UnionItem 目前只有标题与价格；搜索、详情卡片同样为 null）
+ * TODO(规划/11 §4.5): 店铺名 — blocked on 联盟 DTO 增加店铺名字段（union/domain/types.ts UnionItem
+ * 目前没有店铺名）
  */
 export function createCatalogProductReader(
   options: CatalogProductReaderOptions,
@@ -95,7 +95,8 @@ export function createCatalogProductReader(
       return EMPTY;
     }
     if (item.platform !== platform) return EMPTY;
-    return { ...EMPTY, title: nonEmpty(item.title) };
+    // B1-05za: only the main image; image_urls never stands in for it.
+    return { ...EMPTY, title: nonEmpty(item.title), image: nonEmpty(item.main_image_url) };
   }
 
   return {

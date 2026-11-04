@@ -120,4 +120,22 @@ describe('catalog read-only product port (B1-06j landing card)', () => {
     });
     expect(f.detail).not.toHaveBeenCalled();
   });
+  it.each([
+    [
+      'the main image',
+      { main_image_url: 'https://img.synthetic.invalid/unit/main.jpg' },
+      'https://img.synthetic.invalid/unit/main.jpg',
+    ],
+    ['only the gallery', { image_urls: ['https://img.synthetic.invalid/unit/g.jpg'] }, null],
+    ['an empty main image', { main_image_url: '' }, null],
+  ] as const)(
+    '[AC-B1-05za] union detail with %s gives the summary image',
+    async (_label, images, expected) => {
+      const f = fixture({ stored: null, detail: async () => unionItem(images) });
+      await expect(f.reader.read(QUERY)).resolves.toMatchObject({
+        title: '合成联盟商品',
+        image: expected,
+      });
+    },
+  );
 });

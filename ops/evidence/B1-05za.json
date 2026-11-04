@@ -1,0 +1,86 @@
+{
+  "risk_note": "RV2 by path (test/spec) on a catalog change: home pool cards now carry the image stored when the item was added (kysely-pool-reader selects pool_items.image as the card item's main_image_url, absent when empty; the fallback feed pool takes the same path), and the product summary takes the detail's cleaned main_image_url instead of a hard-coded null (product_refs path stays null). No image is filled from other fields; the pool refresh is unchanged. No amounts.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh. Round 1 pass, no findings. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (test/spec/catalog/pool-card-images); spec-test review by a fresh independent Claude context, round 1 pass, no findings. One comment line in the rule test was reworded before the implementation (it named the admin-URL variable literally and tripped guard:static); no assertion changed. No frozen test changed.",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/catalog/pool-card-images/pool-images.int.test.ts > [AC-B1-05za#1] 首页 product_pool 经 listPageSectionItems 读取各行存图，空图不借用其他字段或相邻商品图片",
+    "test/spec/catalog/pool-card-images/pool-images.int.test.ts > [AC-B1-05za#2] 首页 feed.fallback_pool_id 经 listPageSectionItems 读取各行存图，空图不借用其他字段或相邻商品图片",
+    "test/spec/catalog/pool-card-images/pool-images.int.test.ts > [AC-B1-05za#3] 池刷新后仍展示加池存图：不覆盖、不清空、不从新主图或多图补空图",
+    "test/spec/catalog/pool-card-images/product-summary.test.ts > [AC-B1-05za#4] taobao 商品摘要把详情主图带到真实链接落地入口，无主图不从多图补",
+    "test/spec/catalog/pool-card-images/product-summary.test.ts > [AC-B1-05za#5] jd 商品摘要把详情主图带到真实链接落地入口，无主图不从多图补",
+    "test/spec/catalog/pool-card-images/product-summary.test.ts > [AC-B1-05za#6] pdd 商品摘要把详情主图带到真实链接落地入口，无主图不从多图补"
+  ],
+  "task": "B1-05za",
+  "spec_commit": "cd13b2a645d4aaa2c3f47cb50e386dcd187d44b9",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "cd13b2a645d4aaa2c3f47cb50e386dcd187d44b9",
+      "tree": "4c619192337e2d3561da919284bd7fddc0c467cf",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-04T14:12:25Z",
+      "finished_at": "2026-11-04T14:12:47Z",
+      "red_tests": [
+        "test/spec/catalog/pool-card-images/pool-images.int.test.ts > [AC-B1-05za#1] 首页 product_pool 经 listPageSectionItems 读取各行存图，空图不借用其他字段或相邻商品图片",
+        "test/spec/catalog/pool-card-images/pool-images.int.test.ts > [AC-B1-05za#2] 首页 feed.fallback_pool_id 经 listPageSectionItems 读取各行存图，空图不借用其他字段或相邻商品图片",
+        "test/spec/catalog/pool-card-images/pool-images.int.test.ts > [AC-B1-05za#3] 池刷新后仍展示加池存图：不覆盖、不清空、不从新主图或多图补空图",
+        "test/spec/catalog/pool-card-images/product-summary.test.ts > [AC-B1-05za#4] taobao 商品摘要把详情主图带到真实链接落地入口，无主图不从多图补",
+        "test/spec/catalog/pool-card-images/product-summary.test.ts > [AC-B1-05za#5] jd 商品摘要把详情主图带到真实链接落地入口，无主图不从多图补",
+        "test/spec/catalog/pool-card-images/product-summary.test.ts > [AC-B1-05za#6] pdd 商品摘要把详情主图带到真实链接落地入口，无主图不从多图补"
+      ],
+      "expected": [
+        "test/spec/catalog/pool-card-images/pool-images.int.test.ts",
+        "test/spec/catalog/pool-card-images/product-summary.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "57c8c755b487ee1f6751ce9381f177bccfe547e9f44ce5868357e2839614a798"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "46f2ce1350a9c32fa7cef23f34a3025c862a47e5ea357015638c19dda4179f60"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b4b1ce60401160a417703a640de3c8e5ec164674",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}
