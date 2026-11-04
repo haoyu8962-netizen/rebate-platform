@@ -9,7 +9,7 @@ type: impl
 # 冻结测试：test/spec/content/config/delivery.int.test.ts 的 [AC-F1-02c#1] / [#2] / [#20] 与 test/spec/content/config-etag/domain.int.test.ts 夹具按新形状只改钉值、不放宽，
 #   由新鲜独立 Claude（或 Codex）改，落地时 #24 报核编排逐条看；config-etag/domain.int.test.ts 只为类型换夹具值、用例一条没动，移出 test_paths（D10-623 更正，按 #24 报核、protected-paths 标签管住）；#20 表里的 bridge_origins 行移到新目录；
 #   delivery.int.test.ts 未改的 124 个用例 / 表行（标题与用例体与主干逐字相同）登记 red_exempt（D10-620 (b1)）。
-#   跨 app 的冻结 [AC-F1-02zr#8] / [AC-F1-02h#2] 按 D10-624 甲改三条断言（保留 app_id 绑定），两个文件进 test_paths；red_exempt_outside 与它们未改用例的 red_exempt 待 CT-06zzzc 合并后补登。新规则测试放 test/spec/content/bridge-origins/。合并时占契约槽。RV2。
+#   跨 app 的冻结 [AC-F1-02zr#8] / [AC-F1-02h#2] 按 D10-624 甲改三条断言（保留 app_id 绑定），两个文件进 test_paths；三个冻结文件登记 red_exempt_outside，未改用例 176 条登记 red_exempt（CT-06zzzc，上限 300）。新规则测试放 test/spec/content/bridge-origins/。合并时占契约槽。RV2。
 refs: []
 refs_hash: {}
 deps: [B2-03v]
@@ -32,6 +32,13 @@ test_paths:
   - 'test/spec/content/config/delivery.int.test.ts'
   - 'test/spec/content/agreements-min-version/delivery.int.test.ts'
   - 'test/spec/content/config-etag/delivery.int.test.ts'
+red_exempt_outside:
+  - file: test/spec/content/config/delivery.int.test.ts
+    reason: import 新增 onTestFinished、签名 harness 与 verified；#20 顶层表移出 bridge_origins 组（移到 bridge-origins/invalid-stored-values.int.test.ts，D10-620）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    reason: import 新增 onTestFinished、签名 harness 与 expectAppBoundConfig，供改过的 [AC-F1-02h#2] 用（D10-624 甲）
+  - file: test/spec/content/agreements-min-version/delivery.int.test.ts
+    reason: import 新增 signedConfigApp 与 expectAppBoundConfig，供改过的 [AC-F1-02zr#8] 用（D10-624 甲）
 red_exempt:
   - file: test/spec/content/config/delivery.int.test.ts
     test: '[AC-F1-02c#2] invite.bind_phone_guide 单独关闭时不影响另一个缺省开启的开关'
@@ -405,6 +412,162 @@ red_exempt:
   - file: test/spec/content/config/delivery.int.test.ts
     test: '[AC-F1-02c#25] config_items 读失败即 50001，不回成功缺省或过期数据'
     reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#1] 200 契约、强 ETag 与最终 data 的独立 SHA256 oracle 一致'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#3] texts 改动沿用 60 秒缓存，到期后旧 ETag 得到 200 和新内容'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#4] h5 灰度两侧用户得到不同 ETag，A 的 ETag 不能让 B 得到 304'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#5] agent 名单内外两人 ETag 不同，缓存不能复用另一人的结果'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#6] platform_icons 发布后立即参与哈希，旧 ETag 不能遮蔽最新标识'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#7] If-None-Match exact 命中回 304 空 body，无 JSON，带 ETag 和 X-Trace-Id'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#7] If-None-Match weak 命中回 304 空 body，无 JSON，带 ETag 和 X-Trace-Id'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#7] If-None-Match list 命中回 304 空 body，无 JSON，带 ETag 和 X-Trace-Id'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#7] If-None-Match weak-list 命中回 304 空 body，无 JSON，带 ETag 和 X-Trace-Id'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#7] If-None-Match wildcard 命中回 304 空 body，无 JSON，带 ETag 和 X-Trace-Id'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#8] 不命中或语法非法的 stale 返回 200 完整内容'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#8] 不命中或语法非法的 bare 返回 200 完整内容'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#8] 不命中或语法非法的 weak-bare 返回 200 完整内容'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#8] 不命中或语法非法的 lowercase 返回 200 完整内容'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#8] 不命中或语法非法的 junk 返回 200 完整内容'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#8] 不命中或语法非法的 unclosed 返回 200 完整内容'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#9] 必填键 h5_base_url 缺失时 If-None-Match * 仍回 50001'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#9] 必填键 h5_release.stable 缺失时 If-None-Match * 仍回 50001'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#9] 必填键 kf 缺失时 If-None-Match * 仍回 50001'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#9] 必填键 legal.privacy.version 缺失时 If-None-Match * 仍回 50001'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#9] 必填键 legal.privacy.min_version 缺失时 If-None-Match * 仍回 50001'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#9] 必填键 legal.agreement.version 缺失时 If-None-Match * 仍回 50001'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#10] 缓存到期后读口失败，精确 ETag 和 * 都不能跳过读取'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#11] config.lkg_max_age_sec=1 原值下发'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#11] config.lkg_max_age_sec=3600 原值下发'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#11] config.lkg_max_age_sec=2147483647 原值下发'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#12] 两键缺失取 604800 与 []，不记录配置非法 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=0 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=-1 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=1.5 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=3600 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=2147483648 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=null 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=true 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg=[] 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#13] 非法 lkg={} 整键取缺省并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#14] bridge 方法按配置原序下发，不依赖 bridge.schema 的方法清单'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: "[AC-F1-02h#15] 非法 bridge=[ 'login' ] 整键回 [] 并记录键名 warn"
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: "[AC-F1-02h#15] 非法 bridge=[ 'clipboard.read', 7 ] 整键回 [] 并记录键名 warn"
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: "[AC-F1-02h#15] 非法 bridge=[ 'a.b', 'a.b' ] 整键回 [] 并记录键名 warn"
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#15] 非法 bridge=clipboard.read 整键回 [] 并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: "[AC-F1-02h#15] 非法 bridge=[ 'Clipboard.read' ] 整键回 [] 并记录键名 warn"
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: "[AC-F1-02h#15] 非法 bridge=[ 'clipboard.Read' ] 整键回 [] 并记录键名 warn"
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: "[AC-F1-02h#15] 非法 bridge=[ 'clipboard.read.extra' ] 整键回 [] 并记录键名 warn"
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#15] 非法 bridge=null 整键回 [] 并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#15] 非法 bridge={} 整键回 [] 并记录键名 warn'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#16] 同名 config_items 不作为 lkg、bridge、config_version 的来源'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#17] rank_platforms 总下发且只从物料频道派生，配置行和 features.flags 均不能覆盖（只认 sales / popularity，D10-422）'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#18] deletion_only 令牌仍能获取 200 ETag，随后条件请求回 304'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/delivery.int.test.ts
+    test: '[AC-F1-02h#19] 相同值仅提高数据库版本号不改变 ETag，数组换序会改变 ETag'
+    reason: 同文件只改 [AC-F1-02h#2] 跨 app 一步为三条断言（D10-624 甲）；本用例 / 本行的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/agreements-min-version/delivery.int.test.ts
+    test: '[AC-F1-02zr#7] 缺行静默省略，合法值含 int32 上界照常下发且不与 version 比较'
+    reason: 同文件只改 [AC-F1-02zr#8] 跨 app 一步为三条断言（D10-624 甲）；本用例的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/agreements-min-version/delivery.int.test.ts
+    test: '[AC-F1-02zr#9] 仅改最低版本即改变 config_version，旧 ETag 返回新 200，缺行及非法值保持原 ETag'
+    reason: 同文件只改 [AC-F1-02zr#8] 跨 app 一步为三条断言（D10-624 甲）；本用例的标题与用例体与主干逐字相同（CT-06zzzc）
 impl: claude
 tester: codex
 accept:
