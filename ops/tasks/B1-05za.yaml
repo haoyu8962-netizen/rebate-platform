@@ -1,0 +1,28 @@
+id: B1-05za
+repo: rebate-platform
+title: 首页池卡与商品摘要带图（FU-PRODUCT-READER-IMAGE 并入）——kysely-pool-reader 选出加池时存的 image 交给卡片组装；product-reader 摘要取详情主图；缺省仍为 null、不补图
+type: impl
+# 2026-11-04 ops 入账（编排 18:41：并入 FU-PRODUCT-READER-IMAGE，优先于 F1-02zzzb、可并行；负责人问的就是首页图片）。
+# B1-04zzf 合并部署后 staging 搜索卡已出图，但首页池卡（listPageSectionItems）仍 image: null：
+#   catalog/infra/kysely-pool-reader.ts 的 ROW_COLUMNS 不选 pool_items.image，组装卡片时没有 main_image_url。改为选出 image，作为卡片的 main_image_url（缺省 null）。
+#   catalog/application/product-reader.ts:68 摘要 image 写死 null：改为取详情（UnionItemDetail.main_image_url，已经 normalizeItemImages 清洗）。
+# 不从 image_urls 补主图、不伪造；pool_items.image 由加池时写入（pool-admin.ts:251），刷新不改它（本单不动刷新）。
+# 规则测试钉：池卡带加池时存的图、无图为 null、不从多图补，走真实 listPageSectionItems；摘要带详情主图。RV1（catalog）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/infra/kysely-pool-reader.ts'
+  - 'apps/api/src/modules/catalog/infra/kysely-pool-reader.int.test.ts'
+  - 'apps/api/src/modules/catalog/application/pool-read.ts'
+  - 'apps/api/src/modules/catalog/application/pool-read.test.ts'
+  - 'apps/api/src/modules/catalog/application/product-reader.ts'
+  - 'apps/api/src/modules/catalog/application/product-reader.test.ts'
+  - 'test/spec/catalog/pool-card-images/**'
+test_paths:
+  - 'test/spec/catalog/pool-card-images/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
