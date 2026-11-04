@@ -1,0 +1,20 @@
+id: B2-09q
+repo: rebate-platform
+title: 后台按单号查提现审计（FU-AUDIT-VIEW-WITHDRAWAL-ACTIONS，编排 2026-11-04 20:41）——audit-log-view 的 RULES 补 withdrawal_approve、withdrawal_reject、withdrawal_manual_paid、payout_batch_execute、payout_watermark_create；只改读取时的推导，不写库不改契约
+type: impl
+# 2026-11-04 pay 入账。这些动作的 target_type、target_id、permission 现在都推不出来，GET /admin/v1/audit-logs?target_id= 查不到，财务查账要用。规则测试 Codex 写，新鲜 Claude 评规则测试，Codex money。
+# withdrawal_reject 的权限点按 after.reason_code：五个人工原因是 withdraw.review，NEGATIVE_BALANCE 是系统做的，null。target_type 是自由文本（契约写明），不动 openapi。
+# 不改 target 的写法：payout_batch_execute 的 target 是批次号（整批拒绝为空），按提现单号查不到，报编排；提现详情已有批次号可跳转。
+refs: []
+refs_hash: {}
+deps: [B2-09p]
+paths:
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+test_paths:
+  - 'test/spec/admin/audit-view-withdrawal/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/audit-view-withdrawal/**'
+status: todo
