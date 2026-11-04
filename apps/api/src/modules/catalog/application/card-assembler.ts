@@ -7,6 +7,7 @@ import {
   isPriceAnomaly,
   type UnionEnvironment,
   type UnionItem,
+  type UnionItemDetail,
   type UnionMode,
 } from '../../union/index.ts';
 import {
@@ -48,7 +49,8 @@ export interface CardRebateQuoter extends RebateQuoter {
 }
 
 export interface AssembleCardInput {
-  readonly item: UnionItem;
+  /** B1-04zzf：搜索行可只带 UnionItem 字段；图片字段可选，缺省时卡片 image 为 null。 */
+  readonly item: UnionItemDetail;
   readonly ref: ProductRef;
   readonly entrySource: string | null;
   /** Detail/derived requests read the originating link in the server's app scope. */
@@ -185,7 +187,8 @@ export function createCardAssembler(options: CardAssemblerOptions): CardAssemble
       platform: item.platform,
       shop_type: ref.shopType,
       title: item.title,
-      image: null,
+      // B1-04zzf：只用适配器经 normalizeItemImages 清洗后的主图；不从 image_urls 补，不伪造。
+      image: item.main_image_url ?? null,
       price_fen: json(item.price_fen),
       coupon_fen: json(item.coupon_fen),
       final_price_fen: json(item.final_price_fen),

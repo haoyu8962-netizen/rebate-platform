@@ -1,0 +1,103 @@
+{
+  "risk_note": "RV2 by path (union). Product cards now carry the adapter's cleaned main image: catalog card-assembler sets image = item.main_image_url ?? null instead of a hard-coded null, never filling it from image_urls; the Pinduoduo adapter maps goods_image_url / goods_gallery_urls on search, recommend and detail rows through normalizeItemImages, never the thumbnail, never passing through same-named upstream fields. No amounts. Taobao official search already maps images and is unchanged.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh. Round 1 pass, no findings. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (test/spec/union/pdd-images, test/spec/catalog/card-images) plus the frozen test/spec/union/item-images/pdd.test.ts [AC-B1-22s-PDD#1] rewritten to the new behaviour (mapped and cleaned, same-named upstream fields not passed through, a spoof check added; stricter, not loosened; D10-327, reported for #24). Spec-test review by a fresh independent Claude context (the author was Codex), round 1 pass, no findings.",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#5] taobao 搜索卡 image 取适配器主图，无主图为 null，不从多图补",
+    "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#5] jd 搜索卡 image 取适配器主图，无主图为 null，不从多图补",
+    "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#5] pdd 搜索卡 image 取适配器主图，无主图为 null，不从多图补",
+    "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#6] 首页 product_pool 经 listPageSectionItems 卡片组装保留主图，缺省不补图",
+    "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#7] 详情卡 image 取当前适配器主图，无图和仅多图均为 null",
+    "test/spec/union/item-images/pdd.test.ts > [AC-B1-22s-PDD#1] search 上游主图和多图清洗后映射到 DTO，同名字段不透传",
+    "test/spec/union/item-images/pdd.test.ts > [AC-B1-22s-PDD#1] detail 上游主图和多图清洗后映射到 DTO，同名字段不透传",
+    "test/spec/union/item-images/pdd.test.ts > [AC-B1-22s-PDD#1] feed 上游主图和多图清洗后映射到 DTO，同名字段不透传",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#1] search 主图和多图取平台字段并清洗，DTO 同名字段不透传",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#1] detail 主图和多图取平台字段并清洗，DTO 同名字段不透传",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#2] search 主图缺失或不合格不从多图、缩略图、DTO 同名字段补",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#2] detail 主图缺失或不合格不从多图、缩略图、DTO 同名字段补",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#3] search 未给 gallery 或多图全无效时字段缺省，不把主图塞进多图",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#3] detail 未给 gallery 或多图全无效时字段缺省，不把主图塞进多图",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#4] search 多图清洗保持顺序与现有上限，只有缩略图或同名字段仍无图",
+    "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#4] detail 多图清洗保持顺序与现有上限，只有缩略图或同名字段仍无图"
+  ],
+  "task": "B1-04zzf",
+  "spec_commit": "02f46772e04d5aa06fafa5e19a22dfd85aea0463",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "02f46772e04d5aa06fafa5e19a22dfd85aea0463",
+      "tree": "3d238538a81dd886fa66c73e34c3e07decaefb6a",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-04T09:26:41Z",
+      "finished_at": "2026-11-04T09:26:55Z",
+      "red_tests": [
+        "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#5] taobao 搜索卡 image 取适配器主图，无主图为 null，不从多图补",
+        "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#5] jd 搜索卡 image 取适配器主图，无主图为 null，不从多图补",
+        "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#5] pdd 搜索卡 image 取适配器主图，无主图为 null，不从多图补",
+        "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#6] 首页 product_pool 经 listPageSectionItems 卡片组装保留主图，缺省不补图",
+        "test/spec/catalog/card-images/assembly.test.ts > [AC-B1-04zzf#7] 详情卡 image 取当前适配器主图，无图和仅多图均为 null",
+        "test/spec/union/item-images/pdd.test.ts > [AC-B1-22s-PDD#1] search 上游主图和多图清洗后映射到 DTO，同名字段不透传",
+        "test/spec/union/item-images/pdd.test.ts > [AC-B1-22s-PDD#1] detail 上游主图和多图清洗后映射到 DTO，同名字段不透传",
+        "test/spec/union/item-images/pdd.test.ts > [AC-B1-22s-PDD#1] feed 上游主图和多图清洗后映射到 DTO，同名字段不透传",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#1] search 主图和多图取平台字段并清洗，DTO 同名字段不透传",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#1] detail 主图和多图取平台字段并清洗，DTO 同名字段不透传",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#2] search 主图缺失或不合格不从多图、缩略图、DTO 同名字段补",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#2] detail 主图缺失或不合格不从多图、缩略图、DTO 同名字段补",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#3] search 未给 gallery 或多图全无效时字段缺省，不把主图塞进多图",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#3] detail 未给 gallery 或多图全无效时字段缺省，不把主图塞进多图",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#4] search 多图清洗保持顺序与现有上限，只有缩略图或同名字段仍无图",
+        "test/spec/union/pdd-images/mapping.test.ts > [AC-B1-04zzf#4] detail 多图清洗保持顺序与现有上限，只有缩略图或同名字段仍无图"
+      ],
+      "expected": [
+        "test/spec/catalog/card-images/assembly.test.ts",
+        "test/spec/union/item-images/pdd.test.ts",
+        "test/spec/union/pdd-images/mapping.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "bb696b80b6ec043116a38bcfac9d15d07741ef5771d86cfb04e8bf60f65bff2b"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bbbbfec955ee5cf5e4110b8ef4997d3e1c050313",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

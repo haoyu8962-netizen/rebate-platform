@@ -3,6 +3,7 @@ import { UnionError } from '../../domain/types.ts';
 import {
   checkQueryIdentity,
   feedCursor,
+  mapPddGoods,
   parseFeedCursor,
   parseSearchCursor,
   searchCursor,
@@ -44,4 +45,33 @@ it('[AC-B1-04u-UNIT#3] 查询身份原样透传，非对象或缺字段 invalid_
   for (const bad of [null, 'x', { pid: 'unit-pid' }, { customParameters: '{}' }]) {
     expect(code(() => checkQueryIdentity(bad))).toBe('invalid_identity');
   }
+});
+
+it('[AC-B1-04zzf-UNIT#1] 商品行图片取 goods_image_url / goods_gallery_urls 并清洗，缩略图与同名字段不用', () => {
+  const host = 'https://img.synthetic.invalid';
+  const row = {
+    goods_id: 1,
+    goods_sign: 'unit-sign',
+    goods_name: 'unit',
+    min_group_price: 1000,
+    coupon_discount: 0,
+    promotion_rate: 100,
+    goods_image_url: `${host}/main.jpg`,
+    goods_gallery_urls: [`${host}/a.jpg`, 'http://x/b.jpg', `${host}/a.jpg`],
+    goods_thumbnail_url: `${host}/thumb.jpg`,
+    main_image_url: `${host}/spoof.jpg`,
+    image_urls: [`${host}/spoof.jpg`],
+  };
+  const now = new Date('2026-11-04T00:00:00Z');
+  const mapped = mapPddGoods(row, 'search', now, () => undefined);
+  expect(mapped.main_image_url).toBe(`${host}/main.jpg`);
+  expect(mapped.image_urls).toEqual([`${host}/a.jpg`]);
+  const bare = mapPddGoods(
+    { ...row, goods_image_url: null, goods_gallery_urls: undefined },
+    'detail',
+    now,
+    () => undefined,
+  );
+  expect(Object.hasOwn(bare, 'main_image_url')).toBe(false);
+  expect(Object.hasOwn(bare, 'image_urls')).toBe(false);
 });
