@@ -50,3 +50,8 @@ GET /admin/v1/audit-logs/{id} the `data/actor_id` response property's minLength 
 # the server (后台同发). An old console that gets 0 has an upper limit of 0 order numbers, so its form
 # stops a by-number request before sending; the server already answers 20001 [order_nos] for jd.
 GET /admin/v1/order-syncs/limits the `data/items/items/max_order_nos` response property's min was decreased from `1.00` to `0.00` for the response status `200`
+# D10-619 / D10-557 (B2-09p): audit_system_actor gains system:payout for payout's system rejection. Only
+# /admin/v1/** responses: the console ships with the server (后台同发), so no old client reads these rows,
+# and the audit pages show the server's actor_name and do not read this enum.
+GET /admin/v1/audit-logs added the new `system:payout` enum value to the `data/items/items/system_actor` response property for the response status `200`
+GET /admin/v1/audit-logs/{id} added the new `system:payout` enum value to the `data/system_actor` response property for the response status `200`

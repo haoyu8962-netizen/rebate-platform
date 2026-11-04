@@ -35,6 +35,7 @@ export const ORDER_AUTO_HOLD_ACTION = 'order_auto_hold';
 /** Chinese names of contracts/enums/admin.yaml audit_system_actor; a new value must be added here. */
 const SYSTEM_ACTOR_NAMES: Readonly<Record<AuditSystemActor, string>> = Object.freeze({
   'system:risk': '系统（风控）',
+  'system:payout': '系统（打款）',
 });
 
 /** The enum's Chinese name of a stored system_actor; null for a value the enum does not have. */

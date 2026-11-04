@@ -4790,6 +4790,9 @@ export class AppModule {
                 // landing job keeps tax_ytd per verified real name (payout imports no identity).
                 identityKey: createRealnameIdentityKeyReader(),
                 attempts: createPayoutAttemptsStore(),
+                // B2-09p (BR-WDR-10, D10-619): the system rejection's audit record.
+                systemAudit: (clock) =>
+                  createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
                 autoPayout: autoPayoutPorts,
                 config: (_db, clock) => ({
                   configValue: (appId, key, handle) =>

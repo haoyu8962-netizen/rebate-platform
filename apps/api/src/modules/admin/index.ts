@@ -19,6 +19,7 @@ export type { AdminAuditInput, AuditWriterDeps } from './infra/audit-writer.ts';
 // assembles it).
 export { createSystemAuditWriter } from './infra/system-audit.ts';
 export type {
+  SystemActionAudit,
   SystemAuditWriter,
   SystemAuditWriterDeps,
   SystemHoldAudit,

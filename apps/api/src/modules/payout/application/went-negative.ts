@@ -6,7 +6,9 @@
 //                    back to available, so the returned money offsets the debt); an APPROVED one
 //                    with an attempt is only blocked (blocked_reason NEGATIVE_BALANCE) and warned
 //                    (`withdrawal_blocked_negative`); PAYING ones are left to the payout process
-//                    (W9's recheck re-runs `run` for the member, B2-06).
+//                    (W9's recheck re-runs `run` for the member, B2-06). B2-09p (BR-WDR-10,
+//                    D10-619): each system rejection writes one audit record on the same
+//                    transaction, system_actor system:payout.
 //   back to ≥ 0      only the block is cleared. 08 places this clearing in the posting transaction
 //                    that restores the balance; ledger cannot write withdrawals, so this consumer
 //                    clears it when it re-checks (transitional, recorded in the lane's followups).
@@ -16,15 +18,39 @@
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { ReceivedEvent } from '../../platform/index.ts';
+import { WITHDRAWAL_REJECT_AUDIT_ACTION } from './admin-withdrawal-review.ts';
 import { createWithdrawalCommands, type WithdrawalCommandsOptions } from './withdrawal-commands.ts';
 
 export const WENT_NEGATIVE_CONSUMER = 'payout-went-negative';
 const BLOCKED_NEGATIVE = 'NEGATIVE_BALANCE';
+const REASON_NEGATIVE = 'NEGATIVE_BALANCE';
 const OPEN_FOR_REJECT: readonly string[] = ['PENDING_REVIEW', 'APPROVED'];
+
+/** admin's system audit, by shape: payout imports nothing from admin (B2-09p, BR-WDR-10). */
+export interface WentNegativeAuditPort {
+  appendAction(
+    trx: Transaction<DB>,
+    input: {
+      readonly appId: string;
+      readonly actor: 'system:payout';
+      readonly action: string;
+      readonly target: string;
+      readonly before: { readonly withdrawal_id: string; readonly status: string };
+      readonly after: {
+        readonly withdrawal_id: string;
+        readonly status: string;
+        readonly reason_code: string;
+        readonly note: null;
+      };
+    },
+  ): Promise<void>;
+}
 
 export interface WentNegativeOptions extends WithdrawalCommandsOptions {
   db: Kysely<DB>;
   logger: { warn(fields: Record<string, unknown>, message: string): void };
+  /** B2-09p: omitted only by tests of the rejection itself; the worker entry always passes it. */
+  audit?: WentNegativeAuditPort;
 }
 export interface WentNegativeConsumer {
   /** Own transaction; processed_events claim and business effects commit together. */
@@ -88,7 +114,23 @@ export function createWentNegativeConsumer(options: WentNegativeOptions): WentNe
         expectedRowVersion: row.row_version,
         reviewerId: null,
       });
-      if (result.kind === 'changed') continue;
+      if (result.kind === 'changed') {
+        // BR-WDR-10: on this transaction, so it commits or rolls back with the rejection.
+        await options.audit?.appendAction(trx, {
+          appId: input.appId,
+          actor: 'system:payout',
+          action: WITHDRAWAL_REJECT_AUDIT_ACTION,
+          target: row.id,
+          before: { withdrawal_id: row.id, status: row.status },
+          after: {
+            withdrawal_id: row.id,
+            status: result.status,
+            reason_code: REASON_NEGATIVE,
+            note: null,
+          },
+        });
+        continue;
+      }
       // A transfer attempt exists: the money may already be on its way; block, never refund.
       await trx
         .withSchema('app')

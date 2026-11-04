@@ -5,6 +5,8 @@
 // before / after the hold flag and the reason code (through the audit redaction, keys as the manual
 // order_hold record has them), at from the injected Clock read at each call (input.at is not used,
 // as createAuditWriter ignores any `at`), ip null.
+// B2-09p: `appendAction` stores any other action of the system the same way (D10-619: payout's
+// system rejection, BR-WDR-10), with its own target and before / after.
 //
 // The input is a structural type, so admin takes no type from settlement; settlement's
 // RebateDependencies['audit'] is satisfied by shape. Production assembly belongs to B1-09n.
@@ -42,25 +44,50 @@ export interface SystemAuditWriterDeps {
   readonly sensitiveKeys?: readonly string[];
 }
 
+/** Any other action of the system: `before` / `after` go through the same redaction. */
+export interface SystemActionAudit {
+  readonly appId: string;
+  /** system:<name>; the table's CHECK refuses any other form. */
+  readonly actor: AuditSystemActor;
+  readonly action: string;
+  readonly target: string;
+  readonly before: Snapshot;
+  readonly after: Snapshot;
+}
+
 export interface SystemAuditWriter {
   append(trx: Transaction<DB>, input: SystemHoldAudit): Promise<void>;
+  appendAction(trx: Transaction<DB>, input: SystemActionAudit): Promise<void>;
 }
 
 export function createSystemAuditWriter(deps: SystemAuditWriterDeps): SystemAuditWriter {
   const { clock } = deps;
   const sensitive = deps.sensitiveKeys ?? [];
   // Serialised explicitly, as createAuditWriter does.
-  const snapshot = (state: SystemHoldState) => {
-    const value: Snapshot = { hold: state.hold, hold_reason: state.holdReason };
-    return JSON.stringify(redactSnapshot(value, sensitive));
-  };
+  const serialised = (value: Snapshot) => JSON.stringify(redactSnapshot(value, sensitive));
+  const holdState = (state: SystemHoldState): Snapshot => ({
+    hold: state.hold,
+    hold_reason: state.holdReason,
+  });
+  const insert = (trx: Transaction<DB>, input: SystemActionAudit) =>
+    sql`insert into app.audit_logs
+        (app_id, admin_id, system_actor, action, target, before, after, ip, at)
+        values (${input.appId}, null, ${input.actor}, ${input.action},
+          ${input.target}, ${serialised(input.before)}::jsonb,
+          ${serialised(input.after)}::jsonb, null, ${clock.now()})`.execute(trx);
   return {
     async append(trx, input) {
-      await sql`insert into app.audit_logs
-        (app_id, admin_id, system_actor, action, target, before, after, ip, at)
-        values (${input.appId}, null, ${input.actor}, ${ORDER_AUTO_HOLD_ACTION},
-          ${`orders:${input.orderId}`}, ${snapshot(input.before)}::jsonb,
-          ${snapshot(input.after)}::jsonb, null, ${clock.now()})`.execute(trx);
+      await insert(trx, {
+        appId: input.appId,
+        actor: input.actor,
+        action: ORDER_AUTO_HOLD_ACTION,
+        target: `orders:${input.orderId}`,
+        before: holdState(input.before),
+        after: holdState(input.after),
+      });
+    },
+    async appendAction(trx, input) {
+      await insert(trx, input);
     },
   };
 }

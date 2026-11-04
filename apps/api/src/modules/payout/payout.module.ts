@@ -33,7 +33,11 @@ import {
   type Idempotency,
 } from '../platform/index.ts';
 import type { AppealPrevStateReader, RiskStateBatchReader } from '../risk/index.ts';
-import { WENT_NEGATIVE_CONSUMER, createWentNegativeConsumer } from './application/went-negative.ts';
+import {
+  WENT_NEGATIVE_CONSUMER,
+  createWentNegativeConsumer,
+  type WentNegativeAuditPort,
+} from './application/went-negative.ts';
 import {
   AUTO_PAYOUT_CONSUMER,
   createAutoPayoutConsumer,
@@ -195,6 +199,8 @@ export interface PayoutWorkerOptions {
    * tax_ytd (app.module hands in createRealnameIdentityKeyReader()).
    */
   identityKey?: TaxYtdIdentityKeyReader;
+  /** B2-09p (BR-WDR-10, D10-619): admin's system audit for the system rejection. */
+  systemAudit: (clock: Clock) => WentNegativeAuditPort;
 }
 
 /** What app.module supplies to the automatic payout decision (BR-WDR-30). */
@@ -549,6 +555,7 @@ export class PayoutModule {
               lockUsersForUpdate: options.lockUsersForUpdate,
               attempts: options.attempts,
               eventBus,
+              audit: options.systemAudit(clock),
             });
             // B2-06d (BR-WDR-05 (a)): the payout process's W9 member_blocked enqueues a direct
             // recheck { app_id, user_id } on this queue; it is given the event envelope the

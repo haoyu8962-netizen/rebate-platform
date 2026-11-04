@@ -44708,6 +44708,7 @@ components:
       pattern: '^system:[a-z_]+$'
       enum:
         - system:risk
+        - system:payout
     AdminAuditLogListItem:
       type: object
       additionalProperties: false

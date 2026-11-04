@@ -177,6 +177,7 @@ export type AuditActorKind = (typeof audit_actor_kind)[number];
  */
 export const audit_system_actor = [
   "system:risk", // 系统（风控）
+  "system:payout", // 系统（打款）
 ] as const;
 export type AuditSystemActor = (typeof audit_system_actor)[number];
 

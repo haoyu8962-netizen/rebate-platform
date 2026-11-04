@@ -1,0 +1,113 @@
+{
+  "risk_note": "RV2 (funds path, no money moves). went-negative's system rejection (W3 NEGATIVE_BALANCE, BR-WDR-10, BR-WDR-05; D10-619) wrote no audit record. It now writes one withdrawal_reject on the rejection's transaction, with system_actor system:payout, admin_id null. The rejection, its voucher and its amounts do not change; a withdrawal only blocked and a balance back at zero write none. createAuditWriter stores the actor in admin_id (uuid), so the record goes through admin's createSystemAuditWriter, which gains appendAction; the order hold's row does not change, pinned by #10. The check on audit_logs requires system:<name>, so the enum audit_system_actor gains system:payout (accepted by the orchestrator 18:29), with contracts/enums/admin.yaml, openapi and the generated files. The audit port is optional on the consumer because the frozen state/negative tests build it without one; the worker entry always passes it and the rule tests go through the real AppModule. The consumer runs in the worker as couli_app; the payout process's W9 only enqueues. Known, out of scope and reported: withdrawal_reject has no target rule in audit-log-view, so these rows, manual ones too, are not found by target_id; a mutation moving lockBalances off the transaction is caught only by a spy (AC-B2-05e#24).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh (logged in again; D10-619). couli-runs/B2-09p/money-review-r1.json, read-only and static, no findings. Reviewed before the rebase. After the review, two changes with no second round: systemAudit moved after attempts in app.module.ts, because the frozen AC-B2-06f#22 reads that source by regex, and two lines added to contracts/oasdiff-accepted.txt under D10-557."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex wrote the rule tests and the review goes to a fresh Claude (approvals 19; codex-run refuses it). Static, not run by the reviewer. r1 pass, no S0 or S1; two out-of-scope S2 reported to the orchestrator. Before that the author took two rounds: the first failed the red check because 5 tests went red on their seeds (couli_app has no payout_attempts grant; a trigger guards payout_accounts columns), which Codex fixed without weakening an assertion."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09p",
+  "spec_commit": "c922de79a78b1b9e5321125b1e33b5eaf5efb93e",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#1] worker 将 PENDING_REVIEW 系统驳回，恰一条完整审计；101 分原额退冻结",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#1] worker 将 APPROVED 系统驳回，恰一条完整审计；101 分原额退冻结",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#13] 系统驳回和审计只归属事件会员及 app，其他负余额会员不被处理",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#2] 同会员两张单各留一条，before 状态及 target 不串单，仍欠 103 分",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/pending 的单只阻断无审计；同会员无尝试的单正常留痕",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/success 的单只阻断无审计；同会员无尝试的单正常留痕",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/unknown 的单只阻断无审计；同会员无尝试的单正常留痕",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/fail 的单只阻断无审计；同会员无尝试的单正常留痕",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#4] 旧事件到达时余额已恢复到 0n：只清阻断不留审计；再次变负才驳回留痕",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#4] 旧事件到达时余额已恢复到 101n：只清阻断不留审计；再次变负才驳回留痕",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#5] 同一事件并发与顺序重投，只有一个消费标记、一个退回凭证、一条审计",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#6] audit_logs 写入后故障：状态、分录、审计和消费标记均回滚；原事件重投恰一条",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#6] ledger_entries 写入后故障：状态、分录、审计和消费标记均回滚；原事件重投恰一条",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#7] 审计已 INSERT、事务未提交时，另一连接仍看不到任何驳回结果",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#8] PAYING 事件先消费不留痕，W9 回到 APPROVED 后 queue 复查留一条，重复复查不重复写",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#8] PAYING 事件先消费不留痕，W9 回到 APPROVED 后 run 复查留一条，重复复查不重复写",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#9] 系统驳回审计只含单号、状态、原因；不复制会员及收款个人信息",
+    "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#10] [AC-B1-34p] 同库订单挂起和系统驳回并存：订单审计逐字段保持原样",
+    "test/spec/payout/went-negative-audit/contract.test.ts > [AC-B2-09p#12] 审计身份的源枚举、生成枚举、OpenAPI 和显示名包含打款且保留风控",
+    "test/spec/payout/went-negative-audit/read.int.test.ts > [AC-B2-09p#11] worker 实际写出的系统驳回可由 GET /admin/v1/audit-logs 读取，显示系统（打款）"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c922de79a78b1b9e5321125b1e33b5eaf5efb93e",
+      "tree": "8fa6a20f1218c0c4f36786c63a0d744262ec3cc7",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-04T14:08:44Z",
+      "finished_at": "2026-11-04T14:09:25Z",
+      "red_tests": [
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#1] worker 将 PENDING_REVIEW 系统驳回，恰一条完整审计；101 分原额退冻结",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#1] worker 将 APPROVED 系统驳回，恰一条完整审计；101 分原额退冻结",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#13] 系统驳回和审计只归属事件会员及 app，其他负余额会员不被处理",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#2] 同会员两张单各留一条，before 状态及 target 不串单，仍欠 103 分",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/pending 的单只阻断无审计；同会员无尝试的单正常留痕",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/success 的单只阻断无审计；同会员无尝试的单正常留痕",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/unknown 的单只阻断无审计；同会员无尝试的单正常留痕",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#3] transfer/fail 的单只阻断无审计；同会员无尝试的单正常留痕",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#4] 旧事件到达时余额已恢复到 0n：只清阻断不留审计；再次变负才驳回留痕",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#4] 旧事件到达时余额已恢复到 101n：只清阻断不留审计；再次变负才驳回留痕",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#5] 同一事件并发与顺序重投，只有一个消费标记、一个退回凭证、一条审计",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#6] audit_logs 写入后故障：状态、分录、审计和消费标记均回滚；原事件重投恰一条",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#6] ledger_entries 写入后故障：状态、分录、审计和消费标记均回滚；原事件重投恰一条",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#7] 审计已 INSERT、事务未提交时，另一连接仍看不到任何驳回结果",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#8] PAYING 事件先消费不留痕，W9 回到 APPROVED 后 queue 复查留一条，重复复查不重复写",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#8] PAYING 事件先消费不留痕，W9 回到 APPROVED 后 run 复查留一条，重复复查不重复写",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#9] 系统驳回审计只含单号、状态、原因；不复制会员及收款个人信息",
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts > [AC-B2-09p#10] [AC-B1-34p] 同库订单挂起和系统驳回并存：订单审计逐字段保持原样",
+        "test/spec/payout/went-negative-audit/contract.test.ts > [AC-B2-09p#12] 审计身份的源枚举、生成枚举、OpenAPI 和显示名包含打款且保留风控",
+        "test/spec/payout/went-negative-audit/read.int.test.ts > [AC-B2-09p#11] worker 实际写出的系统驳回可由 GET /admin/v1/audit-logs 读取，显示系统（打款）"
+      ],
+      "expected": [
+        "test/spec/payout/went-negative-audit/consumer.int.test.ts",
+        "test/spec/payout/went-negative-audit/contract.test.ts",
+        "test/spec/payout/went-negative-audit/read.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a01a5a847b5962a8153a436696f0f43ae62f4e88866b9ce309f93fa8cc451c0f"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "24713bd47dd7cc0db32535647341c5afbd6f0bd377d1e370de204143a1a81fdd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "216b73993838041c0fbb2e693116bcd1e327ee67",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}
