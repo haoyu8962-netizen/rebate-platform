@@ -292,6 +292,7 @@ chmod 500 /etc/couli-taobao
 
 - `TAOBAO_APP_KEY` 与 `TAOBAO_APP_SECRET_FILE` 要么都设、要么都不设：只设一个时 admin、api、stream 与 worker 启动即失败。
 - 端点是 demo 时应用不打开密钥文件，所以文件读不到或内容为空要到切 live 后才暴露：那时这四个入口启动即失败。
+- `TAOBAO_SEARCH_SOURCE` 设为 `dataoke` 而没配 `DATAOKE_APP_KEY`、`DATAOKE_APP_SECRET_FILE` 这两项时，四个入口照常启动、不报错，但淘宝搜索全部失败，不会自动改走官方；只有 `official_first` 缺大淘客凭据时拒绝启动。要用大淘客搜索，须先在 `staging.env` 配齐这两项（两项要么都设、要么都不设）；否则把 `TAOBAO_SEARCH_SOURCE` 设为 `official` 或不设。
 
 #### 三平台切 live
 
@@ -315,6 +316,9 @@ live 下 api 用真实返利报价器（B2-03d / B2-03n），它读下面三个�
 
 - `tech_fee_bp` 与 `rebate.taobao.compare_rate_ratio_bp` 要先在 staging 配好（取值由负责人定，本文不写），再切 live。
 - `commission.platforms` 已在种子里（`db/seeds/0002_commission-rules.sql`），部署时种子会写入，不用另配。
+- 拼多多商品另读 `union.pdd.self_buy_factor_bp`、`union.pdd.account_level_factor_bp` 两个系数键（万分之一整数）：种子里已有（`db/seeds/0002_commission-rules.sql`），但只是待核实的占位值；而且这两个键还不在 config 登记表里，后台改不了，要改得走登记任务（FU-PDD-FACTOR-REGISTRY）。
+- 报价要求有一条已发布的分佣规则版本：种子里已有一条（`db/seeds/0002_commission-rules.sql`），部署时种子会写入，不用另发布。
+- `tech_fee_bp` 与 `rebate.taobao.compare_rate_ratio_bp` 现在可以经后台（config.business，B2-03t 已登记）修改：在后台改好取值后再切 live。
 
 ## 2. 在开发机构建并传到节点
 

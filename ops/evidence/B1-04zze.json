@@ -1,0 +1,79 @@
+{
+  "risk_note": "RV2 by path (infra/staging). README §1.10 only gains four lines: TAOBAO_SEARCH_SOURCE=dataoke without the 大淘客 pair starts but every Taobao search fails (no fallback to official; only official_first refuses to start); the two union.pdd.*_factor_bp keys are seeded placeholders, not registered, so the console cannot change them; a published rule version is seeded; tech_fee_bp and rebate.taobao.compare_rate_ratio_bp are editable in the console since B2-03t. No code, no amounts, no secret values; §1.5 and §1.8 unchanged.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Fresh independent Claude context via tools/agent/claude-run.sh (Codex not logged in; approvals 36). Round 1 fail on two S1 and one S2: the dataoke sentence claimed a silent fallback to the official search (false: taobao-adapter searchItems throws adapter_unimplemented) and the rule test locked it in; the pdd factor keys were called no-config. The implementation was withdrawn, the rule test rewritten (test attempt 3; attempt 2 voided by a ref change of mine), the README rewritten. Round 2 pass, no findings. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claude contexts (test/spec/infra/staging-readme-wording). Round 1 pass with four S2 (deliberately wrong sentences could pass); after the money S1 the tests were rewritten to pin the no-fallback and placeholder facts; round 2 pass with S2 of the same kind. No frozen test changed.",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#1] 1.10 写明 TAOBAO_SEARCH_SOURCE=dataoke 而缺大淘客两项时照常启动、不报错，但淘宝搜索不可用、不会自动改走官方，只有 official_first 拒绝启动；要用大淘客搜索须先配齐两项，否则设为 official 或不设",
+    "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#2] 真实返利报价器的配置写明拼多多商品另读两个 union.pdd.*_factor_bp 键：种子里是待核实的占位值，且不在 config 登记表、后台改不了",
+    "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#3] 真实返利报价器的配置写明报价要求一条已发布的分佣规则版本，种子里已有",
+    "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#4] 真实返利报价器的配置写明 tech_fee_bp 与 rebate.taobao.compare_rate_ratio_bp 可经后台（config.business）修改，且不说它们在种子里",
+    "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#5] 新增说明与整份 README 不含任何密钥值、真实 app key 或 PID",
+    "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#6] 只在 1.10 里追加：原有每一行原样按序保留，新说明落在 1.10 之内"
+  ],
+  "task": "B1-04zze",
+  "spec_commit": "7df4aa5d6647b92c01ad9d226f6b314b8c64d372",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7df4aa5d6647b92c01ad9d226f6b314b8c64d372",
+      "tree": "17692c5d93a2da46f474e62376164b3ff682dfeb",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-04T05:00:43Z",
+      "finished_at": "2026-11-04T05:00:49Z",
+      "red_tests": [
+        "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#1] 1.10 写明 TAOBAO_SEARCH_SOURCE=dataoke 而缺大淘客两项时照常启动、不报错，但淘宝搜索不可用、不会自动改走官方，只有 official_first 拒绝启动；要用大淘客搜索须先配齐两项，否则设为 official 或不设",
+        "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#2] 真实返利报价器的配置写明拼多多商品另读两个 union.pdd.*_factor_bp 键：种子里是待核实的占位值，且不在 config 登记表、后台改不了",
+        "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#3] 真实返利报价器的配置写明报价要求一条已发布的分佣规则版本，种子里已有",
+        "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#4] 真实返利报价器的配置写明 tech_fee_bp 与 rebate.taobao.compare_rate_ratio_bp 可经后台（config.business）修改，且不说它们在种子里",
+        "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#5] 新增说明与整份 README 不含任何密钥值、真实 app key 或 PID",
+        "test/spec/infra/staging-readme-wording/readme.test.ts > [AC-B1-04zze#6] 只在 1.10 里追加：原有每一行原样按序保留，新说明落在 1.10 之内"
+      ],
+      "expected": ["test/spec/infra/staging-readme-wording/readme.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1df5dd3af12190ace7ddf4f4ac644b016fba1d3decd7af2bb21455a7af480617"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "090879c0cc765235ae1a7dc95cf244c952d7697b",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}
