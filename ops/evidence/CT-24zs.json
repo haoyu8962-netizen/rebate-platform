@@ -1,0 +1,48 @@
+{
+  "risk_note": "RV1 (contract only). Three new planned operations for D (W10; BR-WDR-15, 14, 09, 17, 33; D10-595, D10-596, D10-625, D10-626): adminListUnknownPayouts, adminQueryPayoutResult and adminResolveUnknownPayout. payout.execute, totp step-up on the writes, idempotent, audited. The query queues one job and moves nothing, also for a withdrawal W9 returned. paid ends in PAID_API with W5's voucher. Every failed is refused today with a stated reason: the bill read and the 「订单不存在」 code do not exist, and not finding a line is never taken as absent; the refund path is not specified as working and comes with its own task before the Alipay channel opens. Added beyond 08 and reported for a ruling: paid is refused while the latest query is a definite failure with no success bill line (resolve_query_failed). Seven new data.reason values. No existing operation changes, no migration.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex via codex-run.sh, static. r1 pass with no findings. An independent Claude then found three S2 (see the second review), all changed; Codex r2 on those changes pass with no S0 or S1."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Fresh Claude via claude-run.sh, static, run as a cross-check because this is the most sensitive contract of the line. Pass with three S2, changed afterwards: paid had no guard against a definite failed query (added resolve_query_failed; after a false paid the day's reconciliation would not catch it), a person could not read the query answer (latest_query gained its fields), and the list's x-error-codes lacked 20001. Its remedy for the reconciliation gap itself, a recheck of the paid_at bill day, is not in this contract."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zs",
+  "spec_commit": "b7bd13ebe904fe92d11d9c7f80ada7aeb9587ac1",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c2e69550e251449dae4771835f9e5021191f9ccf",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

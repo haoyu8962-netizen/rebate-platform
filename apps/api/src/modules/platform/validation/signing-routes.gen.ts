@@ -1287,6 +1287,21 @@ export const CONTRACT_SIGNING_ROUTES = [
     "signed": false
   },
   {
+    "method": "GET",
+    "path": "/admin/v1/unknown-payouts",
+    "signed": false
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/query",
+    "signed": false
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/resolve",
+    "signed": false
+  },
+  {
     "method": "POST",
     "path": "/admin/v1/withdrawals/:withdrawal_id/reject",
     "signed": false

@@ -181,6 +181,14 @@ it('identity codes of 08 §13.11 (功能对照补缺 1–3 批) carry their data
     'reject_attempt_exists',
     'reject_query_required',
     'reject_query_success',
+    // CT-24zs: admin-only unknown payout refusals (BR-WDR-15, D10-625).
+    'resolve_query_failed',
+    'resolve_too_early',
+    'resolve_bill_unverifiable',
+    'resolve_query_unverifiable',
+    'resolve_paid_at_invalid',
+    'resolve_order_id_taken',
+    'resolve_identity_missing',
   ]);
   expect(errorCodes[30701].sources).toEqual(['规划/04 §7', 'BR-ID-10', 'BR-ID-40']);
 });

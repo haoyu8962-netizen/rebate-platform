@@ -1287,6 +1287,21 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "admin"
   },
   {
+    "method": "GET",
+    "path": "/admin/v1/unknown-payouts",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/query",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/resolve",
+    "auth": "admin"
+  },
+  {
     "method": "POST",
     "path": "/admin/v1/withdrawals/:withdrawal_id/reject",
     "auth": "admin"

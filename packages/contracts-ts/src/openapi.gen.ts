@@ -8872,6 +8872,167 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/unknown-payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Withdrawals whose transfer result stayed unknown past the limit, waiting for a person (未知结果处置)
+         * @description The list of the 24 hour unknown disposal page (01 F-ADM-07; BR-WDR-14, BR-WDR-15; ruling
+         *     D10-625). Read only, no step-up. Permission point `payout.execute` (BR-WDR-15 sets no point
+         *     of its own); a super admin holds every point. Reading does not write an audit record.
+         *
+         *     Rows are the withdrawals of the console's app in status PAYING with `needs_manual=true`,
+         *     longest waiting first: `withdrawal_id`, `out_biz_no`, the masked `user` as in
+         *     listAdminWithdrawals (no payee account or name), `payout_channel`, `amount_fen`, `net_fen`,
+         *     `first_transfer_at` (T, the earliest kind=transfer attempt), `latest_query` (the newest
+         *     kind=query attempt, null when there is none: `result`, `at`, and what the channel answered,
+         *     `resp_code`, `resp_sub_code`, `channel_status`, `channel_order_id` and `paid_at`, each null
+         *     when absent and never the payee's account or name, so that a person can read the answer and
+         *     use it as proof), and `fail_blockers`, what
+         *     stops this withdrawal from being judged failed right now, in the order of
+         *     adminResolveUnknownPayout's checks. While the channel's 「订单不存在」 code and the bill read
+         *     are missing (D10-625) it always holds `resolve_bill_unverifiable` and
+         *     `resolve_query_unverifiable`, so the page can say why before anyone submits.
+         */
+        get: operations["adminListUnknownPayouts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/withdrawals/{withdrawal_id}/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the channel once more about a withdrawal; the answer lands later (立即查询)
+         * @description The 【立即查询】 of the disposal page (BR-WDR-15; rulings D10-595 ③, D10-596 ①, D10-625). The
+         *     channel keys live only in the payout process, so this queues one query and answers
+         *     `submitted`; the result appears as `latest_query` when the job has run, and the page refreshes
+         *     to see it. Permission point `payout.execute`; a super admin holds every point. Step-up: totp
+         *     tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     The request has no body fields.
+         *
+         *     Order of checks: the route schema first, as on every admin route (D10-591). Then
+         *     `payout.execute` (10403 with `data.reason=admin_permission_denied`) → step-up (10003) → an
+         *     unknown `withdrawal_id` or one of another app is 20001 with `data.fields=[withdrawal_id]`
+         *     (no 404) → a withdrawal that is neither of the two below is 20902 with
+         *     `data.resource=withdrawal`.
+         *
+         *     Two kinds of withdrawal can be queried: PAYING with `needs_manual=true` (automatic queries
+         *     have stopped, BR-WDR-14), and APPROVED with `hold_reason=payer_side_after_transfer`, which
+         *     has no other way to get a query recorded and needs one before W3 or W8 (BR-WDR-17, D10-596 ①).
+         *
+         *     The job asks the channel once, on the withdrawal's own out_biz_no, and only appends one
+         *     kind=query attempt. **It moves nothing:** no status change even on a success or a definite
+         *     failure, no voucher, no next query point, no second transfer (BR-WDR-14). A person ends the
+         *     withdrawal through adminResolveUnknownPayout, W3, W8 or W11. 「订单不存在」 is recorded as result
+         *     unknown until its channel code is verified (BR-WDR-22, BR-WDR-28).
+         *
+         *     Writes an audit record (action payout_query_request, with the `withdrawal_id`, the status and
+         *     no personal data) on the transaction that queues the job. `Idempotency-Key` is required:
+         *     same key and body → the first answer and no second job; same key with another body → 20901;
+         *     same key while still running → 40901. A new key queries again. The step-up token is a header
+         *     and not part of the body hash, so a replay after a 10003 keeps its key.
+         */
+        post: operations["adminQueryPayoutResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/withdrawals/{withdrawal_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End a withdrawal whose result stayed unknown (W10, 未知结果处置)
+         * @description The 【确认处置】 of the disposal page (BR-WDR-15, BR-WDR-08 W10, BR-WDR-09, BR-WDR-14; rulings
+         *     D10-595, D10-625, D10-626). Permission point `payout.execute`; a super admin holds every point;
+         *     one person may do it (ADD-05). Step-up: totp tier (BR-ID-34): without a valid totp-tier
+         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *
+         *     Request (AdminUnknownPayoutResolveRequest): `resolution`, `paid` or `failed`; `proof_text`,
+         *     the pasted proof, the query answer or the bill line naming this out_biz_no, 1 to 4000
+         *     characters and not blank after trimming (text only, no file upload, D10-595 ②; stored in
+         *     `proof_file` and not shown to the member). With `paid`, also `channel_order_id` (1 to 64
+         *     characters, no whitespace or NUL, compared exactly) and `paid_at` (when the channel paid).
+         *
+         *     Order of checks: the route schema first, as on every admin route (D10-591). Then
+         *     `payout.execute` (10403 with `data.reason=admin_permission_denied`) → step-up (10003) →
+         *     a blank `proof_text`, or `paid` without `channel_order_id` or `paid_at`, is 20001 with
+         *     `data.fields` naming them → an unknown `withdrawal_id` or one of another app is 20001 with
+         *     `data.fields=[withdrawal_id]` (no 404) → a withdrawal not PAYING with `needs_manual=true`, or
+         *     changed by another request, is 20902 with `data.resource=withdrawal`. A `needs_manual`
+         *     withdrawal never becomes PAID_MANUAL and is never transferred again (BR-WDR-15).
+         *
+         *     **`paid`** (the proof shows the channel succeeded): while the latest kind=query attempt has
+         *     result fail and `recon_channel` has no success line for this out_biz_no, 20001 with
+         *     `data.fields=[resolution]` and `data.reason=resolve_query_failed`: the channel said the
+         *     transfer failed and nothing contradicts it, so telling the member the money arrived could be
+         *     false, and the bill reconciliation of that day would not catch it afterwards. A later query
+         *     or a bill line lifts this; the money stays frozen meanwhile. `paid_at` more than 5 minutes
+         *     after the injected Clock, or before T, is 20001 with `data.fields=[paid_at]` and
+         *     `data.reason=resolve_paid_at_invalid`; a `channel_order_id` already on another withdrawal is
+         *     20001 with `data.fields=[channel_order_id]` and `data.reason=resolve_order_id_taken`, also
+         *     when two requests race and the unique index settles it. Otherwise, on one transaction: W10 to
+         *     PAID_API with `paid_at`, `channel_order_id`, `manual_resolution=paid`, `resolver_ids` the caller
+         *     and `proof_file`; the success voucher of W5 (`wd:{withdrawal_id}:PAID`, the snapshot channel's
+         *     cash subject, BR-WDR-09); `tax_ytd` (BR-WDR-20); wallet.withdrawal_changed, which sends the
+         *     member the result message; and an audit record (action withdrawal_resolve, with the
+         *     `withdrawal_id`, the status before and after, `resolution`, `channel_order_id` and `paid_at`; no
+         *     personal data and not the proof text). A member without a verified real name fails `tax_ytd`:
+         *     20001 with `data.fields=[withdrawal_id]` and `data.reason=resolve_identity_missing`, nothing
+         *     written, because the money was paid and this needs a person.
+         *
+         *     **`failed`** (BR-WDR-15): refunding money that actually left is a double payment, so every
+         *     condition is checked by the server and nothing in the request can vouch for one. In order,
+         *     the first that does not hold is 20001 with `data.fields=[resolution]` and its `data.reason`:
+         *
+         *     - `resolve_too_early`: less than 24 hours since T.
+         *     - `resolve_bill_unverifiable`: the bills of T's day and the next must both be downloaded and
+         *       both lack this out_biz_no. There is no read yet that tells a downloaded bill without this
+         *       line from a bill not downloaded, and not finding a line is never taken as absent.
+         *     - `resolve_query_unverifiable`: the latest query must be 「订单不存在」. That answer has no
+         *       verified channel code yet and is recorded as unknown (BR-WDR-22, BR-WDR-28).
+         *
+         *     **So today every `failed` is refused, and nothing is written (D10-625, D10-626).** The target,
+         *     once the bill read and the code exist, is W10 to FAILED with `WITHDRAW:RETURN` and a
+         *     `withdraw_holds` row (`manual_failed_watch`, `withdraw.manual_failed_hold_days`, default 7) on
+         *     one transaction; that path comes with its own task and rule tests before the Alipay channel
+         *     opens. A wechat withdrawal has its own conditions (BR-WDR-33 ⑧) and is refused the same way
+         *     until then.
+         *
+         *     `Idempotency-Key` is required: same key and body → the first result; same key with another
+         *     body → 20901; same key while still running → 40901. 2xxxx refusals are not stored, so a fixed
+         *     request can reuse its key. The step-up token is a header and not part of the body hash, so a
+         *     replay after a 10003 keeps its key.
+         */
+        post: operations["adminResolveUnknownPayout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/withdrawals/{withdrawal_id}/reject": {
         parameters: {
             query?: never;
@@ -18817,6 +18978,109 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["AdminWithdrawalBatchManualPaid"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description A condition of a `failed` resolution that does not hold now, by its refusal reason.
+         * @enum {string}
+         */
+        AdminUnknownPayoutFailBlocker: "resolve_too_early" | "resolve_bill_unverifiable" | "resolve_query_unverifiable";
+        /** @description The newest kind=query attempt. */
+        AdminUnknownPayoutLatestQuery: {
+            /** @enum {string} */
+            result: "pending" | "success" | "fail" | "unknown";
+            /** Format: date-time */
+            at: string;
+            resp_code: string | null;
+            resp_sub_code: string | null;
+            /** @description The order status the channel answered, as received. */
+            channel_status: string | null;
+            channel_order_id: string | null;
+            /**
+             * Format: date-time
+             * @description The time the channel answered, when it gave one.
+             */
+            paid_at: string | null;
+        };
+        /** @description One withdrawal waiting for a person; see GET /admin/v1/unknown-payouts. */
+        AdminUnknownPayoutItem: {
+            withdrawal_id: components["schemas"]["Id"];
+            out_biz_no: components["schemas"]["AdminWithdrawalOutBizNo"];
+            user: components["schemas"]["AdminWithdrawalUser"];
+            payout_channel: components["schemas"]["AdminPayoutChannelCode"];
+            amount_fen: components["schemas"]["Fen"];
+            net_fen: components["schemas"]["Fen"];
+            /**
+             * Format: date-time
+             * @description T, the earliest kind=transfer attempt.
+             */
+            first_transfer_at: string;
+            latest_query: components["schemas"]["AdminUnknownPayoutLatestQuery"] | null;
+            /** @description In the order of adminResolveUnknownPayout's checks. */
+            fail_blockers: components["schemas"]["AdminUnknownPayoutFailBlocker"][];
+        };
+        AdminUnknownPayoutPage: {
+            items: components["schemas"]["AdminUnknownPayoutItem"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int32 */
+            total: number;
+        };
+        AdminUnknownPayoutPageResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminUnknownPayoutPage"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /** @description No fields; see POST /admin/v1/withdrawals/{withdrawal_id}/query. */
+        AdminPayoutQueryRequest: Record<string, never>;
+        AdminPayoutQuerySubmitted: {
+            withdrawal_id: components["schemas"]["Id"];
+            /**
+             * @description The query is queued; the answer appears later as latest_query.
+             * @enum {string}
+             */
+            result: "submitted";
+        };
+        AdminPayoutQueryResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminPayoutQuerySubmitted"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /** @description How a person ends the withdrawal; see POST /admin/v1/withdrawals/{withdrawal_id}/resolve. */
+        AdminUnknownPayoutResolveRequest: {
+            /** @enum {string} */
+            resolution: "paid" | "failed";
+            /** @description The pasted proof, not blank after trimming; not shown to the member. */
+            proof_text: string;
+            /** @description Required with paid. The channel's serial number; no whitespace or NUL, compared exactly. */
+            channel_order_id?: string;
+            /**
+             * Format: date-time
+             * @description Required with paid. When the channel paid, checked against T and the injected Clock.
+             */
+            paid_at?: string;
+        };
+        AdminUnknownPayoutResolved: {
+            withdrawal_id: components["schemas"]["Id"];
+            /**
+             * @description Only PAID_API today; a failed resolution is refused (D10-625).
+             * @enum {string}
+             */
+            status: "PAID_API";
+            /** @enum {string} */
+            manual_resolution: "paid";
+            channel_order_id: string;
+            /** Format: date-time */
+            paid_at: string;
+        };
+        AdminUnknownPayoutResolveResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminUnknownPayoutResolved"];
             trace_id: components["schemas"]["TraceId"];
         };
         /** @description The withdrawals to approve; see POST /admin/v1/withdrawals/batch-approve. */
@@ -39500,6 +39764,226 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["AdminWithdrawalBatchManualPaidResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not processed (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminListUnknownPayouts: {
+        parameters: {
+            query?: {
+                /** @description Page number of an admin list, from 1 (04 §5 后台分页). */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Page size of an admin list, at most 200 (04 §5 后台分页); above that → 20001. */
+                page_size?: components["parameters"]["AdminPageSize"];
+            };
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of the withdrawals waiting for a person. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "withdrawal_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001",
+                     *             "out_biz_no": "W2026110200000000000000000000001",
+                     *             "user": {
+                     *               "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
+                     *               "phone_masked": "138****0000"
+                     *             },
+                     *             "payout_channel": "alipay",
+                     *             "amount_fen": 10000,
+                     *             "net_fen": 9800,
+                     *             "first_transfer_at": "2026-11-02T09:00:00+08:00",
+                     *             "latest_query": {
+                     *               "result": "unknown",
+                     *               "at": "2026-11-03T09:00:00+08:00",
+                     *               "resp_code": null,
+                     *               "resp_sub_code": null,
+                     *               "channel_status": null,
+                     *               "channel_order_id": null,
+                     *               "paid_at": null
+                     *             },
+                     *             "fail_blockers": [
+                     *               "resolve_bill_unverifiable",
+                     *               "resolve_query_unverifiable"
+                     *             ]
+                     *           }
+                     *         ],
+                     *         "page": 1,
+                     *         "page_size": 20,
+                     *         "total": 1
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminUnknownPayoutPageResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminQueryPayoutResult: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
+                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
+                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
+                 *     optional). Only on admin console operations; app operations use StepUpToken.
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The withdrawal (withdrawals.id) as a list row carries it; unknown or of another app → 20001 with data.fields=[withdrawal_id]. */
+                withdrawal_id: components["parameters"]["AdminWithdrawalIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /** @example {} */
+                "application/json": components["schemas"]["AdminPayoutQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description The query is queued, or the first answer of the same key. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "withdrawal_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001",
+                     *         "result": "submitted"
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminPayoutQueryResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not processed (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminResolveUnknownPayout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
+                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
+                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
+                 *     optional). Only on admin console operations; app operations use StepUpToken.
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The withdrawal (withdrawals.id) as a list row carries it; unknown or of another app → 20001 with data.fields=[withdrawal_id]. */
+                withdrawal_id: components["parameters"]["AdminWithdrawalIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUnknownPayoutResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description The withdrawal ended, or the first result of the same key. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "withdrawal_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc001",
+                     *         "status": "PAID_API",
+                     *         "manual_resolution": "paid",
+                     *         "channel_order_id": "20261103220014001",
+                     *         "paid_at": "2026-11-03T09:30:00+08:00"
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminUnknownPayoutResolveResponse"];
                 };
             };
             429: components["responses"]["TooManyRequests"];

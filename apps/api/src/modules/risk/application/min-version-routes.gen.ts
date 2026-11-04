@@ -2595,6 +2595,36 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "adminListUnknownPayouts",
+    "method": "GET",
+    "path": "/admin/v1/unknown-payouts",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
+    "operationId": "adminQueryPayoutResult",
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/query",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
+    "operationId": "adminResolveUnknownPayout",
+    "method": "POST",
+    "path": "/admin/v1/withdrawals/:withdrawal_id/resolve",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "adminRejectWithdrawal",
     "method": "POST",
     "path": "/admin/v1/withdrawals/:withdrawal_id/reject",
