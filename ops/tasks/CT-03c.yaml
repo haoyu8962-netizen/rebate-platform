@@ -1,0 +1,29 @@
+id: CT-03c
+repo: rebate-platform
+title: 契约：/v1/config 的 bridge_origins 改为签名白名单 ConfigBridgeOrigins（{jws}，ES256，载荷 {v, app_id, env, version, origins}）（FU-X-BRIDGE-ORIGINS，D10-608、D10-610）
+type: contract
+# 2026-11-04 ops 入账（编排 D10-610 认可方案）。依据：04 §10.1:961（可信容器白名单 + 签名，形状「待契约线」）、02 §12.6:739（配置签名私钥，只 api 用）、
+# 12 §9 B-04:4164（形状与签名算法由 CT-03 定）、03 §5.1:593（客户端取用顺序、验签失败不写 LKG，AC-S1-180 ②）、03 §5.2:638（origin 比较口径）。
+# 本单只改契约与生成物，服务端（F1-02zzs）与三端各自另单：
+#   - ConfigResponse.bridge_origins 由 FreeForm 改为 ConfigBridgeOrigins：{ jws: string }（JWS 紧凑串）。
+#   - JWS 头 {alg: "ES256", kid, typ: "couli-bridge-origins+jws"}；签名是标准 R‖S 64 字节（不是 DER）。
+#   - 载荷 {v: 1, app_id, env, version, origins: string[]}：origins 每项是规范化 https origin（小写主机、无路径与通配、443 省略）；version 取配置项版本号、单调递增（客户端只接受 ≥ 已存 LKG 的版本，防回滚）；不设过期。
+#   - 未配置时服务端用 h5_base_url 的 origin 签一份默认值，所以字段始终在。
+#   - 描述里写明：客户端验签与取用顺序、换钥（包内按 env 带「现用 + 下一把」两个 kid）、ETag 稳定性（服务端按 (version, kid, env) 缓存签名）。
+#   - 以上按 D10-610 定稿。RV1。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
