@@ -1,0 +1,24 @@
+id: CT-24zs
+repo: rebate-platform
+title: 契约：后台未知结果处置（FU-ADMIN-WITHDRAWAL-OPS D，BR-WDR-15、BR-WDR-33 ⑧，D10-595、D10-596、D10-625）——adminListUnknownPayouts、adminQueryPayoutResult（入队）、adminResolveUnknownPayout（W10）；payout.execute，动态码档，幂等，写审计；planned
+type: contract
+# 2026-11-05 pay 入账（D10-625：D 改由本线做）。方案草稿 couli-runs/B3-lane/w10-contract-draft-20261104.md，以 D10-625 为准。校验顺序写明 schema 先于守卫（D10-591）。
+# 判失败的三条件全由服务端核：「订单不存在」的码和账单读法没有之前，条件一律不成立，返回明确拒绝原因；原因进 error-codes。凭证只存文本（D10-595 ②）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo

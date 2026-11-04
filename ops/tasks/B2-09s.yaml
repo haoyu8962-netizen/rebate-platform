@@ -1,0 +1,39 @@
+id: B2-09s
+repo: rebate-platform
+title: 未知结果处置实现 W10（FU-ADMIN-WITHDRAWAL-OPS D，BR-WDR-15、14、09、17，D10-625）——列表、入队查询（只记 kind=query，不迁移状态，含 W9 退回的单）、判成功 PAID_API；判失败首版一律拒绝，不退钱
+type: impl
+# 2026-11-05 pay 入账（D10-625）。RV2。规则测试 Codex，实现 Opus，money 评审 Codex，withdraw 11-06 回来复核。最危险的一处：判失败退钱若钱已出去就是重复打款。
+# 「订单不存在」的码（BR-WDR-22 ⑦）和账单读法都没有之前，条件 ②③ 一律不成立；首版不写判失败的退款路径（WITHDRAW:RETURN、manual_failed_watch），避免留一段测不到的资金代码；等两件有了另开单。
+# query-job 加 source=manual：needs_manual 或 W9 退回的单也查，只查一次、只记尝试，不走 W5、W6、下一点。不动冻结测试，实跑若要动按 D10-327 先报。
+refs: [BR-WDR-15, BR-WDR-14, BR-WDR-09, BR-WDR-17, BR-WDR-33]
+refs_hash:
+  BR-WDR-15: 7e3fa7b3f0f5
+  BR-WDR-14: 6328f3cda2e6
+  BR-WDR-09: 68225c9af85f
+  BR-WDR-17: f6119a685e00
+  BR-WDR-33: '7886471e9297'
+deps: [CT-24zs, B2-09m]
+paths:
+  - 'apps/api/src/modules/payout/application/**'
+  - 'apps/api/src/modules/payout/jobs/query-job.ts'
+  - 'apps/api/src/modules/payout/http/admin/**'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/payout/admin-unknown-payouts/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/admin-unknown-payouts/**'
+status: todo
