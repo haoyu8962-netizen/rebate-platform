@@ -1,0 +1,30 @@
+id: B1-04zzf
+repo: rebate-platform
+title: 商品卡片带图（FU-UNION-IMAGES）——catalog 卡片 image 取适配器清洗后的主图（不再写死 null）；拼多多搜索与详情按录制形状映射主图与多图（经 normalizeItemImages）
+type: impl
+# 2026-11-04 ops 入账（编排 14:59 派 FU-UNION-IMAGES；本线 15:2x 诊断更正）。staging 搜索、详情、首页池卡片 image 全是 null：
+#   ① catalog/application/card-assembler.ts:188 写死 image: null（B1-05f 起）——改为 item.main_image_url ?? null（只用已清洗的主图，不从多图补主图、不伪造）；
+#   ② 拼多多 union/infra/pdd/goods.ts:258（B1-22s「实测前不映射」）——按录制 cap-tests/2026-10-15/pdd 的字段：主图 goods_image_url、多图 goods_gallery_urls，
+#      搜索（goods_list / list 行）与详情（goods_details 行）同口径，经 domain/item-images.ts normalizeItemImages；goods_thumbnail_url 不当主图。去掉那条 TODO。
+#   淘宝官方搜索已经映射（goods.ts mapTaobaoDetail 读 item_basic_info.pict_url / small_images），不改；京东等商品查询权限下来再补。
+# 冻结测试：test/spec/union/item-images/pdd.test.ts [AC-B1-22s-PDD#1]（钉「拼多多不映射图片」）按新行为改钉值，由新鲜独立 Claude 改、#24 报核（D10-327：随实现同 PR）。
+#   card assembly [AC-B1-05f#1] 的夹具商品不带图，期望 image: null 不变，不改。新规则测试只用合成样本（公开仓库不放录制原文）。RV2（union）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/application/card-assembler.ts'
+  - 'apps/api/src/modules/catalog/application/card-assembler.test.ts'
+  - 'apps/api/src/modules/union/infra/pdd/goods.ts'
+  - 'apps/api/src/modules/union/infra/pdd/goods.test.ts'
+  - 'test/spec/union/pdd-images/**'
+  - 'test/spec/catalog/card-images/**'
+test_paths:
+  - 'test/spec/union/pdd-images/**'
+  - 'test/spec/catalog/card-images/**'
+  - 'test/spec/union/item-images/pdd.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
