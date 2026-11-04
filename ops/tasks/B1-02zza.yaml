@@ -1,0 +1,40 @@
+id: B1-02zza
+repo: rebate-platform
+title: staging 测试手机号 + 固定验证码（FU-STAGING-TEST-PHONE，approvals 48，D10-611）——只在 APP_ENV=staging：名单内号码的登录与 step_up 发码不调短信通道（随机码照常生成存储、频控风控照旧），验码时认节点文件里的固定码；其他环境硬关
+type: impl
+# 2026-11-04 ops 入账（编排 D10-611 认可方案 (a)–(e)，T3 取消）。依据 BR-ID-05（码 6 位、5 分钟、错 5 次作废、每号 60 秒 / 时 5 / 日 10 / 24h 10、设备与 IP 限额），不放宽任何规则。
+# 发码 identity/application/sms-codes.ts send()：staging 且号码在名单且 purpose ∈ {login, step_up}（不含落地页注册与 bind）时，在 deliver 处不调发送器、按已受理处理；
+#   随机码照常生成、只存 HMAC、从不外发；黑名单、captcha / 设备、手机号四项限额、commit、afterAccepted（IP 与全站日预算）全部照旧。不包装发送器（admin 的 step-up 共用它）。
+#   不用固定码替换随机码：sms-code-store 的碰撞判定会让第二次发码 50001。
+# 验码 verifyAndConsume：只有 sms-login 与 step-up 传入标记；名单内号码提交的码用 timingSafeEqual 比固定码，相等就 consume 当前码（store 新增 consumeCurrent），不等按一次错误计。
+#   没先发码 → 20003，过期、一码一用、错 5 次作废照旧；名单外号码固定码无效。每次调用都再判 appEnv==='staging'。
+# 配置（platform/config）：STAGING_TEST_PHONES（逗号分隔，≤10，规范化）与 STAGING_TEST_SMS_CODE_FILE（节点 6 位数字文件的绝对路径），两个必须同时设或同时不设；
+#   非 staging 设了任何一个都拒绝启动；变量名不以 SMS_ 开头。api 启动时经 readStartupSecretFile 读文件，不是正好 6 位数字就拒绝启动；启用时 warn 只带号码个数，号码与码不进日志。
+# 审计：只写 pino 审计日志（D10-611 (4)），event=staging_test_phone_login，字段 purpose、is_new_user、phone_masked、user_id，不写码与完整号码；不动契约与 admin。
+# infra/staging：compose 只给 api 只读挂载 /etc/couli-staging-test → /run/couli-staging-test（create_host_path，可缺），README 写节点文件与两个变量、轮换方式（改文件后重启 api）。
+# 测试号 199 0000 0001–0010（D10-611 (3)）只写私有仓库 README，不进本仓库。RV2（platform、infra 路径）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/config/**'
+  - 'apps/api/src/modules/identity/application/sms-codes.ts'
+  - 'apps/api/src/modules/identity/application/sms-codes.test.ts'
+  - 'apps/api/src/modules/identity/application/sms-login.ts'
+  - 'apps/api/src/modules/identity/application/sms-login.test.ts'
+  - 'apps/api/src/modules/identity/application/step-up.ts'
+  - 'apps/api/src/modules/identity/application/step-up.test.ts'
+  - 'apps/api/src/modules/identity/infra/sms-code-store.ts'
+  - 'apps/api/src/modules/identity/infra/sms-code-store.int.test.ts'
+  - 'apps/api/src/modules/identity/identity.module.ts'
+  - 'infra/staging/compose.yaml'
+  - 'infra/staging/README.md'
+  - '.env.example'
+  - 'test/spec/identity/staging-test-phone/**'
+test_paths:
+  - 'test/spec/identity/staging-test-phone/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
