@@ -11,6 +11,8 @@ type: contract
 #   - 未配置时服务端用 h5_base_url 的 origin 签一份默认值，所以字段始终在。
 #   - 描述里写明：客户端验签与取用顺序、换钥（包内按 env 带「现用 + 下一把」两个 kid）、ETag 稳定性（服务端按 (version, kid, env) 缓存签名）。
 #   - 以上按 D10-610 定稿。RV1。
+# **并入 F1-02zzzb**（编排 D10-612，2026-11-04）：契约单独合入必然让主干变红（冻结的 content/config kit 用契约 schema 校验 /v1/config 响应，F1-02c #1/#2/#20 钉着旧形状，client-config 类型不符），
+#   契约改动与服务端签名同一个 PR 交付。本任务不再派工、未开实现 PR、无证据。
 refs: []
 refs_hash: {}
 deps: []
@@ -26,4 +28,4 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
-status: todo
+status: void
