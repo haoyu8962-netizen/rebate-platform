@@ -1,0 +1,85 @@
+{
+  "risk_note": "Reading only: no write path, no stored data, no contract change. withdrawal_approve, withdrawal_reject, withdrawal_manual_paid, payout_batch_execute and payout_watermark_create had no entry in audit-log-view's RULES, so target_type, target_id and permission derived null and GET /admin/v1/audit-logs?target_id= found nothing, which finance needs when checking a withdrawal. The three withdrawal actions derive withdrawal and the withdrawal id. A rejection by a person is under withdraw.review; the system's NEGATIVE_BALANCE derives permission null, so it does not read as done under a point. payout_batch_execute is found by batch id only, and its whole-batch rejection has no target (accepted by the orchestrator 22:12: finance goes through the batch id on the withdrawal's detail). target_type is free text in the contract.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh. couli-runs/B2-09q/money-review-r1.json, read-only and static, no findings. Reviewed before the rebase."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex wrote the rule tests, driven by real writes through the admin routes and the worker, and the review goes to a fresh Claude (approvals 19). Static, not run by the reviewer. r1 pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09q",
+  "spec_commit": "121c311e3c70722c676f57a2b37380d53f1fd6f8",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#1] 同一单审核后补录、另一单审核后驳回：单号精确归集；列表详情、类型权限筛选一致且读取不写库",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 RISK_SUSPECT：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 ORDER_ABNORMAL：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 PAYEE_INFO_INVALID：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 USER_REQUEST：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 OTHER：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#3] 真实水位录入、批次执行与整批拒绝：各目标和权限准确；空目标仅权限可筛选",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#4] worker 实际系统驳回可按单号查询，system:payout、权限 null，withdraw.review 只返回人工动作",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#5] 两个 app 查询同一个真实提现单号及审计 ID：外部 app 看不到，自己的同类行仍能正确读取",
+    "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#6] 新提现动作与真实风控、导出动作共存：原有推导和筛选不变，不把其他对象误归为提现"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "121c311e3c70722c676f57a2b37380d53f1fd6f8",
+      "tree": "6236143abb5bceb49961826a67b3efe218a4f9ac",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-04T16:01:18Z",
+      "finished_at": "2026-11-04T16:01:36Z",
+      "red_tests": [
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#1] 同一单审核后补录、另一单审核后驳回：单号精确归集；列表详情、类型权限筛选一致且读取不写库",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 RISK_SUSPECT：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 ORDER_ABNORMAL：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 PAYEE_INFO_INVALID：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 USER_REQUEST：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#2] 人工驳回 OTHER：真实 after.reason_code 映射 withdraw.review，审核历史仍按原单号查到",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#3] 真实水位录入、批次执行与整批拒绝：各目标和权限准确；空目标仅权限可筛选",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#4] worker 实际系统驳回可按单号查询，system:payout、权限 null，withdraw.review 只返回人工动作",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#5] 两个 app 查询同一个真实提现单号及审计 ID：外部 app 看不到，自己的同类行仍能正确读取",
+        "test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts > [AC-B2-09q#6] 新提现动作与真实风控、导出动作共存：原有推导和筛选不变，不把其他对象误归为提现"
+      ],
+      "expected": ["test/spec/admin/audit-view-withdrawal/withdrawal-actions.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b418688d0189a1946b2f8c2803974c25e5219dc97434fd7fedc2ead3e92c30dd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c2e69550e251449dae4771835f9e5021191f9ccf",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

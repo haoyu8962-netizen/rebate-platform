@@ -167,6 +167,26 @@ const RULES: readonly ActionRule[] = Object.freeze([
     field: 'resource',
     values: { users: 'pii.reveal_phone', tax_withdrawals: 'tax.export_full' },
   }),
+  // payout (B2-09k, B2-09m, B2-09p): target the withdrawal id. A rejection by a person is under
+  // withdraw.review; the system's NEGATIVE_BALANCE (system:payout) used no point, so it derives null.
+  ...rules(['withdrawal_approve'], 'withdrawal', null, fixed('withdraw.review')),
+  ...rules(['withdrawal_reject'], 'withdrawal', null, {
+    kind: 'after',
+    field: 'reason_code',
+    values: {
+      RISK_SUSPECT: 'withdraw.review',
+      ORDER_ABNORMAL: 'withdraw.review',
+      PAYEE_INFO_INVALID: 'withdraw.review',
+      USER_REQUEST: 'withdraw.review',
+      OTHER: 'withdraw.review',
+    },
+  }),
+  ...rules(['withdrawal_manual_paid'], 'withdrawal', null, fixed('payout.manual_entry')),
+  // payout (B2-09l): target the batch id, null on a whole-batch rejection. The withdrawal ids are in
+  // after, so this one is found by batch and not by withdrawal (编排 2026-11-04 22:12).
+  ...rules(['payout_batch_execute'], 'payout_batch', null, fixed('payout.execute')),
+  // payout (B2-09i): target the reading's id.
+  ...rules(['payout_watermark_create'], 'payout_watermark', null, fixed('fund.cash_entry')),
 ]);
 
 const BY_ACTION: ReadonlyMap<string, ActionRule> = new Map(
