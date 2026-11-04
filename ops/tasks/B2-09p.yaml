@@ -1,0 +1,34 @@
+id: B2-09p
+repo: rebate-platform
+title: 系统驳回写审计（FU-WENT-NEGATIVE-AUDIT，BR-WDR-10、BR-WDR-05，D10-619）——went-negative 的系统 W3（NEGATIVE_BALANCE）在同一事务写一条 withdrawal_reject 审计，system_actor=system:payout；行为不变，只补留痕；上线前必做
+type: impl
+# 2026-11-04 pay 入账（D10-619，原 11-03 23:16 编排立单）。RV2，规则测试 Codex 写（不行再用新鲜独立 Claude），money 评审。
+# 消费者跑在 worker 入口（couli_app，有 audit_logs INSERT），payout 进程的 W9 只入队。createAuditWriter 只写 admin_id（uuid），系统行要走 admin 的 createSystemAuditWriter，它现在只会写订单挂起，要加通用写法。
+# audit_logs_system_actor_check 要求 ^system:[a-z_]+$，枚举 audit_system_actor 只有 system:risk，所以追加 system:payout（枚举注明可追加）和中文名。不动冻结测试，实跑若要动按 D10-327 先报。
+refs: [BR-WDR-10, BR-WDR-05]
+refs_hash:
+  BR-WDR-10: 1db6b508e224
+  BR-WDR-05: 99e2e2654ce0
+deps: [B2-09k]
+paths:
+  - 'apps/api/src/modules/payout/application/went-negative.ts'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/admin/infra/system-audit.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'apps/api/src/modules/admin/index.ts'
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/payout/went-negative-audit/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/went-negative-audit/**'
+status: todo
