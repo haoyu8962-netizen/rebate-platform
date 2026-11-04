@@ -367,6 +367,11 @@ export const QUOTE_UNSEEDED: readonly string[] = [
   'tech_fee_bp',
   'rebate.taobao.compare_rate_ratio_bp',
 ];
+// B2-03u (D10-608): share_domains, registered right after QUOTE: editable config.business, its
+// value an array of strings (recorded as object), options null. Not part of expectedNow() either.
+export const SHARE: readonly Expected[] = [row('share_domains', 'object', 'config.business')];
+/** B2-03u (D10-608): domains differ per environment, hence no seed row. */
+export const SHARE_UNSEEDED: readonly string[] = ['share_domains'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -384,6 +389,7 @@ export const expectedOf = (key: string): Expected => {
     ...ORDER_RESCAN,
     ...ADVANCE_ALERT,
     ...QUOTE,
+    ...SHARE,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

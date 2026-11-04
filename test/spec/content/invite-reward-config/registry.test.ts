@@ -39,7 +39,8 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // withdraw.dormant_reverify_days, then B1-06ze (D10-510) the three Taobao promotion link keys in
 // this order, then B1-04zq (D10-543) the four order_sync.rescan.* keys in this order, then B2-04zo
 // ledger.advance_alert_fen, then B2-03t (D10-605 (a)) tech_fee_bp and
-// rebate.taobao.compare_rate_ratio_bp in this order, and nothing else.
+// rebate.taobao.compare_rate_ratio_bp in this order, then B2-03u (D10-608) share_domains, and
+// nothing else.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
   const i = keys.indexOf('settle.statement.grace_days');
@@ -112,6 +113,7 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'ledger.advance_alert_fen',
     'tech_fee_bp',
     'rebate.taobao.compare_rate_ratio_bp',
+    'share_domains',
   ]);
 });
 

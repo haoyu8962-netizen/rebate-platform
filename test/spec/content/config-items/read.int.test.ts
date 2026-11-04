@@ -22,6 +22,7 @@ import {
   RISK_WITHDRAW,
   ROW_AT,
   SEARCH,
+  SHARE,
   TAX,
   UNREGISTERED,
   call,
@@ -71,6 +72,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...ORDER_RESCAN,
     ...ADVANCE_ALERT,
     ...QUOTE,
+    ...SHARE,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

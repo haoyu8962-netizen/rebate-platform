@@ -267,6 +267,11 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // are still placeholders, so neither has a seed row. Registration only.
   spec('tech_fee_bp', 'object', 'config.business'),
   businessInteger('rebate.taobao.compare_rate_ratio_bp', 0, 10000),
+  // B2-03u (D10-608): the share domains /v1/config hands out, config.business. The value is an
+  // array of strings (contract ConfigResponse.share_domains is string[]; client-config reads it
+  // with arrayOf(isString), default []). The registry has no array type, and configValueFits'
+  // 'object' accepts arrays. Domains differ per environment, so no seed row. Registration only.
+  spec('share_domains', 'object', 'config.business'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(
