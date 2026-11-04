@@ -9,7 +9,8 @@ type: impl
 # 密钥：platform/config 读 CONFIG_SIGN_KEY_FILE / CONFIG_SIGN_KEY_ID（只 api 用）；local 启动时临时生成，staging 节点文件 /etc/couli-config-sign → /run/couli-config-sign 只读挂给 api，
 #   prod 走 KMS（负责人上线项，本单不做，prod 缺钥拒绝启动）；staging 缺钥也拒绝启动。与 JWT 签名钥分开。
 # 冻结测试：test/spec/content/config/delivery.int.test.ts 的 [AC-F1-02c#1] / [#2] / [#20] 与 test/spec/content/config-etag/domain.int.test.ts 夹具按新形状只改钉值、不放宽，
-#   由新鲜独立 Claude（或 Codex）改，落地时 #24 报核编排逐条看。新规则测试放 test/spec/content/bridge-origins/。合并时占契约槽。RV2。
+#   由新鲜独立 Claude（或 Codex）改，落地时 #24 报核编排逐条看；config-etag 夹具改动保留（D10-620 (a) 已于 22:32 收回：撤回会让类型检查失败），#20 表里的 bridge_origins 行移到新目录；
+#   delivery.int.test.ts 未改的 124 个用例 / 表行（标题与用例体与主干逐字相同）与 config-etag 未改的 22 个用例一并登记 red_exempt（合计 146 条，D10-620 (b1)，上限 150 见 CT-06zzzb）。新规则测试放 test/spec/content/bridge-origins/。合并时占契约槽。RV2。
 refs: []
 refs_hash: {}
 deps: [B2-03v]
@@ -31,6 +32,445 @@ test_paths:
   - 'test/spec/content/bridge-origins/**'
   - 'test/spec/content/config/delivery.int.test.ts'
   - 'test/spec/content/config-etag/domain.int.test.ts'
+red_exempt:
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#2] invite.bind_phone_guide 单独关闭时不影响另一个缺省开启的开关'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#2] invite.before_buy_tip 单独关闭时不影响另一个缺省开启的开关'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#3] 必填键 h5_base_url 缺失：50001、ErrorEnvelope 与错误日志'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#3] 必填键 h5_release.stable 缺失：50001、ErrorEnvelope 与错误日志'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#3] 必填键 kf 缺失：50001、ErrorEnvelope 与错误日志'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#3] 必填键 legal.privacy.version 缺失：50001、ErrorEnvelope 与错误日志'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#3] 必填键 legal.privacy.min_version 缺失：50001、ErrorEnvelope 与错误日志'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#3] 必填键 legal.agreement.version 缺失：50001、ErrorEnvelope 与错误日志'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 h5_base_url 的非法值 "relative/path" 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 h5_base_url 的非法值 42 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 h5_base_url 的非法值 null 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 h5_release.stable 的非法值 "" 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 h5_release.stable 的非法值 1 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 kf 的非法值 {"url":"not a uri"} 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 kf 的非法值 {} 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 kf 的非法值 {"url":"https://kf.example.test","extra":true} 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 legal.privacy.version 的非法值 0 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 legal.privacy.version 的非法值 "7" 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 legal.privacy.min_version 的非法值 0 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 legal.privacy.min_version 的非法值 1.5 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 legal.agreement.version 的非法值 0 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#4] 必填键 legal.agreement.version 的非法值 2147483648 不降级成成功响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#5] 九个平台购买状态：on 字符串有效、maintenance 仅关闭时有效'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#6] 九个平台搜索只认 JSON true，on、1、字符串 true 及缺失都是 off'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] flags 保留基础字典但两个派生键优先；源值 undefined 只有 false 算关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] flags 保留基础字典但两个派生键优先；源值 false 只有 false 算关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] flags 保留基础字典但两个派生键优先；源值 true 只有 false 算关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] flags 保留基础字典但两个派生键优先；源值 "off" 只有 false 算关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] flags 保留基础字典但两个派生键优先；源值 0 只有 false 算关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] flags 保留基础字典但两个派生键优先；源值 null 只有 false 算关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] 只关闭 earnings.dashboard.enabled 时两个派生 flags 各自跟随自己的配置源'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#7] 只关闭 external_page.union_host_block 时两个派生 flags 各自跟随自己的配置源'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#8] agent 白名单按每次请求登录态判定，含 deletion_only，不泄露名单与备案号'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] agent.enabled=undefined 即使关白名单也不开放'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] agent.enabled="on" 即使关白名单也不开放'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] agent.enabled=false 即使关白名单也不开放'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] agent.enabled=1 即使关白名单也不开放'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] agent.enabled="true" 即使关白名单也不开放'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] 白名单开启时 agent.enabled=undefined 仍约束名单内登录用户，名单外始终关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] 白名单开启时 agent.enabled=false 仍约束名单内登录用户，名单外始终关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] 白名单开启时 agent.enabled="on" 仍约束名单内登录用户，名单外始终关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#9] 白名单开启时 agent.enabled=true 仍约束名单内登录用户，名单外始终关闭'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#10] whitelist_only=undefined 只有 JSON false 才允许游客'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#10] whitelist_only="off" 只有 JSON false 才允许游客'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#10] whitelist_only=0 只有 JSON false 才允许游客'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#10] whitelist_only=null 只有 JSON false 才允许游客'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#10] whitelist_only=false 只有 JSON false 才允许游客'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#11] 白名单混入非字符串时整键失效，不能保留其中匹配用户'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota=undefined 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota=-1 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota=0 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota=9 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota=2147483647 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota=2147483648 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota=1.5 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#12] agent.guest_daily_quota="3" 的整数范围和零额度'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#13] agent.require_phone="on" 只认 JSON true'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#13] agent.require_phone="true" 只认 JSON true'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#13] agent.require_phone=1 只认 JSON true'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#13] agent.require_phone=false 只认 JSON true'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#13] agent.require_phone=true 只认 JSON true'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#14] 灰度 100 bp：精确边界两侧、游客设备哈希、无主体稳定版'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#14] 灰度 1000 bp：精确边界两侧、游客设备哈希、无主体稳定版'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#15] percent_bp=0 覆盖登录、游客、有无分桶主体'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#15] percent_bp=10000 覆盖登录、游客、有无分桶主体'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#16] 同设备登录前后改用 user_id；同用户重读、换裸设备头均稳定'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#17] 灰度哈希包含 app_id，同一游客主体在两个 app 命中不同桶'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 undefined 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 null 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 {"version":"","percent_bp":1000} 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 {"version":"v2"} 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 {"version":"v2","percent_bp":-1} 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 {"version":"v2","percent_bp":10001} 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 {"version":"v2","percent_bp":1.5} 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#18] 灰度缺失、null 或形状非法 {"version":"v2","percent_bp":"10000"} 回稳定版；仅非法非 null 配置要求 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=47 向下取整为 1 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=48 向下取整为 2 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=23 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=24 向下取整为 1 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=undefined 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=36.5 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours="48" 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=0 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=-24 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=null 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=2147483647 向下取整为 89478485 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#19] claim.window_hours=2147483648 向下取整为 null 天，不下发小时'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 dict_version=12 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: "[AC-F1-02c#20] 可选键 share_domains=[ 'valid.example.test', 7 ] 形状非法整键回缺省并 warn"
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: "[AC-F1-02c#20] 可选键 texts={ valid: 'keep?', invalid: 7 } 形状非法整键回缺省并 warn"
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: "[AC-F1-02c#20] 可选键 features.flags={ custom: true, bad: 'true' } 形状非法整键回缺省并 warn"
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 help_links={ valid: [Object], bad: [Object] } 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 help_links={ bad: [Object] } 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: "[AC-F1-02c#20] 可选键 external_hosts=[ 'valid.example.test', '' ] 形状非法整键回缺省并 warn"
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: "[AC-F1-02c#20] 可选键 agent.examples=[ 'valid', false ] 形状非法整键回缺省并 warn"
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 agent.filing_text=1 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 invite.backfill_hours=-1 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 invite.backfill_hours=2147483648 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 invite.bind_phone_guide=false 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 invite.before_buy_tip=0 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 external_page.nav_host_sample_bp=10001 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 external_page.nav_host_sample_bp=0.5 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 app_update.recheck_interval_sec=0 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 app_update.recheck_interval_sec=1800 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 jump_tip=null 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 jump_tip=[] 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 jump_tip=text 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 clipboard=null 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 clipboard=[] 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 clipboard=text 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 auth_tips=null 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 auth_tips=[] 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 auth_tips=text 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 compliance=null 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 compliance=[] 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 compliance=text 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 display=null 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 display=[] 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#20] 可选键 display=text 形状非法整键回缺省并 warn'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#21] link_patterns 只取平台规格表，忽略同名配置及契约外键'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#22] 各 app 配置和缓存隔离，他 app 的必填键不能补齐本 app'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#23] 配置改动在注入时钟推进 60 秒后反映到响应'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#24] 无库句柄仍注册 api 路由且每次 50001；stream/admin 不注册'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config/delivery.int.test.ts
+    test: '[AC-F1-02c#25] config_items 读失败即 50001，不回成功缺省或过期数据'
+    reason: 同文件只改 [AC-F1-02c#1] / [#2]（有效非缺省配置那条）的 bridge_origins 期望并从 #20 表移出 bridge_origins 行；本用例 / 本行的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#30] configEtag 对最终 data 做递归规范化，嵌套对象键序与数字形键均遵守 JS sort'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#31] configEtag 保留数组顺序，不能把数组也排序'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 精确：弱比较结果 true'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 弱：弱比较结果 true'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 列表和空白：弱比较结果 true'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 星号：弱比较结果 true'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 缺失：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 空串：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 不同 tag：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 裸 tag：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 弱裸 tag：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 小写弱前缀：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 重复弱前缀：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 尾部垃圾：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 未闭引号：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 大小写不同：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 引号内星号：弱比较结果 false'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#33] 非空频道按 PlatformCode 顺序去重，只认 sales / popularity，忽略未知和不可选平台'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#34] 全部 PlatformCode 都支持，输入顺序不影响枚举序'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#35] 空白名单 下 rank_platforms 为 []'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#35] 全部不可选 下 rank_platforms 为 []'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#35] 未知平台 下 rank_platforms 为 []'
+    reason: 同文件只改 data() 夹具的 bridge_origins 为签名形状（signedFixture()，F1-02zzzb 新契约必需，否则类型检查不过）；本用例的标题与用例体与主干逐字相同（D10-620，CT-06zzzb）
 impl: claude
 tester: codex
 accept:
