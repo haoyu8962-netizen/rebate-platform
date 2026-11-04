@@ -30,4 +30,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/admin-manual-paid/**'
-status: todo
+status: done
+pr: 2322

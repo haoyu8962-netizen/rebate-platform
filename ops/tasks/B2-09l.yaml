@@ -29,4 +29,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/admin-payout-batch/**'
-status: todo
+status: done
+pr: 2318
