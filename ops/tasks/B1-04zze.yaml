@@ -1,0 +1,21 @@
+id: B1-04zze
+repo: rebate-platform
+title: infra/staging README §1.10 措辞补两句（FU-STAGING-README-WORDING，#2317 money r1 的两条 S2，已更正）：TAOBAO_SEARCH_SOURCE=dataoke 缺大淘客凭据时淘宝搜索不可用、不退回官方；拼多多报价另读两个 union.pdd.*_factor_bp 键
+type: impl
+# 2026-11-04 ops 入账（编排 07:11 排序 ⑦）。只在 README §1.10 追加说明，不改 compose、代码与已有句子；§1.5、§1.8 原文不动。
+# ① TAOBAO_SEARCH_SOURCE：dataoke 没有 DATAOKE_APP_KEY / DATAOKE_APP_SECRET_FILE 时照常启动、不报错，但淘宝搜索全部失败（适配器仍走 dataoke、没有大淘客数据源，抛 adapter_unimplemented），不会退回官方；只有 official_first 缺凭据拒绝启动。（更正：#2317 money r1 那条 S2 说「静默留在官方」是错的，B1-04zze money r1 S1 指出。）
+# ② 真实报价器的配置键：pdd 商品还读 union.pdd.self_buy_factor_bp、union.pdd.account_level_factor_bp（种子 0002 已有，但为待核实占位值，且不在 config 登记表、后台改不了，见 FU-PDD-FACTOR-REGISTRY），并要求一条已发布的分佣规则版本（种子已有）；
+#    tech_fee_bp、rebate.taobao.compare_rate_ratio_bp 自 B2-03t 起可经后台 config.business 修改。RV2（按路径）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'infra/staging/README.md'
+  - 'test/spec/infra/staging-readme-wording/**'
+test_paths:
+  - 'test/spec/infra/staging-readme-wording/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
