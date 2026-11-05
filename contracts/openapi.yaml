@@ -25150,7 +25150,6 @@ paths:
         are missing (D10-625) it always holds `resolve_bill_unverifiable` and
         `resolve_query_unverifiable`, so the page can say why before anyone submits.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -25255,7 +25254,6 @@ paths:
         and not part of the body hash, so a replay after a 10003 keeps its key.
       x-auth: admin
       x-idempotent: true
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003
@@ -25384,7 +25382,6 @@ paths:
         replay after a 10003 keeps its key.
       x-auth: admin
       x-idempotent: true
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003

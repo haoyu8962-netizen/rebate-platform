@@ -6,6 +6,9 @@
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 
+/** jobs/query-job.ts: 【立即查询】 of the disposal page. Ask once, record only, never move the withdrawal. */
+export const PAYOUT_MANUAL_QUERY_SOURCE = 'manual';
+
 export const NEEDS_MANUAL_ALERT = 'payout_needs_manual';
 
 export interface ManualRow {

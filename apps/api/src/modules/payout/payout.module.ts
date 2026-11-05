@@ -44,6 +44,10 @@ import {
   type AutoPayoutOptions,
 } from './application/auto-payout.ts';
 import type { AdminManualPaidDeps } from './application/admin-manual-paid.ts';
+import type {
+  AdminUnknownPayoutReadDeps,
+  AdminUnknownPayoutWriteDeps,
+} from './application/admin-unknown-payouts.ts';
 import type { AdminPayoutBatchDeps } from './application/admin-payout-batch.ts';
 import type { AdminPayoutOverviewDeps } from './application/admin-payout-overview.ts';
 import type { AdminWithdrawalReviewDeps } from './application/admin-withdrawal-review.ts';
@@ -93,6 +97,11 @@ import type {
   AdminPayeeDecrypt,
   AdminWithdrawalReadDeps,
 } from './application/admin-withdrawals.ts';
+import {
+  ADMIN_UNKNOWN_PAYOUT_READS,
+  ADMIN_UNKNOWN_PAYOUT_WRITES,
+  AdminUnknownPayoutsController,
+} from './http/admin/unknown-payouts.controller.ts';
 import {
   ADMIN_MANUAL_PAID,
   AdminManualPaidController,
@@ -925,6 +934,7 @@ export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
  * B2-09l: the batch (payout.execute, step-up totp; its transfer jobs go on the queue for the payout
  * process) and the overview (payout.execute or fund.view, read only), the same rule.
  * B2-09m: W8, the offline payment entry (payout.manual_entry, step-up totp), the same rule.
+ * B2-09s: the unknown result disposal (payout.execute; the writes with step-up totp), the same rule.
  */
 export class PayoutAdminModule {
   static forAdmin(options: PayoutAdminOptions): DynamicModule {
@@ -936,6 +946,7 @@ export class PayoutAdminModule {
         AdminWithdrawalReviewController,
         AdminPayoutBatchController,
         AdminManualPaidController,
+        AdminUnknownPayoutsController,
       ],
       providers: [
         {
@@ -1044,6 +1055,56 @@ export class PayoutAdminModule {
                     eventBus,
                     logger: logger.child({ module: 'payout' }),
                   }),
+                },
+        },
+        {
+          provide: ADMIN_UNKNOWN_PAYOUT_READS,
+          inject: [
+            CLOCK,
+            { token: DB_TOKEN, optional: true },
+            { token: FIELD_CRYPTO, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            db?: Kysely<DB>,
+            crypto?: FieldCrypto,
+          ): AdminUnknownPayoutReadDeps | null =>
+            db === undefined ? null : { db, clock, phones: options.phones(db, crypto ?? null) },
+        },
+        {
+          provide: ADMIN_UNKNOWN_PAYOUT_WRITES,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+            { token: JOB_QUEUE, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+            queue?: QueueRuntime,
+          ): AdminUnknownPayoutWriteDeps | null =>
+            db === undefined ||
+            idempotency === undefined ||
+            eventBus === undefined ||
+            queue === undefined
+              ? null
+              : {
+                  clock,
+                  idempotency,
+                  auditOn: (trx) => options.auditWriter(trx, clock),
+                  queue,
+                  eventBus,
+                  ledger: options.ledger({ clock, eventBus }),
+                  lockUsersForUpdate: options.lockUsersForUpdate,
+                  config: options.config(clock),
+                  identityKey: options.identityKey,
+                  logger: logger.child({ module: 'payout' }),
                 },
         },
         {

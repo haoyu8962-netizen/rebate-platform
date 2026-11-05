@@ -182,6 +182,13 @@ const RULES: readonly ActionRule[] = Object.freeze([
     },
   }),
   ...rules(['withdrawal_manual_paid'], 'withdrawal', null, fixed('payout.manual_entry')),
+  // payout (B2-09s): the disposal of an unknown result and its query; target the withdrawal id.
+  ...rules(
+    ['withdrawal_resolve', 'payout_query_request'],
+    'withdrawal',
+    null,
+    fixed('payout.execute'),
+  ),
   // payout (B2-09l): target the batch id, null on a whole-batch rejection. The withdrawal ids are in
   // after, so this one is found by batch and not by withdrawal (编排 2026-11-04 22:12).
   ...rules(['payout_batch_execute'], 'payout_batch', null, fixed('payout.execute')),

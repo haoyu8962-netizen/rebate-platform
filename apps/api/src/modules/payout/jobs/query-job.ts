@@ -31,6 +31,9 @@
 //      (the next job never lands after T + manual_after, so that decision is taken on time even
 //      when manual_after_min is not one of the points).
 //      A CAS that hits nothing (row_version moved) only warns. A query never pauses the queue.
+// B2-09s (BR-WDR-15, D10-596 ①): source = 'manual' is 【立即查询】 from the disposal page. It skips all of
+// the above: a withdrawal waiting for a person or returned by W9 is asked once, one kind=query row is
+// written and nothing moves.
 // B2-07c (BR-WDR-23 ①; 编排裁定 D10-415 ②, D10-416): the reconciliation's immediate query carries
 // source = 'recon' in its payload. Its result not a success (a definite failure, or unknown after
 // the three tries) → no W6 and no next point: on one couli_payout transaction the attempt, the
@@ -59,7 +62,7 @@ import type { QueryResult } from '../domain/channel-result.ts';
 import { readPayoutChannelConfig } from '../application/judgement.ts';
 import { handoffLanding, recordedResponse } from '../application/landing-handoff.ts';
 import { holdWithdrawal } from '../application/transfer-gates.ts';
-import { markNeedsManual } from '../application/query-manual.ts';
+import { markNeedsManual, PAYOUT_MANUAL_QUERY_SOURCE } from '../application/query-manual.ts';
 import { manualDue, nextQueryDueMs, type QuerySchedule } from '../application/query-schedule.ts';
 import {
   PAYOUT_RECON_SOURCE,
@@ -122,6 +125,10 @@ const RECON_MANUAL_ALERT: QueryReconManualMessage = 'payout_needs_manual_by_bill
 /** The chain's payload and whether the reconciliation sent it (source = 'recon'). */
 interface ParsedQuery extends QueryJobPayload {
   readonly recon: boolean;
+  /** B2-09s: 【立即查询】 of the disposal page (source = 'manual'). */
+  readonly manual: boolean;
+  /** The request's id, the same on every redelivery of its job (one attempt per request). */
+  readonly manualRequestId: string | null;
 }
 
 interface QueryRow {
@@ -152,6 +159,10 @@ type Prepared =
       readonly judgement: ChannelJudgement;
     };
 
+/** processed_events.consumer of 【立即查询】: one kind=query attempt per request. */
+const MANUAL_QUERY_CONSUMER = 'payout-manual-query';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function parsePayload(job: ReceivedJob): ParsedQuery | null {
   const payload = job.payload as Record<string, unknown>;
   const withdrawalId = payload['withdrawal_id'];
@@ -177,6 +188,9 @@ function parsePayload(job: ReceivedJob): ParsedQuery | null {
     app_id: appId,
     point,
     recon: payload['source'] === PAYOUT_RECON_SOURCE,
+    manual: payload['source'] === PAYOUT_MANUAL_QUERY_SOURCE,
+    manualRequestId:
+      typeof payload['manual_request_id'] === 'string' ? payload['manual_request_id'] : null,
   };
 }
 
@@ -358,6 +372,7 @@ export function createQueryJob(options: QueryJobOptions): JobHandler {
     errorName: string | null,
     latencyMs: number,
     at: Date,
+    manualRequestId?: string,
   ): Promise<string> {
     const id = randomUUID();
     await executor
@@ -368,7 +383,12 @@ export function createQueryJob(options: QueryJobOptions): JobHandler {
         app_id: row.app_id,
         withdrawal_id: row.id,
         kind: 'query',
-        request: JSON.stringify({ out_biz_no: row.out_biz_no, point, try: tryNo }),
+        request: JSON.stringify({
+          out_biz_no: row.out_biz_no,
+          point,
+          try: tryNo,
+          ...(manualRequestId === undefined ? {} : { manual_request_id: manualRequestId }),
+        }),
         response: JSON.stringify(
           result === null
             ? { transport_error: true, error: errorName, received_at: at.toISOString() }
@@ -568,10 +588,107 @@ export function createQueryJob(options: QueryJobOptions): JobHandler {
     );
   }
 
+  /**
+   * B2-09s (BR-WDR-15, D10-595 ③, D10-596 ①): 【立即查询】. Only a withdrawal waiting for a person or
+   * returned by W9, once, and one kind=query row: never a transition, a voucher, a next point or a
+   * transfer, whatever the channel answers. A person ends the withdrawal.
+   */
+  async function manualQuery(payload: ParsedQuery): Promise<void> {
+    const requestId = payload.manualRequestId;
+    if (requestId === null || !UUID.test(requestId)) {
+      logger.warn({ withdrawal_id: payload.withdrawal_id }, 'payout_query_bad_payload');
+      return;
+    }
+    const claimed = (executor: Kysely<DB>): Promise<{ event_id: string } | undefined> =>
+      executor
+        .withSchema('app')
+        .selectFrom('processed_events')
+        .select('event_id')
+        .where('consumer', '=', MANUAL_QUERY_CONSUMER)
+        .where('event_id', '=', requestId)
+        .executeTakeFirst();
+    // A redelivery after the record committed: a second answer must not become the latest query.
+    if ((await claimed(attemptsDb)) !== undefined) {
+      logger.info({ withdrawal_id: payload.withdrawal_id }, 'payout_manual_query_already_recorded');
+      return;
+    }
+    const row = await db.transaction().execute(async (trx) => {
+      const found = await readRow(trx, payload.app_id, payload.withdrawal_id);
+      if (found === null || found.execute_seq !== payload.execute_seq) return null;
+      const held = await trx
+        .withSchema('app')
+        .selectFrom('withdrawals')
+        .select('hold_reason')
+        .where('app_id', '=', found.app_id)
+        .where('id', '=', found.id)
+        .executeTakeFirst();
+      const waiting = found.status === PAYING && found.needs_manual;
+      const returned =
+        found.status === 'APPROVED' && held?.hold_reason === 'payer_side_after_transfer';
+      return waiting || returned ? found : null;
+    });
+    const fields = { withdrawal_id: payload.withdrawal_id, execute_seq: payload.execute_seq };
+    if (row === null) {
+      logger.info(fields, 'payout_manual_query_skipped');
+      return;
+    }
+    const adapter = isChannel(row.payout_channel) ? channels[row.payout_channel] : undefined;
+    if (adapter === undefined) {
+      logger.warn({ ...fields, channel: row.payout_channel }, 'payout_query_no_channel');
+      return;
+    }
+    const channelConfig = await readPayoutChannelConfig(row.app_id, db, config, configLogger);
+    const judgement: ChannelJudgement = {
+      lists: {
+        definiteFailCodes: channelConfig.definiteFailCodes,
+        payerSideCodes: channelConfig.payerSideCodes,
+        queryStatusMap: channelConfig.queryStatusMap,
+      },
+    };
+    const started = clock.now();
+    let result: QueryResult | null = null;
+    let errorName: string | null = null;
+    try {
+      result = await adapter.query(row.out_biz_no, judgement);
+    } catch (error: unknown) {
+      errorName = error instanceof Error ? error.name : 'unknown';
+      logger.warn({ ...fields, error: errorName }, 'payout_query_transport_error');
+    }
+    const finished = clock.now();
+    const latencyMs = Math.max(0, finished.getTime() - started.getTime());
+    // The claim and the attempt commit together, on the primary key of processed_events: a delivery
+    // that finds the request claimed, or waits for and then loses to another, records nothing.
+    await attemptsDb.transaction().execute(async (trx) => {
+      const claim = await trx
+        .withSchema('app')
+        .insertInto('processed_events')
+        .values({ consumer: MANUAL_QUERY_CONSUMER, event_id: requestId })
+        .onConflict((oc) => oc.columns(['consumer', 'event_id']).doNothing())
+        .returning('event_id')
+        .executeTakeFirst();
+      if (claim === undefined) return;
+      await recordTry(
+        trx,
+        row,
+        payload.point,
+        1,
+        result,
+        errorName,
+        latencyMs,
+        finished,
+        requestId,
+      );
+    });
+  }
+
   return async function queryJob(job: ReceivedJob): Promise<void> {
     const payload = parsePayload(job);
     if (payload === null) {
       logger.warn({ job_id: job.id, queue: job.queue, name: job.name }, 'payout_query_bad_payload');
+      return;
+    }
+    if (payload.manual) {
+      await manualQuery(payload);
       return;
     }
     const now = clock.now();
