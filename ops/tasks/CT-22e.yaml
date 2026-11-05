@@ -1,0 +1,25 @@
+id: CT-22e
+repo: rebate-platform
+title: 契约：价格走势最常见价 mode_price_fen 与拼多多来源键（D10-664 S-05，CT-22-trend 拆出，不等 DSX-37）
+type: contract
+# 2026-11-06 be 入账（D10-664 ③ 拆单，D10-685 顺序 S-02 → UI-STATES → S-05）。04 §6.3 price-trend 行：ProductPriceTrend 加 mode_price_fen（可空：status=ok 时为近 30 天最常见价，取值只在 08 BR-WATCH-19 细则「商品详情价格走势的最常见价」；no_data 时为 null），按 contracts/README 第 8 条做可选字段。source_key 枚举补拼多多两键 price_trend.source.pdd / price_trend.source.pdd.general（08 BR-TEXT-14 表 C「价格走势·拼多多」）。文案键（price_trend.mode / .current / .mode.note* / .title.pdd*）归 content 的 S-01，本单不改字典。几何向量与 DSX-37 文本键留在 CT-22-trend。实现另立 S-12（B1-29 续）。只增不改。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
