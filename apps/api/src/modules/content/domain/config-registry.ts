@@ -276,6 +276,11 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // signing and the save-time shape check are F1-02zzzb's. Until then /v1/config keeps reading it
   // as it does today (free-form), so behaviour is unchanged. No seed row. Registration only.
   spec('bridge_origins', 'object', 'config.risk'),
+  // B2-03w (D10-637): the default avatar URL identity's GET /v1/me hands out in place of the
+  // avatar:default sentinel, config.business, editable. A string; the save-time check
+  // (default-avatar-save-check) holds it to what identity accepts on read. Addresses differ per
+  // environment, so no seed row. Registration only.
+  spec('me.default_avatar_url', 'string', 'config.business'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

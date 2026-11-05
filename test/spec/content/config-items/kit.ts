@@ -377,6 +377,13 @@ export const SHARE_UNSEEDED: readonly string[] = ['share_domains'];
 export const BRIDGE: readonly Expected[] = [row('bridge_origins', 'object', 'config.risk')];
 /** B2-03v (D10-610): unset means F1-02zzzb signs the h5_base_url origin, hence no seed row. */
 export const BRIDGE_UNSEEDED: readonly string[] = ['bridge_origins'];
+// B2-03w (D10-637): me.default_avatar_url, registered right after BRIDGE: editable
+// config.business, its value a string, options null. Not part of expectedNow() either.
+export const AVATAR: readonly Expected[] = [
+  row('me.default_avatar_url', 'string', 'config.business'),
+];
+/** B2-03w (D10-637): addresses differ per environment, hence no seed row. */
+export const AVATAR_UNSEEDED: readonly string[] = ['me.default_avatar_url'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -396,6 +403,7 @@ export const expectedOf = (key: string): Expected => {
     ...QUOTE,
     ...SHARE,
     ...BRIDGE,
+    ...AVATAR,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

@@ -81,6 +81,7 @@ import {
   type ConfigItemStore,
 } from './application/config-item-admin.ts';
 import { bridgeOriginsSaveCheck } from './application/bridge-origins-save-check.ts';
+import { defaultAvatarSaveCheck } from './application/default-avatar-save-check.ts';
 import { AdminConfigItemsController } from './http/admin/config-items.controller.ts';
 import { createKyselyConfigItemStore } from './infra/kysely-config-item-store.ts';
 import { PagePreviewService, type PagePreviewStore } from './application/page-preview.ts';
@@ -229,15 +230,18 @@ const NO_DATABASE_AUDIT: AuditPort = {
 /** Monotonic milliseconds for the SVG conversion budget (not business time). */
 const monotonicMs = (): number => performance.now();
 
-/** F1-02zzzb: content's own bridge_origins save check runs first, then the assembler's checks. */
+/**
+ * F1-02zzzb: content's own save checks run first (bridge_origins, then B2-03w's
+ * me.default_avatar_url), then the assembler's checks.
+ */
 function withContentSaveChecks(checks: ConfigItemAdminChecks | undefined): ConfigItemAdminChecks {
   const save = checks?.save;
   return {
     ...checks,
     save:
       save === undefined
-        ? bridgeOriginsSaveCheck()
-        : combineConfigItemSaveChecks(bridgeOriginsSaveCheck(), save),
+        ? combineConfigItemSaveChecks(bridgeOriginsSaveCheck(), defaultAvatarSaveCheck())
+        : combineConfigItemSaveChecks(bridgeOriginsSaveCheck(), defaultAvatarSaveCheck(), save),
   };
 }
 

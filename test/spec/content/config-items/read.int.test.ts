@@ -9,6 +9,7 @@ import {
   ADVANCE_ALERT,
   AUTO_ENABLE_CHECK,
   AUTO_PAYOUT,
+  AVATAR,
   BRIDGE,
   EXPECTED,
   KEYS,
@@ -75,6 +76,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...QUOTE,
     ...SHARE,
     ...BRIDGE,
+    ...AVATAR,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(
