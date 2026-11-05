@@ -33,7 +33,7 @@ impl: claude
 tester: codex
 accept:
   - 'pnpm verify'
-status: todo
+status: done
 red_exempt_outside:
   - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
     reason: 顶部 SHAPE 常量只追加 shop_name 一行（迁移 0124 合法加列，D10-660，照 B1-05u 先例），仍是精确列集合比对
@@ -56,3 +56,4 @@ red_exempt:
   - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
     test: '[BR-PRICE-11] 主键仍是 (app_id, pool_id, product_key)：只有佣金率不同的同键插入失败，原行不变'
     reason: 同文件只在顶部 SHAPE 追加 shop_name 一行；本用例的标题与用例体与主干逐字相同，不读 SHAPE（D10-660）
+pr: 2402

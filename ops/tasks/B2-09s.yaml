@@ -36,4 +36,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/admin-unknown-payouts/**'
-status: todo
+status: done
+pr: 2413

@@ -26,4 +26,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/recon-late-paid/**'
-status: todo
+status: done
+pr: 2369

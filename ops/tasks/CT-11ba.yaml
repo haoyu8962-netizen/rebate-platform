@@ -23,7 +23,7 @@ accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
   - 'test/spec/frontend/ui-tokens/**'
-status: todo
+status: done
 red_exempt_outside:
   - file: test/spec/frontend/ui-tokens/dark.test.ts
     reason: 读取函数里的夹具路径由 variables.49bb4ad.css 换成 variables.f088f04.css（随令牌来源提交换钉值，照 CT-11b），用例体一字未改
@@ -43,3 +43,4 @@ red_exempt:
   - file: test/spec/frontend/ui-tokens/dark.test.ts
     test: '[AC-CT-11b-SOURCE#1] 生成器无 I/O 和硬编码颜色，深色变化只来自入参且不污染后续调用'
     reason: 同文件只换了读取函数里的夹具路径；本用例的标题与用例体与主干逐字相同（CT-11ba，D10-675 后先红 red/1）
+pr: 2412
