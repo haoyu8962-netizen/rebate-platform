@@ -36,8 +36,8 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/pdd-auth-link/**'
-status: todo
-pr: null
+status: done
+pr: 2409
 red_exempt:
   - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
     test: '[B1-22l] taobao 绑定 absent、无 self_buy 位：最早登记的账号站长授权 expired 即拒绝，较晚登记却更早更新的有效账号不能替代'

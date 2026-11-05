@@ -551,6 +551,8 @@ export class LinkingModule {
                 pids,
                 jumpEnvironment: { appEnv, apps: ports.apps, verifiedPaths: ports.verifiedPaths },
                 logger,
+                registry: { get: (platform) => ports.union.adapter(platform) },
+                attrCodes: parts.attrCodes,
               }),
               verifiedBirthDate: (appId, userId) => shares.verifiedBirthDate(appId, userId),
             });
@@ -666,6 +668,7 @@ export class LinkingModule {
             CallerContext,
             LinkingConfigReader,
             LINKING_PIDS,
+            AttrCodeReader,
           ],
           useFactory: (
             db: Kysely<Database> | undefined,
@@ -677,6 +680,7 @@ export class LinkingModule {
             callerContext: CallerContext,
             config: LinkingConfigReader,
             pids: PidReader,
+            attrCodes: AttrCodeReader,
           ): UnionAuthUrlService =>
             db === undefined
               ? { get: unavailable }
@@ -688,7 +692,9 @@ export class LinkingModule {
                   appEnv: appConfig.appEnv,
                   authApps: authApps ?? createDemoUnionAuthApps(),
                   pids,
-                  // The pdd auth_jump uses the open's jump environment (apps.json, verified paths).
+                  attrCodes,
+                  // The pdd auth_jump uses the open's jump environment (apps.json, verified paths);
+                  // B1-06zf: its filing link comes from the governed union adapters (none → 50303).
                   ...(ports === undefined
                     ? {}
                     : {
@@ -697,6 +703,7 @@ export class LinkingModule {
                           apps: ports.apps,
                           verifiedPaths: ports.verifiedPaths,
                         },
+                        registry: { get: (platform) => ports.union.adapter(platform) },
                       }),
                   logger,
                 }),

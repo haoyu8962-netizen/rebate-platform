@@ -9,6 +9,7 @@ import {
   type UnionAuthUrlOptions,
 } from '../../../../apps/api/src/modules/linking/application/union-auth-url.ts';
 import { FixedClock } from '../../../../apps/api/src/modules/platform/index.ts';
+import { DemoUnionAdapter } from '../../../../apps/api/src/modules/union/index.ts';
 import { TRACE, validate } from '../auth-url/kit.ts';
 import { databaseFixture, driftedAccounts, interleavedAccounts, type AuthPlatform } from './kit.ts';
 
@@ -66,6 +67,28 @@ async function seed(db: Kysely<DB>) {
       updated_at: clock.now(),
     })
     .execute();
+  // B1-06zf (D10-659): the Pinduoduo authorization link comes through the union port (the demo
+  // adapter here) with the user's attr_code read from users.
+  const demo = new DemoUnionAdapter({
+    platform: 'pdd',
+    seed: 'b1-22l-auth-url',
+    clock,
+    environment: 'test',
+  });
+  const unionPorts = {
+    registry: { get: () => demo },
+    attrCodes: {
+      attrCode: async (tenant: string, uid: string) => {
+        const row = await db
+          .selectFrom('users')
+          .select('attr_code')
+          .where('app_id', '=', tenant)
+          .where('id', '=', uid)
+          .executeTakeFirst();
+        return row?.attr_code ?? null;
+      },
+    },
+  };
   const options: UnionAuthUrlOptions = {
     db,
     clock,
@@ -80,6 +103,7 @@ async function seed(db: Kysely<DB>) {
         }),
       ),
     },
+    ...unionPorts,
   };
   const sessions = () =>
     db.selectFrom('union_auth_sessions').selectAll().where('app_id', '=', appId).execute();
@@ -141,11 +165,46 @@ it.each([
   60_000,
 );
 
+/**
+ * B1-06zf (D10-658 ①): with no self_buy slot no Pinduoduo authorization link can be generated,
+ * so even a valid account answers 50301 maintenance and writes no state.
+ */
+async function expectNoSlotMaintenance(
+  f: Awaited<ReturnType<typeof seed>>,
+  result: Awaited<ReturnType<typeof issue>>,
+) {
+  expect(result).toMatchObject({
+    status: 503,
+    envelope: { code: 50301, data: { reason: 'maintenance' } },
+  });
+  await validate(result.envelope, 'ErrorEnvelope');
+  for (const field of ['auth_url', 'state', 'auth_jump', 'auth_methods']) {
+    expect(result.envelope.data ?? {}).not.toHaveProperty(field);
+  }
+  expect(await f.sessions()).toEqual([]);
+}
+
+it.each([
+  ['pdd', 'absent'],
+  ['pdd', 'released'],
+] as const)(
+  '[B1-22l] %s 绑定 %s、无 self_buy 位：最早登记的账号有效、较晚登记的账号 expired，但没有 self_buy 推广位生成不了授权链接 → 50301 maintenance，不写 state',
+  async (platform, binding) => {
+    const db = database();
+    const f = await seed(db);
+    const { later } = await driftedAccounts(db, f.appId, platform, {
+      first: 'active',
+      later: 'expired',
+    });
+    if (binding === 'released') await f.release(later, platform);
+    await expectNoSlotMaintenance(f, await issue(f, platform));
+  },
+  60_000,
+);
+
 it.each([
   ['taobao', 'absent'],
   ['taobao', 'released'],
-  ['pdd', 'absent'],
-  ['pdd', 'released'],
 ] as const)(
   '[B1-22l] %s 绑定 %s、无 self_buy 位：最早登记的账号有效即签发，不因较晚登记的账号 expired 而拒绝',
   async (platform, binding) => {
@@ -199,7 +258,14 @@ it.each(['taobao', 'pdd'] as const)(
   60_000,
 );
 
-it.each(['taobao', 'pdd'] as const)(
+it('[B1-22l] pdd 无绑定、无 self_buy 位、三个账号更新先后与登记先后交错：最早登记的账号有效，但没有 self_buy 推广位生成不了授权链接 → 50301 maintenance，不写 state', async () => {
+  const db = database();
+  const f = await seed(db);
+  await interleavedAccounts(db, f.appId, 'pdd', { first: 'active', others: 'expired' });
+  await expectNoSlotMaintenance(f, await issue(f, 'pdd'));
+}, 60_000);
+
+it.each(['taobao'] as const)(
   '[B1-22l] %s 无绑定、无 self_buy 位、三个账号更新先后与登记先后交错：最早登记的账号有效即签发，最近重新授权或最早更新的账号 expired 不影响',
   async (platform) => {
     const db = database();

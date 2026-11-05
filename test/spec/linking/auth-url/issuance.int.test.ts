@@ -27,6 +27,7 @@ import {
   type ConnectionConfig,
   type DbHandles,
 } from '../../../../apps/api/src/modules/platform/index.ts';
+import { DemoUnionAdapter } from '../../../../apps/api/src/modules/union/index.ts';
 import {
   NOW,
   ROOT,
@@ -37,6 +38,7 @@ import {
   validate,
   type Response,
 } from './kit.ts';
+import { expectNoState, planValues } from '../pdd-auth-link/kit.ts';
 
 interface HttpApp {
   init(): Promise<unknown>;
@@ -370,6 +372,37 @@ it.each(['ios', 'android', 'harmony'] as const)(
   '[AC-B1-06g#4] 拼多多 %s 的 installed 缺省等同 unknown；只有 auth_jump，快照授权方式两列为空',
   async (client) => {
     const f = await seed();
+    // B1-06zf (D10-658 ②): the authorization link is generated for the account's self_buy slot.
+    await db
+      .insertInto('union_pids')
+      .values({
+        id: randomUUID(),
+        app_id: f.appId,
+        platform: 'pdd',
+        union_account_id: f.accounts.pdd,
+        site_id: null,
+        pid: `synthetic-auth-pdd-self_buy-${randomUUID().slice(0, 8)}`,
+        pid_scene: 'self_buy',
+        status: 'active',
+        hjy_ignore_confirmed_at: clock.now(),
+        hjy_ignore_evidence_path: 'synthetic/evidence',
+        created_at: clock.now(),
+        updated_at: clock.now(),
+      })
+      .execute();
+    // D10-661 甲: record what the union port answers (the governed wrapper takes the method at
+    // entry build, so the call-through spy goes in before start).
+    const portAnswers: Array<Awaited<ReturnType<DemoUnionAdapter['pddAuthorityUrl']>>> = [];
+    const portAuthorityUrl = DemoUnionAdapter.prototype.pddAuthorityUrl;
+    vi.spyOn(DemoUnionAdapter.prototype, 'pddAuthorityUrl').mockImplementation(async function (
+      this: DemoUnionAdapter,
+      identity,
+      context,
+    ) {
+      const answer = await portAuthorityUrl.call(this, identity, context);
+      portAnswers.push(answer);
+      return answer;
+    });
     const get = await start(f);
     const implicitResponse = await get('pdd', client);
     const implicit = success(implicitResponse);
@@ -405,6 +438,25 @@ it.each(['ios', 'android', 'harmony'] as const)(
         used_at: null,
         expire_at: new Date(clock.now().getTime() + 600_000),
       });
+    }
+    // D10-661 甲: every auth_jump step is a link the port answered for that issuance, never the
+    // example.test placeholder and never carrying this state (raw or decoded).
+    const decoded = (value: string): string => {
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    };
+    expect(portAnswers).toHaveLength(2);
+    for (const [index, data] of [implicit, explicit].entries()) {
+      const answer = portAnswers[index]!;
+      const answered = [answer.schema_url, answer.mobile_short_url, answer.url].filter(
+        (value): value is string => typeof value === 'string' && value !== '',
+      );
+      const steps = planValues(data.auth_jump);
+      for (const step of steps) expect(answered).toContain(step);
+      expectNoState([...steps, ...steps.map(decoded)], data.state);
     }
   },
   60_000,
@@ -536,6 +588,28 @@ function options(f: Fixture, client: AuthClient, appEnv: 'test' | 'prod') {
       app_secret: canary,
     }),
   );
+  // B1-06zf (D10-659): the Pinduoduo authorization link comes through the union port (the demo
+  // adapter here) with the user's attr_code read from users.
+  const demo = new DemoUnionAdapter({
+    platform: 'pdd',
+    seed: 'b1-06g-auth-url',
+    clock,
+    environment: 'test',
+  });
+  const unionPorts = {
+    registry: { get: () => demo },
+    attrCodes: {
+      attrCode: async (tenant: string, uid: string) => {
+        const row = await db
+          .selectFrom('users')
+          .select('attr_code')
+          .where('app_id', '=', tenant)
+          .where('id', '=', uid)
+          .executeTakeFirst();
+        return row?.attr_code ?? null;
+      },
+    },
+  };
   const config: UnionAuthUrlOptions = {
     db,
     clock,
@@ -545,6 +619,7 @@ function options(f: Fixture, client: AuthClient, appEnv: 'test' | 'prod') {
     },
     config: createContentReader({ db, clock }),
     authApps: { resolve },
+    ...unionPorts,
   };
   return { config, resolve, canary };
 }

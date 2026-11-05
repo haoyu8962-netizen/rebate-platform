@@ -19,8 +19,9 @@
 //   and active go on; any other status (unbound, pending_auth, invalid, released, no row) asks the
 //   union authority port (UnionAdapter.queryPddAuthority, an idempotent governed read) with the
 //   same server-built identity the conversion uses (custom_parameters {app, uid=attr_code, sc},
-//   never a user_id; no attr_code → 50301; no active slot of the scene → 30111, B1-22n below):
-//   authorized → the binding is written active (below) and the open goes on; not authorized →
+//   never a user_id; no attr_code → 50301; no active slot of the scene → 50301 maintenance,
+//   D10-654 below): authorized → the binding is written active (below) and the open goes on; not
+//   authorized →
 //   30111 with data.auth_jump only, a one-time state bound to uid + device record + the link this
 //   open serves (BR-ID-22 细则, the auth-url jump construction); the port missing or failing →
 //   50303, nothing written.
@@ -49,13 +50,22 @@
 //   (a blocked user's no_rebate keeps no_rebate_reason=binding_blocked) before any cache, price or
 //   union call. Jd has no ⑥: it is checked here too, so every composition routing jd through this
 //   hook (createPddAuthLinkOpen, link-open-taobao.ts) gets it. Cache reads and keys unchanged (R-12).
-// - ⑥ before ⑦ (D10-262 / D10-263): a binding not active whose account in use has no active slot
-//   of the link's scene is not queried (local configuration before external calls) and never
-//   activated, nor is another scene's slot used for the query: locally it counts as not filed →
-//   30111 with an auth_jump as above, no union call at all. With the slot: one filing query, then
-//   ⑦ as above. An active binding goes straight to ⑦ (no slot → 50301).
+// - ⑥ before ⑦ (D10-262 / D10-263, D10-654): a binding not active whose account in use has no
+//   active slot of the link's scene is not queried (local configuration before external calls)
+//   and never activated, nor is another scene's slot used: 50301 data.reason=maintenance, no state,
+//   no union call at all. With the slot: one filing query, then ⑦ as above. An active binding
+//   goes straight to ⑦ (no slot → 50301).
+// B1-06zf (FU-PDD-AUTH-LINK, D10-647): the 30111 auth_jump is built over the filing link
+// UnionAdapter.pddAuthorityUrl generates at that moment for the identity just queried
+// (pdd-authority.ts generatePddAuthorityLink, D10-662: the h5 step the web address
+// mobile_short_url → url, the scheme step the upstream schema_url as is); the
+// state lives only in union_auth_sessions. Generation missing or failing → 50303, nothing written.
 import type { UnionPidRow } from '../../union/index.ts';
-import { createConversionPrecheck, effectiveNoRebate } from './link-open-conversion.ts';
+import {
+  createConversionPrecheck,
+  effectiveNoRebate,
+  type LinkingUnionIdentity,
+} from './link-open-conversion.ts';
 import type { LinkOpenService } from './link-open.ts';
 import type { LinkOpenOwnerResult } from './link-open-owner.ts';
 import {
@@ -73,6 +83,7 @@ import { createWiredLinkOpen, type WiredLinkOpenOptions } from './link-open-wiri
 import {
   PDD,
   activatePddBinding,
+  generatePddAuthorityLink,
   pddAuthorityIdentity,
   pddBindingRows,
   queryPddAuthority,
@@ -88,7 +99,6 @@ import {
   deviceClientOf,
   insertAuthSession,
   newAuthState,
-  syntheticAuthUrl,
 } from './union-auth-state.ts';
 import { pddAuthJump, type UnionAuthUrlOptions } from './union-auth-url.ts';
 
@@ -248,10 +258,16 @@ export function createPddAuthorization(options: PddAuthLinkOpenOptions) {
     return blocked ? { kind: 'allowed', noRebateReason: 'binding_blocked' } : { kind: 'allowed' };
   }
 
-  /** 30111 with an auth_jump whose state is bound to uid + device record + the served link. */
+  /**
+   * 30111 with an auth_jump whose state is bound to uid + device record + the served link. B1-06zf
+   * (D10-647): the jump is built over the filing link pddAuthorityUrl generates now for the
+   * identity this open just queried (never cached, never carrying the state); the port missing or
+   * failing → 50303, no state written.
+   */
   async function issue(
     input: LinkOpenAuthorizationInput,
     userId: string,
+    identity: LinkingUnionIdentity,
   ): Promise<LinkOpenAuthorization> {
     const { caller, owner, executor } = input;
     const appId = owner.link.app_id;
@@ -271,12 +287,17 @@ export function createPddAuthorization(options: PddAuthLinkOpenOptions) {
     // A second reading of the injected clock, moved by the TTL (no `new Date` outside the clock).
     const expireAt = clock.now();
     expireAt.setTime(now.getTime() + AUTH_STATE_TTL_MS);
+    const authLink = await generatePddAuthorityLink(
+      { registry, logger },
+      { appId, identity, traceId: input.traceId, events: 'linking.open' },
+    );
+    if (authLink === null) return QUERY_FAILED;
     const state = newAuthState();
     let authJump;
     try {
       authJump = pddAuthJump(
         { appEnv, jumpEnvironment: environment },
-        syntheticAuthUrl(PLATFORM, state),
+        authLink,
         client,
         input.installed,
         expireAt,
@@ -360,15 +381,16 @@ export function createPddAuthorization(options: PddAuthLinkOpenOptions) {
         events: 'linking.open',
       },
     );
-    // B1-22n (D10-262 / D10-263): no active slot of the scene → not queried, not filed (⑥).
-    if (identity === 'no_pid') return issue(input, subject);
+    // D10-654 (superseding D10-262 / D10-263's 30111): the account in use has no active slot of the
+    // scene → 50301 maintenance, as ⑦ (logged by pddAuthorityIdentity); not queried, no state.
+    if (identity === 'no_pid') return MAINTENANCE;
     if (identity === 'no_attr_code') throw paused('linking: attr_code unavailable');
     const authorized = await queryPddAuthority(
       { registry, logger },
       { appId, identity, traceId: input.traceId, events: 'linking.open' },
     );
     if (authorized === null) return QUERY_FAILED;
-    if (!authorized) return issue(input, subject);
+    if (!authorized) return issue(input, subject, identity);
     const custom = JSON.stringify(identity.custom_parameters);
     const written = await activatePddBinding(executor, clock, {
       appId,

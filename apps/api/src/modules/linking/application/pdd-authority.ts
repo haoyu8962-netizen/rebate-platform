@@ -32,6 +32,7 @@
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import { newUuidV7, type Clock } from '../../platform/index.ts';
+import type { PddAuthorityUrl } from '../../union/index.ts';
 import { canTransitionBinding } from '../domain/binding-status-transitions.ts';
 import { resolveBindingConflictsOnActive } from '../infra/binding-conflicts.ts';
 import type { AttrCodeReader } from '../ports.ts';
@@ -175,6 +176,71 @@ export async function queryPddAuthority(
     return failed(error);
   } finally {
     pddQueriesInFlight -= 1;
+  }
+}
+
+/**
+ * B1-06zf (FU-PDD-AUTH-LINK, D10-662): the two things of a UnionAdapter.pddAuthorityUrl answer the
+ * authorization jump is built over — the web address (mobile_short_url, else url; an https page the
+ * h5 / universal-link steps and auth_url carry) and the upstream App scheme (schema_url as is, else
+ * null; never wrapped again). short_url / browser_url are not used; no web address → an error.
+ */
+export interface PddAuthorityLink {
+  readonly webUrl: string;
+  readonly scheme: string | null;
+}
+
+function present(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+export function pddAuthorityLink(result: PddAuthorityUrl): PddAuthorityLink {
+  const webUrl = [result.mobile_short_url, result.url].find(present);
+  if (webUrl === undefined)
+    throw new Error('linking: the pdd authority answer carries no web link');
+  return { webUrl, scheme: present(result.schema_url) ? result.schema_url : null };
+}
+
+/**
+ * B1-06zf (FU-PDD-AUTH-LINK, D10-647): the filing link of this identity, generated now (only when
+ * the user asked: an open's 30111 or auth-url; never cached) through
+ * UnionAdapter.pddAuthorityUrl, then picked by pddAuthorityLink ({ webUrl, scheme }). The port missing, failing or a
+ * link-less answer → null (logged by error code only; the caller answers 50303, writes nothing).
+ */
+export async function generatePddAuthorityLink(
+  deps: PddQueryDeps,
+  input: {
+    readonly appId: string;
+    readonly identity: LinkingUnionIdentity;
+    readonly traceId: string;
+    readonly events: string;
+  },
+): Promise<PddAuthorityLink | null> {
+  const { appId, identity, traceId } = input;
+  try {
+    const adapter = deps.registry.get(PDD);
+    const generate = adapter.pddAuthorityUrl;
+    if (typeof generate !== 'function') throw new Error('linking: no pdd authority url port');
+    const answer = await generate.call(adapter, identity, {
+      appId,
+      requestId: traceId,
+      purpose: 'online',
+    });
+    if (typeof answer !== 'object' || answer === null) throw new Error('linking: malformed answer');
+    return pddAuthorityLink(answer);
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    deps.logger.warn(
+      {
+        event: `${input.events}.pdd_authority_url_failed`,
+        app_id: appId,
+        platform: PDD,
+        trace_id: traceId,
+        error_code: typeof code === 'string' || typeof code === 'number' ? String(code) : 'unknown',
+      },
+      'linking: pdd authority link generation failed; no state issued',
+    );
+    return null;
   }
 }
 

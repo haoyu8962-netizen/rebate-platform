@@ -48,24 +48,31 @@ async function expectNewLinkAuthorization(f: Fixture, person: 'a' | 'b') {
   expectOpaqueState(session.state, opener.userId, opener.deviceId);
   expect(session.expire_at.getTime()).toBe(f.clock.now().getTime() + 600_000);
   expect(data.auth_jump.expire_at).toBe(session.expire_at.toISOString());
+  // B1-06zf (D10-658 ③): the jump is over the union's own authorization link; the state stays in
+  // the session row (bound above to uid, device and the served link) and is never in a link.
   for (const step of [data.auth_jump.primary, ...data.auth_jump.fallbacks]) {
     expect(step.type).not.toBe('sdk');
     expect(step).not.toHaveProperty('sdk');
-    expect(decodeURIComponent(step.value)).toContain(session.state);
+    for (const link of [step.value, decodeURIComponent(step.value)]) {
+      expect(link).not.toContain('example.test');
+      expect(link).not.toContain(session.state);
+      expect(link).not.toContain(encodeURIComponent(session.state));
+      expect(link).not.toContain(session.state.replace(/^st_/, ''));
+    }
   }
   expect(f.fetch).not.toHaveBeenCalled();
   expect(await f.bindings()).toEqual(before);
   await noConversion(f);
 }
 
-it('[AC-B1-06v#20] B 开 A 非分享 link 未授权：仅返回 auth_jump，每步 state 对应 B 新 link 的会话', async () => {
+it('[AC-B1-06v#20] B 开 A 非分享 link 未授权：仅返回 auth_jump，跳转链接里不含 state；会话照旧绑 B、B 的设备与 B 的新 link', async () => {
   const f = await fixture(database(), { binding: 'active', query: false });
   await f.bind('absent', f.b.userId);
   f.opener('b');
   await expectNewLinkAuthorization(f, 'b');
 }, 60_000);
 
-it('[AC-B1-06v#21] A 开自己的分享 link 未授权：仅返回 auth_jump，每步 state 对应新 self_buy link 的会话', async () => {
+it('[AC-B1-06v#21] A 开自己的分享 link 未授权：仅返回 auth_jump，跳转链接里不含 state；会话照旧绑 A、A 的设备与新 self_buy link', async () => {
   const f = await fixture(database(), { binding: 'absent', query: false, scene: 'share' });
   f.opener('a');
   await expectNewLinkAuthorization(f, 'a');

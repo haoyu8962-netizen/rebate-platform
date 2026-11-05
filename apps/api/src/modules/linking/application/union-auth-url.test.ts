@@ -24,6 +24,8 @@ import { appSchemeOf, buildDefaultLinkJump, pathsOf } from './link-open-conversi
 import type { LinkOpenApps, LinkOpenEnvironment } from './link-open-wiring.ts';
 import { createUnionAuthUrl, type UnionAuthUrlOptions } from './union-auth-url.ts';
 
+type UnionRegistryPort = NonNullable<UnionAuthUrlOptions['registry']>;
+
 const TRACE = '0199a3b4-5c6d-7000-8000-0000000000bb';
 const APP = 'synthetic_app';
 const USER = '0199a3b4-5c6d-7000-8000-000000000001';
@@ -44,7 +46,16 @@ interface Scenario {
   readonly bindings?: readonly { readonly status: string; readonly union_account_id: string }[];
   readonly pidAccount?: string;
   readonly jumpEnvironment?: LinkOpenEnvironment;
+  /** B1-06zf: the pdd filing link port; 'missing' → no registry, 'fails' → it rejects. */
+  readonly authorityUrl?: 'answers' | 'missing' | 'fails';
+  /** D10-662: the union answers no schema_url (the scheme step is then derived). */
+  readonly noSchemaUrl?: boolean;
 }
+
+const ATTR_CODE = 'a1b2c3d4';
+const PDD_PID = 'synthetic-pdd-pid';
+const SCHEMA_LINK = 'couli-demo://pdd/authority/unit';
+const WEB_LINK = 'https://demo.invalid/pdd/authority/m/unit';
 
 function setup(scenario: Scenario) {
   const inserts: CompiledQuery[] = [];
@@ -99,8 +110,20 @@ function setup(scenario: Scenario) {
             pid_scene: input.pidScene,
             status: 'active',
             union_account_id: scenario.pidAccount,
+            pid: PDD_PID,
           } as unknown as UnionPidRow),
   );
+  const pddAuthorityUrl = vi.fn(async () => {
+    if (scenario.authorityUrl === 'fails') throw new Error('synthetic refusal');
+    return {
+      url: 'https://demo.invalid/pdd/authority/page/unit',
+      ...(scenario.noSchemaUrl === true ? {} : { schema_url: SCHEMA_LINK }),
+      mobile_short_url: WEB_LINK,
+    };
+  });
+  const registry = {
+    get: () => ({ pddAuthorityUrl }) as unknown as ReturnType<UnionRegistryPort['get']>,
+  };
   const clock = new FixedClock('2026-10-08T00:00:00.000Z');
   const auth = createUnionAuthUrl({
     db,
@@ -110,11 +133,13 @@ function setup(scenario: Scenario) {
     config: { configValue: async () => null },
     authApps: createDemoUnionAuthApps(),
     pids: { getActivePid },
+    attrCodes: { attrCode: async () => ATTR_CODE },
+    ...(scenario.authorityUrl === 'missing' ? {} : { registry }),
     ...(scenario.jumpEnvironment === undefined
       ? {}
       : { jumpEnvironment: scenario.jumpEnvironment }),
   });
-  return { auth, inserts, getActivePid, clock };
+  return { auth, inserts, getActivePid, clock, pddAuthorityUrl };
 }
 
 describe('createUnionAuthUrl site authorization of the account in use', () => {
@@ -197,10 +222,11 @@ const SYNTHETIC_APPS: LinkOpenApps = {
 };
 
 describe('createUnionAuthUrl pinduoduo auth_jump', () => {
-  it('[AC-B1-06g#4] non-prod android installed=true follows the open matrix by the device record: scheme, then the page', async () => {
+  it('[AC-B1-06g#4] non-prod android installed=true follows the open matrix by the device record: the upstream scheme as is, then the page', async () => {
     const { auth, inserts, clock } = setup({
       client: 'android',
       accounts: [{ id: VALID_ACCOUNT, platform: 'pdd', auth_status: 'active' }],
+      pidAccount: VALID_ACCOUNT,
       jumpEnvironment: { appEnv: 'test', apps: SYNTHETIC_APPS, verifiedPaths: {} },
     });
     // X-Platform says ios; the device record (android) decides.
@@ -212,20 +238,98 @@ describe('createUnionAuthUrl pinduoduo auth_jump', () => {
     });
     expect(result.status).toBe(200);
     const data = (result.envelope as { data: { auth_url: string; auth_jump: unknown } }).data;
-    const scheme = appSchemeOf(SYNTHETIC_APPS, 'pdd');
-    expect(scheme).toBe('synthpdd');
+    expect(data.auth_url).toBe(WEB_LINK);
     const expected = buildDefaultLinkJump({
       platform: 'pdd',
       client: 'android',
       installed: 'true',
-      paths: pathsOf('pdd', data.auth_url, scheme),
+      paths: { ...pathsOf('pdd', WEB_LINK, null), scheme: SCHEMA_LINK },
       expireAt: new Date(clock.now().getTime() + 600_000).toISOString(),
     });
     expect(data.auth_jump).toEqual(expected);
     expect(data.auth_jump).toMatchObject({
-      primary: { type: 'scheme', value: expect.stringMatching(new RegExp(`^${scheme}://`)) },
-      fallbacks: [{ type: 'h5', value: data.auth_url }],
+      primary: { type: 'scheme', value: SCHEMA_LINK },
+      fallbacks: [{ type: 'h5', value: WEB_LINK }],
     });
     expect(inserts).toHaveLength(1);
+  });
+
+  it('[AC-B1-06g#4] without an upstream schema_url the scheme step wraps the web address with the apps.json scheme', async () => {
+    const { auth, clock } = setup({
+      client: 'android',
+      accounts: [{ id: VALID_ACCOUNT, platform: 'pdd', auth_status: 'active' }],
+      pidAccount: VALID_ACCOUNT,
+      jumpEnvironment: { appEnv: 'test', apps: SYNTHETIC_APPS, verifiedPaths: {} },
+      noSchemaUrl: true,
+    });
+    const result = await auth.get({
+      platform: 'pdd',
+      reportedClient: 'android',
+      installed: 'true',
+      traceId: TRACE,
+    });
+    expect(result.status).toBe(200);
+    const data = (result.envelope as { data: { auth_url: string; auth_jump: unknown } }).data;
+    expect(data.auth_url).toBe(WEB_LINK);
+    const scheme = appSchemeOf(SYNTHETIC_APPS, 'pdd');
+    expect(scheme).toBe('synthpdd');
+    expect(data.auth_jump).toEqual(
+      buildDefaultLinkJump({
+        platform: 'pdd',
+        client: 'android',
+        installed: 'true',
+        paths: pathsOf('pdd', WEB_LINK, scheme),
+        expireAt: new Date(clock.now().getTime() + 600_000).toISOString(),
+      }),
+    );
+    expect(data.auth_jump).toMatchObject({
+      primary: { type: 'scheme', value: expect.stringMatching(new RegExp(`^${scheme}://`)) },
+      fallbacks: [{ type: 'h5', value: WEB_LINK }],
+    });
+  });
+});
+
+describe('createUnionAuthUrl pinduoduo filing link (B1-06zf)', () => {
+  const pddScenario: Scenario = {
+    client: 'ios',
+    accounts: [{ id: VALID_ACCOUNT, platform: 'pdd', auth_status: 'active' }],
+    pidAccount: VALID_ACCOUNT,
+  };
+
+  it('[AC-B1-06zf#U1] the link is generated for the self_buy slot of the account in use; auth_url is the web address, never the scheme', async () => {
+    const { auth, inserts, pddAuthorityUrl, getActivePid } = setup(pddScenario);
+    const result = await auth.get({ platform: 'pdd', reportedClient: 'ios', traceId: TRACE });
+    expect(result.status).toBe(200);
+    const data = (result.envelope as { data: { auth_url: string; state: string } }).data;
+    expect(data.auth_url).toBe(WEB_LINK);
+    expect(data.auth_url).not.toContain(data.state);
+    expect(pddAuthorityUrl).toHaveBeenCalledTimes(1);
+    expect(getActivePid).toHaveBeenCalledWith(
+      expect.objectContaining({ pidScene: 'self_buy', unionAccountId: VALID_ACCOUNT }),
+    );
+    expect(inserts).toHaveLength(1);
+  });
+
+  it.each(['missing', 'fails'] as const)(
+    '[AC-B1-06zf#U2] the filing link port %s → 503 / 50303 and no state',
+    async (authorityUrl) => {
+      const { auth, inserts } = setup({ ...pddScenario, authorityUrl });
+      const result = await auth.get({ platform: 'pdd', reportedClient: 'ios', traceId: TRACE });
+      expect(result.status).toBe(503);
+      expect(result.envelope).toEqual({ code: 50303, msg: expect.any(String), trace_id: TRACE });
+      expect(inserts).toEqual([]);
+    },
+  );
+
+  it('[AC-B1-06zf#U3] no active self_buy slot → 503 / 50301 maintenance, no link generated, no state', async () => {
+    const { auth, inserts, pddAuthorityUrl } = setup({
+      client: 'ios',
+      accounts: pddScenario.accounts,
+    });
+    const result = await auth.get({ platform: 'pdd', reportedClient: 'ios', traceId: TRACE });
+    expect(result.status).toBe(503);
+    expect(result.envelope).toMatchObject({ code: 50301, data: { reason: 'maintenance' } });
+    expect(pddAuthorityUrl).not.toHaveBeenCalled();
+    expect(inserts).toEqual([]);
   });
 });

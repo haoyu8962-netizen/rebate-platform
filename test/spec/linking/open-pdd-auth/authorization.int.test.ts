@@ -10,7 +10,7 @@ import { noConversion, response, success } from './assertions.ts';
 const database = databaseFixture(createTestDatabase);
 
 it.each(['true', 'false', undefined] as const)(
-  '[AC-B1-06v#8] installed=%s 未授权回 30111，仅 auth_jump，会话绑定当前设备与服务 link，可重放',
+  '[AC-B1-06v#8] installed=%s 未授权回 30111，仅 auth_jump，跳转链接里不含 state，会话绑定当前设备与服务 link，可重放',
   async (installed) => {
     const f = await fixture(database(), { binding: 'invalid', query: false });
     const before = await f.bindings();
@@ -42,10 +42,17 @@ it.each(['true', 'false', undefined] as const)(
     expect(session.expire_at.getTime()).toBe(f.clock.now().getTime() + 600_000);
     expect(data.auth_jump.expire_at).toBe(session.expire_at.toISOString());
     expectOpaqueState(session.state, f.a.userId, f.a.deviceId);
+    // B1-06zf (D10-658 ③): the jump is over the union's own authorization link; the state stays in
+    // the session row (bound above to uid, device and link) and is never in a link.
     for (const step of [data.auth_jump.primary, ...data.auth_jump.fallbacks]) {
       expect(step.type).not.toBe('sdk');
       expect(step).not.toHaveProperty('sdk');
-      expect(decodeURIComponent(step.value)).toContain(session.state);
+      for (const link of [step.value, decodeURIComponent(step.value)]) {
+        expect(link).not.toContain('example.test');
+        expect(link).not.toContain(session.state);
+        expect(link).not.toContain(encodeURIComponent(session.state));
+        expect(link).not.toContain(session.state.replace(/^st_/, ''));
+      }
     }
     expect(f.fetch).not.toHaveBeenCalled();
     await noConversion(f);
@@ -57,6 +64,8 @@ it.each(['true', 'false', undefined] as const)(
     expect(await f.logs()).toEqual(logs);
     expect(f.query).toHaveBeenCalledTimes(1);
 
+    // B1-06zf (D10-659): the auth-url builds its link through the same union port and attr_code.
+    const unionPorts = { registry: f.options.registry, attrCodes: f.options.attrCodes };
     const auth = createUnionAuthUrl({
       db: database(),
       clock: f.clock,
@@ -66,6 +75,7 @@ it.each(['true', 'false', undefined] as const)(
       appEnv: 'test',
       jumpEnvironment: f.options.environment,
       authApps: { resolve: async () => ({ ref: 'synthetic-unused' }) },
+      ...unionPorts,
     });
     const comparison = await auth.get({
       platform: 'pdd',

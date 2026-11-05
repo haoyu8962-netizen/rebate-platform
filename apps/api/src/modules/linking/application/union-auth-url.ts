@@ -15,13 +15,32 @@
 // authorization actually uses (the unreleased binding's, else the platform's active self_buy pid's,
 // else the platform's earliest registered account by union_accounts created_at, id ascending),
 // never "any account still valid".
+// B1-06zf (FU-PDD-AUTH-LINK, D10-647): the Pinduoduo auth_url / auth_jump is the filing link
+// UnionAdapter.pddAuthorityUrl generates at this request for the identity the conversion uses
+// (pdd-authority.ts pddAuthorityIdentity: this App, the self_buy slot of the account this
+// authorization uses, custom_parameters {app, uid=attr_code, sc}, never a user_id). D10-662:
+// auth_url and the h5 / universal-link steps carry the web address (mobile_short_url → url); the
+// scheme step is the upstream schema_url as is (built from the web address only when there is
+// none); the state is only in union_auth_sessions, never in the link. No slot or attr_code → 50301 maintenance; the port missing or failing → 50303; neither
+// leaves a state. Taobao keeps its synthetic address (syntheticAuthUrl).
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 import type { AppEnv, Clock, HandlerResult, RootLogger } from '../../platform/index.ts';
 import type { UnionPidService } from '../../union/index.ts';
-import type { CallerContext, LinkingConfigReader } from '../ports.ts';
-import { appSchemeOf, buildDefaultLinkJump, pathsOf } from './link-open-conversion.ts';
+import type { AttrCodeReader, CallerContext, LinkingConfigReader } from '../ports.ts';
+import {
+  appSchemeOf,
+  buildDefaultLinkJump,
+  pathsOf,
+  type LinkConversionOptions,
+} from './link-open-conversion.ts';
+import {
+  PDD,
+  generatePddAuthorityLink,
+  pddAuthorityIdentity,
+  type PddAuthorityLink,
+} from './pdd-authority.ts';
 import { createJumpAdmission, type LinkOpenEnvironment } from './link-open-wiring.ts';
 import { createLinkingPidReader } from '../infra/pid-reader.ts';
 import { AuthConfigError, createUnionAuthReads, type AuthClient } from './union-auth-reads.ts';
@@ -65,6 +84,13 @@ export interface UnionAuthUrlOptions {
   readonly jumpEnvironment?: LinkOpenEnvironment;
   /** Risk log of a declared X-Platform that disagrees with the device record (optional). */
   readonly logger?: Pick<RootLogger, 'warn'>;
+  /**
+   * B1-06zf: the governed union adapters the Pinduoduo filing link is generated through. Absent →
+   * every Pinduoduo auth-url answers 50303 (no placeholder address, no state).
+   */
+  readonly registry?: LinkConversionOptions['registry'] | undefined;
+  /** B1-06zf: identity's attr_code reader (the Pinduoduo identity's uid); absent → 50301. */
+  readonly attrCodes?: AttrCodeReader | undefined;
 }
 
 export interface UnionAuthUrlService {
@@ -82,6 +108,7 @@ const STATUS: Readonly<Record<number, number>> = {
   30153: 422,
   50001: 500,
   50301: 503,
+  50303: 503,
 };
 
 /** Fallback texts only; clients show the dictionary text error.<code> (BR-TEXT-14). */
@@ -93,6 +120,7 @@ const MESSAGES: Readonly<Record<number, string>> = {
   30153: '该平台返利已被停用，请联系客服',
   50001: '服务端错误',
   50301: '该平台暂时无法购买，请稍后再试',
+  50303: '暂时无法生成授权链接，请稍后再试',
 };
 
 function fail(code: number, traceId: string, data?: Record<string, unknown>): HandlerResult {
@@ -125,10 +153,12 @@ function authStep(step: { readonly type: string; readonly value: string }): Auth
  * the device record's client and installed (missing → unknown), over the authorization page's
  * paths; in prod only the paths the open admits (none admitted → AuthConfigError, no state).
  * Shared by auth-url and the Pinduoduo open's 30111 (B1-06v, link-open-pdd-auth.ts).
+ * D10-662: the h5 / universal-link steps carry link.webUrl; the scheme step is link.scheme as the
+ * union answered it (never wrapped again), else the apps.json scheme wrapping the web address.
  */
 export function pddAuthJump(
   environment: { readonly appEnv: AppEnv; readonly jumpEnvironment?: LinkOpenEnvironment },
-  authUrl: string,
+  link: PddAuthorityLink,
   client: AuthClient,
   installed: UnionAuthUrlInput['installed'],
   expireAt: Date,
@@ -141,7 +171,7 @@ export function pddAuthJump(
     platform: 'pdd',
     client,
     installed: installed ?? 'unknown',
-    paths: pathsOf('pdd', authUrl, appSchemeOf(jumpEnvironment?.apps, 'pdd')),
+    paths: pddAuthPaths(link, appSchemeOf(jumpEnvironment?.apps, 'pdd')),
     expireAt: expireAt.toISOString(),
   });
   const admitted =
@@ -158,8 +188,16 @@ export function pddAuthJump(
   };
 }
 
+/** The authorization page's launch paths (D10-662): the upstream scheme as is, else derived. */
+function pddAuthPaths(link: PddAuthorityLink, appScheme: string | null) {
+  const paths = pathsOf('pdd', link.webUrl, appScheme);
+  return link.scheme === null ? paths : { ...paths, scheme: link.scheme };
+}
+
 export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlService {
   const { db, clock, callerContext, config, appEnv, authApps, jumpEnvironment, logger } = options;
+  const { registry, attrCodes } = options;
+  const warn: LinkConversionOptions['logger'] = logger ?? { warn: () => undefined };
   const pids = options.pids ?? createLinkingPidReader(db, clock);
   // The same judgements the bindings submission makes (union-auth-reads.ts).
   const reads = createUnionAuthReads({ db, config, appEnv, pids, clock });
@@ -205,18 +243,55 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
     }
 
     const methods = platform === 'taobao' ? await reads.configuredMethods(appId, client) : null;
+    let pddLink: PddAuthorityLink | null = null;
+    if (platform === 'pdd') {
+      // The identity the conversion and the filing query use (no state exists yet).
+      const identity = await pddAuthorityIdentity(
+        { pids, attrCodes, logger: warn },
+        {
+          appId,
+          userId,
+          pidScene: 'self_buy',
+          ...(accountId === null ? {} : { unionAccountId: accountId }),
+          traceId: input.traceId,
+          events: 'linking.auth_url',
+        },
+      );
+      if (identity === 'no_pid' || identity === 'no_attr_code') {
+        return fail(50301, input.traceId, { reason: 'maintenance' });
+      }
+      if (registry === undefined) {
+        warn.warn(
+          {
+            event: 'linking.auth_url.pdd_authority_url_failed',
+            app_id: appId,
+            platform: PDD,
+            trace_id: input.traceId,
+            error_code: 'no_registry',
+          },
+          'linking: no union registry for the pdd authority link; no state issued',
+        );
+        return fail(50303, input.traceId);
+      }
+      // Generated now, at the user's request; never cached (D10-647 ③).
+      pddLink = await generatePddAuthorityLink(
+        { registry, logger: warn },
+        { appId, identity, traceId: input.traceId, events: 'linking.auth_url' },
+      );
+      if (pddLink === null) return fail(50303, input.traceId);
+    }
     // Built before the insert: a pdd jump that cannot be issued leaves no state behind.
     const now = clock.now();
     // A second reading of the injected clock, moved by the TTL (no `new Date` outside the clock).
     const expireAt = clock.now();
     expireAt.setTime(now.getTime() + AUTH_STATE_TTL_MS);
     const state = newAuthState();
-    const authUrl = syntheticAuthUrl(platform, state);
+    const authUrl = pddLink?.webUrl ?? syntheticAuthUrl('taobao', state);
     const authJump =
-      methods === null
+      methods === null && pddLink !== null
         ? pddAuthJump(
             { appEnv, ...(jumpEnvironment === undefined ? {} : { jumpEnvironment }) },
-            authUrl,
+            pddLink,
             client,
             input.installed,
             expireAt,

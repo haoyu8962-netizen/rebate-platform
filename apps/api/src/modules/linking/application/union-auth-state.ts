@@ -33,12 +33,12 @@ export function newAuthState(): string {
 }
 
 /**
- * TODO(规划/11 §4.5): real authorization link generation — blocked on 推广位 / siteId 与联盟应用.
- * Until then a synthetic address on example.test carrying only the issued state.
+ * TODO(规划/11 §4.5): real Taobao authorization link generation — blocked on FU-TB-AUTH-SESSION.
+ * Until then a synthetic address on example.test carrying only the issued state. Taobao only:
+ * Pinduoduo's link comes from UnionAdapter.pddAuthorityUrl (B1-06zf, pdd-authority.ts).
  */
-export function syntheticAuthUrl(platform: 'taobao' | 'pdd', state: string): string {
-  const host = platform === 'taobao' ? 'oauth.example.test' : 'auth.example.test';
-  return `https://${host}/${platform}/authorize?state=${encodeURIComponent(state)}`;
+export function syntheticAuthUrl(platform: 'taobao', state: string): string {
+  return `https://oauth.example.test/${platform}/authorize?state=${encodeURIComponent(state)}`;
 }
 
 /**

@@ -25,6 +25,7 @@ import {
   type OrderQueryOpt,
   type Page,
   type PddAuthority,
+  type PddAuthorityUrl,
   type RegisteredPlatform,
   type ResolvedLink,
   type SearchQuery,
@@ -520,6 +521,40 @@ export class DemoUnionAdapter implements UnionAdapter {
       );
     }
     return Object.freeze({ authorized: scenario !== 'pdd_unauthorized' });
+  }
+
+  /**
+   * B1-06zf (FU-PDD-AUTH-LINK): the demo Pinduoduo filing link of a server-built identity — an
+   * obvious demo address (https://demo.invalid/…), never an imitation of a Pinduoduo payload.
+   * Synthetic; never a capability claim (CAP-PDD-05).
+   */
+  async pddAuthorityUrl(identity: UnionIdentity, ctx: CallCtx): Promise<PddAuthorityUrl> {
+    const claims = this.#claims(identity, ctx);
+    this.#scenario(ctx);
+    if (this.platform !== 'pdd') {
+      throw new UnionError(
+        'adapter_unimplemented',
+        `Demo union adapter for ${this.platform} has no authority link`,
+        this.platform,
+      );
+    }
+    // Varies with the identity (app, user key, slot) without exposing any of it.
+    const tag = digest([
+      'demo-authority',
+      this.platform,
+      this.#seed,
+      claims.appId,
+      claims.userId,
+      claims.promotionSlot,
+    ]).slice(0, 20);
+    const base = `https://${DEMO_HOST}/${this.platform}/authority`;
+    // D10-662: schema_url is an obvious demo App scheme (never a platform scheme); the two web
+    // fields stay https on the demo host, all three distinct.
+    return Object.freeze({
+      url: `${base}/page/${tag}`,
+      schema_url: `couli-demo://${this.platform}/authority/${tag}`,
+      mobile_short_url: `${base}/m/${tag}`,
+    });
   }
 
   async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<Page<UnionOrder>> {

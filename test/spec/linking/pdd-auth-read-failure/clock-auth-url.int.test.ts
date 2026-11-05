@@ -18,6 +18,7 @@ import {
   type UnionAuthUrlOptions,
 } from '../../../../apps/api/src/modules/linking/application/union-auth-url.ts';
 import { FixedClock, SystemClock } from '../../../../apps/api/src/modules/platform/index.ts';
+import { DemoUnionAdapter } from '../../../../apps/api/src/modules/union/index.ts';
 import { TRACE, validate } from '../auth-url/kit.ts';
 import { databaseFixture } from '../open-pdd-auth/database.ts';
 import { DAY_MS, shifted } from './kit.ts';
@@ -93,6 +94,28 @@ async function seed(db: Kysely<DB>, clock: FixedClock, expiry: Date) {
       })
       .execute();
   }
+  // B1-06zf (D10-659): the Pinduoduo authorization link comes through the union port (the demo
+  // adapter here) with the user's attr_code read from users.
+  const demo = new DemoUnionAdapter({
+    platform: 'pdd',
+    seed: 'b1-22u-auth-url',
+    clock,
+    environment: 'test',
+  });
+  const unionPorts = {
+    registry: { get: () => demo },
+    attrCodes: {
+      attrCode: async (tenant: string, uid: string) => {
+        const row = await db
+          .selectFrom('users')
+          .select('attr_code')
+          .where('app_id', '=', tenant)
+          .where('id', '=', uid)
+          .executeTakeFirst();
+        return row?.attr_code ?? null;
+      },
+    },
+  };
   const options: UnionAuthUrlOptions = {
     db,
     clock,
@@ -107,6 +130,7 @@ async function seed(db: Kysely<DB>, clock: FixedClock, expiry: Date) {
         }),
       ),
     },
+    ...unionPorts,
   };
   const sessions = () =>
     db.selectFrom('union_auth_sessions').selectAll().where('app_id', '=', appId).execute();
@@ -117,7 +141,29 @@ function issue(f: Awaited<ReturnType<typeof seed>>, platform: Platform) {
   return createUnionAuthUrl(f.options).get({ platform, reportedClient: 'ios', traceId: TRACE });
 }
 
-it.each(['taobao', 'pdd'] as const)(
+// B1-06zf (D10-658 ①): this fixture has no Pinduoduo self_buy slot, so no authorization link can
+// be generated: even with the site authorization not reached by the injected clock, 50301
+// maintenance and no state.
+it('[B1-22u] auth-url pdd：注入的 FixedClock 早于系统时间，站长授权到期时刻在两者之间 → 按注入时钟未到期，但没有 self_buy 推广位生成不了授权链接，50301 maintenance、不写 state', async () => {
+  const db = database();
+  const clock = new FixedClock(PAST);
+  const expiry = shifted(clock, DAY_MS);
+  // The window separates the two clocks: the wall clock is already past this instant.
+  expect(new SystemClock().now().getTime()).toBeGreaterThan(expiry.getTime());
+  const f = await seed(db, clock, expiry);
+  const result = await issue(f, 'pdd');
+  expect(result).toMatchObject({
+    status: 503,
+    envelope: { code: 50301, data: { reason: 'maintenance' } },
+  });
+  await validate(result.envelope, 'ErrorEnvelope');
+  for (const field of ['auth_url', 'state', 'auth_jump', 'auth_methods']) {
+    expect(result.envelope.data ?? {}).not.toHaveProperty(field);
+  }
+  expect(await f.sessions()).toEqual([]);
+}, 60_000);
+
+it.each(['taobao'] as const)(
   '[B1-22u] auth-url %s：注入的 FixedClock 早于系统时间，站长授权到期时刻在两者之间 → 按注入时钟未到期，照常签发 state',
   async (platform) => {
     const db = database();

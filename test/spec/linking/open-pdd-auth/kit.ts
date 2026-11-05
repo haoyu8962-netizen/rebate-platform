@@ -174,6 +174,10 @@ export async function fixture(db: Kysely<DB>, setup: Setup) {
     resolveLink: (r, c) => demo.resolveLink(r, c),
     listOrders: (w, o, c) => demo.listOrders(w, o, c),
     convert,
+    // B1-06zf (D10-658): the authorization link comes from the union port; forwarded to the same
+    // demo adapter, so the links are the demo's own (https://demo.invalid/…), never a Pinduoduo
+    // payload. Kept in the 'missing' query case too: only the filing query is absent there.
+    pddAuthorityUrl: (identity, callCtx) => demo.pddAuthorityUrl(identity, callCtx),
     ...(setup.query === 'missing' ? {} : { queryPddAuthority: query }),
   };
   const entries = new Map<string, LinkOpenCachedJump>();
