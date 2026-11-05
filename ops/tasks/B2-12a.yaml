@@ -19,6 +19,7 @@ paths:
   - 'packages/domain/src/state-machines/bad-debt-writeoff.gen.ts'
   - 'packages/domain/src/state-machines/index.ts'
   - 'packages/domain/src/index.ts'
+  - 'tools/ci/lint-migrations.test.ts' # 编排 20:10：classifies 用例的资金表期望集合追加两张新表，只加值、不改分类器
 test_paths:
   - 'test/spec/db/admin-adjustments/**'
   - 'test/spec/domain/state-machines/admin-adjustment/**'
