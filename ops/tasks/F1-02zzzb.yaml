@@ -6,7 +6,7 @@ type: impl
 # 服务端：client-config 读 bridge_origins 配置项（未签名的 {origins}），按 (version, kid, env) 缓存签名、同版本只签一次（ETag 稳定）；未配置时用 h5_base_url 的 origin 签默认值。 保存时校验（非空、规范化 https origin、必须含 h5_base_url 的 origin）随 B2-03v 登记的 config.risk 键落在 content。
 # 密钥：platform/config 读 CONFIG_SIGN_KEY_FILE / CONFIG_SIGN_KEY_ID（只 api 用）；local 启动时临时生成，staging 节点文件 /etc/couli-config-sign → /run/couli-config-sign 只读挂给 api，prod 走 KMS（负责人上线项，本单不做，prod 缺钥拒绝启动）；staging 缺钥也拒绝启动。与 JWT 签名钥分开。
 # 冻结测试：test/spec/content/config/delivery.int.test.ts 的 [AC-F1-02c#1] / [#2] / [#20] 与 test/spec/content/config-etag/domain.int.test.ts 夹具按新形状只改钉值、不放宽，
-#   由新鲜独立 Claude（或 Codex）改，落地时 #24 报核编排逐条看；config-etag/domain.int.test.ts 只为类型换夹具值、用例一条没动，移出 test_paths、列入 paths，两行改动放在实现提交（D10-623 更正、06:25，按 #24 报核、protected-paths 标签管住）；#20 表里的 bridge_origins 行移到新目录；
+#   由新鲜独立 Claude（或 Codex）改，落地时 #24 报核编排逐条看；config-etag/domain.int.test.ts 只为类型换夹具值、用例一条没动，回到 test_paths、登记 red_exempt_outside，22 条用例全部豁免（D10-629，CT-06zzzd）；#20 表里的 bridge_origins 行移到新目录；
 #   delivery.int.test.ts 未改的 124 个用例 / 表行（标题与用例体与主干逐字相同）登记 red_exempt（D10-620 (b1)）。
 #   跨 app 的冻结 [AC-F1-02zr#8] / [AC-F1-02h#2] 按 D10-624 甲改三条断言（保留 app_id 绑定），两个文件进 test_paths；三个冻结文件登记 red_exempt_outside，未改用例 176 条登记 red_exempt（CT-06zzzc，上限 300）。新规则测试放 test/spec/content/bridge-origins/。合并时占契约槽。RV2。
 refs: []
@@ -26,12 +26,12 @@ paths:
   - 'infra/staging/README.md'
   - '.env.example'
   - 'test/spec/content/bridge-origins/**'
-  - 'test/spec/content/config-etag/domain.int.test.ts'
 test_paths:
   - 'test/spec/content/bridge-origins/**'
   - 'test/spec/content/config/delivery.int.test.ts'
   - 'test/spec/content/agreements-min-version/delivery.int.test.ts'
   - 'test/spec/content/config-etag/delivery.int.test.ts'
+  - 'test/spec/content/config-etag/domain.int.test.ts'
 red_exempt_outside:
   - file: test/spec/content/config/delivery.int.test.ts
     reason: import 新增 onTestFinished、签名 harness 与 verified；#20 顶层表移出 bridge_origins 组（移到 bridge-origins/invalid-stored-values.int.test.ts，D10-620）
@@ -39,6 +39,8 @@ red_exempt_outside:
     reason: import 新增 onTestFinished、签名 harness 与 expectAppBoundConfig，供改过的 [AC-F1-02h#2] 用（D10-624 甲）
   - file: test/spec/content/agreements-min-version/delivery.int.test.ts
     reason: import 新增 signedConfigApp 与 expectAppBoundConfig，供改过的 [AC-F1-02zr#8] 用（D10-624 甲）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    reason: 只为契约类型把夹具换成签名值，用例一条没动（import signedFixture；data() 夹具的 bridge_origins 改为 signedFixture()；D10-629）
 red_exempt:
   - file: test/spec/content/config/delivery.int.test.ts
     test: '[AC-F1-02c#2] invite.bind_phone_guide 单独关闭时不影响另一个缺省开启的开关'
@@ -568,6 +570,72 @@ red_exempt:
   - file: test/spec/content/agreements-min-version/delivery.int.test.ts
     test: '[AC-F1-02zr#9] 仅改最低版本即改变 config_version，旧 ETag 返回新 200，缺行及非法值保持原 ETag'
     reason: 同文件只改 [AC-F1-02zr#8] 跨 app 一步为三条断言（D10-624 甲）；本用例的标题与用例体与主干逐字相同（CT-06zzzc）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#30] configEtag 对最终 data 做递归规范化，嵌套对象键序与数字形键均遵守 JS sort'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#31] configEtag 保留数组顺序，不能把数组也排序'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 精确：弱比较结果 true'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 弱：弱比较结果 true'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 列表和空白：弱比较结果 true'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 星号：弱比较结果 true'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 缺失：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 空串：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 不同 tag：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 裸 tag：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 弱裸 tag：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 小写弱前缀：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 重复弱前缀：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 尾部垃圾：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 未闭引号：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 大小写不同：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#32] If-None-Match 引号内星号：弱比较结果 false'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#33] 非空频道按 PlatformCode 顺序去重，只认 sales / popularity，忽略未知和不可选平台'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#34] 全部 PlatformCode 都支持，输入顺序不影响枚举序'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#35] 空白名单 下 rank_platforms 为 []'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#35] 全部不可选 下 rank_platforms 为 []'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
+  - file: test/spec/content/config-etag/domain.int.test.ts
+    test: '[AC-F1-02h#35] 未知平台 下 rank_platforms 为 []'
+    reason: 同文件只改 import 与 data() 夹具的 bridge_origins 为签名值（契约类型所需）；本用例的标题与用例体与主干逐字相同（D10-629，CT-06zzzd）
 impl: claude
 tester: codex
 accept:
