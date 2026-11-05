@@ -384,6 +384,19 @@ export const AVATAR: readonly Expected[] = [
 ];
 /** B2-03w (D10-637): addresses differ per environment, hence no seed row. */
 export const AVATAR_UNSEEDED: readonly string[] = ['me.default_avatar_url'];
+// B2-03x (D10-646): the six keys identity's labor agreement reads, registered right after AVATAR
+// in this order: editable config.business, the two versions numbers and the other four strings,
+// options null. Not part of expectedNow() either.
+export const LABOR: readonly Expected[] = [
+  row('legal.labor_agreement.version', 'number', 'config.business'),
+  row('legal.labor_agreement.text_url', 'string', 'config.business'),
+  row('legal.labor_agreement.text_sha256', 'string', 'config.business'),
+  row('legal.labor_agreement.resign_from_version', 'number', 'config.business'),
+  row('legal.operator_entity.name', 'string', 'config.business'),
+  row('legal.operator_entity.credit_code', 'string', 'config.business'),
+];
+/** B2-03x (D10-646): the values are the owner's, hence no seed rows. */
+export const LABOR_UNSEEDED: readonly string[] = LABOR.map((entry) => entry.key);
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -404,6 +417,7 @@ export const expectedOf = (key: string): Expected => {
     ...SHARE,
     ...BRIDGE,
     ...AVATAR,
+    ...LABOR,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

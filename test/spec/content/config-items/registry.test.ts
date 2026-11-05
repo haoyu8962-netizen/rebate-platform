@@ -32,6 +32,8 @@
 // (BRIDGE_UNSEEDED).
 // B2-03w (D10-637): me.default_avatar_url follows it (kit AVATAR), unset by default with no seed
 // row (AVATAR_UNSEEDED).
+// B2-03x (D10-646): the six legal.labor_agreement.* / legal.operator_entity.* keys follow it (kit
+// LABOR), unset by default with no seed rows (LABOR_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -57,6 +59,8 @@ import {
   FUND_FLAGS,
   INVITE_CFG,
   INVITE_ELIG,
+  LABOR,
+  LABOR_UNSEEDED,
   ORDER_RESCAN,
   ORDER_RESCAN_UNSEEDED,
   PAYOUT,
@@ -117,6 +121,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...SHARE_UNSEEDED,
         ...BRIDGE_UNSEEDED,
         ...AVATAR_UNSEEDED,
+        ...LABOR_UNSEEDED,
       ]),
     ]),
   );
@@ -130,6 +135,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...SHARE_UNSEEDED,
     ...BRIDGE_UNSEEDED,
     ...AVATAR_UNSEEDED,
+    ...LABOR_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -161,6 +167,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...SHARE,
         ...BRIDGE,
         ...AVATAR,
+        ...LABOR,
       ].map((entry) => entry.key),
     ),
   );
@@ -205,7 +212,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       QUOTE_UNSEEDED.length -
       SHARE_UNSEEDED.length -
       BRIDGE_UNSEEDED.length -
-      AVATAR_UNSEEDED.length,
+      AVATAR_UNSEEDED.length -
+      LABOR_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -344,6 +352,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...SHARE,
     ...BRIDGE,
     ...AVATAR,
+    ...LABOR,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -401,6 +410,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...SHARE,
     ...BRIDGE,
     ...AVATAR,
+    ...LABOR,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -466,6 +476,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...SHARE,
       ...BRIDGE,
       ...AVATAR,
+      ...LABOR,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -484,6 +495,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...SHARE,
     ...BRIDGE,
     ...AVATAR,
+    ...LABOR,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({

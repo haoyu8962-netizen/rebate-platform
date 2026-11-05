@@ -40,7 +40,9 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // this order, then B1-04zq (D10-543) the four order_sync.rescan.* keys in this order, then B2-04zo
 // ledger.advance_alert_fen, then B2-03t (D10-605 (a)) tech_fee_bp and
 // rebate.taobao.compare_rate_ratio_bp in this order, then B2-03u (D10-608) share_domains, then
-// B2-03v (D10-610) bridge_origins, then B2-03w (D10-637) me.default_avatar_url, and nothing else.
+// B2-03v (D10-610) bridge_origins, then B2-03w (D10-637) me.default_avatar_url, then B2-03x
+// (D10-646) the six legal.labor_agreement.* / legal.operator_entity.* keys in this order, and
+// nothing else.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
   const i = keys.indexOf('settle.statement.grace_days');
@@ -116,6 +118,12 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'share_domains',
     'bridge_origins',
     'me.default_avatar_url',
+    'legal.labor_agreement.version',
+    'legal.labor_agreement.text_url',
+    'legal.labor_agreement.text_sha256',
+    'legal.labor_agreement.resign_from_version',
+    'legal.operator_entity.name',
+    'legal.operator_entity.credit_code',
   ]);
 });
 

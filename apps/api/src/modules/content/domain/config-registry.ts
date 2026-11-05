@@ -281,6 +281,18 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // (default-avatar-save-check) holds it to what identity accepts on read. Addresses differ per
   // environment, so no seed row. Registration only.
   spec('me.default_avatar_url', 'string', 'config.business'),
+  // B2-03x (D10-646): the six keys identity's labor agreement (domain/labor-agreement.ts) reads,
+  // config.business, editable, in this order. The two versions are whole numbers in 1..int4 max
+  // (isVersion there); the text URL, digest, entity name and credit code are strings. The
+  // save-time check (labor-agreement-save-check) holds each to what identity accepts on read,
+  // and resign_from_version to at most version. Values are the owner's, so no seed rows;
+  // publishing an agreement in the console does not write them (D10-465). Registration only.
+  businessInteger('legal.labor_agreement.version', 1),
+  spec('legal.labor_agreement.text_url', 'string', 'config.business'),
+  spec('legal.labor_agreement.text_sha256', 'string', 'config.business'),
+  businessInteger('legal.labor_agreement.resign_from_version', 1),
+  spec('legal.operator_entity.name', 'string', 'config.business'),
+  spec('legal.operator_entity.credit_code', 'string', 'config.business'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

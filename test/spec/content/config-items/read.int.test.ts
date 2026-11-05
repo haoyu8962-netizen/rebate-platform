@@ -13,6 +13,7 @@ import {
   BRIDGE,
   EXPECTED,
   KEYS,
+  LABOR,
   ORDER_RESCAN,
   PAYOUT,
   POOL,
@@ -77,6 +78,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...SHARE,
     ...BRIDGE,
     ...AVATAR,
+    ...LABOR,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

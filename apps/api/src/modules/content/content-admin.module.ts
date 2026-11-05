@@ -82,6 +82,7 @@ import {
 } from './application/config-item-admin.ts';
 import { bridgeOriginsSaveCheck } from './application/bridge-origins-save-check.ts';
 import { defaultAvatarSaveCheck } from './application/default-avatar-save-check.ts';
+import { laborAgreementSaveCheck } from './application/labor-agreement-save-check.ts';
 import { AdminConfigItemsController } from './http/admin/config-items.controller.ts';
 import { createKyselyConfigItemStore } from './infra/kysely-config-item-store.ts';
 import { PagePreviewService, type PagePreviewStore } from './application/page-preview.ts';
@@ -232,16 +233,17 @@ const monotonicMs = (): number => performance.now();
 
 /**
  * F1-02zzzb: content's own save checks run first (bridge_origins, then B2-03w's
- * me.default_avatar_url), then the assembler's checks.
+ * me.default_avatar_url, then B2-03x's six labor agreement keys), then the assembler's checks.
  */
 function withContentSaveChecks(checks: ConfigItemAdminChecks | undefined): ConfigItemAdminChecks {
   const save = checks?.save;
+  const own = [bridgeOriginsSaveCheck(), defaultAvatarSaveCheck(), laborAgreementSaveCheck()];
   return {
     ...checks,
     save:
       save === undefined
-        ? combineConfigItemSaveChecks(bridgeOriginsSaveCheck(), defaultAvatarSaveCheck())
-        : combineConfigItemSaveChecks(bridgeOriginsSaveCheck(), defaultAvatarSaveCheck(), save),
+        ? combineConfigItemSaveChecks(...own)
+        : combineConfigItemSaveChecks(...own, save),
   };
 }
 

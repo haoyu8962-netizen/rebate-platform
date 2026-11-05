@@ -38,8 +38,9 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // in this order; B1-04zq (D10-543): then the four order_sync.rescan.* keys, in this order;
   // B2-04zo: then ledger.advance_alert_fen; B2-03t (D10-605 (a)): then tech_fee_bp and
   // rebate.taobao.compare_rate_ratio_bp, in this order; B2-03u (D10-608): then share_domains;
-  // B2-03v (D10-610): then bridge_origins; B2-03w (D10-637): then me.default_avatar_url; nothing
-  // else may follow.
+  // B2-03v (D10-610): then bridge_origins; B2-03w (D10-637): then me.default_avatar_url; B2-03x
+  // (D10-646): then the six legal.labor_agreement.* / legal.operator_entity.* keys, in this order;
+  // nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
   expect(registry.map((entry) => entry.key)).toStrictEqual([
@@ -111,6 +112,12 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'share_domains',
     'bridge_origins',
     'me.default_avatar_url',
+    'legal.labor_agreement.version',
+    'legal.labor_agreement.text_url',
+    'legal.labor_agreement.text_sha256',
+    'legal.labor_agreement.resign_from_version',
+    'legal.operator_entity.name',
+    'legal.operator_entity.credit_code',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),
