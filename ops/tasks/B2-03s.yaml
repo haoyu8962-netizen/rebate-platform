@@ -4,6 +4,7 @@ title: 佣金版本推进规则（FU-COMMISSION-VERSION-RULE，D10-578）——�
 type: impl
 # 2026-11-03 W1 入账（D10-578、D10-583，方案 couli-runs/B3-lane/version-rule-batch-plan-20261103.md）。planOrderSyncColumns 比前后有效 N；update-step 加 commission_moved；rebate 用它；CREDITED 改按新 N 重算，复制留兜底。「多推一版、金额相同」已认可。B1-08zh 合并后再写规则测试，本单后变基。
 # 冻结用例开工后实测列全报编排，新旧不能同绿的按 D10-327 进 test_paths。
+# D10-655：[AC-B2-04zp#12]、[#18] 按 D10-578 ② 改为基数随结算推到 900、按 STATEMENT 900 入批、不登记差错、R5 按 900 入账；只动这两个 it 块（D10-327）。
 refs: [BR-CALC-15, BR-CALC-02, BR-CALC-27, BR-FUND-03, BR-CALC-23]
 refs_hash:
   BR-CALC-15: e18291194b6e
@@ -28,6 +29,8 @@ test_paths:
   - 'test/spec/commission/estimate-port/wallet.int.test.ts'
   - 'test/spec/orders/platform-status/transitions.int.test.ts'
   - 'test/spec/orders/rights-mounts/credited.int.test.ts'
+  - 'test/spec/settlement/deciding-settlement/bill.int.test.ts'
+  - 'test/spec/settlement/deciding-settlement/supplement.int.test.ts'
 impl: claude
 tester: claude-independent
 accept:
