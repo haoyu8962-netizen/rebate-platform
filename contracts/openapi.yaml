@@ -6414,6 +6414,86 @@ paths:
           $ref: '#/components/responses/ClientError'
         5XX:
           $ref: '#/components/responses/ServerError'
+  /v1/products/{product_key}/feedback:
+    post:
+      operationId: submitProductFeedback
+      tags:
+        - trade
+      summary: Report a wrong price, rebate or product info on the detail page
+      description: |
+        Product feedback from the detail page (01 F-PROD-15, 04 §6.3). Guests who accepted the
+        privacy policy and logged-in users may submit; the record is counted by device and also
+        keeps user_id when logged in (BR-ID-02 细则「商品反馈与进店」). Basic mode shows no entry and
+        sends no request (BR-ID-11). The body carries only what BR-ID-30 细则「商品反馈记录」 lists:
+        no contact fields, and any undefined field is 20001. link_id is the detail card's link,
+        from which the server reads the quote snapshot; a link_id that does not exist or does not
+        belong to the app is 30144. A device submitting more than feedback.daily_limit_per_device
+        (default 20) in one natural day (+08:00) gets 42901 and nothing is written. With
+        feedback.enabled off (features.flags.product_feedback=false) the client shows no entry and
+        the server answers 30145. Version gate: applied.
+      x-auth: optional
+      x-signed: true
+      x-idempotent: true
+      x-min-version-gate: true
+      x-implementation: planned
+      x-error-codes:
+        - 30145
+        - 20001
+        - 30144
+        - 42901
+        - 10405
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+        - $ref: '#/components/parameters/Platform'
+        - $ref: '#/components/parameters/AppVersion'
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/Channel'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Nonce'
+        - $ref: '#/components/parameters/Sign'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProductKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductFeedbackRequest'
+            example:
+              platform: jd
+              link_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70
+              shown_final_price_fen: 12900
+              shown_rebate_fen: 350
+              quoted_at: '2026-11-06T10:15:00+08:00'
+              reason: price
+              note: null
+      responses:
+        '200':
+          description: The feedback is recorded.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductFeedbackResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  feedback_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b10
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          $ref: '#/components/responses/ClientError'
+        5XX:
+          $ref: '#/components/responses/ServerError'
   /v1/rank/hot:
     get:
       operationId: getHotRank
@@ -38890,6 +38970,11 @@ components:
             as on; these keys can only turn a feature off, never turn on what the user turned off.
             account.phone_change_enabled: client copy of the phone change switch, for display only
             (a missing key counts as on); the server still decides on every request (BR-ID-06 细则).
+            product_feedback (product feedback entry on the detail page, derived from
+            feedback.enabled) and jd_plus_note (PLUS note on JD product details, derived from
+            detail.jd_plus_note.enabled) (04 §10.1, §10.2): derived values win over a key of the
+            same name in the base dictionary; a client that finds the key missing or false shows
+            nothing (no default-on in the client).
           additionalProperties:
             type: boolean
         platform_status:
@@ -40178,6 +40263,78 @@ components:
           type: string
         data:
           $ref: '#/components/schemas/ParseInputData'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    ProductFeedbackRequest:
+      type: object
+      description: |
+        Body of product feedback (04 §6.3). Only the fields BR-ID-30 细则「商品反馈记录」 lists;
+        no contact fields, and any other field is 20001. The shown_* fields and quoted_at are
+        what the page displayed at the time; the server keeps them as given next to the quote
+        snapshot of link_id.
+      additionalProperties: false
+      required:
+        - platform
+        - link_id
+        - shown_final_price_fen
+        - shown_rebate_fen
+        - quoted_at
+        - reason
+      properties:
+        platform:
+          $ref: '#/components/schemas/PlatformCode'
+        item_ref:
+          $ref: '#/components/schemas/ItemRef'
+        link_id:
+          $ref: '#/components/schemas/Id'
+        shown_final_price_fen:
+          $ref: '#/components/schemas/Fen'
+          minimum: 0
+        shown_rebate_fen:
+          $ref: '#/components/schemas/NullableFen'
+          minimum: 0
+          description: Rebate amount shown on the page; null when the page showed none.
+        quoted_at:
+          type: string
+          format: date-time
+          description: Quote time shown with the price.
+        reason:
+          type: string
+          description: price / rebate / info / other (BR-TEXT-14 feedback.reason.*).
+          enum:
+            - price
+            - rebate
+            - info
+            - other
+        note:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+          description: Optional note, at most 100 characters (BR-TEXT-14 表 C feedback.note.*).
+    ProductFeedbackResult:
+      type: object
+      additionalProperties: false
+      required:
+        - feedback_id
+      properties:
+        feedback_id:
+          $ref: '#/components/schemas/Id'
+    ProductFeedbackResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/ProductFeedbackResult'
         trace_id:
           $ref: '#/components/schemas/TraceId'
     OpenLinkRequest:

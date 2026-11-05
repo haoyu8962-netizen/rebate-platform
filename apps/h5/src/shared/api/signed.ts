@@ -28,6 +28,8 @@ const SIGNED_OPERATIONS: readonly (readonly [method: string, path: string])[] = 
   ['POST', '/v1/inputs/parse'],
   ['POST', '/v1/links/{link_id}/open'],
   ['POST', '/v1/links/convert'],
+  // CT-26q: product feedback is native-only (signed, 04 §6.3).
+  ['POST', '/v1/products/{product_key}/feedback'],
   // CT-15t: share material generation is native-only (signed).
   ['POST', '/v1/shares'],
   ['POST', '/v1/orders/claims'],

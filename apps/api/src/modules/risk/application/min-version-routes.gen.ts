@@ -835,6 +835,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": false
   },
   {
+    "operationId": "submitProductFeedback",
+    "method": "POST",
+    "path": "/v1/products/:product_key/feedback",
+    "gate": true,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "getHotRank",
     "method": "GET",
     "path": "/v1/rank/hot",

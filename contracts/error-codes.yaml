@@ -446,6 +446,13 @@ codes:
     retry: 重新转链后
     retry_kind: after_action
     sources: [BR-ATTR-05]
+  - code: 30145
+    http: 422
+    meaning: 商品反馈暂未开放（feedback.enabled 关闭时 POST /v1/products/{product_key}/feedback 拒绝；客户端按 /v1/config 的 product_feedback 不显示入口，正常不会调到）
+    action: 只提示，不重试
+    retry: 否
+    retry_kind: never
+    sources: [BR-ID-02, 01 F-PROD-15, BR-TEXT-14]
   - code: 30151
     http: 422
     meaning: 该淘宝账号已绑定本 App 其他用户

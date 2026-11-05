@@ -30,6 +30,7 @@ const ANONYMOUS_OPERATIONS: readonly (readonly [method: string, path: string])[]
   ['GET', '/v1/products/search'],
   ['GET', '/v1/products/{product_key}'],
   ['GET', '/v1/products/{product_key}/price-trend'],
+  ['POST', '/v1/products/{product_key}/feedback'],
   ['GET', '/v1/rank/hot'],
   ['GET', '/v1/search/hot-words'],
   ['POST', '/v1/inputs/parse'],

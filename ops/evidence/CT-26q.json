@@ -1,0 +1,37 @@
+{
+  "task": "CT-26q",
+  "spec_ref": "0df853bea8d87934ebf15a03c24b945e93677c57",
+  "spec_commit": "855ee36c33f981dd6ce65438dfd6539fb66d2626",
+  "red_tests": [],
+  "risk_note": "RV1 (contract). Adds POST /v1/products/{product_key}/feedback (optional auth, signed, idempotent, version-gated, planned) with the body of 04 §6.3, error 30145 registered in 08 §13.11 / BR-TEXT-14 (couli #280, D10-686), and the derived features.flags keys product_feedback and jd_plus_note in the ConfigFeatures description. Additions only; generated files regenerated.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 4,
+      "note": "round 1 fail with one S1 (content/specs/fund-term-keys.gen.ts not regenerated), fixed; round 2 pass; round 3 (apps/h5 anonymous list adds the optional-auth feedback operation) pass; round 4 (apps/h5 signed list adds the operation, caught by CI AC-F1-01q-SIGNED#1) pass with no findings; static only"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4d8cc1d24a4ac0fa44c79e47bef692324ae802c4",
+    "specs": "0f086a2b7e98b0fc2ca36e1cc9c7f251253c8a0c"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

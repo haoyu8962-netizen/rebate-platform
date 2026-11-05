@@ -24,4 +24,5 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "mergeAccount",
   "reportAgentMessage",
   "setAgentMessageFeedback",
+  "submitProductFeedback",
 ]);

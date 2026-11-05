@@ -407,6 +407,11 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "none"
   },
   {
+    "method": "POST",
+    "path": "/v1/products/:product_key/feedback",
+    "auth": "optional"
+  },
+  {
     "method": "GET",
     "path": "/v1/rank/hot",
     "auth": "optional"

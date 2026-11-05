@@ -2389,6 +2389,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/{product_key}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a wrong price, rebate or product info on the detail page
+         * @description Product feedback from the detail page (01 F-PROD-15, 04 §6.3). Guests who accepted the
+         *     privacy policy and logged-in users may submit; the record is counted by device and also
+         *     keeps user_id when logged in (BR-ID-02 细则「商品反馈与进店」). Basic mode shows no entry and
+         *     sends no request (BR-ID-11). The body carries only what BR-ID-30 细则「商品反馈记录」 lists:
+         *     no contact fields, and any undefined field is 20001. link_id is the detail card's link,
+         *     from which the server reads the quote snapshot; a link_id that does not exist or does not
+         *     belong to the app is 30144. A device submitting more than feedback.daily_limit_per_device
+         *     (default 20) in one natural day (+08:00) gets 42901 and nothing is written. With
+         *     feedback.enabled off (features.flags.product_feedback=false) the client shows no entry and
+         *     the server answers 30145. Version gate: applied.
+         */
+        post: operations["submitProductFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rank/hot": {
         parameters: {
             query?: never;
@@ -13068,6 +13097,11 @@ export interface components {
              *     as on; these keys can only turn a feature off, never turn on what the user turned off.
              *     account.phone_change_enabled: client copy of the phone change switch, for display only
              *     (a missing key counts as on); the server still decides on every request (BR-ID-06 细则).
+             *     product_feedback (product feedback entry on the detail page, derived from
+             *     feedback.enabled) and jd_plus_note (PLUS note on JD product details, derived from
+             *     detail.jd_plus_note.enabled) (04 §10.1, §10.2): derived values win over a key of the
+             *     same name in the base dictionary; a client that finds the key missing or false shows
+             *     nothing (no default-on in the client).
              */
             flags: {
                 [key: string]: boolean;
@@ -13730,6 +13764,41 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["ParseInputData"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description Body of product feedback (04 §6.3). Only the fields BR-ID-30 细则「商品反馈记录」 lists;
+         *     no contact fields, and any other field is 20001. The shown_* fields and quoted_at are
+         *     what the page displayed at the time; the server keeps them as given next to the quote
+         *     snapshot of link_id.
+         */
+        ProductFeedbackRequest: {
+            platform: components["schemas"]["PlatformCode"];
+            item_ref?: components["schemas"]["ItemRef"];
+            link_id: components["schemas"]["Id"];
+            shown_final_price_fen: components["schemas"]["Fen"];
+            /** @description Rebate amount shown on the page; null when the page showed none. */
+            shown_rebate_fen: components["schemas"]["NullableFen"];
+            /**
+             * Format: date-time
+             * @description Quote time shown with the price.
+             */
+            quoted_at: string;
+            /**
+             * @description price / rebate / info / other (BR-TEXT-14 feedback.reason.*).
+             * @enum {string}
+             */
+            reason: "price" | "rebate" | "info" | "other";
+            /** @description Optional note, at most 100 characters (BR-TEXT-14 表 C feedback.note.*). */
+            note?: string | null;
+        };
+        ProductFeedbackResult: {
+            feedback_id: components["schemas"]["Id"];
+        };
+        ProductFeedbackResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["ProductFeedbackResult"];
             trace_id: components["schemas"]["TraceId"];
         };
         OpenLinkRequest: {
@@ -26160,6 +26229,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductPriceTrendResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            "4XX": components["responses"]["ClientError"];
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    submitProductFeedback: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description App (brand) the request belongs to; before login it must match the app_id the device was registered with (10403, BR-ID-07). */
+                "X-App-Id": components["parameters"]["AppId"];
+                /** @description Client platform (enum client_platform, 03 §4.2). */
+                "X-Platform": components["parameters"]["Platform"];
+                /** @description SemVer, the same number on all three apps (拍板第二批 TECH-07). */
+                "X-App-Version": components["parameters"]["AppVersion"];
+                /** @description Build number of the client. */
+                "X-Build"?: components["parameters"]["Build"];
+                /** @description Install channel of the app package (enum install_channel); absent for H5. */
+                "X-Channel"?: components["parameters"]["Channel"];
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /** @description device_id issued by POST /v1/devices; anything else is 10402 (BR-ID-09). */
+                "X-Device-Id": components["parameters"]["DeviceId"];
+                /** @description Unix seconds; |server time − ts| ≤ 300 s (BR-ID-09). */
+                "X-Timestamp": components["parameters"]["Timestamp"];
+                /** @description 32 lowercase hex characters; (device_id, nonce) unique within 600 s (BR-ID-09). */
+                "X-Nonce": components["parameters"]["Nonce"];
+                /**
+                 * @description lowercase_hex(HMAC-SHA256(install_secret, METHOD + "\n" + path with raw query + "\n" + ts
+                 *     + "\n" + nonce + "\n" + lowercase_hex(sha256(raw body)))) (BR-ID-09).
+                 */
+                "X-Sign": components["parameters"]["Sign"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque product key, URL-encoded by the client (BR-PROD-02). */
+                product_key: components["parameters"]["ProductKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "platform": "jd",
+                 *       "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70",
+                 *       "shown_final_price_fen": 12900,
+                 *       "shown_rebate_fen": 350,
+                 *       "quoted_at": "2026-11-06T10:15:00+08:00",
+                 *       "reason": "price",
+                 *       "note": null
+                 *     }
+                 */
+                "application/json": components["schemas"]["ProductFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description The feedback is recorded. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "feedback_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b10"
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ProductFeedbackResponse"];
                 };
             };
             429: components["responses"]["TooManyRequests"];

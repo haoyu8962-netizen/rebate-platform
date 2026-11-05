@@ -407,6 +407,11 @@ export const CONTRACT_SIGNING_ROUTES = [
     "signed": false
   },
   {
+    "method": "POST",
+    "path": "/v1/products/:product_key/feedback",
+    "signed": true
+  },
+  {
     "method": "GET",
     "path": "/v1/rank/hot",
     "signed": false
