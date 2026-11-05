@@ -5,7 +5,7 @@ type: impl
 # 2026-11-05 ops 入账（编排 D10-672 ①：content 账号 06:00 前不在，S-06 改由 ops 做，照 CT-11b）。快照逐字取规划 design/tokens/design-tokens.json 于 f088f04，不手改；contracts/README 改版本号与来源提交。
 # v0.4.0 → v0.5.1 只新增 7 个令牌（color.platform.tag.taobao / tmall / jd / pdd、color.overlay.on-image、radius.tag、radius.avatar），没有既有值改动。生成物（tokens.gen.css、tailwind.gen.css、theme.gen.ts）与快照同 PR。
 # 冻结规则测试 test/spec/frontend/ui-tokens/** 钉了 v0.4.0 与来源提交 49bb4ad（kit.ts SOURCE_COMMIT、两个夹具、snapshot.test 版本）：照 CT-11b 由测试作者换成 f088f04 与 0.5.1、补新令牌的生成断言，只改钉值、不放宽，按 #24 报核。
-# 依赖 SPEC_REF 含 f088f04（#2393 升到 ea202ff）。改 contracts/ 落地时占契约槽。Codex contract 评审。CT-11c（v0.6.0、H5 接新类别）另单。
+# 依赖 SPEC_REF 含 f088f04（#2403 升到 0df853b；#2393 的 ea202ff 不含）。f088f04 的 metadata.modes 是多行数组、不合 prettier：.prettierignore 加两行逐字快照忽略（D10-675）。改 contracts/ 落地时占契约槽。Codex contract 评审。CT-11c（v0.6.0、H5 接新类别）另单。
 refs: []
 refs_hash: {}
 deps: [CT-11b]
@@ -14,6 +14,7 @@ paths:
   - 'contracts/README.md'
   - 'packages/ui-tokens/src/**'
   - 'packages/ui-tokens/scripts/**'
+  - '.prettierignore'
 test_paths:
   - 'test/spec/frontend/ui-tokens/**'
 impl: claude
@@ -23,3 +24,22 @@ accept:
   - 'pnpm contracts:check'
   - 'test/spec/frontend/ui-tokens/**'
 status: todo
+red_exempt_outside:
+  - file: test/spec/frontend/ui-tokens/dark.test.ts
+    reason: 读取函数里的夹具路径由 variables.49bb4ad.css 换成 variables.f088f04.css（随令牌来源提交换钉值，照 CT-11b），用例体一字未改
+red_exempt:
+  - file: test/spec/frontend/ui-tokens/dark.test.ts
+    test: '[AC-CT-11b-CSS-DARK#1] 两个深色块完整匹配规划值，仅覆盖含 dark 的叶子'
+    reason: 同文件只换了读取函数里的夹具路径；本用例的标题与用例体与主干逐字相同（CT-11ba，D10-675 后先红 red/1）
+  - file: test/spec/frontend/ui-tokens/dark.test.ts
+    test: '[AC-CT-11b-CSS-DARK#2] 深色值遵循浅色的转换规则，含透明色和两层阴影'
+    reason: 同文件只换了读取函数里的夹具路径；本用例的标题与用例体与主干逐字相同（CT-11ba，D10-675 后先红 red/1）
+  - file: test/spec/frontend/ui-tokens/dark.test.ts
+    test: '[AC-CT-11b-CSS-DARK#3] 按 dark 字段存在性覆盖，同值仍覆盖、缺省不覆盖、空阴影覆盖为 none'
+    reason: 同文件只换了读取函数里的夹具路径；本用例的标题与用例体与主干逐字相同（CT-11ba，D10-675 后先红 red/1）
+  - file: test/spec/frontend/ui-tokens/dark.test.ts
+    test: '[AC-CT-11b-THEME#2] 主题序列化读取输入 dark，不把深色值写死在模板中'
+    reason: 同文件只换了读取函数里的夹具路径；本用例的标题与用例体与主干逐字相同（CT-11ba，D10-675 后先红 red/1）
+  - file: test/spec/frontend/ui-tokens/dark.test.ts
+    test: '[AC-CT-11b-SOURCE#1] 生成器无 I/O 和硬编码颜色，深色变化只来自入参且不污染后续调用'
+    reason: 同文件只换了读取函数里的夹具路径；本用例的标题与用例体与主干逐字相同（CT-11ba，D10-675 后先红 red/1）
