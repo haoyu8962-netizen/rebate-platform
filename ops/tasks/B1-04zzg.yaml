@@ -1,0 +1,32 @@
+id: B1-04zzg
+repo: rebate-platform
+title: 商品卡与详情带店铺名（FU-DETAIL-SHOP-NAME）——联盟 DTO 加 shop_name，三家适配器按官方店铺名字段映射，card-assembler 填 shop_name、product-reader 摘要带店铺名；空值为 null、不从别处补
+type: impl
+# 2026-11-05 ops 入账（编排 11-04 23:21 派工，续跑 ②）。契约 ProductCard 已有 shop_name（可空），定稿详情页有店铺块；现 card-assembler 不填、UnionItem 无店铺名字段，
+#   product-reader.ts:67 TODO 同一件。官方字段（rebate-private cap-tests 录制核过字段名）：淘宝官方搜索 result_list.map_data[].item_basic_info.shop_title（2026-11-02），
+#   淘宝详情按 goods.ts 现用接口的 shop_title，大淘客 data.list[].shopName（2026-10-31），京东 shopInfo.shopName（2026-10-04），拼多多 goods_list[].mall_name（2026-10-15）。
+# 规则：有则原样（只去首尾空白，空串视为没有）、无则 null；不从 nick / seller_nick / 标题等别处补，不伪造。拼多多实录可能为空，空时客户端整行不显示。
+# 规则测试用录制字段形状的合成样例（公开仓库只放合成样例）钉「有则原样、无则 null」，走真实 card-assembler 与 getProduct；冻结测试若钉了 shop_name 为 null 按 #24 报核。
+# 负责人在看的详情 v3 稿保留店铺块（店名空时客户端「店铺」兜底），本单不受定稿影响。RV2（union）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/infra/taobao/**'
+  - 'apps/api/src/modules/union/infra/dataoke/**'
+  - 'apps/api/src/modules/union/infra/jd/**'
+  - 'apps/api/src/modules/union/infra/pdd/**'
+  - 'apps/api/src/modules/union/infra/demo/**'
+  - 'apps/api/src/modules/catalog/application/card-assembler.ts'
+  - 'apps/api/src/modules/catalog/application/card-assembler.test.ts'
+  - 'apps/api/src/modules/catalog/application/product-reader.ts'
+  - 'apps/api/src/modules/catalog/application/product-reader.test.ts'
+  - 'test/spec/catalog/shop-name/**'
+test_paths:
+  - 'test/spec/catalog/shop-name/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
