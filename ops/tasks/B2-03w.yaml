@@ -1,0 +1,33 @@
+id: B2-03w
+repo: rebate-platform
+title: 测试修改（D10-637）：config 登记表加 me.default_avatar_url（config.business，string，无种子）并加保存时 https 绝对地址校验；冻结注册表测试照 B2-03u 只在尾巴后追加一键
+type: test-change
+# 2026-11-05 ops 入账（编排 D10-637，排本线最前）。identity/application/me.ts:121-136 把哨兵头像 avatar:default 换成本 app 的 me.default_avatar_url（https 绝对地址），
+#   缺值或不合规按 D22 / D23 回 50001 并告警（不改）；但该键不在 content 的 config-registry，后台写不了，staging 新号的 GET /v1/me 全部 50001（trace 367506 / ef3cd0 等）。
+# 本单：登记 spec('me.default_avatar_url', 'string', 'config.business')，不加种子（各环境地址不同）；加 ConfigItemSaveCheck（照 bridge-origins-save-check.ts）：
+#   写入该键时值必须是字符串、https:// 开头、URL.canParse 且 hostname 非空（与 me.ts 读取口径逐条一致），否则 20001 fields=[该键]；在 content-admin.module 与已有检查组合。
+# 冻结测试同 B2-03u 的那几处，只在尾巴后追加 me.default_avatar_url、计数 +1、加入「无种子」集合，由新鲜独立 Claude 改、另一新鲜 Claude 只读复审「不削弱」，按 #24 请编排加标签。
+# 走 test-change/B2-03w 分支（approvals 第 12 条）。合并部署后 ops 用 ops-staging 配 staging 占位头像地址（D10-637 (2)）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'apps/api/src/modules/content/application/default-avatar-save-check.ts'
+  - 'apps/api/src/modules/content/application/default-avatar-save-check.test.ts'
+  - 'apps/api/src/modules/content/content-admin.module.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/**'
+status: todo
