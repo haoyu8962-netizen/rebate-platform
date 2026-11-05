@@ -1,0 +1,33 @@
+id: B1-05zd
+repo: rebate-platform
+title: 首页池卡带店铺名（FU-POOL-SHOP-NAME）——pool_items 加可空 shop_name（迁移 0124），加池时从候选条目写入、刷新时按同一规则更新，池卡读出交 card-assembler；缺省 null、不从别处补
+type: impl
+# 2026-11-05 ops 入账（编排 D10-653，排在 B2-03x 之后；迁移号 0124 按编排 18:45 冻结口径）。B1-04zzg 上 staging 后详情有店铺名、首页池卡仍 null：
+#   池卡读 app.pool_items 快照（kysely-pool-reader 只选 title / image / 价格），表无店铺名列，加池与刷新也不存。负责人 11-05 定列表卡与详情同一套组件，池卡应与搜索卡一致。
+# 照 B1-05za（池卡带图）：迁移 0124 给 app.pool_items 加可空 text 列 shop_name（不回填、不加约束以外的东西，授权随建表已有）；加池（pool-admin.ts:251 一带）写入候选条目的 shop_name（B1-04zzg 的 shopNameField 规则已在适配器）；
+#   刷新（worker/pool-refresh.ts）拿到联盟最新条目时按同一规则更新 shop_name（有则原样、无则置 null）；kysely-pool-reader 选出 shop_name 交卡片（缺省 null）。不从标题、nick 补，不伪造。现有 8 件池商品不手工补，随下次刷新带上。
+# 规则测试钉：加池写入、刷新更新与置空、池卡（真实 listPageSectionItems）带店铺名、无则 null。迁移门禁（squawk / db:check）照常；db/schema.sql 与 db.gen.ts 由编排沙箱外 db:snapshot 重生成。RV2（db、catalog）。
+refs: []
+refs_hash: {}
+deps: [B1-04zzg]
+paths:
+  - 'db/migrations/0124_pool-items-shop-name.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'apps/api/src/modules/catalog/application/pool-admin.ts'
+  - 'apps/api/src/modules/catalog/application/pool-admin.test.ts'
+  - 'apps/api/src/modules/catalog/application/pool-read.ts'
+  - 'apps/api/src/modules/catalog/application/pool-read.test.ts'
+  - 'apps/api/src/modules/catalog/infra/kysely-pool-admin-store.ts'
+  - 'apps/api/src/modules/catalog/infra/kysely-pool-reader.ts'
+  - 'apps/api/src/modules/catalog/infra/kysely-pool-reader.int.test.ts'
+  - 'apps/api/src/modules/catalog/worker/pool-refresh.ts'
+  - 'apps/api/src/modules/catalog/worker/pool-refresh.test.ts'
+  - 'test/spec/catalog/pool-shop-name/**'
+test_paths:
+  - 'test/spec/catalog/pool-shop-name/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
