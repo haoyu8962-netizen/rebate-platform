@@ -6,6 +6,7 @@ type: impl
 #   池卡读 app.pool_items 快照（kysely-pool-reader 只选 title / image / 价格），表无店铺名列，加池与刷新也不存。负责人 11-05 定列表卡与详情同一套组件，池卡应与搜索卡一致。
 # 照 B1-05za（池卡带图）：迁移 0124 给 app.pool_items 加可空 text 列 shop_name（不回填、不加约束以外的东西，授权随建表已有）；加池（pool-admin.ts:251 一带）写入候选条目的 shop_name（B1-04zzg 的 shopNameField 规则已在适配器）；
 #   刷新（worker/pool-refresh.ts）拿到联盟最新条目时按同一规则更新 shop_name（有则原样、无则置 null）；kysely-pool-reader 选出 shop_name 交卡片（缺省 null）。不从标题、nick 补，不伪造。现有 8 件池商品不手工补，随下次刷新带上。
+# D10-660：product-pool-schema/kit.ts 的 SHAPES.pool_items 与 commission-column.int.test.ts 顶部 SHAPE 各只加 shop_name 一行（照 B1-05u 先例，Codex test r2，并入 spec 提交）。
 # 规则测试钉：加池写入、刷新更新与置空、池卡（真实 listPageSectionItems）带店铺名、无则 null。迁移门禁（squawk / db:check）照常；db/schema.sql 与 db.gen.ts 由编排沙箱外 db:snapshot 重生成。RV2（db、catalog）。
 refs: []
 refs_hash: {}
@@ -26,8 +27,32 @@ paths:
   - 'test/spec/catalog/pool-shop-name/**'
 test_paths:
   - 'test/spec/catalog/pool-shop-name/**'
+  - 'test/spec/catalog/product-pool-schema/kit.ts'
+  - 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
 impl: claude
 tester: codex
 accept:
   - 'pnpm verify'
 status: todo
+red_exempt_outside:
+  - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
+    reason: 顶部 SHAPE 常量只追加 shop_name 一行（迁移 0124 合法加列，D10-660，照 B1-05u 先例），仍是精确列集合比对
+red_exempt:
+  - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
+    test: '[BR-PRICE-11] pool_items.commission_rate_bp 是 integer，可空，没有默认值'
+    reason: 同文件只在顶部 SHAPE 追加 shop_name 一行；本用例的标题与用例体与主干逐字相同，不读 SHAPE（D10-660）
+  - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
+    test: '[BR-PRICE-11] commission_rate_bp 为负被拒：插入和更新都违反 CHECK，不留下也不改动行'
+    reason: 同文件只在顶部 SHAPE 追加 shop_name 一行；本用例的标题与用例体与主干逐字相同，不读 SHAPE（D10-660）
+  - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
+    test: '[BR-PRICE-11] commission_rate_bp 取 0 和正值都能写入，原样读回，没有上限'
+    reason: 同文件只在顶部 SHAPE 追加 shop_name 一行；本用例的标题与用例体与主干逐字相同，不读 SHAPE（D10-660）
+  - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
+    test: '[BR-PRICE-11] 不写 commission_rate_bp 的插入成功且该列为 NULL，显式写 NULL 同样成功'
+    reason: 同文件只在顶部 SHAPE 追加 shop_name 一行；本用例的标题与用例体与主干逐字相同，不读 SHAPE（D10-660）
+  - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
+    test: '[BR-PRICE-11] 空值行下一次刷新能补上 commission_rate_bp：0 和正值都能从 NULL 更新进去'
+    reason: 同文件只在顶部 SHAPE 追加 shop_name 一行；本用例的标题与用例体与主干逐字相同，不读 SHAPE（D10-660）
+  - file: test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts
+    test: '[BR-PRICE-11] 主键仍是 (app_id, pool_id, product_key)：只有佣金率不同的同键插入失败，原行不变'
+    reason: 同文件只在顶部 SHAPE 追加 shop_name 一行；本用例的标题与用例体与主干逐字相同，不读 SHAPE（D10-660）
