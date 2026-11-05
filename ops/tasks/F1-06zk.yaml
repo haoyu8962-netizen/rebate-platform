@@ -15,7 +15,7 @@ type: test-change
 # 按编排裁定先由 #880 把 SPEC_REF 推到 32d7b096（含 couli #152，F1-06zd、F1-06ze 同步），refs_hash 按它计。
 refs: [BR-TEXT-24]
 refs_hash:
-  BR-TEXT-24: f9944dcc3076
+  BR-TEXT-24: a3b3f13e5be8
 deps: [F1-01n, F1-06zd]
 paths:
   - 'apps/h5/src/components/platform/assets/**'

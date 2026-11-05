@@ -5,7 +5,7 @@ type: impl
 # 2026-11-03 W1 入账，范围按 D10-583 缩小：比对本身不用改（未关闭应扣必晚于最新结算记录）。开工前先核 candidates 用未减的 bSettle、R5 减了 open 有没有下游校验，再定 paths 是否收窄。
 refs: [BR-FUND-04, BR-FUND-06, BR-CALC-15]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
   BR-FUND-06: 2076b932478c
   BR-CALC-15: e18291194b6e
 deps: [B2-03s]

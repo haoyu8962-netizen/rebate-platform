@@ -7,7 +7,7 @@ type: migration
 # 规则测试由独立 Claude 写（Codex 额度至 10-30，approvals #36）。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: []
 paths:
   - 'db/migrations/**'

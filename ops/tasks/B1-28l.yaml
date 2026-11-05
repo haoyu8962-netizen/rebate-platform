@@ -6,7 +6,7 @@ type: impl
 # 已有 test/spec/catalog/hot-rank/** 冻结不改，未带原始位置的候选仍按下标编名次；缓存里不带位置的旧条目按读不出处理（重新取数）。
 refs: [BR-TEXT-17]
 refs_hash:
-  BR-TEXT-17: 486f4508575e
+  BR-TEXT-17: 1990b516b8e4
 deps: [B1-28h, B1-28j]
 paths:
   - 'apps/api/src/modules/catalog/hot-rank.ts'

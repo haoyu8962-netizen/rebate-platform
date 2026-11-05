@@ -11,9 +11,9 @@ type: impl
 # 分工：Codex 写规则测试，Claude Opus 5.5 实现，Codex 评审（approvals #34、#27；Codex 不可用按 #36 由独立 Claude）。风险 RV1。
 refs: [BR-PROD-03, BR-AI-04, BR-TEXT-14]
 refs_hash:
-  BR-PROD-03: 1708058a2ff7
+  BR-PROD-03: 7769390bcd28
   BR-AI-04: 7add9471a0f6
-  BR-TEXT-14: 4f7eb086d75f
+  BR-TEXT-14: f4a2949ee877
 deps: [B1-07a, B3-04f]
 paths:
   - 'apps/api/src/modules/parsing/application/**'

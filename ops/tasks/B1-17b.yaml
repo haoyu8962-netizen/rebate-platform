@@ -11,8 +11,8 @@ type: impl
 # 子模块不得从 catalog/index.ts 导入（depcruise no-circular，教训 16）；不在源码写字面 BOM / U+2028。
 refs: [BR-WATCH-05, BR-WATCH-19]
 refs_hash:
-  BR-WATCH-05: 93ee2a377963
-  BR-WATCH-19: d14905e58b39
+  BR-WATCH-05: 2527ad9787ad
+  BR-WATCH-19: 509febd64b7c
 deps: [B1-17a, B1-05i]
 paths:
   - 'apps/api/src/modules/catalog/price-history/**'

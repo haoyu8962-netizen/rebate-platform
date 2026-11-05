@@ -5,8 +5,8 @@ type: impl
 # 2026-10-31 W1 入账（编排 D10-452 ②）。B1-05e 注释留的详情降级在这里接。搜索不读商品池（BR-PROD-07）。
 refs: [BR-PRICE-11, BR-TEXT-17, BR-PROD-07]
 refs_hash:
-  BR-PRICE-11: 94a46c6de587
-  BR-TEXT-17: 486f4508575e
+  BR-PRICE-11: 26e8055f727a
+  BR-TEXT-17: 1990b516b8e4
   BR-PROD-07: 0802ef31c32c
 deps: [B1-05q, B1-05s, B1-05u]
 paths:

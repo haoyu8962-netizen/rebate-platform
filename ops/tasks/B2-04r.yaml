@@ -6,7 +6,7 @@ type: impl
 # 状态备注：可开（B2-04n 已合并）。step-up 与 HTTP 归 B2-09。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: [B2-04n]
 paths:
   - 'apps/api/src/modules/settlement/bill/supplement/**'

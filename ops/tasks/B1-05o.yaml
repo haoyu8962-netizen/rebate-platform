@@ -5,7 +5,7 @@ type: impl
 # 2026-10-30 W1 入账（编排 19:3x：对照 05 找缺口）。union 端口用 B1-22p，catalog 接法同 B1-28j / B1-05n。白名单今天为空，真实适配器等 CAP-*-10。商品池数据源不在本任务（表 product_pools / pool_items 尚未建）。
 refs: [BR-TEXT-17]
 refs_hash:
-  BR-TEXT-17: 486f4508575e
+  BR-TEXT-17: 1990b516b8e4
 deps: [CT-07c, B1-22p, B1-05n]
 paths:
   - 'apps/api/src/modules/catalog/**'

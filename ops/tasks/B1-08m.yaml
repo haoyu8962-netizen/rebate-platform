@@ -7,7 +7,7 @@ type: impl
 # 05 B1-08 行、BR-ATTR-21 细则「待跟单卡按实际外跳选」「待跟单卡的完成与关闭按尝试」、AC-S1-55 ⑥～⑪；linking 侧 attempt_id 下发与 link_jump 上报开工前核对现状。契约槽 ④。
 refs: [BR-ATTR-21]
 refs_hash:
-  BR-ATTR-21: 0679f900972f
+  BR-ATTR-21: a52b09dcf09d
 deps: [B1-08h, B1-08l]
 paths:
   - 'apps/api/src/modules/orders/**'

@@ -13,7 +13,7 @@ type: impl
 # 照 F1-06h 先例把 fixtures.ts 列进 test_paths，由规则测试提交在 MENU「版本管理」后加「平台标识」一行（第一类 add-only 改动，PR 合并要负责人标签，approvals 第 24 条）；单独 test-change 先合或后合都会让主干红。
 refs: [BR-TEXT-24]
 refs_hash:
-  BR-TEXT-24: f9944dcc3076
+  BR-TEXT-24: a3b3f13e5be8
 deps: [F1-06w, F1-06y, F1-06zb, F1-06r]
 paths:
   - 'apps/admin/src/pages/platform-icons/**'

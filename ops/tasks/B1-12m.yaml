@@ -7,7 +7,7 @@ type: impl
 # 不在本任务：发送链路读取开关（发送核心 / 交易扇出任务）。与 B1-12k 同改 notification/**，deps 串行。
 refs: [BR-WATCH-19, BR-WATCH-15]
 refs_hash:
-  BR-WATCH-19: d14905e58b39
+  BR-WATCH-19: 509febd64b7c
   BR-WATCH-15: f11102d06360
 deps: [B1-12k, B1-12l]
 paths:

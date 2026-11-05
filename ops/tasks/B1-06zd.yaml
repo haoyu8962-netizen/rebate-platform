@@ -7,7 +7,7 @@ type: impl
 # 数据源默认 baichuan 时全部不生效，冻结的淘宝分享 50301 not_launched 不变；开启前提：真实测试单核对 relation_id 回传（D10-503 §3）与 CAP-TB-11。
 refs: [BR-ATTR-27, BR-ATTR-10, BR-ATTR-13, BR-PRICE-12]
 refs_hash:
-  BR-ATTR-27: b6aaaa57f5d6
+  BR-ATTR-27: f908d845271a
   BR-ATTR-10: 0ef7e9245dba
   BR-ATTR-13: 7c8e2b83ee0b
   BR-PRICE-12: 6aa98fc3ce46

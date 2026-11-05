@@ -10,7 +10,7 @@ type: impl
 # 必须复用：B1-17b 的 createPriceHistoryRecorder（经 catalog/index.ts）；不复制游程或可写判定逻辑。子模块不从本模块 index.ts 导入（教训 16）。
 refs: [BR-WATCH-19]
 refs_hash:
-  BR-WATCH-19: d14905e58b39
+  BR-WATCH-19: 509febd64b7c
 deps: [B1-17b, B1-05j, B1-05e, B1-07b]
 paths:
   - 'apps/api/src/modules/catalog/search.ts'

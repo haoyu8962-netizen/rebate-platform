@@ -7,7 +7,7 @@ type: impl
 # D10-506：只认 type=settle_amount_mismatch；结论绑 expected / actual，job 与 supplement 只有当前 base 与 B_settle 都等于结论时算相符，否则照常比较；结案后又不一致新开差错单，dedupe 键 = 原键 + (base_fen, B_settle) 指纹，订单保持 WAITING。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: [CT-24zf]
 paths:
   - 'apps/api/src/modules/ledger/application/admin-recon-diff-close*.ts'

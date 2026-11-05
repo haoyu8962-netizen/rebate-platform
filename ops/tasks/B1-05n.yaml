@@ -6,7 +6,7 @@ type: impl
 # 前置：test/spec/catalog/cache/kit.ts 的假 adapter 只有 materialFeed，走真实 wiring 的兜底用例要先经测试修改补 channelRanking（不削弱断言），开工前由编排定是否走 #24。
 refs: [BR-TEXT-17]
 refs_hash:
-  BR-TEXT-17: 486f4508575e
+  BR-TEXT-17: 1990b516b8e4
 deps: [B1-22p, B1-05j, B1-28j]
 paths:
   - 'apps/api/src/modules/catalog/infra/search-wiring.ts'

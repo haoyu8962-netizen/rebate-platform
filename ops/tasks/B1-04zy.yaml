@@ -5,7 +5,7 @@ type: impl
 # 2026-11-03 be 入账（D10-582 照准 couli-runs/B3-lane/tb-search-fallback-plan-20261102.md，B1-04zx 之后）。开关新增 official_first，默认不改；没有大淘客客户端时启动报错。只看第 1 页：官方 upstream_unavailable、rate_limited、upstream_rejected、超时或 0 条才回落，invalid_dto、配置错误、调用方取消不回落。整次请求单一来源，结果不合并；游标带来源前缀，续页留在原来源，失败就报错。大淘客走 D10-504 换算，官方走最后一段换算。quoted_at 取实际来源（BR-PRICE-11）。缓存键不加来源（BR-PROD-07）。回落在适配器内，熔断器看不到官方失败，所以官方单独限时（总预算一半）并加进程内冷却 60 秒。指标：api 进程内计数器 couli_taobao_search_total{source,outcome}，照 B1-08zh 只在用到它的入口输出；告警 warning 写进 couli.yaml。转链不动。union 线 11-06 回来复核。RV2。
 refs: [BR-PRICE-11]
 refs_hash:
-  BR-PRICE-11: 94a46c6de587
+  BR-PRICE-11: 26e8055f727a
 deps: [B1-04zx]
 paths:
   - 'apps/api/src/modules/union/infra/taobao/**'

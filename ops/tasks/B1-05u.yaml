@@ -6,7 +6,7 @@ type: impl
 # 可空：已有行由下一次刷新补上，为空不下发（B1-05r）。写入在 B1-05r（入库与刷新）。规划 04 的 pool_items 字段由编排回写。
 refs: [BR-PRICE-11]
 refs_hash:
-  BR-PRICE-11: 94a46c6de587
+  BR-PRICE-11: 26e8055f727a
 deps: [B1-05p]
 paths:
   - 'db/migrations/**'

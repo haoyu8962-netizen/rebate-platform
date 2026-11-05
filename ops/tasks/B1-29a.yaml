@@ -10,8 +10,8 @@ type: impl
 # 必须复用：@couli/db Kysely 与生成类型、catalog 读 platforms.key_stability 的现有查询（infra/kysely-catalog-store.ts）、配置读取现有做法。子模块不从本模块 index.ts 导入（教训 16）。
 refs: [BR-WATCH-05, BR-PROD-03, BR-TEXT-11]
 refs_hash:
-  BR-WATCH-05: 93ee2a377963
-  BR-PROD-03: 1708058a2ff7
+  BR-WATCH-05: 2527ad9787ad
+  BR-PROD-03: 7769390bcd28
   BR-TEXT-11: 335c82582156
 deps: [B1-17a, B1-17b, CT-22a]
 paths:

@@ -5,7 +5,7 @@ type: impl
 # 2026-10-31 W1 入账（编排 D10-508，couli #240）。hot-rank-cache 现在物理保留 24 小时，无年龄上限。
 refs: [BR-PRICE-11]
 refs_hash:
-  BR-PRICE-11: 94a46c6de587
+  BR-PRICE-11: 26e8055f727a
 deps: [B1-28m, B1-05s]
 paths:
   - 'apps/api/src/modules/catalog/infra/hot-rank-cache.ts'

@@ -5,7 +5,7 @@ type: impl
 # 2026-10-23 入账（union 线，编排裁定 D10-239 T3a / T3b；评估 eval-1108.md「另发现」）。现状：推广位校验在 link-open-conversion.ts identityFor、价格复核之后；拼多多未备案时先取推广位（无位 50301）再查备案。依据 08 BR-ATTR-05 细则先后，08 未写到的按「先判本地配置、后调外部接口」。返回码变化写进 PR 说明。补冻结用例。Codex 不可用至 10-30，测试由独立 Claude（approvals #36）。
 refs: [BR-ATTR-05]
 refs_hash:
-  BR-ATTR-05: e2864d6024ae
+  BR-ATTR-05: 655fe77b6d9b
 deps: [B1-19d]
 paths:
   - 'apps/api/src/modules/linking/application/link-open-conversion.ts'

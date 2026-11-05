@@ -8,7 +8,7 @@ type: impl
 # Codex 额度至 10-30，规则测试按 approvals #36 由独立 Claude（claude-run.sh）写。
 refs: [BR-ID-28]
 refs_hash:
-  BR-ID-28: f6b22fd0bba1
+  BR-ID-28: 205ab4bdd1d4
 deps: [B1-28b, B1-15g]
 paths:
   - 'apps/api/src/modules/catalog/favorites/**'

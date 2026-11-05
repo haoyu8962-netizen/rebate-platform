@@ -6,7 +6,7 @@ type: impl
 # 前置：冻结的 test/spec/catalog/hot-rank/contract.test.ts 第 17 行钉着 x-auth none，开工时先走测试修改（只改这一项，#24）。要排契约槽。
 refs: [BR-PRICE-11]
 refs_hash:
-  BR-PRICE-11: 94a46c6de587
+  BR-PRICE-11: 26e8055f727a
 deps: [B1-28h, B1-05o]
 paths:
   - 'contracts/openapi.yaml'

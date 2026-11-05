@@ -7,7 +7,7 @@ type: impl
 # app.module 装配时用该端口替换 linking 的 { unavailable: 'W1' } 标记（identity B1-15g 已就绪，D10-186 保守做法）。规则测试由新鲜独立 Claude 写（approvals #36）。
 refs: [BR-ID-28]
 refs_hash:
-  BR-ID-28: f6b22fd0bba1
+  BR-ID-28: 205ab4bdd1d4
 deps: []
 paths:
   - 'apps/api/src/modules/linking/**'

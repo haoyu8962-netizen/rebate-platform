@@ -6,7 +6,7 @@ type: impl
 # 只改 catalog 侧接线（及 app.module 装配），不改 union；规则测试只钉「catalog 经 union 端口取数、端口失败 / 无数据时的 50304 两种口径、缓存仍生效」，平台真实报文仍等 CAP-*-10 录制。
 refs: [BR-TEXT-17]
 refs_hash:
-  BR-TEXT-17: 486f4508575e
+  BR-TEXT-17: 1990b516b8e4
 deps: [B1-22p, B1-28h]
 paths:
   - 'apps/api/src/modules/catalog/infra/hot-rank-wiring.ts'

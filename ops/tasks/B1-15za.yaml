@@ -6,7 +6,7 @@ type: impl
 # 请评审判断一处细节：BR-ID-30 表头写「删除条件 created_at < 运行当日 00:00（+08:00）− 留存天数」，现有 purgeExpired 按 expire_at < clock.now()，在 04:00 跑时比表头早约 4 小时截断；两者差异只在这 4 小时内，是否要改由评审判断，改的话在 paths 内（platform/idempotency/index.ts）。
 refs: [BR-ID-30]
 refs_hash:
-  BR-ID-30: 24c70bf4ac65
+  BR-ID-30: ebedec89359f
 deps: [B1-15z]
 paths:
   - 'apps/api/src/modules/platform/queue/idempotency-purge*.ts'

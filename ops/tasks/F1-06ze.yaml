@@ -8,7 +8,7 @@ type: impl
 # multipart 若 F1-06g 的 data provider 不支持（custom 只发 JSON），在 providers/data 内补 FormData 支持，不改既有行为。大小上限句取配置 content.platform_icon.max_bytes 的当前值。
 refs: [BR-TEXT-24]
 refs_hash:
-  BR-TEXT-24: f9944dcc3076
+  BR-TEXT-24: a3b3f13e5be8
 deps: [F1-06zd, F1-06x]
 paths:
   - 'apps/admin/src/pages/platform-icons/**'

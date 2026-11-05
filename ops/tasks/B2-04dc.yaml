@@ -6,7 +6,7 @@ type: impl
 # 状态备注：可开；B2-04n（账单日任务）第 2 轮改用本状态机的 transition()，须先合并。取值与 db/schema.sql 的 settle_jobs_status_check 一致（running、done、failed）。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: [B2-04d]
 paths:
   - 'specs/state-machines/settle-job.yaml'

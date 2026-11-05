@@ -5,7 +5,7 @@ type: contract
 # 2026-10-30 W1 入账（编排 19:3x：对照 05 找缺口）。04 第 597 行 M-内测 的接口，契约里没有；03 §6.2 规定 union_material 卡片各自发请求，失败或为空隐藏该卡，所以现在首页没有商品。
 refs: [BR-TEXT-17]
 refs_hash:
-  BR-TEXT-17: 486f4508575e
+  BR-TEXT-17: 1990b516b8e4
 deps: [CT-07a]
 paths:
   - 'apps/h5/src/shared/api/anonymous.ts'

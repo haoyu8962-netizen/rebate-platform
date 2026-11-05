@@ -6,7 +6,7 @@ type: contract
 # 依据：规划/04 §6.1 两行（/v1/messages*、/v1/me/notification-settings）、§3.2 inbox_messages 行；BR-WATCH-19 (3)（站内信与推送带分类，通知设置按分类关闭）。关闭推送后站内信照写。
 refs: [BR-WATCH-19]
 refs_hash:
-  BR-WATCH-19: d14905e58b39
+  BR-WATCH-19: 509febd64b7c
 contract_sections: ['6.1']
 deps: []
 paths:

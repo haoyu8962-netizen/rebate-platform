@@ -5,7 +5,7 @@ type: impl
 # 2026-10-30 入账（union 线，编排 FU-RANK-UNION，HANDOFF 10-30 02:1x）。B1-28h 热销榜（catalog/hot-rank.ts 的 HotRankUpstream）生产上游现为联盟故障答；本任务只补 union 侧端口与适配器方法，catalog 的 infra/hot-rank-wiring.ts 接线由 W1 后做。依据 08 BR-TEXT-17 细则「联盟物料频道」（白名单、取数前再核对、不加佣金权重）。平台频道参数与排序依据待 09 CAP-TB-10 / CAP-JD-10 / CAP-PDD-10 实测：在此之前三平台适配器不发请求、不伪造报文，TODO 记 blocked on CAP-*-10。Codex 不可用至 11-02，测试与评审由独立 Claude（approvals #36）。
 refs: [BR-TEXT-17]
 refs_hash:
-  BR-TEXT-17: 486f4508575e
+  BR-TEXT-17: 1990b516b8e4
 deps: [B1-28h]
 paths:
   - 'apps/api/src/modules/union/**'

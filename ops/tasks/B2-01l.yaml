@@ -10,7 +10,7 @@ type: impl
 # Opus 改 specs 并重生成生成物，Codex money 评审；改冻结测试属收紧型，编排按 #24 核对后加标签。其余依据（BR-FUND-08/09/10/22/24、BR-WDR-09/20、BR-INV-22）由任务书摘录。
 refs: [BR-FUND-04, BR-FUND-05, BR-FUND-15, BR-FUND-16, BR-FUND-20, BR-WDR-07, BR-WDR-09]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
   BR-FUND-05: 972b05594c07
   BR-FUND-15: 849cd1eab9f2
   BR-FUND-16: 077f6d412d5a

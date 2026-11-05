@@ -10,9 +10,9 @@ type: impl
 # 2026-10-21：refs 加 BR-AI-17（首版只执行关闭提示与素材 unknown 分支）。rebate_quote 卡的 material / tlj_kind 接线（agent/tools/quote/index.ts 现写死 null / unknown，B3-04c、B3-05e 留给 B3-07）不在本段 paths，派发前另开 B3-07c 或在此补 paths。
 refs: [BR-TEXT-15, BR-PRICE-10, BR-AI-17]
 refs_hash:
-  BR-TEXT-15: 6c123a5ccc02
+  BR-TEXT-15: de8d5a3a0b48
   BR-PRICE-10: 43f0c5212c55
-  BR-AI-17: 8a55b819a558
+  BR-AI-17: 7ef46d5cc3c8
 deps: [B3-07a]
 paths:
   - 'apps/api/src/modules/parsing/material/structure/**'

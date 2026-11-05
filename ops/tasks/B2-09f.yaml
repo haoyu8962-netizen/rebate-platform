@@ -9,7 +9,7 @@ type: impl
 # 不含：worker 装配（funds B2-04x）；SB10；上传；预校验。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: [CT-24zd]
 paths:
   - 'apps/api/src/modules/settlement/application/admin-settle-*.ts'

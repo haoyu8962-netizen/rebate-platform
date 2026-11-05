@@ -6,7 +6,7 @@ type: contract
 refs: [BR-PROD-08, BR-TEXT-17]
 refs_hash:
   BR-PROD-08: 7c9abf38989c
-  BR-TEXT-17: 486f4508575e
+  BR-TEXT-17: 1990b516b8e4
 deps: [CT-07c, B1-05o]
 paths:
   - 'contracts/openapi.yaml'

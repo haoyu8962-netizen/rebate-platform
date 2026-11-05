@@ -6,7 +6,7 @@ type: impl
 # 状态备注：可开（B2-04a、B2-04d 已合并）。S8。与 B2-04j 同模块，按合并先后变基。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: [B2-04a, B2-04d]
 paths:
   - 'apps/api/src/modules/settlement/batch/commands/**'

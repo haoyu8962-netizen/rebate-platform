@@ -5,7 +5,7 @@ type: impl
 # 2026-10-23 入账（union 线，编排裁定 D10-239 T2 + T3c；评估 eval-1108.md ②）。只改 linking/application/link-open-taobao.ts 的 authorize 与头部注释；现有冻结用例无需改断言；返回码在「无推广位 + 授权不满足」同时出现时由 50301 变为 30101 / 30102 / 30153 / 10001（逐情形表写进 PR 说明，fe 核对客户端分支）。补约 6 条冻结用例（open 与 convert）。Codex 不可用至 10-30，测试由独立 Claude（approvals #36）。
 refs: [BR-ATTR-05]
 refs_hash:
-  BR-ATTR-05: e2864d6024ae
+  BR-ATTR-05: 655fe77b6d9b
 deps: [B1-19d]
 paths:
   - 'apps/api/src/modules/linking/application/link-open-taobao.ts'

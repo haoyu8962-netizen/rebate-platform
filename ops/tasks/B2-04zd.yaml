@@ -6,7 +6,7 @@ type: impl
 # 要点：readSource 只读，范围 / 截点 / 最大 seq 仍由账单任务校验（job.ts 注释）；「以联盟为准」只认差错单的结论（resolution），不以 closed 状态冒充（job.ts:44）；saveValidations 生产为不落库实现并在代码注明依据 D10-443 (a)；appendBeneficiaryEvent 形状同 settlement credit-order 的 BeneficiaryEventInput，事件只追加。读写只经各模块 index 导出（settlement/AGENTS.md 规则 7）。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
   BR-FUND-09: 6b72b55621fb
 deps: [B2-04n, B2-04m]
 paths:

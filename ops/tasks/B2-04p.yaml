@@ -6,7 +6,7 @@ type: impl
 # 状态备注：可开（B2-04m、B2-04o、B2-04w 已合并）。真实 PG：崩溃续跑、同一批次并发执行两次（QA-02）；规则测试须含「同一子订单被两个批次纳入、执行后只入账一次」（B2-04r 第 5 轮过审范围外 S1）与跳过原因写入批次明细（B2-04m 过审 S2）。
 refs: [BR-FUND-04, BR-FUND-18, BR-FUND-20]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
   BR-FUND-18: c7ebd23ee75e
   BR-FUND-20: 768e4fe2668e
 deps: [B2-04m, B2-04o, B2-04w]

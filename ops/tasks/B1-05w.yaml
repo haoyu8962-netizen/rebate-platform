@@ -7,7 +7,7 @@ type: impl
 refs: [BR-PROD-05, BR-PRICE-11]
 refs_hash:
   BR-PROD-05: 692dcc678e1e
-  BR-PRICE-11: 94a46c6de587
+  BR-PRICE-11: 26e8055f727a
 deps: [B1-06zd, B1-05x]
 paths:
   - 'contracts/openapi.yaml'

@@ -11,7 +11,7 @@ type: impl
 # 风险：apps/api/src/modules/union/** → RV2。Codex 写规则测试，Claude 过审，Opus 实现，Codex 资金评审。
 refs: [BR-CALC-17, BR-CALC-20]
 refs_hash:
-  BR-CALC-17: ef68a35cbc68
+  BR-CALC-17: '69e927588925'
   BR-CALC-20: d760cf4e71d1
 deps: [B2-01c]
 paths:

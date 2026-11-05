@@ -7,7 +7,7 @@ type: impl
 # 测试至少钉：账单日整日停机 → 次日补种补出 M 且只一次；账单日 bill 全失败 → 之后补出；deferred 不耗重试；M 已生成 → 补种不重复生成。判定依据库内实际状态（settle_bills / settle_jobs / 队列），不用进程内存；时间只读注入 Clock。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: [B2-04ze]
 paths:
   - 'apps/api/src/modules/settlement/worker/**'

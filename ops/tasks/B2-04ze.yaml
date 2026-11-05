@@ -7,7 +7,7 @@ type: impl
 # 要点：补种 / 扫描照 ledger-check（B2-02q / r）自我续排 + 定时器做法，判定依据队列与库内实际状态而非进程内存；同一 bill / batch 不并发（settle 队列 exclusive + singletonKey）；HANDOFF 10-27：createCreditOrder 漏传 readAttribution 会重现 v2 快照无写者整批回滚，规则测试钉住装配传了它。时间只读注入 Clock。
 refs: [BR-FUND-04, BR-FUND-20]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
   BR-FUND-20: 768e4fe2668e
 deps: [B2-04zd, B2-09f, B1-03zc]
 paths:

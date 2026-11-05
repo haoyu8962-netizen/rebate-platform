@@ -9,7 +9,7 @@ type: impl
 # 必须复用：@couli/db Kysely 与生成类型、catalog 的 CatalogConfigReader、card-entry、product-reader；子模块不从本模块 index.ts 导入（教训 16）。
 refs: [BR-PROD-03]
 refs_hash:
-  BR-PROD-03: 1708058a2ff7
+  BR-PROD-03: 7769390bcd28
 deps: [B1-28a, CT-22b]
 paths:
   - 'apps/api/src/modules/catalog/favorites/**'

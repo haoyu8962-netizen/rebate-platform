@@ -19,7 +19,7 @@ refs_hash:
   BR-CALC-06: 8cc9b9a9afc7
   BR-CALC-07: dabd48fba586
   BR-CALC-11: 0bdd7a33eb83
-  BR-CALC-17: ef68a35cbc68
+  BR-CALC-17: '69e927588925'
 deps: []
 paths:
   - 'db/migrations/**'

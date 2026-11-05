@@ -6,7 +6,7 @@ type: impl
 refs: [BR-PROD-08, BR-PROD-03]
 refs_hash:
   BR-PROD-08: 7c9abf38989c
-  BR-PROD-03: 1708058a2ff7
+  BR-PROD-03: 7769390bcd28
 deps: [B1-05p]
 paths:
   - 'apps/api/src/modules/catalog/**'

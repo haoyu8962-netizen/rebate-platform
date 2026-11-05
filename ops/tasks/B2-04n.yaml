@@ -6,7 +6,7 @@ type: impl
 # 状态备注：可开（B2-04a、d、f、i、k、w 均已合并）。不接线调度（B2-04zb）。
 refs: [BR-FUND-04, BR-FUND-18]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
   BR-FUND-18: c7ebd23ee75e
 deps: [B2-04a, B2-04d, B2-04f, B2-04i, B2-04k, B2-04w]
 paths:

@@ -6,7 +6,7 @@ type: impl
 # 状态备注：可开（B2-04q #1507 已合并，commission 已导出 readCommissionAttribution）。只改 credit-order.ts 取比例 / forfeited 的读取方式；金额口径（B2-04e 入账计划、BR-CALC-02 floor）不变。若复现测试在现主干上即绿（不是真 bug），停下报编排。
 refs: [BR-FUND-04, BR-CALC-13]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
   BR-CALC-13: 54c06125032c
 deps: [B2-04m, B2-04q]
 paths:

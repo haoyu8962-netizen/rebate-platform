@@ -6,7 +6,7 @@ type: impl
 refs: [BR-PRICE-01, BR-PRICE-11]
 refs_hash:
   BR-PRICE-01: 9ff41b3629dd
-  BR-PRICE-11: 94a46c6de587
+  BR-PRICE-11: 26e8055f727a
 deps: []
 paths:
   - 'apps/api/src/modules/union/infra/taobao/**'

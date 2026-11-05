@@ -7,7 +7,7 @@ type: impl
 refs: [BR-PRICE-12, BR-ATTR-05]
 refs_hash:
   BR-PRICE-12: 6aa98fc3ce46
-  BR-ATTR-05: e2864d6024ae
+  BR-ATTR-05: 655fe77b6d9b
 deps: [B1-07b, B1-02m]
 paths:
   - 'apps/api/src/modules/parsing/http/public/parse-input.controller.ts'

@@ -7,7 +7,7 @@ refs: [BR-WDR-05, BR-FUND-08, BR-FUND-04]
 refs_hash:
   BR-WDR-05: 99e2e2654ce0
   BR-FUND-08: 4fad67b21a32
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: []
 paths:
   - 'apps/api/src/app.module.ts'

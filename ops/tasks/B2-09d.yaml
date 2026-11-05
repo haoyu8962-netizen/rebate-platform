@@ -7,7 +7,7 @@ type: impl
 # 不含写操作（确认 / 定时 / 撤销 / 驳回 / 继续执行 / 补充批次 / 上传），后续另入账（step-up 动态码在 HTTP 层，B2-04o 注释）。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 2497ceea4515
+  BR-FUND-04: 497806f6f068
 deps: [CT-24z]
 paths:
   - 'apps/api/src/modules/settlement/application/admin-settle-bills*.ts'
