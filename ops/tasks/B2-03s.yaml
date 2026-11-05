@@ -138,3 +138,31 @@ red_exempt:
   - file: test/spec/orders/rights-mounts/credited.int.test.ts
     test: '[AC-B1-10n#28] 直推入账后进入注销 processing（净额 85 > 0），违规单行全额扣回（R8）：直推这笔同键改借 BAD_DEBT 85 / 贷联盟应收，不扣 USER_BALANCE、余额仍 85，类型 CLAWBACK|PUNISH；本人 425、间推 42、平台 448 照常，订单 CLAWED_BACK，联盟应收净额 0'
     reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/settlement/deciding-settlement/bill.int.test.ts
+    test: '[AC-B2-04zp#11] STATEMENT 900、之后 API 1000：账单按 900 比对入批（基数 900 相符，不出差错单），合计也是 900，R5 按 900 入账'
+    reason: 冻结 B2-04zp 用例，测试体未改；同文件只改 [AC-B2-04zp#12] / [#18]（D10-655）
+  - file: test/spec/settlement/deciding-settlement/bill.int.test.ts
+    test: '[AC-B2-04zp#13] 批次 settle_seq 是整单最大 seq 而不是决定金额那条的 seq，R5 的 seq 校验通过，真的入账'
+    reason: 冻结 B2-04zp 用例，测试体未改；同文件只改 [AC-B2-04zp#12] / [#18]（D10-655）
+  - file: test/spec/settlement/deciding-settlement/bill.int.test.ts
+    test: '[AC-B2-04zp#14] 两条 STATEMENT 之后又有两条 API：金额取 seq 2 的 900，settle_seq 取 4，入账 900'
+    reason: 冻结 B2-04zp 用例，测试体未改；同文件只改 [AC-B2-04zp#12] / [#18]（D10-655）
+  - file: test/spec/settlement/deciding-settlement/bill.int.test.ts
+    test: '[AC-B2-04zp#15] 回归：只有 API 行时取最大 seq：settle_seq 2、b_settle 1000、入账 1000，与之前完全一致'
+    reason: 冻结 B2-04zp 用例，测试体未改；同文件只改 [AC-B2-04zp#12] / [#18]（D10-655）
+  - file: test/spec/settlement/deciding-settlement/bill.int.test.ts
+    test: '[AC-B2-04zp#16] STATEMENT 晚于截点、API 在截点内：账单按 API；R5 见 seq 变了，settlement_changed 跳过，不报错不入账'
+    reason: 冻结 B2-04zp 用例，测试体未改；同文件只改 [AC-B2-04zp#12] / [#18]（D10-655）
+  - file: test/spec/settlement/deciding-settlement/supplement.int.test.ts
+    test: '[AC-B2-04zp#17] 补差同一口径：STATEMENT 900、之后 API 1000，按 900 比对入补充批次，settle_seq 3，R5 按 900 入账'
+    reason: 冻结 B2-04zp 用例，测试体未改；同文件只改 [AC-B2-04zp#12] / [#18]（D10-655）
+  - file: test/spec/settlement/deciding-settlement/supplement.int.test.ts
+    test: '[AC-B2-04zp#19] 已入账单的受益人补记项：settle_seq 同样是整单最大 seq，不是决定金额那条的 seq'
+    reason: 冻结 B2-04zp 用例，测试体未改；同文件只改 [AC-B2-04zp#12] / [#18]（D10-655）
+red_exempt_outside:
+  - file: test/spec/commission/estimate-port/credited.int.test.ts
+    reason: 块外只新增导入（planOrderSyncColumns、orders/attribution kit、DB / Transaction 类型）与 helper（SETTLED_SYNC、settleColumns、syncSettlement），供按 D10-578 ② 改成结算变化触发的 #31–#34 用；另有类型声明 Harness、SettleSync 与文件头注释改写；未改用例块与基线相同
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    reason: 块外只新增导入（planOrderSyncColumns、orders/attribution kit、orderRow）与 helper（SETTLED_SYNC、plannedColumns），plannedColumns 只供 #44、#45 用；#41、#63、#64 只改入参；另有文件头注释改写；未改用例块与基线相同
+  - file: test/spec/commission/estimate-port/wallet.int.test.ts
+    reason: 块外只新增导入（planOrderSyncColumns、orderRow），供按 D10-578 ① 改的 #50 用；另有文件头注释改写；未改用例块与基线相同
