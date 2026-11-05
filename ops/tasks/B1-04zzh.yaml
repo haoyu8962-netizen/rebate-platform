@@ -1,0 +1,22 @@
+id: B1-04zzh
+repo: rebate-platform
+title: 淘宝订单推广位守卫补齐（D10-692，union 复核 S1-B）：读不出推广位的行按坏行进 rejected（collect 进待处理并告警），整页读不出推广位则抛错水位不动并计入整页全坏判定；推广位读取器返回空集合抛错；tk_status 非法的已结算单判 rejected；collect 模式不再另打 taobao_order_row_skipped
+type: impl
+# 2026-11-06 union 入账（编排 D10-692，复核报告 couli-runs/UNION-lane/review-20261106.md S1-B、S2-1 / 2 / 5）。是对现有 D10-570（订单坏行隔离）/ D10-488 ③（推广位过滤）实现的补齐，不是规则改动。淘宝入账开关打开前必须合并。
+# ① union/infra/taobao/orders.ts 的 ourRows / adzoneOf：adzone_id 缺失、非法或整行非对象 → 不再当「别家推广位」丢弃，而是按坏行（rowErrors='collect' 时进 rejected，原因只写字段名；非 collect 时按既有口径抛 invalid_dto）；合法 adzone_id 且不属我方推广位（含 pending / active / retired 白名单）→ 照旧计数告警后丢弃。整页（≥1 行）都读不出推广位 → 抛 upstream_unavailable（格式变化），水位不动，并与 D10-570 ⑥「整页全坏 ≥5 行停」口径一致。② taobao-adapter.ts：orderSlots 读者返回空集合 → 抛错（配置错误，不返回空页、水位不动），替代现行 taobao_order_no_slots 空页。③ tk_status 缺失或非法 → collect 进 rejected（不再按未结算放行）。④ collect 模式下坏行只留 order_row_invalid，不再另打 taobao_order_row_skipped。
+# 冻结测试若钉了「空清单 → 空页」「adzone 读不出 → 计入 foreign」等旧行为，按 D10-327 列入 test_paths 由新鲜独立 Claude 改、#24 核（规则测试阶段先查，必要时补台账）。RV2（订单入账路径），新鲜独立 Claude 写规则测试，资金评审。
+refs: []
+refs_hash: {}
+deps: [B1-04f, B1-04zv]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/orders.ts'
+  - 'apps/api/src/modules/union/infra/taobao/orders.test.ts'
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
+test_paths:
+  - 'test/spec/union/taobao-order-slot-guard/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/taobao-order-slot-guard/**'
+status: todo

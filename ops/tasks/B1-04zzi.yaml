@@ -1,0 +1,27 @@
+id: B1-04zzi
+repo: rebate-platform
+title: 淘宝站长授权真实实现（FU-TB-AUTH-SESSION，D10-680）：SiteOAuthProvider.authorizeUrl / exchange 走淘宝开放平台 OAuth2.0 Server-side flow（oauth.taobao.com/authorize、/token），回调复用后台 oauth-callback；staging / prod 在 appKey、secret、回调地址齐备时注入，缺任何一项照旧 fail closed
+type: impl
+# 2026-11-06 union 入账（编排 D10-680 / D10-692 ①，方案 couli-runs/B3-lane/fu-tb-auth-session-plan-20261106.md，w1 + union）。流程复用 B1-22c / B1-22d（auth-expiry/reauth.ts：state 只存哈希、回调条件 UPDATE 防并发、code 换令牌在事务外、FieldCrypto 加密落 union_credentials、审计、过期巡检），本单只补淘宝 provider 与装配。
+# 依据（编排摘入任务书）：私有库 rebate-private/docs-mirror/taobao/guides/118（淘宝 OAuth2.0 服务）、102635（用户授权介绍）、105590（无线端授权规范）——授权地址 https://oauth.taobao.com/authorize（response_type=code、client_id=appKey、redirect_uri、state、view），令牌 POST https://oauth.taobao.com/token（application/x-www-form-urlencoded：grant_type=authorization_code、client_id、client_secret、code、redirect_uri），应答 JSON 含 access_token、token_type、expires_in（秒）、refresh_token（可选）、re_expires_in、taobao_user_id、taobao_user_nick；失败含 error / error_description。redirect_uri 与应用 callback 顶级域名须一致。沙箱地址 oauth.tbsandbox.com 不用。
+# ① infra/taobao/site-oauth.ts：authorizeUrl 只拼官方参数（state 原样、不加我方参数），exchange 经现有 https 传输 POST 表单、取时间只读 Clock（expiresAt = 收到应答时刻 + expires_in 秒，refresh 过期时刻同理），应答缺 access_token / 非 JSON / HTTP 非 2xx / 带 error → 抛不含 code、令牌、secret、原文的错误（reauth 照既有口径记失败）；令牌、code、secret、授权地址不进日志与错误。② 凭据：appKey 与 secret 复用 B1-04k 的淘宝凭据（TAOBAO_APP_KEY + TAOBAO_APP_SECRET_FILE，staging 文件、prod KMS（B1-30a）），新增非密钥配置 TAOBAO_OAUTH_REDIRECT_URI（https、为后台控制台 /unions/oauth-callback 的公网地址；local / test 设了也只用于 fake 之外的测试）。③ fake-site-oauth.ts 的 createSiteOAuthProviders：local / test 仍给假实现；staging / prod 在 appKey、secret、回调地址齐备时给淘宝真实 provider，京东、拼多多照旧为空；缺任何一项 fail closed 并保留 union_site_oauth_unconfigured。④ 负责人在开放平台填回调与用联盟主账号授权前，生产行为不变（发起即 fail closed 或跳到授权页由负责人操作）。备案邀请码（sc.invitecode.get）另报批，不在本单。
+# 风险：凭据与令牌 → RV2；新鲜独立 Claude 写规则测试，资金评审（Codex 可用则 Codex，否则独立 Claude）。
+refs: []
+refs_hash: {}
+deps: [B1-04k, B1-30a]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/site-oauth.ts'
+  - 'apps/api/src/modules/union/infra/taobao/site-oauth.test.ts'
+  - 'apps/api/src/modules/union/infra/fake-site-oauth.ts'
+  - 'apps/api/src/modules/union/infra/fake-site-oauth.test.ts'
+  - 'apps/api/src/modules/union/union-admin.module.ts'
+  - 'apps/api/src/modules/platform/config/**'
+  - '.env.example'
+test_paths:
+  - 'test/spec/union/taobao-site-oauth/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/taobao-site-oauth/**'
+status: todo

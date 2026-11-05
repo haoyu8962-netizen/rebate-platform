@@ -1,0 +1,32 @@
+id: B1-04zzj
+repo: rebate-platform
+title: 联盟杂项（D10-692 S2-4 / 6 / 7 / 8）：淘宝官方搜索同页按换回 item_id 去重；大淘客 mainPic 只收 https 且域名在已知图床内、其余置空；店铺名去控制字符并按 04 字段上限截断；拼多多授权链接生成走 PDD_QUERY_CONCURRENCY；改陈旧注释
+type: impl
+# 2026-11-06 union 入账（编排 D10-692，复核报告 couli-runs/UNION-lane/review-20261106.md）。契约示例与 50303 文案不符场景只记录、本单不改契约。
+# ① taobao-adapter.ts / official-search.ts：同一页里换回的凑狸 item_id 重复时只保留首条（顺序不变）。② dataoke-search.ts：mainPic / smallImages 只收 https 且主机在已知图床白名单（淘宝 img.alicdn.com 等，白名单常量放适配器，任务书据录制形状列出），其余置空，卡片按无图降级。③ domain/types.ts shopNameField：去控制字符（Unicode Cc / Cf）、trim，按 04 字段上限截断（任务书摘上限），空则不带。④ linking/application/pdd-authority.ts：generatePddAuthorityLink 纳入 PDD_QUERY_CONCURRENCY 同一计数。⑤ 陈旧注释：orders/domain/snapshot-retry.ts（SERVICE_FEE_PLATFORM）、orders/application/pipeline-port.ts:381、orders/infra/snapshot-retry-input.ts:19、union/infra/pdd/pdd-adapter.ts:141、union/union.module.ts「no KMS yet」两处——只改注释（无引用的 SERVICE_FEE_PLATFORM 常量可删）。
+# RV1 主体，但触及 linking / orders 文件 → 按路径取最高 RV2；新鲜独立 Claude 写规则测试，代码评审。
+refs: []
+refs_hash: {}
+deps: [B1-04zx, B1-04zzf, B1-04zzg, B1-06zf]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/official-search.ts'
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
+  - 'apps/api/src/modules/union/infra/taobao/dataoke-search.ts'
+  - 'apps/api/src/modules/union/infra/taobao/*.test.ts'
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/domain/*.test.ts'
+  - 'apps/api/src/modules/union/infra/pdd/pdd-adapter.ts'
+  - 'apps/api/src/modules/union/union.module.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.test.ts'
+  - 'apps/api/src/modules/orders/domain/snapshot-retry.ts'
+  - 'apps/api/src/modules/orders/application/pipeline-port.ts'
+  - 'apps/api/src/modules/orders/infra/snapshot-retry-input.ts'
+test_paths:
+  - 'test/spec/union/misc-20261106/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/misc-20261106/**'
+status: todo
