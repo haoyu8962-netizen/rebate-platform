@@ -1,0 +1,25 @@
+id: CT-26o
+repo: rebate-platform
+title: 契约：商品详情多图（FU-DETAIL-GALLERY，D10-649）——getProduct 的卡片加 images（主图在前、原样、最多 9 张，同分享页口径），只有详情响应带，其余出卡响应不带
+type: contract
+# 2026-11-05 be 入账（D10-649：不等详情 v3，视觉定稿只管三端 UI）。ProductResponse.data 复用 ProductCard（8 处引用），本单在 ProductCard 加可选 images（ShareImage 数组，maxItems 9），描述写明只有 GET 商品详情带、列表与搜索等出卡不带；只增不改，oasdiff 无破坏。实现另立 B1-05zd（getProduct 照分享页 images 的取法：UnionItemDetail 主图在前、多图原样、最多 9 张）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
