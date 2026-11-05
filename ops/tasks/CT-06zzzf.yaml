@@ -1,0 +1,22 @@
+id: CT-06zzzf
+repo: rebate-platform
+title: CT-06zzzf：red_exempt_rows 第②项认整张表外层 as const（两边都有且写法相同）与 BigInt 字面量行（D10-670）
+type: guard-change
+# 2026-11-05 w1 入账（编排裁定 D10-670）。起因：B1-06zf 的冻结表写作 it.each([...] as const)，B2-03s 的冻结表行是 789n、9007199254740993n 这类 BigInt 字面量，compareEachRows 第②项都判「不是字面量行的内联数组」，red_exempt_rows 不生效。
+# 放宽两处，仍是机械核对：整张表外层的 as const 在基线与头都有且写法相同时剥掉再判；行字面量认 BigInt 字面量（null 已认），与字符串、数字同等对待。①③、上限、评审确认要求一字不改；删行后回调要加类型实参的仍不放行（D10-669 那种照搬断言处理）。
+# 工具单测补正反例：外层 as const 一边有一边没有 → 不放行；BigInt / null 行逐字相同 → 放行，值不同 → 不放行。实现 Opus 子代理；Codex 对抗评审一轮；编排按 #24 加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'tools/guard/lib/red-check.ts'
+  - 'tools/guard/lib/red-check.test.ts'
+  - 'ops/tasks/CT-06zzzf.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: done
+pr: 2398

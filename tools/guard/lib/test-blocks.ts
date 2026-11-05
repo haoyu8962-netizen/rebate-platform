@@ -876,8 +876,8 @@ export function compareTestFile(base: string, head: string): FileComparison {
 // - What the changed code outside means for the unchanged tests (an import, a table row group, a
 //   fixture value) the comparison cannot tell: the rule-test reviewer confirms the listed lines.
 
-/** A literal value of an `.each` row (CT-06zzzd). */
-type Value = string | number | boolean | null | undefined;
+/** A literal value of an `.each` row (CT-06zzzd; a bigint only in compareEachRows, CT-06zzzf). */
+type Value = string | number | bigint | boolean | null | undefined;
 /** A field of an object row: its literal value, or code (not a single literal). */
 type Field = { literal: true; value: Value } | { literal: false };
 /** A row of an `.each` / `.for` table: its items (a primitive is one item), or an object. */
@@ -947,6 +947,11 @@ export function formatObjectTitle(
       if (text.length > TITLE_VALUE_TRUNCATE) certain = false;
       return text;
     }
+    if (typeof v === 'bigint') {
+      const text = `${v.toString()}n`; // printBigInt (pretty-format dist/index.js:772)
+      if (text.length > TITLE_VALUE_TRUNCATE) certain = false;
+      return text;
+    }
     if (typeof v === 'boolean' || v === null) return String(v);
     certain = false; // undefined
     return '';
@@ -987,7 +992,9 @@ export function formatEachTitle(
       if (i >= items.length) return null;
       const v = items[i];
       i += 1;
-      if (code === 's') {
+      if (typeof v === 'bigint') {
+        out += `${v.toString()}n`; // %s, %d and %i alike (@vitest/utils 5.0.5 dist/display.js:92-120)
+      } else if (code === 's') {
         out += typeof v === 'number' && Object.is(v, -0) ? '-0' : String(v);
       } else if (typeof v !== 'number') {
         return null;
@@ -1042,6 +1049,8 @@ type EachShape = {
   chain: string;
   args: string;
   rows: string[] | null;
+  /** CT-06zzzf (D10-670): the `as const` after the table (its text), '' without one. */
+  outer: string;
   names: (string | null)[] | null;
 };
 
@@ -1162,22 +1171,26 @@ function outsideView(source: string): OutsideView {
     return null;
   };
   // `.each(` / `.for(` at p: exactly one inline array whose rows are literal values, arrays of
-  // them (literalList) or object literals (objectRow).
-  const rows = (p: number, asConst = false): Row[] | null => {
+  // them (literalList) or object literals (objectRow). With `eachRows` (compareEachRows only;
+  // CT-06zzzf, D10-670) the array may be followed by `as const` (outerAsConst); whether it is,
+  // compareEachRows asks the base and the head to agree on (EachShape.outer).
+  const rows = (p: number, eachRows = false): Row[] | null => {
     if (tokens[p]?.text !== '(' || tokens[p + 1]?.text !== '[') return null;
     const close = match[p + 1] as number;
-    if (close + 1 !== match[p]) return null;
+    if (close + 1 !== match[p] && !(eachRows && outerAsConst(close, match[p] as number))) {
+      return null;
+    }
     const out: Row[] = [];
     let k = p + 2;
     while (k < close) {
       const end = valueEnd(k, close);
       if (end === k) return null; // a hole
       if (tokens[k]?.text === '{' && match[k] === end - 1) {
-        const fields = objectRow(k + 1, end - 1, asConst);
+        const fields = objectRow(k + 1, end - 1, eachRows);
         if (fields === null) return null;
         out.push({ kind: 'object', fields });
       } else {
-        const items = literalList(k, end, 0, asConst);
+        const items = literalList(k, end, 0, eachRows);
         if (items === null || items.length !== 1) return null;
         const item = items[0] as Value | Value[];
         out.push({ kind: 'items', items: Array.isArray(item) ? item : [item] });
@@ -1188,6 +1201,14 @@ function outsideView(source: string): OutsideView {
     }
     return out;
   };
+  // CT-06zzzf (D10-670): whether exactly `as const` stands between the table's `]` at `close` and
+  // the call's `)` at `paren`.
+  const outerAsConst = (close: number, paren: number): boolean =>
+    close + 3 === paren &&
+    tokens[close + 1]?.kind === 'id' &&
+    tokens[close + 1]?.text === 'as' &&
+    tokens[close + 2]?.kind === 'id' &&
+    tokens[close + 2]?.text === 'const';
   // The end (exclusive) of the expression starting at k: the next `,` at its level, or `to`.
   const valueEnd = (k: number, to: number): number => {
     let j = k;
@@ -1201,7 +1222,7 @@ function outsideView(source: string): OutsideView {
   // key; a field's value is kept only when it is one literal (primitiveAt), else marked as code
   // (it may be anything: the title must not name it). A spread, a computed key, a method, an
   // accessor, `__proto__` or a key given twice: null.
-  const objectRow = (from: number, to: number, asConst = false): Map<string, Field> | null => {
+  const objectRow = (from: number, to: number, eachRows = false): Map<string, Field> | null => {
     const fields = new Map<string, Field>();
     let k = from;
     while (k < to) {
@@ -1219,7 +1240,7 @@ function outsideView(source: string): OutsideView {
       if (next !== ':') return null;
       const end = valueEnd(k + 2, to);
       if (end === k + 2) return null;
-      const one = primitiveAt(k + 2, asConst);
+      const one = primitiveAt(k + 2, eachRows);
       fields.set(
         key,
         one !== null && one.next === end ? { literal: true, value: one.value } : { literal: false },
@@ -1235,7 +1256,7 @@ function outsideView(source: string): OutsideView {
     from: number,
     to: number,
     depth = 0,
-    asConst = false,
+    eachRows = false,
   ): (Value | Value[])[] | null => {
     const out: (Value | Value[])[] = [];
     let k = from;
@@ -1244,12 +1265,12 @@ function outsideView(source: string): OutsideView {
       const t = tokens[k] as Token;
       if (t.text === '[' && depth === 0) {
         const end = match[k] as number;
-        const inner = literalList(k + 1, end, 1, asConst);
+        const inner = literalList(k + 1, end, 1, eachRows);
         if (inner === null || inner.some(Array.isArray)) return null;
         value = inner as Value[];
         k = end + 1;
       } else {
-        const one = primitiveAt(k, asConst);
+        const one = primitiveAt(k, eachRows);
         if (one === null) return null;
         value = one.value;
         k = one.next;
@@ -1261,17 +1282,18 @@ function outsideView(source: string): OutsideView {
     }
     return out;
   };
-  // CT-06zzze (D10-657): with `asConst`, a literal followed by `as const` (a type assertion only:
-  // the value is the literal's) counts as that literal. Only compareEachRows asks for it; the
-  // names of CT-06zzzd keep reading a literal alone.
-  const primitiveAt = (k: number, asConst = false): { value: Value; next: number } | null => {
-    const one = primitive(k);
-    if (one === null || !asConst) return one;
+  // CT-06zzze (D10-657): with `eachRows`, a literal followed by `as const` (a type assertion only:
+  // the value is the literal's) counts as that literal; CT-06zzzf (D10-670): so does a BigInt
+  // literal (primitive). Only compareEachRows asks for it; the names of CT-06zzzd keep reading a
+  // literal alone, without BigInt.
+  const primitiveAt = (k: number, eachRows = false): { value: Value; next: number } | null => {
+    const one = primitive(k, eachRows);
+    if (one === null || !eachRows) return one;
     return tokens[one.next]?.text === 'as' && tokens[one.next + 1]?.text === 'const'
       ? { value: one.value, next: one.next + 2 }
       : one;
   };
-  const primitive = (k: number): { value: Value; next: number } | null => {
+  const primitive = (k: number, bigint = false): { value: Value; next: number } | null => {
     const t = tokens[k] as Token;
     if (t.kind === 'str' && typeof t.value === 'string') return { value: t.value, next: k + 1 };
     if (t.kind === 'tpl' && t.parts?.length === 1 && typeof t.parts[0] === 'string') {
@@ -1281,11 +1303,21 @@ function outsideView(source: string): OutsideView {
       u?.kind === 'num' && /^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(u.text)
         ? Number(u.text)
         : null;
+    // A decimal BigInt literal (`789n`, `0n`): its value by BigInt, never through Number (no
+    // precision lost); the rows themselves compareEachRows compares by their text.
+    const big = (u: Token | undefined): bigint | null =>
+      bigint && u?.kind === 'num' && /^(?:0|[1-9]\d*)n$/.test(u.text)
+        ? BigInt(u.text.slice(0, -1))
+        : null;
     if (t.kind === 'num') {
+      const b = big(t);
+      if (b !== null) return { value: b, next: k + 1 };
       const n = number(t);
       return n === null ? null : { value: n, next: k + 1 };
     }
     if (t.text === '-' && t.kind === 'punct') {
+      const b = big(tokens[k + 1]);
+      if (b !== null) return { value: -b, next: k + 2 };
       const n = number(tokens[k + 1]);
       return n === null ? null : { value: -n, next: k + 2 };
     }
@@ -1364,10 +1396,12 @@ function outsideView(source: string): OutsideView {
     if (tokens[p]?.text !== '(' || (match[p] as number) + 1 !== c.open) return null;
     let texts: string[] | null = null;
     let table: Row[] | null = null;
-    if (tokens[p + 1]?.text === '[' && (match[p + 1] as number) + 1 === match[p]) {
+    let outer = '';
+    if (tokens[p + 1]?.text === '[') {
       table = rows(p, true);
       if (table !== null) {
         const close = match[p + 1] as number;
+        if (close + 1 !== match[p]) outer = joinTokens(tokens, close + 1, close + 2, sep);
         texts = [];
         let j = p + 2;
         while (j < close) {
@@ -1394,6 +1428,7 @@ function outsideView(source: string): OutsideView {
       chain: joinTokens(tokens, c.start, p - 1, sep),
       args: joinTokens(tokens, c.open, c.end, sep),
       rows: texts,
+      outer,
       names:
         !certain || table === null
           ? null
@@ -1620,7 +1655,10 @@ export function compareOutsideChanged(base: string, head: string): OutsideCompar
 //    describes (position and header), and no other head block has them;
 // ② both tables are inline arrays of literal rows (CT-06zzzd's reading: literals, arrays of
 //    literals, object rows whose fields named in the title are literals; a literal `as const`
-//    counts as the literal), and the title of every kept row is certain (the block stands directly
+//    counts as the literal; CT-06zzzf, D10-670: a decimal BigInt literal such as `789n` or
+//    `-1n` is a literal like a number, compared by its text, named as Vitest names it, `789n`),
+//    the whole array may be followed by `as const` only when both tables are, written alike
+//    (stripped, then the rows read; one side only refuses), and the title of every kept row is certain (the block stands directly
 //    in plain describes, with a static title, without a modifier) and is the title that row had
 //    at the base (`%#` / `%$` moving with the index make it differ);
 // ③ the head rows are the base rows, token for token, with at least one row removed and none
@@ -1695,6 +1733,11 @@ export function compareEachRows(base: string, head: string): (EachRows | null)[]
     }
     if (e.rows === null) {
       return fail('② the head table is not an inline array of literal rows');
+    }
+    if (f.outer !== e.outer) {
+      return fail(
+        `② the table is followed by \`as const\` on one side only, or written differently (base ${JSON.stringify(f.outer)}, head ${JSON.stringify(e.outer)})`,
+      );
     }
     // ③ The head rows are base rows in the base's order: a subsequence (each to its first match).
     const from: number[] = [];

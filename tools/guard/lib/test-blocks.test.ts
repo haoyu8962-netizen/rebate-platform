@@ -2822,3 +2822,161 @@ it('[CT-06zzze] compareEachRows ②: a table by name, a title following the inde
   const same = compareOutsideChanged(OBJ_BASE, OBJ_BASE);
   expect(same.whole === false && same.blocks[0]?.names).toBeNull();
 });
+
+// CT-06zzzf (D10-670, after B1-06zf and B2-03s): an outer `as const` on both sides, BigInt rows.
+const asConstPair = (base: string, head: string) =>
+  compareEachRows(ROWS_BASE.replace("['feed', 'pool', 'search', null]", base), rowsHead(head))?.[1];
+const ONE_SIDE = (b: string, h: string): string =>
+  `② the table is followed by \`as const\` on one side only, or written differently (base ${JSON.stringify(b)}, head ${JSON.stringify(h)})`;
+
+it('[CT-06zzzf] compareEachRows ②: a whole table followed by as const on both sides is read, rows removed only qualify', () => {
+  expect(
+    asConstPair("['feed', 'pool', 'search', null] as const", "['feed', 'pool'] as const"),
+  ).toEqual({
+    ok: true,
+    names: ['[AC-8] source feed inherits', '[AC-8] source pool inherits'],
+    removed: 2,
+  });
+  // Rows that are arrays (the B1-06zf shape).
+  const PAIRS = src(
+    'it.each([',
+    "  ['taobao', 'absent'],",
+    "  ['jd', 'absent'],",
+    "  ['pdd', 'absent'],",
+    "] as const)('[AC-6] %s is %s', async (p, s) => {",
+    '  expect(await h(p)).toBe(s);',
+    '});',
+  );
+  expect(compareEachRows(PAIRS, PAIRS.replace("  ['jd', 'absent'],\n", ''))).toEqual([
+    {
+      ok: true,
+      names: ['[AC-6] taobao is absent', '[AC-6] pdd is absent'],
+      removed: 1,
+    },
+  ]);
+  // A changed row is still refused (③), and so is any other text after the table.
+  expect(
+    asConstPair("['feed', 'pool', 'search', null] as const", "['feeds', 'pool'] as const"),
+  ).toEqual({
+    ok: false,
+    reason:
+      '③ the head table is not the base table with rows removed: row "\'feeds\'" is changed, added or moved',
+  });
+  expect(
+    asConstPair(
+      "['feed', 'pool', 'search', null] as const satisfies X",
+      "['feed', 'pool'] as const satisfies X",
+    ),
+  ).toEqual({ ok: false, reason: '② the base table is not an inline array of literal rows' });
+  // CT-06zzzd's names keep reading an inline array alone: an outer `as const` makes them uncertain.
+  const outer = ROWS_BASE.replace(
+    "['feed', 'pool', 'search', null]",
+    "['feed', 'pool', 'search', null] as const",
+  );
+  const same = compareOutsideChanged(outer, outer);
+  expect(same.whole === false && same.blocks[1]?.names).toBeNull();
+});
+
+it('[CT-06zzzf] compareEachRows ②: an outer as const on one side only refuses', () => {
+  expect(asConstPair("['feed', 'pool', 'search', null] as const", "['feed', 'pool']")).toEqual({
+    ok: false,
+    reason: ONE_SIDE('as const', ''),
+  });
+  expect(asConstPair("['feed', 'pool', 'search', null]", "['feed', 'pool'] as const")).toEqual({
+    ok: false,
+    reason: ONE_SIDE('', 'as const'),
+  });
+});
+
+const BIG_BASE = src(
+  'it.each([null, 789n, 0n, 123n, 9007199254740993n, -5n])(',
+  "  '[AC-3] amount %s',",
+  '  async (v) => {',
+  '    expect(await k(v)).toBe(true);',
+  '  },',
+  ');',
+);
+const bigHead = (table: string): string =>
+  BIG_BASE.replace('[null, 789n, 0n, 123n, 9007199254740993n, -5n]', table);
+
+it('[CT-06zzzf] compareEachRows ②: BigInt and null rows kept token for token qualify, named as Vitest names them', () => {
+  expect(compareEachRows(BIG_BASE, bigHead('[null, 789n, 9007199254740993n, -5n]'))).toEqual([
+    {
+      ok: true,
+      names: [
+        '[AC-3] amount null',
+        '[AC-3] amount 789n',
+        '[AC-3] amount 9007199254740993n',
+        '[AC-3] amount -5n',
+      ],
+      removed: 2,
+    },
+  ]);
+  // %d and %i name a BigInt the same way; with an outer `as const` on both sides too.
+  const d = BIG_BASE.replace("'[AC-3] amount %s'", "'[AC-3] amount %d / %i'").replace(
+    '[null, 789n, 0n, 123n, 9007199254740993n, -5n]',
+    '[[789n, 1n], [0n, 2n], [9007199254740993n, 3n]] as const',
+  );
+  expect(
+    compareEachRows(
+      d,
+      d.replace(
+        '[[789n, 1n], [0n, 2n], [9007199254740993n, 3n]]',
+        '[[789n, 1n], [9007199254740993n, 3n]]',
+      ),
+    ),
+  ).toEqual([
+    {
+      ok: true,
+      names: ['[AC-3] amount 789n / 1n', '[AC-3] amount 9007199254740993n / 3n'],
+      removed: 1,
+    },
+  ]);
+  // Object rows: `$name` of a BigInt field.
+  const obj = src(
+    "it.each([{ v: 1n }, { v: 2n }, { v: 3n }])('[AC-4] $v ok', async ({ v }) => {",
+    '  expect(await k(v)).toBe(true);',
+    '});',
+  );
+  expect(compareEachRows(obj, obj.replace('{ v: 2n }, ', ''))).toEqual([
+    { ok: true, names: ['[AC-4] 1n ok', '[AC-4] 3n ok'], removed: 1 },
+  ]);
+  // CT-06zzzd's names do not read a BigInt.
+  const same = compareOutsideChanged(BIG_BASE, BIG_BASE);
+  expect(same.whole === false && same.blocks[0]?.names).toBeNull();
+});
+
+it('[CT-06zzzf] compareEachRows ③: a BigInt row changed, written as a number, or a neighbouring large integer refuses', () => {
+  const kept = (table: string) => compareEachRows(BIG_BASE, bigHead(table))?.[0];
+  expect(kept('[null, 788n]')).toEqual({
+    ok: false,
+    reason:
+      '③ the head table is not the base table with rows removed: row "788n" is changed, added or moved',
+  });
+  expect(kept('[null, 789]')).toEqual({
+    ok: false,
+    reason:
+      '③ the head table is not the base table with rows removed: row "789" is changed, added or moved',
+  });
+  expect(kept('[null, 9007199254740992n]')).toEqual({
+    ok: false,
+    reason:
+      '③ the head table is not the base table with rows removed: row "9007199254740992n" is changed, added or moved',
+  });
+  // Not a decimal BigInt: not a literal row.
+  const hex = BIG_BASE.replace('789n', '0x1n');
+  expect(compareEachRows(hex, hex.replace(', 0n', ''))?.[0]).toEqual({
+    ok: false,
+    reason: '② the base table is not an inline array of literal rows',
+  });
+});
+
+it('[CT-06zzzf] formatEachTitle and formatObjectTitle name a BigInt as Vitest does', () => {
+  expect(formatEachTitle('%s|%d|%i', [9007199254740993n, -1n, 0n], 0)).toBe(
+    '9007199254740993n|-1n|0n',
+  );
+  expect(formatObjectTitle('$v', new Map([['v', { literal: true, value: 12n }]]), 0)).toBe('12n');
+  expect(
+    formatObjectTitle('$v', new Map([['v', { literal: true, value: 10n ** 40n }]]), 0),
+  ).toBeNull();
+});

@@ -1,0 +1,37 @@
+{
+  "task": "CT-06zzzf",
+  "spec_ref": "0949b0ac28cc0207d2a6be0d2cd4248e76ec3664",
+  "spec_commit": "d1b83ae72facaf746be4e49889bd282a7548b750",
+  "red_tests": [],
+  "risk_note": "Guard change (tools/guard, protected path, orchestrator labels under #24). compareEachRows check 2 (CT-06zzze) now reads two more table shapes, still mechanically: an outer `as const` after the whole table is stripped only when base and head both have it written the same, and a decimal BigInt literal (e.g. 789n, 9007199254740993n) is a literal row, compared by its text and its BigInt value, never through Number. Checks 1 and 3, RED_EXEMPT_MAX and the reviewer confirmation are unchanged; CT-06zzzd's name reading is unchanged (D10-670).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 pass with no findings (the first try hit model capacity and was retried), static review; tools tests 126 / 126 pass locally"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "3631591d467640dc5d14894e264a8b645c199067",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ccf86c7cb5ec8952e2b7b2ff635ea3bd0876a0a6",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
