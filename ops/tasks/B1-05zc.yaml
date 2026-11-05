@@ -19,7 +19,7 @@ paths:
   - 'test/spec/catalog/{entry-quote-parity,card,price-state,hot-rank-upstream}/**'
   - 'test/spec/catalog/detail/{detail.test,route.int.test}.ts'
   - 'test/spec/catalog/{product-pool-read/detail-fallback,hot-rank-viewer/app}.int.test.ts'
-  - 'test/spec/catalog/search/{refill,availability}.test.ts'
+  - 'test/spec/catalog/search/{refill,availability,filter-sort}.test.ts'
   - 'test/spec/commission/quoter/**'
   - 'test/spec/commission/wiring/{assembly,open-quotes}.test.ts'
   - 'test/spec/agent/tools-quote/snapshots.test.ts'
@@ -28,7 +28,7 @@ test_paths:
   - 'test/spec/catalog/{entry-quote-parity,card,price-state,hot-rank-upstream}/**'
   - 'test/spec/catalog/detail/{detail.test,route.int.test}.ts'
   - 'test/spec/catalog/{product-pool-read/detail-fallback,hot-rank-viewer/app}.int.test.ts'
-  - 'test/spec/catalog/search/{refill,availability}.test.ts'
+  - 'test/spec/catalog/search/{refill,availability,filter-sort}.test.ts'
   - 'test/spec/commission/quoter/**'
   - 'test/spec/commission/wiring/{assembly,open-quotes}.test.ts'
   - 'test/spec/agent/tools-quote/snapshots.test.ts'
@@ -47,6 +47,141 @@ red_exempt_outside:
   - file: test/spec/catalog/price-state/cards.test.ts
     reason: '用例外只去掉了 kit 的 PLATFORMS 导入（[AC-B1-05i#5] 改为新用例后不再用它）；其余用例体未改，与比价口径无关，新旧实现下都成立'
 red_exempt:
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#27] taobao 搜索开关关闭返回 50304/search_disabled，不查联盟或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#27] jd 搜索开关关闭返回 50304/search_disabled，不查联盟或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#27] pdd 搜索开关关闭返回 50304/search_disabled，不查联盟或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 null 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":false,"version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":"true","version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":"on","version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":1,"version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":0,"version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":null,"version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":{},"version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#42] 搜索配置 {"value":[],"version":1} 缺失或不是布尔 true 时默认关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#28] 每次请求重读开关，刚成功搜索后关闭也不能继续翻页'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#30] 搜索调用固定 query 推广位，不携带查看者身份或 relation_id'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#31] 没有 active query 推广位按任务默认返回 50304 并告警，不改用转链位'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#32] 联盟故障且无缓存 GovernanceError: synthetic timeout 返回 50304/platform，不伪装成空结果或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#32] 联盟故障且无缓存 GovernanceError: synthetic circuit 返回 50304/platform，不伪装成空结果或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#32] 联盟故障且无缓存 GovernanceError: synthetic quota 返回 50304/platform，不伪装成空结果或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#32] 联盟故障且无缓存 UnionError: synthetic rate limit 返回 50304/platform，不伪装成空结果或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#32] 联盟故障且无缓存 UnionError: synthetic unavailable 返回 50304/platform，不伪装成空结果或物料'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#33] 平台本身没有搜索能力时保留 30131，不误报运行期开关关闭'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/availability.test.ts
+    test: '[AC-B1-05d#34] 卡片登记失败不可吞成无结果或错误的联盟 50304'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#1] 价格区间比较券后价且包含两端，只向联盟传券前价下限'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#2] min=max=1 合法且边界价格能返回'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#2] min=max=1000 合法且边界价格能返回'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#2] min=max=10000000 合法且边界价格能返回'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_min_fen":0} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_max_fen":0} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_min_fen":-1} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_max_fen":-1} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_min_fen":10000001} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_max_fen":10000001} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_min_fen":1.5} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_max_fen":1.5} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#3] 非法价格范围 {"price_min_fen":2001,"price_max_fen":2000} 返回 20001 且不查联盟'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#4] 只有上限时不得透传上限，也不得把上限当下限'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#5] has_coupon=true：true 只留有券，其余保留有券和无券'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#5] has_coupon=false：true 只留有券，其余保留有券和无券'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#5] has_coupon=undefined：true 只留有券，其余保留有券和无券'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#6] 券后价升序只排当页，相同价格保留相关性次序，不为排序拉后页'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#8] relevance 保留联盟次序，不悄悄按价格重排'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#8] sales_desc 保留联盟次序，不悄悄按价格重排'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#9] 补拉结果也参与本次 final_price_asc 排序'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#9] 补拉结果也参与本次 rebate_desc 排序'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/filter-sort.test.ts
+    test: '[AC-B1-05d#10] 异常价格在筛选和排序前排除，经统一入口告警且不登记链接'
+    reason: '冻结用例测试体未改（本文件只改了 [AC-B1-05d#29] / [AC-B1-05d#7]，D10-673）；本文件经未闭合导入 search/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
   - file: test/spec/catalog/price-state/cards.test.ts
     test: '[AC-B1-05i#7] BR-PRICE-01：一分券后价和一分无券售价都有效，不能过度过滤'
     reason: '冻结用例测试体未改；用例外只去掉了 PLATFORMS 导入；本条与小字口径无关，新旧实现下都成立'
@@ -560,6 +695,52 @@ red_exempt:
   - file: test/spec/linking/open-requote/prices.int.test.ts
     test: '[AC-B1-06k#8] 拼多多预判开关 false：仅走普通实时取价与 catalog 报价，不伪造比价结论'
     reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+red_exempt_rows:
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#12] BR-PRICE-07：淘宝无预判结果，feed 按 normal 报价'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#12] BR-PRICE-07：淘宝无预判结果，pool 按 normal 报价'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#12] BR-PRICE-07：淘宝无预判结果，tlj_pool 按 normal 报价'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#13] BR-PRICE-07：详情、提醒和派生请求继承服务端来源 pool'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#13] BR-PRICE-07：详情、提醒和派生请求继承服务端来源 feed'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#13] BR-PRICE-07：详情、提醒和派生请求继承服务端来源 tlj_pool'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#13] BR-PRICE-07：详情、提醒和派生请求继承服务端来源 share_panel'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/card/source.test.ts
+    test: '[AC-B1-05f#13] BR-PRICE-07：详情、提醒和派生请求继承服务端来源 share_landing'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/detail/detail.test.ts
+    test: '[AC-B1-05e#8] 来源卡 feed 经 SourceLinkReader 按 App 范围读取并继承报价口径'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/detail/detail.test.ts
+    test: '[AC-B1-05e#8] 来源卡 pool 经 SourceLinkReader 按 App 范围读取并继承报价口径'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/detail/detail.test.ts
+    test: '[AC-B1-05e#8] 来源卡 tlj_pool 经 SourceLinkReader 按 App 范围读取并继承报价口径'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/detail/detail.test.ts
+    test: '[AC-B1-05e#8] 来源卡 share 经 SourceLinkReader 按 App 范围读取并继承报价口径'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/price-state/disclaimer.test.ts
+    test: '[AC-B1-05i#10] BR-PRICE-03/17：已有出卡器的 normal 有券/无券口径键精确且顺序不变'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/price-state/disclaimer.test.ts
+    test: '[AC-B1-05i#10] BR-PRICE-03/17：已有出卡器的 no_rebate 有券/无券口径键精确且顺序不变'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-07][TRADE-12] 回退出卡沿用来源卡：from_link_id 的入口是 feed → rebate_basis=normal，链接记 feed'
+    reason: 'it.each 表拆分（D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、只删了须随 D10-641 改期望的行（已拆成新用例并在旧实现上红）；本行行为不变，新旧实现下都成立'
 impl: claude
 tester: claude-independent
 accept:
