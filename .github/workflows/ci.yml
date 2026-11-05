@@ -157,6 +157,15 @@ jobs:
       - run: pnpm run guard:static
         env:
           COULI_SPEC_REPO: ${{ github.workspace }}/.tmp/spec-repo
+      # TOKENS-LAG (规划/05 §3.11, D10-643 ⑥): the H5 token snapshot against the planning
+      # repository's token history. Warn-only: exit 1 (lagging) prints ::warning annotations and
+      # passes; exit 2 (input error) fails. Not `continue-on-error`, which would also hide exit 2.
+      # The client locks are checked in their own repositories (DSX-140 to DSX-142).
+      - name: TOKENS-LAG (H5, warn only)
+        run: |
+          status=0
+          node tools/ci/tokens-lag.ts --planning .tmp/spec-repo --planning-ref HEAD --platform . --h5 || status=$?
+          [ "$status" -le 1 ]
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-verify-static-${{ steps.tested.outputs.tree }}

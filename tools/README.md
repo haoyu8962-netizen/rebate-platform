@@ -21,7 +21,9 @@
 | `guard/` | 门禁守卫，见下表；`hooks/` 是 Claude 会话的 PreToolUse 拦截钩子，`shim/` 是 `codex` 垫片（两者都只是文件，安装步骤在各自的 `INSTALL.md`） | 11 §1.2、§2.3、§2.4、§4、§5.5、§8 |
 | `ops/` | 任务台账检查、在途状态与失败熔断、用量账本（只记账）、看板、任务书、交接、verify 容器 | 11 §1.3、§2、§5.3 |
 | `agent/` | Codex 包装脚本 `codex-run.sh`、输出 schema、评审提示词、派工与回收 | 11 §2.4、§3.3 |
-| `ci/` | CI 工作流用到的脚本：`check-workflows.ts`（工作流与规则集的静态检查）、`evidence-check.ts`（必过检查 `evidence-check`，从基线副本运行；非 `task/` 分支带有效负责人批准标签且没碰资金与归属实现路径时免证据文件）、`oasdiff-base.ts`（契约工作流的 oasdiff 前处理：基线契约去掉 `x-implementation: planned` 的 operation 再比较，尚无路由与调用方的接口不算破坏兼容） | 11 §3.2、§4.4 |
+| `ci/` | CI 工作流用到的脚本：`check-workflows.ts`（工作流与规则集的静态检查）、`evidence-check.ts`（必过检查 `evidence-check`，从基线副本运行；非 `task/` 分支带有效负责人批准标签且没碰资金与归属实现路径时免证据文件）、`oasdiff-base.ts`（契约工作流的 oasdiff 前处理：基线契约去掉 `x-implementation: planned` 的 operation 再比较，尚无路由与调用方的接口不算破坏兼容）、`tokens-lag.ts`（TOKENS-LAG：令牌锁与契约锁落后告警，见下） | 11 §3.2、§4.4；05 §3.11 |
+
+`ci/tokens-lag.ts`（TOKENS-LAG，规划/05 §3.11、D10-643 ⑥、D10-672 ②）：`node tools/ci/tokens-lag.ts --planning <规划仓库> [--planning-ref <引用>] [--platform <本仓库>] [--platform-ref <引用>] [--lock <名字>=<contract.lock>]... [--h5] [--now <ISO>]`。令牌源是规划仓库该引用上 `design/tokens/design-tokens.json` 的提交历史（引用默认 `origin/main`，解析不了取 `HEAD`）；`--lock` 读三端 `contract.lock` 的 `design_tokens.commit` 与 `rebate_platform.commit`，`--h5` 用本仓库 `contracts/design-tokens.json` 的 `metadata.version` 与 `contracts/README.md` 里 design-tokens.json 一行的来源提交。告警：令牌版本落后 ≥ 1 个（按历史里出现过的不同 `metadata.version` 计数）或锁定提交早于源最新令牌提交 ≥ 7 天；契约锁早于本仓库 `contracts/` 最新提交 ≥ 7 天，或本仓库找不到该提交；两份及以上三端锁的 `rebate_platform.commit` 不全相同。标准输出是机器可读 JSON（各锁的令牌版本、源最新版本、落后版本数与天数、契约落后天数、告警列表），`docs/design-standard-fix-program.md`「各端消费」一节的版本从这里取；标准错误是中文摘要，`GITHUB_ACTIONS=true` 时每条告警另打一行 `::warning title=TOKENS-LAG::…`。退出码 0 无告警、1 有告警、2 输入错误（锁文件缺字段或 JSON 坏、路径不对、锁定的令牌提交不在源历史里）。`ci.yml` 的 `verify-static` 只对 H5 跑一次，退出码 1 只留警告不挡合并，2 让作业失败。三端仓库的 CI 接入另见 DSX-140～142，本仓库不碰三端仓库。
 
 ## guard/ 各守卫
 

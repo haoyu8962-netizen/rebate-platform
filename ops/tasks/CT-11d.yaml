@@ -1,0 +1,27 @@
+id: CT-11d
+repo: rebate-platform
+title: TOKENS-LAG 令牌锁与契约锁落后告警（三端 + H5，D10-643 ⑥ / 05 §3.11 TOKENS-LAG / D10-672 ②）：tools/ci/tokens-lag.ts 读锁文件，对规划仓库令牌唯一源与本仓库契约主干比对，落后一个版本或 7 天、三端契约锁不一致时告警（夹具覆盖）；本仓库 CI 对 H5 快照跑一次，只警告不挡合并
+type: guard-change
+# 2026-11-05 ops 入账（编排 D10-672 ②，原 D10-643 ⑥ 派 be）。只交付 rebate-platform 的脚本、夹具与 CI（H5 在本仓库）；三端 CI 接入另有 DSX-140～142，本单不碰三端仓库。
+# 输入：三端的 contract.lock（形如 {rebate_platform: {commit}, design_tokens: {repo, commit, path}}，安卓 / 鸿蒙 / iOS 三份格式一致）；H5 的令牌锁取本仓库 contracts/design-tokens.json 与 contracts/README 记的来源提交。
+# 判定：令牌锁的 metadata.version 落后规划仓库 design/tokens/design-tokens.json 最新版本 ≥ 1 个版本，或锁定提交早于最新令牌提交 7 天及以上 → 告警；契约锁（rebate_platform.commit）落后本仓库主干 7 天及以上 → 告警；
+#   同时给出多份锁时三端契约锁不一致 → 告警。输出机器可读 JSON 与中文摘要，退出码约定：0 无告警、1 有告警（CI 里只作警告）、2 输入错误。
+# 夹具：tools/ci/testing 下合成的锁与令牌历史（git 夹具仓库放 .tmp/），覆盖不落后、落后一版、落后 7 天、三端不一致、锁文件缺字段等。CI：ci.yml 加一步只警告（continue-on-error 或 ::warning::），不进必过检查。
+# 门禁类改动按 approvals 第 16 条 / #24 由编排核后加标签。Opus 实现，Codex 对抗评审。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ci/tokens-lag.ts'
+  - 'tools/ci/tokens-lag.test.ts'
+  - 'tools/ci/testing/**'
+  - 'tools/ci/check-workflows.ts'
+  - 'tools/ci/check-workflows.test.ts'
+  - '.github/workflows/ci.yml'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-11d.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
