@@ -1585,6 +1585,7 @@ export interface PoolItems {
   product_key: string;
   quoted_at: Timestamp;
   raw_item_id: string;
+  shop_name: string | null;
   sort: Generated<number>;
   start_at: Timestamp | null;
   status: string;

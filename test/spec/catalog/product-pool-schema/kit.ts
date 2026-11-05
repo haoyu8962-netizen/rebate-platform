@@ -61,6 +61,7 @@ export const ITEM_SHAPE: Shape = {
   coupon_fen: ['int8', false, null],
   final_price_fen: ['int8', false, null],
   commission_rate_bp: ['int4', true, null],
+  shop_name: ['text', true, null],
   quoted_at: ['timestamptz', false, null],
   status: ['text', false, null],
   sort: ['int4', false, '0'],

@@ -67,6 +67,8 @@ export interface PoolItemRow {
   readonly final_price_fen: bigint;
   /** BR-PRICE-07 needs it to quote a pool card; null until a refresh or re-check answers. */
   readonly commission_rate_bp: number | null;
+  /** The union's shop name of the latest live answer (B1-05zd); null when it gave none. */
+  readonly shop_name: string | null;
   readonly quoted_at: Date;
   readonly status: string;
   readonly sort: number;
@@ -253,6 +255,8 @@ function liveFields(product: Extract<PoolProduct, { kind: 'live' }>) {
     coupon_fen: item.coupon_fen,
     final_price_fen: item.final_price_fen,
     commission_rate_bp: Number(item.commission_rate_bp),
+    // B1-05zd: the latest answer's own shop name, null when absent; nothing fills it from elsewhere.
+    shop_name: item.shop_name ?? null,
     quoted_at: item.quoted_at,
     status: 'online',
     invalid_reason: null,

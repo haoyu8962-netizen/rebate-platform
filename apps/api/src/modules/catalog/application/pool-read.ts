@@ -11,7 +11,8 @@ import type { ProductRef } from '../domain/types.ts';
  * ref.rawFetchedAt is when ref.rawItemId was obtained, which goes into the card's item_ref and link.
  * A refresh moves the first and leaves the raw ID, so it never makes the second fresh (BR-PROD-05).
  * item.main_image_url is the row's stored image (B1-05za), absent when the row has none; no other
- * image field is filled.
+ * image field is filled. item.shop_name is likewise the row's stored shop name (B1-05zd), absent when
+ * NULL; it is never taken from the title or a nick.
  */
 export interface PoolCandidate {
   readonly item: UnionItemDetail;

@@ -33,6 +33,7 @@ const ROW_COLUMNS = [
   'coupon_fen',
   'final_price_fen',
   'commission_rate_bp',
+  'shop_name',
   'quoted_at',
   'created_at',
 ] as const;
@@ -47,6 +48,7 @@ interface PoolRow {
   readonly coupon_fen: bigint;
   readonly final_price_fen: bigint;
   readonly commission_rate_bp: number | null;
+  readonly shop_name: string | null;
   readonly quoted_at: Date;
   readonly created_at: Date;
 }
@@ -66,6 +68,8 @@ function candidateOf(appId: string, row: PoolRow): PoolCandidate {
       quoted_at: toPlusEight(row.quoted_at.getTime()),
       // B1-05za: the card image is the row's own image column; nothing fills it from elsewhere.
       ...(row.image !== null && row.image !== '' ? { main_image_url: row.image } : {}),
+      // B1-05zd: likewise the row's own shop_name column, absent when NULL.
+      ...(row.shop_name !== null && row.shop_name !== '' ? { shop_name: row.shop_name } : {}),
     },
     ref: {
       appId,

@@ -38,6 +38,7 @@ const ITEM: PoolItemRow = {
   coupon_fen: 800n,
   final_price_fen: 8000n,
   commission_rate_bp: 1500,
+  shop_name: null,
   quoted_at: NOW,
   status: 'online',
   sort: 1,
@@ -290,6 +291,32 @@ it.each([
   expect(insertItem).not.toHaveBeenCalled();
   expect(takeOffline).not.toHaveBeenCalled();
   expect(audits).toEqual([]);
+});
+
+it.each([
+  { label: '有店铺名原样写入', item: { ...LIVE.item, shop_name: '合成店' }, expected: '合成店' },
+  { label: '无店铺名写 null', item: LIVE.item, expected: null },
+])('[AC-B1-05zd-unit#3] 新 key 加池：$label', async ({ item, expected }) => {
+  const { admin, tx } = harness(null, { ...LIVE, item } as PoolProduct);
+  const insertItem = vi.spyOn(tx, 'insertItem');
+  await admin.addItem(ACTOR, POOL_ID, add);
+  expect(insertItem.mock.calls[0]?.[0]).toMatchObject({ shop_name: expected });
+});
+
+it.each([
+  {
+    label: '新店名覆盖',
+    product: { ...LIVE, item: { ...LIVE.item, shop_name: '新店' } },
+    expected: '新店',
+  },
+  { label: '最新详情无店名 → null', product: LIVE, expected: null },
+  { label: '引用失效不动店名', product: EXPIRED, expected: '旧店' },
+  { label: '异常价不动店名', product: ANOMALY, expected: '旧店' },
+])('[AC-B1-05zd-unit#4] 重复加池：$label', async ({ product, expected }) => {
+  const { admin, tx } = harness({ ...ITEM, shop_name: '旧店' }, product as PoolProduct);
+  const updateItem = vi.spyOn(tx, 'updateItem');
+  await admin.addItem(ACTOR, POOL_ID, add);
+  expect(updateItem.mock.calls[0]?.[0]).toMatchObject({ shop_name: expected });
 });
 
 it('[AC-B1-05q-unit#20] 审计快照不含原串', async () => {

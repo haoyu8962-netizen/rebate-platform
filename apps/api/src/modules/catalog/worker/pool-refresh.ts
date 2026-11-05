@@ -9,8 +9,8 @@
 // key): pgboss.job keeps it in every state, a send of a known id inserts nothing even when two seeds
 // race, and a key that failed or found nothing waits for the next slot.
 //
-//   live     price_fen, coupon_fen, final_price_fen, commission_rate_bp and quoted_at of the online
-//            rows; raw_item_id stays (quoted_at moved, the raw ID did not, BR-PROD-05)
+//   live     price_fen, coupon_fen, final_price_fen, commission_rate_bp, shop_name (NULL when the
+//            answer has none) and quoted_at of the online rows; raw_item_id stays (quoted_at moved, the raw ID did not, BR-PROD-05)
 //   off shelf BR-PROD-05 ①: every row of the key offline with the reason
 //   not passed ②, an anomalous price, and a temporary failure ③: nothing changes, age does the rest
 //
@@ -204,6 +204,8 @@ async function writePrice(
         coupon_fen: item.coupon_fen,
         final_price_fen: item.final_price_fen,
         commission_rate_bp: Number(item.commission_rate_bp),
+        // B1-05zd: the latest answer's shop name; absent there means NULL, not the old value.
+        shop_name: item.shop_name ?? null,
         quoted_at: item.quoted_at,
         updated_at: clock.now(),
       })
