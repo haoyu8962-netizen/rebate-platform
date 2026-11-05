@@ -1,0 +1,129 @@
+{
+  "risk_note": "Money path, RV2, no migration, no contract change. A paid_at written by W8 can fall on a bill day R2 has finished, and R2 selects by paid_at, so it was never checked. W8 now enqueues late_paid_check in its own transaction (Alipay only; proven by xmin in the rule tests). The worker reads the stored bill rows, does not rerun R2, and writes only a recon diff and a recon_diff hold through R2's own registerDiff and dedupe keys, so R2 and the job together leave one diff and one hold. It concludes paid_not_in_bill only when every relevant day has succeeded; otherwise it retries hourly up to 96 rounds and then only warns. Real risk: a false positive freezes a member (recon_diff has no expiry), so a success row on any bill day counts as matched, and run status is read before bill rows because a run commits both in one transaction. listedOn is fixed for a PAID_MANUAL entered after its bill day ran. A withdrawal entered after R2 raised unknown_line for its serial keeps that open diff, for a person to close (rule behaviour, the orchestrator is telling the owner, D10-632). The W10 enqueue is not in this task; it waits for B2-09s. No frozen test changed.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex via codex-run.sh, static, read-only. couli-runs/B2-09t/money-review-r1.json failed on one S1: bill rows were read before run status, so an R2 commit between the two reads gave a false paid_not_in_bill and a permanent hold. Fixed by reading run status first. money-review-r2.json passed at 21f01c32e. That implementation commit was then cherry-picked unchanged over the third test commit, and the change since is rule tests only. Reviewed before the rebase."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Codex wrote the rule tests in 3 attempts, the limit; a first call was killed by the author after about a minute because its brief lacked the notes, and the tool recorded it as no-output and refunded it (uncounted_calls). A fresh Claude reviewed (approvals 19), static, not run by the reviewer. r1 failed on 3 S1 and 5 S2, r2 passed with one S2, r3 passed with no findings. r3 is outside the limit of 2: 编排例外 D10-634, incremental only, covering #34 and #35. Mutations run by the author and reverted: reading bill rows before run status turns #34 red by assertion; putting waiting ahead of an already reported row turns #35 red, by a 60 second test timeout rather than an assertion."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09t",
+  "spec_commit": "a6912b3901aa4f84533c28beb3527d84a86cf3e6",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "red_tests": [
+    "test/spec/payout/recon-late-paid/listed-on.int.test.ts > [AC-B2-09t#22] 先跑 D 的未知流水，再补日界 PAID_MANUAL，D+1 不误报；不同流水仍报差错 [AC-B2-09t#23]",
+    "test/spec/payout/recon-late-paid/listed-on.int.test.ts > [AC-B2-09t#24] 相邻日仅业务单号命中不同流水，PAID_MANUAL 不算列出；PAID_API 保持能列出",
+    "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#1] alipay W8 恰一个无延迟任务，同事务 xmin 相等 [AC-B2-09t#31]；同 key 重放仍一个 [AC-B2-09t#5]",
+    "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#32] 同一批两张 alipay W8 各入队一次，payload 各指向自己的提现单",
+    "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#33] 消费 W8 真实任务，当前轮 active 时仍独立入队 round 1、2，各延迟一小时",
+    "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#2] 银行卡不入队；同批 alipay 成功照常入队，未审核条目不入队 [AC-B2-09t#3]",
+    "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#4] audit、voucher、tax_ytd 逐项故障回滚不留任务；恢复后同 key 重试恰一个",
+    "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#6] 贯通：原样消费 W8 的真实队列任务，已 succeeded 无账单行，差错确实由该任务创建",
+    "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#26] 真实 W8 补录历史 unknown_line 的流水，消费真实任务后旧差错原样保留且不冻结",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#11] 已跑账单无成功行：一张 missing 差错、永久冻结、告警，账本与已存账单完全不动",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#7] 先落 unknown_line 后补同流水号：核上，不新增或关闭旧差错，不冻结",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#8] paid_at 倒填 D，D−3 的成功行仍能核上；多个成功金额中任一等于 net 即结束",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#9] PAID_API 仅 out_biz_no 命中与仅 channel_order_id 命中均核上；无下载、查询或次日入队 [AC-B2-09t#10]",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#12] 金额多一分与少一分：按 net_fen，差错 period 是成功行的账单日",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#13] 单不存在时 LINE_FAIL、LINE_UNKNOWN 不落行；补录后已跑完且无行报 missing",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#14] 手动单的业务单号命中另一成功流水：duplicate_line 优先，即使同时有本流水成功",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#15] D 未运行、failed、partial 各自等一小时，真实 R2 跑成后才判",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#16] round 94 入队 95；round 95 只告警点名单号，不下结论、不再排队",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#17] 日界含恰好十分钟：D+1 未跑要等，早一毫秒不等，两天无行才差错，次日有行核上",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#18] R2 先判和任务先判，两种顺序都复用 missing 去重键，仅一张差错和一次冻结",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#19] 同一任务重投两次，差错冻结各一且不重复告警，不改终态账本",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#20] 外部事务持有同 dedupe_key，PG 证明 worker 等待；提交后沿用差错且不加冻结",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#21] 别的 app 的成功流水和 succeeded 都无效；本 app 才能结束等待，差错冻结不串租户",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#25] 重读后不存在、非 PAID_*、银行卡都结束，不动账本、不排任务、不生差错冻结",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#27] paid_at 按 +08:00 取账单日：UTC 10-18 的付款须等 10-19，跑成后 period 为 10-19",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#28] 已存非成功 diff 行沿用 paid_line_not_success，不再产生金额或漏单差错及冻结",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#29] R2 先判 amount_mismatch，迟到复核复用同一张差错和同一条冻结",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#30] 日界窗口内 D 为 partial 或 failed，即使 D+1 succeeded 仍须等待",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#34] R2 在复核的两次读取之间提交成功行，不得用旧空行和新 succeeded 误报漏单",
+    "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#35] 日界已有 paid_line_not_success 时优先结束，D+1 未跑也不再入队或增加差错冻结"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a6912b3901aa4f84533c28beb3527d84a86cf3e6",
+      "tree": "9cc6bc51a8027bc4db858770de82e25694007249",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-05T04:44:36Z",
+      "finished_at": "2026-11-05T04:44:59Z",
+      "red_tests": [
+        "test/spec/payout/recon-late-paid/listed-on.int.test.ts > [AC-B2-09t#22] 先跑 D 的未知流水，再补日界 PAID_MANUAL，D+1 不误报；不同流水仍报差错 [AC-B2-09t#23]",
+        "test/spec/payout/recon-late-paid/listed-on.int.test.ts > [AC-B2-09t#24] 相邻日仅业务单号命中不同流水，PAID_MANUAL 不算列出；PAID_API 保持能列出",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#1] alipay W8 恰一个无延迟任务，同事务 xmin 相等 [AC-B2-09t#31]；同 key 重放仍一个 [AC-B2-09t#5]",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#32] 同一批两张 alipay W8 各入队一次，payload 各指向自己的提现单",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#33] 消费 W8 真实任务，当前轮 active 时仍独立入队 round 1、2，各延迟一小时",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#2] 银行卡不入队；同批 alipay 成功照常入队，未审核条目不入队 [AC-B2-09t#3]",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#4] audit、voucher、tax_ytd 逐项故障回滚不留任务；恢复后同 key 重试恰一个",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#6] 贯通：原样消费 W8 的真实队列任务，已 succeeded 无账单行，差错确实由该任务创建",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts > [AC-B2-09t#26] 真实 W8 补录历史 unknown_line 的流水，消费真实任务后旧差错原样保留且不冻结",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#11] 已跑账单无成功行：一张 missing 差错、永久冻结、告警，账本与已存账单完全不动",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#7] 先落 unknown_line 后补同流水号：核上，不新增或关闭旧差错，不冻结",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#8] paid_at 倒填 D，D−3 的成功行仍能核上；多个成功金额中任一等于 net 即结束",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#9] PAID_API 仅 out_biz_no 命中与仅 channel_order_id 命中均核上；无下载、查询或次日入队 [AC-B2-09t#10]",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#12] 金额多一分与少一分：按 net_fen，差错 period 是成功行的账单日",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#13] 单不存在时 LINE_FAIL、LINE_UNKNOWN 不落行；补录后已跑完且无行报 missing",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#14] 手动单的业务单号命中另一成功流水：duplicate_line 优先，即使同时有本流水成功",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#15] D 未运行、failed、partial 各自等一小时，真实 R2 跑成后才判",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#16] round 94 入队 95；round 95 只告警点名单号，不下结论、不再排队",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#17] 日界含恰好十分钟：D+1 未跑要等，早一毫秒不等，两天无行才差错，次日有行核上",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#18] R2 先判和任务先判，两种顺序都复用 missing 去重键，仅一张差错和一次冻结",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#19] 同一任务重投两次，差错冻结各一且不重复告警，不改终态账本",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#20] 外部事务持有同 dedupe_key，PG 证明 worker 等待；提交后沿用差错且不加冻结",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#21] 别的 app 的成功流水和 succeeded 都无效；本 app 才能结束等待，差错冻结不串租户",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#25] 重读后不存在、非 PAID_*、银行卡都结束，不动账本、不排任务、不生差错冻结",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#27] paid_at 按 +08:00 取账单日：UTC 10-18 的付款须等 10-19，跑成后 period 为 10-19",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#28] 已存非成功 diff 行沿用 paid_line_not_success，不再产生金额或漏单差错及冻结",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#29] R2 先判 amount_mismatch，迟到复核复用同一张差错和同一条冻结",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#30] 日界窗口内 D 为 partial 或 failed，即使 D+1 succeeded 仍须等待",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#34] R2 在复核的两次读取之间提交成功行，不得用旧空行和新 succeeded 误报漏单",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts > [AC-B2-09t#35] 日界已有 paid_line_not_success 时优先结束，D+1 未跑也不再入队或增加差错冻结"
+      ],
+      "expected": [
+        "test/spec/payout/recon-late-paid/listed-on.int.test.ts",
+        "test/spec/payout/recon-late-paid/w8.int.test.ts",
+        "test/spec/payout/recon-late-paid/worker.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "9ed17a92385b1d85da9820c1b52d5c00799611890f035f79f1f288f62148761d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2f97815df6397ab51c5ec1a1525f4f0f5de4a14e",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

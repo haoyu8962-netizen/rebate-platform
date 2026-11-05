@@ -72,6 +72,24 @@ export const RECON_CHECK_DELAY_SECONDS = 600;
 export const RECON_CHECK_MAX_ROUNDS = 144;
 
 /**
+ * B2-09t (D10-628 ②, D10-632): a paid_at written after its bill day may have been reconciled (W8)
+ * is never picked by a later daily run, which selects by paid_at. This job reads the bill rows
+ * already stored for that one withdrawal; it never downloads a bill or rewrites a row.
+ */
+export const PAYOUT_RECON_LATE_PAID_JOB = 'late_paid_check';
+
+export interface PayoutReconLatePaidPayload {
+  readonly app_id: string;
+  readonly withdrawal_id: string;
+  readonly round: number;
+}
+
+/** A bill day not yet reconciled is looked at again after this many seconds. */
+export const LATE_PAID_CHECK_DELAY_SECONDS = 3_600;
+/** At most this many rounds (four days: a day's run is due within two, plus its retries). */
+export const LATE_PAID_CHECK_MAX_ROUNDS = 96;
+
+/**
  * The daily run of bill day D: D+1 00:00 +08:00 plus this offset (10:00 +08:00, as the T+1 run of
  * payment's bill.recon; the Alipay bill of the previous day is ready by then — 待实测).
  */
@@ -183,6 +201,25 @@ export function sendReconCheck(
       trx,
       singletonKey: `recon_check:${payload.app_id}:${payload.withdrawal_id}:${payload.round}`,
       delaySeconds,
+    },
+  );
+}
+
+/** The withdrawal's late_paid_check on the caller's transaction: it commits with the paid_at. */
+export function sendLatePaidCheck(
+  queue: Pick<JobQueue, 'send'>,
+  trx: Transaction<DB>,
+  payload: PayoutReconLatePaidPayload,
+  delaySeconds?: number,
+): Promise<string | null> {
+  return queue.send(
+    PAYOUT_RECON_QUEUE,
+    PAYOUT_RECON_LATE_PAID_JOB,
+    { ...payload },
+    {
+      trx,
+      singletonKey: `late_paid_check:${payload.app_id}:${payload.withdrawal_id}:${payload.round}`,
+      ...(delaySeconds === undefined ? {} : { delaySeconds }),
     },
   );
 }

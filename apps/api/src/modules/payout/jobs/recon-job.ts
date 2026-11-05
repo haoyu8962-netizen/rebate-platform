@@ -48,7 +48,7 @@
 // Alerts are logger.warn lines with a fixed message (the alert rules are another task's); logs
 // carry ids, out_biz_no, channel_order_id, codes and amounts only — never the payee.
 import type { DB } from '@couli/db';
-import { chinaDayRange } from '@couli/domain';
+import { accountingDate, chinaDayRange } from '@couli/domain';
 import { subFen } from '@couli/money';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { Logger } from 'pino';
@@ -64,8 +64,11 @@ import {
 import { readPayoutChannelConfig, type JudgementLists } from '../application/judgement.ts';
 import { nextQueryPoint } from '../application/query-schedule.ts';
 import {
+  LATE_PAID_CHECK_DELAY_SECONDS,
+  LATE_PAID_CHECK_MAX_ROUNDS,
   PAYOUT_RECON_CHECK_JOB,
   PAYOUT_RECON_JOB,
+  PAYOUT_RECON_LATE_PAID_JOB,
   PAYOUT_RECON_MANUAL_JOB,
   PAYOUT_RECON_QUEUE,
   PAYOUT_RECON_SOURCE,
@@ -76,8 +79,10 @@ import {
   reconDayEndMs,
   reconDayStartMs,
   scheduleReconDay,
+  sendLatePaidCheck,
   sendReconCheck,
   type PayoutReconCheckPayload,
+  type PayoutReconLatePaidPayload,
   type PayoutReconLogger,
   type PayoutReconManualPayload,
 } from '../application/recon-schedule.ts';
@@ -165,6 +170,7 @@ interface WithdrawalRow {
   readonly execute_seq: number;
   readonly hold_reason: string | null;
   readonly paid_at: Date | null;
+  readonly payout_channel: string;
 }
 
 const WITHDRAWAL_COLUMNS = [
@@ -178,6 +184,7 @@ const WITHDRAWAL_COLUMNS = [
   'execute_seq',
   'hold_reason',
   'paid_at',
+  'payout_channel',
 ] as const;
 
 interface ReconRowValues {
@@ -281,6 +288,23 @@ function parseManual(job: ReceivedJob): PayoutReconManualPayload | null {
   return { app_id: appId, withdrawal_id: withdrawalId, execute_seq: executeSeq };
 }
 
+function parseLatePaid(job: ReceivedJob): PayoutReconLatePaidPayload | null {
+  const payload = job.payload as Record<string, unknown>;
+  const appId = payload['app_id'];
+  const withdrawalId = payload['withdrawal_id'];
+  const round = payload['round'];
+  if (
+    !isText(appId) ||
+    !isText(withdrawalId) ||
+    typeof round !== 'number' ||
+    !Number.isInteger(round) ||
+    round < 0
+  ) {
+    return null;
+  }
+  return { app_id: appId, withdrawal_id: withdrawalId, round };
+}
+
 function parseCheck(job: ReceivedJob): PayoutReconCheckPayload | null {
   const manual = parseManual(job);
   const round = (job.payload as Record<string, unknown>)['round'];
@@ -371,7 +395,8 @@ export function createPayoutReconJob(options: PayoutReconJobOptions): JobHandler
       return `R2:alipay:${billDate}:line:${input.line?.channelOrderId ?? 'none'}`;
     }
     if (input.kind === 'duplicate_line') {
-      return `R2:alipay:${billDate}:wd:${input.withdrawal.id}:line:${input.line?.channelOrderId ?? 'none'}`;
+      const order = input.line?.channelOrderId ?? input.billRow?.channel_order_id ?? 'none';
+      return `R2:alipay:${billDate}:wd:${input.withdrawal.id}:line:${order}`;
     }
     if (input.kind === 'paid_not_in_bill') return `R2:alipay:missing:wd:${input.withdrawal.id}`;
     // D10-416: one diff per withdrawal whichever query set needs_manual.
@@ -406,9 +431,8 @@ export function createPayoutReconJob(options: PayoutReconJobOptions): JobHandler
   ): Promise<ReconDiffRegistration> {
     const byLine = input.withdrawal === null || input.refByLine === true;
     const refType = byLine ? 'channel_order_id' : 'withdrawal';
-    const refId = byLine
-      ? (input.line?.channelOrderId ?? 'none')
-      : (input.withdrawal?.id ?? input.line?.channelOrderId ?? 'none');
+    const lineOrder = input.line?.channelOrderId ?? input.billRow?.channel_order_id ?? 'none';
+    const refId = byLine ? lineOrder : (input.withdrawal?.id ?? lineOrder);
     const registration = await registerReconDiffOnce(
       trx,
       {
@@ -539,7 +563,13 @@ export function createPayoutReconJob(options: PayoutReconJobOptions): JobHandler
       .select('id')
       .where('app_id', '=', appId)
       .where('bill_date', '=', sql<Date>`${billDate}::date`)
-      .where('out_biz_no', '=', w.out_biz_no)
+      .where((eb) => {
+        const byOutBizNo = eb('out_biz_no', '=', w.out_biz_no);
+        if (w.channel_order_id === null) return byOutBizNo;
+        const byOrder = eb('channel_order_id', '=', w.channel_order_id);
+        // A PAID_MANUAL withdrawal is matched by channel_order_id only (BR-WDR-23).
+        return w.status === 'PAID_MANUAL' ? byOrder : eb.or([byOutBizNo, byOrder]);
+      })
       .where('channel_status', 'is not', null)
       .executeTakeFirst();
     return row !== undefined;
@@ -1126,7 +1156,198 @@ export function createPayoutReconJob(options: PayoutReconJobOptions): JobHandler
     });
   }
 
+  /**
+   * B2-09t: one withdrawal whose paid_at the daily runs may never pick. Judged on the stored bill
+   * rows of any bill day, so a line booked on another day than the paid_at a person gave is no
+   * diff. Writes only what R2 would (same dedupe keys, a hold only with a new diff).
+   */
+  async function latePaidCheck(payload: PayoutReconLatePaidPayload): Promise<void> {
+    const appId = payload.app_id;
+    const fields = { app_id: appId, withdrawal_id: payload.withdrawal_id, round: payload.round };
+    await db.transaction().execute(async (trx) => {
+      const w = await trx
+        .withSchema('app')
+        .selectFrom('withdrawals')
+        .select(WITHDRAWAL_COLUMNS)
+        .where('app_id', '=', appId)
+        .where('id', '=', payload.withdrawal_id)
+        .executeTakeFirst();
+      if (w === undefined) {
+        logger.warn(fields, 'payout_recon_late_paid_missing');
+        return;
+      }
+      if (!PAID.has(w.status) || w.payout_channel !== 'alipay' || w.paid_at === null) {
+        logger.info({ ...fields, status: w.status }, 'payout_recon_late_paid_out_of_scope');
+        return;
+      }
+      const billDate = accountingDate(w.paid_at);
+      const days =
+        w.paid_at.getTime() >= reconDayEndMs(billDate) - RECON_DAY_BOUNDARY_MS
+          ? [billDate, reconDayAfter(billDate, clock.now())]
+          : [billDate];
+      // Before the bill rows, never after: a run commits its rows with its succeeded, so a day read
+      // as succeeded here has its rows visible to the read below (READ COMMITTED, statement by
+      // statement). The other order can take an empty read and a later succeeded for "missing".
+      let allRan = true;
+      for (const day of days) {
+        if (!(await daySucceeded(trx, appId, day))) allRan = false;
+      }
+      const { queryStatusMap } = await lists(trx, appId);
+      const stored = await trx
+        .withSchema('app')
+        .selectFrom('recon_channel')
+        .select([
+          'id',
+          sql<string>`bill_date::text`.as('bill_date'),
+          'out_biz_no',
+          'channel_order_id',
+          'channel_status',
+          'channel_amount_fen',
+          'result',
+        ])
+        .where('app_id', '=', appId)
+        .where((eb) =>
+          w.channel_order_id === null
+            ? eb('out_biz_no', '=', w.out_biz_no)
+            : eb.or([
+                eb('out_biz_no', '=', w.out_biz_no),
+                eb('channel_order_id', '=', w.channel_order_id),
+              ]),
+        )
+        .orderBy('bill_date', 'desc')
+        .orderBy('id')
+        .execute();
+      const success = stored.flatMap((row) =>
+        row.channel_status !== null &&
+        row.channel_amount_fen !== null &&
+        isSuccess(queryStatusMap, row.channel_status)
+          ? [
+              {
+                billDate: row.bill_date,
+                channelOrderId: row.channel_order_id,
+                amountFen: row.channel_amount_fen,
+                json: {
+                  recon_channel_id: row.id,
+                  channel_order_id: row.channel_order_id,
+                  channel_status: row.channel_status,
+                  channel_amount_fen: row.channel_amount_fen.toString(),
+                },
+                outBizNo: row.out_biz_no,
+              },
+            ]
+          : [],
+      );
+      const manual = w.status === 'PAID_MANUAL';
+      const holdsToAdd: { userId: string; diffId: string }[] = [];
+
+      const stray = manual
+        ? success.find(
+            (row) => row.outBizNo === w.out_biz_no && row.channelOrderId !== w.channel_order_id,
+          )
+        : undefined;
+      if (stray !== undefined) {
+        // Its interface transfer's line: a success is a second payment (same as the daily run).
+        await registerDiff(
+          trx,
+          appId,
+          stray.billDate,
+          {
+            withdrawal: w,
+            line: null,
+            kind: 'duplicate_line',
+            expectedFen: 0n,
+            actualFen: stray.amountFen,
+            hold: true,
+            billRow: stray.json,
+            refByLine: true,
+          },
+          holdsToAdd,
+        );
+        await addHolds(trx, appId, holdsToAdd);
+        return;
+      }
+
+      const own = manual
+        ? success.filter((row) => row.channelOrderId === w.channel_order_id)
+        : success;
+      if (own.some((row) => sameAmount(row.amountFen, w.net_fen))) {
+        logger.info(fields, 'payout_recon_late_paid_matched');
+        return;
+      }
+      const other = own[0];
+      if (other !== undefined) {
+        await registerDiff(
+          trx,
+          appId,
+          other.billDate,
+          {
+            withdrawal: w,
+            line: null,
+            kind: 'amount_mismatch',
+            expectedFen: w.net_fen,
+            actualFen: other.amountFen,
+            hold: true,
+            billRow: other.json,
+          },
+          holdsToAdd,
+        );
+        await addHolds(trx, appId, holdsToAdd);
+        return;
+      }
+
+      // A non-success row is stored only for a PAID_* withdrawal: R2 has reported this one already.
+      const reported = stored.some(
+        (row) =>
+          row.result === 'diff' &&
+          row.channel_status !== null &&
+          (!manual || row.channel_order_id === w.channel_order_id),
+      );
+      if (reported) {
+        logger.info(fields, 'payout_recon_late_paid_reported');
+        return;
+      }
+
+      // No success line anywhere: only the runs of the days that could list it can say it is missing.
+      if (allRan) {
+        await registerDiff(
+          trx,
+          appId,
+          billDate,
+          {
+            withdrawal: w,
+            line: null,
+            kind: 'paid_not_in_bill',
+            expectedFen: w.net_fen,
+            actualFen: 0n,
+            hold: true,
+          },
+          holdsToAdd,
+        );
+        await addHolds(trx, appId, holdsToAdd);
+        return;
+      }
+      const round = payload.round + 1;
+      if (round >= LATE_PAID_CHECK_MAX_ROUNDS) {
+        logger.warn({ ...fields, out_biz_no: w.out_biz_no }, 'payout_recon_late_paid_exhausted');
+        return;
+      }
+      await sendLatePaidCheck(queue, trx, { ...payload, round }, LATE_PAID_CHECK_DELAY_SECONDS);
+    });
+  }
+
   return async function payoutReconJob(job: ReceivedJob): Promise<void> {
+    if (job.name === PAYOUT_RECON_LATE_PAID_JOB) {
+      const payload = parseLatePaid(job);
+      if (payload === null) {
+        logger.warn(
+          { job_id: job.id, queue: job.queue, name: job.name },
+          'payout_recon_bad_payload',
+        );
+        return;
+      }
+      await latePaidCheck(payload);
+      return;
+    }
     if (job.name === PAYOUT_RECON_CHECK_JOB) {
       const payload = parseCheck(job);
       if (payload === null) {

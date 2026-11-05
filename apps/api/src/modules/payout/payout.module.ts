@@ -1054,6 +1054,7 @@ export class PayoutAdminModule {
             { token: DB_TOKEN, optional: true },
             { token: IDEMPOTENCY, optional: true },
             { token: EVENT_BUS, optional: true },
+            { token: JOB_QUEUE, optional: true },
           ],
           useFactory: (
             clock: Clock,
@@ -1061,8 +1062,12 @@ export class PayoutAdminModule {
             db?: Kysely<DB>,
             idempotency?: Idempotency,
             eventBus?: EventBus,
+            queue?: JobQueue,
           ): AdminManualPaidDeps | null =>
-            db === undefined || idempotency === undefined || eventBus === undefined
+            db === undefined ||
+            idempotency === undefined ||
+            eventBus === undefined ||
+            queue === undefined
               ? null
               : {
                   db,
@@ -1077,6 +1082,7 @@ export class PayoutAdminModule {
                     appeal: options.appeal(),
                     attempts: createPayoutAttemptsStore(),
                     eventBus,
+                    queue,
                     identityKey: options.identityKey,
                     logger: logger.child({ module: 'payout' }),
                   }),

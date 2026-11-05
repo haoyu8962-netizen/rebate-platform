@@ -10,7 +10,8 @@
 //                manual W3), member_blocked, channel_order_id_taken.
 //   effects      CAS to PAID_MANUAL with paid_at as given, channel_order_id, both manual_*_by the
 //                operator and the hold cleared; WITHDRAW:SUCCESS:CASH_<subject> `wd:{id}:PAID`, the
-//                same voucher as W5; tax_ytd (BR-WDR-20); wallet.withdrawal_changed.
+//                same voucher as W5; tax_ytd (BR-WDR-20); wallet.withdrawal_changed; for Alipay
+//                the late_paid_check of this paid_at, whose bill day may have run (B2-09t, BR-WDR-23).
 // EXECUTE and W8 both require APPROVED under the row lock and a CAS: the first to commit wins.
 //
 // Two refusals only surface as a throw that must roll the transaction back, so they are the
@@ -22,9 +23,10 @@ import type { DB } from '@couli/db';
 import { buildVouchers, transitionWithdrawal } from '@couli/domain';
 import type { Transaction } from 'kysely';
 import type { Ledger } from '../../ledger/index.ts';
-import type { EventBus } from '../../platform/index.ts';
+import type { EventBus, JobQueue } from '../../platform/index.ts';
 import type { AppealPrevStateReader, RiskStateBatchReader } from '../../risk/index.ts';
 import { memberWithdrawalBlocked } from './payout-execute.ts';
+import { PAYOUT_RECON_CHANNEL, sendLatePaidCheck } from './recon-schedule.ts';
 import {
   createTaxYtdAccumulator,
   type TaxYtdIdentityKeyReader,
@@ -80,6 +82,7 @@ export interface WithdrawalManualPaidOptions {
   readonly appeal: AppealPrevStateReader;
   readonly attempts: WithdrawalAttemptsPort;
   readonly eventBus: EventBus;
+  readonly queue: Pick<JobQueue, 'send'>;
   readonly identityKey: TaxYtdIdentityKeyReader;
   readonly logger: TaxYtdLogger;
 }
@@ -97,7 +100,7 @@ export function isChannelOrderIdCollision(error: unknown): boolean {
 export function createWithdrawalManualPaid(
   options: WithdrawalManualPaidOptions,
 ): WithdrawalManualPaid {
-  const { ledger, config, risk, appeal, attempts, eventBus } = options;
+  const { ledger, config, risk, appeal, attempts, eventBus, queue } = options;
   const taxYtd = createTaxYtdAccumulator({
     identity: options.identityKey,
     logger: options.logger,
@@ -251,6 +254,9 @@ export function createWithdrawalManualPaid(
         name: 'wallet.withdrawal_changed',
         payload: { withdrawal_id: row.id, user_id: row.user_id, status: transition.to },
       });
+      if (row.payout_channel === PAYOUT_RECON_CHANNEL) {
+        await sendLatePaidCheck(queue, trx, { app_id: appId, withdrawal_id: row.id, round: 0 });
+      }
       return { kind: 'paid', netFen: row.net_fen };
     },
   };
