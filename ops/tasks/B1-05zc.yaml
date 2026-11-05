@@ -1,0 +1,567 @@
+id: B1-05zc
+repo: rebate-platform
+title: 下单前返利一律单值（D10-641）——quoteRebate 与出卡不再产出 price_compare_risk 与区间，不读 compare_rate_ratio_bp，小字统一 rebate_estimate
+type: impl
+# 2026-11-05 be 入账（D10-641，SPEC_REF 0949b0ac）。判口径的只有 catalog/domain/card.ts quoteBasisFor（淘宝非 feed/pool/tlj_pool/share 判风险），各入口（搜索、粘贴、首页池、详情、热销榜、Agent、open 复核、分享）都经 card-assembler → 报价器。改法：quoteBasisFor 恒 normal；disclaimer 有返利时只 rebate_estimate；rebate-quoter 与演示报价器删比价折算与配置读取，context 为 price_compare_risk 时拒绝；COMMISSION_QUOTE_CONFIG_KEYS、DEMO_QUOTE_KEYS 去掉 compare 键。
+# 配置项 rebate.taobao.compare_rate_ratio_bp 在 content 注册表保留不删（D10-641），只是不再读。契约枚举 price_compare_risk 保留兼容，Agent 工具侧放行代码不动。no_rebate / amount_unknown / login_required、entry_source 写入照旧；settleQuote「normal 必须 min = max」保留。规则测试钉：同一淘宝商品（配置故意带 compare 5000）经搜索 / 粘贴 / 首页池 / 详情（另加热销榜、Agent、带来源详情、open 复核）报价相同且 min = max、basis normal、小字 rebate_estimate。冻结用例断言旧区间的照 D10-327 进 test_paths，由新鲜独立 Claude 改，PR 正文逐条列改前改后，按 #24 报核。RV2（commission）。
+refs: [BR-PRICE-07, BR-CALC-16, BR-TEXT-03]
+refs_hash:
+  BR-PRICE-07: 945b25cfcca0
+  BR-CALC-16: 608d5607c3fb
+  BR-TEXT-03: e5d9ad000f4c
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/domain/card{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/application/{card-assembler,share-quote}{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/application/detail.ts'
+  - 'apps/api/src/modules/commission/application/{rebate-quoter,types}{.ts,.test.ts}'
+  - 'apps/api/src/app.module.ts'
+  - 'test/spec/catalog/{entry-quote-parity,card,price-state,hot-rank-upstream}/**'
+  - 'test/spec/catalog/detail/{detail.test,route.int.test}.ts'
+  - 'test/spec/catalog/{product-pool-read/detail-fallback,hot-rank-viewer/app}.int.test.ts'
+  - 'test/spec/catalog/search/{refill,availability}.test.ts'
+  - 'test/spec/commission/quoter/**'
+  - 'test/spec/commission/wiring/{assembly,open-quotes}.test.ts'
+  - 'test/spec/agent/tools-quote/snapshots.test.ts'
+  - 'test/spec/linking/open-requote/prices.int.test.ts'
+test_paths:
+  - 'test/spec/catalog/{entry-quote-parity,card,price-state,hot-rank-upstream}/**'
+  - 'test/spec/catalog/detail/{detail.test,route.int.test}.ts'
+  - 'test/spec/catalog/{product-pool-read/detail-fallback,hot-rank-viewer/app}.int.test.ts'
+  - 'test/spec/catalog/search/{refill,availability}.test.ts'
+  - 'test/spec/commission/quoter/**'
+  - 'test/spec/commission/wiring/{assembly,open-quotes}.test.ts'
+  - 'test/spec/agent/tools-quote/snapshots.test.ts'
+  - 'test/spec/linking/open-requote/prices.int.test.ts'
+red_exempt_outside:
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    reason: '用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    reason: '用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    reason: '用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    reason: '用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    reason: '用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/catalog/price-state/cards.test.ts
+    reason: '用例外只去掉了 kit 的 PLATFORMS 导入（[AC-B1-05i#5] 改为新用例后不再用它）；其余用例体未改，与比价口径无关，新旧实现下都成立'
+red_exempt:
+  - file: test/spec/catalog/price-state/cards.test.ts
+    test: '[AC-B1-05i#7] BR-PRICE-01：一分券后价和一分无券售价都有效，不能过度过滤'
+    reason: '冻结用例测试体未改；用例外只去掉了 PLATFORMS 导入；本条与小字口径无关，新旧实现下都成立'
+  - file: test/spec/catalog/price-state/cards.test.ts
+    test: '[AC-B1-05i#8] BR-PRICE-01/12：同一商品先有效、再异常、后恢复时不复用旧卡掩盖异常'
+    reason: '冻结用例测试体未改；用例外只去掉了 PLATFORMS 导入；本条与小字口径无关，新旧实现下都成立'
+  - file: test/spec/catalog/price-state/cards.test.ts
+    test: '[AC-B1-05i#9] BR-PRICE-12：retrieval 的 link 登记失败仍失败即关，不伪装价格异常或编造卡'
+    reason: '冻结用例测试体未改；用例外只去掉了 PLATFORMS 导入；本条与小字口径无关，新旧实现下都成立'
+  - file: test/spec/catalog/price-state/cards.test.ts
+    test: '[AC-B1-05i#9] BR-PRICE-12：active_query 的 link 登记失败仍失败即关，不伪装价格异常或编造卡'
+    reason: '冻结用例测试体未改；用例外只去掉了 PLATFORMS 导入；本条与小字口径无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#23] BR-PRICE-07 jd 不允许比价区间'
+    reason: '冻结用例测试体未改：[AC-B2-03c#23] 块恢复成与基线逐字相同（表 jd、pdd），淘宝另起新用例；用例外加 settled 助手与注释，本条不调用它，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#23] BR-PRICE-07 pdd 不允许比价区间'
+    reason: '冻结用例测试体未改：[AC-B2-03c#23] 块恢复成与基线逐字相同（表 jd、pdd），淘宝另起新用例；用例外加 settled 助手与注释，本条不调用它，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#12][BR-AI-04] 同卡只取一次数据，下一次报价独立取数，不拼接前后快照'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 price_fen 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 coupon_fen 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 final_price_fen 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 rebate_min_fen 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 rebate_max_fen 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 rebate_basis 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 availability 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 quoted_at 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#13][BR-AI-04] 必需字段 source 为 null 时不出卡且不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#14][BR-AI-04] 无券 0 合法，与 null 不同'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#15][BR-AI-04] amount_unknown 的返利 null 保持未知，不能变成 0'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#15][BR-AI-04] login_required 的返利 null 保持未知，不能变成 0'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#16][BR-AI-04] no_rebate 不属于 Agent 商品卡契约，不出卡也不登记'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#17][BR-AI-04] availability 未知时保留 unknown，不改成有货'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#18][BR-AI-05] 恶意标题定界符被转义，模型只见白名单摘要，卡片报价不变'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#19][BR-AI-01][BR-AI-04] 登记失败不返回伪造 link_id 或半张卡'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/agent/tools-quote/snapshots.test.ts
+    test: '[AC-B3-04c#20][BR-AI-04] 情境重新取数价格不可得，不复用上一轮金额卡'
+    reason: '冻结用例测试体未改；用例外只加了 RebateQuote 的类型导入（供 #21 替身的类型断言）与 #21 前的注释；其余用例体未改，与比价口径无关，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#4] BR-PRICE-11：原时间不改写，经过 0 ms 时年龄为 0 秒'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#4] BR-PRICE-11：原时间不改写，经过 299999 ms 时年龄为 299 秒'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#4] BR-PRICE-11：原时间不改写，经过 300000 ms 时年龄为 300 秒'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#4] BR-PRICE-11：原时间不改写，经过 301000 ms 时年龄为 301 秒'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#4] BR-PRICE-11：原时间不改写，经过 7200000 ms 时年龄为 7200 秒'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#5] BR-PRICE-11：age 在报价完成后取响应时刻，不取请求开始时刻'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#24] BR-PRICE-11：UTC 取价时间转成同一时刻的 +08:00，年龄不变'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#6] BR-PRICE-08：search 上限为零统一 no_rebate，由调用方决定是否过滤'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#6] BR-PRICE-08：feed 上限为零统一 no_rebate，由调用方决定是否过滤'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#6] BR-PRICE-08：agent 上限为零统一 no_rebate，由调用方决定是否过滤'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#6] BR-PRICE-08：parse 上限为零统一 no_rebate，由调用方决定是否过滤'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#6] BR-PRICE-08：rebate_quote 上限为零统一 no_rebate，由调用方决定是否过滤'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#6] BR-PRICE-08：tlj_pool 上限为零统一 no_rebate，由调用方决定是否过滤'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#8] 无券正常返利使用普通购买按钮，JSON 金额保留安全整数上界'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#9] 登记失败不能返回伪造 link_id 或半成品卡'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#10] 报价失败不能登记零值报价冒充成功'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#11] jd 使用对应联盟来源且不生成淘宝区间'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/assembly.test.ts
+    test: '[AC-B1-05f#11] pdd 使用对应联盟来源且不生成淘宝区间'
+    reason: '冻结用例测试体未改；用例外只把 kit 的导入拆行并加 compareQuote；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#17] prod/demo 装配演示报价时拒绝启动'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#17] prod/replay 装配演示报价时拒绝启动'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#17] prod/live 装配演示报价时拒绝启动'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#17] local/live 装配演示报价时拒绝启动'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#17] test/live 装配演示报价时拒绝启动'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#17] staging/live 装配演示报价时拒绝启动'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#18] 正常 taobao 报价 min=max，使用该平台技术服务费'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#18] 正常 jd 报价 min=max，使用该平台技术服务费'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#18] 正常 pdd 报价 min=max，使用该平台技术服务费'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#20] 缺少 demo.catalog.quote 时拒绝报价，不臆造演示规则'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#20] 缺少 tech_fee_bp 时拒绝报价，不臆造演示规则'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#23] BR-CALC-20：预留步向下取整，本人全额份额保留一分差异'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#20] tech_fee_bp 仅含淘宝时拒绝 jd 报价，不补平台默认值'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/card/demo-quote.test.ts
+    test: '[AC-B1-05f#20] tech_fee_bp 仅含淘宝时拒绝 pdd 报价，不补平台默认值'
+    reason: '冻结用例测试体未改；用例外加 COMPARE_KEY 常量与注释、模块常量 context 的 rebateBasis 由 price_compare_risk 改 normal（卡片不再请求风险口径）、配置里比价键改用常量（值 5000 不变）；其余用例体未改，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#19] HTTP item_ref=missing 仍能查详情，回退当前 App 的 product_refs'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#19] HTTP item_ref=malformed 仍能查详情，回退当前 App 的 product_refs'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#19] HTTP item_ref=tampered 仍能查详情，回退当前 App 的 product_refs'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#19] HTTP item_ref=expired 仍能查详情，回退当前 App 的 product_refs'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#20] HTTP 派生不一致 的状态码和错误信封正确，失败不新增链接'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#20] HTTP 派生失败 的状态码和错误信封正确，失败不新增链接'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#20] HTTP 商品下架 的状态码和错误信封正确，失败不新增链接'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#20] HTTP 演示商品下架 的状态码和错误信封正确，失败不新增链接'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/detail/route.int.test.ts
+    test: '[AC-B1-05e#20] HTTP 联盟故障且无缓存 的状态码和错误信封正确，失败不新增链接'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#4][BR-PRICE-11] 真实 AppModule：带登录 token，报价收到的查看者是该用户而不是 userId=null，卡面是本人报价，links 行归本人，响应 no-store'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#8][BR-ID-01] 无效 Authorization（不是 JWT）→ 401/10002，同 searchProducts 的 optional 口径，不退回游客'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#8][BR-ID-01] 无效 Authorization（Bearer 后没有令牌）→ 401/10002，同 searchProducts 的 optional 口径，不退回游客'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#8][BR-ID-01] 无效 Authorization（不是 Bearer）→ 401/10002，同 searchProducts 的 optional 口径，不退回游客'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#8][BR-ID-01] 无效 Authorization（签名被改动）→ 401/10002，同 searchProducts 的 optional 口径，不退回游客'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#9][BR-ID-01] 过期 token（签名有效、会话未吊销）→ 401/10002，不退回游客'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#10][BR-ID-07] 会话吊销后同一 token → 401/10002，不退回游客'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#11][BR-ID-07] token 与 X-App-Id 不是同一 App → 403/10403'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/hot-rank-viewer/app.int.test.ts
+    test: '[AC-B1-28m#12][BR-ID-01] deletion_only 会话：x-session-scopes 只有 full，同 searchProducts → 403/10405'
+    reason: '冻结用例测试体未改；用例外只把 GUEST_REBATE 常量由区间 299–598 改为 normal 598–598（D10-641）；本条不用该常量或与金额无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11][TRADE-12] 联盟依赖失败（UnionError upstream_unavailable）→ 用商品池价：stale=true，quoted_at 与 age_sec 取池里的行，报价和链接用池里的佣金率'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11][TRADE-12] 联盟依赖失败（UnionError rate_limited）→ 用商品池价：stale=true，quoted_at 与 age_sec 取池里的行，报价和链接用池里的佣金率'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11][TRADE-12] 联盟依赖失败（GovernanceError timeout）→ 用商品池价：stale=true，quoted_at 与 age_sec 取池里的行，报价和链接用池里的佣金率'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11][TRADE-12] 联盟依赖失败（GovernanceError circuit_open）→ 用商品池价：stale=true，quoted_at 与 age_sec 取池里的行，报价和链接用池里的佣金率'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11][TRADE-12] 联盟依赖失败（GovernanceError quota_exceeded）→ 用商品池价：stale=true，quoted_at 与 age_sec 取池里的行，报价和链接用池里的佣金率'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05][BR-PROD-11] 刷新只动 quoted_at、不动原串：入池多日、10 分钟前刚刷新的行，卡片 quoted_at 是刷新时刻，item_ref 和链接带的取得时刻仍过期'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11] 商品池也没有合格的行 → 50401，不出卡、不登记'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11] age 正好 pool.max_age_sec 还能用，多一毫秒、多一秒都 → 50401；未配置按 7200'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11] pool.max_age_sec 取配置：调成 100 后 101 秒的行 → 50401'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11][B1-05u] commission_rate_bp 为 NULL 的行不能用 → 50401，佣金率为 0 的行能用'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11] 只取 online 的行：下线的行 → 50401'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11] 只取本 App 的行：别的 App 有同 key 的行 → 50401'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[TRADE-12] 多个池都有这个 key：取 quoted_at 最新的一行'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[TRADE-12] quoted_at 相同时按 pool_id 升序取第一行'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[TRADE-12] 更新的行不合格时取次新的合格行：佣金率空的、下线的都跳过'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11] 池里的价格异常走主动查询口径：不出卡、不登记，50303，不改答 50401'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05] 联盟明确下架 不是依赖失败，不读商品池 → 30141，不出卡'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05] 演示下架 不是依赖失败，不读商品池 → 30141，不出卡'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05] 联盟拒绝原串 不是依赖失败，不读商品池 → 30143，不出卡'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05] 请求不合法 不是依赖失败，不读商品池 → 30143，不出卡'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05] 链接认不出 不是依赖失败，不读商品池 → 30143，不出卡'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05] 联盟答了别的商品是引用失效 → 30143，不读商品池'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PRICE-11] 联盟正常时不用池价：stale=false，价格取联盟的答复'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-07] 还有可用的旧缓存时用缓存：缓存层答了就不走商品池'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/product-pool-read/detail-fallback.int.test.ts
+    test: '[BR-PROD-05][BR-WATCH-19] 池价不是联盟答复：不写 product_refs，不进价格历史'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/refill.test.ts
+    test: '[AC-B1-05d#11] 无返利过滤后最多补一页，仍不足按实际数，has_more=true 取末次上游'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/refill.test.ts
+    test: '[AC-B1-05d#11] 无返利过滤后最多补一页，仍不足按实际数，has_more=false 取末次上游'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/refill.test.ts
+    test: '[AC-B1-05d#12] 全部无返利且联盟还有页时仍返回空、has_more=true，不无限补拉'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/refill.test.ts
+    test: '[AC-B1-05d#13] 满页不补拉，has_more=false 的不足页也不补拉'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/catalog/search/refill.test.ts
+    test: '[AC-B1-05d#15] 补拉超出 limit 时仅下发 limit，游标记录上游页而非过滤偏移'
+    reason: '冻结用例测试体未改；catalog/card/kit.ts 改了（经未闭合导入被工具判为可能读到）（默认报价改单值、替身按请求口径作答），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 null 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 1000 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 undefined 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 {} 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 {"jd":0} 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 {"taobao":"1000"} 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 {"taobao":-1} 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 {"taobao":10001} 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#21] tech_fee_bp 格式错或缺目标平台 {"taobao":0.5} 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#22] commission.platforms 错误或不含当前平台 null 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#22] commission.platforms 错误或不含当前平台 "taobao" 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#22] commission.platforms 错误或不含当前平台 {} 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#22] commission.platforms 错误或不含当前平台 undefined 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#22] commission.platforms 错误或不含当前平台 "jd" 即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#24] 登录用户等级 missing 不回退游客 L1'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#24] 登录用户等级 error 不回退游客 L1'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#25] rules 端口异常使报价失败，不变成零返利'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#25] config 端口异常使报价失败，不变成零返利'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#26] BR-CALC-06 选中版本各行必填比例 r_own_bp 缺失即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#26] BR-CALC-06 选中版本各行必填比例 r_direct_bp 缺失即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#26] BR-CALC-06 选中版本各行必填比例 r_indirect_bp 缺失即拒绝'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#27] 不合法预留 -1 拒绝而非夹到边界'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#27] 不合法预留 10001 拒绝而非夹到边界'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#27] 不合法预留 0.5 拒绝而非夹到边界'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/failures.test.ts
+    test: '[AC-B2-03c#27] 不合法预留 NaN 拒绝而非夹到边界'
+    reason: '冻结用例测试体未改；用例外加 settled 助手与注释（#19/#20 用它把拒绝变成可断言的值）；本条用例体未改、不调用 settled，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation-r2.test.ts
+    test: '[AC-B2-03c#40] BR-CALC-20 拼多多自购同时应用自购系数和账号等级系数'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation-r2.test.ts
+    test: '[AC-B2-03c#41] BR-CALC-20 拼多多分享应用账号等级系数，不应用自购系数'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation-r2.test.ts
+    test: '[AC-B2-03c#42] BR-PRICE-08 淘宝 normal 报价为零时标记无返利且返后价为空'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation-r2.test.ts
+    test: '[AC-B2-03c#43] BR-PRICE-08 京东 normal 报价为零时标记无返利且返后价为空'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation-r2.test.ts
+    test: '[AC-B2-03c#44] BR-PRICE-08 拼多多 normal 报价为零时标记无返利且返后价为空'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#1] BR-CALC-20 示例：539 分联盟收入，预留 0 得本人 269n'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#1] BR-CALC-20 示例：539 分联盟收入，预留 1500 得本人 229n'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#2] BR-CALC-20 查看者 null 取自己的当前等级'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#2] BR-CALC-20 查看者 viewer-l1 取自己的当前等级'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#2] BR-CALC-20 查看者 viewer-l2 取自己的当前等级'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#2] BR-CALC-20 查看者 viewer-l3 取自己的当前等级'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#3] BR-CALC-06 taobao 使用同版本本平台比例、预留和技术服务费'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#3] BR-CALC-06 jd 使用同版本本平台比例、预留和技术服务费'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#3] BR-CALC-06 pdd 使用同版本本平台比例、预留和技术服务费'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#4] BR-CALC-20 PDD self 透传口径并取对应规则行'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#4] BR-CALC-20 PDD share 透传口径并取对应规则行'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#5] BR-CALC-20 拼多多两个系数都传给 union，单次乘除不提前取整'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/quoter/quotation.test.ts
+    test: '[AC-B2-03c#9] BR-CALC-20 大整数金额保持精度且使用券后价'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/wiring/assembly.test.ts
+    test: '[AC-B2-03d#2] 任意一个平台 live 就选真实报价器，包括非首位端点与混合 replay'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（经 wiring/kit.ts 被工具判为可能读到）（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/commission/wiring/assembly.test.ts
+    test: '[AC-B2-03d#3] prod 或任一 live 没有 DB 时装配即报缺库，不回退演示；其余环境可装配'
+    reason: '冻结用例测试体未改；commission/quoter/fixtures.ts 改了（经 wiring/kit.ts 被工具判为可能读到）（CONFIG_KEYS 去掉比价键），本文件被整文件连带判定；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：2990n → 3090n 阈值含等号、涨跌对称、两阈值取或 = true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：2990n → 2890n 阈值含等号、涨跌对称、两阈值取或 = true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：2990n → 3080n 阈值含等号、涨跌对称、两阈值取或 = false'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：2990n → 2900n 阈值含等号、涨跌对称、两阈值取或 = false'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：1000n → 950n 阈值含等号、涨跌对称、两阈值取或 = true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：1000n → 1050n 阈值含等号、涨跌对称、两阈值取或 = true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：1000n → 951n 阈值含等号、涨跌对称、两阈值取或 = false'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：1000n → 1049n 阈值含等号、涨跌对称、两阈值取或 = false'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：300000n → 300100n 阈值含等号、涨跌对称、两阈值取或 = true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：300000n → 299900n 阈值含等号、涨跌对称、两阈值取或 = true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：2990n → 2990n 阈值含等号、涨跌对称、两阈值取或 = false'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#1] BR-PRICE-13：9007199254740993n → 9007199254740991n 阈值含等号、涨跌对称、两阈值取或 = false'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#2] BR-PRICE-12：取消后再次打开旧卡仍比旧价，新卡才比新快照'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#3] BR-PRICE-12/G-08：他人非分享卡新建归属后，比较基准仍取原卡'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#4] BR-PRICE-20：requote_after_sec=undefined，刚登记的快照也实时取价，链接缓存不免复核'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#4] BR-PRICE-20：requote_after_sec=0，刚登记的快照也实时取价，链接缓存不免复核'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#5] BR-PRICE-13：阈值经配置读取，差价 150n 的判定为 true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#5] BR-PRICE-13：阈值经配置读取，差价 149n 的判定为 false'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#5] BR-PRICE-13：阈值经配置读取，差价 -150n 的判定为 true'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#7] BR-PRICE-13：拼多多 amount_unknown 不取价、不报价，只转链并签发尝试'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#8] 拼多多预判开关 undefined：仅走普通实时取价与 catalog 报价，不伪造比价结论'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+  - file: test/spec/linking/open-requote/prices.int.test.ts
+    test: '[AC-B1-06k#8] 拼多多预判开关 false：仅走普通实时取价与 catalog 报价，不伪造比价结论'
+    reason: '冻结用例测试体未改；本文件经未闭合导入 open-requote/kit.ts 被工具判为可能读改过的支撑文件、整文件连带判定（本目录支撑文件未改）；本条与比价区间无关，新旧实现下都成立'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
