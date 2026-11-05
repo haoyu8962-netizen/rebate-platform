@@ -1,0 +1,20 @@
+id: B1-05ze
+repo: rebate-platform
+title: 商品详情带多图（FU-DETAIL-GALLERY 实现，CT-26o）——getProduct 的卡加 images：主图在前、联盟多图原顺序、截断前去重、地址原样、最多 9 张；其余出卡不带
+type: impl
+# 2026-11-06 be 入账（D10-649，契约 CT-26o #2389）。catalog/detail.ts getProduct 在 cards.assemble 之后给卡加 images，取法同 linking/application/shares.ts shareImages（主图在前、image_urls 原顺序、Set 去重后截 9、地址原样、[] 当联盟无图）；跨模块不导入 linking，在 catalog/domain 放同口径的纯函数。缓存 / 过期详情照样带（同一 UnionItemDetail）；池回退（poolReader）只有加池时存的主图：有则 [主图]，无则 []，不从别处补图。搜索、列表、栏目、粘贴、榜单等其他出卡不带 images。不下载、不加工、不入业务表。
+# 规则测试钉：多图去重截 9、主图在前、主图缺省只给多图、都无为 []；缓存命中同样带；池回退只主图；搜索卡没有 images 键。RV1（catalog）。
+refs: []
+refs_hash: {}
+deps: [CT-26o]
+paths:
+  - 'apps/api/src/modules/catalog/detail{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/domain/detail-images{.ts,.test.ts}'
+  - 'test/spec/catalog/detail-gallery/**'
+test_paths:
+  - 'test/spec/catalog/detail-gallery/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
