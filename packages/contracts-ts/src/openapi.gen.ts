@@ -13451,6 +13451,15 @@ export interface components {
             title: string | null;
             /** Format: uri */
             image: string | null;
+            /**
+             * @description Only on GET /v1/products/{product_key} (product detail, FU-DETAIL-GALLERY, D10-649);
+             *     absent on every other card (search, lists, sections, parse, rank, favourites). Main image
+             *     first, then the extra images of the union product API in their order; deduplicated
+             *     before the cut, at most 9, addresses unchanged (same as the share page images,
+             *     BR-ATTR-10 细则「分享页与分享赚入口页」); [] when the union gives no image. Not
+             *     downloaded, edited or kept in any business table. A single image shows as today.
+             */
+            images?: components["schemas"]["ShareImage"][];
             shop_name?: string | null;
             price_fen: components["schemas"]["NullableFen"];
             coupon_fen: components["schemas"]["NullableFen"];

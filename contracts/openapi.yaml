@@ -31873,6 +31873,9 @@ components:
           shop_type: tmall
           title: 降噪蓝牙耳机 5.3
           image: https://img.example.test/p/7Kq9LmN3pQ.jpg
+          images:
+            - url: https://img.example.test/p/7Kq9LmN3pQ.jpg
+            - url: https://img.example.test/p/7Kq9LmN3pQ-2.jpg
           shop_name: 示例旗舰店
           price_fen: 3990
           coupon_fen: 1000
@@ -39565,6 +39568,18 @@ components:
             - string
             - 'null'
           format: uri
+        images:
+          type: array
+          description: |
+            Only on GET /v1/products/{product_key} (product detail, FU-DETAIL-GALLERY, D10-649);
+            absent on every other card (search, lists, sections, parse, rank, favourites). Main image
+            first, then the extra images of the union product API in their order; deduplicated
+            before the cut, at most 9, addresses unchanged (same as the share page images,
+            BR-ATTR-10 细则「分享页与分享赚入口页」); [] when the union gives no image. Not
+            downloaded, edited or kept in any business table. A single image shows as today.
+          maxItems: 9
+          items:
+            $ref: '#/components/schemas/ShareImage'
         shop_name:
           type:
             - string
