@@ -13,7 +13,7 @@ type: impl
 refs: [BR-AI-01, BR-AI-04]
 refs_hash:
   BR-AI-01: 502e051e2593
-  BR-AI-04: 303f0a08df60
+  BR-AI-04: 7add9471a0f6
 deps: [B3-04f, B3-04h, B3-04i, B3-04j, B3-05e]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/deterministic/**'

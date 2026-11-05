@@ -12,7 +12,7 @@ refs_hash:
   BR-AI-01: 502e051e2593
   BR-AI-02: 40bc4f6f4109
   BR-AI-03: 2131432de5c6
-  BR-AI-04: 303f0a08df60
+  BR-AI-04: 7add9471a0f6
   BR-AI-05: ee8fd647fd43
   BR-AI-14: e8ed6052e898
 deps: [B3-03f, B3-04d, B3-04e, B3-04h, B3-05e, B3-05f, B3-05k]

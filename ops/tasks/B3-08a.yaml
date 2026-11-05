@@ -12,7 +12,7 @@ type: impl
 refs: [BR-AI-07, BR-TEXT-02]
 refs_hash:
   BR-AI-07: 0da3ace82049
-  BR-TEXT-02: 312331179dcf
+  BR-TEXT-02: 6a9e76de47ef
 deps: [B3-04a, B3-05i, B1-08l, B3-08f, B3-08c, B3-08d]
 paths:
   - 'apps/api/src/modules/agent/tools/orders/**'

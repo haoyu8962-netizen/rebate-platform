@@ -11,7 +11,7 @@ type: migration
 refs: [BR-AI-07, BR-AI-04]
 refs_hash:
   BR-AI-07: 0da3ace82049
-  BR-AI-04: 303f0a08df60
+  BR-AI-04: 7add9471a0f6
 deps: [B3-09a]
 paths:
   - 'db/migrations/**'

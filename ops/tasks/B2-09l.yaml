@@ -5,7 +5,7 @@ type: impl
 # 2026-11-03 pay 入账（D10-595，方案 couli-runs/B3-lane/admin-withdrawal-ops-plan-20261103.md）。RV2，新鲜独立 Claude 写规则测试，money 评审。规则测试走 createHttpApp('admin') 与真实 createPayoutExecute。executeBatch 现在只有自动到账调，admin 入口要给 config、risk、appeal、ledger、queue、eventBus。
 refs: [BR-WDR-12, BR-WDR-11, BR-WDR-18]
 refs_hash:
-  BR-WDR-12: 15d982e09f01
+  BR-WDR-12: 37adcd14e97f
   BR-WDR-11: 9193f1c7ed27
   BR-WDR-18: 9247640dde57
 deps: [CT-24zq, B2-09k]

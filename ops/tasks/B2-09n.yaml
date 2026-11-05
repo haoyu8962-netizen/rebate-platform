@@ -8,7 +8,7 @@ type: impl
 refs: [BR-WDR-11, BR-WDR-12]
 refs_hash:
   BR-WDR-11: 9193f1c7ed27
-  BR-WDR-12: 15d982e09f01
+  BR-WDR-12: 37adcd14e97f
 deps: [B2-09m]
 paths:
   - 'apps/api/src/modules/payout/application/payout-execute.ts'

@@ -7,7 +7,7 @@ type: impl
 # query-job 加 source=manual：needs_manual 或 W9 退回的单也查，只查一次、只记尝试，不走 W5、W6、下一点。不动冻结测试，实跑若要动按 D10-327 先报。
 refs: [BR-WDR-15, BR-WDR-14, BR-WDR-09, BR-WDR-17, BR-WDR-33]
 refs_hash:
-  BR-WDR-15: 7e3fa7b3f0f5
+  BR-WDR-15: 8b11285236c2
   BR-WDR-14: 6328f3cda2e6
   BR-WDR-09: 68225c9af85f
   BR-WDR-17: f6119a685e00

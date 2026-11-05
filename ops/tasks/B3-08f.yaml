@@ -9,7 +9,7 @@ type: impl
 # 风险 RV2（orders/**）。分工：Codex 先写规则测试，Opus 实现，Codex 对抗评审。refs 连一跳超 24KB 时编排手工生成任务书，BR-TEXT-02 只摘上述一段与「订单号的显示」。
 refs: [BR-TEXT-02, BR-AI-07]
 refs_hash:
-  BR-TEXT-02: 312331179dcf
+  BR-TEXT-02: 6a9e76de47ef
   BR-AI-07: 0da3ace82049
 deps: [B1-08l]
 paths:

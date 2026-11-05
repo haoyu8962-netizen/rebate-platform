@@ -14,7 +14,7 @@ type: impl
 # 开放复核卡片的查看者是调用方（catalog.assemble 用请求 viewer），预读计划须带调用方 userId：LinkOpenReadPlan 加 callerUserId，link-open-requote.ts 组计划时填入（只改这一处）。
 refs: [BR-CALC-20]
 refs_hash:
-  BR-CALC-20: b6075c494b94
+  BR-CALC-20: d760cf4e71d1
 deps: [B2-03c]
 paths:
   - 'apps/api/src/app.module.ts'

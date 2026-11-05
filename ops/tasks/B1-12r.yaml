@@ -8,7 +8,7 @@ type: impl
 # 接线照 B1-12g / B1-12p：EVENT_SUBSCRIPTIONS 加订阅、queue/catalog.ts 加 evt.<consumer> 队列与 ENTRY_PLAN；两份平台冻结契约测试只加本任务条目（第一类保护路径，#24 标签由编排核对）。
 refs: [BR-TEXT-09]
 refs_hash:
-  BR-TEXT-09: f943366b1a3b
+  BR-TEXT-09: fd7184fa4d2c
 deps: [B1-12j, B1-12g]
 paths:
   - 'apps/api/src/modules/notification/**'

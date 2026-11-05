@@ -6,7 +6,7 @@ type: impl
 # Codex 写少量规则测试（报价器对象上没有 prepare / 作用域状态；同一报价器并发报价各自按自己的时钟读端口，互不影响）；现有 test/spec/commission/** 与 wiring 测试照旧全过。Opus 实现，Codex money 评审。
 refs: [BR-CALC-20]
 refs_hash:
-  BR-CALC-20: b6075c494b94
+  BR-CALC-20: d760cf4e71d1
 deps: [B2-03m]
 paths:
   - 'apps/api/src/modules/commission/**'

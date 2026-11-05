@@ -7,7 +7,7 @@ refs: [BR-ATTR-10, BR-TEXT-20, BR-PRICE-06, BR-INV-19]
 refs_hash:
   BR-ATTR-10: 0ef7e9245dba
   BR-TEXT-20: f1a1f1898b2d
-  BR-PRICE-06: '0e2803911445'
+  BR-PRICE-06: '2ebe89278bed'
   BR-INV-19: ae0ccc6cc588
 deps: [CT-15t, B1-15v]
 paths:

@@ -6,7 +6,7 @@ type: impl
 refs: [BR-FUND-17, BR-TEXT-02]
 refs_hash:
   BR-FUND-17: 02ee5b1ae349
-  BR-TEXT-02: 312331179dcf
+  BR-TEXT-02: 6a9e76de47ef
 deps: [B1-09r]
 paths:
   - 'apps/api/src/modules/orders/application/order-queries.ts'

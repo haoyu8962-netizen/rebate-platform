@@ -10,7 +10,7 @@ type: contract
 # 新分工：Codex 先写一致性测试（test/spec/contracts/agent-stream/**，读 schema 与样例逐帧校验、未知卡片走 fallback_text），先红；Claude 新子代理过审；Opus 5.5 实现。
 refs: [BR-AI-04, BR-AI-06, BR-AI-24]
 refs_hash:
-  BR-AI-04: 303f0a08df60
+  BR-AI-04: 7add9471a0f6
   BR-AI-06: 3912ea460436
   BR-AI-24: e6144dd5290b
 contract_sections: ['8.1', '8.2', '8.3']

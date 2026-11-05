@@ -10,7 +10,7 @@ type: impl
 # 分工：清单外新台账，Codex 先写规则测试，Opus 实现，Codex 评审。风险 RV1。
 refs: [BR-AI-04, BR-AI-01, BR-AI-05]
 refs_hash:
-  BR-AI-04: 303f0a08df60
+  BR-AI-04: 7add9471a0f6
   BR-AI-01: 502e051e2593
   BR-AI-05: ee8fd647fd43
 # 2026-10-17 编排者：deps 加 B3-05i（卡片编号回填，见 B3-05i 注释）。

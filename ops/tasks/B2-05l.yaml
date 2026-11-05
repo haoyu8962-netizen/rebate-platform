@@ -9,7 +9,7 @@ type: impl
 refs: [BR-WDR-10, BR-TEXT-09]
 refs_hash:
   BR-WDR-10: 1db6b508e224
-  BR-TEXT-09: f943366b1a3b
+  BR-TEXT-09: fd7184fa4d2c
 deps: [B2-05e]
 paths:
   - 'apps/api/src/modules/payout/**'
