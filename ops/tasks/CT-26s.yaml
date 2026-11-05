@@ -1,0 +1,25 @@
+id: CT-26s
+repo: rebate-platform
+title: 契约：商品详情专用字段（D10-664 S-02）——ProductCard 加 coupon_end_at、sales_text、shop_logo、shop_scores、shop_entry 与 BR-PROD-04 规格判定字段，只在 GET /v1/products/{product_key} 带
+type: contract
+# 2026-11-06 be 入账（D10-664 S-02，D10-685 顺序 S-02 → UI-STATES → S-05）。形状照 04 §8.3「商品详情专用字段」：coupon_end_at（+08:00，可空，开关关为 null）、sales_text（可空，接口原样）、shop_logo（URL，可空）、shop_scores[]（{key ∈ desc / serv / lgst / level, value 原样字符串}，开关关为 []）、shop_entry（boolean）；images 已由 CT-26o 落地。另补 BR-PROD-04 已确认、04 尚缺的规格不确定 /「¥x 起」判定字段（design/specs/app-product-detail.md §7，S-19 实现）。均为可选（contracts/README 第 8 条），描述写明只在商品详情响应带、其余出卡不带、各自降级。名字是 04 标注「待契约」的默认，改名回写 04。只增不改。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
