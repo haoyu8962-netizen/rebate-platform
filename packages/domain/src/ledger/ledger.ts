@@ -7,6 +7,20 @@ const CREDIT_TYPES: readonly string[] = ['REBATE_CREDIT', 'SHARE_CREDIT', 'REFER
 /** BR-FUND-10: types whose negative (available-decreasing) writes may end below zero. */
 const NEGATIVE_ALLOWED_TYPES: readonly string[] = ['CLAWBACK', 'SETTLE_ADJUST', 'ADMIN_ADJUST'];
 const REVERSE_SUFFIX = ':REVERSE';
+/**
+ * BR-FUND-24 ②: the reason codes of an executed ADMIN_ADJUST whose whole reversal may (with the
+ * trusted ADMIN_ADJUST_REV context) leave available below zero. RESTORE is a BR-FUND-22 credit:
+ * its reversal stays under the ordinary >= 0 rule (BR-FUND-10).
+ */
+const ADJUST_REVERSIBLE_SUB_TYPES: readonly string[] = [
+  'RECON_FIX',
+  'PAYOUT_RECOVERY',
+  'ACCOUNT_CLOSED',
+  'OTHER',
+];
+/** Exactly `ADJ:{adjust_id}:REVERSE`, adjust_id one id-like component (BR-FUND-24 ⑥). */
+const ADJUST_REVERSE_KEY = /^ADJ:[0-9A-Za-z-]+:REVERSE$/;
+const REVERSAL_KINDS: readonly string[] = ['REASSIGN_REV', 'ADMIN_ADJUST_REV'];
 const USER_BALANCE = 'USER_BALANCE';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -282,8 +296,12 @@ export interface NegativeBalanceInput {
   readonly resulting_available_fen: bigint;
   /** New available minus old available: necessary to distinguish negative adjustments. */
   readonly available_delta_fen: bigint;
-  /** Trusted R14 context, NOT a ledger_type/sub_type or a new uniq_key format. */
-  readonly reversal_kind?: 'REASSIGN_REV';
+  /**
+   * Trusted caller context, NOT a ledger_type/sub_type or a new uniq_key format: REASSIGN_REV for
+   * R14 reversals; ADMIN_ADJUST_REV for the whole reversal `ADJ:{adjust_id}:REVERSE` of an
+   * executed ADMIN_ADJUST (BR-FUND-24 细则「红冲只按原单整笔」, B2-12b).
+   */
+  readonly reversal_kind?: 'REASSIGN_REV' | 'ADMIN_ADJUST_REV';
 }
 
 /**
@@ -293,8 +311,10 @@ export interface NegativeBalanceInput {
  * reversal that raises available, e.g. reversing a mistaken clawback -800 -> -400) are
  * permitted even when the result is still negative: credits offset the debt naturally.
  * A decrease ending below zero is permitted only for CLAWBACK, negative SETTLE_ADJUST /
- * ADMIN_ADJUST, or R14 reversals of the three credit types (trusted reversal_kind,
- * never a substring match; its key format belongs to B2-01i). An ordinary ':REVERSE'
+ * ADMIN_ADJUST, R14 reversals of the three credit types (trusted reversal_kind,
+ * never a substring match; its key format belongs to B2-01i), or the whole reversal
+ * `ADJ:{adjust_id}:REVERSE` of a manual ADMIN_ADJUST (trusted ADMIN_ADJUST_REV, sub_type one of
+ * RECON_FIX / PAYOUT_RECOVERY / ACCOUNT_CLOSED / OTHER; B2-12b). An ordinary ':REVERSE'
  * that decreases available below zero is refused, taking priority over the type list.
  * Any other decrease ending below zero (WITHDRAW_FEE etc.) is refused.
  * Malformed amounts, types or context fail closed (false).
@@ -308,11 +328,22 @@ export function mayGoNegative(input: NegativeBalanceInput): boolean {
   }
   if (typeof ledger_type !== 'string' || typeof uniq_key !== 'string') return false;
   if (sub_type !== null && typeof sub_type !== 'string') return false;
-  if (reversalKind !== undefined && reversalKind !== 'REASSIGN_REV') return false;
+  if (reversalKind !== undefined && !REVERSAL_KINDS.includes(reversalKind as string)) {
+    return false;
+  }
   if (resulting_available_fen >= 0n) return true;
   // Not decreasing available: later credits offset a negative balance (BR-FUND-10).
   if (available_delta_fen >= 0n) return true;
   if (reversalKind === 'REASSIGN_REV') return CREDIT_TYPES.includes(ledger_type);
+  if (reversalKind === 'ADMIN_ADJUST_REV') {
+    // BR-FUND-24 细则「红冲只按原单整笔」: only the whole reversal of a manual adjustment.
+    return (
+      ledger_type === 'ADMIN_ADJUST' &&
+      sub_type !== null &&
+      ADJUST_REVERSIBLE_SUB_TYPES.includes(sub_type) &&
+      ADJUST_REVERSE_KEY.test(uniq_key)
+    );
+  }
   if (uniq_key.endsWith(REVERSE_SUFFIX)) return false;
   return NEGATIVE_ALLOWED_TYPES.includes(ledger_type);
 }

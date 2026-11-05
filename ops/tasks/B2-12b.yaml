@@ -22,4 +22,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/ledger/admin-adjust-reverse/**'
   - 'test/spec/domain/ledger-adjust-reverse/**'
-status: todo
+status: done
+pr: 2381

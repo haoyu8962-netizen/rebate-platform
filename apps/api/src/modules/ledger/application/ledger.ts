@@ -57,7 +57,7 @@ export interface PostingVoucher {
   readonly orderKey: string | null;
   readonly beneficiaryUserId: string | null;
   readonly role: 'self' | 'share' | 'direct' | 'indirect' | null;
-  /** Trusted caller context, including R14 REASSIGN_REV; never inferred from uniqKey. */
+  /** Trusted caller context (R14 REASSIGN_REV, B2-12b ADMIN_ADJUST_REV); never inferred from uniqKey. */
   readonly voucherKind: string | null;
   readonly entries: readonly PostingEntry[];
 }
@@ -99,6 +99,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES: readonly (string | null)[] = ['self', 'share', 'direct', 'indirect', null];
 const INCOME_TYPES: readonly (string | null)[] = ['SERVICE_FEE', 'INCIDENTAL', null];
 const REASSIGN_REV = 'REASSIGN_REV';
+/** B2-12b: the adjustment flow's own whole reversal `ADJ:{adjust_id}:REVERSE` (BR-FUND-24). */
+const ADMIN_ADJUST_REV = 'ADMIN_ADJUST_REV';
+
+/** The trusted reversal context carried by a server-built voucher's voucherKind, exact match. */
+function trustedReversalKind(voucherKind: string | null): ReversalKind {
+  if (voucherKind === REASSIGN_REV) return REASSIGN_REV;
+  if (voucherKind === ADMIN_ADJUST_REV) return ADMIN_ADJUST_REV;
+  return undefined;
+}
 
 /**
  * Balance rows each open transaction locked through lockBalances, by transaction object and then
@@ -333,8 +342,11 @@ function computeWrite(
   return { before, after, version: before.version + 1n, negativeSince };
 }
 
-/** Trusted R14 context for mayGoNegative, or undefined (no reassignment exemption). */
-type ReversalKind = typeof REASSIGN_REV | undefined;
+/**
+ * Trusted context for mayGoNegative (R14 REASSIGN_REV, B2-12b ADMIN_ADJUST_REV), or undefined
+ * (no exemption).
+ */
+type ReversalKind = typeof REASSIGN_REV | typeof ADMIN_ADJUST_REV | undefined;
 
 /**
  * The posting service plus a module-internal entry for ordinary ':REVERSE' corrections
@@ -344,7 +356,8 @@ export interface PostingCore {
   readonly ledger: Ledger;
   /**
    * post() for a reversal voucher built inside this module. Same checks, savepoint and 23505
-   * read-back; the copied voucher_kind never grants the R14 REASSIGN_REV exemption (BR-FUND-10:
+   * read-back; the copied voucher_kind never grants the R14 REASSIGN_REV or the B2-12b
+   * ADMIN_ADJUST_REV exemption (BR-FUND-10:
    * an ordinary {原 uniq_key}:REVERSE may not leave available below zero).
    */
   postReversal(trx: Transaction<DB>, voucher: PostingVoucher): Promise<PostingResult>;
@@ -595,9 +608,7 @@ export function createPostingCore(input: PostingCoreOptions): PostingCore {
 
     async post(trx, voucher) {
       // Trusted caller context only (never inferred from uniqKey); read after the field checks.
-      return postChecked(trx, voucher, (v) =>
-        v.voucherKind === REASSIGN_REV ? REASSIGN_REV : undefined,
-      );
+      return postChecked(trx, voucher, (v) => trustedReversalKind(v.voucherKind));
     },
 
     async getBalances(db, selection) {

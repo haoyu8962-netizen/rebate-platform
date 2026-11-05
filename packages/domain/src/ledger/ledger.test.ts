@@ -82,3 +82,44 @@ it('[AC-B2-01h#39] REVERSE 原键含空分量拒绝，PLATFORM_FORFEIT 不带改
     uniqKey({ kind: 'PLATFORM_FORFEIT', order_key: 'jd:9', user_id: '7', role: 'indirect' }),
   ).toBe('jd:9:PLATFORM:FORFEIT:7:indirect');
 });
+
+const adjustReverse = (overrides: Partial<NegativeBalanceInput>): NegativeBalanceInput =>
+  negative({
+    ledger_type: 'ADMIN_ADJUST',
+    sub_type: 'OTHER',
+    uniq_key: 'ADJ:9001:REVERSE',
+    resulting_available_fen: -300n,
+    available_delta_fen: -500n,
+    reversal_kind: 'ADMIN_ADJUST_REV',
+    ...overrides,
+  });
+
+it('[AC-B2-12b#1] BR-FUND-24：受信调账红冲 kind 只放行 ADJ:{id}:REVERSE 的人工原因码扣负', () => {
+  expect(mayGoNegative(adjustReverse({}))).toBe(true);
+  expect(mayGoNegative(adjustReverse({ sub_type: 'PAYOUT_RECOVERY' }))).toBe(true);
+  expect(mayGoNegative(adjustReverse({ sub_type: 'RESTORE' }))).toBe(false);
+  expect(mayGoNegative(adjustReverse({ sub_type: null }))).toBe(false);
+  expect(mayGoNegative(adjustReverse({ uniq_key: 'ADJ:9001' }))).toBe(false);
+  expect(mayGoNegative(adjustReverse({ uniq_key: 'ADJ:a:b:REVERSE' }))).toBe(false);
+  expect(mayGoNegative(adjustReverse({ ledger_type: 'CLAWBACK' }))).toBe(false);
+});
+
+it('[AC-B2-12b#6] 两种受信 kind 不互借：REASSIGN_REV 不放行调账红冲，没带 kind 的调账红冲扣负拒绝', () => {
+  expect(mayGoNegative(adjustReverse({ reversal_kind: 'REASSIGN_REV' }))).toBe(false);
+  expect(
+    mayGoNegative(
+      negative({
+        ledger_type: 'ADMIN_ADJUST',
+        sub_type: 'OTHER',
+        uniq_key: 'ADJ:9001:REVERSE',
+        resulting_available_fen: -300n,
+        available_delta_fen: -500n,
+      }),
+    ),
+  ).toBe(false);
+  expect(
+    mayGoNegative(
+      negative({ ledger_type: 'REBATE_CREDIT', uniq_key: 'k', reversal_kind: 'ADMIN_ADJUST_REV' }),
+    ),
+  ).toBe(false);
+});
