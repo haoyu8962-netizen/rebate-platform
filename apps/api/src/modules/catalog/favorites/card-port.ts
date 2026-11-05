@@ -30,6 +30,8 @@ export function createFavoriteCardPort(options: FavoriteCardPortOptions): Favori
             itemRefs: options.itemRefs,
             upstream: options.upstream,
             reparse: false,
+            // B1-05ze: ProductCard.images is only on the detail route, never on a favorite card.
+            images: false,
             viewerContext,
             catalog: {
               // A favorite also names its platform: a mismatched key must fail before upstream.

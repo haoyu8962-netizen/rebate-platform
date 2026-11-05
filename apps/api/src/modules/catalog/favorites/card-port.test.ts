@@ -129,6 +129,19 @@ it('[AC-B1-28b#47] 真实取卡组合使用当前用户和原始商品 ID，登�
   expect(f.read).not.toHaveBeenCalled();
 });
 
+it('[AC-B1-05ze] 收藏卡不带 images：联盟详情有主图与多图时卡上也没有 images 键', async () => {
+  const f = setup();
+  f.detail.mockResolvedValue({
+    ...f.item,
+    main_image_url: 'https://img.example.test/favorite/main.jpg',
+    image_urls: ['https://img.example.test/favorite/g1.jpg'],
+  });
+  const result = await createFavoriteCardPort(f.options).fetch(request);
+  expect(result.kind).toBe('card');
+  expect(result).not.toHaveProperty('card.images');
+  expect(favoriteCardView(result).productCard).not.toHaveProperty('images');
+});
+
 it('[AC-B1-28b#48] retrieval 价格异常不报价、不发引用、不登记 link，并记录 retrieval 场景', async () => {
   const f = setup();
   f.detail.mockResolvedValue({ ...f.item, price_status: 'anomaly' });

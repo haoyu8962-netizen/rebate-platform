@@ -20,6 +20,7 @@ import {
 import type { CatalogCardEntry, CatalogCardResult } from './application/card-entry.ts';
 import type { ItemRefService } from './application/item-ref.ts';
 import type { PoolReader } from './application/pool-read.ts';
+import { detailImages, type DetailImage } from './domain/detail-images.ts';
 import { CatalogError, isFresh } from './domain/rules.ts';
 import type { Catalog, ProductCapabilities, ProductRef, RequestRawRef } from './domain/types.ts';
 import type { CatalogConfigReader, ViewerContext } from './ports.ts';
@@ -115,6 +116,12 @@ export interface ProductDetailOptions {
    * no union call: a favorites page reads many cards and must not spend one title search on each.
    */
   readonly reparse?: boolean;
+  /**
+   * B1-05ze (FU-DETAIL-GALLERY, CT-26o): false leaves `images` off the card. ProductCard.images is
+   * only on GET /v1/products/{product_key}; another caller reusing this use case (favorites) is
+   * not the detail route. Absent means the detail route: the card carries images.
+   */
+  readonly images?: boolean;
 }
 
 export type ProductDetailData = components['schemas']['ProductResponse']['data'];
@@ -223,6 +230,18 @@ function issuedCard(result: CatalogCardResult): ProductDetailData {
   }
 }
 
+/**
+ * B1-05ze: the detail card with its images (contract ProductCard.images, only on the detail route);
+ * unchanged when the caller opted out.
+ */
+function withImages(
+  card: ProductDetailData,
+  images: DetailImage[],
+  options: Pick<ProductDetailOptions, 'images'>,
+): ProductDetailData {
+  return options.images === false ? card : { ...card, images };
+}
+
 export async function getProduct(
   query: ProductDetailQuery,
   options: ProductDetailOptions,
@@ -316,7 +335,7 @@ export async function getProduct(
       // Read now, not `reparsing`: the row may have aged out while the union timed out.
       const pooled = await options.poolReader?.detail(appId, productKey);
       if (pooled !== null && pooled !== undefined) {
-        return issuedCard(
+        const card = issuedCard(
           await cards.assemble({
             item: pooled.item,
             ref: pooled.ref,
@@ -325,6 +344,14 @@ export async function getProduct(
             stale: true,
             scene: 'active_query',
           }),
+        );
+        // B1-05ze: the pool row keeps only the main image of its listing; nothing is added from
+        // elsewhere, so the images are [main] or [].
+        const main = pooled.item.main_image_url;
+        return withImages(
+          card,
+          detailImages(main === undefined ? {} : { main_image_url: main }),
+          options,
         );
       }
     }
@@ -403,7 +430,8 @@ export async function getProduct(
     stale: STALE_DETAILS.has(item),
     scene: 'active_query',
   });
-  const card = issuedCard(result);
+  // B1-05ze: a cache hit or a stale entry is the same UnionItemDetail, so it reads the same way.
+  const card = withImages(issuedCard(result), detailImages(item), options);
   // BR-PROD-11: a valid tapped token that supplied this call's raw ID goes back unchanged (原样
   // 透传), even if the union now reports another raw ID for the same key; otherwise the card's
   // freshly issued token stands.

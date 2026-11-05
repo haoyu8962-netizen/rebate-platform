@@ -279,3 +279,42 @@ describe('getProduct: BR-PROD-05 ③ of a key with a pool row (B1-05r)', () => {
     expect(f.getItem).not.toHaveBeenCalled();
   });
 });
+
+describe('getProduct: card images (B1-05ze, FU-DETAIL-GALLERY)', () => {
+  const MAIN = 'https://img.example.test/unit/main.jpg';
+  const EXTRA = 'https://img.example.test/unit/extra.jpg';
+
+  it('[AC-B1-05ze] 详情卡带 images：主图在前、多图去重，item_ref 原样透传时仍在', async () => {
+    const f = setup(async () => item({ main_image_url: MAIN, image_urls: [EXTRA, MAIN, EXTRA] }));
+    const issued = f.issue(RAW_ID);
+    const card = await getProduct({ product_key: PRODUCT_KEY, item_ref: issued }, f.options);
+    expect(card.item_ref).toBe(issued);
+    expect(card.images).toEqual([{ url: MAIN }, { url: EXTRA }]);
+  });
+
+  it('[AC-B1-05ze] 池回退只用池行主图：池里的详情即便带多图也不补', async () => {
+    const pooled = poolCandidate();
+    const f = reparseSetup(
+      { ...pooled, item: { ...pooled.item, main_image_url: MAIN, image_urls: [EXTRA] } },
+      { search: () => Promise.reject(new UnionError('rate_limited', 'x', 'taobao')) },
+    );
+    const card = await f.run();
+    expect(card.stale).toBe(true);
+    expect(card.images).toEqual([{ url: MAIN }]);
+  });
+
+  it('[AC-B1-05ze] 池回退池行无主图 → images 为 []', async () => {
+    const f = reparseSetup(poolCandidate(), {
+      search: () => Promise.reject(new UnionError('rate_limited', 'x', 'taobao')),
+    });
+    const card = await f.run();
+    expect(card.stale).toBe(true);
+    expect(card.images).toEqual([]);
+  });
+
+  it('[AC-B1-05ze] images: false 的调用方（非详情路由）卡上没有 images 键', async () => {
+    const f = setup(async () => item({ main_image_url: MAIN, image_urls: [EXTRA] }));
+    const card = await getProduct({ product_key: PRODUCT_KEY }, { ...f.options, images: false });
+    expect(Object.hasOwn(card, 'images')).toBe(false);
+  });
+});

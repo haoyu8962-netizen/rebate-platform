@@ -1,0 +1,100 @@
+{
+  "task": "B1-05ze",
+  "spec_ref": "ea202ff627fffc14a6622d72b4d7bc292ff06158",
+  "spec_commit": "358e56a500f64200b14c4df72863ddf4bbb0dde5",
+  "red_tests": [
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#3] 详情卡带 images：主图 + 12 张多图（2 重复、1 同主图）恰 9 张，主图在首、顺序同联盟、无重复",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#4] 主图缺省只用多图（3 张原样原序），卡片主图字段仍为 null",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#5] 联盟没给任何图时 images 为 []，键仍在",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#6] 命中缓存 时同一份详情照样带 images",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#6] 联盟故障用过期缓存 时同一份详情照样带 images",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#7] 联盟查不到走池回退：池行存了主图，只用池里的主图，不从别处补",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#7] 联盟查不到走池回退：池行没有主图，只用池里的主图，不从别处补",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#8] 带 item_ref 原样透传、带 from_link_id 时 images 照样按同一取法",
+    "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#9] 只有详情卡带 images：同样带多图的搜索卡没有 images 键",
+    "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#1] 主图在前、多图按联盟原顺序、截断前去重、地址原样，恰 9 张",
+    "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 主图缺省只用多图",
+    "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 只有主图",
+    "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 主图 + 空多图",
+    "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 都没有",
+    "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 多图只有主图本身"
+  ],
+  "risk_note": "RV2 by path (catalog favorites card port in the ledger paths). FU-DETAIL-GALLERY, contract CT-26o (#2389): getProduct adds ProductCard.images: main image first, the union's extra images in their order, deduplicated before the cut, at most 9, addresses unchanged, [] when there is none; a cache or stale detail uses the same UnionItemDetail; the pool fallback gives only the main image stored with the pool row ([main] or []); search, sections, parse and favourites carry no images (favorites/card-port.ts passes images: false to getProduct). No amount, no migration, no contract change.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "358e56a500f64200b14c4df72863ddf4bbb0dde5",
+      "tree": "2aa0f6629ce7e8dcb5b500da32a2827e70094cfd",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-05T17:33:36Z",
+      "finished_at": "2026-11-05T17:33:51Z",
+      "red_tests": [
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#3] 详情卡带 images：主图 + 12 张多图（2 重复、1 同主图）恰 9 张，主图在首、顺序同联盟、无重复",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#4] 主图缺省只用多图（3 张原样原序），卡片主图字段仍为 null",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#5] 联盟没给任何图时 images 为 []，键仍在",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#6] 命中缓存 时同一份详情照样带 images",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#6] 联盟故障用过期缓存 时同一份详情照样带 images",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#7] 联盟查不到走池回退：池行存了主图，只用池里的主图，不从别处补",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#7] 联盟查不到走池回退：池行没有主图，只用池里的主图，不从别处补",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#8] 带 item_ref 原样透传、带 from_link_id 时 images 照样按同一取法",
+        "test/spec/catalog/detail-gallery/detail-card.test.ts > [AC-B1-05ze#9] 只有详情卡带 images：同样带多图的搜索卡没有 images 键",
+        "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#1] 主图在前、多图按联盟原顺序、截断前去重、地址原样，恰 9 张",
+        "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 主图缺省只用多图",
+        "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 只有主图",
+        "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 主图 + 空多图",
+        "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 都没有",
+        "test/spec/catalog/detail-gallery/detail-images.test.ts > [AC-B1-05ze#2] 多图只有主图本身"
+      ],
+      "expected": [
+        "test/spec/catalog/detail-gallery/detail-card.test.ts",
+        "test/spec/catalog/detail-gallery/detail-images.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "2d9dde93697bbbec594f0d582432a81a287488e8dcef7ed13d81ed2b0c1d0c83"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: the whole change, the ProductCard.images contract and the detail and favourites call chains. Static only. The task is RV2 by path (favorites), so a money review was required."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context in one attempt (test/spec/catalog/detail-gallery/, 15 tests in 2 files red at the base for the right reason). Round 1 pass with one S2. Known gap recorded as FU-DETAIL-CACHE-IMAGES: the real Redis detail cache stores neither main_image_url nor image_urls, so a real cache hit has no images; the rule tests pin the same UnionItemDetail giving the same images."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "10947be94c36958efddf3021b94c69752f8f98a6",
+    "specs": "f6611d7d90abc934c721b97452f8a8c5c35d082b"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
