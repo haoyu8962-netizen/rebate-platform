@@ -1,0 +1,20 @@
+id: B1-05zf
+repo: rebate-platform
+title: 商品缓存补存卡片会读的字段（FU-DETAIL-CACHE-IMAGES）——主图、多图、店铺名、一级类目；命中缓存与未命中时详情卡、搜索卡一致
+type: impl
+# 2026-11-06 be 入账（编排 11-05 22:2x 批、22:27 并入 shop_name，D10-677 排在 B1-05ze 之后、S 系列之前）。catalog/infra/product-cache.ts 的 storeItem / loadItem 只存 ITEM_STRINGS 与 ITEM_AMOUNTS，漏了 UnionItem / UnionItemDetail 里卡片会读的 shop_name（B1-04zzg）、category_l1_id / category_l1_name、main_image_url（B1-04zzf 搜索卡主图、详情卡主图）、image_urls（B1-05ze 多图）。命中缓存时这些都丢：详情无图无店名、搜索卡无图。
+# 改法：缓存补存这五个字段，有则原样、缺则不带（image_urls 存字符串数组，读回时元素须全是字符串，否则当缓存坏条目处理、照现有坏条目口径回源）；其余字段与 TTL、命中 / 过期判定不变；旧条目缺这些字段照常读出（随过期自然替换），不迁移。缓存仍只存联盟公开数据，不存卡片、报价、链接。
+# 规则测试钉：同一联盟答复，缓存命中与未命中时详情卡的 image / images / shop_name 相同、搜索卡的 image / shop_name 相同；旧条目（无新字段）命中时不报错、字段缺省；image_urls 坏值回源。RV1（catalog）。
+refs: []
+refs_hash: {}
+deps: [B1-05ze]
+paths:
+  - 'apps/api/src/modules/catalog/infra/product-cache{.ts,.test.ts}'
+  - 'test/spec/catalog/cache-card-fields/**'
+test_paths:
+  - 'test/spec/catalog/cache-card-fields/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
