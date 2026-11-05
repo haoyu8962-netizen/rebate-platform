@@ -10,7 +10,12 @@
 import { InvalidAmount, parseFen, subFen } from '@couli/money';
 import { normalizeItemImages } from '../../domain/item-images.ts';
 import type { PriceAnomalyReason } from '../../domain/taobao-price.ts';
-import { UnionError, type ItemRef, type UnionItemDetail } from '../../domain/types.ts';
+import {
+  shopNameField,
+  UnionError,
+  type ItemRef,
+  type UnionItemDetail,
+} from '../../domain/types.ts';
 
 export const PDD_GOODS_SEARCH = 'pdd.ddk.goods.search';
 export const PDD_GOODS_DETAIL = 'pdd.ddk.goods.detail';
@@ -267,6 +272,8 @@ export function mapPddGoods(
   const base = {
     ...ref,
     title,
+    // B1-04zzg：店铺名只取 mall_name，不用 mall_id / 标题 / 卖家昵称补。
+    ...shopNameField(field(row, 'mall_name')),
     commission_rate_bp: commission,
     quoted_at: now.toISOString(),
     ...(typeof description === 'string' ? { description } : {}),

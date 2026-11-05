@@ -63,10 +63,6 @@ function nonEmpty(value: string | null | undefined): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-/**
- * TODO(规划/11 §4.5): 店铺名 — blocked on 联盟 DTO 增加店铺名字段（union/domain/types.ts UnionItem
- * 目前没有店铺名）
- */
 export function createCatalogProductReader(
   options: CatalogProductReaderOptions,
 ): CatalogProductReader {
@@ -96,7 +92,13 @@ export function createCatalogProductReader(
     }
     if (item.platform !== platform) return EMPTY;
     // B1-05za: only the main image; image_urls never stands in for it.
-    return { ...EMPTY, title: nonEmpty(item.title), image: nonEmpty(item.main_image_url) };
+    // B1-04zzg: the adapter's official shop name, already trimmed; absent → null.
+    return {
+      ...EMPTY,
+      title: nonEmpty(item.title),
+      image: nonEmpty(item.main_image_url),
+      shopName: nonEmpty(item.shop_name),
+    };
   }
 
   return {

@@ -48,7 +48,7 @@ import { addFen, pctStrToBp } from '@couli/money';
 import type { Clock } from '../../../platform/index.ts';
 import { normalizeItemImages } from '../../domain/item-images.ts';
 import { isPriceAnomaly, type PriceAnomalyReason } from '../../domain/taobao-price.ts';
-import { UnionError, type UnionItemDetail } from '../../domain/types.ts';
+import { shopNameField, UnionError, type UnionItemDetail } from '../../domain/types.ts';
 import type { DataokeParameters } from '../dataoke/dataoke-client.ts';
 import type { TaobaoWarning } from './response.ts';
 
@@ -346,6 +346,8 @@ export function mapDataokeSearchItem(
     platform: 'taobao',
     item_id: itemId,
     title,
+    // B1-04zzg：店铺名只取 data.list[].shopName，换算详情的 shop_title 不补。
+    ...shopNameField(row.shopName),
     // 价格异常：三价 0n 占位（不出截断值、不出部分价格），出不出卡由 catalog 决定。
     price_fen: price.status === 'ok' ? price.price : 0n,
     coupon_fen: price.status === 'ok' ? price.coupon : 0n,

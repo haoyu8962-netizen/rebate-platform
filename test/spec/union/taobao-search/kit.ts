@@ -464,6 +464,7 @@ export const ALLOWED_ITEM_KEYS: ReadonlySet<string> = new Set([
   'price_anomaly_reason',
   'main_image_url',
   'image_urls',
+  'shop_name',
 ]);
 
 /** The synthetic number behind a returned item: from its 凑狸 item_id. */

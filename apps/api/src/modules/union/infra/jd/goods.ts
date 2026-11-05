@@ -10,7 +10,12 @@
 import { parseYuanToFen } from '@couli/domain';
 import { InvalidRatio, pctStrToBp, subFen } from '@couli/money';
 import type { PriceAnomalyReason } from '../../domain/taobao-price.ts';
-import { UnionError, type ItemRef, type UnionItemDetail } from '../../domain/types.ts';
+import {
+  shopNameField,
+  UnionError,
+  type ItemRef,
+  type UnionItemDetail,
+} from '../../domain/types.ts';
 import { scalarText, type JdProductKeyMode } from './orders.ts';
 import {
   JdRawNumber,
@@ -325,7 +330,13 @@ export function mapJdGoods(input: unknown, page: JdGoodsPage): UnionItemDetail {
   const title = nonBlank(field(row, 'skuName'));
   if (title === undefined) throw invalid('skuName must be a non-empty string');
   // B1-22s：图片在实测前不映射，imageInfo 不读。
-  const base = { ...ref, title, quoted_at: page.now.toISOString() };
+  // B1-04zzg：店铺名只取 shopInfo.shopName，商品项顶层的同名键不读。
+  const base = {
+    ...ref,
+    title,
+    ...shopNameField(field(recordField(row, 'shopInfo'), 'shopName')),
+    quoted_at: page.now.toISOString(),
+  };
   const price = jdPrice(row, page.now.getTime());
   if (price.status === 'anomaly') return anomalyItem(base, price.reason, page.warn);
   const commission = commissionBp(field(recordField(row, 'commissionInfo'), 'commissionShare'));

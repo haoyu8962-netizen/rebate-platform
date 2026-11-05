@@ -81,6 +81,16 @@ describe('catalog read-only product port (B1-06j landing card)', () => {
     });
   });
 
+  it('[AC-B1-04zzg] the union detail shop name is passed through; absent stays null', async () => {
+    const named = fixture({
+      stored: null,
+      detail: async () => unionItem({ shop_name: '合成单测店' }),
+    });
+    await expect(named.reader.read(QUERY)).resolves.toMatchObject({ shopName: '合成单测店' });
+    const unnamed = fixture({ stored: null });
+    await expect(unnamed.reader.read(QUERY)).resolves.toMatchObject({ shopName: null });
+  });
+
   it('[AC-B1-06j] jd mode defaults to item when unset', async () => {
     const f = fixture({ stored: null });
     await f.reader.read(QUERY);

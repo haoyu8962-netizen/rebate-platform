@@ -106,6 +106,24 @@ describe('createCardAssembler guards', () => {
     expect(register).not.toHaveBeenCalled();
   });
 
+  it('[AC-B1-04zzg] the card shop_name is the item shop name, or null when absent', async () => {
+    const { service } = setup();
+    const named = await service.assemble({
+      item: item({ shop_name: '合成单测店' }),
+      ref,
+      entrySource: 'search',
+      stale: false,
+    });
+    expect(named.shop_name).toBe('合成单测店');
+    const unnamed = await service.assemble({
+      item: item(),
+      ref,
+      entrySource: 'search',
+      stale: false,
+    });
+    expect(unnamed.shop_name).toBeNull();
+  });
+
   it('[AC-B1-05f] refuses a product ref of another app scope', async () => {
     const { service } = setup();
     await expect(

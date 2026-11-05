@@ -187,6 +187,8 @@ export function createCardAssembler(options: CardAssemblerOptions): CardAssemble
       platform: item.platform,
       shop_type: ref.shopType,
       title: item.title,
+      // B1-04zzg：只用适配器给的官方店铺名；没有就是 null，不从标题或店铺 ID 补。
+      shop_name: item.shop_name ?? null,
       // B1-04zzf：只用适配器经 normalizeItemImages 清洗后的主图；不从 image_urls 补，不伪造。
       image: item.main_image_url ?? null,
       price_fen: json(item.price_fen),

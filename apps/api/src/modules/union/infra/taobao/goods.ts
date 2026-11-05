@@ -14,7 +14,12 @@ import {
   type TaobaoPriceOptions,
   type TaobaoPromotion,
 } from '../../domain/taobao-price.ts';
-import { UnionError, type ItemRef, type UnionItemDetail } from '../../domain/types.ts';
+import {
+  shopNameField,
+  UnionError,
+  type ItemRef,
+  type UnionItemDetail,
+} from '../../domain/types.ts';
 
 export const TAOBAO_ITEM_DETAIL = 'taobao.tbk.item.info.upgrade.get';
 /** 按同族已录外层键 tbk_*_response 登记（TODO 待详情录制核对）。 */
@@ -213,6 +218,8 @@ export function mapTaobaoDetail(
     platform: 'taobao',
     item_id: itemId,
     title,
+    // B1-04zzg：店铺名只取 item_basic_info.shop_title，不从 nick / seller_nick 等补。
+    ...shopNameField(field(basic, 'shop_title')),
     price_fen: result.price_fen,
     coupon_fen: result.coupon_fen,
     final_price_fen: result.final_price_fen,

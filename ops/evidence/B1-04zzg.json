@@ -1,0 +1,98 @@
+{
+  "risk_note": "RV2 by path (union adapters, test/spec). Shop names on product cards and in the detail summary: every adapter maps only its official shop-name field (taobao official search and detail item_basic_info.shop_title, dataoke shopName, JD shopInfo.shopName, PDD mall_name) through one rule shopNameField (trimmed, empty means absent, never filled from nick, title or shop id); card-assembler sets ProductCard.shop_name (null when absent) and product-reader's summary carries it. No amounts, quotes or links change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh. Round 1 pass, no findings. Static, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (test/spec/catalog/shop-name, 14 tests; r3 fixed one import path that failed to load). Spec-test review by a fresh independent Claude context via tools/agent/claude-run.sh, round 1 pass, no findings. One frozen change (D10-639 甲, #24): test/spec/union/taobao-search/kit.ts ALLOWED_ITEM_KEYS gains the single entry 'shop_name' (the dataoke sample row carries shopName); every other line unchanged and mapping.test.ts:41 / :65 keep their exact per-key checks. The four files reading kit.ts were not in the red run's expected list (unchanged), so no red_exempt was needed.",
+    "red_exempt_confirmed": false
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#1] 淘宝官方搜索只取 item_basic_info.shop_title，空值不从昵称或换算详情补",
+    "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#2] 淘宝详情 upgrade.get 的 results 包装项只取 item_basic_info.shop_title",
+    "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#3] 大淘客搜索只取 data.list 的 shopName，保留内部空格，不拿换算详情补空值",
+    "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#4] 京东 search 只取 data 商品项的 shopInfo.shopName，无值不补",
+    "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#5] 京东 detail 只取 data 商品项的 shopInfo.shopName，无值不补",
+    "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#6] 拼多多 search 只取 mall_name，不把 mall_id、标题或卖家昵称当店名",
+    "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#7] 拼多多 detail 只取 mall_name，不把 mall_id、标题或卖家昵称当店名",
+    "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#8] taobao 真实 card-assembler 输出店名，缺省显式 null，不用标题或店铺 ID 补",
+    "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#9] jd 真实 card-assembler 输出店名，缺省显式 null，不用标题或店铺 ID 补",
+    "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#10] pdd 真实 card-assembler 输出店名，缺省显式 null，不用标题或店铺 ID 补",
+    "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#11] getProduct 真实详情卡保留当前 DTO 店名，后续缺失为 null",
+    "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#12] taobao product-reader 联盟详情摘要有店名则原样，无则 null",
+    "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#13] jd product-reader 联盟详情摘要有店名则原样，无则 null",
+    "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#14] pdd product-reader 联盟详情摘要有店名则原样，无则 null"
+  ],
+  "task": "B1-04zzg",
+  "spec_commit": "c49610d597843de74880fb5409a1369865fb7348",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c49610d597843de74880fb5409a1369865fb7348",
+      "tree": "1cd83e437dd1a0ba7c4aaaaabb8937dbd1f1f755",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-05T08:54:12Z",
+      "finished_at": "2026-11-05T08:54:24Z",
+      "red_tests": [
+        "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#1] 淘宝官方搜索只取 item_basic_info.shop_title，空值不从昵称或换算详情补",
+        "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#2] 淘宝详情 upgrade.get 的 results 包装项只取 item_basic_info.shop_title",
+        "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#3] 大淘客搜索只取 data.list 的 shopName，保留内部空格，不拿换算详情补空值",
+        "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#4] 京东 search 只取 data 商品项的 shopInfo.shopName，无值不补",
+        "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#5] 京东 detail 只取 data 商品项的 shopInfo.shopName，无值不补",
+        "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#6] 拼多多 search 只取 mall_name，不把 mall_id、标题或卖家昵称当店名",
+        "test/spec/catalog/shop-name/adapters.test.ts > [AC-B1-04zzg#7] 拼多多 detail 只取 mall_name，不把 mall_id、标题或卖家昵称当店名",
+        "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#8] taobao 真实 card-assembler 输出店名，缺省显式 null，不用标题或店铺 ID 补",
+        "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#9] jd 真实 card-assembler 输出店名，缺省显式 null，不用标题或店铺 ID 补",
+        "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#10] pdd 真实 card-assembler 输出店名，缺省显式 null，不用标题或店铺 ID 补",
+        "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#11] getProduct 真实详情卡保留当前 DTO 店名，后续缺失为 null",
+        "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#12] taobao product-reader 联盟详情摘要有店名则原样，无则 null",
+        "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#13] jd product-reader 联盟详情摘要有店名则原样，无则 null",
+        "test/spec/catalog/shop-name/catalog.test.ts > [AC-B1-04zzg#14] pdd product-reader 联盟详情摘要有店名则原样，无则 null"
+      ],
+      "expected": [
+        "test/spec/catalog/shop-name/adapters.test.ts",
+        "test/spec/catalog/shop-name/catalog.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "6d19f44e344fc904d2d2588e836cd26b55ad09ecd9c828bd4dbdb4e189457a54"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8bab317daa68f9ecab88008187c373907a7e563f",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  }
+}

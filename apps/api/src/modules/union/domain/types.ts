@@ -164,6 +164,8 @@ export interface ItemRef {
 /** BR-PRICE-01 three price fields in integer fen, commission rate in bp, fetch time. */
 export interface UnionItem extends ItemRef {
   readonly title: string;
+  /** B1-04zzg：只取上游官方店铺名，去首尾空白；缺失或空白时不填，不从其他字段补。 */
+  readonly shop_name?: string;
   readonly price_fen: bigint;
   readonly coupon_fen: bigint;
   readonly final_price_fen: bigint;
@@ -180,6 +182,18 @@ export interface UnionItem extends ItemRef {
   readonly category_l1_id?: string;
   /** B1-04l: the union's level-one category name as given (Taobao level_one_category_name). */
   readonly category_l1_name?: string;
+}
+
+/**
+ * B1-04zzg (FU-DETAIL-SHOP-NAME): the one rule every adapter uses for its official shop-name field.
+ * A string trimmed of leading / trailing whitespace when non-empty → `{ shop_name }`; empty, blank,
+ * non-string or missing → `{}` (the key stays absent). Callers pass only the platform's official
+ * field — never a nick, seller nick, title or shop id as a fallback.
+ */
+export function shopNameField(value: unknown): { readonly shop_name?: string } {
+  if (typeof value !== 'string') return {};
+  const name = value.trim();
+  return name === '' ? {} : { shop_name: name };
 }
 
 export interface UnionItemDetail extends UnionItem {
