@@ -2,7 +2,13 @@ import { expect, it, vi } from 'vitest';
 import { FixedClock, GovernanceError, type RedisNamespace } from '../../platform/index.ts';
 import type { UnionItemDetail } from '../../union/index.ts';
 import type { ProductDetailUpstream } from '../detail.ts';
-import { cacheDetailUpstream, normalizeKeyword } from './product-cache.ts';
+import {
+  Unreadable,
+  cacheDetailUpstream,
+  loadItem,
+  normalizeKeyword,
+  storeItem,
+} from './product-cache.ts';
 
 const NOW = '2026-10-08T12:00:00+08:00';
 
@@ -122,4 +128,121 @@ it('[BR-PROD-07] 重解析写入的条目记住原串：下一次带 product_ref
   clock.advanceMs(60_001);
   await expect(upstream.detail(next)).resolves.toMatchObject({ title: 'synthetic' });
   expect(detail).toHaveBeenCalledTimes(2);
+});
+
+const CARD = {
+  shop_name: 'synthetic 旗舰店 Ａ&B',
+  category_l1_id: '16',
+  category_l1_name: 'synthetic category',
+  main_image_url: 'https://img.synthetic.invalid/main.JPG?v=2',
+  image_urls: [
+    'https://img.synthetic.invalid/g1.jpg',
+    'https://img.synthetic.invalid/main.JPG?v=2',
+    'https://img.synthetic.invalid/g1.jpg',
+  ],
+} as const;
+const CARD_KEYS = Object.keys(CARD);
+
+/** storeItem → JSON text → loadItem, the way the decorators round-trip an entry. */
+function roundTrip(input: UnionItemDetail): UnionItemDetail {
+  return loadItem(JSON.parse(JSON.stringify(storeItem(input))));
+}
+
+it('[AC-B1-05zf#2] storeItem / loadItem 原样存取卡片五字段（多图顺序与重复不变）', () => {
+  const rich = { ...item(), ...CARD, image_urls: [...CARD.image_urls] };
+  const stored = storeItem(rich);
+  for (const key of CARD_KEYS) expect(stored[key]).toEqual(CARD[key as keyof typeof CARD]);
+  const loaded = roundTrip(rich);
+  expect(loaded).toMatchObject({ ...CARD, image_urls: [...CARD.image_urls], title: 'synthetic' });
+  expect(loaded.price_fen).toBe(100n);
+});
+
+it('[AC-B1-05zf#3] 联盟没给的卡片字段不存、读出也不带键；只给部分时只存那部分', () => {
+  const bare = storeItem(item());
+  for (const key of CARD_KEYS) expect(Object.hasOwn(bare, key)).toBe(false);
+  const loaded = roundTrip(item());
+  for (const key of CARD_KEYS) expect(Object.hasOwn(loaded, key)).toBe(false);
+  const partial = roundTrip({ ...item(), main_image_url: CARD.main_image_url, image_urls: [] });
+  expect(partial.main_image_url).toBe(CARD.main_image_url);
+  expect(partial.image_urls).toEqual([]);
+  for (const key of ['shop_name', 'category_l1_id', 'category_l1_name']) {
+    expect(Object.hasOwn(partial, key)).toBe(false);
+  }
+});
+
+it('[AC-B1-05zf#4] 只有原字段的旧条目照常读出', () => {
+  const old = {
+    platform: 'taobao',
+    item_id: 'synthetic-raw',
+    title: 'synthetic',
+    quoted_at: NOW,
+    price_fen: '100',
+    coupon_fen: '0',
+    final_price_fen: '100',
+    commission_rate_bp: '1000',
+  };
+  const loaded = loadItem(old);
+  expect(loaded).toMatchObject({ title: 'synthetic', final_price_fen: 100n });
+  for (const key of CARD_KEYS) expect(Object.hasOwn(loaded, key)).toBe(false);
+});
+
+const SOME_URL = 'https://img.synthetic.invalid/main.jpg';
+
+it.each<{ name: string; patch: Record<string, unknown> }>([
+  { name: 'shop_name 为数字', patch: { shop_name: 7 } },
+  { name: 'shop_name 为 null', patch: { shop_name: null } },
+  { name: 'category_l1_id 为数字', patch: { category_l1_id: 16 } },
+  { name: 'category_l1_name 为对象', patch: { category_l1_name: { name: 'x' } } },
+  { name: 'main_image_url 为数组', patch: { main_image_url: [SOME_URL] } },
+  { name: 'image_urls 为字符串', patch: { image_urls: SOME_URL } },
+  { name: 'image_urls 为 null', patch: { image_urls: null } },
+  { name: 'image_urls 为对象', patch: { image_urls: { 0: SOME_URL } } },
+  { name: 'image_urls 含数字', patch: { image_urls: [SOME_URL, 7] } },
+  { name: 'image_urls 含 null', patch: { image_urls: [null] } },
+  { name: 'image_urls 含嵌套数组', patch: { image_urls: [[SOME_URL]] } },
+])('[AC-B1-05zf#5] 卡片字段类型不对（$name）按坏条目抛 Unreadable', ({ patch }) => {
+  const stored = { ...storeItem(item()), ...patch };
+  expect(() => loadItem(stored)).toThrow(Unreadable);
+});
+
+it('[AC-B1-05zf#5] 详情条目 image_urls 坏值当未命中：回源并以新答复覆盖条目', async () => {
+  const clock = new FixedClock(NOW);
+  const rows = new Map<string, string>();
+  const redis: RedisNamespace = {
+    get: async (key) => rows.get(key) ?? null,
+    set: async (key, value) => {
+      rows.set(key, value);
+    },
+    eval: async () => {
+      throw new Error('no Lua on the product cache');
+    },
+  };
+  const fresh = { ...item(), image_urls: ['https://img.synthetic.invalid/fresh.jpg'] };
+  const detail = vi.fn<ProductDetailUpstream['detail']>(async () => fresh);
+  const upstream = cacheDetailUpstream(
+    { detail },
+    { redis, clock, config: { configValue: async () => null } },
+  );
+  const key = 'synthetic_app:product:tb:synthetic';
+  rows.set(
+    key,
+    JSON.stringify({
+      v: 1,
+      fetched_at_ms: clock.now().getTime(),
+      data: { ...storeItem(item()), image_urls: ['ok', 7], requested_raw_item_id: null },
+    }),
+  );
+  const request = {
+    appId: 'synthetic_app',
+    productKey: 'tb:synthetic',
+    platform: 'taobao' as const,
+  };
+  await expect(upstream.detail(request)).resolves.toMatchObject({
+    image_urls: ['https://img.synthetic.invalid/fresh.jpg'],
+  });
+  expect(detail).toHaveBeenCalledTimes(1);
+  const written = JSON.parse(rows.get(key)!) as { data: Record<string, unknown> };
+  expect(written.data['image_urls']).toEqual(['https://img.synthetic.invalid/fresh.jpg']);
+  await upstream.detail(request);
+  expect(detail).toHaveBeenCalledTimes(1);
 });

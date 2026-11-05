@@ -2,7 +2,9 @@
 // use cases' upstream ports. The cache holds the union's normalized public data only (title,
 // price, coupon, commission rate, quoted_at, the raw IDs needed to look the item up again) plus
 // fetched_at, the server receipt instant of the union response. Cards, quotes, links and item_refs
-// are assembled per request by the callers, never cached.
+// are assembled per request by the callers, never cached. B1-05zf: the card source fields the union
+// gave (shop_name, category_l1_id / _name, main_image_url, image_urls) are kept as is; absent ones
+// stay absent, and a stored one of the wrong type makes the entry unreadable (a miss).
 //   hit:    now − fetched_at ≤ search.cache_ttl_sec (default 300 s), quoted_at unchanged;
 //   stale:  on a union dependency failure, an entry with now − fetched_at ≤
 //           search.cache.stale_max_age_s (default 300 s, at most the physical TTL) is returned
@@ -120,6 +122,10 @@ const ITEM_STRINGS = [
   'price_anomaly_reason',
   'description',
 ] as const;
+/** Optional card source strings (B1-05zf): stored only when the union gave a string. */
+const CARD_STRINGS = ['shop_name', 'category_l1_id', 'category_l1_name', 'main_image_url'] as const;
+/** Optional card source list (B1-05zf): an array of strings, order and repeats kept. */
+const CARD_LIST = 'image_urls';
 const ITEM_AMOUNTS = ['price_fen', 'coupon_fen', 'final_price_fen', 'commission_rate_bp'] as const;
 const REF_STRINGS = [
   'appId',
@@ -148,7 +154,17 @@ export function storeItem(item: UnionItem): Json {
     if (typeof value === 'string' || value === null) out[name] = value;
   }
   for (const name of ITEM_AMOUNTS) out[name] = String(source[name]);
+  for (const name of CARD_STRINGS) {
+    const value = source[name];
+    if (typeof value === 'string') out[name] = value;
+  }
+  const list = source[CARD_LIST];
+  if (isStringList(list)) out[CARD_LIST] = [...list];
   return out;
+}
+
+function isStringList(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry: unknown) => typeof entry === 'string');
 }
 
 /** A stored value of another shape; readers treat it as a miss. */
@@ -167,6 +183,18 @@ export function loadItem(value: unknown): UnionItemDetail {
     const field = value[name];
     if (typeof field !== 'string' || !/^-?\d+$/.test(field)) throw new Unreadable();
     out[name] = BigInt(field);
+  }
+  // Entries written before B1-05zf lack the card fields; absent stays absent.
+  for (const name of CARD_STRINGS) {
+    const field = value[name];
+    if (field === undefined) continue;
+    if (typeof field !== 'string') throw new Unreadable();
+    out[name] = field;
+  }
+  const list = value[CARD_LIST];
+  if (list !== undefined) {
+    if (!isStringList(list)) throw new Unreadable();
+    out[CARD_LIST] = [...list];
   }
   if (typeof out['title'] !== 'string' || typeof out['quoted_at'] !== 'string') {
     throw new Unreadable();

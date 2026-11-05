@@ -1,0 +1,106 @@
+{
+  "task": "B1-05zf",
+  "spec_ref": "0df853bea8d87934ebf15a03c24b945e93677c57",
+  "spec_commit": "3b8eb4355f42e689066a47513c8fe4c8627fb250",
+  "red_tests": [
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#1] 详情同一联盟答复：未命中回源与命中缓存出的卡 image、images、shop_name 相同（主图 + 12 张多图仍是同样 9 张）",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#2] 详情条目原样存主图、多图（原顺序含重复）、店铺名、一级类目，仍不存卡片、报价与链接",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#3] 联盟答复缺的字段不存、读出也不带，不补空串或空数组；有几个存几个",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#4] 只有原字段的旧条目照常命中出卡（images 由主图缺省得 []、shop_name 缺省）；补存过的条目按存的主图与店铺名出卡",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（字符串）按坏条目当未命中：回源出卡并覆盖条目",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（null）按坏条目当未命中：回源出卡并覆盖条目",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（对象）按坏条目当未命中：回源出卡并覆盖条目",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（含数字）按坏条目当未命中：回源出卡并覆盖条目",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（含 null）按坏条目当未命中：回源出卡并覆盖条目",
+    "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（含嵌套数组）按坏条目当未命中：回源出卡并覆盖条目",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#6] 搜索同一页联盟答复：未命中与命中时搜索卡的 image、shop_name 相同",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#7] 搜索页条目原样存五个字段；联盟没给的不出现这些键",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（字符串）按坏条目当未命中：回源出卡",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（null）按坏条目当未命中：回源出卡",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（对象）按坏条目当未命中：回源出卡",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（含数字）按坏条目当未命中：回源出卡",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（含 null）按坏条目当未命中：回源出卡",
+    "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（含嵌套数组）按坏条目当未命中：回源出卡"
+  ],
+  "risk_note": "RV2 by path (catalog infra). FU-DETAIL-CACHE-IMAGES: the product cache (catalog/infra/product-cache.ts) now stores the five card fields it dropped: shop_name, category_l1_id, category_l1_name, main_image_url, image_urls. Present values are stored and read back unchanged (image_urls a string array, order and repeats kept); absent ones are not written and not read back; a field of the wrong type makes the entry unreadable, which the existing read path treats as a miss and refetches. Old entries without these fields read as before. TTL, hit and stale rules, and the public-data-only scope are unchanged. No amount, no migration, no contract change.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "3b8eb4355f42e689066a47513c8fe4c8627fb250",
+      "tree": "ead42bc066d4cd0edc75ec2b652c0da0722f6baa",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-05T20:05:22Z",
+      "finished_at": "2026-11-05T20:05:31Z",
+      "red_tests": [
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#1] 详情同一联盟答复：未命中回源与命中缓存出的卡 image、images、shop_name 相同（主图 + 12 张多图仍是同样 9 张）",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#2] 详情条目原样存主图、多图（原顺序含重复）、店铺名、一级类目，仍不存卡片、报价与链接",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#3] 联盟答复缺的字段不存、读出也不带，不补空串或空数组；有几个存几个",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#4] 只有原字段的旧条目照常命中出卡（images 由主图缺省得 []、shop_name 缺省）；补存过的条目按存的主图与店铺名出卡",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（字符串）按坏条目当未命中：回源出卡并覆盖条目",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（null）按坏条目当未命中：回源出卡并覆盖条目",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（对象）按坏条目当未命中：回源出卡并覆盖条目",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（含数字）按坏条目当未命中：回源出卡并覆盖条目",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（含 null）按坏条目当未命中：回源出卡并覆盖条目",
+        "test/spec/catalog/cache-card-fields/detail.test.ts > [AC-B1-05zf#5] 详情条目 image_urls 坏值（含嵌套数组）按坏条目当未命中：回源出卡并覆盖条目",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#6] 搜索同一页联盟答复：未命中与命中时搜索卡的 image、shop_name 相同",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#7] 搜索页条目原样存五个字段；联盟没给的不出现这些键",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（字符串）按坏条目当未命中：回源出卡",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（null）按坏条目当未命中：回源出卡",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（对象）按坏条目当未命中：回源出卡",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（含数字）按坏条目当未命中：回源出卡",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（含 null）按坏条目当未命中：回源出卡",
+        "test/spec/catalog/cache-card-fields/search.test.ts > [AC-B1-05zf#8] 搜索页条目里 image_urls 坏值（含嵌套数组）按坏条目当未命中：回源出卡"
+      ],
+      "expected": [
+        "test/spec/catalog/cache-card-fields/detail.test.ts",
+        "test/spec/catalog/cache-card-fields/search.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "851a231de3479b513425812c27d2000601b3355e1154438f9826d9844ad9a67e"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: cache round trip of the five fields, old-entry compatibility, bad values refetched, and the shared detail, search and rank call chains. Static only. RV2 by path, so a money review was required."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context in one attempt (test/spec/catalog/cache-card-fields/, 18 tests in 2 files red at the base for the right reason; no skeleton needed, the behaviour lives in storeItem / loadItem). Round 1 pass. Tests go through the real cacheDetailUpstream / cacheSearchUpstream decorators: hit and miss give the same image, images and shop_name; stored entries carry the fields as given; old entries read; bad image_urls refetched."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "fc214334b1299d9fef65b003119050111db9d3ce",
+    "specs": "f6611d7d90abc934c721b97452f8a8c5c35d082b"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
