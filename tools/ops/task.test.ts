@@ -503,7 +503,7 @@ it('[CT-06zzzc] red_exempt_outside names rule-test files of test_paths that exis
       'red_exempt_outside: "test/spec/demo/kit.ts" is not a rule-test file (*.test.ts)',
     );
     expect(checkTask('X1-02fc', opts('RV1'))).toEqual([
-      `red_exempt_outside: "${RULES}" has no red_exempt declaration: there is nothing for the entry to apply`,
+      `red_exempt_outside: "${RULES}" has no red_exempt or red_exempt_rows declaration: there is nothing for the entry to apply`,
     ]);
     expect(checkTask('X1-02fd', opts('RV1'))).toContain(
       'red_exempt_outside: a task without a rule-test author (tester: none) has no red run to exempt from',
@@ -513,6 +513,74 @@ it('[CT-06zzzc] red_exempt_outside names rule-test files of test_paths that exis
       removeDir(`${root}/ops/tasks/${id}.yaml`);
     removeDir(`${root}/test`);
   }
+});
+
+it('[CT-06zzze] red_exempt_rows name rule-test files of test_paths that exist at the base, of a task with a rule-test author; not counted in the line limit', () => {
+  const RULES = 'test/spec/demo/rules.test.ts';
+  const row = (file: string, test = '[AC-1] source %s'): string =>
+    `\n  - file: '${file}'\n    test: '${test}'\n    reason: the kept rows are the base cases`;
+  const base = good({
+    id: 'X1-02ga',
+    impl: 'claude',
+    tester: 'codex',
+    test_paths: "\n  - 'test/spec/demo/**'",
+    red_exempt_rows: row(RULES, '[AC-1] a') + row(RULES, '[AC-1] b'),
+    red_exempt_outside: `\n  - file: '${RULES}'\n    reason: an import follows the new helper`,
+  });
+  // A body of exactly MAX_TASK_LINES lines plus both sections (not counted).
+  const full = `${'# padding\n'.repeat(MAX_TASK_LINES - countedLines(base))}${base}`;
+  expect(countedLines(full)).toBe(MAX_TASK_LINES);
+  writeFiles(root, {
+    'tools/guard/protected-paths.json': JSON.stringify({
+      class1_add_only: ['test/spec/**', 'test/properties/**'],
+      class2_verify_config: [],
+      class3_gates: [],
+    }),
+    [RULES]: "import { it } from 'vitest';\n",
+    'test/spec/demo/dir.test.ts/x.txt': 'x',
+    // Rows only, with red_exempt_outside on the same file (no red_exempt needed there).
+    'ops/tasks/X1-02ga.yaml': full,
+    // Not at the base (a new file); a directory; outside test_paths; not a rule-test file.
+    'ops/tasks/X1-02gb.yaml': good({
+      id: 'X1-02gb',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      red_exempt_rows:
+        row('test/spec/demo/new.test.ts') +
+        row('test/spec/demo/dir.test.ts') +
+        row('test/spec/other/rules.test.ts') +
+        row('test/spec/demo/kit.ts'),
+    }),
+    'ops/tasks/X1-02gc.yaml': good({
+      id: 'X1-02gc',
+      impl: 'claude',
+      tester: 'none',
+      red_exempt_rows: row(RULES),
+    }),
+  });
+  try {
+    expect(checkTask('X1-02ga', opts('RV1'))).toEqual([]);
+    expect(loadTask('X1-02ga', root).red_exempt_rows).toEqual([
+      { file: RULES, test: '[AC-1] a', reason: 'the kept rows are the base cases' },
+      { file: RULES, test: '[AC-1] b', reason: 'the kept rows are the base cases' },
+    ]);
+    expect(checkTask('X1-02gb', opts('RV1'))).toEqual([
+      'red_exempt_rows: "test/spec/demo/new.test.ts" does not exist at the base (the trusted root): only a table of a rule-test file that existed before the task can keep rows',
+      'red_exempt_rows: "test/spec/demo/dir.test.ts" does not exist at the base (the trusted root): only a table of a rule-test file that existed before the task can keep rows',
+      `red_exempt_rows: "test/spec/other/rules.test.ts" is not inside the task's test_paths`,
+      'red_exempt_rows: "test/spec/demo/kit.ts" is not a rule-test file (*.test.ts)',
+    ]);
+    expect(checkTask('X1-02gc', opts('RV1'))).toContain(
+      'red_exempt_rows: a task without a rule-test author (tester: none) has no red run to exempt from',
+    );
+  } finally {
+    for (const id of ['X1-02ga', 'X1-02gb', 'X1-02gc']) removeDir(`${root}/ops/tasks/${id}.yaml`);
+    removeDir(`${root}/test`);
+  }
+  expect(
+    countedLines(`id: X\nred_exempt_rows:${row(RULES)}${row(RULES, 'b')}\nstatus: todo\n`),
+  ).toBe(2);
 });
 
 it('[ops/approvals.yaml id 19] test_paths stay inside the rule-test assets of a task with a tester', () => {

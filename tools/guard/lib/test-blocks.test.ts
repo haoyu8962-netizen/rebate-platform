@@ -9,6 +9,7 @@ import {
   type ModuleImport,
   type PathKind,
   TestParseError,
+  compareEachRows,
   compareOutsideChanged,
   formatEachTitle,
   formatObjectTitle,
@@ -2645,4 +2646,179 @@ it('[CT-06zzzd] formatObjectTitle: $name of literal fields as Vitest 5.0.5 forma
     expect(formatObjectTitle(t, f({ label: 'x', header: CODE, a: 'y' }), 0), t).toBeNull();
   }
   expect(formatObjectTitle('$u', f({ u: undefined }), 0)).toBeNull();
+});
+
+// CT-06zzze (D10-657, after B1-05zc): a split .each table keeps rows of the base table.
+const ROWS_AC9 = test('[AC-9] other');
+const ROWS_BASE = src(
+  test('[AC-0] plain'),
+  '',
+  "it.each(['feed', 'pool', 'search', null])(",
+  "  '[AC-8] source %s inherits',",
+  '  async (source) => {',
+  '    expect(await f(source)).toBe(1);',
+  '  },',
+  ');',
+  '',
+  ROWS_AC9,
+);
+/** The rows search and null moved out to a new block with a new title (the B1-05zc shape). */
+const ROWS_SPLIT = [
+  "it.each(['search', null])(",
+  "  '[AC-8] source %s single',",
+  '  async (source) => {',
+  '    expect(await f(source)).toBe(2);',
+  '  },',
+  ');',
+  '',
+].join('\n');
+const rowsHead = (table = "['feed', 'pool']", base = ROWS_BASE): string =>
+  base
+    .replace("['feed', 'pool', 'search', null]", table)
+    .replace(ROWS_AC9, `${ROWS_SPLIT}\n${ROWS_AC9}`);
+const NEW_BLOCK =
+  '① no .each / .for block of the base has the same title template and callback under the same describes';
+
+it('[CT-06zzze] compareEachRows: a base .each table with rows removed keeps its rows, under the same title template and callback', () => {
+  expect(compareEachRows(ROWS_BASE, rowsHead())).toEqual([
+    null,
+    {
+      ok: true,
+      names: ['[AC-8] source feed inherits', '[AC-8] source pool inherits'],
+      removed: 2,
+    },
+    { ok: false, reason: NEW_BLOCK },
+    null,
+  ]);
+  // Keeping the last rows, or one row only, is a subsequence too.
+  expect(compareEachRows(ROWS_BASE, rowsHead("['search', null]"))?.[1]).toEqual({
+    ok: true,
+    names: ['[AC-8] source search inherits', '[AC-8] source null inherits'],
+    removed: 2,
+  });
+  expect(compareEachRows(ROWS_BASE, rowsHead("['pool']"))?.[1]).toEqual({
+    ok: true,
+    names: ['[AC-8] source pool inherits'],
+    removed: 3,
+  });
+  // A side that cannot be read as tests: null.
+  expect(compareEachRows(ROWS_BASE, 'it(')).toBeNull();
+});
+
+it('[CT-06zzze] compareEachRows ①: one character of the title template or the callback, the call before the table, or two twins refuse', () => {
+  const kept = (head: string) => compareEachRows(ROWS_BASE, head)?.[1];
+  expect(
+    kept(rowsHead().replace("'[AC-8] source %s inherits'", "'[AC-8] source %s inherit'")),
+  ).toEqual({ ok: false, reason: NEW_BLOCK });
+  expect(kept(rowsHead().replace('f(source)).toBe(1)', 'f(source)).toBe(3)'))).toEqual({
+    ok: false,
+    reason: NEW_BLOCK,
+  });
+  expect(kept(rowsHead().replace('async (source)', '(source)'))).toEqual({
+    ok: false,
+    reason: NEW_BLOCK,
+  });
+  const typed = kept(rowsHead().replace("it.each(['feed'", "it.each<string | null>(['feed'"));
+  expect(typed?.ok).toBe(false);
+  expect(typed?.ok === false && typed.reason).toMatch(
+    /^① the call before the table differs from the base's \("it \. each" → "it \. each < string \| null >"\)$/,
+  );
+  const concurrent = kept(rowsHead().replace("it.each(['feed'", "it.concurrent.each(['feed'"));
+  expect(concurrent?.ok === false && concurrent.reason).toMatch(/^① the call before the table/);
+  // The same title template and callback twice at the head: not one to one.
+  const twice = rowsHead().replace(
+    ROWS_AC9,
+    `${ROWS_SPLIT.replace("'[AC-8] source %s single'", "'[AC-8] source %s inherits'").replace('toBe(2)', 'toBe(1)')}\n${ROWS_AC9}`,
+  );
+  expect(compareEachRows(ROWS_BASE, twice)?.[1]).toEqual({
+    ok: false,
+    reason:
+      '① 1 block(s) of the base and 2 of the head have this title template and callback under the same describes: not one to one',
+  });
+});
+
+it('[CT-06zzze] compareEachRows ③: a changed, added or reordered row, nothing removed, or a moved block refuse', () => {
+  const kept = (table: string) => compareEachRows(ROWS_BASE, rowsHead(table))?.[1];
+  expect(kept("['feeds', 'pool']")).toEqual({
+    ok: false,
+    reason:
+      '③ the head table is not the base table with rows removed: row "\'feeds\'" is changed, added or moved',
+  });
+  expect(kept("['feed', 'pool', 'extra']")).toEqual({
+    ok: false,
+    reason:
+      '③ the head table is not the base table with rows removed: row "\'extra\'" is changed, added or moved',
+  });
+  expect(kept("['pool', 'feed']")).toEqual({
+    ok: false,
+    reason:
+      '③ the head table is not the base table with rows removed: row "\'feed\'" is changed, added or moved',
+  });
+  // The whole table kept but the block moved after [AC-9]: nothing removed.
+  const whole = ROWS_BASE.replace(/it\.each[\s\S]*?\n\);\n/, '').replace(
+    ROWS_AC9,
+    `${ROWS_AC9}\n\n${/it\.each[\s\S]*?\n\);/.exec(ROWS_BASE)?.[0] ?? ''}`,
+  );
+  expect(compareEachRows(ROWS_BASE, whole)?.[2]).toEqual({
+    ok: false,
+    reason: '③ no row of the base table was removed (the block changed elsewhere)',
+  });
+  // Rows removed and the block moved past an unchanged test: refused.
+  const moved = whole.replace("['feed', 'pool', 'search', null]", "['feed', 'pool']");
+  expect(compareEachRows(ROWS_BASE, moved)?.[2]).toEqual({
+    ok: false,
+    reason: '③ the block moved among the blocks whose text is as at the base',
+  });
+});
+
+it('[CT-06zzze] compareEachRows ②: a table by name, a title following the index, a modifier refuse; object rows with as const under a describe qualify', () => {
+  const named = src(
+    "const SOURCES = ['feed', 'pool', 'search', null] as const;",
+    ROWS_BASE.slice(src().length),
+  ).replace("it.each(['feed', 'pool', 'search', null])", 'it.each(SOURCES)');
+  const namedHead = named
+    .replace('it.each(SOURCES)', "it.each(['feed', 'pool'])")
+    .replace(ROWS_AC9, `${ROWS_SPLIT}\n${ROWS_AC9}`);
+  expect(compareEachRows(named, namedHead)?.[1]).toEqual({
+    ok: false,
+    reason: '② the base table is not an inline array of literal rows',
+  });
+  expect(compareEachRows(ROWS_BASE, rowsHead('[...SOURCES]'))?.[1]).toEqual({
+    ok: false,
+    reason: '② the head table is not an inline array of literal rows',
+  });
+  // %# moves with the index: the kept row null is #3 at the base, #2 at the head.
+  const indexed = ROWS_BASE.replace("'[AC-8] source %s inherits'", "'[AC-8] #%# source %s'");
+  expect(compareEachRows(indexed, rowsHead("['feed', 'pool', null]", indexed))?.[1]).toEqual({
+    ok: false,
+    reason:
+      '② row 2 is named "[AC-8] #2 source null", at the base "[AC-8] #3 source null" (a title that follows the index)',
+  });
+  // A modifier makes no name certain.
+  // Built from parts: the test guard rejects the literal modifier in a test file (no-skip-only).
+  const skipped = ROWS_BASE.replace("it.each(['feed'", ['it', 'skip', "each(['feed'"].join('.'));
+  expect(compareEachRows(skipped, rowsHead("['feed', 'pool']", skipped))?.[1]).toEqual({
+    ok: false,
+    reason:
+      '② the full names of the rows are not certain (a title, describe or placement Vitest names in a way not read here, or a modifier)',
+  });
+  // The B1-05zc disclaimer shape: object rows, `as const`, a $name title, inside a describe.
+  const OBJ_BASE = src(
+    "describe('d', () => {",
+    '  it.each([',
+    "    { basis: 'normal' as const, tail: ['a'] },",
+    "    { basis: 'risk' as const, tail: ['b'] },",
+    "    { basis: 'none' as const, tail: [] },",
+    "  ])('[AC-10] $basis keys', async ({ basis, tail }) => {",
+    '    expect(await g(basis)).toEqual(tail);',
+    '  });',
+    '});',
+  );
+  const OBJ_HEAD = OBJ_BASE.replace("    { basis: 'risk' as const, tail: ['b'] },\n", '');
+  expect(compareEachRows(OBJ_BASE, OBJ_HEAD)).toEqual([
+    { ok: true, names: ['d > [AC-10] normal keys', 'd > [AC-10] none keys'], removed: 1 },
+  ]);
+  // `as const` is read for compareEachRows only: CT-06zzzd's names are unchanged.
+  const same = compareOutsideChanged(OBJ_BASE, OBJ_BASE);
+  expect(same.whole === false && same.blocks[0]?.names).toBeNull();
 });

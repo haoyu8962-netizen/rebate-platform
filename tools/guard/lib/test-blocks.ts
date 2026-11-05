@@ -769,6 +769,12 @@ export type ComparedBlock = {
    * branch, a function or a parameterised describe around it). Absent from compareTestFile's.
    */
   names?: string[] | null;
+  /**
+   * CT-06zzze (D10-657): whether the block keeps rows of a base `.each` table (compareEachRows).
+   * Set by red-check (ruleTestBaselines) for a file the ledger's red_exempt_rows name, absent
+   * otherwise and for a block that is no `.each` / `.for` table call.
+   */
+  rows?: EachRows;
 };
 
 export type FileComparison =
@@ -1015,7 +1021,28 @@ type OutsideView = {
     key: string;
     anchor: number;
     names: string[] | null;
+    /** CT-06zzze (D10-657): the `.each` / `.for` table shape of the block, null when it has none. */
+    each: EachShape | null;
   }[];
+};
+
+/**
+ * The shape of a `<chain>.each(<table>)(<title>, <callback>…)` / `.for` test block (CT-06zzze,
+ * D10-657; compareEachRows): `path` its describes (position among the file's describes and header),
+ * `chain` the normalised call before the table (`it.each`, type arguments included), `args` the
+ * normalised arguments of the final call (title template, callback with its parameters and body,
+ * the `;` that ends it), `rows` the normalised text of each row of an inline array of literal rows
+ * (as CT-06zzzd reads them; a literal followed by `as const` counts as that literal), null when
+ * the table is anything else (a name, a call, a spread, a hole …), and `names` the exact full name
+ * of each row as Vitest formats it (null entries: not certain), null when the title, the describes
+ * or the block's place make no name certain (as ComparedBlock.names).
+ */
+type EachShape = {
+  path: string;
+  chain: string;
+  args: string;
+  rows: string[] | null;
+  names: (string | null)[] | null;
 };
 
 function outsideView(source: string): OutsideView {
@@ -1136,7 +1163,7 @@ function outsideView(source: string): OutsideView {
   };
   // `.each(` / `.for(` at p: exactly one inline array whose rows are literal values, arrays of
   // them (literalList) or object literals (objectRow).
-  const rows = (p: number): Row[] | null => {
+  const rows = (p: number, asConst = false): Row[] | null => {
     if (tokens[p]?.text !== '(' || tokens[p + 1]?.text !== '[') return null;
     const close = match[p + 1] as number;
     if (close + 1 !== match[p]) return null;
@@ -1146,11 +1173,11 @@ function outsideView(source: string): OutsideView {
       const end = valueEnd(k, close);
       if (end === k) return null; // a hole
       if (tokens[k]?.text === '{' && match[k] === end - 1) {
-        const fields = objectRow(k + 1, end - 1);
+        const fields = objectRow(k + 1, end - 1, asConst);
         if (fields === null) return null;
         out.push({ kind: 'object', fields });
       } else {
-        const items = literalList(k, end);
+        const items = literalList(k, end, 0, asConst);
         if (items === null || items.length !== 1) return null;
         const item = items[0] as Value | Value[];
         out.push({ kind: 'items', items: Array.isArray(item) ? item : [item] });
@@ -1174,7 +1201,7 @@ function outsideView(source: string): OutsideView {
   // key; a field's value is kept only when it is one literal (primitiveAt), else marked as code
   // (it may be anything: the title must not name it). A spread, a computed key, a method, an
   // accessor, `__proto__` or a key given twice: null.
-  const objectRow = (from: number, to: number): Map<string, Field> | null => {
+  const objectRow = (from: number, to: number, asConst = false): Map<string, Field> | null => {
     const fields = new Map<string, Field>();
     let k = from;
     while (k < to) {
@@ -1192,7 +1219,7 @@ function outsideView(source: string): OutsideView {
       if (next !== ':') return null;
       const end = valueEnd(k + 2, to);
       if (end === k + 2) return null;
-      const one = primitiveAt(k + 2);
+      const one = primitiveAt(k + 2, asConst);
       fields.set(
         key,
         one !== null && one.next === end ? { literal: true, value: one.value } : { literal: false },
@@ -1204,7 +1231,12 @@ function outsideView(source: string): OutsideView {
   // A comma-separated list of literal values in tokens [from, to): a primitive or an array of
   // primitives; anything else (a name, a member, a call, a spread, a template with `${…}`, a
   // function, an object, a deeper array, a hole) is null.
-  const literalList = (from: number, to: number, depth = 0): (Value | Value[])[] | null => {
+  const literalList = (
+    from: number,
+    to: number,
+    depth = 0,
+    asConst = false,
+  ): (Value | Value[])[] | null => {
     const out: (Value | Value[])[] = [];
     let k = from;
     while (k < to) {
@@ -1212,12 +1244,12 @@ function outsideView(source: string): OutsideView {
       const t = tokens[k] as Token;
       if (t.text === '[' && depth === 0) {
         const end = match[k] as number;
-        const inner = literalList(k + 1, end, 1);
+        const inner = literalList(k + 1, end, 1, asConst);
         if (inner === null || inner.some(Array.isArray)) return null;
         value = inner as Value[];
         k = end + 1;
       } else {
-        const one = primitiveAt(k);
+        const one = primitiveAt(k, asConst);
         if (one === null) return null;
         value = one.value;
         k = one.next;
@@ -1229,7 +1261,17 @@ function outsideView(source: string): OutsideView {
     }
     return out;
   };
-  const primitiveAt = (k: number): { value: Value; next: number } | null => {
+  // CT-06zzze (D10-657): with `asConst`, a literal followed by `as const` (a type assertion only:
+  // the value is the literal's) counts as that literal. Only compareEachRows asks for it; the
+  // names of CT-06zzzd keep reading a literal alone.
+  const primitiveAt = (k: number, asConst = false): { value: Value; next: number } | null => {
+    const one = primitive(k);
+    if (one === null || !asConst) return one;
+    return tokens[one.next]?.text === 'as' && tokens[one.next + 1]?.text === 'const'
+      ? { value: one.value, next: one.next + 2 }
+      : one;
+  };
+  const primitive = (k: number): { value: Value; next: number } | null => {
     const t = tokens[k] as Token;
     if (t.kind === 'str' && typeof t.value === 'string') return { value: t.value, next: k + 1 };
     if (t.kind === 'tpl' && t.parts?.length === 1 && typeof t.parts[0] === 'string') {
@@ -1302,6 +1344,68 @@ function outsideView(source: string): OutsideView {
       );
     });
   };
+  // CT-06zzze (D10-657): the `.each` / `.for` table shape of a test call (EachShape), or null.
+  const eachOf = (c: Call, around: readonly Call[]): EachShape | null => {
+    let k = c.start;
+    while (k < c.open) {
+      const t = tokens[k] as Token;
+      if (t.kind === 'id' && (t.text === 'each' || t.text === 'for') && tokens[k - 1]?.text === '.')
+        break;
+      k += 1;
+    }
+    if (k >= c.open) return null;
+    let p = k + 1;
+    if (tokens[p]?.text === '<') {
+      const after = skipTypeArgs(tokens, match, p);
+      if (after === null) return null;
+      p = after;
+    }
+    // The table call, then at once the final call: `<chain>.each(<table>)(<title>, …)`.
+    if (tokens[p]?.text !== '(' || (match[p] as number) + 1 !== c.open) return null;
+    let texts: string[] | null = null;
+    let table: Row[] | null = null;
+    if (tokens[p + 1]?.text === '[' && (match[p + 1] as number) + 1 === match[p]) {
+      table = rows(p, true);
+      if (table !== null) {
+        const close = match[p + 1] as number;
+        texts = [];
+        let j = p + 2;
+        while (j < close) {
+          const end = valueEnd(j, close);
+          texts.push(joinTokens(tokens, j, end - 1, sep));
+          j = end;
+          if (j === close) break;
+          j += 1;
+        }
+        if (texts.length !== table.length) texts = null;
+      }
+    }
+    const title = staticTitle(c);
+    const certain =
+      texts !== null &&
+      table !== null &&
+      title !== null &&
+      plainChain(c.start, c.open) &&
+      surely(c) &&
+      around.every((x) => !x.title.includes(null));
+    const prefix = around.map((x) => `${(x.title as string[]).join('')} > `).join('');
+    return {
+      path: around.map((s) => `${suites.indexOf(s)}:${s.head}`).join('\u0001'),
+      chain: joinTokens(tokens, c.start, p - 1, sep),
+      args: joinTokens(tokens, c.open, c.end, sep),
+      rows: texts,
+      names:
+        !certain || table === null
+          ? null
+          : table.map((row, idx) => {
+              const name =
+                row.kind === 'items'
+                  ? formatEachTitle(title as string, row.items, idx)
+                  : formatObjectTitle(title as string, row.fields, idx);
+              return name === null ? null : `${prefix}${name}`;
+            }),
+    };
+  };
   const blocks = tests.map((c) => {
     const around = suites.filter((s) => s.open < c.start && c.start < s.close);
     const show = (segments: readonly Segment[]): string =>
@@ -1333,6 +1437,7 @@ function outsideView(source: string): OutsideView {
         surely(c) && around.every((x) => !x.title.includes(null))
           ? namesOf(c, around.map((x) => `${(x.title as string[]).join('')} > `).join(''))
           : null,
+      each: eachOf(c, around),
     };
   });
   return { units, span, blocks };
@@ -1500,6 +1605,143 @@ export function compareOutsideChanged(base: string, head: string): OutsideCompar
     })),
     lines: lineRanges(changedLines),
   };
+}
+
+// Rows kept from a split `.each` table (CT-06zzze; orchestrator ruling D10-657 ②, after B1-05zc,
+// whose frozen [AC-B1-05e#8], [AC-B1-05i#10] tables lost the rows whose expectation D10-641
+// changed, moved to new tests): the block of such a table counts as changed (its text differs),
+// so the rows left in it, the base's own cases with the base's own callback, were held to the red
+// rule. compareEachRows tells, for each head block, whether it is such a table; red-check lets a
+// kept row pass on the old code only when the trusted ledger declares it (`red_exempt_rows`).
+// A head `.each` / `.for` block qualifies only when all three hold, mechanically:
+// ① its title template and callback (the whole argument list of the final call: async, the
+//    parameters, the body, every token) and the call before the table (`it.each`, type arguments
+//    and modifiers included) are those of exactly one base `.each` / `.for` block, under the same
+//    describes (position and header), and no other head block has them;
+// ② both tables are inline arrays of literal rows (CT-06zzzd's reading: literals, arrays of
+//    literals, object rows whose fields named in the title are literals; a literal `as const`
+//    counts as the literal), and the title of every kept row is certain (the block stands directly
+//    in plain describes, with a static title, without a modifier) and is the title that row had
+//    at the base (`%#` / `%$` moving with the index make it differ);
+// ③ the head rows are the base rows, token for token, with at least one row removed and none
+//    changed, added or moved (a subsequence); and the block keeps its place among the blocks
+//    whose text is the base's.
+// Anything else says which of the three does not hold (`reason`). The table's meaning — that the
+// removed rows were taken out for the task's reason, that the kept ones still hold — the
+// comparison cannot tell: the rule-test reviewer confirms every declared row.
+
+/** Whether a head block is a base `.each` table with rows removed only (CT-06zzze, see above). */
+export type EachRows =
+  /** `names`: the exact full names of the kept rows, `removed`: how many base rows are gone. */
+  { ok: true; names: string[]; removed: number } | { ok: false; reason: string };
+
+/**
+ * For each head test block (in the order of compareTestFile's and compareOutsideChanged's
+ * blocks), whether it keeps rows of a base `.each` / `.for` table (EachRows), or null when it is
+ * not a `<chain>.each(<table>)(…)` block; null as a whole when a side cannot be read as tests.
+ */
+export function compareEachRows(base: string, head: string): (EachRows | null)[] | null {
+  let before: OutsideView;
+  let after: OutsideView;
+  try {
+    before = outsideView(base);
+    after = outsideView(head);
+  } catch {
+    return null;
+  }
+  const count = (keys: readonly string[]): Map<string, number> => {
+    const c = new Map<string, number>();
+    for (const k of keys) c.set(k, (c.get(k) ?? 0) + 1);
+    return c;
+  };
+  // The blocks whose text is the base's (one on each side): the place a kept table must keep.
+  const baseKeys = count(before.blocks.map((b) => b.key));
+  const headKeys = count(after.blocks.map((b) => b.key));
+  const baseIndex = new Map(before.blocks.map((b, i) => [b.key, i]));
+  const same: [number, number][] = [];
+  after.blocks.forEach((b, j) => {
+    if (baseKeys.get(b.key) === 1 && headKeys.get(b.key) === 1) {
+      same.push([baseIndex.get(b.key) as number, j]);
+    }
+  });
+  const fail = (reason: string): EachRows => ({ ok: false, reason });
+  const one = (e: EachShape, f: EachShape): boolean => e.path === f.path && e.args === f.args;
+  return after.blocks.map((h, j): EachRows | null => {
+    const e = h.each;
+    if (e === null) return null;
+    const bases = before.blocks
+      .map((b, i) => [b, i] as const)
+      .filter(([b]) => b.each !== null && one(b.each, e));
+    if (bases.length === 0) {
+      return fail(
+        '① no .each / .for block of the base has the same title template and callback under the same describes',
+      );
+    }
+    const twins = after.blocks.filter((b) => b.each !== null && one(b.each, e)).length;
+    if (bases.length > 1 || twins > 1) {
+      return fail(
+        `① ${bases.length} block(s) of the base and ${twins} of the head have this title template and callback under the same describes: not one to one`,
+      );
+    }
+    const [b, i] = bases[0] as readonly [OutsideView['blocks'][number], number];
+    const f = b.each as EachShape;
+    if (f.chain !== e.chain) {
+      return fail(
+        `① the call before the table differs from the base's (${JSON.stringify(f.chain)} → ${JSON.stringify(e.chain)})`,
+      );
+    }
+    if (f.rows === null) {
+      return fail('② the base table is not an inline array of literal rows');
+    }
+    if (e.rows === null) {
+      return fail('② the head table is not an inline array of literal rows');
+    }
+    // ③ The head rows are base rows in the base's order: a subsequence (each to its first match).
+    const from: number[] = [];
+    let at = 0;
+    for (const row of e.rows) {
+      while (at < f.rows.length && f.rows[at] !== row) at += 1;
+      if (at === f.rows.length) {
+        return fail(
+          `③ the head table is not the base table with rows removed: row ${JSON.stringify(row)} is changed, added or moved`,
+        );
+      }
+      from.push(at);
+      at += 1;
+    }
+    if (e.rows.length === f.rows.length) {
+      return fail('③ no row of the base table was removed (the block changed elsewhere)');
+    }
+    for (const [bi, hj] of same) {
+      const beforeAtBase = bi < i;
+      const beforeAtHead = hj < j;
+      if (beforeAtBase !== beforeAtHead) {
+        return fail('③ the block moved among the blocks whose text is as at the base');
+      }
+    }
+    if (e.names === null || f.names === null) {
+      return fail(
+        '② the full names of the rows are not certain (a title, describe or placement Vitest names in a way not read here, or a modifier)',
+      );
+    }
+    const names: string[] = [];
+    for (const [k, name] of e.names.entries()) {
+      const was = f.names[from[k] as number];
+      if (name === null || was === null || was === undefined) {
+        return fail(`② the full name of row ${k} is not certain`);
+      }
+      if (name !== was) {
+        return fail(
+          `② row ${k} is named ${JSON.stringify(name)}, at the base ${JSON.stringify(was)} (a title that follows the index)`,
+        );
+      }
+      names.push(name);
+    }
+    if (new Set(names).size !== names.length) {
+      return fail('② two kept rows have the same full name');
+    }
+    return { ok: true, names, removed: f.rows.length - e.rows.length };
+  });
 }
 
 /**

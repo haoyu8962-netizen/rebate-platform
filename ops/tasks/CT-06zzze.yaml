@@ -1,0 +1,26 @@
+id: CT-06zzze
+repo: rebate-platform
+title: CT-06zzze：台账 red_exempt_rows——it.each 表拆分后与基线逐字相同的行可声明豁免（D10-657），三项机械核对都成立才放行
+type: guard-change
+# 2026-11-05 be 入账（编排裁定 D10-657 ②）。起因：B1-05zc 的冻结用例 [AC-B1-05e#8]、[AC-B1-05i#5]、[AC-B1-05i#10] 原是一张 it.each 表，风险行的期望须随 D10-641 改而拆出成新用例；留下的行标题模板、回调体、行值都同基线，但表变了，块被判「改过」，不能绿也不能声明豁免。expected_values 只认顶层 helper，表达不了（改在共用回调体里）。
+# 规则：台账 red_exempt_rows（file、生成后的用例全名、reason ≥ 10 字）。red-check 只在三项都成立时放行该行：① 它所在块的标题模板与回调体与基线某个 it.each 块逐字相同；② 该行字面量与那张基线表的某一行逐字相同；③ 两表之差只是删掉了别的行（不改不增、顺序不变）。任一不成立照旧判改过须红；上限照 RED_EXEMPT_MAX；task check 校验条目；规则测试评审逐条确认，evidence-check 要 spec_test_review.red_exempt_rows_confirmed。不开放「改过的用例可以声明绿」的一般口子。
+# 工具测试钉：三项都成立 → 放行；标题模板或回调体差一字、行值差一字、表里加行或改行、顺序变、未声明 → 照旧失败。实现 Opus 子代理；Codex 对抗评审；按 approvals 第 16 条 / #24 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/**'
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzze.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

@@ -71,6 +71,11 @@
 //              CT-06zzzd (D10-629 / D10-630): such a listed file whose every test is unchanged
 //              and declared is left out of the expected list (red-check.ts outsideOnlyFiles, as
 //              for renames); the coverage rule itself is unchanged.
+//              CT-06zzze (D10-657): a ledger with `red_exempt_rows` (kept rows of a split .each
+//              table, which red-check lets pass when the table is the base's with rows removed
+//              only) needs the rule-test reviewer's confirmation as for red_exempt (reviewer,
+//              engine, last_verdict pass) with `red_exempt_rows_confirmed: true`; the expected list
+//              and the coverage rule are unchanged.
 //              Declared renames (CT-06zxc, D10-347): a rule-test file whose base, with the
 //              ledger's literal `renames` applied, is its spec_commit content is unchanged and
 //              not expected (red-check leaves it out of the red run the same way). When a
@@ -493,6 +498,11 @@ export type RedRequirement = {
    */
   declared?: { count: number; tester: TaskFile['tester']; outside?: number };
   /**
+   * CT-06zzze (D10-657): the kept rows of split .each tables the trusted ledger declares
+   * (`red_exempt_rows`); absent when none: no confirmation required.
+   */
+  rows?: { count: number; tester: TaskFile['tester'] };
+  /**
    * CT-06zxc (review r1 S2-1): the ledger's renames that hit a rule-test file of the task (in
    * ledger order) and the files they leave out of the expected list; absent when none hit: no
    * confirmation required.
@@ -784,6 +794,26 @@ export function evidenceProblems(
         if (engine !== null) at(`${field}.engine`, engine);
         if (review['last_verdict'] !== 'pass') at(`${field}.last_verdict`, want);
         if (review['red_exempt_confirmed'] !== true) at(`${field}.red_exempt_confirmed`, want);
+      }
+    }
+    // CT-06zzze (D10-657): declared kept rows of split .each tables need the rule-test reviewer's
+    // confirmation on record, as red_exempt.
+    if (red.required && red.rows !== undefined && red.rows.count > 0) {
+      const reviewers = specTestReviewers(red.rows.tester);
+      const reviewer = reviewers[0] ?? 'claude';
+      const field = 'spec_test_review';
+      const want = `the ledger declares ${red.rows.count} kept row(s) of split .each tables (red_exempt_rows, CT-06zzze): the rule-test reviewer (${reviewer}) must confirm them one by one in ${field} (reviewer ${reviewer}, last_verdict pass, red_exempt_rows_confirmed true)`;
+      const review = doc[field];
+      if (!isRecord(review)) {
+        at(field, want);
+      } else {
+        if (!reviewers.includes(String(review['reviewer']))) at(`${field}.reviewer`, want);
+        const engine = engineProblem(review);
+        if (engine !== null) at(`${field}.engine`, engine);
+        if (review['last_verdict'] !== 'pass') at(`${field}.last_verdict`, want);
+        if (review['red_exempt_rows_confirmed'] !== true) {
+          at(`${field}.red_exempt_rows_confirmed`, want);
+        }
       }
     }
     // CT-06zxc (review r1 S2-1): renames that hit a rule-test file need the rule-test reviewer's
@@ -1228,6 +1258,9 @@ export function redRequirement(
               : {}),
           },
         }
+      : {}),
+    ...(ledger.red_exempt_rows.length > 0
+      ? { rows: { count: ledger.red_exempt_rows.length, tester: ledger.tester } }
       : {}),
     ...(hit.length > 0 || leftOut.length > 0
       ? { renames: { hit, left_out: leftOut, tester: ledger.tester } }

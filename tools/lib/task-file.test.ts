@@ -66,6 +66,7 @@ describe('parseTaskFile', () => {
       mechanical_paths: [],
       red_exempt: [],
       red_exempt_outside: [],
+      red_exempt_rows: [],
       renames: [],
       expected_values: [],
       tester: 'claude',
@@ -249,6 +250,73 @@ describe('parseTaskFile', () => {
     expect(parseTaskFile(many(300), 'B2-02a.yaml').red_exempt_outside).toHaveLength(300);
     expect(messageOf(many(301), 'B2-02a.yaml')).toContain(
       'red_exempt_outside: 301 entries, the limit is 300',
+    );
+  });
+
+  it('[CT-06zzze] red_exempt_rows: a list of file / test / reason mappings, optional, every malformed entry refused, never also in red_exempt', () => {
+    const declared = (entries: string, extra = ''): string =>
+      EXAMPLE.replace('tester: claude', `tester: claude\nred_exempt_rows:${entries}${extra}`);
+    const row = (test: string, file = 'test/spec/catalog/detail/detail.test.ts'): string =>
+      `\n  - file: ${file}\n    test: '${test}'\n    reason: '留下的行与基线逐字相同，风险行已拆出（D10-641）'`;
+    const one = declared(
+      row('[AC-B1-05e#8] 来源卡 feed 经 SourceLinkReader 按 App 范围读取并继承报价口径'),
+    );
+    expect(parseTaskFile(one, 'B2-02a.yaml').red_exempt_rows).toEqual([
+      {
+        file: 'test/spec/catalog/detail/detail.test.ts',
+        test: '[AC-B1-05e#8] 来源卡 feed 经 SourceLinkReader 按 App 范围读取并继承报价口径',
+        reason: '留下的行与基线逐字相同，风险行已拆出（D10-641）',
+      },
+    ]);
+    // An older ledger without the field: [].
+    expect(parseTaskFile(EXAMPLE, 'B2-02a.yaml').red_exempt_rows).toEqual([]);
+    // Not a list, not a mapping, an unknown field, a missing / bad file, an empty test, a short reason.
+    expect(messageOf(declared(' abc'), 'B2-02a.yaml')).toContain(
+      'red_exempt_rows: must be a list of mappings (file / test / reason)',
+    );
+    expect(messageOf(declared('\n  - abc'), 'B2-02a.yaml')).toContain(
+      'red_exempt_rows[0]: must be a mapping (file / test / reason)',
+    );
+    expect(messageOf(declared(`${row('[AC-1] a')}\n    note: x`), 'B2-02a.yaml')).toContain(
+      'red_exempt_rows[0].note: unknown field',
+    );
+    expect(
+      messageOf(
+        declared("\n  - test: '[AC-1] a'\n    reason: a reason of enough length"),
+        'B2-02a.yaml',
+      ),
+    ).toContain('red_exempt_rows[0].file: must be a non-empty repository path');
+    expect(messageOf(declared(row('[AC-1] a', '../a.test.ts')), 'B2-02a.yaml')).toContain(
+      'red_exempt_rows[0].file: "../a.test.ts" must not contain "." or ".." segments',
+    );
+    expect(messageOf(declared(row(' ')), 'B2-02a.yaml')).toContain(
+      "red_exempt_rows[0].test: must be the test's full name (non-empty)",
+    );
+    for (const reason of ['', "'          '", 'too short']) {
+      const short = declared(
+        `\n  - file: test/spec/a.test.ts\n    test: '[AC-1] a'\n    reason: ${reason}`,
+      );
+      expect(messageOf(short, 'B2-02a.yaml'), reason).toContain(
+        'red_exempt_rows[0].reason: must say why the test cannot be shown red (at least 10 characters)',
+      );
+    }
+    // The same row twice; a row also declared in red_exempt.
+    expect(messageOf(declared(row('[AC-1] a') + row('[AC-1] a')), 'B2-02a.yaml')).toContain(
+      'red_exempt_rows[1]: "test/spec/catalog/detail/detail.test.ts > [AC-1] a" is declared twice',
+    );
+    const both = declared(
+      row('[AC-1] a'),
+      "\nred_exempt:\n  - file: test/spec/catalog/detail/detail.test.ts\n    test: '[AC-1] a'\n    reason: a reason of enough length",
+    );
+    expect(messageOf(both, 'B2-02a.yaml')).toContain(
+      'red_exempt_rows: "test/spec/catalog/detail/detail.test.ts > [AC-1] a" is also declared in red_exempt (declare a test in one of them)',
+    );
+    // At most RED_EXEMPT_MAX entries of its own (not added to red_exempt's).
+    const many = (n: number): string =>
+      declared(Array.from({ length: n }, (_, i) => row(`[AC-${i + 1}] a`)).join(''));
+    expect(parseTaskFile(many(300), 'B2-02a.yaml').red_exempt_rows).toHaveLength(300);
+    expect(messageOf(many(301), 'B2-02a.yaml')).toContain(
+      'red_exempt_rows: 301 entries, the limit is 300 (CT-06zzze;',
     );
   });
 

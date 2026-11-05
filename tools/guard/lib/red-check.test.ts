@@ -2817,3 +2817,352 @@ it('[CT-06zzzd] object rows with $name: literal title fields give exact names (o
     run(source(longRows), edit(source(longRows)), [`[AC-1] ${long}：结果 true`, ...NAMES.slice(1)]),
   ).toEqual([]);
 });
+
+// CT-06zzze (D10-657, after B1-05zc): red_exempt_rows lets the declared kept rows of a split .each
+// table pass when the table is the base's with rows removed only.
+const ROWS = 'test/spec/z/rows.test.ts';
+const ROWS_TABLE = [
+  "it.each(['feed', 'pool', 'search', null])(",
+  "  '[AC-8] source %s inherits',",
+  '  async (source) => {',
+  '    expect(await f(source)).toBe(1);',
+  '  },',
+  ');',
+].join('\n');
+const ROWS_ALL = "['feed', 'pool', 'search', null]";
+const ROWS_NEW = ROWS_TABLE.replace(ROWS_ALL, "['search', null]")
+  .replace('inherits', 'single')
+  .replace('toBe(1)', 'toBe(2)');
+const ROWS_BASE_SRC = file(spec('[AC-0] plain'), ROWS_TABLE, spec('[AC-9] other'));
+const rowsHeadSrc = (table = "['feed', 'pool']", kept = ROWS_TABLE.replace(ROWS_ALL, table)) =>
+  file(spec('[AC-0] plain'), kept, ROWS_NEW, spec('[AC-9] other'));
+const ROW_NAMES = ['[AC-8] source feed inherits', '[AC-8] source pool inherits'];
+const ROW_REASON = 'the kept rows are the base cases; the risk rows moved out (D10-641)';
+const rowsDeclared = (tests: string[] = ROW_NAMES, file = ROWS) =>
+  tests.map((test) => ({ file, test, reason: ROW_REASON }));
+const rowsBaselines = (
+  head = rowsHeadSrc(),
+  declared = rowsDeclared(),
+  outside: { file: string; reason: string }[] = [],
+  base: string | null = ROWS_BASE_SRC,
+) =>
+  ruleTestBaselines(
+    [ROWS],
+    [{ path: ROWS, status: base === null ? 'A' : 'M' }],
+    ['test/spec/z/**'],
+    reader(base === null ? {} : { [ROWS]: base }, { [ROWS]: head }),
+    [],
+    [],
+    outside,
+    declared,
+  );
+const NEW_ROWS: RedTest[] = [
+  ['[AC-8] source search single', 'failed', 'AssertionError: expected 1 to be 2'],
+  ['[AC-8] source null single', 'failed', 'AssertionError: expected 1 to be 2'],
+];
+const rowsTests = (kept: string[] = ROW_NAMES, status = 'passed'): RedTest[] => [
+  ['[AC-0] plain', 'passed'],
+  ...kept.map((n): RedTest => (status === 'passed' ? [n, 'passed'] : [n, 'failed', status])),
+  ...NEW_ROWS,
+  ['[AC-9] other', 'passed'],
+];
+const ROW_NOTE = (name: string, how = 'green') =>
+  `${ROWS} > ${name}: a kept row of an .each table whose title template, callback and rows are the base's (rows removed only), exempt by the task's red_exempt_rows declaration (${how}; reason: ${ROW_REASON}); the rule-test reviewer must confirm red_exempt_rows one by one (evidence spec_test_review.red_exempt_rows_confirmed)`;
+const NO_TEETH = 'green on the skeleton: the test has no teeth (new or changed since the base)';
+
+it('[CT-06zzze] the three checks hold: the declared kept rows may pass, listed with rows: true; the new rows must be red', () => {
+  const b = rowsBaselines();
+  expect(b.get(ROWS)?.kind).toBe('tests');
+  const result = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    b,
+    [],
+    rowsDeclared(),
+  );
+  expect(result.problems).toEqual([]);
+  expect(result.ok).toBe(true);
+  expect(result.red).toEqual(NEW_ROWS.map(([n]) => `${ROWS} > ${n}`));
+  expect(result.exempt).toEqual([
+    { file: ROWS, test: '[AC-0] plain', status: 'passed' },
+    ...ROW_NAMES.map((test) => ({
+      file: ROWS,
+      test,
+      status: 'passed',
+      declared: true,
+      reason: ROW_REASON,
+      rows: true,
+    })),
+    { file: ROWS, test: '[AC-9] other', status: 'passed' },
+  ]);
+  for (const n of ROW_NAMES) expect(result.notes).toContain(ROW_NOTE(n));
+  // A declared kept row that is red for a valid reason is listed too, and counts as red.
+  const red = checkRedReports(
+    [redReport(ROWS, rowsTests(ROW_NAMES, 'AssertionError: x'))],
+    [ROWS],
+    ROOT,
+    b,
+    [],
+    rowsDeclared(),
+  );
+  expect(red.ok).toBe(true);
+  expect(red.exempt?.filter((e) => e.rows === true).map((e) => e.status)).toEqual([
+    'failed',
+    'failed',
+  ]);
+  expect(red.notes).toContain(ROW_NOTE(ROW_NAMES[0] as string, 'red for a valid reason'));
+});
+
+it('[CT-06zzze] an undeclared kept row, or the same rows without red_exempt_rows, must still be red', () => {
+  const one = rowsDeclared(ROW_NAMES.slice(0, 1));
+  const result = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    rowsBaselines(rowsHeadSrc(), one),
+    [],
+    one,
+  );
+  expect(result.ok).toBe(false);
+  expect(result.problems).toEqual([{ file: ROWS, test: ROW_NAMES[1], reason: NO_TEETH }]);
+  // Without declarations nothing changes: the changed block's rows must all be red.
+  const none = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    rowsBaselines(rowsHeadSrc(), []),
+  );
+  expect(none.problems).toEqual(ROW_NAMES.map((test) => ({ file: ROWS, test, reason: NO_TEETH })));
+  expect(none.exempt?.some((e) => e.rows === true)).toBe(false);
+});
+
+it('[CT-06zzze] one character of the title template or the callback, a changed, added or reordered row: the declared rows must be red, the notes say which check failed', () => {
+  const refused = (head: string, names: string[], why: string) => {
+    const declared = rowsDeclared(names);
+    const result = checkRedReports(
+      [redReport(ROWS, rowsTests(names))],
+      [ROWS],
+      ROOT,
+      rowsBaselines(head, declared),
+      [],
+      declared,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.problems).toEqual(names.map((test) => ({ file: ROWS, test, reason: NO_TEETH })));
+    expect(result.exempt?.some((e) => e.rows === true)).toBe(false);
+    for (const n of names) {
+      const note = result.notes.find((x) =>
+        x.startsWith(
+          `${ROWS} > ${n}: declared in red_exempt_rows, but the declaration does not apply: `,
+        ),
+      );
+      expect(note, n).toContain(why);
+      expect(note, n).toMatch(/; the test must be red$/);
+    }
+  };
+  const kept = (table: string) => ROWS_TABLE.replace(ROWS_ALL, table);
+  const NO_BASE =
+    '① no .each / .for block of the base has the same title template and callback under the same describes';
+  refused(
+    rowsHeadSrc('', kept("['feed', 'pool']").replace('%s inherits', '%s inherit')),
+    ['[AC-8] source feed inherit', '[AC-8] source pool inherit'],
+    NO_BASE,
+  );
+  refused(
+    rowsHeadSrc('', kept("['feed', 'pool']").replace('toBe(1)', 'toBe(3)')),
+    ROW_NAMES,
+    NO_BASE,
+  );
+  refused(
+    rowsHeadSrc("['feeds', 'pool']"),
+    ['[AC-8] source feeds inherits', '[AC-8] source pool inherits'],
+    '③ the head table is not the base table with rows removed: row "\'feeds\'" is changed, added or moved',
+  );
+  refused(
+    rowsHeadSrc("['feed', 'pool', 'extra']"),
+    [...ROW_NAMES, '[AC-8] source extra inherits'],
+    '③ the head table is not the base table with rows removed: row "\'extra\'" is changed, added or moved',
+  );
+  refused(
+    rowsHeadSrc("['pool', 'feed']"),
+    ['[AC-8] source pool inherits', '[AC-8] source feed inherits'],
+    '③ the head table is not the base table with rows removed: row "\'feed\'" is changed, added or moved',
+  );
+});
+
+it('[CT-06zzze] a table by name at the base (the B1-05zc cards shape) is not covered: ① with type arguments, ② without', () => {
+  const CARDS = 'test/spec/z/cards.test.ts';
+  const CARDS_BASE = [
+    "import { expect, it } from 'vitest';",
+    "import { PLATFORMS } from './kit.ts';",
+    '',
+    'it.each(PLATFORMS)(',
+    "  '[AC-5] $0 keys',",
+    '  async (platform) => {',
+    "    expect(await k(platform)).toBe(platform === 'taobao' ? 1 : 2);",
+    '  },',
+    ');',
+    '',
+  ].join('\n');
+  const split = (call: string) =>
+    `${CARDS_BASE.replace('it.each(PLATFORMS)(', `${call}(`)}\nit.each(['taobao'] as const)('[AC-5] $0 keys (single)', async (platform) => {\n  expect(await k(platform)).toBe(2);\n});\n`;
+  const names = ['[AC-5] jd keys', '[AC-5] pdd keys'];
+  const run = (head: string) => {
+    const declared = rowsDeclared(names, CARDS);
+    return checkRedReports(
+      [
+        redReport(CARDS, [
+          ...names.map((n): RedTest => [n, 'passed']),
+          ['[AC-5] taobao keys (single)', 'failed', 'AssertionError: x'],
+        ]),
+      ],
+      [CARDS],
+      ROOT,
+      ruleTestBaselines(
+        [CARDS],
+        [{ path: CARDS, status: 'M' }],
+        ['test/spec/z/**'],
+        reader({ [CARDS]: CARDS_BASE }, { [CARDS]: head }),
+        [],
+        [],
+        [],
+        declared,
+      ),
+      [],
+      declared,
+    );
+  };
+  const typed = run(split("it.each<(typeof PLATFORMS)[number]>(['jd', 'pdd'])"));
+  expect(typed.ok).toBe(false);
+  expect(typed.problems.map((p) => p.test)).toEqual(names);
+  expect(typed.notes.join('\n')).toContain(
+    "declared in red_exempt_rows, but the declaration does not apply: ① the call before the table differs from the base's",
+  );
+  const plain = run(split("it.each(['jd', 'pdd'])"));
+  expect(plain.ok).toBe(false);
+  expect(plain.problems.map((p) => p.test)).toEqual(names);
+  expect(plain.notes.join('\n')).toContain(
+    'declared in red_exempt_rows, but the declaration does not apply: ② the base table is not an inline array of literal rows; the test must be red',
+  );
+});
+
+it('[CT-06zzze] a new file, a report not from the red reporter, a row of an unchanged block: the declarations do not apply', () => {
+  const fresh = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    rowsBaselines(rowsHeadSrc(), rowsDeclared(), [], null),
+    [],
+    rowsDeclared(),
+  );
+  expect(fresh.ok).toBe(false);
+  expect(fresh.problems.map((p) => p.test)).toEqual(['[AC-0] plain', ...ROW_NAMES, '[AC-9] other']);
+  expect(fresh.notes).toContain(
+    `${ROWS}: 2 declared kept row(s) (red_exempt_rows) do not apply: the file is new, renamed or could not be compared with the base (they apply only to a file that existed at the base, compared test by test)`,
+  );
+  const plain = checkRedReports(
+    [redReport(ROWS, rowsTests(), 'vitest')],
+    [ROWS],
+    ROOT,
+    rowsBaselines(),
+    [],
+    rowsDeclared(),
+  );
+  expect(plain.ok).toBe(false);
+  expect(plain.notes).toContain(
+    `${ROWS}: 2 declared kept row(s) (red_exempt_rows) do not apply: the report is not from the red reporter (they apply only to a file that existed at the base, compared test by test)`,
+  );
+  // A row declaration of a test whose block is unchanged is not needed (and never more).
+  const unchanged = rowsDeclared([...ROW_NAMES, '[AC-9] other']);
+  const result = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    rowsBaselines(rowsHeadSrc(), unchanged),
+    [],
+    unchanged,
+  );
+  expect(result.ok).toBe(true);
+  expect(result.notes).toContain(
+    `${ROWS}: the declared kept row (red_exempt_rows) "[AC-9] other" matches no test of the report that must otherwise be red (the full name must be exactly the red reporter's)`,
+  );
+  // A file whose every test is unchanged or a declared kept row: nothing is shown red.
+  const onlyKept = file(spec('[AC-0] plain'), ROWS_TABLE.replace(ROWS_ALL, "['feed', 'pool']"));
+  const all = checkRedReports(
+    [
+      redReport(ROWS, [
+        ['[AC-0] plain', 'passed'],
+        ...ROW_NAMES.map((n): RedTest => [n, 'passed']),
+      ]),
+    ],
+    [ROWS],
+    ROOT,
+    rowsBaselines(onlyKept),
+    [],
+    rowsDeclared(),
+  );
+  expect(all.problems).toEqual([
+    {
+      file: ROWS,
+      test: null,
+      reason:
+        'existed at the base and every test is unchanged or a declared kept row: nothing is shown red (3 test(s))',
+    },
+  ]);
+});
+
+it('[CT-06zzze] with red_exempt_outside: the kept rows may pass, every other rule stays (an undeclared unchanged test must be red, a row declaration of an unchanged block does not apply)', () => {
+  const head = rowsHeadSrc().replace(VITEST, `${VITEST}\nimport { g } from './g.ts';`);
+  const outside = [{ file: ROWS, reason: 'the import follows the new quoting helper' }];
+  const b = rowsBaselines(head, rowsDeclared(), outside);
+  expect(b.get(ROWS)).toMatchObject({ kind: 'support', outside: { lines: 'L2' } });
+  const exempt = [declare('[AC-0] plain', REASON, ROWS)];
+  const result = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    b,
+    exempt,
+    rowsDeclared(),
+  );
+  expect(result.ok).toBe(false);
+  expect(result.problems).toEqual([
+    {
+      file: ROWS,
+      test: '[AC-9] other',
+      reason:
+        'green on the skeleton: the test has no teeth (the file may read a test-support file the task changed and the ledger does not declare this test exempt)',
+    },
+  ]);
+  expect(result.exempt?.map((e) => [e.test, e.rows === true])).toEqual([
+    ['[AC-0] plain', false],
+    [ROW_NAMES[0], true],
+    [ROW_NAMES[1], true],
+  ]);
+  // Declaring the unchanged [AC-9] as a kept row does not make it exempt.
+  const asRow = rowsDeclared([...ROW_NAMES, '[AC-9] other']);
+  const wrong = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    rowsBaselines(head, asRow, outside),
+    exempt,
+    asRow,
+  );
+  expect(wrong.problems.map((p) => p.test)).toEqual(['[AC-9] other']);
+  expect(wrong.notes).toContain(
+    `${ROWS} > [AC-9] other: declared in red_exempt_rows, but the declaration does not apply: its block is unchanged since the base (a row declaration is for a kept row of a changed .each table only); the test must be red`,
+  );
+  // Declared in red_exempt instead, a kept row still must be red: its block changed.
+  const asExempt = [...exempt, declare(ROW_NAMES[0] as string, REASON, ROWS)];
+  const changed = checkRedReports(
+    [redReport(ROWS, rowsTests())],
+    [ROWS],
+    ROOT,
+    rowsBaselines(head, [], outside),
+    asExempt,
+    [],
+  );
+  expect(changed.problems.map((p) => p.test)).toEqual([...ROW_NAMES, '[AC-9] other']);
+});

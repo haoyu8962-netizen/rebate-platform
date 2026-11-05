@@ -59,6 +59,21 @@ export type TaskFile = {
    */
   red_exempt_outside: RedExemptOutsideDeclaration[];
   /**
+   * CT-06zzze (orchestrator ruling D10-657 ②, after B1-05zc): kept rows of an `.each` table of a
+   * rule-test file that existed at the base, whose other rows the task took out (their expectation
+   * changed, they moved to new tests). Such a block counts as changed, so its kept rows, the base's
+   * own cases under the base's own callback, would have to be red on the old code. Each entry names
+   * the file (inside test_paths, existing at the base: tools/ops/task.ts), the row's full name as
+   * Vitest formats it and a reason of at least RED_EXEMPT_REASON_MIN characters. red-check lets
+   * such a row pass only when its block's title template and callback are a base `.each` block's,
+   * both tables are inline literal arrays, the row is the base's and the head table is the base
+   * table with rows removed only (tools/guard/lib/test-blocks.ts compareEachRows); the rule-test
+   * reviewer confirms every entry (spec_test_review.red_exempt_rows_confirmed). Read from the
+   * trusted root like red_exempt; at most RED_EXEMPT_MAX entries of its own. Optional, [] when
+   * absent.
+   */
+  red_exempt_rows: RedExemptRowDeclaration[];
+  /**
    * CT-06zxc (orchestrator ruling D10-347): literal renames the task makes inside rule-test files
    * that existed at the base (a queue job name 'freeze-expiry' → 'freeze_expiry' its frozen tests
    * must follow). red-check replaces every `from` by its `to` in the base content of such a file,
@@ -108,6 +123,16 @@ export type RedExemptOutsideDeclaration = {
   /** The rule-test file, repository-relative, inside the task's test_paths, existing at the base. */
   file: string;
   /** Why its code outside the tests changes (at least RED_EXEMPT_REASON_MIN characters). */
+  reason: string;
+};
+
+/** One declared kept row of a split `.each` table (CT-06zzze, D10-657). */
+export type RedExemptRowDeclaration = {
+  /** The rule-test file, repository-relative, inside the task's test_paths, existing at the base. */
+  file: string;
+  /** The row's full name as Vitest formats it and the red reporter writes it (`describe > … > title`). */
+  test: string;
+  /** Why the row cannot be shown red (at least RED_EXEMPT_REASON_MIN characters). */
   reason: string;
 };
 
@@ -205,6 +230,8 @@ export const RED_EXEMPT_REASON_MIN = 10;
 // red-check still judges every test that is not exempt, so a higher cap does not weaken the red run.
 // CT-06zzzc (D10-624): raised from 150 to 300, for the same reason as D10-620 (red_exempt_outside
 // shares the cap).
+// CT-06zzze (D10-657): red_exempt_rows has the same cap of its own (counted apart from red_exempt,
+// like red_exempt_outside): each entry is still checked mechanically and confirmed one by one.
 export const RED_EXEMPT_MAX = 300;
 
 export const TASK_REPOS = ['rebate-platform', 'ios', 'android', 'harmony'] as const;
@@ -241,6 +268,7 @@ const KNOWN_KEYS = new Set([
   'mechanical_paths',
   'red_exempt',
   'red_exempt_outside',
+  'red_exempt_rows',
   'renames',
   'expected_values',
   'impl',
@@ -298,26 +326,31 @@ function pathProblem(glob: string): string | null {
  * characters once trimmed, and no file + test named twice. Whether the file lies inside
  * test_paths and the task has a rule-test author is checked by tools/ops/task.ts.
  */
-function redExemptList(value: unknown, problems: string[]): RedExemptDeclaration[] {
+function redExemptList(
+  value: unknown,
+  problems: string[],
+  label: 'red_exempt' | 'red_exempt_rows' = 'red_exempt',
+): RedExemptDeclaration[] {
   if (!Array.isArray(value)) {
-    problems.push('red_exempt: must be a list of mappings (file / test / reason)');
+    problems.push(`${label}: must be a list of mappings (file / test / reason)`);
     return [];
   }
   if (value.length > RED_EXEMPT_MAX) {
+    const origin = label === 'red_exempt' ? 'CT-06t' : 'CT-06zzze';
     problems.push(
-      `red_exempt: ${value.length} entries, the limit is ${RED_EXEMPT_MAX} (CT-06t; the section is not counted in the file's line limit, so it has its own)`,
+      `${label}: ${value.length} entries, the limit is ${RED_EXEMPT_MAX} (${origin}; the section is not counted in the file's line limit, so it has its own)`,
     );
   }
   const out: RedExemptDeclaration[] = [];
   const seen = new Set<string>();
   value.forEach((item, index) => {
     if (!isRecord(item)) {
-      problems.push(`red_exempt[${index}]: must be a mapping (file / test / reason)`);
+      problems.push(`${label}[${index}]: must be a mapping (file / test / reason)`);
       return;
     }
     for (const key of Object.keys(item)) {
       if (!['file', 'test', 'reason'].includes(key)) {
-        problems.push(`red_exempt[${index}].${key}: unknown field`);
+        problems.push(`${label}[${index}].${key}: unknown field`);
       }
     }
     const file = item['file'];
@@ -325,22 +358,22 @@ function redExemptList(value: unknown, problems: string[]): RedExemptDeclaration
     const reason = item['reason'];
     let ok = true;
     if (typeof file !== 'string' || file === '') {
-      problems.push(`red_exempt[${index}].file: must be a non-empty repository path`);
+      problems.push(`${label}[${index}].file: must be a non-empty repository path`);
       ok = false;
     } else {
       const problem = pathProblem(file);
       if (problem !== null) {
-        problems.push(`red_exempt[${index}].file: "${file}" ${problem}`);
+        problems.push(`${label}[${index}].file: "${file}" ${problem}`);
         ok = false;
       }
     }
     if (typeof test !== 'string' || test.trim() === '') {
-      problems.push(`red_exempt[${index}].test: must be the test's full name (non-empty)`);
+      problems.push(`${label}[${index}].test: must be the test's full name (non-empty)`);
       ok = false;
     }
     if (typeof reason !== 'string' || reason.trim().length < RED_EXEMPT_REASON_MIN) {
       problems.push(
-        `red_exempt[${index}].reason: must say why the test cannot be shown red (at least ${RED_EXEMPT_REASON_MIN} characters)`,
+        `${label}[${index}].reason: must say why the test cannot be shown red (at least ${RED_EXEMPT_REASON_MIN} characters)`,
       );
       ok = false;
     }
@@ -348,7 +381,7 @@ function redExemptList(value: unknown, problems: string[]): RedExemptDeclaration
     const key = `${file as string}\u0000${test as string}`;
     if (seen.has(key)) {
       problems.push(
-        `red_exempt[${index}]: "${file as string} > ${test as string}" is declared twice`,
+        `${label}[${index}]: "${file as string} > ${test as string}" is declared twice`,
       );
       return;
     }
@@ -608,6 +641,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
       key !== 'mechanical_paths' &&
       key !== 'red_exempt' &&
       key !== 'red_exempt_outside' &&
+      key !== 'red_exempt_rows' &&
       key !== 'renames' &&
       key !== 'expected_values' &&
       !Object.hasOwn(doc, key)
@@ -669,6 +703,18 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
   const redExemptOutside = Object.hasOwn(doc, 'red_exempt_outside')
     ? redExemptOutsideList(doc['red_exempt_outside'], problems)
     : [];
+  const redExemptRows = Object.hasOwn(doc, 'red_exempt_rows')
+    ? redExemptList(doc['red_exempt_rows'], problems, 'red_exempt_rows')
+    : [];
+  // CT-06zzze: a test is declared in one of red_exempt (an unchanged block) and red_exempt_rows (a
+  // kept row of a changed table), never both.
+  for (const row of redExemptRows) {
+    if (redExempt.some((d) => d.file === row.file && d.test === row.test)) {
+      problems.push(
+        `red_exempt_rows: "${row.file} > ${row.test}" is also declared in red_exempt (declare a test in one of them)`,
+      );
+    }
+  }
   const renames = Object.hasOwn(doc, 'renames') ? renameList(doc['renames'], problems) : [];
   const expectedValues = Object.hasOwn(doc, 'expected_values')
     ? expectedValueList(doc['expected_values'], problems)
@@ -750,6 +796,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
     mechanical_paths: mechanicalPaths,
     red_exempt: redExempt,
     red_exempt_outside: redExemptOutside,
+    red_exempt_rows: redExemptRows,
     renames,
     expected_values: expectedValues,
     impl: impl as TaskFile['impl'],

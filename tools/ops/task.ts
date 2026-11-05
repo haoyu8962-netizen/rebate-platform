@@ -44,8 +44,9 @@ export function countedLines(text: string): number {
     // from / to mapping of string literals: nothing else parses there); CT-06zxe: and the
     // `expected_values` section (EXPECTED_VALUES_MAX entries of file / helper / from / to);
     // CT-06zzzc (D10-623): and the `red_exempt_outside` section (RED_EXEMPT_MAX entries of file /
-    // reason).
-    if (/^(red_exempt|red_exempt_outside|renames|expected_values):/.test(line)) {
+    // reason); CT-06zzze (D10-657): and the `red_exempt_rows` section (RED_EXEMPT_MAX entries of
+    // file / test / reason, as red_exempt).
+    if (/^(red_exempt|red_exempt_outside|red_exempt_rows|renames|expected_values):/.test(line)) {
       inExempt = true;
       continue;
     }
@@ -311,7 +312,7 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
   const lines = countedLines(text);
   if (lines > MAX_TASK_LINES) {
     problems.push(
-      `${lines} lines, the limit is ${MAX_TASK_LINES} (规划/11 §5.1; the red_exempt section is not counted, CT-06t, nor the renames section, CT-06zxc, nor expected_values, CT-06zxe, nor red_exempt_outside, CT-06zzzc)`,
+      `${lines} lines, the limit is ${MAX_TASK_LINES} (规划/11 §5.1; the red_exempt section is not counted, CT-06t, nor the renames section, CT-06zxc, nor expected_values, CT-06zxe, nor red_exempt_outside, CT-06zzzc, nor red_exempt_rows, CT-06zzze)`,
     );
   }
 
@@ -500,9 +501,35 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
         problems.push(
           `red_exempt_outside: "${entry.file}" does not exist at the base (the trusted root): only a rule-test file that existed before the task can keep its declared exemptions`,
         );
-      } else if (!task.red_exempt.some((d) => d.file === entry.file)) {
+      } else if (
+        !task.red_exempt.some((d) => d.file === entry.file) &&
+        !task.red_exempt_rows.some((d) => d.file === entry.file)
+      ) {
         problems.push(
-          `red_exempt_outside: "${entry.file}" has no red_exempt declaration: there is nothing for the entry to apply`,
+          `red_exempt_outside: "${entry.file}" has no red_exempt or red_exempt_rows declaration: there is nothing for the entry to apply`,
+        );
+      }
+    }
+  }
+
+  // CT-06zzze (D10-657): declared kept rows of a split .each table name rule-test files of the
+  // task's own test_paths that exist at the base (a new file has no base table: every test of it
+  // must be red), and only a task with a rule-test author has a red run they matter to (the shape,
+  // the reason length and duplicates are checked by parseTaskFile).
+  if (task.red_exempt_rows.length > 0) {
+    if (task.tester === 'none') {
+      problems.push(
+        'red_exempt_rows: a task without a rule-test author (tester: none) has no red run to exempt from',
+      );
+    }
+    for (const file of new Set(task.red_exempt_rows.map((d) => d.file))) {
+      if (!RULE_TEST_FILE.test(file)) {
+        problems.push(`red_exempt_rows: "${file}" is not a rule-test file (*.test.ts)`);
+      } else if (!matchesAny(file, task.test_paths)) {
+        problems.push(`red_exempt_rows: "${file}" is not inside the task's test_paths`);
+      } else if (!regularFile(join(root, file))) {
+        problems.push(
+          `red_exempt_rows: "${file}" does not exist at the base (the trusted root): only a table of a rule-test file that existed before the task can keep rows`,
         );
       }
     }

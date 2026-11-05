@@ -179,6 +179,35 @@
 // and the ledger declares exactly those names; the notes say which file, why, its changed lines and that the
 // reviewer and the orchestrator confirm it. Otherwise the file stays expected: a file whose every
 // test is declared still fails, listed or not.
+//
+// Declared kept rows (CT-06zzze; orchestrator ruling D10-657 ② after B1-05zc, whose frozen
+// [AC-B1-05e#8], [AC-B1-05i#5] and [AC-B1-05i#10] were each one it.each table: the rows whose
+// expectation D10-641 changed had to move out to new tests): the rows left in such a table are the
+// base's own cases under the base's own callback, but their block's text changed, so they had to
+// be red on the old code, where they pass for the reason they always did; a red_exempt declaration
+// does not apply to a changed block, and an expected value (CT-06zxe) is for a top-level helper,
+// not a shared callback. The trusted ledger may declare such rows one by one (`red_exempt_rows`:
+// file, the row's full name as Vitest formats it, a reason of at least 10 characters;
+// tools/lib/task-file.ts, tools/ops/task.ts: a rule-test file of test_paths that exists at the
+// base). For a file it names, ruleTestBaselines asks test-blocks.ts compareEachRows, against the
+// same base the blocks were compared with (after the renames, the expected values, the lenient
+// comparison of red_exempt_outside), whether each changed `.each` / `.for` block keeps rows of a
+// base table: ① its title template, callback (async, parameters, body, every token) and call
+// before the table are those of exactly one base `.each` block under the same describes; ② both
+// tables are inline arrays of literal rows (CT-06zzzd's reading; a literal `as const` counts as the
+// literal) and every kept row's full name is certain and its base name; ③ the head table is the
+// base table with at least one row removed and none changed, added or moved, and the block keeps
+// its place among the blocks unchanged since the base. A block calling a registered changed helper
+// never qualifies. A declared row of a qualifying block may then pass (red still needs a valid
+// reason); it is listed in `exempt` with `declared`, `rows: true` and the reason, and the notes say
+// that the rule-test reviewer confirms red_exempt_rows one by one
+// (tools/ci/evidence-check.ts requires spec_test_review.red_exempt_rows_confirmed). Anything else
+// — a row not declared, a block that fails ①–③ (the notes say which), a new file, a file judged
+// as a whole, a report not from the red reporter — is judged exactly as before: it must be red.
+// red_exempt_outside and red_exempt keep their own rules; a row declaration never makes a test of
+// an unchanged block, or any other test, exempt. A file whose every test is unchanged or a
+// declared kept row still fails (nothing would be shown red). The table being an imported constant
+// (`it.each(PLATFORMS)`) is not covered: ② fails.
 import { matchesAny } from '../../lib/glob.ts';
 import type { Change } from '../../lib/git.ts';
 import { RED_EXEMPT_REASON_MIN } from '../../lib/task-file.ts';
@@ -186,11 +215,13 @@ import type {
   ExpectedValueDeclaration,
   RedExemptDeclaration,
   RedExemptOutsideDeclaration,
+  RedExemptRowDeclaration,
   RenameDeclaration,
   TaskFile,
 } from '../../lib/task-file.ts';
 import {
   type ComparedBlock,
+  compareEachRows,
   compareOutsideChanged,
   compareTestFile,
   helperImpact,
@@ -263,6 +294,12 @@ export type RedExempt = {
   status: 'passed' | 'failed';
   declared?: true;
   reason?: string;
+  /**
+   * CT-06zzze (D10-657): the exemption is a kept row of a split `.each` table the ledger declares
+   * in `red_exempt_rows` (declared too); the rule-test reviewer confirms it
+   * (spec_test_review.red_exempt_rows_confirmed).
+   */
+  rows?: true;
 };
 export type RedResult = {
   ok: boolean;
@@ -621,6 +658,7 @@ export function ruleTestBaselines(
   renames: readonly RenameDeclaration[] = [],
   expectedValues: readonly ExpectedValueDeclaration[] = [],
   outside: readonly RedExemptOutsideDeclaration[] = [],
+  rowsDeclared: readonly RedExemptRowDeclaration[] = [],
 ): Map<string, RuleTestBaseline> {
   const out = new Map<string, RuleTestBaseline>();
   const support = new Set<string>();
@@ -674,6 +712,8 @@ export function ruleTestBaselines(
     // CT-06zxe (D10-371): the registered expected values of this file (see the header).
     const registered = applyExpectedValues(file, before, expectedValues);
     let compared = compareTestFile(before, after);
+    // The base text the blocks were compared with (CT-06zzze: the .each tables are read from it).
+    let comparedBase = before;
     let affected: boolean[] | null = null;
     if (registered.applied.length > 0 || registered.skipped.length > 0) {
       ev = { applied: registered.applied, skipped: registered.skipped, affected: [], void: [] };
@@ -686,6 +726,7 @@ export function ruleTestBaselines(
           : 'the head does not make the registered change (compared without the registered expected values)';
       } else {
         compared = withValues;
+        comparedBase = registered.text;
         const helpers = [...new Set(registered.applied.map((e) => e.helper))];
         const found = helperImpact(after, helpers);
         // CT-06zxh (review r2 S2-1): a literal of the base naming the closure, outside the
@@ -714,7 +755,8 @@ export function ruleTestBaselines(
     // compareOutsideChanged; its declared exemptions may then apply (kind `support`, below).
     if (compared.whole && compared.outside === true && listed !== undefined) {
       const withValues = ev !== undefined && ev.applied.length > 0;
-      const lenient = compareOutsideChanged(withValues ? registered.text : before, after);
+      const lenientBase = withValues ? registered.text : before;
+      const lenient = compareOutsideChanged(lenientBase, after);
       if (lenient.whole) {
         outsideVoid(lenient.reason);
       } else if (withValues && ev !== undefined) {
@@ -726,6 +768,7 @@ export function ruleTestBaselines(
           outsideVoid(`registered expected values: ${found.ok ? (named as string) : found.reason}`);
         } else {
           compared = { whole: false, blocks: lenient.blocks };
+          comparedBase = lenientBase;
           affected = found.affected;
           delete ev.whole;
           ev.affected = lenient.blocks.filter((_, i) => found.affected[i]).map((b) => b.title);
@@ -741,6 +784,7 @@ export function ruleTestBaselines(
         }
       } else {
         compared = { whole: false, blocks: lenient.blocks };
+        comparedBase = lenientBase;
         outsideState = { reason: listed.reason, lines: lenient.lines };
       }
     } else if (compared.whole) {
@@ -752,10 +796,33 @@ export function ruleTestBaselines(
       set({ kind: 'whole', reason: compared.reason });
       continue;
     }
-    const blocks =
+    let blocks =
       affected === null
         ? compared.blocks
         : compared.blocks.map((b, i) => (affected[i] === true ? { ...b, changed: true } : b));
+    // CT-06zzze (D10-657): for a file the ledger's red_exempt_rows name, whether each .each block
+    // keeps rows of a base table (compareEachRows); a block calling a registered changed helper
+    // (CT-06zxe) never does.
+    if (rowsDeclared.some((d) => d.file === file)) {
+      const each = compareEachRows(comparedBase, after);
+      if (each !== null && each.length === blocks.length) {
+        blocks = blocks.map((b, i) => {
+          const rows = each[i];
+          if (rows === null || rows === undefined) return b;
+          return {
+            ...b,
+            rows:
+              affected?.[i] === true
+                ? {
+                    ok: false,
+                    reason:
+                      '① the block calls a helper whose registered expected value changed (CT-06zxe)',
+                  }
+                : rows,
+          };
+        });
+      }
+    }
     const others = [...support].filter((s) => s !== file).sort();
     const closure =
       others.length === 0
@@ -1211,12 +1278,47 @@ function declarationVerdict(
 }
 
 /**
+ * Why a declared kept row (CT-06zzze, D10-657) does not apply to the report test `fullName`, or
+ * null when it does: exactly one block's pattern matches the name, that block changed and keeps
+ * rows of a base `.each` table (EachRows ok: ①–③ of test-blocks.ts compareEachRows), the name is
+ * one of its kept rows' exact full names, and the reason is long enough.
+ */
+function rowDeclarationVerdict(
+  declaration: RedExemptRowDeclaration,
+  fullName: string,
+  blocks: readonly ComparedBlock[],
+): string | null {
+  const hits = blocks.filter((b) => b.pattern.test(fullName));
+  if (hits.length !== 1) {
+    return `the full name matches ${hits.length} test blocks, not exactly one`;
+  }
+  const block = hits[0] as ComparedBlock;
+  if (!block.changed) {
+    return 'its block is unchanged since the base (a row declaration is for a kept row of a changed .each table only)';
+  }
+  if (block.rows === undefined) {
+    return 'its block is not an .each / .for table call compared row by row with the base';
+  }
+  if (!block.rows.ok) return block.rows.reason;
+  if (!block.rows.names.includes(fullName)) {
+    return '② the full name is not the exact title of a kept row of the table';
+  }
+  if (declaration.reason.trim().length < RED_EXEMPT_REASON_MIN) {
+    return `the reason is shorter than ${RED_EXEMPT_REASON_MIN} characters`;
+  }
+  return null;
+}
+
+/**
  * Checks Vitest JSON reports against the expected rule-test files (repository-relative). `root`
  * is stripped from the absolute file names Vitest reports. `baselines` (CT-06p) say how the
  * expected files that existed at the base are judged (see the header); without them every test
  * of every expected file must be red. `declared` (CT-06r) are the task's declared exemptions
  * (the trusted ledger's `red_exempt`); they apply only with baselines, to a file of kind
- * `support`, and to a test whose block is unchanged.
+ * `support`, and to a test whose block is unchanged. `rows` (CT-06zzze, D10-657) are the declared
+ * kept rows of split `.each` tables (the trusted ledger's `red_exempt_rows`); they apply only with
+ * baselines whose blocks were compared row by row (ruleTestBaselines with the same declarations),
+ * to a file of kind `tests` or `support`, and to a row rowDeclarationVerdict accepts.
  */
 export function checkRedReports(
   reports: readonly unknown[],
@@ -1224,6 +1326,7 @@ export function checkRedReports(
   root: string,
   baselines?: ReadonlyMap<string, RuleTestBaseline>,
   declared: readonly RedExemptDeclaration[] = [],
+  rows: readonly RedExemptRowDeclaration[] = [],
 ): RedResult {
   const problems: RedProblem[] = [];
   const red: string[] = [];
@@ -1231,8 +1334,11 @@ export function checkRedReports(
   const exempt: RedExempt[] = [];
   const confirmation =
     "needs the rule-test reviewer's confirmation (evidence spec_test_review.red_exempt_confirmed)";
+  const rowConfirmation =
+    'the rule-test reviewer must confirm red_exempt_rows one by one (evidence spec_test_review.red_exempt_rows_confirmed)';
   // Declarations that named an expected file (the others are said in the notes at the end).
   const declaredSeen = new Set<RedExemptDeclaration>();
+  const rowsSeen = new Set<RedExemptRowDeclaration>();
   const prefix = root.endsWith('/') ? root : `${root}/`;
   const seen = new Map<string, FileResult>();
   // Files reported by the trusted red reporter: only their full names are `describe > … > test`.
@@ -1353,12 +1459,19 @@ export function checkRedReports(
     }
     const declaredHere = baselines === undefined ? [] : declared.filter((d) => d.file === file);
     for (const d of declaredHere) declaredSeen.add(d);
+    const rowsHere = baselines === undefined ? [] : rows.filter((d) => d.file === file);
+    for (const d of rowsHere) rowsSeen.add(d);
     let blocks: ComparedBlock[] | null = null;
     let declarable: ComparedBlock[] | null = null;
     const wholeDespite = (why: string): void => {
       if (declaredHere.length > 0) {
         notes.push(
           `${file}: ${declaredHere.length} declared exemption(s) do not apply: ${why} (a declaration applies only to a file judged as a whole because it may read a changed test-support file)`,
+        );
+      }
+      if (rowsHere.length > 0) {
+        notes.push(
+          `${file}: ${rowsHere.length} declared kept row(s) (red_exempt_rows) do not apply: ${why} (they apply only to a file that existed at the base, compared test by test)`,
         );
       }
     };
@@ -1387,17 +1500,21 @@ export function checkRedReports(
       notes.push(
         `${file}: existed at the base, judged as a whole except the tests the ledger declares exempt (every other test must be red): ${baseline.reason}`,
       );
-    } else if (declaredHere.length > 0) {
+    } else if (declaredHere.length > 0 || rowsHere.length > 0) {
       wholeDespite('the file is new, renamed or could not be compared with the base');
     }
     let required = 0;
     const matched = new Set<RedExemptDeclaration>();
+    const rowsMatched = new Set<RedExemptRowDeclaration>();
+    // CT-06zzze: the blocks a kept-row declaration is judged against (kind tests or support).
+    const compared = blocks ?? declarable;
     for (const t of tests) {
       const fullName = text(t.fullName);
       const name = fullName || text(t.title);
       const status = text(t.status);
       let unchanged = blocks !== null && unchangedTest(fullName, blocks);
       let declaration: RedExemptDeclaration | null = null;
+      let row: RedExemptRowDeclaration | null = null;
       if (declarable !== null && fullName !== '') {
         const d = declaredHere.find((x) => x.test === fullName);
         if (d !== undefined) {
@@ -1413,15 +1530,35 @@ export function checkRedReports(
           }
         }
       }
+      // CT-06zzze (D10-657): a declared kept row of a split .each table (rowDeclarationVerdict).
+      if (!unchanged && compared !== null && fullName !== '') {
+        const d = rowsHere.find((x) => x.test === fullName);
+        if (d !== undefined) {
+          rowsMatched.add(d);
+          const why = rowDeclarationVerdict(d, fullName, compared);
+          if (why === null) {
+            row = d;
+            unchanged = true;
+          } else {
+            notes.push(
+              `${file} > ${name}: declared in red_exempt_rows, but the declaration does not apply: ${why}; the test must be red`,
+            );
+          }
+        }
+      }
       if (!unchanged) required += 1;
       const exemptEntry = (status: 'passed' | 'failed'): RedExempt =>
-        declaration === null
-          ? { file, test: name, status }
-          : { file, test: name, status, declared: true, reason: declaration.reason };
+        row !== null
+          ? { file, test: name, status, declared: true, reason: row.reason, rows: true }
+          : declaration === null
+            ? { file, test: name, status }
+            : { file, test: name, status, declared: true, reason: declaration.reason };
       const exemptNote = (how: string): string =>
-        declaration === null
-          ? `${file} > ${name}: unchanged since the base, exempt from the red rule (${how})`
-          : `${file} > ${name}: unchanged since the base, exempt by the task's declaration (${how}; reason: ${declaration.reason}); ${confirmation}`;
+        row !== null
+          ? `${file} > ${name}: a kept row of an .each table whose title template, callback and rows are the base's (rows removed only), exempt by the task's red_exempt_rows declaration (${how}; reason: ${row.reason}); ${rowConfirmation}`
+          : declaration === null
+            ? `${file} > ${name}: unchanged since the base, exempt from the red rule (${how})`
+            : `${file} > ${name}: unchanged since the base, exempt by the task's declaration (${how}; reason: ${declaration.reason}); ${confirmation}`;
       if (status === 'passed') {
         if (unchanged) {
           exempt.push(exemptEntry('passed'));
@@ -1489,11 +1626,21 @@ export function checkRedReports(
         );
       }
     }
+    for (const d of rowsHere) {
+      if (compared !== null && !rowsMatched.has(d)) {
+        notes.push(
+          `${file}: the declared kept row (red_exempt_rows) "${d.test}" matches no test of the report that must otherwise be red (the full name must be exactly the red reporter's)`,
+        );
+      }
+    }
     if (blocks !== null && required === 0) {
       problems.push({
         file,
         test: null,
-        reason: `existed at the base and has no new or changed test: nothing is shown red (${tests.length} unchanged test(s))`,
+        reason:
+          rowsMatched.size === 0
+            ? `existed at the base and has no new or changed test: nothing is shown red (${tests.length} unchanged test(s))`
+            : `existed at the base and every test is unchanged or a declared kept row: nothing is shown red (${tests.length} test(s))`,
       });
     }
     if (declarable !== null && required === 0) {
@@ -1509,6 +1656,13 @@ export function checkRedReports(
       if (!declaredSeen.has(d)) {
         notes.push(
           `declared exemption of ${d.file} > ${d.test}: ${d.file} is not an expected rule-test file (ignored)`,
+        );
+      }
+    }
+    for (const d of rows) {
+      if (!rowsSeen.has(d)) {
+        notes.push(
+          `declared kept row (red_exempt_rows) of ${d.file} > ${d.test}: ${d.file} is not an expected rule-test file (ignored)`,
         );
       }
     }

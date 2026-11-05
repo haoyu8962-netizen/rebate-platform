@@ -1136,6 +1136,96 @@ red_exempt_outside:
   });
 });
 
+it('[CT-06zzze] a ledger with red_exempt_rows needs red_exempt_rows_confirmed from the rule-test reviewer', () => {
+  const head = git(repo, ['rev-parse', 'HEAD']);
+  const cfg = loadProtected(REPO);
+  const problemsOf = (doc: Evidence, red: RedRequirement): string =>
+    evidenceProblems(doc, { prDir: repo, head, task: 'B2-01a', cfg, red }).join('\n');
+  const red = { ...RED, rows: { count: 3, tester: 'codex' as const } };
+  const want =
+    'the ledger declares 3 kept row(s) of split .each tables (red_exempt_rows, CT-06zzze): the rule-test reviewer (claude) must confirm them one by one in spec_test_review (reviewer claude, last_verdict pass, red_exempt_rows_confirmed true)';
+  const confirmed = {
+    reviewer: 'claude',
+    engine: 'claude',
+    rounds: 1,
+    last_verdict: 'pass',
+    red_exempt_rows_confirmed: true,
+    note: 'the kept rows are the base cases; the moved rows are red in their new tests',
+  };
+  expect(problemsOf(evidence({ spec_test_review: confirmed }), red)).toBe('');
+  expect(problemsOf(evidence(), red)).toBe(`spec_test_review: ${want}`);
+  // red_exempt_confirmed does not stand in for it, nor a value other than true.
+  for (const value of [undefined, 'yes', 1]) {
+    expect(
+      problemsOf(
+        evidence({
+          spec_test_review: {
+            ...confirmed,
+            red_exempt_rows_confirmed: value,
+            red_exempt_confirmed: true,
+          },
+        }),
+        red,
+      ),
+    ).toBe(`spec_test_review.red_exempt_rows_confirmed: ${want}`);
+  }
+  // The rule-test author cannot confirm them; nor a verdict other than pass.
+  expect(
+    problemsOf(
+      evidence({
+        spec_test_review: {
+          ...confirmed,
+          reviewer: 'codex',
+          engine: 'codex',
+          model: 'gpt-6-astra',
+        },
+      }),
+      red,
+    ),
+  ).toContain(`spec_test_review.reviewer: ${want}`);
+  expect(
+    problemsOf(evidence({ spec_test_review: { ...confirmed, last_verdict: 'fail' } }), red),
+  ).toBe(`spec_test_review.last_verdict: ${want}`);
+  // With red_exempt too, both confirmations are needed.
+  const both = { ...red, declared: { count: 1, tester: 'codex' as const } };
+  expect(problemsOf(evidence({ spec_test_review: confirmed }), both)).toContain(
+    'spec_test_review.red_exempt_confirmed: the ledger declares 1 red exemption(s)',
+  );
+  expect(
+    problemsOf(evidence({ spec_test_review: { ...confirmed, red_exempt_confirmed: true } }), both),
+  ).toBe('');
+  // Without rows nothing more is asked.
+  expect(problemsOf(evidence(), RED)).toBe('');
+
+  // The requirement reads the section from the trusted ledger.
+  const trusted = join(SCRATCH, 'trusted-rows');
+  for (const file of [
+    'tools/guard/protected-paths.json',
+    'ops/risk-map.yaml',
+    'tools/guard/legacy-tasks.json',
+  ]) {
+    write(trusted, { [file]: readFileSync(join(TRUSTED, file), 'utf8') });
+  }
+  write(trusted, {
+    'ops/tasks/B2-01a.yaml': `${readFileSync(join(TRUSTED, 'ops/tasks/B2-01a.yaml'), 'utf8').trimEnd()}
+red_exempt_rows:
+  - file: ${FLOOR}
+    test: 'floors 1'
+    reason: the kept rows are the base cases
+  - file: ${FLOOR}
+    test: 'floors 2'
+    reason: the kept rows are the base cases
+`,
+  });
+  const text = JSON.stringify({ task: 'B2-01a', spec_commit: specCommit });
+  const input = { prDir: repo, base, head, headRef: 'task/B2-01a', trusted };
+  expect(redRequirement(input, 'B2-01a', base, text)).toEqual({
+    required: true,
+    expected: [FLOOR],
+    rows: { count: 2, tester: 'codex' },
+  });
+});
+
 it('[CT-06zzzd] a file listed in red_exempt_outside whose every test is unchanged and declared is left out of the expected list; the confirmation is still required', () => {
   const ETAG = 'test/spec/money/etag.test.ts';
   const source = (extra: string, body = 'expect(1).toBe(1);'): string =>

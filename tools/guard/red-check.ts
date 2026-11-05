@@ -29,6 +29,10 @@
 // A listed file whose every test is unchanged and declared is left out of the expected list
 // (CT-06zzzd, D10-629 / D10-630; outsideOnlyFiles), here and with --print-expected, as a
 // renamed-only file; the notes, or stderr, say which.
+// The trusted ledger's `red_exempt_rows` (CT-06zzze, D10-657) declare kept rows of split `.each`
+// tables: such a row may pass only when its block keeps rows of a base table by the three checks of
+// lib/test-blocks.ts compareEachRows; the notes say which rows and that the rule-test reviewer
+// confirms them one by one (lib/red-check.ts).
 //
 //   node tools/guard/red-check.ts --task <id> --cwd <worktree> --base <ref> --print-expected
 //     prints the expected rule-test files, one per line (tools/ops/verify-container.sh --red uses
@@ -240,6 +244,7 @@ runCli(
           task.renames,
           task.expected_values,
           task.red_exempt_outside,
+          task.red_exempt_rows,
         );
         renamedNotes.push(...unusedExpectedValueNotes(task.expected_values, baselines));
         renamedNotes.push(...unusedOutsideNotes(task.red_exempt_outside, baselines));
@@ -264,6 +269,7 @@ runCli(
       args.values.get('root') ?? '/work/repo',
       baselines,
       task.red_exempt,
+      task.red_exempt_rows,
     );
     result.notes.unshift(...renamedNotes);
     if (baselineNote !== null) result.notes.unshift(baselineNote);
@@ -273,7 +279,9 @@ runCli(
     for (const n of result.notes) console.error(`red-check note: ${n}`);
     if (json) printJson({ task: id, required: true, expected, ...result });
     const exempt = result.exempt?.length ?? 0;
-    const declared = result.exempt?.filter((e) => e.declared === true).length ?? 0;
+    const declared =
+      result.exempt?.filter((e) => e.declared === true && e.rows !== true).length ?? 0;
+    const rows = result.exempt?.filter((e) => e.rows === true).length ?? 0;
     say(
       result.ok
         ? `PASS red-check: ${result.red.length} rule test(s) in ${expected.length} file(s) red for the right reason` +
@@ -282,6 +290,9 @@ runCli(
               : '') +
             (declared > 0
               ? ` (${declared} by the ledger's red_exempt declarations: the rule-test reviewer must confirm them)`
+              : '') +
+            (rows > 0
+              ? `; ${rows} kept row(s) of split .each tables exempt by the ledger's red_exempt_rows: the rule-test reviewer must confirm them`
               : '')
         : `FAIL red-check: ${result.problems.length} problem(s)`,
     );
