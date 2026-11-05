@@ -8360,6 +8360,8 @@ export interface paths {
          *     PAYOUT_RECOVERY both are refused (20001 on the field): the server takes the cash subject
          *     from the withdrawal's channel (CASH_ALIPAY, CASH_WECHAT or CASH_BANK).
          *
+         *     The route schema runs first (D10-590 ⑥, as every console route): a malformed body is 20001
+         *     before any of the checks below, with or without `fund.adjust`, and writes no audit record.
          *     Order of checks: `fund.adjust` (10403 with `data.reason=admin_permission_denied`; the
          *     refusal writes an audit record, action adjustment_denied, BR-FUND-24 例（无权限）) → step-up
          *     (10003) → body (20001: the schema, then the checks above) → an unknown `user_id` or one of
@@ -8374,7 +8376,10 @@ export interface paths {
          *     answers the same under a race) → the guards, each refusal 20001: an original that is not
          *     APPROVED, or that is itself a reversal, with `data.fields=[reverses_adjust_id]` and
          *     `data.reason=reverse_not_allowed`; a member already deleted with the field of the request
-         *     (`user_id` or `reverses_adjust_id`) and `data.reason=adjust_user_deleted`.
+         *     (`user_id` or `reverses_adjust_id`) and `data.reason=adjust_user_deleted`; a member in
+         *     deletion (users.status deleting) takes no new manual form, only the reversal of an approved
+         *     ACCOUNT_CLOSED form (D10-590 ④), anything else 20001 with the field of the request and
+         *     `data.reason=adjust_user_deleted`.
          *
          *     Effects, in one transaction under the member's balance lock: the balance is read again
          *     and the form (`status=APPROVED`) and its ADMIN_ADJUST voucher (sub_type = `reason_code`)
@@ -8510,7 +8515,9 @@ export interface paths {
          *     Effects, in one transaction: the form becomes REJECTED, `reject_note` the trimmed reason,
          *     `reviewed_by` the caller and `reviewed_at`; `amount_fen` stays null. No voucher, and no
          *     balance moves. Writes an audit record (action adjustment_reject, with the `adjust_id`,
-         *     the `user_id` and the reason; no personal data).
+         *     the `user_id` and the reason; no personal data). The deletion does not go back: its
+         *     closing gate stays pending with a warning, and the next accounting day the deletion
+         *     processing prefills a new ACCOUNT_CLOSED form while none is PENDING (D10-590 ③).
          *
          *     `Idempotency-Key` is required: same key and body → the first result; same key with
          *     another body → 20901; same key while still running → 40901.
@@ -39122,7 +39129,7 @@ export interface operations {
             content: {
                 /**
                  * @example {
-                 *       "reason": "用户已撤回注销申请，无需处理"
+                 *       "reason": "预填金额与核对结果不一致，次日按系统补建的新单处理"
                  *     }
                  */
                 "application/json": components["schemas"]["AdminAdjustmentRejectRequest"];
@@ -39163,7 +39170,7 @@ export interface operations {
                      *           "created_at": "2026-12-01T02:00:00+08:00",
                      *           "reviewed_by": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
                      *           "reviewed_at": "2026-12-02T09:30:00+08:00",
-                     *           "reject_note": "用户已撤回注销申请，无需处理",
+                     *           "reject_note": "预填金额与核对结果不一致，次日按系统补建的新单处理",
                      *           "voucher_id": null
                      *         }
                      *       },

@@ -1,0 +1,37 @@
+{
+  "task": "CT-26n",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "spec_commit": "fa3bdcab0fc750c837665fac563edbb32a45bd8e",
+  "red_tests": [],
+  "risk_note": "RV1 (contract text only). Adjustment operations: the reject example no longer says the user withdrew the deletion; after a reject the closing gate stays pending and a new ACCOUNT_CLOSED form is prefilled the next accounting day; a member in deletion takes only the reversal of an ACCOUNT_CLOSED form; the route schema runs before the guards. D10-590 ③④⑥. No shape or error code change.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "codex-run.sh review --review-type contract round 1 pass."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2d3182592a0894da1e26bda10e256839234f5399",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
