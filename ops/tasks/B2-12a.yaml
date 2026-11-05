@@ -31,4 +31,5 @@ accept:
   - 'test/spec/db/admin-adjustments/**'
   - 'test/spec/domain/state-machines/admin-adjustment/**'
   - 'test/spec/domain/state-machines/bad-debt-writeoff/**'
-status: todo
+status: done
+pr: 2386

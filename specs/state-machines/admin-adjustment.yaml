@@ -1,0 +1,43 @@
+# 人工调账单 admin_adjustments.status 的状态机（规划/04 §3.2 admin_adjustments；规划/08 BR-FUND-24 ①⑧ 与细则「后台入口」「红冲只按原单整笔」「注销调减单被驳回与注销中的调账」；编排 D10-534、D10-587、D10-590；任务 B2-12a）。
+# 08 没有给这张表编号的迁移表；本文件按 BR-FUND-24 转写，AA 编号与英文事件名是本任务的技术命名。
+# 生成 packages/domain/src/state-machines/admin-adjustment.gen.ts
+# （node packages/domain/scripts/state-machines.ts；--verify 只比对）。生成物勿手改，改这里再生成。
+#
+# 写法约定（同 CT-04a、B2-03j、B2-04d）：
+# - from 中 null 表示「—」（入库首态）。
+# - guard 只作说明，transition() 不求值；权限、step-up、重读余额、记账与审计由服务层负责。
+# - 状态值与 contracts/enums/fund.yaml 的 admin_adjustment_status 一致（大写）。
+#
+# 表外说明：人工发起的单（含红冲单）一步提交即 APPROVED，不保存待批、不撤回（负责人 2026-10-18 后台第 2 批定稿 ②）；
+# PENDING 只剩系统预填的 ACCOUNT_CLOSED 调减单（⑧）。CANCELLED 照契约保留在状态集合里，但没有任何迁移写它（D10-590 ⑨）。
+# 「已红冲」是由红冲单派生的标记，不是状态；APPROVED、REJECTED、CANCELLED 都是终态，不重开、不互转。
+name: admin-adjustment
+field: status
+states: [PENDING, APPROVED, REJECTED, CANCELLED]
+# PREFILL 系统预填；SUBMIT 人工一步提交并生效；APPROVE 批准预填单；REJECT 驳回预填单。
+events: [PREFILL, SUBMIT, APPROVE, REJECT]
+transitions:
+  - id: AA1
+    from: [null]
+    event: PREFILL
+    to: PENDING
+    guard: '系统预填：用户进入注销 processing（注销处理中，BR-ID-28）且 available > 0 时，系统生成 ACCOUNT_CLOSED 调减单（发起人为空，金额在批准时按当时 available 取，对方科目 COMMISSION_REVENUE，关联注销单）；同一用户同时只有一张待批的 ACCOUNT_CLOSED 单；被驳回后注销完成门仍 pending 的，每个会计日补建一张（D10-590）'
+    test_id: AC-B2-12a#28
+  - id: AA2
+    from: [null]
+    event: SUBMIT
+    to: APPROVED
+    guard: '人工一步提交并生效（含红冲单）：超管或被勾选人工调账权限的账号提交方向、金额（分，> 0）、原因码、关联单据、对方科目与内部说明，短信档 step-up（BR-ID-34）后，在同一事务内锁定并重读余额、写 ADMIN_ADJUST 凭证 ADJ:{adjust_id}（红冲单写 ADJ:{原 adjust_id}:REVERSE，只按原单整笔、方向相反、同一原单只能红冲一次），写审计；无权限拒绝并写审计；users.status 为 deleting（注销处理中）或已注销的用户不受理，只允许红冲 ACCOUNT_CLOSED 调减单本身'
+    test_id: AC-B2-12a#28
+  - id: AA3
+    from: [PENDING]
+    event: APPROVE
+    to: APPROVED
+    guard: '批准预填单：超管或被勾选人工调账权限的账号短信档 step-up 后批准（一人可完成），在同一事务内锁定并重读当时 available 作为金额写 ADMIN_ADJUST 凭证 ADJ:{adjust_id}，回填金额、凭证与批准人，写审计；须在注销 done 前完成'
+    test_id: AC-B2-12a#28
+  - id: AA4
+    from: [PENDING]
+    event: REJECT
+    to: REJECTED
+    guard: '驳回预填单：须填驳回原因，不需 step-up（短信档、动态码档都不要），不记账、不写凭证，只写审计；注销完成门继续 pending 并照常告警，次一会计日补建（D10-590）'
+    test_id: AC-B2-12a#28

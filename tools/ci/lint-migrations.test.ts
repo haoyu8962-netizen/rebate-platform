@@ -228,6 +228,8 @@ it('classifies every table of db/schema.sql: the funds and attribution tables an
     'settle_runs',
     // B2-04zh: union collection records (union_ prefix, D10-538).
     'union_receipts',
+    'admin_adjustments',
+    'bad_debt_writeoffs',
     'beneficiary_credits',
     'settle_adjust_batches',
     'settle_adjustments',

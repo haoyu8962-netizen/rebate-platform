@@ -41,6 +41,28 @@ export interface AccountBalances {
   version: ColumnType<bigint, bigint, bigint>;
 }
 
+export interface AdminAdjustments {
+  adjust_id: string;
+  amount_fen: ColumnType<bigint, bigint, bigint> | null;
+  app_id: string;
+  contra_platform: string | null;
+  contra_subject: string;
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  direction: string;
+  note: string | null;
+  reason_code: string;
+  refs: Json;
+  reject_note: string | null;
+  reverses_adjust_id: string | null;
+  reviewed_at: Timestamp | null;
+  reviewed_by: string | null;
+  row_version: Generated<number>;
+  status: string;
+  user_id: string;
+  voucher_id: string | null;
+}
+
 export interface AdminPermissions {
   admin_id: string;
   app_id: string;
@@ -369,6 +391,21 @@ export interface AuditLogs {
   ip: string | null;
   system_actor: string | null;
   target: string | null;
+}
+
+export interface BadDebtWriteoffs {
+  account_id: string;
+  app_id: string;
+  approved_at: Timestamp | null;
+  approver_id: string | null;
+  candidate_fen: ColumnType<bigint, bigint, bigint>;
+  created_at: Generated<Timestamp>;
+  id: string;
+  initiator_id: string | null;
+  negative_since: Timestamp;
+  row_version: Generated<number>;
+  status: string;
+  voucher_id: string | null;
 }
 
 export interface BeneficiaryCredits {
@@ -2246,6 +2283,7 @@ export interface WithdrawHolds {
 
 export interface DB {
   account_balances: AccountBalances;
+  admin_adjustments: AdminAdjustments;
   admin_permissions: AdminPermissions;
   admin_union_auth_sessions: AdminUnionAuthSessions;
   admin_users: AdminUsers;
@@ -2267,6 +2305,7 @@ export interface DB {
   asset_snapshot_receivables: AssetSnapshotReceivables;
   asset_snapshots: AssetSnapshots;
   audit_logs: AuditLogs;
+  bad_debt_writeoffs: BadDebtWriteoffs;
   beneficiary_credits: BeneficiaryCredits;
   blocklist: Blocklist;
   category_blocklist: CategoryBlocklist;

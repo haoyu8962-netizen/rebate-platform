@@ -1,0 +1,36 @@
+# 负余额坏账核销候选 bad_debt_writeoffs.status 的状态机（规划/04 §3.2 bad_debt_writeoffs；规划/08 BR-FUND-12 与细则；任务 B2-12a）。
+# 08 没有给这张表编号的迁移表；本文件按 BR-FUND-12 转写，BD 编号与英文事件名是本任务的技术命名。
+# 生成 packages/domain/src/state-machines/bad-debt-writeoff.gen.ts
+# （node packages/domain/scripts/state-machines.ts；--verify 只比对）。生成物勿手改，改这里再生成。
+#
+# 写法约定（同 CT-04a、B2-03j、B2-04d）：
+# - from 中 null 表示「—」（入库首态：每日任务生成候选）。
+# - guard 只作说明，transition() 不求值；阈值、锁、记账、风控标记与审计由服务层负责。
+# - 状态值与 contracts/enums/fund.yaml 的 bad_debt_writeoff_status 一致（大写）。
+#
+# 表外说明：核销不得自动执行；有冻结金额（开关 on）时拒绝批准不是迁移，候选单保持 PENDING；
+# APPROVED、CANCELLED 都是终态，不重开、不互转。
+name: bad-debt-writeoff
+field: status
+states: [PENDING, APPROVED, CANCELLED]
+# GENERATE 每日任务生成候选；APPROVE 批准并核销；CANCEL 批准时余额已回正而取消。
+events: [GENERATE, APPROVE, CANCEL]
+transitions:
+  - id: BD1
+    from: [null]
+    event: GENERATE
+    to: PENDING
+    guard: '每日 R3 后生成负余额报表：当前会计日 − negative_since ≥ ledger.bad_debt_days 且 |available_fen| ≥ ledger.bad_debt_min_fen 时生成候选单（记生成时金额与 negative_since，发起人为空）；同一账户同时最多 1 张 PENDING 候选单，已存在则不再生成；只适用于未注销用户'
+    test_id: AC-B2-12a#35
+  - id: BD2
+    from: [PENDING]
+    event: APPROVE
+    to: APPROVED
+    guard: '超管或被勾选核销权限的账号 step-up 后批准（一人可完成，写审计）；批准时锁定并重读 available 与 frozen：frozen_fen > 0 且 ledger.bad_debt_require_no_frozen.enabled=on 时拒绝批准、候选单保持 PENDING（不是迁移）；frozen 为 0（或开关 off）且 available < 0 → 写 BAD_DEBT_WRITEOFF 凭证 BADDEBT:{account_id}:{candidate_id}（借 BAD_DEBT / 贷 USER_BALANCE.available，金额 = −当前 available_fen，不用候选单生成时的金额），使 available=0；给同实名、同设备、同收款账号的关联账户打风控标记'
+    test_id: AC-B2-12a#35
+  - id: BD3
+    from: [PENDING]
+    event: CANCEL
+    to: CANCELLED
+    guard: '批准时重读 available ≥ 0（余额已回正）：候选单置 CANCELLED，不写凭证、不核销，写审计'
+    test_id: AC-B2-12a#35

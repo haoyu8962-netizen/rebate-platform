@@ -1883,6 +1883,61 @@ CREATE TABLE app.account_balances (
 
 
 --
+-- Name: admin_adjustments; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.admin_adjustments (
+    adjust_id uuid NOT NULL,
+    app_id text NOT NULL,
+    user_id uuid NOT NULL,
+    direction text NOT NULL,
+    amount_fen bigint,
+    reason_code text NOT NULL,
+    refs jsonb NOT NULL,
+    contra_subject text NOT NULL,
+    contra_platform text,
+    note text,
+    status text NOT NULL,
+    reverses_adjust_id uuid,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    reviewed_by uuid,
+    reviewed_at timestamp with time zone,
+    reject_note text,
+    voucher_id uuid,
+    row_version integer DEFAULT 0 NOT NULL,
+    CONSTRAINT admin_adjustments_amount_fen_check CHECK (((amount_fen IS NULL) OR (amount_fen > 0))),
+    CONSTRAINT admin_adjustments_amount_required_check CHECK (((amount_fen IS NOT NULL) OR (reason_code = 'ACCOUNT_CLOSED'::text))),
+    CONSTRAINT admin_adjustments_app_id_check CHECK ((app_id <> ''::text)),
+    CONSTRAINT admin_adjustments_approved_check CHECK (((status <> 'APPROVED'::text) OR ((amount_fen IS NOT NULL) AND (voucher_id IS NOT NULL) AND (reviewed_by IS NOT NULL) AND (reviewed_at IS NOT NULL)))),
+    CONSTRAINT admin_adjustments_contra_platform_check CHECK (((contra_subject = 'UNION_RECEIVABLE'::text) = (contra_platform IS NOT NULL))),
+    CONSTRAINT admin_adjustments_contra_platform_value_check CHECK ((contra_platform = ANY (ARRAY['taobao'::text, 'jd'::text, 'pdd'::text, 'meituan'::text, 'vip'::text, 'douyin'::text, 'eleme'::text, 'kuaishou'::text, 'suning'::text]))),
+    CONSTRAINT admin_adjustments_contra_subject_check CHECK ((contra_subject = ANY (ARRAY['COMMISSION_REVENUE'::text, 'UNION_RECEIVABLE'::text, 'BAD_DEBT'::text, 'MKT_EXPENSE'::text, 'CASH_ALIPAY'::text, 'CASH_WECHAT'::text, 'CASH_BANK'::text]))),
+    CONSTRAINT admin_adjustments_created_by_check CHECK (((created_by IS NOT NULL) OR (reason_code = 'ACCOUNT_CLOSED'::text))),
+    CONSTRAINT admin_adjustments_direction_check CHECK ((direction = ANY (ARRAY['increase'::text, 'decrease'::text]))),
+    CONSTRAINT admin_adjustments_note_check CHECK ((char_length(note) <= 500)),
+    CONSTRAINT admin_adjustments_reason_code_check CHECK ((reason_code = ANY (ARRAY['RESTORE'::text, 'RECON_FIX'::text, 'PAYOUT_RECOVERY'::text, 'ACCOUNT_CLOSED'::text, 'OTHER'::text]))),
+    CONSTRAINT admin_adjustments_refs_check CHECK (
+CASE
+    WHEN (jsonb_typeof(refs) = 'array'::text) THEN (jsonb_array_length(refs) <= 10)
+    ELSE false
+END),
+    CONSTRAINT admin_adjustments_refs_required_check CHECK (((reason_code = 'OTHER'::text) OR (reverses_adjust_id IS NOT NULL) OR
+CASE
+    WHEN (jsonb_typeof(refs) = 'array'::text) THEN (jsonb_array_length(refs) >= 1)
+    ELSE true
+END)),
+    CONSTRAINT admin_adjustments_reject_note_check CHECK ((char_length(reject_note) <= 200)),
+    CONSTRAINT admin_adjustments_rejected_check CHECK (((status <> 'REJECTED'::text) OR ((reject_note IS NOT NULL) AND (btrim(reject_note) <> ''::text)))),
+    CONSTRAINT admin_adjustments_reversal_refs_check CHECK (((reverses_adjust_id IS NULL) OR (refs = '[]'::jsonb))),
+    CONSTRAINT admin_adjustments_reverses_self_check CHECK ((reverses_adjust_id <> adjust_id)),
+    CONSTRAINT admin_adjustments_row_version_check CHECK ((row_version >= 0)),
+    CONSTRAINT admin_adjustments_status_check CHECK ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'REJECTED'::text, 'CANCELLED'::text]))),
+    CONSTRAINT admin_adjustments_voucher_check CHECK (((status = 'APPROVED'::text) OR (voucher_id IS NULL)))
+);
+
+
+--
 -- Name: admin_permissions; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -2513,6 +2568,31 @@ ALTER TABLE app.audit_logs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: bad_debt_writeoffs; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.bad_debt_writeoffs (
+    id uuid NOT NULL,
+    app_id text NOT NULL,
+    account_id uuid NOT NULL,
+    negative_since date NOT NULL,
+    candidate_fen bigint NOT NULL,
+    status text NOT NULL,
+    initiator_id uuid,
+    approver_id uuid,
+    approved_at timestamp with time zone,
+    voucher_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    row_version integer DEFAULT 0 NOT NULL,
+    CONSTRAINT bad_debt_writeoffs_app_id_check CHECK ((app_id <> ''::text)),
+    CONSTRAINT bad_debt_writeoffs_approved_check CHECK (((status <> 'APPROVED'::text) OR ((voucher_id IS NOT NULL) AND (approver_id IS NOT NULL) AND (approved_at IS NOT NULL)))),
+    CONSTRAINT bad_debt_writeoffs_row_version_check CHECK ((row_version >= 0)),
+    CONSTRAINT bad_debt_writeoffs_status_check CHECK ((status = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'CANCELLED'::text]))),
+    CONSTRAINT bad_debt_writeoffs_voucher_check CHECK (((status = 'APPROVED'::text) OR (voucher_id IS NULL)))
 );
 
 
@@ -6393,6 +6473,22 @@ ALTER TABLE ONLY app.account_balances
 
 
 --
+-- Name: admin_adjustments admin_adjustments_app_id_adjust_id_key; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_adjustments
+    ADD CONSTRAINT admin_adjustments_app_id_adjust_id_key UNIQUE (app_id, adjust_id);
+
+
+--
+-- Name: admin_adjustments admin_adjustments_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_adjustments
+    ADD CONSTRAINT admin_adjustments_pkey PRIMARY KEY (adjust_id);
+
+
+--
 -- Name: admin_permissions admin_permissions_admin_permission_key; Type: CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -6694,6 +6790,22 @@ ALTER TABLE ONLY app.asset_snapshots
 
 ALTER TABLE ONLY app.audit_logs
     ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bad_debt_writeoffs bad_debt_writeoffs_app_id_id_key; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.bad_debt_writeoffs
+    ADD CONSTRAINT bad_debt_writeoffs_app_id_id_key UNIQUE (app_id, id);
+
+
+--
+-- Name: bad_debt_writeoffs bad_debt_writeoffs_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.bad_debt_writeoffs
+    ADD CONSTRAINT bad_debt_writeoffs_pkey PRIMARY KEY (id);
 
 
 --
@@ -8345,6 +8457,41 @@ ALTER TABLE ONLY public.pgmigrations
 
 
 --
+-- Name: admin_adjustments_account_closed_pending_key; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE UNIQUE INDEX admin_adjustments_account_closed_pending_key ON app.admin_adjustments USING btree (app_id, user_id) WHERE ((reason_code = 'ACCOUNT_CLOSED'::text) AND (status = 'PENDING'::text));
+
+
+--
+-- Name: admin_adjustments_list_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX admin_adjustments_list_idx ON app.admin_adjustments USING btree (app_id, created_at DESC, adjust_id DESC);
+
+
+--
+-- Name: admin_adjustments_reverses_key; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE UNIQUE INDEX admin_adjustments_reverses_key ON app.admin_adjustments USING btree (app_id, reverses_adjust_id) WHERE (reverses_adjust_id IS NOT NULL);
+
+
+--
+-- Name: admin_adjustments_status_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX admin_adjustments_status_idx ON app.admin_adjustments USING btree (app_id, status);
+
+
+--
+-- Name: admin_adjustments_user_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX admin_adjustments_user_idx ON app.admin_adjustments USING btree (app_id, user_id);
+
+
+--
 -- Name: admin_permissions_granted_by_idx; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -8587,6 +8734,34 @@ CREATE INDEX audit_logs_at_idx ON app.audit_logs USING btree (app_id, at);
 --
 
 CREATE INDEX audit_logs_target_idx ON app.audit_logs USING btree (app_id, target, at);
+
+
+--
+-- Name: bad_debt_writeoffs_account_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX bad_debt_writeoffs_account_idx ON app.bad_debt_writeoffs USING btree (app_id, account_id);
+
+
+--
+-- Name: bad_debt_writeoffs_account_pending_key; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE UNIQUE INDEX bad_debt_writeoffs_account_pending_key ON app.bad_debt_writeoffs USING btree (app_id, account_id) WHERE (status = 'PENDING'::text);
+
+
+--
+-- Name: bad_debt_writeoffs_list_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX bad_debt_writeoffs_list_idx ON app.bad_debt_writeoffs USING btree (app_id, created_at DESC, id DESC);
+
+
+--
+-- Name: bad_debt_writeoffs_status_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX bad_debt_writeoffs_status_idx ON app.bad_debt_writeoffs USING btree (app_id, status);
 
 
 --
@@ -10229,6 +10404,46 @@ ALTER TABLE ONLY app.account_balances
 
 
 --
+-- Name: admin_adjustments admin_adjustments_created_by_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_adjustments
+    ADD CONSTRAINT admin_adjustments_created_by_fkey FOREIGN KEY (app_id, created_by) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: admin_adjustments admin_adjustments_reverses_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_adjustments
+    ADD CONSTRAINT admin_adjustments_reverses_fkey FOREIGN KEY (app_id, reverses_adjust_id) REFERENCES app.admin_adjustments(app_id, adjust_id);
+
+
+--
+-- Name: admin_adjustments admin_adjustments_reviewed_by_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_adjustments
+    ADD CONSTRAINT admin_adjustments_reviewed_by_fkey FOREIGN KEY (app_id, reviewed_by) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: admin_adjustments admin_adjustments_user_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_adjustments
+    ADD CONSTRAINT admin_adjustments_user_fkey FOREIGN KEY (app_id, user_id) REFERENCES app.users(app_id, id);
+
+
+--
+-- Name: admin_adjustments admin_adjustments_voucher_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_adjustments
+    ADD CONSTRAINT admin_adjustments_voucher_fkey FOREIGN KEY (app_id, voucher_id) REFERENCES app.ledger_vouchers(app_id, id);
+
+
+--
 -- Name: admin_permissions admin_permissions_admin_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -10426,6 +10641,38 @@ ALTER TABLE ONLY app.asset_snapshot_receivables
 
 ALTER TABLE ONLY app.audit_logs
     ADD CONSTRAINT audit_logs_admin_fkey FOREIGN KEY (app_id, admin_id) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: bad_debt_writeoffs bad_debt_writeoffs_account_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.bad_debt_writeoffs
+    ADD CONSTRAINT bad_debt_writeoffs_account_fkey FOREIGN KEY (app_id, account_id) REFERENCES app.ledger_accounts(app_id, id);
+
+
+--
+-- Name: bad_debt_writeoffs bad_debt_writeoffs_approver_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.bad_debt_writeoffs
+    ADD CONSTRAINT bad_debt_writeoffs_approver_fkey FOREIGN KEY (app_id, approver_id) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: bad_debt_writeoffs bad_debt_writeoffs_initiator_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.bad_debt_writeoffs
+    ADD CONSTRAINT bad_debt_writeoffs_initiator_fkey FOREIGN KEY (app_id, initiator_id) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: bad_debt_writeoffs bad_debt_writeoffs_voucher_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.bad_debt_writeoffs
+    ADD CONSTRAINT bad_debt_writeoffs_voucher_fkey FOREIGN KEY (app_id, voucher_id) REFERENCES app.ledger_vouchers(app_id, id);
 
 
 --
@@ -12015,6 +12262,63 @@ GRANT UPDATE(version) ON TABLE app.account_balances TO couli_app;
 
 
 --
+-- Name: TABLE admin_adjustments; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.admin_adjustments TO couli_app;
+GRANT SELECT ON TABLE app.admin_adjustments TO couli_readonly;
+
+
+--
+-- Name: COLUMN admin_adjustments.amount_fen; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(amount_fen) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
+-- Name: COLUMN admin_adjustments.status; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(status) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
+-- Name: COLUMN admin_adjustments.reviewed_by; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reviewed_by) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
+-- Name: COLUMN admin_adjustments.reviewed_at; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reviewed_at) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
+-- Name: COLUMN admin_adjustments.reject_note; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reject_note) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
+-- Name: COLUMN admin_adjustments.voucher_id; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(voucher_id) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
+-- Name: COLUMN admin_adjustments.row_version; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(row_version) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
 -- Name: TABLE admin_permissions; Type: ACL; Schema: app; Owner: -
 --
 
@@ -13217,6 +13521,49 @@ GRANT UPDATE(updated_at) ON TABLE app.asset_snapshots TO couli_app;
 
 GRANT SELECT,INSERT ON TABLE app.audit_logs TO couli_app;
 GRANT SELECT ON TABLE app.audit_logs TO couli_readonly;
+
+
+--
+-- Name: TABLE bad_debt_writeoffs; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.bad_debt_writeoffs TO couli_app;
+GRANT SELECT ON TABLE app.bad_debt_writeoffs TO couli_readonly;
+
+
+--
+-- Name: COLUMN bad_debt_writeoffs.status; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(status) ON TABLE app.bad_debt_writeoffs TO couli_app;
+
+
+--
+-- Name: COLUMN bad_debt_writeoffs.approver_id; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(approver_id) ON TABLE app.bad_debt_writeoffs TO couli_app;
+
+
+--
+-- Name: COLUMN bad_debt_writeoffs.approved_at; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(approved_at) ON TABLE app.bad_debt_writeoffs TO couli_app;
+
+
+--
+-- Name: COLUMN bad_debt_writeoffs.voucher_id; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(voucher_id) ON TABLE app.bad_debt_writeoffs TO couli_app;
+
+
+--
+-- Name: COLUMN bad_debt_writeoffs.row_version; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(row_version) ON TABLE app.bad_debt_writeoffs TO couli_app;
 
 
 --
