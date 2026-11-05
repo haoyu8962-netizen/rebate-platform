@@ -1,0 +1,25 @@
+id: CT-09s
+repo: rebate-platform
+title: 契约：状态目录 specs/ui-states.yaml 与通用状态文案键（UI-STATES 甲，D10-643 ⑤，P0）——首次加载、加载失败、超时、断网有无缓存、结果未知、金额缺失、空态、维护、强更逐行
+type: contract
+# 2026-11-08 be 入账（D10-643 ⑤；DSX-01 已入规划 couli #279，SPEC_REF b144fc0）。拆两单：甲（本单）只做契约——新增 specs/ui-states.yaml（每行：编号、触发条件、组件与 kind、标题 / 说明 / 按钮文案键、按钮主次、播报、重试；加载态时长上限在本文件定）；文案键只取 08 BR-TEXT-14 表 A～C，照表 C 后「通用状态键」小节逐行对应；contracts/texts.default.json 收 7 个 state.* 新键，取值与表 C 零差异；specs/fund-term-keys.yaml 按 BR-TEXT-12 细则归类（state.value_missing.a11y 单列，其余普通）；金额缺失行引用 BR-TEXT-10 细则「金额缺失」。写请求结果未知（90003）按 08 表 C state.timeout 一行（轻提示、已填内容保留、重试沿用同一幂等键；二次验证四操作走 pending_confirm.*、购买 buy.timeout、登录 login.network_retry），整改计划里「待确认」的写法以 08 为准。乙（另立）：由 yaml 生成三端与 H5 的向量与目录页样例进分发产物、client-behavior.md 金额缺失向量。
+# 规则测试钉：yaml 每行字段齐全、编号唯一；文案键都在 texts.default.json 且只取表 A～C 允许的前缀；state.* 七键取值与 08 表 C 逐字相同；fund-term-keys 归类；90003 行照 08。
+refs: [BR-TEXT-10, BR-TEXT-14]
+refs_hash:
+  BR-TEXT-10: 3dab37cc5da0
+  BR-TEXT-14: 9cc48bb1faf7
+deps: []
+paths:
+  - 'specs/ui-states.yaml'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'test/spec/contracts/ui-states/**'
+test_paths:
+  - 'test/spec/contracts/ui-states/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
