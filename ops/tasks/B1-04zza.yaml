@@ -25,6 +25,89 @@ test_paths:
   - 'test/spec/union/taobao-refunds/refund-mapping.test.ts'
   - 'test/spec/orders/wiring/module.test.ts'
   - 'test/spec/orders/snapshot-retry/wiring.test.ts'
+red_exempt:
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#26] JSON 数字金额取报文原文（BR-CALC-26），不经 JS number'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#29] 订单号、维权号是 JSON 整数时取十进制原文（19 位不丢精度）；字符串原样'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 tb_trade_id → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 refund_suit_id → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 tk_commission_fee_refund → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 tk_commission_alimm_refund_fee → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 tk_commission_agent_refund_fee → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 tk_subsidy_fee_refund → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 tk_subsidy_alimm_refund_fee → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#30] 缺 tk_subsidy_agent_refund_fee → 跳过该条并告警（带字段名），同页其他维权不受影响'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#31] 必需金额是非数字 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#31] 必需金额是负数 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#31] 必需金额是空串 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#31] 必需金额是科学计数法 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#31] 必需金额是JSON null → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#31] 必需金额是对象 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#32] tb_trade_id / refund_suit_id 是空串 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#32] tb_trade_id / refund_suit_id 是空白 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#32] tb_trade_id / refund_suit_id 是JSON null → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#32] tb_trade_id / refund_suit_id 是对象 → 跳过该条并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#34] result 里不是对象的条目（null）跳过并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#34] result 里不是对象的条目（字符串）跳过并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#34] result 里不是对象的条目（数字）跳过并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#34] result 里不是对象的条目（数组）跳过并告警'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#36] 平台时间各自独立：只缺维权完成时间时其余照常换算'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#39] 不映射 refund_fee / tb_trade_finish_price / day / refund_day / tb_trade_parent_id'
+    reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
+red_exempt_rows:
+  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
+    test: '[AC-B1-04z#33] subsidy_refund_fen 算出负数 → 跳过该条并告警，不出负数'
+    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块 [AC-B1-04zza#44] 的 base_refund_fen 一行（D10-682）；本行补贴为负新旧规则下都跳过并告警
 impl: claude
 tester: claude-independent
 accept:
