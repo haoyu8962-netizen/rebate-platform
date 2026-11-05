@@ -19,6 +19,8 @@
 #   （external_page.product_unresolved 单列资金术语）。
 #
 # 08 列了、texts.default.json 里还没有的键（jump_tip）照 08 先归类；08「还没有取键名的资金文案」取键名后补进 fund_terms.keys。
+# CT-26p：08 BR-TEXT-12 细则（2026-11-05）单列 order.tag.price_compare（按 ② 归入）、rebate_estimate（①⑤）、rebate_compare（②）
+# 归 fund_terms；后两键 CT-16f 已登记。
 # CT-16f：agent.earnings. 按 08 写作前缀归 fund_terms；08 未写归类的新键按认定规则归类：rebate_estimate、rebate_compare
 # （「以结算为准」是 08 列的比价区间后缀）、home.guest_value.login（「登录领返利」，拿不准按资金术语）归 fund_terms，
 # price_basis、price_basis.general、home.guest_value.desc 归 ordinary（编排者默认，待规划回写）。
@@ -138,6 +140,7 @@ fund_terms:
     - no_rebate.price_compare.confirm
     - no_rebate_hint
     - order.price_compare.hint
+    - order.tag.price_compare
     - order_list.deposit_amount
     - platform_coming_soon
     - platform_no_rebate

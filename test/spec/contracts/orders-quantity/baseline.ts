@@ -29,6 +29,11 @@ const commonProperties = {
   is_other_product: { type: 'boolean' },
 };
 
+// CT-26p（D10-664 S-04）：列表项新增可选的 is_price_compare，不进 required（contracts/README 第 8 条）。
+const summaryProperties = {
+  is_price_compare: { type: ['boolean', 'null'] },
+};
+
 const detailProperties = {
   product_key: { anyOf: [{ $ref: '#/components/schemas/ProductKey' }, { type: 'null' }] },
   reason_action: { type: 'array', items: { type: 'string' } },
@@ -54,7 +59,9 @@ export function baselineWithoutQuantity(name: 'OrderSummary' | 'OrderDetail') {
     type: 'object',
     additionalProperties: false,
     required: detail ? [...commonRequired, ...Object.keys(detailProperties)] : commonRequired,
-    properties: detail ? { ...commonProperties, ...detailProperties } : commonProperties,
+    properties: detail
+      ? { ...commonProperties, ...detailProperties }
+      : { ...commonProperties, ...summaryProperties },
     not: {
       type: 'object',
       additionalProperties: true,

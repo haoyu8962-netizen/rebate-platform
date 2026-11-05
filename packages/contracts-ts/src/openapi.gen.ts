@@ -11266,6 +11266,14 @@ export interface components {
             paid_at: string | null;
             /** @description A shared order whose bought product is not the shared one. */
             is_other_product: boolean;
+            /**
+             * @description orders.is_price_compare (04 §6.4, 2026-11-05). true: the client shows the 「比价订单」 tag
+             *     (text key order.tag.price_compare, BR-TEXT-03; not a display_status, amounts unchanged).
+             *     Set only from the union order API field (BR-CALC-16); null on a platform whose field is
+             *     not yet verified, and the server does not set it before then. null, false or absent:
+             *     no tag. Optional: added to an existing /v1 shape (contracts/README rule 8).
+             */
+            is_price_compare?: boolean | null;
         } & ({
             order_no: string;
         } | {
@@ -22038,7 +22046,8 @@ export interface operations {
                      *             "reason": null,
                      *             "est_rebate_fen": 269,
                      *             "paid_at": "2026-10-02T09:31:00+08:00",
-                     *             "is_other_product": false
+                     *             "is_other_product": false,
+                     *             "is_price_compare": false
                      *           }
                      *         ],
                      *         "next_cursor": null,

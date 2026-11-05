@@ -577,6 +577,7 @@
     "notify_settings.service_push": "服务类推送",
     "notify_settings.service_push.desc": "跟单成功、返利结算、提现结果等消息。关闭后不再推送，消息中心里照常可以看到",
     "order.price_compare.hint": "这笔订单被平台判为比价订单，没有返利",
+    "order.tag.price_compare": "比价订单",
     "order_detail.copy.done": "已复制订单号",
     "order_detail.view_product": "查看商品",
     "order_list.claim_entry": "未跟单？去找回",

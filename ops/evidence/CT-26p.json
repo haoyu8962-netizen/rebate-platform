@@ -1,0 +1,75 @@
+{
+  "task": "CT-26p",
+  "spec_ref": "0df853bea8d87934ebf15a03c24b945e93677c57",
+  "spec_commit": "75bea98ffda6053228d189809046f2d6095716e4",
+  "red_tests": [
+    "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#1] OrderSummary 新增可选的 is_price_compare（boolean | null，不进 required），列表示例取值合法，OrderDetail 照旧",
+    "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#2] texts.default.json 有「比价订单」标识键 order.tag.price_compare（BR-TEXT-14 表 C / BR-TEXT-03）",
+    "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#3] fund-term-keys.yaml 把 order.tag.price_compare 单列为资金术语键，且不归普通（BR-TEXT-12 细则）",
+    "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#4] banned-words.yaml「比价」条目的 allow_keys 含 order.tag.price_compare（BR-TEXT-13）"
+  ],
+  "risk_note": "RV1 contract (D10-664 S-04, the order-list part of D10-641 once called CT-26e). OrderSummary (GET /v1/orders item) gains the optional nullable is_price_compare (04 §6.4; contracts/README rule 8: an existing /v1 structure only gains optional fields); OrderDetail unchanged. texts.default.json gains order.tag.price_compare 「比价订单」 (BR-TEXT-14 table C, BR-TEXT-03); fund-term-keys lists it (BR-TEXT-12 细则, single-listed ②; rebate_estimate and rebate_compare were already listed); banned-words 「比价」 allow_keys gains it (BR-TEXT-13). Generated files regenerated (pnpm codegen, generate-text-specs). The frozen baseline test/spec/contracts/orders-quantity/baseline.ts pins the OrderSummary property set, so it gains is_price_compare (D10-327, by a fresh independent Claude).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "75bea98ffda6053228d189809046f2d6095716e4",
+      "tree": "7eb9afe6d9aecd52281c6e7242221fb597ac4f82",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-05T20:45:11Z",
+      "finished_at": "2026-11-05T20:45:19Z",
+      "red_tests": [
+        "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#1] OrderSummary 新增可选的 is_price_compare（boolean | null，不进 required），列表示例取值合法，OrderDetail 照旧",
+        "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#2] texts.default.json 有「比价订单」标识键 order.tag.price_compare（BR-TEXT-14 表 C / BR-TEXT-03）",
+        "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#3] fund-term-keys.yaml 把 order.tag.price_compare 单列为资金术语键，且不归普通（BR-TEXT-12 细则）",
+        "test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts > [AC-CT-26p#4] banned-words.yaml「比价」条目的 allow_keys 含 order.tag.price_compare（BR-TEXT-13）"
+      ],
+      "expected": ["test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "0c61307aac4d2738927d4e0824a00e1f74fcc8c17eec7b1fa38c6634faf09a35"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: the whole diff, planning 04 at SPEC_REF and the ADR, the text, fund-term and banned-word files and their generated outputs. Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context in 2 counted attempts: the 1st changed only the frozen support file baseline.ts (OrderSummary gains is_price_compare: [boolean, null], not required), which the red tooling cannot show red on its own (no rule-test file added); the 2nd added test/spec/contracts/orders-quantity/order-summary-price-compare.test.ts pinning the field, the text key, the fund-term listing and the banned-word allow key, 4 tests red at the base for the right reason. Before/after in test/spec/contracts/orders-quantity/author-notes.md. Round 1 pass."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c0ab2ba60c299c1a995208d99612984827328294",
+    "specs": "12df3a226a71d48c0c59b3b65465641d97ccd8d9"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

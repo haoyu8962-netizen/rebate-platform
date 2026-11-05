@@ -102,6 +102,7 @@ words:
       - no_rebate.price_compare
       - no_rebate.price_compare.confirm
       - order.price_compare.hint
+      - order.tag.price_compare
     allow_rendered_in: [ORDER_INVALID, CLAWBACK]
     allow_articles:
       - config_key: help_links.price_compare

@@ -94,6 +94,7 @@ export const FUND_TERM_KEYS = {
       "no_rebate.price_compare.confirm",
       "no_rebate_hint",
       "order.price_compare.hint",
+      "order.tag.price_compare",
       "order_list.deposit_amount",
       "platform_coming_soon",
       "platform_no_rebate",
