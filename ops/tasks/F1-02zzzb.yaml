@@ -7,8 +7,7 @@ type: impl
 # 密钥：platform/config 读 CONFIG_SIGN_KEY_FILE / CONFIG_SIGN_KEY_ID（只 api 用）；local 启动时临时生成，staging 节点文件 /etc/couli-config-sign → /run/couli-config-sign 只读挂给 api，prod 走 KMS（负责人上线项，本单不做，prod 缺钥拒绝启动）；staging 缺钥也拒绝启动。与 JWT 签名钥分开。
 # 冻结测试：test/spec/content/config/delivery.int.test.ts 的 [AC-F1-02c#1] / [#2] / [#20] 与 test/spec/content/config-etag/domain.int.test.ts 夹具按新形状只改钉值、不放宽，
 #   由新鲜独立 Claude（或 Codex）改，落地时 #24 报核编排逐条看；config-etag/domain.int.test.ts 只为类型换夹具值、用例一条没动，回到 test_paths、登记 red_exempt_outside，22 条用例全部豁免（D10-629，CT-06zzzd）；#20 表里的 bridge_origins 行移到新目录；
-#   delivery.int.test.ts 未改的 124 个用例 / 表行（标题与用例体与主干逐字相同）登记 red_exempt（D10-620 (b1)）。
-#   跨 app 的冻结 [AC-F1-02zr#8] / [AC-F1-02h#2] 按 D10-624 甲改三条断言（保留 app_id 绑定），两个文件进 test_paths；三个冻结文件登记 red_exempt_outside，未改用例 176 条登记 red_exempt（CT-06zzzc，上限 300）。新规则测试放 test/spec/content/bridge-origins/。合并时占契约槽。RV2。
+#   delivery.int.test.ts 未改的 124 个用例 / 表行（标题与用例体与主干逐字相同）登记 red_exempt（D10-620 (b1)）。 跨 app 的冻结 [AC-F1-02zr#8] / [AC-F1-02h#2] 按 D10-624 甲改三条断言（保留 app_id 绑定），两个文件进 test_paths；三个冻结文件登记 red_exempt_outside，未改用例 176 条登记 red_exempt（CT-06zzzc，上限 300）。新规则测试放 test/spec/content/bridge-origins/。合并时占契约槽。RV2。
 refs: []
 refs_hash: {}
 deps: [B2-03v]
@@ -641,4 +640,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
-status: todo
+status: done
+pr: 2352

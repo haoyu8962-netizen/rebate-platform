@@ -14,4 +14,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/daily-sent-source/**'
-status: todo
+status: done
+pr: 2341

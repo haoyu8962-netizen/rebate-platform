@@ -16,4 +16,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/went-negative-lock-order/**'
-status: todo
+status: done
+pr: 2358

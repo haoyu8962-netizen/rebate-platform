@@ -17,4 +17,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/admin/audit-view-withdrawal/**'
-status: todo
+status: done
+pr: 2353

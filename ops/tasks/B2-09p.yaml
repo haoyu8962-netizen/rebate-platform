@@ -33,4 +33,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/went-negative-audit/**'
-status: todo
+status: done
+pr: 2346
