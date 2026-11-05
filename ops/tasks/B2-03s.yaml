@@ -35,3 +35,103 @@ accept:
   - 'test/spec/commission/version-rule/**'
 status: todo
 pr: null
+red_exempt:
+  - file: test/spec/commission/estimate-port/credited.int.test.ts
+    test: '[AC-B2-03q#35] 已入账单 refresh 本身什么账都不动：orders、分录、余额、义务、事件逐行相同，只多当前版本的行'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/credited.int.test.ts
+    test: '[AC-B2-03q#36] 已入账单同一版本 refresh 两次：不报错、不多行，第一次的行不变'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    test: '[AC-B2-03q#38] commission 公开出口给出端口，rebate.ts 的 TODO 已解'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    test: '[AC-B2-03q#39][BR-FUND-01] R7 ESTIMATED：真实 bases 判 recalc，真实 refresh 写当前版本，状态不变'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    test: '[AC-B2-03q#40][BR-FUND-01] R7 经 apply（部分退款）：入参的 estAfter 进 bases，refresh 写当前版本'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    test: '[AC-B2-03q#42][BR-FUND-07] 无快照的单：bases 的 null 不当 0，佣金变 0 不作废；refresh 什么也不写'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    test: '[AC-B2-03q#43] R3a 跳号：未归因期间版本到 3、快照只写了 v1，归因时 refresh 直接写 v3'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    test: '[AC-B2-03q#46][BR-FUND-01] CREDITED 分支：版本没前进时没有新版本的行'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/rebate-wiring.int.test.ts
+    test: '[AC-B2-03q#62][BR-FUND-01][BR-CALC-03] R7 拼多多：est 已是净额，真实 bases 与 refresh 都按这个 N，不再减服务费'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/wallet.int.test.ts
+    test: '[AC-B2-03q#47][BR-FUND-18][BR-TEXT-02] 佣金变化后钱包不抛错，ESTIMATED 与 WAITING 都与订单页同单同数'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/wallet.int.test.ts
+    test: '[AC-B2-03q#48][BR-FUND-18] 连续两次佣金变化：钱包取最新版本，v1、v2、v3 都在'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/wallet.int.test.ts
+    test: '[AC-B2-03q#49][BR-FUND-18] 版本跳号：未归因期间 +2、快照才写 v1 的单，归因后钱包正常，与订单页同数'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/wallet.int.test.ts
+    test: '[AC-B2-03q#77][BR-FUND-18][BR-TEXT-02] 佣金从没变过的普通订单：入库后钱包预估与订单页都有金额，且同数'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/commission/estimate-port/wallet.int.test.ts
+    test: '[AC-B2-03q#78][BR-FUND-18] 入库后第一次改佣金：版本到 2 写 v2，钱包与订单页取新金额，v1 留着旧金额'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#21] paid + received 缺时间只到 PAID 并提交 NO_RECEIVED_AT'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#21] deposit + received 缺时间只到 PAID 并提交 NO_RECEIVED_AT'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#21] paid + settled 缺时间只到 PAID 并提交 NO_RECEIVED_AT'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#21] deposit + settled 缺时间只到 PAID 并提交 NO_RECEIVED_AT'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#22] P9 从 INVALID 恢复只改平台状态，并告警'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#23] paid + paid noop 仍写佣金、调用 settlement、发事件'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#23] paid + rights noop 仍写佣金、调用 settlement、发事件'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#23] received + punish noop 仍写佣金、调用 settlement、发事件'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/platform-status/transitions.int.test.ts
+    test: '[AC-B1-08i#23] settled + invalid noop 仍写佣金、调用 settlement、发事件'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#16] 已入账订单的违规单行经真实装配全额扣回（R8）：扣回 425 / 85 / 42、平台 448，键带 R{order_rights.id}，sub_type PUNISH，订单 CLAWED_BACK、原因码 PUNISH、booked 0 / 0，余额归零，联盟应收净额 0，发 order.clawed_back'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#17] 已入账订单的维权单行部分成功（应扣佣金 4.00 元）按部分维权额扣回（R9）：N_new 600，扣回 170 / 34 / 17、平台 179，sub_type RIGHTS，订单仍 CREDITED、booked 510 / 600、差额原因 PART_REFUND，余额 255 / 51 / 25，联盟应收净额 600'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#18] 已入账订单的维权单行全额成功（应扣佣金 12.00 元不低于 booked_n）按 R8 全额扣回：425 / 85 / 42、平台 448，订单 CLAWED_BACK、原因码 RIGHTS，发 order.clawed_back'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#19] 已入账订单的维权单行成功而无应扣佣金（BR-FUND-08 ③）：不扣回，记录 WAIT_COMMISSION，rights_pending=true，经 orders 真实待处理端口落 CLAWBACK_NO_COMMISSION，booked 与余额不变'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#20] 同一作业重投（至少一次投递，已跑完的任务）：不重复扣——凭证、余额、booked、记录、事件与计数都不变'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#21] 行检查点提交前崩溃（扣回已在该行事务里写完）：记录、凭证、余额、booked 随行事务一起回滚，任务仍 running；重投后只扣一次，计数 succeeded 1、duplicate 0'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#22] 同一文件重新上传是新任务：已导入的行计 duplicate_rows，不重复扣（BR-FUND-06 去重键）'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#23] 入账前部分维权（结算佣金 1000、应扣 4.00 元）不得按旧额入账（B2-04lb）：R7 保持 WAITING、不写分录；随后真实批次按 N_new 600 入账，booked 510 / 600，255 / 51 / 25、平台 269，联盟应收净额 600'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#24] 入账前维权成功而无应扣佣金：记录 WAIT_COMMISSION、rights_pending=true，真实批次跳过（rights_pending），不按旧额入账'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
+  - file: test/spec/orders/rights-mounts/credited.int.test.ts
+    test: '[AC-B1-10n#28] 直推入账后进入注销 processing（净额 85 > 0），违规单行全额扣回（R8）：直推这笔同键改借 BAD_DEBT 85 / 贷联盟应收，不扣 USER_BALANCE、余额仍 85，类型 CLAWBACK|PUNISH；本人 425、间推 42、平台 448 照常，订单 CLAWED_BACK，联盟应收净额 0'
+    reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
