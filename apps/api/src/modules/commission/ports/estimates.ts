@@ -107,7 +107,7 @@ export function createCommissionEstimates(
     return order;
   }
 
-  /** BR-FUND-01 R9b: the latest version as it stands, whatever the commission columns say now. */
+  /** The latest version as it stands: a credited order moved on with no known N (B2-03q). */
   async function copyLatest(
     trx: Transaction<DB>,
     ref: EstimateOrderRef,
@@ -137,20 +137,15 @@ export function createCommissionEstimates(
     );
   }
 
-  /** A new N over the frozen terms; an unknown N writes nothing, like a pending snapshot. */
+  /** A new N over the frozen terms (BR-CALC-02, BR-CALC-27); a credited order's too (BR-CALC-23 (a)). */
   async function revalue(
     trx: Transaction<DB>,
     ref: EstimateOrderRef,
-    order: EstimateOrder,
+    version: number,
+    n: bigint,
     split: SplitRow,
     latest: TotalsRow,
-    value: EstimateRefreshValue | undefined,
   ): Promise<void> {
-    const n =
-      value === undefined
-        ? (order.settle_commission_fen ?? order.est_commission_fen)
-        : value.commissionFen;
-    if (n === null) return;
     const terms = frozenTerms(split);
     const shares = await readShareStates(trx, ref.appId, ref.orderId, terms.beneficiaries);
     const plan = planVersion(
@@ -172,7 +167,7 @@ export function createCommissionEstimates(
       {
         appId: ref.appId,
         orderId: ref.orderId,
-        version: order.commission_version,
+        version,
         createdAt: deps.clock.now(),
       },
       plan,
@@ -205,12 +200,17 @@ export function createCommissionEstimates(
       if (latest === undefined) throw new Error('commission: snapshot has no amount version');
       // At-least-once delivery: this version is written once, by whichever call came first.
       if (latest.commission_version >= version) return;
-      // CREDITED first: a copy needs neither the fee nor any commission column.
-      if (order.rebate_status === 'CREDITED') {
-        await copyLatest(trx, input, version, latest);
+      const n =
+        value === undefined
+          ? (order.settle_commission_fen ?? order.est_commission_fen)
+          : value.commissionFen;
+      if (n !== null) {
+        await revalue(trx, input, version, n, split, latest);
         return;
       }
-      await revalue(trx, input, order, split, latest, value);
+      // Unknown N: a credited order still needs this version's rows (the clawback reads them); before
+      // credit nothing is written, like a pending snapshot.
+      if (order.rebate_status === 'CREDITED') await copyLatest(trx, input, version, latest);
     },
   };
 }

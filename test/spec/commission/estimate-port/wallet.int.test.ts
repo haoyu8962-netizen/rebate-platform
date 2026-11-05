@@ -8,6 +8,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import {
   createOrderPipeline,
   createOrderUpdateStep,
+  planOrderSyncColumns,
 } from '../../../../apps/api/src/modules/orders/index.ts';
 import { FixedClock } from '../../../../apps/api/src/modules/platform/index.ts';
 import type { Schema } from '../../../../packages/contracts-ts/src/index.ts';
@@ -26,6 +27,7 @@ import { fixture, waiting, type OrderPatch } from '../../orders/figures/kit.ts';
 import {
   amountsAt,
   estimatesOf,
+  orderRow,
   portOrderOf,
   rebateOf,
   snapshotPortOf,
@@ -243,7 +245,7 @@ it(
 );
 
 it(
-  '[AC-B2-03q#50][BR-FUND-03][BR-FUND-18] 结算后预估单独变化：版本前进、结算额不变，钱包不抛错，金额仍按结算额',
+  '[AC-B2-03q#50][BR-FUND-03][BR-FUND-18][BR-CALC-15] 结算后预估单独变化：est 只存档，版本不动，没有新行，钱包与订单页都不变，仍按结算额',
   async () => {
     const m = await memberFixture();
     const o = await m.f.order({
@@ -254,12 +256,55 @@ it(
         settle_commission_fen: 1000n,
       }),
     });
-
-    await m.sync(o, { estAfter: 3000n, event: 'PLATFORM_SETTLED' });
-
-    const summary = await m.wallet();
-    expect(summary['pending_credit_fen']).toBe(425);
+    const own = m.own(o);
+    const before = await m.wallet();
+    expect(before['pending_credit_fen']).toBe(425);
     expect(await m.amount(o.orderId)).toBe(425);
+
+    // syncColumns moves the version on any estimate change; the real column plan decides here.
+    await m.f.db.transaction().execute(async (trx) => {
+      const { change, source } = await syncColumns(trx, own, { event: 'PLATFORM_SETTLED' });
+      const current = await orderRow(trx, own);
+      const columns = planOrderSyncColumns(
+        current,
+        unionOrder({ est_commission_fen: 3000n, settle_commission_fen: null }),
+        {
+          kind: 'update',
+          platform_status: 'SETTLED',
+          received_at: null,
+          history: [],
+          pending: null,
+          rule: null,
+        },
+      );
+      await trx
+        .updateTable('orders')
+        .set({
+          est_commission_fen: columns.est_commission_fen,
+          commission_version: columns.commission_version,
+        })
+        .where('app_id', '=', own.appId)
+        .where('order_id', '=', own.orderId)
+        .execute();
+      await m.rebate.onUpdated(
+        trx,
+        {
+          ...change,
+          est_after: columns.est_commission_fen,
+          commission_moved: columns.commission_version !== current.commission_version,
+        },
+        source,
+      );
+    });
+
+    expect(await m.wallet()).toEqual(before);
+    expect(await m.amount(o.orderId)).toBe(425);
+    expect(await orderRow(m.f.db, own)).toMatchObject({
+      est_commission_fen: 3000n,
+      settle_commission_fen: 1000n,
+      commission_version: 1,
+    });
+    expect(await storedVersions(m.f.db, own)).toEqual({ amounts: [1], totals: [1] });
   },
   TIMEOUT,
 );

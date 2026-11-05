@@ -179,4 +179,38 @@ describe('planOrderSyncColumns', () => {
         .settle_commission_fen,
     ).toBe(7n);
   });
+
+  const row = (est: bigint | null, settle: bigint | null): OrderSyncColumns => ({
+    ...current,
+    est_commission_fen: est,
+    settle_commission_fen: settle,
+    commission_version: 3,
+  });
+
+  it('[AC-B2-03s#U1] 结算后只来新预估：est 存档，版本不动；结算额首次到达且与预估不同：+1', () => {
+    expect(
+      planOrderSyncColumns(row(10n, 8n), order({ est_commission_fen: 15n }), settledPlan),
+    ).toMatchObject({ est_commission_fen: 15n, commission_version: 3 });
+    expect(
+      planOrderSyncColumns(row(10n, null), order({ settle_commission_fen: 8n }), settledPlan),
+    ).toMatchObject({ settle_commission_fen: 8n, commission_version: 4 });
+  });
+
+  it('[AC-B2-03s#U2] 库内 N 为空时结算到达 +1；STATEMENT 已在列上时报文不动 N，不 +1；缺预估不前进', () => {
+    expect(
+      planOrderSyncColumns(
+        row(null, null),
+        order({ est_commission_fen: null, settle_commission_fen: 8n }),
+        settledPlan,
+      ).commission_version,
+    ).toBe(4);
+    expect(
+      planOrderSyncColumns(row(10n, 9n), order({ settle_commission_fen: 8n }), settledPlan, 9n)
+        .commission_version,
+    ).toBe(3);
+    expect(
+      planOrderSyncColumns(row(10n, null), order({ est_commission_fen: null }), plan)
+        .commission_version,
+    ).toBe(3);
+  });
 });

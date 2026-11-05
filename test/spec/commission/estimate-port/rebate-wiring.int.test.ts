@@ -1,12 +1,17 @@
 // B2-03q · 端口接进真实 settlement rebate（RebateDependencies.estimates，签名不改）：真实 bases 决定 R6 / R7，
-// 真实 refresh 跟在迁移之后；CREDITED 分支在版本前进时调 refresh；结算后预估单独变化的单版本同样前进，
-// 当前版本也要有行（BR-FUND-03：预估不变，但 readCommissionSnapshot 只认最大版本，否则钱包抛错）。
-// 默认单：预留 1500、N=1000 → B=850。
+// 真实 refresh 跟在迁移之后；CREDITED 分支在版本前进时调 refresh。结算后预估单独变化只存档，版本不动，
+// 没有新行；结算额变化才推版本（BR-CALC-15，D10-578）。
+// 默认单：预留 1500、N=1000 → B=850；N=800 → B=680。
 import { readFileSync } from 'node:fs';
 import { createTestDatabase } from '@couli/db/testing';
 import type { Transaction } from 'kysely';
 import type { DB } from '@couli/db';
 import { expect, it, vi } from 'vitest';
+import {
+  planOrderSyncColumns,
+  type OrderUpdatePlan,
+} from '../../../../apps/api/src/modules/orders/index.ts';
+import { order as unionOrder } from '../../orders/attribution/kit.ts';
 import {
   TIMEOUT,
   amountsAt,
@@ -15,6 +20,7 @@ import {
   estimatesOf,
   fixture,
   moneyRows,
+  orderRow,
   rebateOf,
   storedVersions,
   syncColumns,
@@ -30,6 +36,56 @@ async function readCurrent(trx: Transaction<DB>, o: PortOrder, commissionVersion
     orderId: o.orderId,
     commissionVersion,
   });
+}
+
+const SETTLED_SYNC: OrderUpdatePlan = {
+  kind: 'update',
+  platform_status: 'SETTLED',
+  received_at: null,
+  history: [],
+  pending: null,
+  rule: null,
+};
+
+/**
+ * One sync of an already settled order. syncColumns moves the version on any estimate change, so
+ * the commission columns come from the real column plan here, and so does commission_moved
+ * (BR-CALC-15): the version moves only because the plan says so, as in update-step.
+ */
+async function plannedColumns(
+  trx: Transaction<DB>,
+  o: PortOrder,
+  reported: { readonly estAfter?: bigint; readonly settleAfter?: bigint },
+) {
+  const { change, source } = await syncColumns(trx, o, { event: 'PLATFORM_SETTLED' });
+  const current = await orderRow(trx, o);
+  const columns = planOrderSyncColumns(
+    current,
+    unionOrder({
+      est_commission_fen: reported.estAfter ?? null,
+      settle_commission_fen: reported.settleAfter ?? null,
+    }),
+    SETTLED_SYNC,
+  );
+  await trx
+    .updateTable('orders')
+    .set({
+      est_commission_fen: columns.est_commission_fen,
+      settle_commission_fen: columns.settle_commission_fen,
+      commission_version: columns.commission_version,
+    })
+    .where('app_id', '=', o.appId)
+    .where('order_id', '=', o.orderId)
+    .execute();
+  return {
+    change: {
+      ...change,
+      est_after: columns.est_commission_fen,
+      settle_commission_fen: columns.settle_commission_fen,
+      commission_moved: columns.commission_version !== current.commission_version,
+    },
+    source,
+  };
 }
 
 it('[AC-B2-03q#38] commission 公开出口给出端口，rebate.ts 的 TODO 已解', async () => {
@@ -100,14 +156,15 @@ it('[AC-B2-03q#40][BR-FUND-01] R7 经 apply（部分退款）：入参的 estAft
   ]);
 });
 
-it('[AC-B2-03q#41][BR-FUND-07] R6：真实 bases 给出新基数 0，订单 VOID，不写新版本', async () => {
+it('[AC-B2-03q#41][BR-FUND-07] R6：真实 bases 给出新基数 0，订单 VOID，版本行照写，B=0', async () => {
   const f = await fixture(p.db);
   const o = await f.order();
   const rebate = rebateOf(f.clock, f.estimates);
 
   await p.db.transaction().execute(async (trx) => {
     const { change, source } = await syncColumns(trx, o, { estAfter: 0n });
-    await rebate.onUpdated(trx, change, source);
+    // kit 的 syncColumns 推了版本，补上真实同步会给出的标志（D10-650）。
+    await rebate.onUpdated(trx, { ...change, commission_moved: true }, source);
   });
 
   const order = await p.db
@@ -117,7 +174,12 @@ it('[AC-B2-03q#41][BR-FUND-07] R6：真实 bases 给出新基数 0，订单 VOID
     .where('order_id', '=', o.orderId)
     .executeTakeFirstOrThrow();
   expect(order).toEqual({ rebate_status: 'VOID', reason: 'COMMISSION_ZERO' });
-  expect(await storedVersions(p.db, o)).toEqual({ amounts: [1], totals: [1] });
+  expect(await storedVersions(p.db, o)).toEqual({ amounts: [1, 2], totals: [1, 2] });
+  expect(await amountsAt(p.db, o, 2)).toEqual([
+    ['self', 0n, 0n],
+    ['direct', 0n, 0n],
+    ['indirect', 0n, 0n],
+  ]);
 });
 
 it('[AC-B2-03q#42][BR-FUND-07] 无快照的单：bases 的 null 不当 0，佣金变 0 不作废；refresh 什么也不写', async () => {
@@ -165,7 +227,7 @@ it('[AC-B2-03q#43] R3a 跳号：未归因期间版本到 3、快照只写了 v1�
 });
 
 it.each(['ESTIMATED', 'WAITING'])(
-  '[AC-B2-03q#44][BR-FUND-03] %s 结算后预估单独变化：不走 R7、结算额不变，但版本前进后当前版本要有行，读取不抛错',
+  '[AC-B2-03q#44][BR-FUND-03][BR-CALC-15] %s 结算后预估单独变化：不走 R7、结算额不变，est 只存档，版本不动，没有 v2 行，读取仍是 v1',
   async (rebateStatus) => {
     const f = await fixture(p.db);
     const o = await f.order({
@@ -178,22 +240,25 @@ it.each(['ESTIMATED', 'WAITING'])(
     const rebate = rebateOf(f.clock, f.estimates);
 
     await p.db.transaction().execute(async (trx) => {
-      const { change, source } = await syncColumns(trx, o, {
-        estAfter: 3000n,
-        event: 'PLATFORM_SETTLED',
-      });
+      const { change, source } = await plannedColumns(trx, o, { estAfter: 3000n });
       await rebate.onUpdated(trx, change, source);
     });
 
-    // 有效佣金仍是结算额 1000：v2 与 v1 同额。
-    expect(await amountsAt(p.db, o, 2)).toEqual([
+    // 有效佣金仍是结算额 1000（①）：只有 est 存档。
+    expect(await orderRow(p.db, o)).toMatchObject({
+      est_commission_fen: 3000n,
+      settle_commission_fen: 1000n,
+      commission_version: 1,
+    });
+    expect(await storedVersions(p.db, o)).toEqual({ amounts: [1], totals: [1] });
+    expect(await amountsAt(p.db, o, 1)).toEqual([
       ['self', 850n, 425n],
       ['direct', 850n, 85n],
       ['indirect', 850n, 42n],
     ]);
-    expect(await totalsAt(p.db, o, 2)).toMatchObject({ n_total_fen: 1000n, base_fen: 850n });
-    const read = await p.db.transaction().execute((trx) => readCurrent(trx, o, 2));
-    expect(read).toMatchObject({ commissionVersion: 2, baseFen: 850n });
+    expect(await totalsAt(p.db, o, 1)).toMatchObject({ n_total_fen: 1000n, base_fen: 850n });
+    const read = await p.db.transaction().execute((trx) => readCurrent(trx, o, 1));
+    expect(read).toMatchObject({ commissionVersion: 1, baseFen: 850n });
     const history = await p.db
       .selectFrom('order_status_history')
       .select('event')
@@ -205,7 +270,7 @@ it.each(['ESTIMATED', 'WAITING'])(
   TIMEOUT,
 );
 
-it('[AC-B2-03q#45][BR-FUND-01] CREDITED 分支：版本前进时调一次 refresh，同一事务，状态与 booked 不动', async () => {
+it('[AC-B2-03q#45][BR-FUND-01][BR-CALC-23] CREDITED 分支：结算额变化推版本时调一次 refresh，同一事务，新行按新 N，状态与 booked 不动', async () => {
   const f = await fixture(p.db);
   const o = await f.order({
     rebateStatus: 'CREDITED',
@@ -224,17 +289,18 @@ it('[AC-B2-03q#45][BR-FUND-01] CREDITED 分支：版本前进时调一次 refres
 
   await p.db.transaction().execute(async (trx) => {
     seen.push(trx);
-    const { change, source } = await syncColumns(trx, o, {
-      estAfter: 2000n,
-      event: 'PLATFORM_SETTLED',
-    });
+    const { change, source } = await plannedColumns(trx, o, { settleAfter: 800n });
     await rebate.onUpdated(trx, change, source);
   });
 
   expect(refresh.mock.calls).toEqual([
     [seen[0], { appId: o.appId, orderId: o.orderId, attrAt: o.attrAt }],
   ]);
-  expect(await amountsAt(p.db, o, 2)).toEqual(await amountsAt(p.db, o, 1));
+  expect(await amountsAt(p.db, o, 2)).toEqual([
+    ['self', 680n, 340n],
+    ['direct', 680n, 68n],
+    ['indirect', 680n, 34n],
+  ]);
   const order = await p.db
     .selectFrom('orders')
     .select(['rebate_status', 'booked_base_fen', 'booked_n_fen', 'commission_version'])
@@ -325,7 +391,8 @@ it('[AC-B2-03q#63][BR-FUND-07][BR-CALC-03] R6 拼多多：est 变 0 时新基数
 
   await p.db.transaction().execute(async (trx) => {
     const { change, source } = await syncColumns(trx, o, { estAfter: 0n });
-    await rebate.onUpdated(trx, change, source);
+    // kit 的 syncColumns 推了版本，补上真实同步会给出的标志（D10-650）。
+    await rebate.onUpdated(trx, { ...change, commission_moved: true }, source);
   });
 
   const order = await p.db
@@ -335,7 +402,7 @@ it('[AC-B2-03q#63][BR-FUND-07][BR-CALC-03] R6 拼多多：est 变 0 时新基数
     .where('order_id', '=', o.orderId)
     .executeTakeFirstOrThrow();
   expect(order).toEqual({ rebate_status: 'VOID', reason: 'COMMISSION_ZERO' });
-  expect(await storedVersions(p.db, o)).toEqual({ amounts: [1], totals: [1] });
+  expect(await storedVersions(p.db, o)).toEqual({ amounts: [1, 2], totals: [1, 2] });
 });
 
 it('[AC-B2-03q#64][BR-FUND-07][BR-CALC-02] R6 有补贴的单：佣金变 0 时新基数是 0，补贴不把订单留在 R7', async () => {
@@ -345,7 +412,8 @@ it('[AC-B2-03q#64][BR-FUND-07][BR-CALC-02] R6 有补贴的单：佣金变 0 时�
 
   await p.db.transaction().execute(async (trx) => {
     const { change, source } = await syncColumns(trx, o, { estAfter: 0n });
-    await rebate.onUpdated(trx, change, source);
+    // kit 的 syncColumns 推了版本，补上真实同步会给出的标志（D10-650）。
+    await rebate.onUpdated(trx, { ...change, commission_moved: true }, source);
   });
 
   const order = await p.db
@@ -355,5 +423,5 @@ it('[AC-B2-03q#64][BR-FUND-07][BR-CALC-02] R6 有补贴的单：佣金变 0 时�
     .where('order_id', '=', o.orderId)
     .executeTakeFirstOrThrow();
   expect(order).toEqual({ rebate_status: 'VOID', reason: 'COMMISSION_ZERO' });
-  expect(await storedVersions(p.db, o)).toEqual({ amounts: [1], totals: [1] });
+  expect(await storedVersions(p.db, o)).toEqual({ amounts: [1, 2], totals: [1, 2] });
 });

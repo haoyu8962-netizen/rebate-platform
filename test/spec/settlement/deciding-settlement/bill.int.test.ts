@@ -94,7 +94,7 @@ it(
 );
 
 it(
-  '[AC-B2-04zp#12] 基数 1000 与 STATEMENT 900 不符：登记 settle_amount_mismatch（基数 1000、结算 900），不入批，不被 API 1000 蒙混过关',
+  '[AC-B2-04zp#12] 付款时预估 1000，API 950 → STATEMENT 900 → API 1000：结算到达和变化都推版本（BR-CALC-15，D10-578 ②），出账时基数 900，账单按 STATEMENT 900 入批（settle_seq 3），不登记 settle_amount_mismatch，不被 API 1000 蒙混过关；R5 按 900 入账',
   async () => {
     await withWorker(db, async (w) => {
       const app = await w.app();
@@ -106,21 +106,26 @@ it(
 
       w.clock.set(BILL_AT);
       await w.bill(app);
-      expect(await w.items(app)).toEqual([]);
-      expect(await reconDiffs(db, app)).toMatchObject([
-        {
-          type: 'settle_amount_mismatch',
-          period: BILL_MONTH,
-          ref_id: `pdd:${o.subOrderId}`,
-          expected_fen: 1000n,
-          actual_fen: 900n,
-        },
+      expect(await w.items(app)).toEqual([
+        expect.objectContaining({ item_type: 'order', settle_seq: 3, b_settle_fen: 900n }),
       ]);
+      expect(await reconDiffs(db, app)).toEqual([]);
       expect(await billTotals(app.appId)).toMatchObject({
-        platform_settle_commission_totals: { pdd: '0' },
-        error_count: 1,
+        platform_settle_commission_totals: { pdd: '900' },
+        beneficiary_total_fen: 450n,
+        platform_retained_fen: 450n,
+        error_count: 0,
       });
       expect(await o.row()).toMatchObject({ rebate_status: 'WAITING', booked_n_fen: null });
+
+      await w.confirmAndExecute(app);
+      expect(await w.items(app)).toMatchObject([{ result: 'credited', skip_reason: null }]);
+      expect(await o.row()).toMatchObject({
+        rebate_status: 'CREDITED',
+        booked_base_fen: 900n,
+        booked_n_fen: 900n,
+      });
+      expect(await w.available(app)).toBe(450n);
     });
   },
   TIMEOUT,

@@ -1,11 +1,19 @@
-// B2-03q · refresh，CREDITED（D10-565；BR-FUND-01 R9b「只存档，不改应得」）：把上一版本金额行与 totals 原样复制
-// 到当前版本，排在任何扣回之前；不改余额、不写分录、booked 不变。订单都先经真实 B2-04m 入账。
+// B2-03q · refresh，CREDITED（D10-565；B2-03s 起按 D10-578、BR-CALC-23 (a)）：结算额变化推版本时按新 N 重算当前版本的
+// 金额行与 totals，排在任何扣回之前；不改余额、不写分录、booked 不变。订单都先经真实 B2-04m 入账。
 // 默认单（credit kit）：N=1000、预留 1500，booked 850 / 1000，入账 425 / 85 / 42；快照 v1 建在预估 4333 上，
-// B=3683，份额 1841 / 368 / 184，n_total 4444（故意与入账额不同，复制时不能换算）。
+// B=3683，份额 1841 / 368 / 184，n_total 4444（故意与入账额不同）；冻结补贴 111。
+// 结算额变成 800：B=680，340 / 68 / 34，合计 442，n_total 911，基数前扣除 231，利润 469。
 // BR-FUND-08 例：已入账 617 / 123 / 494，booked 1234，退款 1/2，联盟新 B=617 → 新应得 308 / 61 / 248，
 // CLAWBACK 309、62，平台凭证 246。
+import type { DB } from '@couli/db';
 import { createTestDatabase } from '@couli/db/testing';
+import type { Transaction } from 'kysely';
 import { expect, it } from 'vitest';
+import {
+  planOrderSyncColumns,
+  type OrderUpdatePlan,
+} from '../../../../apps/api/src/modules/orders/index.ts';
+import { order as unionOrder } from '../../orders/attribution/kit.ts';
 import {
   LATER,
   TIMEOUT,
@@ -16,12 +24,15 @@ import {
   databaseFixture,
   fixture,
   moneyRows,
+  orderRow,
   platformClawbackKey,
   platformDecreaseLines,
   receivable,
   storedVersions,
+  syncColumns,
   totalsAt,
   userClawbackLines,
+  type PortOrder,
 } from './kit.ts';
 
 const p = databaseFixture(createTestDatabase);
@@ -36,40 +47,109 @@ const FOR_BR_FUND_08 = {
   patch: { quantity: 2 },
 } as const;
 
+type Harness = Awaited<ReturnType<typeof creditedFixture>>;
+
+interface SettleSync {
+  readonly settleAfter: bigint;
+  readonly refundedQuantityAfter?: number;
+}
+
+const SETTLED_SYNC: OrderUpdatePlan = {
+  kind: 'update',
+  platform_status: 'SETTLED',
+  received_at: null,
+  history: [],
+  pending: null,
+  rule: null,
+};
+
+/**
+ * One sync whose report carries a settlement amount. syncColumns writes the estimate only, so the
+ * commission columns come from the real column plan here, and so does commission_moved
+ * (BR-CALC-15): the version moves only because the plan says so, as in update-step.
+ */
+async function settleColumns(
+  trx: Transaction<DB>,
+  o: PortOrder,
+  { settleAfter, ...rest }: SettleSync,
+) {
+  const { change, source } = await syncColumns(trx, o, { event: 'PLATFORM_SETTLED', ...rest });
+  const current = await orderRow(trx, o);
+  const columns = planOrderSyncColumns(
+    current,
+    unionOrder({ est_commission_fen: null, settle_commission_fen: settleAfter }),
+    SETTLED_SYNC,
+  );
+  await trx
+    .updateTable('orders')
+    .set({
+      settle_commission_fen: columns.settle_commission_fen,
+      commission_version: columns.commission_version,
+    })
+    .where('app_id', '=', o.appId)
+    .where('order_id', '=', o.orderId)
+    .execute();
+  return {
+    change: {
+      ...change,
+      settle_commission_fen: columns.settle_commission_fen,
+      commission_moved: columns.commission_version !== current.commission_version,
+    },
+    source,
+  };
+}
+
+/** One sync on one transaction: the columns, then settlement's rebate, then the clawback. */
+async function syncSettlement(h: Harness, o: Parameters<Harness['target']>[0], spec: SettleSync) {
+  const clawback = h.boot();
+  return p.db.transaction().execute(async (trx) => {
+    const { change, source } = await settleColumns(trx, h.target(o), spec);
+    await h.rebate.onUpdated(trx, change, source);
+    return clawback.onUpdated(trx, change, source);
+  });
+}
+
 it(
-  '[AC-B2-03q#31][BR-FUND-01] R9b：真实 rebate 与 clawback 走完不抛错，金额行与 totals 逐行等于上一版本',
+  '[AC-B2-03q#31][BR-CALC-23][BR-CALC-15] 结算额变化（②）：真实 rebate 与 clawback 走完不抛错，当前版本的金额行与 totals 按新 N 重算，不是复制上一版本',
   async () => {
     const h = await creditedFixture(p.db);
     const o = await h.credited();
     const target = h.target(o);
 
-    const result = await h.syncOrder(o, { estAfter: 2000n });
+    const result = await syncSettlement(h, o, { settleAfter: 800n });
 
-    expect(result).toEqual({
-      outcome: 'estimate_archived',
-      orderKey: o.orderKey,
-      reconDiff: 'registered',
-    });
-    expect(await amountsAt(p.db, target, 2)).toEqual(await amountsAt(p.db, target, 1));
-    expect(await amountsAt(p.db, target, 2)).toEqual([
+    expect(result).toEqual({ outcome: 'skipped', reason: 'not_reverse' });
+    expect(await amountsAt(p.db, target, 1)).toEqual([
       ['self', 3683n, 1841n],
       ['direct', 3683n, 368n],
       ['indirect', 3683n, 184n],
     ]);
-    expect(await totalsAt(p.db, target, 2)).toEqual(await totalsAt(p.db, target, 1));
+    expect(await amountsAt(p.db, target, 2)).toEqual([
+      ['self', 680n, 340n],
+      ['direct', 680n, 68n],
+      ['indirect', 680n, 34n],
+    ]);
+    expect(await totalsAt(p.db, target, 2)).toEqual({
+      n_total_fen: 911n,
+      pre_base_deduct_fen: 231n,
+      base_fen: 680n,
+      user_share_total_fen: 442n,
+      tlj_redpacket_fen: 0n,
+      platform_est_profit_fen: 469n,
+    });
     expect(await storedVersions(p.db, target)).toEqual({ amounts: [1, 2], totals: [1, 2] });
   },
   TIMEOUT,
 );
 
 it(
-  '[AC-B2-03q#32][BR-FUND-01] R9b 只存档：booked 不变、余额不变、没有新分录，应得不改',
+  '[AC-B2-03q#32][BR-CALC-23][BR-CALC-15] 结算额变化只推版本和金额行：booked 不变、余额不变、没有新分录，已入账的不动',
   async () => {
     const h = await creditedFixture(p.db);
     const o = await h.credited();
     const money = await moneyRows(p.db, h.appId);
 
-    await h.syncOrder(o, { estAfter: 2000n });
+    await syncSettlement(h, o, { settleAfter: 800n });
 
     expect(await h.rebateColumns(o)).toMatchObject({
       rebate_status: 'CREDITED',
@@ -87,10 +167,11 @@ it(
 );
 
 it(
-  '[AC-B2-03q#33][BR-FUND-08] R9b 之后再部分退款：refresh 加真实 createClawbackOrder 不抛错，金额与 BR-FUND-08 例一致',
+  '[AC-B2-03q#33][BR-FUND-08] 结算额变化之后再部分退款：refresh 加真实 createClawbackOrder 不抛错，金额与 BR-FUND-08 例一致',
   async () => {
     const h = await creditedFixture(p.db);
     const o = await h.credited(FOR_BR_FUND_08);
+    const target = h.target(o);
     expect(await h.balance(o.user('self'))).toBe(617n);
     expect(await h.balance(o.user('direct'))).toBe(123n);
     expect((await h.nets(o)).platform_net_fen).toBe(494n);
@@ -99,14 +180,33 @@ it(
       booked_n_fen: 1234n,
     });
 
-    // R9b 把版本推到 2，部分退款推到 3；两次都先 refresh，再由 clawback 读当前版本。
-    await h.syncOrder(o, { estAfter: 5000n });
-    const result = await h.partialRefund(o, {
-      estAfter: 617n,
-      refundedQuantityAfter: 1,
-      newCommissionFen: 617n,
+    // 结算额两次变化把版本推到 2、3（②）；两次都先 refresh，再由 clawback 读当前版本。
+    await syncSettlement(h, o, { settleAfter: 5000n });
+    expect(await amountsAt(p.db, target, 2)).toEqual([
+      ['self', 5000n, 2500n],
+      ['direct', 5000n, 500n],
+    ]);
+    const clawback = h.boot();
+    const result = await p.db.transaction().execute(async (trx) => {
+      const { change, source } = await settleColumns(trx, target, {
+        settleAfter: 617n,
+        refundedQuantityAfter: 1,
+      });
+      await h.rebate.onUpdated(trx, change, source);
+      return clawback.apply(trx, {
+        appId: h.appId,
+        orderId: o.orderId,
+        cause: 'PARTIAL_REFUND',
+        ref: { kind: 'commission' },
+        newCommissionFen: 617n,
+        rightsDeductFen: null,
+      });
     });
 
+    expect(await amountsAt(p.db, target, 3)).toEqual([
+      ['self', 617n, 308n],
+      ['direct', 617n, 61n],
+    ]);
     const id = 'C3';
     expect(result).toEqual({
       outcome: 'clawed_back',
@@ -142,16 +242,21 @@ it(
 );
 
 it(
-  '[AC-B2-03q#34][BR-FUND-01] R9：结算记录未变、退款未给新佣金时走 WAIT_COMMISSION，也不因版本前进抛错',
+  '[AC-B2-03q#34][BR-FUND-01] R9：退款未给新佣金时走 WAIT_COMMISSION，结算额不算新佣金（归 R10）；v2 行来自结算变化，按新 N，也不因版本前进抛错',
   async () => {
     const h = await creditedFixture(p.db);
     const o = await h.credited();
 
-    const result = await h.syncOrder(o, { estAfter: 2000n, refundedQuantityAfter: 1 });
+    const result = await syncSettlement(h, o, { settleAfter: 800n, refundedQuantityAfter: 1 });
 
     expect(result).toMatchObject({ outcome: 'wait_commission', orderKey: o.orderKey });
     expect(await h.clawbackKeys(o)).toEqual([]);
     expect(await storedVersions(p.db, h.target(o))).toEqual({ amounts: [1, 2], totals: [1, 2] });
+    expect(await amountsAt(p.db, h.target(o), 2)).toEqual([
+      ['self', 680n, 340n],
+      ['direct', 680n, 68n],
+      ['indirect', 680n, 34n],
+    ]);
   },
   TIMEOUT,
 );
@@ -198,7 +303,7 @@ it(
 );
 
 it(
-  '[AC-B2-03q#37][BR-FUND-01] 上一版本 = 库内最大版本：跳号时不补中间版本，复制不重算，后来的没收也不改复制的金额，null 面额保持 null',
+  '[AC-B2-03q#37][BR-FUND-01] 上一版本 = 库内最大版本：跳号时不补中间版本，N 已知按新 N 重算，后来的没收按 0 算，null 面额保持 null',
   async () => {
     const f = await fixture(p.db);
     const o = await f.order({
@@ -223,15 +328,15 @@ it(
 
     expect(await storedVersions(p.db, o)).toEqual({ amounts: [1, 2, 4], totals: [1, 2, 4] });
     expect(await amountsAt(p.db, o, 4)).toEqual([
-      ['self', 1700n, 850n],
-      ['direct', 1700n, 170n],
-      ['indirect', 1700n, 85n],
+      ['self', 6800n, 3400n],
+      ['direct', 6800n, 0n],
+      ['indirect', 6800n, 340n],
     ]);
     expect(await totalsAt(p.db, o, 4)).toEqual({
-      n_total_fen: 2000n,
-      pre_base_deduct_fen: 300n,
-      base_fen: 1700n,
-      user_share_total_fen: 1105n,
+      n_total_fen: 8000n,
+      pre_base_deduct_fen: 1200n,
+      base_fen: 6800n,
+      user_share_total_fen: 3740n,
       tlj_redpacket_fen: null,
       platform_est_profit_fen: null,
     });

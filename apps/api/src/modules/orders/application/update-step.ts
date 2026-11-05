@@ -41,6 +41,8 @@
 //   结算佣金列的值；本次报文的结算额算数（domain reportedSettleFen）就在 CAS 与 history 之后、待处理与 settlement
 //   端口之前同事务记一条 API 记录，内容不变不加行。判定看算数的结算额，不看事件名；CREDITED 单照记。
 //   union_settled_at（BR-FUND-04 ①）：报文给了 settled_at 就写，不看平台状态与结算额，空值不覆盖。
+// - 版本推进（B2-03s，BR-CALC-15，D10-578）：commission_version 只由 planOrderSyncColumns 在这条 CAS 里 +1；
+//   change.commission_moved 就是这次写动没动版本，settlement 只看它，不比前后佣金。
 // - 返利状态、hold、order_rights、order_settlements 只由 settlement 经端口决定；本模块不写这些列。
 //   端口除 change / info 外另带本次报文的来源（映射事件与原始码），settlement 据此区分维权与处罚（P8）。
 // 日志只打平铺字段（platform、app_id、reason、outcome、rule、event），不打子订单号与买家参数。
@@ -139,6 +141,11 @@ export interface OrderUpdateChange {
   readonly est_after: bigint | null;
   readonly settle_commission_fen: bigint | null;
   readonly attributed_now: boolean;
+  /**
+   * B2-03s：这次写库 commission_version 动了（有效联盟佣金变了，BR-CALC-15），由列计划算出。同步路径总是给；
+   * 可选只为不带它的替身，缺失等于 false。
+   */
+  readonly commission_moved?: boolean;
   /**
    * B1-08k 第 ⑥ 步本次的快照结果（P2 / R3a 的预估由 settlement 据此与快照表决定）；只在注入 snapshots 时出现，
    * 未注入时不带此字段（与 B1-08i 的 change 逐字段一致）。
@@ -754,6 +761,7 @@ export function createOrderUpdateStep(
         est_after: columns.est_commission_fen,
         settle_commission_fen: columns.settle_commission_fen,
         attributed_now: attributedNow,
+        commission_moved: columns.commission_version !== current.commission_version,
         ...(snapshot === undefined ? {} : { snapshot }),
       },
       source,

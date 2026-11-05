@@ -20,20 +20,49 @@ afterAll(async () => {
 import { at, historySteps, RECEIVED, scenario, SETTLED } from './kit.ts';
 
 it.each([
-  { initial: 'paid', raw: 'received', rule: 'P3', steps: ['RECEIVED'], time: RECEIVED },
-  { initial: 'received', raw: 'settled', rule: 'P4', steps: ['SETTLED'], time: RECEIVED },
-  { initial: 'paid', raw: 'settled', rule: 'P5', steps: ['RECEIVED', 'SETTLED'], time: SETTLED },
+  {
+    initial: 'paid',
+    raw: 'received',
+    rule: 'P3',
+    steps: ['RECEIVED'],
+    time: RECEIVED,
+    moved: false,
+  },
+  {
+    initial: 'received',
+    raw: 'settled',
+    rule: 'P4',
+    steps: ['SETTLED'],
+    time: RECEIVED,
+    moved: true,
+  },
+  {
+    initial: 'paid',
+    raw: 'settled',
+    rule: 'P5',
+    steps: ['RECEIVED', 'SETTLED'],
+    time: SETTLED,
+    moved: true,
+  },
   {
     initial: 'deposit',
     raw: 'settled',
     rule: 'P5',
     steps: ['PAID', 'RECEIVED', 'SETTLED'],
     time: SETTLED,
+    moved: true,
   },
-  { initial: 'deposit', raw: 'received', rule: 'P14', steps: ['PAID', 'RECEIVED'], time: RECEIVED },
+  {
+    initial: 'deposit',
+    raw: 'received',
+    rule: 'P14',
+    steps: ['PAID', 'RECEIVED'],
+    time: RECEIVED,
+    moved: false,
+  },
 ] as const)(
   '[AC-B1-08i#20] $rule 从 $initial 更新，CAS 一次且 history 按步骤只插入',
-  async ({ initial, raw, rule, steps, time }) => {
+  async ({ initial, raw, rule, steps, time, moved }) => {
     const f = await scenario(db, {
       raw_status: initial,
       ...(initial === 'received' ? { received_at: at(RECEIVED) } : {}),
@@ -57,6 +86,8 @@ it.each([
       platform_status: steps.at(-1),
       received_at: at(time),
       settled_at: raw === 'settled' ? at(SETTLED) : null,
+      // BR-CALC-15：结算额 500 与预估 789 不同，有效 N 变了才推版本。
+      commission_version: f.original.commission_version + (moved ? 1 : 0),
       row_version: f.original.row_version + 1,
       updated_at: f.clock.now(),
       attr_at: f.original.attr_at,
@@ -94,6 +125,7 @@ it.each([
       est_after: 789n,
       settle_commission_fen: raw === 'settled' ? 500n : null,
       attributed_now: false,
+      commission_moved: moved,
     });
     expect(f.publishedOf('order.updated')).toHaveLength(1);
     expect(f.publishedOf('order.updated')[0]?.[1]).toEqual({

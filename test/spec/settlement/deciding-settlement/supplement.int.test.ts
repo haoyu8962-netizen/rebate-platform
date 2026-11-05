@@ -60,7 +60,7 @@ it(
 );
 
 it(
-  '[AC-B2-04zp#18] 补差时基数 1000 与 STATEMENT 900 不符：登记 settle_amount_mismatch，不入批，不被 API 1000 蒙混过关',
+  '[AC-B2-04zp#18] 补差：付款时预估 1000，账单日应结未结，之后 API 950 → STATEMENT 900 → API 1000：基数已随结算推到 900，按 900 进补充批次（settle_seq 3），不登记 settle_amount_mismatch，不被 API 1000 蒙混过关；R5 按 900 入账',
   async () => {
     await withWorker(db, async (w) => {
       const app = await w.app();
@@ -73,19 +73,28 @@ it(
 
       await statementBetweenApi(o);
       const result = await launch(db, w, app);
-      expect(result).toMatchObject({ outcome: 'generated', batchIds: [] });
-      expect(await w.items(app)).toEqual([]);
+      expect(result).toMatchObject({
+        outcome: 'generated',
+        billId: BILL_MONTH,
+        batchIds: [expect.any(String)],
+      });
+      expect(await w.items(app)).toEqual([
+        expect.objectContaining({ item_type: 'order', settle_seq: 3, b_settle_fen: 900n }),
+      ]);
       const mismatches = (await reconDiffs(db, app)).filter(
         (diff) => diff.type === 'settle_amount_mismatch',
       );
-      expect(mismatches).toMatchObject([
-        {
-          period: BILL_MONTH,
-          ref_id: `pdd:${o.subOrderId}`,
-          expected_fen: 1000n,
-          actual_fen: 900n,
-        },
-      ]);
+      expect(mismatches).toEqual([]);
+      expect((await reconDiffs(db, app)).map((diff) => diff.type)).toEqual(['settle_missing']);
+
+      await w.confirmAndExecute(app);
+      expect(await w.items(app)).toMatchObject([{ result: 'credited', skip_reason: null }]);
+      expect(await o.row()).toMatchObject({
+        rebate_status: 'CREDITED',
+        booked_base_fen: 900n,
+        booked_n_fen: 900n,
+      });
+      expect(await w.available(app)).toBe(450n);
     });
   },
   TIMEOUT,

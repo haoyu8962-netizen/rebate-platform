@@ -432,13 +432,10 @@ it('[AC-B1-10n#28] 直推入账后进入注销 processing（净额 85 > 0），�
   expect(await subjectNet(s, RECEIVABLE)).toBe(0n);
 }, 120_000);
 
-// D10-565: this report's estimate moves commission_version (BR-FUND-03) and the clawback reads the
-// snapshot of the current version, so orders' onUpdated must run rebate (R9b's copy of the amount
-// rows and totals) before the clawback. jd 3 is PLATFORM_INVALID: P6 from RECEIVED, R8 with ref
+// D10-578 (BR-CALC-15): this order has its statement, so the report's estimate alone is archived:
+// no new version, the clawback reads v1. jd 3 is PLATFORM_INVALID: P6 from RECEIVED, R8 with ref
 // platform, sub_type FULL, reason REFUND (BR-FUND-08 细则), the same 425 / 85 / 42, platform 448.
-// The copy keeps the snapshot's own figures whatever the new estimate says. Goes green once the
-// update step's rebate port is the real one (B1-09n's wiring); the order must not be weakened.
-it('[AC-B1-10n#30] 已入账订单的同步更新（预估变化，平台失效）经真实 worker 的 order-sync 作业：commission 新版本行先于扣回凭证写入（rebate 在前，扣回在后），v2 逐行等于 v1；全额扣回 425 / 85 / 42、平台 448，sub_type FULL，订单 CLAWED_BACK、原因码 REFUND、booked 0 / 0，余额归零，联盟应收净额 0', async () => {
+it('[AC-B1-10n#30] 已入账订单的同步更新（结算后预估变化，平台失效）经真实 worker 的 order-sync 作业：有效佣金没变，不推版本，没有 v2 行，只写扣回凭证；全额扣回 425 / 85 / 42、平台 448，sub_type FULL，订单 CLAWED_BACK、原因码 REFUND、booked 0 / 0，余额归零，联盟应收净额 0', async () => {
   const s = await setup(h);
   const writes = insertRecorder([
     'commission_split_amounts',
@@ -460,10 +457,91 @@ it('[AC-B1-10n#30] 已入账订单的同步更新（预估变化，平台失效�
   const phases = writes.inserts
     .map((table) => (table === 'ledger_vouchers' ? 'voucher' : 'version'))
     .filter((phase, at, all) => phase !== all[at - 1]);
+  expect(phases).toEqual(['voucher']);
+
+  expect(await versionRows(s, c.order.order_id, 1)).toEqual(before);
+  expect(await versionRows(s, c.order.order_id, 2)).toEqual({ amounts: [], totals: [] });
+
+  const keys = await voucherKeys(s, ':PLATFORM:CLAWBACK:');
+  expect(keys).toHaveLength(1);
+  const event = keys[0]!.split(':').pop()!;
+  expect(event).toMatch(/^P\d+$/);
+  await expectClawback(s, c, event, [425n, 85n, 42n, 448n], 'CLAWBACK|FULL');
+  expect(await orderNow(s, c.order.order_id)).toMatchObject({
+    platform_status: 'INVALID',
+    rebate_status: 'CLAWED_BACK',
+    reason: 'REFUND',
+    booked_base_fen: 0n,
+    booked_n_fen: 0n,
+    commission_version: 1,
+    est_commission_fen: 2000n,
+    settle_commission_fen: 1000n,
+  });
+  await expectBalances(s, c, [0n, 0n, 0n]);
+  expect(await subjectNet(s, 'UNION_RECEIVABLE:jd')).toBe(0n);
+}, 120_000);
+
+// D10-578 (BR-CALC-15, BR-CALC-23 (a)): a new statement reaches the column on the next sync
+// (BR-FUND-09: a jd order's settlement comes from the statement alone), so the effective N moves on
+// the report that also invalidates the order, with its estimate unchanged. The clawback reads the
+// snapshot of the current version, so orders' onUpdated must run rebate before the clawback. The new
+// rows follow N 800 over the frozen terms: reserve 1500 → B 680, 340 / 68 / 34, total 442; subsidy
+// 111 → n_total 911, before base 231, profit 469. The clawback gives back what was booked.
+it('[AC-B2-03s#39][BR-CALC-15][BR-CALC-23] 已入账订单的同步更新（新账单改了结算额，平台失效）经真实 worker 的 order-sync 作业：有效佣金变了，commission 新版本行先于扣回凭证写入（rebate 在前，扣回在后），v2 按新 N 800，v1 不动；全额扣回 425 / 85 / 42、平台 448，sub_type FULL，订单 CLAWED_BACK、booked 0 / 0，余额归零，联盟应收净额 0', async () => {
+  const s = await setup(h);
+  const writes = insertRecorder([
+    'commission_split_amounts',
+    'commission_split_totals',
+    'ledger_vouchers',
+  ]);
+  const w = await worker(h, { plugin: writes.plugin });
+  const c = await creditedOrder(s, w, 'jd');
+  const accountId = await seedUnionAccount(s, 'jd');
+  await s.h.db
+    .insertInto('order_settlements')
+    .values({
+      app_id: s.appId,
+      order_id: c.order.order_id,
+      seq: 2,
+      source: 'STATEMENT',
+      settle_commission_fen: 800n,
+      settled_at: new Date(OCCURRED),
+      content_hash: 'synthetic-second-statement',
+      created_at: new Date(OCCURRED),
+    })
+    .execute();
+
+  const before = await versionRows(s, c.order.order_id, 1);
+  expect(before.amounts).toHaveLength(3);
+  expect(before.totals).toHaveLength(1);
+
+  writes.armed = true;
+  await w.sync(s.appId, accountId, reported(c.order, '3', 3222n));
+  writes.armed = false;
+
+  const phases = writes.inserts
+    .map((table) => (table === 'ledger_vouchers' ? 'voucher' : 'version'))
+    .filter((phase, at, all) => phase !== all[at - 1]);
   expect(phases).toEqual(['version', 'voucher']);
 
   expect(await versionRows(s, c.order.order_id, 1)).toEqual(before);
-  expect(await versionRows(s, c.order.order_id, 2)).toEqual(before);
+  expect(await versionRows(s, c.order.order_id, 2)).toEqual({
+    amounts: [
+      { user_id: c.direct, role: 'direct', base_fen: 680n, amount_fen: 68n },
+      { user_id: c.indirect, role: 'indirect', base_fen: 680n, amount_fen: 34n },
+      { user_id: c.self, role: 'self', base_fen: 680n, amount_fen: 340n },
+    ],
+    totals: [
+      {
+        n_total_fen: 911n,
+        pre_base_deduct_fen: 231n,
+        base_fen: 680n,
+        user_share_total_fen: 442n,
+        tlj_redpacket_fen: 0n,
+        platform_est_profit_fen: 469n,
+      },
+    ],
+  });
 
   const keys = await voucherKeys(s, ':PLATFORM:CLAWBACK:');
   expect(keys).toHaveLength(1);
@@ -477,7 +555,8 @@ it('[AC-B1-10n#30] 已入账订单的同步更新（预估变化，平台失效�
     booked_base_fen: 0n,
     booked_n_fen: 0n,
     commission_version: 2,
-    est_commission_fen: 2000n,
+    est_commission_fen: 3222n,
+    settle_commission_fen: 800n,
   });
   await expectBalances(s, c, [0n, 0n, 0n]);
   expect(await subjectNet(s, 'UNION_RECEIVABLE:jd')).toBe(0n);

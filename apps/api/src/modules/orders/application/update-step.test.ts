@@ -715,6 +715,23 @@ it('[AC-B2-04zj#U4] 有 STATEMENT：给 settlement 的是 STATEMENT 金额，记
   });
 });
 
+it('[AC-B2-03s#U3] commission_moved 取自列计划：有效 N 变了为 true，同值重报为 false', async () => {
+  const { db } = scriptedDb(
+    () => 1n,
+    () => undefined,
+  );
+  const { d } = withRecords([]);
+  const step = createOrderUpdateStep(d);
+  const est = incoming().est_commission_fen ?? null;
+  const moved = incoming({ raw_status: 'settled', settle_commission_fen: (est ?? 0n) + 1n });
+  const same = incoming({ raw_status: 'settled', settle_commission_fen: est });
+  const row = { ...current, est_commission_fen: est } as Row;
+  await db.transaction().execute((trx) => step.apply(trx, row, moved, ctx));
+  await db.transaction().execute((trx) => step.apply(trx, row, same, ctx));
+  const calls = vi.mocked(d.rebate.onUpdated).mock.calls;
+  expect(calls.map(([, change]) => change.commission_moved)).toEqual([true, false]);
+});
+
 it('[AC-B2-04zj#U5] 结算额不算数不记录；union_settled_at 报文给了就写，不看状态与结算额；没给不进 UPDATE', async () => {
   const { db, log } = scriptedDb(
     () => 1n,

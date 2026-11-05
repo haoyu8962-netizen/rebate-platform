@@ -34,12 +34,21 @@ const plan: OrderUpdatePlan = {
   rule: 'P15',
 };
 
-it.each([null, 789n, 0n, 123n, 9007199254740993n])(
+it.each([null, 789n])(
   '[AC-B1-08i#10] 预估佣金 %s：null 保留，实际变化才递增版本，整数分不丢精度',
   (amount) => {
     const next = planOrderSyncColumns(current, order({ est_commission_fen: amount }), plan);
     expect(next.est_commission_fen).toBe(amount ?? 789n);
     expect(next.commission_version).toBe(amount === null || amount === 789n ? 7 : 8);
+  },
+);
+
+it.each([0n, 123n, 9007199254740993n])(
+  '[AC-B1-08i#10] 已结算单只来新预估 %s：est 存档、版本保持 7（D10-578 ①），整数分不丢精度',
+  (amount) => {
+    const next = planOrderSyncColumns(current, order({ est_commission_fen: amount }), plan);
+    expect(next.est_commission_fen).toBe(amount);
+    expect(next.commission_version).toBe(7);
   },
 );
 

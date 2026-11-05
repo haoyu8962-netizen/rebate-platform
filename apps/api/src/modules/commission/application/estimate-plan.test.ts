@@ -44,6 +44,23 @@ it('[AC-B2-03q] planVersion：行序按本人、直推、间推，没收份额 0
   });
 });
 
+it('[AC-B2-03s#U4] planVersion：负 N 把 B 夹到 0，份额 0，四段金额保留负的 N', () => {
+  const plan = planVersion(terms, -100n, 0n, () => false);
+  expect(plan.amounts.map((a) => [a.role, a.base_fen, a.amount_fen])).toEqual([
+    ['self', 0n, 0n],
+    ['direct', 0n, 0n],
+    ['indirect', 0n, 0n],
+  ]);
+  expect(plan.totals).toEqual({
+    n_total_fen: -100n,
+    pre_base_deduct_fen: -100n,
+    base_fen: 0n,
+    user_share_total_fen: 0n,
+    tlj_redpacket_fen: 0n,
+    platform_est_profit_fen: -100n,
+  });
+});
+
 it('[AC-B2-03q] planVersion：面额 null 时利润也是 null', () => {
   expect(planVersion(terms, 2000n, null, () => false).totals).toMatchObject({
     tlj_redpacket_fen: null,

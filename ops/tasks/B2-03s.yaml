@@ -36,8 +36,8 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/commission/version-rule/**'
-status: todo
-pr: null
+status: done
+pr: 2387
 red_exempt:
   - file: test/spec/orders/platform-status/columns.test.ts
     test: '[AC-B1-08i#11] 结算佣金仅迁移后 SETTLED 可写：PAID'
