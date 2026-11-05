@@ -21,12 +21,18 @@ import {
   DB,
   getLinkPatterns,
   getMaterialChannels,
+  loadConfigSignKey,
   ROOT_LOGGER,
   type AppConfig,
   type Clock,
   type RootLogger,
 } from '../platform/index.ts';
-import { ClientConfigService, ConfigViewerContext } from './application/client-config.ts';
+import {
+  ClientConfigService,
+  ConfigViewerContext,
+  type BridgeOriginsSource,
+} from './application/client-config.ts';
+import { BRIDGE_ORIGINS_KEY, BridgeOriginsSigner } from './domain/bridge-origins.ts';
 import type { InviteRewardBudgetReader } from './application/invite-reward-budget-reader.ts';
 import { ArticleReader } from './application/article-reader.ts';
 import {
@@ -95,7 +101,58 @@ export interface ContentPublicPorts {
 }
 
 const AUDIENCE_READS = Symbol('AUDIENCE_READS');
+const BRIDGE_ORIGINS_SIGNING = Symbol('BRIDGE_ORIGINS_SIGNING');
+
+/**
+ * F1-02zzzb: the bridge_origins signer of this process, built from platform's configuration signing
+ * key (read once while the providers are created). A refused key (staging / prod without
+ * CONFIG_SIGN_KEY_*, an unreadable or non-P-256 file) fails Nest's init, so the api entry refuses
+ * to start before it listens; until then nothing is signed. The error text names the variables
+ * only.
+ */
+interface BridgeOriginsSigning {
+  signer(): BridgeOriginsSigner;
+  onModuleInit(): void;
+}
+
+async function bridgeOriginsSigning(config: AppConfig): Promise<BridgeOriginsSigning> {
+  let signer: BridgeOriginsSigner | null = null;
+  let refusal: unknown = null;
+  try {
+    signer = new BridgeOriginsSigner(
+      await loadConfigSignKey(config.appEnv, config.configSignKey ?? null),
+    );
+  } catch (error) {
+    refusal = error;
+  }
+  return {
+    signer: () => {
+      if (signer === null) throw new Error('content: the configuration signing key is unavailable');
+      return signer;
+    },
+    onModuleInit: () => {
+      if (signer === null) throw refusal;
+    },
+  };
+}
 const INVITE_REWARD_BUDGET = Symbol('INVITE_REWARD_BUDGET');
+
+/** F1-02zzzb: the row is read afresh from the primary handle on every request (never cached). */
+function bridgeOriginsSource(
+  db: Kysely<Database> | undefined,
+  config: AppConfig,
+  signing: BridgeOriginsSigning,
+): BridgeOriginsSource {
+  const store = db === undefined ? null : createKyselyContentStore(db);
+  return {
+    env: config.appEnv,
+    item: (appId) =>
+      store === null
+        ? Promise.reject(new Error('content: config reads need the database'))
+        : store.configItem(appId, BRIDGE_ORIGINS_KEY),
+    signer: () => signing.signer(),
+  };
+}
 
 function ownContentReader(db: Kysely<Database> | undefined, clock: Clock): ContentReader | null {
   if (db === undefined) return null;
@@ -207,6 +264,11 @@ export class ContentPublicModule {
           }),
         },
         {
+          provide: BRIDGE_ORIGINS_SIGNING,
+          inject: [APP_CONFIG],
+          useFactory: bridgeOriginsSigning,
+        },
+        {
           provide: ClientConfigService,
           inject: [
             CONTENT_READER,
@@ -214,6 +276,7 @@ export class ContentPublicModule {
             ROOT_LOGGER,
             APP_CONFIG,
             INVITE_REWARD_BUDGET,
+            BRIDGE_ORIGINS_SIGNING,
           ],
           useFactory: (
             reader: ContentReader,
@@ -221,10 +284,12 @@ export class ContentPublicModule {
             logger: RootLogger,
             config: AppConfig,
             inviteRewardBudget: InviteRewardBudgetReader | null,
+            signing: BridgeOriginsSigning,
           ): ClientConfigService =>
             new ClientConfigService({
               reader,
               inviteRewardBudget,
+              bridgeOrigins: bridgeOriginsSource(db, config, signing),
               platformIcons: (appId) => {
                 if (db === undefined) {
                   return Promise.reject(

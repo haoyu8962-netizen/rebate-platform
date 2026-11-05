@@ -55,7 +55,7 @@ const OPTIONAL_CONFIG_KEYS = [
   'invite.before_buy_tip',
   'jump_tip',
   'clipboard',
-  'bridge_origins',
+  // F1-02zzzb: bridge_origins is not read here: the service reads its row afresh and signs it.
   'auth_tips',
   'compliance',
   'display',
@@ -180,6 +180,12 @@ export interface ClientConfigInput {
    * (null: could not be calculated); absent when the port is not installed or was not asked.
    */
   readonly inviteRewardBudgetFen?: number | null;
+  /**
+   * F1-02zzzb: the signed bridge_origins whitelist (domain/bridge-origins.ts), which needs the
+   * validated h5_base_url and the signing key, so ClientConfigService fills it after this build.
+   * Absent: an empty placeholder JWS that no client accepts (direct domain callers only).
+   */
+  readonly bridgeOrigins?: ClientConfig['bridge_origins'];
   readonly report: ConfigReport;
 }
 
@@ -450,7 +456,7 @@ export function buildClientConfig(input: ClientConfigInput): ClientConfig | unde
     kf: kf ?? { url: '' },
     jump_tip: optional('jump_tip', isFreeForm, {}),
     clipboard: optional('clipboard', isConfigClipboard, {}),
-    bridge_origins: optional('bridge_origins', isFreeForm, {}),
+    bridge_origins: input.bridgeOrigins ?? { jws: '' },
     auth_tips: optional('auth_tips', isFreeForm, {}),
     compliance: optional('compliance', isFreeForm, {}),
     display: optional('display', isFreeForm, {}),

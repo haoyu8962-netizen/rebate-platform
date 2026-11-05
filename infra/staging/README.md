@@ -360,6 +360,48 @@ chmod 500 /etc/couli-staging-test
 - 增减号码：改 `staging.env` 里的 `STAGING_TEST_PHONES` 后重新部署（第 3 节）。
 - 停用：从 `staging.env` 删掉两个变量后重新部署；节点目录可以留着，也可以删。
 
+### 1.12 配置签名私钥（bridge_origins 签名白名单）
+
+依据编排裁定 D10-608 / D10-610 / D10-612（F1-02zzzb）。`/v1/config` 的 `bridge_origins` 是 api 用 ES256 签过名的白名单（契约 `ConfigBridgeOrigins`），App 用包里带的公钥验签，验不过就不用。签名私钥只给 api，和访问令牌私钥（1.4）**分开**，不要复用同一把。**api 在 staging 没有这把私钥就拒绝启动**，所以合入这项改动之后的第一次部署之前，要先把下面的文件和变量准备好。
+
+#### 节点文件
+
+compose 只给 api 只读挂载节点目录 `/etc/couli-config-sign`（容器内 `/run/couli-config-sign`）；stream、worker、admin、payout 都不挂。挂载带 `create_host_path`，目录不存在不会让挂载本身失败，但 api 读不到私钥照样拒绝启动。
+
+| 路径 | 内容 | 权限 |
+| --- | --- | --- |
+| `/etc/couli-config-sign/` | 目录 | 属主 1000，目录 500 |
+| `/etc/couli-config-sign/es256.pem` | PKCS#8 格式（首行标签 `BEGIN PRIVATE KEY`，不带 `EC`）的 P-256 私钥，不加密 | 属主 1000，文件 400 |
+
+```bash
+install -d -m 700 /etc/couli-config-sign
+(umask 077 && openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out /etc/couli-config-sign/es256.pem)
+chown -R 1000:1000 /etc/couli-config-sign
+chmod 400 /etc/couli-config-sign/es256.pem
+chmod 500 /etc/couli-config-sign
+```
+
+核对曲线用 `openssl pkey -in /etc/couli-config-sign/es256.pem -noout -text_pub`（只打印公钥，应看到 `prime256v1` 或 `P-256`）。要放进 App 包里的公钥用 `openssl pkey -in /etc/couli-config-sign/es256.pem -pubout` 导出，交给三端，和 kid 一起登记。文件必须是普通文件；读不到、不是 P-256 私钥（RSA、P-384、只有公钥、乱码）时 api 拒绝启动，报错只写变量名，不带路径和内容；私钥不进日志。
+
+#### 变量
+
+在 `/etc/couli/staging.env` 里**两个一起设**；只设一个，或两个都不设，api 都拒绝启动：
+
+| 变量 | 取值 |
+| --- | --- |
+| `CONFIG_SIGN_KEY_FILE` | `/run/couli-config-sign/es256.pem`（容器内路径） |
+| `CONFIG_SIGN_KEY_ID` | kid，只能用字母、数字和 `.` `_` `~` `-`，1 到 64 个字符；用用途加环境加年月，例如 `config-staging-2026-11` |
+
+api 只在启动时读一次私钥文件。本地与测试环境不设这两个变量时，每次启动临时生成一对（App 验不过是正常的）。prod 改走 KMS，是上线前的负责人事项，不在这里。
+
+#### 换钥顺序
+
+App 包里按环境带两把公钥（「现用」和「下一把」）。换钥按这个顺序，不要倒过来：
+
+1. 生成新私钥（新文件名，例如 `es256-next.pem`，权限同上），导出公钥，连同新 kid 交给三端，作为「下一把」随新包发布；
+2. 等带新公钥的包覆盖到足够多的用户后，把 `staging.env` 里的 `CONFIG_SIGN_KEY_FILE` 改成新文件、`CONFIG_SIGN_KEY_ID` 改成新 kid，重新部署（第 3 节）。之后同一配置版本的签名会换一次（kid 变了），`/v1/config` 的 ETag 也随之变一次；
+3. 确认没有只认旧公钥的包在用之后，删掉旧私钥文件，三端在下一版里把旧公钥移出、新公钥变成「现用」。
+
 ## 2. 在开发机构建并传到节点
 
 在代码仓库根目录：

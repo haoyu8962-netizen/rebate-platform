@@ -6048,7 +6048,8 @@ paths:
                   jump_tip: {}
                   clipboard:
                     consent_version: '2026-10-01'
-                  bridge_origins: {}
+                  bridge_origins:
+                    jws: aGVhZGVy.cGF5bG9hZA.c2lnbmF0dXJl
                   auth_tips: {}
                   compliance: {}
                   display: {}
@@ -33484,6 +33485,53 @@ components:
       type: object
       description: Configuration block whose inner shape is not fixed by 规划/04 yet.
       additionalProperties: true
+    ConfigBridgeOrigins:
+      type: object
+      description: |
+        Signed whitelist of the origins whose pages the client's trusted web container serves and
+        lets call the bridge (04 §10.1 可信容器白名单 + 签名; 02 §12.6; 03 §5.1 / §5.2; 12 §9 B-04;
+        D10-608 / D10-610 / D10-612). Always present.
+
+        jws is a JWS compact serialization (RFC 7515) `header.payload.signature`, each part
+        base64url without padding:
+        - header: {"alg": "ES256", "kid": <signing key id>, "typ": "couli-bridge-origins+jws"}.
+        - payload: {"v": 1, "app_id": <the caller's app>, "env": "local" | "test" | "staging" |
+          "prod", "version": <integer >= 0>, "origins": [<origin>, ...]}. Each origin is a
+          normalized https origin: lowercase host, no path, query, fragment, credentials or
+          wildcard, port 443 omitted, other ports kept (`https://host[:port]`). origins is non-empty
+          and always contains the origin of h5_base_url. There is no expiry.
+        - signature: ECDSA P-256 over SHA-256 of the ASCII `header.payload`, as the raw 64-byte
+          R‖S (IEEE P1363, RFC 7518 §3.4), not DER.
+
+        Server: origins come from the console config item bridge_origins (an unsigned {origins});
+        version is that item's version, so it grows with every save. Without the item, or when the
+        stored value is not a usable list, the server signs [origin of h5_base_url] (version 0
+        without the item, the item's version otherwise). The signature is cached per
+        (app_id, env, version, origins) and signing key (kid), so the same version answers the
+        same jws byte for byte and the /v1/config ETag (config_version) stays stable; a new
+        version changes both. The private key is the api entry's configuration signing key
+        (CONFIG_SIGN_KEY_FILE / CONFIG_SIGN_KEY_ID), separate from the JWT key.
+
+        Client (03 §5.1 取用顺序): verify the signature with the public key that the package
+        carries for the header's kid and the build's env, then check typ, v = 1, app_id and env
+        equal its own, and version >= the version of the last good whitelist (no rollback). Only
+        then use origins and store it as the last good whitelist; on any failure keep the last good
+        whitelist (or the packaged one) and never write the failed value as last good (AC-S1-180
+        ②). Origins compare as in 03 §5.2: the page URL's normalized origin equals one entry
+        exactly.
+
+        Key rotation: the package carries two kids per env (current + next). The server switches
+        CONFIG_SIGN_KEY_ID / CONFIG_SIGN_KEY_FILE to the next key only after the packages that
+        carry it are released; the signature of the same version then changes once (new kid), and
+        the old key is retired after clients that only know it are gone.
+      additionalProperties: false
+      required:
+        - jws
+      properties:
+        jws:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+          description: JWS compact serialization signed with ES256 (see the schema description).
     ConfigClipboard:
       type: object
       description: |
@@ -39180,9 +39228,10 @@ components:
         link_patterns, external_hosts, app_update, help_links, claim, platform_icons,
         lkg_max_age_sec, config_version, bridge_disabled_methods, nickname) are optional, so a client keeps reading an older last-good configuration (04 §5「兼容」); the
         server always sends them, except that platform_icons lists only the marks with a published
-        replacement image (BR-TEXT-24). jump_tip, bridge_origins, auth_tips, compliance and display are not
-        shaped by 04 yet and stay free-form; the task that consumes each one types it
-        (bridge_origins with CT-03). clipboard is ConfigClipboard (only consent_version is typed).
+        replacement image (BR-TEXT-24). jump_tip, auth_tips, compliance and display are not
+        shaped by 04 yet and stay free-form; the task that consumes each one types it.
+        bridge_origins is the signed whitelist ConfigBridgeOrigins (CT-03c / F1-02zzzb, D10-610).
+        clipboard is ConfigClipboard (only consent_version is typed).
       additionalProperties: false
       required:
         - dict_version
@@ -39234,7 +39283,7 @@ components:
         clipboard:
           $ref: '#/components/schemas/ConfigClipboard'
         bridge_origins:
-          $ref: '#/components/schemas/FreeForm'
+          $ref: '#/components/schemas/ConfigBridgeOrigins'
         auth_tips:
           $ref: '#/components/schemas/FreeForm'
         compliance:

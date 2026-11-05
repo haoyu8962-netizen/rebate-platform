@@ -1,5 +1,12 @@
 export { APP_ENVS, ConfigError, LOG_LEVELS, loadConfig, startupViolations } from './config.ts';
 export type { AppConfig, AppEnv, LogLevel, MetricsConfig, TracingConfig } from './config.ts';
+// The api entry's configuration signing key (F1-02zzzb): content signs bridge_origins with it.
+export {
+  CONFIG_SIGN_KEY_ENV_NAMES,
+  ConfigSignKeyError,
+  loadConfigSignKey,
+} from './config-sign-key.ts';
+export type { ConfigSignKey, ConfigSignKeyConfig } from './config-sign-key.ts';
 // The second field keyring (B1-27e): only the token; opening and reading it stay inside platform.
 export { PRIOR_IDENTITY_FIELD_CRYPTO } from './keyring-prior-identity.ts';
 export type { PriorIdentityKeyringConfig } from './keyring-prior-identity.ts';

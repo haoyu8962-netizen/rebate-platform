@@ -15,6 +15,11 @@ import {
   type ConfigViewer,
 } from '../domain/client-config.ts';
 import { configEtag, rankPlatforms } from '../domain/config-etag.ts';
+import {
+  BRIDGE_ORIGINS_KEY,
+  BridgeOriginsSigner,
+  type BridgeOriginsInput,
+} from '../domain/bridge-origins.ts';
 import type { ContentReader } from './content-reader.ts';
 import type { InviteRewardBudgetReader } from './invite-reward-budget-reader.ts';
 import type { PublishedPlatformIcons } from './published-platform-icons.ts';
@@ -34,7 +39,23 @@ export class ClientConfigUnavailableError extends Error {
   }
 }
 
+/**
+ * F1-02zzzb: where bridge_origins comes from. `item` reads the config_items row afresh on every
+ * request (outside ContentReader's cache, so a console save shows on the next read); `signer`
+ * answers the process's signer or throws when the signing key is unavailable.
+ */
+export interface BridgeOriginsSource {
+  readonly env: BridgeOriginsInput['env'];
+  item(appId: string): Promise<BridgeOriginsInput['item']>;
+  signer(): BridgeOriginsSigner;
+}
+
 export interface ClientConfigDeps {
+  /**
+   * F1-02zzzb: the signed bridge_origins whitelist. Always wired by content-public.module; absent
+   * (direct unit callers only) the field is the domain's empty placeholder.
+   */
+  readonly bridgeOrigins?: BridgeOriginsSource | null;
   readonly reader: ContentReader;
   /** Fresh primary-database read on every request, outside ContentReader's cache. */
   readonly platformIcons: (appId: string) => Promise<PublishedPlatformIcons>;
@@ -64,12 +85,16 @@ export class ClientConfigService {
    */
   async read(viewer: ConfigViewer, deviceId: string | null): Promise<ClientConfig> {
     const { reader, logger } = this.#deps;
-    const rows = await Promise.all(
-      CLIENT_CONFIG_KEYS.map(async (key) => ({
-        key,
-        row: await reader.configValue(viewer.appId, key),
-      })),
-    );
+    const source = this.#deps.bridgeOrigins ?? null;
+    const [rows, bridgeItem] = await Promise.all([
+      Promise.all(
+        CLIENT_CONFIG_KEYS.map(async (key) => ({
+          key,
+          row: await reader.configValue(viewer.appId, key),
+        })),
+      ),
+      source === null ? Promise.resolve(null) : source.item(viewer.appId),
+    ]);
     const values = new Map<string, unknown>();
     for (const { key, row } of rows) {
       if (row !== null) values.set(key, row.value);
@@ -100,6 +125,9 @@ export class ClientConfigService {
       },
     });
     if (config === undefined) throw new ClientConfigUnavailableError(missing);
+    if (source !== null) {
+      config.bridge_origins = this.#signBridgeOrigins(source, viewer.appId, config, bridgeItem);
+    }
     try {
       config.platform_icons = await this.#deps.platformIcons(viewer.appId);
     } catch (error) {
@@ -114,6 +142,42 @@ export class ClientConfigService {
     const etag = configEtag(config);
     config.config_version = etag.slice(1, -1);
     return config;
+  }
+
+  /**
+   * F1-02zzzb: the signed whitelist of the caller's app. A stored row that is not usable is not
+   * signed (the h5_base_url origin is, under the row's version) and is warned about like any
+   * malformed optional key; an h5_base_url without an https origin cannot be signed and fails the
+   * response like a malformed required key.
+   */
+  #signBridgeOrigins(
+    source: BridgeOriginsSource,
+    appId: string,
+    config: ClientConfig,
+    item: BridgeOriginsInput['item'],
+  ): ClientConfig['bridge_origins'] {
+    const { logger } = this.#deps;
+    const h5BaseUrl = config.h5_base_url;
+    if (item !== null && !BridgeOriginsSigner.usable(item, h5BaseUrl)) {
+      logger.warn(
+        { event: 'content_config_value_invalid', app_id: appId, config_key: BRIDGE_ORIGINS_KEY },
+        'client configuration value malformed; default used',
+      );
+    }
+    try {
+      return source.signer().sign({ appId, env: source.env, h5BaseUrl, item });
+    } catch (error) {
+      logger.error(
+        {
+          event: 'content_config_bridge_origins_unsigned',
+          app_id: appId,
+          config_key: BRIDGE_ORIGINS_KEY,
+          error_name: error instanceof Error ? error.name : typeof error,
+        },
+        'bridge_origins could not be signed',
+      );
+      throw new ClientConfigUnavailableError([BRIDGE_ORIGINS_KEY]);
+    }
   }
 
   /**

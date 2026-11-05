@@ -6,6 +6,7 @@ import { APP_ENVS, type AppEnv } from './app-env.ts';
 import { readAdminAuthConfig, type AdminAuthConfig } from './admin-auth.ts';
 import { readAgentReviewConfig, type AgentReviewConfig } from './agent-review.ts';
 import { readAgentUserHashConfig } from './agent-user-hash.ts';
+import { readConfigSignKeyConfig, type ConfigSignKeyConfig } from './config-sign-key.ts';
 import { findCredentialLikeEnvNames } from './credential-env.ts';
 import { readDataokeConfig, type DataokeAppConfig } from './dataoke.ts';
 import { readJdConfig, readJdSiteConfig, type JdAppConfig } from './jd.ts';
@@ -113,6 +114,13 @@ type EnvKey = keyof z.input<typeof envSchema>;
 const ENV_KEYS = Object.keys(envSchema.shape) as EnvKey[];
 
 export interface AppConfig {
+  /**
+   * CONFIG_SIGN_KEY_FILE / CONFIG_SIGN_KEY_ID (./config-sign-key.ts, F1-02zzzb): the api entry's
+   * configuration signing key (bridge_origins JWS), separate from JWT. Both or neither; present
+   * only when configured (path and kid only). Unset: local / test generate a pair per process,
+   * staging / prod refuse to start the api entry. A hand-built config without it counts as unset.
+   */
+  readonly configSignKey?: ConfigSignKeyConfig | null;
   /**
    * MEDIA_PUBLIC_BASE_URL (./media.ts, F1-06z): https base of stored media files. loadConfig gives
    * the local / test default when unset there; undefined in staging / prod when unset (media writes
@@ -411,6 +419,7 @@ export function loadConfig(
     if (appEnv.success) problems.push(...readAgentUserHashConfig(appEnv.data, env).problems);
     if (appEnv.success) problems.push(...readStagingTestPhoneConfig(appEnv.data, env).problems);
     problems.push(...readQueueConcurrencyConfig(env).problems);
+    problems.push(...readConfigSignKeyConfig(env).problems);
     if (appEnv.success && entry !== undefined) {
       problems.push(...readPayChannelsConfig(appEnv.data, env, entry).problems);
     }
@@ -484,6 +493,8 @@ export function loadConfig(
   violations.push(...stagingTestPhoneProblems);
   const { queueLimits, problems: queueProblems } = readQueueConcurrencyConfig(env);
   violations.push(...queueProblems);
+  const { configSignKey, problems: configSignKeyProblems } = readConfigSignKeyConfig(env);
+  violations.push(...configSignKeyProblems);
   if (violations.length > 0) throw new ConfigError(violations);
   const sms = readSmsConfig(values.APP_ENV, env);
 
@@ -552,5 +563,7 @@ export function loadConfig(
     // Only on the entries that read it (B2-15k), same reason.
     ...(payChannels === null ? {} : { payChannels }),
     ...(kms === null ? {} : { kms }),
+    // Only present when configured (F1-02zzzb), same reason.
+    ...(configSignKey === null ? {} : { configSignKey }),
   };
 }

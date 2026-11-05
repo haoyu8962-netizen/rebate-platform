@@ -1,7 +1,9 @@
 // F1-02h §9.2–9.3. HTTP is the oracle boundary; each case owns a fresh app_id.
 import { randomUUID } from 'node:crypto';
 import { createDb, destroyDb } from '@couli/db';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, onTestFinished } from 'vitest';
+import { harness as signedHarness } from '../bridge-origins/http-kit.ts';
+import { expectAppBoundConfig } from '../bridge-origins/jws-kit.ts';
 import { getMaterialChannels } from '../../../../apps/api/src/modules/platform/index.ts';
 import {
   PLATFORMS,
@@ -62,6 +64,8 @@ it('[AC-F1-02h#1] 200 契约、强 ETag 与最终 data 的独立 SHA256 oracle �
 });
 
 it('[AC-F1-02h#2] 同一 viewer 重读、60 秒缓存到期和相同配置的另一个 app 均不改变 ETag', async () => {
+  const h = await signedHarness(db, database.urlFor('couli_app'), redis.url);
+  onTestFinished(() => h.close());
   const id = await configured(h);
   const device = await registerDevice(h, id);
   const viewer = await session(h, id, device);
@@ -73,8 +77,7 @@ it('[AC-F1-02h#2] 同一 viewer 重读、60 秒缓存到期和相同配置的另
   const otherId = await configured(h);
   const otherViewer = await session(h, otherId, await registerDevice(h, otherId));
   const other = await snapshot(h.app, otherId, otherViewer.headers);
-  expect(other.data).toEqual(first.data);
-  expect(other.etag).toBe(first.etag);
+  expectAppBoundConfig(first, id, other, otherId, h.signing.publicKey);
 });
 
 it('[AC-F1-02h#3] texts 改动沿用 60 秒缓存，到期后旧 ETag 得到 200 和新内容', async () => {

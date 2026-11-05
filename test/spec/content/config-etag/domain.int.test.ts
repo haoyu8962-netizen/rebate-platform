@@ -10,6 +10,7 @@ import {
 } from '../../../../apps/api/src/modules/content/domain/config-etag.ts';
 import type { MaterialChannelsSpec } from '../../../../apps/api/src/modules/platform/index.ts';
 import { canonical, PLATFORMS } from './kit.ts';
+import { signedFixture } from '../bridge-origins/jws-kit.ts';
 
 function data(): Omit<Schema<'Config'>, 'config_version'> {
   return {
@@ -32,7 +33,7 @@ function data(): Omit<Schema<'Config'>, 'config_version'> {
     kf: { url: 'https://kf.example.test/' },
     jump_tip: {},
     clipboard: {},
-    bridge_origins: {},
+    bridge_origins: signedFixture(),
     auth_tips: {},
     compliance: {},
     display: { z: [{ b: 2, a: 1 }, null, false], a: { z: '引号"\n', a: '中文' } },

@@ -113,6 +113,18 @@ services:
         read_only: true
         bind:
           create_host_path: true
+      # Configuration signing key (F1-02zzzb, D10-610; README 1.12): node /etc/couli-config-sign
+      # holds the PKCS#8 P-256 private key that signs /v1/config's bridge_origins (separate from
+      # the access-token key; owned by uid 1000, directory 500, file 400). The variables
+      # CONFIG_SIGN_KEY_FILE / CONFIG_SIGN_KEY_ID come only from the node env file; api refuses
+      # to start without them. create_host_path keeps the mount itself from failing the
+      # deployment. Mounted on api only; stream, worker, admin and payout never get it.
+      - type: bind
+        source: /etc/couli-config-sign
+        target: /run/couli-config-sign
+        read_only: true
+        bind:
+          create_host_path: true
     healthcheck:
       # Healthy only when this process own /healthz on API_PORT answers 2xx AND the
       # container has run for 30s AND (before its first healthy check) started only once:

@@ -1,7 +1,7 @@
 // Scope: task F1-02c §9.1–9.3 and the current ConfigResponse contract only.
 // Every case starts with its own app_id; all observations of content are HTTP responses.
 import { createDb, destroyDb } from '@couli/db';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, onTestFinished } from 'vitest';
 import { getLinkPatterns } from '../../../../apps/api/src/modules/platform/index.ts';
 import {
   REQUIRED,
@@ -23,6 +23,8 @@ import {
   type Json,
   type Values,
 } from './kit.ts';
+import { harness as signingHarness } from '../bridge-origins/http-kit.ts';
+import { verified } from '../bridge-origins/jws-kit.ts';
 
 // F1-02zm: F1-02zp adds invite.reward_enabled and invite.reward_amount_fen (BR-INV-24 ⑨, 04 §10.1
 // l.903). These cases write neither growth.invite_reward.enabled nor .amount_fen and wire no budget
@@ -70,8 +72,15 @@ afterAll(async () => {
 });
 
 it('[AC-F1-02c#1] 最小有效配置下发所有约定键、规划缺省与完整契约', async () => {
+  const h = await signingHarness(db, database.urlFor('couli_app'), redis.url);
+  onTestFinished(() => h.close());
   const id = await configured(h, { 'invite.required': true });
   const data = await success(h.app, id);
+  expect(verified(data.bridge_origins, h.signing.publicKey, 'fixture-config-key')).toMatchObject({
+    app_id: id,
+    env: 'test',
+    origins: ['https://h5.example.test'],
+  });
   // platform_icons belongs to F1-02d: absent before it, {} once delivered (no published mark here).
   expect([undefined, {}]).toContainEqual(data.platform_icons);
   // F1-02h keys: absent before it, the 04 §10.1 default once delivered.
@@ -119,7 +128,7 @@ it('[AC-F1-02c#1] 最小有效配置下发所有约定键、规划缺省与完�
     kf: REQUIRED['kf'],
     jump_tip: {},
     clipboard: {},
-    bridge_origins: {},
+    bridge_origins: data.bridge_origins,
     auth_tips: {},
     compliance: {},
     display: {},
@@ -133,10 +142,12 @@ it('[AC-F1-02c#1] 最小有效配置下发所有约定键、规划缺省与完�
 });
 
 it('[AC-F1-02c#2] 有效非缺省配置按键读取，不遗漏 free-form、字典及后增字段', async () => {
+  const h = await signingHarness(db, database.urlFor('couli_app'), redis.url);
+  onTestFinished(() => h.close());
   const objects = {
     jump_tip: { title: '跳转', count: 2 },
     clipboard: { enabled: false },
-    bridge_origins: { allow: ['https://bridge.example.test'] },
+    bridge_origins: { origins: ['https://alternate.example.test', 'https://bridge.example.test'] },
     auth_tips: { nested: { text: '提示' } },
     compliance: { enabled: true },
     display: { scale: 2, extra: null },
@@ -164,9 +175,17 @@ it('[AC-F1-02c#2] 有效非缺省配置按键读取，不遗漏 free-form、字�
     help_links: { login_help: { route: 'Help', params: { article_id: 'help-1' } } },
   });
   const data = await success(h.app, id);
+  expect(verified(data.bridge_origins, h.signing.publicKey, 'fixture-config-key')).toStrictEqual({
+    v: 1,
+    app_id: id,
+    env: 'test',
+    version: 1,
+    origins: objects.bridge_origins.origins,
+  });
   inviteOf(data.invite); // F1-02zm: the reward pair delivered as the derived default
   expect(data).toMatchObject({
     ...objects,
+    bridge_origins: data.bridge_origins,
     h5_base_url: 'https://alternate.example.test/h5/',
     h5_release: { version: 'alternate-stable' },
     kf: { url: 'https://alternate.example.test/chat' },
@@ -625,8 +644,8 @@ const optionalCases: { key: string; value: Json; path: string[]; expected: unkno
     path: ['app_update', 'recheck_interval_sec'],
     expected: 1800,
   },
-  ...['jump_tip', 'clipboard', 'bridge_origins', 'auth_tips', 'compliance', 'display'].flatMap(
-    (key) => [null, [], 'text'].map((value) => ({ key, value, path: [key], expected: {} })),
+  ...['jump_tip', 'clipboard', 'auth_tips', 'compliance', 'display'].flatMap((key) =>
+    [null, [], 'text'].map((value) => ({ key, value, path: [key], expected: {} })),
   ),
 ];
 it.each(optionalCases)(

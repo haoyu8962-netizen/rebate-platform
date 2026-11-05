@@ -76,9 +76,11 @@ import { AdminKillSwitchesController } from './http/admin/kill-switches.controll
 import { createKyselyKillSwitchStore } from './infra/kysely-kill-switch-store.ts';
 import {
   ConfigItemAdmin,
+  combineConfigItemSaveChecks,
   type ConfigItemAdminChecks,
   type ConfigItemStore,
 } from './application/config-item-admin.ts';
+import { bridgeOriginsSaveCheck } from './application/bridge-origins-save-check.ts';
 import { AdminConfigItemsController } from './http/admin/config-items.controller.ts';
 import { createKyselyConfigItemStore } from './infra/kysely-config-item-store.ts';
 import { PagePreviewService, type PagePreviewStore } from './application/page-preview.ts';
@@ -227,6 +229,18 @@ const NO_DATABASE_AUDIT: AuditPort = {
 /** Monotonic milliseconds for the SVG conversion budget (not business time). */
 const monotonicMs = (): number => performance.now();
 
+/** F1-02zzzb: content's own bridge_origins save check runs first, then the assembler's checks. */
+function withContentSaveChecks(checks: ConfigItemAdminChecks | undefined): ConfigItemAdminChecks {
+  const save = checks?.save;
+  return {
+    ...checks,
+    save:
+      save === undefined
+        ? bridgeOriginsSaveCheck()
+        : combineConfigItemSaveChecks(bridgeOriginsSaveCheck(), save),
+  };
+}
+
 @Module({})
 export class ContentAdminModule {
   static forAdmin(options: ContentAdminOptions): DynamicModule {
@@ -363,7 +377,7 @@ export class ContentAdminModule {
                 : createKyselyConfigItemStore(db, (trx) => options.auditWriter(trx, clock)),
               clock,
               logger,
-              options.configItemChecks,
+              withContentSaveChecks(options.configItemChecks),
             ),
         },
         {

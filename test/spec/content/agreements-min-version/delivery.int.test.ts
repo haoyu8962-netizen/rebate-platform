@@ -1,6 +1,8 @@
 // F1-02zr §9.2#2 / §9.3#4,6: real /v1/config, response contract, logs and ETag.
 import { sql } from 'kysely';
 import { expect, it } from 'vitest';
+import { signedConfigApp } from '../bridge-origins/http-kit.ts';
+import { expectAppBoundConfig } from '../bridge-origins/jws-kit.ts';
 import {
   MIN_KEY,
   config,
@@ -47,15 +49,14 @@ it.each([
 ] satisfies [string, unknown][])(
   '[AC-F1-02zr#8] 最低版本为%s仍返回 200 并省略，仅 warn 一次键名且不含原值',
   async (_label, value) => {
-    const f = await configApp(h);
+    const f = await signedConfigApp(h);
     const id = await configured(h, { [MIN_KEY]: value });
     const absent = await configured(h);
     const baseline = await readConfig(f.app, absent);
     const start = f.logs.length;
     const result = await readConfig(f.app, id);
     expect(result.data.legal.agreement).toEqual({ version: 5 });
-    expect(result.data).toEqual(baseline.data);
-    expect(result.etag).toBe(baseline.etag);
+    expectAppBoundConfig(baseline, absent, result, id, f.signing.publicKey);
     const entries = configLogs(f.logs, start, id);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
