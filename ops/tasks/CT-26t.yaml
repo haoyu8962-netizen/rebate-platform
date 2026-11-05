@@ -1,0 +1,29 @@
+id: CT-26t
+repo: rebate-platform
+title: 文案契约（D10-691 / D10-664 S-01）：texts.default.json 按 08 BR-TEXT-14 表 C 补商品详情 v3 新键、改 btn.buy 与 deletion.cooling.readonly_note 的值、30132 改为「这个链接或口令暂时识别不了」；资金术语与禁用词登记；ProductCta 描述指向 BR-TEXT-12 细则「购买按钮」
+type: contract
+# 2026-11-06 入账（content-client；编排 D10-691 派 S-01，任务书 couli-runs/DETAIL-V3/server-tasks.md §S-01）。依据 SPEC_REF b144fc0：08 BR-TEXT-12 / 13 / 14 表 C，04 §8.3 cta；30132 取值照 couli #278。取值逐字照 08，不另拟。原文由编排者摘入任务书，refs 置空。
+# 不收 state.*（be UI-STATES）、30145 / 30146（#2424 / #2425）、order.tag.price_compare（CT-26p #2420）；btn.buy.coupon、btn.buy.rebate_suffix 保留不删。与上述单同改两份字典文件，后合者变基。
+# 改已有键值前核对 H5 / 原生冻结快照与规则测试；受影响则先开 test-change。只改契约与生成物；不占迁移槽，ProductCta 描述改 openapi.yaml 占契约槽。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'contracts/openapi.yaml'
+  - 'specs/fund-term-keys.yaml'
+  - 'specs/banned-words.yaml'
+  - 'apps/api/src/modules/content/specs/banned-words.gen.ts'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null
