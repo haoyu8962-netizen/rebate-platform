@@ -1,0 +1,209 @@
+id: B1-06zf
+repo: rebate-platform
+title: 拼多多真实授权链接（FU-PDD-AUTH-LINK）——open 的 30111 auth_jump 与 GET /v1/unions/pdd/auth-url 改用适配器 pddAuthorityUrl，换掉占位地址
+type: impl
+# 2026-11-05 W1 入账（编排 11:32 立单、D10-647 批方案：couli-runs/B3-lane/fu-pdd-auth-link-plan-20261105.md）。open 的 30111 auth_jump 与 GET /v1/unions/pdd/auth-url 用 pdd-authority.ts 现有身份调 union.pddAuthorityUrl（B1-04h），schema_url → mobile_short_url → url；state 只进 union_auth_sessions，授权以 member.authority.query 为准（BR-ID-22）。
+# 点击才生成；生成失败或端口缺失 50303 不写 session（CT-02zd）；缺推广位或 attr_code 50301 maintenance（D10-654、D10-658）。淘宝不动；演示适配器给演示地址；录制只进私有库；评审 Codex money（D10-647）。
+# 冻结：B1-22n#5/#6（D10-654）；替身补 pddAuthorityUrl、构造补 registry / attrCodes（D10-658）；四类与新规则冲突的用例照 D10-659 改（D10-327）。
+refs: [BR-ID-22, BR-ID-17]
+refs_hash:
+  BR-ID-22: 07f1349bf0ac
+  BR-ID-17: 01dbb87f6f09
+deps: []
+paths:
+  - 'apps/api/src/modules/linking/linking.module.ts'
+  - 'apps/api/src/modules/linking/application/link-open-pdd-auth.ts'
+  - 'apps/api/src/modules/linking/application/union-auth-url.ts'
+  - 'apps/api/src/modules/linking/application/union-auth-state.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.ts'
+  - 'apps/api/src/modules/linking/application/*.test.ts'
+  - 'apps/api/src/modules/union/infra/demo/demo-adapter.ts'
+  - 'apps/api/src/modules/union/infra/demo/demo-adapter.test.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/linking/pdd-auth-link/**'
+  - 'test/spec/linking/open-pid-before-requote/pdd-unfiled.int.test.ts'
+  - 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+  - 'test/spec/linking/open-pdd-auth/kit.ts'
+  - 'test/spec/linking/open-pdd-auth/authorization.int.test.ts'
+  - 'test/spec/linking/open-pdd-auth/ownership-jump.int.test.ts'
+  - 'test/spec/linking/auth-url/issuance.int.test.ts'
+  - 'test/spec/linking/auth-url-pdd/maintenance.int.test.ts'
+  - 'test/spec/linking/auth-account-fallback/auth-url.int.test.ts'
+  - 'test/spec/linking/pdd-auth-read-failure/clock-auth-url.int.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/pdd-auth-link/**'
+status: todo
+pr: null
+red_exempt:
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] taobao 绑定 absent、无 self_buy 位：最早登记的账号站长授权 expired 即拒绝，较晚登记却更早更新的有效账号不能替代'
+    reason: 冻结 B1-22l 用例，测试体未改；同文件只把 pdd 无 self_buy 位的签发翻为 50301（D10-659 ①）与构造入参
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] taobao 绑定 released、无 self_buy 位：最早登记的账号站长授权 expired 即拒绝，较晚登记却更早更新的有效账号不能替代'
+    reason: 冻结 B1-22l 用例，测试体未改；同文件只把 pdd 无 self_buy 位的签发翻为 50301（D10-659 ①）与构造入参
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] pdd 绑定 absent、无 self_buy 位：最早登记的账号站长授权 expired 即拒绝，较晚登记却更早更新的有效账号不能替代'
+    reason: 冻结 B1-22l 用例，测试体未改；同文件只把 pdd 无 self_buy 位的签发翻为 50301（D10-659 ①）与构造入参
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] pdd 绑定 released、无 self_buy 位：最早登记的账号站长授权 expired 即拒绝，较晚登记却更早更新的有效账号不能替代'
+    reason: 冻结 B1-22l 用例，测试体未改；同文件只把 pdd 无 self_buy 位的签发翻为 50301（D10-659 ①）与构造入参
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] taobao 无绑定、无 self_buy 位、三个账号更新先后与登记先后交错：最早登记的账号 expired 即拒绝，最近重新授权或最早更新的有效账号都不能替代'
+    reason: 冻结 B1-22l 用例，测试体未改；同文件只把 pdd 无 self_buy 位的签发翻为 50301（D10-659 ①）与构造入参
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] pdd 无绑定、无 self_buy 位、三个账号更新先后与登记先后交错：最早登记的账号 expired 即拒绝，最近重新授权或最早更新的有效账号都不能替代'
+    reason: 冻结 B1-22l 用例，测试体未改；同文件只把 pdd 无 self_buy 位的签发翻为 50301（D10-659 ①）与构造入参
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    test: '[AC-B1-06t#1][AC-B1-06t#2] 拼多多绑定 absent、所用账号 expired：50301 maintenance；同夹具淘宝仍为授权不可用'
+    reason: 冻结 B1-06t 用例，测试体未改；同文件只改另两条用例的夹具与断言（D10-659 ②、D10-661 甲）
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    test: '[AC-B1-06t#1][AC-B1-06t#2] 拼多多绑定 unbound、所用账号 expired：50301 maintenance；同夹具淘宝仍为授权不可用'
+    reason: 冻结 B1-06t 用例，测试体未改；同文件只改另两条用例的夹具与断言（D10-659 ②、D10-661 甲）
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    test: '[AC-B1-06t#1][AC-B1-06t#2] 拼多多绑定 pending_auth、所用账号 expired：50301 maintenance；同夹具淘宝仍为授权不可用'
+    reason: 冻结 B1-06t 用例，测试体未改；同文件只改另两条用例的夹具与断言（D10-659 ②、D10-661 甲）
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    test: '[AC-B1-06t#1][AC-B1-06t#2] 拼多多绑定 released、所用账号 expired：50301 maintenance；同夹具淘宝仍为授权不可用'
+    reason: 冻结 B1-06t 用例，测试体未改；同文件只改另两条用例的夹具与断言（D10-659 ②、D10-661 甲）
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    test: '[AC-B1-06t#1][AC-B1-06t#2] 拼多多绑定 invalid、所用账号 expired：50301 maintenance；同夹具淘宝仍为授权不可用'
+    reason: 冻结 B1-06t 用例，测试体未改；同文件只改另两条用例的夹具与断言（D10-659 ②、D10-661 甲）
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    test: '[AC-B1-06t#1][AC-B1-06t#2] 拼多多绑定 active、所用账号 expired：50301 maintenance；同夹具淘宝仍为授权不可用'
+    reason: 冻结 B1-06t 用例，测试体未改；同文件只改另两条用例的夹具与断言（D10-659 ②、D10-661 甲）
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    test: '[AC-B1-06t#3] normal 用户的拼多多 blocked 优先于 expired 返回 30153；解除 blocked 后才返回 50301'
+    reason: 冻结 B1-06t 用例，测试体未改；同文件只改另两条用例的夹具与断言（D10-659 ②、D10-661 甲）
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#1] 淘宝 ios 未配置时默认 web_code，签发完整的未使用 state 快照'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#1] 淘宝 android 未配置时默认 web_code，签发完整的未使用 state 快照'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#1] 淘宝 harmony 未配置时默认 web_code，签发完整的未使用 state 快照'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#2] 设备记录 android、请求声明 ios：按记录端配置保序下发并持久化'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#2] 设备记录 ios、请求声明 android：按记录端配置保序下发并持久化'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#2] 设备记录 harmony、请求声明 android：按记录端配置保序下发并持久化'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#3] 同一身份重复调用产生不同 state、两行记录，后一次不覆盖前一次或提前消费'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#5] taobao 绑定 blocked 且用户 normal：30153，不签发 state'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#5] pdd 绑定 blocked 且用户 normal：30153，不签发 state'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#6] 站长授权 expired、用户绑定 absent：30101 auth_unavailable，不下发授权入口或写行'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#6] 站长授权 expired、用户绑定 unbound：30101 auth_unavailable，不下发授权入口或写行'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#6] 站长授权 expired、用户绑定 pending_auth：30101 auth_unavailable，不下发授权入口或写行'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#6] 站长授权 expired、用户绑定 released：30101 auth_unavailable，不下发授权入口或写行'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#6] 站长授权 expired、用户绑定 invalid：30102 auth_unavailable，不下发授权入口或写行'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#7] 只有游客设备、无登录令牌：10001，不写授权会话'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#8] 不支持授权的平台 synthetic_unknown 返回 20001，不能误签发淘宝授权会话'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#8] 不支持授权的平台 jd 返回 20001，不能误签发淘宝授权会话'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#11] HTTP 请求夹带应用、身份及换绑参数不能改变服务端签发快照'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#9] 应用快照来自签发环境的服务端配置，忽略请求伪造的身份与应用字段，不保存或返回密钥'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    test: '[AC-B1-06g#10] prod 配置混入 sdk_token 时只下发 web_code，state 不保存实验方式或跨环境应用引用'
+    reason: 冻结 B1-06g 用例，测试体未改；同文件只改另一条用例的夹具与断言（D10-659 ②、D10-661 甲）与构造 createUnionAuthUrl 的入参
+  - file: test/spec/linking/open-pdd-auth/authorization.int.test.ts
+    test: '[AC-B1-06v#9] 授权完成后新键重新查询并置 active，旧键仍重放原 30111'
+    reason: 冻结 B1-06v 用例，测试体未改；只因读的 open-pdd-auth/kit.ts 替身补了 pddAuthorityUrl（D10-658），同文件另改 [AC-B1-06v#8] 的 state 断言（D10-659 ③）
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active detail/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 off_shelf）；有推广位时照旧复核得 30141'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active detail/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 unavailable）；有推广位时照旧复核得 50303'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active detail/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 price_changed）；有推广位时照旧复核得 0'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active agent/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 off_shelf）；有推广位时照旧复核得 30141'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active agent/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 unavailable）；有推广位时照旧复核得 50303'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active agent/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 price_changed）；有推广位时照旧复核得 0'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active share/b 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 off_shelf）；有推广位时照旧复核得 30141'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active share/b 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 unavailable）；有推广位时照旧复核得 50303'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#3] 拼多多 active share/b 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 price_changed）；有推广位时照旧复核得 0'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#4] 拼多多 no_rebate/active 改用所用账号的 self_buy 位：无 active 时先回 50301、不复核、不查备案，不沿用 agent 位；有 self_buy 位时照旧复核'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#4] 拼多多 no_rebate/pending_auth 改用所用账号的 self_buy 位：无 active 时先回 50301、不复核、不查备案，不沿用 agent 位；有 self_buy 位时照旧复核'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    test: '[AC-B1-22n#4] 拼多多 no_rebate/blocked 改用所用账号的 self_buy 位：无 active 时先回 50301、不复核、不查备案，不沿用 agent 位；有 self_buy 位时照旧复核'
+    reason: 冻结 B1-22n 用例，测试体未改；同文件只改 [AC-B1-22n#6] 的期望（D10-654）与块外导入、helper
+  - file: test/spec/linking/pdd-auth-read-failure/clock-auth-url.int.test.ts
+    test: '[B1-22u] auth-url taobao：注入的 FixedClock 晚于系统时间，站长授权到期时刻在两者之间 → 按注入时钟已到期，拒绝且不写 state'
+    reason: 冻结 B1-22u 用例，测试体未改；同文件只把 pdd 无推广位的签发翻为 50301（D10-659 ①）与构造入参
+  - file: test/spec/linking/pdd-auth-read-failure/clock-auth-url.int.test.ts
+    test: '[B1-22u] auth-url pdd：注入的 FixedClock 晚于系统时间，站长授权到期时刻在两者之间 → 按注入时钟已到期，拒绝且不写 state'
+    reason: 冻结 B1-22u 用例，测试体未改；同文件只把 pdd 无推广位的签发翻为 50301（D10-659 ①）与构造入参
+red_exempt_outside:
+  - file: test/spec/linking/auth-url/issuance.int.test.ts
+    reason: 块外只新增导入 DemoUnionAdapter 与联盟端口入参，供 createUnionAuthUrl 构造补 registry / attrCodes（D10-658），以及 [AC-B1-06g#4] 夹具补种推广位与加强断言用的 expectNoState、planValues 导入（D10-661 甲）；未改用例块与基线相同
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    reason: 块外只新增导入 DemoUnionAdapter、构造入参与 helper expectNoSlotMaintenance，供翻为 50301 的 pdd 行用（D10-659 ①）；共享 it.each 拆出 pdd 行，淘宝行不变；未改用例块与基线相同
+  - file: test/spec/linking/auth-url-pdd/maintenance.int.test.ts
+    reason: 块外只新增 helper selfBuySlot 与导入 DemoUnionAdapter、expectNoState、planValues，供 [AC-B1-06t#4]、[#5] 补种推广位与加强断言用（D10-659 ②、D10-661 甲）；未改用例块与基线相同
+  - file: test/spec/linking/pdd-auth-read-failure/clock-auth-url.int.test.ts
+    reason: 块外只新增导入 DemoUnionAdapter 与构造入参，供翻为 50301 的 [B1-22u] pdd 用（D10-659 ①）；未改用例块与基线相同
+  - file: test/spec/linking/open-pid-before-requote/pdd.int.test.ts
+    reason: 块外只改导入（去掉 expectFilingRefusal、加 response 与 Fixture 类型）并新增 helper expectMaintenance，供改为 50301 的 [AC-B1-22n#6] 用（D10-654）；未改用例块与基线相同
+red_exempt_rows:
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] taobao 绑定 absent、无 self_buy 位：最早登记的账号有效即签发，不因较晚登记的账号 expired 而拒绝'
+    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块翻为 50301 的 pdd 行（D10-659 ①）；淘宝行行为不变
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] taobao 绑定 released、无 self_buy 位：最早登记的账号有效即签发，不因较晚登记的账号 expired 而拒绝'
+    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块翻为 50301 的 pdd 行（D10-659 ①）；淘宝行行为不变
+  - file: test/spec/linking/auth-account-fallback/auth-url.int.test.ts
+    test: '[B1-22l] taobao 无绑定、无 self_buy 位、三个账号更新先后与登记先后交错：最早登记的账号有效即签发，最近重新授权或最早更新的账号 expired 不影响'
+    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块翻为 50301 的 pdd 行（D10-659 ①）；淘宝行行为不变
+  - file: test/spec/linking/pdd-auth-read-failure/clock-auth-url.int.test.ts
+    test: '[B1-22u] auth-url taobao：注入的 FixedClock 早于系统时间，站长授权到期时刻在两者之间 → 按注入时钟未到期，照常签发 state'
+    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块翻为 50301 的 pdd 行（D10-659 ①）；淘宝行行为不变
