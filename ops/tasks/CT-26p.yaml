@@ -1,0 +1,30 @@
+id: CT-26p
+repo: rebate-platform
+title: 契约：订单列表项加 is_price_compare（可空布尔）与「比价订单」文案键（D10-641 所称 CT-26e，D10-664 S-04）
+type: contract
+# 2026-11-06 be 入账（D10-664 ① 另取空号）。04 §6.4：GET /v1/orders 列表项（OrderSummary）加 is_price_compare（bool，可空，取 orders.is_price_compare，true 时显示「比价订单」标识，BR-CALC-16 / BR-TEXT-03）；OrderDetail 已有不动。texts.default.json 加 order.tag.price_compare「比价订单」；specs/fund-term-keys.yaml 把它与 rebate_estimate、rebate_compare 归资金术语（BR-TEXT-12 细则）；specs/banned-words.yaml「比价」的 allow_keys 加该键（BR-TEXT-13）。只增不改；与 content 的 S-01 同改两份字典文件，后合者变基。实现另立（S-18，置位等 CAP-TB-04 / CAP-PDD-04）。冻结 test/spec/contracts/orders-quantity 的 baseline.ts 钉了 OrderSummary 属性全集（[AC-CT-04b#1]），照 D10-327 进 test_paths，由新鲜独立 Claude 在基线加 is_price_compare，按 #24 报核。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/contracts/orders-quantity/**'
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'specs/banned-words.yaml'
+  - 'apps/api/src/modules/content/specs/banned-words.gen.ts'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/orders-quantity/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
