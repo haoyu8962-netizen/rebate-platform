@@ -1,0 +1,23 @@
+id: B2-09u
+repo: rebate-platform
+title: W10 判成功同事务入队 late_paid_check（上线缺口第 25 项后一半，BR-WDR-23、15，D10-679）——alipay 判成功时和 PAID_API 同一事务入队单张复核；顺带把 B2-09t #35 的超时红改成断言红（FU-B2-09T-ASSERT-NOT-TIMEOUT）
+type: impl
+# 2026-11-06 pay 入账（D10-679）。B2-09s 合并后开工。RV2。规则测试 Codex，计数从零；新鲜 Claude 评规则测试；Codex money。
+# 复用 B2-09t 的 sendLatePaidCheck 和 worker 判定，不改 recon-job。只对 alipay：PAID_API 的单按 out_biz_no 或 channel_order_id 核，worker 已支持。
+# 冻结用例（D10-327）：recon-late-paid/worker.int.test.ts 只改 [AC-B2-09t#35]，期望不变，只把「等不到」从测试超时改成到点断言失败，回归时报错清楚、不占 CI 一分钟（编排 11-05 12:48 记的 FU）。
+refs: [BR-WDR-23, BR-WDR-15]
+refs_hash:
+  BR-WDR-23: 98981fee10c7
+  BR-WDR-15: 8b11285236c2
+deps: [B2-09s, B2-09t]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-unknown-payouts.ts'
+test_paths:
+  - 'test/spec/payout/w10-late-paid/**'
+  - 'test/spec/payout/recon-late-paid/worker.int.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/w10-late-paid/**'
+status: todo
