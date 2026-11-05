@@ -1,0 +1,23 @@
+id: DSX-42a
+repo: rebate-platform
+title: 共享剪贴板向量 importGate 按剪贴板默认开启改写期望（FU-CLIP-VECTORS-DEFAULT-ON，D10-684）
+type: guard-change
+# 2026-11-06 ops 入账（编排 D10-684；DSX-42 合并后做）。DSX-42 只收归不改语义；本单把 specs/client/clipboard-vectors.json 的 importGate 里
+#   仍按 consent_version / 用途说明弹层（notices）判断的 34 行（notice_* 19、G47_* 11、R11_consent_mismatch、R11_unselected_seen、G21_first_notice、
+#   G30_closed_user_new_consent_version）按 08 BR-ID-16 2026-10-30 版（剪贴板默认开启，规划 docs/changes/20261030-剪贴板默认开启.md）改写期望：
+#   默认开启、无用途说明弹层、consent_version 不再是门槛、已关闭的保持关闭、未选择按开启。fields 的说明随之改；其余 49 行与别的块不动。
+# 改前改后逐行列在 PR 正文；manifest.json 重算 sha256。三端各自升锁时跟上（DSX-140～142），安卓 FU-X-CLIP-DEFAULT-ON-android 用改写版。
+# Opus 实现；对照 BR-ID-16 的评审由 Codex（不可用时按第 36 条由独立 Claude）做。只改数据，不改脚本与 CI。
+refs: [BR-ID-16]
+refs_hash:
+  BR-ID-16: f492d4eb6346
+deps: [DSX-42]
+paths:
+  - 'specs/client/clipboard-vectors.json'
+  - 'specs/client/manifest.json'
+  - 'specs/client/README.md'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
