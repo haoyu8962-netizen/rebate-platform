@@ -64,4 +64,13 @@ describe('share quote (B1-15w)', () => {
     const other = answer(1n, 2n, 'price_compare_risk');
     expect(() => settleShareQuote(other, 'normal')).toThrow(TypeError);
   });
+
+  it('[AC-B1-05zc] D10-641: a normal share quote is one amount; a range is refused', () => {
+    expect(() => settleShareQuote(answer(1n, 2n, 'normal'), 'normal')).toThrow(TypeError);
+    expect(settleShareQuote(answer(2n, 2n, 'normal'), 'normal')).toEqual({
+      rebate_min_fen: 2,
+      rebate_max_fen: 2,
+      rebate_basis: 'normal',
+    });
+  });
 });

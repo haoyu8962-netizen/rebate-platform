@@ -14,9 +14,10 @@ it('[AC-B1-05e#1] 详情下发券、券后价、报价器返利和原取价时�
     price_fen: 3990,
     coupon_fen: 1000,
     final_price_fen: 2990,
-    rebate_min_fen: 135,
+    // B1-05zc (D10-641): a detail without a source card quotes one amount on the normal basis.
+    rebate_min_fen: 269,
     rebate_max_fen: 269,
-    rebate_basis: 'price_compare_risk',
+    rebate_basis: 'normal',
     quoted_at: NOW,
     age_sec: 0,
     stale: false,
@@ -37,7 +38,7 @@ it('[AC-B1-05e#1] 详情下发券、券后价、报价器返利和原取价时�
       coupon_ids: 'synthetic-coupon',
       quoted_at: NOW,
     },
-    quote: { rebateMinFen: 135n, rebateMaxFen: 269n },
+    quote: { rebateMinFen: 269n, rebateMaxFen: 269n, rebateBasis: 'normal' },
   });
 });
 
@@ -158,7 +159,7 @@ it.each([
   expect(f.quote).not.toHaveBeenCalled();
 });
 
-it.each(['feed', 'pool', 'tlj_pool', 'share', 'search', 'parse', 'agent', null])(
+it.each(['feed', 'pool', 'tlj_pool', 'share'])(
   '[AC-B1-05e#8] 来源卡 %s 经 SourceLinkReader 按 App 范围读取并继承报价口径',
   async (source) => {
     const f = fixture();
@@ -176,15 +177,36 @@ it.each(['feed', 'pool', 'tlj_pool', 'share', 'search', 'parse', 'agent', null])
   },
 );
 
-it('[AC-B1-05e#9] 无来源卡详情按风险报价，不能自行当作 normal', async () => {
+// B1-05zc (D10-641): the inherited entry_source is still read and registered, but the sources the
+// old table sent to price_compare_risk now quote on the normal basis too (one amount).
+it.each(['search', 'parse', 'agent', null])(
+  '[AC-B1-05e#8] 来源卡 %s 经 SourceLinkReader 按 App 范围读取并继承登记，报价一律单值',
+  async (source) => {
+    const f = fixture();
+    const sourceId = '01920000-0000-7000-8000-00000000d008';
+    f.entrySource.mockResolvedValue(source);
+    const card = await f.get({ from_link_id: sourceId });
+    expect(f.entrySource).toHaveBeenCalledWith(APP_ID, sourceId);
+    expect(card).toMatchObject({
+      rebate_basis: 'normal',
+      rebate_min_fen: 269,
+      rebate_max_fen: 269,
+    });
+    expect(f.rows[0]?.entrySource).toBe(source);
+  },
+);
+
+it('[AC-B1-05e#9] 无来源卡详情按 normal 单值报价，来源记 detail、不读来源链接', async () => {
   const f = fixture();
   const card = await f.get();
-  expect(card.rebate_basis).toBe('price_compare_risk');
+  expect(card.rebate_basis).toBe('normal');
+  expect(card.rebate_min_fen).toBe(card.rebate_max_fen);
   expect(f.quote).toHaveBeenCalledWith(
     expect.anything(),
     expect.anything(),
-    expect.objectContaining({ rebateBasis: 'price_compare_risk' }),
+    expect.objectContaining({ rebateBasis: 'normal' }),
   );
+  expect(f.rows[0]?.entrySource).toBe('detail');
   expect(f.entrySource).not.toHaveBeenCalled();
 });
 

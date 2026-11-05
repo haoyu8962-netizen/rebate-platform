@@ -73,7 +73,11 @@ it('[AC-B1-05d#29] 搜索开启但转链关闭时仍出卡；只登记链接和�
     expect.objectContaining({
       viewer: { appId: 'synthetic-app', userId: 'synthetic-user', deviceId: 'synthetic-device' },
       entrySource: 'search',
-      quote: expect.objectContaining({ rebateMinFen: 10n, rebateMaxFen: 20n }),
+      quote: expect.objectContaining({
+        rebateMinFen: 20n,
+        rebateMaxFen: 20n,
+        rebateBasis: 'normal',
+      }),
     }),
   );
   expect(result.items[0]?.link_id).toBe('00000000-0000-7000-8000-000000000001');

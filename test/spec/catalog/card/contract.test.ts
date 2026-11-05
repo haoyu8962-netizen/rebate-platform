@@ -8,7 +8,10 @@ import {
 } from '../../../../apps/api/src/modules/platform/validation/index.ts';
 import { fixture, quote, request } from './kit.ts';
 
-it('[AC-B1-05f#22] 普通、区间、零下限和无返利的带价卡都符合 ProductCard 契约', async () => {
+// B1-05zc (D10-641): pre-order cards no longer carry a compare range; the shapes are a normal
+// single amount, a one-fen single amount and no_rebate. A taobao search card (the old compare
+// source) is checked too: one amount on the normal basis with rebate_estimate.
+it('[AC-B1-05f#22] 普通、一分单值和无返利的带价卡都符合 ProductCard 契约，淘宝搜索卡为单值', async () => {
   const f = fixture();
   const root = new URL('../../../../', import.meta.url);
   const requireApi = createRequire(new URL('apps/api/package.json', root));
@@ -21,8 +24,7 @@ it('[AC-B1-05f#22] 普通、区间、零下限和无返利的带价卡都符合 
   const validate = createValidatorCompiler()({ schema: schema!, httpPart: 'body' });
   for (const value of [
     quote(),
-    quote({ rebateBasis: 'normal', rebateMinFen: 433n, estNetPriceFen: 9567n }),
-    quote({ rebateMinFen: 0n, rebateMaxFen: 1n, estNetPriceFen: null }),
+    quote({ rebateMinFen: 1n, rebateMaxFen: 1n, estNetPriceFen: 9999n }),
     quote({ rebateBasis: 'no_rebate', rebateMinFen: 0n, rebateMaxFen: 0n, estNetPriceFen: null }),
   ]) {
     f.quoted.mockResolvedValue(value);
@@ -34,4 +36,16 @@ it('[AC-B1-05f#22] 普通、区间、零下限和无返利的带价卡都符合 
     expect(card.link_id).toBe('registered-link');
     expect(card.item_ref).toBe('opaque-item-ref');
   }
+  // The default port double answers the basis asked for: a card still asking for
+  // price_compare_risk on a search source gets the old 211–433 range and fails here.
+  const g = fixture();
+  const search = await g.service.assemble(request({ entrySource: 'search' }));
+  const serializedSearch: unknown = JSON.parse(JSON.stringify(search));
+  expect(validate(serializedSearch), JSON.stringify(validate.errors)).toBe(true);
+  expect(search).toMatchObject({
+    rebate_basis: 'normal',
+    rebate_min_fen: search.rebate_max_fen,
+  });
+  expect(search.disclaimer_keys).toContain('rebate_estimate');
+  expect(search.disclaimer_keys).not.toContain('rebate_compare');
 });

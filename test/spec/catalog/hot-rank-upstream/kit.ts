@@ -360,7 +360,8 @@ export function hotRank(f: Fixture, setup: HotRankSetup = {}) {
         _viewer: Viewer,
         context?: CardQuoteContext,
       ): Promise<RebateQuote> => ({
-        rebateMinFen: 10n,
+        // B1-05zc (D10-641): a pre-order quote is one amount (min = max), whatever the basis asked.
+        rebateMinFen: 20n,
         rebateMaxFen: 20n,
         estNetPriceFen: null,
         rebateBasis: context?.rebateBasis ?? 'normal',

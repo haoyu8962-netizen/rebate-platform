@@ -2492,16 +2492,12 @@ const UNAVAILABLE_QUOTE_CONFIG: CatalogConfigReader = {
 const QUOTE_CONFIG = Symbol('QUOTE_CONFIG');
 
 /**
- * Every key the demo quoter reads (card-assembler.ts: its rule, the tech fee and the taobao
- * compare ratio). An open pre-reads them before its transaction (B1-06m); a key missing here
- * fails that open's re-check closed instead of borrowing a second connection. The commission
- * quoter's keys are its own COMMISSION_QUOTE_CONFIG_KEYS.
+ * Every key the demo quoter reads (card-assembler.ts: its rule and the tech fee; since D10-641 no
+ * quote reads the taobao compare ratio). An open pre-reads them before its transaction (B1-06m); a
+ * key missing here fails that open's re-check closed instead of borrowing a second connection. The
+ * commission quoter's keys are its own COMMISSION_QUOTE_CONFIG_KEYS.
  */
-const DEMO_QUOTE_KEYS = [
-  DEMO_QUOTE_RULE_KEY,
-  'tech_fee_bp',
-  'rebate.taobao.compare_rate_ratio_bp',
-] as const;
+const DEMO_QUOTE_KEYS = [DEMO_QUOTE_RULE_KEY, 'tech_fee_bp'] as const;
 
 /** The process quoter and the pre-reads an open makes for it (LINK_OPEN_PORTS.quoteReads). */
 interface QuoterWiring {

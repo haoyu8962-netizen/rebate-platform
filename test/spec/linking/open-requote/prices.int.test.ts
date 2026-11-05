@@ -145,19 +145,27 @@ it.each([0n, 180n])(
     const s = service(f);
     expect(success(await s.open(f.request(original.link_id))).new_rebate_max_fen).toBe('229');
     f.clock.advanceMs(3001);
+    // B1-05zc (D10-641): the taobao search card's re-check asks for the normal basis and gets one
+    // amount; price_compare_risk is never the answer of a pre-order quote.
     f.quote.mockResolvedValue({
       rebateMinFen: rebate,
       rebateMaxFen: rebate,
       estNetPriceFen: null,
-      rebateBasis: rebate === 0n ? 'no_rebate' : 'price_compare_risk',
+      rebateBasis: rebate === 0n ? 'no_rebate' : 'normal',
     });
     const result = success(await s.open(f.request(original.link_id)));
     expect(result).toMatchObject({
       price_changed: false,
+      requote_failed: false,
       new_rebate_min_fen: rebate.toString(),
       new_rebate_max_fen: rebate.toString(),
     });
     expect(result).not.toHaveProperty('rebate_basis');
+    expect(f.quote).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ rebateBasis: 'normal' }),
+    );
   },
 );
 

@@ -1,9 +1,11 @@
 // B2-03c: the real rebate quoter (catalog's CardRebateQuoter). BR-CALC-20: N from union's
 // quoteN, the viewer's own share from @couli/domain quoteRebate (the same splitCommission as
 // booking), with the rule version in force at the quote instant (BR-CALC-11) and the viewer's
-// level × the caller's order type (BR-CALC-06). The taobao compare range (BR-PRICE-07) redoes the
-// whole formula at ⌊rate × compare_rate_ratio_bp⌋; max = 0 is no_rebate without a net price
-// (BR-PRICE-08), otherwise est_net_price_fen = final − min (BR-PRICE-09).
+// level × the caller's order type (BR-CALC-06). Before an order the rebate is one amount from the
+// union commission field on every platform (D10-641, BR-PRICE-07 / BR-CALC-16): min = max, basis
+// normal; rebate.taobao.compare_rate_ratio_bp is never read and a price_compare_risk context is
+// refused. max = 0 is no_rebate without a net price (BR-PRICE-08), otherwise
+// est_net_price_fen = final − min (BR-PRICE-09).
 //
 // Live only (B2-03n removed prepare() and the scoped mode): every quote reads rules, the level
 // and configuration in the viewer's app scope; the quoter keeps no state, so concurrent quotes for
@@ -17,7 +19,7 @@
 // Also compiled by the `test` project: erasable syntax only, relative imports with `.ts`.
 import type { UserLevel } from '@couli/contracts-ts';
 import { quoteRebate } from '@couli/domain';
-import { mulDivFloor, subFen } from '@couli/money';
+import { subFen } from '@couli/money';
 import type { CatalogConfigReader, RebateQuote, Viewer } from '../../catalog/index.ts';
 import type { UserLevelReader } from '../../identity/index.ts';
 import type { Clock } from '../../platform/index.ts';
@@ -46,11 +48,9 @@ type ConfigKey = COMMISSION_QUOTE_CONFIG_KEYS[number];
 
 const PLATFORMS_KEY: ConfigKey = 'commission.platforms';
 const TECH_FEE_KEY: ConfigKey = 'tech_fee_bp';
-const COMPARE_RATIO_KEY: ConfigKey = 'rebate.taobao.compare_rate_ratio_bp';
 const PDD_SELF_KEY: ConfigKey = 'union.pdd.self_buy_factor_bp';
 const PDD_ACCOUNT_KEY: ConfigKey = 'union.pdd.account_level_factor_bp';
 
-const BP = 10000n;
 /** BR-CALC-20: a guest (not logged in) quotes at the registration default level. */
 const GUEST_LEVEL: UserLevel = 'L1';
 const LEVELS: ReadonlySet<unknown> = new Set(['L1', 'L2', 'L3']);
@@ -66,26 +66,26 @@ interface QuoteInputs {
 
 interface ResolvedContext {
   readonly buyType: 'self' | 'share';
-  readonly basis: 'normal' | 'price_compare_risk';
+  readonly basis: 'normal';
 }
 
-/** Without a context: guest-style self purchase with no entry source (taobao → compare risk). */
+/**
+ * Without a context: guest-style self purchase with no entry source, normal on every platform.
+ * Only normal is quoted (D10-641); price_compare_risk, like any unknown basis, is refused.
+ */
 function resolveContext(item: UnionItem, context?: CommissionQuoteContext): ResolvedContext {
   const buyType: unknown = context === undefined ? 'self' : context.buyType;
   if (buyType !== 'self' && buyType !== 'share') {
     throw new TypeError(`commission quote: unknown order type ${String(buyType)}`);
   }
-  const basis: unknown =
-    context === undefined
-      ? item.platform === 'taobao'
-        ? 'price_compare_risk'
-        : 'normal'
-      : context.rebateBasis;
-  if (basis !== 'normal' && basis !== 'price_compare_risk') {
-    throw new TypeError(`commission quote: unknown rebate basis ${String(basis)}`);
+  const basis: unknown = context === undefined ? 'normal' : context.rebateBasis;
+  if (basis === 'price_compare_risk') {
+    throw new TypeError(
+      `commission quote: no compare range before an order (BR-PRICE-07), ${item.platform} refused`,
+    );
   }
-  if (basis === 'price_compare_risk' && item.platform !== 'taobao') {
-    throw new TypeError('commission quote: compare range exists only on taobao (BR-PRICE-07)');
+  if (basis !== 'normal') {
+    throw new TypeError(`commission quote: unknown rebate basis ${String(basis)}`);
   }
   return { buyType, basis };
 }
@@ -105,9 +105,8 @@ function checkAppId(appId: unknown): string {
 }
 
 /** The keys one quote needs; others (e.g. PDD factors on a taobao quote) are not required. */
-function neededKeys(item: UnionItem, ctx: ResolvedContext): ConfigKey[] {
+function neededKeys(item: UnionItem): ConfigKey[] {
   const keys: ConfigKey[] = [PLATFORMS_KEY, TECH_FEE_KEY];
-  if (ctx.basis === 'price_compare_risk') keys.push(COMPARE_RATIO_KEY);
   if (item.platform === 'pdd') keys.push(PDD_SELF_KEY, PDD_ACCOUNT_KEY);
   return keys;
 }
@@ -163,10 +162,6 @@ export function createCommissionRebateQuoter(
             ),
           }
         : undefined;
-    const compareRatioBp =
-      ctx.basis === 'price_compare_risk'
-        ? bpConfig(required(inputs.config, COMPARE_RATIO_KEY), COMPARE_RATIO_KEY)
-        : undefined;
 
     const version = selectRuleVersion(inputs.versions, inputs.at);
     const terms = selectQuoteTerms({
@@ -181,48 +176,37 @@ export function createCommissionRebateQuoter(
     if (!isRegisteredPlatform(platform)) {
       throw new TypeError(`commission quote: no union quote for platform ${platform}`);
     }
-    const ownShare = (commissionRateBp: bigint): bigint =>
-      quoteRebate({
-        n_quote_fen: quoteN({
-          platform,
-          finalPriceFen: item.final_price_fen,
-          commissionRateBp,
-          orderType: ctx.buyType,
-          techFeeBp,
-          ...(pdd === undefined ? {} : { pdd }),
-        }),
-        reserve_bp: terms.reserve_bp,
-        r_own_bp: terms.r_own_bp,
-      });
-
-    const max = ownShare(item.commission_rate_bp);
-    const min =
-      compareRatioBp === undefined
-        ? max
-        : ownShare(mulDivFloor(item.commission_rate_bp, compareRatioBp, BP));
-    if (max === 0n) {
+    const rebate = quoteRebate({
+      n_quote_fen: quoteN({
+        platform,
+        finalPriceFen: item.final_price_fen,
+        commissionRateBp: item.commission_rate_bp,
+        orderType: ctx.buyType,
+        techFeeBp,
+        ...(pdd === undefined ? {} : { pdd }),
+      }),
+      reserve_bp: terms.reserve_bp,
+      r_own_bp: terms.r_own_bp,
+    });
+    if (rebate === 0n) {
       return { rebateMinFen: 0n, rebateMaxFen: 0n, estNetPriceFen: null, rebateBasis: 'no_rebate' };
     }
     return {
-      rebateMinFen: min,
-      rebateMaxFen: max,
-      estNetPriceFen: subFen(item.final_price_fen, min, { nonNegative: true }),
+      rebateMinFen: rebate,
+      rebateMaxFen: rebate,
+      estNetPriceFen: subFen(item.final_price_fen, rebate, { nonNegative: true }),
       rebateBasis: ctx.basis,
     };
   }
 
-  async function liveInputs(
-    item: UnionItem,
-    ctx: ResolvedContext,
-    viewer: Viewer,
-  ): Promise<QuoteInputs> {
+  async function liveInputs(item: UnionItem, viewer: Viewer): Promise<QuoteInputs> {
     const appId = checkAppId(viewer.appId);
     // Read the clock before any port, never during or after the reads (see the header).
     const at = clock.now();
     const [versions, level, values] = await Promise.all([
       rules.publishedVersions(appId),
       readLevel(appId, viewer.userId),
-      readConfig(appId, neededKeys(item, ctx)),
+      readConfig(appId, neededKeys(item)),
     ]);
     return { at, versions, level, config: values };
   }
@@ -233,7 +217,7 @@ export function createCommissionRebateQuoter(
     context?: CommissionQuoteContext,
   ): Promise<RebateQuote> {
     const ctx = resolveContext(item, context);
-    return compute(item, ctx, await liveInputs(item, ctx, viewer));
+    return compute(item, ctx, await liveInputs(item, viewer));
   }
 
   return { quote };

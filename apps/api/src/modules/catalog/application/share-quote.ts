@@ -1,5 +1,5 @@
 // B1-15w: the share quote of POST /v1/shares (BR-PRICE-06: buy_type=share, shown only to the
-// sharer on the share page; BR-PRICE-07 来源判定表: the share entry is `share` → normal; BR-PRICE-08:
+// sharer on the share page; BR-PRICE-07 (D10-641): one amount, basis normal; BR-PRICE-08:
 // rebate_max_fen = 0 is no_rebate; BR-PRICE-11: quoted_at is the union response's receipt time).
 // The amounts are the process quoter's (catalog's CardRebateQuoter port: commission's real quoter
 // in prod / live, the demo quoter elsewhere); nothing here estimates. The quoter is called with the
@@ -46,7 +46,8 @@ function invalidQuote(reason: string): never {
 
 /**
  * The quoter's answer checked for shape (both bounds, 0 ≤ min ≤ max) and BR-PRICE-08 applied:
- * rebate_max_fen = 0 is no_rebate with 0 / 0. Any other basis must be the requested one.
+ * rebate_max_fen = 0 is no_rebate with 0 / 0. Any other basis must be the requested one, and a
+ * normal quote has min = max (D10-641: no range before an order).
  */
 export function settleShareQuote(quote: RebateQuote, expected: QuoteBasis): ShareEstPromo {
   const { rebateMinFen: min, rebateMaxFen: max } = quote;
@@ -54,6 +55,7 @@ export function settleShareQuote(quote: RebateQuote, expected: QuoteBasis): Shar
   if (min < 0n || min > max) invalidQuote('bounds out of order');
   if (max === 0n) return { rebate_min_fen: 0, rebate_max_fen: 0, rebate_basis: 'no_rebate' };
   if (quote.rebateBasis !== expected) invalidQuote('basis differs from the requested one');
+  if (expected === 'normal' && min !== max) invalidQuote('a normal quote has min = max');
   return {
     rebate_min_fen: fenToJsonNumber(min),
     rebate_max_fen: fenToJsonNumber(max),
@@ -71,7 +73,7 @@ export async function quoteShare(
   viewer: Viewer,
 ): Promise<ShareQuote> {
   const quotedAtMs = zonedInstantMs(item.quoted_at);
-  const basis = quoteBasisFor(item.platform, SHARE_ENTRY_SOURCE);
+  const basis = quoteBasisFor();
   const context: ShareQuoteContext = {
     buyType: 'share',
     entrySource: SHARE_ENTRY_SOURCE,

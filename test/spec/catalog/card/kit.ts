@@ -74,14 +74,50 @@ export function request(overrides: Partial<AssembleCardInput> = {}): AssembleCar
   return { item: item(), ref: ref(), entrySource: 'search', stale: false, ...overrides };
 }
 
+/** B1-05zc (D10-641): a pre-order quote is one amount, rebate_basis normal, min = max. */
 export function quote(overrides: Partial<RebateQuote> = {}): RebateQuote {
   return {
-    rebateMinFen: 211n,
+    rebateMinFen: 433n,
     rebateMaxFen: 433n,
-    estNetPriceFen: 9789n,
-    rebateBasis: 'price_compare_risk',
+    estNetPriceFen: 9567n,
+    rebateBasis: 'normal',
     ...overrides,
   };
+}
+
+/**
+ * The old compare range (211–433). The fixture answers it to any non-normal context, so an
+ * assembler that still asks for price_compare_risk shows it and fails the single-value checks.
+ * Cast: the quote type may lose price_compare_risk with the implementation.
+ */
+export function compareQuote(
+  overrides: Partial<Pick<RebateQuote, 'rebateMinFen' | 'rebateMaxFen' | 'estNetPriceFen'>> = {},
+): RebateQuote {
+  return {
+    ...quote({ rebateMinFen: 211n, estNetPriceFen: 9789n, ...overrides }),
+    rebateBasis: 'price_compare_risk',
+  } as unknown as RebateQuote;
+}
+
+/**
+ * The basis a card asked the quoter for. Read loosely: the context type may lose the
+ * price_compare_risk member (or the field) with the implementation.
+ */
+function requestedBasis(context: CardQuoteContext | undefined): unknown {
+  return (context as { readonly rebateBasis?: unknown } | undefined)?.rebateBasis;
+}
+
+/**
+ * B1-05zc: the quote port answers the basis it was asked for, as a real quoter does. A single
+ * normal amount set by a test (e.g. `mockResolvedValue(quote())`) is returned unchanged to a
+ * normal request; to a request for any other basis (an assembler still asking for
+ * price_compare_risk) it comes back on that basis with the same amounts, so such an assembler
+ * shows a non-normal card and fails assertions rather than its own basis check.
+ */
+function answerRequestedBasis(answer: RebateQuote, context: CardQuoteContext | undefined) {
+  const basis = requestedBasis(context);
+  if (basis === undefined || basis === 'normal' || answer.rebateBasis !== 'normal') return answer;
+  return { ...answer, rebateBasis: basis } as unknown as RebateQuote;
 }
 
 /** Deliberately non-formula amounts: assembler must delegate, not duplicate quote arithmetic. */
@@ -90,9 +126,7 @@ export function fixture() {
   const clock = new FixedClock('2026-10-06T10:05:00+08:00');
   const current = vi.fn(async () => viewer());
   const quoted = vi.fn(async (_item: UnionItem, _viewer: Viewer, context?: CardQuoteContext) =>
-    context?.rebateBasis === 'normal'
-      ? quote({ rebateMinFen: 433n, rebateBasis: 'normal', estNetPriceFen: 9567n })
-      : quote(),
+    requestedBasis(context) === 'normal' ? quote() : compareQuote(),
   );
   const register = vi.fn(async () => ({ linkId: 'registered-link' }));
   const entrySource = vi.fn(async (): Promise<string | null> => null);
@@ -100,7 +134,10 @@ export function fixture() {
   const service = create({
     clock,
     viewerContext: { current },
-    quoter: { quote: quoted },
+    quoter: {
+      quote: async (value: UnionItem, who: Viewer, context?: CardQuoteContext) =>
+        answerRequestedBasis(await quoted(value, who, context), context),
+    },
     registrar: { register },
     sourceLinks: { entrySource },
     itemRefs: { issue },

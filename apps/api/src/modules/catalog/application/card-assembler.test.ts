@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import type { UnionItem } from '../../union/index.ts';
 import type { ProductRef } from '../domain/types.ts';
-import type { RebateQuote, Viewer } from '../ports.ts';
+import type { CatalogConfigReader, RebateQuote, Viewer } from '../ports.ts';
 import { createCardAssembler, createDemoRebateQuoter } from './card-assembler.ts';
 
 const AT = '2026-10-06T10:00:00+08:00';
@@ -43,10 +43,10 @@ function setup(quote: Partial<RebateQuote> = {}, itemRef = 'ref-token') {
     viewerContext: { current: async () => viewer },
     quoter: {
       quote: async () => ({
-        rebateMinFen: 10n,
+        rebateMinFen: 20n,
         rebateMaxFen: 20n,
-        estNetPriceFen: 3990n,
-        rebateBasis: 'price_compare_risk',
+        estNetPriceFen: 3980n,
+        rebateBasis: 'normal',
         ...quote,
       }),
     },
@@ -86,7 +86,10 @@ describe('createCardAssembler guards', () => {
 
   it('[AC-B1-05f] quote with a mismatched basis or inverted bounds is not registered', async () => {
     for (const quote of [
-      { rebateBasis: 'normal' as const },
+      // D10-641: a compare range (or a compare basis at all) is never shown before an order.
+      { rebateBasis: 'price_compare_risk' as const },
+      { rebateMinFen: 10n, rebateBasis: 'price_compare_risk' as const },
+      { rebateMinFen: 10n },
       { rebateMinFen: 30n },
       { rebateMinFen: null },
     ]) {
@@ -138,19 +141,19 @@ describe('createCardAssembler guards', () => {
 });
 
 describe('createDemoRebateQuoter', () => {
-  it('[AC-B1-05f] refuses a missing compare ratio instead of defaulting it', async () => {
+  it('[AC-B1-05zc] D10-641: refuses a compare basis, never reads the compare ratio, quotes one amount', async () => {
+    const configValue = vi.fn<CatalogConfigReader['configValue']>(async (_appId, key) =>
+      key === 'demo.rule'
+        ? { value: { reserve_bp: 0, self_share_bp: 10000 }, version: 1 }
+        : key === 'tech_fee_bp'
+          ? { value: { taobao: 0 }, version: 1 }
+          : null,
+    );
     const quoter = createDemoRebateQuoter({
       appEnv: 'local',
       unionMode: 'demo',
       ruleConfigKey: 'demo.rule',
-      config: {
-        configValue: async (_appId, key) =>
-          key === 'demo.rule'
-            ? { value: { reserve_bp: 0, self_share_bp: 10000 }, version: 1 }
-            : key === 'tech_fee_bp'
-              ? { value: { taobao: 0 }, version: 1 }
-              : null,
-      },
+      config: { configValue },
     });
     const viewer: Viewer = { appId: 'app-u', userId: null, deviceId: null };
     await expect(
@@ -159,7 +162,7 @@ describe('createDemoRebateQuoter', () => {
         entrySource: 'search',
         rebateBasis: 'price_compare_risk',
       }),
-    ).rejects.toThrow(/compare_rate_ratio_bp/u);
+    ).rejects.toThrow(TypeError);
     const normal = await quoter.quote(item(), viewer, {
       buyType: 'self',
       entrySource: 'pool',
@@ -172,5 +175,10 @@ describe('createDemoRebateQuoter', () => {
       estNetPriceFen: 3800n,
       rebateBasis: 'normal',
     });
+    // No context (guest, no entry source): taobao is one amount as well.
+    await expect(quoter.quote(item(), viewer)).resolves.toEqual(normal);
+    expect(configValue.mock.calls.map(([, key]) => key)).not.toContain(
+      'rebate.taobao.compare_rate_ratio_bp',
+    );
   });
 });

@@ -7,11 +7,14 @@ import type {
 } from '../../catalog/index.ts';
 import type { UnionItem } from '../../union/index.ts';
 
-/** Configuration keys a quote reads (all in the viewer's app scope); an open pre-reads all. */
+/**
+ * Configuration keys a quote reads (all in the viewer's app scope); an open pre-reads all.
+ * rebate.taobao.compare_rate_ratio_bp is not among them (D10-641: stays registered in content,
+ * never read by a quote).
+ */
 export type COMMISSION_QUOTE_CONFIG_KEYS = readonly [
   'commission.platforms',
   'tech_fee_bp',
-  'rebate.taobao.compare_rate_ratio_bp',
   'union.pdd.self_buy_factor_bp',
   'union.pdd.account_level_factor_bp',
 ];
@@ -19,7 +22,6 @@ export type COMMISSION_QUOTE_CONFIG_KEYS = readonly [
 export const COMMISSION_QUOTE_CONFIG_KEYS: COMMISSION_QUOTE_CONFIG_KEYS = Object.freeze([
   'commission.platforms',
   'tech_fee_bp',
-  'rebate.taobao.compare_rate_ratio_bp',
   'union.pdd.self_buy_factor_bp',
   'union.pdd.account_level_factor_bp',
 ] as const);

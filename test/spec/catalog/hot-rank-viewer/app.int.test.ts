@@ -51,8 +51,12 @@ const item = tbItem('viewer', 28, {
   commissionBp: 2000n,
   quotedAt: deps.clock.now().toISOString(),
 });
-/** The demo quoter's price_compare_risk range of `item` under the rule seeded below. */
-const GUEST_REBATE = { rebate_min_fen: 299, rebate_max_fen: 598 };
+/**
+ * The demo quoter's amount of `item` under the rule seeded below. B1-05zc (D10-641): one amount on
+ * the normal basis (2990 × 20% = 598), although compare_rate_ratio_bp = 5000 is still seeded; the
+ * old range was 299–598.
+ */
+const GUEST_REBATE = { rebate_basis: 'normal', rebate_min_fen: 598, rebate_max_fen: 598 };
 
 interface Device {
   device_id: string;

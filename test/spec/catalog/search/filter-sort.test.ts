@@ -104,7 +104,7 @@ it('[AC-B1-05d#6] 券后价升序只排当页，相同价格保留相关性次�
   expect(result.has_more).toBe(true);
 });
 
-it('[AC-B1-05d#7] 返利排序用下限而非上限或佣金率，不请求联盟按返利排序', async () => {
+it('[AC-B1-05d#7] BR-PRICE-15：返利排序按单值返利降序，不请求联盟按返利排序', async () => {
   const f = fixture();
   const highRate = candidate('max-only');
   f.pages.set(1, {
@@ -120,9 +120,9 @@ it('[AC-B1-05d#7] 返利排序用下限而非上限或佣金率，不请求联�
   f.quotes.set('synthetic-zero-min', { min: 0n, max: 950n });
   const result = await f.run({ sort: 'rebate_desc' });
   expect(result.items.map((card) => card.title)).toEqual([
-    'synthetic-min-winner',
-    'synthetic-max-only',
     'synthetic-zero-min',
+    'synthetic-max-only',
+    'synthetic-min-winner',
   ]);
   expect(f.search.mock.calls.map(([input]) => input.sort)).toEqual(['relevance']);
 });

@@ -125,7 +125,9 @@ it('[AC-B2-03c#5] BR-CALC-20 拼多多两个系数都传给 union，单次乘除
   expect(result.rebateBasis).toBe('normal');
 });
 
-it('[AC-B2-03c#6] BR-PRICE-07 下限从佣金率重算每一步，不直接折半最终返利', async () => {
+// B1-05zc (D10-641): the compare range is gone. A price_compare_risk context is refused rather than
+// quoted from ⌊rate × compare_rate_ratio_bp⌋, and the ratio is not even read.
+it('[AC-B2-03c#6] BR-PRICE-07 price_compare_risk 口径拒绝报价，不按比价系数重算下限', async () => {
   const f = fixture();
   f.values.set('tech_fee_bp', { taobao: 1379, jd: 0, pdd: 0 });
   f.versions.set(APP, [
@@ -134,10 +136,8 @@ it('[AC-B2-03c#6] BR-PRICE-07 下限从佣金率重算每一步，不直接折�
       reserves: PLATFORMS.map((platform) => ({ platform, reserve_bp: 1234 })),
     }),
   ]);
-  // Max: gross 1235, fee 170, N 1065, B 933, own 426.
-  // Min: rate 617, gross 617, fee 85, N 532, B 466, own 212 (not 213).
-  expect(
-    await f.quoter.quote(
+  await expect(
+    f.quoter.quote(
       item({
         price_fen: 11000n,
         coupon_fen: 997n,
@@ -147,28 +147,25 @@ it('[AC-B2-03c#6] BR-PRICE-07 下限从佣金率重算每一步，不直接折�
       viewer(),
       COMPARE,
     ),
-  ).toEqual({
-    rebateMinFen: 212n,
-    rebateMaxFen: 426n,
-    estNetPriceFen: 9791n,
-    rebateBasis: 'price_compare_risk',
-  });
+  ).rejects.toThrow(TypeError);
+  expect(f.configValue).not.toHaveBeenCalledWith(APP, 'rebate.taobao.compare_rate_ratio_bp');
 });
 
-it('[AC-B2-03c#7] BR-PRICE-07 下限零而上限正数仍保留区间', async () => {
+it('[AC-B2-03c#7] BR-PRICE-07 淘宝极小金额也是单值：上限 1 分即 1–1，不出零下限区间', async () => {
   const f = fixture();
+  // N = 3, own = ⌊3 × 50%⌋ = 1; the old lower bound would have been ⌊1 × 50%⌋ = 0.
   expect(
     await f.quoter.quote(
       item({ price_fen: 3n, coupon_fen: 0n, final_price_fen: 3n, commission_rate_bp: 10000n }),
       viewer(),
-      COMPARE,
     ),
   ).toEqual({
-    rebateMinFen: 0n,
+    rebateMinFen: 1n,
     rebateMaxFen: 1n,
-    estNetPriceFen: 3n,
-    rebateBasis: 'price_compare_risk',
+    estNetPriceFen: 2n,
+    rebateBasis: 'normal',
   });
+  expect(f.configValue).not.toHaveBeenCalledWith(APP, 'rebate.taobao.compare_rate_ratio_bp');
 });
 
 it.each(['zero-rate', 'tiny-share', 'full-reserve', 'zero-own', 'full-fee'] as const)(
@@ -193,12 +190,15 @@ it.each(['zero-rate', 'tiny-share', 'full-reserve', 'zero-own', 'full-fee'] as c
         version({ rules: version().rules.map((r) => ({ ...r, r_own_bp: 0 })) }),
       ]);
     if (reason === 'full-fee') f.values.set('tech_fee_bp', { taobao: 10000, jd: 0, pdd: 0 });
-    expect(await f.quoter.quote(product, viewer(), COMPARE)).toEqual({
+    // B1-05zc: a taobao quote without context (guest self purchase, no entry source); COMPARE is
+    // refused now, and the compare ratio is not read on the way to no_rebate.
+    expect(await f.quoter.quote(product, viewer())).toEqual({
       rebateMinFen: 0n,
       rebateMaxFen: 0n,
       estNetPriceFen: null,
       rebateBasis: 'no_rebate',
     });
+    expect(f.configValue).not.toHaveBeenCalledWith(APP, 'rebate.taobao.compare_rate_ratio_bp');
   },
 );
 
@@ -223,24 +223,33 @@ it('[AC-B2-03c#9] BR-CALC-20 大整数金额保持精度且使用券后价', asy
   });
 });
 
-it.each(['taobao', 'jd', 'pdd'] as const)(
-  '[AC-B2-03c#10] 省略 context 时 $0 按游客自购和无来源语义报价',
-  async (platform) => {
+// B1-05zc (D10-641): no source makes taobao a compare risk any more; the old answer was 250–500.
+// The base it.each's jd / pdd assertions (D10-669) follow, copied from its non-taobao branch.
+it('[AC-B2-03c#10] 省略 context 时淘宝按游客自购和无来源语义报价，单值 500–500、不读比价系数', async () => {
+  const f = fixture();
+  expect(await f.quoter.quote(item({ platform: 'taobao' }), viewer())).toEqual({
+    rebateMinFen: 500n,
+    rebateMaxFen: 500n,
+    estNetPriceFen: 9500n,
+    rebateBasis: 'normal',
+  });
+  expect(f.configValue).not.toHaveBeenCalledWith(APP, 'rebate.taobao.compare_rate_ratio_bp');
+  {
     const f = fixture();
-    expect(await f.quoter.quote(item({ platform }), viewer())).toEqual(
-      platform === 'taobao'
-        ? {
-            rebateMinFen: 250n,
-            rebateMaxFen: 500n,
-            estNetPriceFen: 9750n,
-            rebateBasis: 'price_compare_risk',
-          }
-        : {
-            rebateMinFen: platform === 'pdd' ? 375n : 500n,
-            rebateMaxFen: platform === 'pdd' ? 375n : 500n,
-            estNetPriceFen: platform === 'pdd' ? 9625n : 9500n,
-            rebateBasis: 'normal',
-          },
-    );
-  },
-);
+    expect(await f.quoter.quote(item({ platform: 'jd' }), viewer())).toEqual({
+      rebateMinFen: 500n,
+      rebateMaxFen: 500n,
+      estNetPriceFen: 9500n,
+      rebateBasis: 'normal',
+    });
+  }
+  {
+    const f = fixture();
+    expect(await f.quoter.quote(item({ platform: 'pdd' }), viewer())).toEqual({
+      rebateMinFen: 375n,
+      rebateMaxFen: 375n,
+      estNetPriceFen: 9625n,
+      rebateBasis: 'normal',
+    });
+  }
+});

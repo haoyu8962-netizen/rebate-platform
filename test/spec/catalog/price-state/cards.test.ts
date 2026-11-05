@@ -1,8 +1,52 @@
 import { expect, it } from 'vitest';
-import { fixture, input, item, observed, PLATFORMS, QUOTED_AT } from './kit.ts';
+import { fixture, input, item, observed, QUOTED_AT } from './kit.ts';
 
-it.each(PLATFORMS)(
-  '[AC-B1-05i#5] BR-PRICE-03/17：$0 两类入口的有券/无券卡使用唯一且排首位的口径键',
+// B1-05zc (D10-641, BR-PRICE-17): new case for the jd and pdd rows of the base [AC-B1-05i#5], which
+// iterated the imported PLATFORMS and so cannot be kept as a trimmed block. Under the same entry
+// and coupon case a taobao card is built too: all three platforms carry the same keys, ending in
+// rebate_estimate (the old taobao card said rebate_compare).
+it.each(['jd', 'pdd'] as const)(
+  '[AC-B1-05i#5] BR-PRICE-03/17：新用例：$0 与同入口同券况的淘宝卡小字键一致，口径键排首位、返利小字均为 rebate_estimate',
+  async (platform) => {
+    for (const scene of ['retrieval', 'active_query'] as const) {
+      for (const coupon of [true, false]) {
+        const expected = [coupon ? 'price_basis' : 'price_basis.general', 'rebate_estimate'];
+        for (const which of [platform, 'taobao'] as const) {
+          const f = fixture();
+          const request = input(
+            item({
+              platform: which,
+              coupon_fen: coupon ? 2000n : 0n,
+              final_price_fen: coupon ? 10000n : 12000n,
+            }),
+            scene,
+          );
+          const result = await observed(() => f.service.assemble(request));
+          expect(result).toEqual({
+            outcome: 'returned',
+            value: {
+              kind: 'card',
+              card: expect.objectContaining({
+                availability: 'ok',
+                price_fen: 12000,
+                coupon_fen: coupon ? 2000 : 0,
+                final_price_fen: coupon ? 10000 : 12000,
+                link_id: `synthetic-link:${request.ref.productKey}`,
+                disclaimer_keys: expected,
+              }),
+            },
+          });
+          expect(f.warn).not.toHaveBeenCalled();
+          expect(f.register).toHaveBeenCalledTimes(1);
+        }
+      }
+    }
+  },
+);
+
+// B1-05zc (D10-641): the taobao priced card carries rebate_estimate too, never rebate_compare.
+it.each(['taobao'] as const)(
+  '[AC-B1-05i#5] BR-PRICE-03/17：$0 两类入口的有券/无券卡使用唯一且排首位的口径键（单值，rebate_estimate）',
   async (platform) => {
     for (const scene of ['retrieval', 'active_query'] as const) {
       for (const coupon of [true, false]) {
@@ -26,10 +70,8 @@ it.each(PLATFORMS)(
               coupon_fen: coupon ? 2000 : 0,
               final_price_fen: coupon ? 10000 : 12000,
               link_id: `synthetic-link:${request.ref.productKey}`,
-              disclaimer_keys: [
-                coupon ? 'price_basis' : 'price_basis.general',
-                platform === 'taobao' ? 'rebate_compare' : 'rebate_estimate',
-              ],
+              // B1-05zc (D10-641): every platform's priced card carries rebate_estimate.
+              disclaimer_keys: [coupon ? 'price_basis' : 'price_basis.general', 'rebate_estimate'],
             }),
           },
         });
@@ -61,15 +103,16 @@ it('[AC-B1-05i#6] BR-PRICE-12：带价卡登记沿用 item.coupon_ids 与取价�
       }),
     },
   });
+  // B1-05zc (D10-641): a pasted taobao link quotes one amount on the normal basis.
   expect(f.register).toHaveBeenCalledExactlyOnceWith({
     viewer: f.viewer,
     ref: request.ref,
     item: value,
     quote: {
-      rebateMinFen: 211n,
+      rebateMinFen: 433n,
       rebateMaxFen: 433n,
       estNetPriceFen: null,
-      rebateBasis: 'price_compare_risk',
+      rebateBasis: 'normal',
     },
     entrySource: 'parse',
   });

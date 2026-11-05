@@ -48,14 +48,21 @@ it('[AC-B1-05d#13] 满页不补拉，has_more=false 的不足页也不补拉', a
   expect(f.search).toHaveBeenCalledTimes(2);
 });
 
-it('[AC-B1-05d#14] 零返利下限但正上限保留，只有 max=0 的商品被过滤', async () => {
+// B1-05zc (D10-641): a search card is one amount (normal, min = max), so an item whose old range
+// had a zero lower bound now shows its single 1 fen; only max = 0 is still filtered.
+it('[AC-B1-05d#14] 一分返利按单值保留（不出零下限区间），只有 max=0 的商品被过滤', async () => {
   const f = fixture();
   f.pages.set(1, { items: [candidate('range'), candidate('zero')], hasMore: false });
   f.quotes.set('synthetic-range', { min: 0n, max: 1n });
   f.quotes.set('synthetic-zero', { min: 0n, max: 0n });
   const result = await f.run();
   expect(result.items).toEqual([
-    expect.objectContaining({ title: 'synthetic-range', rebate_min_fen: 0, rebate_max_fen: 1 }),
+    expect.objectContaining({
+      title: 'synthetic-range',
+      rebate_basis: 'normal',
+      rebate_min_fen: 1,
+      rebate_max_fen: 1,
+    }),
   ]);
 });
 

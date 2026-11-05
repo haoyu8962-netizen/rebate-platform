@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { APP, COMPARE, NORMAL, fixture, item, version, viewer } from './fixtures.ts';
 
-it('[AC-B2-03c#39] BR-PRICE-07 比价系数先乘佣金率，不能乘 gross、N 或 B', async () => {
+it('[AC-B2-03c#39] BR-PRICE-07 比价系数不参与报价：淘宝按接口佣金率单值，系数 5000、2500 同额', async () => {
   const f = fixture();
   f.values.set('rebate.taobao.compare_rate_ratio_bp', 5000);
   f.values.set('tech_fee_bp', { taobao: 0, jd: 0, pdd: 0 });
@@ -10,30 +10,28 @@ it('[AC-B2-03c#39] BR-PRICE-07 比价系数先乘佣金率，不能乘 gross、N
       rules: version().rules.map((r) => ({ ...r, r_own_bp: 8000, r_direct_bp: 0 })),
     }),
   ]);
-  // 下限率 = floor(1235 × 5000 / 10000) = 617。
-  // 下限 gross = floor(20000 × 617 / 10000) = 1234；fee = 0，N = 1234。
-  // reserve_bp = 0，B = 1234；本人 = floor(1234 × 8000 / 10000) = 987。
-  // 上限 gross = floor(20000 × 1235 / 10000) = 2470；fee = 0，N = B = 2470。
-  // 上限本人 = floor(2470 × 8000 / 10000) = 1976；返后价 = 20000 − 987 = 19013。
-  // 若先算 gross、N 或 B 再乘系数：floor(2470 × 5000 / 10000) = 1235，
-  // 本人会错误地变成 floor(1235 × 8000 / 10000) = 988。
-  expect(
-    await f.quoter.quote(
-      item({
-        price_fen: 20000n,
-        coupon_fen: 0n,
-        final_price_fen: 20000n,
-        commission_rate_bp: 1235n,
-      }),
-      viewer(),
-      COMPARE,
-    ),
-  ).toEqual({
-    rebateMinFen: 987n,
-    rebateMaxFen: 1976n,
-    estNetPriceFen: 19013n,
-    rebateBasis: 'price_compare_risk',
+  // B1-05zc (D10-641): gross = floor(20000 × 1235 / 10000) = 2470；fee = 0，N = B = 2470。
+  // 本人 = floor(2470 × 8000 / 10000) = 1976；返后价 = 20000 − 1976 = 18024。
+  // 旧区间下限（987，返后价 19013）不再出现，系数换成 2500 金额也不变。
+  const product = item({
+    price_fen: 20000n,
+    coupon_fen: 0n,
+    final_price_fen: 20000n,
+    commission_rate_bp: 1235n,
   });
+  const single = {
+    rebateMinFen: 1976n,
+    rebateMaxFen: 1976n,
+    estNetPriceFen: 18024n,
+    rebateBasis: 'normal',
+  };
+  expect(await f.quoter.quote(product, viewer())).toEqual(single);
+  f.values.set('rebate.taobao.compare_rate_ratio_bp', 2500);
+  expect(await f.quoter.quote(product, viewer(), { ...NORMAL, entrySource: 'search' })).toEqual(
+    single,
+  );
+  await expect(f.quoter.quote(product, viewer(), COMPARE)).rejects.toThrow(TypeError);
+  expect(f.configValue).not.toHaveBeenCalledWith(APP, 'rebate.taobao.compare_rate_ratio_bp');
 });
 
 it('[AC-B2-03c#40] BR-CALC-20 拼多多自购同时应用自购系数和账号等级系数', async () => {

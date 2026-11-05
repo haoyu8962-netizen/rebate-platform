@@ -101,3 +101,31 @@ it('[AC-B2-03c-UNIT#5] live 报价在等级读取期间跨过生效时刻也不�
   const next = await quoter.quote(ITEM, { appId: APP, userId: 'u1', deviceId: null }, NORMAL);
   expect(next.rebateMaxFen).toBe(400n);
 });
+
+it('[AC-B1-05zc-UNIT#1] D10-641：price_compare_risk 口径一律拒绝（TypeError），省略 context 的淘宝报单值', async () => {
+  const keys: string[] = [];
+  const quoter = createCommissionRebateQuoter({
+    rules: { publishedVersions: async () => [V1] },
+    levels: { levelOf: async () => 'L1' },
+    config: {
+      configValue: async (appId, key) => {
+        keys.push(key);
+        return config.configValue(appId, key);
+      },
+    },
+    clock: new FixedClock('2026-10-31T12:00:00+08:00'),
+  });
+  const guest = { appId: APP, userId: null, deviceId: null };
+  const compare = { ...NORMAL, rebateBasis: 'price_compare_risk' } as const;
+  for (const platform of PLATFORMS) {
+    await expect(quoter.quote({ ...ITEM, platform }, guest, compare)).rejects.toThrow(TypeError);
+  }
+  expect(keys).toEqual([]);
+  expect(await quoter.quote(ITEM, guest)).toEqual({
+    rebateMinFen: 500n,
+    rebateMaxFen: 500n,
+    estNetPriceFen: 9500n,
+    rebateBasis: 'normal',
+  });
+  expect(keys).not.toContain('rebate.taobao.compare_rate_ratio_bp');
+});

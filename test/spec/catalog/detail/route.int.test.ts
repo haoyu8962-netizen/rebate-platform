@@ -238,19 +238,27 @@ it('[AC-B1-05e#18] 真实 AppModule 游客详情符合 ProductResponse，重复�
   const b = second.json<ProductResponse>();
   expect(a.code).toBe(0);
   expect(b.code).toBe(0);
+  // B1-05zc (D10-641): the search source card and the detail are both one amount on the normal
+  // basis, although the configuration still carries compare_rate_ratio_bp = 5000.
+  expect(source).toMatchObject({
+    rebate_basis: 'normal',
+    rebate_min_fen: source.rebate_max_fen,
+    disclaimer_keys: expect.arrayContaining(['rebate_estimate']),
+  });
   expect(a.data).toMatchObject({
     product_key: source.product_key,
     item_ref: source.item_ref,
     price_fen: source.price_fen,
     coupon_fen: source.coupon_fen,
     final_price_fen: source.final_price_fen,
-    rebate_min_fen: source.rebate_min_fen,
+    rebate_min_fen: source.rebate_max_fen,
     rebate_max_fen: source.rebate_max_fen,
-    rebate_basis: 'price_compare_risk',
+    rebate_basis: 'normal',
     age_sec: 0,
     stale: false,
     availability: 'ok',
   });
+  expect(a.data.disclaimer_keys).not.toContain('rebate_compare');
   expect(Date.parse(a.data.quoted_at!)).toBe(clock.now().getTime());
   expect(b.data.link_id).not.toBe(a.data.link_id);
   const after = await links();

@@ -1,9 +1,21 @@
 // price_unavailable 卡的 link_id 形状待契约同步（BR-PRICE-01 与 ProductCard.link_id 必填冲突），由后续契约任务与 B1-07a 覆盖。
 // Only priced cards. Filtering/refill, cache storage/eligibility and link persistence belong to callers.
 import { expect, it } from 'vitest';
-import { amounts, fen, fixture, item, QUOTED_AT, quote, ref, request, viewer } from './kit.ts';
+import {
+  amounts,
+  compareQuote,
+  fen,
+  fixture,
+  item,
+  QUOTED_AT,
+  quote,
+  ref,
+  request,
+  viewer,
+} from './kit.ts';
 
-it('[AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端口的本人份额', async () => {
+// B1-05zc (D10-641): a taobao search card is one amount (normal, min = max) with rebate_estimate.
+it('[AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端口的本人份额（淘宝搜索卡单值）', async () => {
   const f = fixture();
   const input = request();
   const card = await f.service.assemble(input);
@@ -11,14 +23,14 @@ it('[AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端
     price: 12000n,
     coupon: 2000n,
     final: 10000n,
-    min: 211n,
+    min: 433n,
     max: 433n,
-    net: 9789n,
+    net: 9567n,
   });
   expect(f.quoted).toHaveBeenCalledExactlyOnceWith(input.item, viewer(), {
     buyType: 'self',
     entrySource: 'search',
-    rebateBasis: 'price_compare_risk',
+    rebateBasis: 'normal',
   });
   expect(card).toMatchObject({
     product_key: input.ref.productKey,
@@ -28,12 +40,12 @@ it('[AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端
     is_presale: false,
     availability: 'ok',
     source: 'taobao_union',
-    rebate_basis: 'price_compare_risk',
+    rebate_basis: 'normal',
     cta: { text_key: 'btn.buy.coupon' },
     link_id: 'registered-link',
     item_ref: 'opaque-item-ref',
   });
-  expect(card.disclaimer_keys).toEqual(expect.arrayContaining(['price_basis', 'rebate_compare']));
+  expect(card.disclaimer_keys).toEqual(['price_basis', 'rebate_estimate']);
   expect(Array.isArray(card.benefit_tags)).toBe(true);
 });
 
@@ -62,15 +74,21 @@ it('[AC-B1-05f#3] BR-PRICE-11：相同 DTO 每次按当前查看者报价，不�
   const input = request();
   const first = await f.service.assemble(input);
   f.current.mockResolvedValue(viewer({ userId: null, deviceId: 'guest-device' }));
-  f.quoted.mockResolvedValue(
-    quote({ rebateMinFen: 101n, rebateMaxFen: 203n, estNetPriceFen: 9899n }),
+  // B1-05zc: answers the requested basis (as the kit fixture does), so an assembler that still asks
+  // for price_compare_risk gets the old 101–203 range and fails the assertions, not a basis check.
+  f.quoted.mockImplementation(async (_item, _viewer, context) =>
+    context?.rebateBasis === 'normal'
+      ? quote({ rebateMinFen: 203n, rebateMaxFen: 203n, estNetPriceFen: 9797n })
+      : compareQuote({ rebateMinFen: 101n, rebateMaxFen: 203n, estNetPriceFen: 9899n }),
   );
   f.register.mockResolvedValue({ linkId: 'second-link' });
   f.clock.advanceMs(1000);
   const second = await f.service.assemble(input);
-  expect(fen(first.rebate_min_fen)).toBe(211n);
-  expect(fen(second.rebate_min_fen)).toBe(101n);
-  expect(fen(second.est_net_price_fen)).toBe(9899n);
+  // B1-05zc (D10-641): both quotes are single amounts on the normal basis.
+  expect(fen(first.rebate_min_fen)).toBe(433n);
+  expect(fen(second.rebate_min_fen)).toBe(203n);
+  expect(fen(second.rebate_max_fen)).toBe(203n);
+  expect(fen(second.est_net_price_fen)).toBe(9797n);
   expect(second.link_id).toBe('second-link');
   expect(f.current).toHaveBeenCalledTimes(2);
   expect(f.quoted).toHaveBeenLastCalledWith(
@@ -79,7 +97,7 @@ it('[AC-B1-05f#3] BR-PRICE-11：相同 DTO 每次按当前查看者报价，不�
     {
       buyType: 'self',
       entrySource: 'search',
-      rebateBasis: 'price_compare_risk',
+      rebateBasis: 'normal',
     },
   );
   expect(f.register).toHaveBeenCalledTimes(2);
@@ -156,16 +174,15 @@ it.each(['search', 'feed', 'agent', 'parse', 'rebate_quote', 'tlj_pool'])(
   },
 );
 
-it('[AC-B1-05f#7] BR-PRICE-07：下限零且上限正数仍是区间，不丢掉零端点', async () => {
+// B1-05zc (D10-641): the card asks for one amount; a quoter answering a compare range (here 0–1)
+// is refused, so no range card is shown and no link is registered.
+it('[AC-B1-05f#7] BR-PRICE-07：报价端口回比价区间（0–1）时拒绝出卡，不下发区间也不登记', async () => {
   const f = fixture();
-  f.quoted.mockResolvedValue(quote({ rebateMinFen: 0n, rebateMaxFen: 1n, estNetPriceFen: null }));
-  const card = await f.service.assemble(request());
-  expect(card.rebate_basis).toBe('price_compare_risk');
-  expect(fen(card.rebate_min_fen)).toBe(0n);
-  expect(fen(card.rebate_max_fen)).toBe(1n);
-  expect(card.est_net_price_fen).toBeNull();
-  expect(card.cta.text_key).toBe('btn.buy.coupon');
-  expect(card.disclaimer_keys).toContain('rebate_compare');
+  f.quoted.mockResolvedValue(
+    compareQuote({ rebateMinFen: 0n, rebateMaxFen: 1n, estNetPriceFen: null }),
+  );
+  await expect(f.service.assemble(request())).rejects.toThrow();
+  expect(f.register).not.toHaveBeenCalled();
 });
 
 it('[AC-B1-05f#8] 无券正常返利使用普通购买按钮，JSON 金额保留安全整数上界', async () => {

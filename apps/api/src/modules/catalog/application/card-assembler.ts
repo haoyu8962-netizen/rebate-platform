@@ -36,7 +36,11 @@ import type { ItemRefService } from './item-ref.ts';
 
 export type ProductCard = components['schemas']['ProductCard'];
 
-/** entry_source is opaque text in links, not a new contract enumeration. */
+/**
+ * entry_source is opaque text in links, not a new contract enumeration. Cards always ask for
+ * normal (D10-641); the quoters refuse price_compare_risk, which the type keeps only because the
+ * contract enumeration still lists it.
+ */
 export interface CardQuoteContext {
   readonly buyType: 'self';
   readonly entrySource: string | null;
@@ -110,8 +114,9 @@ function assertPriced(item: UnionItem): void {
 
 /**
  * The quoter owns every amount (BR-PRICE-06 「不得另写估算逻辑」); this only checks the result's
- * shape and applies BR-PRICE-08: rebate_max_fen = 0 is no_rebate (no estimated net price), while
- * min = 0 < max stays a price_compare_risk range (BR-PRICE-07).
+ * shape and applies BR-PRICE-08: rebate_max_fen = 0 is no_rebate (no estimated net price). Any
+ * other answer must carry the requested basis (always normal since D10-641) with min = max; a
+ * range is refused, never shown.
  */
 function settleQuote(quote: RebateQuote, expected: QuoteBasis): RebateQuote {
   const { rebateMinFen: min, rebateMaxFen: max, estNetPriceFen: net } = quote;
@@ -146,7 +151,8 @@ export function createCardAssembler(options: CardAssemblerOptions): CardAssemble
 
   async function entrySourceOf(input: AssembleCardInput, viewer: Viewer): Promise<string | null> {
     // Detail, watch and other derived requests inherit the originating card's link record,
-    // read in the server-side app scope; an unreadable or foreign link gives null (→ risk).
+    // read in the server-side app scope; an unreadable or foreign link gives null (recorded as
+    // such; the quote is normal either way, D10-641).
     if (input.sourceLinkId === undefined) return input.entrySource;
     return sourceLinks.entrySource(viewer.appId, input.sourceLinkId);
   }
@@ -165,7 +171,7 @@ export function createCardAssembler(options: CardAssemblerOptions): CardAssemble
       throw new TypeError('card: product ref belongs to another app scope');
     }
     const entrySource = await entrySourceOf(input, viewer);
-    const basis = quoteBasisFor(item.platform, entrySource);
+    const basis = quoteBasisFor();
     const context: CardQuoteContext = { buyType: 'self', entrySource, rebateBasis: basis };
     const quote = settleQuote(await quoter.quote(item, viewer, context), basis);
 
@@ -245,7 +251,6 @@ export interface DemoRebateQuoterOptions {
 
 const BP = 10000n;
 const TECH_FEE_KEY = 'tech_fee_bp';
-const COMPARE_RATIO_KEY = 'rebate.taobao.compare_rate_ratio_bp';
 
 function missingConfig(key: string): never {
   throw new Error(`demo quoter: config missing or malformed (${key})`);
@@ -267,10 +272,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Demo / replay quoter for non-production environments only. The formula is BR-CALC-20 with
  * synthetic rule values; every step floors (@couli/money): gross = ⌊final × rate⌋,
  * fee = ⌊gross × tech_fee⌋, N = gross − fee, after-reserve (BR-CALC-02), self = ⌊after × share⌋.
- * The range lower bound redoes the same steps at ⌊rate × compare_rate_ratio_bp⌋ (BR-PRICE-07),
- * it does not halve the upper result. est_net_price_fen = final − rebate_min_fen (BR-PRICE-09);
- * rebate_max_fen = 0 is no_rebate without a net price (BR-PRICE-08). Configuration is read on
- * every call, in the viewer's app scope; a missing key is refused, never defaulted.
+ * One amount on every platform (D10-641, BR-PRICE-07): min = max = self, the compare ratio is
+ * never read, and a price_compare_risk (or any non-normal) context is refused with a TypeError.
+ * est_net_price_fen = final − rebate_min_fen (BR-PRICE-09); rebate_max_fen = 0 is no_rebate
+ * without a net price (BR-PRICE-08). Configuration is read on every call, in the viewer's app
+ * scope; a missing key is refused, never defaulted.
  */
 export function createDemoRebateQuoter(options: DemoRebateQuoterOptions): CardRebateQuoter {
   const { appEnv, unionMode, config, ruleConfigKey } = options;
@@ -306,9 +312,12 @@ export function createDemoRebateQuoter(options: DemoRebateQuoterOptions): CardRe
     viewer: Viewer,
     context?: CardQuoteContext,
   ): Promise<RebateQuote> {
-    const basis = context?.rebateBasis ?? quoteBasisFor(item.platform, null);
-    if (basis === 'price_compare_risk' && item.platform !== 'taobao') {
-      throw new TypeError('demo quoter: compare range exists only on taobao (BR-PRICE-07)');
+    // Read loosely: the type still names price_compare_risk, which no pre-order quote produces.
+    const basis: unknown = context === undefined ? quoteBasisFor() : context.rebateBasis;
+    if (basis !== 'normal') {
+      throw new TypeError(
+        `demo quoter: only the normal basis is quoted (BR-PRICE-07), got ${String(basis)}`,
+      );
     }
     const { reserveBp, selfShareBp } = await rule(viewer.appId);
     const feeBp = await techFee(viewer.appId, item.platform);
@@ -320,19 +329,14 @@ export function createDemoRebateQuoter(options: DemoRebateQuoterOptions): CardRe
       return mulDivFloor(applyReserve(n, reserveBp).after_reserve_fen, selfShareBp, BP);
     };
 
-    const max = self(item.commission_rate_bp);
-    let min = max;
-    if (basis === 'price_compare_risk') {
-      const ratioBp = bpValue(await read(viewer.appId, COMPARE_RATIO_KEY), COMPARE_RATIO_KEY);
-      min = self(mulDivFloor(item.commission_rate_bp, ratioBp, BP));
-    }
-    if (max === 0n) {
+    const rebate = self(item.commission_rate_bp);
+    if (rebate === 0n) {
       return { rebateMinFen: 0n, rebateMaxFen: 0n, estNetPriceFen: null, rebateBasis: 'no_rebate' };
     }
     return {
-      rebateMinFen: min,
-      rebateMaxFen: max,
-      estNetPriceFen: subFen(final, min),
+      rebateMinFen: rebate,
+      rebateMaxFen: rebate,
+      estNetPriceFen: subFen(final, rebate),
       rebateBasis: basis,
     };
   }

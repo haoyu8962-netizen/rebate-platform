@@ -5,7 +5,6 @@ import type {
   Viewer,
 } from '../../../../apps/api/src/modules/catalog/index.ts';
 import type {
-  COMMISSION_QUOTE_CONFIG_KEYS,
   CommissionQuoteContext,
   CommissionRebateQuoter,
 } from '../../../../apps/api/src/modules/commission/application/types.ts';
@@ -40,23 +39,29 @@ export const APP = 'quote-app-a';
 export const OTHER_APP = 'quote-app-b';
 export const NOW = '2026-11-01T00:00:00+08:00';
 export const PLATFORMS = ['taobao', 'jd', 'pdd'] as const;
-export const CONFIG_KEYS: COMMISSION_QUOTE_CONFIG_KEYS = [
+// B1-05zc (D10-641): a quote no longer reads rebate.taobao.compare_rate_ratio_bp, so neither the
+// keys a quote reads nor an open's pre-reads contain it. Untyped on purpose: the key tuple type
+// loses that member only with the implementation.
+export const CONFIG_KEYS = [
   'commission.platforms',
   'tech_fee_bp',
-  'rebate.taobao.compare_rate_ratio_bp',
   'union.pdd.self_buy_factor_bp',
   'union.pdd.account_level_factor_bp',
-];
+] as const;
 export const NORMAL = {
   buyType: 'self',
   entrySource: 'pool',
   rebateBasis: 'normal',
 } as const satisfies CommissionQuoteContext;
+/**
+ * B1-05zc (D10-641): a price_compare_risk context, which the quoter now refuses (never quoted as a
+ * range). Cast so the tests do not depend on the context type still naming that basis.
+ */
 export const COMPARE = {
   buyType: 'self',
   entrySource: 'search',
   rebateBasis: 'price_compare_risk',
-} as const satisfies CommissionQuoteContext;
+} as unknown as CommissionQuoteContext;
 export type ConfigValue = NonNullable<
   Awaited<ReturnType<CatalogConfigReader['configValue']>>
 >['value'];
@@ -111,6 +116,7 @@ export function fixture() {
   const values = new Map<string, ConfigValue>([
     ['commission.platforms', [...PLATFORMS]],
     ['tech_fee_bp', { taobao: 0, jd: 0, pdd: 0 }],
+    // B1-05zc: kept on purpose (5000, the old placeholder); a quote must not read it.
     ['rebate.taobao.compare_rate_ratio_bp', 5000],
     ['union.pdd.self_buy_factor_bp', 7500],
     ['union.pdd.account_level_factor_bp', 10000],

@@ -2,41 +2,76 @@ import { expect, it } from 'vitest';
 import type { RuleRow } from '../../../../apps/api/src/modules/commission/domain/rules.ts';
 import { APP, COMPARE, NORMAL, PLATFORMS, fixture, item, version, viewer } from './fixtures.ts';
 
-it.each([
-  { key: 'commission.platforms', platform: 'taobao' },
-  { key: 'tech_fee_bp', platform: 'taobao' },
-  { key: 'rebate.taobao.compare_rate_ratio_bp', platform: 'taobao' },
-  { key: 'union.pdd.self_buy_factor_bp', platform: 'pdd' },
-  { key: 'union.pdd.account_level_factor_bp', platform: 'pdd' },
-] as const)('[AC-B2-03c#19] 缺少 $key 时拒绝报价，不填默认值', async ({ key, platform }) => {
+/**
+ * B1-05zc: the quote's settled outcome as a plain value. A refused quote becomes the string
+ * 'rejected', so a quoter that still refuses fails the equality assertion below instead of letting
+ * its error leave the test body.
+ */
+async function settled(run: () => Promise<unknown>): Promise<unknown> {
+  try {
+    return await run();
+  } catch {
+    return 'rejected';
+  }
+}
+
+// B1-05zc (D10-641): the base [AC-B2-03c#19] table, all rows. Missing commission.platforms or
+// tech_fee_bp still refuses a taobao quote (NORMAL); the two pdd rows (D10-669) still refuse a pdd
+// quote with NORMAL; a missing compare key no longer refuses, the quote is one amount.
+it('[AC-B2-03c#19] 淘宝缺少 commission.platforms / tech_fee_bp 仍拒绝报价；缺少 rebate.taobao.compare_rate_ratio_bp 不拒绝：淘宝不读该键（D10-641）', async () => {
+  for (const key of ['commission.platforms', 'tech_fee_bp'] as const) {
+    const missing = fixture();
+    missing.values.delete(key);
+    await expect(
+      missing.quoter.quote(item({ platform: 'taobao' }), viewer(), NORMAL),
+    ).rejects.toThrow();
+  }
+  {
+    const f = fixture();
+    f.values.delete('union.pdd.self_buy_factor_bp');
+    await expect(f.quoter.quote(item({ platform: 'pdd' }), viewer(), NORMAL)).rejects.toThrow();
+  }
+  {
+    const f = fixture();
+    f.values.delete('union.pdd.account_level_factor_bp');
+    await expect(f.quoter.quote(item({ platform: 'pdd' }), viewer(), NORMAL)).rejects.toThrow();
+  }
   const f = fixture();
-  f.values.delete(key);
-  await expect(
-    f.quoter.quote(item({ platform }), viewer(), platform === 'taobao' ? COMPARE : NORMAL),
-  ).rejects.toThrow();
+  f.values.delete('rebate.taobao.compare_rate_ratio_bp');
+  const single = {
+    rebateMinFen: 500n,
+    rebateMaxFen: 500n,
+    estNetPriceFen: 9500n,
+    rebateBasis: 'normal',
+  };
+  const outcomes: unknown[] = [];
+  for (const context of [undefined, { ...NORMAL, entrySource: 'search' }]) {
+    outcomes.push(await settled(() => f.quoter.quote(item(), viewer(), context)));
+  }
+  expect(outcomes).toEqual([single, single]);
+  expect(f.configValue).not.toHaveBeenCalledWith(APP, 'rebate.taobao.compare_rate_ratio_bp');
 });
 
 it.each([null, '5000', -1, 10001, 0.5, true, {}, [], Number.MAX_SAFE_INTEGER])(
-  '[AC-B2-03c#20] 非整数万分比配置 %j 被拒绝',
+  '[AC-B2-03c#20] 非整数万分比配置 %j 被拒绝；比价系数不再读取，填错也不影响淘宝单值报价',
   async (invalid) => {
     const f = fixture();
     for (const key of [
-      'rebate.taobao.compare_rate_ratio_bp',
       'union.pdd.self_buy_factor_bp',
       'union.pdd.account_level_factor_bp',
     ] as const) {
       const previous = f.values.get(key)!;
       f.values.set(key, invalid);
-      const pdd = key.startsWith('union.pdd.');
-      await expect(
-        f.quoter.quote(
-          item({ platform: pdd ? 'pdd' : 'taobao' }),
-          viewer(),
-          pdd ? NORMAL : COMPARE,
-        ),
-      ).rejects.toThrow();
+      await expect(f.quoter.quote(item({ platform: 'pdd' }), viewer(), NORMAL)).rejects.toThrow();
       f.values.set(key, previous);
     }
+    f.values.set('rebate.taobao.compare_rate_ratio_bp', invalid);
+    expect(await settled(() => f.quoter.quote(item(), viewer()))).toEqual({
+      rebateMinFen: 500n,
+      rebateMaxFen: 500n,
+      estNetPriceFen: 9500n,
+      rebateBasis: 'normal',
+    });
   },
 );
 
@@ -72,6 +107,14 @@ it.each(['jd', 'pdd'] as const)(
     await expect(f.quoter.quote(item({ platform }), viewer(), COMPARE)).rejects.toThrow(TypeError);
   },
 );
+
+// B1-05zc (D10-641): taobao no longer has a compare range either; the old quoter answered one.
+it('[AC-B2-03c#23] BR-PRICE-07 淘宝也不允许比价区间：price_compare_risk 口径拒绝报价', async () => {
+  const f = fixture();
+  await expect(f.quoter.quote(item({ platform: 'taobao' }), viewer(), COMPARE)).rejects.toThrow(
+    TypeError,
+  );
+});
 
 it.each(['missing', 'error'] as const)(
   '[AC-B2-03c#24] 登录用户等级 $0 不回退游客 L1',

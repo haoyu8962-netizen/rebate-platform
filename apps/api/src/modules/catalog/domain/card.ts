@@ -1,33 +1,23 @@
 // Pure card rules (no I/O, no clock reads). Amounts are integer fen (bigint); arithmetic, when
-// any, goes through @couli/money. Rules: BR-PRICE-07 (basis by entry_source), BR-PRICE-17
+// any, goes through @couli/money. Rules: BR-PRICE-07 (one basis, D10-641), BR-PRICE-17
 // (disclaimer_keys order), BR-PRICE-21 (cta by state), BR-PRICE-11 (quoted_at / age_sec).
 import type { Platform } from '../../union/index.ts';
 
-/** Rebate basis a priced card can carry before the zero-cap check (BR-PRICE-07 / 08). */
+/**
+ * Rebate basis a priced card can carry before the zero-cap check (BR-PRICE-07 / 08). The contract
+ * keeps price_compare_risk for compatibility, but since D10-641 no pre-order quote produces it.
+ */
 export type QuoteBasis = 'normal' | 'price_compare_risk';
 
 /**
- * BR-PRICE-07, no pre-check permission (M-内测 default): only these sources are normal for
- * taobao — home material feed, product pool, taolijin pool, share (panel and landing page).
- * Every other value — parse, search, agent (and its refresh), a detail without a source card,
- * a watch whose origin is unknown, null or an unrecognised name — is price_compare_risk.
+ * BR-PRICE-07 / BR-CALC-16 (D10-641): before an order every card quotes one amount from the union
+ * commission field — normal on every platform and from every entry source (search, parse,
+ * feed, pool, detail, rank, agent, share, a watch, null or an unrecognised name alike). The
+ * entry source is still recorded on the link; it no longer decides the basis, so nothing is
+ * passed in.
  */
-const NORMAL_ENTRY_SOURCES: ReadonlySet<string> = new Set([
-  'feed',
-  'pool',
-  'tlj_pool',
-  // 08 BR-PRICE-07 来源判定表 names the share entry `share`; the panel / landing names stay.
-  'share',
-  'share_panel',
-  'share_landing',
-]);
-
-/** MVP shows a compare range only on taobao (BR-PRICE-07); other platforms quote normal. */
-export function quoteBasisFor(platform: Platform, entrySource: string | null): QuoteBasis {
-  if (platform !== 'taobao') return 'normal';
-  return entrySource !== null && NORMAL_ENTRY_SOURCES.has(entrySource)
-    ? 'normal'
-    : 'price_compare_risk';
+export function quoteBasisFor(): 'normal' {
+  return 'normal';
 }
 
 export type CardBasis = QuoteBasis | 'no_rebate';
@@ -35,13 +25,13 @@ export type CardBasis = QuoteBasis | 'no_rebate';
 /**
  * BR-PRICE-17 / BR-PRICE-03: the price-basis key goes first — price_basis when the card shows a
  * coupon price (coupon_fen > 0), price_basis.general when it only shows the selling price; then
- * rebate_estimate (normal) or rebate_compare (range); no_rebate adds no rebate key.
+ * rebate_estimate for any card with a rebate (D10-641: rebate_compare is no longer issued);
+ * no_rebate adds no rebate key.
  */
 export function disclaimerKeysFor(basis: CardBasis, couponFen: bigint): string[] {
   const priceKey = couponFen > 0n ? 'price_basis' : 'price_basis.general';
-  if (basis === 'normal') return [priceKey, 'rebate_estimate'];
-  if (basis === 'price_compare_risk') return [priceKey, 'rebate_compare'];
-  return [priceKey];
+  if (basis === 'no_rebate') return [priceKey];
+  return [priceKey, 'rebate_estimate'];
 }
 
 /** BR-PRICE-21 three states: 有券有返 / 无券有返 / 无返利 (button keys per BR-TEXT-12). */

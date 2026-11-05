@@ -82,12 +82,9 @@ it.each([
   TIMEOUT,
 );
 
-// BR-PRICE-07 来源判定表, as the detail's own case [AC-B1-05e#8]: feed quotes normal and search on the
-// risk basis, so the amounts tell feed from `detail` and only the link's source tells search apart.
-it.each([
-  { source: 'feed', basis: 'normal', min: 269 },
-  { source: 'search', basis: 'price_compare_risk', min: 135 },
-])(
+// BR-PRICE-07 来源判定表, as the detail's own case [AC-B1-05e#8]: feed quotes normal, so the link's
+// source is what tells feed from `detail`. B1-05zc: the base table's search row is the case below.
+it.each([{ source: 'feed', basis: 'normal', min: 269 }])(
   '[BR-PRICE-07][TRADE-12] 回退出卡沿用来源卡：from_link_id 的入口是 $source → rebate_basis=$basis，链接记 $source',
   async ({ source, basis, min }) => {
     const f = await detailCase(h);
@@ -109,8 +106,33 @@ it.each([
   TIMEOUT,
 );
 
+// B1-05zc (D10-641, BR-PRICE-07 2026-11-05): entry_source no longer decides a compare risk. A search
+// source card's fallback quotes one amount on the normal basis (the old range was 135–269); only the
+// link's registered source tells it apart from feed.
 it(
-  '[BR-PRICE-07][TRADE-12] 没有来源卡的回退按详情入口：rebate_basis=price_compare_risk，链接记 detail',
+  '[BR-PRICE-07][TRADE-12] 回退出卡沿用来源卡：from_link_id 的入口是 search → rebate_basis=normal 单值，链接记 search',
+  async () => {
+    const f = await detailCase(h);
+    await f.item(await f.pool());
+    f.detail.mockRejectedValue(outage());
+    f.entrySource.mockResolvedValue('search');
+
+    const card = await f.run({ from_link_id: SOURCE_LINK });
+
+    expect(card).toMatchObject({
+      stale: true,
+      rebate_basis: 'normal',
+      rebate_min_fen: 269,
+      rebate_max_fen: 269,
+    });
+    expect(f.entrySource).toHaveBeenCalledWith(f.owner.appId, SOURCE_LINK);
+    expect(f.rows.map((row) => row.entrySource)).toEqual(['search']);
+  },
+  TIMEOUT,
+);
+
+it(
+  '[BR-PRICE-07][TRADE-12] 没有来源卡的回退按详情入口：rebate_basis=normal 单值，链接记 detail',
   async () => {
     const f = await detailCase(h);
     await f.item(await f.pool());
@@ -118,10 +140,11 @@ it(
 
     const card = await f.run();
 
+    // B1-05zc (D10-641): one amount, no compare range.
     expect(card).toMatchObject({
       stale: true,
-      rebate_basis: 'price_compare_risk',
-      rebate_min_fen: 135,
+      rebate_basis: 'normal',
+      rebate_min_fen: 269,
       rebate_max_fen: 269,
     });
     expect(f.rows.map((row) => row.entrySource)).toEqual(['detail']);

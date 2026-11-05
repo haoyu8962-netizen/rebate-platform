@@ -35,13 +35,16 @@ it('[AC-B2-03d#1] AppModule 选择矩阵：local/test/staging × demo/replay/liv
       await withOpenReads(
         () => ports.quoteReads.prepare(plan()),
         async () => {
+          // B1-05zc (D10-641): neither quoter reads rebate.taobao.compare_rate_ratio_bp any more,
+          // so an open pre-reads it for neither (CONFIG_KEYS no longer lists it).
+          const expected: readonly string[] = real
+            ? CONFIG_KEYS
+            : ['demo.rebate_quote_rule', 'tech_fee_bp'];
           expect(f.configValue.mock.calls.map(([appId, key]) => [appId, key]).sort()).toEqual(
-            (real
-              ? CONFIG_KEYS
-              : ['demo.rebate_quote_rule', 'tech_fee_bp', 'rebate.taobao.compare_rate_ratio_bp']
-            )
-              .map((key) => [APP, key])
-              .sort(),
+            expected.map((key) => [APP, key]).sort(),
+          );
+          expect(f.configValue.mock.calls.map(([, key]) => key)).not.toContain(
+            'rebate.taobao.compare_rate_ratio_bp',
           );
           f.configValue.mockClear();
           expect(await ports.quoter.quote(item(), viewer({ userId: 'viewer-l2' }), NORMAL)).toEqual(

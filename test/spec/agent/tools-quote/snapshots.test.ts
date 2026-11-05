@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import type { RebateQuote } from '../../../../apps/api/src/modules/catalog/index.ts';
 import {
   createLinkQuoteRunner,
   createRebateQuoteHandler,
@@ -201,7 +202,10 @@ it('[AC-B3-04c#20][BR-AI-04] 情境重新取数价格不可得，不复用上一
   expect(JSON.stringify(outcome.modelView)).not.toContain('2990');
 });
 
-it('[AC-B3-04c#21][BR-AI-04] 淘宝比价风险报价保留区间，合法的零下限不等于无返利', async () => {
+// B1-05zc (D10-641, BR-AI-04 细则): a taobao Agent card is the union amount as one value. The quote
+// double answers the old 0–137 range only to a price_compare_risk request, so a card that still asks
+// for the compare basis shows that range and fails here.
+it('[AC-B3-04c#21][BR-AI-04] 淘宝 Agent 报价卡按接口金额单值，不出比价区间、不下发 rebate_compare', async () => {
   const f = fixture();
   const runner = createLinkQuoteRunner(f.deps);
   f.setProduct({
@@ -209,21 +213,34 @@ it('[AC-B3-04c#21][BR-AI-04] 淘宝比价风险报价保留区间，合法的零
     item: { ...f.current.item, platform: 'taobao', item_id: 'synthetic-taobao' },
     ref: { ...f.current.ref, platform: 'taobao', productKey: 'tb:synthetic-taobao' },
   });
-  f.setQuote({
-    rebateMinFen: 0n,
-    rebateMaxFen: 137n,
-    estNetPriceFen: 2990n,
-    rebateBasis: 'price_compare_risk',
+  // The kit's double is typed with the item only; the card entry also passes viewer and context.
+  f.quote.mockImplementation(async (...args: unknown[]): Promise<RebateQuote> => {
+    const context = args[2] as { readonly rebateBasis?: unknown } | undefined;
+    // Cast: the quote type may lose price_compare_risk with the implementation.
+    const range = {
+      rebateMinFen: 0n,
+      rebateMaxFen: 137n,
+      estNetPriceFen: 2990n,
+      rebateBasis: 'price_compare_risk',
+    } as unknown as RebateQuote;
+    return context?.rebateBasis === 'normal'
+      ? { rebateMinFen: 137n, rebateMaxFen: 137n, estNetPriceFen: 2853n, rebateBasis: 'normal' }
+      : range;
   });
   const outcome = await runner.run(candidate, context());
   expect(outcome.kind).toBe('ok');
-  expect(productOf(outcome.cards)).toMatchObject({
-    rebate_basis: 'price_compare_risk',
-    rebate_min_fen: 0,
+  const product = productOf(outcome.cards);
+  expect(product).toMatchObject({
+    rebate_basis: 'normal',
+    rebate_min_fen: 137,
     rebate_max_fen: 137,
     final_price_fen: 2990,
-    est_net_price_fen: 2990,
+    est_net_price_fen: 2853,
     source: 'taobao_union',
   });
+  expect(product['disclaimer_keys']).toEqual(expect.arrayContaining(['rebate_estimate']));
+  expect(product['disclaimer_keys']).not.toContain('rebate_compare');
+  const quoted = f.quote.mock.calls[0] as readonly unknown[] | undefined;
+  expect(quoted?.[2]).toMatchObject({ entrySource: 'agent', rebateBasis: 'normal' });
   expect(f.register).toHaveBeenCalledTimes(1);
 });
