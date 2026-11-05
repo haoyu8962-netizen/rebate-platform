@@ -1,4 +1,6 @@
 // Public surface of the identity module. Other modules import only from this file.
+import type { DB } from '@couli/db';
+import { sql, type Kysely, type Transaction } from 'kysely';
 export { createPushSessionValidity } from './ports/push-session-validity.ts';
 // B1-02zq: BR-WDR-03 ③b, the verdict payout's rules chain reads through its ReverifyGatePort.
 export { createReverifyGate } from './application/reverify-gate.ts';
@@ -396,3 +398,27 @@ export type { WecomCopyFailInput } from './infra/personal-data-copies.ts';
 // B2-11a: BR-WDR-29 ⑩ payee_prev_other_user — the payee HMAC's binding history (read only).
 export { createPayeeBindingHistoryReader } from './ports/payee-prev-other-user.ts';
 export type { PayeeBindingHistoryReader } from './ports/payee-prev-other-user.ts';
+
+/**
+ * B2-12c (08 BR-FUND-24 ③): the member of each deletion request of the app (app.deletion_requests),
+ * for the linked documents of a manual adjustment. Read on the caller's executor; IDs not of the
+ * app (or not a uuid) are omitted. No writes, no locks, no logging.
+ */
+export async function readDeletionRequestOwners(
+  executor: Kysely<DB> | Transaction<DB>,
+  input: { readonly appId: string; readonly ids: readonly string[] },
+): Promise<ReadonlyMap<string, string>> {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ids = [...new Set(input.ids.filter((id) => uuid.test(id)).map((id) => id.toLowerCase()))];
+  const owners = new Map<string, string>();
+  if (ids.length === 0) return owners;
+  const rows = await executor
+    .withSchema('app')
+    .selectFrom('deletion_requests')
+    .select(['id', 'user_id'])
+    .where('app_id', '=', input.appId)
+    .where('id', '=', sql<string>`ANY(${ids}::uuid[])`)
+    .execute();
+  for (const row of rows) owners.set(row.id, row.user_id);
+  return owners;
+}

@@ -222,6 +222,7 @@ import {
   type PayoutAccountConfigPort,
   type PersonalDataCopySources,
   createReverifyGate,
+  readDeletionRequestOwners,
 } from './modules/identity/index.ts';
 import {
   EarningsSummaryModule,
@@ -288,6 +289,7 @@ import {
   type WithdrawApplyService,
   type WithdrawRulesOptions,
   type WithdrawRulesService,
+  readWithdrawalAdjustRefs,
 } from './modules/payout/index.ts';
 import {
   LINK_LANDING_PORTS,
@@ -347,6 +349,7 @@ import {
   type NotifySmsTestSender,
   type TemplateSmsSender,
   type VerifyCodeSmsSender,
+  recordBalanceAdjustedMessage,
 } from './modules/notification/index.ts';
 import {
   createSelfPurchaseOrderReader,
@@ -368,6 +371,7 @@ import {
   type PlatformRestoreDiffPort,
   readPersonalDataCopyOrders,
   type OrdersWorkerOptions,
+  readExistingOrderKeys,
 } from './modules/orders/index.ts';
 import {
   ParsingError,
@@ -4527,6 +4531,30 @@ export class AppModule {
         ...(options.entry === 'admin'
           ? [
               LedgerAdminModule.forAdmin({
+                // B2-12c: the manual adjustments (BR-FUND-24): the entry's ledger with the bus and
+                // payout's recovery hook (D10-587); identity's users lock, deletion status and
+                // deletion requests, payout's linked withdrawals, orders' order_keys and
+                // notification's BALANCE_ADJUSTED inbox message, all on the caller's handle.
+                adjustments: {
+                  ledger: ({ clock, eventBus }) =>
+                    createLedger({
+                      clock,
+                      eventBus,
+                      balanceRecoveredHook: createBalanceRecoveredHook({ clock }),
+                    }),
+                  ports: {
+                    lockUsers: (trx, input) => lockUsersForUpdate(trx, input),
+                    userStatus: (executor, input) =>
+                      createUserDeletionStatusReader({ db: executor as Kysely<Database> }).read(
+                        executor,
+                        { app_id: input.appId, user_ids: input.userIds },
+                      ),
+                    withdrawals: readWithdrawalAdjustRefs,
+                    deletionOwners: readDeletionRequestOwners,
+                    orderKeys: readExistingOrderKeys,
+                    message: (trx, input) => recordBalanceAdjustedMessage(trx, input),
+                  },
+                },
                 // B2-04zs: the fund ledger overview reads payout's W and P and admin's names.
                 waterLevel: readAlipayWaterLevel,
                 adminNames: createAdminDisplayNameReader,

@@ -44,6 +44,16 @@ import {
   AdminReconDiffsController,
   RECON_DIFF_READ_DB,
 } from './http/admin/recon-diffs.controller.ts';
+import type {
+  AdminAdjustmentCreateDeps,
+  AdminAdjustmentPorts,
+  AdminAdjustmentReadDeps,
+} from './application/admin-adjustment.ts';
+import {
+  ADJUSTMENT_CREATE_DEPS,
+  ADJUSTMENT_READ_DEPS,
+  AdminAdjustmentsController,
+} from './http/admin/adjustments.controller.ts';
 
 /** Nest injection token for the process ledger (the Clock-backed posting port, with the optional event bus and recovery port). */
 export const LEDGER = Symbol('LEDGER');
@@ -105,6 +115,14 @@ export interface LedgerAdminOptions {
   readonly waterLevel: AdminFundLedgerDeps['waterLevel'];
   /** B2-04zs: admin's createAdminDisplayNameReader. */
   readonly adminNames: AdminFundLedgerDeps['adminNames'];
+  /**
+   * B2-12c: the manual adjustments' ledger (the entry's event bus and payout's recovery hook,
+   * D10-587) and the other modules' ports (identity, payout, orders, notification).
+   */
+  readonly adjustments: {
+    readonly ledger: (context: { readonly clock: Clock; readonly eventBus: EventBus }) => Ledger;
+    readonly ports: AdminAdjustmentPorts;
+  };
 }
 
 /**
@@ -126,8 +144,53 @@ export class LedgerAdminModule {
         AdminAssetSnapshotsController,
         AdminReconDiffWriteOffController,
         AdminFundLedgerController,
+        AdminAdjustmentsController,
       ],
       providers: [
+        // B2-12c: the adjustment reads (fund.adjust or fund.view, read only) on the primary
+        // handle, the balance preview through the entry's plain ledger read.
+        {
+          provide: ADJUSTMENT_READ_DEPS,
+          inject: [CLOCK, { token: DB, optional: true }],
+          useFactory: (clock: Clock, db?: Kysely<Database>): AdminAdjustmentReadDeps | null =>
+            db === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  ledger: createLedger({ clock }),
+                  userStatus: options.adjustments.ports.userStatus,
+                },
+        },
+        // B2-12c: the one-step submission (fund.adjust, step-up sms, platform idempotency): the
+        // form, its ADMIN_ADJUST voucher on the ledger with the bus and the recovery hook, the
+        // audit record (admin's writer bound to the transaction) and the in-app message commit
+        // together. Without the database, the bus or idempotency the route fails closed (50001).
+        {
+          provide: ADJUSTMENT_CREATE_DEPS,
+          inject: [
+            CLOCK,
+            { token: DB, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            db?: Kysely<Database>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+          ): AdminAdjustmentCreateDeps | null =>
+            db === undefined || idempotency === undefined || eventBus === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  idempotency,
+                  auditOn: (trx) => options.auditWriter(trx, clock),
+                  ledger: options.adjustments.ledger({ clock, eventBus }),
+                  ports: options.adjustments.ports,
+                },
+        },
         {
           provide: RECON_DIFF_READ_DB,
           inject: [{ token: DB, optional: true }],

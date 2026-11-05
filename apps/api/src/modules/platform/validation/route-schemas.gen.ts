@@ -16362,6 +16362,261 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "adminListAdjustments": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "querystring": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "default": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20
+        },
+        "reason_code": {
+          "type": "string",
+          "description": "The reason code, equal to the ADMIN_ADJUST sub_type (contracts/enums/fund.yaml admin_adjust_sub_type; BR-FUND-24 ②).",
+          "enum": [
+            "RESTORE",
+            "RECON_FIX",
+            "PAYOUT_RECOVERY",
+            "ACCOUNT_CLOSED",
+            "OTHER"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of a manual adjustment form (contracts/enums/fund.yaml admin_adjustment_status).\nForms a person submits are born APPROVED; only system-prefilled forms are PENDING. 已红冲\nis not a status (BR-TEXT-25).\n",
+          "enum": [
+            "PENDING",
+            "APPROVED",
+            "REJECTED",
+            "CANCELLED"
+          ]
+        },
+        "user_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "adminCreateAdjustment": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "description": "Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing what fails in both branches plus `body`.",
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "A new adjustment. Which `refs`, `note`, `contra_subject` and `contra_platform` a reason code needs is in POST /admin/v1/adjustments.",
+          "additionalProperties": false,
+          "required": [
+            "user_id",
+            "direction",
+            "amount_fen",
+            "reason_code"
+          ],
+          "properties": {
+            "user_id": {
+              "type": "string",
+              "description": "Entity id, a UUIDv7 string (04 §5).",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "direction": {
+              "type": "string",
+              "description": "Direction on the member's available balance (contracts/enums/fund.yaml admin_adjustment_direction).",
+              "enum": [
+                "increase",
+                "decrease"
+              ]
+            },
+            "amount_fen": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "description": "Integer fen above 0, no upper limit (BR-FUND-24 ④)."
+            },
+            "reason_code": {
+              "type": "string",
+              "description": "Only these three can be chosen; RESTORE and ACCOUNT_CLOSED → 20001 at the schema (see AdminAdjustmentCreateRequest).",
+              "enum": [
+                "RECON_FIX",
+                "PAYOUT_RECOVERY",
+                "OTHER"
+              ]
+            },
+            "refs": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "object",
+                "description": "One linked document of an adjustment form (BR-FUND-24 ③).",
+                "additionalProperties": false,
+                "required": [
+                  "ref_type",
+                  "ref_id"
+                ],
+                "properties": {
+                  "ref_type": {
+                    "type": "string",
+                    "description": "Type of a linked document (contracts/enums/fund.yaml admin_adjustment_ref_type;\nBR-FUND-24 ③): `recon_diff` (`ref_id` = recon_diffs.id, not of source R4), `withdrawal`\n(withdrawals.id), `order` (the sub-order's order_key), `account_deletion`\n(deletion_requests.id).\n",
+                    "enum": [
+                      "recon_diff",
+                      "withdrawal",
+                      "order",
+                      "account_deletion"
+                    ]
+                  },
+                  "ref_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "The document's id, or the order_key for ref_type `order`."
+                  }
+                }
+              }
+            },
+            "note": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "Internal explanation, at most 500 characters, not blank after trimming; required for OTHER."
+            },
+            "contra_subject": {
+              "type": "string",
+              "description": "RECON_FIX and OTHER only, required for them (BR-FUND-24 ⑥).",
+              "enum": [
+                "COMMISSION_REVENUE",
+                "UNION_RECEIVABLE",
+                "BAD_DEBT",
+                "MKT_EXPENSE"
+              ]
+            },
+            "contra_platform": {
+              "type": "string",
+              "description": "Platform (contracts/enums/platform.yaml platform).",
+              "enum": [
+                "taobao",
+                "jd",
+                "pdd",
+                "meituan",
+                "vip",
+                "douyin",
+                "eleme",
+                "kuaishou",
+                "suning"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "A whole-form reversal; everything else comes from the original (BR-FUND-24 细则「红冲只按原单整笔」).",
+          "additionalProperties": false,
+          "required": [
+            "reverses_adjust_id",
+            "note"
+          ],
+          "properties": {
+            "reverses_adjust_id": {
+              "type": "string",
+              "description": "Entity id, a UUIDv7 string (04 §5).",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "note": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "The reason for the reversal, at most 500 characters, not blank after trimming."
+            }
+          }
+        }
+      ]
+    }
+  },
+  "adminGetAdjustment": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "adjust_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "adjust_id"
+      ],
+      "additionalProperties": false
+    }
+  },
   "listAdminWithdrawals": {
     "headers": {
       "type": "object",

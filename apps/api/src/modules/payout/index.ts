@@ -416,3 +416,9 @@ export type {
   ReviewOverdueQueue,
   ReviewOverdueSeedOptions,
 } from './jobs/review-overdue-job.ts';
+// B2-12c: the linked withdrawals of a manual adjustment (member and cash subject of the channel).
+export { readWithdrawalAdjustRefs } from './application/withdrawal-adjust-ref.ts';
+export type {
+  WithdrawalAdjustRef,
+  WithdrawalCashSubject,
+} from './application/withdrawal-adjust-ref.ts';

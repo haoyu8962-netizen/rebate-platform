@@ -136,3 +136,13 @@ export type {
   DeletionProgressWriteOptions,
   DeletionRequestedInput,
 } from './application/deletion-progress-message.ts';
+// B2-12c: the BALANCE_ADJUSTED inbox message of a manual adjustment (BR-FUND-24 ⑦, BR-TEXT-19),
+// written on ledger's adjustment transaction. ledger never imports it: app.module hands it over.
+export { renderBalanceAdjustedMessage } from './application/balance-adjusted-message.ts';
+export type {
+  BalanceAdjustedFacts,
+  BalanceAdjustedMessage,
+  BalanceAdjustedOverride,
+} from './application/balance-adjusted-message.ts';
+export { recordBalanceAdjustedMessage } from './application/balance-adjusted-message-record.ts';
+export type { BalanceAdjustedRecordInput } from './application/balance-adjusted-message-record.ts';

@@ -2,7 +2,6 @@ id: B2-12c
 repo: rebate-platform
 title: 调账读与一步提交：adminListAdjustments、adminGetAdjustment、adminCreateAdjustment 去 planned（含红冲、无权限审计、站内信）
 type: impl
-# 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。D10-590 ④：deleting 用户不受理新的人工单，只允许红冲 ACCOUNT_CLOSED 调减单。⑧ 流水先不跳转、显示 hint（FU-LEDGER-ADJUST-JUMP）。对方科目按 specs/ledger-rules.md §6 方案 A。
 refs: [BR-FUND-24, BR-FUND-10, BR-FUND-16, BR-TEXT-19]
 refs_hash:
   BR-FUND-24: 0f1a6ecb3334
@@ -37,4 +36,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/admin-adjustments/**'
-status: todo
+status: done
+pr: 2416

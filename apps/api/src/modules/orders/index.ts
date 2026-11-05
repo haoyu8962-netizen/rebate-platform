@@ -1,4 +1,6 @@
 // Public surface of the orders module (规划/02 §4.1); other modules import only from this file.
+import type { DB } from '@couli/db';
+import { sql, type Kysely, type Transaction } from 'kysely';
 export { recordOrderRights, adminHoldOrder, adminUnholdOrder } from './application/rights-ports.ts';
 export type {
   RightsRecordResult,
@@ -269,3 +271,34 @@ export type {
   ClawbackPendingPort,
   ClawbackPendingResolveInput,
 } from './application/clawback-pending.ts';
+
+/**
+ * B2-12c (08 BR-FUND-24 ③): which order_keys `{platform}:{sub_order_id}` name a sub-order of the app
+ * (app.order_keys), for the linked documents of a manual adjustment. Read on the caller's executor;
+ * no writes, no locks, no logging. A malformed key is simply absent from the result.
+ */
+export async function readExistingOrderKeys(
+  executor: Kysely<DB> | Transaction<DB>,
+  input: { readonly appId: string; readonly orderKeys: readonly string[] },
+): Promise<ReadonlySet<string>> {
+  const found = new Set<string>();
+  const pairs: { key: string; platform: string; sub: string }[] = [];
+  for (const key of new Set(input.orderKeys)) {
+    const at = key.indexOf(':');
+    if (at <= 0 || at === key.length - 1) continue;
+    pairs.push({ key, platform: key.slice(0, at), sub: key.slice(at + 1) });
+  }
+  if (pairs.length === 0) return found;
+  const rows = await executor
+    .withSchema('app')
+    .selectFrom('order_keys')
+    .select(['platform', 'sub_order_id'])
+    .where('app_id', '=', input.appId)
+    .where('sub_order_id', '=', sql<string>`ANY(${pairs.map((p) => p.sub)}::text[])`)
+    .execute();
+  for (const row of rows) {
+    const key = `${row.platform}:${row.sub_order_id}`;
+    if (pairs.some((p) => p.key === key)) found.add(key);
+  }
+  return found;
+}
