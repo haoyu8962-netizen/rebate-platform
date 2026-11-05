@@ -35,6 +35,10 @@
   --color-couli-source-text: var(--color-source-text);
   --color-couli-source-background: var(--color-source-background);
   --color-couli-source-border: var(--color-source-border);
+  --color-couli-platform-tag-taobao: var(--color-platform-tag-taobao);
+  --color-couli-platform-tag-tmall: var(--color-platform-tag-tmall);
+  --color-couli-platform-tag-jd: var(--color-platform-tag-jd);
+  --color-couli-platform-tag-pdd: var(--color-platform-tag-pdd);
   --color-couli-button-primary-default-background: var(--color-button-primary-default-background);
   --color-couli-button-primary-default-text: var(--color-button-primary-default-text);
   --color-couli-button-primary-pressed-background: var(--color-button-primary-pressed-background);
@@ -44,6 +48,7 @@
   --color-couli-button-inverse-background: var(--color-button-inverse-background);
   --color-couli-button-inverse-text: var(--color-button-inverse-text);
   --color-couli-overlay-scrim: var(--color-overlay-scrim);
+  --color-couli-overlay-on-image: var(--color-overlay-on-image);
   --color-couli-control-checked: var(--color-control-checked);
   --color-couli-badge-background: var(--color-badge-background);
   --font-couli-system: var(--font-family-system);
@@ -75,6 +80,8 @@
   --spacing-couli-12: var(--space-12);
   --spacing-couli-16: var(--space-16);
   --radius-couli-small: var(--radius-small);
+  --radius-couli-tag: var(--radius-tag);
+  --radius-couli-avatar: var(--radius-avatar);
   --radius-couli-button: var(--radius-button);
   --radius-couli-card: var(--radius-card);
   --radius-couli-panel: var(--radius-panel);

@@ -3,14 +3,14 @@ import type { DesignTokens } from '@couli/ui-tokens';
 import { expect } from 'vitest';
 
 const moduleUrl = import.meta.url;
-export const SOURCE_COMMIT = '49bb4ad30d031e3aca1ec7881b90d9628f34d79b';
+export const SOURCE_COMMIT = 'f088f0473230d1e70232b8a246b92ef53d723929';
 export const ROOT = new URL('../../../../', moduleUrl);
 
-// Source fixtures are copied from this commit, not from the implementation snapshot.
-// Both fixtures preserve the complete planning blobs byte for byte, including foundations.
+// JSON is copied byte for byte from this planning commit, not the implementation snapshot.
+// CSS preserves the old fixture plus the seven additions derived from the generation rules.
 export function baseline(): DesignTokens {
   return JSON.parse(
-    readFileSync(new URL('./fixtures/design-tokens.49bb4ad.json', moduleUrl), 'utf8'),
+    readFileSync(new URL('./fixtures/design-tokens.f088f04.json', moduleUrl), 'utf8'),
   ) as DesignTokens;
 }
 
@@ -83,6 +83,6 @@ export function rootDeclarations(css: string): Map<string, string> {
 
 export function baselineDeclarations(): Map<string, string> {
   return rootDeclarations(
-    readFileSync(new URL('./fixtures/variables.49bb4ad.css', moduleUrl), 'utf8'),
+    readFileSync(new URL('./fixtures/variables.f088f04.css', moduleUrl), 'utf8'),
   );
 }

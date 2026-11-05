@@ -36,6 +36,10 @@
   --color-source-text: #655E57;
   --color-source-background: #FFFFFF;
   --color-source-border: #E4DED5;
+  --color-platform-tag-taobao: #D53D00;
+  --color-platform-tag-tmall: #EA0031;
+  --color-platform-tag-jd: #E02018;
+  --color-platform-tag-pdd: #EB0007;
   --color-button-primary-default-background: #C44820;
   --color-button-primary-default-text: #FFFFFF;
   --color-button-primary-pressed-background: #A83B1F;
@@ -45,6 +49,7 @@
   --color-button-inverse-background: #FFFFFF;
   --color-button-inverse-text: #A83B1F;
   --color-overlay-scrim: rgba(40, 37, 31, 0.4);
+  --color-overlay-on-image: rgba(0, 0, 0, 0.55);
   --color-control-checked: #C44820;
   --color-badge-background: #C44820;
   --font-family-system: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
@@ -76,6 +81,8 @@
   --space-12: 48px;
   --space-16: 64px;
   --radius-small: 8px;
+  --radius-tag: 4px;
+  --radius-avatar: 10px;
   --radius-button: 12px;
   --radius-card: 16px;
   --radius-panel: 24px;
@@ -151,6 +158,10 @@
     --color-source-text: #B5ACA2;
     --color-source-background: #24211E;
     --color-source-border: #3A3530;
+    --color-platform-tag-taobao: #D53D00;
+    --color-platform-tag-tmall: #EA0031;
+    --color-platform-tag-jd: #E02018;
+    --color-platform-tag-pdd: #EB0007;
     --color-button-primary-default-background: #C44820;
     --color-button-primary-default-text: #FFFFFF;
     --color-button-primary-pressed-background: #A83B1F;
@@ -160,6 +171,7 @@
     --color-button-inverse-background: #FFFFFF;
     --color-button-inverse-text: #A83B1F;
     --color-overlay-scrim: rgba(0, 0, 0, 0.55);
+    --color-overlay-on-image: rgba(0, 0, 0, 0.55);
     --color-control-checked: #C44820;
     --color-badge-background: #C44820;
     --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.3);
@@ -203,6 +215,10 @@
   --color-source-text: #B5ACA2;
   --color-source-background: #24211E;
   --color-source-border: #3A3530;
+  --color-platform-tag-taobao: #D53D00;
+  --color-platform-tag-tmall: #EA0031;
+  --color-platform-tag-jd: #E02018;
+  --color-platform-tag-pdd: #EB0007;
   --color-button-primary-default-background: #C44820;
   --color-button-primary-default-text: #FFFFFF;
   --color-button-primary-pressed-background: #A83B1F;
@@ -212,6 +228,7 @@
   --color-button-inverse-background: #FFFFFF;
   --color-button-inverse-text: #A83B1F;
   --color-overlay-scrim: rgba(0, 0, 0, 0.55);
+  --color-overlay-on-image: rgba(0, 0, 0, 0.55);
   --color-control-checked: #C44820;
   --color-badge-background: #C44820;
   --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.3);

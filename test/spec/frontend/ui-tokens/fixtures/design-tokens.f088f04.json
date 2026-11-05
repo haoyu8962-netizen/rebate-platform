@@ -1,0 +1,856 @@
+{
+  "schemaVersion": "couli.tokens.v1",
+  "metadata": {
+    "name": "凑狸",
+    "version": "0.5.1",
+    "date": "2026-11-05",
+    "status": "project baseline",
+    "theme": "light",
+    "modes": [
+      "light",
+      "dark"
+    ],
+    "darkThemePhase": "MVP",
+    "colorSpace": "sRGB",
+    "description": "当前项目使用的品牌与界面基线；2026-10-04 按设计方向第三轮调整 App 页面底、返利强调、平台来源标签与图片占位（docs/changes/20261004-设计方向第三轮.md）；2026-10-18 v0.4.0 按 00 D35 给每个颜色与阴影令牌补深色取值（dark 字段，value 仍为浅色）并新增组件令牌 T1–T12（docs/changes/20261018-深色令牌进唯一源.md）；2026-11-05 v0.5.0 按商品详情 v3 新增标题前平台文字标签的四个实底色 color.platform.tag.*（淘宝、天猫、京东、拼多多）与主图浮层控件底 color.overlay.on-image（docs/changes/20261105-商品详情v3定稿.md）；同日 v0.5.1 补平台文字标签圆角 radius.tag 与店铺头像圆角 radius.avatar（只加键，不改已有值）。已应用于根目录品牌配置、交付素材与品牌预览，不代表原生接入、Icon Composer 或真机验收完成。App 图标外观变体独立于 UI 主题。",
+    "cssFontBase": 16,
+    "sources": [
+      "https://developer.apple.com/design/human-interface-guidelines/color",
+      "https://developer.apple.com/design/human-interface-guidelines/accessibility",
+      "https://www.w3.org/TR/WCAG22/#contrast-minimum"
+    ]
+  },
+  "tokens": {
+    "color": {
+      "brand": {
+        "primary": {
+          "type": "color",
+          "value": "#C44820",
+          "dark": "#C44820",
+          "description": "狸橙；主要行动底色与品牌图形，不用于米白上的普通小字"
+        },
+        "emphasis": {
+          "type": "color",
+          "value": "#A83B1F",
+          "dark": "#F0956B",
+          "description": "深橙；品牌强调文字、链接与主按钮按下态"
+        },
+        "secondary": {
+          "type": "color",
+          "value": "#26735B",
+          "dark": "#6CC49F",
+          "description": "松叶绿；保留品牌辅助色，业务状态仅已结算或已完成使用"
+        },
+        "subtle": {
+          "type": "color",
+          "value": "#FBEFE8",
+          "dark": "#3A2219",
+          "description": "品牌浅底；搭配 emphasis 文字"
+        }
+      },
+      "background": {
+        "canvas": {
+          "type": "color",
+          "value": "#F2EEE6",
+          "dark": "#171513",
+          "description": "App 页面背景（暖米白）；2026-10-04 由 #F6F3ED 调整，管理后台用 admin-canvas"
+        },
+        "admin-canvas": {
+          "type": "color",
+          "value": "#F6F3ED",
+          "dark": "#171513",
+          "description": "管理后台页面背景，保留第二版暖米白"
+        },
+        "surface": {
+          "type": "color",
+          "value": "#FFFFFF",
+          "dark": "#24211E",
+          "description": "卡片、输入区与浮层背景"
+        },
+        "muted": {
+          "type": "color",
+          "value": "#EFEAE2",
+          "dark": "#2F2B27",
+          "description": "次要分组背景"
+        },
+        "placeholder": {
+          "type": "color",
+          "value": "#E9E2D9",
+          "dark": "#36312C",
+          "description": "商品图与配图位的占位底；真实素材容器另加 border.subtle 描边，不承载文字"
+        }
+      },
+      "text": {
+        "primary": {
+          "type": "color",
+          "value": "#28251F",
+          "dark": "#F2EEE6",
+          "description": "标题、正文、主要信息"
+        },
+        "secondary": {
+          "type": "color",
+          "value": "#655E57",
+          "dark": "#B5ACA2",
+          "description": "辅助说明和标签，不再叠加透明度"
+        },
+        "inverse": {
+          "type": "color",
+          "value": "#FFFFFF",
+          "dark": "#FFFFFF",
+          "description": "仅用于已验证的深色实底"
+        },
+        "link": {
+          "type": "color",
+          "value": "#A83B1F",
+          "dark": "#F0956B",
+          "description": "行内链接；另加下划线或可辨识形状"
+        }
+      },
+      "price": {
+        "text": {
+          "type": "color",
+          "value": "#28251F",
+          "dark": "#F2EEE6",
+          "description": "墨棕价格数值（券后价、售价），靠字号和字重突出；不代表返利状态，返利金额与标签用 color.rebate.*"
+        }
+      },
+      "rebate": {
+        "text": {
+          "type": "color",
+          "value": "#A83B1F",
+          "dark": "#F29A6E",
+          "description": "返利金额与其标签词（预估返、推广收益）的强调文字，用于白底、米白底与 rebate.background 上"
+        },
+        "background": {
+          "type": "color",
+          "value": "#FBEFE8",
+          "dark": "#3A2219",
+          "description": "返利标签浅底，配 rebate.text 与钟表图形；不表示已结算"
+        },
+        "solid": {
+          "background": {
+            "type": "color",
+            "value": "#C44820",
+            "dark": "#C44820",
+            "description": "狸橙实底（钱包主卡等），只承载白字；24 以上大字或实底卡片使用，不做渐变或整屏色块"
+          },
+          "text": {
+            "type": "color",
+            "value": "#FFFFFF",
+            "dark": "#FFFFFF",
+            "description": "狸橙实底上的白字，含金额大字与卡内次要文字，不用半透明白"
+          }
+        }
+      },
+      "status": {
+        "pending": {
+          "text": {
+            "type": "color",
+            "value": "#655E57",
+            "dark": "#B5ACA2",
+            "description": "「预估中」「等待结算」等状态标签的中性文字和图标，须配明确状态词及钟表等进行中图形；返利金额本身用 color.rebate.*"
+          },
+          "background": {
+            "type": "color",
+            "value": "#EFEAE2",
+            "dark": "#2F2B27",
+            "description": "「预估中」「等待结算」状态标签的中性浅底；不能配完成对勾"
+          }
+        },
+        "success": {
+          "text": {
+            "type": "color",
+            "value": "#26735B",
+            "dark": "#6CC49F",
+            "description": "仅用于已结算或已完成的状态文字和图标，须配明确状态词及完成对勾"
+          },
+          "background": {
+            "type": "color",
+            "value": "#EAF4EE",
+            "dark": "#16302A",
+            "description": "已结算或已完成状态浅底；不用于预估返利或等待结算"
+          }
+        },
+        "warning": {
+          "text": {
+            "type": "color",
+            "value": "#846020",
+            "dark": "#E3B65C",
+            "description": "警告状态文字和图标"
+          },
+          "background": {
+            "type": "color",
+            "value": "#FBF2DC",
+            "dark": "#33290F",
+            "description": "警告状态浅底"
+          }
+        },
+        "error": {
+          "text": {
+            "type": "color",
+            "value": "#B42345",
+            "dark": "#F28DA4",
+            "description": "莓红错误文字和警示图标，须配原因与恢复操作；不用来强调价格"
+          },
+          "background": {
+            "type": "color",
+            "value": "#FDECF0",
+            "dark": "#3B1A22",
+            "description": "错误状态浅底"
+          }
+        }
+      },
+      "border": {
+        "subtle": {
+          "type": "color",
+          "value": "#E4DED5",
+          "dark": "#3A3530",
+          "description": "仅限装饰分隔，不单独承担必要控件边界"
+        },
+        "control": {
+          "type": "color",
+          "value": "#8A8177",
+          "dark": "#8C8278",
+          "description": "必要控件边界，已验证对白色与米白至少 3:1"
+        },
+        "active": {
+          "type": "color",
+          "value": "#28251F",
+          "dark": "#F2EEE6",
+          "description": "输入中、验证码当前格的 2 单位描边（T2，取代绿色）；深色用主文字色"
+        }
+      },
+      "focus": {
+        "ring": {
+          "type": "color",
+          "value": "#26735B",
+          "dark": "#5DBB97",
+          "description": "键盘或辅助输入焦点线，外侧留白"
+        }
+      },
+      "source": {
+        "text": {
+          "type": "color",
+          "value": "#655E57",
+          "dark": "#B5ACA2",
+          "description": "平台来源中性文字，不表示商家品牌色"
+        },
+        "background": {
+          "type": "color",
+          "value": "#FFFFFF",
+          "dark": "#24211E",
+          "description": "平台来源标签白底，配 source.border 描边"
+        },
+        "border": {
+          "type": "color",
+          "value": "#E4DED5",
+          "dark": "#3A3530",
+          "description": "平台来源标签 1 单位描边；装饰性，来源含义由文字承担"
+        }
+      },
+      "platform": {
+        "tag": {
+          "taobao": {
+            "type": "color",
+            "value": "#D53D00",
+            "dark": "#D53D00",
+            "description": "标题前平台文字标签「淘宝」的实底（2026-11-05 商品详情 v3，规划/03 §10.2 PlatformBadge 标题标签形态）；取平台标识主色加深，只承载 color.text.inverse 白字，白字 4.67:1；深浅色同值；不用于其他文字与大面积色块"
+          },
+          "tmall": {
+            "type": "color",
+            "value": "#EA0031",
+            "dark": "#EA0031",
+            "description": "标题前平台文字标签「天猫」（淘宝商品 shop_type=tmall）的实底（2026-11-05）；只承载白字，白字 4.62:1；深浅色同值；不用于其他文字与大面积色块"
+          },
+          "jd": {
+            "type": "color",
+            "value": "#E02018",
+            "dark": "#E02018",
+            "description": "标题前平台文字标签「京东」的实底（2026-11-05）；只承载白字，白字 4.78:1；深浅色同值；不用于其他文字与大面积色块"
+          },
+          "pdd": {
+            "type": "color",
+            "value": "#EB0007",
+            "dark": "#EB0007",
+            "description": "标题前平台文字标签「拼多多」的实底（2026-11-05）；只承载白字，白字 4.63:1；深浅色同值；不用于其他文字与大面积色块"
+          }
+        }
+      },
+      "button": {
+        "primary": {
+          "default": {
+            "background": {
+              "type": "color",
+              "value": "#C44820",
+              "dark": "#C44820",
+              "description": "主按钮正常底色"
+            },
+            "text": {
+              "type": "color",
+              "value": "#FFFFFF",
+              "dark": "#FFFFFF",
+              "description": "主按钮正常文字"
+            }
+          },
+          "pressed": {
+            "background": {
+              "type": "color",
+              "value": "#A83B1F",
+              "dark": "#A83B1F",
+              "description": "主按钮按下底色"
+            },
+            "text": {
+              "type": "color",
+              "value": "#FFFFFF",
+              "dark": "#FFFFFF",
+              "description": "主按钮按下文字"
+            }
+          },
+          "disabled": {
+            "background": {
+              "type": "color",
+              "value": "#E9E2D9",
+              "dark": "#36312C",
+              "description": "主按钮禁用底色"
+            },
+            "text": {
+              "type": "color",
+              "value": "#655E57",
+              "dark": "#A39A90",
+              "description": "主按钮禁用文字，仍保留可读性"
+            }
+          }
+        },
+        "inverse": {
+          "background": {
+            "type": "color",
+            "value": "#FFFFFF",
+            "dark": "#FFFFFF",
+            "description": "狸橙实底卡内按钮底（T1）；深色下仍白底"
+          },
+          "text": {
+            "type": "color",
+            "value": "#A83B1F",
+            "dark": "#A83B1F",
+            "description": "狸橙实底卡内按钮文字（T1），白底上 6.34:1"
+          }
+        }
+      },
+      "overlay": {
+        "scrim": {
+          "type": "color",
+          "value": "#28251F66",
+          "dark": "#0000008C",
+          "description": "弹层遮罩（T3）；八位十六进制 #RRGGBBAA，末两位为透明度（浅色 40%，深色 55%），CSS 输出 rgba()"
+        },
+        "on-image": {
+          "type": "color",
+          "value": "#0000008C",
+          "dark": "#0000008C",
+          "description": "商品主图上浮层控件（返回键、页码胶囊）的半透明深色底（2026-11-05 商品详情 v3，规划/03 §10.2 ProductGallery）；黑色 55%，配 color.text.inverse 白色图标 / 白字，叠在纯白图上合成 #737373、白字 4.74:1，图越深越高；深浅色同值；不复用 overlay.scrim（其浅色值叠在白图上白字只有 2.38:1）"
+        }
+      },
+      "control": {
+        "checked": {
+          "type": "color",
+          "value": "#C44820",
+          "dark": "#C44820",
+          "description": "勾选、单选、开关「选中」填充（T5）；与 brand.primary 同值，单列便于按主题单独调"
+        }
+      },
+      "badge": {
+        "background": {
+          "type": "color",
+          "value": "#C44820",
+          "dark": "#C44820",
+          "description": "红点 / 数字角标底（T4）；深色仍用狸橙，白字 4.89:1（#E0673C 只有 3.40:1）"
+        }
+      }
+    },
+    "font": {
+      "family": {
+        "system": {
+          "type": "fontFamily",
+          "value": [
+            "system-ui",
+            "-apple-system",
+            "BlinkMacSystemFont",
+            "PingFang SC",
+            "Noto Sans CJK SC",
+            "Microsoft YaHei",
+            "sans-serif"
+          ],
+          "description": "系统字体回退；原生使用平台系统字体"
+        }
+      },
+      "size": {
+        "caption": {
+          "type": "fontSize",
+          "value": 12,
+          "description": "caption 基础字号；随用户字号偏好缩放",
+          "unit": "logical"
+        },
+        "footnote": {
+          "type": "fontSize",
+          "value": 14,
+          "description": "footnote 基础字号；随用户字号偏好缩放",
+          "unit": "logical"
+        },
+        "body": {
+          "type": "fontSize",
+          "value": 17,
+          "description": "body 基础字号；随用户字号偏好缩放",
+          "unit": "logical"
+        },
+        "title": {
+          "type": "fontSize",
+          "value": 22,
+          "description": "title 基础字号；随用户字号偏好缩放",
+          "unit": "logical"
+        },
+        "heading": {
+          "type": "fontSize",
+          "value": 28,
+          "description": "heading 基础字号；随用户字号偏好缩放",
+          "unit": "logical"
+        },
+        "display": {
+          "type": "fontSize",
+          "value": 34,
+          "description": "display 基础字号；随用户字号偏好缩放",
+          "unit": "logical"
+        }
+      },
+      "line-height": {
+        "caption": {
+          "type": "lineHeight",
+          "value": 1.5,
+          "description": "caption 行高倍数"
+        },
+        "footnote": {
+          "type": "lineHeight",
+          "value": 1.5,
+          "description": "footnote 行高倍数"
+        },
+        "body": {
+          "type": "lineHeight",
+          "value": 1.5,
+          "description": "body 行高倍数"
+        },
+        "title": {
+          "type": "lineHeight",
+          "value": 1.3,
+          "description": "title 行高倍数"
+        },
+        "heading": {
+          "type": "lineHeight",
+          "value": 1.25,
+          "description": "heading 行高倍数"
+        },
+        "display": {
+          "type": "lineHeight",
+          "value": 1.2,
+          "description": "display 行高倍数"
+        }
+      },
+      "weight": {
+        "regular": {
+          "type": "fontWeight",
+          "value": 400,
+          "description": "正文常规字重"
+        },
+        "medium": {
+          "type": "fontWeight",
+          "value": 500,
+          "description": "标签和次要强调"
+        },
+        "semibold": {
+          "type": "fontWeight",
+          "value": 600,
+          "description": "标题和主按钮字重"
+        },
+        "bold": {
+          "type": "fontWeight",
+          "value": 700,
+          "description": "少量核心数值强调"
+        }
+      }
+    },
+    "space": {
+      "0": {
+        "type": "dimension",
+        "value": 0,
+        "description": "0 单位间距",
+        "unit": "logical"
+      },
+      "1": {
+        "type": "dimension",
+        "value": 4,
+        "description": "4 单位间距",
+        "unit": "logical"
+      },
+      "2": {
+        "type": "dimension",
+        "value": 8,
+        "description": "8 单位间距",
+        "unit": "logical"
+      },
+      "3": {
+        "type": "dimension",
+        "value": 12,
+        "description": "12 单位间距",
+        "unit": "logical"
+      },
+      "4": {
+        "type": "dimension",
+        "value": 16,
+        "description": "16 单位间距",
+        "unit": "logical"
+      },
+      "5": {
+        "type": "dimension",
+        "value": 20,
+        "description": "20 单位间距",
+        "unit": "logical"
+      },
+      "6": {
+        "type": "dimension",
+        "value": 24,
+        "description": "24 单位间距",
+        "unit": "logical"
+      },
+      "8": {
+        "type": "dimension",
+        "value": 32,
+        "description": "32 单位间距",
+        "unit": "logical"
+      },
+      "10": {
+        "type": "dimension",
+        "value": 40,
+        "description": "40 单位间距",
+        "unit": "logical"
+      },
+      "12": {
+        "type": "dimension",
+        "value": 48,
+        "description": "48 单位间距",
+        "unit": "logical"
+      },
+      "16": {
+        "type": "dimension",
+        "value": 64,
+        "description": "64 单位间距",
+        "unit": "logical"
+      }
+    },
+    "radius": {
+      "small": {
+        "type": "dimension",
+        "value": 8,
+        "description": "小控件圆角",
+        "unit": "logical"
+      },
+      "tag": {
+        "type": "dimension",
+        "value": 4,
+        "description": "标题前平台文字标签圆角（商品详情 v3 R6，详情与列表卡同一组件）",
+        "unit": "logical"
+      },
+      "avatar": {
+        "type": "dimension",
+        "value": 10,
+        "description": "店铺块头像圆角（商品详情 v3 R7，44 头像）",
+        "unit": "logical"
+      },
+      "button": {
+        "type": "dimension",
+        "value": 12,
+        "description": "按钮与输入框圆角",
+        "unit": "logical"
+      },
+      "card": {
+        "type": "dimension",
+        "value": 16,
+        "description": "卡片圆角",
+        "unit": "logical"
+      },
+      "panel": {
+        "type": "dimension",
+        "value": 24,
+        "description": "较大面板圆角",
+        "unit": "logical"
+      },
+      "pill": {
+        "type": "dimension",
+        "value": 999,
+        "description": "胶囊形状；限制于元素高度",
+        "unit": "logical"
+      }
+    },
+    "shadow": {
+      "none": {
+        "type": "shadow",
+        "value": [],
+        "description": "无阴影"
+      },
+      "card": {
+        "type": "shadow",
+        "value": [
+          {
+            "x": 0,
+            "y": 2,
+            "blur": 8,
+            "spread": 0,
+            "color": "#28251F",
+            "opacity": 0.06
+          }
+        ],
+        "dark": [
+          {
+            "x": 0,
+            "y": 2,
+            "blur": 8,
+            "spread": 0,
+            "color": "#000000",
+            "opacity": 0.3
+          }
+        ],
+        "description": "轻卡片阴影；不单独承担控件边界"
+      },
+      "floating": {
+        "type": "shadow",
+        "value": [
+          {
+            "x": 0,
+            "y": 8,
+            "blur": 24,
+            "spread": 0,
+            "color": "#28251F",
+            "opacity": 0.12
+          }
+        ],
+        "dark": [
+          {
+            "x": 0,
+            "y": 8,
+            "blur": 24,
+            "spread": 0,
+            "color": "#000000",
+            "opacity": 0.45
+          }
+        ],
+        "description": "浮层阴影；原生按平台能力映射后复核"
+      }
+    },
+    "focus": {
+      "width": {
+        "type": "dimension",
+        "value": 2,
+        "description": "可见焦点线宽",
+        "unit": "logical"
+      },
+      "offset": {
+        "type": "dimension",
+        "value": 2,
+        "description": "焦点环与控件间距，周围保留实色留白",
+        "unit": "logical"
+      }
+    },
+    "interaction": {
+      "target": {
+        "minimum": {
+          "type": "dimension",
+          "value": 44,
+          "description": "团队采用的通用触控目标；不声明为所有平台的硬性下限",
+          "unit": "logical"
+        },
+        "ios": {
+          "type": "dimension",
+          "value": 44,
+          "description": "iOS 触控目标，按 pt",
+          "unit": "logical"
+        },
+        "android": {
+          "type": "dimension",
+          "value": 48,
+          "description": "团队采用的 Android 触控目标，按 dp",
+          "unit": "logical"
+        },
+        "harmony": {
+          "type": "dimension",
+          "value": 48,
+          "description": "团队采用的鸿蒙触控目标，按 vp",
+          "unit": "logical"
+        }
+      }
+    },
+    "component": {
+      "button": {
+        "min-height": {
+          "type": "dimension",
+          "value": 48,
+          "description": "主按钮最小高度；大字号允许继续增高",
+          "unit": "logical"
+        },
+        "padding-inline": {
+          "type": "dimension",
+          "value": 20,
+          "description": "主按钮水平内边距",
+          "unit": "logical"
+        },
+        "padding-block": {
+          "type": "dimension",
+          "value": 12,
+          "description": "主按钮上下内边距",
+          "unit": "logical"
+        },
+        "gap": {
+          "type": "dimension",
+          "value": 8,
+          "description": "按钮图标与文字间距",
+          "unit": "logical"
+        }
+      },
+      "control": {
+        "min-height": {
+          "type": "dimension",
+          "value": 44,
+          "description": "通用 H5 控件最小高度；原生按平台目标取较大值",
+          "unit": "logical"
+        },
+        "border-width": {
+          "type": "dimension",
+          "value": 1,
+          "description": "输入框等控件边界宽度",
+          "unit": "logical"
+        }
+      },
+      "icon": {
+        "default": {
+          "type": "dimension",
+          "value": 24,
+          "description": "通用图标视觉尺寸；触控区另行扩大",
+          "unit": "logical"
+        },
+        "small": {
+          "type": "dimension",
+          "value": 14,
+          "description": "标签里的钟表、对勾等小图标（T11）",
+          "unit": "logical"
+        },
+        "inline": {
+          "type": "dimension",
+          "value": 16,
+          "description": "口径 i、行内图标（T11）",
+          "unit": "logical"
+        },
+        "medium": {
+          "type": "dimension",
+          "value": 20,
+          "description": "提示条图标（T11）",
+          "unit": "logical"
+        }
+      },
+      "field": {
+        "min-height": {
+          "type": "dimension",
+          "value": 52,
+          "description": "表单输入框（手机号等）最小高度（T6）；control.min-height 44 保留给紧凑控件",
+          "unit": "logical"
+        }
+      },
+      "code-cell": {
+        "height": {
+          "type": "dimension",
+          "value": 56,
+          "description": "验证码格高（T7）；格宽按可用宽度均分，间距 space.2",
+          "unit": "logical"
+        }
+      },
+      "checkbox": {
+        "size": {
+          "type": "dimension",
+          "value": 18,
+          "description": "勾选框视觉直径（T8）；命中区由 interaction.target.* 扩到 44 / 48",
+          "unit": "logical"
+        },
+        "max-scale": {
+          "type": "number",
+          "value": 1.5,
+          "description": "勾选框随系统字号放大的上限倍数（T8）"
+        }
+      },
+      "chip": {
+        "height": {
+          "type": "dimension",
+          "value": 32,
+          "description": "筛选胶囊视觉高（T9）；命中区仍 44 / 48",
+          "unit": "logical"
+        }
+      },
+      "tab-indicator": {
+        "height": {
+          "type": "dimension",
+          "value": 2,
+          "description": "顶部标签页下划线高（T10）",
+          "unit": "logical"
+        }
+      },
+      "tag": {
+        "min-height": {
+          "type": "dimension",
+          "value": 22,
+          "description": "胶囊标签最小高（T11）",
+          "unit": "logical"
+        }
+      },
+      "platform-badge": {
+        "min-height": {
+          "type": "dimension",
+          "value": 20,
+          "description": "平台来源标签最小高（T11）",
+          "unit": "logical"
+        }
+      },
+      "count-badge": {
+        "size": {
+          "type": "dimension",
+          "value": 18,
+          "description": "数字角标高（T4）",
+          "unit": "logical"
+        }
+      },
+      "image": {
+        "list": {
+          "type": "dimension",
+          "value": 96,
+          "description": "列表卡左图边长（T11）",
+          "unit": "logical"
+        }
+      },
+      "grid-cell": {
+        "min-height": {
+          "type": "dimension",
+          "value": 72,
+          "description": "宫格格子最小高（T11）",
+          "unit": "logical"
+        }
+      },
+      "oauth": {
+        "size": {
+          "type": "dimension",
+          "value": 48,
+          "description": "第三方登录圆形按钮直径（T12）",
+          "unit": "logical"
+        },
+        "gap": {
+          "type": "dimension",
+          "value": 32,
+          "description": "第三方登录圆钮间距（T12）",
+          "unit": "logical"
+        }
+      }
+    }
+  }
+}

@@ -14,7 +14,7 @@ import {
 
 function plannedDark(): Map<string, string> {
   // The planning CSS includes optional classes after the token blocks; this package emits tokens.
-  const css = requiredText('test/spec/frontend/ui-tokens/fixtures/variables.49bb4ad.css');
+  const css = requiredText('test/spec/frontend/ui-tokens/fixtures/variables.f088f04.css');
   return darkBlocks(css.split('/* Optional foundations:')[0]!)[0];
 }
 

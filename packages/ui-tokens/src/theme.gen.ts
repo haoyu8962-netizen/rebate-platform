@@ -64,6 +64,14 @@ export const tokenTheme = {
       background: 'var(--color-source-background)',
       border: 'var(--color-source-border)',
     },
+    platform: {
+      tag: {
+        taobao: 'var(--color-platform-tag-taobao)',
+        tmall: 'var(--color-platform-tag-tmall)',
+        jd: 'var(--color-platform-tag-jd)',
+        pdd: 'var(--color-platform-tag-pdd)',
+      },
+    },
     button: {
       primary: {
         default: {
@@ -86,6 +94,7 @@ export const tokenTheme = {
     },
     overlay: {
       scrim: 'var(--color-overlay-scrim)',
+      'on-image': 'var(--color-overlay-on-image)',
     },
     control: {
       checked: 'var(--color-control-checked)',
@@ -136,6 +145,8 @@ export const tokenTheme = {
   },
   radius: {
     small: 'var(--radius-small)',
+    tag: 'var(--radius-tag)',
+    avatar: 'var(--radius-avatar)',
     button: 'var(--radius-button)',
     card: 'var(--radius-card)',
     panel: 'var(--radius-panel)',
@@ -279,6 +290,14 @@ export const tokenValues = {
         background: '#FFFFFF',
         border: '#E4DED5',
       },
+      platform: {
+        tag: {
+          taobao: '#D53D00',
+          tmall: '#EA0031',
+          jd: '#E02018',
+          pdd: '#EB0007',
+        },
+      },
       button: {
         primary: {
           default: {
@@ -301,6 +320,7 @@ export const tokenValues = {
       },
       overlay: {
         scrim: 'rgba(40, 37, 31, 0.4)',
+        'on-image': 'rgba(0, 0, 0, 0.55)',
       },
       control: {
         checked: '#C44820',
@@ -352,6 +372,8 @@ export const tokenValues = {
     },
     radius: {
       small: '8px',
+      tag: '4px',
+      avatar: '10px',
       button: '12px',
       card: '16px',
       panel: '24px',
@@ -491,6 +513,14 @@ export const tokenValues = {
         background: '#24211E',
         border: '#3A3530',
       },
+      platform: {
+        tag: {
+          taobao: '#D53D00',
+          tmall: '#EA0031',
+          jd: '#E02018',
+          pdd: '#EB0007',
+        },
+      },
       button: {
         primary: {
           default: {
@@ -513,6 +543,7 @@ export const tokenValues = {
       },
       overlay: {
         scrim: 'rgba(0, 0, 0, 0.55)',
+        'on-image': 'rgba(0, 0, 0, 0.55)',
       },
       control: {
         checked: '#C44820',
@@ -564,6 +595,8 @@ export const tokenValues = {
     },
     radius: {
       small: '8px',
+      tag: '4px',
+      avatar: '10px',
       button: '12px',
       card: '16px',
       panel: '24px',

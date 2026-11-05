@@ -2,14 +2,17 @@
   "schemaVersion": "couli.tokens.v1",
   "metadata": {
     "name": "凑狸",
-    "version": "0.4.0",
-    "date": "2026-10-18",
+    "version": "0.5.1",
+    "date": "2026-11-05",
     "status": "project baseline",
     "theme": "light",
-    "modes": ["light", "dark"],
+    "modes": [
+      "light",
+      "dark"
+    ],
     "darkThemePhase": "MVP",
     "colorSpace": "sRGB",
-    "description": "当前项目使用的品牌与界面基线；2026-10-04 按设计方向第三轮调整 App 页面底、返利强调、平台来源标签与图片占位（docs/changes/20261004-设计方向第三轮.md）；2026-10-18 v0.4.0 按 00 D35 给每个颜色与阴影令牌补深色取值（dark 字段，value 仍为浅色）并新增组件令牌 T1–T12（docs/changes/20261018-深色令牌进唯一源.md）。已应用于根目录品牌配置、交付素材与品牌预览，不代表原生接入、Icon Composer 或真机验收完成。App 图标外观变体独立于 UI 主题。",
+    "description": "当前项目使用的品牌与界面基线；2026-10-04 按设计方向第三轮调整 App 页面底、返利强调、平台来源标签与图片占位（docs/changes/20261004-设计方向第三轮.md）；2026-10-18 v0.4.0 按 00 D35 给每个颜色与阴影令牌补深色取值（dark 字段，value 仍为浅色）并新增组件令牌 T1–T12（docs/changes/20261018-深色令牌进唯一源.md）；2026-11-05 v0.5.0 按商品详情 v3 新增标题前平台文字标签的四个实底色 color.platform.tag.*（淘宝、天猫、京东、拼多多）与主图浮层控件底 color.overlay.on-image（docs/changes/20261105-商品详情v3定稿.md）；同日 v0.5.1 补平台文字标签圆角 radius.tag 与店铺头像圆角 radius.avatar（只加键，不改已有值）。已应用于根目录品牌配置、交付素材与品牌预览，不代表原生接入、Icon Composer 或真机验收完成。App 图标外观变体独立于 UI 主题。",
     "cssFontBase": 16,
     "sources": [
       "https://developer.apple.com/design/human-interface-guidelines/color",
@@ -245,6 +248,34 @@
           "description": "平台来源标签 1 单位描边；装饰性，来源含义由文字承担"
         }
       },
+      "platform": {
+        "tag": {
+          "taobao": {
+            "type": "color",
+            "value": "#D53D00",
+            "dark": "#D53D00",
+            "description": "标题前平台文字标签「淘宝」的实底（2026-11-05 商品详情 v3，规划/03 §10.2 PlatformBadge 标题标签形态）；取平台标识主色加深，只承载 color.text.inverse 白字，白字 4.67:1；深浅色同值；不用于其他文字与大面积色块"
+          },
+          "tmall": {
+            "type": "color",
+            "value": "#EA0031",
+            "dark": "#EA0031",
+            "description": "标题前平台文字标签「天猫」（淘宝商品 shop_type=tmall）的实底（2026-11-05）；只承载白字，白字 4.62:1；深浅色同值；不用于其他文字与大面积色块"
+          },
+          "jd": {
+            "type": "color",
+            "value": "#E02018",
+            "dark": "#E02018",
+            "description": "标题前平台文字标签「京东」的实底（2026-11-05）；只承载白字，白字 4.78:1；深浅色同值；不用于其他文字与大面积色块"
+          },
+          "pdd": {
+            "type": "color",
+            "value": "#EB0007",
+            "dark": "#EB0007",
+            "description": "标题前平台文字标签「拼多多」的实底（2026-11-05）；只承载白字，白字 4.63:1；深浅色同值；不用于其他文字与大面积色块"
+          }
+        }
+      },
       "button": {
         "primary": {
           "default": {
@@ -311,6 +342,12 @@
           "value": "#28251F66",
           "dark": "#0000008C",
           "description": "弹层遮罩（T3）；八位十六进制 #RRGGBBAA，末两位为透明度（浅色 40%，深色 55%），CSS 输出 rgba()"
+        },
+        "on-image": {
+          "type": "color",
+          "value": "#0000008C",
+          "dark": "#0000008C",
+          "description": "商品主图上浮层控件（返回键、页码胶囊）的半透明深色底（2026-11-05 商品详情 v3，规划/03 §10.2 ProductGallery）；黑色 55%，配 color.text.inverse 白色图标 / 白字，叠在纯白图上合成 #737373、白字 4.74:1，图越深越高；深浅色同值；不复用 overlay.scrim（其浅色值叠在白图上白字只有 2.38:1）"
         }
       },
       "control": {
@@ -512,6 +549,18 @@
         "type": "dimension",
         "value": 8,
         "description": "小控件圆角",
+        "unit": "logical"
+      },
+      "tag": {
+        "type": "dimension",
+        "value": 4,
+        "description": "标题前平台文字标签圆角（商品详情 v3 R6，详情与列表卡同一组件）",
+        "unit": "logical"
+      },
+      "avatar": {
+        "type": "dimension",
+        "value": 10,
+        "description": "店铺块头像圆角（商品详情 v3 R7，44 头像）",
         "unit": "logical"
       },
       "button": {
