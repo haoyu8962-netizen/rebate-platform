@@ -1352,6 +1352,7 @@ paths:
         - 30102
         - 30153
         - 50301
+        - 50303
       security:
         - bearerAuth: []
       parameters:

@@ -1,0 +1,26 @@
+id: CT-02zd
+repo: rebate-platform
+title: 契约：getUnionAuthUrl 错误码加 50303（拼多多授权链接生成失败，D10-652）——只改文字
+type: contract
+# 2026-11-05 W1 入账（编排 D10-652 ①）。B1-06zf 让 GET /v1/unions/pdd/auth-url 调联盟生成真实授权链接，上游不可用或生成失败回 50303、不写 session，语义同 open 的转链失败。只加错误码列表一项，行为由 B1-06zf 实现；CT 先合。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: done
+pr: 2379

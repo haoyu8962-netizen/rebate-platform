@@ -1,0 +1,37 @@
+{
+  "task": "CT-02zd",
+  "spec_ref": "6f50a051e858d71ae088acfc5a147d5615f2fd6c",
+  "spec_commit": "fa3bdcab0fc750c837665fac563edbb32a45bd8e",
+  "red_tests": [],
+  "risk_note": "RV1 (contract, text only). getUnionAuthUrl's x-error-codes adds 50303: once B1-06zf asks the union for the real Pinduoduo authorization link, an upstream failure or a link that cannot be generated answers 50303 with no session written, the same as a failed conversion on open (D10-652). Fields, auth and responses are unchanged; codegen has no generated change.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "round 1 answered pass but was rejected by the output validator (the trusted clone had no node_modules), round 2 pass with no findings; static only"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "4b0851bf64012ac4e0d1efb6cffcb5e889b11cfc",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2d3182592a0894da1e26bda10e256839234f5399",
+    "specs": "c3b64170031ebf937d0ed0dc6178d2b39d29f311"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
