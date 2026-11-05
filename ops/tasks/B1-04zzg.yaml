@@ -8,6 +8,7 @@ type: impl
 # 规则：有则原样（只去首尾空白，空串视为没有）、无则 null；不从 nick / seller_nick / 标题等别处补，不伪造。拼多多实录可能为空，空时客户端整行不显示。
 # 规则测试用录制字段形状的合成样例（公开仓库只放合成样例）钉「有则原样、无则 null」，走真实 card-assembler 与 getProduct；冻结测试若钉了 shop_name 为 null 按 #24 报核。
 # 负责人在看的详情 v3 稿保留店铺块（店名空时客户端「店铺」兜底），本单不受定稿影响。RV2（union）。
+# D10-639 甲：冻结 taobao-search/kit.ts 的 ALLOWED_ITEM_KEYS 只加 'shop_name'（Codex test r2，并入 spec 提交）；读它的 4 个文件进 test_paths，未改用例按 CT-06r 补登 red_exempt。
 refs: []
 refs_hash: {}
 deps: []
@@ -25,6 +26,11 @@ paths:
   - 'test/spec/catalog/shop-name/**'
 test_paths:
   - 'test/spec/catalog/shop-name/**'
+  - 'test/spec/union/taobao-search/kit.ts'
+  - 'test/spec/union/taobao-search/mapping.test.ts'
+  - 'test/spec/union/taobao-search/identity.test.ts'
+  - 'test/spec/union/taobao-search/requests.test.ts'
+  - 'test/spec/union/taobao-search/prices.test.ts'
 impl: claude
 tester: codex
 accept:
