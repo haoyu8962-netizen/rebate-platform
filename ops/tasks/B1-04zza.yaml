@@ -4,6 +4,7 @@ title: 淘宝维权、违规进调度（listRefunds、listPunishments）
 type: impl
 # 2026-11-03 be 入账（D10-588）。两接口已实现但 modules/orders 没有调用方；订单接口不随维权改金额，不接就扣不回来。02 §7.1 每 30 分钟、回扫 60 天；违规接口只能查 30 天，按 30 天，02 的 60 天记差异。写入走现有 order_rights 路径。开工前读 BR-FUND-06、08 定 refs。RV2。
 # 2026-11-06 编排 D10-676 改派 funds（资金扣回链路）；方案 couli-runs/B3-lane/tb-rights-sync-plan-20261105.md；裁定 D10-645：① 应扣佣金 = tk_commission_fee_refund 原值，不减 alimm / agent，补贴不进；② refund_status 14 / 15 当结束且不扣我方（解除 rights_pending、不写 CLAWBACK），之后变 12 / 13 照 SUCCEEDED；③ 违规查 [now−30 天, now)，occurred_at 取同步时刻。D10-649：大淘客额度不阻塞。Codex money。
+# D10-689：[AC-B1-04z#33] 保留块删除，补贴行输入与断言逐字并进 [AC-B1-04zza#44]（同 D10-669），不再用 red_exempt_rows。
 # 冻结 refund-mapping（钉旧减法）与两个定时器计数用例按 D10-327 列入 test_paths，由新鲜独立 Claude 改、按 #24 核；实测后如还有别的冻结用例，再补台账。
 refs: [BR-FUND-01, BR-FUND-02, BR-FUND-06, BR-FUND-08]
 refs_hash:
@@ -104,10 +105,6 @@ red_exempt:
   - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
     test: '[AC-B1-04z#39] 不映射 refund_fee / tb_trade_finish_price / day / refund_day / tb_trade_parent_id'
     reason: 冻结 B1-04z 用例，测试体未改；整文件因读到本单改动的支持文件被连带判定，本条与维权应扣佣金换算无关（D10-645 ① / D10-682）
-red_exempt_rows:
-  - file: test/spec/union/taobao-refunds/refund-mapping.test.ts
-    test: '[AC-B1-04z#33] subsidy_refund_fen 算出负数 → 跳过该条并告警，不出负数'
-    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块 [AC-B1-04zza#44] 的 base_refund_fen 一行（D10-682）；本行补贴为负新旧规则下都跳过并告警
 impl: claude
 tester: claude-independent
 accept:
