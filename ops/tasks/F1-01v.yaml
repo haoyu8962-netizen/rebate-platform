@@ -1,0 +1,22 @@
+id: F1-01v
+repo: rebate-platform
+title: H5-DARK：H5 基础组件深色修正——弹层遮罩改用令牌 overlay.scrim（现为 text-primary/40，深色下变浅色遮罩）、轻提示（Toast）底色与文字换成浅深两态都可读的角色令牌对，加浅 / 深对比度测试（规划/05 §3.11.3 H5-DARK，D10-643 ⑦）
+type: impl
+# 2026-11-06 入账（前端线 f1-frontend-7，编排 D10-643 ⑦ / D10-671：05 §3.11 本线 P0 「进行中（已派）」但未入台账）。整改计划 docs/design-standard-fix-program.md H5-DARK 行：「H5 遮罩改用 overlay.scrim，轻提示用角色令牌，浅深对比度测试通过」。
+# 现状（主干）：components/base/ModalFrame.tsx 遮罩 `bg-couli-text-primary/40`；Toast.tsx 底色 `bg-couli-text-primary`。令牌快照 v0.5.1 已有 color.overlay.scrim；轻提示没有专用成对令牌——只从现有令牌里选浅深两态对比都 ≥ 4.5:1 的一对（背景 / 前景），选不出就停下报编排（不自造色值、不等 v0.6.0；DSX-48 的轻提示位置与状态目录对齐是 P1，不在本单）。
+# 冻结测试 test/spec/frontend/h5-base-fixes/**、h5-components/** 若有断言钉住旧类名或旧色值，规则测试作者先列出，按 D10-327 / #24 另开 test-change 前置，不在本单改。
+# 非资金页面；评审走 general 口径。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
+refs: []
+refs_hash: {}
+deps: [CT-11ba]
+paths:
+  - 'apps/h5/src/components/base/**'
+test_paths:
+  - 'test/spec/frontend/h5-dark/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-dark/**'
+status: todo
+pr: null

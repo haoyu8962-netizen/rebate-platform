@@ -1,0 +1,26 @@
+id: F1-01w
+repo: rebate-platform
+title: LINT-STYLE-web：H5 与后台禁写死样式——eslint 规则对页面代码里写死的字号、色值与错用品牌色报错，现存违规登记为只减不增的基线入库；后台主题剩余写死项改读令牌；修正 H5 选中态对比度（规划/05 §3.11.3 LINT-STYLE-web，D10-643 ⑧）
+type: impl
+# 2026-11-06 入账（前端线 f1-frontend-7，编排 D10-643 ⑧ / D10-671：05 §3.11 本线 P0「进行中（已派）」但未入台账）。整改计划 LINT-STYLE-web 行验收：「pnpm lint 对写死字号、色值与错用品牌色的反例报错，基线入库，后台主题读令牌」。三端同类 LINT-STYLE-ios / -android / -harmony 各自另单。
+# **保护路径**：要改 eslint.config.js（第二类，验证配置）——本单规则与基线落在 eslint.config.js 引用的新文件里，eslint.config.js 只加引用；合并前编排按 #16 / #24 核并经负责人批（规划/11 §3.2、§4.4），PR 正文写明规则清单与基线条数。基线文件只减不增，新增页面代码不得进基线。
+# 后台主题 apps/admin/src/theme.ts 已从 CSS 变量读颜色；剩余写死项（字号、圆角、阴影等）由规则测试作者对照令牌逐项列出再定范围。H5「选中态对比度」指整改审计里 H5 选中态色对比不足的那处，作者从审计报告转述（编排转述要点见 notices D10-643）核实具体组件。
+# 非资金；门禁类改动，评审走 general 口径并按 #16 核。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
+refs: []
+refs_hash: {}
+deps: [F1-01v]
+paths:
+  - 'eslint.config.js'
+  - 'lint/style/**'
+  - 'apps/admin/src/theme.ts'
+  - 'apps/h5/src/**'
+  - 'apps/admin/src/**'
+test_paths:
+  - 'test/spec/frontend/lint-style-web/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/lint-style-web/**'
+status: todo
+pr: null
