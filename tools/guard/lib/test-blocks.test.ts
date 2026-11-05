@@ -10,6 +10,9 @@ import {
   type PathKind,
   TestParseError,
   compareOutsideChanged,
+  formatEachTitle,
+  formatObjectTitle,
+  TITLE_VALUE_TRUNCATE,
   compareTestFile,
   cook,
   listedDirectories,
@@ -2593,4 +2596,53 @@ it('[CT-06zzzc] compareOutsideChanged: the code ending an enclosing statement co
   expect(outside(after('const z = 1'), after('const z = 2')).changed).toMatchObject({
     'cfg > [AC-2] group *': false,
   });
+});
+
+it('[CT-06zzzd] formatEachTitle: the known placeholders as Vitest 5 formats them, null for the rest', () => {
+  expect(formatEachTitle('case %s', ['x'], 0)).toBe('case x');
+  expect(formatEachTitle('%# %$ %s %d %i', ['a', 2.5, 3], 4)).toBe('4 5 a 2.5 3');
+  expect(formatEachTitle('%s %s %s %s', [-0, null, undefined, false], 0)).toBe(
+    '-0 null undefined false',
+  );
+  expect(formatEachTitle('%d', [-0], 0)).toBe('0');
+  expect(formatEachTitle('no placeholder', ['x'], 0)).toBe('no placeholder');
+  for (const t of ['%o', '%O', '%j', '%f', '%c', '%%', '50% off', '$a', '%']) {
+    expect(formatEachTitle(t, [1], 0), t).toBeNull();
+  }
+  expect(formatEachTitle('%s %s', ['x'], 0)).toBeNull();
+  expect(formatEachTitle('%d', ['1'], 0)).toBeNull();
+  expect(formatEachTitle('%i', [1.5], 0)).toBeNull();
+});
+
+it('[CT-06zzzd] formatObjectTitle: $name of literal fields as Vitest 5.0.5 formats them (truncation at 40), null otherwise', () => {
+  type Field =
+    Parameters<typeof formatObjectTitle>[1] extends ReadonlyMap<string, infer F> ? F : never;
+  const f = (entries: Record<string, unknown>) =>
+    new Map<string, Field>(
+      Object.entries(entries).map(([k, v]): [string, Field] =>
+        v === CODE ? [k, { literal: false }] : [k, { literal: true, value: v as string }],
+      ),
+    );
+  const CODE = Symbol('code');
+  expect(TITLE_VALUE_TRUNCATE).toBe(40);
+  expect(formatObjectTitle('$label：$hit', f({ label: '弱', hit: true, header: CODE }), 0)).toBe(
+    '弱：true',
+  );
+  expect(formatObjectTitle('%# %$ $n', f({ n: -0 }), 2)).toBe('2 3 -0');
+  expect(formatObjectTitle('$n $z', f({ n: 1.5, z: null }), 0)).toBe('1.5 null');
+  // 40 characters stay; 41 become 39 and "…"; a high surrogate at the cut is dropped too.
+  expect(formatObjectTitle('$s', f({ s: 'b'.repeat(40) }), 0)).toBe('b'.repeat(40));
+  expect(formatObjectTitle('$s', f({ s: 'b'.repeat(41) }), 0)).toBe(`${'b'.repeat(39)}…`);
+  expect(formatObjectTitle('$s', f({ s: `${'b'.repeat(37)}😀${'b'.repeat(5)}` }), 0)).toBe(
+    `${'b'.repeat(37)}😀…`,
+  );
+  expect(formatObjectTitle('$s', f({ s: `${'b'.repeat(38)}😀${'b'.repeat(5)}` }), 0)).toBe(
+    `${'b'.repeat(38)}…`,
+  );
+  // Key regex as Vitest's: CJK letters continue a key.
+  expect(formatObjectTitle('$label下', f({ label: 'x' }), 0)).toBeNull();
+  for (const t of ['$header', '$missing', '$a.b', '$0', '$a$b', '$label %s', '%%', '%o $label']) {
+    expect(formatObjectTitle(t, f({ label: 'x', header: CODE, a: 'y' }), 0), t).toBeNull();
+  }
+  expect(formatObjectTitle('$u', f({ u: undefined }), 0)).toBeNull();
 });

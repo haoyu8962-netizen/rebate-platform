@@ -26,6 +26,9 @@
 // The trusted ledger's `red_exempt_outside` (CT-06zzzc, D10-623) lists the files whose changed
 // code outside the tests still lets their red_exempt declarations apply; the notes give the head
 // lines of those changes for the rule-test reviewer (lib/red-check.ts).
+// A listed file whose every test is unchanged and declared is left out of the expected list
+// (CT-06zzzd, D10-629 / D10-630; outsideOnlyFiles), here and with --print-expected, as a
+// renamed-only file; the notes, or stderr, say which.
 //
 //   node tools/guard/red-check.ts --task <id> --cwd <worktree> --base <ref> --print-expected
 //     prints the expected rule-test files, one per line (tools/ops/verify-container.sh --red uses
@@ -44,6 +47,8 @@ import {
   checkRedReports,
   expectedRuleTests,
   redCheckRequired,
+  outsideOnlyFiles,
+  outsideOnlyNote,
   renamedOnlyFiles,
   renamedOnlyNote,
   ruleTestBaselines,
@@ -146,6 +151,19 @@ runCli(
       );
       const left = new Set(renamedOnly.map((r) => r.file));
       for (const r of renamedOnly) console.error(`red-check note: ${renamedOnlyNote(r)}`);
+      // CT-06zzzd (D10-630): a listed file whose every test is unchanged and declared is not run.
+      const outsideOnly = outsideOnlyFiles(
+        files.filter((f) => !left.has(f)),
+        { base: (p) => showAt(cwd, base, p), head: (p) => readWorkTree(cwd, p) },
+        task.renames,
+        task.expected_values,
+        task.red_exempt_outside,
+        task.red_exempt,
+      );
+      for (const r of outsideOnly) {
+        left.add(r.file);
+        console.error(`red-check note: ${outsideOnlyNote(r)}`);
+      }
       for (const file of files) if (!left.has(file)) console.log(file);
       return 0;
     }
@@ -201,6 +219,18 @@ runCli(
         const left = new Set(renamedOnly.map((r) => r.file));
         expected = expected.filter((f) => !left.has(f));
         for (const r of renamedOnly) renamedNotes.push(renamedOnlyNote(r));
+        // CT-06zzzd (D10-630): likewise a listed file whose every test is unchanged and declared.
+        const outsideOnly = outsideOnlyFiles(
+          [...expected, ...expectedRuleTests(changes, scope)].filter((f) => !left.has(f)),
+          reader,
+          task.renames,
+          task.expected_values,
+          task.red_exempt_outside,
+          task.red_exempt,
+        );
+        const outsideLeft = new Set(outsideOnly.map((r) => r.file));
+        expected = expected.filter((f) => !outsideLeft.has(f));
+        for (const r of outsideOnly) renamedNotes.push(outsideOnlyNote(r));
         // CT-06zxe (D10-371): the trusted ledger's registered expected values, after the renames.
         baselines = ruleTestBaselines(
           expected,

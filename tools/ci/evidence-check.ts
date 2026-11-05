@@ -68,6 +68,9 @@
 //              CT-06zzzc (D10-623): a ledger with `red_exempt_outside` (files whose changed code
 //              outside the tests keeps their red_exempt in force; red-check lists the changed
 //              lines) needs the same confirmation, red_exempt_confirmed true.
+//              CT-06zzzd (D10-629 / D10-630): such a listed file whose every test is unchanged
+//              and declared is left out of the expected list (red-check.ts outsideOnlyFiles, as
+//              for renames); the coverage rule itself is unchanged.
 //              Declared renames (CT-06zxc, D10-347): a rule-test file whose base, with the
 //              ledger's literal `renames` applied, is its spec_commit content is unchanged and
 //              not expected (red-check leaves it out of the red run the same way). When a
@@ -115,6 +118,7 @@ import type { ExpectedValueDeclaration, RenameDeclaration, TaskFile } from '../l
 import {
   expectedRuleTests,
   expectedValuesHit,
+  outsideOnlyFiles,
   renamedOnlyFiles,
   renamesHit,
 } from '../guard/lib/red-check.ts';
@@ -1188,11 +1192,28 @@ export function redRequirement(
   };
   const leftOut = renamedOnlyFiles(all, read, ledger.renames).map((r) => r.file);
   const left = new Set(leftOut);
+  // CT-06zzzd (D10-630): a file listed in red_exempt_outside whose every test is unchanged and
+  // declared is left out the same way (red-check.ts calls the same function); the coverage rule
+  // below is unchanged, and red_exempt_confirmed is still required (the ledger declares them).
+  const outsideOut = outsideOnlyFiles(
+    all.filter((f) => !left.has(f)),
+    read,
+    ledger.renames,
+    ledger.expected_values,
+    ledger.red_exempt_outside,
+    ledger.red_exempt,
+  ).map((r) => r.file);
   // Review r1 S2-1: renames that hit a rule-test file of the task need the reviewer's confirmation.
   const hit = renamesHit(all, read, ledger.renames);
   // CT-06zxe (D10-371): registered expected values that apply need the reviewer's confirmation.
-  const expected = all.filter((f) => !left.has(f));
-  const values = expectedValuesHit(expected, read, ledger.renames, ledger.expected_values);
+  const expected = all.filter((f) => !left.has(f) && !outsideOut.includes(f));
+  // A file left out by red_exempt_outside still has its registered expected values confirmed.
+  const values = expectedValuesHit(
+    all.filter((f) => !left.has(f)),
+    read,
+    ledger.renames,
+    ledger.expected_values,
+  );
   return {
     required: true,
     expected,

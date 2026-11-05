@@ -756,6 +756,19 @@ export type ComparedBlock = {
   title: string;
   /** False only when the block is the same as at the base (see the header). */
   changed: boolean;
+  /**
+   * CT-06zzzd (D10-630, Codex review r1 S1; compareOutsideChanged only): the exact full names
+   * (`describe > … > title`) of the tests the block certainly produces, each run once — the
+   * static title of a plain test, or the titles Vitest formats for each row of an inline
+   * `.each([…])` / `.for([…])` array whose rows are literals or arrays of literals
+   * (formatEachTitle) or object literals whose fields named by `$name` are literals
+   * (formatObjectTitle; other fields may be any code) — or null when they cannot be told for
+   * certain (a title or describe title that is not a static literal, a table by name, a row with a
+   * name, member, call, spread, `${…}` template or function where it reaches the title, a
+   * placeholder the formatters do not know, a modifier such as `.skip` / `.only` / `.skipIf`, a loop, a
+   * branch, a function or a parameterised describe around it). Absent from compareTestFile's.
+   */
+  names?: string[] | null;
 };
 
 export type FileComparison =
@@ -857,6 +870,134 @@ export function compareTestFile(base: string, head: string): FileComparison {
 // - What the changed code outside means for the unchanged tests (an import, a table row group, a
 //   fixture value) the comparison cannot tell: the rule-test reviewer confirms the listed lines.
 
+/** A literal value of an `.each` row (CT-06zzzd). */
+type Value = string | number | boolean | null | undefined;
+/** A field of an object row: its literal value, or code (not a single literal). */
+type Field = { literal: true; value: Value } | { literal: false };
+/** A row of an `.each` / `.for` table: its items (a primitive is one item), or an object. */
+type Row = { kind: 'items'; items: Value[] } | { kind: 'object'; fields: Map<string, Field> };
+
+/**
+ * The value-format truncation Vitest applies to `$name` attributes (CT-06zzzd). Basis: vitest
+ * 5.0.5 dist/chunks/defaults.B1FCaFfh.js:85 `taskTitleValueFormatTruncate: 40`, merged under the
+ * user options by resolveConfig (dist/chunks/index.1TqnEahn.js:8773 `deepMerge({}, configDefaults,
+ * options)`) and handed to the runner (index.1TqnEahn.js:4030); no config of this repository sets
+ * it (vitest.shared.ts, test/vitest.config.ts, test/vitest.integration.config.ts,
+ * test/vitest.browser.config.ts, test/vitest.build-smoke.config.ts, test/vitest.longrun.config.ts:
+ * none mentions taskTitleValueFormatTruncate). A config that sets it makes this value wrong: the
+ * names then differ from the declared ones and the file simply stays expected (judged as before).
+ */
+export const TITLE_VALUE_TRUNCATE = 40;
+
+/** @vitest/utils truncateString (vitest 5.0.5 dist/chunks/display.BlTmubjj.js:164-169). */
+function truncateString(value: string, max: number): string {
+  if (value.length <= max) return value;
+  let end = max - 1;
+  const c = value[end - 1];
+  if (c !== undefined && c >= '\ud800' && c <= '\udbff') end -= 1;
+  return `${value.slice(0, end)}…`;
+}
+
+/**
+ * The title Vitest 5.0.5 gives an object row (CT-06zzzd, orchestrator follow-up of Codex review
+ * r1 S1), or null when it is not certain. Basis: dist/chunks/run.BPv-BBRv.js formatTitle (from
+ * line 3010): `%#` / `%$` are replaced first; any other `%` would format the object itself (null
+ * here); then every `$key` of /\$([$\p{ID_Continue}.]+)/gu becomes objectAttr(row, key): a string
+ * truncated by truncateString(TITLE_VALUE_TRUNCATE), anything else by inspect — for a number
+ * pretty-format's printNumber (`-0` or String), for a boolean or null its text
+ * (@vitest/pretty-format 5.0.5 dist/index.js:769-800; inspect, display.BlTmubjj.js:121, keeps a
+ * text of at most 40 characters as is). Only a key naming a literal field of the row (a string, a
+ * number, a boolean or null) is known; a missing field, a field of code, a path (`$a.b`), a key
+ * with `$` or of digits: null.
+ */
+export function formatObjectTitle(
+  title: string,
+  fields: ReadonlyMap<string, Field>,
+  idx: number,
+): string | null {
+  let template = '';
+  for (let k = 0; k < title.length; k += 1) {
+    const ch = title[k] as string;
+    if (ch !== '%') {
+      template += ch;
+      continue;
+    }
+    const code = title[k + 1];
+    k += 1;
+    if (code === '#') template += String(idx);
+    else if (code === '$') template += String(idx + 1);
+    else return null;
+  }
+  let certain = true;
+  const out = template.replace(/\$([$\p{ID_Continue}.]+)/gu, (_, key: string) => {
+    const field = fields.get(key);
+    if (/^\d+$/.test(key) || key.includes('.') || key.includes('$')) certain = false;
+    if (field === undefined || !field.literal) certain = false;
+    if (!certain || field === undefined || !field.literal) return '';
+    const v = field.value;
+    if (typeof v === 'string') return truncateString(v, TITLE_VALUE_TRUNCATE);
+    if (typeof v === 'number') {
+      const text = Object.is(v, -0) ? '-0' : String(v);
+      if (text.length > TITLE_VALUE_TRUNCATE) certain = false;
+      return text;
+    }
+    if (typeof v === 'boolean' || v === null) return String(v);
+    certain = false; // undefined
+    return '';
+  });
+  return certain ? out : null;
+}
+
+/**
+ * The title Vitest 5 gives the row `items` (index `idx`) of an `.each` / `.for` table
+ * (@vitest/runner formatTitle with format of @vitest/utils), or null when that is not certain
+ * (CT-06zzzd, Codex review r1 S1). Only these are known: `%#` (the index), `%$` (the index + 1),
+ * `%s` (a string as is; a number, boolean, null or undefined by String, -0 as "-0"), `%d` (a
+ * number by Number(…).toString()) and `%i` (an integer number). Any other `%` (`%%`, `%f`,
+ * `%j`, `%o`, `%O`, `%c`, a lone `%`), any `$` (Vitest's `$name` attributes, truncated by
+ * configuration), and fewer row items than placeholders: null.
+ */
+export function formatEachTitle(
+  title: string,
+  items: readonly Value[],
+  idx: number,
+): string | null {
+  if (title.replaceAll('%$', '').includes('$')) return null;
+  let out = '';
+  let i = 0;
+  for (let k = 0; k < title.length; k += 1) {
+    const ch = title[k] as string;
+    if (ch !== '%') {
+      out += ch;
+      continue;
+    }
+    const code = title[k + 1];
+    k += 1;
+    if (code === '#') {
+      out += String(idx);
+    } else if (code === '$') {
+      out += String(idx + 1);
+    } else if (code === 's' || code === 'd' || code === 'i') {
+      if (i >= items.length) return null;
+      const v = items[i];
+      i += 1;
+      if (code === 's') {
+        out += typeof v === 'number' && Object.is(v, -0) ? '-0' : String(v);
+      } else if (typeof v !== 'number') {
+        return null;
+      } else if (code === 'd') {
+        out += Number(v).toString();
+      } else {
+        if (!Number.isInteger(v)) return null;
+        out += Number.parseInt(String(v)).toString();
+      }
+    } else {
+      return null;
+    }
+  }
+  return out;
+}
+
 /** The most shared-token edits compareOutsideChanged aligns (above it the whole file is judged). */
 export const OUTSIDE_EDITS_MAX = 2000;
 
@@ -868,7 +1009,13 @@ type OutsideView = {
   units: string[];
   /** The 1-based first and last source line of each shared token. */
   span: [number, number][];
-  blocks: { pattern: RegExp; title: string; key: string; anchor: number }[];
+  blocks: {
+    pattern: RegExp;
+    title: string;
+    key: string;
+    anchor: number;
+    names: string[] | null;
+  }[];
 };
 
 function outsideView(source: string): OutsideView {
@@ -966,6 +1113,195 @@ function outsideView(source: string): OutsideView {
     if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(k);
     else if (t.text === ')' || t.text === ']' || t.text === '}') stack.pop();
   });
+  // CT-06zzzd (D10-630; Codex review r1 S1): the exact full names a call certainly produces
+  // (ComparedBlock.names), or null.
+  const UNSURE = new Set(['skip', 'todo', 'only', 'fails', 'skipIf', 'runIf']);
+  const plainChain = (from: number, open: number): boolean => {
+    for (let k = from; k < open; k += 1) {
+      const t = tokens[k] as Token;
+      if (t.kind === 'id' && UNSURE.has(t.text)) return false;
+    }
+    return true;
+  };
+  // The title argument: one string literal, or a template without `${…}`, then `,` or `)`.
+  const staticTitle = (c: Call): string | null => {
+    const t = tokens[c.open + 1];
+    const after = tokens[c.open + 2]?.text;
+    if (t === undefined || (after !== ',' && c.open + 2 !== c.close)) return null;
+    if (t.kind === 'str' && typeof t.value === 'string') return t.value;
+    if (t.kind === 'tpl' && t.parts?.length === 1 && typeof t.parts[0] === 'string') {
+      return t.parts[0];
+    }
+    return null;
+  };
+  // `.each(` / `.for(` at p: exactly one inline array whose rows are literal values, arrays of
+  // them (literalList) or object literals (objectRow).
+  const rows = (p: number): Row[] | null => {
+    if (tokens[p]?.text !== '(' || tokens[p + 1]?.text !== '[') return null;
+    const close = match[p + 1] as number;
+    if (close + 1 !== match[p]) return null;
+    const out: Row[] = [];
+    let k = p + 2;
+    while (k < close) {
+      const end = valueEnd(k, close);
+      if (end === k) return null; // a hole
+      if (tokens[k]?.text === '{' && match[k] === end - 1) {
+        const fields = objectRow(k + 1, end - 1);
+        if (fields === null) return null;
+        out.push({ kind: 'object', fields });
+      } else {
+        const items = literalList(k, end);
+        if (items === null || items.length !== 1) return null;
+        const item = items[0] as Value | Value[];
+        out.push({ kind: 'items', items: Array.isArray(item) ? item : [item] });
+      }
+      k = end;
+      if (k === close) break;
+      k += 1; // the comma (a trailing one ends the list)
+    }
+    return out;
+  };
+  // The end (exclusive) of the expression starting at k: the next `,` at its level, or `to`.
+  const valueEnd = (k: number, to: number): number => {
+    let j = k;
+    while (j < to && tokens[j]?.text !== ',') {
+      const t = tokens[j] as Token;
+      j = t.text === '(' || t.text === '[' || t.text === '{' ? (match[j] as number) + 1 : j + 1;
+    }
+    return j;
+  };
+  // The fields of an object literal in tokens [from, to): `key: value` with a plain or string
+  // key; a field's value is kept only when it is one literal (primitiveAt), else marked as code
+  // (it may be anything: the title must not name it). A spread, a computed key, a method, an
+  // accessor, `__proto__` or a key given twice: null.
+  const objectRow = (from: number, to: number): Map<string, Field> | null => {
+    const fields = new Map<string, Field>();
+    let k = from;
+    while (k < to) {
+      const t = tokens[k] as Token;
+      const key =
+        t.kind === 'id' ? t.text : t.kind === 'str' && typeof t.value === 'string' ? t.value : null;
+      if (key === null || key === '__proto__' || fields.has(key)) return null;
+      const next = tokens[k + 1]?.text;
+      if (k + 1 === to || next === ',') {
+        if (t.kind !== 'id') return null;
+        fields.set(key, { literal: false }); // shorthand: a name
+        k += 2;
+        continue;
+      }
+      if (next !== ':') return null;
+      const end = valueEnd(k + 2, to);
+      if (end === k + 2) return null;
+      const one = primitiveAt(k + 2);
+      fields.set(
+        key,
+        one !== null && one.next === end ? { literal: true, value: one.value } : { literal: false },
+      );
+      k = end + 1;
+    }
+    return fields;
+  };
+  // A comma-separated list of literal values in tokens [from, to): a primitive or an array of
+  // primitives; anything else (a name, a member, a call, a spread, a template with `${…}`, a
+  // function, an object, a deeper array, a hole) is null.
+  const literalList = (from: number, to: number, depth = 0): (Value | Value[])[] | null => {
+    const out: (Value | Value[])[] = [];
+    let k = from;
+    while (k < to) {
+      let value: Value | Value[] | undefined;
+      const t = tokens[k] as Token;
+      if (t.text === '[' && depth === 0) {
+        const end = match[k] as number;
+        const inner = literalList(k + 1, end, 1);
+        if (inner === null || inner.some(Array.isArray)) return null;
+        value = inner as Value[];
+        k = end + 1;
+      } else {
+        const one = primitiveAt(k);
+        if (one === null) return null;
+        value = one.value;
+        k = one.next;
+      }
+      out.push(value);
+      if (k === to) break;
+      if (tokens[k]?.text !== ',') return null;
+      k += 1; // a trailing comma ends the list
+    }
+    return out;
+  };
+  const primitiveAt = (k: number): { value: Value; next: number } | null => {
+    const t = tokens[k] as Token;
+    if (t.kind === 'str' && typeof t.value === 'string') return { value: t.value, next: k + 1 };
+    if (t.kind === 'tpl' && t.parts?.length === 1 && typeof t.parts[0] === 'string') {
+      return { value: t.parts[0], next: k + 1 };
+    }
+    const number = (u: Token | undefined): number | null =>
+      u?.kind === 'num' && /^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(u.text)
+        ? Number(u.text)
+        : null;
+    if (t.kind === 'num') {
+      const n = number(t);
+      return n === null ? null : { value: n, next: k + 1 };
+    }
+    if (t.text === '-' && t.kind === 'punct') {
+      const n = number(tokens[k + 1]);
+      return n === null ? null : { value: -n, next: k + 2 };
+    }
+    if (t.kind === 'id') {
+      const known: Record<string, Value> = { true: true, false: false, null: null };
+      if (Object.hasOwn(known, t.text)) return { value: known[t.text] as Value, next: k + 1 };
+      if (t.text === 'undefined') return { value: undefined, next: k + 1 };
+    }
+    return null;
+  };
+  const namesOf = (c: Call, prefix: string): string[] | null => {
+    if (!plainChain(c.start, c.open)) return null;
+    const title = staticTitle(c);
+    if (title === null) return null;
+    for (let k = c.start; k < c.open; k += 1) {
+      const t = tokens[k] as Token;
+      if (t.kind !== 'id' || (t.text !== 'each' && t.text !== 'for')) continue;
+      if (tokens[k - 1]?.text !== '.') continue;
+      const table = rows(k + 1);
+      if (table === null) return null;
+      const names: string[] = [];
+      for (const [idx, row] of table.entries()) {
+        const name =
+          row.kind === 'items'
+            ? formatEachTitle(title, row.items, idx)
+            : formatObjectTitle(title, row.fields, idx);
+        if (name === null) return null;
+        names.push(`${prefix}${name}`);
+      }
+      return names;
+    }
+    return [`${prefix}${title}`];
+  };
+  // Only describes (without `.each` / `.for` / modifiers) and their callback bodies around it.
+  const plainSuite = (s: Call): boolean => {
+    if (!plainChain(s.start, s.open)) return false;
+    for (let k = s.start; k < s.open; k += 1) {
+      const t = tokens[k] as Token;
+      if (t.kind === 'id' && (t.text === 'each' || t.text === 'for')) return false;
+    }
+    return true;
+  };
+  const surely = (c: Call): boolean => {
+    if (lead(c.start) !== '') return false;
+    const chain = enclosing.get(c.start) ?? [];
+    return chain.every((o, i) => {
+      const suite = suites.find((s) => s.open === o);
+      if (suite !== undefined) return plainSuite(suite);
+      const outer = chain[i - 1];
+      const t = tokens[o] as Token;
+      return (
+        t.text === '{' &&
+        outer !== undefined &&
+        suites.some((s) => s.open === outer) &&
+        ['=>', ')'].includes(tokens[o - 1]?.text ?? '')
+      );
+    });
+  };
   const blocks = tests.map((c) => {
     const around = suites.filter((s) => s.open < c.start && c.start < s.close);
     const show = (segments: readonly Segment[]): string =>
@@ -993,6 +1329,10 @@ function outsideView(source: string): OutsideView {
         (tokens[c.end] as Token).text === ';' ? '' : trail(c.end),
       ].join('\u0000'),
       anchor: anchor[c.start] as number,
+      names:
+        surely(c) && around.every((x) => !x.title.includes(null))
+          ? namesOf(c, around.map((x) => `${(x.title as string[]).join('')} > `).join(''))
+          : null,
     };
   });
   return { units, span, blocks };
@@ -1156,6 +1496,7 @@ export function compareOutsideChanged(base: string, head: string): OutsideCompar
       pattern: b.pattern,
       title: b.title,
       changed: !unchanged.has(j),
+      names: b.names,
     })),
     lines: lineRanges(changedLines),
   };

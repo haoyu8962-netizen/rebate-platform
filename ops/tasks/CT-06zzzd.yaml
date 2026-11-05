@@ -1,0 +1,24 @@
+id: CT-06zzzd
+repo: rebate-platform
+title: CT-06zzzd：列在台账 red_exempt_outside 的文件允许全部用例被声明豁免（D10-629），未列的照旧「全豁免即失败」
+type: guard-change
+# 2026-11-05 入账（ops 线，编排裁定 D10-629）。起因：F1-02zzzb 的 config-etag/domain.int.test.ts 只为契约类型把夹具换成签名值、用例一条没动；
+#   path-guard-author（spec 提交里的规则测试资产须在 test_paths）、evidence-check（spec 之后不得改第一类文件）与 CT-06r「全豁免即失败」三道一起，只剩这一条路。
+# 前提不变：每条豁免用例逐块与基线相同、notes 列出用例外改动行段与理由、规则测试评审 red_exempt_confirmed、编排 #24 逐条核；不动 evidence-check。
+# 工具测试钉：登记 → 全豁免放行；未登记 → 照旧失败；登记了但有改过 / 新增用例 → 改过的仍须红。
+# 实现 Opus 子代理；Codex 对抗评审；按 approvals 第 16 条 / #24 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzc]
+paths:
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzd.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

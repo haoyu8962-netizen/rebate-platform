@@ -1136,6 +1136,119 @@ red_exempt_outside:
   });
 });
 
+it('[CT-06zzzd] a file listed in red_exempt_outside whose every test is unchanged and declared is left out of the expected list; the confirmation is still required', () => {
+  const ETAG = 'test/spec/money/etag.test.ts';
+  const source = (extra: string, body = 'expect(1).toBe(1);'): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      extra,
+      "it('[AC-1] a', () => { expect(2).toBe(2); });",
+      `it('[AC-2] b', () => { ${body} });`,
+      '',
+    ].join('\n');
+  git(repo, ['checkout', '-q', '-b', 'ct06zzzd-base', base]);
+  write(repo, { [ETAG]: source('') });
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-q', '-m', 'ct06zzzd-base']);
+  const frozen = git(repo, ['rev-parse', 'HEAD']);
+  const spec = (extra: string, body?: string): string => {
+    git(repo, ['checkout', '-q', '-B', 'ct06zzzd-spec', frozen]);
+    write(repo, { [ETAG]: source(extra, body) });
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', 'ct06zzzd-spec']);
+    const sha = git(repo, ['rev-parse', 'HEAD']);
+    git(repo, ['checkout', '-q', 'task/B2-01a']);
+    return sha;
+  };
+  const importOnly = spec("import { sign } from './sign.ts';");
+  const alsoChanged = spec("import { sign } from './sign.ts';", 'expect(sign(1)).toBe(1);');
+  const trustedWith = (name: string, sections: string): string => {
+    const dir = join(SCRATCH, name);
+    for (const file of [
+      'tools/guard/protected-paths.json',
+      'ops/risk-map.yaml',
+      'tools/guard/legacy-tasks.json',
+    ]) {
+      write(dir, { [file]: readFileSync(join(TRUSTED, file), 'utf8') });
+    }
+    write(dir, {
+      'ops/tasks/B2-01a.yaml': `${readFileSync(join(TRUSTED, 'ops/tasks/B2-01a.yaml'), 'utf8').trimEnd()}
+${sections}`,
+    });
+    return dir;
+  };
+  const exempt = `red_exempt:
+  - file: ${ETAG}
+    test: '[AC-1] a'
+    reason: structural, holds for the old data too
+  - file: ${ETAG}
+    test: '[AC-2] b'
+    reason: structural, holds for the old data too
+`;
+  const outside = `red_exempt_outside:
+  - file: ${ETAG}
+    reason: an import for the contract type only
+`;
+  const listed = trustedWith('trusted-ct06zzzd', exempt + outside);
+  const notListed = trustedWith('trusted-ct06zzzd-not', exempt);
+  const req = (head: string, trusted: string) =>
+    redRequirement(
+      { prDir: repo, base: frozen, head, headRef: 'task/B2-01a', trusted },
+      'B2-01a',
+      frozen,
+      JSON.stringify({ task: 'B2-01a', spec_commit: head }),
+    );
+  // Listed, every test unchanged and declared: left out; the confirmation is still asked for.
+  const left = req(importOnly, listed);
+  expect(left).toEqual({
+    required: true,
+    expected: [],
+    declared: { count: 2, tester: 'codex', outside: 1 },
+  });
+  // Not listed: expected as before (and red-check fails it: every test declared).
+  expect(req(importOnly, notListed)).toEqual({
+    required: true,
+    expected: [ETAG],
+    declared: { count: 2, tester: 'codex' },
+  });
+  // Listed, but a test changed: expected as before (the changed test must be red).
+  expect(req(alsoChanged, listed)).toMatchObject({ expected: [ETAG] });
+  // The coverage rule is unchanged: with the file left out the evidence passes once confirmed.
+  const head = git(repo, ['rev-parse', 'HEAD']);
+  const cfg = loadProtected(REPO);
+  const problemsOf = (doc: Evidence): string =>
+    // The task's other rule-test file (FLOOR) still needs its red test.
+    evidenceProblems(doc, {
+      prDir: repo,
+      head,
+      task: 'B2-01a',
+      cfg,
+      red: { ...left, expected: [...left.expected, FLOOR] },
+    }).join('\n');
+  const confirmed = {
+    reviewer: 'claude',
+    engine: 'claude',
+    rounds: 1,
+    last_verdict: 'pass',
+    red_exempt_confirmed: true,
+    note: 'import only; every test unchanged and declared',
+  };
+  expect(problemsOf(evidence({ spec_test_review: confirmed }))).toBe('');
+  expect(problemsOf(evidence())).toContain(
+    'spec_test_review: the ledger declares 2 red exemption(s)',
+  );
+  // The file kept in the list without a red test: the coverage rule still catches it.
+  expect(
+    evidenceProblems(evidence({ spec_test_review: confirmed }), {
+      prDir: repo,
+      head,
+      task: 'B2-01a',
+      cfg,
+      red: { ...left, expected: [FLOOR, ETAG] },
+    }).join('\n'),
+  ).toContain(`does not cover ${ETAG}, a rule-test file the task added`);
+});
+
 it('[legacy flow] a legacy ledger needs no red run and no test_paths, but still the full container verify', () => {
   // A B1-01s-shape ledger: Codex implements, Claude wrote the rule tests, no test_paths; listed
   // on the trusted legacy list.
