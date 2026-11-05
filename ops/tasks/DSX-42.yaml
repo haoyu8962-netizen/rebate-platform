@@ -1,0 +1,26 @@
+id: DSX-42
+repo: rebate-platform
+title: 三端共享客户端向量收归唯一源（specs/client/ 一处，login、order、clipboard 分叉合并为一版）+ 分发清单 sha256 + TOKENS-LAG 检查比对三端锁定的向量 hash（D10-683）
+type: guard-change
+# 2026-11-06 ops 入账（编排 D10-683，整改 P1 首批；规划 docs/design-standard-fix-program.md DSX-42 条、05 §3.11）。依赖 TOKENS-LAG（CT-11d，已合并）。只交付 rebate-platform 的脚本、夹具与 CI；三端改锁拆到 DSX-140～142。
+# 现状（2026-11-06 三端主干逐字比对）：format、home-sdui、me、oauth-login 三端相同；login iOS 与安卓 / 鸿蒙不同；order 鸿蒙与安卓 / iOS 不同；clipboard 三端各不同；
+#   clipboard-candidates 安卓 = 鸿蒙；privacy-visual 鸿蒙 = iOS；risk-appeal-visual、clipboard-harmony 只在鸿蒙。分叉逐条合并成一版，合并方案先报三端确认再落文件。
+# 交付：specs/client/ 下的共享向量（login、order、clipboard、clipboard-candidates、format、home-sdui、me、oauth-login 与各 *-visual-vectors）；分发清单 specs/client/manifest.json 记每个文件的 sha256，脚本校验清单与文件一致；
+#   tools/ci/tokens-lag.ts 扩展：三端 contract.lock 的 files 表里锁的 specs/client/* hash 与清单不一致就警告（何时升为失败由编排定）；夹具覆盖一致、不一致、未锁三种。CI 只警告。
+# 门禁类改动按 approvals 第 16 条 / #24 由编排核后加标签。Opus 实现，Codex 对抗评审。
+refs: []
+refs_hash: {}
+deps: [CT-11d]
+paths:
+  - 'specs/client/**'
+  - 'tools/ci/tokens-lag.ts'
+  - 'tools/ci/tokens-lag.test.ts'
+  - 'tools/ci/client-vectors.ts'
+  - 'tools/ci/client-vectors.test.ts'
+  - '.github/workflows/ci.yml'
+  - 'tools/README.md'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
