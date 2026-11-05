@@ -2,9 +2,8 @@ id: B2-03s
 repo: rebate-platform
 title: 佣金版本推进规则（FU-COMMISSION-VERSION-RULE，D10-578）——有效 N 变了才 +1，结算后只来新预估不推；结算到达或变化推版本并按新 N 写金额行；含负结算 ②、已入账单 R10 金额行
 type: impl
-# 2026-11-03 W1 入账（D10-578、D10-583，方案 couli-runs/B3-lane/version-rule-batch-plan-20261103.md）。planOrderSyncColumns 比前后有效 N；update-step 加 commission_moved；rebate 用它；CREDITED 改按新 N 重算，复制留兜底。「多推一版、金额相同」已认可。B1-08zh 合并后再写规则测试，本单后变基。
-# 冻结用例开工后实测列全报编排，新旧不能同绿的按 D10-327 进 test_paths。
-# D10-655：[AC-B2-04zp#12]、[#18] 按 D10-578 ② 改为基数随结算推到 900、按 STATEMENT 900 入批、不登记差错、R5 按 900 入账；只动这两个 it 块（D10-327）。
+# 2026-11-03 W1 入账（D10-578、D10-583，方案 couli-runs/B3-lane/version-rule-batch-plan-20261103.md）。planOrderSyncColumns 比前后有效 N；update-step 加 commission_moved；rebate 用它；CREDITED 改按新 N 重算，复制留兜底。「多推一版、金额相同」已认可。B1-08zh 合并后再写规则测试，本单后变基。 冻结用例开工后实测列全报编排，新旧不能同绿的按 D10-327 进 test_paths。
+# D10-655：[AC-B2-04zp#12]、[#18] 按 D10-578 ② 改为基数随结算推到 900、按 STATEMENT 900 入批、不登记差错、R5 按 900 入账；只动这两个 it 块（D10-327）。 D10-663：[AC-B1-08i#10] 拆表，已结算单 est 变化三行搬进新块期望 7，原块只留 null、789n 两行，待 red_exempt_rows（CT-06zzze）。
 refs: [BR-CALC-15, BR-CALC-02, BR-CALC-27, BR-FUND-03, BR-CALC-23]
 refs_hash:
   BR-CALC-15: e18291194b6e
@@ -31,6 +30,7 @@ test_paths:
   - 'test/spec/orders/rights-mounts/credited.int.test.ts'
   - 'test/spec/settlement/deciding-settlement/bill.int.test.ts'
   - 'test/spec/settlement/deciding-settlement/supplement.int.test.ts'
+  - 'test/spec/orders/platform-status/columns.test.ts'
 impl: claude
 tester: claude-independent
 accept:
@@ -39,6 +39,24 @@ accept:
 status: todo
 pr: null
 red_exempt:
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#11] 结算佣金仅迁移后 SETTLED 可写：PAID'
+    reason: 冻结 B1-08i 用例，测试体未改；同文件只按 D10-663 拆了 [AC-B1-08i#10] 的表
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#11] 结算佣金仅迁移后 SETTLED 可写：RECEIVED'
+    reason: 冻结 B1-08i 用例，测试体未改；同文件只按 D10-663 拆了 [AC-B1-08i#10] 的表
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#11] 结算佣金仅迁移后 SETTLED 可写：SETTLED'
+    reason: 冻结 B1-08i 用例，测试体未改；同文件只按 D10-663 拆了 [AC-B1-08i#10] 的表
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#12] null 金额与时间不覆盖已有值；缺失预估不借用 commission_fen'
+    reason: 冻结 B1-08i 用例，测试体未改；同文件只按 D10-663 拆了 [AC-B1-08i#10] 的表
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#13] 后到收货时间只存 platform_received_at，新值再次到达可更新'
+    reason: 冻结 B1-08i 用例，测试体未改；同文件只按 D10-663 拆了 [AC-B1-08i#10] 的表
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#14] 同步列使用归一字段及共同 hash，不包含返利或身份列'
+    reason: 冻结 B1-08i 用例，测试体未改；同文件只按 D10-663 拆了 [AC-B1-08i#10] 的表
   - file: test/spec/commission/estimate-port/credited.int.test.ts
     test: '[AC-B2-03q#35] 已入账单 refresh 本身什么账都不动：orders、分录、余额、义务、事件逐行相同，只多当前版本的行'
     reason: 冻结用例，测试体未改，只因同文件按 D10-578 改了别的用例（D10-327，清单 #2289）
@@ -166,3 +184,10 @@ red_exempt_outside:
     reason: 块外只新增导入（planOrderSyncColumns、orders/attribution kit、orderRow）与 helper（SETTLED_SYNC、plannedColumns），plannedColumns 只供 #44、#45 用；#41、#63、#64 只改入参；另有文件头注释改写；未改用例块与基线相同
   - file: test/spec/commission/estimate-port/wallet.int.test.ts
     reason: 块外只新增导入（planOrderSyncColumns、orderRow），供按 D10-578 ① 改的 #50 用；另有文件头注释改写；未改用例块与基线相同
+red_exempt_rows:
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#10] 预估佣金 null：null 保留，实际变化才递增版本，整数分不丢精度'
+    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块的 0n、123n、9007199254740993n 三行（D10-663）；本行新旧规则下都是版本 7
+  - file: test/spec/orders/platform-status/columns.test.ts
+    test: '[AC-B1-08i#10] 预估佣金 789n：null 保留，实际变化才递增版本，整数分不丢精度'
+    reason: 原块标题模板与回调体逐字未改，表里只删了搬到新块的 0n、123n、9007199254740993n 三行（D10-663）；本行新旧规则下都是版本 7
