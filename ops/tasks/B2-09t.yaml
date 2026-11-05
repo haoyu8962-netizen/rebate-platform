@@ -1,0 +1,29 @@
+id: B2-09t
+repo: rebate-platform
+title: 迟到 paid_at 的单张复核（FU-RECON-W10-BACKFILL，BR-WDR-23、16，D10-628 ②、D10-632）——W8 同事务入队 late_paid_check，worker 只读已存账单行，核上结束，金额不符或相关账单日都跑完仍无成功行走现有差错单和冻结；顺手修 listedOn 对日界附近 PAID_MANUAL 的误判
+type: impl
+# 2026-11-05 pay 入账（D10-632）。RV2。规则测试 Codex，实现 Opus，money 评审 Codex，新鲜 Claude 评规则测试。方案：B3-lane/recon-late-paid-plan-20261105.md。
+# 不重跑当日 R2：runDay 会改写该日已有的 recon_channel 行、再发查询、入队下一天，违背只增不改。账单日未跑完就延迟再查，有轮次上限，到上限只告警不下结论。
+# 复用 R2 的 dedupe_key、registerReconDiffOnce，和 R2 都判也只有一张差错单；只有新差错才加 recon_diff 冻结。只对 alipay。无迁移无契约。
+# listedOn 只按 out_biz_no 查，日界附近的 PAID_MANUAL 到相邻日跑完被误判 paid_not_in_bill；规则测试先钉住（先红）再修。
+# W10 判成功的一行入队等 B2-09s 合并后接，本单不碰 admin-unknown-payouts.ts。不动冻结测试，实跑若要动按 D10-327 先报。
+refs: [BR-WDR-23, BR-WDR-16]
+refs_hash:
+  BR-WDR-23: 98981fee10c7
+  BR-WDR-16: c5899cc85558
+deps: [B2-07c, B2-09m]
+paths:
+  - 'apps/api/src/modules/payout/jobs/recon-job.ts'
+  - 'apps/api/src/modules/payout/application/recon-schedule.ts'
+  - 'apps/api/src/modules/payout/application/withdrawal-manual-paid.ts'
+  - 'apps/api/src/modules/payout/application/admin-manual-paid.ts'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+test_paths:
+  - 'test/spec/payout/recon-late-paid/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/recon-late-paid/**'
+status: todo
