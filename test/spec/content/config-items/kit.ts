@@ -404,6 +404,13 @@ export const FEEDBACK: readonly Expected[] = [
   row('feedback.enabled', 'boolean', 'config.business'),
   row('feedback.daily_limit_per_device', 'number', 'config.business'),
 ];
+// B2-12e (D10-590, 08 BR-FUND-12): the two bad debt write-off thresholds, registered right after
+// FEEDBACK in this order: editable config.business numbers, options null; both seeded (90 days and
+// 0 fen, placeholders the super admin fills in before launch). Not part of expectedNow() either.
+export const BAD_DEBT: readonly Expected[] = [
+  row('ledger.bad_debt_days', 'number', 'config.business'),
+  row('ledger.bad_debt_min_fen', 'number', 'config.business'),
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -426,6 +433,7 @@ export const expectedOf = (key: string): Expected => {
     ...AVATAR,
     ...LABOR,
     ...FEEDBACK,
+    ...BAD_DEBT,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

@@ -10,6 +10,7 @@ import {
   AUTO_ENABLE_CHECK,
   AUTO_PAYOUT,
   AVATAR,
+  BAD_DEBT,
   BRIDGE,
   EXPECTED,
   FEEDBACK,
@@ -61,7 +62,8 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // B2-08cz: + the three tax.SERVICE_FEE.* keys; B1-05s: + feed.fallback_pool_id and pool.*;
   // B1-02zs: + withdraw.dormant_reverify_days; B1-06ze: + the three Taobao promotion link keys;
   // B1-04zq: + the four order_sync.rescan.* keys; B2-04zo: + ledger.advance_alert_fen;
-  // B1-28q: + feedback.enabled and feedback.daily_limit_per_device.
+  // B1-28q: + feedback.enabled and feedback.daily_limit_per_device; B2-12e: + ledger.bad_debt_days
+  // and ledger.bad_debt_min_fen.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -82,6 +84,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...AVATAR,
     ...LABOR,
     ...FEEDBACK,
+    ...BAD_DEBT,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

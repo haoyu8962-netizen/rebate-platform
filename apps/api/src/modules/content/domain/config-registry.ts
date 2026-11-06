@@ -301,6 +301,13 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // Registration only.
   spec('feedback.enabled', 'boolean', 'config.business'),
   businessInteger('feedback.daily_limit_per_device', 1),
+  // B2-12e (D10-590, 08 BR-FUND-12): the bad debt write-off candidate thresholds, config.business,
+  // editable, in this order. The days a balance must have stayed negative (current accounting day
+  // − negative_since), a whole number of at least 1, seeded 90; and the least |available_fen| in
+  // fen, a whole number of at least 0, seeded 0. Both are placeholders the super admin fills in
+  // before launch (拍板第二批 §8 ADD-03). Registration only.
+  businessInteger('ledger.bad_debt_days', 1),
+  businessInteger('ledger.bad_debt_min_fen', 0),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

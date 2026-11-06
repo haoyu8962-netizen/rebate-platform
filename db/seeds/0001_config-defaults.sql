@@ -126,5 +126,8 @@ INSERT INTO app.config_items (app_id, key, value, updated_by) VALUES
   ('couli', 'withdraw.dormant_reverify_days', '0'::jsonb, 'seed'), -- BR-WDR-01
   -- 第 18 批：商品反馈开关与每设备每日条数上限（B1-28q，D10-698）；默认开、每台设备每个 +08:00 自然日 20 条
   ('couli', 'feedback.enabled', 'true'::jsonb, 'seed'), -- 规划/01 F-PROD-15、04 §10.1 / §10.2
-  ('couli', 'feedback.daily_limit_per_device', '20'::jsonb, 'seed') -- BR-ID-02 细则「商品反馈与进店」
+  ('couli', 'feedback.daily_limit_per_device', '20'::jsonb, 'seed'), -- BR-ID-02 细则「商品反馈与进店」
+  -- 第 19 批：负余额坏账核销候选单的天数与金额阈值（B2-12e，D10-590）；90 天、0 分为占位值，上线前由超管在后台填写（拍板第二批 §8 ADD-03）
+  ('couli', 'ledger.bad_debt_days', '90'::jsonb, 'seed'), -- BR-FUND-12
+  ('couli', 'ledger.bad_debt_min_fen', '0'::jsonb, 'seed') -- BR-FUND-12
 ON CONFLICT (app_id, key) DO NOTHING;

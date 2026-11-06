@@ -215,7 +215,8 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
   // this order, and B2-03u (D10-608) then share_domains, and B2-03v (D10-610) then
   // bridge_origins, and B2-03w (D10-637) then me.default_avatar_url, and B2-03x (D10-646) then
   // the six legal.labor_agreement.* / legal.operator_entity.* keys in this order, and B1-28q
-  // (D10-698) then feedback.enabled and feedback.daily_limit_per_device in this order.
+  // (D10-698) then feedback.enabled and feedback.daily_limit_per_device in this order, and B2-12e
+  // (D10-590) then ledger.bad_debt_days and ledger.bad_debt_min_fen in this order.
   const keys = items.map((item) => item.key);
   const tail = [
     ...inviteNow().map((entry) => entry.key),
@@ -292,6 +293,8 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'legal.operator_entity.credit_code',
     'feedback.enabled',
     'feedback.daily_limit_per_device',
+    'ledger.bad_debt_days',
+    'ledger.bad_debt_min_fen',
   ];
   const settleEnd = keys.length - tail.length;
   const settleStart = settleEnd - 16;

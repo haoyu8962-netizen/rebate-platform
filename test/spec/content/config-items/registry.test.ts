@@ -36,6 +36,8 @@
 // LABOR), unset by default with no seed rows (LABOR_UNSEEDED).
 // B1-28q (D10-698): feedback.enabled and feedback.daily_limit_per_device follow them (kit
 // FEEDBACK), both seeded.
+// B2-12e (D10-590, BR-FUND-12): ledger.bad_debt_days and ledger.bad_debt_min_fen follow them (kit
+// BAD_DEBT), both seeded.
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -55,6 +57,7 @@ import {
   AUTO_PAYOUT,
   AVATAR,
   AVATAR_UNSEEDED,
+  BAD_DEBT,
   BRIDGE,
   BRIDGE_UNSEEDED,
   EXPECTED,
@@ -172,6 +175,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...AVATAR,
         ...LABOR,
         ...FEEDBACK,
+        ...BAD_DEBT,
       ].map((entry) => entry.key),
     ),
   );
@@ -358,6 +362,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...AVATAR,
     ...LABOR,
     ...FEEDBACK,
+    ...BAD_DEBT,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -417,6 +422,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...AVATAR,
     ...LABOR,
     ...FEEDBACK,
+    ...BAD_DEBT,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -484,6 +490,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...AVATAR,
       ...LABOR,
       ...FEEDBACK,
+      ...BAD_DEBT,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -504,6 +511,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...AVATAR,
     ...LABOR,
     ...FEEDBACK,
+    ...BAD_DEBT,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({
@@ -885,6 +893,73 @@ it('[AC-F1-10e#72] feedback.daily_limit_per_device 是可改的 config.business 
     Number.POSITIVE_INFINITY,
     '20',
     true,
+    null,
+    [],
+  ];
+  for (const value of refused) expect(configValueFits(spec, value), String(value)).toBe(false);
+});
+
+// B2-12e (D10-590, 08 BR-FUND-12): the type, permission and editable flag are checked in #58; here
+// the values the days a balance must have stayed negative accepts: a whole number of at least 1
+// (0 would make every negative balance a candidate the day it turns negative; int4 max, 08 gives no
+// upper bound). Seeded 90, a placeholder the super admin fills in before launch (ADD-03).
+it('[AC-F1-10e#73] ledger.bad_debt_days 是可改的 config.business 整数，下限 1，拒绝 0、负数、浮点与隐式转换（B2-12e，BR-FUND-12）', () => {
+  const spec = registered('ledger.bad_debt_days');
+  expect(spec).toMatchObject({
+    valueType: 'number',
+    options: null,
+    permission: 'config.business',
+    adminEditable: true,
+  });
+  expect(spec.range).toStrictEqual({ integer: true, min: 1, max: 2147483647 });
+  expect(switchSpecOf('ledger.bad_debt_days')).toBeNull();
+  for (const value of [1, 90, 365, 2147483647]) {
+    expect(configValueFits(spec, value), String(value)).toBe(true);
+  }
+  const refused = [
+    0,
+    -1,
+    -90,
+    0.5,
+    90.5,
+    2147483648,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    '90',
+    true,
+    null,
+    [],
+  ];
+  for (const value of refused) expect(configValueFits(spec, value), String(value)).toBe(false);
+});
+
+// B2-12e (D10-590, 08 BR-FUND-12): the type, permission and editable flag are checked in #58; here
+// the values the least |available_fen| for a candidate accepts: a whole number of fen of at least 0
+// (0 is a valid threshold, every negative balance qualifies; int4 max). Seeded 0, a placeholder the
+// super admin fills in before launch (ADD-03).
+it('[AC-F1-10e#74] ledger.bad_debt_min_fen 是可改的 config.business 整数，下限 0，拒绝负数、浮点与隐式转换（B2-12e，BR-FUND-12）', () => {
+  const spec = registered('ledger.bad_debt_min_fen');
+  expect(spec).toMatchObject({
+    valueType: 'number',
+    options: null,
+    permission: 'config.business',
+    adminEditable: true,
+  });
+  expect(spec.range).toStrictEqual({ integer: true, min: 0, max: 2147483647 });
+  expect(switchSpecOf('ledger.bad_debt_min_fen')).toBeNull();
+  for (const value of [0, 1, 800, 2147483647]) {
+    expect(configValueFits(spec, value), String(value)).toBe(true);
+  }
+  const refused = [
+    -1,
+    -800,
+    0.5,
+    800.5,
+    2147483648,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    '0',
+    false,
     null,
     [],
   ];

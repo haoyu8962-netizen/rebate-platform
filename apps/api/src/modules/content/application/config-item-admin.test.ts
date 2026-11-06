@@ -137,7 +137,7 @@ it('[AC-F1-02zj#11] list exposes the enum options of settle.* items', async () =
   const page = await admin.list('couli', { page: 1, page_size: 100 });
   const source = page.items.find((item) => item.key === 'settle.statement_source.taobao');
   expect(source?.options).toStrictEqual(['api', 'upload']);
-  expect(page.total).toBe(124);
+  expect(page.total).toBe(126);
 });
 
 it('[AC-B1-05m] combined save checks run only for their own written keys and read only their keys', () => {

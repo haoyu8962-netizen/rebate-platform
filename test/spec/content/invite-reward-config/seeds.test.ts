@@ -35,6 +35,9 @@ const ELIGIBILITY = { key: `${PREFIX}eligibility_days`, value: 30 };
 // B1-28q (D10-698): the feedback.enabled and feedback.daily_limit_per_device rows follow
 // withdraw.dormant_reverify_days in registration order, under the same checks, seeded true (the
 // product feedback entry on) and 20 (submissions per device per +08:00 calendar day).
+// B2-12e (D10-590, BR-FUND-12): the ledger.bad_debt_days and ledger.bad_debt_min_fen rows follow
+// them in registration order, under the same checks, seeded 90 (days negative) and 0 (fen), the
+// 08 defaults kept as placeholders the super admin fills in before launch.
 const PAYOUT_KEYS = [
   'payout.single_cap_fen',
   'payout.daily_cap_fen',
@@ -107,6 +110,11 @@ const FEEDBACK_SEEDS = [
   { key: 'feedback.daily_limit_per_device', value: 20 },
 ];
 const FEEDBACK_KEYS = FEEDBACK_SEEDS.map((row) => row.key);
+const BAD_DEBT_SEEDS = [
+  { key: 'ledger.bad_debt_days', value: 90 },
+  { key: 'ledger.bad_debt_min_fen', value: 0 },
+];
+const BAD_DEBT_KEYS = BAD_DEBT_SEEDS.map((row) => row.key);
 const PROMO_LINK_KEYS = [
   'share.taobao_enabled',
   'convert.taobao_prefetch.enabled',
@@ -152,6 +160,7 @@ it('[AC-F1-02zn#6] BR-INV-24 种子为 1000/0/0/0/24，开关缺行默认 off；
     ...POOL_KEYS,
     ...REVERIFY_KEYS,
     ...FEEDBACK_KEYS,
+    ...BAD_DEBT_KEYS,
   ]);
   for (const key of SEARCH_KEYS) {
     expect(
@@ -164,6 +173,7 @@ it('[AC-F1-02zn#6] BR-INV-24 种子为 1000/0/0/0/24，开关缺行默认 off；
   expect(rows.filter((row) => POOL_KEYS.includes(row.key))).toStrictEqual(POOL_SEEDS);
   expect(rows.filter((row) => REVERIFY_KEYS.includes(row.key))).toStrictEqual(REVERIFY_SEEDS);
   expect(rows.filter((row) => FEEDBACK_KEYS.includes(row.key))).toStrictEqual(FEEDBACK_SEEDS);
+  expect(rows.filter((row) => BAD_DEBT_KEYS.includes(row.key))).toStrictEqual(BAD_DEBT_SEEDS);
   expect(rows.some((row) => row.key === 'feed.fallback_pool_id')).toBe(false);
   expect(rows.some((row) => row.key === ADVANCE_ALERT_KEY)).toBe(false);
   expect(sql).not.toContain(ADVANCE_ALERT_KEY);
