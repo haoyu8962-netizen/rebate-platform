@@ -1,0 +1,17 @@
+id: B1-05zj
+repo: rebate-platform
+title: 测试修改（S-09 (a) 乙，D10-736）：content switch-registry 登记五个紧急开关——shop.entry.enabled.<platform>、detail.sales.enabled.<platform>、detail.shop_scores.enabled.<platform>、detail.coupon_end.enabled.<platform>（默认 off）与 detail.jd_plus_note.enabled（默认 on），插在 growth.invite_reward 两项之前
+type: test-change
+# 2026-11-09 be 入账（D10-664 S-09 (a)，D10-736 ①③）：04 §10.2 紧急开关（10 秒内生效、switch.all），进 switch-registry；登记顺序插在 growth.invite_reward 两项之前，冻结 [AC-F1-10b#15]「这两项在最后」继续成立、不改它；<platform> 只取 taobao / jd / pdd。默认值依据：shop.entry 不得默认打开（BR-PRICE-21 细则「进店」）、销量与店铺评分 off（BR-TEXT-13 细则「虚拟数据」）、券结束时刻 off（BR-PRICE-04 细则）、京东 PLUS 提示 on（BR-CALC-17 细则）。feedback.enabled 留在配置表不迁（FU-FEEDBACK-SWITCH-TABLE）。冻结注册表测试由新鲜独立 Claude 照 B1-28q 先例只增改期望全集，另一位只读复审，报 #24。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/switch-registry{.ts,.test.ts}'
+  - 'test/spec/content/switch-read/kit.ts'
+  - 'test/spec/content/switch-read/registry.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
