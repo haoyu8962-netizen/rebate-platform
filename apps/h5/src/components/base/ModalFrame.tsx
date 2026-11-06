@@ -299,7 +299,7 @@ export function ModalFrame(props: ModalFrameProps): ReactElement | null {
         <div
           data-slot="modal-backdrop"
           aria-hidden="true"
-          className="absolute inset-0 bg-couli-text-primary/40"
+          className="absolute inset-0 bg-couli-overlay-scrim"
           onClick={allowBackdrop ? onClose : undefined}
         />
         <div

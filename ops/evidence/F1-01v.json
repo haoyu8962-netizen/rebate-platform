@@ -1,0 +1,86 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-dark/contrast.test.ts > [AC-F1-01v-CONTRAST#1] 浅色：遮罩（overlay.scrim）之上的 Dialog / Sheet 面板与正文、轻提示底与字对比度都 ≥ 4.5:1",
+    "test/spec/frontend/h5-dark/contrast.test.ts > [AC-F1-01v-CONTRAST#2] 深色：遮罩（overlay.scrim）之上的 Dialog / Sheet 面板与正文、轻提示底与字对比度都 ≥ 4.5:1",
+    "test/spec/frontend/h5-dark/scrim.test.ts > [AC-F1-01v-SCRIM#1] Dialog 遮罩只取 overlay.scrim 令牌，浅深两态计算值等于令牌源的浅 / 深值",
+    "test/spec/frontend/h5-dark/scrim.test.ts > [AC-F1-01v-SCRIM#2] Sheet 遮罩只取 overlay.scrim 令牌，浅深两态计算值等于令牌源的浅 / 深值",
+    "test/spec/frontend/h5-dark/scrim.test.ts > [AC-F1-01v-SCRIM#3] apps/h5/src/components 源码里没有以 text-primary 作背景的写法",
+    "test/spec/frontend/h5-dark/toast.test.ts > [AC-F1-01v-TOAST#1] 轻提示底色与文字色各取一个令牌变量（不加透明度），底色不是 text-primary",
+    "test/spec/frontend/h5-dark/toast.test.ts > [AC-F1-01v-TOAST#2] 轻提示底与字的对比度在浅色、深色下都 ≥ 4.5:1（按令牌值计算）"
+  ],
+  "risk_note": "H5-DARK (规划/05 §3.11.3, D10-643 ⑦): H5 base components in dark mode. ModalFrame (Sheet, Dialog) backdrop changes from text-primary/40 (a light layer in dark mode) to the overlay.scrim token class; Toast changes from a text-primary background to background.surface with text.primary and a subtle border, contrast about 15:1 light and 13:1 dark, no dark: overrides, no literal colours. Two lines in apps/h5/src/components/base. Non-funds. No frozen test pinned the old classes, so no test-change. Rule tests written by an independent Claude (contrast computed from the token source with the WCAG formula); Claude spec-test review r1 pass (two S2: no dark: overrides carried into the constraints, the opaque-Toast rule kept by orchestrator decision); red on the local container (red/1; AWS runners are off since D10-555). Implementation by Opus 5.5; local container verify-fast and browser green. Independent Claude general review r1 pass. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "round 1 pass, no findings; independent Claude (approvals #36)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "fresh Claude subagent: round 1 pass with two S2 (dark: prefix overrides would be ignored by the parser, carried into the implementation constraints; the opaque Toast rule kept); tests written by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-01v",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "b28d7c78d8f8ca5feefd4aa107935adfb3bed6cd",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b28d7c78d8f8ca5feefd4aa107935adfb3bed6cd",
+      "tree": "6c81f889f7debad3a54cee2b243353e6cf3d710a",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T05:35:17Z",
+      "finished_at": "2026-11-06T05:35:27Z",
+      "red_tests": [
+        "test/spec/frontend/h5-dark/contrast.test.ts > [AC-F1-01v-CONTRAST#1] 浅色：遮罩（overlay.scrim）之上的 Dialog / Sheet 面板与正文、轻提示底与字对比度都 ≥ 4.5:1",
+        "test/spec/frontend/h5-dark/contrast.test.ts > [AC-F1-01v-CONTRAST#2] 深色：遮罩（overlay.scrim）之上的 Dialog / Sheet 面板与正文、轻提示底与字对比度都 ≥ 4.5:1",
+        "test/spec/frontend/h5-dark/scrim.test.ts > [AC-F1-01v-SCRIM#1] Dialog 遮罩只取 overlay.scrim 令牌，浅深两态计算值等于令牌源的浅 / 深值",
+        "test/spec/frontend/h5-dark/scrim.test.ts > [AC-F1-01v-SCRIM#2] Sheet 遮罩只取 overlay.scrim 令牌，浅深两态计算值等于令牌源的浅 / 深值",
+        "test/spec/frontend/h5-dark/scrim.test.ts > [AC-F1-01v-SCRIM#3] apps/h5/src/components 源码里没有以 text-primary 作背景的写法",
+        "test/spec/frontend/h5-dark/toast.test.ts > [AC-F1-01v-TOAST#1] 轻提示底色与文字色各取一个令牌变量（不加透明度），底色不是 text-primary",
+        "test/spec/frontend/h5-dark/toast.test.ts > [AC-F1-01v-TOAST#2] 轻提示底与字的对比度在浅色、深色下都 ≥ 4.5:1（按令牌值计算）"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-dark/contrast.test.ts",
+        "test/spec/frontend/h5-dark/scrim.test.ts",
+        "test/spec/frontend/h5-dark/toast.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1d4b40bb1ef777349456e264efa067955c44da18ede95c7d48b64eacca99ddf8"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f329a1b6c1f9a374cb919a65d80956b1da3a75ca",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}

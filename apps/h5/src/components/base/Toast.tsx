@@ -27,7 +27,7 @@ function acquireRegion(container: HTMLElement): HTMLElement {
   return region;
 }
 
-const STATUS_CLASS = `${TOAST_LAYER} pointer-events-none inset-x-couli-4 mx-auto w-fit max-w-full rounded-couli-button bg-couli-text-primary px-couli-4 py-couli-2 text-center text-couli-footnote leading-couli-footnote text-couli-text-inverse [box-shadow:var(--shadow-floating)]`;
+const STATUS_CLASS = `${TOAST_LAYER} pointer-events-none inset-x-couli-4 mx-auto w-fit max-w-full rounded-couli-button border border-couli-border-subtle bg-couli-background-surface px-couli-4 py-couli-2 text-center text-couli-footnote leading-couli-footnote text-couli-text-primary [box-shadow:var(--shadow-floating)]`;
 const STATUS_BOTTOM = 'calc(env(safe-area-inset-bottom, 0px) + var(--space-16))';
 
 /**
