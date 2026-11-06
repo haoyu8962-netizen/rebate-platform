@@ -33,4 +33,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/risk/admin-risk-rules/**'
-status: todo
+status: done
+pr: 2435
