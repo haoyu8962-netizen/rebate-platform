@@ -23195,7 +23195,7 @@ export interface operations {
                      *             "is_presale": false,
                      *             "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70",
                      *             "cta": {
-                     *               "text_key": "btn.buy.coupon"
+                     *               "text_key": "btn.buy.rebate"
                      *             },
                      *             "quoted_at": "2026-10-05T10:00:00+08:00",
                      *             "stale": false,
@@ -26741,7 +26741,7 @@ export interface operations {
                      *               "is_presale": false,
                      *               "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70",
                      *               "cta": {
-                     *                 "text_key": "btn.buy.coupon"
+                     *                 "text_key": "btn.buy.rebate"
                      *               },
                      *               "quoted_at": "2026-10-05T10:00:00+08:00",
                      *               "stale": false,
@@ -26901,7 +26901,7 @@ export interface operations {
                      *               "is_presale": false,
                      *               "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70",
                      *               "cta": {
-                     *                 "text_key": "btn.buy.coupon"
+                     *                 "text_key": "btn.buy.rebate"
                      *               },
                      *               "quoted_at": "2026-10-05T10:00:00+08:00",
                      *               "stale": false,

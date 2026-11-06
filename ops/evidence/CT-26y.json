@@ -1,0 +1,44 @@
+{
+  "risk_note": "RV1 contract (S-08 follow-up). Examples and replay fixtures only: the six openapi examples (section items, hot rank, favourites, SearchProductsOk, ProductOk, ParseInputOk) and the agent-stream fixtures normal / cancelled / fallback / disconnected carry cta / product_cta text_key btn.buy.rebate instead of the retired btn.buy.coupon (and one old btn.buy on a normal no-coupon card), matching their normal single-amount cards (B1-05zg, BR-TEXT-12 细则「购买按钮」). Fixtures were byte-compared: only the key value changed. No shape change; ProductCta description and the kept btn.buy.coupon text key untouched.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: full diff of the six files, contract text at SPEC_REF and the texts dictionary. Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "none",
+    "rounds": 0,
+    "last_verdict": "n/a",
+    "note": "contract task, ledger tester: none"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "legacy_no_red": true,
+  "task": "CT-26y",
+  "spec_commit": "44378698c47a5ef1ab8a3c243b864f907da4a1b5",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "de15ef8386778bc2282788015d4978c4a3576042",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  }
+}
