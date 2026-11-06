@@ -49,6 +49,7 @@ export const NONE = [
   'fund.view',
   'audit.view_all',
   'export',
+  'feedback.view',
   'content.page',
   'content.pool',
   'content.article',

@@ -1470,5 +1470,10 @@ export const CONTRACT_SIGNING_ROUTES = [
     "method": "POST",
     "path": "/v1/agent/messages/:message_id/report",
     "signed": false
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/product-feedbacks",
+    "signed": false
   }
 ] as const;

@@ -120,6 +120,8 @@ tags:
     description: Admin asset snapshots — the daily asset snapshots (one row per accounting day, with the per-platform union receivables) page by page, read only (permission point fund.view; 01 F-ADM-08, 04 §3.2 asset_snapshots, asset_snapshot_receivables, §11; BR-FUND-18). The daily ledger with W / P and the water-level state, the union collection entry (fund.cash_entry), the fund dashboard and the export follow in later tasks.
   - name: admin-fund-ledger
     description: Admin platform fund ledger — the union collection entry and its whole-record reversal (permission point fund.cash_entry, totp step-up), the list of union collection records and the fund ledger overview, the last two read only (permission point fund.view; 01 F-ADM-08, 04 §3.2 union_receipts, §11; BR-FUND-20, BR-WDR-18). The entry of the enterprise Alipay balance W belongs to the payout console (design/specs/admin-payouts.md).
+  - name: admin-product-feedbacks
+    description: Admin product feedback records — the feedback users and guests sent from the product detail page, page by page with filters, read only (permission point feedback.view; 01 F-PROD-15; BR-ID-30 细则「商品反馈记录」; 编排 D10-757（S-16；04 §11.1 权限点与 §6.3 后台查看接口待编排回写）).
   - name: agent
     description: Agent sessions, history, the reply stream, stop, feedback and report (04 §6.5, §8).
 paths:
@@ -28956,6 +28958,139 @@ paths:
           $ref: '#/components/responses/ClientError'
         5XX:
           $ref: '#/components/responses/ServerError'
+  /admin/v1/product-feedbacks:
+    get:
+      operationId: adminListProductFeedbacks
+      tags:
+        - admin-product-feedbacks
+      summary: Product feedback records, newest first
+      description: |
+        The product feedback records users and guests sent from the product detail page
+        (POST /v1/products/{product_key}/feedback; 01 F-PROD-15; BR-ID-30 细则「商品反馈记录」;
+        编排 D10-757（S-16；04 §11.1 权限点与 §6.3 后台查看接口待编排回写）), for operations to check prices, rebates and product information.
+        Permission point `feedback.view` (编排 D10-757), read only, no step-up; lacking it is 10403
+        with `data.reason=admin_permission_denied`. Reading does not write an audit record.
+        Lists only the console's app records; records of other apps never appear.
+        Feedbacks of users whose account deletion completed have been deleted (BR-ID-28) and never appear.
+        A guest record (sent without login) has `user_id` null; it is not tied to any account.
+        Rows are sorted by `created_at` descending, then by the server-internal order for equal times.
+        Filters combine with AND and are all optional: `platform` (PlatformCode), `reason`
+        (price / rebate / info / other) and the submit time window, `from` (inclusive) and
+        `to` (exclusive), ISO 8601 times with offset (04 §5).
+        `from` not earlier than `to` (equal included) is 20001 with `data.fields=[from, to]`.
+        Pages with `page` (a page past the last one is `items=[]`) and `page_size` ≤ 200 (above
+        200 is 20001, as AdminPageSize); `total` counts all rows matching the filters. Undeclared
+        query parameters follow the global rule. The items carry no phone number, nickname,
+        device identifier or app_id; `note` is the optional remark of at most 100 characters as
+        sent.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminPageSize'
+        - name: platform
+          in: query
+          required: false
+          description: Platform of the feedback (PlatformCode).
+          schema:
+            $ref: '#/components/schemas/PlatformCode'
+        - name: reason
+          in: query
+          required: false
+          description: Reason of the feedback.
+          schema:
+            type: string
+            enum:
+              - price
+              - rebate
+              - info
+              - other
+        - name: from
+          in: query
+          required: false
+          description: Earliest submit time (created_at), inclusive (ISO 8601 with offset).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Latest submit time (created_at), exclusive (ISO 8601 with offset).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: One page of product feedback records, newest first.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProductFeedbackPageResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  items:
+                    - id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7a02
+                      platform: taobao
+                      product_key: tb:6543210
+                      item_ref: opaque-item-ref
+                      link_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7b02
+                      shown_final_price_fen: 1990
+                      shown_rebate_fen: 120
+                      quoted_at: '2026-11-05T10:20:00+08:00'
+                      reason: rebate
+                      note: 返利和页面上写的不一样
+                      user_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04
+                      created_at: '2026-11-05T10:21:00+08:00'
+                    - id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7a01
+                      platform: pdd
+                      product_key: pdd:1234567890
+                      item_ref: null
+                      link_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7b01
+                      shown_final_price_fen: 2990
+                      shown_rebate_fen: null
+                      quoted_at: '2026-11-05T10:00:00+08:00'
+                      reason: price
+                      note: null
+                      user_id: null
+                      created_at: '2026-11-05T10:01:00+08:00'
+                  page: 1
+                  page_size: 20
+                  total: 2
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                pageSizeTooLarge:
+                  $ref: '#/components/examples/AdminPageSizeInvalid'
+                fromNotBeforeTo:
+                  $ref: '#/components/examples/AdminProductFeedbackTimeRangeInvalid'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
 components:
   securitySchemes:
     bearerAuth:
@@ -30536,6 +30671,16 @@ components:
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminAuditTimeRangeInvalid:
       summary: 20001 audit-log search with from later than to
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - from
+            - to
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminProductFeedbackTimeRangeInvalid:
+      summary: 20001 product feedback list with from not earlier than to
       value:
         code: 20001
         msg: 参数错误
@@ -48374,6 +48519,121 @@ components:
           type: string
         data:
           $ref: '#/components/schemas/AdminOrderSyncPage'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminProductFeedbackListItem:
+      type: object
+      description: |
+        One product feedback record (app.product_feedbacks; BR-ID-30 细则「商品反馈记录」). No
+        phone number, nickname, device identifier or app_id.
+      additionalProperties: false
+      required:
+        - id
+        - platform
+        - product_key
+        - item_ref
+        - link_id
+        - shown_final_price_fen
+        - shown_rebate_fen
+        - quoted_at
+        - reason
+        - note
+        - user_id
+        - created_at
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        platform:
+          $ref: '#/components/schemas/PlatformCode'
+        product_key:
+          $ref: '#/components/schemas/ProductKey'
+        item_ref:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 1024
+          description: Opaque product reference sent with the feedback; null when none was sent.
+        link_id:
+          $ref: '#/components/schemas/Id'
+        shown_final_price_fen:
+          $ref: '#/components/schemas/Fen'
+          minimum: 0
+          description: Final price shown on the page when the feedback was sent.
+        shown_rebate_fen:
+          $ref: '#/components/schemas/NullableFen'
+          minimum: 0
+          description: Rebate amount shown on the page; null when the page showed none.
+        quoted_at:
+          type: string
+          format: date-time
+          description: Quote time shown with the price.
+        reason:
+          type: string
+          description: price / rebate / info / other (BR-TEXT-14 feedback.reason.*).
+          enum:
+            - price
+            - rebate
+            - info
+            - other
+        note:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+          description: Optional note as sent, at most 100 characters; null when none.
+        user_id:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 64
+          description: The user who sent it; null for a guest record.
+        created_at:
+          type: string
+          format: date-time
+          description: Submit time.
+    AdminProductFeedbackPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminProductFeedbackListItem'
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+        page_size:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+    AdminProductFeedbackPageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminProductFeedbackPage'
         trace_id:
           $ref: '#/components/schemas/TraceId'
     AdminOrderSyncPlatformLimit:

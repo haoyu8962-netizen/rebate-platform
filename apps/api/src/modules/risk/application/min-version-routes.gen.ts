@@ -2963,5 +2963,15 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
       "full"
     ],
     "idempotent": false
+  },
+  {
+    "operationId": "adminListProductFeedbacks",
+    "method": "GET",
+    "path": "/admin/v1/product-feedbacks",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
   }
 ] as const;

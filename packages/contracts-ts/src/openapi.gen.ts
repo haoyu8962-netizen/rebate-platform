@@ -10422,6 +10422,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/product-feedbacks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Product feedback records, newest first
+         * @description The product feedback records users and guests sent from the product detail page
+         *     (POST /v1/products/{product_key}/feedback; 01 F-PROD-15; BR-ID-30 细则「商品反馈记录」;
+         *     编排 D10-757（S-16；04 §11.1 权限点与 §6.3 后台查看接口待编排回写）), for operations to check prices, rebates and product information.
+         *     Permission point `feedback.view` (编排 D10-757), read only, no step-up; lacking it is 10403
+         *     with `data.reason=admin_permission_denied`. Reading does not write an audit record.
+         *     Lists only the console's app records; records of other apps never appear.
+         *     Feedbacks of users whose account deletion completed have been deleted (BR-ID-28) and never appear.
+         *     A guest record (sent without login) has `user_id` null; it is not tied to any account.
+         *     Rows are sorted by `created_at` descending, then by the server-internal order for equal times.
+         *     Filters combine with AND and are all optional: `platform` (PlatformCode), `reason`
+         *     (price / rebate / info / other) and the submit time window, `from` (inclusive) and
+         *     `to` (exclusive), ISO 8601 times with offset (04 §5).
+         *     `from` not earlier than `to` (equal included) is 20001 with `data.fields=[from, to]`.
+         *     Pages with `page` (a page past the last one is `items=[]`) and `page_size` ≤ 200 (above
+         *     200 is 20001, as AdminPageSize); `total` counts all rows matching the filters. Undeclared
+         *     query parameters follow the global rule. The items carry no phone number, nickname,
+         *     device identifier or app_id; `note` is the optional remark of at most 100 characters as
+         *     sent.
+         */
+        get: operations["adminListProductFeedbacks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -17714,6 +17751,56 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["AdminOrderSyncPage"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description One product feedback record (app.product_feedbacks; BR-ID-30 细则「商品反馈记录」). No
+         *     phone number, nickname, device identifier or app_id.
+         */
+        AdminProductFeedbackListItem: {
+            id: components["schemas"]["Id"];
+            platform: components["schemas"]["PlatformCode"];
+            product_key: components["schemas"]["ProductKey"];
+            /** @description Opaque product reference sent with the feedback; null when none was sent. */
+            item_ref: string | null;
+            link_id: components["schemas"]["Id"];
+            /** @description Final price shown on the page when the feedback was sent. */
+            shown_final_price_fen: components["schemas"]["Fen"];
+            /** @description Rebate amount shown on the page; null when the page showed none. */
+            shown_rebate_fen: components["schemas"]["NullableFen"];
+            /**
+             * Format: date-time
+             * @description Quote time shown with the price.
+             */
+            quoted_at: string;
+            /**
+             * @description price / rebate / info / other (BR-TEXT-14 feedback.reason.*).
+             * @enum {string}
+             */
+            reason: "price" | "rebate" | "info" | "other";
+            /** @description Optional note as sent, at most 100 characters; null when none. */
+            note: string | null;
+            /** @description The user who sent it; null for a guest record. */
+            user_id: string | null;
+            /**
+             * Format: date-time
+             * @description Submit time.
+             */
+            created_at: string;
+        };
+        AdminProductFeedbackPage: {
+            items: components["schemas"]["AdminProductFeedbackListItem"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int32 */
+            total: number;
+        };
+        AdminProductFeedbackPageResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminProductFeedbackPage"];
             trace_id: components["schemas"]["TraceId"];
         };
         /** @description The manual sync limits of one platform (02 §7.1, 01 F-ORD-10). */
@@ -42840,6 +42927,97 @@ export interface operations {
             };
             429: components["responses"]["TooManyRequests"];
             "4XX": components["responses"]["ClientError"];
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminListProductFeedbacks: {
+        parameters: {
+            query?: {
+                /** @description Page number of an admin list, from 1 (04 §5 后台分页). */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Page size of an admin list, at most 200 (04 §5 后台分页); above that → 20001. */
+                page_size?: components["parameters"]["AdminPageSize"];
+                /** @description Platform of the feedback (PlatformCode). */
+                platform?: components["schemas"]["PlatformCode"];
+                /** @description Reason of the feedback. */
+                reason?: "price" | "rebate" | "info" | "other";
+                /** @description Earliest submit time (created_at), inclusive (ISO 8601 with offset). */
+                from?: string;
+                /** @description Latest submit time (created_at), exclusive (ISO 8601 with offset). */
+                to?: string;
+            };
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of product feedback records, newest first. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7a02",
+                     *             "platform": "taobao",
+                     *             "product_key": "tb:6543210",
+                     *             "item_ref": "opaque-item-ref",
+                     *             "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7b02",
+                     *             "shown_final_price_fen": 1990,
+                     *             "shown_rebate_fen": 120,
+                     *             "quoted_at": "2026-11-05T10:20:00+08:00",
+                     *             "reason": "rebate",
+                     *             "note": "返利和页面上写的不一样",
+                     *             "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04",
+                     *             "created_at": "2026-11-05T10:21:00+08:00"
+                     *           },
+                     *           {
+                     *             "id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7a01",
+                     *             "platform": "pdd",
+                     *             "product_key": "pdd:1234567890",
+                     *             "item_ref": null,
+                     *             "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f7b01",
+                     *             "shown_final_price_fen": 2990,
+                     *             "shown_rebate_fen": null,
+                     *             "quoted_at": "2026-11-05T10:00:00+08:00",
+                     *             "reason": "price",
+                     *             "note": null,
+                     *             "user_id": null,
+                     *             "created_at": "2026-11-05T10:01:00+08:00"
+                     *           }
+                     *         ],
+                     *         "page": 1,
+                     *         "page_size": 20,
+                     *         "total": 2
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminProductFeedbackPageResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             "5XX": components["responses"]["ServerError"];
         };
     };

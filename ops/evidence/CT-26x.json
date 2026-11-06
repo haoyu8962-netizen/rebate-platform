@@ -1,0 +1,101 @@
+{
+  "risk_note": "RV1 contract (S-16, rulings D10-757, D10-763). New planned read-only list GET /admin/v1/product-feedbacks (adminListProductFeedbacks: filters platform, reason, from inclusive / to exclusive with from >= to → 20001 fields [from, to]; AdminPage / AdminPageSize; created_at descending then server-internal order; only the console's app; deleted users' feedback is gone per BR-ID-28; items carry no phone, device identifier or app_id, guest user_id null) and new permission point feedback.view (read only, no step-up, no audit). The frozen permission list gains one entry (precedent CT-24zi). No runtime code, no migration; the implementation is B1-28s. 04 §6.3 / §11.1 are written back by the orchestrator after the merge (D10-763). Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex's own verdict in rounds 1 and 2 was fail, on one S1 only (contracts/openapi.yaml:28971): SPEC_REF 18f0015e's 04 §6.3 still says the admin view is to be planned and §11.1 has no feedback.view, so the new operation and permission have no planning source yet. Round 2 changed the citation from 04 §11.1 to ruling D10-757; Codex kept the S1 open. S1 由编排 D10-763 裁定关闭，04 §6.3 / §11.1 合并后由编排回写 (a planning writeback gap, not a contract error; D10-757 orders contract first, as CT-24zi did). This entry records the ruling's outcome, not a Codex pass. No other finding on shape, wording or generated files. Static, nothing executed by Codex. couli-runs/CT-26x/review-contract-r1.json, review-contract-r2.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "codex-run.sh review --review-type spec-test on tests by an independent Claude writer (claude-run.sh, approvals #36): round 1 fail (three S1: interval direction and the from >= to error, only-this-app and deleted-feedback wording, the secondary order), round 2 pass. The frozen test/spec/admin/permissions/expected.ts gains only feedback.view (precedent CT-24zi)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-26x",
+  "spec_commit": "67503d94ce6c0488510241f68d1caad5f47ab35e",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#5] 登记 GET /admin/v1/product-feedbacks：adminListProductFeedbacks、后台鉴权、planned、无幂等与 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#6] 描述写明 feedback.view、只读无 step-up、不写审计、缺权限 10403 admin_permission_denied",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#7] 描述写明只列本控制台 app 的记录、注销用户的反馈已删除（BR-ID-28）、游客记录 user_id 为 null",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#8] 描述写明按 created_at 降序排列，created_at 相同再按服务端内部顺序",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#9] 参数恰为 X-Trace-Id、page、page_size、platform、reason、from、to；前三个引用现有组件，筛选都可选",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#10] 筛选 platform 取 PlatformCode，reason 取 price / rebate / info / other",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#11] from（含）、to（不含）都是 date-time；from 不早于 to 时 20001 且 data.fields 为 from、to",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#12] 200 响应是后台分页信封：code/msg/data/trace_id，data 含 items、page、page_size、total",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#13] 列表项封闭且恰为 12 个字段，全部 required",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#14] 列表项各字段的取值：金额为非负整数分，item_ref / shown_rebate_fen / note / user_id 可为 null，note ≤ 100",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#15] 响应里不出现手机号、昵称、设备标识与 app_id",
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#16] 200 示例过 schema，含一条游客记录（user_id null）与一条登录用户记录",
+    "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#1] 枚举 admin_permission 登记 feedback.view，中文说明为商品反馈只读查看、不标 step-up",
+    "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#2] specs/permissions.yaml 恰有一条 feedback.view（无 step-up、无例外操作），键序与枚举一致，版本号递增",
+    "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#3] 生成的权限快照 permissions.gen.ts 含 feedback.view（无 step-up），版本与 YAML 一致",
+    "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#4] 生成的 planned 清单含 adminListProductFeedbacks"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "67503d94ce6c0488510241f68d1caad5f47ab35e",
+      "tree": "41563a8523763560f3a2955d094f5a15f3169243",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T15:35:15Z",
+      "finished_at": "2026-11-06T15:35:22Z",
+      "red_tests": [
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#5] 登记 GET /admin/v1/product-feedbacks：adminListProductFeedbacks、后台鉴权、planned、无幂等与 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#6] 描述写明 feedback.view、只读无 step-up、不写审计、缺权限 10403 admin_permission_denied",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#7] 描述写明只列本控制台 app 的记录、注销用户的反馈已删除（BR-ID-28）、游客记录 user_id 为 null",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#8] 描述写明按 created_at 降序排列，created_at 相同再按服务端内部顺序",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#9] 参数恰为 X-Trace-Id、page、page_size、platform、reason、from、to；前三个引用现有组件，筛选都可选",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#10] 筛选 platform 取 PlatformCode，reason 取 price / rebate / info / other",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#11] from（含）、to（不含）都是 date-time；from 不早于 to 时 20001 且 data.fields 为 from、to",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#12] 200 响应是后台分页信封：code/msg/data/trace_id，data 含 items、page、page_size、total",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#13] 列表项封闭且恰为 12 个字段，全部 required",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#14] 列表项各字段的取值：金额为非负整数分，item_ref / shown_rebate_fen / note / user_id 可为 null，note ≤ 100",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#15] 响应里不出现手机号、昵称、设备标识与 app_id",
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#16] 200 示例过 schema，含一条游客记录（user_id null）与一条登录用户记录",
+        "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#1] 枚举 admin_permission 登记 feedback.view，中文说明为商品反馈只读查看、不标 step-up",
+        "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#2] specs/permissions.yaml 恰有一条 feedback.view（无 step-up、无例外操作），键序与枚举一致，版本号递增",
+        "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#3] 生成的权限快照 permissions.gen.ts 含 feedback.view（无 step-up），版本与 YAML 一致",
+        "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#4] 生成的 planned 清单含 adminListProductFeedbacks"
+      ],
+      "expected": [
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts",
+        "test/spec/contracts/admin-product-feedbacks/permission.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a071058dc02e32a58fb5573cfa719c20d0e827d93a1c59c5715a0014e25823a2"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6b7eda6305e9cfbda1f811ae063383a2942f7180",
+    "specs": "f0751bc32509be9ef49b0868d57f6b3a09de501b"
+  }
+}

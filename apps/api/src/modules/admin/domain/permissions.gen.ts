@@ -1,7 +1,7 @@
 // Generated from specs/permissions.yaml by admin/scripts/generate-permissions.ts.
 // Do not edit by hand. Regenerate after changing the specification.
 export const ADMIN_PERMISSIONS = {
-  "version": "4",
+  "version": "5",
   "permissions": [
     {
       "key": "dashboard.view",
@@ -40,6 +40,11 @@ export const ADMIN_PERMISSIONS = {
     },
     {
       "key": "export",
+      "step_up_tier": null,
+      "operations": []
+    },
+    {
+      "key": "feedback.view",
       "step_up_tier": null,
       "operations": []
     },

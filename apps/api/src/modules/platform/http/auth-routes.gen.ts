@@ -1470,5 +1470,10 @@ export const CONTRACT_AUTH_ROUTES = [
     "method": "POST",
     "path": "/v1/agent/messages/:message_id/report",
     "auth": "optional"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/product-feedbacks",
+    "auth": "admin"
   }
 ] as const;

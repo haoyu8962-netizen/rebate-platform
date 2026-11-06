@@ -14,6 +14,7 @@ enums:
       fund.view: 单个用户流水、提现单、对账明细；资金看板
       audit.view_all: 全部审计日志只读
       export: 导出
+      feedback.view: 商品反馈查看（只读；列表只给运营核对价格、返利与商品信息，不含手机号与设备标识）
       content.page: 首页配置发布 / 回滚、草稿预览二维码
       content.pool: 商品池、淘礼金池
       content.article: 帮助中心、返利规则、公告、消息模板（资金类消息模板除外，归 content.fund_terms）
