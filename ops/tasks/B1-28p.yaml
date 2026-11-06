@@ -1,0 +1,29 @@
+id: B1-28p
+repo: rebate-platform
+title: 商品反馈实现（S-15，CT-26q submitProductFeedback）——新 feedback 模块：POST /v1/products/{product_key}/feedback（已同意隐私政策的游客与登录用户、设备签名、幂等、版本门禁；feedback.enabled 关 → 30145；link_id 不存在或不属本 app → 30144；每台设备每个 +08:00 自然日超 feedback.daily_limit_per_device → 42901 且不写；只收 BR-ID-30 细则「商品反馈记录」字段，未定义字段 20001）；新表 app.product_feedbacks 迁移；注销完成时经 identity 注销清理步骤删除该用户 user_id 名下记录（BR-ID-28，游客记录不删）；法务前不设自动删除；去 planned
+type: impl
+# 2026-11-06 入账（identity-lane，编排 D10-697：S-15 由 be 移给 identity；任务书 couli-runs/DETAIL-V3/server-tasks.md §S-15）。方案见 couli-runs/B1-28p/plan.md。模块独立 feedback（不放 catalog）；注销接入照 B1-28f 收藏先例（DeletionCleanupStep，app.module 装配 deletionCleanupPorts）；每日上限同事务按 (app, device) 加 advisory lock 后计数，保证超限不写；配置键 feedback.enabled / feedback.daily_limit_per_device 由 B1-28q 登记（be 的 S-09 (a) 不再登记这两键）。RV2（个人数据与删除）；features.flags.product_feedback 派生归 content 的 S-10（D10-698）；迁移号落地时取主干最大 +1（占迁移队列），去 planned 占契约队列。
+refs: []
+refs_hash: {}
+deps: [B1-28q]
+paths:
+  - 'apps/api/src/modules/feedback/**'
+  - 'apps/api/src/modules/identity/ports/deletion-cleanup.ts'
+  - 'apps/api/src/modules/identity/application/deletion-processing.ts'
+  - 'apps/api/src/modules/identity/application/deletion-processing.test.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/*.gen.ts'
+  - 'apps/api/src/modules/platform/**/*.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/feedback/product-feedback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/feedback/product-feedback/**'
+status: todo

@@ -1,0 +1,26 @@
+id: B1-28q
+repo: rebate-platform
+title: 测试修改（B1-28p 前置，照 B1-05s / B1-02zs 先例，编排 D10-697）：content config-registry 登记 feedback.enabled（布尔，默认 on，04 §10.2 / 变更记录 §8.2 第 6 项）与 feedback.daily_limit_per_device（整数、下限 1、默认 20，BR-ID-02 细则「商品反馈与进店」），config.business；种子与冻结注册表测试同步只加这两键
+type: test-change
+# 2026-11-06 入账（identity-lane，D10-697：S-09 (a) 尚未登记 feedback 两键，由本单登记，be 的 S-09 (a) 不再重复）。新鲜独立 Claude 改、另一位只读复审「不削弱」，报 #24。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'test/spec/content/invite-reward-config/seeds.test.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'db/seeds/0001_config-defaults.sql'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
