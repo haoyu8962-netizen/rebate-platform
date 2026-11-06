@@ -1,0 +1,307 @@
+# 状态目录（UI-STATES 甲，CT-09s；D10-643 ⑤）。三端与 H5 的通用状态逐行写在这里：首次加载、加载失败、超时、
+# 断网有无缓存、写请求结果未知、金额缺失、空态、维护、强更。依据：规划/08 BR-TEXT-14 表 C 七个 state.* 行与表 C 后
+# 「通用状态键」小节、BR-TEXT-10 细则「金额缺失」、规划/03 §4.2「超时、重试与弱网」；本文件与它们不一致时以规划为准
+# 并改本文件。
+#
+# 文案键只取 08 BR-TEXT-14 表 A～C（state.*、net.*、error.*、web_page.*、app_update.*，写请求结果未知的场景键
+# pending_confirm.*、buy.timeout、login.network_retry），取值以 contracts/texts.default.json 为准，本文件不写文案；
+# 三端草稿键（*.load_failed、*.network_error、*.loading、*.retry）不进本文件。「—」（金额缺失占位）是格式规则，不进字典。
+#
+# 结构（规则测试 test/spec/contracts/ui-states/ 钉住）：
+#   version      整数，每次改动递增
+#   sources      依据
+#   states       每行一个状态
+#     id           UIS-nn，一经发布不复用、不重排
+#     name         snake_case，唯一
+#     trigger      触发条件
+#     component    Skeleton / LoadingProgress / ErrorState / EmptyState / Toast / NoticeBar / ForceUpdate / WebPage / Inline
+#     kind         ErrorState 的 load_failed / network / maintenance / custom；其他组件为 null
+#     title_key    标题文案键或 null（Toast、NoticeBar 只有一句，写在 desc_key）
+#     desc_key     说明文案键或 null；error.<code>[.<reason>] 模式串只用于 load_failed_with_code、platform_maintenance
+#     actions      按钮 {key, emphasis}，emphasis 为 primary / secondary；没有按钮为 []
+#     announce     读屏 {mode, key}，mode 为 polite / assertive / none；key 为 null 而 mode 不是 none 时读该行的可见文案
+#     retry        {mode, idempotency}，mode 为 none / manual / auto_once_then_manual；idempotency 为 same_key / n/a
+#     timeout_ms   加载类行的时长上限（毫秒），其余为 null
+#     on_timeout   加载类行到时转入的行 name，其余为 null
+#     refs         所引编号
+version: 1
+sources:
+  - 规划/08 BR-TEXT-14 表 C 七个 state.* 行（state.loading、state.load_failed.title / .desc、state.timeout、state.retry、state.empty.default、state.value_missing.a11y）与 net.unavailable、net.stale_data、web_page.maintenance、app_update.* 行
+  - 规划/08 BR-TEXT-14 表 C 后「通用状态键」小节（各状态行与文案键的对应）
+  - 规划/08 BR-TEXT-14 表 A 10405、50301 与表 B 50301 子键
+  - 规划/08 BR-TEXT-10 细则「金额缺失」（金额位显示「—」、整块进错误态）
+  - 规划/03 §4.2「超时、重试与弱网」（请求 10 秒超时；读接口自动重试 1 次、退避 500 毫秒；写接口不自动重试；订单、钱包页失败时显示上次成功的数据）
+  - first_load.timeout_ms 21000 是代理默认：按 规划/03 §4.2 一次读请求最长 10000 + 退避 500 + 重试 10000 = 20500 毫秒，再留 500 毫秒余量，让网络层的超时结果先到（转 read_timeout），本上限只兜底拿不到任何结果的情形（转 load_failed）
+states:
+  - id: UIS-01
+    name: first_load
+    trigger: 首次加载，页面或模块还没有可显示的数据；显示骨架，骨架不显示文字，state.loading 作骨架区域的读屏名称；读请求失败由网络层自动重试 1 次；到了时长上限仍没有任何结果（拿不到统一外壳的响应、响应解码失败）转加载失败，不无限转圈
+    component: Skeleton
+    kind: null
+    title_key: null
+    desc_key: null
+    actions: []
+    announce:
+      mode: polite
+      key: state.loading
+    retry:
+      mode: auto_once_then_manual
+      idempotency: n/a
+    timeout_ms: 21000
+    on_timeout: load_failed
+    refs:
+      - BR-TEXT-14 表 C state.loading
+      - 规划/03 §4.2
+  - id: UIS-02
+    name: load_failed
+    trigger: 读请求失败且没有错误码（拿不到统一外壳的响应、响应解码失败、加载态到了时长上限仍没有结果）；整页或整块显示加载失败，不借用 error.50001
+    component: ErrorState
+    kind: load_failed
+    title_key: state.load_failed.title
+    desc_key: state.load_failed.desc
+    actions:
+      - key: state.retry
+        emphasis: primary
+    announce:
+      mode: polite
+      key: state.load_failed.title
+    retry:
+      mode: manual
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C state.load_failed.title / .desc
+      - BR-TEXT-14 表 C state.retry
+  - id: UIS-03
+    name: load_failed_with_code
+    trigger: 读请求返回了错误码，且该码的客户端动作是通用错误态；说明句取该码的 error.<code>，带 data.reason 的取表 B 子键 error.<code>.<reason>，未命中回落 error.<code>；5xxxx 附 trace_id 后 6 位（不足 6 位显示全部）
+    component: ErrorState
+    kind: load_failed
+    title_key: state.load_failed.title
+    desc_key: 'error.<code>[.<reason>]'
+    actions:
+      - key: state.retry
+        emphasis: primary
+    announce:
+      mode: polite
+      key: state.load_failed.title
+    retry:
+      mode: manual
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C state.load_failed.title / .desc
+      - BR-TEXT-14 表 A、表 B
+      - 规划/03 §4.2 ErrorActionMapper
+  - id: UIS-04
+    name: read_timeout
+    trigger: 读请求超时（网络层自动重试 1 次后仍超时）且设备没有断网，页面没有可显示的缓存；有缓存的页面改走 offline_with_cache
+    component: ErrorState
+    kind: load_failed
+    title_key: state.load_failed.title
+    desc_key: state.timeout
+    actions:
+      - key: state.retry
+        emphasis: primary
+    announce:
+      mode: polite
+      key: state.load_failed.title
+    retry:
+      mode: manual
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C state.timeout
+      - 规划/03 §4.2
+  - id: UIS-05
+    name: offline_no_cache
+    trigger: 设备断网，页面没有可显示的缓存数据；整页显示断网态
+    component: ErrorState
+    kind: network
+    title_key: net.unavailable
+    desc_key: net.unavailable.desc
+    actions:
+      - key: state.retry
+        emphasis: primary
+    announce:
+      mode: polite
+      key: net.unavailable
+    retry:
+      mode: manual
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C net.unavailable / net.unavailable.desc
+      - BR-TEXT-14 表 C state.retry
+  - id: UIS-06
+    name: offline_with_cache
+    trigger: 有缓存的页面（订单、钱包）请求失败（断网或读请求超时）；显示上次成功的数据，页面顶部以提示条附 net.stale_data，提示条上有重试入口
+    component: NoticeBar
+    kind: null
+    title_key: null
+    desc_key: net.stale_data
+    actions:
+      - key: state.retry
+        emphasis: secondary
+    announce:
+      mode: polite
+      key: net.stale_data
+    retry:
+      mode: manual
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C net.stale_data
+      - BR-TEXT-14 表 C state.retry
+      - 规划/03 §4.2
+  - id: UIS-07
+    name: write_unknown
+    trigger: 写请求发出后没有拿到带统一外壳的响应（超时或连接中断，结果未知），且没有场景键；App 内 H5 的桥调用返回 90003 同此；轻提示，已填内容保留，写接口不自动重试，用户再次提交时沿用同一幂等键。有场景键的用场景键、不走本行：提现等四个需要二次验证的操作进入待确认 pending_confirm.*，购买 buy.timeout，登录流程 login.network_retry
+    component: Toast
+    kind: null
+    title_key: null
+    desc_key: state.timeout
+    actions: []
+    announce:
+      mode: polite
+      key: state.timeout
+    retry:
+      mode: manual
+      idempotency: same_key
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C state.timeout
+      - BR-ID-10 细则「敏感操作的幂等键」
+      - 规划/03 §4.2
+      - 规划/03 §5.3（90003）
+  - id: UIS-08
+    name: value_missing
+    trigger: 金额位的金额字段（*_fen）为 null 或响应里没有该字段（0 不算缺失），同一块里还有其他金额；金额位显示「—」（U+2014），不带「¥」、正负号与「+」，不补 0、不推算；读屏在金额标签后读 state.value_missing.a11y，不读符号；商品价格、返利未知、预售付款金额、Agent 卡必需字段与文案模板变量照原条，不走本行
+    component: Inline
+    kind: null
+    title_key: null
+    desc_key: null
+    actions: []
+    announce:
+      mode: polite
+      key: state.value_missing.a11y
+    retry:
+      mode: none
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-10 细则「金额缺失」
+      - BR-TEXT-14 表 C state.value_missing.a11y
+  - id: UIS-09
+    name: value_missing_block
+    trigger: 同一块里的金额全部缺失，或缺的是这一块里操作的依据（如提现页的可提现余额与提现估算）；这一块显示加载失败，依赖它的操作置灰，不让用户在缺数时提交
+    component: ErrorState
+    kind: load_failed
+    title_key: state.load_failed.title
+    desc_key: state.load_failed.desc
+    actions:
+      - key: state.retry
+        emphasis: primary
+    announce:
+      mode: polite
+      key: state.load_failed.title
+    retry:
+      mode: manual
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-10 细则「金额缺失」
+      - BR-TEXT-14 表 C state.load_failed.title / .desc
+      - BR-WDR-04
+  - id: UIS-10
+    name: empty
+    trigger: 列表或模块请求成功但没有数据，又没有自己的场景空态键（有的照旧用场景空态键，如 favorites.empty、order_list.empty）；没有数据不是加载失败，不配重试，引导按钮按页面规格
+    component: EmptyState
+    kind: null
+    title_key: state.empty.default
+    desc_key: null
+    actions: []
+    announce:
+      mode: polite
+      key: state.empty.default
+    retry:
+      mode: none
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C state.empty.default
+  - id: UIS-11
+    name: page_maintenance
+    trigger: 页面级开关 h5.route.<page>.enabled 为 false；原生容器直接显示维护页，不加载 H5
+    component: WebPage
+    kind: null
+    title_key: web_page.maintenance
+    desc_key: null
+    actions:
+      - key: web_page.back
+        emphasis: primary
+    announce:
+      mode: polite
+      key: web_page.maintenance
+    retry:
+      mode: none
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 C web_page.maintenance / web_page.back
+      - 规划/03 §8.3
+  - id: UIS-12
+    name: platform_maintenance
+    trigger: 平台转链 / 联盟场景（带 data.platform）的接口返回 50301；按 data.reason 取表 B 子键 error.50301.<reason>（如 maintenance），未命中或没有 reason 时回落 error.50301；购买按钮置灰「稍后再试」并以轻提示显示文案；data.reason 为 not_launched 时按表 B 只在卡片按钮上显示、不弹轻提示。不适用于核验场景：实名页与后台实名更正得到的 50301 取场景子键 error.50301.realname_vendor，收款账号保存得到的 50301 取 error.50301.bank_vendor，二者键缺失时回落表 A「其他 5xxxx」行，都不用本行的平台维护句
+    component: Toast
+    kind: null
+    title_key: null
+    desc_key: 'error.50301[.<reason>]'
+    actions: []
+    announce:
+      mode: polite
+      key: null
+    retry:
+      mode: none
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 A 50301
+      - BR-TEXT-14 表 B 50301 子键（maintenance、not_launched；场景子键 realname_vendor、bank_vendor 不走本行）
+  - id: UIS-13
+    name: force_update
+    trigger: 接口返回 10405，或版本检查结果为本机版本低于最低支持版本；进入强更全屏拦截页，标题与说明优先用版本检查接口的 update_title、update_notes，没有时用 error.10405；唯一按钮是去更新，另有隐私政策与注销账号两个次要入口（冷静期内注销入口改为 app_update.cancel_deletion）；会话是受限作用域而本机版本并不低时不进入本页
+    component: ForceUpdate
+    kind: null
+    title_key: error.10405
+    desc_key: null
+    actions:
+      - key: app_update.go_store
+        emphasis: primary
+      - key: app_update.privacy_policy
+        emphasis: secondary
+      - key: app_update.delete_account
+        emphasis: secondary
+    announce:
+      mode: polite
+      key: error.10405
+    retry:
+      mode: none
+      idempotency: n/a
+    timeout_ms: null
+    on_timeout: null
+    refs:
+      - BR-TEXT-14 表 A 10405
+      - BR-TEXT-14 表 C app_update.go_store / app_update.privacy_policy / app_update.delete_account / app_update.cancel_deletion
+      - 规划/03 §4.1

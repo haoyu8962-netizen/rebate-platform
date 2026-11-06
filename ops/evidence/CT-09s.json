@@ -1,0 +1,141 @@
+{
+  "task": "CT-09s",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "spec_commit": "0a17a2a0fe943f928720fb71f200f5629105951a",
+  "red_tests": [
+    "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#1] 状态目录存在，version 为 1，sources 写明 08 BR-TEXT-14 / BR-TEXT-10 与规划/03 依据",
+    "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#1] 每行字段齐全，取值都在约定的枚举内",
+    "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#1] id 与 name 各自唯一，13 个必有状态都在",
+    "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#6] 首次加载有时长上限：timeout_ms 为正整数，到时转入 load_failed（08 表 C state.loading 行）",
+    "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#6] 除 first_load 外的必有状态不是加载类行：timeout_ms 与 on_timeout 为 null",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#2] 每行的文案键都在 texts.default.json 里，模式串只出现在 desc_key 且只在两行",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#2] 文案键只取 08 表 A～C 的通用与场景键，不出现三端草稿键",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] first_load：Skeleton 不显示文字，state.loading 作读屏名称，无按钮",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] load_failed：ErrorState(load_failed)，state.load_failed.title / .desc + 主按钮 state.retry",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] load_failed_with_code：标题同加载失败，说明取 error.<code>[.<reason>]，主按钮 state.retry",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] read_timeout：标题仍为 state.load_failed.title，说明句是 state.timeout，主按钮 state.retry",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] offline_no_cache：ErrorState(network)，net.unavailable / net.unavailable.desc + 主按钮 state.retry",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] offline_with_cache：显示旧数据并以 NoticeBar 附 net.stale_data，提示条上有重试入口 state.retry",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] write_unknown：Toast 轻提示 state.timeout，不自动重发、手动重试沿用同一幂等键，注明 90003 与三类场景键例外",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] value_missing：Inline 显示「—」（不进字典），读屏读 state.value_missing.a11y",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] value_missing_block：整块进 ErrorState(load_failed)，用加载失败一组与主按钮 state.retry",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] empty：EmptyState 标题 state.empty.default，没有数据不是加载失败，不配重试",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] page_maintenance：页面维护用 web_page.maintenance",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] platform_maintenance：平台转链 / 联盟场景的 50301 用 error.50301[.<reason>]，核验场景按表 B 场景键另行处理",
+    "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] force_update：ForceUpdate 强更页用 error.10405",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.loading 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.load_failed.title 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.load_failed.desc 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.timeout 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.retry 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.empty.default 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.value_missing.a11y 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] texts.default.json 收录的 state.* 键恰好是表 C 的七个",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.value_missing.a11y 归资金术语键（BR-TEXT-12 细则，按 ③），不归普通",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.loading 归普通（BR-TEXT-12 细则），不在资金术语键里",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.load_failed.title 归普通（BR-TEXT-12 细则），不在资金术语键里",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.load_failed.desc 归普通（BR-TEXT-12 细则），不在资金术语键里",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.timeout 归普通（BR-TEXT-12 细则），不在资金术语键里",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.retry 归普通（BR-TEXT-12 细则），不在资金术语键里",
+    "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.empty.default 归普通（BR-TEXT-12 细则），不在资金术语键里"
+  ],
+  "risk_note": "RV1 contract (UI-STATES part A, D10-643 ⑤, DSX-01 couli #279). New specs/ui-states.yaml: 13 state rows (first_load, load_failed, load_failed_with_code, read_timeout, offline_no_cache, offline_with_cache, write_unknown, value_missing, value_missing_block, empty, page_maintenance, platform_maintenance, force_update), each with id, trigger, component / kind, title / desc / action keys with emphasis, announce, retry, timeout and refs; text keys only from 08 BR-TEXT-14 tables A–C per the 「通用状态键」 bullet. contracts/texts.default.json gains the seven state.* keys, equal to table C; specs/fund-term-keys.yaml lists state.value_missing.a11y as a fund term and the other six as ordinary (BR-TEXT-12). Write result unknown (90003) follows 08 state.timeout (D10-643 plan said 「待确认」; orchestrator: 08 wins). first_load timeout 21000 ms is an agent default from 03 §4.2. Generated fund-term-keys.gen.ts regenerated. Part B (vectors for three clients and H5) is a separate task.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "0a17a2a0fe943f928720fb71f200f5629105951a",
+      "tree": "26eddbe7a9af0ee8736337a8b4100f38614e55a6",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T02:17:14Z",
+      "finished_at": "2026-11-06T02:17:21Z",
+      "red_tests": [
+        "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#1] 状态目录存在，version 为 1，sources 写明 08 BR-TEXT-14 / BR-TEXT-10 与规划/03 依据",
+        "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#1] 每行字段齐全，取值都在约定的枚举内",
+        "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#1] id 与 name 各自唯一，13 个必有状态都在",
+        "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#6] 首次加载有时长上限：timeout_ms 为正整数，到时转入 load_failed（08 表 C state.loading 行）",
+        "test/spec/contracts/ui-states/catalog.test.ts > [AC-CT-09s#6] 除 first_load 外的必有状态不是加载类行：timeout_ms 与 on_timeout 为 null",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#2] 每行的文案键都在 texts.default.json 里，模式串只出现在 desc_key 且只在两行",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#2] 文案键只取 08 表 A～C 的通用与场景键，不出现三端草稿键",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] first_load：Skeleton 不显示文字，state.loading 作读屏名称，无按钮",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] load_failed：ErrorState(load_failed)，state.load_failed.title / .desc + 主按钮 state.retry",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] load_failed_with_code：标题同加载失败，说明取 error.<code>[.<reason>]，主按钮 state.retry",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] read_timeout：标题仍为 state.load_failed.title，说明句是 state.timeout，主按钮 state.retry",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] offline_no_cache：ErrorState(network)，net.unavailable / net.unavailable.desc + 主按钮 state.retry",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] offline_with_cache：显示旧数据并以 NoticeBar 附 net.stale_data，提示条上有重试入口 state.retry",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] write_unknown：Toast 轻提示 state.timeout，不自动重发、手动重试沿用同一幂等键，注明 90003 与三类场景键例外",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] value_missing：Inline 显示「—」（不进字典），读屏读 state.value_missing.a11y",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] value_missing_block：整块进 ErrorState(load_failed)，用加载失败一组与主按钮 state.retry",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] empty：EmptyState 标题 state.empty.default，没有数据不是加载失败，不配重试",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] page_maintenance：页面维护用 web_page.maintenance",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] platform_maintenance：平台转链 / 联盟场景的 50301 用 error.50301[.<reason>]，核验场景按表 B 场景键另行处理",
+        "test/spec/contracts/ui-states/keys.test.ts > [AC-CT-09s#3] force_update：ForceUpdate 强更页用 error.10405",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.loading 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.load_failed.title 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.load_failed.desc 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.timeout 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.retry 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.empty.default 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] state.value_missing.a11y 的默认文案与 08 BR-TEXT-14 表 C 逐字相同",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#4] texts.default.json 收录的 state.* 键恰好是表 C 的七个",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.value_missing.a11y 归资金术语键（BR-TEXT-12 细则，按 ③），不归普通",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.loading 归普通（BR-TEXT-12 细则），不在资金术语键里",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.load_failed.title 归普通（BR-TEXT-12 细则），不在资金术语键里",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.load_failed.desc 归普通（BR-TEXT-12 细则），不在资金术语键里",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.timeout 归普通（BR-TEXT-12 细则），不在资金术语键里",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.retry 归普通（BR-TEXT-12 细则），不在资金术语键里",
+        "test/spec/contracts/ui-states/texts.test.ts > [AC-CT-09s#5] state.empty.default 归普通（BR-TEXT-12 细则），不在资金术语键里"
+      ],
+      "expected": [
+        "test/spec/contracts/ui-states/catalog.test.ts",
+        "test/spec/contracts/ui-states/keys.test.ts",
+        "test/spec/contracts/ui-states/texts.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "57a0563906bfd60d621ec4affd022b92b8013eb446da8b2bac633b3ccb6e11bd"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex via tools/agent/codex-run.sh. Round 1 fail on one S1: the platform_maintenance row took every 50301, while 08 table B sends the verification 50301s to the scene keys realname_vendor / bank_vendor with their own fallback; the row was limited to platform conversion with the two exceptions written out. Round 2 incremental pass. Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests (test/spec/contracts/ui-states/) by fresh independent Claude contexts in 2 counted attempts against a catalog shape fixed by the orchestrator (couli-runs/CT-09s/shape.md). Round 1 fail on five S1 and one S2 (tests too loose: first_load timeout target, write_unknown auto retry, 90003 mention, bare error.50301, BR-TEXT-10 refs, stale-bar retry); attempt 2 tightened them, round 2 incremental pass with all six closed. 35 tests red at the base for the right reason."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "046cf0d572153f4b00c36cd332472bd386f9d203",
+    "specs": "8c2c4a714633a2aabc37b96e2894c1d7aa3fc609"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

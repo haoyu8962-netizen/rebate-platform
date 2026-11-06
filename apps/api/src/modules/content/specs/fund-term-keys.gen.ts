@@ -116,6 +116,7 @@ export const FUND_TERM_KEYS = {
       "risk_notice.withdrawal_label",
       "share.est_promo",
       "share_hub.rule_note",
+      "state.value_missing.a11y",
       "tag.rebate"
     ],
     "notify_templates": [
@@ -797,6 +798,12 @@ export const FUND_TERM_KEYS = {
       "shop.score.lgst",
       "shop.score.serv",
       "spec_min_price_note",
+      "state.empty.default",
+      "state.load_failed.desc",
+      "state.load_failed.title",
+      "state.loading",
+      "state.retry",
+      "state.timeout",
       "step_up.no_available_method",
       "step_up.oauth.action",
       "step_up.oauth.desc",

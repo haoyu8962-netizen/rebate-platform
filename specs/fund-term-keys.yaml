@@ -50,6 +50,9 @@
 # favorites.no_rebate.notice、jd.plus_note 归 fund_terms；coupon.、product.gallery.、platform.tag.、shop.、price_trend. 新键、
 # feedback.、favorites.no_rebate.clear 归 ordinary，逐键列出、不加前缀（免得吞掉以后的资金术语键）。coupon.tag 的 {amount}
 # 是券额，进 exempt 是编排者的技术处理（08 未写）。
+# CT-09s：08 BR-TEXT-12 细则（2026-11-06 DSX-01）写明：BR-TEXT-14 表 C 通用状态键 state.value_missing.a11y 单列归 fund_terms
+# （按 ③，出现在余额与返利金额的位置）；state.loading、state.load_failed.title / .desc、state.timeout、state.retry、
+# state.empty.default 逐键归 ordinary（不用 state. 整前缀，因两段不能同时以前缀与单列命中同一组）。
 fund_terms:
   prefixes:
     - order_status.
@@ -166,6 +169,7 @@ fund_terms:
     - risk_notice.withdrawal_label
     - share.est_promo
     - share_hub.rule_note
+    - state.value_missing.a11y
     - tag.rebate
   notify_templates:
     - ORDER_TRACKED
@@ -856,6 +860,12 @@ ordinary:
     - shop.score.lgst
     - shop.score.serv
     - spec_min_price_note
+    - state.empty.default
+    - state.load_failed.desc
+    - state.load_failed.title
+    - state.loading
+    - state.retry
+    - state.timeout
     - step_up.no_available_method
     - step_up.oauth.action
     - step_up.oauth.desc
