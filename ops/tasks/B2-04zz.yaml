@@ -1,0 +1,19 @@
+id: B2-04zz
+repo: rebate-platform
+title: 维权重开审计的系统身份改为 system:settlement（FU-AUDIT-ACTOR-SETTLEMENT 实现半，D10-717 ②）——settlement rights-command 的 RIGHTS_AUDIT_ACTOR 由暂记的 system:risk 改为 CT-26z 新增的 system:settlement
+type: impl
+# 2026-11-07 入账（funds，D10-769 队列第一件）。deps CT-26z（枚举先进契约）、B2-04zx（审计只经端口）。规则测试钉「API 源 FAILED 后联盟报成功」的审计行 actor = system:settlement，其余审计字段不变。RV2，独立 Claude 写测试、Codex money。
+refs: [BR-FUND-06]
+refs_hash:
+  BR-FUND-06: 9f92492d273a
+deps: [CT-26z, B2-04zx]
+paths:
+  - 'apps/api/src/modules/settlement/rights/rights-command.ts'
+test_paths:
+  - 'test/spec/settlement/rights-audit-actor/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/rights-audit-actor/**'
+status: todo
