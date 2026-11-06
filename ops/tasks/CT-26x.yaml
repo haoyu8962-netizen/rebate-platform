@@ -1,0 +1,29 @@
+id: CT-26x
+repo: rebate-platform
+title: 契约：商品反馈后台只读列表 adminListProductFeedbacks（planned；按平台、反馈原因、提交时间区间筛选，page / page_size；不给手机号与设备标识）+ 新增只读权限点 feedback.view（无 step-up、不审计）
+type: contract
+# 2026-11-07 入账（admin-backend，编排 D10-757、D10-664 ⑨；S-16）。字段取 B1-28p 的 app.product_feedbacks 已存列，口径照 08 BR-ID-02 细则「商品反馈与进店」、BR-ID-30 细则「商品反馈记录」；注销删除照 B1-28p（删号后不再出现）。分页照后台列表惯例 AdminPage / AdminPageSize（全仓后台无游标分页）。权限清单加一项，冻结 test/spec/admin/permissions/expected.ts 随之加一行（先例 CT-24zi）。合并后形状发 notices，04 / 01 由编排回写。无迁移。
+refs: []
+refs_hash: {}
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'specs/permissions.yaml'
+  - 'apps/api/src/modules/admin/domain/permissions.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/admin/permissions/expected.ts'
+  - 'test/spec/contracts/admin-product-feedbacks/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo

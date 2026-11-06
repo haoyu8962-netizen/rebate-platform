@@ -1,0 +1,23 @@
+id: B1-28s
+repo: rebate-platform
+title: 商品反馈后台只读列表实现（S-16，CT-26x adminListProductFeedbacks）——feedback 模块只读查询 + 后台 controller，feedback.view，去 planned
+type: impl
+# 2026-11-07 入账（admin-backend，编排 D10-757）。只读：不写库、不审计、无 step-up；按 app_id 隔离；注销删除后的记录自然不出现（B1-28p 已删行）。后台页面另由 fe 接（F1-09u 之后）。
+refs: []
+refs_hash: {}
+deps: [CT-26x]
+paths:
+  - 'apps/api/src/modules/feedback/**'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/*.gen.ts'
+  - 'apps/api/src/modules/platform/**/*.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/feedback/admin-product-feedbacks/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/feedback/admin-product-feedbacks/**'
+status: todo
