@@ -193,7 +193,9 @@ const SHOP_NAME_INVISIBLE = /[\p{Cc}\p{Cf}]/gu;
  * B1-04zzg (FU-DETAIL-SHOP-NAME): the one rule every adapter uses for its official shop-name field.
  * B1-04zzj (D10-692 S2-7): a string has every Unicode Cc / Cf character removed, is then trimmed of
  * leading / trailing whitespace, and is cut to its first SHOP_NAME_MAX_CODE_POINTS code points
- * (a surrogate pair is one code point and is never split); non-empty → `{ shop_name }`; empty,
+ * (a surrogate pair is one code point and is never split); B1-04zzk (D10-725 ①): whitespace left
+ * at the end by the cut (String#trimEnd, so U+3000 and other Unicode spaces too) is removed;
+ * non-empty → `{ shop_name }`; empty,
  * blank, non-string or missing → `{}` (the key stays absent). Callers pass only the platform's
  * official field — never a nick, seller nick, title or shop id as a fallback.
  */
@@ -204,9 +206,9 @@ export function shopNameField(value: unknown): { readonly shop_name?: string } {
   const points = [...cleaned];
   const name =
     points.length > SHOP_NAME_MAX_CODE_POINTS
-      ? points.slice(0, SHOP_NAME_MAX_CODE_POINTS).join('')
+      ? points.slice(0, SHOP_NAME_MAX_CODE_POINTS).join('').trimEnd()
       : cleaned;
-  return { shop_name: name };
+  return name === '' ? {} : { shop_name: name };
 }
 
 export interface UnionItemDetail extends UnionItem {

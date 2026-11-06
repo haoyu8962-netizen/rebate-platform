@@ -1,0 +1,110 @@
+{
+  "task": "B1-04zzk",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "b3efd4d4f6bd57423d421bc257849aee8fd4fb56",
+  "red_tests": [
+    "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#4] 3 个白名单外地址在前、其后 9 个白名单内地址 → image_urls 恰为这 9 个（顺序不变）",
+    "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#5] 白名单外、重复与不合格项夹杂：结果是过滤 + 去重后的前 9 个",
+    "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#6] 前 9 个合法地址都在白名单外、第 10 个起才有白名单内地址 → 白名单内的照样进 image_urls",
+    "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#7] 属性：白名单外地址排在前面、白名单内去重后不少于 9 个，夹杂重复与不合格项 → image_urls 恰为参照口径的 9 个",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ ASCII 空格 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 全角空格 U+3000 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 不换行空格 U+00A0 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ EM SPACE U+2003 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 窄不换行空格 U+202F + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 中等数学空格 U+205F + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 行分隔符 U+2028 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#9] 第 64 个码点及其前面连续多个空白（混合种类）一并去掉",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#10] 先去 Cc / Cf 再计 64 个：零宽字符被去掉后落在第 64 位的全角空格同样去掉；代理对不被切开",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#11] 经适配器：大淘客搜索的 shopName 截断后同样去尾空白",
+    "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#12] 属性：截断点落在空白串里时，shop_name = 前 64 个码点去尾空白，不以空白结尾、不超过 64 个码点",
+    "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#1] 换令牌请求带 AbortSignal；即时应答时 signal 未中止、结果与原口径相同",
+    "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#2] 应答在 timeoutMs − 1 时到达：signal 未中止，交换照常成功",
+    "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#3] 传输挂起不应答、中止时以 AbortError（报文里带 secret、code 与原文） 拒绝 → 早 1 ms 仍未结束；到 unionPolicy(offline).timeoutMs 时 signal 中止、交换被拒，错误不含 code、令牌、secret",
+    "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#3] 传输挂起不应答、中止时以 TimeoutError（报文里带 secret 与 code） 拒绝 → 早 1 ms 仍未结束；到 unionPolicy(offline).timeoutMs 时 signal 中止、交换被拒，错误不含 code、令牌、secret",
+    "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#3] 传输挂起不应答、中止时以 原样抛出 signal.reason 拒绝 → 早 1 ms 仍未结束；到 unionPolicy(offline).timeoutMs 时 signal 中止、交换被拒，错误不含 code、令牌、secret"
+  ],
+  "risk_note": "RV2 (credential path: Taobao site OAuth token exchange now aborts after unionPolicy('offline').timeoutMs with a fixed error, still unarchived; Dataoke smallImages filtered by the image host whitelist before the 9-image cap; shopNameField trims trailing blanks after the 64-code-point cut). Independent Claude (approvals #36) wrote test/spec/union/followups-20261106/** (1 attempt, 20 tests in 3 files; hidden characters it wrote literally were mechanically turned into \\u escapes, runtime-equivalent). Implementation model: Claude Opus 5.5 (1 round). Locally tsc -b test apps/api 0 and the related rule / regression / unit suites pass; full verification is the required CI checks.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b3efd4d4f6bd57423d421bc257849aee8fd4fb56",
+      "tree": "fc01d522d2eaed2bcfc9274579a465b1b2850116",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T17:03:24Z",
+      "finished_at": "2026-11-06T17:03:33Z",
+      "red_tests": [
+        "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#4] 3 个白名单外地址在前、其后 9 个白名单内地址 → image_urls 恰为这 9 个（顺序不变）",
+        "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#5] 白名单外、重复与不合格项夹杂：结果是过滤 + 去重后的前 9 个",
+        "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#6] 前 9 个合法地址都在白名单外、第 10 个起才有白名单内地址 → 白名单内的照样进 image_urls",
+        "test/spec/union/followups-20261106/dataoke-image-cap.test.ts > [AC-B1-04zzk#7] 属性：白名单外地址排在前面、白名单内去重后不少于 9 个，夹杂重复与不合格项 → image_urls 恰为参照口径的 9 个",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ ASCII 空格 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 全角空格 U+3000 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 不换行空格 U+00A0 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ EM SPACE U+2003 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 窄不换行空格 U+202F + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 中等数学空格 U+205F + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#8] 63 个「合」+ 行分隔符 U+2028 + 「店」：截到 64 个码点后去尾空白 → shop_name 为 63 个「合」",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#9] 第 64 个码点及其前面连续多个空白（混合种类）一并去掉",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#10] 先去 Cc / Cf 再计 64 个：零宽字符被去掉后落在第 64 位的全角空格同样去掉；代理对不被切开",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#11] 经适配器：大淘客搜索的 shopName 截断后同样去尾空白",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts > [AC-B1-04zzk#12] 属性：截断点落在空白串里时，shop_name = 前 64 个码点去尾空白，不以空白结尾、不超过 64 个码点",
+        "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#1] 换令牌请求带 AbortSignal；即时应答时 signal 未中止、结果与原口径相同",
+        "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#2] 应答在 timeoutMs − 1 时到达：signal 未中止，交换照常成功",
+        "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#3] 传输挂起不应答、中止时以 AbortError（报文里带 secret、code 与原文） 拒绝 → 早 1 ms 仍未结束；到 unionPolicy(offline).timeoutMs 时 signal 中止、交换被拒，错误不含 code、令牌、secret",
+        "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#3] 传输挂起不应答、中止时以 TimeoutError（报文里带 secret 与 code） 拒绝 → 早 1 ms 仍未结束；到 unionPolicy(offline).timeoutMs 时 signal 中止、交换被拒，错误不含 code、令牌、secret",
+        "test/spec/union/followups-20261106/site-oauth-timeout.test.ts > [AC-B1-04zzk#3] 传输挂起不应答、中止时以 原样抛出 signal.reason 拒绝 → 早 1 ms 仍未结束；到 unionPolicy(offline).timeoutMs 时 signal 中止、交换被拒，错误不含 code、令牌、secret"
+      ],
+      "expected": [
+        "test/spec/union/followups-20261106/dataoke-image-cap.test.ts",
+        "test/spec/union/followups-20261106/shop-name-trailing-blank.test.ts",
+        "test/spec/union/followups-20261106/site-oauth-timeout.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "37f46647f281a32e78550488eca0ebf528ab3a0bb8af23880c80a24440a2507e"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "money r1 pass, no findings (couli-runs/B1-04zzk/review-m1.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "r1 pass with two S2 (property callbacks return void instead of true; result unaffected)"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2f1f61ff0ebf3cd3ffc39be99c2d5a4d68e23008",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

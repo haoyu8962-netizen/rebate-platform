@@ -18,9 +18,14 @@
 //   Anything else (non-2xx, not JSON, `error` present, access_token missing, transport error) →
 //   rejects with an Error whose text and properties carry no code, token, secret or answer text
 //   (the `error` code may appear) and no `cause`.
+//   The token request carries an AbortSignal that aborts after unionPolicy('offline').timeoutMs
+//   (B1-04zzk, FU-TB-OAUTH-TIMEOUT; a bare setTimeout, so fake timers drive it); at that point the
+//   exchange rejects the same way even when the transport ignores the signal. The timer is cleared
+//   once the transport settles.
 // - Credentials come only from the injected provider (B1-04k openTaobaoCredentials: staging file,
 //   prod KMS); this module reads no environment variable or file, logs nothing, and reads time only
 //   from the injected Clock. The sandbox host oauth.tbsandbox.com is never used.
+import { unionPolicy } from '../../../platform/index.ts';
 import type { Clock, TaobaoAppCredentials } from '../../../platform/index.ts';
 import type { SiteOAuthProvider } from '../../auth-expiry/reauth.ts';
 import type { UnionTransport, UnionTransportResponse } from '../replay.ts';
@@ -57,6 +62,31 @@ function later(instant: Date, ms: number): Date {
   const result = structuredClone(instant);
   result.setTime(instant.getTime() + ms);
   return result;
+}
+
+/**
+ * `send(signal)` with `signal` aborted after `timeoutMs`; rejects at that point even when `send`
+ * ignores the signal. The timer is cleared as soon as `send` settles.
+ */
+async function withTimeout<T>(
+  timeoutMs: number,
+  send: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new TaobaoSiteOAuthError('token request timed out'));
+    }, timeoutMs);
+  });
+  // A late rejection of `expired` after `send` won the race is not left unhandled.
+  expired.catch(() => undefined);
+  try {
+    return await Promise.race([send(controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,17 +141,21 @@ export function createTaobaoSiteOAuth(options: TaobaoSiteOAuthOptions): SiteOAut
       try {
         // No `archive` context: the request carries the secret and the code, the answer tokens
         // (B1-04zzi review S2: never written to union_raw_payloads).
-        response = await transport({
-          platform: 'taobao',
-          url: TAOBAO_OAUTH_TOKEN_URL,
-          method: 'POST',
-          headers: {
-            'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
-            accept: 'application/json',
-          },
-          body: form.toString(),
-        });
-      } catch {
+        response = await withTimeout(unionPolicy('offline').timeoutMs, (signal) =>
+          transport({
+            platform: 'taobao',
+            url: TAOBAO_OAUTH_TOKEN_URL,
+            method: 'POST',
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+              accept: 'application/json',
+            },
+            body: form.toString(),
+            signal,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof TaobaoSiteOAuthError) throw error;
         // The transport's error may quote the request: only a fixed text, no cause.
         throw new TaobaoSiteOAuthError('token request failed');
       }

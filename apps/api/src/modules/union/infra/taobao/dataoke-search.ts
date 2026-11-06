@@ -48,12 +48,15 @@
 //   不在白名单的只当无图：main_image_url 缺省、image_urls 去掉该项（全去掉则缺省），不跳行、不打
 //   invalid_item。被去掉的图按主机名聚合，每页一条 dataoke_image_host_dropped 告警（每个主机名一次），
 //   只带主机名与计数，不带完整地址、商品 ID。地址本身原样保留，不改写。
+//   多图先滤后截（B1-04zzk，D10-725 ①）：smallImages 逐项过 normalizeItemImages 的单项校验，保留每个
+//   地址的首次出现，再查白名单，白名单内的才占 9 张（MAX_ITEM_IMAGES）的名额，保持上游顺序；白名单外
+//   与重复项都不占名额。计数扫完整个列表：每个被白名单去掉的合格地址（去重后）都计一次，截断不影响计数。
 // 告警：经适配器 warn，形如 { method: '/api/goods/get-dtk-search-goods', code: DataokeSearchWarningCode }，
 //   只带路径与固定码，不带商品 ID、标题、金额、链接等原值。
 import { parseYuanToFen } from '@couli/domain';
 import { addFen, pctStrToBp } from '@couli/money';
 import type { Clock } from '../../../platform/index.ts';
-import { normalizeItemImages, type ItemImages } from '../../domain/item-images.ts';
+import { MAX_ITEM_IMAGES, normalizeItemImages, type ItemImages } from '../../domain/item-images.ts';
 import { isPriceAnomaly, type PriceAnomalyReason } from '../../domain/taobao-price.ts';
 import { shopNameField, UnionError, type UnionItemDetail } from '../../domain/types.ts';
 import type { DataokeParameters } from '../dataoke/dataoke-client.ts';
@@ -196,19 +199,38 @@ export function dataokeImageHost(url: string): {
   return { allowed, host };
 }
 
-/** The cleaned images with every address outside DATAOKE_IMAGE_HOSTS left out and tallied. */
-function whitelistedImages(images: ItemImages, dropped: DataokeDroppedImageHosts): ItemImages {
+/**
+ * The images of one row, cleaned as normalizeItemImages does, with every address outside
+ * DATAOKE_IMAGE_HOSTS left out and tallied (B1-04zzk, D10-725 ①: filter first, then cap). Each
+ * smallImages entry goes through the single-entry check of normalizeItemImages, then the first
+ * occurrence of each address is kept and checked against the whitelist; only whitelisted ones take
+ * one of the MAX_ITEM_IMAGES places. The whole list is scanned so that every distinct valid
+ * address left out for its host is tallied, also those past the cap.
+ */
+function whitelistedImages(
+  mainPic: unknown,
+  smallImages: unknown,
+  dropped: DataokeDroppedImageHosts,
+): ItemImages {
   const keep = (url: string): boolean => {
     const { allowed, host } = dataokeImageHost(url);
     if (!allowed) dropped.set(host, (dropped.get(host) ?? 0) + 1);
     return allowed;
   };
   const out: { main_image_url?: string; image_urls?: readonly string[] } = {};
-  if (images.main_image_url !== undefined && keep(images.main_image_url)) {
-    out.main_image_url = images.main_image_url;
+  const main = normalizeItemImages({ main_image_url: mainPic }).main_image_url;
+  if (main !== undefined && keep(main)) out.main_image_url = main;
+  if (Array.isArray(smallImages)) {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const entry of smallImages as readonly unknown[]) {
+      const url = normalizeItemImages({ image_urls: [entry] }).image_urls?.[0];
+      if (url === undefined || seen.has(url)) continue;
+      seen.add(url);
+      if (keep(url) && list.length < MAX_ITEM_IMAGES) list.push(url);
+    }
+    if (list.length > 0) out.image_urls = Object.freeze(list);
   }
-  const list = (images.image_urls ?? []).filter(keep);
-  if (list.length > 0) out.image_urls = Object.freeze(list);
   return Object.freeze(out);
 }
 
@@ -443,11 +465,8 @@ export function mapDataokeSearchItem(
       'taobao',
     );
   }
-  // 先过 normalizeItemImages，再查主机白名单（header ⑥；顺序不能反）。
-  const images = whitelistedImages(
-    normalizeItemImages({ main_image_url: row.mainPic, image_urls: row.smallImages }),
-    droppedHosts,
-  );
+  // 先过 normalizeItemImages 的单项校验，再查主机白名单，最后才截到 9 张（header ⑥；顺序不能反）。
+  const images = whitelistedImages(row.mainPic, row.smallImages, droppedHosts);
   const price = searchPrice(row);
   if (price.status === 'anomaly') warnOf(warn, 'PRICE_ANOMALY');
   return Object.freeze({

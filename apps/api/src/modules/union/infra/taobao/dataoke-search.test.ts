@@ -93,3 +93,32 @@ it('[B1-04zzj unit] dropped images are tallied per host across the page and repo
   ]);
   expect(JSON.stringify(warn.mock.calls)).not.toContain('syn-');
 });
+
+it('[B1-04zzk unit] smallImages are filtered (validity, whitelist, duplicates) before the cut to 9; every dropped address is tallied', () => {
+  const dropped: DataokeDroppedImageHosts = new Map();
+  const allowed = Array.from(
+    { length: 10 },
+    (_, i) => `https://img.alicdn.com/syn-small-${String(i + 1)}.jpg`,
+  );
+  const foreign = (i: number) => `https://img.example.test/syn-foreign-${String(i)}.jpg`;
+  const item = mapDataokeSearchItem(
+    candidate(3, 'https://img.alicdn.com/syn-main-3.jpg', [
+      foreign(1),
+      foreign(2),
+      'http://img.alicdn.com/syn-plain-http.jpg',
+      allowed[0]!,
+      foreign(1),
+      allowed[0]!,
+      ...allowed.slice(1),
+      foreign(3),
+    ]),
+    'syn-item-3',
+    RECEIVED_AT,
+    undefined,
+    dropped,
+  );
+  expect(item.image_urls).toEqual(allowed.slice(0, 9));
+  expect(item.main_image_url).toBe('https://img.alicdn.com/syn-main-3.jpg');
+  // Distinct foreign addresses, including the one past the cap.
+  expect([...dropped]).toEqual([['img.example.test', 3]]);
+});

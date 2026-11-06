@@ -8,6 +8,7 @@ type: impl
 # ③ union/domain/types.ts shopNameField：按 64 码点截断后再去尾部空白（含 U+3000 等 Unicode 空白），截断后为空则不带 shop_name。来源：B1-04zzj 实现留问。
 # test/spec/union/taobao-orders/slots.test.ts 头注释旧行为另走只改注释的前置 PR（D10-725 允许随单机械改；为免红检整文件判定拆出）。
 # 风险：凭据路径（站长授权）→ RV2；新鲜独立 Claude 写规则测试，资金评审。
+# 完成 2026-11-07（#2521）：超时 10 s（unionPolicy offline）用 AbortController + setTimeout（假定时器可驱动）；图床丢弃计数扫完整列表（含截断后）。
 refs: []
 refs_hash: {}
 deps: [B1-04zzi, B1-04zzj]
@@ -25,4 +26,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/followups-20261106/**'
-status: todo
+status: done
+pr: 2521

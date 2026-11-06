@@ -1,7 +1,7 @@
 // B1-04zzi: unit checks of the Taobao site OAuth provider beyond the rule tests — the token request
 // is never archived (rule-test review S2) and a refusal never quotes upstream text.
-import { expect, it } from 'vitest';
-import { FixedClock } from '../../../platform/index.ts';
+import { afterEach, expect, it, vi } from 'vitest';
+import { FixedClock, unionPolicy } from '../../../platform/index.ts';
 import type { UnionTransportRequest, UnionTransportResponse } from '../replay.ts';
 import { createTaobaoSiteOAuth, TaobaoSiteOAuthError } from './site-oauth.ts';
 
@@ -83,4 +83,33 @@ it('[B1-04zzi] expires_in 超出 Date 范围按无到期处理', async () => {
     refreshToken: null,
     expiresAt: null,
   });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+it('[B1-04zzk] 传输忽略 signal 一直挂起：到 offline 超时 signal 中止、交换被拒；即时应答时计时器被清掉', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+  const timeoutMs = unionPolicy('offline').timeoutMs;
+  const hanging = setup(() => new Promise<UnionTransportResponse>(() => undefined));
+  const outcome = hanging.oauth.exchange(input).catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(timeoutMs - 1);
+  expect(hanging.requests[0]!.signal?.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(hanging.requests[0]!.signal?.aborted).toBe(true);
+  const error = await outcome;
+  expect(error).toBeInstanceOf(TaobaoSiteOAuthError);
+  expect((error as Error).message).not.toContain(SECRET);
+  expect((error as Error).message).not.toContain(CODE);
+  expect(error).not.toHaveProperty('cause');
+
+  const quick = setup(() => ({
+    status: 200,
+    headers: {},
+    body: JSON.stringify({ access_token: 'unit-access' }),
+  }));
+  await expect(quick.oauth.exchange(input)).resolves.toMatchObject({ accessToken: 'unit-access' });
+  expect(vi.getTimerCount()).toBe(0);
+  expect(quick.requests[0]!.signal?.aborted).toBe(false);
 });

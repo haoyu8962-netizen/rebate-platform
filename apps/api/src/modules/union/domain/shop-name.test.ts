@@ -17,3 +17,9 @@ it('[B1-04zzj unit] cut to 64 code points without splitting a surrogate pair', (
   const exact = '\u{1F600}'.repeat(SHOP_NAME_MAX_CODE_POINTS);
   expect(shopNameField(exact)).toEqual({ shop_name: exact });
 });
+
+it('[B1-04zzk unit] whitespace left at the end by the 64-code-point cut is removed (U+3000 too)', () => {
+  const head = 'x'.repeat(SHOP_NAME_MAX_CODE_POINTS - 2);
+  expect(shopNameField(`${head} 　tail`)).toEqual({ shop_name: head });
+  expect(shopNameField(`${head} y tail`)).toEqual({ shop_name: `${head} y` });
+});
