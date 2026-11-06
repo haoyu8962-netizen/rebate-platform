@@ -3,12 +3,21 @@ repo: rebate-platform
 title: 关联账户风控标记：坏账核销给同实名、同设备、同收款账号的账户打标（只留痕、不改提现结果）
 type: impl
 # 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。D10-590 ⑤：开工时再定形状，先最小实现；要影响提现另回写 BR-WDR-29。
+# 2026-11-07 identity 接手（编排 D10-727 ③，B2-12f #2546 已合并）定最小形状（方案 couli-runs/B2-12g/plan.md）：risk_hits / risk_judgements 的 CHECK 与 rule_id 外键都收不下、event_log 事件名要登记契约，
+#   故新迁移建只增表 app.risk_linked_marks（app、被标记用户、被核销用户、候选单、维度 id_no / device / payout_account；唯一 (app, 候选单, 用户, 维度)；couli_app 只 SELECT / INSERT）。
+#   risk 唯一写者 bad-debt-linked.ts，经 risk/index.ts 端口在 ledger approve 写 BAD_DEBT_WRITEOFF 的同一事务调用；CANCELLED 不打标。同设备取会话关联过的全部设备（D10-571），同实名取 verified 的 id_no_hmac，
+#   同收款账号取 payout_accounts 当前绑定 HMAC。只留痕：不改提现判定、不发通知、无后台接口；有效期、申诉、展示另记 FU。要影响提现须先回写 BR-WDR-29。RV2。
 refs: [BR-FUND-12]
 refs_hash:
   BR-FUND-12: d1b1d1e718f6
 deps: [B2-12f]
 paths:
   - 'apps/api/src/modules/risk/application/bad-debt-linked*.ts'
+  - 'apps/api/src/modules/ledger/application/bad-debt-writeoff.ts'
+  - 'apps/api/src/modules/ledger/application/bad-debt-writeoff.test.ts'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
   - 'apps/api/src/modules/risk/index.ts'
   - 'apps/api/src/app.module.ts'
 test_paths:
