@@ -2418,6 +2418,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/{product_key}/shop/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enter the product's shop — convert the shop link at tap time
+         * @description 【进店】 on the product detail (BR-PRICE-21 细则「进店」, 04 §6.3). Identity requirements are
+         *     those of a purchase tap: not logged in → 10001; platform not authorized → 30101 / 30102 /
+         *     30111 with the same data as open (BR-ID-02, BR-ID-17, BR-ID-22); convert.enabled.<platform>
+         *     off → 50301 as on open. The server takes this shop's promotion link from
+         *     shop.entry.source.<platform> with the identity injected as in BR-ATTR-05 (self_buy slot and
+         *     the current user's attribution parameters) and returns `jump` (same shape as open, 04 §8.4).
+         *     There is no scene (exception to BR-ATTR-08), no link is registered and no quote snapshot is
+         *     written. shop.entry.enabled.<platform> off, or no shop entry source configured for the
+         *     platform → 30146 with data.reason=shop_entry_disabled. A conversion that does not produce
+         *     a promotion link carrying the user's attribution fails like a purchase conversion (50303
+         *     and the other purchase-link codes, not 30146); the server never answers with a shop address
+         *     without promotion parameters. A request stopped by 30101, 30102 or 30111 and sent again
+         *     after the user authorized is a new request with a new Idempotency-Key (BR-ID-10 细则).
+         *     Version gate: applied.
+         */
+        post: operations["openProductShop"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rank/hot": {
         parameters: {
             query?: never;
@@ -13884,6 +13917,22 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["ProductFeedbackResult"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /** @description Body of the shop entry (04 §6.3); no scene (BR-ATTR-08 exception). */
+        ShopOpenRequest: {
+            platform: components["schemas"]["PlatformCode"];
+            item_ref?: components["schemas"]["ItemRef"];
+            /** @description Default unknown; H5 always sends unknown (BR-ATTR-27 ①). */
+            installed?: components["schemas"]["InstalledState"];
+        };
+        ShopOpenResult: {
+            jump: components["schemas"]["JumpPlan"];
+        };
+        ShopOpenResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["ShopOpenResult"];
             trace_id: components["schemas"]["TraceId"];
         };
         OpenLinkRequest: {
@@ -26398,6 +26447,91 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["ProductFeedbackResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            "4XX": components["responses"]["ClientError"];
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    openProductShop: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description App (brand) the request belongs to; before login it must match the app_id the device was registered with (10403, BR-ID-07). */
+                "X-App-Id": components["parameters"]["AppId"];
+                /** @description Client platform (enum client_platform, 03 §4.2). */
+                "X-Platform": components["parameters"]["Platform"];
+                /** @description SemVer, the same number on all three apps (拍板第二批 TECH-07). */
+                "X-App-Version": components["parameters"]["AppVersion"];
+                /** @description Build number of the client. */
+                "X-Build"?: components["parameters"]["Build"];
+                /** @description Install channel of the app package (enum install_channel); absent for H5. */
+                "X-Channel"?: components["parameters"]["Channel"];
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /** @description device_id issued by POST /v1/devices; anything else is 10402 (BR-ID-09). */
+                "X-Device-Id": components["parameters"]["DeviceId"];
+                /** @description Unix seconds; |server time − ts| ≤ 300 s (BR-ID-09). */
+                "X-Timestamp": components["parameters"]["Timestamp"];
+                /** @description 32 lowercase hex characters; (device_id, nonce) unique within 600 s (BR-ID-09). */
+                "X-Nonce": components["parameters"]["Nonce"];
+                /**
+                 * @description lowercase_hex(HMAC-SHA256(install_secret, METHOD + "\n" + path with raw query + "\n" + ts
+                 *     + "\n" + nonce + "\n" + lowercase_hex(sha256(raw body)))) (BR-ID-09).
+                 */
+                "X-Sign": components["parameters"]["Sign"];
+                /**
+                 * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
+                 *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
+                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
+                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque product key, URL-encoded by the client (BR-PROD-02). */
+                product_key: components["parameters"]["ProductKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "platform": "taobao",
+                 *       "installed": "true"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ShopOpenRequest"];
+            };
+        };
+        responses: {
+            /** @description Jump plan into the shop. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "jump": {
+                     *           "primary": {
+                     *             "type": "universal_link",
+                     *             "value": "https://shop.example.test/s/1001?promo=placeholder"
+                     *           },
+                     *           "fallbacks": [],
+                     *           "expire_at": "2026-11-06T10:45:00+08:00"
+                     *         }
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ShopOpenResponse"];
                 };
             };
             429: components["responses"]["TooManyRequests"];

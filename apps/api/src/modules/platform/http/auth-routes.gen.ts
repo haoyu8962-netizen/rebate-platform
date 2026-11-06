@@ -412,6 +412,11 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "optional"
   },
   {
+    "method": "POST",
+    "path": "/v1/products/:product_key/shop/open",
+    "auth": "login"
+  },
+  {
     "method": "GET",
     "path": "/v1/rank/hot",
     "auth": "optional"

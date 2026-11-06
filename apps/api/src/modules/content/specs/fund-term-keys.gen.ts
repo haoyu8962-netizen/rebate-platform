@@ -406,6 +406,7 @@ export const FUND_TERM_KEYS = {
       "error.30143",
       "error.30144",
       "error.30145",
+      "error.30146",
       "error.30151.auth_manage",
       "error.30401",
       "error.30402",

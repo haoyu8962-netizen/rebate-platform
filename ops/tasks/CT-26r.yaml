@@ -1,0 +1,27 @@
+id: CT-26r
+repo: rebate-platform
+title: 契约：进店 POST /v1/products/{product_key}/shop/open（login、返回 jump 同 open、不带 scene；开关关或来源未配置时 30146 shop_entry_disabled，转链失败按购买链路的码，不返回无推广参数的地址）（S-03，D10-685）
+type: contract
+# 2026-11-06 w1 入账（D10-685 改派 S-03，方案 couli-runs/B3-lane/s03-contract-plan-20261106.md）。形状照 04 §6.3、§8.4；新码 30146 已登记 08 §13.11 与 BR-TEXT-14 表 A（couli #280，D10-686），本单同步。只增不改。实现另立（S-17，开关默认关）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/h5/src/shared/api/signed.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: done
+pr: 2425

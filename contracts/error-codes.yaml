@@ -453,6 +453,16 @@ codes:
     retry: 否
     retry_kind: never
     sources: [BR-ID-02, 01 F-PROD-15, BR-TEXT-14]
+  - code: 30146
+    http: 422
+    meaning: 该店铺暂不支持进店（POST /v1/products/{product_key}/shop/open：本平台进店来源未配置或开关关闭，data.reason=shop_entry_disabled）；转链失败不用本码，按购买链路的失败处理（上游不可用 50303 等，不外跳、不改跳无推广参数的店铺页）
+    action: 只提示，不外跳
+    retry: 否
+    retry_kind: never
+    data:
+      platform: ~
+      reason: [shop_entry_disabled]
+    sources: [BR-PRICE-21, BR-TEXT-14]
   - code: 30151
     http: 422
     meaning: 该淘宝账号已绑定本 App 其他用户

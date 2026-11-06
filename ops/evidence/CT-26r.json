@@ -1,0 +1,37 @@
+{
+  "task": "CT-26r",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "spec_commit": "cd72526ae646655ba29c19651099df18db4b7b00",
+  "red_tests": [],
+  "risk_note": "RV1 (contract). Adds POST /v1/products/{product_key}/shop/open (login, signed, idempotent, version-gated, planned): body platform / item_ref / installed, no scene, response jump (JumpPlan). Error 30146 shop_entry_disabled registered in 08 §13.11 / BR-TEXT-14 (couli #280, D10-686); conversion failures keep the purchase-link codes. Additions only; generated files regenerated.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 3,
+      "note": "round 1 fail with one S1 (content/specs/fund-term-keys.gen.ts not regenerated), fixed; round 2 pass; round 3 (apps/h5 signed list adds the operation, caught by CI AC-F1-01q-SIGNED#1) pass with no findings; static only"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "250083d18c249fb370ea4ee26a26ed9e26a7d7a7",
+    "specs": "849039e5fe85d7f29c16d740825b69d57e22fa77"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

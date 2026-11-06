@@ -6495,6 +6495,93 @@ paths:
           $ref: '#/components/responses/ClientError'
         5XX:
           $ref: '#/components/responses/ServerError'
+  /v1/products/{product_key}/shop/open:
+    post:
+      operationId: openProductShop
+      tags:
+        - trade
+      summary: Enter the product's shop — convert the shop link at tap time
+      description: |
+        【进店】 on the product detail (BR-PRICE-21 细则「进店」, 04 §6.3). Identity requirements are
+        those of a purchase tap: not logged in → 10001; platform not authorized → 30101 / 30102 /
+        30111 with the same data as open (BR-ID-02, BR-ID-17, BR-ID-22); convert.enabled.<platform>
+        off → 50301 as on open. The server takes this shop's promotion link from
+        shop.entry.source.<platform> with the identity injected as in BR-ATTR-05 (self_buy slot and
+        the current user's attribution parameters) and returns `jump` (same shape as open, 04 §8.4).
+        There is no scene (exception to BR-ATTR-08), no link is registered and no quote snapshot is
+        written. shop.entry.enabled.<platform> off, or no shop entry source configured for the
+        platform → 30146 with data.reason=shop_entry_disabled. A conversion that does not produce
+        a promotion link carrying the user's attribution fails like a purchase conversion (50303
+        and the other purchase-link codes, not 30146); the server never answers with a shop address
+        without promotion parameters. A request stopped by 30101, 30102 or 30111 and sent again
+        after the user authorized is a new request with a new Idempotency-Key (BR-ID-10 细则).
+        Version gate: applied.
+      x-auth: login
+      x-signed: true
+      x-idempotent: true
+      x-min-version-gate: true
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 30101
+        - 30102
+        - 30111
+        - 50301
+        - 30146
+        - 50303
+        - 20001
+        - 10405
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+        - $ref: '#/components/parameters/Platform'
+        - $ref: '#/components/parameters/AppVersion'
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/Channel'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Nonce'
+        - $ref: '#/components/parameters/Sign'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProductKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopOpenRequest'
+            example:
+              platform: taobao
+              installed: 'true'
+      responses:
+        '200':
+          description: Jump plan into the shop.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopOpenResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  jump:
+                    primary:
+                      type: universal_link
+                      value: https://shop.example.test/s/1001?promo=placeholder
+                    fallbacks: []
+                    expire_at: '2026-11-06T10:45:00+08:00'
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          $ref: '#/components/responses/ClientError'
+        5XX:
+          $ref: '#/components/responses/ServerError'
   /v1/rank/hot:
     get:
       operationId: getHotRank
@@ -40453,6 +40540,45 @@ components:
           type: string
         data:
           $ref: '#/components/schemas/ProductFeedbackResult'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    ShopOpenRequest:
+      type: object
+      description: Body of the shop entry (04 §6.3); no scene (BR-ATTR-08 exception).
+      additionalProperties: false
+      required:
+        - platform
+      properties:
+        platform:
+          $ref: '#/components/schemas/PlatformCode'
+        item_ref:
+          $ref: '#/components/schemas/ItemRef'
+        installed:
+          $ref: '#/components/schemas/InstalledState'
+          description: Default unknown; H5 always sends unknown (BR-ATTR-27 ①).
+    ShopOpenResult:
+      type: object
+      additionalProperties: false
+      required:
+        - jump
+      properties:
+        jump:
+          $ref: '#/components/schemas/JumpPlan'
+    ShopOpenResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/ShopOpenResult'
         trace_id:
           $ref: '#/components/schemas/TraceId'
     OpenLinkRequest:

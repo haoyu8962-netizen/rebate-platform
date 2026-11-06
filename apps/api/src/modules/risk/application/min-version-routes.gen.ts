@@ -845,6 +845,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "openProductShop",
+    "method": "POST",
+    "path": "/v1/products/:product_key/shop/open",
+    "gate": true,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "getHotRank",
     "method": "GET",
     "path": "/v1/rank/hot",
