@@ -63,3 +63,9 @@ GET /admin/v1/unknown-payouts response property `data/items/items/first_transfer
 # /admin/v1/** responses widen, shipped together with the console (D10-557, D10-619 precedent).
 GET /admin/v1/audit-logs added the new `system:ledger` enum value to the `data/items/items/system_actor` response property for the response status `200`
 GET /admin/v1/audit-logs/{id} added the new `system:ledger` enum value to the `data/system_actor` response property for the response status `200`
+# D10-664 S-05 (CT-22e): ProductPriceTrend.source_key gains the Pinduoduo text keys price_trend.source.pdd /
+# price_trend.source.pdd.general (08 BR-TEXT-14 table C 「价格走势·拼多多」). They are text keys, sent only for
+# Pinduoduo products; the three apps and H5 have not shipped the price trend yet and read the contract through
+# contract.lock, so they take the new values when they move the lock.
+GET /v1/products/{product_key}/price-trend added the new `price_trend.source.pdd` enum value to the `data/source_key` response property for the response status `200`
+GET /v1/products/{product_key}/price-trend added the new `price_trend.source.pdd.general` enum value to the `data/source_key` response property for the response status `200`

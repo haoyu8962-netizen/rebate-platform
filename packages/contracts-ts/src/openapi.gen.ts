@@ -13790,10 +13790,21 @@ export interface components {
              */
             window_days: 30;
             /**
-             * @description Text key of the source line (price_trend.source.general for a product without coupon).
+             * @description Text key of the source line: price_trend.source (with coupon), price_trend.source.general
+             *     (without coupon), and for Pinduoduo price_trend.source.pdd / price_trend.source.pdd.general
+             *     (BR-TEXT-14 table C 「价格走势·拼多多」; D10-664 S-05).
              * @enum {string}
              */
-            source_key: "price_trend.source" | "price_trend.source.general";
+            source_key: "price_trend.source" | "price_trend.source.general" | "price_trend.source.pdd" | "price_trend.source.pdd.general";
+            /**
+             * Format: int64
+             * @description The most common price of the last 30 days in fen (04 §6.3; D10-664 S-05): set when
+             *     status=ok, null when status=no_data. The value rule is only in 08 BR-WATCH-19 细则
+             *     「商品详情价格走势的最常见价」; the client shows it as given and never computes it.
+             *     Optional (contracts/README rule 8): a client treats a missing field like null and then
+             *     shows neither the 「当前」 and 「近 30 天最常见价」 blocks nor the note line.
+             */
+            mode_price_fen?: number | null;
         };
         ProductPriceTrendResponse: {
             code: components["schemas"]["SuccessCode"];

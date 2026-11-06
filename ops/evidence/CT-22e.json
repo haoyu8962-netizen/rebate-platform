@@ -1,0 +1,44 @@
+{
+  "risk_note": "RV1 contract (D10-664 S-05, split out of CT-22-trend so v3 does not wait for DSX-37). ProductPriceTrend gains the optional mode_price_fen ([integer, null] int64; set when status=ok, null when no_data; the value rule only in 08 BR-WATCH-19 细则 「商品详情价格走势的最常见价」; contracts/README rule 8: optional), and source_key gains price_trend.source.pdd / price_trend.source.pdd.general (BR-TEXT-14 table C). Examples carry mode_price_fen. The trend text keys belong to content's S-01; no dictionary change here. Additive only. The two new source_key values are oasdiff response-property-enum-value-added; they are registered in contracts/oasdiff-accepted.txt as in the D10-562 / D10-619 entries (text keys, sent only for Pinduoduo products; the apps and H5 have not shipped the price trend and take new values when they move contract.lock), the ledger paths gaining that file in #2468 (orchestrator 11-06 10:2x).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex via tools/agent/codex-run.sh. Round 1 pass with one out_of_scope S1: the ok example's mode_price_fen 2990 broke BR-WATCH-19 (three prices one day each, a tie goes to the most recent day: 2890); fixed, round 2 incremental pass with nothing open. Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "none",
+    "rounds": 0,
+    "last_verdict": "n/a",
+    "note": "contract task, ledger tester: none"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "legacy_no_red": true,
+  "task": "CT-22e",
+  "spec_commit": "1d2804828bd97efc7ecaff25f49f5606c66bca59",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4d0a2d0e38406dfefd6ca38da5c8579c4f908f19",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}
