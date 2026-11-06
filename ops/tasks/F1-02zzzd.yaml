@@ -1,0 +1,19 @@
+id: F1-02zzzd
+repo: rebate-platform
+title: 过渡测试改动（F1-02zzze / S-10 前置）：冻结 /v1/config features.flags 精确比较接受「无 product_feedback / jd_plus_note」或「有且恰为派生值 true」二选一，其余字段精确比较不变
+type: test-change
+# 2026-11-06 入账（content-client；先例 F1-02zzt / F1-02zzu）。S-10 加两个派生键后，test/spec/content/config/delivery.int.test.ts [AC-F1-02c#1]、[#7]（两处）、[#20] 与 test/spec/content/config-clipboard/delivery.int.test.ts [AC-F1-02j#5]–[#8]（DERIVED_DEFAULTS 恰为两个派生键）必红；config-etag、config-nickname 等已普查不受影响。
+# 做法：每文件加一个辅助，新键存在时断言恰为 true（这些用例都不写 feedback.enabled / detail.jd_plus_note.enabled），再从精确比较中剔除；不存在时与原断言逐字相同。F1-02zzze 合并后另开收紧为单态。
+# 改既有规则测试属第一类保护路径：走非 task 分支；全新上下文 Claude 修改、另一全新上下文 Claude 只读复审，按 approvals #24 由编排加 owner-approved 标签。
+refs: []
+refs_hash: {}
+deps: [F1-02c, F1-02j]
+paths:
+  - 'test/spec/content/config/delivery.int.test.ts'
+  - 'test/spec/content/config-clipboard/delivery.int.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

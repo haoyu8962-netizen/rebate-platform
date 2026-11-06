@@ -1,0 +1,21 @@
+id: F1-02zzze
+repo: rebate-platform
+title: /v1/config 派生 features.flags 两键（D10-691 / D10-664 S-10）：product_feedback 由 feedback.enabled 派生、jd_plus_note 由 detail.jd_plus_note.enabled 派生（false → false，其余含缺失 → true，派生值覆盖基础字典同名键），两源键进可选读取集合
+type: impl
+# 2026-11-06 入账（content-client；任务书 couli-runs/DETAIL-V3/server-tasks.md §S-10）。依据 SPEC_REF b144fc0：04 §10.1 features.flags 行（l.1004）、§10.2（l.1050–1051）；08 BR-CALC-17；01 F-PROD-15 ①。契约 CT-26q（#2424）已写两键。
+# 依赖改为 B1-28q（feedback.* 配置键登记）+ CT-26q（编排 08:17）；冻结 [AC-F1-02c#1 / #7 / #20] 与 [AC-F1-02j#5–#8] 钉了派生键恰为两个，由前置两态 test-change F1-02zzzd 处理，本任务不改它们。
+# 不在客户端写死默认 on；不改契约。approvals 第 34 / 36 条：Opus 实现，独立 Claude 写规则测试与评审。
+refs: []
+refs_hash: {}
+deps: [F1-02zzzd, B1-28q, CT-26q]
+paths:
+  - 'apps/api/src/modules/content/domain/client-config.ts'
+  - 'apps/api/src/modules/content/domain/client-config.test.ts'
+test_paths:
+  - 'test/spec/content/config-derived-flags/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
