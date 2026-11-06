@@ -1,0 +1,20 @@
+id: B2-09w
+repo: rebate-platform
+title: 未知结果列表一行异常不挂整页的实现（FU-W10-LIST-ROW-500，BR-WDR-15，D10-702 ①）——没有 transfer 尝试的 needs_manual 单照常出行（first_transfer_at=null、排最后、fail_blockers 以 resolve_too_early 开头）并打一条告警，不再 throw
+type: impl
+# 2026-11-06 pay 入账（D10-702 ①）。契约 CT-24zt（#2459）。规则测试钉「一行异常不影响整页」：其他行照常、顺序、该行字段、告警点名单号；判定接口对这种单仍 20902。
+# RV2。规则测试 Codex，新鲜 Claude 评，Codex money。不动冻结测试，实跑若要动按 D10-327 先报。
+refs: [BR-WDR-15]
+refs_hash:
+  BR-WDR-15: 862cdb2e711a
+deps: [CT-24zt]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-unknown-payouts.ts'
+test_paths:
+  - 'test/spec/payout/unknown-list-row/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/unknown-list-row/**'
+status: todo

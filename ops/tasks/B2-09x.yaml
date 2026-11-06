@@ -1,0 +1,22 @@
+id: B2-09x
+repo: rebate-platform
+title: W10 判成功的凭证交叉核对实现（FU-W10-VOUCHER-CROSSCHECK，BR-WDR-15、BR-TEXT-14，D10-703）——人填的流水号与成功查询、成功账单行核对，冲突即拒并写审计；金额与 net_fen 不符即拒；到账时间差超 5 分钟只告警
+type: impl
+# 2026-11-06 pay 入账（D10-703）。契约 CT-24zu。四条按序：别的单的成功账单行（out_biz_no 非空且不是本单）→ resolve_order_id_other_order；本单成功查询或成功账单行的流水号不同 → resolve_order_id_mismatch；本单成功账单行金额 ≠ net_fen → resolve_amount_mismatch；到账时间只告警。
+# 拒绝时业务数据一律不写，另写一条拒绝审计（操作人、提现单、冲突类别），所以要在回滚之外落审计；audit-log-view 的 RULES 随之补这个动作。RV2，规则测试 Codex，新鲜 Claude 评，Codex money。
+refs: [BR-WDR-15, BR-TEXT-14]
+refs_hash:
+  BR-WDR-15: 862cdb2e711a
+  BR-TEXT-14: 4dcc98991751
+deps: [CT-24zu, B2-09w]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-unknown-payouts.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+test_paths:
+  - 'test/spec/payout/w10-voucher-crosscheck/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/w10-voucher-crosscheck/**'
+status: todo

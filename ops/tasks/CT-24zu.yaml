@@ -1,0 +1,27 @@
+id: CT-24zu
+repo: rebate-platform
+title: 契约：W10 判成功的凭证交叉核对（FU-W10-VOUCHER-CROSSCHECK，BR-WDR-15、BR-TEXT-14，D10-703）——adminResolveUnknownPayout 新增三个 20001 拒绝原因 resolve_order_id_other_order、resolve_order_id_mismatch、resolve_amount_mismatch；到账时间不作拒绝条件
+type: contract
+# 2026-11-06 pay 入账（D10-703，方案 couli-runs/B3-lane/w10-voucher-crosscheck-plan-20261106.md）。08 BR-WDR-15 细则与 BR-TEXT-14 表 B 已回写（SPEC_REF 18f0015）。
+# 冲突即拒、什么业务数据都不写，并写一条拒绝审计；out_biz_no 为空的账单行（线下转账）不算别的单；到账时间相差超 5 分钟只告警加审计备注。没有任何证据时照旧。
+# 新 reason 注册 error-codes.yaml 与 catalog.test.ts；后台同发，判定接口的 data.reason 是自由文本时不登 oasdiff，若有枚举按 D10-557 登。实现另开 B2-09x。
+refs: [BR-WDR-15, BR-TEXT-14]
+refs_hash:
+  BR-WDR-15: 862cdb2e711a
+  BR-TEXT-14: 4dcc98991751
+deps: [CT-24zt]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
