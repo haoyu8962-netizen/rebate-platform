@@ -4957,6 +4957,34 @@ CREATE TABLE app.processed_events (
 
 
 --
+-- Name: product_feedbacks; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.product_feedbacks (
+    id uuid NOT NULL,
+    app_id text NOT NULL,
+    device_id uuid NOT NULL,
+    user_id uuid,
+    platform text NOT NULL,
+    product_key text NOT NULL,
+    item_ref text,
+    link_id uuid NOT NULL,
+    shown_final_price_fen bigint NOT NULL,
+    shown_rebate_fen bigint,
+    quoted_at timestamp with time zone NOT NULL,
+    reason text NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_feedbacks_item_ref_check CHECK (((item_ref IS NULL) OR ((char_length(item_ref) >= 1) AND (char_length(item_ref) <= 1024)))),
+    CONSTRAINT product_feedbacks_note_check CHECK (((note IS NULL) OR (char_length(note) <= 100))),
+    CONSTRAINT product_feedbacks_product_key_check CHECK (((char_length(product_key) >= 3) AND (char_length(product_key) <= 128))),
+    CONSTRAINT product_feedbacks_reason_check CHECK ((reason = ANY (ARRAY['price'::text, 'rebate'::text, 'info'::text, 'other'::text]))),
+    CONSTRAINT product_feedbacks_shown_final_price_fen_check CHECK ((shown_final_price_fen >= 0)),
+    CONSTRAINT product_feedbacks_shown_rebate_fen_check CHECK (((shown_rebate_fen IS NULL) OR (shown_rebate_fen >= 0)))
+);
+
+
+--
 -- Name: product_key_aliases; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -7786,6 +7814,14 @@ ALTER TABLE ONLY app.processed_events
 
 
 --
+-- Name: product_feedbacks product_feedbacks_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.product_feedbacks
+    ADD CONSTRAINT product_feedbacks_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: product_key_aliases product_key_aliases_new_key_key; Type: CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -9463,6 +9499,20 @@ CREATE INDEX price_snapshot_latest_idx ON ONLY app.price_snapshot USING btree (a
 --
 
 CREATE INDEX price_snapshot_default_app_id_product_key_source_kind_first_idx ON app.price_snapshot_default USING btree (app_id, product_key, source_kind, first_observed_at DESC);
+
+
+--
+-- Name: product_feedbacks_app_id_device_id_created_at_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX product_feedbacks_app_id_device_id_created_at_idx ON app.product_feedbacks USING btree (app_id, device_id, created_at);
+
+
+--
+-- Name: product_feedbacks_app_id_user_id_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX product_feedbacks_app_id_user_id_idx ON app.product_feedbacks USING btree (app_id, user_id) WHERE (user_id IS NOT NULL);
 
 
 --
@@ -15716,6 +15766,14 @@ GRANT UPDATE(observation_count) ON TABLE app.price_snapshot TO couli_app;
 GRANT SELECT,INSERT ON TABLE app.processed_events TO couli_app;
 GRANT SELECT,INSERT ON TABLE app.processed_events TO couli_payout;
 GRANT SELECT ON TABLE app.processed_events TO couli_readonly;
+
+
+--
+-- Name: TABLE product_feedbacks; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE app.product_feedbacks TO couli_app;
+GRANT SELECT ON TABLE app.product_feedbacks TO couli_readonly;
 
 
 --

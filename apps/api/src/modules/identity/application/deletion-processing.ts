@@ -98,6 +98,7 @@ const PORT_ORDER: readonly DeletionCleanupPortName[] = [
   'notification',
   'agent',
   'catalog',
+  'feedback',
 ];
 
 interface Due {
@@ -344,6 +345,8 @@ export function createDeletionProcessing(options: DeletionProcessingOptions): De
       const blocked: DeletionCleanupPortName[] = [];
       for (const name of PORT_ORDER) {
         const port = cleanup[name];
+        // Only the optional feedback port can be absent (a port set without it): nothing to run.
+        if (port === undefined) continue;
         if (isStep(port)) await port(trx, { appId, userId, at: now });
         else blocked.push(name);
       }

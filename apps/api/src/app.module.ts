@@ -329,7 +329,14 @@ import {
   type LinkSharePorts,
   needsTaobaoReauth,
   blockForDeletion,
+  createLandingLinks,
 } from './modules/linking/index.ts';
+import {
+  FeedbackModule,
+  deleteFeedbackForUser,
+  type FeedbackAccountReader,
+  type FeedbackLinkReader,
+} from './modules/feedback/index.ts';
 import {
   NotificationAdminModule,
   NotificationModule,
@@ -752,7 +759,7 @@ const deletionProgressNotice = {
  * B1-15g: the owning modules' shares of the deletion cleanup (identity's DeletionCleanupPorts, on
  * identity's cleanup transaction). growth's detachChildrenOfDeleted (B1-15n), notification's
  * deletePushTokensForUser (F1-02zzk), linking's blockForDeletion (B1-06zc) and catalog's
- * deleteFavoritesForUser (B1-28f) are shipped; the others are unavailable markers: the rest of the
+ * deleteFavoritesForUser (B1-28f) and feedback's deleteFeedbackForUser (B1-28p) are shipped; the others are unavailable markers: the rest of the
  * cleanup still commits, but the request stays in processing (cleaned_at NULL) with a daily
  * identity_deletion_cleanup_blocked line until the owner ships and is assembled here. agent's
  * slot follows the configuration (agentDeletionCleanup).
@@ -772,7 +779,35 @@ const deletionCleanupPorts = {
     agent: agentDeletionCleanup(config, logger, database),
     // B1-28f: every favorite of the user in the app (BR-ID-28).
     catalog: deleteFavoritesForUser,
+    // B1-28p: the user's product feedback records in the app; guest records stay (BR-ID-28).
+    feedback: deleteFeedbackForUser,
   }),
+};
+
+/**
+ * B1-28p: feedback's link check through linking's read of app.links (the landing's lookup by app
+ * and link_id), on the handle feedback passes (its idempotency transaction).
+ */
+const feedbackLinks: FeedbackLinkReader = {
+  async linkInApp(handle, appId, linkId) {
+    return (await createLandingLinks(handle).find(appId, linkId)) !== null;
+  },
+};
+
+/**
+ * B1-28p (money r1 S1, BR-ID-28): feedback's read of the submitting account's deletion status
+ * through identity's read port (users.status), on feedback's transaction after it has locked the
+ * users row; undefined when the user is not in the app. The reader runs every query on the
+ * executor it is given (its `db` option is never queried).
+ */
+const feedbackAccounts: FeedbackAccountReader = {
+  async deletionStatus(trx, appId, userId) {
+    const statuses = await createUserDeletionStatusReader({ db: trx }).read(trx, {
+      app_id: appId,
+      user_ids: [userId],
+    });
+    return statuses.get(userId);
+  },
 };
 
 /**
@@ -4872,6 +4907,18 @@ export class AppModule {
         // settlement's order ids.
         ...(options.entry === 'api'
           ? [WalletLedgerModule.forApi({ dependencies: walletLedgerDependencies })]
+          : []),
+        // feedback's POST /v1/products/{product_key}/feedback (B1-28p): on the api entry, beside
+        // identity and risk, over content's shared configuration reader (feedback.enabled,
+        // feedback.daily_limit_per_device) and linking's read of app.links.
+        ...(options.entry === 'api'
+          ? [
+              FeedbackModule.forApi({
+                config: (db, clock) => contentReader(db, clock),
+                links: feedbackLinks,
+                accounts: feedbackAccounts,
+              }),
+            ]
           : []),
         // payment's /v1/pay/orders routes (B2-15b): on the api entry, over content's shared
         // configuration reader (pay.enabled, pay.channel_enabled.*, pay.biz.*.platforms,

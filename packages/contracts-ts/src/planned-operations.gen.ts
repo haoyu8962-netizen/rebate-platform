@@ -22,5 +22,4 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "openProductShop",
   "reportAgentMessage",
   "setAgentMessageFeedback",
-  "submitProductFeedback",
 ]);

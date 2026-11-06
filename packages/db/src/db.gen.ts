@@ -1617,6 +1617,23 @@ export interface ProcessedEvents {
   event_id: string;
 }
 
+export interface ProductFeedbacks {
+  app_id: string;
+  created_at: Generated<Timestamp>;
+  device_id: string;
+  id: string;
+  item_ref: string | null;
+  link_id: string;
+  note: string | null;
+  platform: string;
+  product_key: string;
+  quoted_at: Timestamp;
+  reason: string;
+  shown_final_price_fen: ColumnType<bigint, bigint, bigint>;
+  shown_rebate_fen: ColumnType<bigint, bigint, bigint> | null;
+  user_id: string | null;
+}
+
 export interface ProductKeyAliases {
   adr_id: string;
   created_at: Generated<Timestamp>;
@@ -2386,6 +2403,7 @@ export interface DB {
   pool_items: PoolItems;
   price_snapshot: PriceSnapshot;
   processed_events: ProcessedEvents;
+  product_feedbacks: ProductFeedbacks;
   product_key_aliases: ProductKeyAliases;
   product_pools: ProductPools;
   product_refs: ProductRefs;

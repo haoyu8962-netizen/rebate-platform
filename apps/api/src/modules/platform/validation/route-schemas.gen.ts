@@ -7527,6 +7527,186 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       "additionalProperties": false
     }
   },
+  "submitProductFeedback": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-app-id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "x-platform": {
+          "type": "string",
+          "description": "Client platform (contracts/enums/platform.yaml client_platform).",
+          "enum": [
+            "ios",
+            "android",
+            "harmony",
+            "h5",
+            "admin"
+          ]
+        },
+        "x-app-version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "maxLength": 32
+        },
+        "x-build": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "x-channel": {
+          "type": "string",
+          "description": "Install channel (contracts/enums/platform.yaml install_channel).",
+          "enum": [
+            "appstore",
+            "official",
+            "huawei",
+            "agc"
+          ]
+        },
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-device-id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "x-timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{10}$"
+        },
+        "x-nonce": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "x-sign": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "x-app-id",
+        "x-platform",
+        "x-app-version",
+        "x-device-id",
+        "x-timestamp",
+        "x-nonce",
+        "x-sign",
+        "idempotency-key"
+      ]
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "product_key": {
+          "type": "string",
+          "description": "`<key_prefix>:<stable_id>`, at most 128 characters, opaque to clients (BR-PROD-02).\n",
+          "minLength": 3,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "product_key"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "description": "Body of product feedback (04 §6.3). Only the fields BR-ID-30 细则「商品反馈记录」 lists;\nno contact fields, and any other field is 20001. The shown_* fields and quoted_at are\nwhat the page displayed at the time; the server keeps them as given next to the quote\nsnapshot of link_id.\n",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "link_id",
+        "shown_final_price_fen",
+        "shown_rebate_fen",
+        "quoted_at",
+        "reason"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "Platform (contracts/enums/platform.yaml platform).",
+          "enum": [
+            "taobao",
+            "jd",
+            "pdd",
+            "meituan",
+            "vip",
+            "douyin",
+            "eleme",
+            "kuaishou",
+            "suning"
+          ]
+        },
+        "item_ref": {
+          "type": "string",
+          "description": "Server-signed opaque product reference; passed through unchanged (BR-PROD-11).",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "link_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "shown_final_price_fen": {
+          "minimum": 0,
+          "type": "integer",
+          "format": "int64",
+          "description": "Amount in fen (ADR-0001 §4.2 item 3)."
+        },
+        "shown_rebate_fen": {
+          "minimum": 0,
+          "description": "Rebate amount shown on the page; null when the page showed none.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "quoted_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Quote time shown with the price."
+        },
+        "reason": {
+          "type": "string",
+          "description": "price / rebate / info / other (BR-TEXT-14 feedback.reason.*).",
+          "enum": [
+            "price",
+            "rebate",
+            "info",
+            "other"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 100,
+          "description": "Optional note, at most 100 characters (BR-TEXT-14 表 C feedback.note.*)."
+        }
+      }
+    }
+  },
   "getHotRank": {
     "headers": {
       "type": "object",

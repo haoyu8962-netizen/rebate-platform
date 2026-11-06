@@ -3,7 +3,7 @@
 // modules and handed in by app.module's assembly: identity never imports another module's
 // application code for the cleanup.
 //
-// Cleanup ports (linking / growth / notification / agent / catalog): called inside identity's
+// Cleanup ports (linking / growth / notification / agent / catalog / feedback): called inside identity's
 // cleanup transaction (users row already locked), on the caller's transaction, re-entrant, with
 // { appId, userId, at } (at = the step's Clock reading). A port whose owner has not shipped yet is
 // assembled as a DeletionCleanupUnavailable marker: the rest of the cleanup still commits, but
@@ -40,10 +40,20 @@ export interface DeletionCleanupUnavailable {
 
 export type DeletionCleanupPort = DeletionCleanupStep | DeletionCleanupUnavailable;
 
-export type DeletionCleanupPortName = 'linking' | 'growth' | 'notification' | 'agent' | 'catalog';
+export type DeletionCleanupPortName =
+  'linking' | 'growth' | 'notification' | 'agent' | 'catalog' | 'feedback';
+
+/**
+ * feedback (B1-28p: app.product_feedbacks rows of the user, BR-ID-28 删除清单「商品反馈记录」) is
+ * optional in the type only: app.module always assembles it (its wiring test checks that), while
+ * port sets built before it existed keep compiling; an absent port runs nothing.
+ */
+type OptionalCleanupPortName = 'feedback';
 
 export type DeletionCleanupPorts = {
-  readonly [name in DeletionCleanupPortName]: DeletionCleanupPort;
+  readonly [name in Exclude<DeletionCleanupPortName, OptionalCleanupPortName>]: DeletionCleanupPort;
+} & {
+  readonly [name in OptionalCleanupPortName]?: DeletionCleanupPort;
 };
 
 export type ClosingAdjustmentState = 'none_needed' | 'pending' | 'done';

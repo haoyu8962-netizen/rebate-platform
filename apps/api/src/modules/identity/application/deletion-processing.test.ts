@@ -171,6 +171,54 @@ it('[AC-B1-15g] an unavailable port: the cleanup commits without cleaned_at, one
   expect(h.warns('identity_deletion_cleanup_blocked')).toHaveLength(2);
 });
 
+it('[AC-B1-28p] the feedback port runs after catalog on the cleanup transaction with the user and the step time; cleaned_at follows', async () => {
+  const { db, queries } = scriptedDb({
+    status: 'processing',
+    cleaned_at: null,
+    apple_revoke_attempts: 0,
+    apple_revoke_result: null,
+  });
+  const calls: { port: string; at: number; input: unknown }[] = [];
+  const h = harness(db, {
+    ...allAvailable,
+    catalog: async () => void calls.push({ port: 'catalog', at: queries.length, input: null }),
+    feedback: async (_trx, input) =>
+      void calls.push({ port: 'feedback', at: queries.length, input }),
+  });
+  await h.runner.runOnce();
+  expect(calls.map((call) => call.port)).toEqual(['catalog', 'feedback']);
+  expect(calls[1]!.input).toEqual({ appId: APP, userId: USER, at: new Date(NOW) });
+  const texts = queries.map((q) => q.text);
+  expect(calls[1]!.at).toBeGreaterThan(texts.indexOf('begin'));
+  const cleaned = texts.findIndex((text) => /set "cleaned_at"/.test(text));
+  expect(cleaned).toBeGreaterThanOrEqual(calls[1]!.at);
+  expect(h.warns('identity_deletion_cleanup_blocked')).toEqual([]);
+});
+
+it('[AC-B1-28p] an unavailable feedback port blocks cleaned_at and is named; a port set without feedback runs the rest', async () => {
+  const blockedDb = scriptedDb({
+    status: 'processing',
+    cleaned_at: null,
+    apple_revoke_attempts: 0,
+    apple_revoke_result: null,
+  });
+  const blocked = harness(blockedDb.db, { ...allAvailable, feedback: { unavailable: 'B1-28p' } });
+  await blocked.runner.runOnce();
+  expect(blocked.warns('identity_deletion_cleanup_blocked')).toMatchObject([{ port: 'feedback' }]);
+  expect(blockedDb.queries.some((q) => /set "cleaned_at"/.test(q.text))).toBe(false);
+
+  const plain = scriptedDb({
+    status: 'processing',
+    cleaned_at: null,
+    apple_revoke_attempts: 0,
+    apple_revoke_result: null,
+  });
+  const h = harness(plain.db, allAvailable);
+  await h.runner.runOnce();
+  expect(h.warns('identity_deletion_cleanup_blocked')).toEqual([]);
+  expect(plain.queries.some((q) => /set "cleaned_at"/.test(q.text))).toBe(true);
+});
+
 it('[AC-B1-15g] a failing request: one cleanup_failed line with app_id, deletion_request_id and error_name only', async () => {
   const { db } = scriptedDb(
     { status: 'processing', cleaned_at: null, apple_revoke_attempts: 0, apple_revoke_result: null },
