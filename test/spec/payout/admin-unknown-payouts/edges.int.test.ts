@@ -197,7 +197,18 @@ it('[AC-B2-09s#30] 账单成功按本app的query_status_map判定：非SUCCESS�
     const w = await unknownWithdrawal(f, h, await payee(f, h));
     await seedQueries(f, w, [['fail', 1]]);
     await bill(f, w, 'SYNTHETIC_SETTLED');
-    await answer(await h.resolve(w.id, paidBody(f, w)), 0);
+    const own = await f.db
+      .withSchema('app')
+      .selectFrom('recon_channel')
+      .select('channel_order_id')
+      .where('app_id', '=', w.app_id)
+      .where('out_biz_no', '=', w.out_biz_no)
+      .where('channel_status', '=', 'SYNTHETIC_SETTLED')
+      .executeTakeFirstOrThrow();
+    await answer(
+      await h.resolve(w.id, paidBody(f, w, { channel_order_id: own.channel_order_id })),
+      0,
+    );
     expect((await rowOf(f, w)).status).toBe('PAID_API');
     expect(await voucherOf(f.db, f.appId, `wd:${w.id}:PAID`)).toHaveLength(1);
   });

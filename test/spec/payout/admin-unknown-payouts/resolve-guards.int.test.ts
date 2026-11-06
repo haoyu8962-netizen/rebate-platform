@@ -71,9 +71,21 @@ it('[AC-B2-09s#8] query失败保护可由后续unknown或本单成功账单解�
       const before = await state(f);
       await refused(await h.resolve(w.id, body, { key }), 'resolve_query_failed');
       expect(await state(f)).toEqual(before);
+      let paid: unknown = body;
       if (lift === 'query') await seedQueries(f, w, [['unknown', 0]]);
-      else await bill(f, w, 'SUCCESS');
-      await answer(await h.resolve(w.id, body, { key }), 0);
+      else {
+        await bill(f, w, 'SUCCESS');
+        const own = await f.db
+          .withSchema('app')
+          .selectFrom('recon_channel')
+          .select('channel_order_id')
+          .where('app_id', '=', w.app_id)
+          .where('out_biz_no', '=', w.out_biz_no)
+          .where('channel_status', '=', 'SUCCESS')
+          .executeTakeFirstOrThrow();
+        paid = { ...body, channel_order_id: own.channel_order_id };
+      }
+      await answer(await h.resolve(w.id, paid, { key }), 0);
       expect((await rowOf(f, w)).status).toBe('PAID_API');
     }
   });
