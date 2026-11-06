@@ -57,4 +57,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/w10-voucher-crosscheck/**'
-status: todo
+status: done
+pr: 2558
