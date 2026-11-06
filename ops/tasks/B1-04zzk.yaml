@@ -1,0 +1,28 @@
+id: B1-04zzk
+repo: rebate-platform
+title: 联盟小修并单（D10-725 ①）：淘宝站长授权换令牌请求带联盟离线超时（FU-TB-OAUTH-TIMEOUT）；大淘客多图先按图床白名单过滤再截 9 张；店铺名截断后去尾部空白
+type: impl
+# 2026-11-06 union 入账（编排 D10-725 ①，D10-692 三单收尾的 followups）。
+# ① union/infra/taobao/site-oauth.ts：exchange 发往 oauth.taobao.com/token 的请求带 AbortSignal，超时取 platform/http unionPolicy('offline').timeoutMs（现 10 000 ms，后台人工触发、非搜索热路径）；超时 / 中止 → 按既有口径抛错（错误不含 code / 令牌 / secret / 应答原文），会话由 reauth 既有口径记失败。来源：B1-04zzi money r1 S2。
+# ② union/infra/taobao/dataoke-search.ts：smallImages 先过 normalizeItemImages 的单项校验与图床白名单，再去重、截到 9 张（现行先截后滤，白名单外主机在前时少于可用张数）。来源：B1-04zzj money r1 S2。
+# ③ union/domain/types.ts shopNameField：按 64 码点截断后再去尾部空白（含 U+3000 等 Unicode 空白），截断后为空则不带 shop_name。来源：B1-04zzj 实现留问。
+# test/spec/union/taobao-orders/slots.test.ts 头注释旧行为另走只改注释的前置 PR（D10-725 允许随单机械改；为免红检整文件判定拆出）。
+# 风险：凭据路径（站长授权）→ RV2；新鲜独立 Claude 写规则测试，资金评审。
+refs: []
+refs_hash: {}
+deps: [B1-04zzi, B1-04zzj]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/site-oauth.ts'
+  - 'apps/api/src/modules/union/infra/taobao/site-oauth.test.ts'
+  - 'apps/api/src/modules/union/infra/taobao/dataoke-search.ts'
+  - 'apps/api/src/modules/union/infra/taobao/dataoke-search.test.ts'
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/domain/shop-name.test.ts'
+test_paths:
+  - 'test/spec/union/followups-20261106/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/followups-20261106/**'
+status: todo
