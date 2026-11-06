@@ -21166,7 +21166,6 @@ paths:
         value has one write path. `version` is what POST /admin/v1/risk-rules/{rule_id}/enable and
         …/disable take as `expected_version`.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -21256,7 +21255,6 @@ paths:
         within their cache period (04 §10); judgements already made are not redone. The response
         is the rule's row as GET /admin/v1/risk-rules lists it now. No Idempotency-Key (04 §6.6).
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003
@@ -21353,7 +21351,6 @@ paths:
         values. The response is the rule's row as GET /admin/v1/risk-rules lists it now. No
         Idempotency-Key (04 §6.6).
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003

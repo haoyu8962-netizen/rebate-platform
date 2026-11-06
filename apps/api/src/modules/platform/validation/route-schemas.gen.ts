@@ -15245,6 +15245,135 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "adminListRiskRules": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    }
+  },
+  "adminEnableRiskRule": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": []
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "description": "A risk rule's business code (risk_rules.rule_id, unique per app; 04 §3.2), as the rule seed\nregistered it (B1-03, BR-ID-36), for example `DEVICE_REGISTER_LIMIT` or `inv_08_self`.\n",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        }
+      },
+      "required": [
+        "rule_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_version"
+      ],
+      "properties": {
+        "expected_version": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0,
+          "description": "The rule's `version` as GET /admin/v1/risk-rules listed it; a mismatch is 20902."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Optional free-text reason, kept in the audit record."
+        }
+      }
+    }
+  },
+  "adminDisableRiskRule": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": []
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "description": "A risk rule's business code (risk_rules.rule_id, unique per app; 04 §3.2), as the rule seed\nregistered it (B1-03, BR-ID-36), for example `DEVICE_REGISTER_LIMIT` or `inv_08_self`.\n",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        }
+      },
+      "required": [
+        "rule_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_version"
+      ],
+      "properties": {
+        "expected_version": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0,
+          "description": "The rule's `version` as GET /admin/v1/risk-rules listed it; a mismatch is 20902."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Optional free-text reason, kept in the audit record."
+        }
+      }
+    }
+  },
   "adminListAppeals": {
     "headers": {
       "type": "object",

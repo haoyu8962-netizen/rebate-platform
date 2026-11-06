@@ -70,6 +70,24 @@ export type {
 // B1-09p: processing order appeals of a user (BR-ID-36; read only, settlement's port).
 export { createOrderAppealReader } from './application/order-appeal-read.ts';
 export type { OrderAppealReader } from './application/order-appeal-read.ts';
+// Task B1-03zg: the console's risk rule list and enable / disable (GET /admin/v1/risk-rules, POST
+// /admin/v1/risk-rules/{rule_id}/enable|disable; CT-24f, BR-ID-36; admin entry only). Rule tests:
+// test/spec/risk/admin-risk-rules/**.
+export {
+  AdminRiskRules,
+  AdminRiskRuleConflictError,
+  AdminRiskRulesFieldsError,
+} from './application/admin-risk-rules.ts';
+export type {
+  AdminRiskRuleView,
+  AdminRiskRuleChange,
+  AdminRiskRuleCommand,
+  AdminRiskRulesOptions,
+} from './application/admin-risk-rules.ts';
+export { riskRuleCatalog, riskRuleCatalogEntry } from './application/risk-rule-catalog.ts';
+export type { RiskRuleCatalogEntry } from './application/risk-rule-catalog.ts';
+export { RiskRulesAdminModule } from './http/admin/risk-rules-admin.module.ts';
+export type { RiskRulesAdminOptions } from './http/admin/risk-rules-admin.module.ts';
 export { createInviteRelationHitWriter } from './application/invite-relation-hits.ts';
 export type {
   InviteRelationHitRuleId,
