@@ -15,5 +15,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
-pr: null
+status: done
+pr: 2475

@@ -29,6 +29,24 @@ afterAll(async () => {
   }
 });
 
+// F1-02zzzd: S-10（F1-02zzze）前的两态过渡，合并后收紧为单态
+// F1-02zzze adds derived flags product_feedback (feedback.enabled) and jd_plus_note
+// (detail.jd_plus_note.enabled): only a false source turns them off. These cases write neither
+// source, so each key, when present, must be exactly true; it is then removed for the original
+// exact comparison. Absent keys leave the flags untouched.
+const PENDING_DERIVED = ['product_feedback', 'jd_plus_note'] as const;
+function settled(flags: unknown): unknown {
+  if (typeof flags !== 'object' || flags === null || Array.isArray(flags)) return flags;
+  const copy = { ...(flags as Record<string, unknown>) };
+  for (const key of PENDING_DERIVED) {
+    if (Object.hasOwn(copy, key)) {
+      expect(copy[key], `features.flags.${key}`).toBe(true);
+      delete copy[key];
+    }
+  }
+  return copy;
+}
+
 const DERIVED_DEFAULTS = {
   'external_page.union_host_block': true,
   'earnings.dashboard.visible': true,
@@ -157,7 +175,7 @@ it.each([
     });
     const start = h.logs.length;
     const data = await success(h, id, { 'x-platform': platform });
-    expect(data.features.flags).toEqual({
+    expect(settled(data.features.flags)).toEqual({
       ...base,
       'external_page.union_host_block': unionBlock,
       'earnings.dashboard.visible': dashboard,
@@ -183,7 +201,7 @@ it('[AC-F1-02j#6] auto_read 混入 off 时整个基础 flags 回退，与 clipbo
   });
   const start = h.logs.length;
   const data = await success(h, id);
-  expect(data.features.flags).toEqual(DERIVED_DEFAULTS);
+  expect(settled(data.features.flags)).toEqual(DERIVED_DEFAULTS);
   expect(data.clipboard).toEqual({});
   expect(warnings(h, start, id, 'features.flags')).not.toHaveLength(0);
   expect(warnings(h, start, id, 'clipboard')).not.toHaveLength(0);
@@ -197,7 +215,10 @@ it('[AC-F1-02j#7] 不读取单独 auto_read 行，不补缺键，不用它覆盖
       'features.clipboard.auto_read.ios': false,
       ...(flags === undefined ? {} : { 'features.flags': flags }),
     });
-    expect((await success(h, id)).features.flags).toEqual({ ...DERIVED_DEFAULTS, ...flags });
+    expect(settled((await success(h, id)).features.flags)).toEqual({
+      ...DERIVED_DEFAULTS,
+      ...flags,
+    });
   }
   const id = await configured(h, {
     clipboard: { consent_version: '' },
@@ -207,7 +228,7 @@ it('[AC-F1-02j#7] 不读取单独 auto_read 行，不补缺键，不用它覆盖
   });
   const start = h.logs.length;
   const data = await success(h, id);
-  expect(data.features.flags).toEqual({
+  expect(settled(data.features.flags)).toEqual({
     ...DERIVED_DEFAULTS,
     'clipboard.auto_read.harmony': false,
   });
@@ -248,7 +269,7 @@ it('[AC-F1-02j#8] 登录与游客交替读取各自 app_id，非法配置回退�
     const start = h.logs.length;
     const data = await success(h, caller.id, caller.headers);
     expect(data.clipboard).toEqual(caller.clipboard);
-    expect(data.features.flags).toEqual({ ...DERIVED_DEFAULTS, ...caller.flags });
+    expect(settled(data.features.flags)).toEqual({ ...DERIVED_DEFAULTS, ...caller.flags });
     if (caller.id === b) {
       expect(warnings(h, start, b, 'clipboard')).not.toHaveLength(0);
     } else {
