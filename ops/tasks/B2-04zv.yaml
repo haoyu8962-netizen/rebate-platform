@@ -1,0 +1,20 @@
+id: B2-04zv
+repo: rebate-platform
+title: 冻结用例 [AC-B2-04zfa#3] 的「约束在迁移里显式具名」改为在所有建 / 改 app.settle_runs 的迁移里找（B2-04zw 前置，D10-719 ③；断言含义不变）
+type: test-change
+# 2026-11-06 agent 入账（D10-719 ③，抄 funds）。第 28 项 FU-B204ZFA-PAIR-CHECK 要在新迁移里给 settle_runs 加 CHECK；冻结 test/spec/settlement/settle-runs-schema/shape.int.test.ts
+# [AC-B2-04zfa#3] 134-145 行要求表上每个约束都在「建表那个迁移」（kit.ts migrationSource，只读 0108）里显式具名，新约束写在新迁移里会让它红。照 B3-09k 先例拆前置：
+# 只把具名检查的取源扩为「创建或 ALTER app.settle_runs 的全部迁移」，「每个约束都显式具名」本身不放宽，主键与跨 app 冲突断言一字不动；现行主干全绿，可先合。
+# 改既有规则测试属第一类保护路径：非 task 分支、不带证据；新鲜独立 Claude 改、另一位只读复审（写进 PR 正文）；标签由编排核后加（#24）。RV2。
+refs: []
+refs_hash: {}
+deps: [B2-04zfa]
+paths:
+  - 'test/spec/settlement/settle-runs-schema/shape.int.test.ts'
+  - 'test/spec/settlement/settle-runs-schema/kit.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

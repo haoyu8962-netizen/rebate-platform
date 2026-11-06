@@ -1,0 +1,26 @@
+id: B2-04zu
+repo: rebate-platform
+title: 结算 run 发布起点夹紧（上线缺口第 26 项 FU-B204ZF-CLOCK-SKEW，D10-719 ②）——part_started_at 取 GREATEST(clock.now(), 本 run 已完成批次 / 已入账明细的最大时间)，跨 worker 时钟落后不多发 partial 与 CREDITED
+type: impl
+# 2026-11-06 agent 入账（D10-719 ②，抄 funds）。现状：发布 run 静止的 worker 在 saveRunPart 以本机 clock.now() 写 part_started_at，下一次执行比 orders.credited_at /
+# beneficiary_credits.closed_at / settle_batches.finished_at > since 判「本次入账」——这些时间由别的 worker 的时钟写，发布方时钟落后时把已完成批次算进下一 part，多发一条 partial 与通知。
+# 改法：发布时在 run 锁下、同一 trx 内把起点夹紧为 GREATEST(clock.now(), 本 run 批次 max(finished_at), 本 run 已入账明细 max(credited_at / closed_at))；时间仍只来自注入的 Clock 与已有数据，
+# 不用数据库 now()、不迁移、不动冻结测试（现用例同一 FixedClock，夹紧值即 now()）。漏发只剩「人工续跑落在时钟偏差内」，在代码注释写明。packages/domain 会计日函数不涉及。
+# 新鲜独立 Claude 写规则测试（自建偏慢 FixedClock 造多发，改前红）；Codex money。RV2。排在 B2-04zt 之后（同改 / 同钉 saveRunPart）。
+refs: [BR-FUND-04, BR-TEXT-09]
+refs_hash:
+  BR-FUND-04: 497806f6f068
+  BR-TEXT-09: fd7184fa4d2c
+deps: [B2-04zt]
+paths:
+  - 'apps/api/src/modules/settlement/batch/executor/executor.ts'
+  - 'apps/api/src/modules/settlement/batch/executor/rules.ts'
+test_paths:
+  - 'test/spec/settlement/run-done-skew/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/run-done-skew/**'
+status: todo
+pr: null

@@ -1,0 +1,22 @@
+id: B2-04zt
+repo: rebate-platform
+title: 结算 run 收尾同事务证明（上线缺口第 29 项 FU-B204ZF-SAMETX-PROOF，D10-719 ①）——xmin 钉住「批次状态迁移 + settle_runs 写入 + settle.run_done 发布」同一事务
+type: test-change
+# 2026-11-06 agent 入账（D10-718 / D10-719 ①，抄 funds）。B2-04zf 已把收尾三步放在同一 trx（executor.ts SB5c / SB7 / SB6 → publishRunRest → saveRunPart，event 在同 trx 发），
+# 但规则测试未钉死（原评审 S2，runs.int.test.ts:164）。入账分录本在每单明细事务，不在本证明之内（D10-719 更正）。照 B2-09u w10.int.test.ts 的 xmin 法：提交后立刻比
+# settle_runs.xmin == 动作批次 settle_batches.xmin == run_done 那行 event_log.xmin；三例：DONE 首发（INSERT 路径，另证前一批 xmin 不等）、PARTIAL 再发（CAS UPDATE）、SB5c 停住发布。
+# 只加测试、不动实现、不迁移、不动冻结测试（复用 test/spec/settlement/run-done/kit.ts 不改）。现实现已同事务，新测试先天绿：type test-change、tester none，
+# 新鲜独立 Claude 写、另一位只读复审；PR 正文附一次手工变异证据（把 run_done 发布挪到事务外 → 新例红）。RV2（test/**）。
+refs: [BR-FUND-04, BR-TEXT-09]
+refs_hash:
+  BR-FUND-04: 497806f6f068
+  BR-TEXT-09: fd7184fa4d2c
+deps: [B2-04zf, B2-04zfa]
+paths:
+  - 'test/spec/settlement/run-done-same-tx/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

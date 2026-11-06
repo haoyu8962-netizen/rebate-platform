@@ -1,0 +1,26 @@
+id: B2-04zw
+repo: rebate-platform
+title: 迁移：app.settle_runs 加 CHECK「part = 0 ⇔ last_outcome 为空」（上线缺口第 28 项 FU-B204ZFA-PAIR-CHECK，D10-719 ③）——NOT VALID + 下一号 VALIDATE
+type: impl
+# 2026-11-06 agent 入账（D10-719 ③，抄 funds）。0108 只约束 last_outcome IN ('done','partial')（NULL 放行），无配对约束；唯一写入方 saveRunPart 写入时 part ≥ 1 且 last_outcome 非空，
+# 现存数据只有 (0, NULL) 与 (≥1, 非空)，不会违反。迁移 NNNN：ADD CONSTRAINT settle_runs_part_outcome_check CHECK ((part = 0) = (last_outcome IS NULL)) NOT VALID；NNNN+1 只 VALIDATE
+# （资金表不在同一事务 VALIDATE，先例 0119 / 0120、0096 / 0097）；迁移号落地时取主干最大号 + 1，按迁移槽排。属收紧；lint-migrations 若要求登记，照 B2-04rc 单开 guard-change 先合。
+# 规则测试（新鲜独立 Claude）：(0, 'done')、(1, NULL)、(2, NULL) 报 23514，(0, NULL)、(1, 'done')、(2, 'partial') 可写。schema.sql 沙箱外重快照（outside_needed）。
+# 依赖前置 B2-04zv（冻结 shape 的具名检查扩到所有 settle_runs 迁移）。不改代码、不改主键（第 27 项 RUN-KEY 暂缓至多 App 前，D10-719 ④）。Codex money。RV2。
+refs: [BR-FUND-04, BR-TEXT-09]
+refs_hash:
+  BR-FUND-04: 497806f6f068
+  BR-TEXT-09: fd7184fa4d2c
+deps: [B2-04zu, B2-04zv]
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+test_paths:
+  - 'test/spec/settlement/settle-runs-pair/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/settle-runs-pair/**'
+status: todo
+pr: null
