@@ -1,0 +1,37 @@
+{
+  "task": "CT-26v",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "957e9e5f718bbf668e7b3ea083e96d490cd8c43c",
+  "red_tests": [],
+  "risk_note": "RV1 (contract). The Agent product card in contracts/agent-stream.schema.json gets an optional price_spec_hint (price_from / spec_uncertain / null), the same values and server judgement as openapi ProductCard.price_spec_hint (BR-PROD-04, D10-713 ④); not required, absent reads as null. openapi unchanged. No generated change.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "round 1 fail with one S1 (the ProductCard description change redefined null ahead of the pinned planning text), withheld by the wrapper because another branch was pushed during the run (exit 12); the openapi change was reverted; round 2 pass with no findings; static only"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f08cc896fb01c74a45f08520ae67c91f0159560e",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

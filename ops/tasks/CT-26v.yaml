@@ -1,0 +1,27 @@
+id: CT-26v
+repo: rebate-platform
+title: 契约：Agent 卡片加可选 price_spec_hint（与 ProductCard 同枚举，D10-713 ④）
+type: contract
+# 2026-11-06 w1 入账（D10-712 / D10-713，S-19 方案 couli-runs/B3-lane/s19-price-spec-hint-plan-20261106.md）。agent-stream.schema.json 的 Agent 产品卡加可选 price_spec_hint（不进 required，缺省按 null 读）；openapi 不改（Codex contract r1：ProductCard 的 null 口径以 SPEC_REF 版本为准，取值由 S-19 实现按 08 BR-PROD-04 落实）。只增不改。实现另立（catalog priceSpecHintFor）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/agent-stream.schema.json'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: done
+pr: 2482

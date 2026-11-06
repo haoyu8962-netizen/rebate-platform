@@ -518,6 +518,11 @@
           "description": "Spec recognized from the title, for 标题显示为 X (BR-AI-24).",
           "type": ["string", "null"]
         },
+        "price_spec_hint": {
+          "description": "Spec qualifier of the price (BR-PROD-04): the same values and the same server judgement as openapi ProductCard.price_spec_hint, copied from the catalog card; the client never infers it. Independent of match_tag (BR-PROD-04: the check mark does not change the price qualifier). Optional; absent is read as null.",
+          "type": ["string", "null"],
+          "enum": ["price_from", "spec_uncertain", null]
+        },
         "is_presale": { "type": "boolean" },
         "tlj": {
           "anyOf": [{ "$ref": "#/$defs/product_tlj" }, { "type": "null" }]
