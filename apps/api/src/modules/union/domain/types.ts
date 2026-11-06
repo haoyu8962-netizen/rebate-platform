@@ -769,6 +769,13 @@ export interface UnionAdapter {
    * methods' presence is the answer. The governed wrapper passes it through.
    */
   readonly rightsSources?: UnionRightsSources;
+  /**
+   * B1-04zzb (D10-741): whether listOrders can fetch with the adapter as configured (Taobao only
+   * with both its 大淘客 order source and the order slot reader). false: the order sync scheduler
+   * skips the platform this round (no window, cursor untouched, no error). Absent, listOrders'
+   * presence is the answer. The governed wrapper passes it through.
+   */
+  readonly orderSources?: boolean;
   searchItems(q: SearchQuery, ctx: CallCtx): Promise<Page<UnionItem>>;
   getItem(ref: ItemRef, ctx: CallCtx): Promise<UnionItemDetail>;
   resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink>;

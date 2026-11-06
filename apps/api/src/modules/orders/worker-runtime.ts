@@ -52,6 +52,10 @@
 //   handler routes 'rights.window' / 'punish.window' to jobs/rights-sync.ts (writes only through
 //   that port), and start() also arms the refund / punishment loops (application/rights-sync.ts)
 //   when some governed adapter has listRefunds / listPunishments. Absent or undefined → neither.
+// - B1-04zzb: the increment scheduler gets orderSources(platform) from the governed adapters
+//   (UnionAdapter.orderSources, else listOrders' presence): a platform without an order source
+//   (taobao without the 大淘客 order source or the slot reader) dispatches nothing that round.
+//   The rescan scheduler gets the same orderSources.
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports.
 import { readFileSync } from 'node:fs';
 import type { DB } from '@couli/db';
@@ -426,8 +430,17 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
     requests: createOrderSyncRequestProgress(db, clock),
     logger,
   };
+  // B1-04zzb (D10-741 ③): the order-source gate of the increment scheduler, from the governed
+  // adapter's orderSources (passed through from the adapter); absent, listOrders' presence answers
+  // (jd / pdd unchanged). A platform without an endpoint has no governed adapter here: the gate
+  // leaves it to the existing gates (union's access answers it), as before this gate existed.
+  const orderSources = (platform: RegisteredPlatform): boolean => {
+    const adapter = governed.get(platform)?.adapter;
+    if (adapter === undefined) return true;
+    return adapter.orderSources ?? typeof adapter.listOrders === 'function';
+  };
   const sync = createOrderSyncScheduler(
-    { clock, queue, cursors, access, logger },
+    { clock, queue, cursors, access, logger, orderSources },
     DEFAULT_INTERVAL,
   );
   const rescanHandler = {
@@ -498,6 +511,7 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
             access,
             logger,
             config: rescanConfig,
+            orderSources,
           },
           scheduledPlatforms(),
         );

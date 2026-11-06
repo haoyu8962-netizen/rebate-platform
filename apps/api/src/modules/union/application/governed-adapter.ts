@@ -176,6 +176,8 @@ export function governAdapter(
           punishments: adapter.rightsSources.punishments,
         };
 
+  const orderSources = adapter.orderSources;
+
   /** UnionIdentity is built only by linking on the server (BR-ATTR-05, BR-AI-03). */
   const assertIdentity = (identity: UnionIdentity, ctx: CallCtx, operation: string): void => {
     if (
@@ -211,6 +213,8 @@ export function governAdapter(
         }),
     // B1-04zza (money r1 S2 ①): the adapter's configured rights sources, read once here.
     ...(rightsSources === undefined ? {} : { rightsSources }),
+    // B1-04zzb (D10-741 ③): the adapter's configured order source, read once here.
+    ...(orderSources === undefined ? {} : { orderSources }),
     // B1-04z: `opt` goes through as given (and is left out when the caller left it out).
     ...(listRefunds === undefined
       ? {}

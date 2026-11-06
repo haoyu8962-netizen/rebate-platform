@@ -47,7 +47,6 @@ export const MANUAL_SYNC_LOOK_BACK_DAYS: Readonly<Record<'taobao' | 'jd' | 'pdd'
  * The platforms a manual sync can run for: a window cap of 02 §7.1 is fixed for them
  * (INCREMENT_WINDOW_CAP_MS) and the worker's order-sync handler takes their windows.
  */
-// TODO(规划/11 §4.5): 淘宝手动同步（窗口上限、按单号查询） — blocked on CAP-TB-07
 export function manualSyncPlatforms(): readonly (keyof typeof MANUAL_SYNC_LOOK_BACK_DAYS)[] {
   return (
     Object.keys(MANUAL_SYNC_LOOK_BACK_DAYS) as (keyof typeof MANUAL_SYNC_LOOK_BACK_DAYS)[]

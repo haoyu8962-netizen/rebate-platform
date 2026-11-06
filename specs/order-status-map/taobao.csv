@@ -1,0 +1,5 @@
+raw_code,event,source,verified,note
+12,PLATFORM_PAID,doc,false,订单付款
+14,PLATFORM_RECEIVED,doc,false,已确认收货（商家佣金未支付）
+3,PLATFORM_SETTLED,doc,false,订单结算（商家佣金已支付）
+13,PLATFORM_INVALID,doc,false,订单失效

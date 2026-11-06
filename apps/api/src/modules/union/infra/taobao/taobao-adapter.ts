@@ -370,6 +370,16 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     return { refunds, punishments: refunds && this.#orderSlots !== undefined };
   }
 
+  /**
+   * B1-04zzb (D10-741 ③): listOrders needs both the 大淘客 order source and the order slot reader
+   * (registered PIDs). Only what was injected counts: nothing is read or requested here. false:
+   * the order sync scheduler skips taobao this round, so listOrders' own taobao_order_no_slots
+   * (#2464) is never the gate.
+   */
+  get orderSources(): boolean {
+    return this.#orderSource !== undefined && this.#orderSlots !== undefined;
+  }
+
   constructor(options: TaobaoAdapterOptions) {
     if (options.endpoint.platform !== 'taobao') {
       throw new UnionError(

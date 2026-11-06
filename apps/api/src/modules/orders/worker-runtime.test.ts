@@ -21,8 +21,10 @@ import type {
   UnionEndpoint,
   UnionRegistry,
 } from '../union/index.ts';
+import * as orderRescan from './application/order-rescan.ts';
 import * as pipelinePort from './application/pipeline-port.ts';
 import type { OrderSourcePorts } from './application/source-backfill.ts';
+import * as syncScheduler from './application/sync-scheduler.ts';
 import * as updateStep from './application/update-step.ts';
 import {
   createOrderSyncRuntime,
@@ -30,6 +32,7 @@ import {
   type OrderRightsImportDeps,
   type OrderSyncReadPorts,
 } from './worker-runtime.ts';
+import { scheduledPlatforms } from './domain/sync-window.ts';
 
 const handles: Kysely<DB>[] = [];
 afterEach(async () => {
@@ -67,6 +70,10 @@ function setup(
   sources?: OrderSyncReadPorts['sources'],
   extra: Pick<OrderSyncReadPorts, 'blocklist' | 'suffixVoidEnabled' | 'rebate'> = {},
   rightsImports?: OrderRightsImportDeps,
+  options: {
+    readonly endpointPlatforms?: readonly RegisteredPlatform[];
+    readonly adapters?: Partial<Record<RegisteredPlatform, UnionAdapter>>;
+  } = {},
 ) {
   const queries: string[] = [];
   const lines: { msg: string }[] = [];
@@ -82,13 +89,17 @@ function setup(
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
   } as unknown as QueueRuntime;
-  const endpoints: UnionEndpoint[] = (['pdd', 'jd'] as const).map((platform) => ({
-    platform,
-    mode: 'demo',
-    baseUrl: null,
-    quotaKey: `unit-${platform}`,
-  }));
-  const raws = new Map<RegisteredPlatform, UnionAdapter>();
+  const endpoints: UnionEndpoint[] = (options.endpointPlatforms ?? ['pdd', 'jd']).map(
+    (platform) => ({
+      platform,
+      mode: 'demo',
+      baseUrl: null,
+      quotaKey: `unit-${platform}`,
+    }),
+  );
+  const raws = new Map<RegisteredPlatform, UnionAdapter>(
+    Object.entries(options.adapters ?? {}) as [RegisteredPlatform, UnionAdapter][],
+  );
   const registry: UnionRegistry = {
     registrations: () => [],
     get: (platform) => {
@@ -150,14 +161,15 @@ it('[AC-B1-08n#u7] 装配只注册一次 order-sync，不查库、不投递；�
   expect(typeof orderSyncToken()).toBe('symbol');
 });
 
-it('[AC-B1-08n#u8] 映射表启动时读好并缓存；未调度平台报 MISSING_STATUS_MAP', () => {
+it('[AC-B1-08n#u8] 映射表启动时读好并缓存；B1-04zzb 起淘宝也在其中（taobao.csv 四行）', () => {
   const { runtime } = setup();
   const pdd = runtime.statusMaps('pdd');
   expect(pdd.entries.size).toBeGreaterThan(0);
   expect(runtime.statusMaps('pdd')).toBe(pdd);
-  expect(() => runtime.statusMaps('taobao')).toThrow(
-    expect.objectContaining({ code: 'MISSING_STATUS_MAP' }),
-  );
+  const taobao = runtime.statusMaps('taobao');
+  expect(taobao.platform).toBe('taobao');
+  expect([...taobao.entries.keys()].sort()).toEqual(['12', '13', '14', '3']);
+  expect(runtime.statusMaps('taobao')).toBe(taobao);
 });
 
 it('[AC-B1-08n#u9] registry 回治理包装后的适配器；没有端点的平台拒绝', () => {
@@ -197,7 +209,9 @@ it('[AC-B1-08n#u11] start 只起定时器、不投递；stop 后无残留定时�
   expect(vi.getTimerCount()).toBe(0);
   const handle = s.runtime.start();
   await vi.advanceTimersByTimeAsync(0);
-  expect(vi.getTimerCount()).toBe(2); // one schedule timer per scheduled platform: jd, pdd
+  // one schedule timer per scheduled platform (B1-04zzb: jd, pdd, taobao)
+  expect(vi.getTimerCount()).toBe(scheduledPlatforms().length);
+  expect([...scheduledPlatforms()].sort()).toEqual(['jd', 'pdd', 'taobao']);
   expect(s.send).not.toHaveBeenCalled();
   expect(s.queries).toEqual([]);
   await handle.stop();
@@ -359,4 +373,104 @@ it('[AC-B1-09g#u3] rights_import 的载荷不合：抛错（重试后进死信�
     handler({ ...RIGHTS_IMPORT_JOB, payload: { app_id: 'unit', import_id: 'nope' } }),
   ).rejects.toThrow(/import_id/);
   expect(s.queries).toEqual([]);
+});
+
+/** The orderSources the runtime hands the increment scheduler. */
+function wiredOrderSources(...args: Parameters<typeof setup>) {
+  const make = vi.spyOn(syncScheduler, 'createOrderSyncScheduler');
+  make.mockClear();
+  const s = setup(...args);
+  expect(make).toHaveBeenCalledTimes(1);
+  const orderSources = make.mock.calls[0]![0].orderSources;
+  expect(orderSources).toBeTypeOf('function');
+  return { s, orderSources: orderSources! };
+}
+
+it('[AC-B1-04zzb#u1] 调度门装配：适配器未声明 orderSources 时由 listOrders 是否存在决定（京东 / 拼多多照旧为 true）', () => {
+  const { s, orderSources } = wiredOrderSources();
+  expect(orderSources('jd')).toBe(true);
+  expect(orderSources('pdd')).toBe(true);
+  // 没有端点的平台不归这道门管，交既有的门（union access）判断，行为与加门前一致。
+  expect(orderSources('taobao')).toBe(true);
+  expect(s.queries).toEqual([]);
+});
+
+it('[AC-B1-04zzb#u2] 调度门装配：治理包装透传适配器的 orderSources，false 即 false、true 即 true', () => {
+  const bare = { ...rawAdapter('taobao'), orderSources: false };
+  const off = wiredOrderSources(undefined, {}, undefined, {
+    endpointPlatforms: ['pdd', 'jd', 'taobao'],
+    adapters: { taobao: bare },
+  });
+  expect(off.orderSources('taobao')).toBe(false);
+  expect(off.orderSources('jd')).toBe(true);
+  expect(bare.listOrders).not.toHaveBeenCalled();
+
+  const sourced = { ...rawAdapter('taobao'), orderSources: true };
+  const on = wiredOrderSources(undefined, {}, undefined, {
+    endpointPlatforms: ['pdd', 'jd', 'taobao'],
+    adapters: { taobao: sourced },
+  });
+  expect(on.orderSources('taobao')).toBe(true);
+});
+
+it('[AC-B1-04zzb#u4] 调度门装配：回扫调度拿到与增量同一个 orderSources', () => {
+  const make = vi.spyOn(orderRescan, 'createOrderRescanScheduler');
+  const sync = vi.spyOn(syncScheduler, 'createOrderSyncScheduler');
+  make.mockClear();
+  sync.mockClear();
+  const bare = { ...rawAdapter('taobao'), orderSources: false };
+  const rescanConfig = () => ({ get: async () => undefined });
+  setup(undefined, { rescanConfig } as never, undefined, {
+    endpointPlatforms: ['pdd', 'jd', 'taobao'],
+    adapters: { taobao: bare },
+  });
+  expect(make).toHaveBeenCalledTimes(1);
+  const gate = make.mock.calls[0]![0].orderSources;
+  expect(gate).toBe(sync.mock.calls[0]![0].orderSources);
+  expect(gate?.('taobao')).toBe(false);
+  expect(gate?.('jd')).toBe(true);
+});
+
+it('[AC-B1-04zzb#u3] 调度一轮：淘宝报无订单源时不查水位、不投窗、只一条 info；京东同轮照发', async () => {
+  const send = vi.fn<(...args: unknown[]) => Promise<string>>().mockResolvedValue('job');
+  const info = vi.fn();
+  const warn = vi.fn();
+  const error = vi.fn();
+  const read = vi.fn().mockResolvedValue('2026-10-17T15:00:00.000Z');
+  const rewind = vi.fn().mockResolvedValue(true);
+  const account = (platform: RegisteredPlatform, id: string) => ({
+    app_id: 'unit',
+    platform,
+    union_account_id: id,
+    sync_start_at: '2026-10-17T00:00:00.000Z',
+  });
+  const orderSources = vi.fn((platform: RegisteredPlatform) => platform !== 'taobao');
+  await syncScheduler.scheduleOrderSync({
+    clock: new FixedClock('2026-10-17T17:30:00.000Z'),
+    queue: { send } as never,
+    cursors: { read, advance: vi.fn(), rewind },
+    access: {
+      listEnabledAccounts: vi
+        .fn()
+        .mockResolvedValue([
+          account('taobao', '10000000-0000-4000-8000-0000000000a1'),
+          account('taobao', '10000000-0000-4000-8000-0000000000a2'),
+          account('jd', '10000000-0000-4000-8000-0000000000b1'),
+        ]),
+      siteAuthAvailable: vi.fn().mockResolvedValue(true),
+      offlineCircuitOpen: vi.fn().mockResolvedValue(false),
+    },
+    logger: { info, warn, error } as never,
+    orderSources,
+  });
+  expect(orderSources.mock.calls.filter(([p]) => p === 'taobao')).toHaveLength(1);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect((send.mock.calls[0]![2] as { platform: string }).platform).toBe('jd');
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(rewind).not.toHaveBeenCalled();
+  expect(warn).not.toHaveBeenCalled();
+  expect(error).not.toHaveBeenCalled();
+  expect(info.mock.calls.filter(([fields]) => fields.platform === 'taobao')).toEqual([
+    [{ platform: 'taobao' }, 'order_sync_skipped_no_order_source'],
+  ]);
 });

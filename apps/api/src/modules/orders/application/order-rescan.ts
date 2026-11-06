@@ -11,6 +11,9 @@
 // cursor is read, as the increment skips it.
 // The round that ends a stream's round only moves the cursor. Every window comes out of rescanStep
 // as a 'window' step, so the next round's first window, one tick later, is bounded like any other.
+// B1-04zzb (D10-741 ③): as the increment scheduler, a platform whose adapter reports no order
+// source (deps.orderSources) is skipped for the round before its settings are read: no window, no
+// cursor read or move, no error, one info line per platform and round. Absent → no gating.
 import type { RegisteredPlatform } from '../../union/index.ts';
 import { rescanDefaults, type RescanDefaults } from '../domain/platform-rules/rescan.ts';
 import {
@@ -43,6 +46,8 @@ export interface OrderRescanSchedulerDeps extends Omit<SyncSchedulerDeps, 'curso
   readonly config: SyncIntervalConfig;
   /** Window cap per platform; absent → the rule table's syncWindowCapMs. */
   readonly capsMs?: Readonly<Partial<Record<RegisteredPlatform, number>>>;
+  /** false → the platform has no order source this round and is skipped; absent → no gating. */
+  readonly orderSources?: (platform: RegisteredPlatform) => boolean;
 }
 
 interface RescanSettings {
@@ -113,6 +118,11 @@ export async function scheduleOrderRescan(
 ): Promise<void> {
   const settings = new Map<RegisteredPlatform, RescanSettings>();
   for (const platform of platforms) {
+    if (rescanDefaults(platform) === null || capOf(deps, platform) === undefined) continue;
+    if (deps.orderSources?.(platform) === false) {
+      deps.logger?.info({ platform }, 'order_sync_rescan_skipped_no_order_source');
+      continue;
+    }
     const read = await readSettings(deps, platform);
     if (read !== null) settings.set(platform, read);
   }

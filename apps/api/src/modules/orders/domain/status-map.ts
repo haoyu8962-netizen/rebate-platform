@@ -5,7 +5,6 @@
 //
 // TODO(规划/11 §4.5): 拼多多处罚类码 4（审核失败）/ 10（已处罚）进 pdd.csv（映射为 PLATFORM_PUNISH）
 //   — blocked on CAP-PDD-07 实测；实测前它们不进表，出现时按表外码处理（BR-FUND-02）。
-// TODO(规划/11 §4.5): 淘宝映射表 — blocked on CAP-TB-07 实测资料。
 
 export type PlatformStatusEvent =
   | 'PLATFORM_DEPOSIT_PAID'
