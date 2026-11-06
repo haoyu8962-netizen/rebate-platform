@@ -1,0 +1,21 @@
+id: CT-06zzzm
+repo: rebate-platform
+title: CT-06zzzm：test-guard 对新增或改动的 test/spec 文件中调用 propParams() 却没写显式超时（≥ 900_000）的 it 报错（D10-750）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排 D10-750，排 CT-06zzzk / CT-06zzzl 后）。起因：#2511 [AC-B1-05zg#2]、#2521 [AC-B1-04zzk#7] 的新属性测试在 verify-props
+#   （PROP_RUNS=100000）撞 Vitest 默认 15 秒超时；仓库先例是用 propParams() 的 it 在第三参写显式超时（`}, 900_000);`）。
+# 口径：只在 guard-git（相对 base）对新增或改动的 test/spec/**/*.test.ts 生效；主干现有 62 个文件不追溯（它们在 CI 里是绿的，且是第一类冻结路径），
+#   static 模式不加此规则，免得主干立刻变红。判定：一个 it / test 块（含 .each 与 it.prop 等同类）体内调用 propParams()，第三参须是 ≥ 900_000 的数字字面量
+#   （或 { timeout: n } 中 n ≥ 900_000）；缺失或更小即报错。工具测试补正反例。Opus 实现；Codex 对抗评审；按 #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/**'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzm.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

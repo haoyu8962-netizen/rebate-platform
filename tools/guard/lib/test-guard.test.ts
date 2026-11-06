@@ -3,9 +3,13 @@ import { repoRoot } from '../../lib/paths.ts';
 import { cleanupFixtures, makeTree } from './fixture-kit.ts';
 import { loadProtected } from './protected.ts';
 import * as fx from './test-guard.fixtures.ts';
+import type { Change } from '../../lib/git.ts';
 import {
+  PROP_TIMEOUT_MIN,
   addOnlyViolations,
   isFundsTestFile,
+  propTimeoutChecks,
+  propTimeoutFindings,
   scanFile,
   scanTree,
   testTitles,
@@ -290,5 +294,159 @@ describe('addOnlyViolations', () => {
       'test/replay/case-1.json',
       'test/spec/money/round.test.ts',
     ]);
+  });
+});
+
+describe('[CT-06zzzm] prop-timeout: propParams() tests need an explicit timeout ≥ 900_000 (git mode only)', () => {
+  const FILE = 'test/spec/demo/prop.test.ts';
+  const FIX = 'propParams() 的用例须写显式超时 ≥ 900_000：补 `}, 900_000);`，见 D10-750';
+  const found = (text: string) =>
+    propTimeoutFindings(FILE, text, null).map((f) => [f.line, f.message]);
+  const line = (text: string, needle: string): number =>
+    text.slice(0, text.indexOf(needle)).split('\n').length;
+
+  it('[CT-06zzzm] 900_000, 1_000_000 and { timeout: 900_000 } pass; so does the options-second form', () => {
+    expect(PROP_TIMEOUT_MIN).toBe(900_000);
+    for (const tail of [', 900_000', ', 900000', ', 1_000_000', ', { timeout: 900_000 }']) {
+      expect(found(fx.propFile(fx.propBlock('[AC-1] p', tail))), tail).toEqual([]);
+    }
+    expect(
+      found(fx.propFile(fx.propBlock('[AC-1] p', ', { timeout: 900_000, concurrent: true }'))),
+    ).toEqual([]);
+    expect(found(fx.propFile(fx.PROP_OPTIONS_SECOND))).toEqual([]);
+  });
+
+  it('[CT-06zzzm] no third argument, 60_000, a name, a spread or no timeout key: a finding at the block line naming the fix', () => {
+    const cases: [string, string][] = [
+      ['', 'no timeout argument'],
+      [', 60_000', 'the timeout 60_000 is too small'],
+      [', TIMEOUT', 'the timeout `TIMEOUT` is not a number literal'],
+      [', 15 * 60_000', 'the timeout `15 * 60_000` is not a number literal'],
+      [', { timeout: 60_000 }', 'the timeout 60_000 is too small'],
+      [', { timeout: LONG }', 'the timeout `LONG` is not a number literal'],
+      [', { ...opts, timeout: 900_000 }', 'the options object spreads another object'],
+      [', { concurrent: true }', 'the options object has no timeout'],
+    ];
+    for (const [tail, why] of cases) {
+      const text = fx.propFile(fx.PROP_PLAIN('[AC-0] plain'), fx.propBlock('[AC-1] p', tail));
+      expect(found(text), tail).toEqual([[line(text, "it('[AC-1] p'"), `${FIX} (${why})`]]);
+    }
+    // A direct call in the body, propParams() inside another argument; a chain (.concurrent).
+    expect(found(fx.propFile(fx.PROP_DIRECT))).toEqual([[4, `${FIX} (no timeout argument)`]]);
+    expect(found(fx.propFile(fx.PROP_AS_ARGUMENT))).toEqual([
+      [4, `${FIX} (the timeout 30_000 is too small)`],
+    ]);
+    expect(found(fx.propFile(fx.PROP_CONCURRENT))).toEqual([
+      [4, `${FIX} (the timeout 899_999 is too small)`],
+    ]);
+  });
+
+  it('[CT-06zzzm] .each: the argument after the callback of the call after the table', () => {
+    expect(found(fx.propFile(fx.PROP_EACH(', 900_000')))).toEqual([]);
+    expect(found(fx.propFile(fx.PROP_EACH('')))).toEqual([[4, `${FIX} (no timeout argument)`]]);
+    expect(found(fx.propFile(fx.PROP_EACH(', 5_000')))).toEqual([
+      [4, `${FIX} (the timeout 5_000 is too small)`],
+    ]);
+  });
+
+  it('[CT-06zzzm] a block without propParams() is not reported; neither is the static mode', () => {
+    const text = fx.propFile(fx.PROP_PLAIN('[AC-0] plain'), fx.propBlock('[AC-1] p', ''));
+    expect(found(fx.propFile(fx.PROP_PLAIN('[AC-0] plain')))).toEqual([]);
+    expect(scanFile(FILE, text).filter((f) => f.rule === 'prop-timeout')).toEqual([]);
+  });
+
+  it('[CT-06zzzm] git mode: added files whole, modified files only in their new or changed blocks; other paths and removals not at all', () => {
+    const bad = fx.propBlock('[AC-1] p', '');
+    const base = fx.propFile(fx.PROP_PLAIN('[AC-0] plain'), bad);
+    const files: Record<string, { base: string | null; head: string }> = {
+      // New: the old-style block is reported.
+      'test/spec/demo/new.test.ts': { base: null, head: base },
+      // Modified next to the untouched old block: nothing reported.
+      'test/spec/demo/frozen.test.ts': {
+        base,
+        head: fx.propFile(fx.PROP_PLAIN('[AC-0] plain'), bad, fx.PROP_PLAIN('[AC-2] new')),
+      },
+      // Modified, a new property test without a timeout: reported.
+      'test/spec/demo/grown.test.ts': {
+        base,
+        head: fx.propFile(fx.PROP_PLAIN('[AC-0] plain'), bad, fx.propBlock('[AC-3] new', '')),
+      },
+      // Modified in the old block itself: reported.
+      'test/spec/demo/touched.test.ts': {
+        base,
+        head: fx.propFile(fx.PROP_PLAIN('[AC-0] plain'), bad.replace('n === n', 'n + 0 === n')),
+      },
+      // Code outside the tests changed: judged whole.
+      'test/spec/demo/import.test.ts': {
+        base,
+        head: base.replace(
+          "import fc from 'fast-check';",
+          "import fc from 'fast-check';\nimport { x } from './x.ts';",
+        ),
+      },
+      // Not under test/spec, and a test-support file: not checked.
+      'test/properties/demo/p.test.ts': { base: null, head: base },
+      'test/spec/demo/kit.ts': { base: null, head: base },
+    };
+    const changes: Change[] = [
+      { path: 'test/spec/demo/new.test.ts', status: 'A' },
+      { path: 'test/spec/demo/frozen.test.ts', status: 'M' },
+      { path: 'test/spec/demo/grown.test.ts', status: 'M' },
+      { path: 'test/spec/demo/touched.test.ts', status: 'M' },
+      { path: 'test/spec/demo/import.test.ts', status: 'M' },
+      { path: 'test/spec/demo/untracked.test.ts', status: '?' },
+      { path: 'test/spec/demo/gone.test.ts', status: 'D' },
+      { path: 'test/properties/demo/p.test.ts', status: 'A' },
+      { path: 'test/spec/demo/kit.ts', status: 'A' },
+    ];
+    files['test/spec/demo/untracked.test.ts'] = { base: null, head: base };
+    const got = propTimeoutChecks(
+      changes,
+      (p) => files[p]?.base ?? null,
+      (p) => files[p]?.head ?? null,
+    );
+    expect(got.map((f) => [f.file, f.rule])).toEqual([
+      ['test/spec/demo/new.test.ts', 'prop-timeout'],
+      ['test/spec/demo/grown.test.ts', 'prop-timeout'],
+      ['test/spec/demo/touched.test.ts', 'prop-timeout'],
+      ['test/spec/demo/import.test.ts', 'prop-timeout'],
+      ['test/spec/demo/untracked.test.ts', 'prop-timeout'],
+    ]);
+    const grown = got.find((f) => f.file === 'test/spec/demo/grown.test.ts');
+    const head = files['test/spec/demo/grown.test.ts']?.head ?? '';
+    expect(grown?.line).toBe(line(head, "it('[AC-3] new'"));
+    expect(grown?.message).toBe(`${FIX} (no timeout argument)`);
+  });
+});
+
+describe('[CT-06zzzm] Codex r1: comments and strings, commented timeouts', () => {
+  const FILE = 'test/spec/demo/prop.test.ts';
+  const FIX = 'propParams() 的用例须写显式超时 ≥ 900_000：补 `}, 900_000);`，见 D10-750';
+  const found = (text: string) =>
+    propTimeoutFindings(FILE, text, null).map((f) => [f.line, f.message]);
+
+  it('[CT-06zzzm] propParams() in a comment or a string is no call; inside ${…} of a template it is', () => {
+    expect(found(fx.propFile(fx.PROP_IN_COMMENT))).toEqual([]);
+    expect(found(fx.propFile(fx.PROP_IN_STRING))).toEqual([]);
+    expect(found(fx.propFile(fx.PROP_IN_INTERPOLATION))).toEqual([
+      [4, `${FIX} (no timeout argument)`],
+    ]);
+  });
+
+  it('[CT-06zzzm] a timeout with comments around it passes; a commented one below the minimum still fails', () => {
+    for (const tail of [
+      ', 900_000 /* 高次数运行 */',
+      ', /* 高次数运行 */ 900_000',
+      ', 900_000 // 高次数运行\n',
+      ', { timeout: 900_000 /* 高次数运行 */ }',
+      ', { /* 高次数 */ timeout: /* 运行 */ 900_000 }',
+    ]) {
+      expect(found(fx.propFile(fx.propBlock('[AC-1] p', tail))), tail).toEqual([]);
+    }
+    for (const tail of [', 60_000 /* 高次数运行 */', ', { timeout: 60_000 /* 高次数运行 */ }']) {
+      expect(found(fx.propFile(fx.propBlock('[AC-1] p', tail))), tail).toEqual([
+        [4, `${FIX} (the timeout 60_000 is too small)`],
+      ]);
+    }
   });
 });

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { Change } from '../../lib/git.ts';
 import type { ProtectedConfig, ProtectedHit } from './protected.ts';
 import { findProtectedHits } from './protected.ts';
+import { compareTestFile, testBlockSpans } from './test-blocks.ts';
 
 export type Finding = { file: string; line: number; rule: string; message: string };
 
@@ -598,6 +599,203 @@ export function scanTree(root: string, files: readonly string[]): Finding[] {
   for (const file of files) {
     if (!isRelevant(file)) continue;
     findings.push(...scanFile(file, readFileSync(join(root, file), 'utf8')));
+  }
+  return findings;
+}
+
+// Explicit timeouts of property tests (CT-06zzzm; orchestrator ruling D10-750, after #2511 and
+// #2521, whose new property tests hit Vitest's default timeout of 15 s under verify-props with
+// PROP_RUNS=100000): a test block (it / test with any chain: .each, .concurrent, .prop …; not
+// describe) whose callback calls propParams() — directly, as an argument, as fc.assert's second
+// argument — must register with an explicit timeout of at least PROP_TIMEOUT_MIN: its final call
+// (for .each / .for the call after the table) has as third argument a number literal ≥ the
+// minimum (`900_000` separators allowed) or an object literal whose `timeout` is one (no spread);
+// Vitest's (title, options, callback) form counts with the options as that object. Anything else
+// (missing, a name, a smaller number, an unreadable call) is a finding. Only in git mode
+// (testGuardCheck with a base, guard-git): the test/spec/**/*.test.ts files the change adds,
+// renames or leaves untracked are checked whole; a modified one only in its new or changed blocks
+// (tools/guard/lib/test-blocks.ts compareTestFile; a file it judges as a whole, its code outside
+// the tests changed, is checked whole). The main branch's existing property tests, frozen class 1
+// files green in CI, are not checked after the fact; scanFile / the static mode never run it.
+
+/** The least explicit timeout of a test calling propParams() (D10-750). */
+export const PROP_TIMEOUT_MIN = 900_000;
+
+const PROP_TIMEOUT_FILE = /^test\/spec\/.+\.test\.ts$/;
+const PROP_TIMEOUT_FIX = 'propParams() 的用例须写显式超时 ≥ 900_000：补 `}, 900_000);`，见 D10-750';
+
+// A call of propParams(): plain, spread (`...propParams()`) or through a namespace
+// (`testing.propParams()`); a name that only ends in propParams is not.
+const PROP_PARAMS_CALL = /^propParams\s*\(/;
+
+/**
+ * Whether `text` calls propParams() (directly, as an argument, spread into an object), outside
+ * comments, strings and the static parts of template literals; a call inside a template's `${…}`
+ * counts (Codex r1 S2). Text that cannot be read (an unterminated literal): read as is, so a call
+ * is never missed.
+ */
+function callsPropParams(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] ?? '';
+    if (c === '`') {
+      // The static parts are skipped, each `${…}` is searched on its own.
+      let j = i + 1;
+      for (; j < text.length && text[j] !== '`'; j++) {
+        if (text[j] === '\\') {
+          j++;
+        } else if (text[j] === '$' && text[j + 1] === '{') {
+          const end = skipBalanced(text, j + 1);
+          if (end === -1) return /(?<![\w$])propParams\s*\(/.test(text.slice(j + 2));
+          if (callsPropParams(text.slice(j + 2, end - 1))) return true;
+          j = end - 1;
+        }
+      }
+      if (j >= text.length) return /(?<![\w$])propParams\s*\(/.test(text.slice(i));
+      i = j;
+      continue;
+    }
+    const end = skipTrivia(text, i);
+    if (end === -1) return /(?<![\w$])propParams\s*\(/.test(text.slice(i));
+    if (end !== i) {
+      i = end - 1;
+      continue;
+    }
+    if (
+      c === 'p' &&
+      !/[\w$]/.test(text[i - 1] ?? '') &&
+      PROP_PARAMS_CALL.test(text.slice(i, i + 40))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** `value` without the whitespace and comments around it (Codex r1 S2: a block comment after `900_000`). */
+function withoutComments(value: string): string {
+  let out = value.trim();
+  for (let changed = true; changed;) {
+    changed = false;
+    const lead = /^(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))\s*/.exec(out);
+    if (lead !== null && lead[0] !== '') {
+      out = out.slice(lead[0].length);
+      changed = true;
+    }
+    const block = /\s*\/\*(?:(?!\*\/)[\s\S])*\*\/$/.exec(out);
+    const line = /\s*\/\/[^\n'"`]*$/.exec(out);
+    const trail = block ?? line;
+    if (trail !== null && trail[0] !== '') {
+      out = out.slice(0, out.length - trail[0].length);
+      changed = true;
+    }
+    out = out.trim();
+  }
+  return out;
+}
+
+/** The number of a number literal such as `900_000` (comments around it ignored), or null. */
+function numberLiteral(value: string): number | null {
+  const bare = withoutComments(value);
+  return /^\d+(?:_\d+)*$/.test(bare) ? Number(bare.replace(/_/g, '')) : null;
+}
+
+/** Why the explicit timeout argument `arg` is not enough, or null when it is. */
+function timeoutProblem(
+  text: string,
+  arg: { from: number; to: number } | undefined,
+): string | null {
+  if (arg === undefined) return 'no timeout argument';
+  const value = withoutComments(text.slice(arg.from, arg.to));
+  const n = numberLiteral(value);
+  if (n !== null) return n >= PROP_TIMEOUT_MIN ? null : `the timeout ${value} is too small`;
+  if (text[arg.from] !== '{') return `the timeout \`${value}\` is not a number literal`;
+  const close = skipBalanced(text, arg.from);
+  const props = close === -1 ? null : splitTopLevel(text, arg.from + 1, close - 1);
+  if (props === null) return 'the options object cannot be read';
+  let timeout: string | null = null;
+  for (const [from, to] of props) {
+    const property = text.slice(partStart(text, from, to), to).trim();
+    if (property.startsWith('...')) return 'the options object spreads another object';
+    const m = /^(?:timeout|'timeout'|"timeout")\s*:\s*([\s\S]*)$/.exec(property);
+    if (m !== null) timeout = withoutComments(m[1] ?? '');
+  }
+  if (timeout === null) return 'the options object has no timeout';
+  const t = numberLiteral(timeout);
+  if (t === null) return `the timeout \`${timeout}\` is not a number literal`;
+  return t >= PROP_TIMEOUT_MIN ? null : `the timeout ${timeout} is too small`;
+}
+
+/**
+ * prop-timeout findings of one test file (see above): every block when `base` is null (a new
+ * file), else the blocks compareTestFile says are new or changed.
+ */
+export function propTimeoutFindings(file: string, head: string, base: string | null): Finding[] {
+  const findings: Finding[] = [];
+  const report = (offset: number, why: string): void => {
+    findings.push({
+      file,
+      line: lineOfOffset(head, offset),
+      rule: 'prop-timeout',
+      message: `${PROP_TIMEOUT_FIX} (${why})`,
+    });
+  };
+  let spans: ReturnType<typeof testBlockSpans>;
+  try {
+    spans = testBlockSpans(head);
+  } catch (err) {
+    if (callsPropParams(head)) {
+      report(0, `the test blocks cannot be read (${String(err)})`);
+    }
+    return findings;
+  }
+  let changed: boolean[] | null = null;
+  if (base !== null) {
+    const compared = compareTestFile(base, head);
+    if (!compared.whole && compared.blocks.length === spans.length) {
+      changed = compared.blocks.map((b) => b.changed);
+    }
+  }
+  spans.forEach((span, i) => {
+    if (changed !== null && changed[i] !== true) return;
+    const parts = splitTopLevel(head, span.open + 1, span.close - 1);
+    if (parts === null) {
+      if (callsPropParams(head.slice(span.start, span.end))) {
+        report(span.start, 'the call cannot be read');
+      }
+      return;
+    }
+    const args = parts
+      .map(([from, to]) => ({ from: partStart(head, from, to), to }))
+      .filter(({ from, to }) => head.slice(from, to).trim() !== '');
+    const [, second, third] = args;
+    // (title, callback, timeout) or (title, options, callback).
+    const optionsFirst = second !== undefined && head[second.from] === '{' && third !== undefined;
+    const callback = optionsFirst ? third : second;
+    if (callback === undefined) return;
+    const body = head.slice(callback.from, callback.to);
+    if (!callsPropParams(body)) return;
+    const why = timeoutProblem(head, optionsFirst ? second : third);
+    if (why !== null) report(span.start, why);
+  });
+  return findings;
+}
+
+/**
+ * prop-timeout findings of a change (git mode only, see above): `readBase` gives the base content
+ * of a modified file (null: judged whole), `readHead` the head content (null: skipped).
+ */
+export function propTimeoutChecks(
+  changes: readonly Change[],
+  readBase: (path: string) => string | null,
+  readHead: (path: string) => string | null,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const change of changes) {
+    if (change.status === 'D' || !PROP_TIMEOUT_FILE.test(change.path)) continue;
+    const head = readHead(change.path);
+    if (head === null) continue;
+    const base = change.status === 'M' ? readBase(change.path) : null;
+    findings.push(...propTimeoutFindings(change.path, head, base));
   }
   return findings;
 }

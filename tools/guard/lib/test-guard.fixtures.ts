@@ -88,3 +88,71 @@ export const CONFIG_STRICT =
 export const CONFIG_RETRY = 'export default { test: { retry: 2 } };\n';
 export const CONFIG_PASS_EMPTY = 'export default { test: { passWithNoTests: true } };\n';
 export const CONFIG_ALLOW_ONLY = 'export default { test: { allowOnly: true } };\n';
+
+// CT-06zzzm (D10-750): property tests calling propParams() and their explicit timeouts.
+const PROP_HEADER = [
+  "import fc from 'fast-check';",
+  "import { expect, it } from 'vitest';",
+  "import { propParams } from '@couli/testing';",
+  '',
+].join('\n');
+/** A rule-test file with the given blocks. */
+export const propFile = (...blocks: string[]): string => `${PROP_HEADER}${blocks.join('\n\n')}\n`;
+/** A test block calling propParams() as fc.assert's second argument, then `tail` (`, 900_000`). */
+export const propBlock = (title: string, tail: string): string =>
+  [
+    `it('${title}', () => {`,
+    '  fc.assert(',
+    '    fc.property(fc.integer(), (n) => n === n),',
+    '    propParams(),',
+    '  );',
+    `}${tail});`,
+  ].join('\n');
+export const PROP_PLAIN = (title: string): string =>
+  `it('${title}', () => {\n  expect(1).toBe(1);\n});`;
+export const PROP_DIRECT = [
+  "it('[AC-1] direct', async () => {",
+  '  const params = propParams();',
+  '  await fc.assert(fc.asyncProperty(fc.nat(), async (n) => n >= 0), params);',
+  '});',
+].join('\n');
+export const PROP_AS_ARGUMENT = [
+  "it('[AC-1] argument', () => {",
+  '  run(fc.nat(), { ...propParams(), numRuns: 1 });',
+  '}, 30_000);',
+].join('\n');
+export const PROP_OPTIONS_SECOND = [
+  "it('[AC-1] options', { timeout: 900_000 }, () => {",
+  '  fc.assert(fc.property(fc.nat(), (n) => n >= 0), propParams());',
+  '});',
+].join('\n');
+export const PROP_EACH = (tail: string): string =>
+  [
+    "it.each([1, 2])('[AC-1] row %i', (k) => {",
+    '  fc.assert(fc.property(fc.nat(), (n) => n + k > n), propParams());',
+    `}${tail});`,
+  ].join('\n');
+export const PROP_CONCURRENT = [
+  "it.concurrent('[AC-1] concurrent', async () => {",
+  '  await fc.assert(fc.asyncProperty(fc.nat(), async (n) => n >= 0), propParams());',
+  '}, 899_999);',
+].join('\n');
+// Codex r1 S2 (CT-06zzzm): the name in a comment or a string is no call; inside `${…}` it is.
+export const PROP_IN_COMMENT = [
+  "it('[AC-1] comment', () => {",
+  '  // 不需要 propParams()，这里只跑一次',
+  '  /* propParams() 也不要 */',
+  '  expect(1).toBe(1);',
+  '});',
+].join('\n');
+export const PROP_IN_STRING = [
+  "it('[AC-1] string', () => {",
+  '  expect(\'propParams()\').toBe("propParams()");',
+  '  expect(`propParams() is ${1}`).toBeTruthy();',
+  '});',
+].join('\n');
+export const PROP_IN_INTERPOLATION = [
+  "it('[AC-1] interpolation', () => {",
+  '  expect(`${JSON.stringify(propParams())}`).toBeTruthy();',
+  '});',
+].join('\n');

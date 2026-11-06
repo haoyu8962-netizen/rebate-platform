@@ -42,7 +42,7 @@ import {
 } from './mechanical.ts';
 import { authorProblems, checkAuthorPaths } from './spec-base.ts';
 import { checkSpecRef } from './spec-ref.ts';
-import { addOnlyViolations, scanTree } from './test-guard.ts';
+import { addOnlyViolations, propTimeoutChecks, scanTree } from './test-guard.ts';
 import type { Finding } from './test-guard.ts';
 import { listTreeFiles } from './tree.ts';
 import type { TreeListing } from './tree.ts';
@@ -137,10 +137,26 @@ export function testGuardCheck(
   base?: string,
 ): CheckResult & { findings: Finding[]; add_only_violations: ProtectedHit[] } {
   const findings = testGuardStatic(root, tree);
+  const changes = base === undefined ? [] : changedFiles(base, { cwd: root });
   const addOnly =
-    base === undefined
-      ? []
-      : addOnlyViolations(changedFiles(base, { cwd: root }), loadProtected(trustedRoot()));
+    base === undefined ? [] : addOnlyViolations(changes, loadProtected(trustedRoot()));
+  // CT-06zzzm (D10-750): explicit timeouts of property tests, in git mode only (test-guard.ts).
+  if (base !== undefined) {
+    const readOr = (read: () => string): string | null => {
+      try {
+        return read();
+      } catch {
+        return null;
+      }
+    };
+    findings.push(
+      ...propTimeoutChecks(
+        changes,
+        (p) => readOr(() => showFile(root, base, p)),
+        (p) => readOr(() => readFileSync(join(root, p), 'utf8')),
+      ),
+    );
+  }
   const problems = [...findings.map(formatFinding), ...addOnly.map(addOnlyProblem)];
   return { ...result('test-guard', problems), findings, add_only_violations: addOnly };
 }

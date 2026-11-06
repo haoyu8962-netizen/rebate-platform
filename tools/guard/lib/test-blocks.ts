@@ -703,6 +703,26 @@ function scanTests(source: string): Scanned {
   return { tokens, match, sep, suites, tests };
 }
 
+/**
+ * CT-06zzzm (D10-750): the source offsets of each test block, in the order of parseTestFile's
+ * and compareTestFile's blocks: `start` / `end` the block (end exclusive, its `;` included),
+ * `open` / `close` the parentheses of its final call (the registration: title, callback,
+ * timeout or options; for `.each` / `.for` the call after the table). Throws TestParseError.
+ */
+export function testBlockSpans(
+  source: string,
+): { start: number; end: number; open: number; close: number }[] {
+  const { tokens, tests } = scanTests(source);
+  const at = (k: number): number => (tokens[k] as Token).start ?? 0;
+  const after = (k: number): number => at(k) + (tokens[k] as Token).text.length;
+  return tests.map((c) => ({
+    start: at(c.start),
+    end: after(c.end),
+    open: at(c.open),
+    close: after(c.close),
+  }));
+}
+
 /** Test blocks and shared rest of a rule-test file (see the header); throws TestParseError. */
 export function parseTestFile(source: string): ParsedTestFile {
   const { tokens, sep, suites, tests } = scanTests(source);

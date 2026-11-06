@@ -866,6 +866,29 @@ describe('path-guard.ts, protected-paths.ts, test-guard.ts, run.ts git', () => {
     expect(guard('test-guard.ts', ['--cwd', root]).status).toBe(1);
   });
 
+  it('[CT-06zzzm] test-guard --base reports prop-timeout for an added test/spec file only; the static mode does not', () => {
+    const { root, base } = workRepo();
+    writeFiles(root, {
+      'test/spec/demo/prop.test.ts': fx.propFile(fx.propBlock('[AC-1] p', '')),
+      'test/spec/demo/ok.test.ts': fx.propFile(fx.propBlock('[AC-2] q', ', 900_000')),
+    });
+    const res = guard('test-guard.ts', ['--base', base, '--cwd', root, '--json']);
+    expect(res.status).toBe(1);
+    const out = json<{ findings: { file: string; line: number; rule: string; message: string }[] }>(
+      res.stdout,
+    );
+    expect(out.findings).toEqual([
+      {
+        file: 'test/spec/demo/prop.test.ts',
+        line: 4,
+        rule: 'prop-timeout',
+        message:
+          'propParams() 的用例须写显式超时 ≥ 900_000：补 `}, 900_000);`，见 D10-750 (no timeout argument)',
+      },
+    ]);
+    expect(guard('test-guard.ts', ['--cwd', root]).status).toBe(0);
+  });
+
   it('run.ts git prints one line per check and fails when any check fails', () => {
     const { root, base } = workRepo();
     writeFiles(root, { 'turbo.json': '{ "x": 1 }\n' });
