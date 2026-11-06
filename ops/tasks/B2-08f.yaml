@@ -1,0 +1,23 @@
+id: B2-08f
+repo: rebate-platform
+title: payout / ledger：W11 核销路径把 tax_ytd「未实名」告警接上日志（FU-B208B-W11-LOGGER，BR-WDR-20，D10-710）——ledger.module 的 writeOff 工厂上下文带上 logger，app.module 传给 createWithdrawalProvenSuccess；只加日志，不改分录与回滚行为
+type: impl
+# 2026-11-06 withdraw 入账（B2-08b 留的 FU；编排 D10-710 授权本线改 ledger.module.ts / app.module.ts 这一处，抄 funds）。现状：W11（差错单核销 → 提现判成功）经 ledger.module 的 writeOff 端口调 payout 的 createWithdrawalProvenSuccess；工厂上下文只有 db / clock / queue / eventBus，没有 logger，所以会员没有已核实名时 tax_ytd 累加照旧抛错回滚（请求 500），但 B2-08b 定的告警行 tax_ytd_identity_missing 在生产装配里写不出来，运维看不到原因。
+# 做法：writeOff 的上下文加 logger（ledger.module 注入 ROOT_LOGGER），app.module 把它的 payout 子 logger 传给 createWithdrawalProvenSuccess 已有的 logger 选项。告警只带 app_id / withdrawal_id / user_id / year 这类编号（B2-08b 的口径不变），不带实名、证件、摘要。抛错回滚、分录、状态迁移一律不动，无契约无迁移。
+# 规则测试放新目录：经 admin 入口的实际装配走一次 W11 核销，会员无已核实名 → 请求失败且什么都没落（照旧），日志里恰一条 tax_ytd_identity_missing；有实名时照常成功、无该告警。
+refs: [BR-WDR-20]
+refs_hash:
+  BR-WDR-20: 3127fc4b4b65
+deps: [B2-08b, B2-07e]
+paths:
+  - 'apps/api/src/modules/ledger/ledger.module.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/payout/proven-success-logger/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/proven-success-logger/**'
+status: todo
+pr: null
