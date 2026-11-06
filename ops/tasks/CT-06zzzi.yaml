@@ -1,0 +1,19 @@
+id: CT-06zzzi
+repo: rebate-platform
+title: CT-06zzzi：brief.test.ts 真实台账一例不再随「第一个 todo」漂移——按顺序试 todo，超限的断言照设计拒绝，取第一个能生成的做原有全部断言（D10-720）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排裁定 D10-720；优先于 B1-25a 实现）。起因：tools/ops/brief.test.ts「generates the brief of a real task within the size limit」
+#   取台账第一个 todo；#2467 把 B1-03zg 标 done 后第一个 todo 变成 B1-04zza（任务书 95603 字节 > 24KB），brief.ts 照设计拒绝，测试红，与 #2467 无关。
+# 改法：按台账顺序试 todo；超限的断言退出码 1、报「任务书 N 字节，超过上限 24576 字节（24KB）：任务 <id> 该拆小」且不写文件，再试下一个；
+#   第一个能生成的做原有全部断言；全部超限时断言至少一个且每个报错格式正确；其他失败照旧红。上限不放宽，原断言一条不删。按 #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/brief.test.ts'
+  - 'ops/tasks/CT-06zzzi.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

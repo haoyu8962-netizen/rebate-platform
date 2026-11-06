@@ -457,16 +457,44 @@ it('refuses a brief that hits a banned term and leaves no file behind', () => {
 it(
   'generates the brief of a real task within the size limit, with the real rules embedded',
   () => {
-    // The first open task of the ledger. Tasks leave the ledger when they are archived
-    // (规划/11 §2.1), so nothing here names one.
+    // The open tasks of the ledger, in order. Tasks leave the ledger when they are archived
+    // (规划/11 §2.1), so nothing here names one. CT-06zzzi (D10-720): an open task whose brief is
+    // over the size limit is refused by brief.ts by design (exit 1, the "超过上限" message, no file);
+    // that refusal is asserted and the next open task is tried, until one generates; the checks
+    // below then run on it. The limit itself is not relaxed.
     const runs = join(base, 'real-runs');
-    const id = listTaskIds().find((t) => loadTask(t).status === 'todo') ?? listTaskIds()[0];
-    if (id === undefined) {
+    const open = listTaskIds().filter((t) => loadTask(t).status === 'todo');
+    const candidates = open.length > 0 ? open : listTaskIds().slice(0, 1);
+    if (candidates.length === 0) {
       expect(runCli('brief.ts', ['ZZ-99'], { COULI_RUNS: runs }).status).toBe(1);
       return;
     }
+    let id: string | undefined;
+    let res: ReturnType<typeof runCli> | undefined;
+    const overLimit: string[] = [];
+    for (const candidate of candidates) {
+      const tried = runCli('brief.ts', [candidate], { COULI_RUNS: runs });
+      if (tried.status === 0) {
+        id = candidate;
+        res = tried;
+        break;
+      }
+      // Any other failure than the size limit fails here, with its output.
+      expect(tried.status, `${candidate}: ${tried.stderr}`).toBe(1);
+      expect(tried.stderr, candidate).toMatch(
+        new RegExp(
+          `任务书 \\d+ 字节，超过上限 ${MAX_BRIEF_BYTES} 字节（24KB）：任务 ${candidate} 该拆小`,
+        ),
+      );
+      expect(existsSync(join(runs, candidate, 'brief.md')), `${candidate}: no file`).toBe(false);
+      overLimit.push(candidate);
+    }
+    if (id === undefined || res === undefined) {
+      // Every open task is over the limit: each refusal above was checked; at least one exists.
+      expect(overLimit.length).toBeGreaterThan(0);
+      return;
+    }
     const task = loadTask(id);
-    const res = runCli('brief.ts', [id], { COULI_RUNS: runs });
     expect(res.stderr).toContain('任务书已生成');
     expect(res.status).toBe(0);
     const out = join(runs, id, 'brief.md');
