@@ -18,14 +18,28 @@
 //     clock.now() + n days;
 //     anything else → rejects with an Error whose message quotes the code (so a leak of the
 //     provider's error text is visible to the tests).
-// - createSiteOAuthProviders(appEnv, clock, logger): what the admin entry injects: the fake in
-//   local / test; in staging / prod no provider, announced once with a warn
-//   `union_site_oauth_unconfigured` (no code, state or token is ever logged).
-import type { Clock, RootLogger } from '../../platform/index.ts';
+// - createSiteOAuthProviders(appEnv, clock, logger, wiring?): what the admin entry injects: the
+//   fake in local / test (wiring ignored); in staging / prod (B1-04zzi, D10-680) the real Taobao
+//   provider (./taobao/site-oauth.ts) only when the wiring has a non-empty appKey, a non-empty
+//   appSecret and a non-empty redirect URI, jd and pdd never; otherwise no provider, announced once
+//   with a warn `union_site_oauth_unconfigured` (no code, state, secret or token is ever logged).
+import type { Clock, RootLogger, TaobaoAppCredentials } from '../../platform/index.ts';
 import type { SiteOAuthProvider } from '../auth-expiry/reauth.ts';
 import { REGISTERED_PLATFORMS, type RegisteredPlatform } from '../domain/types.ts';
+import type { UnionTransport } from './replay.ts';
+import { createTaobaoSiteOAuth } from './taobao/site-oauth.ts';
 
 export type SiteOAuthProviders = Partial<Readonly<Record<RegisteredPlatform, SiteOAuthProvider>>>;
+
+/** What the admin entry hands over for the real providers (B1-04zzi). */
+export interface SiteOAuthWiring {
+  /** The B1-04k Taobao app credentials as opened at startup; null when the entry has none. */
+  readonly taobaoCredentials: TaobaoAppCredentials | null;
+  /** AppConfig.taobaoOAuthRedirectUri (TAOBAO_OAUTH_REDIRECT_URI); null when unset. */
+  readonly taobaoRedirectUri: string | null;
+  /** HTTPS transport of the token request (createUnionHttpTransport; not archived). */
+  readonly transport: UnionTransport;
+}
 
 const HOST = 'https://site-oauth.example.test';
 const DAY_MS = 86_400_000;
@@ -88,13 +102,37 @@ export function createFakeSiteOAuth(appEnv: string, clock: Clock): SiteOAuthProv
   );
 }
 
-/** The admin entry's providers: the fake in local / test, none elsewhere (one warn). */
+/**
+ * The admin entry's providers: the fake in local / test; elsewhere the real Taobao provider when the
+ * wiring is complete, none otherwise (one warn).
+ */
 export function createSiteOAuthProviders(
   appEnv: string,
   clock: Clock,
   logger: Pick<RootLogger, 'warn'>,
+  wiring?: SiteOAuthWiring,
 ): SiteOAuthProviders {
   if (isFakeEnv(appEnv)) return createFakeSiteOAuth(appEnv, clock);
-  logger.warn({ app_env: appEnv }, 'union_site_oauth_unconfigured');
-  return Object.freeze({});
+  const credentials = wiring?.taobaoCredentials ?? null;
+  const redirectUri = wiring?.taobaoRedirectUri ?? null;
+  if (
+    wiring === undefined ||
+    credentials === null ||
+    credentials.appKey === '' ||
+    credentials.appSecret === '' ||
+    redirectUri === null ||
+    redirectUri === ''
+  ) {
+    logger.warn({ app_env: appEnv }, 'union_site_oauth_unconfigured');
+    return Object.freeze({});
+  }
+  return Object.freeze({
+    taobao: createTaobaoSiteOAuth({
+      credentials: () => Promise.resolve(credentials),
+      // The plain HTTPS transport as handed in: never wrapped in the archiving transport.
+      transport: wiring.transport,
+      clock,
+      redirectUri,
+    }),
+  });
 }

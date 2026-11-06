@@ -33,6 +33,7 @@ import { readQueueConcurrencyConfig } from './queue-concurrency.ts';
 import { readSmsConfig, type SmsConfig } from './sms.ts';
 import { readStagingTestPhoneConfig, type StagingTestPhoneConfig } from './staging-test-phones.ts';
 import { readTaobaoConfig, type TaobaoAppConfig } from './taobao.ts';
+import { readTaobaoOAuthConfig } from './taobao-oauth.ts';
 import { readTaobaoSourceConfig } from './taobao-sources.ts';
 import { readTrustedProxies } from './trusted-proxies.ts';
 import { readUnionEndpointOverrideConfig } from './union-endpoint-override.ts';
@@ -207,6 +208,13 @@ export interface AppConfig {
    * and the path. Absent when not configured; a hand-built config without it counts as null.
    */
   readonly taobao?: TaobaoAppConfig | null;
+  /**
+   * TAOBAO_OAUTH_REDIRECT_URI (B1-04zzi, D10-680): the redirect_uri of the Taobao station-owner
+   * OAuth, the console's /unions/oauth-callback page. Not a credential; any APP_ENV may set it; an
+   * absolute https: URL or loadConfig refuses (the problem names the variable only). Absent or
+   * null when unset; a hand-built config without it counts as unset.
+   */
+  readonly taobaoOAuthRedirectUri?: string | null;
   /**
    * DATAOKE_APP_KEY / DATAOKE_APP_SECRET_FILE (./dataoke.ts, B1-04e): staging only, both or neither;
    * the 大淘客 order source of the live Taobao adapter. The secret file is read once by the union
@@ -414,6 +422,7 @@ export function loadConfig(
     problems.push(...readJdSiteConfig(env).problems);
     problems.push(...readPddQueryConfig(env).problems);
     problems.push(...readTaobaoSourceConfig(env).problems);
+    problems.push(...readTaobaoOAuthConfig(env).problems);
     if (appEnv.success)
       problems.push(...readUnionEndpointOverrideConfig(appEnv.data, env).problems);
     if (appEnv.success) problems.push(...readAgentUserHashConfig(appEnv.data, env).problems);
@@ -474,6 +483,8 @@ export function loadConfig(
     problems: taobaoSourceProblems,
   } = readTaobaoSourceConfig(env);
   violations.push(...taobaoSourceProblems);
+  const { taobaoOAuthRedirectUri, problems: taobaoOAuthProblems } = readTaobaoOAuthConfig(env);
+  violations.push(...taobaoOAuthProblems);
   const { unionEndpointOverrideDir, problems: overrideProblems } = readUnionEndpointOverrideConfig(
     values.APP_ENV,
     env,
@@ -525,6 +536,8 @@ export function loadConfig(
     pddQueryCustomParameters,
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(taobao === null ? {} : { taobao }),
+    // Only present when configured, so the documented shape of an unconfigured result is unchanged.
+    ...(taobaoOAuthRedirectUri === null ? {} : { taobaoOAuthRedirectUri }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(dataoke === null ? {} : { dataoke }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.

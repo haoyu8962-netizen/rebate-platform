@@ -91,6 +91,8 @@ export {
   TAOBAO_SEARCH_SOURCE_ENV,
   readTaobaoSourceConfig,
 } from './taobao-sources.ts';
+// Taobao station-owner OAuth redirect URI (B1-04zzi): a server setting, not a credential.
+export { TAOBAO_OAUTH_REDIRECT_URI_ENV, readTaobaoOAuthConfig } from './taobao-oauth.ts';
 export type { DataokeAppConfig } from './dataoke.ts';
 export {
   DATAOKE_SECRET_FILE_MAX_BYTES,
