@@ -1,0 +1,25 @@
+id: B2-05r
+repo: rebate-platform
+title: payout：自动到账 ⑨ 黑名单命中补一条结构化日志，并用规则测试钉住日志内容（FU-B205Q-LOG-9，BR-WDR-29、BR-ID-33，D10-707 ①）——只记提现单号与命中类别，不记手机号、任何摘要、设备哈希
+type: impl
+# 2026-11-06 withdraw 入账（编排 08:09 入账 FU、D10-707 ① 派工）。来由：B2-05q spec-test r2 / r3 的范围外 S2——⑨ 路径（auto-payout 判定时实时查黑名单、命中转人工并记 risk_hits）没有用例读 worker 日志，写口或消费者日后若打出值摘要也不会红。
+# 做法：判定列出 risk_flag:blacklist_hit 并记下命中后，打一条 info 日志（固定消息名），字段只有 app_id、withdrawal_id、命中类别（维度与规则码 BLACKLIST_<DIMENSION>）；不带 user_id、手机号、value_hmac、手机号摘要、设备哈希、收款账号摘要。不命中、规则停用、判定回滚重投不重复记的口径照 B2-05q。不动判定、不动 risk_hits、不动钱、无契约无迁移。
+# 规则测试放新目录（B2-05q 的 withdraw-blocklist-hits/ 已冻结，不改）：经 worker 实际装配取日志，命中时恰一条该消息、字段恰为上列；全部日志行不含手机号摘要、值摘要、设备哈希；不命中与停用时没有该消息。
+refs: [BR-WDR-29, BR-ID-33]
+refs_hash:
+  BR-WDR-29: c576e429b058
+  BR-ID-33: 01b25f773b29
+deps: [B2-05q]
+paths:
+  - 'apps/api/src/modules/payout/application/auto-payout.ts'
+  - 'apps/api/src/modules/payout/application/auto-payout.test.ts'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+test_paths:
+  - 'test/spec/payout/auto-payout-hit-log/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/auto-payout-hit-log/**'
+status: todo
+pr: null

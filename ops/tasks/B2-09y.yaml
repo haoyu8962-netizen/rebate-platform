@@ -1,0 +1,25 @@
+id: B2-09y
+repo: rebate-platform
+title: payout：处置页【立即查询】按同一提现单在途去重（FU-W10-QUERY-DEDUPE，BR-WDR-15、BR-WDR-14，D10-702 ③、D10-707 ②）——同一张单已有一条人工查询在队列里或执行中时，再点不再入队第二条，应答不变
+type: impl
+# 2026-11-06 withdraw 入账（从 pay 移来，D10-707 ②）。来由：withdraw 对 B2-09s 的评审 S2——admin-unknown-payouts.ts 的 queryAdminPayoutResult 每次请求用随机 manual_request_id 作 singletonKey，不同幂等键的重复点击（或两位处置人同时点）会各入队一条，对同一 out_biz_no 并发查通道、各记一条尝试。
+# 做法（只动实现，契约不改）：在途 = 同一 withdrawal_id + execute_seq 的人工查询任务已入队或执行中、结果尚未落尝试记录；在途时新请求不再入队，仍答 submitted（结果照旧出现在 latest_query），审计照记是谁点的。上一条落了记录之后再点，照常入队新的一条。只查不重发（BR-WDR-14）不变，查询结果只作凭证、不迁移状态（BR-WDR-15）不变。不动钱、无迁移。
+# 顺序：与 pay 的 B2-09w / B2-09x（#2466）同改 admin-unknown-payouts.ts（路径相交不同时在途），按 D10-702 排在它们之后开工；#2466 合并前本台账的 deps 写不了那两个编号，开工前补。
+refs: [BR-WDR-15, BR-WDR-14]
+refs_hash:
+  BR-WDR-15: 862cdb2e711a
+  BR-WDR-14: 6328f3cda2e6
+deps: [B2-09u]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-unknown-payouts.ts'
+  - 'apps/api/src/modules/payout/application/admin-unknown-payouts.test.ts'
+  - 'apps/api/src/modules/payout/jobs/query-job.ts'
+test_paths:
+  - 'test/spec/payout/manual-query-dedupe/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/manual-query-dedupe/**'
+status: todo
+pr: null
