@@ -33,3 +33,16 @@ accept:
   - 'test/spec/settlement/run-credit-watermark/**'
 status: todo
 pr: null
+red_exempt:
+  - file: test/spec/db/settlement/core/schema.int.test.ts
+    test: '[AC-B2-04a#25] couli_app 出账完成时回填六个账单汇总列与完成时刻并原样读回'
+    reason: 冻结 B2-04a 用例，测试体未改；只因同目录 kit.ts 的 migrationSource 为 B2-04zy 新列扩到后续 ALTER app.settle_batches 迁移，整份文件被一并判定，骨架上本就为绿（D10-726 / D10-327）
+  - file: test/spec/db/settlement/core/schema.int.test.ts
+    test: '[AC-B2-04a#3] 名义任务和账单唯一，明细两条部分唯一、open 义务部分唯一'
+    reason: 冻结 B2-04a 用例，测试体未改；只因同目录 kit.ts 的 migrationSource 为 B2-04zy 新列扩到后续 ALTER app.settle_batches 迁移，整份文件被一并判定，骨架上本就为绿（D10-726 / D10-327）
+  - file: test/spec/db/settlement/core/schema.int.test.ts
+    test: '[AC-B2-04a#4] 同一迁移创建并授权八表，约束与独立索引具名，不创建打款明细'
+    reason: 冻结 B2-04a 用例，测试体未改；只因同目录 kit.ts 的 migrationSource 为 B2-04zy 新列扩到后续 ALTER app.settle_batches 迁移，整份文件被一并判定，骨架上本就为绿（D10-726 / D10-327）
+  - file: test/spec/db/settlement/core/schema.int.test.ts
+    test: '[AC-B2-04a#5] 订单引用指 order_keys，明细连接账单批次及义务，所有外键不级联'
+    reason: 冻结 B2-04a 用例，测试体未改；只因同目录 kit.ts 的 migrationSource 为 B2-04zy 新列扩到后续 ALTER app.settle_batches 迁移，整份文件被一并判定，骨架上本就为绿（D10-726 / D10-327）
