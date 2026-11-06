@@ -4,7 +4,9 @@
 // fetched_at, the server receipt instant of the union response. Cards, quotes, links and item_refs
 // are assembled per request by the callers, never cached. B1-05zf: the card source fields the union
 // gave (shop_name, category_l1_id / _name, main_image_url, image_urls) are kept as is; absent ones
-// stay absent, and a stored one of the wrong type makes the entry unreadable (a miss).
+// stay absent, and a stored one of the wrong type makes the entry unreadable (a miss). B1-05zk: the
+// same for the union fields behind the detail-only card keys (coupon_end_at, sales_text, shop_logo,
+// shop_scores, shop_ref), kept whatever the detail switches say; only the card blanks them.
 //   hit:    now − fetched_at ≤ search.cache_ttl_sec (default 300 s), quoted_at unchanged;
 //   stale:  on a union dependency failure, an entry with now − fetched_at ≤
 //           search.cache.stale_max_age_s (default 300 s, at most the physical TTL) is returned
@@ -126,6 +128,10 @@ const ITEM_STRINGS = [
 const CARD_STRINGS = ['shop_name', 'category_l1_id', 'category_l1_name', 'main_image_url'] as const;
 /** Optional card source list (B1-05zf): an array of strings, order and repeats kept. */
 const CARD_LIST = 'image_urls';
+/** Optional detail-only source strings (B1-05zk, D10-736 ⑦): stored only when given as a string. */
+const DETAIL_STRINGS = ['coupon_end_at', 'sales_text', 'shop_logo', 'shop_ref'] as const;
+/** Optional shop scores (B1-05zk): an array of { key, value } strings, order kept. */
+const DETAIL_SCORES = 'shop_scores';
 const ITEM_AMOUNTS = ['price_fen', 'coupon_fen', 'final_price_fen', 'commission_rate_bp'] as const;
 const REF_STRINGS = [
   'appId',
@@ -160,11 +166,33 @@ export function storeItem(item: UnionItem): Json {
   }
   const list = source[CARD_LIST];
   if (isStringList(list)) out[CARD_LIST] = [...list];
+  for (const name of DETAIL_STRINGS) {
+    const value = source[name];
+    if (typeof value === 'string') out[name] = value;
+  }
+  const scores = source[DETAIL_SCORES];
+  if (isScoreList(scores)) out[DETAIL_SCORES] = copyScores(scores);
   return out;
 }
 
 function isStringList(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((entry: unknown) => typeof entry === 'string');
+}
+
+type StoredScore = { readonly key: string; readonly value: string };
+
+function isScoreList(value: unknown): value is readonly StoredScore[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry: unknown) =>
+        isRecord(entry) && typeof entry['key'] === 'string' && typeof entry['value'] === 'string',
+    )
+  );
+}
+
+function copyScores(scores: readonly StoredScore[]): StoredScore[] {
+  return scores.map(({ key, value }) => ({ key, value }));
 }
 
 /** A stored value of another shape; readers treat it as a miss. */
@@ -195,6 +223,18 @@ export function loadItem(value: unknown): UnionItemDetail {
   if (list !== undefined) {
     if (!isStringList(list)) throw new Unreadable();
     out[CARD_LIST] = [...list];
+  }
+  // Entries written before B1-05zk lack the detail-only fields; absent stays absent.
+  for (const name of DETAIL_STRINGS) {
+    const field = value[name];
+    if (field === undefined) continue;
+    if (typeof field !== 'string') throw new Unreadable();
+    out[name] = field;
+  }
+  const scores = value[DETAIL_SCORES];
+  if (scores !== undefined) {
+    if (!isScoreList(scores)) throw new Unreadable();
+    out[DETAIL_SCORES] = copyScores(scores);
   }
   if (typeof out['title'] !== 'string' || typeof out['quoted_at'] !== 'string') {
     throw new Unreadable();

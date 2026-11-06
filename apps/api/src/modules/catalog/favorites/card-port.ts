@@ -32,6 +32,8 @@ export function createFavoriteCardPort(options: FavoriteCardPortOptions): Favori
             reparse: false,
             // B1-05ze: ProductCard.images is only on the detail route, never on a favorite card.
             images: false,
+            // B1-05zk: nor are the five detail-only keys (coupon_end_at … shop_entry).
+            detailExtras: false,
             viewerContext,
             catalog: {
               // A favorite also names its platform: a mismatched key must fail before upstream.

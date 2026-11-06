@@ -20,6 +20,13 @@ import {
 import type { CatalogCardEntry, CatalogCardResult } from './application/card-entry.ts';
 import type { ItemRefService } from './application/item-ref.ts';
 import type { PoolReader } from './application/pool-read.ts';
+import {
+  detailExtraSwitchKeys,
+  detailExtras,
+  emptyDetailExtras,
+  switchOn,
+  type DetailExtras,
+} from './domain/detail-extras.ts';
 import { detailImages, type DetailImage } from './domain/detail-images.ts';
 import { CatalogError, isFresh } from './domain/rules.ts';
 import type { Catalog, ProductCapabilities, ProductRef, RequestRawRef } from './domain/types.ts';
@@ -122,6 +129,12 @@ export interface ProductDetailOptions {
    * not the detail route. Absent means the detail route: the card carries images.
    */
   readonly images?: boolean;
+  /**
+   * B1-05zk (D10-736, CT-26s): false leaves coupon_end_at / sales_text / shop_logo / shop_scores /
+   * shop_entry off the card and reads none of their switches; like images they are only on GET
+   * /v1/products/{product_key}. Absent means the detail route: the card carries all five.
+   */
+  readonly detailExtras?: boolean;
 }
 
 export type ProductDetailData = components['schemas']['ProductResponse']['data'];
@@ -242,6 +255,32 @@ function withImages(
   return options.images === false ? card : { ...card, images };
 }
 
+/**
+ * B1-05zk: the five detail-only keys under the platform's switches (only an exact `true` is on). A
+ * cache hit or a stale entry is the same UnionItemDetail, so it reads the same way.
+ */
+async function readDetailExtras(
+  item: UnionItemDetail,
+  appId: string,
+  platform: string,
+  config: CatalogConfigReader,
+): Promise<DetailExtras> {
+  const keys = detailExtraSwitchKeys(platform);
+  const on = async (key: string): Promise<boolean> =>
+    switchOn((await config.configValue(appId, key))?.value);
+  const [couponEnd, sales, shopScores] = await Promise.all([
+    on(keys.couponEnd),
+    on(keys.sales),
+    on(keys.shopScores),
+  ]);
+  return detailExtras(item, { couponEnd, sales, shopScores });
+}
+
+/** B1-05zk: the card with the five keys; unchanged when the caller opted out. */
+function withDetailExtras(card: ProductDetailData, extras: DetailExtras | null): ProductDetailData {
+  return extras === null ? card : { ...card, ...extras };
+}
+
 export async function getProduct(
   query: ProductDetailQuery,
   options: ProductDetailOptions,
@@ -348,10 +387,11 @@ export async function getProduct(
         // B1-05ze: the pool row keeps only the main image of its listing; nothing is added from
         // elsewhere, so the images are [main] or [].
         const main = pooled.item.main_image_url;
-        return withImages(
-          card,
-          detailImages(main === undefined ? {} : { main_image_url: main }),
-          options,
+        const images = detailImages(main === undefined ? {} : { main_image_url: main });
+        // B1-05zk: a pool row is no union detail, so the five keys show nothing whatever it holds.
+        return withDetailExtras(
+          withImages(card, images, options),
+          options.detailExtras === false ? null : emptyDetailExtras(),
         );
       }
     }
@@ -431,7 +471,10 @@ export async function getProduct(
     scene: 'active_query',
   });
   // B1-05ze: a cache hit or a stale entry is the same UnionItemDetail, so it reads the same way.
-  const card = withImages(issuedCard(result), detailImages(item), options);
+  const card = withDetailExtras(
+    withImages(issuedCard(result), detailImages(item), options),
+    options.detailExtras === false ? null : await readDetailExtras(item, appId, platform, config),
+  );
   // BR-PROD-11: a valid tapped token that supplied this call's raw ID goes back unchanged (原样
   // 透传), even if the union now reports another raw ID for the same key; otherwise the card's
   // freshly issued token stands.

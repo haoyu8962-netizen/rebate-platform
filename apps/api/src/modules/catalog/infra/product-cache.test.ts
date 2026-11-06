@@ -246,3 +246,49 @@ it('[AC-B1-05zf#5] 详情条目 image_urls 坏值当未命中：回源并以新�
   await upstream.detail(request);
   expect(detail).toHaveBeenCalledTimes(1);
 });
+
+const EXTRAS = {
+  coupon_end_at: '2026-10-31T23:59:59+08:00',
+  sales_text: '已拼 10 万+件',
+  shop_logo: 'https://img.synthetic.invalid/shop/logo.png',
+  shop_scores: [
+    { key: 'desc', value: '高' },
+    { key: 'level', value: '5' },
+  ],
+  shop_ref: '987654321',
+} as const satisfies Partial<UnionItemDetail>;
+const EXTRA_FIELDS = Object.keys(EXTRAS);
+
+it('[AC-B1-05zk] storeItem / loadItem 原样存取详情专用字段（评分顺序不变），不存 shop_entry', () => {
+  const rich: UnionItemDetail = {
+    ...item(),
+    ...EXTRAS,
+    shop_scores: EXTRAS.shop_scores.map((score) => ({ ...score })),
+  };
+  const stored = storeItem(rich);
+  expect(stored).toMatchObject(EXTRAS);
+  expect(Object.hasOwn(stored, 'shop_entry')).toBe(false);
+  expect(roundTrip(rich)).toMatchObject({ ...EXTRAS, title: 'synthetic' });
+});
+
+it('[AC-B1-05zk] 联盟没给的详情专用字段不存、读出也不带键（旧条目照常读出）', () => {
+  const stored = storeItem(item());
+  for (const key of EXTRA_FIELDS) expect(Object.hasOwn(stored, key)).toBe(false);
+  const loaded = roundTrip(item());
+  for (const key of EXTRA_FIELDS) expect(Object.hasOwn(loaded, key)).toBe(false);
+  expect(loaded.title).toBe('synthetic');
+});
+
+it.each<{ name: string; patch: Record<string, unknown> }>([
+  { name: 'coupon_end_at 为数字', patch: { coupon_end_at: 1_798_732_799_000 } },
+  { name: 'sales_text 为 null', patch: { sales_text: null } },
+  { name: 'shop_logo 为数组', patch: { shop_logo: [SOME_URL] } },
+  { name: 'shop_ref 为数字', patch: { shop_ref: 987_654_321 } },
+  { name: 'shop_scores 为对象', patch: { shop_scores: { key: 'desc', value: '高' } } },
+  { name: 'shop_scores 含字符串', patch: { shop_scores: ['高'] } },
+  { name: 'shop_scores 的 value 为数字', patch: { shop_scores: [{ key: 'level', value: 5 }] } },
+  { name: 'shop_scores 缺 key', patch: { shop_scores: [{ value: '高' }] } },
+])('[AC-B1-05zk] 详情专用字段类型不对（$name）按坏条目抛 Unreadable', ({ patch }) => {
+  const stored = { ...storeItem(item()), ...patch };
+  expect(() => loadItem(stored)).toThrow(Unreadable);
+});

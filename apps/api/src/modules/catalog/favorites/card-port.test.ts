@@ -142,6 +142,40 @@ it('[AC-B1-05ze] 收藏卡不带 images：联盟详情有主图与多图时卡�
   expect(favoriteCardView(result).productCard).not.toHaveProperty('images');
 });
 
+const DETAIL_EXTRA_KEYS = [
+  'coupon_end_at',
+  'sales_text',
+  'shop_logo',
+  'shop_scores',
+  'shop_entry',
+] as const;
+
+it('[AC-B1-05zk] 收藏卡不带五个详情专用键，也不读它们的开关：开关全开、联盟都给了也没有', async () => {
+  const f = setup();
+  const configValue = vi.fn(async (_appId: string, key: string) =>
+    key.startsWith('detail.') || key.startsWith('shop.entry.') ? { value: true, version: 1 } : null,
+  );
+  f.detail.mockResolvedValue({
+    ...f.item,
+    coupon_end_at: '2031-05-31T23:59:59+08:00',
+    sales_text: '已售 1 万+',
+    shop_logo: 'https://img.example.test/favorite/logo.png',
+    shop_scores: [{ key: 'desc', value: '高' }],
+    shop_ref: '12345',
+  });
+  const result = await createFavoriteCardPort({
+    ...f.options,
+    config: { configValue },
+  }).fetch(request);
+  expect(result.kind).toBe('card');
+  for (const key of DETAIL_EXTRA_KEYS) {
+    expect(result).not.toHaveProperty(['card', key]);
+    expect(favoriteCardView(result).productCard).not.toHaveProperty([key]);
+  }
+  const asked = configValue.mock.calls.map(([, key]) => key);
+  expect(asked.filter((key) => key.startsWith('detail.'))).toEqual([]);
+});
+
 it('[AC-B1-28b#48] retrieval 价格异常不报价、不发引用、不登记 link，并记录 retrieval 场景', async () => {
   const f = setup();
   f.detail.mockResolvedValue({ ...f.item, price_status: 'anomaly' });

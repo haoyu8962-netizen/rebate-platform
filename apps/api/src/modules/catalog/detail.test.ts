@@ -318,3 +318,97 @@ describe('getProduct: card images (B1-05ze, FU-DETAIL-GALLERY)', () => {
     expect(Object.hasOwn(card, 'images')).toBe(false);
   });
 });
+
+describe('getProduct: detail-only card keys (B1-05zk, D10-736)', () => {
+  const EXTRAS = {
+    coupon_end_at: '2026-10-31T23:59:59+08:00',
+    sales_text: '已拼 10 万+件',
+    shop_logo: 'https://img.example.test/unit/logo.png',
+    shop_scores: [{ key: 'desc', value: '高' }],
+    shop_ref: '987654321',
+  } as const satisfies Partial<UnionItemDetail>;
+  const SWITCHES = [
+    'detail.coupon_end.enabled.taobao',
+    'detail.sales.enabled.taobao',
+    'detail.shop_scores.enabled.taobao',
+  ];
+
+  const KEYS = ['coupon_end_at', 'sales_text', 'shop_logo', 'shop_scores', 'shop_entry'];
+
+  function switches(values: Record<string, string | number | boolean>) {
+    const map = new Map(Object.entries(values));
+    return vi.fn(async (_appId: string, key: string) => {
+      const value = map.get(key);
+      return value === undefined ? null : { value, version: 1 };
+    });
+  }
+
+  function pick(card: object) {
+    const fields = card as Record<string, unknown>;
+    return Object.fromEntries(KEYS.map((key) => [key, fields[key]]));
+  }
+
+  it('[AC-B1-05zk] 三个开关都为 true：联盟字段原样上卡，shop_entry 为 false；按商品平台读开关', async () => {
+    const f = setup(async () => item(EXTRAS));
+    const configValue = switches(Object.fromEntries(SWITCHES.map((key) => [key, true])));
+    const card = await getProduct(
+      { product_key: PRODUCT_KEY },
+      { ...f.options, config: { configValue } },
+    );
+    expect(pick(card)).toEqual({
+      coupon_end_at: EXTRAS.coupon_end_at,
+      sales_text: EXTRAS.sales_text,
+      shop_logo: EXTRAS.shop_logo,
+      shop_scores: [{ key: 'desc', value: '高' }],
+      shop_entry: false,
+    });
+    for (const key of SWITCHES) expect(configValue).toHaveBeenCalledWith(APP_ID, key);
+  });
+
+  it('[AC-B1-05zk] 开关缺省或不是严格 true：coupon_end_at / sales_text 为 null、shop_scores 为 []，shop_logo 照联盟', async () => {
+    const f = setup(async () => item(EXTRAS));
+    const configValue = switches({
+      'detail.coupon_end.enabled.taobao': 'true',
+      'detail.sales.enabled.taobao': 1,
+    });
+    const card = await getProduct(
+      { product_key: PRODUCT_KEY },
+      { ...f.options, config: { configValue } },
+    );
+    expect(pick(card)).toEqual({
+      coupon_end_at: null,
+      sales_text: null,
+      shop_logo: EXTRAS.shop_logo,
+      shop_scores: [],
+      shop_entry: false,
+    });
+  });
+
+  it('[AC-B1-05zk] 池回退：五个键为 null / null / null / [] / false', async () => {
+    const pooled = poolCandidate();
+    const f = reparseSetup(
+      { ...pooled, item: { ...pooled.item, ...EXTRAS } },
+      { search: () => Promise.reject(new UnionError('rate_limited', 'x', 'taobao')) },
+    );
+    const card = await f.run();
+    expect(card.stale).toBe(true);
+    expect(pick(card)).toEqual({
+      coupon_end_at: null,
+      sales_text: null,
+      shop_logo: null,
+      shop_scores: [],
+      shop_entry: false,
+    });
+  });
+
+  it('[AC-B1-05zk] detailExtras: false 的调用方卡上没有这五个键，也不读详情开关', async () => {
+    const f = setup(async () => item(EXTRAS));
+    const configValue = switches({});
+    const card = await getProduct(
+      { product_key: PRODUCT_KEY },
+      { ...f.options, config: { configValue }, detailExtras: false },
+    );
+    for (const key of KEYS) expect(Object.hasOwn(card, key)).toBe(false);
+    for (const key of SWITCHES) expect(configValue).not.toHaveBeenCalledWith(APP_ID, key);
+  });
+});
