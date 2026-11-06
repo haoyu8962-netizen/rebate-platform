@@ -62,6 +62,9 @@ const OPTIONAL_CONFIG_KEYS = [
   'external_page.nav_host_sample_bp',
   'external_page.union_host_block',
   'earnings.dashboard.enabled',
+  // F1-02zzze (D10-691): sources of the derived flags product_feedback / jd_plus_note.
+  'feedback.enabled',
+  'detail.jd_plus_note.enabled',
   'external_hosts',
   'app_update.recheck_interval_sec',
   'help_links',
@@ -398,6 +401,8 @@ export function buildClientConfig(input: ClientConfigInput): ClientConfig | unde
     // Derived keys win over a same-named entry of the base dictionary.
     'external_page.union_host_block': switchValue('external_page.union_host_block') !== false,
     'earnings.dashboard.visible': switchValue('earnings.dashboard.enabled') !== false,
+    product_feedback: switchValue('feedback.enabled') !== false,
+    jd_plus_note: switchValue('detail.jd_plus_note.enabled') !== false,
   };
 
   const whitelistOnly = switchValue('agent.whitelist_only') !== false;

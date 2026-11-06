@@ -112,7 +112,42 @@ it('[AC-F1-02c] derived flags win over the base dictionary', () => {
     custom: true,
     'external_page.union_host_block': true,
     'earnings.dashboard.visible': false,
+    product_feedback: true,
+    jd_plus_note: true,
   });
+});
+
+it('[AC-F1-02zzze] product_feedback / jd_plus_note: only a strict false source turns them off', () => {
+  expect(build({}).config!.features.flags).toMatchObject({
+    product_feedback: true,
+    jd_plus_note: true,
+  });
+  const off = build({ 'feedback.enabled': false, 'detail.jd_plus_note.enabled': false });
+  expect(off.config!.features.flags).toMatchObject({
+    product_feedback: false,
+    jd_plus_note: false,
+  });
+  expect(off.invalid).toEqual([]);
+  const odd = build({ 'feedback.enabled': 'false', 'detail.jd_plus_note.enabled': 0 });
+  expect(odd.config!.features.flags).toMatchObject({ product_feedback: true, jd_plus_note: true });
+  expect(odd.invalid).toEqual(['feedback.enabled', 'detail.jd_plus_note.enabled']);
+});
+
+it('[AC-F1-02zzze] product_feedback / jd_plus_note win over same-named base dictionary keys', () => {
+  const { config } = build({
+    'features.flags': { product_feedback: false, jd_plus_note: true, custom: false },
+    'detail.jd_plus_note.enabled': false,
+  });
+  expect(config!.features.flags).toEqual({
+    custom: false,
+    'external_page.union_host_block': true,
+    'earnings.dashboard.visible': true,
+    product_feedback: true,
+    jd_plus_note: false,
+  });
+  expect(CLIENT_CONFIG_KEYS).toEqual(
+    expect.arrayContaining(['feedback.enabled', 'detail.jd_plus_note.enabled']),
+  );
 });
 
 it('[AC-F1-02c] platform and search status read their own switch rules', () => {
@@ -308,6 +343,8 @@ it('[AC-F1-02j] split clipboard rows are never read', () => {
   expect(config!.features.flags).toEqual({
     'external_page.union_host_block': true,
     'earnings.dashboard.visible': true,
+    product_feedback: true,
+    jd_plus_note: true,
   });
   expect(invalid).toEqual([]);
 });
@@ -321,11 +358,15 @@ it('[AC-F1-02j] clipboard.auto_read flags pass through as-is; missing clients ar
     'clipboard.auto_read.android': true,
     'external_page.union_host_block': true,
     'earnings.dashboard.visible': true,
+    product_feedback: true,
+    jd_plus_note: true,
   });
   const bad = build({ 'features.flags': { 'clipboard.auto_read.ios': 'off', other: true } });
   expect(bad.config!.features.flags).toEqual({
     'external_page.union_host_block': true,
     'earnings.dashboard.visible': true,
+    product_feedback: true,
+    jd_plus_note: true,
   });
   expect(bad.invalid).toEqual(['features.flags']);
 });
