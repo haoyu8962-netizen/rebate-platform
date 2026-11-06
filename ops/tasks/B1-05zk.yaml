@@ -1,0 +1,25 @@
+id: B1-05zk
+repo: rebate-platform
+title: 商品详情专用字段组装（D10-664 S-09 S09b，D10-736）——getProduct 的卡带 coupon_end_at / sales_text / shop_logo / shop_scores / shop_entry，按开关出卡、收藏卡不带、池回退空值、缓存补字段，shop_entry 在 S-17 前恒 false
+type: impl
+# 2026-11-09 be 入账（依赖 B1-04zzm #2545 已合：UnionItemDetail 有 coupon_end_at / sales_text / shop_logo / shop_scores / shop_ref；开关 B1-05zj #2530、来源配置 B1-05zi #2529 已合；契约 CT-26s #2438）。catalog/detail.ts getProduct 照 B1-05ze 的 images 套路给卡加五字段：开关经 config.configValue 读，严格 === true 才开（缺值或类型不对按关）——detail.coupon_end.enabled.<platform> 关则 coupon_end_at = null，detail.sales.enabled.<platform> 关则 sales_text = null，detail.shop_scores.enabled.<platform> 关则 shop_scores = []；shop_logo 照联盟原样、无则 null；shop_entry 按 BR-PRICE-21 细则「进店」与 D10-736 ②（开关开、shop.entry.source.<platform> 已配置且支持该平台、商品带店铺标识，不预查），但 S-17 前没有店铺转链能力，恒 false 并写 TODO(规划/11 …) — blocked on S-17。开关关时联盟数据照常进缓存、只在出卡时置空（D10-736 ⑦）。收藏卡（favorites/card-port.ts）不带这五字段；池回退给 null / null / null / [] / false；详情缓存白名单（infra/product-cache.ts）补存五个联盟字段（照 B1-05zf）。其余出卡（搜索、首页池、粘贴、榜单）不带。
+# 规则测试钉：开关开 / 关两态下五字段取值；开关值非 true（字符串 "true"、缺失）按关；收藏卡没有这些键；池回退空值；缓存命中与未命中一致；shop_entry 恒 false；搜索卡没有这些键。RV1（catalog）。
+refs: [BR-PRICE-04, BR-PRICE-21, BR-TEXT-13]
+refs_hash:
+  BR-PRICE-04: 4848c2b9346d
+  BR-PRICE-21: c05f612fa872
+  BR-TEXT-13: 81791b1bb9dd
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/detail{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/domain/detail-extras{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/favorites/card-port{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/infra/product-cache{.ts,.test.ts}'
+  - 'test/spec/catalog/detail-extras/**'
+test_paths:
+  - 'test/spec/catalog/detail-extras/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
