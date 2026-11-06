@@ -8,7 +8,7 @@ refs_hash:
   BR-FUND-24: 0f1a6ecb3334
   BR-ID-28: 205ab4bdd1d4
   BR-FUND-16: 077f6d412d5a
-deps: [B2-12c]
+deps: [B2-12c, CT-26u]
 paths:
   - 'apps/api/src/modules/ledger/application/admin-adjustment-closing*.ts'
   - 'apps/api/src/modules/ledger/http/admin/adjustments*.controller*.ts'
@@ -21,6 +21,8 @@ paths:
   - 'apps/api/src/modules/identity/ports/closing-adjustment-prefill.ts'
   - 'apps/api/src/modules/identity/index.ts'
   - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/ledger/infra/admin-adjustments-store.ts' # money r1：B2-12c 的一步提交直接写 status，改走 transition()
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts' # 预填审计 adjustment_prefill、system:ledger 登记显示名
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/src/planned-operations.gen.ts'
   - 'packages/contracts-ts/src/openapi.gen.ts'
