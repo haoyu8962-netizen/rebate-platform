@@ -180,9 +180,7 @@ export function HelpHome({
 
   return (
     <Page>
-      <h1 className="flex min-h-11 items-center justify-center text-couli-body leading-couli-body font-couli-semibold">
-        {helpTexts.title}
-      </h1>
+      <h1 className="sr-only">{helpTexts.title}</h1>
       <section className="flex flex-col gap-couli-2">
         <h2 className="px-couli-1 text-couli-body leading-couli-body font-couli-semibold">
           {helpTexts.faq}

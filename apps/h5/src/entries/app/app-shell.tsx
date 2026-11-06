@@ -6,6 +6,7 @@ import { createBrowserRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { ApiProvider, createAppApi, type AppApiClient } from '../../shared/api/app-api.ts';
 import { clearAccountData, createQueryClient, createQueryProvider } from '../../shared/query.ts';
+import { syncNavBar } from './nav-bar.ts';
 import { createAppRoutes } from './routes.ts';
 
 type AppRouter = ReturnType<typeof createBrowserRouter>;
@@ -71,8 +72,20 @@ function AccountScope({ router, api, client }: AccountScopeProps): ReactElement 
 }
 
 /**
+ * Native title bar: one ui.setNavBar per entry into a route (a change of path, not of query),
+ * mounted with the shell so it also follows navigation while the page tree is taken down.
+ */
+function NavBarSync({ router }: { router: AppRouter }): null {
+  const pathname = useSyncExternalStore(router.subscribe, () => router.state.location.pathname);
+  useEffect(() => {
+    syncNavBar(pathname);
+  }, [pathname]);
+  return null;
+}
+
+/**
  * Query provider, App API provider and React Router (lazy route modules), without an H5 title
- * bar. One API client per shell; it is null without bridge, app.getEnv, base URL or brand, and
+ * bar (native draws the title, set through ui.setNavBar). One API client per shell; it is null without bridge, app.getEnv, base URL or brand, and
  * pages then read null from useApi() and send nothing.
  */
 export function createAppShell(): ReactElement {
@@ -81,6 +94,7 @@ export function createAppShell(): ReactElement {
   const client = createQueryClient();
   return createQueryProvider(
     <ApiProvider api={api}>
+      <NavBarSync router={router} />
       <AccountScope router={router} api={api} client={client} />
     </ApiProvider>,
     client,

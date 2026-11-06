@@ -1,0 +1,106 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-nav/help-home.browser.test.ts > [AC-F1-01x-HELP#1] help-home 无自绘标题行：「帮助中心」只作 sr-only 的 h1，读屏可读、可见区域无同名标题",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#1] 进入 /earnings：外壳调 ui.setNavBar，title 等于字典 earnings.title",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#2] 进入 /find-order：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#3] 进入 /ledger：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#4] 进入 /messages：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#5] 进入 /invite：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#6] 进入 /rules：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#7] 进入 /help：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#8] 进入 /notice：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#9] 进入 /agreement：外壳调 ui.setNavBar，title 不写死",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#10] 同一外壳依次进入 9 个 h5 路由：每次进入都调 ui.setNavBar，回到 /earnings 时 title 回到字典值",
+    "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#11] 同一路由内只改查询参数：不再调用，或再调时 title 不变",
+    "test/spec/frontend/h5-nav/source.test.ts > [AC-F1-01x-SRC#1] ui.setNavBar 只由共用外壳调用：外壳有调用，页面与其他非 conformance 代码没有",
+    "test/spec/frontend/h5-nav/source.test.ts > [AC-F1-01x-SRC#2] 外壳导航标题只取字典键：经 shared/texts.ts 的 t()，不写中文、不取 texts/ 本地表与壳层兜底键",
+    "test/spec/frontend/h5-nav/source.test.ts > [AC-F1-01x-HTML#1] entries/app/index.html 的 <title> 非空，取应用名或字典里的页面标题"
+  ],
+  "risk_note": "F1-01-nav (规划/05 §3.11.3, D10-724 ①). The H5 app shell calls ui.setNavBar once each time the route path changes (new nav-bar.ts, guarded by has(), failures swallowed); query-only changes do not resend. Titles come only from dictionary keys: /earnings uses earnings.title; the other eight h5 routes have no page-title key in contracts/texts.default.json yet, so they are sent without a title and carry a TODO with the proposed key names (content contract ticket requested; a tightening task follows once the keys exist). index.html title is 凑狸; help-home's drawn title becomes an sr-only h1. Setnavbar calls only in the shell (conformance excepted). Non-funds. Known transitional gaps recorded as follow-ups: /help shows no visible title until help.title exists, and a browser-style back from /earnings to a keyless route may leave the old native title. Rule tests written by an independent Claude in two rounds (round 2 only shortened waits after red/1 timed out); Claude spec-test review r1 pass (three S2 carried into the implementation constraints), round 2 incremental review pass; red on the local container (red/2). Implementation by Opus 5.5; local container verify-fast and browser green on the same tree. Independent Claude general review r1 pass (two S2, both from the missing keys). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "round 1 pass with two S2 caused by the eight missing page-title keys (stale native title after a browser-style back; /help has no visible title for now); both resolved by the follow-up tightening after content adds the keys"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "fresh Claude subagents: round 1 pass with three S2 carried into the implementation constraints; round 2 (waits shortened after a timed-out red run) incremental review pass; tests written by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-01x",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "a682411e3929dd876a20d1812c6ab0fecfed698f",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a682411e3929dd876a20d1812c6ab0fecfed698f",
+      "tree": "cf44893314328d0392b9de0781a7ce6695f30263",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T17:16:42Z",
+      "finished_at": "2026-11-06T17:18:22Z",
+      "red_tests": [
+        "test/spec/frontend/h5-nav/help-home.browser.test.ts > [AC-F1-01x-HELP#1] help-home 无自绘标题行：「帮助中心」只作 sr-only 的 h1，读屏可读、可见区域无同名标题",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#1] 进入 /earnings：外壳调 ui.setNavBar，title 等于字典 earnings.title",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#2] 进入 /find-order：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#3] 进入 /ledger：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#4] 进入 /messages：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#5] 进入 /invite：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#6] 进入 /rules：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#7] 进入 /help：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#8] 进入 /notice：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#9] 进入 /agreement：外壳调 ui.setNavBar，title 不写死",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#10] 同一外壳依次进入 9 个 h5 路由：每次进入都调 ui.setNavBar，回到 /earnings 时 title 回到字典值",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts > [AC-F1-01x-NAV#11] 同一路由内只改查询参数：不再调用，或再调时 title 不变",
+        "test/spec/frontend/h5-nav/source.test.ts > [AC-F1-01x-SRC#1] ui.setNavBar 只由共用外壳调用：外壳有调用，页面与其他非 conformance 代码没有",
+        "test/spec/frontend/h5-nav/source.test.ts > [AC-F1-01x-SRC#2] 外壳导航标题只取字典键：经 shared/texts.ts 的 t()，不写中文、不取 texts/ 本地表与壳层兜底键",
+        "test/spec/frontend/h5-nav/source.test.ts > [AC-F1-01x-HTML#1] entries/app/index.html 的 <title> 非空，取应用名或字典里的页面标题"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-nav/help-home.browser.test.ts",
+        "test/spec/frontend/h5-nav/shell.browser.test.ts",
+        "test/spec/frontend/h5-nav/source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "e2a3305c69a98354531ddb77008e8c0d3b359aa1f4a86e8319cedccf19e56b2b"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7b2239586a058ca0aaa4e261dafb9b2c9815b6304fe0d5b06876ba2e982fd417"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6225ac532afe08d62ee40ce1230bbc5b083917ea",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  }
+}
