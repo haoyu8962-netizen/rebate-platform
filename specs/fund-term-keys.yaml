@@ -46,6 +46,10 @@
 # help.、cs.、about.、net.、web_page. 与表 B 场景子键 error.30101.auth_unavailable.auth_manage、
 # error.30102.auth_unavailable.auth_manage、error.30151.auth_manage（去掉了「无法获得返利」半句）、error.30411.phone_change
 # 逐键归 ordinary（任务书 9.2 默认经逐句复核，待规划回写）。
+# CT-26t：08 BR-TEXT-12 细则（2026-11-05 商品详情 v3 定稿）写明：btn.buy.rebate、btn.buy.rebate_unknown、no_rebate.notice、
+# favorites.no_rebate.notice、jd.plus_note 归 fund_terms；coupon.、product.gallery.、platform.tag.、shop.、price_trend. 新键、
+# feedback.、favorites.no_rebate.clear 归 ordinary，逐键列出、不加前缀（免得吞掉以后的资金术语键）。coupon.tag 的 {amount}
+# 是券额，进 exempt 是编排者的技术处理（08 未写）。
 fund_terms:
   prefixes:
     - order_status.
@@ -103,7 +107,9 @@ fund_terms:
     - appeal.result.lifted_frozen.title
     - appeal.result.next.frozen_others
     - btn.buy.no_rebate
+    - btn.buy.rebate
     - btn.buy.rebate_suffix
+    - btn.buy.rebate_unknown
     - claim.records.status.approved
     - claim.records.status.auto_tracked
     - claim.records.status.rejected
@@ -123,6 +129,7 @@ fund_terms:
     - error.44001
     - error.50301.not_launched
     - external_page.product_unresolved
+    - favorites.no_rebate.notice
     - help.appeal.state_frozen
     - home.guest_value.login
     - invite.notice_inviter
@@ -133,9 +140,11 @@ fund_terms:
     - invite.share.reward_rules
     - invite.share.reward_title
     - invite.share.rule.no_reward
+    - jd.plus_note
     - jump_tip
     - labor_agreement.resign_hint
     - link_landing.owner_hint
+    - no_rebate.notice
     - no_rebate.price_compare
     - no_rebate.price_compare.confirm
     - no_rebate_hint
@@ -384,6 +393,8 @@ ordinary:
     - clipboard.paste_hint
     - clipboard.paste_hint.agent
     - clipboard.prompt
+    - coupon.tag
+    - coupon.valid_until
     - cs.appeal_entry
     - cs.copy_link
     - cs.copy_link.done
@@ -546,7 +557,20 @@ ordinary:
     - favorites.empty_hint
     - favorites.go_home
     - favorites.manage
+    - favorites.no_rebate.clear
     - favorites.select_all
+    - feedback.entry.action
+    - feedback.entry.question
+    - feedback.note.count
+    - feedback.note.label
+    - feedback.note.placeholder
+    - feedback.reason.info
+    - feedback.reason.other
+    - feedback.reason.price
+    - feedback.reason.rebate
+    - feedback.sent
+    - feedback.submit
+    - feedback.title
     - h5.load_failed
     - help.appeal.go_appeal
     - help.appeal.state_pending
@@ -704,14 +728,30 @@ ordinary:
     - phone_change.step1
     - phone_change.step2
     - phone_change.submit_hint
+    - platform.tag.jd
+    - platform.tag.pdd
+    - platform.tag.taobao
+    - platform.tag.tmall
     - presale.price_note
     - price_basis
     - price_basis.general
+    - price_trend.current
     - price_trend.empty
+    - price_trend.mode
+    - price_trend.mode.note
+    - price_trend.mode.note.general
+    - price_trend.mode.note.pdd
+    - price_trend.mode.note.pdd.general
     - price_trend.source
     - price_trend.source.general
+    - price_trend.source.pdd
+    - price_trend.source.pdd.general
     - price_trend.title
     - price_trend.title.general
+    - price_trend.title.pdd
+    - price_trend.title.pdd.general
+    - product.gallery.position
+    - product.gallery.position.a11y
     - rank.notice
     - rank.sales.neutral
     - rank.sales.tb
@@ -807,6 +847,14 @@ ordinary:
     - share_page.copy_tpwd.done
     - share_page.open_in_app
     - share_page.open_in_browser_hint
+    - shop.a11y
+    - shop.a11y.enter
+    - shop.enter
+    - shop.name.fallback
+    - shop.score.desc
+    - shop.score.level
+    - shop.score.lgst
+    - shop.score.serv
     - spec_min_price_note
     - step_up.no_available_method
     - step_up.oauth.action
@@ -894,3 +942,9 @@ exempt:
     reason: 帮助中心分类的一句介绍，只列这类文章讲什么（收款账号与提现），不说金额，也不说提现处在什么状态
   - key: privacy.system_permissions.push.desc
     reason: 通知权限的用途说明，只列推送哪类消息，不说金额、状态或有没有返利（同 perm.push.card_hint；表 D 隐私文案，另归 content.agreement）
+  - key: feedback.entry.question
+    reason: 只是请用户反馈，不说有没有返利、金额或提现状态（08 BR-TEXT-12 细则写明的例外理由）
+  - key: feedback.reason.rebate
+    reason: 只是请用户反馈，不说有没有返利、金额或提现状态（08 BR-TEXT-12 细则写明的例外理由）
+  - key: coupon.tag
+    reason: 说的是券额，不是返利金额

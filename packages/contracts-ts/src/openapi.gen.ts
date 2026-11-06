@@ -13488,9 +13488,13 @@ export interface components {
             trace_id: components["schemas"]["TraceId"];
         };
         /**
-         * @description Buy button chosen by the server; the client never decides it (BR-TEXT-12, 拍板第二批
-         *     TRADE-21): btn.buy.coupon (有券有返), btn.buy (无券有返 and amount_unknown),
-         *     btn.buy.no_rebate (无返利); other keys come with login_required and taolijin cards.
+         * @description Buy button chosen by the server and sent as cta.text_key; the client never decides it
+         *     (BR-TEXT-12 细则「购买按钮」, 拍板第二批 TRADE-21, changed 2026-11-05): btn.buy.rebate
+         *     (rebate_basis=normal with a single amount), btn.buy.rebate_unknown (amount_unknown),
+         *     rebate_login_to_view (login_required), btn.buy (pages that show no rebate amount, i.e.
+         *     LinkLanding), btn.buy.no_rebate (the card turns no-rebate on tap); the same key with or
+         *     without a coupon. Taolijin cards follow BR-TEXT-15. Since 2026-11-05 btn.buy.coupon and
+         *     btn.buy.rebate_suffix are kept but unused, and their key names are not reused.
          */
         ProductCta: {
             text_key: string;

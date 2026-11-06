@@ -1,0 +1,38 @@
+{
+  "red_tests": [],
+  "risk_note": "RV1 (contract texts). texts.default.json gets the 44 product-detail v3 keys of 08 BR-TEXT-14 table C (SPEC_REF b144fc0, verbatim) and changes btn.buy (购买), deletion.cooling.readonly_note and error.30132 (couli #278); specs/fund-term-keys.yaml registers 5 fund-term keys and 39 ordinary keys, exempt entries for feedback.entry.question / feedback.reason.rebate (08 reason) and coupon.tag (amount placeholder is the coupon amount, not a rebate; orchestrator-side technical handling); banned words checked, no hits; ProductCta description now points to BR-TEXT-12 购买按钮 (examples unchanged; issuing logic is S-08). Generated files regenerated. No frozen test pins the old values. Excludes state.*, 30145 / 30146, order.tag.price_compare (D10-691). No rule tests (tester none). Full verification by the required CI checks (ops/approvals.yaml id 21).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "fresh independent Claude via claude-run.sh; pass with no findings"
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "legacy_no_red": true,
+  "task": "CT-26t",
+  "spec_commit": "eb48a3c8151faee2aac512c159d7cc3574592f87",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "fc335a950d527d4443c7be306005ef0b6b7c15c7",
+    "specs": "91a566154637d22d47c53fd4dc5b086bb2436028"
+  }
+}
