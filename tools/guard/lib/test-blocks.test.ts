@@ -3064,8 +3064,12 @@ it('[CT-06zzzg] compareModifiedBlocks: a declared block gone, renamed, ambiguous
   expect(notFound(src(test('[AC-2] b'), test('[AC-2] b')), base, ['[AC-2] b'])).toEqual([
     '2 test blocks of the base may produce the name',
   ]);
-  const each = src("it.each([1, 2])('[AC-2] b %s', (n) => { expect(n).toBe(n); });");
-  expect(notFound(each, each, ['[AC-2] b 1'])[0]).toMatch(/not a static literal/);
+  // CT-06zzzk: a row of an .each table is found by its expanded title (below); a template title
+  // with `${…}` still is not.
+  const each = src('it.each([1, 2])(`[AC-2] b ${K} %s`, (n) => { expect(n).toBe(n); });');
+  expect(notFound(each, each, ['[AC-2] b k 1'])[0]).toMatch(/not one string literal/);
+  const plain = src('it(`[AC-2] b ${K}`, () => { expect(1).toBe(1); });');
+  expect(notFound(plain, plain, ['[AC-2] b k'])[0]).toMatch(/not a static literal/);
   // Two names on one block.
   expect(notFound(base, base, ['[AC-2] b', 'x > [AC-2] b'])).toEqual([
     'found',
@@ -3073,4 +3077,270 @@ it('[CT-06zzzg] compareModifiedBlocks: a declared block gone, renamed, ambiguous
   ]);
   expect(compareModifiedBlocks('it((', base, ['[AC-2] b'])).toMatchObject({ ok: false });
   expect(compareModifiedBlocks(base, 'it((', ['[AC-2] b'])).toMatchObject({ ok: false });
+});
+
+// CT-06zzzk (D10-738 A, after B2-04zx): modify_existing names the rows of an .each table by the
+// titles Vitest expands them to.
+const EACH_ROWS = (body: string, table = "['14', '15'] as const"): string =>
+  `it.each(${table})(\n  '[AC-45] closed with %s, then succeeded',\n  async (code) => {\n    ${body}\n  },\n);`;
+const ROWS_45 = [
+  '[AC-45] closed with 14, then succeeded',
+  '[AC-45] closed with 15, then succeeded',
+];
+const rowsOf = (got: ReturnType<typeof compareModifiedBlocks>): (string | boolean)[] => {
+  if (!got.ok) throw new Error(got.reason);
+  return got.blocks.map((b) => (b.found ? b.changed : b.reason));
+};
+
+it('[CT-06zzzk] only the callback changed and every row declared: each row found and changed, before / after the block plus the row', () => {
+  const base = src(test('[AC-1] a'), EACH_ROWS('expect(code).toBeTruthy();'));
+  const head = src(
+    test('[AC-1] a'),
+    EACH_ROWS('const audit = port();\n    expect(code).toBeTruthy();'),
+  );
+  const got = compareModifiedBlocks(base, head, ROWS_45);
+  expect(rowsOf(got)).toEqual([true, true]);
+  expect(got.ok && got.outside).toBe(null);
+  const [one] = got.ok ? got.blocks : [];
+  expect(one?.found === true ? one.before : '').toBe(
+    `${EACH_ROWS('expect(code).toBeTruthy();')}\n// .each row 1 of 2: '14'`,
+  );
+  expect(one?.found === true ? one.after : '').toBe(
+    `${EACH_ROWS('const audit = port();\n    expect(code).toBeTruthy();')}\n// .each row 1 of 2: '14'`,
+  );
+  // Unchanged: found, not changed (the caller calls the entries redundant).
+  expect(rowsOf(compareModifiedBlocks(base, base, ROWS_45))).toEqual([false, false]);
+});
+
+it('[CT-06zzzk] only some rows declared while the shared callback changed: not applicable', () => {
+  const base = src(EACH_ROWS('expect(code).toBeTruthy();'));
+  const head = src(EACH_ROWS('expect(code).toBe(code);'));
+  const got = compareModifiedBlocks(base, head, [ROWS_45[0] as string]);
+  expect(rowsOf(got)).toEqual([
+    'the call, title or callback every row shares changed: every row of the table must be declared (1 of 2 are)',
+  ]);
+  // The block is then no declared block: a difference outside the declarations.
+  expect(got.ok && got.outside).toMatch(/is not declared and differs from the base/);
+});
+
+it('[CT-06zzzk] a row of the table changed, added, removed or moved: not applicable', () => {
+  const base = src(EACH_ROWS('expect(code).toBeTruthy();', "['14', '15', '16']"));
+  const head = (table: string) => src(EACH_ROWS('expect(code).toBe(code);', table));
+  const names = (...codes: string[]) =>
+    codes.map((c) => `[AC-45] closed with ${c}, then succeeded`);
+  expect(rowsOf(compareModifiedBlocks(base, head("['14', '15']"), names('14', '15')))).toEqual([
+    'the .each / .for table has 2 row(s) at the head, 3 at the base: rows added or removed',
+    'the .each / .for table has 2 row(s) at the head, 3 at the base: rows added or removed',
+  ]);
+  expect(
+    rowsOf(compareModifiedBlocks(base, head("['14', '15', '16', '17']"), names('14', '15', '16'))),
+  ).toEqual(
+    Array(3).fill(
+      'the .each / .for table has 4 row(s) at the head, 3 at the base: rows added or removed',
+    ),
+  );
+  expect(
+    rowsOf(compareModifiedBlocks(base, head("['15', '14', '16']"), names('14', '15', '16'))),
+  ).toEqual([
+    'the row moved in the .each / .for table',
+    'the row moved in the .each / .for table',
+    'row 1 of the .each / .for table changed and is not declared',
+  ]);
+  // An undeclared row changed (the callback the base's): not applicable.
+  const objects = (third: string) =>
+    `[{ code: '14', n: 1 }, { code: '15', n: 2 }, { code: '16', n: ${third} }]`;
+  const objBase = src(EACH_ROWS('expect(code).toBeTruthy();', objects('3')).replace('%s', '$code'));
+  const objHead = src(EACH_ROWS('expect(code).toBeTruthy();', objects('4')).replace('%s', '$code'));
+  expect(rowsOf(compareModifiedBlocks(objBase, objHead, names('14')))).toEqual([
+    'row 3 of the .each / .for table changed and is not declared',
+  ]);
+  // A declared row's own data changed (the title the same): taken, changed.
+  expect(rowsOf(compareModifiedBlocks(objBase, objHead, names('16')))).toEqual([true]);
+});
+
+it('[CT-06zzzk] a table that is no literal, a title that cannot be expanded, a template title: not applicable, with the reason', () => {
+  const cases: [string, string, string, RegExp][] = [
+    [
+      'a call',
+      "it.each(rows())('[AC-45] closed with %s', async (code) => { expect(code).toBe(code); });",
+      '[AC-45] closed with 14',
+      /rows cannot be expanded for certain: the table is not an array literal of literal rows/,
+    ],
+    [
+      'a name of a row',
+      "it.each([CODE, '15'])('[AC-45] closed with %s', async (code) => { expect(code).toBe(code); });",
+      '[AC-45] closed with 15',
+      /the table is not an array literal of literal rows/,
+    ],
+    [
+      '%o',
+      "it.each(['14', '15'])('[AC-45] closed with %o', async (code) => { expect(code).toBe(code); });",
+      "[AC-45] closed with '14'",
+      /row 1: the title cannot be expanded for certain/,
+    ],
+    [
+      '%j',
+      "it.each(['14'])('[AC-45] closed with %j', async (code) => { expect(code).toBe(code); });",
+      '[AC-45] closed with "14"',
+      /row 1: the title cannot be expanded for certain/,
+    ],
+    [
+      'a field of code in the title',
+      "it.each([{ run: () => 1 }])('[AC-45] closed with $run', async ({ run }) => { expect(run()).toBe(1); });",
+      '[AC-45] closed with x',
+      /row 1: the title cannot be expanded for certain/,
+    ],
+    [
+      'a template title',
+      'it.each([1])(`[AC-45] ${K} closed with %s`, async (code) => { expect(code).toBe(code); });',
+      '[AC-45] k closed with 1',
+      /the title is not one string literal/,
+    ],
+    [
+      'a modifier',
+      // Split so the repository's own test-guard (no-skip-only) does not read the fixture as a skip.
+      'it.' +
+        "skip.each(['14'])('[AC-45] closed with %s', async (code) => { expect(code).toBe(code); });",
+      '[AC-45] closed with 14',
+      /a modifier/,
+    ],
+    [
+      'an exported table',
+      "export const ROWS = ['14'];\nit.each(ROWS)('[AC-45] closed with %s', async (code) => { expect(code).toBe(code); });",
+      '[AC-45] closed with 14',
+      /the table ROWS is exported or declared/,
+    ],
+    [
+      'a table used twice',
+      "const ROWS = ['14'];\nconst MORE = ROWS;\nit.each(ROWS)('[AC-45] closed with %s', async (code) => { expect(code).toBe(code); });",
+      '[AC-45] closed with 14',
+      /the table ROWS is not one top-level const used only by this block/,
+    ],
+    [
+      'a table changed after its declaration',
+      "const ROWS = ['14'].concat(['15']);\nit.each(ROWS)('[AC-45] closed with %s', async (code) => { expect(code).toBe(code); });",
+      '[AC-45] closed with 14',
+      /the table ROWS is more than an array literal/,
+    ],
+  ];
+  for (const [name, block, title, want] of cases) {
+    const file = src(block);
+    expect(rowsOf(compareModifiedBlocks(file, file, [title]))[0], name).toMatch(want);
+  }
+});
+
+it('[CT-06zzzk] the B2-04zx shapes: an inline `as const` table with %s and a top-level const table of object rows with $label (truncated as Vitest does)', () => {
+  const guards = (body: string): string =>
+    [
+      'interface GuardCase {',
+      '  readonly label: string;',
+      '  readonly seed: (h: Harness) => Promise<void>;',
+      '}',
+      'const GUARDS: readonly GuardCase[] = [',
+      "  { label: 'ADMIN 源 FAILED 之后联盟报成功', seed: seedAdminFailed },",
+      '  {',
+      "    label: 'API 源 FAILED 之后报成功而无应扣佣金（会落 WAIT_COMMISSION）',",
+      "    seed: recorded({ source: 'API', status: 'FAILED' }),",
+      '  },',
+      '];',
+      '',
+      'it.each(GUARDS)(',
+      "  '[AC-B1-04zza#46] $label（入账后订单）：duplicate',",
+      '  async ({ seed }) => {',
+      `    ${body}`,
+      '  },',
+      '  TIMEOUT,',
+      ');',
+    ].join('\n');
+  const base = src(
+    EACH_ROWS('const h = await harness(p.db);'),
+    guards('const h = await harness(p.db);'),
+  );
+  const head = src(
+    EACH_ROWS('const h = await harness(p.db, { audit: await auditPort() });'),
+    guards('const h = await harness(p.db, { audit: await auditPort() });'),
+  );
+  const names = [
+    ...ROWS_45,
+    '[AC-B1-04zza#46] ADMIN 源 FAILED 之后联盟报成功（入账后订单）：duplicate',
+    '[AC-B1-04zza#46] API 源 FAILED 之后报成功而无应扣佣金（会落 WAIT_COMMIS…（入账后订单）：duplicate',
+  ];
+  const got = compareModifiedBlocks(base, head, names);
+  expect(rowsOf(got)).toEqual([true, true, true, true]);
+  expect(got.ok && got.outside).toBe(null);
+  const last = got.ok ? got.blocks[3] : undefined;
+  expect(last?.found === true ? last.after : '').toMatch(
+    /\n\/\/ \.each row 2 of 2: \{\n {4}label: 'API 源 FAILED 之后报成功而无应扣佣金（会落 WAIT_COMMISSION）',\n {4}seed: recorded\(\{ source: 'API', status: 'FAILED' \}\),\n {2}\}$/,
+  );
+  // One row of GUARDS left out: not applicable; the table itself changed: code outside the tests.
+  expect(rowsOf(compareModifiedBlocks(base, head, names.slice(0, 3)))[2]).toMatch(
+    /every row of the table must be declared \(1 of 2 are\)/,
+  );
+  const changed = head.replace('seed: seedAdminFailed', 'seed: seedOther');
+  const table = compareModifiedBlocks(base, changed, names);
+  expect(rowsOf(table).slice(2)).toEqual(
+    Array(2).fill('the named table is declared differently at the head'),
+  );
+  expect(table.ok && table.outside).toMatch(/code outside the tests changed/);
+});
+
+it('[CT-06zzzk] Codex r1 S1: a named table whose initialiser goes on past the array (a line break before .concat, a comma, any operator) is not applicable; outside is said and the rows are not found', () => {
+  const block = (body: string): string =>
+    `it.each(ROWS)('case %s', async (code) => {\n  ${body}\n});`;
+  const decls: [string, string][] = [
+    ["const ROWS = ['14', '15']\n.concat(['16']);", '.'],
+    ["const ROWS = ['14', '15']\n  .map((c) => c);", '.'],
+    ["const ROWS = ['14', '15'] as const\n.concat(['16']);", '.'],
+    ["const ROWS = ['14', '15'], MORE = 1;", ','],
+    ["const ROWS = ['14', '15'] || ['16'];", '||'],
+    ["const ROWS = ['14', '15']\n['16'];", '['],
+    ["const ROWS = ['14', '15']\nconst OTHER = 1;", 'const'],
+  ];
+  for (const [decl, follows] of decls) {
+    const base = src(decl, block('expect(code).toBeTruthy();'));
+    const head = src(decl, block('expect(code).toBe(code);'));
+    const got = compareModifiedBlocks(base, head, ['case 14', 'case 15']);
+    expect(rowsOf(got)[0], decl).toBe(
+      `its block at the base is an .each / .for table whose rows cannot be expanded for certain: the table ROWS is more than an array literal: \`${follows}\` follows it, not a \`;\``,
+    );
+    expect(got.ok && got.outside, decl).toMatch(/is not declared and differs from the base/);
+  }
+  // The B2-04zx shape (the array, then `;`) still applies.
+  const ok = "const ROWS = ['14', '15'] as const;";
+  expect(
+    rowsOf(
+      compareModifiedBlocks(
+        src(ok, block('expect(code).toBeTruthy();')),
+        src(ok, block('expect(code).toBe(code);')),
+        ['case 14', 'case 15'],
+      ),
+    ),
+  ).toEqual([true, true]);
+});
+
+it('[CT-06zzzk] Codex r1 S2: the table name inside a template interpolation (at any depth) or a string counts as a use: not applicable', () => {
+  const decl = "const ROWS = ['14', '15'];";
+  const block = (body: string): string =>
+    `it.each(ROWS)('case %s', async (code) => {\n  ${body}\n});`;
+  const extras = [
+    "const note = `${ROWS.push('16')}`;",
+    "const note = `a ${`b ${ROWS.push('16')}`}`;",
+    'const note = `a ${[1].map(() => `${ROWS.length}`)}`;',
+    "const grab = globalThis['ROWS'];",
+    'eval(`ROWS.push(1)`);',
+  ];
+  for (const extra of extras) {
+    const base = src(decl, extra, block('expect(code).toBeTruthy();'));
+    const head = src(decl, extra, block('expect(code).toBe(code);'));
+    expect(rowsOf(compareModifiedBlocks(base, head, ['case 14', 'case 15']))[0], extra).toMatch(
+      /the table ROWS is not one top-level const used only by this block \(1 declaration\(s\), 2 occurrence\(s\), [1-9]\d* inside a template or a string\)/,
+    );
+  }
+  // A template or a string not naming it changes nothing.
+  const plain = src(decl, 'const note = `${1 + 1} ROWSX`;', block('expect(code).toBeTruthy();'));
+  const plainHead = src(decl, 'const note = `${1 + 1} ROWSX`;', block('expect(code).toBe(code);'));
+  expect(rowsOf(compareModifiedBlocks(plain, plainHead, ['case 14', 'case 15']))).toEqual([
+    true,
+    true,
+  ]);
 });

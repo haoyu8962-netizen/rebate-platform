@@ -1052,7 +1052,32 @@ type EachShape = {
   /** CT-06zzzf (D10-670): the `as const` after the table (its text), '' without one. */
   outer: string;
   names: (string | null)[] | null;
+  /**
+   * CT-06zzzk (D10-738 A): the table expanded row by row for modify_existing
+   * (compareModifiedBlocks), also for a table named by a top-level const; never read by
+   * compareEachRows (red_exempt_rows keeps not covering a table by name).
+   */
+  expand: EachExpansion;
 };
+
+/**
+ * An `.each` / `.for` table expanded row by row (CT-06zzzk, D10-738 A), or why it cannot be:
+ * `names` the exact full name of each row (formatEachTitle / formatObjectTitle, as Vitest
+ * reports it), `rows` the normalised text of each row, `raw` its source text, `frame` the
+ * normalised block without the table (the call before it, its `as const`, the title and the
+ * callback: what every row shares), `table` the normalised declaration of a table named by a
+ * top-level const ('' for an inline table).
+ */
+export type EachExpansion =
+  | { ok: false; reason: string }
+  | {
+      ok: true;
+      names: string[];
+      rows: string[];
+      raw: string[];
+      frame: string;
+      table: string;
+    };
 
 function outsideView(source: string): OutsideView {
   const { tokens, match, sep, suites, tests } = scanTests(source);
@@ -1180,8 +1205,12 @@ function outsideView(source: string): OutsideView {
     if (close + 1 !== match[p] && !(eachRows && outerAsConst(close, match[p] as number))) {
       return null;
     }
+    return rowsIn(p + 1, close, eachRows);
+  };
+  // The rows of the array literal whose `[` is at `open` and `]` at `close` (see rows).
+  const rowsIn = (open: number, close: number, eachRows: boolean): Row[] | null => {
     const out: Row[] = [];
-    let k = p + 2;
+    let k = open + 1;
     while (k < close) {
       const end = valueEnd(k, close);
       if (end === k) return null; // a hole
@@ -1376,6 +1405,162 @@ function outsideView(source: string): OutsideView {
       );
     });
   };
+  // CT-06zzzk (D10-738 A): the rows of the array literal [open, close] — normalised, raw — or
+  // null when they are not literal rows (rowsIn with the reading of compareEachRows).
+  const tableAt = (
+    open: number,
+    close: number,
+  ): { table: Row[]; rows: string[]; raw: string[] } | null => {
+    const table = rowsIn(open, close, true);
+    if (table === null) return null;
+    const texts: string[] = [];
+    const raw: string[] = [];
+    let j = open + 1;
+    while (j < close) {
+      const end = valueEnd(j, close);
+      texts.push(joinTokens(tokens, j, end - 1, sep));
+      const first = tokens[j] as Token;
+      const last = tokens[end - 1] as Token;
+      raw.push(source.slice(first.start ?? 0, (last.start ?? 0) + last.text.length));
+      j = end;
+      if (j === close) break;
+      j += 1;
+    }
+    return texts.length === table.length ? { table, rows: texts, raw } : null;
+  };
+  // CT-06zzzk: the table a name at `at` stands for — exactly one top-level `const <name>[: type]
+  // = [ … ][ as const]` (not exported) whose name occurs nowhere else in the file but there and
+  // at `at` — or why not.
+  const depth = new Array<number>(tokens.length).fill(0);
+  {
+    let d = 0;
+    tokens.forEach((t, k) => {
+      if (t.kind === 'punct' && (t.text === ')' || t.text === ']' || t.text === '}')) d -= 1;
+      depth[k] = d;
+      if (t.kind === 'punct' && (t.text === '(' || t.text === '[' || t.text === '{')) d += 1;
+    });
+  }
+  const namedTable = (
+    at: number,
+  ): { open: number; close: number; decl: string } | { reason: string } => {
+    const name = (tokens[at] as Token).text;
+    const uses = tokens
+      .map((t, k) => [t, k] as const)
+      .filter(([t, k]) => t.kind === 'id' && t.text === name && tokens[k - 1]?.text !== '.');
+    const decls = uses.filter(
+      ([, k]) => tokens[k - 1]?.text === 'const' && depth[k] === 0 && !inBlock[k],
+    );
+    // Codex r1 S2: the name inside a template's `${…}` (Token.inner, at any depth) counts too, and
+    // so does a string or a template part naming it (a computed access, an eval).
+    const word = new RegExp(
+      `(?:^|[^$\\p{ID_Continue}])${escapeRegex(name)}(?:$|[^$\\p{ID_Continue}])`,
+      'u',
+    );
+    const nested = (list: readonly Token[]): number =>
+      list.reduce((n, t) => {
+        let here = 0;
+        if (t.kind === 'str' && word.test(t.value ?? t.text)) here += 1;
+        if (t.kind === 'tpl') {
+          if ((t.parts ?? [t.text]).some((part) => word.test(part ?? t.text))) here += 1;
+          const inner = t.inner ?? [];
+          here += inner.filter(
+            (u, k) => u.kind === 'id' && u.text === name && inner[k - 1]?.text !== '.',
+          ).length;
+          here += nested(inner);
+        }
+        return n + here;
+      }, 0);
+    const hidden = nested(tokens);
+    if (decls.length !== 1 || uses.length !== 2 || hidden > 0) {
+      return {
+        reason: `the table ${name} is not one top-level const used only by this block (${decls.length} declaration(s), ${uses.length} occurrence(s), ${hidden} inside a template or a string)`,
+      };
+    }
+    const d = (decls[0] as readonly [Token, number])[1];
+    const before = tokens[d - 2];
+    if (before !== undefined && (before.text === 'export' || before.text === 'declare')) {
+      return { reason: `the table ${name} is exported or declared (another module may change it)` };
+    }
+    let k = d + 1;
+    while (k < tokens.length && tokens[k]?.text !== '=') {
+      const t = tokens[k] as Token;
+      if (t.text === ';') break;
+      k = t.text === '(' || t.text === '[' || t.text === '{' ? (match[k] as number) + 1 : k + 1;
+    }
+    const open = k + 1;
+    if (tokens[k]?.text !== '=' || tokens[open]?.text !== '[') {
+      return { reason: `the table ${name} is not declared as an array literal` };
+    }
+    const close = match[open] as number;
+    let last = close;
+    if (tokens[close + 1]?.text === 'as' && tokens[close + 2]?.text === 'const') last = close + 2;
+    // Codex r1 S1: the initialiser is exactly the array literal (and `as const`), then a `;` or the
+    // end of the file, judged by the tokens, never by lines: a line break before `.concat(…)`
+    // continues the expression.
+    const next = tokens[last + 1];
+    if (next !== undefined && next.text !== ';') {
+      return {
+        reason: `the table ${name} is more than an array literal: \`${next.text}\` follows it, not a \`;\``,
+      };
+    }
+    const end = next === undefined ? last : last + 1;
+    return { open, close, decl: joinTokens(tokens, d - 1, end, sep) };
+  };
+  // CT-06zzzk (D10-738 A): the table of the `.each` call `c` (its table call at `p`) expanded row
+  // by row (EachExpansion).
+  const expansion = (
+    c: Call,
+    around: readonly Call[],
+    p: number,
+    title: string | null,
+    prefix: string,
+    outer: string,
+  ): EachExpansion => {
+    const fail = (reason: string): EachExpansion => ({ ok: false, reason });
+    if (title === null) {
+      return fail('the title is not one string literal (a template with ${…} or code)');
+    }
+    if (!plainChain(c.start, c.open) || !surely(c) || around.some((x) => x.title.includes(null))) {
+      return fail(
+        'a modifier (.skip / .only / .skipIf …), a describe title that is not a literal, or a placement (loop, branch, function) Vitest names in a way not read here',
+      );
+    }
+    const frame = `${joinTokens(tokens, c.start, p - 1, sep)}\u0000${outer}\u0000${joinTokens(tokens, c.open, c.end, sep)}`;
+    let found: { table: Row[]; rows: string[]; raw: string[] } | null = null;
+    let decl = '';
+    const one = (match[p] as number) === p + 2 ? tokens[p + 1] : undefined;
+    if (tokens[p + 1]?.text === '[') {
+      const close = match[p + 1] as number;
+      if (close + 1 === match[p] || outerAsConst(close, match[p] as number)) {
+        found = tableAt(p + 1, close);
+      }
+    } else if (one?.kind === 'id') {
+      const named = namedTable(p + 1);
+      if ('reason' in named) return fail(named.reason);
+      found = tableAt(named.open, named.close);
+      decl = named.decl;
+    }
+    if (found === null) {
+      return fail(
+        'the table is not an array literal of literal rows (strings, numbers, BigInt, booleans, null, arrays of them, objects; inline or a top-level const)',
+      );
+    }
+    const names: string[] = [];
+    for (const [idx, row] of found.table.entries()) {
+      const name =
+        row.kind === 'items'
+          ? formatEachTitle(title, row.items, idx)
+          : formatObjectTitle(title, row.fields, idx);
+      if (name === null) {
+        return fail(
+          `row ${idx + 1}: the title cannot be expanded for certain (only %s, %d, %i, %#, %$ and $field of a literal field are; %o, %j, %f, a field of code or a missing one are not)`,
+        );
+      }
+      names.push(`${prefix}${name}`);
+    }
+    if (new Set(names).size !== names.length) return fail('two rows expand to the same title');
+    return { ok: true, names, rows: found.rows, raw: found.raw, frame, table: decl };
+  };
   // CT-06zzze (D10-657): the `.each` / `.for` table shape of a test call (EachShape), or null.
   const eachOf = (c: Call, around: readonly Call[]): EachShape | null => {
     let k = c.start;
@@ -1423,12 +1608,14 @@ function outsideView(source: string): OutsideView {
       surely(c) &&
       around.every((x) => !x.title.includes(null));
     const prefix = around.map((x) => `${(x.title as string[]).join('')} > `).join('');
+    const expand = expansion(c, around, p, title, prefix, outer);
     return {
       path: around.map((s) => `${suites.indexOf(s)}:${s.head}`).join('\u0001'),
       chain: joinTokens(tokens, c.start, p - 1, sep),
       args: joinTokens(tokens, c.open, c.end, sep),
       rows: texts,
       outer,
+      expand,
       names:
         !certain || table === null
           ? null
@@ -1803,6 +1990,25 @@ export function compareEachRows(base: string, head: string): (EachRows | null)[]
 //   describes) or the found block of the same name at the same place and describes. Any other
 //   difference — another test changed, added, removed or moved — is said in `outside`.
 // - A side that cannot be read as tests: ok false (the caller fails closed).
+// - Rows of an `.each` / `.for` table (CT-06zzzk; orchestrator ruling D10-738 A, after B2-04zx,
+//   whose frozen success-after-closed has `it.each(['14', '15'] as const)` and
+//   `it.each(GUARDS)` blocks): a name whose one matching block has a non-static title is looked
+//   up among the block's rows expanded as Vitest titles them (EachExpansion: formatEachTitle /
+//   formatObjectTitle, the describe prefix included). The table is an inline array of literal
+//   rows (the reading of compareEachRows: strings, numbers, BigInt, booleans, null, arrays of them,
+//   objects whose title fields are literals; `as const` after the array or a value) or a
+//   top-level, not exported `const` of one whose name occurs nowhere else in the file. Not
+//   applicable (not found, with the reason): a table of any other kind, a title that is no single
+//   string literal (a template with `${…}`), a placeholder that cannot be expanded (%o, %j, %f, a
+//   field of code …), a modifier or a placement Vitest names otherwise, two rows of one title.
+//   The rows of one block are judged together: the table must have the same rows in the same
+//   order on both sides (a declared row may change its own data, an undeclared row may not; a
+//   table by name must be declared alike), the row of a name at the same index on both sides, and
+//   when what every row shares (the call before the table, its `as const`, the title, the
+//   callback) changed, every row must be declared. A row's `before` / `after` is the block's raw
+//   text followed by `\n// .each row <k> of <n>: <the row's raw text>` (an inline row from the
+//   block, a named table's row from its declaration); it is changed when the shared part or its
+//   own row changed.
 
 /** One declared name and its block at the base and the head (compareModifiedBlocks). */
 export type ModifiedBlock =
@@ -1838,9 +2044,15 @@ type BlockView = {
   raw: string;
 };
 
-function blockViews(source: string): { shared: string; blocks: BlockView[] } {
+function blockViews(source: string): {
+  shared: string;
+  blocks: BlockView[];
+  /** CT-06zzzk: each block's `.each` / `.for` table expanded (null: no such table). */
+  each: (EachExpansion | null)[];
+} {
   const { tokens, suites, tests } = scanTests(source);
   const parsed = parseTestFile(source);
+  const view = outsideView(source);
   const blocks = tests.map((c, i): BlockView => {
     const b = parsed.blocks[i] as TestBlock;
     const around = suites.filter((s) => s.open < c.start && c.start < s.close);
@@ -1858,10 +2070,13 @@ function blockViews(source: string): { shared: string; blocks: BlockView[] } {
       raw: source.slice(from, to),
     };
   });
-  return { shared: parsed.shared, blocks };
+  const each = view.blocks.map((b) => b.each?.expand ?? null);
+  if (each.length !== blocks.length)
+    throw new TestParseError('the test blocks were not read alike');
+  return { shared: parsed.shared, blocks, each };
 }
 
-/** See the comment above ModifiedBlock (CT-06zzzg, D10-701). */
+/** See the comment above ModifiedBlock (CT-06zzzg, D10-701; rows of `.each`: CT-06zzzk). */
 export function compareModifiedBlocks(
   base: string,
   head: string,
@@ -1879,30 +2094,45 @@ export function compareModifiedBlocks(
   } catch (err) {
     return { ok: false, reason: `the file cannot be read as tests (${String(err)})` };
   }
-  const locate = (
-    side: BlockView[],
-    name: string,
-    where: string,
-  ): { index: number } | { reason: string } => {
-    const hits = side.map((b, i) => [b, i] as const).filter(([b]) => b.pattern.test(name));
+  type Located = { index: number; row: number | null } | { reason: string };
+  const locate = (side: ReturnType<typeof blockViews>, name: string, where: string): Located => {
+    const hits = side.blocks.map((b, i) => [b, i] as const).filter(([b]) => b.pattern.test(name));
     if (hits.length === 0) return { reason: `no test block of the ${where} is named so` };
     if (hits.length > 1) {
       return { reason: `${hits.length} test blocks of the ${where} may produce the name` };
     }
     const [b, i] = hits[0] as readonly [BlockView, number];
-    if (!b.static) {
+    if (b.static) return { index: i, row: null };
+    // CT-06zzzk (D10-738 A): a row of an `.each` / `.for` table, by its expanded title.
+    const each = side.each[i];
+    if (each === null || each === undefined) {
       return {
-        reason: `its block at the ${where} has a title or describe title that is not a static literal (a template, a non-literal or an .each placeholder)`,
+        reason: `its block at the ${where} has a title or describe title that is not a static literal (a template, a non-literal) and is no .each / .for table`,
       };
     }
-    return { index: i };
+    if (!each.ok) {
+      return {
+        reason: `its block at the ${where} is an .each / .for table whose rows cannot be expanded for certain: ${each.reason}`,
+      };
+    }
+    const rows = each.names.flatMap((n, k) => (n === name ? [k] : []));
+    if (rows.length !== 1) {
+      return {
+        reason: `no row of the .each / .for table at the ${where} expands to exactly this title (the full name as Vitest reports it)`,
+      };
+    }
+    return { index: i, row: rows[0] as number };
   };
+  const rowTag = (e: Extract<EachExpansion, { ok: true }>, k: number): string =>
+    `\n// .each row ${k + 1} of ${e.rows.length}: ${e.raw[k] as string}`;
   const pairs = new Map<number, number>();
-  const usedBase = new Set<number>();
-  const blocks = names.map((test): ModifiedBlock => {
-    const b = locate(before.blocks, test, 'base');
+  const plainBase = new Set<number>();
+  // Row entries by head block: the base block, and the entry indexes with their row.
+  const groups = new Map<number, { base: number; entries: { at: number; row: number }[] }>();
+  const blocks = names.map((test, at): ModifiedBlock => {
+    const b = locate(before, test, 'base');
     if (!('index' in b)) return { test, found: false, reason: b.reason };
-    const h = locate(after.blocks, test, 'head');
+    const h = locate(after, test, 'head');
     if (!('index' in h)) {
       return {
         test,
@@ -1912,15 +2142,82 @@ export function compareModifiedBlocks(
           : h.reason,
       };
     }
-    if (usedBase.has(b.index) || pairs.has(h.index)) {
-      return { test, found: false, reason: 'another declared name is on the same block' };
-    }
-    usedBase.add(b.index);
-    pairs.set(h.index, b.index);
     const x = before.blocks[b.index] as BlockView;
     const y = after.blocks[h.index] as BlockView;
-    return { test, found: true, before: x.raw, after: y.raw, changed: x.key !== y.key };
+    if (b.row === null || h.row === null) {
+      if (b.row !== h.row) {
+        return {
+          test,
+          found: false,
+          reason: 'a plain block on one side, an .each row on the other',
+        };
+      }
+      if (plainBase.has(b.index) || pairs.has(h.index) || groups.has(h.index)) {
+        return { test, found: false, reason: 'another declared name is on the same block' };
+      }
+      plainBase.add(b.index);
+      pairs.set(h.index, b.index);
+      return { test, found: true, before: x.raw, after: y.raw, changed: x.key !== y.key };
+    }
+    if (b.row !== h.row) {
+      return { test, found: false, reason: 'the row moved in the .each / .for table' };
+    }
+    const group = groups.get(h.index);
+    if (
+      plainBase.has(b.index) ||
+      pairs.has(h.index) ||
+      (group !== undefined &&
+        (group.base !== b.index || group.entries.some((e) => e.row === h.row)))
+    ) {
+      return { test, found: false, reason: 'another declared name is on the same block or row' };
+    }
+    if (group === undefined) groups.set(h.index, { base: b.index, entries: [{ at, row: h.row }] });
+    else group.entries.push({ at, row: h.row });
+    // Filled in below, once every row entry of the block is known.
+    return { test, found: false, reason: 'pending' };
   });
+  // CT-06zzzk (D10-738 A): the row entries of one `.each` block. The table must be the base's
+  // row by row (same count, same order; a declared row's own data may change, an undeclared row's
+  // not; a table by name the same declaration), and when what every row shares (the call, the
+  // title, the callback) changed, every row must be declared.
+  for (const [hj, group] of groups) {
+    const eb = before.each[group.base] as Extract<EachExpansion, { ok: true }>;
+    const eh = after.each[hj] as Extract<EachExpansion, { ok: true }>;
+    const n = eb.rows.length;
+    const declared = new Set(group.entries.map((e) => e.row));
+    const shared = eb.frame !== eh.frame;
+    let why: string | null = null;
+    if (eh.rows.length !== n) {
+      why = `the .each / .for table has ${eh.rows.length} row(s) at the head, ${n} at the base: rows added or removed`;
+    } else if (eb.table !== eh.table) {
+      why = 'the named table is declared differently at the head';
+    } else {
+      for (let k = 0; k < n && why === null; k += 1) {
+        if (!declared.has(k) && eb.rows[k] !== eh.rows[k]) {
+          why = `row ${k + 1} of the .each / .for table changed and is not declared`;
+        }
+      }
+      if (why === null && shared && declared.size !== n) {
+        why = `the call, title or callback every row shares changed: every row of the table must be declared (${declared.size} of ${n} are)`;
+      }
+    }
+    const x = before.blocks[group.base] as BlockView;
+    const y = after.blocks[hj] as BlockView;
+    for (const { at, row } of group.entries) {
+      const test = names[at] as string;
+      blocks[at] =
+        why === null
+          ? {
+              test,
+              found: true,
+              before: `${x.raw}${rowTag(eb, row)}`,
+              after: `${y.raw}${rowTag(eh, row)}`,
+              changed: shared || eb.rows[row] !== eh.rows[row],
+            }
+          : { test, found: false, reason: why };
+    }
+    if (why === null) pairs.set(hj, group.base);
+  }
   let outside: string | null = null;
   if (before.shared !== after.shared) {
     outside =

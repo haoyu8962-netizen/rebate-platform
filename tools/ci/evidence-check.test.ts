@@ -2522,3 +2522,163 @@ it('[CT-06zzzg] Codex r1 S2: a ledger only at the PR head never applies modify_e
     `runs[0].expected: does not cover ${MOD_FILE}, a rule-test file the task added`,
   );
 });
+
+// CT-06zzzk (D10-738 A, after B2-04zx): rows of .each tables declared by their expanded titles.
+it('[CT-06zzzk] the B2-04zx shape: every row of both .each tables declared, only the callbacks changed, with the label — the class 1 change passes; a row left out or a record without its row is refused', () => {
+  const FILE = 'test/spec/orders/x/success-after-closed.int.test.ts';
+  const inline = (body: string): string =>
+    [
+      "it.each(['14', '15'] as const)(",
+      "  '[AC-B1-04zza#45] 先处理中、再 %s，同一维权单号后来 13',",
+      '  async (code) => {',
+      `    ${body}`,
+      '  },',
+      ');',
+    ].join('\n');
+  const named = (body: string): string =>
+    [
+      'it.each(GUARDS)(',
+      "  '[AC-B1-04zza#46] $label（入账后订单）：duplicate',",
+      '  async ({ seed }) => {',
+      `    ${body}`,
+      '  },',
+      '  TIMEOUT,',
+      ');',
+    ].join('\n');
+  const GUARDS = [
+    'const GUARDS: readonly GuardCase[] = [',
+    "  { label: 'ADMIN 源 FAILED 之后联盟报成功', seed: seedAdminFailed },",
+    "  { label: '导入源 FAILED 之后联盟报成功', seed: seedImportFailed },",
+    '];',
+  ].join('\n');
+  const OLD = 'const h = await harness(p.db);';
+  const NEW = 'const h = await harness(p.db, { audit: await auditPort() });';
+  const source = (body: string): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      'const TIMEOUT = 30_000;',
+      inline(body),
+      GUARDS,
+      named(body),
+      '',
+    ].join('\n');
+  const TESTS = [
+    '[AC-B1-04zza#45] 先处理中、再 14，同一维权单号后来 13',
+    '[AC-B1-04zza#45] 先处理中、再 15，同一维权单号后来 13',
+    '[AC-B1-04zza#46] ADMIN 源 FAILED 之后联盟报成功（入账后订单）：duplicate',
+    '[AC-B1-04zza#46] 导入源 FAILED 之后联盟报成功（入账后订单）：duplicate',
+  ];
+  const ROWS = [
+    "'14'",
+    "'15'",
+    "{ label: 'ADMIN 源 FAILED 之后联盟报成功', seed: seedAdminFailed }",
+    "{ label: '导入源 FAILED 之后联盟报成功', seed: seedImportFailed }",
+  ];
+  const record = (i: number, extra: Evidence = {}): Evidence => {
+    const block = i < 2 ? inline : named;
+    const tag = `\n// .each row ${(i % 2) + 1} of 2: ${ROWS[i] as string}`;
+    return {
+      file: FILE,
+      test: TESTS[i],
+      reason: 'tighten_only',
+      before: `${block(OLD)}${tag}`,
+      after: `${block(NEW)}${tag}`,
+      mutation: [{ mutant: 'settlement writes the audit table itself', result: 'killed' }],
+      ...extra,
+    };
+  };
+  const repo = join(SCRATCH, 'each-repo');
+  mkdirSync(repo, { recursive: true });
+  git(repo, ['init', '-q', '-b', 'main']);
+  write(repo, { SPEC_REF: `${SPEC_REF}\n`, [FILE]: source(OLD) });
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-q', '-m', 'base']);
+  const base = git(repo, ['rev-parse', 'HEAD']);
+  const trusted = (count: number): string => {
+    const dir = join(SCRATCH, `trusted-each-${count}`);
+    for (const f of ['tools/guard/protected-paths.json', 'ops/risk-map.yaml']) {
+      write(dir, { [f]: readFileSync(join(REPO, f), 'utf8') });
+    }
+    write(dir, {
+      'tools/guard/legacy-tasks.json': JSON.stringify({ baseline: 'fixture', tasks: [] }),
+      'ops/tasks/B2-04zx.yaml': [
+        'id: B2-04zx',
+        'repo: rebate-platform',
+        'title: audit port injected inside the frozen blocks',
+        'type: test-change',
+        'refs: []',
+        'refs_hash: {}',
+        'deps: []',
+        'paths:',
+        `  - '${FILE}'`,
+        'impl: claude',
+        'tester: none',
+        'accept:',
+        "  - 'pnpm verify'",
+        'status: todo',
+        'modify_existing:',
+        ...TESTS.slice(0, count).flatMap((t) => [
+          `  - file: '${FILE}'`,
+          `    test: '${t}'`,
+          '    reason: tighten_only',
+          '    ruling: D10-723',
+          "    note: 'the audit port is injected inside the block only'",
+        ]),
+        '',
+      ].join('\n'),
+    });
+    return dir;
+  };
+  const branch = (name: string, records: Evidence[]): string => {
+    git(repo, ['checkout', '-q', '-B', name, base]);
+    write(repo, { [FILE]: source(NEW) });
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', name]);
+    const tree = git(repo, ['rev-parse', 'HEAD:test/spec']);
+    const doc = {
+      task: 'B2-04zx',
+      spec_ref: SPEC_REF,
+      spec_commit: base,
+      runs: [],
+      reviews: [
+        {
+          reviewer: 'codex',
+          engine: 'codex',
+          model: 'gpt-6-astra',
+          verdict: 'pass',
+          open_s0_s1: 0,
+          checklist_complete: true,
+        },
+      ],
+      trees: { 'test/spec': tree },
+      longrun: { runs: 1000000, seed: 1, passed: true, tree },
+      modify_existing: records,
+    };
+    write(repo, { 'ops/evidence/B2-04zx.json': `${JSON.stringify(doc, null, 2)}\n` });
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', 'evidence']);
+    return git(repo, ['rev-parse', 'HEAD']);
+  };
+  const check = (head: string, dir: string) =>
+    checkEvidence({
+      prDir: repo,
+      base,
+      head,
+      headRef: 'task/B2-04zx',
+      trusted: dir,
+      approval: approved(head),
+    });
+  const all = [0, 1, 2, 3].map((i) => record(i));
+  const good = branch('each-good', all);
+  expect(check(good, trusted(4)).problems).toEqual([]);
+  // One row of GUARDS not declared: the shared callback changed, so neither row applies.
+  const partial = branch('each-partial', all.slice(0, 3));
+  const text = check(partial, trusted(3)).problems.join('\n');
+  expect(text).toContain('every row of the table must be declared (1 of 2 are)');
+  expect(text).toContain(`spec_commit: rule tests changed after the rule-test commit: ${FILE} (M)`);
+  // A record whose after lacks the row: not the block's text plus the row.
+  const bad = branch('each-bad', [...all.slice(0, 3), record(3, { after: named(NEW) })]);
+  expect(check(bad, trusted(4)).problems.join('\n')).toContain(
+    "modify_existing[3].after: must be the block's text at the head, character for character",
+  );
+});

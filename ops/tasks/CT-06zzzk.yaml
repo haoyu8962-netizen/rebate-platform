@@ -1,0 +1,28 @@
+id: CT-06zzzk
+repo: rebate-platform
+title: CT-06zzzk：modify_existing 认 it.each 展开后的用例标题（按基线 .each 表逐行展开后比对；展开不了的仍判不适用）（D10-738 A）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排 D10-738 A，排 B1-25b staging 演练后）。起因：B2-04zx 的冻结文件 success-after-closed 有 8 块 it.each，
+#   modify_existing 只认标题为静态字面量的块（CT-06zzzg 的从严选择），这些块登不进条目，只能走先红例外 / 前置 test-change。
+# 改法：条目 test 可写 it.each 展开后的单行标题；块比对按基线与头两边的 .each 表逐行展开（字面量行，同 red_exempt_rows 的机械判定），
+#   展开后的标题与条目匹配即视为该行的块；表不是字面量、行数或顺序变化、占位符展开不了，都判不适用（照旧拒）。其余规则（标签、证据 before/after、上限）不变。
+# 工具测试补正反例。Opus 实现；Codex 对抗评审；按 #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/**'
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzk.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

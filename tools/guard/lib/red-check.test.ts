@@ -3472,3 +3472,113 @@ it("[CT-06zzzg] not left out when the comparison cannot be made, a declared bloc
     expect(modifiedOnlyFiles([MOD], read(base, head), declared), name).toEqual([]);
   }
 });
+
+// CT-06zzzk (D10-738 A): modify_existing names rows of an .each table by their expanded titles.
+const EACH = 'test/spec/z/each.int.test.ts';
+const eachBlock = (body: string): string =>
+  `it.each(['14', '15'] as const)('[AC-45] closed with %s', async (code) => {\n  ${body}\n});`;
+const EACH_BASE = file(spec('[AC-1] a'), eachBlock('expect(code).toBeTruthy();'));
+const EACH_HEAD = file(spec('[AC-1] a'), eachBlock('audit();\n  expect(code).toBeTruthy();'));
+const EACH_ROWS = ['[AC-45] closed with 14', '[AC-45] closed with 15'];
+const eachDeclared = (tests: string[] = EACH_ROWS) =>
+  tests.map((test) => ({
+    file: EACH,
+    test,
+    reason: 'tighten_only' as const,
+    ruling: 'D10-738',
+    note: 'the audit port is injected inside the block only',
+  }));
+const eachBaselines = (head: string, declared = eachDeclared()) =>
+  ruleTestBaselines(
+    [EACH],
+    [{ path: EACH, status: 'M' }],
+    ['test/spec/z/**'],
+    reader({ [EACH]: EACH_BASE }, { [EACH]: head }),
+    [],
+    [],
+    [],
+    [],
+    declared,
+  );
+const EACH_TESTS: RedTest[] = [
+  ['[AC-1] a', 'passed'],
+  ['[AC-45] closed with 14', 'passed'],
+  ['[AC-45] closed with 15', 'passed'],
+];
+
+it('[CT-06zzzk] every row of an .each table declared, only the callback changed: the rows may pass green; the file is left out of the expected list', () => {
+  const result = checkRedReports(
+    [redReport(EACH, EACH_TESTS)],
+    [EACH],
+    ROOT,
+    eachBaselines(EACH_HEAD),
+    [],
+    [],
+    eachDeclared(),
+  );
+  // Nothing else changed: every test unchanged or declared, nothing shown red (as for a plain
+  // block); such a file is left out of the expected list instead.
+  expect(result.problems).toEqual([
+    {
+      file: EACH,
+      test: null,
+      reason:
+        'existed at the base and every test is unchanged or a declared change of a frozen test (modify_existing): nothing is shown red (3 test(s))',
+    },
+  ]);
+  expect(result.exempt?.filter((e) => e.modified === true).map((e) => e.test)).toEqual(EACH_ROWS);
+  expect(
+    modifiedOnlyFiles([EACH], reader({ [EACH]: EACH_BASE }, { [EACH]: EACH_HEAD }), eachDeclared()),
+  ).toEqual([{ file: EACH, tests: EACH_ROWS }]);
+  // With a new test next to it the file stays expected; the rows still pass, the new test is red.
+  const withNew = file(
+    spec('[AC-1] a'),
+    eachBlock('audit();\n  expect(code).toBeTruthy();'),
+    spec('[AC-2] new'),
+  );
+  expect(
+    modifiedOnlyFiles([EACH], reader({ [EACH]: EACH_BASE }, { [EACH]: withNew }), eachDeclared()),
+  ).toEqual([]);
+  const kept = checkRedReports(
+    [
+      redReport(EACH, [
+        ...EACH_TESTS,
+        ['[AC-2] new', 'failed', 'AssertionError: expected 1 to be 2'],
+      ]),
+    ],
+    [EACH],
+    ROOT,
+    eachBaselines(withNew),
+    [],
+    [],
+    eachDeclared(),
+  );
+  expect(kept.problems).toEqual([]);
+  expect(kept.red).toEqual([`${EACH} > [AC-2] new`]);
+});
+
+it('[CT-06zzzk] only some rows declared: a problem, and the undeclared row must be red; not left out', () => {
+  const one = eachDeclared([EACH_ROWS[0] as string]);
+  const result = checkRedReports(
+    [redReport(EACH, EACH_TESTS)],
+    [EACH],
+    ROOT,
+    eachBaselines(EACH_HEAD, one),
+    [],
+    [],
+    one,
+  );
+  expect(result.ok).toBe(false);
+  expect(result.problems).toContainEqual({
+    file: EACH,
+    test: EACH_ROWS[0],
+    reason:
+      'declared in modify_existing, but the declaration does not apply: the call, title or callback every row shares changed: every row of the table must be declared (1 of 2 are)',
+  });
+  expect(result.problems.filter((p) => p.reason === NO_TEETH).map((p) => p.test)).toEqual(
+    EACH_ROWS,
+  );
+  expect(
+    modifiedOnlyFiles([EACH], reader({ [EACH]: EACH_BASE }, { [EACH]: EACH_HEAD }), one),
+  ).toEqual([]);
+});
