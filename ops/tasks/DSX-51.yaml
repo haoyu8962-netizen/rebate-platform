@@ -1,0 +1,25 @@
+id: DSX-51
+repo: rebate-platform
+title: 后台 200% 缩放与窄视口重排：按适配约定的后台视口分档（≥1440 / 1280–1439 / 960–1279 / <960）在外壳与表格组件落地侧栏可收起、筛选可换行、宽表固定列，断点集中在外壳组件（规划/05 §3.11.3 DSX-51，编排 D10-724 ②）
+type: impl
+# 2026-11-06 入账（前端线 f1-frontend-7，编排 D10-724 ②）。整改计划 DSX-51 验收：「浏览器测试在 1280、960、800 宽和 200% 缩放下，除数据表格外没有页面级横向滚动，侧栏可以收起；页面代码里不写断点数字」。依据：适配约定「后台 · 视口分档」与规划 03 §10.4 后台行。
+# 冻结测试（admin-*/** 的布局、截图与 1280 / 1440 浏览器用例）若与重排冲突，规则测试作者先列出，按 #24 另开 test-change，不在本单改。资金页面（withdrawals / adjustments 目录）只受外壳与表格组件的共用改动，不改其业务代码。
+# 非资金；评审 general 口径（若因路径判 RV2 则按 money 口径）。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/layout/**'
+  - 'apps/admin/src/shell.ts'
+  - 'apps/admin/src/shell-options.ts'
+  - 'apps/admin/src/components/**'
+  - 'apps/admin/src/texts/shell.ts'
+test_paths:
+  - 'test/spec/frontend/admin-responsive/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-responsive/**'
+status: todo
+pr: null

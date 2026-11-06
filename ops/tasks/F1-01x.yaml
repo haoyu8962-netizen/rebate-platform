@@ -1,0 +1,21 @@
+id: F1-01x
+repo: rebate-platform
+title: F1-01-nav：H5 外壳按路由调 ui.setNavBar 设原生标题（文案只取字典键），entries/app/index.html 空 title 填与标题一致的值，help-home 自绘标题改为 sr-only h1（规划/05 §3.11.3 F1-01-nav，编排 D10-724 ①）
+type: impl
+# 2026-11-06 入账（前端线 f1-frontend-7，编排 D10-724 整改 P1 第一批 ①）。整改计划 F1-01-nav 范围：「apps/h5 的 app 入口在路由切换时调用 ui.setNavBar 设置标题（文案取字典键）。entries/app/index.html 的空 title 填上与标题一致的值。help-home.tsx L183 自绘的标题改为 sr-only h1」；验收：「浏览器测试：每个 app 路由进入后都调用了 ui.setNavBar，且 title 非空；help-home 可见区域没有自绘标题行；非 conformance 代码里的 setNavBar 调用都集中在共用外壳」。
+# 标题文案只取 contracts/texts.default.json 的现有键（如 earnings.title）；routes.json 的 9 个 h5 路由里没有标题键的，规则测试作者列出，由编排另开 content 契约单补键，本单不写死中文、不改 contracts/。
+# 非资金；评审 general 口径。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/**'
+test_paths:
+  - 'test/spec/frontend/h5-nav/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-nav/**'
+status: todo
+pr: null

@@ -1,0 +1,22 @@
+id: DSX-50
+repo: rebate-platform
+title: H5 与后台截图基准比对（先只报告不挡合并）：H5 关键页（规则、帮助、公告、收益明细、订单找回、消息、邀请）浅深两套、后台关键页（登录、工作台、订单列表、提现审核）浅色一套，差异 ≤1% 阈值只报告，基准图入库（规划/05 §3.11.3 DSX-50，编排 D10-724 ③）
+type: impl
+# 2026-11-06 入账（前端线 f1-frontend-7，编排 D10-724 ③）。整改计划 DSX-50：在现有 Vitest 浏览器模式（Playwright Chromium）上加截图基准比对；阈值按 11 §4.1 截图差 ≤1%，先只报告；容差按 DSX-09（未定前用 1%）。验收：「test/spec/frontend 里有截图比对断言，基准图已入库；CI 产物输出每页的差异百分比；变异：改一个按钮圆角后，报告能标出该页」。
+# 「先只报告」：比对结果写报告（每页差异百分比 JSON / 文本），超阈值不让用例失败；基准图放 test/spec/frontend/visual-baseline/__baselines__/**。**CI 上传产物要改 .github/**（第三类保护路径）——不在本单，报告先写到测试输出与 .tmp，CI 产物接入由编排另开门禁单**。基准图在本机容器（D10-555）生成，同一浏览器与字体。
+# 非资金；评审 general 口径。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/frontend/visual-baseline/__baselines__/**'
+  - 'test/spec/frontend/visual-baseline/report/**'
+test_paths:
+  - 'test/spec/frontend/visual-baseline/*.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/visual-baseline/**'
+status: todo
+pr: null

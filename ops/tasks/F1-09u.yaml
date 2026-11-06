@@ -1,0 +1,22 @@
+id: F1-09u
+repo: rebate-platform
+title: F1-09-qr：后台首页配置草稿二维码（保存草稿后经 adminCreatePagePreviewToken 生成 couli://r/HomePreview?page_key=…&token=… 二维码，token 10 分钟只读）与版本列表 render_count / error_count / 错误率列；弹窗素材上传位待规格定稿另做（规划/05 §3.11.3 F1-09-qr，编排 D10-724 ④）
+type: impl
+# 2026-11-06 入账（前端线 f1-frontend-7，编排 D10-724 ④）。开工前已核（编排要求）：草稿预览 token 接口已在契约且已实现——adminCreatePagePreviewToken（POST /admin/v1/pages/{page_key}/preview-tokens，content 模块 page-preview-tokens.controller.ts / application/page-preview.ts）与 previewPage（GET /v1/pages/{page_key}/preview），均非 planned。
+# 整改计划 F1-09-qr 三块：① 撤掉 home-config.ts L68「二维码待深链定稿」与 EditorView.tsx 头注释 no QR code，生成二维码——**本单做**；③ 版本列表加 render_count、error_count 与错误率列——契约字段已在（DSX-40 合并前恒为 0），**本单做列**，数据随 DSX-40 自然有值；② popup 表单加动画文件与兜底图两个 Upload 位（adminUploadPopupAsset 已实现）——**本单不做**：其画板与规格（F1-spec-drafts/admin-home-config-extra，本线 10-31 草稿）仍待负责人定稿，定稿后另入账。
+# 二维码用 antd 5.29.3 自带的 QRCode 组件（不新增依赖）。非资金；评审 general 口径。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/pages/home-config/**'
+  - 'apps/admin/src/texts/home-config.ts'
+test_paths:
+  - 'test/spec/frontend/admin-home-config-qr/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-home-config-qr/**'
+status: todo
+pr: null
