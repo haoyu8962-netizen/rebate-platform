@@ -5,6 +5,11 @@ type: impl
 # 2026-11-06 withdraw 入账（从 pay 移来，D10-707 ②）。来由：withdraw 对 B2-09s 的评审 S2——admin-unknown-payouts.ts 的 queryAdminPayoutResult 每次请求用随机 manual_request_id 作 singletonKey，不同幂等键的重复点击（或两位处置人同时点）会各入队一条，对同一 out_biz_no 并发查通道、各记一条尝试。
 # 做法（只动实现，契约不改）：在途 = 同一 withdrawal_id + execute_seq 的人工查询任务已入队或执行中、结果尚未落尝试记录；在途时新请求不再入队，仍答 submitted（结果照旧出现在 latest_query），审计照记是谁点的。上一条落了记录之后再点，照常入队新的一条。只查不重发（BR-WDR-14）不变，查询结果只作凭证、不迁移状态（BR-WDR-15）不变。不动钱、无迁移。
 # 顺序：与 pay 的 B2-09w / B2-09x 同改 admin-unknown-payouts.ts（路径相交不同时在途），按 D10-702 排在它们之后开工（deps）。
+# 2026-11-07 开工（#2558 合并后；做法编排已认可）：只把 queryAdminPayoutResult 入队的 singletonKey 去掉随机段（`{withdrawal_id}:{execute_seq}:manual`），靠队列 payout 的 exclusive 策略在途去重；不加表、不加时间窗，query-job.ts 实际不改。
+# 开工前实测（实现树一行改动，四个冻结目录 76 条）：两条 B2-09s 冻结用例钉的是本单要改掉的行为，编排 D10-777 准照 D10-327 在本单 spec 提交里改这两个用例块——
+#   [AC-B2-09s#14]（query-list）：第一条任务还在队列里时换幂等键再点。旧：队列 2 条、审计 2 条；新：队列 1 条（在途不再入队）、审计仍 2 条、应答 submitted，标题「异键再次入队」改「异键在途不再入队」；同键重放半段不变。
+#   [AC-B2-09s#39]（edges）：旧：连续两次异键提交各入队一条、各查一次；新：上一条真正完成后再点才入队新的一条，各查一次、共 2 条 query 尝试。
+#   两个文件其余用例逐字不动，登 red_exempt。规则测试改由新鲜独立 Claude 写（Codex 额度用尽至 11-11，approvals #36、D10-775），另一位独立 Claude 只读复审。
 refs: [BR-WDR-15, BR-WDR-14]
 refs_hash:
   BR-WDR-15: 862cdb2e711a
@@ -16,8 +21,68 @@ paths:
   - 'apps/api/src/modules/payout/jobs/query-job.ts'
 test_paths:
   - 'test/spec/payout/manual-query-dedupe/**'
+  - 'test/spec/payout/admin-unknown-payouts/query-list.int.test.ts'
+  - 'test/spec/payout/admin-unknown-payouts/edges.int.test.ts'
+red_exempt:
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#27] 最近查询success允许判成功；同一at时先fail后success按id倒序取成功，不能只允许unknown'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#28] 真实手动查询任务返回success只留凭证，随后W10判成功贯通；较早fail不会挡住新success'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#29] 最近查询fail且本单账单CLOSED未映射成功，仍resolve_query_failed，不能把有行当成功'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#30] 账单成功按本app的query_status_map判定：非SUCCESS的合成状态映射success能解除fail保护'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#31] 微信W10判成功贷CASH_WECHAT：六条分录金额科目逐条核对且与同金额W5相同，available不变frozen归零'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#32] 手动查询按提现快照选wechat和bank_card通道，只有对应fake被调用一次且参数为本单out_biz_no'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#33] 手动查询传输异常只调一次并记一条unknown，任务不失败不迁移；W9退回单随后驳回仍reject_query_required'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#34] APPROVED+payout_disabled不是付款方失败退回单，查询20902，状态余额审计队列均不变'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#35] failed先检查状态：PAID_API及普通PAYING均20902；空白proof_text先于未知withdrawal_id检查'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#36] T取首次transfer.at而非早7分钟的executed_at：列表、fail_blockers及24小时少1毫秒/恰到边界一致'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#37] paid_at下限取首次transfer.at：executed_at早7分钟，T前1毫秒拒绝，恰好T允许'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#38] 手动任务确认前重投按manual_request_id去重：首次fail、重投通道会抛错，不再调用且仍只有fail，W10保护不被unknown解除'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#40] 同一手动任务两个处理器确定性交错：首个通道响应被闸门扣住，允许第二个查询通道，最终只留一条query'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#41] 最新查询fail时，账单状态虽在map内但映射fail或unknown均不能解除resolve_query_failed，状态凭证余额不变'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/edges.int.test.ts
+    test: '[AC-B2-09s#42] 同一手动查询两处理器各过通道闸门后同时写入：外部提现行锁证明两者阻塞，提交后恰一条query且不迁移不重转账'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#39]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/query-list.int.test.ts
+    test: '[AC-B2-09s#12] 入队后真实query-job只追加一条query：needs_manual及W9退回单，对success/fail/unknown均不迁移、不记账、不排下一点、不重提转账；开关暂停不拦查询'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#14]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/query-list.int.test.ts
+    test: '[AC-B2-09s#13] W9退回单查询fail写成真实尝试后，W3守卫可读到并成功驳回；needs_manual单W8仍not_approved'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#14]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/query-list.int.test.ts
+    test: '[AC-B2-09s#15] 列表仅本app PAYING+needs_manual，按T最老优先且分页；latest_query来自最新at/id，响应不含原始账号、姓名及响应中的额外私密字段'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#14]，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/admin-unknown-payouts/query-list.int.test.ts
+    test: '[AC-B2-09s#16] 查询其他状态20902，未知id/跨app/非UUID为20001，不入队不审计'
+    reason: '冻结 B2-09s 用例，测试体与基线逐字相同；本单照 D10-777 只改同一文件里的 [AC-B2-09s#14]，本条不动，在旧代码上照常为绿'
 impl: claude
-tester: codex
+tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/manual-query-dedupe/**'
