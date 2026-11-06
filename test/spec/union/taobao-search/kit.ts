@@ -97,7 +97,7 @@ export function titleOf(n: number): string {
   return `合成搜索商品 ${pad(n)}`;
 }
 export function mainPicOf(n: number): string {
-  return `https://img.synthetic.invalid/dtk/main-${pad(n)}.jpg`;
+  return `https://img.synthetic.alicdn.com/dtk/main-${pad(n)}.jpg`;
 }
 
 /** Values that must never be exposed (estimateAmount, links, ids, signs, sellers). */

@@ -120,16 +120,16 @@ it.each([
 
 it('[AC-B1-04zh#30] smallImages 有效项作多图 image_urls（https、去重、保持顺序，不合格项丢弃）；主图不并入多图', async () => {
   const small = [
-    'https://img.synthetic.invalid/dtk/small-1.jpg',
-    'http://img.synthetic.invalid/dtk/small-bad.jpg',
-    'https://img.synthetic.invalid/dtk/small-2.jpg',
-    'https://img.synthetic.invalid/dtk/small-1.jpg',
+    'https://img.synthetic.alicdn.com/dtk/small-1.jpg',
+    'http://img.synthetic.alicdn.com/dtk/small-bad.jpg',
+    'https://img.synthetic.alicdn.com/dtk/small-2.jpg',
+    'https://img.synthetic.alicdn.com/dtk/small-1.jpg',
   ];
   const item: UnionItemDetail = await one(dtkRow(5, { smallImages: small }));
   expect(item.main_image_url).toBe(mainPicOf(5));
   expect(item.image_urls).toEqual([
-    'https://img.synthetic.invalid/dtk/small-1.jpg',
-    'https://img.synthetic.invalid/dtk/small-2.jpg',
+    'https://img.synthetic.alicdn.com/dtk/small-1.jpg',
+    'https://img.synthetic.alicdn.com/dtk/small-2.jpg',
   ]);
 });
 
