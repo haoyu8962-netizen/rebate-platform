@@ -185,7 +185,7 @@ const RULES: readonly ActionRule[] = Object.freeze([
   ...rules(['withdrawal_manual_paid'], 'withdrawal', null, fixed('payout.manual_entry')),
   // payout (B2-09s): the disposal of an unknown result and its query; target the withdrawal id.
   ...rules(
-    ['withdrawal_resolve', 'payout_query_request'],
+    ['withdrawal_resolve', 'withdrawal_resolve_refused', 'payout_query_request'],
     'withdrawal',
     null,
     fixed('payout.execute'),

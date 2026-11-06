@@ -192,7 +192,6 @@ const HISTORICAL_PAID_AT = '2026-10-17T18:00:00.000Z';
 const FIRST_TRANSFER_AT = '2026-10-17T02:00:00.000Z';
 
 it.each([
-  { ac: 10, evidence: 'out_biz_no' },
   { ac: 11, evidence: 'missing' },
   { ac: 12, evidence: 'channel_order_id' },
 ])(
@@ -312,3 +311,118 @@ it.each([
   },
   120_000,
 );
+
+it('[AC-B2-09x#17] 承 [AC-B2-09u#10]：历史成功账单流水不符先拒，改为账单流水后成功并消费真实复核任务', async () => {
+  const f = await s.setup();
+  const a = s.admin(f);
+  await withUnknownAdmin(a, async (h) => {
+    const who = await payee(a, h);
+    const w = await unknownWithdrawal(a, h, who, {
+      age: a.clock.now().getTime() - Date.parse(FIRST_TRANSFER_AT),
+      automatic: false,
+    });
+    const order = serial();
+    const line = lineOf({ outBizNo: w.out_biz_no, net: 12_347n }, { channelOrderId: serial() });
+    // Original #10: persist the historical bill through the real daily worker before W10.
+    f.setBill(BILL_DATE, [line]);
+    await f.runDay();
+    expect(await runs(f)).toEqual([
+      expect.objectContaining({ bill_date: BILL_DATE, status: 'succeeded' }),
+    ]);
+    expect(await rowOf(a, w)).toMatchObject({ status: 'PAYING', channel_order_id: null });
+    const rows = await reconRows(f);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        out_biz_no: w.out_biz_no,
+        channel_order_id: line.channelOrderId,
+        channel_status: 'SUCCESS',
+        channel_amount_fen: 12_347n,
+        bill_date: BILL_DATE,
+      }),
+    ]);
+    const priorDiffs = await diffs(f);
+    expect(priorDiffs).toEqual([]);
+
+    // New rule: a different human-entered serial is refused, with only a durable audit.
+    const beforeRefusal = await state(a);
+    await refused(
+      await h.resolve(
+        w.id,
+        paidBody(a, w, {
+          channel_order_id: order,
+          paid_at: HISTORICAL_PAID_AT,
+        }),
+      ),
+      'resolve_order_id_mismatch',
+      'channel_order_id',
+    );
+    expect(await rowOf(a, w)).toMatchObject({ status: 'PAYING', channel_order_id: null });
+    expect(await lateJobs(f)).toEqual([]);
+    expect(await diffsOf(f, [w.id])).toEqual([]);
+    expect(await holdsOf(f, who.userId)).toEqual([]);
+    expect(await diffs(f)).toEqual(priorDiffs);
+    const afterRefusal = await state(a);
+    expect({ ...afterRefusal, audits: [] }).toEqual({ ...beforeRefusal, audits: [] });
+    const appended = afterRefusal.audits.filter(
+      (r) => !beforeRefusal.audits.some((b) => b.id === r.id),
+    );
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toMatchObject({
+      app_id: a.appId,
+      admin_id: h.executor.id,
+      target: w.id,
+      action: 'withdrawal_resolve_refused',
+      after: { withdrawal_id: w.id, reason: 'resolve_order_id_mismatch' },
+    });
+    expect(
+      afterRefusal.audits.filter((r) => r.target === w.id && r.action === 'withdrawal_resolve'),
+    ).toEqual([]);
+
+    // Original #10 success assertions, now using the bill's serial throughout.
+    await answer(
+      await h.resolve(
+        w.id,
+        paidBody(a, w, {
+          channel_order_id: line.channelOrderId,
+          paid_at: HISTORICAL_PAID_AT,
+        }),
+      ),
+      0,
+    );
+    expect(await rowOf(a, w)).toMatchObject({
+      status: 'PAID_API',
+      channel_order_id: line.channelOrderId,
+      paid_at: new Date(HISTORICAL_PAID_AT),
+    });
+    const job = await expectQueued(f, w.id);
+    expect(await lateJobs(f)).toEqual([job]);
+    expect(await diffsOf(f, [w.id])).toEqual([]);
+    expect(await holdsOf(f, who.userId)).toEqual([]);
+    expect(await diffs(f)).toEqual(priorDiffs);
+    const before = {
+      stored: await stored(f),
+      books: await books(f),
+      jobs: await jobs(f),
+      calls: f.billCalls(),
+      withdrawal: await rowOf(a, w),
+    };
+    // Original #10: consume the exact stored task name and payload, then compare every snapshot.
+    await runLate(f, w.id, 0, {
+      id: job.id,
+      queue: job.name,
+      name: job.data.name,
+      payload: job.data.payload,
+      attempt: 1,
+    });
+    const found = await diffsOf(f, [w.id]);
+    expect(found).toEqual([]);
+    expect(await diffs(f)).toEqual(priorDiffs);
+    expect(await holdsOf(f, who.userId)).toEqual([]);
+    expect(alertsAbout(f, [w.id])).toEqual([]);
+    expect(await stored(f)).toEqual(before.stored);
+    expect(await books(f)).toEqual(before.books);
+    expect(await jobs(f)).toEqual(before.jobs);
+    expect(f.billCalls()).toEqual(before.calls);
+    expect(await rowOf(a, w)).toEqual(before.withdrawal);
+  });
+}, 120_000);

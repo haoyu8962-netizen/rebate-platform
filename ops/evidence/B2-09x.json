@@ -1,0 +1,106 @@
+{
+  "risk_note": "Money path, RV2. W10 resolving as paid now cross-checks the serial number and amount a person gives against what the system already holds (08 BR-WDR-15 细则, D10-703; contract CT-24zu): another withdrawal's success bill line with that serial (out_biz_no set and not this one) refuses resolve_order_id_other_order; this withdrawal's latest success query answer or any of its success bill lines naming another serial refuses resolve_order_id_mismatch; any of its success bill lines with an amount other than net_fen refuses resolve_amount_mismatch. A refusal writes nothing of the withdrawal (the 2xxxx answer rolls the request back) and one withdrawal_resolve_refused audit record, written after the request's transaction has released its connection (money review r1 S1: the admin pool holds 3 connections). A line without out_biz_no (offline transfer) is not another withdrawal's. A paid_at more than 5 minutes from the success query's paid time only warns and notes paid_at_differs_from_query on the audit. Without evidence nothing changes. audit-log-view derives the refusal's target and permission. Frozen tests: B2-09s #8 and #30 were aligned before this task by the test-change PR #2549 (D10-756); B2-09u #10 was split out of its it.each table (D10-737) and carried forward as [AC-B2-09x#17] at the end of the same file (D10-754).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex via codex-run.sh. couli-runs/B2-09x/money-review-r1.json failed on one S1 (the refusal audit asked the 3-connection admin pool for a second connection while the request held one, so three concurrent refusals could starve it) and one S2 (with two success lines of different serials one matching line let it pass); both fixed in the implementation only. money-review-r2.json passed. No rule test pins the pool exhaustion: the test rounds were used up (3 of 3). Reviewed before the rebase."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "red_exempt_rows_confirmed": true,
+    "note": "Rule tests in 3 attempts (the limit): 1st by Codex (16 tests in w10-voucher-crosscheck); 2nd by a new Codex thread (D10-748) removing the [AC-B2-09u#10] row from the frozen it.each table and writing [AC-B2-09x#17] carried from it; 3rd by a new Codex thread (D10-754) moving #17 verbatim to the end of w10-late-paid/w10.int.test.ts so that file has a test red on the old code. The author restored the 2nd attempt's #17 text from the 3rd attempt's own log (it read the file before moving it) and compared it with the moved block: identical, 4176 characters. A fresh Claude reviewed (approvals 19), static, r1 pass: it confirmed one by one the 9 red_exempt entries ([AC-B2-09u#1]-#9, bodies byte-identical to base, the file judged as a whole only because unknown-harness.ts imports by a computed name) and the 2 red_exempt_rows ([AC-B2-09u#11], #12, kept rows of the split table), and #17 'only more, nothing less' against the original #10. Two S2 left open: every cross-check case uses the default status map (an implementation hard-coding 'SUCCESS' would pass; the implementation reads query_status_map), and the refusal audit privacy check bans a fixed key list. Mutation evidence: the frozen #8 and #30 of B2-09s went red on this implementation before #2549 aligned them, which is how the conflict was found."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09x",
+  "spec_commit": "3563f91b08b6134ba9c5c01fd062cafafd97049d",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09x#17] 承 [AC-B2-09u#10]：历史成功账单流水不符先拒，改为账单流水后成功并消费真实复核任务",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#1] 别单成功流水拒绝且仅留一条可查询审计；换凭证同幂等键无证据照常成功",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#2] 成功查询流水与人填不同拒绝；纠正为查询流水成功且幂等拒绝不占键",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#3] 本单成功账单流水不符，即使成功查询与人填一致也拒绝",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#4] 金额多一分、少一分均拒绝；等于实发而不等于申请金额可成功",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#5] 同时别单占用账单流水与本单成功查询不符，先报 other_order",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#6] 本单账单流水与金额同时不符，先报 order_id_mismatch",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#7] 已用流水先于三种新冲突拒绝；未占用的同类证据仍报 other_order",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#8] 别单同号非成功账单与空out_biz_no成功账单均放行；真实别单成功才拒绝",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#9] 别app同号成功账单不串租户；本app同样证据必须拒绝",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#10] 仅取最新成功查询：早期异号无影响，较新的unknown不遮住成功证据",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#11] 成功查询时间相同时按id倒序，不能取较小id或任意成功查询",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#12] fail/unknown查询与非成功本单账单不作冲突证据；成功查询异号仍拒绝",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#15] 没有查询账单照常成功；正确账单不能掩盖本单成功查询异号",
+    "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#16] 既有查询失败和paid_at范围检查先于凭证冲突，条件修正后才检查凭证",
+    "test/spec/payout/w10-voucher-crosscheck/paid-time.int.test.ts > [AC-B2-09x#13] 到账时间差正负恰5分钟不告警，多1毫秒仍成功且仅一条warn和审计标记",
+    "test/spec/payout/w10-voucher-crosscheck/paid-time.int.test.ts > [AC-B2-09x#14] 时间仅用最新成功查询：早期相差很大不告警，最新相差超限才告警"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "3563f91b08b6134ba9c5c01fd062cafafd97049d",
+      "tree": "8ad84a37a3b2d188e1a59719ac41f668e5c09427",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T15:33:20Z",
+      "finished_at": "2026-11-06T15:33:47Z",
+      "red_tests": [
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09x#17] 承 [AC-B2-09u#10]：历史成功账单流水不符先拒，改为账单流水后成功并消费真实复核任务",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#1] 别单成功流水拒绝且仅留一条可查询审计；换凭证同幂等键无证据照常成功",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#2] 成功查询流水与人填不同拒绝；纠正为查询流水成功且幂等拒绝不占键",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#3] 本单成功账单流水不符，即使成功查询与人填一致也拒绝",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#4] 金额多一分、少一分均拒绝；等于实发而不等于申请金额可成功",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#5] 同时别单占用账单流水与本单成功查询不符，先报 other_order",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#6] 本单账单流水与金额同时不符，先报 order_id_mismatch",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#7] 已用流水先于三种新冲突拒绝；未占用的同类证据仍报 other_order",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#8] 别单同号非成功账单与空out_biz_no成功账单均放行；真实别单成功才拒绝",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#9] 别app同号成功账单不串租户；本app同样证据必须拒绝",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#10] 仅取最新成功查询：早期异号无影响，较新的unknown不遮住成功证据",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#11] 成功查询时间相同时按id倒序，不能取较小id或任意成功查询",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#12] fail/unknown查询与非成功本单账单不作冲突证据；成功查询异号仍拒绝",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#15] 没有查询账单照常成功；正确账单不能掩盖本单成功查询异号",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts > [AC-B2-09x#16] 既有查询失败和paid_at范围检查先于凭证冲突，条件修正后才检查凭证",
+        "test/spec/payout/w10-voucher-crosscheck/paid-time.int.test.ts > [AC-B2-09x#13] 到账时间差正负恰5分钟不告警，多1毫秒仍成功且仅一条warn和审计标记",
+        "test/spec/payout/w10-voucher-crosscheck/paid-time.int.test.ts > [AC-B2-09x#14] 时间仅用最新成功查询：早期相差很大不告警，最新相差超限才告警"
+      ],
+      "expected": [
+        "test/spec/payout/w10-late-paid/w10.int.test.ts",
+        "test/spec/payout/w10-voucher-crosscheck/crosscheck.int.test.ts",
+        "test/spec/payout/w10-voucher-crosscheck/paid-time.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "92ddc4b186319fded6a610fc308272bb72af59027f7aa9f2bef0db11af1d7186"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "0c426ac170f065dfb42b7126968b7aa1eb61e5d6",
+    "specs": "9e57900c342339bf28cd82120b289fc6d10f73f1"
+  }
+}

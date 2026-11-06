@@ -1104,6 +1104,7 @@ export class PayoutAdminModule {
             queue === undefined
               ? null
               : {
+                  db,
                   clock,
                   idempotency,
                   auditOn: (trx) => options.auditWriter(trx, clock),

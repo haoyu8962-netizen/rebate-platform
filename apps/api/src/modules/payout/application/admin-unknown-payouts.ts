@@ -51,6 +51,107 @@ import type { PayoutConfigPort } from './withdraw-rules.ts';
 
 export const PAYOUT_QUERY_REQUEST_AUDIT_ACTION = 'payout_query_request';
 export const WITHDRAWAL_RESOLVE_AUDIT_ACTION = 'withdrawal_resolve';
+/** B2-09x (D10-703): a paid resolution refused by the voucher cross-check. */
+export const WITHDRAWAL_RESOLVE_REFUSED_AUDIT_ACTION = 'withdrawal_resolve_refused';
+/** BR-WDR-15 细则 (D10-703): a paid time this far from the query's only warns. */
+const PAID_AT_QUERY_DRIFT_MS = 5 * 60 * 1000;
+
+type CrossCheckReason =
+  'resolve_order_id_other_order' | 'resolve_order_id_mismatch' | 'resolve_amount_mismatch';
+
+interface CrossCheck {
+  readonly refusal: { readonly reason: CrossCheckReason; readonly field: string } | null;
+  /** A success query answered a paid time more than 5 minutes from the given one. */
+  readonly paidAtDiffers: boolean;
+}
+
+function isSuccessStatus(statusMap: Readonly<Record<string, string>>, status: string): boolean {
+  return Object.hasOwn(statusMap, status) && statusMap[status] === 'success';
+}
+
+/**
+ * BR-WDR-15 细则 (D10-703): the serial number and amount given for a paid resolution against what
+ * the system already holds for this payment. No evidence → nothing to refuse.
+ */
+async function crossCheck(
+  trx: Transaction<DB>,
+  appId: string,
+  row: { readonly id: string; readonly out_biz_no: string; readonly net_fen: bigint },
+  channelOrderId: string,
+  paidAt: Date,
+  statusMap: Readonly<Record<string, string>>,
+): Promise<CrossCheck> {
+  const success = (r: { channel_status: string | null }) =>
+    r.channel_status !== null && isSuccessStatus(statusMap, r.channel_status);
+  const others = await trx
+    .withSchema('app')
+    .selectFrom('recon_channel')
+    .select(['out_biz_no', 'channel_status'])
+    .where('app_id', '=', appId)
+    .where('channel_order_id', '=', channelOrderId)
+    .where('out_biz_no', 'is not', null)
+    .where('out_biz_no', '<>', row.out_biz_no)
+    .execute();
+  if (others.some(success)) {
+    return {
+      refusal: { reason: 'resolve_order_id_other_order', field: 'channel_order_id' },
+      paidAtDiffers: false,
+    };
+  }
+  const query = await trx
+    .withSchema('app')
+    .selectFrom('payout_attempts')
+    .select('response')
+    .where('app_id', '=', appId)
+    .where('withdrawal_id', '=', row.id)
+    .where('kind', '=', 'query')
+    .where('result', '=', 'success')
+    .orderBy('at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  const answer =
+    query !== undefined && typeof query.response === 'object' && query.response !== null
+      ? (query.response as Record<string, unknown>)
+      : {};
+  const text = (key: string): string | null => {
+    const value = answer[key];
+    return typeof value === 'string' && value !== '' ? value : null;
+  };
+  const own = (
+    await trx
+      .withSchema('app')
+      .selectFrom('recon_channel')
+      .select(['channel_order_id', 'channel_status', 'channel_amount_fen'])
+      .where('app_id', '=', appId)
+      .where('out_biz_no', '=', row.out_biz_no)
+      .execute()
+  ).filter(success);
+  const queried = text('channel_order_id');
+  // Any success line of this withdrawal naming another serial is a conflict (money review r1).
+  if (
+    (queried !== null && queried !== channelOrderId) ||
+    own.some((r) => r.channel_order_id !== channelOrderId)
+  ) {
+    return {
+      refusal: { reason: 'resolve_order_id_mismatch', field: 'channel_order_id' },
+      paidAtDiffers: false,
+    };
+  }
+  if (own.some((r) => r.channel_amount_fen !== row.net_fen)) {
+    return {
+      refusal: { reason: 'resolve_amount_mismatch', field: 'resolution' },
+      paidAtDiffers: false,
+    };
+  }
+  const queriedPaidAt = text('paid_at');
+  const queriedMs = queriedPaidAt === null ? Number.NaN : Date.parse(queriedPaidAt);
+  return {
+    refusal: null,
+    paidAtDiffers:
+      !Number.isNaN(queriedMs) && Math.abs(queriedMs - paidAt.getTime()) > PAID_AT_QUERY_DRIFT_MS,
+  };
+}
 
 const PAYING = 'PAYING';
 const APPROVED = 'APPROVED';
@@ -79,6 +180,8 @@ export interface AdminUnknownPayoutReadDeps {
 }
 
 export interface AdminUnknownPayoutWriteDeps {
+  /** B2-09x: the refusal audit commits on its own transaction (a 2xxxx answer rolls back). */
+  readonly db: Kysely<DB>;
   readonly clock: Clock;
   readonly idempotency: Idempotency;
   readonly auditOn: (trx: Transaction<DB>) => AuditPort;
@@ -350,7 +453,7 @@ async function billShowsSuccess(
 }
 
 /** W10 of one withdrawal of the operator's app. */
-export function resolveAdminUnknownPayout(
+export async function resolveAdminUnknownPayout(
   deps: AdminUnknownPayoutWriteDeps,
   operator: UnknownPayoutOperator,
   rawId: string,
@@ -359,7 +462,11 @@ export function resolveAdminUnknownPayout(
   const { appId, adminId } = operator;
   const { body, traceId } = request;
   const taxYtd = createTaxYtdAccumulator({ identity: deps.identityKey, logger: deps.logger });
-  return deps.idempotency.executeInTransaction(
+  // A voucher cross-check refusal is answered 20001, so the request's transaction rolls back; its
+  // audit record is written after that, once the request's connection is back in the pool (the
+  // admin pool is small: holding one connection while asking for another can starve it).
+  const refused: { entry?: Parameters<AuditPort['append']>[0] } = {};
+  const response = await deps.idempotency.executeInTransaction(
     {
       appId,
       actor: { userId: null, deviceId: null, phoneHmac: null, adminUserId: adminId },
@@ -370,6 +477,7 @@ export function resolveAdminUnknownPayout(
       traceId,
     },
     async (trx): Promise<HandlerResult> => {
+      delete refused.entry;
       const proof = body.proof_text.trim();
       const missing = [
         ...(proof === '' ? ['proof_text'] : []),
@@ -455,6 +563,24 @@ export function resolveAdminUnknownPayout(
       const takenRefusal = () =>
         fieldsRefusal(['channel_order_id'], traceId, 'resolve_order_id_taken');
       if (taken !== undefined) return takenRefusal();
+      const check = await crossCheck(trx, appId, row, channelOrderId, paidAt, lists.queryStatusMap);
+      if (check.refusal !== null) {
+        const { reason, field } = check.refusal;
+        // Recorded after the transaction (编排 16:00: the refusal must leave its audit record).
+        refused.entry = {
+          appId,
+          actor: adminId,
+          action: WITHDRAWAL_RESOLVE_REFUSED_AUDIT_ACTION,
+          target: id,
+          before: { withdrawal_id: id, status: PAYING },
+          after: { withdrawal_id: id, reason, channel_order_id: channelOrderId },
+          ip: operator.ip,
+        };
+        return fieldsRefusal([field], traceId, reason);
+      }
+      if (check.paidAtDiffers) {
+        deps.logger.warn({ app_id: appId, withdrawal_id: id }, 'payout_resolve_paid_at_differs');
+      }
       const identity = await deps.identityKey.readIdentityKey(trx, {
         appId,
         userId: row.user_id,
@@ -553,6 +679,7 @@ export function resolveAdminUnknownPayout(
           resolution: 'paid',
           channel_order_id: channelOrderId,
           paid_at: paidAt.toISOString(),
+          ...(check.paidAtDiffers ? { paid_at_differs_from_query: true } : {}),
         },
         ip: operator.ip,
       });
@@ -566,4 +693,11 @@ export function resolveAdminUnknownPayout(
       return { status: 200, envelope: { code: 0, msg: '', data, trace_id: traceId } };
     },
   );
+  const entry = refused.entry;
+  if (entry !== undefined) {
+    await deps.db.transaction().execute(async (own) => {
+      await deps.auditOn(own).append(entry);
+    });
+  }
+  return response;
 }
