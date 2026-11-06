@@ -1,0 +1,22 @@
+id: B1-03zj
+repo: rebate-platform
+title: 自动到账判定 ⑨ 的黑名单命中维度顺序与 ③a 统一为先设备、后收款账号（risk_hits 记录的命中维度一致；转人工结论不变）（D10-731 ①）
+type: impl
+# 2026-11-06 identity 入账（编排 D10-731 ①，来自 D10-727 ① (a) 复核 S2）。app.module.ts ⑨ 装配先用占位设备查手机号 / 身份证 / 收款账号，再逐台查真实设备；
+#   设备与收款账号同时命中时 risk_hits 记成收款账号，而 ③a（withdraw-rules）是先设备后收款账号。只改 ⑨ 的查找顺序，命中与否、转人工结论、规则启停语义都不变。
+# RV2（app.module 资金路径）。排在 B1-02zzb 迁移单之后开工。refs 留空，任务书摘 BR-WDR-03 ③a、BR-WDR-29 ⑨、BR-ID-31。
+refs: []
+refs_hash: {}
+deps: [B1-03zi]
+paths:
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/risk/ports/blocklist-match.ts'
+  - 'apps/api/src/modules/risk/ports/blocklist-match.test.ts'
+test_paths:
+  - 'test/spec/risk/blocklist-hit-order/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/risk/blocklist-hit-order/**'
+status: todo

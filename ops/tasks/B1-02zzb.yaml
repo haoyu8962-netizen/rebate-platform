@@ -1,0 +1,23 @@
+id: B1-02zzb
+repo: rebate-platform
+title: 迁移：devices.user_id 标为弃用（COMMENT ON COLUMN，生产不写、设备归属以 sessions 为准）并撤掉 couli_readonly 的列级 SELECT(user_id)；列与外键不动（FU-DEVICES-USER-ID-COLUMN，D10-730）
+type: migration
+# 2026-11-06 identity 入账（编排 D10-730，照 identity 17:4x 建议）。生产唯一写点 devices.repository.ts 插入 null，此后无 UPDATE；设备归属一律走 sessions（D10-571 / D10-585）。
+# 只读检索：生产代码无 devices.user_id 读者；couli_readonly 无经该列的代码或报表读者；冻结 [AC-B1-02b#12] 只用 has_any_column_privilege 判 readonly 对 devices 可 SELECT，撤一列后仍成立。
+# 不删列、不在登录时写（8 个 test/spec 文件读写该列，含 payout 资金目录；[AC-B1-03zi#1/#2] 断言登录后为 null）——均属 #24 四类，不碰任何冻结测试。
+# 若实现或先红时发现有授权快照类冻结断言因撤权变红，先停下报编排，不改测试。删列登记为 FU-DEVICES-USER-ID-DROP，不排期；04 §devices 由编排回写（couli #284）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/db/identity/devices-user-id-deprecated/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/db/identity/devices-user-id-deprecated/**'
+status: todo

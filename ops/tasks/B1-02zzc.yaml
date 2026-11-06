@@ -1,0 +1,16 @@
+id: B1-02zzc
+repo: rebate-platform
+title: 新增规则测试：staging 落地页注册不认固定验证码——经接口走到底，钉住 identity.module 给落地页注册装配的是包装后的短信码服务（只新增，不改冻结文件）（D10-731 ②）
+type: test-change
+# 2026-11-06 identity 入账（编排 D10-731 ②，来自 D10-727 ① (c) 复核 S2）。现只在单元层测了包装函数（sms-codes.test.ts），没有规则测试钉住 identity.module.ts 落地页注册的装配；
+#   将来重构改回直传原服务不会红，后果仅限 staging 落地页注册可用固定码。新目录只新增，由独立 Claude 写、另一位只读复审；不改 apps/，不改任何已有测试文件。
+refs: []
+refs_hash: {}
+deps: [B1-02zza]
+paths:
+  - 'test/spec/identity/staging-test-phone-landing/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
