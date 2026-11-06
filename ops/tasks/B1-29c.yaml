@@ -1,0 +1,25 @@
+id: B1-29c
+repo: rebate-platform
+title: 价格走势最常见价：computePriceTrend 算 mode_price_fen（近 30 天每日价出现天数最多、按分比较、并列取最近一天；no_data 为 null），来源键按平台 + 有无券（含拼多多两键）
+type: impl
+# 2026-11-06 入账（agent2-acct4），D10-691 派工、D10-664 S-12（couli-runs/DETAIL-V3/server-tasks.md §S-12，整改计划 B1-29-trend）。
+# 取值只看 08 BR-WATCH-19 细则「商品详情价格走势的最常见价」：同一组每日价（最近 30 个自然日 +08:00，每天当天最后一次券后价）里出现天数最多的价，按分精确比较，并列取最近一天出现的；走势为 no_data 时 null。
+# 门槛与走势共用 price_trend.min_distinct_days，不加开关；服务端计算、三端不自算。source_key 按平台 + 有无券选（拼多多 price_trend.source.pdd / .pdd.general，契约 CT-22e）。
+# D10-694：同 PR 内 test-change 段改 B1-29a 冻结测试 test/spec/catalog/price-trend/**（整对象期望补 mode_price_fen、字段清单加该键、拼多多 source_key 改 .pdd 键；不删不放宽，手算期望值），编排按 #24 核后加标签。
+# 依赖契约 CT-22e（openapi ProductPriceTrend.mode_price_fen 与来源键枚举）先合。分工：新鲜独立 Claude 写规则测试，Claude Opus 5.5 实现，Codex 评审。风险 RV1。
+refs: [BR-WATCH-19]
+refs_hash:
+  BR-WATCH-19: 509febd64b7c
+deps: [B1-29a, CT-22e]
+paths:
+  - 'apps/api/src/modules/catalog/price-trend/**'
+test_paths:
+  - 'test/spec/catalog/price-trend-mode/**'
+  - 'test/spec/catalog/price-trend/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/price-trend-mode/**'
+status: todo
+pr: null
