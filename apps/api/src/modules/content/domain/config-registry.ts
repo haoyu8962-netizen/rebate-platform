@@ -90,6 +90,9 @@ function businessEnum(
 /** Platform codes of contracts/enums/platform.yaml, expanded into literal keys. */
 const SETTLE_PLATFORMS = ['taobao', 'jd', 'pdd', 'meituan'] as const;
 
+/** B1-05zi (D10-736): the platforms shop.entry.source.<platform> is registered for. */
+const SHOP_ENTRY_PLATFORMS = ['taobao', 'jd', 'pdd'] as const;
+
 function perPlatform(prefix: string, make: (key: string) => ConfigItemSpec): ConfigItemSpec[] {
   return SETTLE_PLATFORMS.map((platform) => make(`${prefix}.${platform}`));
 }
@@ -308,6 +311,15 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // before launch (拍板第二批 §8 ADD-03). Registration only.
   businessInteger('ledger.bad_debt_days', 1),
   businessInteger('ledger.bad_debt_min_fen', 0),
+  // B1-05zi (D10-736): where the shop entry takes a shop's promotion link from, per platform
+  // (04 §10.1 / §11.2, 08 BR-PRICE-21 细则「进店」), config.business, editable; every change goes
+  // through the generic config item write and so leaves a config_item_versions row. Platforms
+  // taobao / jd / pdd only (no meituan), hence not perPlatform. The only source this phase is
+  // dataoke (official has no implementation, so it is not an option). Seeded dataoke for taobao
+  // only; jd and pdd have no seed row (unset = no source, no shop entry). Registration only.
+  ...SHOP_ENTRY_PLATFORMS.map((platform) =>
+    businessEnum(`shop.entry.source.${platform}`, ['dataoke']),
+  ),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

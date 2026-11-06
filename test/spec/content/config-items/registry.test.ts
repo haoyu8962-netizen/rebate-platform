@@ -38,6 +38,8 @@
 // FEEDBACK), both seeded.
 // B2-12e (D10-590, BR-FUND-12): ledger.bad_debt_days and ledger.bad_debt_min_fen follow them (kit
 // BAD_DEBT), both seeded.
+// B1-05zi (D10-736): shop.entry.source.taobao / jd / pdd follow them (kit SHOP_SOURCE), enums
+// whose only option is dataoke; only taobao is seeded (SHOP_SOURCE_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -84,6 +86,8 @@ import {
   SETTLE,
   SHARE,
   SHARE_UNSEEDED,
+  SHOP_SOURCE,
+  SHOP_SOURCE_UNSEEDED,
   TAX,
   UNREGISTERED,
   expectedNow,
@@ -128,6 +132,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...BRIDGE_UNSEEDED,
         ...AVATAR_UNSEEDED,
         ...LABOR_UNSEEDED,
+        ...SHOP_SOURCE_UNSEEDED,
       ]),
     ]),
   );
@@ -142,6 +147,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...BRIDGE_UNSEEDED,
     ...AVATAR_UNSEEDED,
     ...LABOR_UNSEEDED,
+    ...SHOP_SOURCE_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -176,6 +182,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...LABOR,
         ...FEEDBACK,
         ...BAD_DEBT,
+        ...SHOP_SOURCE,
       ].map((entry) => entry.key),
     ),
   );
@@ -221,7 +228,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       SHARE_UNSEEDED.length -
       BRIDGE_UNSEEDED.length -
       AVATAR_UNSEEDED.length -
-      LABOR_UNSEEDED.length,
+      LABOR_UNSEEDED.length -
+      SHOP_SOURCE_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -363,6 +371,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...LABOR,
     ...FEEDBACK,
     ...BAD_DEBT,
+    ...SHOP_SOURCE,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -423,6 +432,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...LABOR,
     ...FEEDBACK,
     ...BAD_DEBT,
+    ...SHOP_SOURCE,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -491,6 +501,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...LABOR,
       ...FEEDBACK,
       ...BAD_DEBT,
+      ...SHOP_SOURCE,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -964,4 +975,50 @@ it('[AC-F1-10e#74] ledger.bad_debt_min_fen 是可改的 config.business 整数�
     [],
   ];
   for (const value of refused) expect(configValueFits(spec, value), String(value)).toBe(false);
+});
+
+// B1-05zi (D10-736, 04 §10.1 / §11.2, 08 BR-PRICE-21 细则「进店」): the three shop entry source
+// keys follow BAD_DEBT in taobao / jd / pdd order (key order checked in #1 and #56-#58); here each
+// one's type, options, permission and editable flag (#58 checks only options-null entries), the
+// values it accepts (dataoke only: official has no implementation yet), that it is not an
+// emergency switch, that meituan is not registered, and that only taobao is seeded (dataoke).
+it('[AC-F1-10e#75] shop.entry.source.<platform> 只登记 taobao / jd / pdd，可改的 config.business 枚举、只收 dataoke，不是开关键；只有淘宝有种子 dataoke（B1-05zi，D10-736）', () => {
+  expect(SHOP_SOURCE.map((entry) => entry.key)).toStrictEqual([
+    'shop.entry.source.taobao',
+    'shop.entry.source.jd',
+    'shop.entry.source.pdd',
+  ]);
+  for (const entry of SHOP_SOURCE) {
+    const spec = registered(entry.key);
+    expect({
+      key: spec.key,
+      valueType: spec.valueType,
+      options: spec.options,
+      permission: spec.permission,
+      adminEditable: spec.adminEditable,
+    }).toStrictEqual({
+      key: entry.key,
+      valueType: 'enum',
+      options: ['dataoke'],
+      permission: 'config.business',
+      adminEditable: true,
+    });
+    expect(spec.range).toBeUndefined();
+    expect(configItemSpecOf(entry.key), entry.key).toBe(spec);
+    expect(switchSpecOf(entry.key), entry.key).toBeNull();
+    expect(configValueFits(spec, 'dataoke'), entry.key).toBe(true);
+    for (const value of ['official', 'DATAOKE', '', 'api', 1, true, null, ['dataoke'], {}]) {
+      expect(configValueFits(spec, value), `${entry.key}: ${JSON.stringify(value)}`).toBe(false);
+    }
+  }
+  expect(configItemSpecOf('shop.entry.source.meituan')).toBeNull();
+  expect(configRegistry().filter((spec) => spec.key.startsWith('shop.entry.source.'))).toHaveLength(
+    3,
+  );
+  const seeds = seedRows();
+  expect(seeds.get('shop.entry.source.taobao')).toBe('dataoke');
+  expect(SHOP_SOURCE_UNSEEDED).toStrictEqual(['shop.entry.source.jd', 'shop.entry.source.pdd']);
+  for (const key of [...SHOP_SOURCE_UNSEEDED, 'shop.entry.source.meituan']) {
+    expect(seeds.has(key), key).toBe(false);
+  }
 });

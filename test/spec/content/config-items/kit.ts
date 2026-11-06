@@ -411,6 +411,19 @@ export const BAD_DEBT: readonly Expected[] = [
   row('ledger.bad_debt_days', 'number', 'config.business'),
   row('ledger.bad_debt_min_fen', 'number', 'config.business'),
 ];
+// B1-05zi (D10-736): the three shop entry source keys, registered right after BAD_DEBT in this
+// order (taobao / jd / pdd, no meituan): editable config.business enums whose only option is
+// dataoke. Not part of expectedNow() either.
+export const SHOP_SOURCE: readonly Expected[] = [
+  enumRow('shop.entry.source.taobao', ['dataoke']),
+  enumRow('shop.entry.source.jd', ['dataoke']),
+  enumRow('shop.entry.source.pdd', ['dataoke']),
+];
+/** B1-05zi (D10-736): only taobao is seeded (dataoke); jd and pdd have no seed rows. */
+export const SHOP_SOURCE_UNSEEDED: readonly string[] = [
+  'shop.entry.source.jd',
+  'shop.entry.source.pdd',
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -434,6 +447,7 @@ export const expectedOf = (key: string): Expected => {
     ...LABOR,
     ...FEEDBACK,
     ...BAD_DEBT,
+    ...SHOP_SOURCE,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

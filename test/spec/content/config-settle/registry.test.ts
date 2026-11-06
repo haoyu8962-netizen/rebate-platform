@@ -42,6 +42,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // (D10-646): then the six legal.labor_agreement.* / legal.operator_entity.* keys, in this order;
   // B1-28q (D10-698): then feedback.enabled and feedback.daily_limit_per_device, in this order;
   // B2-12e (D10-590): then ledger.bad_debt_days and ledger.bad_debt_min_fen, in this order;
+  // B1-05zi (D10-736): then shop.entry.source.taobao / jd / pdd, in this order;
   // nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
@@ -124,6 +125,9 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'feedback.daily_limit_per_device',
     'ledger.bad_debt_days',
     'ledger.bad_debt_min_fen',
+    'shop.entry.source.taobao',
+    'shop.entry.source.jd',
+    'shop.entry.source.pdd',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),

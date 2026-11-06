@@ -129,5 +129,7 @@ INSERT INTO app.config_items (app_id, key, value, updated_by) VALUES
   ('couli', 'feedback.daily_limit_per_device', '20'::jsonb, 'seed'), -- BR-ID-02 细则「商品反馈与进店」
   -- 第 19 批：负余额坏账核销候选单的天数与金额阈值（B2-12e，D10-590）；90 天、0 分为占位值，上线前由超管在后台填写（拍板第二批 §8 ADD-03）
   ('couli', 'ledger.bad_debt_days', '90'::jsonb, 'seed'), -- BR-FUND-12
-  ('couli', 'ledger.bad_debt_min_fen', '0'::jsonb, 'seed') -- BR-FUND-12
+  ('couli', 'ledger.bad_debt_min_fen', '0'::jsonb, 'seed'), -- BR-FUND-12
+  -- 第 20 批：进店来源（B1-05zi，D10-736）；只给淘宝 dataoke（大淘客店铺转链），京东、拼多多无种子（按未配置）
+  ('couli', 'shop.entry.source.taobao', '"dataoke"'::jsonb, 'seed') -- BR-PRICE-21 细则「进店」、04 §10.1 / §11.2
 ON CONFLICT (app_id, key) DO NOTHING;

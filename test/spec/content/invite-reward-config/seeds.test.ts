@@ -38,6 +38,8 @@ const ELIGIBILITY = { key: `${PREFIX}eligibility_days`, value: 30 };
 // B2-12e (D10-590, BR-FUND-12): the ledger.bad_debt_days and ledger.bad_debt_min_fen rows follow
 // them in registration order, under the same checks, seeded 90 (days negative) and 0 (fen), the
 // 08 defaults kept as placeholders the super admin fills in before launch.
+// B1-05zi (D10-736): the shop.entry.source.taobao row follows them, under the same checks, seeded
+// dataoke; shop.entry.source.jd and shop.entry.source.pdd have no seed rows (unset).
 const PAYOUT_KEYS = [
   'payout.single_cap_fen',
   'payout.daily_cap_fen',
@@ -115,6 +117,9 @@ const BAD_DEBT_SEEDS = [
   { key: 'ledger.bad_debt_min_fen', value: 0 },
 ];
 const BAD_DEBT_KEYS = BAD_DEBT_SEEDS.map((row) => row.key);
+const SHOP_SOURCE_SEEDS = [{ key: 'shop.entry.source.taobao', value: 'dataoke' }];
+const SHOP_SOURCE_KEYS = SHOP_SOURCE_SEEDS.map((row) => row.key);
+const SHOP_SOURCE_UNSEEDED_KEYS = ['shop.entry.source.jd', 'shop.entry.source.pdd'];
 const PROMO_LINK_KEYS = [
   'share.taobao_enabled',
   'convert.taobao_prefetch.enabled',
@@ -161,6 +166,7 @@ it('[AC-F1-02zn#6] BR-INV-24 种子为 1000/0/0/0/24，开关缺行默认 off；
     ...REVERIFY_KEYS,
     ...FEEDBACK_KEYS,
     ...BAD_DEBT_KEYS,
+    ...SHOP_SOURCE_KEYS,
   ]);
   for (const key of SEARCH_KEYS) {
     expect(
@@ -174,6 +180,13 @@ it('[AC-F1-02zn#6] BR-INV-24 种子为 1000/0/0/0/24，开关缺行默认 off；
   expect(rows.filter((row) => REVERIFY_KEYS.includes(row.key))).toStrictEqual(REVERIFY_SEEDS);
   expect(rows.filter((row) => FEEDBACK_KEYS.includes(row.key))).toStrictEqual(FEEDBACK_SEEDS);
   expect(rows.filter((row) => BAD_DEBT_KEYS.includes(row.key))).toStrictEqual(BAD_DEBT_SEEDS);
+  expect(rows.filter((row) => SHOP_SOURCE_KEYS.includes(row.key))).toStrictEqual(SHOP_SOURCE_SEEDS);
+  for (const key of SHOP_SOURCE_UNSEEDED_KEYS) {
+    expect(
+      rows.some((row) => row.key === key),
+      key,
+    ).toBe(false);
+  }
   expect(rows.some((row) => row.key === 'feed.fallback_pool_id')).toBe(false);
   expect(rows.some((row) => row.key === ADVANCE_ALERT_KEY)).toBe(false);
   expect(sql).not.toContain(ADVANCE_ALERT_KEY);
