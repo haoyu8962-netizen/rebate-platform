@@ -1,0 +1,47 @@
+# Alertmanager configuration of the couli business alerts (B1-25a; 规划/02 §13; BR-WDR-24, BR-WDR-26).
+# A couli-only instance: the database alerts keep Pigsty's own Alertmanager (B1-25).
+# Routing reads the label every fund rule already carries (infra/monitoring/rules/couli-fund.yaml:
+# fund: 'true'); every other couli alert is an operations alert.
+# - Fund alerts go to the finance receiver at any hour (02 §13: at night only fund alerts are pushed;
+#   BR-WDR-26: the review-overdue alert is not limited at night), and also to the on-call receiver
+#   (02 §13: fund alerts @ the on-call person), likewise without a night mute.
+# - Operations alerts go to the on-call receiver and are muted 22:00–08:00 (+08:00); what is still
+#   firing when the mute ends is sent at the next group interval (02 §13: summarised after 08:00).
+# - Same alert within 30 minutes is merged (BR-WDR-24 细则): group_by alertname and app_id,
+#   group_interval 30m. group_wait 30s and repeat_interval 4h are agent defaults.
+# Receivers are placeholders: the log-only sink (log-sink.mjs) on 127.0.0.1; no external service and
+# no real contact until the owner names the channels and the people.
+global:
+  resolve_timeout: '5m'
+route:
+  receiver: 'oncall'
+  group_by: ['alertname', 'app_id']
+  group_wait: '30s'
+  group_interval: '30m'
+  repeat_interval: '4h'
+  routes:
+    - receiver: 'finance'
+      matchers: ['fund="true"']
+      continue: true
+    - receiver: 'oncall'
+      matchers: ['fund="true"']
+    - receiver: 'oncall'
+      mute_time_intervals: ['night']
+time_intervals:
+  - name: 'night'
+    time_intervals:
+      - times:
+          - start_time: '22:00'
+            end_time: '24:00'
+          - start_time: '00:00'
+            end_time: '08:00'
+        location: 'Asia/Shanghai'
+receivers:
+  - name: 'finance'
+    webhook_configs:
+      - url: 'http://127.0.0.1:9096/finance'
+        send_resolved: true
+  - name: 'oncall'
+    webhook_configs:
+      - url: 'http://127.0.0.1:9096/oncall'
+        send_resolved: true
