@@ -40,11 +40,19 @@ import {
 const wireMs = (text: string): number => Date.parse(`${text.replace(' ', 'T')}+08:00`);
 
 it('[AC-B1-04zr#1] 规则表 jd 上限 60 分钟，jd 进增量上限、调度与手动同步；淘宝仍不调度', () => {
+  // B1-04zzl：淘宝进调度（B1-04zzb）前后两态过渡，合并后收紧为单态
+  const TB = PLATFORM_RULES.taobao.syncWindowCapMs;
+  expect([null, 20 * MINUTE_MS]).toContain(TB);
+  const on = TB !== null;
+  const listed = on ? ['jd', 'pdd', 'taobao'] : ['jd', 'pdd'];
   expect(PLATFORM_RULES.jd.syncWindowCapMs).toBe(HOUR_MS);
-  expect(INCREMENT_WINDOW_CAP_MS).toEqual({ jd: HOUR_MS, pdd: 30 * MINUTE_MS });
-  expect([...scheduledPlatforms()].sort()).toEqual(['jd', 'pdd']);
-  expect([...manualSyncPlatforms()].sort()).toEqual(['jd', 'pdd']);
-  expect(PLATFORM_RULES.taobao.syncWindowCapMs).toBeNull();
+  expect(INCREMENT_WINDOW_CAP_MS).toEqual({
+    jd: HOUR_MS,
+    pdd: 30 * MINUTE_MS,
+    ...(on ? { taobao: 20 * MINUTE_MS } : {}),
+  });
+  expect([...scheduledPlatforms()].sort()).toEqual(listed);
+  expect([...manualSyncPlatforms()].sort()).toEqual(listed);
 });
 
 it.each([

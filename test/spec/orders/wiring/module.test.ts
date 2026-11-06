@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { loadStatusMap } from '../../../../apps/api/src/modules/orders/domain/status-map.ts';
+import { PLATFORM_RULES } from '../../../../apps/api/src/modules/orders/domain/platform-rules/index.ts';
+import { rescanDefaults } from '../../../../apps/api/src/modules/orders/domain/platform-rules/rescan.ts';
 import { scheduledPlatforms } from '../../../../apps/api/src/modules/orders/domain/sync-window.ts';
 import * as pipeline from '../../../../apps/api/src/modules/orders/application/pipeline-port.ts';
 import * as update from '../../../../apps/api/src/modules/orders/application/update-step.ts';
@@ -43,9 +45,24 @@ it('[AC-B1-08n#1] worker 装配只注册一次 order-sync，零查询、零投�
       'utf8',
     );
     expect([...r.statusMaps('jd').entries]).toEqual([...loadStatusMap('jd', jdCsv).entries]);
-    expect(() => r.statusMaps('taobao')).toThrow(
-      expect.objectContaining({ code: 'MISSING_STATUS_MAP' }),
-    );
+    // B1-04zzl：淘宝进调度（B1-04zzb）前后两态过渡，合并后收紧为单态
+    const TB = PLATFORM_RULES.taobao.syncWindowCapMs;
+    expect([null, 20 * 60_000]).toContain(TB);
+    const on = TB !== null;
+    if (on) {
+      const tbCsv = readFileSync(
+        new URL('../../../../specs/order-status-map/taobao.csv', import.meta.url),
+        'utf8',
+      );
+      expect([...r.statusMaps('taobao').entries]).toEqual([
+        ...loadStatusMap('taobao', tbCsv).entries,
+      ]);
+      expect(rescanDefaults('taobao')).toEqual({ enabled: true, days: 30 });
+    } else {
+      expect(() => r.statusMaps('taobao')).toThrow(
+        expect.objectContaining({ code: 'MISSING_STATUS_MAP' }),
+      );
+    }
     await f.queue.start();
     // B1-08t's compensation scan arms one 15-minute timer once a snapshot port is wired (B1-08w);
     // count it by its period so the platform timers stay exactly one per platform (B1-08z
@@ -67,7 +84,8 @@ it('[AC-B1-08n#1] worker 装配只注册一次 order-sync，零查询、零投�
       expect(scans).toBeLessThanOrEqual(1);
       // B1-04zr: one rescan loop each for jd and pdd. pdd's switch is off by default: its loop runs,
       // reads the switch on time and sends nothing, so turning it on needs no restart.
-      const rescans = 2;
+      // B1-04zzl：淘宝进调度后多一条 taobao 回扫循环（默认开、30 天）。
+      const rescans = on ? 3 : 2;
       expect(t.count()).toBe(scheduledPlatforms().length + rescans + scans);
       await vi.advanceTimersByTimeAsync(59_999);
       expect(work()).toEqual([]);

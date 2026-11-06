@@ -1,0 +1,22 @@
+id: B1-04zzl
+repo: rebate-platform
+title: 过渡测试改动（B1-04zzb 前置，D10-739 路线）：淘宝进调度前后两态——冻结 [AC-B1-08za#9]、[AC-B1-04zr#1]、[AC-B1-08n#1]、[AC-B1-08f#11]（taobao 行）、[AC-B1-04zm#16]（taobao 行）接受「淘宝未调度」或「淘宝 20 分钟上限、taobao.csv 四行、回扫 30 天」二选一，各态严格
+type: test-change
+# 2026-11-06 入账（content-client；D10-740 / D10-741）。B1-04zzb 给 taobao 上 syncWindowCapMs 20 分钟、加 taobao.csv（12 / 14 / 3 / 13，doc，verified=false）、回看 90 天、回扫 {enabled:true, days:30}、worker 启动读 taobao.csv 后，上述 5 条冻结用例钉着「淘宝不调度」必红；其中两条是 it.each 行，CT-06zzzk 未合，modify_existing 不认，故照 D10-739 走前置两态（先例 F1-02zzzd）。
+# 两态判据：PLATFORM_RULES.taobao.syncWindowCapMs ∈ {null, 20 分钟}；为 20 分钟时各断言照新值精确比较，为 null 时与原断言逐字相同。不改 kit；B1-04zzb 合并后另开收紧为单态。
+# 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；全新上下文 Claude 修改、另一全新上下文 Claude 只读复审「不削弱」，按 approvals #24 由编排加 owner-approved 标签。
+refs: []
+refs_hash: {}
+deps: [B1-08za, B1-04zr, B1-08n, B1-08f, B1-04zm]
+paths:
+  - 'test/spec/orders/platform-rules/values.test.ts'
+  - 'test/spec/orders/jd-sync/window.test.ts'
+  - 'test/spec/orders/wiring/module.test.ts'
+  - 'test/spec/orders/status-map/missing-platform.test.ts'
+  - 'test/spec/orders/rescan/config.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: done
+pr: 2525
