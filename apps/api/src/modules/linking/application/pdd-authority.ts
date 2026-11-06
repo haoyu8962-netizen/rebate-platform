@@ -20,6 +20,11 @@
 // queries of this process at once (the open and GET /v1/unions/bindings share the count). A query
 // over the cap does not wait: it is refused at once as a failed query (null, logged; the adapter is
 // not called) and touches no count; a query that entered frees its one slot when it ends.
+// B1-04zzj (D10-692 S2-8): generatePddAuthorityLink counts against the same PDD_QUERY_CONCURRENCY
+// slots. Unlike a query it waits when every slot is taken (first come, first served) and calls the
+// port once a slot frees; a freed slot goes straight to the oldest waiting generation, so the
+// upstream calls in flight never exceed the cap and a query arriving meanwhile is still refused.
+// Success, a failed or malformed answer and a throw all free the slot.
 // F1-07c: activatePddBinding first takes the user lock (binding-lock.ts) on the caller's
 // transaction, outside the per-attempt savepoints (a rollback to one would drop it), and reads the
 // risk state after it: a banned user's binding is never written (`banned`, nothing changed). Its
@@ -47,6 +52,24 @@ const ACTIVATE_ATTEMPTS = 3;
 /** Pinduoduo authority queries of this process in flight at once (open + bindings list). */
 export const PDD_QUERY_CONCURRENCY = 8;
 let pddQueriesInFlight = 0;
+/** B1-04zzj: link generations waiting for a slot, oldest first. */
+const pddSlotWaiters: (() => void)[] = [];
+
+/** B1-04zzj: a slot for a link generation, now or once one frees (never refused). */
+function waitForPddSlot(): Promise<void> {
+  if (pddQueriesInFlight < PDD_QUERY_CONCURRENCY) {
+    pddQueriesInFlight += 1;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => pddSlotWaiters.push(resolve));
+}
+
+/** Frees one slot: handed straight to the oldest waiting generation, else returned to the pool. */
+function releasePddSlot(): void {
+  const next = pddSlotWaiters.shift();
+  if (next === undefined) pddQueriesInFlight -= 1;
+  else next();
+}
 
 type PidScene = Parameters<LinkConversionOptions['pids']['getActivePid']>[0]['pidScene'];
 type Warn = LinkConversionOptions['logger'];
@@ -175,7 +198,7 @@ export async function queryPddAuthority(
   } catch (error) {
     return failed(error);
   } finally {
-    pddQueriesInFlight -= 1;
+    releasePddSlot();
   }
 }
 
@@ -206,6 +229,8 @@ export function pddAuthorityLink(result: PddAuthorityUrl): PddAuthorityLink {
  * the user asked: an open's 30111 or auth-url; never cached) through
  * UnionAdapter.pddAuthorityUrl, then picked by pddAuthorityLink ({ webUrl, scheme }). The port missing, failing or a
  * link-less answer → null (logged by error code only; the caller answers 50303, writes nothing).
+ * B1-04zzj: the port call holds one PDD_QUERY_CONCURRENCY slot, waiting for one when all are taken;
+ * the slot is freed however the call ends.
  */
 export async function generatePddAuthorityLink(
   deps: PddQueryDeps,
@@ -217,6 +242,7 @@ export async function generatePddAuthorityLink(
   },
 ): Promise<PddAuthorityLink | null> {
   const { appId, identity, traceId } = input;
+  await waitForPddSlot();
   try {
     const adapter = deps.registry.get(PDD);
     const generate = adapter.pddAuthorityUrl;
@@ -241,6 +267,8 @@ export async function generatePddAuthorityLink(
       'linking: pdd authority link generation failed; no state issued',
     );
     return null;
+  } finally {
+    releasePddSlot();
   }
 }
 

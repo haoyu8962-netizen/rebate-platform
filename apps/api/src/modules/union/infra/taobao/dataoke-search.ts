@@ -41,12 +41,19 @@
 //   commission_rate_bp = @couli/money pctStrToBp(commissionRate)（number 先 String()，超两位小数按十进制
 //   floor：20.556 → 2055、0.019 → 1）；缺失 / 非法 → 跳过该条并告警 invalid_commission。goodsId / 标题（title 与 dtitle 都没有）/ 主图缺失或不合格 →
 //   跳过该条并告警 invalid_item。跳过不整页失败，结果保持搜索顺序。
+// ⑥ 图片主机白名单（B1-04zzj，D10-692 S2-6 / D10-706）：主图 / 多图先过 normalizeItemImages（非法
+//   主图仍按 ⑤ 跳行 + invalid_item），合格的地址再查主机：authority（scheme 后到第一个 / ? # \ 为止）
+//   含 @（userinfo）直接拒；去掉端口后小写，须等于或以 . 结尾匹配 DATAOKE_IMAGE_HOSTS 之一
+//   （alicdn.com、taobaocdn.com、ffquan.cn）；alicdn.com.evil.test、evilalicdn.com 这类后缀伪装一律拒。
+//   不在白名单的只当无图：main_image_url 缺省、image_urls 去掉该项（全去掉则缺省），不跳行、不打
+//   invalid_item。被去掉的图按主机名聚合，每页一条 dataoke_image_host_dropped 告警（每个主机名一次），
+//   只带主机名与计数，不带完整地址、商品 ID。地址本身原样保留，不改写。
 // 告警：经适配器 warn，形如 { method: '/api/goods/get-dtk-search-goods', code: DataokeSearchWarningCode }，
 //   只带路径与固定码，不带商品 ID、标题、金额、链接等原值。
 import { parseYuanToFen } from '@couli/domain';
 import { addFen, pctStrToBp } from '@couli/money';
 import type { Clock } from '../../../platform/index.ts';
-import { normalizeItemImages } from '../../domain/item-images.ts';
+import { normalizeItemImages, type ItemImages } from '../../domain/item-images.ts';
 import { isPriceAnomaly, type PriceAnomalyReason } from '../../domain/taobao-price.ts';
 import { shopNameField, UnionError, type UnionItemDetail } from '../../domain/types.ts';
 import type { DataokeParameters } from '../dataoke/dataoke-client.ts';
@@ -66,7 +73,25 @@ export type TaobaoItemIdBatchSize = 20;
 
 /** The fixed codes a search warning may carry (see the header). */
 export type DataokeSearchWarningCode =
-  'PRICE_ANOMALY' | 'PRICE_CALC_DIFF' | 'invalid_item' | 'invalid_commission';
+  | 'PRICE_ANOMALY'
+  | 'PRICE_CALC_DIFF'
+  | 'invalid_item'
+  | 'invalid_commission'
+  | 'dataoke_image_host_dropped';
+
+/**
+ * B1-04zzj: images of one search page left out for their host (see the header ⑥), one per host;
+ * only the host name (lower case, no port; `(unparsed)` when it is not a plain DNS name) and the
+ * count — never the address or an item id.
+ */
+export interface DataokeImageHostWarning extends TaobaoWarning {
+  readonly code: 'dataoke_image_host_dropped';
+  readonly host: string;
+  readonly count: number;
+}
+
+/** B1-04zzj: per-page tally of images left out by host (see DataokeImageHostWarning). */
+export type DataokeDroppedImageHosts = Map<string, number>;
 
 export const DATAOKE_SEARCH_PATH: DataokeSearchPath = '/api/goods/get-dtk-search-goods';
 export const DATAOKE_SEARCH_VERSION: DataokeSearchVersion = 'v2.1.2';
@@ -76,6 +101,21 @@ export const TAOBAO_ITEM_ID_BATCH_SIZE: TaobaoItemIdBatchSize = 20;
 export const TAOBAO_ITEM_ID_CACHE_TTL_MS = 30 * 60 * 1000;
 /** 映射缓存最多条数；超出按写入先后淘汰最早的一条，防止进程内无界增长。 */
 export const TAOBAO_ITEM_ID_CACHE_MAX_ENTRIES = 10_000;
+
+/**
+ * B1-04zzj (D10-706 / 编排 11-06 09:35): image hosts accepted from the 大淘客 search, each matched
+ * as the whole host or as a `.`-suffix: 淘宝 / 天猫图床 alicdn.com、taobaocdn.com 与大淘客自家图床
+ * ffquan.cn.
+ */
+export const DATAOKE_IMAGE_HOSTS: readonly string[] = Object.freeze([
+  'alicdn.com',
+  'taobaocdn.com',
+  'ffquan.cn',
+]);
+const IMAGE_SCHEME = 'https://';
+/** A plain DNS host name (already lower case): labels of letters, digits and hyphens. */
+const PLAIN_HOST = /^(?:[a-z0-9-]+\.)*[a-z0-9-]+$/u;
+const UNPARSED_HOST = '(unparsed)';
 
 /** 游标页码上限（大淘客精选子集远小于此；越界的游标按非法处理）。 */
 const MAX_SEARCH_PAGE = 9_999;
@@ -126,6 +166,67 @@ function warnOf(
 ): void {
   // 只带路径与固定码，不带商品 ID、标题、金额、链接等原值。
   warn?.({ method: DATAOKE_SEARCH_PATH, code });
+}
+
+/** Host name of an authority without its port, lower case; undefined when not a plain DNS name. */
+function plainHost(hostPort: string): string | undefined {
+  const host = hostPort.replace(/:[0-9]*$/u, '').toLowerCase();
+  return PLAIN_HOST.test(host) ? host : undefined;
+}
+
+/**
+ * Whether an address that already passed normalizeItemImages is served from DATAOKE_IMAGE_HOSTS
+ * (see the header ⑥), and the host name to count it under when it is not.
+ */
+export function dataokeImageHost(url: string): {
+  readonly allowed: boolean;
+  readonly host: string;
+} {
+  const rest = url.startsWith(IMAGE_SCHEME) ? url.slice(IMAGE_SCHEME.length) : '';
+  // 反斜杠在 https 下等同 /（WHATWG URL），同样结束 authority。
+  const authority = rest.split(/[/?#\\]/u, 1)[0] ?? '';
+  const at = authority.lastIndexOf('@');
+  if (at >= 0) {
+    // 带 userinfo 直接拒；计数只用 @ 之后的主机名，userinfo 不进告警。
+    return { allowed: false, host: plainHost(authority.slice(at + 1)) ?? UNPARSED_HOST };
+  }
+  const host = plainHost(authority);
+  if (host === undefined) return { allowed: false, host: UNPARSED_HOST };
+  const allowed = DATAOKE_IMAGE_HOSTS.some((known) => host === known || host.endsWith(`.${known}`));
+  return { allowed, host };
+}
+
+/** The cleaned images with every address outside DATAOKE_IMAGE_HOSTS left out and tallied. */
+function whitelistedImages(images: ItemImages, dropped: DataokeDroppedImageHosts): ItemImages {
+  const keep = (url: string): boolean => {
+    const { allowed, host } = dataokeImageHost(url);
+    if (!allowed) dropped.set(host, (dropped.get(host) ?? 0) + 1);
+    return allowed;
+  };
+  const out: { main_image_url?: string; image_urls?: readonly string[] } = {};
+  if (images.main_image_url !== undefined && keep(images.main_image_url)) {
+    out.main_image_url = images.main_image_url;
+  }
+  const list = (images.image_urls ?? []).filter(keep);
+  if (list.length > 0) out.image_urls = Object.freeze(list);
+  return Object.freeze(out);
+}
+
+/** One dataoke_image_host_dropped warning per host of this page's tally (see the header ⑥). */
+export function reportDroppedImageHosts(
+  warn: ((event: TaobaoWarning) => void) | undefined,
+  dropped: DataokeDroppedImageHosts,
+): void {
+  if (warn === undefined) return;
+  for (const [host, count] of dropped) {
+    const event: DataokeImageHostWarning = {
+      method: DATAOKE_SEARCH_PATH,
+      code: 'dataoke_image_host_dropped',
+      host,
+      count,
+    };
+    warn(event);
+  }
 }
 
 /** The opaque cursor of search page `page` (≥ 2). */
@@ -321,12 +422,15 @@ function searchPrice(row: Readonly<Record<string, unknown>>): SearchPrice {
 /**
  * One candidate row → UnionItemDetail under the converted `itemId`; `receivedAt` is the Clock read
  * when the search response arrived. Price anomalies stay in the result (price_status 'anomaly').
+ * Images outside DATAOKE_IMAGE_HOSTS are left out and tallied into `droppedHosts` (the caller
+ * reports the page's tally once, reportDroppedImageHosts).
  */
 export function mapDataokeSearchItem(
   candidate: DataokeSearchCandidate,
   itemId: string,
   receivedAt: Date,
   warn: ((event: TaobaoWarning) => void) | undefined,
+  droppedHosts: DataokeDroppedImageHosts = new Map(),
 ): UnionItemDetail {
   const { row } = candidate;
   const title = titleOf(row);
@@ -339,7 +443,11 @@ export function mapDataokeSearchItem(
       'taobao',
     );
   }
-  const images = normalizeItemImages({ main_image_url: row.mainPic, image_urls: row.smallImages });
+  // 先过 normalizeItemImages，再查主机白名单（header ⑥；顺序不能反）。
+  const images = whitelistedImages(
+    normalizeItemImages({ main_image_url: row.mainPic, image_urls: row.smallImages }),
+    droppedHosts,
+  );
   const price = searchPrice(row);
   if (price.status === 'anomaly') warnOf(warn, 'PRICE_ANOMALY');
   return Object.freeze({

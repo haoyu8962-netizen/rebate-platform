@@ -378,7 +378,8 @@ export function createOrderPipeline(
       pay_amount_fen: order.paid_fen,
       est_commission_fen: order.est_commission_fen ?? null,
       settle_commission_fen: settleFen,
-      // B1-08v：联盟报文的平台服务费（只有拼多多给）按本次报文原样写，缺失为 NULL；未归因订单同样写。
+      // B1-08v：联盟报文的平台服务费（拼多多 duo_id_service_fee；淘宝自 B1-04zz 起给实际扣的服务费；京东不给）
+      // 按本次报文原样写，缺失为 NULL；未归因订单同样写。
       service_fee_fen: order.service_fee_fen ?? null,
       pid: slot,
       relation_id: params.relation_id,

@@ -85,10 +85,13 @@ import {
   mapDataokeSearchItem,
   matchConvertedItemIds,
   parseDataokeSearchCursor,
+  reportDroppedImageHosts,
   taobaoItemIdBatches,
+  type DataokeDroppedImageHosts,
   type TaobaoItemIdCache,
 } from './dataoke-search.ts';
 import {
+  firstPerItemId,
   matchSearchItemIds,
   officialSearchCandidates,
   officialSearchNextCursor,
@@ -665,7 +668,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       }
       items.push(mapTaobaoDetail(candidate.row, itemId, receivedAt, priceOptions));
     }
-    return { items, nextCursor };
+    // B1-04zzj (D10-692 S2-4)：同页换回同一个 item_id 的只留首条，顺序不变（official-search.ts ⑨）。
+    return { items: firstPerItemId(items), nextCursor };
   }
 
   /** B1-04zh: one page of the 大淘客 search (see dataoke-search.ts). */
@@ -699,12 +703,15 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       ctx,
     );
     const items: UnionItem[] = [];
+    // B1-04zzj：白名单外的图按主机名记数，整页一次告警（dataoke-search.ts ⑥）。
+    const droppedHosts: DataokeDroppedImageHosts = new Map();
     for (const candidate of candidates) {
       const itemId = itemIds.get(candidate.goodsId);
       // 换不到的不返回（商品暂不可用），不用大淘客 ID 兜底。
       if (itemId === undefined) continue;
-      items.push(mapDataokeSearchItem(candidate, itemId, receivedAt, this.#warn));
+      items.push(mapDataokeSearchItem(candidate, itemId, receivedAt, this.#warn, droppedHosts));
     }
+    reportDroppedImageHosts(this.#warn, droppedHosts);
     return { items, nextCursor };
   }
 

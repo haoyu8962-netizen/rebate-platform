@@ -54,6 +54,7 @@ import {
   taobaoSearchCounterToken,
   type TaobaoSearchCounter,
 } from './infra/taobao/search-counter.ts';
+import type { DataokeImageHostWarning } from './infra/taobao/dataoke-search.ts';
 import type { TaobaoSearchFallbackWarning } from './infra/taobao/search-fallback.ts';
 import type { TaobaoWarning } from './infra/taobao/response.ts';
 import { readActivePddQueryPid } from './pids/query-reader.ts';
@@ -106,19 +107,21 @@ export const UNION_ENDPOINTS_DIR = fileURLToPath(
  * endpoints are read once while the entry starts; an invalid set, or a demo / replay endpoint in
  * prod, stops the entry. Platforms configured as mode=demo get the DemoUnionAdapter. Governed adapters (createGovernedAdapter) are assembled by the callers
  * that own a quota limiter.
- * pdd with mode=live (B1-04t): local / test refuse to start, prod refuses until KMS exists, staging
+ * pdd with mode=live (B1-04t): local / test refuse to start, prod reads the secret from KMS once here
+ * (B1-30a; without KMS configured it refuses, kms_unavailable), staging
  * reads PDD_CLIENT_SECRET_FILE once here and assembles the real PddUnionAdapter over the HTTPS
  * transport (registry option `pddLive`); a failure stops the entry before it serves anything.
  * B1-04p: with the optional DB that HTTPS transport writes one union_raw_payloads row per request.
- * taobao with mode=live (B1-04k): local / test and prod refuse like pdd; staging with both
+ * taobao with mode=live (B1-04k): local / test refuse and prod goes through KMS like pdd; staging with both
  * TAOBAO_APP_KEY and TAOBAO_APP_SECRET_FILE reads the secret file once here and assembles the real
  * TaobaoUnionAdapter over its own archived HTTPS transport (registry option `taobaoLive`); staging
  * with neither variable keeps taobao unimplemented. pdd and taobao are assembled independently.
  * B1-04e: with taobao assembled live and AppConfig.dataoke set (staging, DATAOKE_APP_KEY and
  * DATAOKE_APP_SECRET_FILE), the 大淘客 secret file is read once here too and the adapter gets a
  * DataokeClient order source over its own archived HTTPS transport; staging with neither variable
- * starts without one and logs nothing (D10-479; deployment checks cover it). prod never gets here
- * with taobao live (kms_unavailable first).
+ * starts without one and logs nothing (D10-479; deployment checks cover it). prod with taobao live
+ * reads the taobao secret, and with DATAOKE_APP_KEY set the 大淘客 one, from KMS (B1-30a) instead of
+ * files; without KMS configured it refuses (kms_unavailable).
  * B1-04zn (D10-530): taobao live also gets TAOBAO_CONVERT_SOURCE / TAOBAO_SEARCH_SOURCE from the
  * passed config, and with the 大淘客 order source an order slot reader over the optional database
  * (union_pids, every Taobao PID of ctx.appId) plus a warn hook logging only event code and count.
@@ -129,7 +132,8 @@ export const UNION_ENDPOINTS_DIR = fileURLToPath(
  * start (UnionError, no silent official-only); taobao live gets the module's search counter (see
  * search-counter.ts) under every switch value, and a fallback hook logging only event, source and
  * reason.
- * jd with mode=live (B1-04ze): local / test and prod refuse like taobao, after taobao's own check;
+ * jd with mode=live (B1-04ze): local / test refuse and prod goes through KMS like taobao, after
+ * taobao's own check;
  * staging with both JD_APP_KEY and JD_APP_SECRET_FILE reads the secret file once here and assembles
  * the real JdUnionAdapter over its own archived HTTPS transport (registry option `jdLive`); staging
  * with neither variable keeps jd unimplemented and logs nothing (D10-479). The adapter reads
@@ -163,11 +167,35 @@ function logPddWarning(logger: RootLogger, warning: PddWarning): void {
   );
 }
 
+/** B1-04zzj: the 大淘客 search's per-page image host tally (dataoke-search.ts ⑥). */
+function isImageHostWarning(warning: TaobaoWarning): warning is DataokeImageHostWarning {
+  const fields = warning as Partial<DataokeImageHostWarning>;
+  return (
+    warning.code === 'dataoke_image_host_dropped' &&
+    typeof fields.host === 'string' &&
+    typeof fields.count === 'number'
+  );
+}
+
 /**
  * The Taobao warn hook (B1-04j: an API permission refusal) as flat pino fields: only the method
  * name and code / sub_code; no message text, request id or request content.
+ * B1-04zzj: the 大淘客 image host tally is its own event with only the host name and the count
+ * (no address, no item id), not an API permission warning.
  */
 function logTaobaoWarning(logger: RootLogger, warning: TaobaoWarning): void {
+  if (isImageHostWarning(warning)) {
+    logger.warn(
+      {
+        event: 'DATAOKE_IMAGE_HOST_DROPPED',
+        method: warning.method,
+        host: warning.host,
+        count: warning.count,
+      },
+      'dataoke search images dropped for their host',
+    );
+    return;
+  }
   logger.warn(
     {
       event: 'TAOBAO_API_PERMISSION_DENIED',
@@ -454,16 +482,18 @@ async function startUnionRegistry(
   const taobaoUnconfigured =
     config.appEnv === 'staging' && (config.taobao === null || config.taobao === undefined);
   if (taobao?.mode === 'live' && !taobaoUnconfigured) {
-    // Checked after pdd, so pdd's own refusals come first. local / test, prod (no KMS yet) and a
-    // staging secret file that is unreadable or empty throw TaobaoStartupError (fixed text).
+    // Checked after pdd, so pdd's own refusals come first. local / test, prod without KMS configured
+    // (B1-30a: prod reads the secret from KMS), a KMS read that fails and a staging secret file that
+    // is unreadable or empty throw TaobaoStartupError (fixed text).
     const credentials = await openTaobaoCredentials(
       config.appEnv,
       config.taobao,
       kmsAccessOf(config),
     );
-    // B1-04e: the 大淘客 order source only when configured (staging, both DATAOKE_* variables;
-    // loadConfig refuses them elsewhere); an unreadable or empty secret file throws
-    // DataokeStartupError (fixed text). Neither variable: no order source, nothing logged.
+    // B1-04e: the 大淘客 order source only when configured (staging: both DATAOKE_* variables; prod:
+    // DATAOKE_APP_KEY with KMS, B1-30a; loadConfig refuses them elsewhere); an unreadable or empty
+    // secret (file or KMS) throws DataokeStartupError (fixed text). Not configured: no order source,
+    // nothing logged.
     let orderSource: TaobaoOrderSourceOptions | undefined;
     if (config.dataoke !== null && config.dataoke !== undefined) {
       orderSource = {
@@ -518,8 +548,9 @@ async function startUnionRegistry(
   const jdUnconfigured =
     config.appEnv === 'staging' && (config.jd === null || config.jd === undefined);
   if (jd?.mode === 'live' && !jdUnconfigured) {
-    // Checked after taobao, so taobao's own refusals come first. local / test, prod (no KMS yet) and
-    // a staging secret file that is unreadable or empty throw JdStartupError (fixed text).
+    // Checked after taobao, so taobao's own refusals come first. local / test, prod without KMS
+    // configured (B1-30a: prod reads the secret from KMS), a KMS read that fails and a staging secret
+    // file that is unreadable or empty throw JdStartupError (fixed text).
     const credentials = await openJdCredentials(config.appEnv, config.jd, kmsAccessOf(config));
     jdLive = {
       credentials,

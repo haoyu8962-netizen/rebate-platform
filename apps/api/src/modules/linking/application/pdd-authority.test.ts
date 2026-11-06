@@ -10,7 +10,13 @@ import {
   type QueryResult,
 } from 'kysely';
 import { describe, expect, it } from 'vitest';
-import { activatePddBinding } from './pdd-authority.ts';
+import { LinkingUnionIdentity } from './link-open-conversion.ts';
+import {
+  activatePddBinding,
+  generatePddAuthorityLink,
+  PDD_QUERY_CONCURRENCY,
+  queryPddAuthority,
+} from './pdd-authority.ts';
 
 // Synthetic ids of one app's user and one union account.
 const APP = 'synthetic-app';
@@ -97,5 +103,67 @@ describe('activatePddBinding user lock (F1-07c, BR-ID-20 / BR-ID-31)', () => {
     expect(statements[0]).toContain('for no key update');
     expect(statements.some((s) => s.includes('from "union_auth_sessions"'))).toBe(false);
     expect(statements.some((s) => s.startsWith('insert into "union_bindings"'))).toBe(true);
+  });
+});
+
+describe('generatePddAuthorityLink shares PDD_QUERY_CONCURRENCY (B1-04zzj, D10-692 S2-8)', () => {
+  const identity = new LinkingUnionIdentity({
+    appId: APP,
+    platform: 'pdd',
+    promotionSlot: 'synthetic-pid',
+    userKey: 'pdd0000a',
+    customParameters: { app: 'n', uid: 'pdd0000a', sc: 'self_buy' },
+  });
+  const input = { appId: APP, identity, traceId: 'synthetic-trace', events: 'linking.unit' };
+
+  it('[B1-04zzj unit] failing generations free their slots: then every query slot is free, and a generation over the cap waits for one', async () => {
+    const gates: PromiseWithResolvers<unknown>[] = [];
+    let generated = 0;
+    const adapter = {
+      pddAuthorityUrl: async () => {
+        generated += 1;
+        const gate = Promise.withResolvers<unknown>();
+        gates.push(gate);
+        return gate.promise;
+      },
+      queryPddAuthority: async () => ({ authorized: true }),
+    };
+    const deps = {
+      registry: { get: () => adapter },
+      logger: { warn: () => undefined },
+    } as unknown as Parameters<typeof generatePddAuthorityLink>[0];
+    const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+    // Every slot taken by a generation that then fails (throw / null answer / no web link).
+    const failing = Array.from({ length: PDD_QUERY_CONCURRENCY }, () =>
+      generatePddAuthorityLink(deps, input),
+    );
+    const waiting = generatePddAuthorityLink(deps, input);
+    await tick();
+    expect(generated).toBe(PDD_QUERY_CONCURRENCY);
+    // A query over the cap is refused at once, without calling the port.
+    expect(await queryPddAuthority(deps, input)).toBeNull();
+
+    gates[0]!.reject(new Error('synthetic failure'));
+    await tick();
+    // The freed slot went to the waiting generation, not back to the pool.
+    expect(generated).toBe(PDD_QUERY_CONCURRENCY + 1);
+    expect(await queryPddAuthority(deps, input)).toBeNull();
+    gates
+      .slice(1, PDD_QUERY_CONCURRENCY)
+      .forEach((gate, i) =>
+        gate.resolve(i % 2 === 0 ? null : { short_url: 'https://short.example.invalid/s/unit' }),
+      );
+    expect(await Promise.all(failing)).toEqual(
+      Array.from({ length: PDD_QUERY_CONCURRENCY }, () => null),
+    );
+    gates[PDD_QUERY_CONCURRENCY]!.resolve({ url: 'https://landing.example.invalid/unit' });
+    expect(await waiting).toEqual({ webUrl: 'https://landing.example.invalid/unit', scheme: null });
+
+    // All slots are free again: the cap's worth of queries enter at once.
+    const queries = await Promise.all(
+      Array.from({ length: PDD_QUERY_CONCURRENCY }, () => queryPddAuthority(deps, input)),
+    );
+    expect(queries).toEqual(Array.from({ length: PDD_QUERY_CONCURRENCY }, () => true));
   });
 });

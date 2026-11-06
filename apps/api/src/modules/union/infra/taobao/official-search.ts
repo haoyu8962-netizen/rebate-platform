@@ -30,6 +30,9 @@
 //   整页每行都因缺标题或佣金非法而跳过 → invalid_dto（不调换算）；换不到不算非法，本页照常返回。
 // ⑧ 外层：外层键缺失或不是对象 → upstream_unavailable（request() 的做法）；result_list / map_data
 //   损坏 → invalid_dto；code 11 → upstream_rejected。
+// ⑨ 同页去重（B1-04zzj，D10-692 S2-4）：同一页里换回的凑狸 item_id（详情口径）相同的行只保留首条
+//   能返回的那条（被跳过 / 换不到的行不算首条），其余不出现，顺序不变；不报错、不另发告警。
+//   nextCursor 仍按原始条数（②）。只在同一页内去重，不跨页。
 import { deriveProductKey, ProductKeyUnderivable } from '@couli/domain';
 import { UnionError, type CallCtx } from '../../domain/types.ts';
 import { detailRowFault } from './goods.ts';
@@ -239,6 +242,25 @@ export function matchSearchItemIds(
     const key = matchKey(searchId);
     const itemId = key === undefined ? undefined : byKey.get(key);
     if (itemId !== undefined) out.set(searchId, itemId);
+  }
+  return out;
+}
+
+/**
+ * B1-04zzj (D10-692 S2-4): the items of one page with only the first of each item_id kept, order
+ * unchanged (see the header ⑨). An item without an item_id is never a duplicate.
+ */
+export function firstPerItemId<T extends { readonly item_id?: string | null }>(
+  items: readonly T[],
+): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (typeof item.item_id === 'string') {
+      if (seen.has(item.item_id)) continue;
+      seen.add(item.item_id);
+    }
+    out.push(item);
   }
   return out;
 }

@@ -184,16 +184,29 @@ export interface UnionItem extends ItemRef {
   readonly category_l1_name?: string;
 }
 
+/** B1-04zzj (D10-692 S2-7): longest shop_name kept, in code points (04 / 契约无上限，union 技术值). */
+export const SHOP_NAME_MAX_CODE_POINTS = 64;
+/** Unicode Cc (C0 / DEL / C1 controls) and Cf (format: zero-width, bidi, BOM, soft hyphen, tags). */
+const SHOP_NAME_INVISIBLE = /[\p{Cc}\p{Cf}]/gu;
+
 /**
  * B1-04zzg (FU-DETAIL-SHOP-NAME): the one rule every adapter uses for its official shop-name field.
- * A string trimmed of leading / trailing whitespace when non-empty → `{ shop_name }`; empty, blank,
- * non-string or missing → `{}` (the key stays absent). Callers pass only the platform's official
- * field — never a nick, seller nick, title or shop id as a fallback.
+ * B1-04zzj (D10-692 S2-7): a string has every Unicode Cc / Cf character removed, is then trimmed of
+ * leading / trailing whitespace, and is cut to its first SHOP_NAME_MAX_CODE_POINTS code points
+ * (a surrogate pair is one code point and is never split); non-empty → `{ shop_name }`; empty,
+ * blank, non-string or missing → `{}` (the key stays absent). Callers pass only the platform's
+ * official field — never a nick, seller nick, title or shop id as a fallback.
  */
 export function shopNameField(value: unknown): { readonly shop_name?: string } {
   if (typeof value !== 'string') return {};
-  const name = value.trim();
-  return name === '' ? {} : { shop_name: name };
+  const cleaned = value.replace(SHOP_NAME_INVISIBLE, '').trim();
+  if (cleaned === '') return {};
+  const points = [...cleaned];
+  const name =
+    points.length > SHOP_NAME_MAX_CODE_POINTS
+      ? points.slice(0, SHOP_NAME_MAX_CODE_POINTS).join('')
+      : cleaned;
+  return { shop_name: name };
 }
 
 export interface UnionItemDetail extends UnionItem {

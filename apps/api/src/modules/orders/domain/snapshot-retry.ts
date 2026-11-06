@@ -3,7 +3,8 @@
 // isSnapshotEligible（本次 ⑦ 迁移与 ② 归属后的值，rebate_status 用库内值）。planCommissionSnapshot 与
 // crossesSnapshotEligibility 的行为不变（「首次跨入」仍只由它们判定）。
 // - 入参恢复：N = 结算收入 ?? 预估收入，不再减服务费（est 已是净额，适配器算，B1-08zh）。两者都空：
-//   拼多多且没有服务费（报文没给，或扫描读到列为空）→ SERVICE_FEE_RATE_MISSING；其余 → AMOUNT_PARSE_FAILED。
+//   规则表 serviceFeeDeducted 的平台（拼多多、淘宝）且没有服务费（报文没给，或扫描读到列为空）→
+//   SERVICE_FEE_RATE_MISSING；其余 → AMOUNT_PARSE_FAILED。
 //   都不按 0 兜底。
 // - paidAt 按库内 paid_at_source：platform → paid_at；observed → 首条到 PAID+ 的历史时刻；platform_modified
 //   （预售迁到 PAID 那条报文的平台更新时间）不可恢复 → skip paid_at_unknown；为空 → chooseSnapshotPaidAt
@@ -128,7 +129,7 @@ export interface PlanSnapshotRetryInput {
   readonly ownerUserId: string;
   /** null = paidAt 不可恢复。 */
   readonly paid: SnapshotRetryPaid | null;
-  /** 拼多多服务费：流水线为本次报文的值（null = 报文没给）；扫描为订单当前列，列为空传 'unknown'。 */
+  /** 服务费（拼多多、淘宝）：流水线为本次报文的值（null = 报文没给）；扫描为订单当前列，列为空传 'unknown'。 */
   readonly serviceFeeFen: bigint | null | 'unknown';
   /** 订单推广位的 pid_scene；'unknown' = 无从查询（扫描路径无 pids 端口）。 */
   readonly pidScene: string | null | 'unknown';
@@ -136,8 +137,9 @@ export interface PlanSnapshotRetryInput {
 
 const TAOLIJIN_SCENE = 'taolijin';
 /**
- * 报文佣金含服务费的平台（拼多多，净额在适配器算，B1-08zh，这里不再减）。B1-08za：判定只查规则表的
- * serviceFeeDeducted；本常量只留作 SQL（infra/snapshot-retry-store.ts）的单平台取值，须与规则表一致。
+ * 历史常量：B1-08za 前「报文佣金含服务费」的唯一平台（拼多多）。现在判定只查规则表的 serviceFeeDeducted
+ * （拼多多与淘宝都打开，B1-04zz），净额都在适配器算（B1-08zh），代码里已无引用（SQL 也不用）；只因冻结的
+ * 规则测试 test/spec/orders/platform-rules/exports.test.ts 仍导入它而保留，不要用它判定服务费平台。
  */
 export const SERVICE_FEE_PLATFORM = 'pdd' as const;
 /**

@@ -5,6 +5,7 @@ type: impl
 # 2026-11-06 union 入账（编排 D10-692，复核报告 couli-runs/UNION-lane/review-20261106.md）。契约示例与 50303 文案不符场景只记录、本单不改契约。
 # ① taobao-adapter.ts / official-search.ts：同一页里换回的凑狸 item_id 重复时只保留首条（顺序不变）。② dataoke-search.ts：mainPic / smallImages 只收 https 且主机在已知图床白名单（淘宝 img.alicdn.com 等，白名单常量放适配器，任务书据录制形状列出），其余置空，卡片按无图降级。③ domain/types.ts shopNameField：去控制字符（Unicode Cc / Cf）、trim，按 04 字段上限截断（任务书摘上限），空则不带。④ linking/application/pdd-authority.ts：generatePddAuthorityLink 纳入 PDD_QUERY_CONCURRENCY 同一计数。⑤ 陈旧注释：orders/domain/snapshot-retry.ts（SERVICE_FEE_PLATFORM）、orders/application/pipeline-port.ts:381、orders/infra/snapshot-retry-input.ts:19、union/infra/pdd/pdd-adapter.ts:141、union/union.module.ts「no KMS yet」两处——只改注释（无引用的 SERVICE_FEE_PLATFORM 常量可删）。
 # RV1 主体，但触及 linking / orders 文件 → 按路径取最高 RV2；新鲜独立 Claude 写规则测试，代码评审。
+# 完成 2026-11-06（#2474）：图床白名单 alicdn.com / taobaocdn.com / ffquan.cn 子域（ffquan.cn 由编排 11-06 09:35 / 09:42 notices 加入），置空图按主机聚合告警 dataoke_image_host_dropped（编排 08:55）；店铺名 64 码点（编排 08:55 照准）；SERVICE_FEE_PLATFORM 因冻结测试导入保留只改注释；money S2 先截后滤记后续。
 refs: []
 refs_hash: {}
 deps: [B1-04zx, B1-04zzf, B1-04zzg, B1-06zf]
@@ -32,4 +33,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/misc-20261106/**'
-status: todo
+status: done
+pr: 2474

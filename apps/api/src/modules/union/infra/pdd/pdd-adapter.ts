@@ -138,7 +138,6 @@ export function pddArchiveKind(method: string): string {
   return 'query';
 }
 
-/** 调用上下文的 app（服务端注入的 ctx.appId）与该方法的用途；没有 app 时不带归档上下文。 */
 /** B1-04zv：一页订单行；ctx.rowErrors 为 collect 时 mapper 拒绝的行进 rejected，否则整页报错。 */
 function orderRows(
   rows: readonly unknown[],
@@ -152,6 +151,7 @@ function orderRows(
     : { items: rows.map(map) };
 }
 
+/** 调用上下文的 app（服务端注入的 ctx.appId）与该方法的用途；没有 app 时不带归档上下文。 */
 function archiveContext(method: string, ctx: CallCtx | undefined): ArchiveContext | undefined {
   const appId = ctx?.appId;
   return typeof appId === 'string' ? { appId, kind: pddArchiveKind(method) } : undefined;
