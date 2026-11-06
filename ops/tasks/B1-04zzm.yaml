@@ -1,0 +1,32 @@
+id: B1-04zzm
+repo: rebate-platform
+title: union：UnionItemDetail 加券结束时刻、销量、店铺 logo、店铺评分、商品侧店铺标识（S-09 S09c，D10-736）——拼多多、京东映射（京东只给店铺等级），淘宝推迟
+type: impl
+# 2026-11-07 union 入账（编排 D10-736 ⑤⑥⑦，be 方案 couli-runs/B3-lane/s09-plan-20261109.md 的 S09c；契约 CT-26s 已合：ProductCard 的 coupon_end_at / sales_text / shop_logo / shop_scores / shop_entry）。本单只做联盟侧取数，catalog 组装与开关判断是 be 的 S09b。
+# UnionItemDetail（union/domain/types.ts）新增可选字段，取不到就缺省、不编造（BR-TEXT-13 细则「虚拟数据」）：
+#   coupon_end_at（所选券的结束时刻，ISO 8601 +08:00，按 BR-PRICE-01 细则「时间与剩余量」归一：无时区按 +08:00、只有日期取次日 00:00:00+08:00；只在 coupon_fen > 0 且联盟给了所选那张券的结束时间时出）；
+#   sales_text（联盟销量原样字符串，本期只有拼多多 sales_tip；不计算不估算）；
+#   shop_logo（店铺 logo，本期只有拼多多 mall_img_url，只收 https，口径同 normalizeItemImages 单项）；
+#   shop_scores（[{ key: desc | serv | lgst | level, value: 非空原样字符串 }]，每个 key 至多一次、至多 4 项；拼多多 desc_txt / serv_txt / lgst_txt → desc / serv / lgst；京东只给 shopInfo.shopLevel → level，不给 desc / serv / lgst（D10-736 ⑥，照 08））；
+#   shop_ref（商品侧店铺标识：拼多多 mall_id、京东 shopInfo.shopId，原样字符串，供 S-17 进店判断；本期不外露到卡片）。
+# 拼多多：pdd/goods.ts 详情映射（coupon_end_time 秒；与现有选券同一张券）。京东：jd/goods.ts 详情映射（所选券 couponList[].useEndTime 毫秒、shopInfo.shopLevel / shopId；等 goods.query 返回才有）。淘宝整段推迟到 09 TB §2.10 复录之后（D10-736 ⑤），本单淘宝不出这些字段。
+# 开关关时联盟数据照常取、只在出卡时置空（D10-736 ⑦，由 S09b 做），本单不看开关。字段含义未实测的照 09 已登记「文档已查、未实测」口径，不臆造平台事实。
+# 风险：union 适配器 → RV2；新鲜独立 Claude 写规则测试，资金评审。
+refs: []
+refs_hash: {}
+deps: [B1-04zzk]
+paths:
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/domain/*.test.ts'
+  - 'apps/api/src/modules/union/infra/pdd/goods.ts'
+  - 'apps/api/src/modules/union/infra/pdd/goods.test.ts'
+  - 'apps/api/src/modules/union/infra/jd/goods.ts'
+  - 'apps/api/src/modules/union/infra/jd/goods.test.ts'
+test_paths:
+  - 'test/spec/union/detail-extras/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/detail-extras/**'
+status: todo

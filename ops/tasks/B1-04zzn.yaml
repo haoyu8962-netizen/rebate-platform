@@ -1,0 +1,26 @@
+id: B1-04zzn
+repo: rebate-platform
+title: catalog：拼多多商品详情 price_spec_hint 收窄为 price_from（S-19，D10-728 ②）——拼多多搜索 / 推荐仍 spec_uncertain，淘宝、京东 item 模式不动
+type: impl
+# 2026-11-07 union 入账（编排 D10-728 ②；09 登记 couli #285 已合并 d60063b：pdd.ddk.goods.detail 原文写明 min_group_price / min_normal_price 是「最低价 sku」的价格，文档已查、未实测）。
+# 在 B1-05zh 的 spec-hint 纯函数（catalog/domain/spec-hint.ts）上收窄：平台 pdd 且价格取自商品详情（pdd.ddk.goods.detail）→ price_from；拼多多搜索 / 推荐 / 池回退 / Agent 卡照旧 spec_uncertain；京东 sku 模式 null、京东 item 模式与淘宝 spec_uncertain 不变。拼多多详情取数处把「来自详情接口」这一事实交给判定（paths 内最小改动；具体落点任务书据代码定）。
+# need_sku_info、item.details.get、京东 sku 模式等权限本期不申请（D10-728 ③）。
+# **B1-05zh 合并前只入账、不开工**（D10-728 ②）。与 be 的 S09b 同碰 catalog 详情组装时按合并先后变基。
+# 风险：catalog 价格展示 → RV1 主体，按路径取最高；新鲜独立 Claude 写规则测试。
+refs: [BR-PROD-04]
+refs_hash:
+  BR-PROD-04: 287b67ace136
+deps: [B1-05zh]
+paths:
+  - 'apps/api/src/modules/catalog/domain/spec-hint.ts'
+  - 'apps/api/src/modules/catalog/domain/spec-hint.test.ts'
+  - 'apps/api/src/modules/catalog/detail.ts'
+  - 'apps/api/src/modules/catalog/detail.test.ts'
+test_paths:
+  - 'test/spec/catalog/pdd-detail-price-from/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/pdd-detail-price-from/**'
+status: todo
