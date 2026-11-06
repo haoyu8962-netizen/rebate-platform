@@ -1,0 +1,40 @@
+id: B1-12zc
+repo: rebate-platform
+title: notification：订阅 order.clawed_back 与 order.settle_adjusted，按 BR-TEXT-09 给受益人发 CLAWBACK（扣回）与 SETTLE_ADJUSTED（结算负差调减）通知——service 类，站内信总写、推送随服务开关；同一事务写 inbox_messages 与 notify_logs；自购 / 分享跳订单详情、邀请跳余额流水；正向补差忽略
+type: impl
+# 2026-11-07 入账（content，编排 D10-773 方案 C；FU-SETTLE-ADJ-NOTIFY 消费端，并进 FU-CLAWBACK-NOTIFY：主干 order.clawed_back 没有消费者，08 要求扣回发站内信，上线前缺口）。写法照 B1-12u withdrawal-result-message（推送 + 站内信、notify_logs 去重、registerEventConsumer）。
+# CLAWBACK：载荷取 clawback-order.ts 现有 order.clawed_back（order_id、order_key、rights_event_id、reason、beneficiaries[{user_id, role, clawback_fen}]），只发扣到用户可用余额的受益人；去重键 {order_key}:{uid}:{role}:CLAWBACK:{rights_event_id}；文案与变体照 08 BR-TEXT-09 表（目录 catalog.ts 的 self / share / invite 与 texts 的 inbox.title.CLAWBACK.self / promo 不一致处开工实测报编排，08 原文优先）。
+# SETTLE_ADJUSTED（D10-773 定案，代理补全的默认）：只发负差记到 user_available 的受益人（坏账与平台侧不发）；正文 self「订单返利已按结算金额调整，减少 {amount}：{reason.title}」、share「一笔分享订单的推广收益已按结算金额调整，减少 {amount}：{reason.title}」、invite「一笔邀请奖励已按结算金额调整，减少 {amount}」（J7 不带原因）；原因按 sub_type 取 BR-TEXT-05 SETTLE_DIFF / PRICE_PROTECT / PRICE_COMPARE；去重键 {order_key}:{uid}:{role}:SETTLE_ADJ:{seq}。
+# 载荷（发布端另入账，照此发）：order_id、order_key、settle_seq、sub_type、beneficiaries[{user_id, role, adjust_fen(负), bucket}]；消费端忽略 adjust_fen ≥ 0 与 bucket ≠ user_available 的行。本单用合成事件测，不依赖发布端合并。
+# 冻结的 events / queue 契约测试照 B1-12u 先例：两条新队列 evt.notification-clawback、evt.notification-settle-adjusted（或合一条，开工定）改计划计数，未改测试体的冻结用例列 red_exempt。
+refs: []
+refs_hash: {}
+deps: [CT-26za]
+paths:
+  - 'apps/api/src/modules/notification/**'
+  - 'apps/api/src/modules/platform/events/types.ts'
+  - 'apps/api/src/modules/platform/queue/catalog.ts'
+  - 'apps/api/src/modules/platform/queue/worker-plan.ts'
+  - 'apps/api/src/modules/platform/queue/worker-plan.test.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/notification/clawback-message/**'
+  - 'test/spec/notification/settle-adjusted-message/**'
+  - 'test/spec/platform/events/contract.test.ts'
+  - 'test/spec/platform/queue/contract.test.ts'
+  - 'test/spec/platform/queue-concurrency/limits.test.ts'
+  - 'test/spec/platform/queue-concurrency/kit.ts'
+red_exempt:
+  - file: test/spec/platform/queue-concurrency/limits.test.ts
+    test: '[B1-01zzk 其他入口不受影响] api / stream / admin / payout：有没有 limits 都只取自己的计划值（B2-07e：payout 为 payout 1 与 payout-attempt-append 1），没有共享预算（dbBudget null）'
+    reason: 冻结 B1-01zzk 用例，测试体未改；同文件只为新通知队列改计划计数与只读 kit.ts（B1-12u 先例），断言不变
+  - file: test/spec/platform/queue-concurrency/limits.test.ts
+    test: '[B1-01zzk 配置覆盖] 合法的 limits 被接受；超过计划值、非整数、不在 worker 计划里的队列、预算不在 1..7、多键缺键、不是普通对象 → 同步抛 QueueError invalid_option（固定文案、无 cause），payout 入口同样检查'
+    reason: 冻结 B1-01zzk 用例，测试体未改；同文件只为新通知队列改计划计数与只读 kit.ts（B1-12u 先例），断言不变
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/notification/clawback-message/**'
+  - 'test/spec/notification/settle-adjusted-message/**'
+status: todo

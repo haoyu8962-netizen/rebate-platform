@@ -1,0 +1,24 @@
+id: CT-26za
+repo: rebate-platform
+title: 契约：消息模板编码新增 SETTLE_ADJUSTED（入账后结算负差调减通知，service 类）+ 站内信短标题 inbox.title.SETTLE_ADJUSTED.{self,share,invite}（返利已调整类），并入资金术语模板清单
+type: contract
+# 2026-11-07 入账（content，编排 D10-773 方案 A；FU-SETTLE-ADJ-NOTIFY）。08 BR-TEXT-09 表、通知模板资金术语清单、inbox.title.*、04 notify_template.code 枚举都还没有 SETTLE_ADJUSTED，由编排在本单合并后回写（D10-773）；本单取值标「代理补全的默认」。
+# 只改契约与生成物：contracts/enums/ops.yaml notify_template_code 加一值；texts.default.json 加三个 inbox.title 键（自购 / 分享 / 邀请三行，照 ORDER_TRACKED / ORDER_INVALID 的变体命名）；specs/fund-term-keys.yaml notify_templates 加 SETTLE_ADJUSTED（资金类，正文含金额）。正文三句（D10-773 草案）在消费端 B1-12zc 的代码里，不进契约，与 CLAWBACK、WD_* 一致。
+# 契约合并后发布端（另入账，依赖 B2-04zi）与消费端 B1-12zc 才开工。无迁移、无 openapi 形状变化（AdminNotifyTemplateCode 是 pattern 字符串）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/enums/ops.yaml'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+test_paths:
+  - 'test/spec/contracts/settle-adjusted-template/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
