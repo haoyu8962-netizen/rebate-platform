@@ -1,0 +1,23 @@
+id: B2-04zx
+repo: rebate-platform
+title: 维权命令审计端口去兜底（FU-B104ZZA-AUDIT-PORT，D10-723）——删掉 settlement rights-store 直写 admin 审计表的兜底；缺审计端口时在重开 API 源 FAILED 记录之前抛错（fail-closed、不写半截）；success-after-closed 改为自己注入审计端口
+type: impl
+# 2026-11-06 编排 D10-717 ① / D10-723 选 B：端口保持可选，不碰 settlement/rights 与 rights-estimate 两个大夹具（9 个冻结文件约 80 块），不批豁免上限例外；生产两处已注入 createSystemAuditWriter。RV2，独立 Claude 写测试、Codex money。
+# 冻结 success-after-closed.int.test.ts（B1-04zza #45 / #46）改为注入审计端口，走 modify_existing（tighten_only，D10-701 / D10-721），条目在先红后按 red-check 输出的完整标题补登。
+refs: [BR-FUND-06, BR-FUND-08]
+refs_hash:
+  BR-FUND-06: 9f92492d273a
+  BR-FUND-08: 4fad67b21a32
+deps: [B1-04zza]
+paths:
+  - 'apps/api/src/modules/settlement/rights/rights-command.ts'
+  - 'apps/api/src/modules/settlement/rights/rights-store.ts'
+test_paths:
+  - 'test/spec/settlement/rights-audit-port/**'
+  - 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/rights-audit-port/**'
+status: todo
