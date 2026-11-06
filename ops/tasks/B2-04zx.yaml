@@ -3,7 +3,7 @@ repo: rebate-platform
 title: 维权命令审计端口去兜底（FU-B104ZZA-AUDIT-PORT，D10-723）——删掉 settlement rights-store 直写 admin 审计表的兜底；缺审计端口时在重开 API 源 FAILED 记录之前抛错（fail-closed、不写半截）；success-after-closed 改为自己注入审计端口
 type: impl
 # 2026-11-06 编排 D10-717 ① / D10-723 选 B：端口保持可选，不碰 settlement/rights 与 rights-estimate 两个大夹具（9 个冻结文件约 80 块），不批豁免上限例外；生产两处已注入 createSystemAuditWriter。RV2，独立 Claude 写测试、Codex money。
-# 冻结 success-after-closed.int.test.ts（B1-04zza #45 / #46）改为注入审计端口，走 modify_existing（tighten_only，D10-701 / D10-721），条目在先红后按 red-check 输出的完整标题补登。
+# 冻结 success-after-closed.int.test.ts（B1-04zza #45 / #46）改为注入审计端口，走 modify_existing（tighten_only，D10-701 / D10-721），条目按先红 red/1 输出的完整标题登记。
 refs: [BR-FUND-06, BR-FUND-08]
 refs_hash:
   BR-FUND-06: 9f92492d273a
@@ -15,6 +15,47 @@ paths:
 test_paths:
   - 'test/spec/settlement/rights-audit-port/**'
   - 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+modify_existing:
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#45] 真实 settlement 下 API 源维权先处理中、再 14（结束且不扣我方 → FAILED：rights_pending 解除、不扣回），同一维权单号后来 13（扣款成功）→ 同一条记录按 SUCCEEDED 处理、按 BR-FUND-08 部分扣回一次（170 / 34 / 17、平台 179，键带 R{id}），写一条原因 union_reported_success_after_closed 的审计、告警一条；再重放 13 → duplicate，不重复扣、什么都不变'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#45] 真实 settlement 下 API 源维权先处理中、再 15（结束且不扣我方 → FAILED：rights_pending 解除、不扣回），同一维权单号后来 13（扣款成功）→ 同一条记录按 SUCCEEDED 处理、按 BR-FUND-08 部分扣回一次（170 / 34 / 17、平台 179，键带 R{id}），写一条原因 union_reported_success_after_closed 的审计、告警一条；再重放 13 → duplicate，不重复扣、什么都不变'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#46] ADMIN 源 FAILED 之后联盟报成功（入账后订单）：duplicate，什么都不写、不审计不告警；同一订单另一条 API 源 FAILED → SUCCEEDED 照样放开（applied、按成功扣回）'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#46] 导入源 FAILED 之后联盟报成功（入账后订单）：duplicate，什么都不写、不审计不告警；同一订单另一条 API 源 FAILED → SUCCEEDED 照样放开（applied、按成功扣回）'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#46] API 源 SUCCEEDED 之后报 FAILED（成功后回退）（入账后订单）：duplicate，什么都不写、不审计不告警；同一订单另一条 API 源 FAILED → SUCCEEDED 照样放开（applied、按成功扣回）'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#46] API 源 FAILED 之后报 PROCESSING（入账后订单）：duplicate，什么都不写、不审计不告警；同一订单另一条 API 源 FAILED → SUCCEEDED 照样放开（applied、按成功扣回）'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#46] API 源 FAILED 之后报成功而无应扣佣金（会落 WAIT_COMMIS…（入账后订单）：duplicate，什么都不写、不审计不告警；同一订单另一条 API 源 FAILED → SUCCEEDED 照样放开（applied、按成功扣回）'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
+  - file: 'test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts'
+    test: '[AC-B1-04zza#46] API 源 FAILED 之后 FAILED 重放（入账后订单）：duplicate，什么都不写、不审计不告警；同一订单另一条 API 源 FAILED → SUCCEEDED 照样放开（applied、按成功扣回）'
+    reason: tighten_only
+    ruling: D10-723
+    note: 用例块内注入审计端口（admin createSystemAuditWriter，块内动态导入），#45 另加审计 action / target 断言；块外不改、原断言不删不放宽（D10-723，settlement 去掉直写审计表兜底）
 impl: claude
 tester: claude-independent
 accept:
