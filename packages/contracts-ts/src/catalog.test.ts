@@ -189,6 +189,10 @@ it('identity codes of 08 §13.11 (功能对照补缺 1–3 批) carry their data
     'resolve_paid_at_invalid',
     'resolve_order_id_taken',
     'resolve_identity_missing',
+    // CT-24zu: W10 voucher cross-check refusals (BR-WDR-15, BR-TEXT-14, D10-703).
+    'resolve_order_id_other_order',
+    'resolve_order_id_mismatch',
+    'resolve_amount_mismatch',
   ]);
   expect(errorCodes[30701].sources).toEqual(['规划/04 §7', 'BR-ID-10', 'BR-ID-40']);
 });

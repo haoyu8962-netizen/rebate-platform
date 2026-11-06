@@ -9064,7 +9064,24 @@ export interface paths {
          *     after the injected Clock, or before T, is 20001 with `data.fields=[paid_at]` and
          *     `data.reason=resolve_paid_at_invalid`; a `channel_order_id` already on another withdrawal is
          *     20001 with `data.fields=[channel_order_id]` and `data.reason=resolve_order_id_taken`, also
-         *     when two requests race and the unique index settles it. Otherwise, on one transaction: W10 to
+         *     when two requests race and the unique index settles it. Then the given values are checked
+         *     against what the system already holds for this payment (BR-WDR-15 细则, D10-703), in order; the
+         *     first that fails is 20001 and nothing of the withdrawal is written, only an audit record of the
+         *     refusal (action withdrawal_resolve_refused: the `withdrawal_id` and which check failed, no
+         *     payment data besides the serial number given):
+         *
+         *     - `resolve_order_id_other_order` (`data.fields=[channel_order_id]`): `recon_channel` has a
+         *       success line (by `payout.query_status_map`) with this `channel_order_id` whose out_biz_no
+         *       is another withdrawal's. A line without out_biz_no (an offline transfer) is not another
+         *       withdrawal's.
+         *     - `resolve_order_id_mismatch` (`data.fields=[channel_order_id]`): this withdrawal's latest
+         *       success query answer, or its success bill line, names a different `channel_order_id`.
+         *     - `resolve_amount_mismatch` (`data.fields=[resolution]`): this withdrawal's success bill line
+         *       is for an amount other than its `net_fen`.
+         *
+         *     Without such a query answer or bill line these checks do not apply. A `paid_at` more than 5
+         *     minutes from the paid time of a success query answer is not refused: it logs a warning and
+         *     notes it on the audit record. Otherwise, on one transaction: W10 to
          *     PAID_API with `paid_at`, `channel_order_id`, `manual_resolution=paid`, `resolver_ids` the caller
          *     and `proof_file`; the success voucher of W5 (`wd:{withdrawal_id}:PAID`, the snapshot channel's
          *     cash subject, BR-WDR-09); `tax_ytd` (BR-WDR-20); wallet.withdrawal_changed, which sends the

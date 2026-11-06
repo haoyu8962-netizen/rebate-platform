@@ -1,0 +1,37 @@
+{
+  "risk_note": "Contract only, RV2 by path. adminResolveUnknownPayout gains the W10 voucher cross-check (BR-WDR-15 细则 and BR-TEXT-14 表 B as written back for D10-703): before anything is written, a paid resolution is refused with 20001 when the serial number given is another withdrawal's success bill line (resolve_order_id_other_order), when this withdrawal's latest success query answer or success bill line names a different serial (resolve_order_id_mismatch), or when its success bill line amount is not net_fen (resolve_amount_mismatch); a refusal writes only an audit record. A bill line without out_biz_no (offline transfer) is not another withdrawal's. A paid_at more than 5 minutes from a success query's paid time only warns. Without any query answer or bill line the checks do not apply. Only an /admin/v1/** description and the 20001 reason list change; data.reason is free text in the schema, so no oasdiff entry. The implementation is B2-09x.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-24zu/contract-review-r1.json, static, no findings. Reviewed before the rebase."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zu",
+  "spec_commit": "f9a44e39d71771be96e0b37d479f6d67f95679e9",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4d0a2d0e38406dfefd6ca38da5c8579c4f908f19",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}

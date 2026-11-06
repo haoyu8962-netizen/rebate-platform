@@ -217,6 +217,9 @@ codes:
         - resolve_paid_at_invalid
         - resolve_order_id_taken
         - resolve_identity_missing
+        - resolve_order_id_other_order
+        - resolve_order_id_mismatch
+        - resolve_amount_mismatch
     sources:
       - BR-ID-05
       - BR-ID-09
