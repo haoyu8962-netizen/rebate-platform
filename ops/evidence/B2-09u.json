@@ -1,0 +1,89 @@
+{
+  "risk_note": "Money path, RV2, one call in one file. W10 resolving as paid (PAID_API) now enqueues B2-09t's late_paid_check for an Alipay withdrawal in the same transaction, so a paid_at a person gave on a bill day R2 has finished is still checked against the stored bill rows (go-live gap 25, second half; D10-679). The worker judgement is B2-09t's, unchanged. Refusals, rollbacks (audit, voucher, tax_ytd faults; no verified real name) and replays leave no job; bank card and WeChat get none. The job row's xmin equals the PAID_API event's: the withdrawal UPDATE runs inside a savepoint, so its own xmin is a subtransaction id and is not compared. No migration, no contract change, no frozen test changed: the rewrite of B2-09t's #35 (a 60 second timeout red into an assertion red) was moved out, because a changed test must be red on the old code and #35 is green there by design; it goes in a separate green test-change task.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/B2-09u/money-review-r1.json, static, read-only, no findings. Reviewed before the rebase."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex wrote the rule tests in 2 attempts: the first compared the withdrawal row's xmin, a subtransaction id under W10's savepoint, so it failed on the correct implementation; the second compares the PAID_API event row. A fresh Claude reviewed (approvals 19), static, r1 pass. Mutations run by the author and reverted: enqueueing for every channel turns #2 red by assertion; enqueueing in a separate transaction turns all 12 red, but through a 500 answer from the route rather than through the xmin assertion."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09u",
+  "spec_commit": "75fc5594572fa7d81492ec112480e2897d86335b",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "red_tests": [
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#1] alipay W10 恰一个无延迟任务，payload 三字段准确，与 PAID_API 状态变更事件的 xmin 相同；同键重放仍一个",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#2] 银行卡与微信 W10 判成功不入复核队列，同场 alipay 成功才入队",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#3] resolve_query_failed 拒绝不入队，修正条件后同键判成功恰一个任务",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#4] resolve_order_id_taken 拒绝不入队，修正条件后同键判成功恰一个任务",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#5] resolve_paid_at_invalid 拒绝不入队，修正条件后同键判成功恰一个任务",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#6] audit 故障回滚不留任务；同键重试成功才入队",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#7] voucher 故障回滚不留任务；同键重试成功才入队",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#8] tax_ytd 故障回滚不留任务；同键重试成功才入队",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#9] 缺少已核实名 resolve_identity_missing 不留任务；实名完整的单正常入队",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#10] 贯通 W10 真实任务：历史账单已 succeeded，out_biz_no 分支准确复核",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#11] 贯通 W10 真实任务：历史账单已 succeeded，missing 分支准确复核",
+    "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#12] 贯通 W10 真实任务：历史账单已 succeeded，channel_order_id 分支准确复核"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "75fc5594572fa7d81492ec112480e2897d86335b",
+      "tree": "af44d9946615d930d23c37947e79613763d8ec31",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T00:13:53Z",
+      "finished_at": "2026-11-06T00:14:09Z",
+      "red_tests": [
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#1] alipay W10 恰一个无延迟任务，payload 三字段准确，与 PAID_API 状态变更事件的 xmin 相同；同键重放仍一个",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#2] 银行卡与微信 W10 判成功不入复核队列，同场 alipay 成功才入队",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#3] resolve_query_failed 拒绝不入队，修正条件后同键判成功恰一个任务",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#4] resolve_order_id_taken 拒绝不入队，修正条件后同键判成功恰一个任务",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#5] resolve_paid_at_invalid 拒绝不入队，修正条件后同键判成功恰一个任务",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#6] audit 故障回滚不留任务；同键重试成功才入队",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#7] voucher 故障回滚不留任务；同键重试成功才入队",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#8] tax_ytd 故障回滚不留任务；同键重试成功才入队",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#9] 缺少已核实名 resolve_identity_missing 不留任务；实名完整的单正常入队",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#10] 贯通 W10 真实任务：历史账单已 succeeded，out_biz_no 分支准确复核",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#11] 贯通 W10 真实任务：历史账单已 succeeded，missing 分支准确复核",
+        "test/spec/payout/w10-late-paid/w10.int.test.ts > [AC-B2-09u#12] 贯通 W10 真实任务：历史账单已 succeeded，channel_order_id 分支准确复核"
+      ],
+      "expected": ["test/spec/payout/w10-late-paid/w10.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "963edff0c358f1418a96b550972291cbea2395aa1546d456d9451f684f320338"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d706621046baae19c8e2770e4ee8a6cd66988161",
+    "specs": "4e438a320cb0da577f7f5ef420f3aa5a7c15b9b6"
+  }
+}

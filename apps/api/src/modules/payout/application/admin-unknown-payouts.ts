@@ -38,6 +38,7 @@ import {
 import { readPayoutChannelConfig } from './judgement.ts';
 import { instant } from './payout-landing.ts';
 import { PAYOUT_MANUAL_QUERY_SOURCE } from './query-manual.ts';
+import { PAYOUT_RECON_CHANNEL, sendLatePaidCheck } from './recon-schedule.ts';
 import {
   createTaxYtdAccumulator,
   type TaxYtdIdentityKeyReader,
@@ -524,6 +525,11 @@ export function resolveAdminUnknownPayout(
         name: 'wallet.withdrawal_changed',
         payload: { withdrawal_id: row.id, user_id: row.user_id, status: transition.to },
       });
+      // B2-09u (BR-WDR-23): the paid_at a person gave may fall on a bill day R2 has finished,
+      // which no later daily run picks; the worker's single check commits with it.
+      if (row.payout_channel === PAYOUT_RECON_CHANNEL) {
+        await sendLatePaidCheck(deps.queue, trx, { app_id: appId, withdrawal_id: id, round: 0 });
+      }
       await deps.auditOn(trx).append({
         appId,
         actor: adminId,
