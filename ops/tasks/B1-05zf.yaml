@@ -17,4 +17,5 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 2417

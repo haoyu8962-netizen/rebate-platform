@@ -19,4 +19,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/unknown-list-row/**'
-status: todo
+status: done
+pr: 2499

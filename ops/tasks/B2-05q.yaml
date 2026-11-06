@@ -34,5 +34,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/withdraw-blocklist-hits/**'
-status: todo
-pr: null
+status: done
+pr: 2441

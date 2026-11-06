@@ -20,4 +20,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/w10-late-paid/**'
-status: todo
+status: done
+pr: 2443

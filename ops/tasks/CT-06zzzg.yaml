@@ -28,4 +28,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify:fast'
-status: todo
+status: done
+pr: 2455

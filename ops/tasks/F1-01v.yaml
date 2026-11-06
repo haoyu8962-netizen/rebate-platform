@@ -18,5 +18,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/h5-dark/**'
-status: todo
-pr: null
+status: done
+pr: 2479
