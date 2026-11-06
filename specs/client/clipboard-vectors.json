@@ -16,18 +16,19 @@
     "reason": "2026-10-17 改版后旧默认开启/探测提示条口径作废；旧数组仅供历史追溯，不参与读取门槛验收。"
   },
   "importGate": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "sources": [
       "couli origin/main b90e712f5255a9600ebf6f0f3b561afd1b4f8d9e: 规划/03_前端架构.md §4.6; 规划/08_业务规则/10_ID_身份授权与合规.md BR-ID-16",
       "NATIVE/FU-AND-0722/decision.md G05/G10/G11/G13/G16/G17/G21/G47",
-      "FU-AND-0723 tests-review-r1 S1-1..3 / S2-1..12；brief r1 后本线裁定（纯逻辑，接线与旧测试退役归 0724）"
+      "FU-AND-0723 tests-review-r1 S1-1..3 / S2-1..12；brief r1 后本线裁定（纯逻辑，接线与旧测试退役归 0724）",
+      "couli b144fc0d07aeafb9503457ffd824056a6ac8e02d：规划/08_业务规则/10_ID_身份授权与合规.md BR-ID-16 2026-10-30 版（默认开启：同意当前隐私政策后即按其余门槛自动读取，无用途说明弹层；自动门槛②、手动门槛②作废；已关闭的保持关闭，从未选择的按开启处理）；docs/changes/20261030-剪贴板默认开启.md §2 第 1–5 行、§3 第 1–2 条。DSX-42a 据此改写本组 34 行（30 行改写、4 行删除），schemaVersion 1→2：enabled=null 的含义、storedConsentVersion/seenVersion 与 config.clipboard.consent_version 不再参与判定、consumed 前置动作不再经用途弹层。"
     ],
     "fields": {
       "platforms": "适用端；runner 只执行包含本端的行。auto_read 交叉行每端独立一对。这里系统资格与本端节流条件预置为通过，iOS/鸿蒙另立适配向量，不推断系统必然允许读取。",
-      "state": "完整初始快照，不允许 runner 补业务默认值；config 是 /v1/config.data 原形，auto_read 缺键由产品判定。",
+      "state": "完整初始快照，不允许 runner 补业务默认值；config 是 /v1/config.data 原形，auto_read 缺键由产品判定。config.clipboard.consent_version 2026-10-30 起不参与判定：有无、null、空串或取值都不影响 reads/notices（BR-ID-16 自动门槛②作废），本组照原形保留，C4_* 行专测这一点。",
       "privacyAgreed": "已同意当前隐私版本；false 包括未决定/基本模式/版本过期。",
-      "enabled": "本机开关 true/false/null（未选择）。",
-      "storedConsentVersion/seenVersion": "本机功能同意版本/已看用途说明版本，null 表示没有。",
+      "enabled": "本机开关 true/false/null（未选择）。2026-10-30 起默认开启：null 且 privacyAgreed=true 按开启处理（从未作出选择的视同开启）；false 是用户已关闭，保持关闭、不自动读取；privacyAgreed=false 时不论 enabled 都不读。",
+      "storedConsentVersion/seenVersion": "2026-10-30 前的本机功能同意版本/已看用途说明版本，2026-10-30 起不参与判定（变更记录 §2 第 1–3 行）。快照里保留只为形状兼容：DSX-42a 改写的行统一为 null（无旧残留），其余行沿用原值；runner 不必写入这两项，端上残留的旧键也不得改变 reads/notices。旧键到新开关的升级迁移（变更记录 §3 第 1 条）不在本组，见各端专属迁移向量。",
       "route/homeRoot": "当前路由与是否首页根页；Android 0724 按 G27 只有 Home 根页；AgentChat 0725 恢复，其他端仍沿用原期望。",
       "pageReady/interactive/focused": "页面就绪/可交互/窗口获焦，分别覆盖门槛④。",
       "modal": {
@@ -54,15 +55,15 @@
           "force_update"
         ],
         "waiting": ["payment", "login", "trade_jump", "trade_return_confirmation", "update_prompt"],
-        "semantics": "敏感浮层按 BR-ID-16 敏感清单及 03 §4.6 sensitivePage→markSkipped，消费本轮，关闭后不补读/弹用途层；其余模态只阻断 gate⑤，按 03 §4.6 !autoGatesPass→return 保留 pending，关闭后同轮再尝试；update_prompt 另有 G22/G31 等待先例。login 是 Home 上的普通互斥任务标志，不等于 route=Login；实际进入 Login 路由仍消费跳过。"
+        "semantics": "敏感浮层按 BR-ID-16 敏感清单及 03 §4.6 sensitivePage→markSkipped，消费本轮，关闭后不补读（用途说明弹层 2026-10-30 起取消，不参与判定）；其余模态只阻断 gate⑤，按 03 §4.6 !autoGatesPass→return 保留 pending，关闭后同轮再尝试；update_prompt 另有 G22/G31 等待先例。login 是 Home 上的普通互斥任务标志，不等于 route=Login；实际进入 Login 路由仍消费跳过。"
       },
       "webSuppressed": "当前页面实例 H5 暂停标记。",
       "foreground": "前置动作，不是给产品塞布尔状态。true：Android 送 PROCESS_FOREGROUND；iOS 用 scene 将进入前台的等价入口；鸿蒙用 UIAbility 回前台的等价入口。false：不送任何进入前台事件，仅发目标页就绪通知。",
-      "consumed": "前置动作，不直接改内部字段。true 时先经本端用途弹层已显示入口携带当前 epoch 标记本轮；Android onNoticeShown(epoch)，iOS/鸿蒙用语义等价入口；false 不发该事件。",
-      "expect": "结算后 reads/notices 端口累计入口计数；pending/consumed 存在时才断言状态。G11 非目标页只锁 pending=false 和恢复后不补读/不补弹，不限制 consumed 内部表示。",
+      "consumed": "前置动作，不直接改内部字段。true 时先经本端「本轮已消费」的等价入口携带当前 epoch 标记本轮，该前置动作不计入 expect 的 reads/notices；false 不发该事件。原「经用途弹层已显示入口（Android onNoticeShown(epoch)）标记」随弹层取消，2026-10-30 起不参与判定。",
+      "expect": "结算后 reads/notices 端口累计入口计数；pending/consumed 存在时才断言状态。notices 是用途说明弹层入口计数，弹层 2026-10-30 起取消、不参与判定，所有行恒为 0（保留为回归守卫）。G11 非目标页只锁 pending=false 和恢复后不补读/不补弹，不限制 consumed 内部表示。",
       "afterReady": "可选的恢复动作+期望。route:String、homeRoot:Boolean 必填，设置该目标且 pageReady/interactive/focused=true、modal=none，其余状态保持；只发 pageReady，不新建 epoch。reads:Int、notices:Int 为结算后的累计入口次数，两个都必须断言。",
       "throttle": "门槛⑦ Android 恒通过，无跨轮节流由时序测试锁住。iOS deniedAt 与拒绝后节流、鸿蒙资格/授权及节流另立适配向量；本组不带 deniedAt，执行本组时各端节流条件预置为通过。",
-      "preferenceSetup": "通过真实存储入口建立 enabled/storedConsentVersion/seenVersion 后逐项核对快照。enabled=true 且 storedConsentVersion=null 必须用 switchOnWithoutConsent（或本端等价入口），不得退化成未选择。"
+      "preferenceSetup": "通过真实存储入口建立 enabled（true/false/null 三态）后逐项核对快照：enabled=true 用设置开关打开（或本端等价入口）建立，打开直接生效、不经弹层，不得退化成未选择；enabled=null 保持未选择，不得在建状态时写成 true/false。storedConsentVersion/seenVersion 2026-10-30 起不参与判定，不再经同意入口建立；原「enabled=true 且 storedConsentVersion=null 必须用 switchOnWithoutConsent」随之不再适用。"
     },
     "cases": [
       {
@@ -135,48 +136,6 @@
           "privacyAgreed": false,
           "enabled": true,
           "storedConsentVersion": "v1",
-          "seenVersion": "v1",
-          "config": { "clipboard": { "consent_version": "v1" } },
-          "route": "Home",
-          "homeRoot": true,
-          "pageReady": true,
-          "interactive": true,
-          "focused": true,
-          "modal": "none",
-          "webSuppressed": false,
-          "foreground": true,
-          "consumed": false
-        },
-        "expect": { "reads": 0, "notices": 0 }
-      },
-      {
-        "name": "R11_consent_mismatch",
-        "platforms": ["android", "ios", "harmony"],
-        "state": {
-          "privacyAgreed": true,
-          "enabled": true,
-          "storedConsentVersion": "v0",
-          "seenVersion": "v0",
-          "config": { "clipboard": { "consent_version": "v1" } },
-          "route": "Home",
-          "homeRoot": true,
-          "pageReady": true,
-          "interactive": true,
-          "focused": true,
-          "modal": "none",
-          "webSuppressed": false,
-          "foreground": true,
-          "consumed": false
-        },
-        "expect": { "reads": 0, "notices": 1, "consumed": true }
-      },
-      {
-        "name": "R11_unselected_seen",
-        "platforms": ["android", "ios", "harmony"],
-        "state": {
-          "privacyAgreed": true,
-          "enabled": null,
-          "storedConsentVersion": null,
           "seenVersion": "v1",
           "config": { "clipboard": { "consent_version": "v1" } },
           "route": "Home",
@@ -417,13 +376,13 @@
         "expect": { "reads": 0, "notices": 0 }
       },
       {
-        "name": "G47_section_missing",
+        "name": "C4_config_section_missing_still_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
           "enabled": true,
-          "storedConsentVersion": "v1",
-          "seenVersion": "v1",
+          "storedConsentVersion": null,
+          "seenVersion": null,
           "config": {},
           "route": "Home",
           "homeRoot": true,
@@ -435,16 +394,16 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "G47_key_missing",
+        "name": "C4_consent_version_key_missing_still_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
           "enabled": true,
-          "storedConsentVersion": "v1",
-          "seenVersion": "v1",
+          "storedConsentVersion": null,
+          "seenVersion": null,
           "config": { "clipboard": {} },
           "route": "Home",
           "homeRoot": true,
@@ -456,16 +415,16 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "G47_null",
+        "name": "C4_consent_version_null_still_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
           "enabled": true,
-          "storedConsentVersion": "v1",
-          "seenVersion": "v1",
+          "storedConsentVersion": null,
+          "seenVersion": null,
           "config": { "clipboard": { "consent_version": null } },
           "route": "Home",
           "homeRoot": true,
@@ -477,16 +436,16 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "G47_empty",
+        "name": "C4_consent_version_empty_still_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
           "enabled": true,
-          "storedConsentVersion": "v1",
-          "seenVersion": "v1",
+          "storedConsentVersion": null,
+          "seenVersion": null,
           "config": { "clipboard": { "consent_version": "" } },
           "route": "Home",
           "homeRoot": true,
@@ -498,7 +457,7 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
         "name": "R14_G11_skip_Login",
@@ -1095,7 +1054,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "G21_first_notice",
+        "name": "default_on_unselected_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1113,28 +1072,7 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 1, "pending": false, "consumed": true }
-      },
-      {
-        "name": "G47_no_bundled_version_1_fallback",
-        "platforms": ["android", "ios", "harmony"],
-        "state": {
-          "privacyAgreed": true,
-          "enabled": true,
-          "storedConsentVersion": "1",
-          "seenVersion": "1",
-          "config": { "clipboard": {} },
-          "route": "Home",
-          "homeRoot": true,
-          "pageReady": true,
-          "interactive": true,
-          "focused": true,
-          "modal": "none",
-          "webSuppressed": false,
-          "foreground": true,
-          "consumed": false
-        },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0, "pending": false, "consumed": true }
       },
       {
         "name": "G11_agent_chat_wait_ready",
@@ -1181,7 +1119,7 @@
         "afterReady": { "route": "AgentChat", "homeRoot": false, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_sensitive_Login",
+        "name": "default_on_sensitive_Login",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1203,7 +1141,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_non_target_Settings",
+        "name": "default_on_non_target_Settings",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1225,7 +1163,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_home_not_root",
+        "name": "default_on_home_not_root",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1247,7 +1185,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_sensitive_modal_step_up",
+        "name": "default_on_sensitive_modal_step_up",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1269,7 +1207,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_sensitive_modal_auth_sheet",
+        "name": "default_on_sensitive_modal_auth_sheet",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1291,7 +1229,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_sensitive_modal_oauth_in_progress",
+        "name": "default_on_sensitive_modal_oauth_in_progress",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1313,7 +1251,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_sensitive_modal_auth_jump",
+        "name": "default_on_sensitive_modal_auth_jump",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1335,7 +1273,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_sensitive_modal_privacy_first_launch",
+        "name": "default_on_sensitive_modal_privacy_first_launch",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1357,7 +1295,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_sensitive_modal_force_update",
+        "name": "default_on_sensitive_modal_force_update",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1379,7 +1317,7 @@
         "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_waiting_modal_payment",
+        "name": "default_on_waiting_modal_payment",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1398,10 +1336,10 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_waiting_modal_login",
+        "name": "default_on_waiting_modal_login",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1420,10 +1358,10 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_waiting_modal_trade_jump",
+        "name": "default_on_waiting_modal_trade_jump",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1442,10 +1380,10 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_waiting_modal_trade_return_confirmation",
+        "name": "default_on_waiting_modal_trade_return_confirmation",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1464,10 +1402,10 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_waiting_modal_update_prompt",
+        "name": "default_on_waiting_modal_update_prompt",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1486,10 +1424,10 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_privacy_not_agreed",
+        "name": "default_on_privacy_not_agreed",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": false,
@@ -1510,7 +1448,7 @@
         "expect": { "reads": 0, "notices": 0 }
       },
       {
-        "name": "notice_background",
+        "name": "default_on_background",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1531,7 +1469,7 @@
         "expect": { "reads": 0, "notices": 0, "pending": false }
       },
       {
-        "name": "G47_new_user_section_missing",
+        "name": "C4_new_user_section_missing_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1549,10 +1487,10 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "G47_new_user_key_missing",
+        "name": "C4_new_user_key_missing_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1570,10 +1508,10 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "G47_new_user_null",
+        "name": "C4_new_user_null_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1591,10 +1529,10 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "G47_new_user_empty",
+        "name": "C4_new_user_empty_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1612,10 +1550,10 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 0 }
+        "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_wait_pageReady",
+        "name": "default_on_wait_pageReady",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1634,10 +1572,10 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_wait_interactive",
+        "name": "default_on_wait_interactive",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1656,10 +1594,10 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
-        "name": "notice_wait_focused",
+        "name": "default_on_wait_focused",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1678,7 +1616,7 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
-        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
       },
       {
         "name": "auto_read_android_only_self_off",
@@ -1837,7 +1775,7 @@
         "expect": { "reads": 1, "notices": 0 }
       },
       {
-        "name": "G47_enabled_without_consent_version_arrives",
+        "name": "settings_on_without_consent_version_reads",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
@@ -1855,17 +1793,17 @@
           "foreground": true,
           "consumed": false
         },
-        "expect": { "reads": 0, "notices": 1, "consumed": true, "pending": false }
+        "expect": { "reads": 1, "notices": 0, "consumed": true, "pending": false }
       },
       {
-        "name": "G47_enabled_without_consent_version_missing",
+        "name": "G30_closed_user_stays_closed",
         "platforms": ["android", "ios", "harmony"],
         "state": {
           "privacyAgreed": true,
-          "enabled": true,
+          "enabled": false,
           "storedConsentVersion": null,
           "seenVersion": null,
-          "config": { "clipboard": {} },
+          "config": { "clipboard": { "consent_version": "v1" } },
           "route": "Home",
           "homeRoot": true,
           "pageReady": true,
@@ -1877,27 +1815,6 @@
           "consumed": false
         },
         "expect": { "reads": 0, "notices": 0 }
-      },
-      {
-        "name": "G30_closed_user_new_consent_version",
-        "platforms": ["android", "ios", "harmony"],
-        "state": {
-          "privacyAgreed": true,
-          "enabled": false,
-          "storedConsentVersion": "v0",
-          "seenVersion": "v0",
-          "config": { "clipboard": { "consent_version": "v1" } },
-          "route": "Home",
-          "homeRoot": true,
-          "pageReady": true,
-          "interactive": true,
-          "focused": true,
-          "modal": "none",
-          "webSuppressed": false,
-          "foreground": true,
-          "consumed": false
-        },
-        "expect": { "reads": 0, "notices": 1, "consumed": true, "pending": false }
       }
     ]
   },
