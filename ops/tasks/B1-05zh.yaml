@@ -1,0 +1,26 @@
+id: B1-05zh
+repo: rebate-platform
+title: catalog、agent：卡片 price_spec_hint 服务端判定（S-19，D10-713）——京东 sku 模式 null，其余一律 spec_uncertain；列表、详情、池回退与 Agent 卡同一判定
+type: impl
+# 2026-11-06 W1 入账（D10-712 / D10-713，方案 couli-runs/B3-lane/s19-price-spec-hint-plan-20261106.md）。判定只在 catalog/domain 一个纯函数：平台 jd 且 product_key.jd.mode=sku → null；其余（淘宝、拼多多、京东 item 模式、池回退、open 复核）→ spec_uncertain；本期不出 price_from（联盟区间与最低规格价字段未在 09 登记，登记后 union 另开小单收窄）。card-assembler 组卡写入，Agent 卡（search/card.ts、quote）照抄 ProductCard 的值。不改 union。Agent 卡字段的契约在 CT-26v，本单实现排在它合并之后。
+refs: [BR-PROD-04]
+refs_hash:
+  BR-PROD-04: 287b67ace136
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/domain/spec-hint.ts'
+  - 'apps/api/src/modules/catalog/domain/spec-hint.test.ts'
+  - 'apps/api/src/modules/catalog/application/card-assembler.ts'
+  - 'apps/api/src/modules/catalog/application/card-assembler.test.ts'
+  - 'apps/api/src/modules/agent/tools/search/card.ts'
+  - 'apps/api/src/modules/agent/tools/search/search.test.ts'
+  - 'apps/api/src/modules/agent/tools/quote/index.ts'
+  - 'apps/api/src/modules/agent/tools/quote/index.test.ts'
+test_paths:
+  - 'test/spec/catalog/price-spec-hint/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/price-spec-hint/**'
+status: todo
