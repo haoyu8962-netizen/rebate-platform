@@ -6,6 +6,7 @@ type: impl
 # 取值只看 08 BR-WATCH-19 细则「商品详情价格走势的最常见价」：同一组每日价（最近 30 个自然日 +08:00，每天当天最后一次券后价）里出现天数最多的价，按分精确比较，并列取最近一天出现的；走势为 no_data 时 null。
 # 门槛与走势共用 price_trend.min_distinct_days，不加开关；服务端计算、三端不自算。source_key 按平台 + 有无券选（拼多多 price_trend.source.pdd / .pdd.general，契约 CT-22e）。
 # D10-694：同 PR 内 test-change 段改 B1-29a 冻结测试 test/spec/catalog/price-trend/**（整对象期望补 mode_price_fen、字段清单加该键、拼多多 source_key 改 .pdd 键；不删不放宽，手算期望值），编排按 #24 核后加标签。
+# D10-704：red_exempt 只登 6 条连带用例（kit.ts 改动致整文件判定，测试体未改）。
 # 依赖契约 CT-22e（openapi ProductPriceTrend.mode_price_fen 与来源键枚举）先合。分工：新鲜独立 Claude 写规则测试，Claude Opus 5.5 实现，Codex 评审。风险 RV1。
 refs: [BR-WATCH-19]
 refs_hash:
@@ -16,6 +17,25 @@ paths:
 test_paths:
   - 'test/spec/catalog/price-trend-mode/**'
   - 'test/spec/catalog/price-trend/**'
+red_exempt:
+  - file: test/spec/catalog/price-trend/compute.test.ts
+    test: '[AC-B1-29a#10] source_key：最后一个点所用那一行 coupon_fen > 0 → price_trend.source；= 0 → price_trend.source.general（前面的点不算）'
+    reason: 冻结 B1-29a 用例，测试体未改；整文件因 kit.ts 加 NO_DATA / modelTrend 被连带判定，与 mode_price_fen 无关（D10-694 / D10-704）
+  - file: test/spec/catalog/price-trend/compute.test.ts
+    test: '[AC-B1-29a#15] 金额是 bigint 原值：2^53+1、2^31+1、奇数 1 都不经浮点、原样作为 final_price_fen'
+    reason: 冻结 B1-29a 用例，测试体未改；整文件因 kit.ts 加 NO_DATA / modelTrend 被连带判定，与 mode_price_fen 无关（D10-694 / D10-704）
+  - file: test/spec/catalog/price-trend/window.test.ts
+    test: '[AC-B1-29a#36] 传给 store.rows 的窗口：Clock = 2031-03-10 12:00:00.000 +08:00 → from 不晚于 Mon Mar 10 2031 04:00:00 GMT+0000 (Coordinated Universal Time) 00:00:00.000 +08:00（窗口首日按 +08:00，不按 UTC 零点），until 晚于 now；身份三元组原样传入'
+    reason: 冻结 B1-29a 用例，测试体未改；整文件因 kit.ts 加 NO_DATA / modelTrend 被连带判定，与 mode_price_fen 无关（D10-694 / D10-704）
+  - file: test/spec/catalog/price-trend/window.test.ts
+    test: '[AC-B1-29a#36] 传给 store.rows 的窗口：Clock = 2031-03-10 23:59:59.999 +08:00 → from 不晚于 Mon Mar 10 2031 15:59:59 GMT+0000 (Coordinated Universal Time) 00:00:00.000 +08:00（窗口首日按 +08:00，不按 UTC 零点），until 晚于 now；身份三元组原样传入'
+    reason: 冻结 B1-29a 用例，测试体未改；整文件因 kit.ts 加 NO_DATA / modelTrend 被连带判定，与 mode_price_fen 无关（D10-694 / D10-704）
+  - file: test/spec/catalog/price-trend/window.test.ts
+    test: '[AC-B1-29a#36] 传给 store.rows 的窗口：Clock = 2031-03-11 00:00:00.000 +08:00 → from 不晚于 Mon Mar 10 2031 16:00:00 GMT+0000 (Coordinated Universal Time) 00:00:00.000 +08:00（窗口首日按 +08:00，不按 UTC 零点），until 晚于 now；身份三元组原样传入'
+    reason: 冻结 B1-29a 用例，测试体未改；整文件因 kit.ts 加 NO_DATA / modelTrend 被连带判定，与 mode_price_fen 无关（D10-694 / D10-704）
+  - file: test/spec/catalog/price-trend/window.test.ts
+    test: '[AC-B1-29a#36] 传给 store.rows 的窗口：Clock = 2031-03-10 07:59:59.999 +08:00 → from 不晚于 Sun Mar 09 2031 23:59:59 GMT+0000 (Coordinated Universal Time) 00:00:00.000 +08:00（窗口首日按 +08:00，不按 UTC 零点），until 晚于 now；身份三元组原样传入'
+    reason: 冻结 B1-29a 用例，测试体未改；整文件因 kit.ts 加 NO_DATA / modelTrend 被连带判定，与 mode_price_fen 无关（D10-694 / D10-704）
 impl: claude
 tester: claude-independent
 accept:
