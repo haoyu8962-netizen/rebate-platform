@@ -679,6 +679,19 @@ jobs:
           echo "host links:"
           echo "$cur"
       - run: pnpm --filter @couli/spec-tests run test:browser
+      # CT-06zzzl (DSX-50, orchestrator 11-06 18:5x): the screenshot-baseline report of the browser
+      # tests (per-page difference percentages, report only, D10-724 ③) is kept as a CI artifact.
+      # DSX-50 writes it under test/.tmp/visual-baseline/; uploaded whether the browser tests passed
+      # or not (not when the run is cancelled); nothing there yet is not an error (before DSX-50).
+      # A separate artifact name, so verify-reuse's verified-<job>-<tree> records are untouched.
+      - name: Upload the screenshot-baseline report (DSX-50)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-baseline-report-${{ steps.tested.outputs.tree }}-${{ github.run_attempt }}
+          path: test/.tmp/visual-baseline/
+          retention-days: 14
+          if-no-files-found: ignore
       # Build smoke (F1-01k, test/vitest.build-smoke.config.ts): builds the H5 entries (APP_ENV=test)
       # and the admin console into a temporary directory, serves each on 127.0.0.1 and opens it in
       # the same Chromium (playwright library): first screen, initial-JS budgets, no jsxDEV.

@@ -1,0 +1,20 @@
+id: CT-06zzzl
+repo: rebate-platform
+title: CT-06zzzl：verify-int-1 浏览器测试后上传 DSX-50 截图基准报告为 CI 产物（test/.tmp/visual-baseline/，只报告、不影响判定）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排 11-06 18:5x 另立门禁单，排 CT-06zzzk 后）。DSX-50（fe，#2520 台账）在浏览器测试里做截图基准比对、先只报告，
+#   验收要求「CI 产物输出每页的差异百分比」；上传要改 .github/（第三类保护路径），所以单列。
+# 改法：verify-int-1 的 test:browser 之后加一步 actions/upload-artifact（与现有同一固定 SHA），if: !cancelled()，路径 test/.tmp/visual-baseline/，
+#   产物名 visual-baseline-report-<tree>-<attempt>（不与 verify-reuse 的 verified-<job>-<tree> 冲突），保留 14 天，没有文件时 ignore（DSX-50 落地前不报错）。
+#   不改任何测试、判定、超时与 ci-gate。DSX-50 的报告目录以此为准（已告知 fe）。按 #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'ops/tasks/CT-06zzzl.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
