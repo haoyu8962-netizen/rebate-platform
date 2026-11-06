@@ -1,0 +1,39 @@
+id: B2-09z
+repo: rebate-platform
+title: B2-09r 锁序用例的偶发红（FU-B209R-FLAKE，BR-WDR-05，D10-701）——确定性交错点改为确认等锁语句就是目标表再放行；期望不变，只改用例块
+type: test-change
+# 2026-11-06 pay 入账（D10-701，CT-06zzzg 的 modify_existing）。CI 偶发：[AC-B2-09r#2] 断言 query 含 account_balances，读到的是 users 那条（pg_stat_activity 的 query 与 wait_event 不同时刻读取）。
+# 编排点名 #2、#4；#1、#3 用同一个 waiting()，同样会偶发，一并登记，编排可删。证据记本机循环 ≥ 20 次全绿。
+refs: [BR-WDR-05]
+refs_hash:
+  BR-WDR-05: 99e2e2654ce0
+deps: [B2-09r]
+paths:
+  - 'test/spec/payout/went-negative-lock-order/recheck.int.test.ts'
+modify_existing:
+  - file: 'test/spec/payout/went-negative-lock-order/recheck.int.test.ts'
+    test: '[AC-B2-09r#1] W9 复查等余额锁期间 −37 变 +37：只清阻断，不驳回、不退冻结、不写审计'
+    reason: flake_fix
+    ruling: D10-701
+    note: 交错点改为在用例块内重复读 pg_stat_activity，直到被外部持锁连接阻塞的那条语句确实是本用例等的表再放行（pg_stat_activity 的 query 与 wait_event 不同时刻读取，偶尔读到上一条 users 语句）；期望不变，fixtures.ts 不动
+  - file: 'test/spec/payout/went-negative-lock-order/recheck.int.test.ts'
+    test: '[AC-B2-09r#2] W9 复查等余额锁期间 +37 变 −37：驳回并退 101 分，恰一条审计'
+    reason: flake_fix
+    ruling: D10-701
+    note: 交错点改为在用例块内重复读 pg_stat_activity，直到被外部持锁连接阻塞的那条语句确实是本用例等的表再放行（pg_stat_activity 的 query 与 wait_event 不同时刻读取，偶尔读到上一条 users 语句）；期望不变，fixtures.ts 不动
+  - file: 'test/spec/payout/went-negative-lock-order/recheck.int.test.ts'
+    test: '[AC-B2-09r#3] W9 复查先等 users，第三连接此时可 NOWAIT 锁余额：禁止余额锁先于 users'
+    reason: flake_fix
+    ruling: D10-701
+    note: 交错点改为在用例块内重复读 pg_stat_activity，直到被外部持锁连接阻塞的那条语句确实是本用例等的表再放行（pg_stat_activity 的 query 与 wait_event 不同时刻读取，偶尔读到上一条 users 语句）；期望不变，fixtures.ts 不动
+  - file: 'test/spec/payout/went-negative-lock-order/recheck.int.test.ts'
+    test: '[AC-B2-09r#4] W9 初次余额锁一直属于驳回事务：审计已写未提交时状态不可见、余额 NOWAIT 仍失败'
+    reason: flake_fix
+    ruling: D10-701
+    note: 交错点改为在用例块内重复读 pg_stat_activity，直到被外部持锁连接阻塞的那条语句确实是本用例等的表再放行（pg_stat_activity 的 query 与 wait_event 不同时刻读取，偶尔读到上一条 users 语句）；期望不变，fixtures.ts 不动
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/went-negative-lock-order/**'
+status: todo
