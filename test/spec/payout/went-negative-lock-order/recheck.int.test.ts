@@ -40,6 +40,22 @@ it(
     const done = app.handle(job);
     void done.catch(() => {});
     try {
+      // pg_stat_activity reads query and wait_event at different moments: read again until the
+      // statement blocked by the holder is the account_balances lock itself (CI once saw the previous one).
+      let seen = false;
+      for (let attempt = 0; attempt < 2000; attempt += 1) {
+        const blocked = await sql<{ query: string }>`
+          SELECT query FROM pg_stat_activity
+          WHERE datname = current_database() AND application_name = ${s.applicationName}
+            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(
+          s.h.observer,
+        );
+        if (blocked.rows.some((row) => row.query.includes('account_balances'))) {
+          seen = true;
+          break;
+        }
+      }
+      expect(seen, '2000 次内没读到被持锁连接阻塞的 account_balances 语句').toBe(true);
       await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');
       await locked.release((trx) => adjustHeld(f, trx, 74n));
       await done;
@@ -68,6 +84,22 @@ it(
     const done = app.handle(job);
     void done.catch(() => {});
     try {
+      // pg_stat_activity reads query and wait_event at different moments: read again until the
+      // statement blocked by the holder is the account_balances lock itself (CI once saw the previous one).
+      let seen = false;
+      for (let attempt = 0; attempt < 2000; attempt += 1) {
+        const blocked = await sql<{ query: string }>`
+          SELECT query FROM pg_stat_activity
+          WHERE datname = current_database() AND application_name = ${s.applicationName}
+            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(
+          s.h.observer,
+        );
+        if (blocked.rows.some((row) => row.query.includes('account_balances'))) {
+          seen = true;
+          break;
+        }
+      }
+      expect(seen, '2000 次内没读到被持锁连接阻塞的 account_balances 语句').toBe(true);
       await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');
       await locked.release((trx) => adjustHeld(f, trx, -74n));
       await done;
@@ -98,6 +130,22 @@ it(
     const done = app.handle(job);
     void done.catch(() => {});
     try {
+      // pg_stat_activity reads query and wait_event at different moments: read again until the
+      // statement blocked by the holder is the users lock itself (CI once saw the previous one).
+      let seen = false;
+      for (let attempt = 0; attempt < 2000; attempt += 1) {
+        const blocked = await sql<{ query: string }>`
+          SELECT query FROM pg_stat_activity
+          WHERE datname = current_database() AND application_name = ${s.applicationName}
+            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(
+          s.h.observer,
+        );
+        if (blocked.rows.some((row) => row.query.includes('users'))) {
+          seen = true;
+          break;
+        }
+      }
+      expect(seen, '2000 次内没读到被持锁连接阻塞的 users 语句').toBe(true);
       await waiting(s.h.observer, s.applicationName, locked.pid, 'users');
       expect((await balanceNowait(f)).rows).toHaveLength(1);
       expect((await withdrawal(f, id)).status).toBe('APPROVED');
@@ -141,6 +189,22 @@ it(
     const done = app.handle(job);
     void done.catch(() => {});
     try {
+      // pg_stat_activity reads query and wait_event at different moments: read again until the
+      // statement blocked by the holder is the account_balances lock itself (CI once saw the previous one).
+      let seen = false;
+      for (let attempt = 0; attempt < 2000; attempt += 1) {
+        const blocked = await sql<{ query: string }>`
+          SELECT query FROM pg_stat_activity
+          WHERE datname = current_database() AND application_name = ${s.applicationName}
+            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(
+          s.h.observer,
+        );
+        if (blocked.rows.some((row) => row.query.includes('account_balances'))) {
+          seen = true;
+          break;
+        }
+      }
+      expect(seen, '2000 次内没读到被持锁连接阻塞的 account_balances 语句').toBe(true);
       firstWait = await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');
       await locked.release();
       await done;

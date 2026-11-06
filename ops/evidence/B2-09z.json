@@ -1,0 +1,98 @@
+{
+  "risk_note": "Test only: four blocks of B2-09r's frozen recheck.int.test.ts, declared modify_existing flake_fix under D10-701 (CT-06zzzg). CI went red at random on [AC-B2-09r#2]: the waiting check read the worker's previous users statement while it already waited on the balance lock, because pg_stat_activity's query and wait_event are not read at the same moment. Each block now reads pg_stat_activity again until the statement blocked by the holder is the expected table's lock, fails by assertion after at most 2000 reads, then calls the unchanged waiting() as before, so every expectation is kept; fixtures.ts and the code outside the blocks are unchanged (compareModifiedBlocks: outside null). The orchestrator named #2 and #4; #1 and #3 use the same waiting() and are declared too.",
+  "modify_existing": [
+    {
+      "file": "test/spec/payout/went-negative-lock-order/recheck.int.test.ts",
+      "test": "[AC-B2-09r#1] W9 复查等余额锁期间 −37 变 +37：只清阻断，不驳回、不退冻结、不写审计",
+      "reason": "flake_fix",
+      "before": "it(\n  '[AC-B2-09r#1] W9 复查等余额锁期间 −37 变 +37：只清阻断，不驳回、不退冻结、不写审计',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, -37n);\n    const before = await withdrawal(f, id);\n    const app = await worker(f, s.db);\n    const locked = await hold(f, 'account_balances');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');\n      await locked.release((trx) => adjustHeld(f, trx, 74n));\n      await done;\n      expect(await withdrawal(f, id)).toEqual({ ...before, blocked_reason: null });\n      const state = await snapshot(f);\n      expect(state.balances[0]).toMatchObject({ available_fen: 37n, frozen_fen: 101n });\n      expect(state.vouchers.filter((v) => v.uniq_key === `wd:${id}:RETURN`)).toEqual([]);\n      expect(state.returns).toEqual([]);\n      expect(await audits(f)).toEqual([]);\n      await invariant(f);\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B2-09r#1] W9 复查等余额锁期间 −37 变 +37：只清阻断，不驳回、不退冻结、不写审计',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, -37n);\n    const before = await withdrawal(f, id);\n    const app = await worker(f, s.db);\n    const locked = await hold(f, 'account_balances');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      // pg_stat_activity reads query and wait_event at different moments: read again until the\n      // statement blocked by the holder is the account_balances lock itself (CI once saw the previous one).\n      let seen = false;\n      for (let attempt = 0; attempt < 2000; attempt += 1) {\n        const blocked = await sql<{ query: string }>`\n          SELECT query FROM pg_stat_activity\n          WHERE datname = current_database() AND application_name = ${s.applicationName}\n            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(\n          s.h.observer,\n        );\n        if (blocked.rows.some((row) => row.query.includes('account_balances'))) {\n          seen = true;\n          break;\n        }\n      }\n      expect(seen, '2000 次内没读到被持锁连接阻塞的 account_balances 语句').toBe(true);\n      await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');\n      await locked.release((trx) => adjustHeld(f, trx, 74n));\n      await done;\n      expect(await withdrawal(f, id)).toEqual({ ...before, blocked_reason: null });\n      const state = await snapshot(f);\n      expect(state.balances[0]).toMatchObject({ available_fen: 37n, frozen_fen: 101n });\n      expect(state.vouchers.filter((v) => v.uniq_key === `wd:${id}:RETURN`)).toEqual([]);\n      expect(state.returns).toEqual([]);\n      expect(await audits(f)).toEqual([]);\n      await invariant(f);\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "local container (colima), worktree commit 1cacb9ca7 (B2-09z), vitest.integration.config.ts spec/payout/went-negative-lock-order run 20 times in a row, 4 of 4 tests green each time (couli-runs/B2-09z/loop-1..20.json); the read-again loop is bounded at 2000 reads and then fails by assertion (expect(seen)), never by the test timeout (orchestrator 10:40)"
+      }
+    },
+    {
+      "file": "test/spec/payout/went-negative-lock-order/recheck.int.test.ts",
+      "test": "[AC-B2-09r#2] W9 复查等余额锁期间 +37 变 −37：驳回并退 101 分，恰一条审计",
+      "reason": "flake_fix",
+      "before": "it(\n  '[AC-B2-09r#2] W9 复查等余额锁期间 +37 变 −37：驳回并退 101 分，恰一条审计',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, 37n);\n    const app = await worker(f, s.db);\n    const locked = await hold(f, 'account_balances');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');\n      await locked.release((trx) => adjustHeld(f, trx, -74n));\n      await done;\n      expect(await withdrawal(f, id)).toMatchObject({\n        status: 'REJECTED',\n        reject_reason_code: 'NEGATIVE_BALANCE',\n      });\n      await expectReturn(f, id, 101n);\n      expect((await snapshot(f)).balances[0]).toMatchObject({ available_fen: 64n, frozen_fen: 0n });\n      expect(await audits(f)).toHaveLength(1);\n      await expectAudit(f, id, 'APPROVED');\n      await invariant(f);\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B2-09r#2] W9 复查等余额锁期间 +37 变 −37：驳回并退 101 分，恰一条审计',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, 37n);\n    const app = await worker(f, s.db);\n    const locked = await hold(f, 'account_balances');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      // pg_stat_activity reads query and wait_event at different moments: read again until the\n      // statement blocked by the holder is the account_balances lock itself (CI once saw the previous one).\n      let seen = false;\n      for (let attempt = 0; attempt < 2000; attempt += 1) {\n        const blocked = await sql<{ query: string }>`\n          SELECT query FROM pg_stat_activity\n          WHERE datname = current_database() AND application_name = ${s.applicationName}\n            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(\n          s.h.observer,\n        );\n        if (blocked.rows.some((row) => row.query.includes('account_balances'))) {\n          seen = true;\n          break;\n        }\n      }\n      expect(seen, '2000 次内没读到被持锁连接阻塞的 account_balances 语句').toBe(true);\n      await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');\n      await locked.release((trx) => adjustHeld(f, trx, -74n));\n      await done;\n      expect(await withdrawal(f, id)).toMatchObject({\n        status: 'REJECTED',\n        reject_reason_code: 'NEGATIVE_BALANCE',\n      });\n      await expectReturn(f, id, 101n);\n      expect((await snapshot(f)).balances[0]).toMatchObject({ available_fen: 64n, frozen_fen: 0n });\n      expect(await audits(f)).toHaveLength(1);\n      await expectAudit(f, id, 'APPROVED');\n      await invariant(f);\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "local container (colima), worktree commit 1cacb9ca7 (B2-09z), vitest.integration.config.ts spec/payout/went-negative-lock-order run 20 times in a row, 4 of 4 tests green each time (couli-runs/B2-09z/loop-1..20.json); the read-again loop is bounded at 2000 reads and then fails by assertion (expect(seen)), never by the test timeout (orchestrator 10:40)"
+      }
+    },
+    {
+      "file": "test/spec/payout/went-negative-lock-order/recheck.int.test.ts",
+      "test": "[AC-B2-09r#3] W9 复查先等 users，第三连接此时可 NOWAIT 锁余额：禁止余额锁先于 users",
+      "reason": "flake_fix",
+      "before": "it(\n  '[AC-B2-09r#3] W9 复查先等 users，第三连接此时可 NOWAIT 锁余额：禁止余额锁先于 users',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, -37n);\n    const app = await worker(f, s.db);\n    const locked = await hold(f, 'users');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      await waiting(s.h.observer, s.applicationName, locked.pid, 'users');\n      expect((await balanceNowait(f)).rows).toHaveLength(1);\n      expect((await withdrawal(f, id)).status).toBe('APPROVED');\n      await locked.release();\n      await done;\n      await expectReturn(f, id, 101n);\n      await expectAudit(f, id, 'APPROVED');\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B2-09r#3] W9 复查先等 users，第三连接此时可 NOWAIT 锁余额：禁止余额锁先于 users',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, -37n);\n    const app = await worker(f, s.db);\n    const locked = await hold(f, 'users');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      // pg_stat_activity reads query and wait_event at different moments: read again until the\n      // statement blocked by the holder is the users lock itself (CI once saw the previous one).\n      let seen = false;\n      for (let attempt = 0; attempt < 2000; attempt += 1) {\n        const blocked = await sql<{ query: string }>`\n          SELECT query FROM pg_stat_activity\n          WHERE datname = current_database() AND application_name = ${s.applicationName}\n            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(\n          s.h.observer,\n        );\n        if (blocked.rows.some((row) => row.query.includes('users'))) {\n          seen = true;\n          break;\n        }\n      }\n      expect(seen, '2000 次内没读到被持锁连接阻塞的 users 语句').toBe(true);\n      await waiting(s.h.observer, s.applicationName, locked.pid, 'users');\n      expect((await balanceNowait(f)).rows).toHaveLength(1);\n      expect((await withdrawal(f, id)).status).toBe('APPROVED');\n      await locked.release();\n      await done;\n      await expectReturn(f, id, 101n);\n      await expectAudit(f, id, 'APPROVED');\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "local container (colima), worktree commit 1cacb9ca7 (B2-09z), vitest.integration.config.ts spec/payout/went-negative-lock-order run 20 times in a row, 4 of 4 tests green each time (couli-runs/B2-09z/loop-1..20.json); the read-again loop is bounded at 2000 reads and then fails by assertion (expect(seen)), never by the test timeout (orchestrator 10:40)"
+      }
+    },
+    {
+      "file": "test/spec/payout/went-negative-lock-order/recheck.int.test.ts",
+      "test": "[AC-B2-09r#4] W9 初次余额锁一直属于驳回事务：审计已写未提交时状态不可见、余额 NOWAIT 仍失败",
+      "reason": "flake_fix",
+      "before": "it(\n  '[AC-B2-09r#4] W9 初次余额锁一直属于驳回事务：审计已写未提交时状态不可见、余额 NOWAIT 仍失败',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, -37n);\n    const before = await effects(f, job);\n    let firstWait: { pid: number; backend_xid: string | null } | undefined;\n    async function sameTransaction() {\n      expect(firstWait).toBeDefined();\n      const result = await sql<{ backend_xid: string | null; state: string }>`\n      SELECT backend_xid::text, state FROM pg_stat_activity\n      WHERE pid = ${firstWait!.pid}`.execute(s.h.observer);\n      expect(firstWait!.backend_xid).not.toBeNull();\n      expect(result.rows).toEqual([\n        { backend_xid: firstWait!.backend_xid, state: 'idle in transaction' },\n      ]);\n      await expect(balanceNowait(f)).rejects.toMatchObject({ code: '55P03' });\n      await expect(usersNowait(f)).rejects.toMatchObject({ code: '55P03' });\n      expect(await effects(f, job, s.h.observer)).toEqual(before);\n    }\n    // W3 locks balances again: checking only after its audit would miss an earlier autocommit lock.\n    const early = beforeReject(sameTransaction);\n    const late = afterInsert('audit_logs', sameTransaction);\n    const app = await worker(f, s.db.withPlugin(early.plugin).withPlugin(late.plugin));\n    const locked = await hold(f, 'account_balances');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      firstWait = await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');\n      await locked.release();\n      await done;\n      expect(early.hits()).toBe(1);\n      expect(late.hits()).toBe(1);\n      expect((await withdrawal(f, id)).status).toBe('REJECTED');\n      await expectReturn(f, id, 101n);\n      expect(await audits(f)).toHaveLength(1);\n      await expectAudit(f, id, 'APPROVED');\n      expect((await balanceNowait(f)).rows, '提交后余额锁释放').toHaveLength(1);\n      expect((await usersNowait(f)).rows, '提交后 users 锁释放').toHaveLength(1);\n      await invariant(f);\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B2-09r#4] W9 初次余额锁一直属于驳回事务：审计已写未提交时状态不可见、余额 NOWAIT 仍失败',\n  async () => {\n    const { f, id, job } = await afterW9(s.h);\n    await changeAvailable(f, -37n);\n    const before = await effects(f, job);\n    let firstWait: { pid: number; backend_xid: string | null } | undefined;\n    async function sameTransaction() {\n      expect(firstWait).toBeDefined();\n      const result = await sql<{ backend_xid: string | null; state: string }>`\n      SELECT backend_xid::text, state FROM pg_stat_activity\n      WHERE pid = ${firstWait!.pid}`.execute(s.h.observer);\n      expect(firstWait!.backend_xid).not.toBeNull();\n      expect(result.rows).toEqual([\n        { backend_xid: firstWait!.backend_xid, state: 'idle in transaction' },\n      ]);\n      await expect(balanceNowait(f)).rejects.toMatchObject({ code: '55P03' });\n      await expect(usersNowait(f)).rejects.toMatchObject({ code: '55P03' });\n      expect(await effects(f, job, s.h.observer)).toEqual(before);\n    }\n    // W3 locks balances again: checking only after its audit would miss an earlier autocommit lock.\n    const early = beforeReject(sameTransaction);\n    const late = afterInsert('audit_logs', sameTransaction);\n    const app = await worker(f, s.db.withPlugin(early.plugin).withPlugin(late.plugin));\n    const locked = await hold(f, 'account_balances');\n    const done = app.handle(job);\n    void done.catch(() => {});\n    try {\n      // pg_stat_activity reads query and wait_event at different moments: read again until the\n      // statement blocked by the holder is the account_balances lock itself (CI once saw the previous one).\n      let seen = false;\n      for (let attempt = 0; attempt < 2000; attempt += 1) {\n        const blocked = await sql<{ query: string }>`\n          SELECT query FROM pg_stat_activity\n          WHERE datname = current_database() AND application_name = ${s.applicationName}\n            AND wait_event_type = 'Lock' AND ${locked.pid}::int = ANY(pg_blocking_pids(pid))`.execute(\n          s.h.observer,\n        );\n        if (blocked.rows.some((row) => row.query.includes('account_balances'))) {\n          seen = true;\n          break;\n        }\n      }\n      expect(seen, '2000 次内没读到被持锁连接阻塞的 account_balances 语句').toBe(true);\n      firstWait = await waiting(s.h.observer, s.applicationName, locked.pid, 'account_balances');\n      await locked.release();\n      await done;\n      expect(early.hits()).toBe(1);\n      expect(late.hits()).toBe(1);\n      expect((await withdrawal(f, id)).status).toBe('REJECTED');\n      await expectReturn(f, id, 101n);\n      expect(await audits(f)).toHaveLength(1);\n      await expectAudit(f, id, 'APPROVED');\n      expect((await balanceNowait(f)).rows, '提交后余额锁释放').toHaveLength(1);\n      expect((await usersNowait(f)).rows, '提交后 users 锁释放').toHaveLength(1);\n      await invariant(f);\n    } finally {\n      await Promise.allSettled([locked.release(), done]);\n      await app.close();\n    }\n  },\n  TIMEOUT,\n);",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "local container (colima), worktree commit 1cacb9ca7 (B2-09z), vitest.integration.config.ts spec/payout/went-negative-lock-order run 20 times in a row, 4 of 4 tests green each time (couli-runs/B2-09z/loop-1..20.json); the read-again loop is bounded at 2000 reads and then fails by assertion (expect(seen)), never by the test timeout (orchestrator 10:40)"
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/B2-09z/money-review-r1.json, static, no findings. Reviewed before the rebase."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "A fresh Claude via claude-run.sh, couli-runs/B2-09z/claude-money-r1.json, static, no findings: only the four declared blocks change, each read-again loop is bounded at 2000 reads and fails by expect(seen), the imports, fixtures.ts and every expectation are kept. tester none, so the money type is used (B2-09o, B2-09r)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09z",
+  "spec_commit": "6ff385d5158485329f884d08a872e51da6c4b004",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "128710304880f5d4c9c8f5ff33e8c199195246a6",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}
