@@ -4,6 +4,7 @@ title: B2-09t 冻结用例 [AC-B2-09t#35] 的超时红改断言红（FU-B2-09T-A
 type: test-change
 # 2026-11-06 pay 入账。原定并进 B2-09u（编排 02:56 按 D10-327 已准改这一条），但 red-check 规定改过的用例必须在旧代码上红，#35 在主干正确实现上本来就绿，过不了先红，所以单独走绿着的 test-change（同 B2-09o、B2-09r 形状：tester none、不写 test_paths）。
 # 改法：runLate 前把 f.send 换成一调用就 expect.fail 的实现，之后恢复；其他用例和 harness 不动。补丁由 Codex 在 B2-09u 第 1 轮写出（未提交），本单作者核对后提交；新鲜 Claude 评，变异实跑（等待优先于已报告）要几秒内断言红。
+# 2026-11-06 作废（D10-700 / D10-749）：D10-743 曾移给 withdraw 重开，实测原 #35 对「等待优先于已报告」的变异已是断言红（46–111 ms，单跑 / 整文件 / 整目录三种跑法都不超时），拿不出 tighten_only 要的「改后杀、改前杀不了」的变异体，不做。实测报告 couli-runs/B2-09v/mut-*.json；task/B2-09v 的本地提交不推。
 refs: [BR-WDR-23]
 refs_hash:
   BR-WDR-23: 98981fee10c7
@@ -15,4 +16,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/recon-late-paid/**'
-status: todo
+status: void
+pr: null

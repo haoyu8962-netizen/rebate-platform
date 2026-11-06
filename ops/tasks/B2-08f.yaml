@@ -19,5 +19,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/proven-success-logger/**'
-status: todo
-pr: null
+status: done
+pr: 2510
