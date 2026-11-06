@@ -19,4 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/risk/blocklist-hit-order/**'
-status: todo
+status: done
+pr: 2543
