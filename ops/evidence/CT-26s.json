@@ -1,0 +1,43 @@
+{
+  "task": "CT-26s",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "spec_commit": "cd72526ae646655ba29c19651099df18db4b7b00",
+  "red_tests": [],
+  "risk_note": "RV1 contract (D10-664 S-02; D10-688). ProductCard gains optional detail-only fields per 04 §8.3 「商品详情专用字段」: coupon_end_at (date-time | null), sales_text (string | null), shop_logo (uri | null), shop_scores (ProductShopScore {key ∈ desc/serv/lgst/level, value}, at most 4), shop_entry (boolean), each documented as carried only by GET /v1/products/{product_key} with its fallback; and price_spec_hint (price_from / spec_uncertain / null, BR-PROD-04), carried by every card response, list-type cards null until S-19 (D10-688). ProductOk example updated. Additive only (contracts/README rule 8).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: new fields against planning 04 at SPEC_REF and the ADR, detail-only scope, compatibility, example and generated types. Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "none",
+    "rounds": 0,
+    "last_verdict": "n/a",
+    "note": "contract task, ledger tester: none"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "250083d18c249fb370ea4ee26a26ed9e26a7d7a7",
+    "specs": "0f086a2b7e98b0fc2ca36e1cc9c7f251253c8a0c"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

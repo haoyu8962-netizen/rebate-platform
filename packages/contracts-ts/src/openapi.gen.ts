@@ -13554,6 +13554,83 @@ export interface components {
              *     caller has favorited this product; false when not logged in (规划/01 F-PROD-12).
              */
             favorited?: boolean;
+            /**
+             * Format: date-time
+             * @description Only on GET /v1/products/{product_key} (product detail, 04 §8.3「商品详情专用字段」,
+             *     D10-664); absent on every other card (search, lists, sections, parse, rank, favourites,
+             *     Agent). End time of the selected coupon, ISO 8601 with +08:00, normalised as BR-PRICE-01
+             *     细则「时间与剩余量」 (no time zone read as +08:00; a date-only end becomes the next day
+             *     00:00:00+08:00). Non-null only when coupon_fen > 0 and the union gives the selected
+             *     coupon's end time; null while the platform's `detail.coupon_end.enabled.<platform>` is
+             *     off (default off until 规划/09 registers the field's meaning and time zone). Display:
+             *     BR-PRICE-04 细则「商品详情的券标签」; null or absent shows only the amount part of the
+             *     coupon tag, with no default end time.
+             */
+            coupon_end_at?: string | null;
+            /**
+             * @description Only on GET /v1/products/{product_key} (04 §8.3「商品详情专用字段」); absent on every
+             *     other card. The union's sales field as an unchanged string (for now only pinduoduo
+             *     sales_tip), same meaning as `sales_text` of GET /v1/rank/hot; never computed or
+             *     estimated (BR-TEXT-13 细则「虚拟数据」). Null when the platform's
+             *     `detail.sales.enabled.<platform>` is off or the union gives none; null or absent hides
+             *     the sales line.
+             */
+            sales_text?: string | null;
+            /**
+             * Format: uri
+             * @description Only on GET /v1/products/{product_key} (04 §8.3「商品详情专用字段」); absent on every
+             *     other card. Shop logo address as the union gives it; for now only pinduoduo
+             *     `mall_img_url` may carry one (official docs, not yet recorded, 规划/09 §6 U-92); the
+             *     taobao and jd product APIs give none. Null or absent: the client shows the platform
+             *     mark instead (规划/03 §10.2 `StoreCard`).
+             */
+            shop_logo?: string | null;
+            /**
+             * @description Only on GET /v1/products/{product_key} (04 §8.3「商品详情专用字段」); absent on every
+             *     other card. Shop scores as the union gives them, each key at most once; [] while the
+             *     platform's `detail.shop_scores.enabled.<platform>` is off. The client shows each item
+             *     as label (`shop.score.<key>`) plus the unchanged value, hides an empty item and hides
+             *     the whole line when none is left (BR-TEXT-14 表 C「商品详情·店铺评分」, BR-TEXT-13
+             *     细则「虚拟数据」).
+             */
+            shop_scores?: components["schemas"]["ProductShopScore"][];
+            /**
+             * @description Only on GET /v1/products/{product_key} (04 §8.3「商品详情专用字段」); absent on every
+             *     other card. Whether the shop can be entered, decided by the server per BR-PRICE-21
+             *     细则「进店」 (`shop.entry.enabled.<platform>` on, the product has a shop id and the
+             *     configured source can make a shop link carrying the user's attribution). false or
+             *     absent: no 【进店】 and the shop block is not tappable.
+             */
+            shop_entry?: boolean;
+            /**
+             * @description Spec qualifier of the price, decided by the server per BR-PROD-04 (and its 细则); the
+             *     client never infers it from title, spec_text or prices. price_from: the union returned
+             *     a price range or the price is known to be the lowest spec's, so the main price reads
+             *     「¥x 起」 (amount per BR-TEXT-10, e.g. 券后 ¥29.9 起) with no further note.
+             *     spec_uncertain: the spec the product-level price belongs to cannot be determined, so
+             *     `spec_min_price_note` (规格以下单页为准) is shown beside the price (on product detail
+             *     in the coupon tag row, BR-PRICE-04 细则「商品详情的券标签」). null: neither. Carried by
+             *     every card response (BR-PROD-04: beside the price on cards and on product detail;
+             *     D10-688); list-type cards give null until the server-side judgement (S-19) covers them.
+             *     Absent is read as null.
+             * @enum {string|null}
+             */
+            price_spec_hint?: "price_from" | "spec_uncertain" | null;
+        };
+        /** @description One shop score of the product detail card (04 §8.3「商品详情专用字段」). */
+        ProductShopScore: {
+            /**
+             * @description desc (描述), serv (服务), lgst (物流), level (店铺等级); labels `shop.score.<key>`
+             *     (BR-TEXT-14 表 C). Unknown keys are skipped by the client.
+             * @enum {string}
+             */
+            key: "desc" | "serv" | "lgst" | "level";
+            /**
+             * @description The union's value unchanged (pinduoduo 高 / 中 / 低, jd shop level digits), not a
+             *     dictionary key and never computed; the jd level scale is shown as is until 规划/09
+             *     confirms it.
+             */
+            value: string;
         };
         SearchProductsData: {
             items: components["schemas"]["ProductCard"][];
