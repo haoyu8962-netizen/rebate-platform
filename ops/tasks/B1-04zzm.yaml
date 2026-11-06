@@ -12,6 +12,7 @@ type: impl
 # 拼多多：pdd/goods.ts 详情映射（coupon_end_time 秒；与现有选券同一张券）。京东：jd/goods.ts 详情映射（所选券 couponList[].useEndTime 毫秒、shopInfo.shopLevel / shopId；等 goods.query 返回才有）。淘宝整段推迟到 09 TB §2.10 复录之后（D10-736 ⑤），本单淘宝不出这些字段。
 # 开关关时联盟数据照常取、只在出卡时置空（D10-736 ⑦，由 S09b 做），本单不看开关。字段含义未实测的照 09 已登记「文档已查、未实测」口径，不臆造平台事实。
 # 风险：union 适配器 → RV2；新鲜独立 Claude 写规则测试，资金评审。
+# 完成 2026-11-07（#2545）：京东搜索与详情共用 mapJdGoods，搜索行也带 coupon_end_at / shop_scores / shop_ref（jd-adapter 不在 paths；契约只在详情卡出，由 catalog 取舍）；拼多多三项评分全缺时不出 shop_scores。
 refs: []
 refs_hash: {}
 deps: [B1-04zzk]
@@ -29,4 +30,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/detail-extras/**'
-status: todo
+status: done
+pr: 2545

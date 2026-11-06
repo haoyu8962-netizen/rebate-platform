@@ -2,7 +2,8 @@
 // 规则测试：test/spec/union/jd-goods/**；映射口径见 specs/union/jd.md（D10-525）。
 // 权限批下前只按文档，字段待实测再校。映射只读下列字段，从不 spread 整份报文：itemId、skuId、skuName、
 // priceInfo.{price, lowestCouponPrice}、commissionInfo.commissionShare、
-// couponInfo.couponList[].{discount, quota, useStartTime, useEndTime, couponStatus}。
+// couponInfo.couponList[].{discount, quota, useStartTime, useEndTime, couponStatus}，
+// 以及 shopInfo.{shopName, shopLevel, shopId}（B1-04zzg / B1-04zzm）。
 // lowestPrice 不读；lowestCouponPrice 只用于比对告警，不参与计算；isBest 不看；图片不映射（B1-22s）。
 // 报价字段的 JSON 数字先 String(Number(原文)) 再交 parseYuanToFen（D10-525），佣金比例取原文按
 // BR-CALC-26 floor。错误与告警只带固定文案、商品标识与分值，不带报文内容、比例原文、关键词、券链接。
@@ -11,7 +12,10 @@ import { parseYuanToFen } from '@couli/domain';
 import { InvalidRatio, pctStrToBp, subFen } from '@couli/money';
 import type { PriceAnomalyReason } from '../../domain/taobao-price.ts';
 import {
+  couponEndAtField,
   shopNameField,
+  shopRefField,
+  shopScoresField,
   UnionError,
   type ItemRef,
   type UnionItemDetail,
@@ -232,8 +236,14 @@ function commissionBp(value: unknown): bigint | undefined {
   }
 }
 
+/** 选中的券连同它的 useEndTime（毫秒）；只在本文件内用，不外露券的其他字段。 */
+interface JdSelectedCoupon {
+  readonly choice: JdCouponChoice;
+  readonly end_ms: number;
+}
+
 /** 一张券合格时给出面额与门槛。缺 discount、quota 或有效期，或不可领取的，都不是候选。 */
-function eligibleCoupon(entry: unknown, priceFen: bigint, nowMs: number): JdCouponChoice | null {
+function eligibleCoupon(entry: unknown, priceFen: bigint, nowMs: number): JdSelectedCoupon | null {
   if (!isRecord(entry)) return null;
   if (scalarText(field(entry, 'couponStatus')) === NOT_CLAIMABLE_STATUS) return null;
   const discount = quoteFen(field(entry, 'discount'));
@@ -243,7 +253,31 @@ function eligibleCoupon(entry: unknown, priceFen: bigint, nowMs: number): JdCoup
   if (discount === undefined || quota === undefined) return null;
   if (start === undefined || end === undefined) return null;
   if (nowMs < start || nowMs >= end || priceFen < quota) return null;
-  return { discount_fen: discount, quota_fen: quota };
+  return { choice: { discount_fen: discount, quota_fen: quota }, end_ms: end };
+}
+
+/**
+ * 选券本体（BR-PRICE-01）：合格券里面额最大，面额相同取门槛低的；完全并列保留先出现的那张。
+ * pickJdCoupon 与 coupon_end_at（B1-04zzm）都从这里取，保证结束时刻与 coupon_fen 是同一张券。
+ */
+function selectJdCoupon(
+  coupons: unknown,
+  priceFen: bigint,
+  nowMs: number,
+): JdSelectedCoupon | null {
+  if (!Array.isArray(coupons)) return null;
+  let best: JdSelectedCoupon | null = null;
+  for (const entry of coupons as readonly unknown[]) {
+    const candidate = eligibleCoupon(entry, priceFen, nowMs);
+    if (candidate === null) continue;
+    const better =
+      best === null ||
+      candidate.choice.discount_fen > best.choice.discount_fen ||
+      (candidate.choice.discount_fen === best.choice.discount_fen &&
+        candidate.choice.quota_fen < best.choice.quota_fen);
+    if (better) best = candidate;
+  }
+  return best;
 }
 
 /**
@@ -255,18 +289,7 @@ export function pickJdCoupon(
   priceFen: bigint,
   nowMs: number,
 ): JdCouponChoice | null {
-  if (!Array.isArray(coupons)) return null;
-  let best: JdCouponChoice | null = null;
-  for (const entry of coupons as readonly unknown[]) {
-    const candidate = eligibleCoupon(entry, priceFen, nowMs);
-    if (candidate === null) continue;
-    const better =
-      best === null ||
-      candidate.discount_fen > best.discount_fen ||
-      (candidate.discount_fen === best.discount_fen && candidate.quota_fen < best.quota_fen);
-    if (better) best = candidate;
-  }
-  return best;
+  return selectJdCoupon(coupons, priceFen, nowMs)?.choice ?? null;
 }
 
 type PriceResult =
@@ -275,6 +298,8 @@ type PriceResult =
       readonly price: bigint;
       readonly coupon: bigint;
       readonly final: bigint;
+      /** useEndTime（毫秒）of the coupon counted in `coupon`; null when coupon is 0. */
+      readonly couponEndMs: number | null;
     }
   | { readonly status: 'anomaly'; readonly reason: PriceAnomalyReason };
 
@@ -286,9 +311,26 @@ function jdPrice(row: Record<string, unknown>, nowMs: number): PriceResult {
   const price = quoteFen(field(recordField(row, 'priceInfo'), 'price'));
   if (price === undefined) return { status: 'anomaly', reason: 'missing_field' };
   const coupons = field(recordField(row, 'couponInfo'), 'couponList');
-  const coupon = pickJdCoupon(coupons, price, nowMs)?.discount_fen ?? 0n;
+  const selected = selectJdCoupon(coupons, price, nowMs);
+  const coupon = selected?.choice.discount_fen ?? 0n;
   if (price <= 0n || coupon >= price) return { status: 'anomaly', reason: 'invalid_price' };
-  return { status: 'ok', price, coupon, final: subFen(price, coupon) };
+  const couponEndMs = selected !== null && coupon > 0n ? selected.end_ms : null;
+  return { status: 'ok', price, coupon, final: subFen(price, coupon), couponEndMs };
+}
+
+/**
+ * B1-04zzm（S-09 S09c，D10-736 ⑥）：店铺等级与商品侧店铺标识，只读 shopInfo，顶层同名键不读。
+ * shop_scores 只出 shopInfo.shopLevel → level（原文），不出 desc / serv / lgst；shop_ref =
+ * shopInfo.shopId 原文，只收正整数（0、负数、小数、空串都不出）。京东不出 sales_text、shop_logo。
+ */
+function jdShopExtras(
+  row: Record<string, unknown>,
+): Pick<UnionItemDetail, 'shop_scores' | 'shop_ref'> {
+  const shop = recordField(row, 'shopInfo');
+  return {
+    ...shopScoresField([['level', scalarText(field(shop, 'shopLevel'))]]),
+    ...shopRefField(scalarText(field(shop, 'shopId'))),
+  };
 }
 
 type QuotedFields = 'price_fen' | 'coupon_fen' | 'final_price_fen' | 'commission_rate_bp';
@@ -336,6 +378,7 @@ export function mapJdGoods(input: unknown, page: JdGoodsPage): UnionItemDetail {
     title,
     ...shopNameField(field(recordField(row, 'shopInfo'), 'shopName')),
     quoted_at: page.now.toISOString(),
+    ...jdShopExtras(row),
   };
   const price = jdPrice(row, page.now.getTime());
   if (price.status === 'anomaly') return anomalyItem(base, price.reason, page.warn);
@@ -359,5 +402,7 @@ export function mapJdGoods(input: unknown, page: JdGoodsPage): UnionItemDetail {
     final_price_fen: price.final,
     commission_rate_bp: commission,
     price_status: 'ok',
+    // B1-04zzm：券结束时刻来自与 coupon_fen 同一张券（selectJdCoupon），只在 coupon_fen > 0 时出。
+    ...(price.couponEndMs === null ? {} : couponEndAtField(price.couponEndMs)),
   });
 }

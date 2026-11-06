@@ -4,14 +4,18 @@
 // 映射只读任务书 probe 字段清单里、三个商品接口共有的下列字段，从不 spread 整份报文：
 // goods_id、goods_sign、goods_name、goods_desc（只详情用）、min_group_price、coupon_discount、
 // coupon_min_order_amount、coupon_start_time、coupon_end_time、coupon_remain_quantity、promotion_rate，
-// 以及图片 goods_image_url、goods_gallery_urls（B1-04zzf）。
+// 以及图片 goods_image_url、goods_gallery_urls（B1-04zzf）、店铺名 mall_name（B1-04zzg）；详情另读
+// sales_tip、mall_img_url、desc_txt、serv_txt、lgst_txt、mall_id（B1-04zzm）。
 // 单买价 min_normal_price、预测 / 分享比例、平台券、店铺券、收藏券、补贴都不计入（待 CAP-PDD-02 实测另开）。
 // 金额是 JSON 整数分，经 @couli/money 的 parseFen / subFen 运算；不经浮点。
 import { InvalidAmount, parseFen, subFen } from '@couli/money';
 import { normalizeItemImages } from '../../domain/item-images.ts';
 import type { PriceAnomalyReason } from '../../domain/taobao-price.ts';
 import {
+  couponEndAtField,
   shopNameField,
+  shopRefField,
+  shopScoresField,
   UnionError,
   type ItemRef,
   type UnionItemDetail,
@@ -205,6 +209,8 @@ type PriceResult =
       readonly price: bigint;
       readonly coupon: bigint;
       readonly final: bigint;
+      /** coupon_end_time（秒）of the coupon counted in `coupon`; null when coupon is 0. */
+      readonly couponEndSec: number | null;
     }
   | { readonly status: 'anomaly'; readonly reason: PriceAnomalyReason };
 
@@ -219,6 +225,7 @@ function pddPrice(row: Record<string, unknown>, nowMs: number): PriceResult {
   const discount = fen(field(row, 'coupon_discount'));
   if (discount === undefined) return { status: 'anomaly', reason: 'missing_field' };
   let coupon = 0n;
+  let couponEndSec: number | null = null;
   if (discount > 0n) {
     const threshold = fen(field(row, 'coupon_min_order_amount'));
     const start = count(field(row, 'coupon_start_time'));
@@ -238,12 +245,48 @@ function pddPrice(row: Record<string, unknown>, nowMs: number): PriceResult {
       start * 1000 <= nowMs &&
       nowMs < end * 1000 &&
       (remain === undefined || remain > 0);
-    if (usable) coupon = discount;
+    if (usable) {
+      coupon = discount;
+      couponEndSec = end;
+    }
   }
   if (coupon >= price) return { status: 'anomaly', reason: 'invalid_price' };
   const final = subFen(price, coupon);
   if (final <= 0n) return { status: 'anomaly', reason: 'invalid_price' };
-  return { status: 'ok', price, coupon, final };
+  return { status: 'ok', price, coupon, final, couponEndSec };
+}
+
+/** 非空白字符串原样；其余 undefined。 */
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+/**
+ * B1-04zzm（S-09 S09c，D10-736）：详情的销量、店铺 logo、店铺评分、商品侧店铺标识，取不到就缺省。
+ * sales_text = sales_tip 原样；shop_logo = mall_img_url（normalizeItemImages 单项口径）；
+ * shop_scores = desc_txt / serv_txt / lgst_txt → desc / serv / lgst；shop_ref = mall_id（正安全整数，
+ * 十进制字符串）。报文里与 DTO 同名的键不读。
+ */
+function pddDetailExtras(
+  row: Record<string, unknown>,
+): Pick<UnionItemDetail, 'sales_text' | 'shop_logo' | 'shop_scores' | 'shop_ref'> {
+  const sales = text(field(row, 'sales_tip'));
+  const logo = normalizeItemImages({ main_image_url: field(row, 'mall_img_url') }).main_image_url;
+  const mallId = field(row, 'mall_id');
+  return {
+    ...(sales === undefined ? {} : { sales_text: sales }),
+    ...(logo === undefined ? {} : { shop_logo: logo }),
+    ...shopScoresField([
+      ['desc', text(field(row, 'desc_txt'))],
+      ['serv', text(field(row, 'serv_txt'))],
+      ['lgst', text(field(row, 'lgst_txt'))],
+    ]),
+    ...shopRefField(
+      typeof mallId === 'number' && Number.isSafeInteger(mallId) && mallId > 0
+        ? String(mallId)
+        : undefined,
+    ),
+  };
 }
 
 /**
@@ -278,6 +321,7 @@ export function mapPddGoods(
     quoted_at: now.toISOString(),
     ...(typeof description === 'string' ? { description } : {}),
     ...images,
+    ...(source === 'detail' ? pddDetailExtras(row) : {}),
   };
   const price = pddPrice(row, now.getTime());
   if (price.status === 'anomaly') {
@@ -297,5 +341,9 @@ export function mapPddGoods(
     coupon_fen: price.coupon,
     final_price_fen: price.final,
     price_status: 'ok',
+    // B1-04zzm：券结束时刻来自与 coupon_fen 同一张券，只在 coupon_fen > 0 时出。
+    ...(source === 'detail' && price.couponEndSec !== null
+      ? couponEndAtField(price.couponEndSec * 1000)
+      : {}),
   });
 }

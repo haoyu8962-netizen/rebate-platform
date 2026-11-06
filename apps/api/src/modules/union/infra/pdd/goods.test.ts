@@ -75,3 +75,60 @@ it('[AC-B1-04zzf-UNIT#1] 商品行图片取 goods_image_url / goods_gallery_urls
   expect(Object.hasOwn(bare, 'main_image_url')).toBe(false);
   expect(Object.hasOwn(bare, 'image_urls')).toBe(false);
 });
+
+function detailRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    goods_id: 7,
+    goods_sign: 'unit-sign',
+    goods_name: 'unit',
+    min_group_price: 2000,
+    coupon_discount: 300,
+    coupon_min_order_amount: 1000,
+    coupon_start_time: 1_759_000_000,
+    coupon_end_time: 1_760_111_999,
+    promotion_rate: 100,
+    sales_tip: '2万+',
+    mall_img_url: 'https://img.synthetic.invalid/unit/logo.png',
+    desc_txt: '高',
+    serv_txt: '中',
+    lgst_txt: '低',
+    mall_id: 4321,
+    ...overrides,
+  };
+}
+
+const unitNow = new Date('2025-10-01T00:00:00Z');
+
+it('[AC-B1-04zzm-UNIT#1] 详情五字段：券结束 +08:00、销量与 logo 原样、三项评分、mall_id 十进制；搜索行不带', () => {
+  const mapped = mapPddGoods(detailRow(), 'detail', unitNow, () => undefined);
+  expect(mapped.coupon_fen).toBe(300n);
+  expect(mapped.coupon_end_at).toBe('2025-10-10T23:59:59+08:00');
+  expect(mapped.sales_text).toBe('2万+');
+  expect(mapped.shop_logo).toBe('https://img.synthetic.invalid/unit/logo.png');
+  expect(mapped.shop_scores).toEqual([
+    { key: 'desc', value: '高' },
+    { key: 'serv', value: '中' },
+    { key: 'lgst', value: '低' },
+  ]);
+  expect(mapped.shop_ref).toBe('4321');
+  const search = mapPddGoods(detailRow(), 'search', unitNow, () => undefined);
+  for (const name of ['coupon_end_at', 'sales_text', 'shop_logo', 'shop_scores', 'shop_ref']) {
+    expect(Object.hasOwn(search, name), name).toBe(false);
+  }
+});
+
+it('[AC-B1-04zzm-UNIT#2] 券不计入（门槛不够）时不出结束时刻；空白评分与非正整数 mall_id 不出', () => {
+  const mapped = mapPddGoods(
+    detailRow({ coupon_min_order_amount: 2500, serv_txt: ' ', mall_id: '4321' }),
+    'detail',
+    unitNow,
+    () => undefined,
+  );
+  expect(mapped.coupon_fen).toBe(0n);
+  expect(Object.hasOwn(mapped, 'coupon_end_at')).toBe(false);
+  expect(mapped.shop_scores).toEqual([
+    { key: 'desc', value: '高' },
+    { key: 'lgst', value: '低' },
+  ]);
+  expect(Object.hasOwn(mapped, 'shop_ref')).toBe(false);
+});

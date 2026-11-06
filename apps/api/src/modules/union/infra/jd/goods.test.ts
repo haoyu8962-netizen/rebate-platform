@@ -159,3 +159,58 @@ it('[AC-B1-04zc-UNIT#11] item 模式只有 skuId 的引用 invalid_dto，不把 
     'item_unavailable',
   );
 });
+
+function shopRow(shopInfo: Record<string, unknown>, coupons: readonly unknown[] = [coupon()]) {
+  return goods({ shopInfo, couponInfo: { couponList: coupons } });
+}
+
+it('[AC-B1-04zzm-UNIT#1] 京东详情：所选券结束 +08:00、shopLevel → level、shopId 原文；不出销量与 logo', () => {
+  const mapped = mapJdGoods(
+    shopRow({ shopName: 'unit', shopLevel: num('4.5'), shopId: num('1000012345') }),
+    page(),
+  );
+  expect(mapped.coupon_fen).toBe(1000n);
+  // nowMs + 1h = 2026-10-30T16:55:42Z → 北京 2026-10-31T00:55:42。
+  expect(mapped.coupon_end_at).toBe('2026-10-31T00:55:42+08:00');
+  expect(mapped.shop_scores).toEqual([{ key: 'level', value: '4.5' }]);
+  expect(mapped.shop_ref).toBe('1000012345');
+  expect(Object.hasOwn(mapped, 'sales_text')).toBe(false);
+  expect(Object.hasOwn(mapped, 'shop_logo')).toBe(false);
+  const fraction = mapJdGoods(
+    shopRow({}, [coupon({ useEndTime: num(String(nowMs + hourMs + 7)) })]),
+    page(),
+  );
+  expect(fraction.coupon_end_at).toBe('2026-10-31T00:55:42.007+08:00');
+});
+
+it('[AC-B1-04zzm-UNIT#2] 面额与门槛完全并列：结束时刻取先出现的那张，与 pickJdCoupon 同一张', () => {
+  const first = coupon({ useEndTime: num(String(nowMs + 2 * hourMs)) });
+  const second = coupon({ useEndTime: num(String(nowMs + 3 * hourMs)) });
+  expect(pickJdCoupon([first, second], 3990n, nowMs)).toEqual({
+    discount_fen: 1000n,
+    quota_fen: 3900n,
+  });
+  const mapped = mapJdGoods(shopRow({}, [first, second]), page());
+  expect(mapped.coupon_fen).toBe(1000n);
+  expect(mapped.coupon_end_at).toBe('2026-10-31T01:55:42+08:00');
+  const swapped = mapJdGoods(shopRow({}, [second, first]), page());
+  expect(swapped.coupon_end_at).toBe('2026-10-31T02:55:42+08:00');
+});
+
+it('[AC-B1-04zzm-UNIT#3] 京东 shopId 为 0、负数、小数（数字或字符串）、前导零都不出 shop_ref', () => {
+  for (const shopId of [
+    num('0'),
+    '0',
+    num('-5'),
+    '-5',
+    num('12.5'),
+    '12.5',
+    num('1e3'),
+    '0012',
+    ' 12',
+  ]) {
+    const mapped = mapJdGoods(shopRow({ shopId }), page());
+    expect(Object.hasOwn(mapped, 'shop_ref'), String(shopId)).toBe(false);
+  }
+  expect(mapJdGoods(shopRow({ shopId: '73129' }), page()).shop_ref).toBe('73129');
+});

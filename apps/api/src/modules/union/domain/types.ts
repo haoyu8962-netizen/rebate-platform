@@ -221,6 +221,97 @@ export interface UnionItemDetail extends UnionItem {
    * upstream order, 1–9 entries; the main image is neither added nor removed. Absent when empty.
    */
   readonly image_urls?: readonly string[];
+  /**
+   * B1-04zzm (S-09 S09c, D10-736): end of the selected coupon (the one coupon_fen comes from),
+   * ISO 8601 with +08:00. Only when coupon_fen > 0 and the union gave its end time; absent
+   * otherwise. Pinduoduo coupon_end_time (seconds), jd the selected couponList entry's useEndTime
+   * (milliseconds); Taobao not yet (D10-736 ⑤).
+   */
+  readonly coupon_end_at?: string;
+  /** B1-04zzm: the union's sales text as given, non-empty (Pinduoduo sales_tip only). */
+  readonly sales_text?: string;
+  /** B1-04zzm: shop logo (Pinduoduo mall_img_url only), same check as one normalizeItemImages entry. */
+  readonly shop_logo?: string;
+  /**
+   * B1-04zzm: shop scores as the union gave them, each key at most once, values non-empty and
+   * unchanged. Pinduoduo desc_txt / serv_txt / lgst_txt; jd only shopInfo.shopLevel as `level`.
+   */
+  readonly shop_scores?: readonly UnionShopScore[];
+  /** B1-04zzm: the product side's shop id as given (Pinduoduo mall_id, jd shopInfo.shopId). */
+  readonly shop_ref?: string;
+}
+
+/** B1-04zzm: key of one shop score (contracts ProductShopScore.key). */
+export type UnionShopScoreKey = components['schemas']['ProductShopScore']['key'];
+
+/** B1-04zzm: one shop score of a union item detail. */
+export interface UnionShopScore {
+  readonly key: UnionShopScoreKey;
+  readonly value: string;
+}
+
+const BEIJING_OFFSET_SECONDS = 8 * 3_600;
+const SECONDS_PER_DAY = 86_400;
+/** 10000-01-01T00:00:00+08:00 in Unix seconds: later instants have no four-digit year. */
+const BEIJING_YEAR_10000 = 253_402_300_800 - BEIJING_OFFSET_SECONDS;
+
+function pad(value: number, width = 2): string {
+  return String(value).padStart(width, '0');
+}
+
+/**
+ * B1-04zzm: epoch milliseconds → ISO 8601 Beijing time with `+08:00`, e.g.
+ * `2025-10-10T23:59:59+08:00`; whole seconds carry no fraction, otherwise `.SSS`. Plain integer
+ * arithmetic (civil-from-days), no Date and no clock. Only non-negative safe integers up to the
+ * year 9999 give a time; anything else → `{}` (the key stays absent).
+ */
+export function couponEndAtField(epochMs: number): { readonly coupon_end_at?: string } {
+  if (!Number.isSafeInteger(epochMs) || epochMs < 0) return {};
+  const millis = epochMs % 1000;
+  const seconds = (epochMs - millis) / 1000;
+  if (seconds >= BEIJING_YEAR_10000) return {};
+  const local = seconds + BEIJING_OFFSET_SECONDS;
+  const days = Math.floor(local / SECONDS_PER_DAY);
+  const secondOfDay = local - days * SECONDS_PER_DAY;
+  const z = days + 719_468;
+  const era = Math.floor(z / 146_097);
+  const doe = z - era * 146_097;
+  const yoe = Math.floor(
+    (doe - Math.floor(doe / 1460) + Math.floor(doe / 36_524) - Math.floor(doe / 146_096)) / 365,
+  );
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
+  const mp = Math.floor((5 * doy + 2) / 153);
+  const day = doy - Math.floor((153 * mp + 2) / 5) + 1;
+  const month = mp < 10 ? mp + 3 : mp - 9;
+  const year = yoe + era * 400 + (month <= 2 ? 1 : 0);
+  const hour = Math.floor(secondOfDay / 3_600);
+  const minute = Math.floor((secondOfDay % 3_600) / 60);
+  const second = secondOfDay % 60;
+  const fraction = millis === 0 ? '' : `.${pad(millis, 3)}`;
+  return {
+    coupon_end_at: `${pad(year, 4)}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}${fraction}+08:00`,
+  };
+}
+
+/**
+ * B1-04zzm: shop scores in the given order, each key at most once (first kept), values non-blank
+ * strings passed on unchanged; nothing left → `{}` (the key stays absent).
+ */
+export function shopScoresField(
+  entries: readonly (readonly [UnionShopScoreKey, string | undefined])[],
+): { readonly shop_scores?: readonly UnionShopScore[] } {
+  const scores: UnionShopScore[] = [];
+  for (const [key, value] of entries) {
+    if (value === undefined || value.trim() === '') continue;
+    if (scores.some((score) => score.key === key)) continue;
+    scores.push(Object.freeze({ key, value }));
+  }
+  return scores.length === 0 ? {} : { shop_scores: Object.freeze(scores) };
+}
+
+/** B1-04zzm: a shop id is a positive decimal integer without leading zeros, kept as given. */
+export function shopRefField(text: string | undefined): { readonly shop_ref?: string } {
+  return text !== undefined && /^[1-9][0-9]*$/.test(text) ? { shop_ref: text } : {};
 }
 
 /** Domain data, never an invented upstream response format. Percent is e.g. "12.34". */
