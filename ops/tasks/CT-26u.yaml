@@ -19,6 +19,7 @@ paths:
   - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
   - 'contracts/oasdiff-accepted.txt'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts' # 编排 12:45：系统操作人显示名表是穷举 Record，加枚举值同单补一行
 impl: claude
 tester: none
 accept:
