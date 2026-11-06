@@ -1,0 +1,24 @@
+id: B1-28r
+repo: rebate-platform
+title: B1-28r：门禁登记 feedback 模块（risk-map RV1、AGENTS 分工表、模块 AGENTS.md）（D10-722）
+type: guard-change
+# 2026-11-06 入账（identity 线，编排裁定 D10-722）。起因：B1-28p #2483 新建 apps/api/src/modules/feedback，verify-static 的
+#   risk-map-coverage 报该模块在 ops/risk-map.yaml 无显式规则。照 B1-08b / B2-05a 先例：risk-map 加 feedback/** 为 RV1
+#   （impl claude、tester codex、review codex，同 catalog / notification——不涉资金，注销删除只经 identity 清理端口），
+#   agents-table.ts --write 重生成根 AGENTS.md 分工表（根文件守 150 行：§10 两条指针合为一条，内容不变），
+#   加 feedback/AGENTS.md 与一行 @AGENTS.md 的 CLAUDE.md，risk.test 清单只增一行。按 #16 由编排核后加标签；合并后 #2483 变基重落地。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'ops/risk-map.yaml'
+  - 'AGENTS.md'
+  - 'apps/api/src/modules/feedback/AGENTS.md'
+  - 'apps/api/src/modules/feedback/CLAUDE.md'
+  - 'tools/guard/lib/risk.test.ts'
+  - 'ops/tasks/B1-28r.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

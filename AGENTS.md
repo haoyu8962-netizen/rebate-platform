@@ -66,6 +66,7 @@
 | `apps/api/src/modules/catalog/**` | Claude | Codex | Codex | RV1 |
 | `apps/api/src/modules/parsing/**` | Claude | Codex | Codex | RV1 |
 | `apps/api/src/modules/notification/**` | Claude | Codex | Codex | RV1 |
+| `apps/api/src/modules/feedback/**` | Claude | Codex | Codex | RV1 |
 | `apps/api/src/modules/agent/**` | Claude | Codex | Codex | RV1 |
 | `apps/api/src/modules/platform/**` | Claude | Codex | Claude + Codex | RV2 |
 | `packages/evals/**` | Claude | Codex | Codex | RV1 |
@@ -146,5 +147,4 @@
 
 ## 10. 技术栈、开发约束、测试要求（指针）
 
-- 技术栈、版本与数据库设计规则：规划仓库 `docs/adr/0001-技术栈基线.md`（改动须新 ADR）；分工、评审、合并与测试标准：规划/11。
-- 开发约束见本文件 §4–§6、§9，测试要求见 §7，命令见 §2；评审重点（高风险区、严重度、免查文件、发现格式、增量评审与三轮规则）见根目录 `REVIEW.md`。
+- 技术栈、版本与数据库设计规则：规划仓库 `docs/adr/0001-技术栈基线.md`（改动须新 ADR）；分工、评审、合并与测试标准：规划/11；开发约束见本文件 §4–§6、§9，测试要求见 §7，命令见 §2；评审重点（高风险区、严重度、免查文件、发现格式、增量评审与三轮规则）见根目录 `REVIEW.md`。

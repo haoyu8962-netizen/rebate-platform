@@ -141,6 +141,13 @@ rules:
     impl: claude
     tester: codex
     review: codex
+  # feedback: 商品反馈（S-15，B1-28p）。不涉资金与归属，规划/11 §1.1 第 4 行「其他交易模块」为 RV1，分工同 catalog、notification；
+  # 注销删除只经 identity 的清理端口（BR-ID-28）。B1-28r 登记（2026-11-06，编排 D10-722）。
+  - path: 'apps/api/src/modules/feedback/**'
+    risk: RV1
+    impl: claude
+    tester: codex
+    review: codex
   # agent: 规划/11 §1.1「Agent 服务：agent、judge」行为 RV1（2026-10-06 随 B3-02 / B3-03 首个子任务登记；
   # 列值照通则，B3-02、B3-03 等的 Codex 首发实现是任务级例外，见 tools/guard/codex-impl-tasks.json 与 ops/approvals.yaml 第 23 条）。
   - path: 'apps/api/src/modules/agent/**'
