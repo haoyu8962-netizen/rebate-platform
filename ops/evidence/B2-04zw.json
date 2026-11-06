@@ -1,0 +1,79 @@
+{
+  "task": "B2-04zw",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "185b69a4ccb32df7c118ab5ca4062995dd99e181",
+  "red_tests": [
+    "test/spec/settlement/settle-runs-pair/migration.int.test.ts > [AC-B2-04zw#4][BR-FUND-04] 迁移形状：恰好一个迁移显式具名地 ADD CONSTRAINT settle_runs_part_outcome_check … NOT VALID 且不做别的；紧接的下一号迁移只 VALIDATE 它；两者都不改 settle_runs 的列与主键",
+    "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#1][BR-FUND-04] app.settle_runs 上有 CHECK settle_runs_part_outcome_check，只读 part 与 last_outcome，且已生效（convalidated = true，迁移最终已 VALIDATE）",
+    "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#2][BR-FUND-04] 非法配对写不进去：插入 (0, done)、(0, partial)、(1, NULL)、(2, NULL) 报 23514 且没有行；把合法行改成这些配对同样报 23514，行不变",
+    "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#3][BR-FUND-04] 合法配对可写：插入 (0, NULL)、(1, done)、(2, partial) 读回原值；按发布推进 (0, NULL) → (1, partial) → (2, done) 每步成功",
+    "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#2][AC-B2-04zw#3][BR-FUND-04] 任意 part ≥ 0 与 last_outcome ∈ {NULL, done, partial}：插入成功当且仅当 part = 0 ⇔ last_outcome 为空，被拒的报 23514 且没有行"
+  ],
+  "risk_note": "RV2 db/migrations：app.settle_runs 加 CHECK settle_runs_part_outcome_check ((part = 0) = (last_outcome IS NULL))，先 NOT VALID 后下一号 VALIDATE（先例 0119 / 0120）；不改列、主键、授权与代码；现存数据只有 (0, NULL) 与 (≥1, 非空)",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "185b69a4ccb32df7c118ab5ca4062995dd99e181",
+      "tree": "62fa5a4e31661b57e8ad166902ec47ae3b8f2077",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T18:28:13Z",
+      "finished_at": "2026-11-06T18:28:24Z",
+      "red_tests": [
+        "test/spec/settlement/settle-runs-pair/migration.int.test.ts > [AC-B2-04zw#4][BR-FUND-04] 迁移形状：恰好一个迁移显式具名地 ADD CONSTRAINT settle_runs_part_outcome_check … NOT VALID 且不做别的；紧接的下一号迁移只 VALIDATE 它；两者都不改 settle_runs 的列与主键",
+        "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#1][BR-FUND-04] app.settle_runs 上有 CHECK settle_runs_part_outcome_check，只读 part 与 last_outcome，且已生效（convalidated = true，迁移最终已 VALIDATE）",
+        "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#2][BR-FUND-04] 非法配对写不进去：插入 (0, done)、(0, partial)、(1, NULL)、(2, NULL) 报 23514 且没有行；把合法行改成这些配对同样报 23514，行不变",
+        "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#3][BR-FUND-04] 合法配对可写：插入 (0, NULL)、(1, done)、(2, partial) 读回原值；按发布推进 (0, NULL) → (1, partial) → (2, done) 每步成功",
+        "test/spec/settlement/settle-runs-pair/pair.int.test.ts > [AC-B2-04zw#2][AC-B2-04zw#3][BR-FUND-04] 任意 part ≥ 0 与 last_outcome ∈ {NULL, done, partial}：插入成功当且仅当 part = 0 ⇔ last_outcome 为空，被拒的报 23514 且没有行"
+      ],
+      "expected": [
+        "test/spec/settlement/settle-runs-pair/migration.int.test.ts",
+        "test/spec/settlement/settle-runs-pair/pair.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "95af5753ac163d630c83acd18e8d55e2406620b5693db8fce2d2b25d981486e8"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "round 1 pass, S2x1 (migration numbering gap until 0128 lands; resolved by landing after 0128) (couli-runs/B2-04zw/review-claude-money-r1.json). Codex over its usage limit until 2026-11-11, approvals #36"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 fail (S1: property runs / seed hard-coded) -> r2 by a fresh independent Claude (Codex usage limit, approvals #36) pass (review-codex-spec-test-r1.json, review-claude-spec-test-r2.json). Rule tests by claude-independent"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d3c53239de0446a485e5035d4ccc81de8ade60e5",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

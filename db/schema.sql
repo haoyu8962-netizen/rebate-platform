@@ -5664,6 +5664,7 @@ CREATE TABLE app.settle_runs (
     CONSTRAINT settle_runs_app_id_check CHECK ((app_id <> ''::text)),
     CONSTRAINT settle_runs_last_outcome_check CHECK ((last_outcome = ANY (ARRAY['done'::text, 'partial'::text]))),
     CONSTRAINT settle_runs_part_check CHECK ((part >= 0)),
+    CONSTRAINT settle_runs_part_outcome_check CHECK (((part = 0) = (last_outcome IS NULL))),
     CONSTRAINT settle_runs_published_credited_count_check CHECK ((published_credited_count >= 0)),
     CONSTRAINT settle_runs_row_version_check CHECK ((row_version >= 0))
 );
