@@ -1,0 +1,81 @@
+{
+  "task": "B1-09t",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "spec_commit": "c5001c3d80d37850d7e707150a5283420cabe9bb",
+  "red_tests": [
+    "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#1] 自购列表项原样带 is_price_compare：true / false / null 各自照列下发，键必须在",
+    "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#2] 分享列表项（same 商品）同样原样带 is_price_compare，投影裁剪不影响该字段",
+    "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#2] 分享列表项（other 商品）同样原样带 is_price_compare，投影裁剪不影响该字段",
+    "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#3] 列表与详情的 is_price_compare 一致；标识不改金额、display_status、原因与其余投影",
+    "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#4] 列值改了（订单同步按报文更新）后列表跟着变：null→true 加上，true→false 撤下，不缓存首读",
+    "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#5] 筛选、搜索与翻页的每一页都照列下发 is_price_compare",
+    "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#6] HTTP GET /v1/orders 的 data.items 带 is_price_compare 且过契约；Agent 订单卡不带该字段"
+  ],
+  "risk_note": "RV2 by path (orders). The order list item now carries orders.is_price_compare as stored (true / false / null; BR-CALC-16, contract CT-26p #2420): one line in summaryFields. No amount, status, ledger, contract or migration change; the detail already carried the field and is unchanged; the Agent order cards do not carry it. Setting the column from union order fields is out of scope until CAP-TB-04 / CAP-PDD-04 are verified (D10-641).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c5001c3d80d37850d7e707150a5283420cabe9bb",
+      "tree": "3af2c6f8dc6f79b202bfea9e0420fca4fe03ae9f",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T02:15:42Z",
+      "finished_at": "2026-11-06T02:15:55Z",
+      "red_tests": [
+        "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#1] 自购列表项原样带 is_price_compare：true / false / null 各自照列下发，键必须在",
+        "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#2] 分享列表项（same 商品）同样原样带 is_price_compare，投影裁剪不影响该字段",
+        "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#2] 分享列表项（other 商品）同样原样带 is_price_compare，投影裁剪不影响该字段",
+        "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#3] 列表与详情的 is_price_compare 一致；标识不改金额、display_status、原因与其余投影",
+        "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#4] 列值改了（订单同步按报文更新）后列表跟着变：null→true 加上，true→false 撤下，不缓存首读",
+        "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#5] 筛选、搜索与翻页的每一页都照列下发 is_price_compare",
+        "test/spec/orders/list-price-compare/list.int.test.ts > [AC-B1-09t#6] HTTP GET /v1/orders 的 data.items 带 is_price_compare 且过契约；Agent 订单卡不带该字段"
+      ],
+      "expected": ["test/spec/orders/list-price-compare/list.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "dde07b2bae7051379dd3e85fb87b7495e4b6f4c4d218d11e8a32a13f6631cde9"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "round 1 pass in scope; its two out-of-scope S1 (payout risk_hits recording) came from a stale base (main had merged B1-03zg since the branch point), so the branch was rebased and round 2 confirmed both closed; round 2 pass with no findings; static only"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude r1: test/spec/orders/list-price-compare/list.int.test.ts, 6 top-level it (7 cases), local red 7/7 on the missing field. Review r1 answered pass but was rejected by the output validator (an out_of_scope key did not start with its file path), counted; r2 pass with one S2 (the null-flag rows carry no commission rate range, so a range-based inference would not be caught; no such code exists and the task forbids inference), not blocking."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f4a834baf0f0a67e46ae12a9eb5cb3dd8eb5f804",
+    "specs": "91a566154637d22d47c53fd4dc5b086bb2436028"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

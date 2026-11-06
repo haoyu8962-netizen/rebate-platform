@@ -354,6 +354,8 @@ function summaryFields(view: OrderView): { base: SummaryBase; number: OrderNumbe
       est_rebate_fen: fen(figures.est_rebate_fen),
       paid_at: depositStage ? null : iso(row.paid_at),
       is_other_product,
+      // BR-CALC-16: the column as stored (true / false / null), never inferred; a tag only.
+      is_price_compare: row.is_price_compare,
     },
     number,
   };
