@@ -152,6 +152,13 @@ export const FUND_TERM_KEYS = {
       "agent.tool_status.default."
     ],
     "keys": [
+      "agreement.title",
+      "find_order.title",
+      "help.title",
+      "invite.title",
+      "messages.title",
+      "notice.title",
+      "rules.title",
       "about.ai_filing.title",
       "about.copy_diagnostics",
       "about.copy_diagnostics.desc",
@@ -925,6 +932,10 @@ export const FUND_TERM_KEYS = {
     {
       "key": "me.grid.ledger",
       "reason": "「我的」宫格的入口名，只是进余额流水页，不说金额或余额状态"
+    },
+    {
+      "key": "rules.title",
+      "reason": "返利规则说明页的页面标题，只是进规则页，不说金额、状态或有没有返利（D10-745，取 routes.json page 名）"
     },
     {
       "key": "invite.poster.slogan",

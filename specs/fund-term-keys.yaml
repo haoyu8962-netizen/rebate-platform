@@ -207,6 +207,13 @@ ordinary:
     - agent.tool_status.default.
   # 清单以外的现有键（08「普通：清单以外的现有键与模板」），逐键列出。
   keys:
+    - agreement.title
+    - find_order.title
+    - help.title
+    - invite.title
+    - messages.title
+    - notice.title
+    - rules.title
     - about.ai_filing.title
     - about.copy_diagnostics
     - about.copy_diagnostics.desc
@@ -934,6 +941,8 @@ exempt:
     reason: 游客卡的登录引导，只列登录后能用的功能（查看返利、提现），不说金额、状态或有没有返利
   - key: me.grid.ledger
     reason: 「我的」宫格的入口名，只是进余额流水页，不说金额或余额状态
+  - key: rules.title
+    reason: 返利规则说明页的页面标题，只是进规则页，不说金额、状态或有没有返利（D10-745，取 routes.json page 名）
   - key: invite.poster.slogan
     reason: 海报标语只是请好友购物前来查优惠券和返利，不说金额、状态或有没有返利（同 clipboard.prompt）
   - key: favorite.invalid_desc
