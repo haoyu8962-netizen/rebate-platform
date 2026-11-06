@@ -21,7 +21,8 @@ import {
 // 推广位过滤（D10-488 ③）：账号与别家共用，只返回 adzone_id 属于凑狸在 union_pids 登记过的全部淘宝
 // 推广位（含 retired）的订单。清单经注入的读取端口；PID 形如 mm_<memberid>_<siteid>_<adzoneid>，按最后
 // 一段与 adzone_id 的十进制字符串比对。别家的订单不返回，每页只计数打一条告警（不带订单号、金额）；
-// 清单为空 → 不发请求、返回空页并告警一次。订单源或推广位端口未注入 → adapter_unimplemented。
+// 清单为空 → 不取凭据、不发请求，告警一次后抛 adapter_unimplemented（配置错误，B1-04zzh / D10-692）。
+// 订单源或推广位端口未注入 → adapter_unimplemented。
 
 it('[AC-B1-04f#36] 只留我方推广位（含已停用）的订单；别家的不返回，整页只打一条计数告警', async () => {
   const rows = [
