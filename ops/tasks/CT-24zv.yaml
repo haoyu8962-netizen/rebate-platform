@@ -1,0 +1,25 @@
+id: CT-24zv
+repo: rebate-platform
+title: 契约：月结正差补差的候选列表、按批次批准 / 拒绝、手动触发（FU-SETTLE-ADJ-POSITIVE，BR-FUND-09 ②，D10-769、D10-770）——权限点 fund.settle_adjust（totp step-up），一人可完成，写审计
+type: contract
+# 2026-11-07 pay 入账（D10-770，方案 couli-runs/B3-lane/settle-adj-positive-plan-20261107.md）。四个操作：列候选（批次 / 平台 / 状态，带单号、受益人脱敏、diff、seq、「有等待中维权」标记）、按批次批准（批次内逐单锁单重算，seq 变则该单作废、diff=0 记 approved 不出分录，任一单作废不挡其余，逐单返回结果）、按批次拒绝（reason）、finance 手动触发生成（平台 + 账单日）。
+# 冻结受益人照常生成、批准时转待补记义务；注销中 / 已注销按 08 走平台或坏账；等待联盟的维权 + 正差照常生成由批准人把关（08 E-32）。只 /admin/v1/**，后台同发；新 20001 / 20902 子原因注册 error-codes。实现：生成 B2-09zb、批准 B2-09zc（后入账）。
+refs: [BR-FUND-09]
+refs_hash:
+  BR-FUND-09: 6b72b55621fb
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo

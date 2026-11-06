@@ -1,0 +1,22 @@
+id: B2-09za
+repo: rebate-platform
+title: 迁移：settle_adjustments 防重复候选的部分唯一索引（FU-SETTLE-ADJ-POSITIVE，BR-FUND-09 ②，D10-770）——(app_id, order_id, settle_seq, coalesce(user_id), coalesce(role)) WHERE status = 'pending'
+type: migration
+# 2026-11-07 pay 入账（D10-770）。生成任务重跑、手动触发与定时重叠时，同一结算记录（seq）对同一受益人只能有一条待批候选；已批 / 已拒 / 作废的不占位。平台行 user_id、role 为空，用 coalesce 归一。
+# 迁移号落地时取主干最大 +1，排在 identity 0128、agent B2-04zw 之后，落地前在 notices 报编排。规则测试 Codex：重复 pending 被拒、不同 seq / 不同受益人 / 非 pending 不冲突、平台行去重、跨 app 不冲突。
+refs: [BR-FUND-09]
+refs_hash:
+  BR-FUND-09: 6b72b55621fb
+deps: []
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/db/settlement/settle-adjust-dedupe/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/db/settlement/settle-adjust-dedupe/**'
+status: todo
