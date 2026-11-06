@@ -25,6 +25,13 @@
 //                                risk_action manual_review, the matched dimension / digest / rule.
 //                                A withdrawal is judged once, so it has at most one; the digest
 //                                never enters auto_decision or a log.
+//   hit log                      B2-05r (BR-WDR-29 ⑨, BR-ID-33): once that hit is recorded, one info
+//                                line auto_payout_blacklist_hit with app_id, withdrawal_id, the
+//                                dimension and the rule code — never the member id, a phone or any
+//                                digest. Only a decision that recorded a hit logs it; a logger
+//                                without info (older hand-written ones) logs nothing. The line is
+//                                not part of the transaction: a decision rolled back and redelivered
+//                                may log it again; risk_hits is the record.
 //   manual                       review_deadline = created_at + 24 working hours (BR-WDR-26).
 //   auto                         system W2 through B2-05e's approve (CAS status = PENDING_REVIEW,
 //                                reviewer_id null) → executeBatch with executor 'system:auto_payout'
@@ -121,7 +128,11 @@ export interface AutoPayoutDecisionRecord extends AutoPayoutDecision {
 
 export interface AutoPayoutOptions extends WithdrawalCommandsOptions {
   db: Kysely<DB>;
-  logger: { warn(fields: Record<string, unknown>, message: string): void };
+  /** `info` is optional: without it the blacklist-hit line (B2-05r) is not written. */
+  logger: {
+    warn(fields: Record<string, unknown>, message: string): void;
+    info?(fields: Record<string, unknown>, message: string): void;
+  };
   /**
    * content's configuration reader: withdraw.auto_payout.* with payout.channel_enabled.<channel>
    * as one snapshot (readAutoPayoutConfigSnapshot), calendar.* for the review deadline.
@@ -159,6 +170,8 @@ const DAILY_LOCK = 'auto_payout_daily';
 const PREFIX = 'withdraw.auto_payout.';
 const NOT_COUNTED: readonly string[] = ['REJECTED', 'FAILED'];
 const PENDING_REVIEW = 'PENDING_REVIEW';
+/** B2-05r: the info line of a decision that recorded a BR-WDR-29 ⑨ hit (ids and category only). */
+export const AUTO_PAYOUT_BLACKLIST_HIT = 'auto_payout_blacklist_hit';
 /** auto_decision.failed_conditions entry of the live BR-WDR-29 ⑨ check (domain/auto-decision.ts). */
 const BLACKLIST_HIT_CONDITION = 'risk_flag:blacklist_hit';
 /** The alert line: total × 10000 ≥ max × 8000 (no rounding of 80% first). */
@@ -683,6 +696,17 @@ export function createAutoPayoutConsumer(options: AutoPayoutOptions): AutoPayout
         value_hmac: blacklistMatch.hit.value_hmac,
         rule_id: blacklistMatch.hit.rule_id,
       });
+      // B2-05r (BR-ID-33): which withdrawal went to a reviewer and for which kind of hit; no
+      // member id, phone or digest.
+      logger.info?.(
+        {
+          app_id: appId,
+          withdrawal_id: id,
+          dimension: blacklistMatch.hit.dimension,
+          rule_id: blacklistMatch.hit.rule_id,
+        },
+        AUTO_PAYOUT_BLACKLIST_HIT,
+      );
     }
 
     if (row.status !== PENDING_REVIEW) {

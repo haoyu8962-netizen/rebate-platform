@@ -1,0 +1,82 @@
+{
+  "task": "B2-05r",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "6d778e3cf38a56eaca3a92d263883055344c16af",
+  "red_tests": [
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] phone 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] id_no 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] device 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] alipay 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] bank_card 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#2][BR-WDR-29][BR-ID-33] 不命中与规则停用不打日志，同规则启用后的下一单才有一条",
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#3][BR-WDR-29][BR-ID-33] 已判定单的同事件重投、第二个事件都不重复打日志",
+    "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#4][BR-WDR-29][BR-ID-33] 旧 warn-only logger 命中不报错也不降级打 warn，下一单用实际 logger 才打 info"
+  ],
+  "risk_note": "RV2 path (payout), log only: no money moves, no status or decision changes, no contract, no migration (withdraw lane, model Claude Fable 5.1; orchestrator D10-707 ①, FU-B205Q-LOG-9). After the automatic payout decision records a BR-WDR-29 ⑨ blacklist hit (B2-05q), auto-payout.ts now writes one info line auto_payout_blacklist_hit with app_id, withdrawal_id, the dimension and the rule code — never the member id, a phone or any digest (BR-ID-33; app_id confirmed by the orchestrator, D10-710). Only a decision that recorded a hit logs it; a logger without info logs nothing and does not fail. The line is written inside the decision, so a decision rolled back and redelivered may log it again; risk_hits stays the record. Real risk: personal data in the worker log — the rule tests read every line of the real worker assembly's output and pin the hit line by exact equality. Full verification is the required CI checks (approvals 21; AWS runners disabled, D10-555); the red run and the implementation's run of the task's rule tests were made in the local Docker container.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6d778e3cf38a56eaca3a92d263883055344c16af",
+      "tree": "f0da05c6b7e9d4a9caa9f879e9d2c132ba918345",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T08:09:48Z",
+      "finished_at": "2026-11-06T08:10:13Z",
+      "red_tests": [
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] phone 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] id_no 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] device 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] alipay 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#1][BR-WDR-29][BR-ID-33] bank_card 命中记下后：worker 的 info 日志只有四个业务字段，全部日志无会员编号或摘要",
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#2][BR-WDR-29][BR-ID-33] 不命中与规则停用不打日志，同规则启用后的下一单才有一条",
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#3][BR-WDR-29][BR-ID-33] 已判定单的同事件重投、第二个事件都不重复打日志",
+        "test/spec/payout/auto-payout-hit-log/auto.int.test.ts > [AC-B2-05r#4][BR-WDR-29][BR-ID-33] 旧 warn-only logger 命中不报错也不降级打 warn，下一单用实际 logger 才打 info"
+      ],
+      "expected": ["test/spec/payout/auto-payout-hit-log/auto.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "73ee1d1750c88be89a76dac2868e01893e65b8bb4c2d0ac123f52df56d245b8d"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex via codex-run.sh, static, read-only, base = the fork point. Round 1 passed with no findings: the line is written only after the hit is recorded, carries the four business fields only and tolerates a warn-only logger; checklist rounding n/a, sign n/a, idempotency ok, concurrency ok, partial_refund n/a, clock ok, app_id ok. Reviewed before the landing rebase; the implementation commit is unchanged by it."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex wrote the rule tests in 1 attempt (test/spec/payout/auto-payout-hit-log: auto.int.test.ts with [AC-B2-05r#1]–[#4], 8 tests, and worker-kit.ts; no skeleton change, red on main by assertion). A fresh independent Claude reviewed, static: round 1 passed. One S2, not blocking and not applied: no case pins that a decision made with the automatic payout switch off (failed_conditions = ['disabled'], no hit recorded although the live match hit) writes no hit line; the implementation logs only inside the branch that records the hit."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "649761ad5b2afc9236855ad553f4cc1e42d16413",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
