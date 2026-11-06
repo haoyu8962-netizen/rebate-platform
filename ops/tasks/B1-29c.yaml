@@ -7,6 +7,7 @@ type: impl
 # 门槛与走势共用 price_trend.min_distinct_days，不加开关；服务端计算、三端不自算。source_key 按平台 + 有无券选（拼多多 price_trend.source.pdd / .pdd.general，契约 CT-22e）。
 # D10-694：同 PR 内 test-change 段改 B1-29a 冻结测试 test/spec/catalog/price-trend/**（整对象期望补 mode_price_fen、字段清单加该键、拼多多 source_key 改 .pdd 键；不删不放宽，手算期望值），编排按 #24 核后加标签。
 # D10-704：red_exempt 只登 6 条连带用例（kit.ts 改动致整文件判定，测试体未改）。
+# 2026-11-06 paths 加 price-trend.controller.ts：控制器逐字段组装响应（不带 mode_price_fen），source_key 类型取自契约生成物，CT-22e 合并重生成后需在此加字段、放宽来源键（实现回报）。
 # 依赖契约 CT-22e（openapi ProductPriceTrend.mode_price_fen 与来源键枚举）先合。分工：新鲜独立 Claude 写规则测试，Claude Opus 5.5 实现，Codex 评审。风险 RV1。
 refs: [BR-WATCH-19]
 refs_hash:
@@ -14,6 +15,7 @@ refs_hash:
 deps: [B1-29a, CT-22e]
 paths:
   - 'apps/api/src/modules/catalog/price-trend/**'
+  - 'apps/api/src/modules/catalog/http/public/price-trend.controller.ts'
 test_paths:
   - 'test/spec/catalog/price-trend-mode/**'
   - 'test/spec/catalog/price-trend/**'
