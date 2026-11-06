@@ -1,0 +1,30 @@
+id: B1-05zg
+repo: rebate-platform
+title: 购买按钮按 v3 新键下发（D10-664 S-08）——ctaKeyFor 按最终返利状态取 btn.buy.rebate / btn.buy.rebate_unknown / rebate_login_to_view / btn.buy.no_rebate，Agent 搜索卡遮罩后同步按钮键
+type: impl
+# 2026-11-08 be 入账（D10-691 顺序 S-08 → S-09 → S-15 → S-19；依赖 S-01 #2450、S-07 #2401 已合）。08 BR-TEXT-12 细则「购买按钮」：normal 单值 → btn.buy.rebate；amount_unknown → btn.buy.rebate_unknown；login_required → rebate_login_to_view；no_rebate（点击时才无返利等）→ btn.buy.no_rebate；btn.buy.coupon / btn.buy.rebate_suffix 停用不删；有券无券同一句；benefit_tags 不改。唯一决定点 catalog/domain/card.ts ctaKeyFor（去掉按券分支，按 basis 全覆盖，price_compare_risk 已不产出也给 btn.buy.rebate）。Agent 搜索卡（agent/tools/search/card.ts、pipeline.ts maskLoginToView）在游客遮罩为 login_required 或 amount_unknown 后按最终 basis 重算 cta（经 catalog/index.ts 导出取键函数，不深导入）。LinkLanding / 分享面板卡按契约 SharedProductCard 不带 cta，本单不做（客户端固定 btn.buy）。契约 ProductCta 描述已由 CT-26t 改好；openapi 与 agent 回放夹具里的旧示例不在本单。
+# 冻结 [AC-B1-05f#1]、[AC-B1-05f#8]（catalog/card/assembly.test.ts）钉旧键，照 D10-327 进 test_paths 由新鲜独立 Claude 改、按 #24 报核。规则测试新目录 catalog/card-cta（走真实 assembler，搜索 / 详情 / 识别 / 收藏 / 热销榜）、agent/tools-search-cta（遮罩后 rebate_login_to_view、amount_unknown、查返利卡）。RV1。
+refs: [BR-TEXT-12, BR-TEXT-15, BR-AI-11]
+refs_hash:
+  BR-TEXT-12: 0cd095533ce6
+  BR-TEXT-15: de8d5a3a0b48
+  BR-AI-11: 0ce4651ba7c3
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/domain/card{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/application/card-assembler{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/index.ts'
+  - 'apps/api/src/modules/agent/tools/search/{card,pipeline,search.test}.ts'
+  - 'apps/api/src/modules/agent/tools/quote/index{.ts,.test.ts}'
+  - 'test/spec/catalog/card/assembly.test.ts'
+  - 'test/spec/catalog/card-cta/**'
+  - 'test/spec/agent/tools-search-cta/**'
+test_paths:
+  - 'test/spec/catalog/card/assembly.test.ts'
+  - 'test/spec/catalog/card-cta/**'
+  - 'test/spec/agent/tools-search-cta/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
