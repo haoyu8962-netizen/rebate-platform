@@ -1,0 +1,149 @@
+{
+  "risk_note": "RV2 ledger: bad debt writeoff. A new ledger worker module generates candidates once the accounting day's R3 daily check is done (processed_events ledger.daily_check_done for app, D-1): the scan is only a prefilter; each account is re-checked in its own transaction under the users row then balance row locks (deletion status, available, negative_since, ledger.bad_debt_days, ledger.bad_debt_min_fen from B2-12e), then a PENDING row is inserted through transitionBadDebtWriteoff GENERATE with the partial unique index as backstop. adminListBadDebtWriteoffs (fund.writeoff or fund.view) and adminApproveBadDebtWriteoff (fund.writeoff, sms step-up) leave planned: approval locks users, balances and the candidate row, re-reads available and frozen; frozen > 0 with ledger.bad_debt_require_no_frozen.enabled on → 20001 writeoff_frozen_pending and the row stays PENDING; available >= 0 → CANCELLED, 200, written_off_fen 0, no voucher; otherwise a BAD_DEBT_WRITEOFF voucher BADDEBT:{account_id}:{candidate_id} for -available through ledger.post, APPROVED, audit bad_debt_writeoff_approve. The linked-account risk mark is out of scope (D10-727 ③, B2-12g in identity). Integration spec/ledger/bad-debt-writeoffs 32/32 pass after rebase.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "codex-run.sh review --review-type money: round 1 fail (S1 candidate generation used an unlocked stale snapshot: a balance that went positive and negative again between scan and insert still got a candidate with the old negative_since), round 2 pass (per-account re-check under users then balance locks; checklist rounding, sign, idempotency, concurrency, clock, app_id ok; partial_refund na)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "codex-run.sh review --review-type spec-test on tests by an independent Claude writer (claude-run.sh, approvals #36): round 1 fail (six S1: balance-row lock, Beijing midnight, version and balance_after, frozen-return interleaving, platform balance cache, amounts over 2^31), round 2 pass, round 3 pass on #14 expecting fields [amount_fen] (the platform names an additionalProperties error by the property; the contract does not say body)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-12f",
+  "spec_commit": "3e5e76a1a512751c9d6a022570692f1b663dc0ec",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [
+    "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#11] 列表不要 step-up：fund.view、fund.writeoff、超管都能读；只有 fund.adjust 的账号 → 10403；不带令牌 → 10001；读不写审计",
+    "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#12] 批准要 fund.writeoff：只有 fund.view 的、只有 fund.adjust 的、没有任何权限点的账号用合法请求体（各带自己的短信档令牌）→ 10403 admin_permission_denied；不带令牌 → 10001；都不写任何东西；之后 fund.writeoff 账号批准生效",
+    "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#13] 短信档 step-up：fund.writeoff 账号与超管不带令牌、带动态码档令牌 → 10003 tier=sms；没登记验证手机号的（超管也一样）→ 10003 verify_phone_missing；都不写任何东西；之后带短信档令牌一人即可批准（超管也可以）",
+    "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#14] 请求体与 id：控制台不送金额，带 amount_fen 的请求体 → 20001（fields 含 amount_fen）；不存在的 id、别的 app 的候选单 → 20001 data.fields=[id]（不是 404）；都不写任何东西；之后空对象请求体按批准时余额核销",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#15] BR-FUND-12 例：候选单生成时 −800（candidate_fen 800），批准前入账 500 → 批准核销 300（不是 800）：应答 APPROVED、written_off_fen 300、available 0；凭证 BADDEBT:{account_id}:{id} 记在当天会计日，分录逐行对 BAD_DEBT_WRITEOFF 模板（借 BAD_DEBT 300 / 贷 USER_BALANCE.available 300）且借贷合计为 0；negative_since 清空；审计 bad_debt_writeoff_approve 一条，含单号、账户、APPROVED、300 与前后 available −300 / 0，不含个人信息",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#16] 批准在会员的锁下重读余额：外部事务先持有 users 行与余额行，批准请求排队等锁；外部事务在锁内入账 500（−800 → −300）后提交，批准按锁后读到的 −300 核销 300",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#17] 批准时余额已回正 → CANCELLED、HTTP 200、written_off_fen 0：正好抵平到 0 的、回到 +200 的都不写凭证、不动余额，approver_id 与 approved_at 仍为 null；各写一条审计（CANCELLED、0、前后 available 相同）",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#18] 一个事务：写审计失败或改候选单失败时整笔回滚（候选单仍 PENDING、无凭证、余额与 negative_since 不变、无审计），换新幂等键重试一次生效",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#29] 只持有余额行锁的另一连接先拿到锁（不持 users 行）：批准事务被这把余额行锁挡住（pg_blocking_pids 指向持锁连接，被挡的正是入口发出的 account_balances … FOR UPDATE），持锁事务入账 500（−800 → −300）提交后，批准按锁后读到的 −300 核销 300：available 0、version 恰好 +1、用户分录 balance_after_fen 0，平台科目没有余额缓存行",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#30] 批准先拿到余额行锁（入口的 account_balances … FOR UPDATE 返回后在此停住）：只要余额行锁的另一连接入账 500 时被批准挡住；放行后批准按 −800 核销 800 并提交，之后入账才记账：available 500、version 共 +2，核销分录 balance_after_fen 0 / version +1，入账分录 balance_after_fen 500 / version +2，只有一张 BADDEBT 凭证",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#32] 金额逐分、不截断：经真实批准入口核销 −1 分、−1001 分（奇数）与 −2147483649 分（超过 2^31）：应答 written_off_fen 分别为 1、1001、2147483649，available 都变 0，凭证分录为借 BAD_DEBT 同额 / 贷 USER_BALANCE.available 同额、合计 0",
+    "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#34] 会计日按北京时间 00:00 日切：2027-02-18T17:00Z（北京 02-19 01:00，UTC 仍是 02-18）批准 −800（北京 2026-11-20 00:30 变负，negative_since 2026-11-20）→ 凭证 accounting_date 2027-02-19，应答 negative_days 91、approved_at 为该时刻",
+    "test/spec/ledger/bad-debt-writeoffs/assembly.test.ts > [AC-B2-12f#1] 装配：worker 入口的 app.module 恰调用一次 LedgerBadDebtWriteoffModule.forWorker；api、stream、admin、payout 入口一次都不调用",
+    "test/spec/ledger/bad-debt-writeoffs/assembly.test.ts > [AC-B2-12f#2] 装配（源码）：app.module 调 LedgerBadDebtWriteoffModule.forWorker；ledger 的核销文件不从 identity 或 content 模块直接导入",
+    "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#22] 已处理的单再批准 → 20902 bad_debt_writeoff：已 APPROVED 的（含刚由本入口核销的）与已 CANCELLED 的都不再写凭证、不动余额、不写审计",
+    "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#23] 两个批准并发（不同账号、不同幂等键）在会员锁后排队：只成一个（APPROVED、核销 800），另一个 20902；只有一张 BADDEBT 凭证、一条审计，available 0",
+    "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#24] 同一 Idempotency-Key 同一请求体重放：原样返回第一次的应答，不再记账、不再写审计（第一次之后的扣回让余额再负也不核销）；同 key 换请求体 → 不是第一次的应答、什么都不写；新 key → 20902；别的账号用同一 key 是它自己的作用域 → 20902",
+    "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#25] 同一 key 的请求还在执行（排在会员锁后）时再发 → 40901；锁放开后第一次照常核销，之后同 key 重放得到它的应答",
+    "test/spec/ledger/bad-debt-writeoffs/contract.test.ts > [AC-B2-12f#3] 两个操作去掉 x-implementation: planned（生成的 planned 清单同步）：列表 x-auth admin、x-error-codes [10001, 10403, 20001]；批准 x-auth admin、x-idempotent true、x-error-codes [10001, 10003, 10403, 20001, 20901, 20902, 40901]；admin 入口各恰好挂一次并带契约的请求 schema，api 入口都不挂",
+    "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#19] 开关 on、有冻结中的提现（available −1000、frozen 1000）→ 20001 writeoff_frozen_pending，不写凭证、单保持 PENDING、余额不动，列表 approve_blocked=true；提现单驳回退回 1000（available 0、frozen 0）后再批准 → CANCELLED、200、written_off_fen 0，没有坏账",
+    "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#20] 开关没有配置行时按默认 on：frozen 500 > 0 → 20001 writeoff_frozen_pending，什么都不写，列表 approve_blocked=true",
+    "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#21] 开关 off：不看 frozen，列表 approve_blocked=false；available −1500、frozen 1000（NEGATIVE_BALANCE 拦截的已批提现单）照常核销 1500，available 0、frozen 仍 1000；同一笔经回正钩子解除该单拦截（blocked_reason 清空、updated_at 取时钟、row_version + 1、状态不变）",
+    "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#31] 冻结退回与批准确定性交错（开关 on）：退回事务先持有 users 行与余额行（available −1000、frozen 1000），批准请求在它之后等锁；退回 1000 提交（available 0、frozen 0）后批准按锁后重读的 frozen 与 available 处理 → CANCELLED、200、written_off_fen 0，不是 writeoff_frozen_pending；全程没有 BADDEBT 凭证，审计一条 CANCELLED、前后 available 0",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#4] 默认阈值（没有配置行：90 天、0 分）：负余额第 89 天不生成；第 90 天 R3 完成后生成 PENDING 候选单，candidate_fen = −available、negative_since 取余额的、发起人与批准字段为空、created_at 取时钟；−1 分也生成；生成不写凭证、不动余额",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#5] 按配置值：ledger.bad_debt_days=30、ledger.bad_debt_min_fen=500 → 第 29 天不生成；第 30 天 |available| 正好 500 生成，差 1 分（499）不生成，只负了 29 天的 2000 也不生成",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#6] 每日 R3 后：第 90 天只有前天（02-16）或别的 app 的 R3 完成记录时不生成；当天要等的那一次（02-17）记下后才生成",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#7] 同一账户已有 PENDING 不再生成：同一天反复 tick、次日再跑都不重复（原单 id 与 created_at 不变）；次日满 90 天的另一个账户照常生成",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#8] 只有 PENDING 挡住再生成：同一账户早先的 APPROVED（已核销）与 CANCELLED 候选单不影响；再次负满 90 天时生成新的 PENDING，记新的 negative_since 与当前金额",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#9] 只适用于未注销用户、只看负余额：注销中（deleting）与已注销（deleted）的负余额会员不生成；负过但已入账抵平（negative_since 已清空）的、从未为负的不生成；同 app 的正常负余额会员照常生成",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#10] 各 app 互不影响：同一 tick 里 A、C（默认 90 天）各自生成、候选单只落在本 app；B 配置 ledger.bad_debt_days=120，同样负了 90 天不生成",
+    "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#33] 会计日按北京时间 00:00 日切（UTC 日期与北京日期不同的时刻）：北京 2026-11-20 00:30（UTC 11-19 16:30）变负的会员 negative_since 2026-11-20；2027-02-17T15:59Z（北京 02-17 23:59，第 89 天）不生成；2027-02-17T16:01Z（北京 02-18 00:01，UTC 仍是 02-17）R3（02-17）完成后生成，created_at 取该时刻；北京 2026-11-21 00:30（UTC 11-20 16:30）变负的只有 89 天，不生成",
+    "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#26] 默认第一页：只列本 app 的五张候选单，created_at 倒序、同一时刻按 id 倒序；每行 candidate_fen 是生成时金额，available / frozen 是现在的余额，negative_days = 当天会计日 − negative_since，approve_blocked 只在 PENDING 且有冻结时为 true（开关默认 on）；page 1、page_size 20、total 5",
+    "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#27] 筛选与分页：status=PENDING 三张、APPROVED 一张；user_id 只看该会员；status 与 user_id 同时给按 AND；不认识的 user_id 是空页；page_size=2 分三页，total 始终是筛选集的数，越过最后一页 items=[]；读不写审计",
+    "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#28] 参数不合契约 → 20001 data.fields 指明参数：page_size 201、page 0、status 小写 pending、user_id 不是 uuid；之后合法查询照常",
+    "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#35] negative_days 按北京时间 00:00 日切：negative_since 2026-11-20 的候选单，2027-02-18T15:59:30Z（北京 02-18 23:59:30）列出 90 天；一分钟后 2027-02-18T16:00:30Z（北京 02-19 00:00:30，UTC 仍是 02-18）列出 91 天"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "3e5e76a1a512751c9d6a022570692f1b663dc0ec",
+      "tree": "dffc17d5ec0cb3274816015c125dba20ef9ee850",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T13:12:37Z",
+      "finished_at": "2026-11-06T13:14:53Z",
+      "red_tests": [
+        "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#11] 列表不要 step-up：fund.view、fund.writeoff、超管都能读；只有 fund.adjust 的账号 → 10403；不带令牌 → 10001；读不写审计",
+        "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#12] 批准要 fund.writeoff：只有 fund.view 的、只有 fund.adjust 的、没有任何权限点的账号用合法请求体（各带自己的短信档令牌）→ 10403 admin_permission_denied；不带令牌 → 10001；都不写任何东西；之后 fund.writeoff 账号批准生效",
+        "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#13] 短信档 step-up：fund.writeoff 账号与超管不带令牌、带动态码档令牌 → 10003 tier=sms；没登记验证手机号的（超管也一样）→ 10003 verify_phone_missing；都不写任何东西；之后带短信档令牌一人即可批准（超管也可以）",
+        "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts > [AC-B2-12f#14] 请求体与 id：控制台不送金额，带 amount_fen 的请求体 → 20001（fields 含 amount_fen）；不存在的 id、别的 app 的候选单 → 20001 data.fields=[id]（不是 404）；都不写任何东西；之后空对象请求体按批准时余额核销",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#15] BR-FUND-12 例：候选单生成时 −800（candidate_fen 800），批准前入账 500 → 批准核销 300（不是 800）：应答 APPROVED、written_off_fen 300、available 0；凭证 BADDEBT:{account_id}:{id} 记在当天会计日，分录逐行对 BAD_DEBT_WRITEOFF 模板（借 BAD_DEBT 300 / 贷 USER_BALANCE.available 300）且借贷合计为 0；negative_since 清空；审计 bad_debt_writeoff_approve 一条，含单号、账户、APPROVED、300 与前后 available −300 / 0，不含个人信息",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#16] 批准在会员的锁下重读余额：外部事务先持有 users 行与余额行，批准请求排队等锁；外部事务在锁内入账 500（−800 → −300）后提交，批准按锁后读到的 −300 核销 300",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#17] 批准时余额已回正 → CANCELLED、HTTP 200、written_off_fen 0：正好抵平到 0 的、回到 +200 的都不写凭证、不动余额，approver_id 与 approved_at 仍为 null；各写一条审计（CANCELLED、0、前后 available 相同）",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#18] 一个事务：写审计失败或改候选单失败时整笔回滚（候选单仍 PENDING、无凭证、余额与 negative_since 不变、无审计），换新幂等键重试一次生效",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#29] 只持有余额行锁的另一连接先拿到锁（不持 users 行）：批准事务被这把余额行锁挡住（pg_blocking_pids 指向持锁连接，被挡的正是入口发出的 account_balances … FOR UPDATE），持锁事务入账 500（−800 → −300）提交后，批准按锁后读到的 −300 核销 300：available 0、version 恰好 +1、用户分录 balance_after_fen 0，平台科目没有余额缓存行",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#30] 批准先拿到余额行锁（入口的 account_balances … FOR UPDATE 返回后在此停住）：只要余额行锁的另一连接入账 500 时被批准挡住；放行后批准按 −800 核销 800 并提交，之后入账才记账：available 500、version 共 +2，核销分录 balance_after_fen 0 / version +1，入账分录 balance_after_fen 500 / version +2，只有一张 BADDEBT 凭证",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#32] 金额逐分、不截断：经真实批准入口核销 −1 分、−1001 分（奇数）与 −2147483649 分（超过 2^31）：应答 written_off_fen 分别为 1、1001、2147483649，available 都变 0，凭证分录为借 BAD_DEBT 同额 / 贷 USER_BALANCE.available 同额、合计 0",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts > [AC-B2-12f#34] 会计日按北京时间 00:00 日切：2027-02-18T17:00Z（北京 02-19 01:00，UTC 仍是 02-18）批准 −800（北京 2026-11-20 00:30 变负，negative_since 2026-11-20）→ 凭证 accounting_date 2027-02-19，应答 negative_days 91、approved_at 为该时刻",
+        "test/spec/ledger/bad-debt-writeoffs/assembly.test.ts > [AC-B2-12f#1] 装配：worker 入口的 app.module 恰调用一次 LedgerBadDebtWriteoffModule.forWorker；api、stream、admin、payout 入口一次都不调用",
+        "test/spec/ledger/bad-debt-writeoffs/assembly.test.ts > [AC-B2-12f#2] 装配（源码）：app.module 调 LedgerBadDebtWriteoffModule.forWorker；ledger 的核销文件不从 identity 或 content 模块直接导入",
+        "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#22] 已处理的单再批准 → 20902 bad_debt_writeoff：已 APPROVED 的（含刚由本入口核销的）与已 CANCELLED 的都不再写凭证、不动余额、不写审计",
+        "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#23] 两个批准并发（不同账号、不同幂等键）在会员锁后排队：只成一个（APPROVED、核销 800），另一个 20902；只有一张 BADDEBT 凭证、一条审计，available 0",
+        "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#24] 同一 Idempotency-Key 同一请求体重放：原样返回第一次的应答，不再记账、不再写审计（第一次之后的扣回让余额再负也不核销）；同 key 换请求体 → 不是第一次的应答、什么都不写；新 key → 20902；别的账号用同一 key 是它自己的作用域 → 20902",
+        "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts > [AC-B2-12f#25] 同一 key 的请求还在执行（排在会员锁后）时再发 → 40901；锁放开后第一次照常核销，之后同 key 重放得到它的应答",
+        "test/spec/ledger/bad-debt-writeoffs/contract.test.ts > [AC-B2-12f#3] 两个操作去掉 x-implementation: planned（生成的 planned 清单同步）：列表 x-auth admin、x-error-codes [10001, 10403, 20001]；批准 x-auth admin、x-idempotent true、x-error-codes [10001, 10003, 10403, 20001, 20901, 20902, 40901]；admin 入口各恰好挂一次并带契约的请求 schema，api 入口都不挂",
+        "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#19] 开关 on、有冻结中的提现（available −1000、frozen 1000）→ 20001 writeoff_frozen_pending，不写凭证、单保持 PENDING、余额不动，列表 approve_blocked=true；提现单驳回退回 1000（available 0、frozen 0）后再批准 → CANCELLED、200、written_off_fen 0，没有坏账",
+        "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#20] 开关没有配置行时按默认 on：frozen 500 > 0 → 20001 writeoff_frozen_pending，什么都不写，列表 approve_blocked=true",
+        "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#21] 开关 off：不看 frozen，列表 approve_blocked=false；available −1500、frozen 1000（NEGATIVE_BALANCE 拦截的已批提现单）照常核销 1500，available 0、frozen 仍 1000；同一笔经回正钩子解除该单拦截（blocked_reason 清空、updated_at 取时钟、row_version + 1、状态不变）",
+        "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts > [AC-B2-12f#31] 冻结退回与批准确定性交错（开关 on）：退回事务先持有 users 行与余额行（available −1000、frozen 1000），批准请求在它之后等锁；退回 1000 提交（available 0、frozen 0）后批准按锁后重读的 frozen 与 available 处理 → CANCELLED、200、written_off_fen 0，不是 writeoff_frozen_pending；全程没有 BADDEBT 凭证，审计一条 CANCELLED、前后 available 0",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#4] 默认阈值（没有配置行：90 天、0 分）：负余额第 89 天不生成；第 90 天 R3 完成后生成 PENDING 候选单，candidate_fen = −available、negative_since 取余额的、发起人与批准字段为空、created_at 取时钟；−1 分也生成；生成不写凭证、不动余额",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#5] 按配置值：ledger.bad_debt_days=30、ledger.bad_debt_min_fen=500 → 第 29 天不生成；第 30 天 |available| 正好 500 生成，差 1 分（499）不生成，只负了 29 天的 2000 也不生成",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#6] 每日 R3 后：第 90 天只有前天（02-16）或别的 app 的 R3 完成记录时不生成；当天要等的那一次（02-17）记下后才生成",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#7] 同一账户已有 PENDING 不再生成：同一天反复 tick、次日再跑都不重复（原单 id 与 created_at 不变）；次日满 90 天的另一个账户照常生成",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#8] 只有 PENDING 挡住再生成：同一账户早先的 APPROVED（已核销）与 CANCELLED 候选单不影响；再次负满 90 天时生成新的 PENDING，记新的 negative_since 与当前金额",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#9] 只适用于未注销用户、只看负余额：注销中（deleting）与已注销（deleted）的负余额会员不生成；负过但已入账抵平（negative_since 已清空）的、从未为负的不生成；同 app 的正常负余额会员照常生成",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#10] 各 app 互不影响：同一 tick 里 A、C（默认 90 天）各自生成、候选单只落在本 app；B 配置 ledger.bad_debt_days=120，同样负了 90 天不生成",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts > [AC-B2-12f#33] 会计日按北京时间 00:00 日切（UTC 日期与北京日期不同的时刻）：北京 2026-11-20 00:30（UTC 11-19 16:30）变负的会员 negative_since 2026-11-20；2027-02-17T15:59Z（北京 02-17 23:59，第 89 天）不生成；2027-02-17T16:01Z（北京 02-18 00:01，UTC 仍是 02-17）R3（02-17）完成后生成，created_at 取该时刻；北京 2026-11-21 00:30（UTC 11-20 16:30）变负的只有 89 天，不生成",
+        "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#26] 默认第一页：只列本 app 的五张候选单，created_at 倒序、同一时刻按 id 倒序；每行 candidate_fen 是生成时金额，available / frozen 是现在的余额，negative_days = 当天会计日 − negative_since，approve_blocked 只在 PENDING 且有冻结时为 true（开关默认 on）；page 1、page_size 20、total 5",
+        "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#27] 筛选与分页：status=PENDING 三张、APPROVED 一张；user_id 只看该会员；status 与 user_id 同时给按 AND；不认识的 user_id 是空页；page_size=2 分三页，total 始终是筛选集的数，越过最后一页 items=[]；读不写审计",
+        "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#28] 参数不合契约 → 20001 data.fields 指明参数：page_size 201、page 0、status 小写 pending、user_id 不是 uuid；之后合法查询照常",
+        "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts > [AC-B2-12f#35] negative_days 按北京时间 00:00 日切：negative_since 2026-11-20 的候选单，2027-02-18T15:59:30Z（北京 02-18 23:59:30）列出 90 天；一分钟后 2027-02-18T16:00:30Z（北京 02-19 00:00:30，UTC 仍是 02-18）列出 91 天"
+      ],
+      "expected": [
+        "test/spec/ledger/bad-debt-writeoffs/access.int.test.ts",
+        "test/spec/ledger/bad-debt-writeoffs/approve.int.test.ts",
+        "test/spec/ledger/bad-debt-writeoffs/assembly.test.ts",
+        "test/spec/ledger/bad-debt-writeoffs/concurrency.int.test.ts",
+        "test/spec/ledger/bad-debt-writeoffs/contract.test.ts",
+        "test/spec/ledger/bad-debt-writeoffs/frozen.int.test.ts",
+        "test/spec/ledger/bad-debt-writeoffs/generate.int.test.ts",
+        "test/spec/ledger/bad-debt-writeoffs/list.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "35233f6f953b984894aad0ad8e6f2b575b377b098da821552f4764a97421eae1"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f25036825c633abd74899498a8207bfdb664ab4da031665ce87cbe385610a666"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b371ccb23d45586162e336ce9caf165e9bc90523",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}

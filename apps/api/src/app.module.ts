@@ -227,6 +227,7 @@ import {
 import {
   EarningsSummaryModule,
   LedgerAdminModule,
+  LedgerBadDebtWriteoffModule,
   LedgerAssetSnapshotModule,
   LedgerDailyCheckModule,
   LedgerModule,
@@ -248,6 +249,7 @@ import {
   type WalletSummaryDependencies,
   type ClosingAdjustmentAuditPort,
   readOrderFiguresLedger,
+  type BadDebtWriteoffPorts,
 } from './modules/ledger/index.ts';
 // B1-02zn: GET /v1/me's balance reads the wallet summary query through ledger's read-only entry.
 import { getWalletSummary } from './modules/ledger/read.ts';
@@ -4384,6 +4386,49 @@ function ledgerAssetSnapshotModule(): DynamicModule {
   });
 }
 
+/** BR-FUND-12 defaults when a config row is missing (content/domain/config-registry.ts seeds). */
+const BAD_DEBT_DEFAULT_DAYS = 90;
+
+/**
+ * B2-12f (BR-FUND-12): the bad debt write-offs' ports — content's ledger.bad_debt_days /
+ * ledger.bad_debt_min_fen (no row: 90 days, 0 fen) and ledger.bad_debt_require_no_frozen.enabled
+ * (no row: on), each read with a new reader on the given handle so a changed value applies at
+ * once; identity's deletion stages (deleting or deleted members get no candidate) and its users
+ * row lock (before ledger's balance lock, BR-WDR-07).
+ */
+const badDebtWriteoffPorts: BadDebtWriteoffPorts = {
+  thresholds: async (db, clock, appId) => {
+    const reader = createContentReader({ db, clock });
+    const days = await reader.configValue(appId, 'ledger.bad_debt_days');
+    const minFen = await reader.configValue(appId, 'ledger.bad_debt_min_fen');
+    const dayValue = days === null ? BAD_DEBT_DEFAULT_DAYS : days.value;
+    if (typeof dayValue !== 'number' || !Number.isSafeInteger(dayValue) || dayValue < 1) {
+      throw new Error('ledger.bad_debt_days must be a whole number of at least 1');
+    }
+    const fen = minFen === null ? 0n : parseFen(minFen.value);
+    if (fen < 0n) throw new Error('ledger.bad_debt_min_fen must not be negative');
+    return { days: dayValue, minFen: fen };
+  },
+  requireNoFrozen: async (db, clock, appId) => {
+    const item = await createContentReader({ db, clock }).configValue(
+      appId,
+      'ledger.bad_debt_require_no_frozen.enabled',
+    );
+    // Default on; only an explicit false turns the frozen check off.
+    return item?.value !== false;
+  },
+  closingUsers: async (db, input) => {
+    const statuses = await createUserDeletionStatusReader({ db }).read(db, {
+      app_id: input.appId,
+      user_ids: input.userIds,
+    });
+    const closing = new Set<string>();
+    for (const [userId, status] of statuses) if (status !== 'none') closing.add(userId);
+    return closing;
+  },
+  lockUsersForUpdate: (trx, input) => lockUsersForUpdate(trx, input),
+};
+
 function payoutProcessOptions(): PayoutProcessOptions {
   return {
     lockUsersForUpdate,
@@ -4711,6 +4756,25 @@ export class AppModule {
         // release of the holds whose source is the diff (users rows locked first, one
         // withdraw_hold.release audit each) and the recon_diff_close audit row (admin's writer
         // bound to the closing transaction) commit together.
+        // B2-12f (BR-FUND-12): the write-off candidates' list (fund.writeoff or fund.view, read
+        // only) and approval (fund.writeoff, step-up sms, platform idempotency): the voucher on the
+        // ledger with the bus and payout's recovery hook (D10-587), the candidate and the audit
+        // record commit together.
+        ...(options.entry === 'admin'
+          ? [
+              LedgerBadDebtWriteoffModule.forAdmin({
+                ports: badDebtWriteoffPorts,
+                ledger: ({ clock, eventBus }) =>
+                  createLedger({
+                    clock,
+                    eventBus,
+                    balanceRecoveredHook: createBalanceRecoveredHook({ clock }),
+                  }),
+                auditWriter: (db, clock) =>
+                  createAuditWriter({ db, clock, sensitiveKeys: SENSITIVE_KEYS }),
+              }),
+            ]
+          : []),
         ...(options.entry === 'admin'
           ? [
               LedgerAdminModule.forAdmin({
@@ -5031,6 +5095,9 @@ export class AppModule {
               ledgerDailyCheckModule(),
               // B2-04zo (BR-FUND-18): the asset daily snapshot timer, D+1 00:01 +08:00 per app.
               ledgerAssetSnapshotModule(),
+              // B2-12f (BR-FUND-12): the daily generation of the bad debt write-off candidates,
+              // after the day's R3 (the completion record of D − 1), on a timer.
+              LedgerBadDebtWriteoffModule.forWorker({ ports: badDebtWriteoffPorts }),
               // B2-04ze (D10-443): settlement's queue settle (bill / batch_execute), its daily bill
               // seed and due batch scan, over the owners' exports. readAttribution must be
               // commission's readCommissionAttribution (HANDOFF 10-27). Switches as they are:

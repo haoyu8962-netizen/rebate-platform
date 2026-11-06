@@ -155,6 +155,17 @@ export { dailyCheckDoneEventId } from './application/daily-check-schedule-done.t
 export type { DailyCheckDoneConsumer } from './application/daily-check-schedule-done.ts';
 export { LedgerDailyCheckModule } from './daily-check.module.ts';
 export type { LedgerDailyCheckWorkerOptions } from './daily-check.module.ts';
+// B2-12f: BR-FUND-12 bad debt write-off candidates (worker entry) and their ports.
+export { LedgerBadDebtWriteoffModule } from './bad-debt-writeoff.module.ts';
+export type {
+  LedgerBadDebtWriteoffAdminOptions,
+  LedgerBadDebtWriteoffWorkerOptions,
+} from './bad-debt-writeoff.module.ts';
+export type {
+  BadDebtThresholds,
+  BadDebtWriteoffPorts,
+  BadDebtWriteoffStatus,
+} from './application/bad-debt-writeoff.ts';
 // B2-04y: GET /v1/wallet/summary (the query itself is exported only by read.ts, BR-AI-02 ④).
 export { WalletSummaryModule } from './wallet-summary.module.ts';
 export type { WalletSummaryModuleOptions } from './wallet-summary.module.ts';

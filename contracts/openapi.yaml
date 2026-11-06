@@ -24478,7 +24478,6 @@ paths:
         20001, as AdminPageSize); `total` is the count of the filter set. Reading does not write
         an audit record.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -24587,7 +24586,6 @@ paths:
         and not part of the body hash, so a replay after a 10003 keeps its key.
       x-auth: admin
       x-idempotent: true
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003
