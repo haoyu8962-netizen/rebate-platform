@@ -23,6 +23,7 @@ it('[AC-B1-29a#1] 窗口 = [今天−29, 今天]（+08:00）：now = 03-10 00:00
     start_date: '2031-02-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 400n,
   });
 }, 10_000);
 
@@ -37,6 +38,7 @@ it('[AC-B1-29a#2] now = 03-10 23:59:59.999 +08:00 仍是 03-10，窗口不变', 
     start_date: '2031-02-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 400n,
   });
 }, 10_000);
 
@@ -50,6 +52,7 @@ it('[AC-B1-29a#3] now = 03-11 00:00:00.000 +08:00 → 窗口 02-10..03-11，02-0
     start_date: '2031-03-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 400n,
   });
 }, 10_000);
 
@@ -67,6 +70,7 @@ it('[AC-B1-29a#4] 日期按 +08:00 而不是 UTC：03-09 08:00 与 03-10 07:00�
     start_date: '2031-03-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 520n,
   });
 }, 10_000);
 
@@ -85,6 +89,7 @@ it('[AC-B1-29a#5] 跨年与闰月：now = 2032-01-15 00:00 → 起点 2031-12-17
     start_date: '2031-12-17',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 13n,
   });
   const leapRows = [
     row('detail', 21n, bj('2032-01-31', '23:59:59.999')),
@@ -100,6 +105,7 @@ it('[AC-B1-29a#5] 跨年与闰月：now = 2032-01-15 00:00 → 起点 2031-12-17
     start_date: '2032-02-01',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 23n,
   });
 }, 10_000);
 
@@ -121,6 +127,7 @@ it('[AC-B1-29a#6] 游程行跨越窗口起点：01-01~02-11 09:00 的 500 在 02
     start_date: '2031-02-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 500n,
   });
 }, 10_000);
 
@@ -147,6 +154,7 @@ it('[AC-B1-29a#7] 同日多来源：detail 优先于 search、search 优先于 q
     start_date: '2031-03-01',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 320n,
   });
 }, 10_000);
 
@@ -167,6 +175,7 @@ it('[AC-B1-29a#8] 当日最后一次记录：同一来源一天多行取当日�
     start_date: '2031-03-05',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 620n,
   });
 }, 10_000);
 
@@ -184,6 +193,7 @@ it('[AC-B1-29a#9] 跨 +08:00 零点的游程行：[03-08 23:59:59.999, 03-09 00:
     start_date: '2031-03-08',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 710n,
   });
   const onlyRun = [row('detail', 700n, bj('2031-03-08', '23:59:59.999'), bj('2031-03-09'))];
   expect(computePriceTrend(onlyRun, bj('2031-03-10', '12:00:00.000'), 2)).toEqual({
@@ -195,6 +205,7 @@ it('[AC-B1-29a#9] 跨 +08:00 零点的游程行：[03-08 23:59:59.999, 03-09 00:
     start_date: '2031-03-08',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 700n,
   });
 }, 10_000);
 
@@ -229,6 +240,7 @@ it('[AC-B1-29a#11] source_key 跟随当天实际选中的行：detail 无券压�
     start_date: '2031-03-08',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 900n,
   });
   const laterNoCoupon = [
     base,
@@ -244,6 +256,7 @@ it('[AC-B1-29a#11] source_key 跟随当天实际选中的行：detail 无券压�
     start_date: '2031-03-08',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 950n,
   });
   const searchOnly = [
     base,
@@ -271,6 +284,7 @@ it('[AC-B1-29a#13] min_distinct_days = 1 → 1 天也是 ok；= 3 → 2 天 no_d
     start_date: '2031-03-09',
     window_days: 30,
     source_key: 'price_trend.source',
+    mode_price_fen: 90n,
   });
   const two = [
     row('detail', 90n, bj('2031-03-07')),
@@ -290,6 +304,7 @@ it('[AC-B1-29a#13] min_distinct_days = 1 → 1 天也是 ok；= 3 → 2 天 no_d
     start_date: '2031-03-07',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 94n,
   });
 }, 10_000);
 

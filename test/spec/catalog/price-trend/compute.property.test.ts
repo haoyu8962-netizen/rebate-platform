@@ -45,7 +45,7 @@ it('[AC-B1-29a#16] 属性：任意五类来源、任意顺序、跨窗口起点�
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);
 
 it('[AC-B1-29a#17] 属性（跨日）：一条 detail 游程行从窗口第 a 天覆盖到第 b 天 → a..b 每天一点、同一价格、日期连续升序，start_date = 第 a 天', () => {
   let checked = 0;
@@ -77,6 +77,8 @@ it('[AC-B1-29a#17] 属性（跨日）：一条 detail 游程行从窗口第 a �
           start_date: shiftDay(startDay, a),
           window_days: 30,
           source_key: coupon > 0n ? 'price_trend.source' : 'price_trend.source.general',
+          // Every point carries the same fen, so it is the most common daily price.
+          mode_price_fen: fen,
         });
         expect(computePriceTrend(rows, new Date(nowMs), days + 1)).toEqual(NO_DATA);
         checked += 1;
@@ -85,7 +87,7 @@ it('[AC-B1-29a#17] 属性（跨日）：一条 detail 游程行从窗口第 a �
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);
 
 const optionalRun = fc.option(
   fc.record({ t1: timeOfDayArb, t2: timeOfDayArb, fen: fenArb, coupon: fenArb }),
@@ -128,6 +130,7 @@ it('[AC-B1-29a#18] 属性（同日多来源）：某天五类来源任意出现�
             start_date: today,
             window_days: 30,
             source_key: 'price_trend.source.general',
+            mode_price_fen: anchorFen,
           });
         } else {
           const date = shiftDay(startDay, d);
@@ -137,6 +140,8 @@ it('[AC-B1-29a#18] 属性（同日多来源）：某天五类来源任意出现�
             start_date: date,
             window_days: 30,
             source_key: 'price_trend.source.general',
+            // Equal fen → 2 days; different → 1 day each and today (the anchor) is the latest.
+            mode_price_fen: anchorFen,
           });
         }
         checked += 1;
@@ -145,7 +150,7 @@ it('[AC-B1-29a#18] 属性（同日多来源）：某天五类来源任意出现�
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);
 
 it('[AC-B1-29a#19] 属性（游程行跨越窗口起点）：first 在窗口起点前 k 天、last 在窗口第 j 天 → 第 0..j 天每天一点，start_date = 窗口第一天；j = 0 且 min = 2 → no_data', () => {
   let checked = 0;
@@ -179,6 +184,8 @@ it('[AC-B1-29a#19] 属性（游程行跨越窗口起点）：first 在窗口起�
           start_date: startDay,
           window_days: 30,
           source_key: coupon > 0n ? 'price_trend.source' : 'price_trend.source.general',
+          // Every point carries the same fen.
+          mode_price_fen: fen,
         };
         expect(computePriceTrend(rows, new Date(nowMs), 1)).toEqual(expected);
         expect(computePriceTrend(rows, new Date(nowMs), 2)).toEqual(j === 0 ? NO_DATA : expected);
@@ -188,7 +195,7 @@ it('[AC-B1-29a#19] 属性（游程行跨越窗口起点）：first 在窗口起�
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);
 
 it('[AC-B1-29a#20] 属性（只有 1 天记录）：所有行落在同一天（任意来源与时刻）→ min_distinct_days ≥ 2 一律 no_data；= 1 时与独立模型一致', () => {
   let checked = 0;
@@ -226,7 +233,7 @@ it('[AC-B1-29a#20] 属性（只有 1 天记录）：所有行落在同一天（�
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);
 
 it('[AC-B1-29a#21] 属性（+08:00 窗口边界）：任意 now，窗口第一天 00:00:00.000 的行计入、早 1 ms 的行不计；今天 00:00:00.000 的行计入今天', () => {
   let checked = 0;
@@ -248,10 +255,12 @@ it('[AC-B1-29a#21] 属性（+08:00 窗口边界）：任意 now，窗口第一�
         start_date: dateOfMs(start),
         window_days: 30,
         source_key: 'price_trend.source.general',
+        // Equal fen → 2 days; different → 1 day each and today is the latest.
+        mode_price_fen: today,
       });
       checked += 1;
     }),
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);

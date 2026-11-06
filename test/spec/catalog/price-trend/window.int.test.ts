@@ -61,6 +61,7 @@ it('[AC-B1-29a#40] 连库：today = 03-10，窗口首日 02-09 01:00 +08:00（UT
     start_date: '2031-02-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 190n,
   });
 
   await insertSingle(appId, 'tb:w0', 220n, bj('2031-02-09', '00:00:00.000'));
@@ -76,6 +77,7 @@ it('[AC-B1-29a#40] 连库：today = 03-10，窗口首日 02-09 01:00 +08:00（UT
     start_date: '2031-02-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 200n,
   });
 
   await insertSingle(appId, 'tb:wx', 230n, bj('2031-02-08', '23:59:59.999'));

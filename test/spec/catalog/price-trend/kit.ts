@@ -68,11 +68,33 @@ export const NO_DATA: PriceTrend = {
   start_date: null,
   window_days: 30,
   source_key: 'price_trend.source.general',
+  mode_price_fen: null,
 };
 
 /**
- * Independent model of rulings B.1-B.8 and B.10. Same-kind rows must be disjoint (as the writer
- * produces them), so the "latest instant inside the day" never ties.
+ * B1-29c (BR-WATCH-19 细则「最常见价」): the daily price seen on the most days, exact fen
+ * comparison, a tie goes to the price whose latest day is the most recent. Points are in
+ * ascending date order, one per day.
+ */
+function modeOfPoints(points: readonly { final_price_fen: bigint }[]): bigint | null {
+  const seen = new Map<bigint, { days: number; lastIndex: number }>();
+  points.forEach((point, index) => {
+    const entry = seen.get(point.final_price_fen);
+    seen.set(point.final_price_fen, { days: (entry?.days ?? 0) + 1, lastIndex: index });
+  });
+  let best: { fen: bigint; days: number; lastIndex: number } | null = null;
+  for (const [fen, { days, lastIndex }] of seen) {
+    if (best === null || days > best.days || (days === best.days && lastIndex > best.lastIndex)) {
+      best = { fen, days, lastIndex };
+    }
+  }
+  return best === null ? null : best.fen;
+}
+
+/**
+ * Independent model of rulings B.1-B.8 and B.10 (and, B1-29c, mode_price_fen by modeOfPoints).
+ * Same-kind rows must be disjoint (as the writer produces them), so the "latest instant inside
+ * the day" never ties.
  */
 export function modelTrend(
   rows: readonly PriceTrendRow[],
@@ -114,6 +136,7 @@ export function modelTrend(
     start_date: points[0]!.date,
     window_days: 30,
     source_key: lastCoupon > 0n ? 'price_trend.source' : 'price_trend.source.general',
+    mode_price_fen: modeOfPoints(points),
   };
 }
 

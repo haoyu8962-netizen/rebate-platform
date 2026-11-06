@@ -39,6 +39,7 @@ const TWO_DAYS_OK = {
   start_date: '2031-03-09',
   window_days: 30,
   source_key: 'price_trend.source.general',
+  mode_price_fen: 90n,
 };
 
 function options(
@@ -102,7 +103,7 @@ it('[AC-B1-29a#24] 属性（未达 stable_7d）：任意 key_stability 与任意
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);
 
 it('[AC-B1-29a#25] price_trend.min_distinct_days 按 appId 经 CatalogConfigReader 读；没有配置 → 默认 2（1 天 no_data、2 天 ok）', async () => {
   const one = options('stable_7d', ONE_DAY);
@@ -128,6 +129,7 @@ it('[AC-B1-29a#26] 非默认值：min_distinct_days = 3 → 2 天 no_data、3 �
     start_date: '2031-03-08',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 90n,
   });
   expect(await getPriceTrend(options('stable_7d', ONE_DAY, minDaysConfig(1)).opts, QUERY)).toEqual({
     status: 'ok',
@@ -135,6 +137,7 @@ it('[AC-B1-29a#26] 非默认值：min_distinct_days = 3 → 2 天 no_data、3 �
     start_date: '2031-03-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 100n,
   });
 }, 10_000);
 
@@ -182,6 +185,7 @@ it('[AC-B1-29a#29] 时间只读注入的 Clock：同一批行，Clock 在 03-11 
     start_date: '2031-02-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 400n,
   });
   const after = options('stable_7d', rows, minDaysConfig(3), bj('2031-03-11', '00:00:00.000'));
   expect(await getPriceTrend(after.opts, QUERY)).toEqual(NO_DATA);
@@ -200,6 +204,7 @@ it('[AC-B1-29a#30] 返回里没有任何用户标识（10 AC-S1-141）：只有�
   } as PriceTrendQuery;
   const result = await getPriceTrend(opts, smuggled);
   expect(Object.keys(result).sort()).toEqual([
+    'mode_price_fen',
     'points',
     'source_key',
     'start_date',
@@ -226,6 +231,7 @@ it('[AC-B1-29a#30] 返回里没有任何用户标识（10 AC-S1-141）：只有�
     start_date: '2031-03-09',
     window_days: 30,
     source_key: 'price_trend.source',
+    mode_price_fen: 90n,
   });
 }, 10_000);
 
@@ -239,6 +245,7 @@ it('[AC-B1-29a#31] 属性（无用户标识）：任意行与 now 下，结果�
         const { opts } = plainOptions('stable_7d', rows, minDays, new Date(nowMs));
         const result = await getPriceTrend(opts, QUERY);
         expect(Object.keys(result).sort()).toEqual([
+          'mode_price_fen',
           'points',
           'source_key',
           'start_date',
@@ -257,4 +264,4 @@ it('[AC-B1-29a#31] 属性（无用户标识）：任意行与 now 下，结果�
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);

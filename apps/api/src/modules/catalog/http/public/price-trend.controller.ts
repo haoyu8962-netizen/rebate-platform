@@ -107,6 +107,9 @@ export class PriceTrendController {
         start_date: trend.start_date,
         window_days: trend.window_days,
         source_key: trend.source_key,
+        // B1-29c (CT-22e): null exactly when no_data; same int64 serialization as the points.
+        mode_price_fen:
+          trend.mode_price_fen === null ? null : fenToJsonNumber(trend.mode_price_fen),
       },
       trace_id: request.id,
     };

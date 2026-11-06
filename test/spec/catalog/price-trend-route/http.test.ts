@@ -57,6 +57,7 @@ it('[AC-B1-29b#1] 游客读取真实用例结果，金额序列化为整数且�
       start_date: '2030-10-16',
       window_days: 30,
       source_key: 'price_trend.source.general',
+      mode_price_fen: 2990,
     },
     trace_id: '01920000-0000-7000-8000-00000000d029',
   });
@@ -90,6 +91,7 @@ it('[AC-B1-29b#2] auth none：登录凭据和游客返回同样结果，传入�
       start_date: '2030-10-16',
       window_days: 30,
       source_key: 'price_trend.source.general',
+      mode_price_fen: 2990,
     });
   }
   expect(f.read.mock.calls.map(([, query]) => query)).toEqual([
@@ -208,6 +210,7 @@ it.each(['unknown-product', 'too-few-days', 'unstable-platform'] as const)(
       start_date: null,
       window_days: 30,
       source_key: 'price_trend.source.general',
+      mode_price_fen: null,
     });
     expect(f.read).toHaveBeenCalledTimes(1);
     await assertContract(response, 'ProductPriceTrendResponse');
@@ -235,6 +238,7 @@ it('[AC-B1-29b#9] 保留用例的有券 source_key、零价与大额整数，不
     start_date: '2030-10-16',
     window_days: 30,
     source_key: 'price_trend.source',
+    mode_price_fen: 9007199254740991,
   });
   await assertContract(response, 'ProductPriceTrendResponse');
 }, 30_000);

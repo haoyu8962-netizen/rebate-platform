@@ -1,5 +1,5 @@
 // B1-29a: the price trend of one product from its price_snapshot runs, a pure function.
-import type { PriceTrend, PriceTrendPoint, PriceTrendRow } from './types.ts';
+import type { PriceTrend, PriceTrendPoint, PriceTrendRow, PriceTrendSourceKey } from './types.ts';
 import { DAY_MS, WINDOW_DAYS, dayLabel, dayNumber, windowStart } from './window.ts';
 
 export function noPriceTrend(): PriceTrend {
@@ -9,7 +9,40 @@ export function noPriceTrend(): PriceTrend {
     start_date: null,
     window_days: WINDOW_DAYS,
     source_key: 'price_trend.source.general',
+    mode_price_fen: null,
   };
+}
+
+/**
+ * BR-WATCH-19 细则「商品详情价格走势的最常见价」: the daily price seen on the most days, compared
+ * exactly in fen; on a tie the price whose latest day is the most recent. Points are ascending,
+ * one per day. Empty → null.
+ */
+export function modePriceFen(points: readonly PriceTrendPoint[]): bigint | null {
+  const seen = new Map<bigint, { days: number; lastIndex: number }>();
+  points.forEach((point, index) => {
+    const days = (seen.get(point.final_price_fen)?.days ?? 0) + 1;
+    seen.set(point.final_price_fen, { days, lastIndex: index });
+  });
+  let best: bigint | null = null;
+  let bestDays = 0;
+  let bestIndex = -1;
+  for (const [fen, { days, lastIndex }] of seen) {
+    if (days > bestDays || (days === bestDays && lastIndex > bestIndex)) {
+      best = fen;
+      bestDays = days;
+      bestIndex = lastIndex;
+    }
+  }
+  return best;
+}
+
+/** By platform (Pinduoduo has its own pair, CT-22e), then by the last point's coupon. */
+function sourceKeyOf(platform: string | undefined, lastCoupon: bigint): PriceTrendSourceKey {
+  if (platform === 'pdd') {
+    return lastCoupon > 0n ? 'price_trend.source.pdd' : 'price_trend.source.pdd.general';
+  }
+  return lastCoupon > 0n ? 'price_trend.source' : 'price_trend.source.general';
 }
 
 const SOURCE_PRIORITY = { detail: 0, search: 1, quote: 2 } as const;
@@ -30,13 +63,17 @@ interface DailyChoice {
  *   points   one per day with a value, ascending; fewer distinct days than minDistinctDays →
  *            no_data (points [], start_date null, source_key 'price_trend.source.general');
  *   ok       start_date = first point's date; source_key from the coupon_fen of the row behind
- *            the last point (> 0 'price_trend.source', = 0 'price_trend.source.general').
- * minDistinctDays is a positive integer (the caller normalises it). Rows may come in any order.
+ *            the last point (> 0 'price_trend.source', = 0 'price_trend.source.general'; for
+ *            platform 'pdd' the .pdd / .pdd.general pair, B1-29c); mode_price_fen = modePriceFen
+ *            of the points (B1-29c). no_data keeps source_key .general on every platform.
+ * `platform` is the query's platform code; omitted means not Pinduoduo. minDistinctDays is a
+ * positive integer (the caller normalises it). Rows may come in any order.
  */
 export function computePriceTrend(
   rows: readonly PriceTrendRow[],
   now: Date,
   minDistinctDays: number,
+  platform?: string,
 ): PriceTrend {
   const nowMs = now.getTime();
   const firstDay = dayNumber(nowMs) - WINDOW_DAYS + 1;
@@ -87,6 +124,7 @@ export function computePriceTrend(
     points,
     start_date: first.date,
     window_days: WINDOW_DAYS,
-    source_key: lastCoupon > 0n ? 'price_trend.source' : 'price_trend.source.general',
+    source_key: sourceKeyOf(platform, lastCoupon),
+    mode_price_fen: modePriceFen(points),
   };
 }

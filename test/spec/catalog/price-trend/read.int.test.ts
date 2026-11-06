@@ -128,8 +128,10 @@ it('[AC-B1-29a#32] 连库：只按 (app_id, platform, product_key) 读 price_sna
     start_date: '2031-02-09',
     window_days: 30,
     source_key: 'price_trend.source',
+    mode_price_fen: 400n,
   });
   expect(Object.keys(result).sort()).toEqual([
+    'mode_price_fen',
     'points',
     'source_key',
     'start_date',
@@ -162,6 +164,7 @@ it('[AC-B1-29a#33] 连库：platforms.key_stability 为 unverified、stable_24h�
     start_date: '2031-03-07',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 1n,
   });
 }, 30_000);
 
@@ -179,6 +182,7 @@ it('[AC-B1-29a#34] 连库：只有 1 天记录 → 默认 no_data；price_trend.
     start_date: '2031-03-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 700n,
   });
 }, 30_000);
 

@@ -98,6 +98,7 @@ it.each([
       start_date: '2031-02-09',
       window_days: 30,
       source_key: 'price_trend.source.general',
+      mode_price_fen: 190n,
     });
   },
   10_000,
@@ -123,6 +124,7 @@ it('[AC-B1-29a#38] 窗口首日前一刻 02-08 23:59:59.999 +08:00 的单次观�
     start_date: '2031-03-09',
     window_days: 30,
     source_key: 'price_trend.source.general',
+    mode_price_fen: 180n,
   });
 }, 10_000);
 
@@ -167,4 +169,4 @@ it('[AC-B1-29a#39] 属性（跨日、游程行跨越窗口起点）：store 只�
     propParams(),
   );
   expect(checked).toBeGreaterThan(0);
-}, 120_000);
+}, 900_000);

@@ -8,8 +8,15 @@ import type { PriceSnapshotSourceKind } from '../price-history/types.ts';
 
 export type PriceTrendStatus = 'ok' | 'no_data';
 
-/** price_trend.source when the last point's row carries a coupon, else .general (BR-PRICE-04). */
-export type PriceTrendSourceKey = 'price_trend.source' | 'price_trend.source.general';
+/**
+ * price_trend.source when the last point's row carries a coupon, else .general (BR-PRICE-04);
+ * Pinduoduo products (platform 'pdd') use the .pdd pair instead (B1-29c, CT-22e).
+ */
+export type PriceTrendSourceKey =
+  | 'price_trend.source'
+  | 'price_trend.source.general'
+  | 'price_trend.source.pdd'
+  | 'price_trend.source.pdd.general';
 
 /** One natural day in +08:00 (date YYYY-MM-DD) and the final price chosen for it. */
 export interface PriceTrendPoint {
@@ -21,7 +28,8 @@ export interface PriceTrendPoint {
  * The data of the price trend response (contract ProductPriceTrend). Nothing else: no user,
  * device or request identifier of any kind.
  *   ok       points in ascending date order, start_date = date of the first point;
- *   no_data  points [], start_date null, source_key 'price_trend.source.general'.
+ *   no_data  points [], start_date null, source_key 'price_trend.source.general',
+ *            mode_price_fen null.
  */
 export interface PriceTrend {
   readonly status: PriceTrendStatus;
@@ -29,6 +37,12 @@ export interface PriceTrend {
   readonly start_date: string | null;
   readonly window_days: 30;
   readonly source_key: PriceTrendSourceKey;
+  /**
+   * B1-29c (BR-WATCH-19 细则「商品详情价格走势的最常见价」): among the points' daily prices the
+   * one seen on the most days, compared exactly in fen; a tie goes to the price seen most
+   * recently. null when status = no_data.
+   */
+  readonly mode_price_fen: bigint | null;
 }
 
 /** One price_snapshot run as the trend needs it (a run: same price from first to last). */

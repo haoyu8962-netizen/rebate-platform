@@ -10,7 +10,7 @@ import { dateAt, windowStart } from './window.ts';
  *   2. price_trend.min_distinct_days through options.config.configValue(appId, key); default 2
  *      when missing, not a positive safe integer, or the read fails.
  *   3. store.rows for exactly (appId, platform, productKey) and the window of options.clock.now(),
- *      then computePriceTrend. Only price_snapshot is read: no observation table, no union call.
+ *      then computePriceTrend with query.platform (source_key pair, B1-29c). Only price_snapshot is read: no observation table, no union call.
  * The result has only the PriceTrend fields; nothing from the caller beyond the query is used.
  */
 export async function getPriceTrend(
@@ -40,5 +40,5 @@ export async function getPriceTrend(
     // The store's upper bound is exclusive; include the captured Clock instant.
     until: dateAt(now, now.getTime() + 1),
   });
-  return computePriceTrend(rows, now, minDistinctDays);
+  return computePriceTrend(rows, now, minDistinctDays, platform);
 }
