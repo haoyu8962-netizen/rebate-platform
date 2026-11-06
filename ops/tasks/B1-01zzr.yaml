@@ -1,0 +1,24 @@
+id: B1-01zzr
+repo: rebate-platform
+title: platform/metrics：同步水位滞后只算同步流，排除 rescan / rights / manual；另出回扫位置 gauge（D10-747 / D10-765 / D10-766 A，staging CouliSyncWatermarkLag 误报）
+type: impl
+# 2026-11-07 W1 入账（D10-766 选 A，不动冻结 B1-01zzh）。couli_sync_watermark_lag_seconds{platform} 照旧按平台取 min(cursor_at)，但按排除表去掉 query_kind 为 rescan / rights / manual 的流（排除表，不改成「只认 increment」：冻结夹具的 'updated_at' 流照常计入）；
+# 新出 couli_sync_rescan_position_seconds{app_id, platform, query_kind}（now − 各回扫流 cursor_at，回扫是扫描位置不是水位，D10-747），不挂告警，infra/monitoring/rules 不改。
+# 不动冻结 test/spec/platform/metrics/**：WorkerMetricsSnapshot 新字段须可选（冻结 registry.test.ts 用该类型写常量），或照 review-overdue.ts 另起采集器。app_id 标签另登 FU-METRICS-APP-ID（第二个 App 前，走冻结改动裁定）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/metrics/collect.ts'
+  - 'apps/api/src/modules/platform/metrics/registry.ts'
+  - 'apps/api/src/modules/platform/metrics/rescan-position.ts'
+  - 'apps/api/src/modules/platform/metrics/rescan-position.test.ts'
+  - 'apps/api/src/modules/platform/metrics/index.ts'
+test_paths:
+  - 'test/spec/platform/metrics-sync-streams/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/metrics-sync-streams/**'
+status: todo
