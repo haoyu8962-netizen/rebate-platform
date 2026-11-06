@@ -1,0 +1,19 @@
+id: F1-02zzzf
+repo: rebate-platform
+title: 收紧测试（F1-02zzzd 两态过渡收尾，编排 13:37）：冻结 /v1/config features.flags 精确比较改回单态——product_feedback、jd_plus_note 两键必须存在且恰为 true，去掉 settled() 两态辅助
+type: test-change
+# 2026-11-06 入账（content-client；先例 F1-02zzw / F1-02zzz）。F1-02zzze（#2487）已合并，/v1/config 总是下发两个新派生键。
+# 涉及 F1-02zzzd 改过的 test/spec/content/config/delivery.int.test.ts [AC-F1-02c#1 / #7 / #20] 与 config-clipboard/delivery.int.test.ts [AC-F1-02j#5–#8]：期望对象与 DERIVED_DEFAULTS 直接含两键 true。
+# 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；全新上下文 Claude 修改、另一全新上下文 Claude 只读复审，按 approvals #24 由编排加 owner-approved 标签。
+refs: []
+refs_hash: {}
+deps: [F1-02zzzd, F1-02zzze]
+paths:
+  - 'test/spec/content/config/delivery.int.test.ts'
+  - 'test/spec/content/config-clipboard/delivery.int.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: done
+pr: 2505

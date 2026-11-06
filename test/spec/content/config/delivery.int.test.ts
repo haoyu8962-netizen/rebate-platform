@@ -47,23 +47,10 @@ function inviteOf<T extends object>(invite: T): T {
   return others as T;
 }
 
-// F1-02zzzd: S-10（F1-02zzze）前的两态过渡，合并后收紧为单态
-// F1-02zzze adds derived flags product_feedback (feedback.enabled) and jd_plus_note
-// (detail.jd_plus_note.enabled): only a false source turns them off. These cases write neither
-// source, so each key, when present, must be exactly true; it is then removed for the original
-// exact comparison. Absent keys leave the flags untouched.
-const PENDING_DERIVED = ['product_feedback', 'jd_plus_note'] as const;
-function settled(flags: unknown): unknown {
-  if (typeof flags !== 'object' || flags === null || Array.isArray(flags)) return flags;
-  const copy = { ...(flags as Record<string, unknown>) };
-  for (const key of PENDING_DERIVED) {
-    if (Object.hasOwn(copy, key)) {
-      expect(copy[key], `features.flags.${key}`).toBe(true);
-      delete copy[key];
-    }
-  }
-  return copy;
-}
+// F1-02zzzf：收紧为单态（F1-02zzze 已合并）
+// Derived flags product_feedback (feedback.enabled) and jd_plus_note (detail.jd_plus_note.enabled):
+// only a false source turns them off. These cases write neither source, so both keys must be
+// present and exactly true in every exact features.flags comparison below.
 
 let database: Awaited<ReturnType<(typeof import('@couli/db/testing'))['createTestDatabase']>>;
 let redis: Awaited<ReturnType<(typeof import('@couli/db/testing'))['acquireTestRedis']>>;
@@ -121,14 +108,19 @@ it('[AC-F1-02c#1] 最小有效配置下发所有约定键、规划缺省与完�
     lkg_max_age_sec: undefined,
     config_version: undefined,
     bridge_disabled_methods: undefined,
-    features: { ...data.features, flags: settled(data.features.flags), rank_platforms: undefined },
+    features: { ...data.features, rank_platforms: undefined },
   }).toEqual({
     dict_version: '0',
     h5_base_url: REQUIRED['h5_base_url'],
     h5_release: { version: 'stable-v1' },
     share_domains: [],
     features: {
-      flags: { 'external_page.union_host_block': true, 'earnings.dashboard.visible': true },
+      flags: {
+        'external_page.union_host_block': true,
+        'earnings.dashboard.visible': true,
+        product_feedback: true,
+        jd_plus_note: true,
+      },
       platform_status: Object.fromEntries(PLATFORMS.map((p) => [p, 'not_launched'])),
       search_status: Object.fromEntries(PLATFORMS.map((p) => [p, 'off'])),
     },
@@ -333,11 +325,13 @@ it.each([undefined, false, true, 'off', 0, null] as const)(
             'earnings.dashboard.enabled': value,
           }),
     });
-    expect(settled((await success(h.app, id)).features.flags)).toEqual({
+    expect((await success(h.app, id)).features.flags).toEqual({
       custom: true,
       'ui.grayscale': false,
       'external_page.union_host_block': value !== false,
       'earnings.dashboard.visible': value !== false,
+      product_feedback: true,
+      jd_plus_note: true,
     });
   },
 );
@@ -349,9 +343,11 @@ it.each([
   '[AC-F1-02c#7] 只关闭 %s 时两个派生 flags 各自跟随自己的配置源',
   async (key, unionHostBlock, dashboardVisible) => {
     const id = await configured(h, { [key]: false });
-    expect(settled((await success(h.app, id)).features.flags)).toEqual({
+    expect((await success(h.app, id)).features.flags).toEqual({
       'external_page.union_host_block': unionHostBlock,
       'earnings.dashboard.visible': dashboardVisible,
+      product_feedback: true,
+      jd_plus_note: true,
     });
   },
 );
@@ -593,7 +589,13 @@ const optionalCases: { key: string; value: Json; path: string[]; expected: unkno
     key: 'features.flags',
     value: { custom: true, bad: 'true' },
     path: ['features', 'flags'],
-    expected: { 'external_page.union_host_block': true, 'earnings.dashboard.visible': true },
+    // F1-02zzzf：收紧为单态（F1-02zzze 已合并）
+    expected: {
+      'external_page.union_host_block': true,
+      'earnings.dashboard.visible': true,
+      product_feedback: true,
+      jd_plus_note: true,
+    },
   },
   {
     key: 'help_links',
@@ -676,8 +678,7 @@ it.each(optionalCases)(
       (value, part) => (value as Record<string, unknown> | null | undefined)?.[part],
       data,
     );
-    // F1-02zzzd: only the features.flags case carries the pending derived keys.
-    expect(key === 'features.flags' ? settled(actual) : actual).toEqual(expected);
+    expect(actual).toEqual(expected);
     expectLog(h.logs.slice(start), 40, key);
   },
 );
