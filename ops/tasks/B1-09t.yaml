@@ -1,0 +1,20 @@
+id: B1-09t
+repo: rebate-platform
+title: orders：订单列表项原样下发 orders.is_price_compare（S-18，CT-26p 契约 #2420）；置位逻辑不在本单，核实前列为 null
+type: impl
+# 2026-11-06 W1 入账（D10-685：S-18 在 CT-26p 契约合并后当天做）。只改 GET /v1/orders 列表项（summaryFields）带上 is_price_compare，详情接口已带、字段不变；按联盟订单字段置位等 CAP-TB-04 / CAP-PDD-04 实测登记后另立单（D10-641「订单侧识别」）。Agent 订单卡片不带该字段。
+refs: [BR-CALC-16]
+refs_hash:
+  BR-CALC-16: 608d5607c3fb
+deps: []
+paths:
+  - 'apps/api/src/modules/orders/application/order-queries.ts'
+  - 'apps/api/src/modules/orders/application/order-queries.test.ts'
+test_paths:
+  - 'test/spec/orders/list-price-compare/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/list-price-compare/**'
+status: todo
