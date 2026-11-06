@@ -1,0 +1,4396 @@
+{
+  "version": 1,
+  "sources": [
+    "任务书：/Users/zhixing/我的项目/couli-runs/NATIVE/APP-07/brief.md §2、§3、§4；规则空白：同目录 rule-gaps.md G01～G17。",
+    "规划读取：git -C /Users/zhixing/我的项目/couli show origin/main:<路径>；本次 origin/main=2be9768602e588932bc71bcb8c6883ff44bd0367。",
+    "规划/01_需求规划.md F-CLIP-01～06；规划/08_业务规则/10_ID_身份授权与合规.md BR-ID-11、BR-ID-16 正文及细则。",
+    "规划/08_业务规则/11_INV_邀请与分销.md BR-INV-04 正文及细则；规划/08_业务规则/12_TEXT_话术与格式.md BR-TEXT-14：clipboard.prompt、clipboard.invite_prompt、settings.clipboard_auto、30132。",
+    "规划/03_前端架构.md §3.3、§4.2、§4.6；规划/04_数据模型与契约.md §8.5、§9 clipboard.*、§10.1 features/clipboard/share_domains。",
+    "规划/09_平台能力验证/5_X_跨平台与系统.md CAP-X-02；规划/10_首个完整流程验收用例.md AC-S1-03、AC-S1-63、AC-S1-08、AC-S1-02-TB。",
+    "契约读取：git -C /Users/zhixing/我的项目/rebate-platform show 9cd1e6f:<路径>；contracts/openapi.yaml 的 parseInput、ParseInputRequest、InputHit、ParseResult、ParseInputData、ParseInputResponse、ParseInputOk、getMe/Me/InviteBackfill、Config/ConfigFeatures；contracts/error-codes.yaml；contracts/texts.default.json；contracts/bridge.schema.json；contracts/routes.json；contracts/enums/trade.yaml。",
+    "测试布置：readPolicy 未写的可选字段补中性前提 overlay=none、configEnabled=true、webSuppressed=false、readThisForeground=false；iOS 补 iosChangeCountChanged=true、enabled=true（本机开关「打开 App 自动识别剪贴板」，与 Android / 鸿蒙 importGate.fields.enabled 同名；FU-X-CLIP-DEFAULT-ON 起 iOS 读取策略只在 iOS 行使用，Android 行仍用 androidAutoSwitch），Android 补 androidAutoSwitch=true、androidWindowFocused=true。iosDetectHit 不补值，缺失表示尚未探测。显式值覆盖补值。这不测试生产环境缺配置时的默认行为。"
+  ],
+  "readPolicyStatus": {
+    "status": "obsolete",
+    "replacedBy": "importGate",
+    "reason": "2026-10-17 改版后旧默认开启/探测提示条口径作废；旧数组仅供历史追溯，不参与读取门槛验收。"
+  },
+  "importGate": {
+    "schemaVersion": 1,
+    "sources": [
+      "couli origin/main b90e712f5255a9600ebf6f0f3b561afd1b4f8d9e: 规划/03_前端架构.md §4.6; 规划/08_业务规则/10_ID_身份授权与合规.md BR-ID-16",
+      "NATIVE/FU-AND-0722/decision.md G05/G10/G11/G13/G16/G17/G21/G47",
+      "FU-AND-0723 tests-review-r1 S1-1..3 / S2-1..12；brief r1 后本线裁定（纯逻辑，接线与旧测试退役归 0724）"
+    ],
+    "fields": {
+      "platforms": "适用端；runner 只执行包含本端的行。auto_read 交叉行每端独立一对。这里系统资格与本端节流条件预置为通过，iOS/鸿蒙另立适配向量，不推断系统必然允许读取。",
+      "state": "完整初始快照，不允许 runner 补业务默认值；config 是 /v1/config.data 原形，auto_read 缺键由产品判定。",
+      "privacyAgreed": "已同意当前隐私版本；false 包括未决定/基本模式/版本过期。",
+      "enabled": "本机开关 true/false/null（未选择）。",
+      "storedConsentVersion/seenVersion": "本机功能同意版本/已看用途说明版本，null 表示没有。",
+      "route/homeRoot": "当前路由与是否首页根页；Android 0724 按 G27 只有 Home 根页；AgentChat 0725 恢复，其他端仍沿用原期望。",
+      "pageReady/interactive/focused": "页面就绪/可交互/窗口获焦，分别覆盖门槛④。",
+      "modal": {
+        "values": [
+          "none",
+          "step_up",
+          "auth_sheet",
+          "oauth_in_progress",
+          "auth_jump",
+          "privacy_first_launch",
+          "force_update",
+          "payment",
+          "login",
+          "trade_jump",
+          "trade_return_confirmation",
+          "update_prompt"
+        ],
+        "sensitiveSkip": [
+          "step_up",
+          "auth_sheet",
+          "oauth_in_progress",
+          "auth_jump",
+          "privacy_first_launch",
+          "force_update"
+        ],
+        "waiting": ["payment", "login", "trade_jump", "trade_return_confirmation", "update_prompt"],
+        "semantics": "敏感浮层按 BR-ID-16 敏感清单及 03 §4.6 sensitivePage→markSkipped，消费本轮，关闭后不补读/弹用途层；其余模态只阻断 gate⑤，按 03 §4.6 !autoGatesPass→return 保留 pending，关闭后同轮再尝试；update_prompt 另有 G22/G31 等待先例。login 是 Home 上的普通互斥任务标志，不等于 route=Login；实际进入 Login 路由仍消费跳过。"
+      },
+      "webSuppressed": "当前页面实例 H5 暂停标记。",
+      "foreground": "前置动作，不是给产品塞布尔状态。true：Android 送 PROCESS_FOREGROUND；iOS 用 scene 将进入前台的等价入口；鸿蒙用 UIAbility 回前台的等价入口。false：不送任何进入前台事件，仅发目标页就绪通知。",
+      "consumed": "前置动作，不直接改内部字段。true 时先经本端用途弹层已显示入口携带当前 epoch 标记本轮；Android onNoticeShown(epoch)，iOS/鸿蒙用语义等价入口；false 不发该事件。",
+      "expect": "结算后 reads/notices 端口累计入口计数；pending/consumed 存在时才断言状态。G11 非目标页只锁 pending=false 和恢复后不补读/不补弹，不限制 consumed 内部表示。",
+      "afterReady": "可选的恢复动作+期望。route:String、homeRoot:Boolean 必填，设置该目标且 pageReady/interactive/focused=true、modal=none，其余状态保持；只发 pageReady，不新建 epoch。reads:Int、notices:Int 为结算后的累计入口次数，两个都必须断言。",
+      "throttle": "门槛⑦ Android 恒通过，无跨轮节流由时序测试锁住。iOS deniedAt 与拒绝后节流、鸿蒙资格/授权及节流另立适配向量；本组不带 deniedAt，执行本组时各端节流条件预置为通过。",
+      "preferenceSetup": "通过真实存储入口建立 enabled/storedConsentVersion/seenVersion 后逐项核对快照。enabled=true 且 storedConsentVersion=null 必须用 switchOnWithoutConsent（或本端等价入口），不得退化成未选择。"
+    },
+    "cases": [
+      {
+        "name": "R11_all_seven_pass",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 1, "notices": 0, "pending": false, "consumed": true }
+      },
+      {
+        "name": "G11_agent_chat",
+        "platforms": ["ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "AgentChat",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 1, "notices": 0, "consumed": true }
+      },
+      {
+        "name": "G11_agent_chat_android_0724_g27",
+        "platforms": ["android"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "AgentChat",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "consumed": false, "pending": false }
+      },
+      {
+        "name": "R11_privacy_basic",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": false,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R11_consent_mismatch",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v0",
+          "seenVersion": "v0",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 1, "consumed": true }
+      },
+      {
+        "name": "R11_unselected_seen",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R11_switch_off",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": false,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R11_auto_read_disabled",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": { "auto_read": { "android": false, "ios": false, "harmony": false } }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G05_missing_auto_read_defaults_on",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "G05_platform_filter_does_not_block_read",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": {
+                "enabled": { "android": false, "taobao": false, "jd": false, "pdd": false }
+              }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R11_background",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": false,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false }
+      },
+      {
+        "name": "R13_wait_pageReady",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": false,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R13_wait_interactive",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": false,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R13_wait_focused",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": false,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R11_consumed",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": true
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true }
+      },
+      {
+        "name": "R11_web_suppressed",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": true,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G47_section_missing",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {},
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G47_key_missing",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": {} },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G47_null",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": null } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G47_empty",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_Login",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Login",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_BindPhone",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "BindPhone",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_InviteBackfill",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "InviteBackfill",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_RealName",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "RealName",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_PayoutAccount",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "PayoutAccount",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_Withdraw",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Withdraw",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_LaborAgreement",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "LaborAgreement",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_DeleteAccount",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "DeleteAccount",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_FindOrder",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "FindOrder",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_ForceUpdate",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "ForceUpdate",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_Settings",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Settings",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_Search",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Search",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_Orders",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Orders",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_G11_skip_UnknownRoute",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "UnknownRoute",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G11_home_not_root",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_sensitive_modal_step_up",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "step_up",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_sensitive_modal_auth_sheet",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "auth_sheet",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_sensitive_modal_oauth_in_progress",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "oauth_in_progress",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_sensitive_modal_auth_jump",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "auth_jump",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_sensitive_modal_privacy_first_launch",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "privacy_first_launch",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R14_sensitive_modal_force_update",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "force_update",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "R11_G10_mutex_payment",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "payment",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R11_G10_mutex_login",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "login",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R11_G10_mutex_trade_jump",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "trade_jump",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R11_G10_mutex_trade_return_confirmation",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "trade_return_confirmation",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R11_G10_mutex_update_prompt",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "update_prompt",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "R13_sensitive_beats_unready",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Withdraw",
+          "homeRoot": false,
+          "pageReady": false,
+          "interactive": true,
+          "focused": false,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G21_first_notice",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 1, "pending": false, "consumed": true }
+      },
+      {
+        "name": "G47_no_bundled_version_1_fallback",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "1",
+          "seenVersion": "1",
+          "config": { "clipboard": {} },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G11_agent_chat_wait_ready",
+        "platforms": ["ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "AgentChat",
+          "homeRoot": false,
+          "pageReady": false,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "AgentChat", "homeRoot": false, "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "G11_agent_chat_wait_ready_android_0724_g27",
+        "platforms": ["android"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "AgentChat",
+          "homeRoot": false,
+          "pageReady": false,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "AgentChat", "homeRoot": false, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_sensitive_Login",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Login",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_non_target_Settings",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Settings",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_home_not_root",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": false,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_sensitive_modal_step_up",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "step_up",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_sensitive_modal_auth_sheet",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "auth_sheet",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_sensitive_modal_oauth_in_progress",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "oauth_in_progress",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_sensitive_modal_auth_jump",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "auth_jump",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_sensitive_modal_privacy_first_launch",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "privacy_first_launch",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_sensitive_modal_force_update",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "force_update",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false, "consumed": true },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_waiting_modal_payment",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "payment",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "notice_waiting_modal_login",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "login",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "notice_waiting_modal_trade_jump",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "trade_jump",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "notice_waiting_modal_trade_return_confirmation",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "trade_return_confirmation",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "notice_waiting_modal_update_prompt",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "update_prompt",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "notice_privacy_not_agreed",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": false,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_background",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": false,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": false }
+      },
+      {
+        "name": "G47_new_user_section_missing",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": {},
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G47_new_user_key_missing",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": {} },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G47_new_user_null",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": null } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G47_new_user_empty",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "notice_wait_pageReady",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": false,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "notice_wait_interactive",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": false,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "notice_wait_focused",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": null,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": false,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0, "pending": true, "consumed": false },
+        "afterReady": { "route": "Home", "homeRoot": true, "reads": 0, "notices": 1 }
+      },
+      {
+        "name": "auto_read_android_only_self_off",
+        "platforms": ["android"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": { "auto_read": { "android": false, "ios": true, "harmony": true } }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "auto_read_android_only_others_off",
+        "platforms": ["android"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": { "auto_read": { "android": true, "ios": false, "harmony": false } }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "auto_read_ios_only_self_off",
+        "platforms": ["ios"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": { "auto_read": { "android": true, "ios": false, "harmony": true } }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "auto_read_ios_only_others_off",
+        "platforms": ["ios"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": { "auto_read": { "android": false, "ios": true, "harmony": false } }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "auto_read_harmony_only_self_off",
+        "platforms": ["harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": { "auto_read": { "android": true, "ios": true, "harmony": false } }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "auto_read_harmony_only_others_off",
+        "platforms": ["harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": "v1",
+          "seenVersion": "v1",
+          "config": {
+            "clipboard": { "consent_version": "v1" },
+            "features": {
+              "clipboard": { "auto_read": { "android": false, "ios": false, "harmony": true } }
+            }
+          },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 1, "notices": 0 }
+      },
+      {
+        "name": "G47_enabled_without_consent_version_arrives",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 1, "consumed": true, "pending": false }
+      },
+      {
+        "name": "G47_enabled_without_consent_version_missing",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": true,
+          "storedConsentVersion": null,
+          "seenVersion": null,
+          "config": { "clipboard": {} },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 0 }
+      },
+      {
+        "name": "G30_closed_user_new_consent_version",
+        "platforms": ["android", "ios", "harmony"],
+        "state": {
+          "privacyAgreed": true,
+          "enabled": false,
+          "storedConsentVersion": "v0",
+          "seenVersion": "v0",
+          "config": { "clipboard": { "consent_version": "v1" } },
+          "route": "Home",
+          "homeRoot": true,
+          "pageReady": true,
+          "interactive": true,
+          "focused": true,
+          "modal": "none",
+          "webSuppressed": false,
+          "foreground": true,
+          "consumed": false
+        },
+        "expect": { "reads": 0, "notices": 1, "consumed": true, "pending": false }
+      }
+    ]
+  },
+  "readPolicy": [
+    {
+      "name": "AC-S1-03.a.ios_cold_detect",
+      "platform": "ios",
+      "state": { "consent": "agreed", "event": "cold_start_foreground", "route": "Home" },
+      "expect": { "actionRaw": "detect_patterns" }
+    },
+    {
+      "name": "AC-S1-03.a.ios_foreground_detect",
+      "platform": "ios",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "detect_patterns" }
+    },
+    {
+      "name": "AC-S1-03.a.ios_detect_hit",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "iosDetectHit": true
+      },
+      "expect": { "actionRaw": "show_prompt" }
+    },
+    {
+      "name": "AC-S1-03.b.ios_no_detect_hit",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "iosDetectHit": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "no_detect_hit" }
+    },
+    {
+      "name": "AC-S1-03.c.ios_unchanged",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "iosChangeCountChanged": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "unchanged" }
+    },
+    {
+      "name": "ios_once_per_foreground",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "readThisForeground": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "already_read" }
+    },
+    {
+      "name": "AC-S1-03.a.android_cold_focused",
+      "platform": "android",
+      "state": { "consent": "agreed", "event": "cold_start_foreground", "route": "Home" },
+      "expect": { "actionRaw": "read" }
+    },
+    {
+      "name": "AC-S1-03.a.android_guest_agreed_switch_on",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidAutoSwitch": true
+      },
+      "expect": { "actionRaw": "read" }
+    },
+    {
+      "name": "AC-S1-03.a.android_no_focus_is_not_empty",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidWindowFocused": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "no_focus" }
+    },
+    {
+      "name": "AC-S1-03.a.android_switch_off",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidAutoSwitch": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "AC-S1-03.b.android_switch_off",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidAutoSwitch": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "AC-S1-03.c.android_switch_off",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidAutoSwitch": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "AC-S1-03.a.android_guest_agreed_switch_off",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidAutoSwitch": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "android_once_per_foreground",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "readThisForeground": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "already_read" }
+    },
+    {
+      "name": "android_window_focus_after_read",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "window_focus",
+        "route": "Home",
+        "readThisForeground": true
+      },
+      "expect": { "actionRaw": "skip" }
+    },
+    {
+      "name": "AC-S1-03.a.harmony_paste_only",
+      "platform": "harmony",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "paste_only", "reasonRaw": "harmony_paste_only" }
+    },
+    {
+      "name": "AC-S1-03.b.harmony_paste_only",
+      "platform": "harmony",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "paste_only", "reasonRaw": "harmony_paste_only" }
+    },
+    {
+      "name": "AC-S1-03.c.harmony_paste_only",
+      "platform": "harmony",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "paste_only", "reasonRaw": "harmony_paste_only" }
+    },
+    {
+      "name": "harmony_cold_paste_only",
+      "platform": "harmony",
+      "state": { "consent": "agreed", "event": "cold_start_foreground", "route": "Home" },
+      "expect": { "actionRaw": "paste_only", "reasonRaw": "harmony_paste_only" }
+    },
+    {
+      "name": "ios_basic",
+      "platform": "ios",
+      "state": { "consent": "basic", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "basic_mode" }
+    },
+    {
+      "name": "ios_privacy_outdated",
+      "platform": "ios",
+      "state": { "consent": "outdated", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "privacy_outdated" }
+    },
+    {
+      "name": "android_basic",
+      "platform": "android",
+      "state": { "consent": "basic", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "basic_mode" }
+    },
+    {
+      "name": "android_privacy_outdated",
+      "platform": "android",
+      "state": { "consent": "outdated", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "privacy_outdated" }
+    },
+    {
+      "name": "harmony_basic",
+      "platform": "harmony",
+      "state": { "consent": "basic", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "basic_mode" }
+    },
+    {
+      "name": "harmony_privacy_outdated",
+      "platform": "harmony",
+      "state": { "consent": "outdated", "event": "foreground_after_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "privacy_outdated" }
+    },
+    {
+      "name": "AC-S1-03.android_basic_switch_off",
+      "platform": "android",
+      "state": {
+        "consent": "basic",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidAutoSwitch": false
+      },
+      "expect": { "actionRaw": "skip" }
+    },
+    {
+      "name": "android_outdated_switch_off",
+      "platform": "android",
+      "state": {
+        "consent": "outdated",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "androidAutoSwitch": false
+      },
+      "expect": { "actionRaw": "skip" }
+    },
+    {
+      "name": "ios_config_disabled",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "configEnabled": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "config_off" }
+    },
+    {
+      "name": "ios_web_suppressed",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "webSuppressed": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "web_suppressed" }
+    },
+    {
+      "name": "ios_refocus_without_background",
+      "platform": "ios",
+      "state": { "consent": "agreed", "event": "refocus_without_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "not_foreground" }
+    },
+    {
+      "name": "AC-S1-03.d.ios_home_navigation_no_catchup",
+      "platform": "ios",
+      "state": { "consent": "agreed", "event": "in_app_navigation", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "not_foreground" }
+    },
+    {
+      "name": "android_config_disabled",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "configEnabled": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "config_off" }
+    },
+    {
+      "name": "android_web_suppressed",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "webSuppressed": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "web_suppressed" }
+    },
+    {
+      "name": "android_refocus_without_background",
+      "platform": "android",
+      "state": { "consent": "agreed", "event": "refocus_without_background", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "not_foreground" }
+    },
+    {
+      "name": "AC-S1-03.d.android_home_navigation_no_catchup",
+      "platform": "android",
+      "state": { "consent": "agreed", "event": "in_app_navigation", "route": "Home" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "not_foreground" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.Login",
+      "platform": "ios",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Login" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.BindPhone",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "BindPhone"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.RealName",
+      "platform": "ios",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "RealName" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.PayoutAccount",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "PayoutAccount"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.Withdraw",
+      "platform": "ios",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Withdraw" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.LaborAgreement",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "LaborAgreement"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.DeleteAccount",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "DeleteAccount"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.FindOrder",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "FindOrder"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.ios.ForceUpdate",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "ForceUpdate"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "ios_overlay_step_up",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "step_up"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "ios_overlay_auth_sheet",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "auth_sheet"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "ios_overlay_oauth_in_progress",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "oauth_in_progress"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "ios_overlay_auth_jump",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "auth_jump"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "ios_overlay_privacy_first_launch",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "privacy_first_launch"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "ios_overlay_force_update",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "force_update"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.Login",
+      "platform": "android",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Login" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.BindPhone",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "BindPhone"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.RealName",
+      "platform": "android",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "RealName" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.PayoutAccount",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "PayoutAccount"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.Withdraw",
+      "platform": "android",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Withdraw" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.LaborAgreement",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "LaborAgreement"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.DeleteAccount",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "DeleteAccount"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.FindOrder",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "FindOrder"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.android.ForceUpdate",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "ForceUpdate"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "android_overlay_step_up",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "step_up"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "android_overlay_auth_sheet",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "auth_sheet"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "android_overlay_oauth_in_progress",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "oauth_in_progress"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "android_overlay_auth_jump",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "auth_jump"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "android_overlay_privacy_first_launch",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "privacy_first_launch"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "android_overlay_force_update",
+      "platform": "android",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "force_update"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.Login",
+      "platform": "harmony",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Login" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.BindPhone",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "BindPhone"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.RealName",
+      "platform": "harmony",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "RealName" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.PayoutAccount",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "PayoutAccount"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.Withdraw",
+      "platform": "harmony",
+      "state": { "consent": "agreed", "event": "foreground_after_background", "route": "Withdraw" },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.LaborAgreement",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "LaborAgreement"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.DeleteAccount",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "DeleteAccount"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.FindOrder",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "FindOrder"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "AC-S1-03.d.harmony.ForceUpdate",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "ForceUpdate"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "harmony_overlay_step_up",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "step_up"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "harmony_overlay_auth_sheet",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "auth_sheet"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "harmony_overlay_oauth_in_progress",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "oauth_in_progress"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "harmony_overlay_auth_jump",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "auth_jump"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "harmony_overlay_privacy_first_launch",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "privacy_first_launch"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "harmony_overlay_force_update",
+      "platform": "harmony",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "overlay": "force_update"
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C1.ios_switch_on_detect",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": true
+      },
+      "expect": { "actionRaw": "detect_patterns" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C1.ios_switch_on_cold_detect",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "cold_start_foreground",
+        "route": "Home",
+        "enabled": true
+      },
+      "expect": { "actionRaw": "detect_patterns" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C1.ios_switch_on_detect_hit",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": true,
+        "iosDetectHit": true
+      },
+      "expect": { "actionRaw": "show_prompt" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C5.ios_switch_off_skip_no_detect",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C5.ios_switch_off_cold_start",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "cold_start_foreground",
+        "route": "Home",
+        "enabled": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C5.ios_switch_off_late_detect_hit_no_prompt",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": false,
+        "iosDetectHit": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C5.ios_switch_off_unchanged",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": false,
+        "iosChangeCountChanged": false
+      },
+      "expect": { "actionRaw": "skip" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C5.ios_config_on_switch_off",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "configEnabled": true,
+        "enabled": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "switch_off" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C5.ios_config_off_switch_on",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "configEnabled": false,
+        "enabled": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "config_off" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C5.ios_web_suppressed_switch_on",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "webSuppressed": true,
+        "enabled": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "web_suppressed" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C7.ios_basic_switch_on",
+      "platform": "ios",
+      "state": {
+        "consent": "basic",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "basic_mode" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C7.ios_basic_switch_off",
+      "platform": "ios",
+      "state": {
+        "consent": "basic",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": false
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "basic_mode" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C7.ios_outdated_switch_on",
+      "platform": "ios",
+      "state": {
+        "consent": "outdated",
+        "event": "foreground_after_background",
+        "route": "Home",
+        "enabled": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "privacy_outdated" }
+    },
+    {
+      "name": "BR-ID-16.20261030.C9.ios_sensitive_switch_on",
+      "platform": "ios",
+      "state": {
+        "consent": "agreed",
+        "event": "foreground_after_background",
+        "route": "Withdraw",
+        "enabled": true
+      },
+      "expect": { "actionRaw": "skip", "reasonRaw": "sensitive" }
+    }
+  ],
+  "inviteExtract": [
+    {
+      "name": "AC-S1-63.a.share_landing_code",
+      "text": "https://share.example.test/i/K7M2QX",
+      "expect": { "code": "K7M2QX" }
+    },
+    { "name": "AC-S1-63.b.keyword", "text": "邀请码 K7M2QX", "expect": { "code": "K7M2QX" } },
+    {
+      "name": "AC-S1-63.c.extract_does_not_require_trigger",
+      "text": "K7M2QX",
+      "expect": { "code": "K7M2QX" }
+    },
+    { "name": "nfkc_fullwidth", "text": "邀请码 ｋ７ｍ２ｑｘ", "expect": { "code": "K7M2QX" } },
+    { "name": "lowercase", "text": "邀请码 k7m2qx", "expect": { "code": "K7M2QX" } },
+    { "name": "excluded_0", "text": "邀请码 K0M2QX", "expect": { "code": null } },
+    { "name": "excluded_1", "text": "邀请码 K1M2QX", "expect": { "code": null } },
+    { "name": "excluded_I", "text": "邀请码 KIM2QX", "expect": { "code": null } },
+    { "name": "excluded_O", "text": "邀请码 KOM2QX", "expect": { "code": null } },
+    { "name": "left_letter", "text": "AK7M2QX", "expect": { "code": null } },
+    { "name": "right_letter", "text": "K7M2QXZ", "expect": { "code": null } },
+    { "name": "left_digit", "text": "1K7M2QX", "expect": { "code": null } },
+    { "name": "right_digit", "text": "K7M2QX0", "expect": { "code": null } },
+    { "name": "left_lowercase", "text": "aK7M2QX", "expect": { "code": null } },
+    { "name": "nfkc_boundary", "text": "ＡＫ７Ｍ２ＱＸ", "expect": { "code": null } },
+    { "name": "five", "text": "K7M2Q", "expect": { "code": null } },
+    { "name": "seven", "text": "K7M2QXX", "expect": { "code": null } },
+    { "name": "empty", "text": "", "expect": { "code": null } },
+    { "name": "punctuation_boundaries", "text": "（K7M2QX）", "expect": { "code": "K7M2QX" } },
+    { "name": "allowed_alphabet", "text": "邀请码 JKLMNP", "expect": { "code": "JKLMNP" } },
+    { "name": "allowed_digits", "text": "邀请码 234567", "expect": { "code": "234567" } },
+    {
+      "name": "first_of_multiple",
+      "text": "邀请码 AB23CD；邀请码 K7M2QX",
+      "expect": { "code": "AB23CD" }
+    },
+    {
+      "name": "BR-INV-04.token_contains_1",
+      "text": "￥AB12CD￥ 邀请码 K7M2QX",
+      "expect": { "code": "K7M2QX" }
+    }
+  ],
+  "classify": [
+    {
+      "name": "AC-S1-03.a.product_link",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product", "uploadText": "https://e.tb.cn/h.AbCdEf?tk=Xy12" }
+    },
+    {
+      "name": "AC-S1-03.b.ordinary_text",
+      "text": "今天下午三点在楼下见面",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "no_link" }
+    },
+    {
+      "name": "AC-S1-03.c.same_text_one_hour",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "context": {
+        "selfWritten": [],
+        "prompted": [{ "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "agoMs": 3600000 }],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "prompted_recently" }
+    },
+    {
+      "name": "same_text_48_hours",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "context": {
+        "selfWritten": [],
+        "prompted": [{ "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "agoMs": 172800000 }],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product", "uploadText": "https://e.tb.cn/h.AbCdEf?tk=Xy12" }
+    },
+    {
+      "name": "other_text_prompted_recently",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "context": {
+        "selfWritten": [],
+        "prompted": [{ "text": "https://e.tb.cn/other", "agoMs": 3600000 }],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product" }
+    },
+    {
+      "name": "self_written_product",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "context": {
+        "selfWritten": ["https://e.tb.cn/h.AbCdEf?tk=Xy12"],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "self_written" }
+    },
+    {
+      "name": "self_written_invite",
+      "text": "邀请码 K7M2QX",
+      "context": {
+        "selfWritten": ["邀请码 K7M2QX"],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "self_written" }
+    },
+    {
+      "name": "AC-S1-63.b.invite_eligible",
+      "text": "邀请码 K7M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "invite", "inviteCode": "K7M2QX" }
+    },
+    {
+      "name": "AC-S1-63.c.bare_code_no_prompt",
+      "text": "K7M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none" }
+    },
+    {
+      "name": "no_trigger_in_longer_text",
+      "text": "请保存 K7M2QX 备用",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "no_trigger" }
+    },
+    {
+      "name": "AC-S1-63.d.product_priority",
+      "text": "【淘宝】https://e.tb.cn/h.AbCdEf?tk=Xy12 ￥AbCdEf12￥ https://share.example.test/i/K7M2QX 邀请码 K7M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product" }
+    },
+    {
+      "name": "AC-S1-63.e.self_invite",
+      "text": "邀请码 K7M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "selfInviteCode": "K7M2QX",
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "self_code" }
+    },
+    {
+      "name": "AC-S1-63.existing_inviter",
+      "text": "邀请码 K7M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": false,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "not_eligible" }
+    },
+    {
+      "name": "invite_one_hour",
+      "text": "邀请码 K7M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 3600000 }],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "prompted_recently" }
+    },
+    {
+      "name": "invite_48_hours",
+      "text": "邀请码 K7M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 172800000 }],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "invite", "inviteCode": "K7M2QX" }
+    },
+    {
+      "name": "invite_keyword_without_share_domains",
+      "text": "邀请码 K7M2QX",
+      "context": { "selfWritten": [], "prompted": [], "inviteEligible": true, "shareDomains": [] },
+      "expect": { "kindRaw": "invite", "inviteCode": "K7M2QX" }
+    },
+    {
+      "name": "invite_invalid_code",
+      "text": "邀请码 K0M2QX",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none" }
+    },
+    {
+      "name": "too_short",
+      "text": "短文",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "too_short" }
+    },
+    {
+      "name": "digits_20",
+      "text": "12345678901234567890",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "pure_alnum" }
+    },
+    {
+      "name": "letters_20",
+      "text": "abcdefghijklmnopqrst",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "pure_alnum" }
+    },
+    {
+      "name": "alnum_20",
+      "text": "A2B3C4D5E6F7G8H9J2K3",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "no_link" }
+    },
+    {
+      "name": "digits_21",
+      "text": "123456789012345678901",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "no_link" }
+    },
+    {
+      "name": "letters_mixed_case_20",
+      "text": "AbCdEfGhIjKlMnOpQrSt",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "pure_alnum" }
+    },
+    {
+      "name": "length_500",
+      "text": "https://e.tb.cn/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product" }
+    },
+    {
+      "name": "length_501",
+      "text": "https://e.tb.cn/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "too_long" }
+    },
+    {
+      "name": "upload_one_link_and_title",
+      "text": "分享 https://e.tb.cn/h.AbCdEf?tk=Xy12 「降噪蓝牙耳机」 其他文字",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": {
+        "kindRaw": "product",
+        "uploadText": "https://e.tb.cn/h.AbCdEf?tk=Xy12\n降噪蓝牙耳机"
+      }
+    },
+    {
+      "name": "upload_first_three_links",
+      "text": "分享 https://e.tb.cn/a https://e.tb.cn/b https://e.tb.cn/c https://e.tb.cn/d 「降噪蓝牙耳机」 其他文字",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": {
+        "kindRaw": "product",
+        "uploadText": "https://e.tb.cn/a\nhttps://e.tb.cn/b\nhttps://e.tb.cn/c\n降噪蓝牙耳机"
+      }
+    }
+  ],
+  "writeLedger": [
+    { "name": "empty", "writes": [], "probe": "write-01", "expect": { "excluded": false } },
+    {
+      "name": "ten_keep_first",
+      "writes": [
+        "write-01",
+        "write-02",
+        "write-03",
+        "write-04",
+        "write-05",
+        "write-06",
+        "write-07",
+        "write-08",
+        "write-09",
+        "write-10"
+      ],
+      "probe": "write-01",
+      "expect": { "excluded": true }
+    },
+    {
+      "name": "eleven_evict_first",
+      "writes": [
+        "write-01",
+        "write-02",
+        "write-03",
+        "write-04",
+        "write-05",
+        "write-06",
+        "write-07",
+        "write-08",
+        "write-09",
+        "write-10",
+        "write-11"
+      ],
+      "probe": "write-01",
+      "expect": { "excluded": false }
+    },
+    {
+      "name": "eleven_keep_second",
+      "writes": [
+        "write-01",
+        "write-02",
+        "write-03",
+        "write-04",
+        "write-05",
+        "write-06",
+        "write-07",
+        "write-08",
+        "write-09",
+        "write-10",
+        "write-11"
+      ],
+      "probe": "write-02",
+      "expect": { "excluded": true }
+    },
+    {
+      "name": "eleven_keep_newest",
+      "writes": [
+        "write-01",
+        "write-02",
+        "write-03",
+        "write-04",
+        "write-05",
+        "write-06",
+        "write-07",
+        "write-08",
+        "write-09",
+        "write-10",
+        "write-11"
+      ],
+      "probe": "write-11",
+      "expect": { "excluded": true }
+    },
+    {
+      "name": "never_written",
+      "writes": [
+        "write-01",
+        "write-02",
+        "write-03",
+        "write-04",
+        "write-05",
+        "write-06",
+        "write-07",
+        "write-08",
+        "write-09",
+        "write-10",
+        "write-11"
+      ],
+      "probe": "write-12",
+      "expect": { "excluded": false }
+    }
+  ],
+  "parseResult": [
+    {
+      "name": "AC-S1-02-TB.single_card",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "results": [
+            {
+              "hit": {
+                "platform": "taobao",
+                "kind": "url",
+                "raw": "https://e.tb.cn/h.AbCdEf?tk=Xy12"
+              },
+              "card": {
+                "product_key": "tb:7Kq9LmN3pQ",
+                "item_ref": "v1.dGJfN0txOUxtTjNwUQ.c2ln",
+                "platform": "taobao",
+                "shop_type": "tmall",
+                "title": "降噪蓝牙耳机 5.3",
+                "image": "https://img.example.test/p/7Kq9LmN3pQ.jpg",
+                "shop_name": "示例旗舰店",
+                "price_fen": 3990,
+                "coupon_fen": 1000,
+                "final_price_fen": 2990,
+                "est_net_price_fen": 2721,
+                "rebate_min_fen": 269,
+                "rebate_max_fen": 269,
+                "rebate_basis": "normal",
+                "benefit_tags": ["有券"],
+                "spec_text": null,
+                "is_presale": false,
+                "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70",
+                "cta": { "text_key": "btn.buy.coupon" },
+                "quoted_at": "2026-10-02T09:30:00+08:00",
+                "stale": false,
+                "age_sec": 12,
+                "source": "taobao_union",
+                "disclaimer_keys": ["price_basis"],
+                "ad_label": null,
+                "availability": "ok"
+              }
+            }
+          ]
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": { "actionRaw": "open_detail", "linkId": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70" }
+    },
+    {
+      "name": "AC-S1-08.inline_30131",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "results": [
+            {
+              "hit": { "platform": "taobao", "kind": "url", "raw": "https://e.tb.cn/unsupported" },
+              "error_code": 30131
+            }
+          ]
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": { "actionRaw": "notice", "textKey": "error.30131" }
+    },
+    {
+      "name": "AC-S1-08.inline_30132_quoted_title",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "results": [
+            {
+              "hit": { "platform": "taobao", "kind": "text", "raw": "「降噪蓝牙耳机」" },
+              "error_code": 30132
+            }
+          ]
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": {
+        "actionRaw": "search_prefill",
+        "prefill": "降噪蓝牙耳机",
+        "textKey": "error.30132"
+      }
+    },
+    {
+      "name": "AC-S1-08.inline_30132_first_line",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "results": [
+            {
+              "hit": { "platform": "taobao", "kind": "text", "raw": "降噪蓝牙耳机\n商品分享" },
+              "error_code": 30132
+            }
+          ]
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": {
+        "actionRaw": "search_prefill",
+        "prefill": "降噪蓝牙耳机",
+        "textKey": "error.30132"
+      }
+    },
+    {
+      "name": "AC-S1-08.overall_30131",
+      "errorCode": 30131,
+      "expect": { "actionRaw": "notice", "textKey": "error.30131" }
+    },
+    {
+      "name": "AC-S1-08.overall_30132_no_input_for_prefill",
+      "errorCode": 30132,
+      "expect": { "actionRaw": "search_prefill", "textKey": "error.30132" }
+    },
+    {
+      "name": "retry_after_7",
+      "errorCode": 42901,
+      "headers": { "Retry-After": "7" },
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 7000 }
+    },
+    {
+      "name": "retry_after_missing",
+      "errorCode": 42901,
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 5000 }
+    },
+    {
+      "name": "retry_after_invalid",
+      "errorCode": 42901,
+      "headers": { "Retry-After": "not-seconds" },
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 5000 }
+    },
+    {
+      "name": "retry_after_negative",
+      "errorCode": 42901,
+      "headers": { "Retry-After": "-1" },
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 5000 }
+    },
+    {
+      "name": "retry_after_empty",
+      "errorCode": 42901,
+      "headers": { "Retry-After": "" },
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 5000 }
+    },
+    {
+      "name": "server_50001",
+      "errorCode": 50001,
+      "traceId": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+      "expect": { "actionRaw": "error", "textKey": "error.50001", "showTrace6": true }
+    },
+    {
+      "name": "server_50401",
+      "errorCode": 50401,
+      "traceId": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+      "expect": { "actionRaw": "error", "textKey": "error.50401", "showTrace6": true }
+    }
+  ],
+  "manualPaste": [
+    {
+      "name": "home_link",
+      "entry": "home",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "expect": { "actionRaw": "parse", "uploadText": "https://e.tb.cn/h.AbCdEf?tk=Xy12" }
+    },
+    {
+      "name": "search_typing_link",
+      "entry": "search_typing",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "expect": { "actionRaw": "parse", "uploadText": "https://e.tb.cn/h.AbCdEf?tk=Xy12" }
+    },
+    {
+      "name": "home_null",
+      "entry": "home",
+      "text": null,
+      "expect": { "actionRaw": "open_search_typing" }
+    },
+    {
+      "name": "home_empty",
+      "entry": "home",
+      "text": "",
+      "expect": { "actionRaw": "open_search_typing" }
+    },
+    {
+      "name": "search_typing_null",
+      "entry": "search_typing",
+      "text": null,
+      "expect": { "actionRaw": "open_search_typing" }
+    },
+    {
+      "name": "AC-S1-63.a.login_landing",
+      "entry": "login_invite",
+      "text": "https://share.example.test/i/K7M2QX",
+      "expect": { "actionRaw": "fill_invite", "code": "K7M2QX" }
+    },
+    {
+      "name": "AC-S1-63.b.login_keyword",
+      "entry": "login_invite",
+      "text": "邀请码 K7M2QX",
+      "expect": { "actionRaw": "fill_invite", "code": "K7M2QX" }
+    },
+    {
+      "name": "AC-S1-63.c.manual_bare_code",
+      "entry": "login_invite",
+      "text": "K7M2QX",
+      "expect": { "actionRaw": "fill_invite", "code": "K7M2QX" }
+    },
+    {
+      "name": "login_fullwidth",
+      "entry": "login_invite",
+      "text": "ｋ７ｍ２ｑｘ",
+      "expect": { "actionRaw": "fill_invite", "code": "K7M2QX" }
+    },
+    {
+      "name": "login_BR-INV-04_example",
+      "entry": "login_invite",
+      "text": "￥AB12CD￥ 邀请码 K7M2QX",
+      "expect": { "actionRaw": "fill_invite", "code": "K7M2QX" }
+    },
+    {
+      "name": "login_no_code",
+      "entry": "login_invite",
+      "text": "这里没有邀请码",
+      "expect": { "actionRaw": "invite_not_found" }
+    },
+    {
+      "name": "login_null",
+      "entry": "login_invite",
+      "text": null,
+      "expect": { "actionRaw": "invite_not_found" }
+    },
+    {
+      "name": "login_invalid",
+      "entry": "login_invite",
+      "text": "邀请码 K0M2QX",
+      "expect": { "actionRaw": "invite_not_found" }
+    }
+  ],
+  "manualPasteInviteDedup": {
+    "schemaVersion": 1,
+    "sources": [
+      "规则：couli e411188（#265）规划/08_业务规则/11_INV_邀请与分销.md BR-INV-04 正文 ④（同一内容 hash 24 小时只提示一次，自动读取与手动粘贴都适用）、正文自写排除一句（只对自动读取）与细则「手动粘贴的邀请提示去重」；10_ID_身份授权与合规.md BR-ID-16 细则「本地过滤与去重默认值」；规划/03 §4.6 InviteBranch 独立提示去重。",
+      "裁定：编排 D10-593（2026-11-03）J1 自写的邀请文案被手动粘贴照常出条（仍受本去重）；J2 退出登录、换号不清邀请提示记录；J3 盐不可用时手动照常出条、不写记录，自动照旧不出条，不回退到不加盐 hash；J4 被挡下时静默结束（不出条、不上传、不落 30132、不预填搜索）。",
+      "来历：三端任务 FU-X-INVITE-MANUAL-DEDUP（任务书 NATIVE/FU-X-INVITE-MANUAL-DEDUP/brief.md §2、§6、§7），Android 测试 v1 起草；iOS、鸿蒙逐字节同步本段，各端用新测试文件消费，不进旧 ClipboardVectorTest 的组名列表。"
+    ],
+    "fields": {
+      "decide": "一次邀请出条判定，纯函数：调用前已确认抽到邀请码、满足触发前提（落地页或「邀请码」字样）、当前账号可绑定、没有商品候选；不含路由、会话与存储。kind：auto / manual；entry：manual 时 home、search_typing 为 product_lookup，login_invite 为 fill_input，auto 行没有该字段；text：剪贴板原文。",
+      "decide.context": "selfWritten：App 自写记录里的原文；prompted：邀请提示记录 {text, agoMs}，runner 把 text 换成本端 hash、agoMs 换成 nowMs-agoMs；saltAvailable：false 表示加盐 hash 不可用，此时 runner 给的 hash 函数一被调用即判失败（不得回退到不加盐 hash）。runner 的 hash 只保证同文同值、异文异值，不选算法。",
+      "decide.expect": "show：出不出邀请条；record：出条的同时写不写邀请提示记录；reasonRaw：show 与 record 都为 true 时为 null，否则为 prompted_recently / self_written / salt_unavailable / not_prompt_purpose 之一。三个字段都判，null 要求无值。",
+      "flows": "执行层场景：真实剪贴板控制器，只替换系统剪贴板、网络、时钟与盐的安全存储。given.session 为初始会话；steps 按顺序执行，时钟只由 wait 推进；每个 flow 从空记录开始，开始前 App 已在首页根页、已同意隐私政策、剪贴板自动识别已开启且用途说明已看过，剪贴板里是普通文字。",
+      "flows.ops": "paste{entry,text}：剪贴板为 text 时用户在首页（home）或 SearchTyping（search_typing）点「粘贴查返利」；foreground{text}：剪贴板为 text 时 App 回到前台，停在首页根页；then：这一步出了邀请条后用户的处理，close（缺省）/ confirm / ignore；wait{ms}；app_write{text}：App 自己写入剪贴板（如复制邀请文案）；fill_input{text}：填写邀请码页点「粘贴」；bridge_read{text}：H5 经桥 clipboard.read；login：游客登录；switch_account：已登录换成另一个账号；logout：退出成游客；withdraw_consent：撤回隐私同意；basic_mode：进入基本模式（不是撤回）；consent_again：重新同意隐私政策并重新打开剪贴板功能（不碰记录）；salt_rotate：换盐；salt_unavailable / salt_restore：盐的安全存储不可用 / 恢复。",
+      "flows.expect": "show：这一步是否新出了邀请条（auto 为首页提示条，manual 为发起页内联确认条）；uploads：这一步发出的 parse 次数；fallback：这一步是否出了 30132「识别不了」、轻提示，或打开 / 预填了搜索；code：fill_input 填入的邀请码；inviteRecords：这一步之后邀请提示记录里仍有效的条数（属于当前盐、距今严格小于 24 小时；盐不可用时数存储里 24 小时内的条数）；productRecords：同口径数商品候选摘要记录。缺字段不判。"
+    },
+    "decide": [
+      {
+        "name": "BR-INV-04.manual.first",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": { "selfWritten": [], "prompted": [], "saltAvailable": true },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.within_1h",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 3600000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.manual.edge_23h59m59s",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 86399000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.manual.edge_24h_minus_1ms",
+        "kind": "manual",
+        "entry": "search_typing",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 86399999 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.manual.edge_24h",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 86400000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.after_48h",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 172800000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.search_typing_first",
+        "kind": "manual",
+        "entry": "search_typing",
+        "text": "https://share.example.test/i/K7M2QX",
+        "context": { "selfWritten": [], "prompted": [], "saltAvailable": true },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.search_typing_within_1h",
+        "kind": "manual",
+        "entry": "search_typing",
+        "text": "https://share.example.test/i/K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "https://share.example.test/i/K7M2QX", "agoMs": 3600000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.manual.after_auto",
+        "kind": "manual",
+        "entry": "home",
+        "text": "https://share.example.test/i/K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "https://share.example.test/i/K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.auto.first",
+        "kind": "auto",
+        "text": "邀请码 K7M2QX",
+        "context": { "selfWritten": [], "prompted": [], "saltAvailable": true },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.auto.after_manual",
+        "kind": "auto",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.auto.edge_24h_minus_1ms",
+        "kind": "auto",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 86399999 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.auto.edge_24h",
+        "kind": "auto",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 86400000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.same_code_other_text",
+        "kind": "manual",
+        "entry": "home",
+        "text": "https://share.example.test/i/K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.same_code_more_words",
+        "kind": "manual",
+        "entry": "home",
+        "text": "好友邀请你加入凑狸 https://share.example.test/i/K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "https://share.example.test/i/K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.lowercase_not_normalized",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 k7m2qx",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.fullwidth_not_normalized",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 Ｋ７Ｍ２ＱＸ",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.auto.same_code_other_text",
+        "kind": "auto",
+        "text": "https://share.example.test/i/K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.other_text_prompted",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 P8N3RY", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.expired_and_recent",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [
+            { "text": "邀请码 K7M2QX", "agoMs": 90000000 },
+            { "text": "邀请码 K7M2QX", "agoMs": 60000 }
+          ],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.manual.only_expired",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 90000000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.self_written_J1",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": { "selfWritten": ["邀请码 K7M2QX"], "prompted": [], "saltAvailable": true },
+        "expect": { "show": true, "record": true, "reasonRaw": null }
+      },
+      {
+        "name": "BR-INV-04.manual.self_written_still_deduped_J1",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": ["邀请码 K7M2QX"],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "prompted_recently" }
+      },
+      {
+        "name": "BR-INV-04.auto.self_written",
+        "kind": "auto",
+        "text": "邀请码 K7M2QX",
+        "context": { "selfWritten": ["邀请码 K7M2QX"], "prompted": [], "saltAvailable": true },
+        "expect": { "show": false, "record": false, "reasonRaw": "self_written" }
+      },
+      {
+        "name": "BR-INV-04.manual.salt_unavailable_J3",
+        "kind": "manual",
+        "entry": "home",
+        "text": "邀请码 K7M2QX",
+        "context": { "selfWritten": [], "prompted": [], "saltAvailable": false },
+        "expect": { "show": true, "record": false, "reasonRaw": "salt_unavailable" }
+      },
+      {
+        "name": "BR-INV-04.manual.search_typing_salt_unavailable_J3",
+        "kind": "manual",
+        "entry": "search_typing",
+        "text": "https://share.example.test/i/K7M2QX",
+        "context": { "selfWritten": [], "prompted": [], "saltAvailable": false },
+        "expect": { "show": true, "record": false, "reasonRaw": "salt_unavailable" }
+      },
+      {
+        "name": "BR-INV-04.auto.salt_unavailable",
+        "kind": "auto",
+        "text": "邀请码 K7M2QX",
+        "context": { "selfWritten": [], "prompted": [], "saltAvailable": false },
+        "expect": { "show": false, "record": false, "reasonRaw": "salt_unavailable" }
+      },
+      {
+        "name": "BR-INV-04.fill_input.prompted_recently_not_a_prompt",
+        "kind": "manual",
+        "entry": "login_invite",
+        "text": "邀请码 K7M2QX",
+        "context": {
+          "selfWritten": [],
+          "prompted": [{ "text": "邀请码 K7M2QX", "agoMs": 60000 }],
+          "saltAvailable": true
+        },
+        "expect": { "show": false, "record": false, "reasonRaw": "not_prompt_purpose" }
+      },
+      {
+        "name": "BR-INV-04.fill_input.fresh_not_a_prompt",
+        "kind": "manual",
+        "entry": "login_invite",
+        "text": "邀请码 K7M2QX",
+        "context": { "selfWritten": [], "prompted": [], "saltAvailable": true },
+        "expect": { "show": false, "record": false, "reasonRaw": "not_prompt_purpose" }
+      }
+    ],
+    "flows": [
+      {
+        "name": "BR-INV-04.flow.manual_repeat_then_24h",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 3600000 },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 82799000 },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 1000 },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.search_typing_and_home_share_one_record",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "search_typing",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": true, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "search_typing",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.auto_then_manual",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "foreground",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 60000 },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "search_typing",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.manual_then_auto",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 60000 },
+          {
+            "op": "foreground",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 86339999 },
+          {
+            "op": "foreground",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 1 },
+          {
+            "op": "foreground",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.confirm_and_ignore_count_as_prompted",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "then": "confirm",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "https://share.example.test/i/K7M2QX",
+            "then": "ignore",
+            "expect": { "show": true, "inviteRecords": 2 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 2 }
+          },
+          {
+            "op": "foreground",
+            "text": "好友邀请你加入凑狸 https://share.example.test/i/K7M2QX",
+            "then": "confirm",
+            "expect": { "show": true, "inviteRecords": 3 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "好友邀请你加入凑狸 https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 3 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.key_is_raw_text",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": true, "inviteRecords": 2 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "好友邀请你加入凑狸 https://share.example.test/i/K7M2QX",
+            "expect": { "show": true, "inviteRecords": 3 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 k7m2qx",
+            "expect": { "show": true, "inviteRecords": 4 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 4 }
+          },
+          {
+            "op": "foreground",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 4 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.self_written_manual_shows_J1",
+        "given": { "session": "guest" },
+        "steps": [
+          { "op": "app_write", "text": "邀请码 K7M2QX" },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          { "op": "app_write", "text": "https://share.example.test/i/K7M2QX" },
+          {
+            "op": "foreground",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.logout_keeps_record_J2",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          { "op": "login", "expect": { "inviteRecords": 1 } },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          { "op": "logout", "expect": { "inviteRecords": 1 } },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          { "op": "wait", "ms": 86400000 },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.switch_account_keeps_record_J2",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "foreground",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          { "op": "login" },
+          { "op": "switch_account", "expect": { "inviteRecords": 1 } },
+          { "op": "logout", "expect": { "inviteRecords": 1 } },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          },
+          {
+            "op": "foreground",
+            "text": "https://share.example.test/i/K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.unshown_does_not_record",
+        "given": { "session": "guest" },
+        "steps": [
+          { "op": "login" },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 0 }
+          },
+          { "op": "logout" },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 0 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12 邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 1, "inviteRecords": 0 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.withdraw_consent_clears",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          { "op": "withdraw_consent", "expect": { "inviteRecords": 0 } },
+          { "op": "consent_again" },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.basic_mode_clears",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "foreground",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          { "op": "basic_mode", "expect": { "inviteRecords": 0 } },
+          { "op": "consent_again" },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.salt_rotate_clears",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          { "op": "salt_rotate", "expect": { "inviteRecords": 0 } },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.salt_unavailable_manual_J3",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 P8N3RY",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          { "op": "salt_unavailable" },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          },
+          { "op": "salt_restore" },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 2 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 2 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.salt_unavailable_auto",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 P8N3RY",
+            "expect": { "show": true, "inviteRecords": 1 }
+          },
+          { "op": "salt_unavailable" },
+          {
+            "op": "foreground",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 1 }
+          },
+          { "op": "salt_restore" },
+          {
+            "op": "foreground",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 2 }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.invite_and_product_records_separate",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "foreground",
+            "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+            "expect": { "show": false, "uploads": 1, "inviteRecords": 0, "productRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1, "productRecords": 1 }
+          },
+          {
+            "op": "foreground",
+            "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 1, "productRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+            "expect": { "show": false, "uploads": 1, "inviteRecords": 1, "productRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": {
+              "show": false,
+              "uploads": 0,
+              "fallback": false,
+              "inviteRecords": 1,
+              "productRecords": 1
+            }
+          },
+          { "op": "login", "expect": { "inviteRecords": 1 } },
+          { "op": "logout", "expect": { "inviteRecords": 1, "productRecords": 0 } },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": {
+              "show": false,
+              "uploads": 0,
+              "fallback": false,
+              "inviteRecords": 1,
+              "productRecords": 0
+            }
+          }
+        ]
+      },
+      {
+        "name": "BR-INV-04.flow.fill_input_and_bridge_read_untouched",
+        "given": { "session": "guest" },
+        "steps": [
+          {
+            "op": "fill_input",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "code": "K7M2QX", "inviteRecords": 0 }
+          },
+          {
+            "op": "bridge_read",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 0 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": true, "uploads": 0, "inviteRecords": 1 }
+          },
+          {
+            "op": "fill_input",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "code": "K7M2QX", "inviteRecords": 1 }
+          },
+          {
+            "op": "fill_input",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "code": "K7M2QX", "inviteRecords": 1 }
+          },
+          {
+            "op": "bridge_read",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "inviteRecords": 1 }
+          },
+          {
+            "op": "paste",
+            "entry": "home",
+            "text": "邀请码 K7M2QX",
+            "expect": { "show": false, "uploads": 0, "fallback": false, "inviteRecords": 1 }
+          }
+        ]
+      }
+    ]
+  },
+  "inviteConfirm": [
+    {
+      "name": "AC-S1-63.b.guest_prefill_only",
+      "session": "guest",
+      "expect": { "actionRaw": "prefill_login" }
+    },
+    {
+      "name": "member_eligible_bind_phone_first",
+      "session": "member",
+      "me": { "inviter_bound": false, "invite_backfill": { "eligible": true } },
+      "expect": { "actionRaw": "bind_phone_first" }
+    },
+    {
+      "name": "phone_eligible_G01_pending",
+      "session": "phone",
+      "me": { "inviter_bound": false, "invite_backfill": { "eligible": true } },
+      "expect": { "actionRaw": "backfill_pending_contract" }
+    },
+    {
+      "name": "phone_bound",
+      "session": "phone",
+      "me": { "inviter_bound": true, "invite_backfill": { "eligible": false } },
+      "expect": { "actionRaw": "none" }
+    },
+    {
+      "name": "member_ineligible",
+      "session": "member",
+      "me": { "inviter_bound": false, "invite_backfill": { "eligible": false } },
+      "expect": { "actionRaw": "none" }
+    },
+    {
+      "name": "phone_ineligible",
+      "session": "phone",
+      "me": { "inviter_bound": false, "invite_backfill": { "eligible": false } },
+      "expect": { "actionRaw": "none" }
+    },
+    { "name": "member_me_unavailable", "session": "member", "expect": { "actionRaw": "none" } },
+    { "name": "phone_me_unavailable", "session": "phone", "expect": { "actionRaw": "none" } }
+  ],
+  "gaps": [
+    "G01；backfill_pending_contract 仅为题定判定值，不表示存在绑定接口或 InviteBackfill 路由；不测试真实已登录绑定。",
+    "G02；不猜 config.clipboard 字段、格式及远程规则覆盖方式。",
+    "G03；不为无链接淘口令形态写商品分类期望。AC-S1-63.d 用明确商品链接加邀请内容覆盖商品优先，纯口令部分仍待规则。",
+    "G04；uploadText 只覆盖空白分隔的完整链接、单个完整「」标题、前三个链接按顺序换行连接。尾标点、多标题、嵌套标题、重复链接、转义与截断不猜。",
+    "G05；只测已解析为明确布尔值的 configEnabled；不判端键/电商键选择、缺键、null 或 LKG 回退。",
+    "G06；只测当前 webSuppressed=true 的抑制，不锁死容器作用域、寿命或旧设置迁移。",
+    "G07；show_prompt 不断言读取前提示条的商品/邀请文案；不编造 iOS 对无链接邀请码的探测能力。",
+    "G08；同一原文取 1 小时和 48 小时，不测恰好 24 小时、规范化等价文本、关闭/点击的记录时点或跨进程保留。测试 hash 只验证相等关系，不选择生产 hash 算法。",
+    "G09；不为多卡落点、成功/失败混合项聚合顺序写期望；single_card.linkId 只核对本次输出，详情重取后的 link_id 保留另验。",
+    "G10；非空但无链接的手动商品粘贴不写 search_prefill 期望；空剪贴板按 brief §2.5 进入 SearchTyping。",
+    "G11；不造文案键；按钮、设置开关文案和读屏名另验。",
+    "G12；仅覆盖题目及 brief 明列的弹层，不扩充 ExternalPage 或授权回跳过渡界面边界。",
+    "G13；仅覆盖题目及 brief 明列的事件；尚未读取时的 window_focus 缺少是否存在待执行前台轮次的输入，不写该分支期望。",
+    "G14；邀请正例使用 10～500 长度内文案；裸 6 位码只断言不自动提示，不固定 too_short/no_trigger 的优先级。",
+    "G15；不把 InputHit.kind=text 当成线报判据，不造 Agent 动作。",
+    "G16；只测游客 prefill_login 决定，不规定预填容器、覆盖已有输入的顺序或 pending_action 交互。",
+    "G17。",
+    "CLIP-18：AC-S1-63.a 的分享域名 /i/{code} 同时符合 G03 的 HTTP(S) 商品候选条件，未明确如何排除邀请 URL；a 已覆盖抽取和登录页主动粘贴，不猜自动分类结果。域名后缀、子域、userinfo、端口与编码路径的触发匹配也待明确。",
+    "CLIP-19：整体 30132 的 map 没有原始/已筛文本，契约也无预填字段；只断言动作及文案键。行内 30132 只使用 hit.raw 中明确标题/首行测试预填；不能提取商品名的判据、多标题选择、空白清理与搜索参数截断未定。",
+    "CLIP-20：30141 要求卡片置灰，但题定输出没有 availability/disabled/逐行动作，不猜成 notice 或 error。多结果逐项处理也缺输出；response/errorCode 同时提供的优先级和畸形响应不猜。",
+    "CLIP-21：readPolicy 没有 session；guest 用例验证读取判定不需要登录输入，不能证明开关跨登录/退出/换号保留。Settings 显示、默认开启与持久化另做集成测试。",
+    "CLIP-22：纯函数 API 无法断言 AC-S1-03 点击前 0 请求、点击后 1 请求、scene=clipboard、entry_source=parse、系统读取/写入次数、e 剪贴板前后不变、iOS 无系统弹窗、鸿蒙 SUCCESS 后才读、撤回清 hash、页面/账号/环境世代失效与 H5 事件无原文。按 brief §2.11 补执行层测试，不能把本文件视为这些验收已通过。",
+    "CLIP-23：showTrace6 不验证实际文案渲染；Retry-After 的 HTTP-date、零值、小数、溢出及倒计时执行层另验。",
+    "CLIP-24：重复 record 同一文本是否刷新位置未定，容量测试用 11 条不同文本。多拒绝条件的 reasonRaw 优先级不固定，基本模式加关闭开关只断言 skip。",
+    "TEST-WIRING：鸿蒙通过公共隐私/敏感守卫后始终 paste_only，不表示敏感页可以显示 PasteButton。expect 缺字段不判定，显式 null 要求无值。三端执行所有平台行，不按当前端过滤。",
+    "TEST-WIRING：selfWritten/prompted 的文本由测试转换为注入 hash，agoMs 转为 nowMs-agoMs；假 hash 只在测试内存给不同文本分配编号。三个测试为实现前接线，未编译运行。鸿蒙由 gen.py 生成 ClipboardVectorsData.ets，并在 List.test.ets 注册。本轮不写文件。",
+    "APP-04 的 specs/bridge-vectors.json 已覆盖 clipboard.write 手势与 90404，这里不重复。"
+  ]
+}

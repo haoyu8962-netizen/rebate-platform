@@ -1,0 +1,249 @@
+{
+  "about_this_file": "APP-12w-b 隐私中心 / 关于 / 联系客服视觉的截图与视图数据（三端同一份，G-P13：不往 me-vectors.json 追加）。只放本地状态与配置报文；键名避开 token / secret / key / sentry / password / auth。",
+  "clock": "2026-10-12T10:30:00+08:00",
+  "zone": "Asia/Shanghai",
+  "boards": {
+    "PrivacyCenter": {
+      "sha12": "4d60cd5f4c7c",
+      "height": 864,
+      "compare": true,
+      "state": "privacy_member"
+    },
+    "PrivacyCenterBasic-v2": {
+      "sha12": "a7745af326cc",
+      "height": 844,
+      "compare": true,
+      "state": "privacy_basic"
+    },
+    "PrivacyCenterWithdraw": {
+      "sha12": "903bc26faeb6",
+      "height": 864,
+      "compare": true,
+      "state": "privacy_member + 点【撤回同意】"
+    },
+    "PrivacyCenterForceUpdate": {
+      "sha12": "2def87c570a3",
+      "height": 864,
+      "compare": true,
+      "state": "privacy_force_update"
+    },
+    "PrivacyCenterDark": {
+      "sha12": "64049c0d2da3",
+      "height": 864,
+      "compare": true,
+      "dark": true,
+      "state": "privacy_member"
+    },
+    "PrivacyCollectList-v2": {
+      "sha12": "01468077a062",
+      "height": 1981,
+      "compare": false,
+      "why": "G-P01 H5 正文，不在原生任务"
+    },
+    "PrivacyShareList-v2": {
+      "sha12": "6a1059851bad",
+      "height": 1931,
+      "compare": false,
+      "why": "G-P01 H5 正文，不在原生任务"
+    },
+    "About-v2": { "sha12": "93b849722a71", "height": 844, "compare": true, "state": "about_filed" },
+    "AboutBeforeFiling": {
+      "sha12": "976dc087f1ba",
+      "height": 844,
+      "compare": true,
+      "state": "about_unfiled + 复制成功"
+    },
+    "AboutDark": {
+      "sha12": "f24efdd79bfb",
+      "height": 844,
+      "compare": true,
+      "dark": true,
+      "state": "about_filed"
+    },
+    "CsOpenFailed-v2": {
+      "sha12": "2beaf0e8a771",
+      "height": 1032,
+      "compare": true,
+      "state": "cs_open_failed"
+    },
+    "CsWechatMissing-v2": {
+      "sha12": "10b1ba303b9a",
+      "height": 1032,
+      "compare": true,
+      "state": "cs_wechat_missing"
+    },
+    "CsWechatMissingDark": {
+      "sha12": "52572584780a",
+      "height": 1032,
+      "compare": true,
+      "dark": true,
+      "state": "cs_wechat_missing"
+    }
+  },
+  "superseded": {
+    "PrivacyCenterBasic": "d9accb2f579f",
+    "PrivacyCollectList": "28d318d0f14e",
+    "PrivacyShareList": "1df8630825f2",
+    "About": "27d13b97cdd4",
+    "CsOpenFailed": "5bd10d9570ad",
+    "CsWechatMissing": "7dcb4145fb98",
+    "CsHandoff": "9914f04c72b8"
+  },
+  "sessions": {
+    "privacy_member": {
+      "level": "member",
+      "nickname": "凑狸用户",
+      "privacy": "consented",
+      "personalization": true,
+      "deviceRegistered": true,
+      "legalPrivacyVersion": 3,
+      "forceUpdate": false,
+      "permissionStatus": { "push": "not_asked", "photos": "granted" }
+    },
+    "privacy_guest": {
+      "level": "guest",
+      "privacy": "consented",
+      "personalization": true,
+      "deviceRegistered": false,
+      "legalPrivacyVersion": 3,
+      "forceUpdate": false,
+      "permissionStatus": { "push": "not_asked", "photos": "granted" }
+    },
+    "privacy_basic": {
+      "level": "basic",
+      "privacy": "basic_mode",
+      "personalization": true,
+      "deviceRegistered": false,
+      "legalPrivacyVersion": 3,
+      "forceUpdate": false,
+      "permissionStatus": { "push": "not_asked", "photos": "granted" }
+    },
+    "privacy_force_update": {
+      "level": "member",
+      "nickname": "凑狸用户",
+      "privacy": "consented",
+      "personalization": true,
+      "deviceRegistered": true,
+      "legalPrivacyVersion": 3,
+      "forceUpdate": true,
+      "permissionStatus": { "push": "not_asked", "photos": "granted" }
+    }
+  },
+  "behaviorOnlyPermissionEntry": {
+    "why": "Android 锁定契约无条目（G-P15），截图不注入；只在红线 ④ 行为用例里注入一条 android 条目验证「点行 = 打开系统设置一次、不申请」；purpose 在测试里转成契约字段名",
+    "type": "push",
+    "platform": "android",
+    "purpose": "perm.push.card_hint"
+  },
+  "about": {
+    "version": "1.0.0",
+    "build": "100",
+    "filed": "[生成式 AI 服务公示文本：登记后由配置 agent.filing_text 下发，原样显示]",
+    "unfiled": "",
+    "diagnostics": {
+      "version": "1.0.0",
+      "build": "100",
+      "channel": "visual_test",
+      "system_version": "Android 16",
+      "model": "TEST_MODEL",
+      "device_id": "VISUALDEVICE-ABC123",
+      "push_reported": true,
+      "trace_ids": ["trace-visual-01", "trace-visual-02", "trace-visual-03", "trace-visual-04"],
+      "config_version": "CONFIG_123",
+      "home_version": "HOME_456",
+      "uid": "visual-uid-0001",
+      "phone": "13800000000"
+    },
+    "diagnosticsText": [
+      "app_version: 1.0.0 (100)",
+      "channel: visual_test",
+      "os_version: Android 16",
+      "device_model: TEST_MODEL",
+      "device_id_tail: ABC123",
+      "push_reported: 是",
+      "recent_trace_ids: trace-visual-01, trace-visual-02, trace-visual-03",
+      "config_version: CONFIG_123",
+      "home_version: HOME_456"
+    ],
+    "diagnosticsMustNotContain": [
+      "VISUALDEVICE",
+      "visual-uid-0001",
+      "13800000000",
+      "trace-visual-04"
+    ]
+  },
+  "cs": {
+    "kf": "https://kf.example.com/couli-visual-test",
+    "kfInsecure": "http://kf.example.com/couli-visual-test",
+    "cases": {
+      "cs_open_failed": {
+        "kf": "https",
+        "wechat": "unknown",
+        "opens": false,
+        "copies": true,
+        "via": "bridge",
+        "sheet": "open_failed",
+        "buttons": ["retry", "copy_link", "go_help"]
+      },
+      "cs_help_only": {
+        "kf": "none",
+        "wechat": "unknown",
+        "opens": false,
+        "copies": true,
+        "via": "open",
+        "sheet": "help_only",
+        "buttons": ["go_help"]
+      },
+      "cs_help_only_insecure": {
+        "kf": "http",
+        "wechat": "unknown",
+        "opens": false,
+        "copies": true,
+        "via": "open",
+        "sheet": "help_only",
+        "buttons": ["go_help"]
+      },
+      "cs_wechat_missing": {
+        "kf": "https",
+        "wechat": "no",
+        "opens": false,
+        "copies": true,
+        "via": "open",
+        "sheet": "wechat_missing",
+        "buttons": ["copy_link", "go_help"]
+      },
+      "cs_wechat_missing_copy_failed": {
+        "kf": "https",
+        "wechat": "no",
+        "opens": false,
+        "copies": false,
+        "via": "open",
+        "sheet": "wechat_missing",
+        "buttons": ["copy_link", "go_help"]
+      },
+      "cs_handoff": {
+        "kf": "https",
+        "wechat": "unknown",
+        "opens": true,
+        "copies": true,
+        "via": "open",
+        "sheet": "handoff",
+        "buttons": ["open_wechat", "go_help"]
+      }
+    },
+    "safetyDraft": "客服不会向你索要验证码或密码",
+    "safetyOld": "客服不会向你索要登录验证码和密码"
+  },
+  "notices": [
+    { "text": "about.copy_diagnostics.done", "check": true, "live": "polite", "where": "page" },
+    { "text": "me.copy_failed", "check": false, "live": "assertive", "where": "page" },
+    {
+      "text": "privacy_center.personalization_failed",
+      "check": false,
+      "live": "once",
+      "where": "page"
+    },
+    { "text": "cs.copy_link.done", "check": false, "live": "polite", "where": "sheet" }
+  ],
+  "personalizationFailure": { "code": 50001 }
+}

@@ -1,0 +1,1346 @@
+{
+  "version": 1,
+  "sources": [
+    "couli-runs/NATIVE/FU-CLIP/brief.md §0.1、§2.1～§2.6、§4",
+    "couli-runs/NATIVE/FU-CLIP/rule-gaps.md K01～K32（现在的做法）",
+    "couli-runs/NATIVE/APP-07/brief.md；rule-gaps.md G03/G04/G05/G08/G10/A02",
+    "couli origin/main:规划/08_业务规则/10_ID_身份授权与合规.md BR-ID-16 正文与细则",
+    "couli origin/main:规划/01_需求规划.md F-CLIP-01～06；规划/04_数据模型与契约.md §2.1",
+    "couli origin/main:规划/09_平台能力验证/2_TB_淘宝.md CAP-TB-01；3_JD_京东.md CAP-JD-01；4_PDD_拼多多.md CAP-PDD-01；5_X_跨平台与系统.md CAP-X-01",
+    "couli origin/main:规划/10_首个完整流程验收用例.md AC-S1-42-TB/JD/PDD",
+    "rebate-platform 9cd1e6f:contracts/openapi.yaml parseInput/ParseInputRequest/InputHit；contracts/bridge.schema.json clipboard.read/levels/errors；contracts/texts.default.json clipboard.prompt/error.30132；contracts/routes.json",
+    "rebate-platform origin/main:apps/api/src/modules/parsing/domain/link-patterns.ts（参考主机边界与 userinfo）",
+    "rea/docs/research/clipboard-detect-flow.md §6.2、§6.3、§7.2",
+    "三端 main:specs/clipboard-vectors.json 与 ClipboardVectorTests.swift / ClipboardVectorTest.kt / ClipboardVector.test.ets（旧向量不改、不重复）"
+  ],
+  "fixtures": {
+    "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "otherSaltHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "shareDomains": ["share.example.test"]
+  },
+  "hostCheck": [
+    {
+      "name": "K01_taobao_exact",
+      "url": "https://taobao.com",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K01_taobao_sub",
+      "url": "https://item.taobao.com/item.htm?id=1",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K01_tb_exact",
+      "url": "https://tb.cn",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K01_tb_m",
+      "url": "https://m.tb.cn/h.x",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K01_tb_e",
+      "url": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K01_tmall_exact",
+      "url": "https://tmall.com",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K01_tmall_detail",
+      "url": "https://detail.tmall.com/item.htm?id=1",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K01_jd_exact",
+      "url": "https://jd.com",
+      "expect": { "allowed": true, "platform": "jd" }
+    },
+    {
+      "name": "K01_jd_mobile",
+      "url": "https://item.m.jd.com/product/1.html",
+      "expect": { "allowed": true, "platform": "jd" }
+    },
+    {
+      "name": "K01_jd_short",
+      "url": "https://u.jd.com/abc",
+      "expect": { "allowed": true, "platform": "jd" }
+    },
+    {
+      "name": "K01_three_cn",
+      "url": "https://3.cn/abc",
+      "expect": { "allowed": true, "platform": "jd" }
+    },
+    {
+      "name": "K01_yangkeduo",
+      "url": "https://mobile.yangkeduo.com/goods.html?goods_id=1",
+      "expect": { "allowed": true, "platform": "pdd" }
+    },
+    {
+      "name": "K01_pinduoduo",
+      "url": "https://p.pinduoduo.com/abc",
+      "expect": { "allowed": true, "platform": "pdd" }
+    },
+    {
+      "name": "K06_uppercase",
+      "url": "HTTPS://M.TB.CN/h.X",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K06_trailing_dot",
+      "url": "https://m.tb.cn./h.x",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K06_http",
+      "url": "http://m.tb.cn/h.x",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K31_login",
+      "url": "https://login.taobao.com/x",
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K31_passport",
+      "url": "https://passport.jd.com/x",
+      "expect": { "allowed": true, "platform": "jd" }
+    },
+    {
+      "name": "K06_suffix",
+      "url": "https://taobao.com.evil.cn/x",
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K06_hyphen",
+      "url": "https://evil-taobao.com/x",
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K06_prefix",
+      "url": "https://xtaobao.com/x",
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K06_typo",
+      "url": "https://taobao.co/x",
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K06_tb_suffix",
+      "url": "https://tb.cn.evil.cn/x",
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K06_at",
+      "url": "https://taobao.com@evil.cn/x",
+      "expect": { "allowed": false, "reasonRaw": "userinfo" }
+    },
+    {
+      "name": "K06_credentials",
+      "url": "https://user:pw@m.tb.cn/x",
+      "expect": { "allowed": false, "reasonRaw": "userinfo" }
+    },
+    {
+      "name": "K06_fragment",
+      "url": "https://evil.cn#@taobao.com",
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K06_port_443",
+      "url": "https://m.tb.cn:443/x",
+      "expect": { "allowed": false, "reasonRaw": "port" }
+    },
+    {
+      "name": "K06_port_8080",
+      "url": "https://m.tb.cn:8080/x",
+      "expect": { "allowed": false, "reasonRaw": "port" }
+    },
+    {
+      "name": "K06_ipv4",
+      "url": "http://127.0.0.1/x",
+      "expect": { "allowed": false, "reasonRaw": "ip" }
+    },
+    {
+      "name": "K06_ipv4_short",
+      "url": "http://127.1/x",
+      "expect": { "allowed": false, "reasonRaw": "ip" }
+    },
+    {
+      "name": "K06_ipv4_hex",
+      "url": "http://0x7f.1/x",
+      "expect": { "allowed": false, "reasonRaw": "ip" }
+    },
+    {
+      "name": "K06_ipv4_integer",
+      "url": "http://2130706433/x",
+      "expect": { "allowed": false, "reasonRaw": "ip" }
+    },
+    { "name": "K06_ipv6", "url": "http://[::1]/x", "expect": { "allowed": false } },
+    { "name": "K06_percent_host", "url": "https://%74aobao.com/x", "expect": { "allowed": false } },
+    {
+      "name": "K06_ftp",
+      "url": "ftp://taobao.com/x",
+      "expect": { "allowed": false, "reasonRaw": "scheme" }
+    },
+    {
+      "name": "K06_javascript",
+      "url": "javascript:alert(1)",
+      "expect": { "allowed": false, "reasonRaw": "scheme" }
+    },
+    {
+      "name": "K06_localhost",
+      "url": "https://localhost/x",
+      "expect": { "allowed": false, "reasonRaw": "host_invalid" }
+    },
+    {
+      "name": "K06_share_host",
+      "url": "https://share.example.test/i/K7M2QX",
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K06_unparsable",
+      "url": "https://[",
+      "expect": { "allowed": false, "reasonRaw": "unparsable" }
+    },
+    {
+      "name": "K06_scheme_before_userinfo_port_ip",
+      "url": "ftp://u@127.0.0.1:443/x",
+      "expect": { "allowed": false, "reasonRaw": "scheme" }
+    },
+    {
+      "name": "K06_userinfo_before_port_ip",
+      "url": "http://u@127.0.0.1:443/x",
+      "expect": { "allowed": false, "reasonRaw": "userinfo" }
+    },
+    {
+      "name": "K06_port_before_ip",
+      "url": "http://127.0.0.1:443/x",
+      "expect": { "allowed": false, "reasonRaw": "port" }
+    },
+    {
+      "name": "K02_jd_only",
+      "url": "https://m.tb.cn/h.x",
+      "tighten": { "platforms": ["jd"] },
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K02_remove_tb",
+      "url": "https://m.tb.cn/h.x",
+      "tighten": { "removeHosts": ["tb.cn"] },
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K02_keep_taobao",
+      "url": "https://item.taobao.com/item.htm?id=1",
+      "tighten": { "removeHosts": ["tb.cn"] },
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K02_remove_nondefault_noop",
+      "url": "https://m.tb.cn/h.x",
+      "tighten": { "removeHosts": ["m.tb.cn"] },
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K02_unknown_platform_rejected",
+      "url": "https://evil.com/x",
+      "tighten": { "platforms": ["taobao", "evil"] },
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K02_known_platform_kept",
+      "url": "https://m.tb.cn/h.x",
+      "tighten": { "platforms": ["taobao", "evil"] },
+      "expect": { "allowed": true, "platform": "taobao" }
+    },
+    {
+      "name": "K02_empty_taobao",
+      "url": "https://m.tb.cn/h.x",
+      "tighten": { "platforms": [] },
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K02_empty_jd",
+      "url": "https://u.jd.com/abc",
+      "tighten": { "platforms": [] },
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    },
+    {
+      "name": "K02_empty_pdd",
+      "url": "https://p.pinduoduo.com/abc",
+      "tighten": { "platforms": [] },
+      "expect": { "allowed": false, "reasonRaw": "not_allowed" }
+    }
+  ],
+  "flagLimits": [
+    {
+      "name": "K03_taobao_off",
+      "flags": { "clipboard.enabled.taobao": false },
+      "expect": { "platforms": ["jd", "pdd"] }
+    },
+    {
+      "name": "K03_jd_off",
+      "flags": { "clipboard.enabled.jd": false },
+      "expect": { "platforms": ["taobao", "pdd"] }
+    },
+    {
+      "name": "K03_pdd_off",
+      "flags": { "clipboard.enabled.pdd": false },
+      "expect": { "platforms": ["taobao", "jd"] }
+    },
+    {
+      "name": "K03_all_off",
+      "flags": {
+        "clipboard.enabled.taobao": false,
+        "clipboard.enabled.jd": false,
+        "clipboard.enabled.pdd": false
+      },
+      "expect": { "platforms": [] }
+    },
+    {
+      "name": "K03_true_no_limit",
+      "flags": {
+        "clipboard.enabled.taobao": true,
+        "clipboard.enabled.jd": true,
+        "clipboard.enabled.pdd": true
+      },
+      "expect": { "platforms": null }
+    },
+    { "name": "K03_missing_no_limit", "flags": {}, "expect": { "platforms": null } },
+    {
+      "name": "K03_client_keys_ignored",
+      "flags": {
+        "clipboard.enabled.ios": false,
+        "clipboard.enabled.android": false,
+        "clipboard.enabled.harmony": false
+      },
+      "expect": { "platforms": null }
+    },
+    {
+      "name": "K03_unknown_ignored",
+      "flags": { "clipboard.enabled.evil": false },
+      "expect": { "platforms": null }
+    },
+    {
+      "name": "K03_mixed",
+      "flags": {
+        "clipboard.enabled.taobao": false,
+        "clipboard.enabled.jd": true,
+        "clipboard.enabled.evil": true,
+        "clipboard.enabled.android": false
+      },
+      "expect": { "platforms": ["jd", "pdd"] }
+    }
+  ],
+  "tpwdExtract": [
+    {
+      "name": "K04_old_wrapper_0",
+      "text": "￥AbCdEfGh12￥",
+      "expect": { "tokens": ["￥AbCdEfGh12￥"] }
+    },
+    {
+      "name": "K04_old_wrapper_1",
+      "text": "¥AbCdEfGh12¥",
+      "expect": { "tokens": ["¥AbCdEfGh12¥"] }
+    },
+    {
+      "name": "K04_old_wrapper_2",
+      "text": "$AbCdEfGh12$",
+      "expect": { "tokens": ["$AbCdEfGh12$"] }
+    },
+    {
+      "name": "K04_old_wrapper_3",
+      "text": "€AbCdEfGh12€",
+      "expect": { "tokens": ["€AbCdEfGh12€"] }
+    },
+    {
+      "name": "K04_old_wrapper_4",
+      "text": "£AbCdEfGh12£",
+      "expect": { "tokens": ["£AbCdEfGh12£"] }
+    },
+    {
+      "name": "K04_old_wrapper_5",
+      "text": "₤AbCdEfGh12₤",
+      "expect": { "tokens": ["₤AbCdEfGh12₤"] }
+    },
+    {
+      "name": "K04_old_wrapper_6",
+      "text": "₳AbCdEfGh12₳",
+      "expect": { "tokens": ["₳AbCdEfGh12₳"] }
+    },
+    {
+      "name": "K04_old_wrapper_7",
+      "text": "¢AbCdEfGh12¢",
+      "expect": { "tokens": ["¢AbCdEfGh12¢"] }
+    },
+    {
+      "name": "K04_old_wrapper_8",
+      "text": "₴AbCdEfGh12₴",
+      "expect": { "tokens": ["₴AbCdEfGh12₴"] }
+    },
+    {
+      "name": "K04_old_wrapper_9",
+      "text": "₰AbCdEfGh12₰",
+      "expect": { "tokens": ["₰AbCdEfGh12₰"] }
+    },
+    { "name": "K04_old_min8", "text": "￥AbCdEf12￥", "expect": { "tokens": ["￥AbCdEf12￥"] } },
+    {
+      "name": "K04_old_max16",
+      "text": "￥AbCdEfGh12345678￥",
+      "expect": { "tokens": ["￥AbCdEfGh12345678￥"] }
+    },
+    { "name": "K04_mismatch", "text": "￥AbCdEfGh12$", "expect": { "tokens": [] } },
+    { "name": "K04_short7", "text": "￥AbCdE12￥", "expect": { "tokens": [] } },
+    { "name": "K04_long17", "text": "￥AbCdEfGh123456789￥", "expect": { "tokens": [] } },
+    { "name": "K04_digits", "text": "￥1234567890￥", "expect": { "tokens": [] } },
+    { "name": "K04_left_letter", "text": "x￥AbCdEfGh12￥", "expect": { "tokens": [] } },
+    { "name": "K04_left_digit", "text": "7￥AbCdEfGh12￥", "expect": { "tokens": [] } },
+    { "name": "K04_right_letter", "text": "￥AbCdEfGh12￥x", "expect": { "tokens": [] } },
+    { "name": "K04_right_digit", "text": "￥AbCdEfGh12￥7", "expect": { "tokens": [] } },
+    { "name": "K04_invite6", "text": "￥AB12CD￥", "expect": { "tokens": [] } },
+    {
+      "name": "K04_new",
+      "text": "/CZ0001 AbCdEfGh12/",
+      "expect": { "tokens": ["/CZ0001 AbCdEfGh12/"] }
+    },
+    { "name": "K04_new_no_space", "text": "/CZ0001AbCdEfGh12/", "expect": { "tokens": [] } },
+    { "name": "K04_new_three_digits", "text": "/CZ001 AbCdEfGh12/", "expect": { "tokens": [] } },
+    { "name": "K04_new_five_digits", "text": "/CZ00001 AbCdEfGh12/", "expect": { "tokens": [] } },
+    { "name": "K04_new_nondigit", "text": "/CZ00A1 AbCdEfGh12/", "expect": { "tokens": [] } },
+    {
+      "name": "K04_all_in_order",
+      "text": "€AbCdEfGh12€ /CZ0001 QrStUvWx34/ ￥ZyXwVuTs56￥ $MnOpQrSt78$",
+      "expect": {
+        "tokens": ["€AbCdEfGh12€", "/CZ0001 QrStUvWx34/", "￥ZyXwVuTs56￥", "$MnOpQrSt78$"]
+      }
+    },
+    {
+      "name": "K04_disabled",
+      "text": "￥AbCdEfGh12￥ /CZ0001 QrStUvWx34/",
+      "tighten": { "tpwdEnabled": false },
+      "expect": { "tokens": [] }
+    },
+    {
+      "name": "K04_taobao_removed",
+      "text": "￥AbCdEfGh12￥ /CZ0001 QrStUvWx34/",
+      "tighten": { "platforms": ["jd", "pdd"] },
+      "expect": { "tokens": [] }
+    }
+  ],
+  "candidates": [
+    {
+      "name": "K07_G04_mixed_url_first",
+      "text": "聊天样例 13800138000 验证码 482731 https://m.tb.cn/h.x ￥AbCdEfGh12￥ https://u.jd.com/abc https://p.pinduoduo.com/abc 「降噪蓝牙耳机」",
+      "expect": {
+        "items": [
+          { "kindRaw": "url", "platform": "taobao", "raw": "https://m.tb.cn/h.x" },
+          { "kindRaw": "tpwd", "platform": "taobao", "raw": "￥AbCdEfGh12￥" },
+          { "kindRaw": "url", "platform": "jd", "raw": "https://u.jd.com/abc" }
+        ],
+        "uploadText": "https://m.tb.cn/h.x\n￥AbCdEfGh12￥\nhttps://u.jd.com/abc\n降噪蓝牙耳机"
+      }
+    },
+    {
+      "name": "K07_mixed_token_first",
+      "text": "￥AbCdEfGh12￥ https://u.jd.com/abc /CZ0001 QrStUvWx34/ https://m.tb.cn/h.x",
+      "expect": {
+        "items": [
+          { "kindRaw": "tpwd", "platform": "taobao", "raw": "￥AbCdEfGh12￥" },
+          { "kindRaw": "url", "platform": "jd", "raw": "https://u.jd.com/abc" },
+          { "kindRaw": "tpwd", "platform": "taobao", "raw": "/CZ0001 QrStUvWx34/" }
+        ],
+        "uploadText": "￥AbCdEfGh12￥\nhttps://u.jd.com/abc\n/CZ0001 QrStUvWx34/"
+      }
+    },
+    {
+      "name": "K01_K07_A02_filter_before_cap",
+      "text": "https://example.com/a https://share.example.test/i/K7M2QX https://m.tb.cn/h.x ￥AbCdEfGh12￥ https://u.jd.com/abc 「耳机」",
+      "shareDomains": ["share.example.test"],
+      "expect": {
+        "items": [
+          { "kindRaw": "url", "platform": "taobao", "raw": "https://m.tb.cn/h.x" },
+          { "kindRaw": "tpwd", "platform": "taobao", "raw": "￥AbCdEfGh12￥" },
+          { "kindRaw": "url", "platform": "jd", "raw": "https://u.jd.com/abc" }
+        ],
+        "uploadText": "https://m.tb.cn/h.x\n￥AbCdEfGh12￥\nhttps://u.jd.com/abc\n耳机"
+      }
+    },
+    {
+      "name": "K01_unlisted_only",
+      "text": "聊天 https://example.com/a 「耳机」",
+      "expect": { "items": [], "uploadText": null }
+    },
+    {
+      "name": "K14_A02_invite_only",
+      "text": "邀请码 K7M2QX https://share.example.test/i/K7M2QX 「邀请标题」",
+      "shareDomains": ["share.example.test"],
+      "expect": { "items": [], "uploadText": null }
+    },
+    {
+      "name": "K07_chat_only",
+      "text": "今天下午三点见，样例手机号13800138000，验证码482731。",
+      "expect": { "items": [], "uploadText": null }
+    },
+    {
+      "name": "K04_unrecognized_token",
+      "text": "￥1234567890￥ 「耳机」",
+      "expect": { "items": [], "uploadText": null }
+    },
+    {
+      "name": "K02_taobao_removed_keeps_jd",
+      "text": "https://m.tb.cn/h.x ￥AbCdEfGh12￥ https://u.jd.com/abc",
+      "tighten": { "platforms": ["jd"] },
+      "expect": {
+        "items": [{ "kindRaw": "url", "platform": "jd", "raw": "https://u.jd.com/abc" }],
+        "uploadText": "https://u.jd.com/abc"
+      }
+    },
+    {
+      "name": "K02_tpwd_disabled_keeps_url",
+      "text": "￥AbCdEfGh12￥ https://m.tb.cn/h.x",
+      "tighten": { "tpwdEnabled": false },
+      "expect": {
+        "items": [{ "kindRaw": "url", "platform": "taobao", "raw": "https://m.tb.cn/h.x" }],
+        "uploadText": "https://m.tb.cn/h.x"
+      }
+    },
+    {
+      "name": "K06_raw_not_normalized",
+      "text": "HTTP://M.TB.CN./h.X?tk=AbC",
+      "expect": {
+        "items": [{ "kindRaw": "url", "platform": "taobao", "raw": "HTTP://M.TB.CN./h.X?tk=AbC" }],
+        "uploadText": "HTTP://M.TB.CN./h.X?tk=AbC"
+      }
+    },
+    {
+      "name": "K07_A02_whitelisted_invite_excluded",
+      "text": "https://m.tb.cn/i/K7M2QX https://u.jd.com/abc",
+      "shareDomains": ["m.tb.cn"],
+      "expect": {
+        "items": [{ "kindRaw": "url", "platform": "jd", "raw": "https://u.jd.com/abc" }],
+        "uploadText": "https://u.jd.com/abc"
+      }
+    }
+  ],
+  "promptDisplay": [
+    {
+      "name": "K26_taobao",
+      "text": "https://m.tb.cn/h.x?tk=Secret",
+      "expect": {
+        "platform": "taobao",
+        "labelRaw": "link",
+        "display": "m.tb.cn/…",
+        "count": 1,
+        "displayName": "淘宝"
+      }
+    },
+    {
+      "name": "K26_tmall",
+      "text": "https://detail.tmall.com/item.htm?id=1",
+      "expect": {
+        "platform": "taobao",
+        "labelRaw": "link",
+        "display": "detail.tmall.com/…",
+        "count": 1,
+        "displayName": "天猫"
+      }
+    },
+    {
+      "name": "K26_bare_host",
+      "text": "https://m.tb.cn",
+      "expect": {
+        "platform": "taobao",
+        "labelRaw": "link",
+        "display": "m.tb.cn",
+        "count": 1,
+        "displayName": "淘宝"
+      }
+    },
+    {
+      "name": "K26_query_only",
+      "text": "https://m.tb.cn?tk=Secret",
+      "expect": {
+        "platform": "taobao",
+        "labelRaw": "link",
+        "display": "m.tb.cn/…",
+        "count": 1,
+        "displayName": "淘宝"
+      }
+    },
+    {
+      "name": "K26_lowercase",
+      "text": "https://M.TB.CN/h.X?tk=Secret",
+      "expect": {
+        "platform": "taobao",
+        "labelRaw": "link",
+        "display": "m.tb.cn/…",
+        "count": 1,
+        "displayName": "淘宝"
+      }
+    },
+    {
+      "name": "K26_tpwd",
+      "text": "￥AbCdEfGh12￥",
+      "expect": {
+        "platform": "taobao",
+        "labelRaw": "tpwd",
+        "display": null,
+        "count": 1,
+        "displayName": "淘宝"
+      }
+    },
+    {
+      "name": "K26_multiple",
+      "text": "￥AbCdEfGh12￥ https://u.jd.com/abc https://p.pinduoduo.com/abc https://m.tb.cn/h.x",
+      "expect": {
+        "platform": "taobao",
+        "labelRaw": "tpwd",
+        "display": null,
+        "count": 3,
+        "displayName": "淘宝"
+      }
+    },
+    {
+      "name": "K26_jd",
+      "text": "https://u.jd.com/abc",
+      "expect": {
+        "platform": "jd",
+        "labelRaw": "link",
+        "display": "u.jd.com/…",
+        "count": 1,
+        "displayName": "京东"
+      }
+    },
+    {
+      "name": "K26_pdd",
+      "text": "https://p.pinduoduo.com/abc",
+      "expect": {
+        "platform": "pdd",
+        "labelRaw": "link",
+        "display": "p.pinduoduo.com/…",
+        "count": 1,
+        "displayName": "拼多多"
+      }
+    },
+    {
+      "name": "K26_tightened_first",
+      "text": "https://m.tb.cn/h.x https://u.jd.com/abc",
+      "tighten": { "platforms": ["jd"] },
+      "expect": {
+        "platform": "jd",
+        "labelRaw": "link",
+        "display": "u.jd.com/…",
+        "count": 1,
+        "displayName": "京东"
+      }
+    }
+  ],
+  "classify": [
+    {
+      "name": "K01_unlisted",
+      "text": "https://example.com/a",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "no_link", "uploadText": null }
+    },
+    {
+      "name": "K01_disguised",
+      "text": "https://taobao.com.evil.cn/x",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "none", "reasonRaw": "no_link", "uploadText": null }
+    },
+    {
+      "name": "K04_old_tpwd",
+      "text": "￥AbCdEfGh12￥",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product", "uploadText": "￥AbCdEfGh12￥" }
+    },
+    {
+      "name": "K04_new_tpwd",
+      "text": "/CZ0001 AbCdEfGh12/",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product", "uploadText": "/CZ0001 AbCdEfGh12/" }
+    },
+    {
+      "name": "K01_filter_mixed",
+      "text": "https://example.com/a https://m.tb.cn/h.x",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "expect": { "kindRaw": "product", "uploadText": "https://m.tb.cn/h.x" }
+    },
+    {
+      "name": "K02_taobao_removed",
+      "text": "https://m.tb.cn/h.x",
+      "context": {
+        "selfWritten": [],
+        "prompted": [],
+        "inviteEligible": true,
+        "shareDomains": ["share.example.test"]
+      },
+      "tighten": { "platforms": ["jd"] },
+      "expect": { "kindRaw": "none", "reasonRaw": "no_link", "uploadText": null }
+    }
+  ],
+  "manualPaste": [
+    {
+      "name": "K01_G10_unlisted",
+      "entry": "home",
+      "text": "https://example.com/a",
+      "expect": { "actionRaw": "search_prefill", "uploadText": null }
+    },
+    {
+      "name": "K01_G10_disguised",
+      "entry": "search_typing",
+      "text": "https://taobao.com.evil.cn/x",
+      "expect": { "actionRaw": "search_prefill", "uploadText": null }
+    },
+    {
+      "name": "K05_unsupported_platform",
+      "entry": "home",
+      "text": "https://v.douyin.com/abc",
+      "expect": { "actionRaw": "search_prefill", "uploadText": null }
+    },
+    {
+      "name": "K04_old_tpwd",
+      "entry": "home",
+      "text": "￥AbCdEfGh12￥",
+      "expect": { "actionRaw": "parse", "uploadText": "￥AbCdEfGh12￥" }
+    },
+    {
+      "name": "K04_new_tpwd",
+      "entry": "search_typing",
+      "text": "/CZ0001 AbCdEfGh12/",
+      "expect": { "actionRaw": "parse", "uploadText": "/CZ0001 AbCdEfGh12/" }
+    },
+    {
+      "name": "K01_filter_mixed",
+      "entry": "home",
+      "text": "https://m.tb.cn/h.x https://example.com/a",
+      "expect": { "actionRaw": "parse", "uploadText": "https://m.tb.cn/h.x" }
+    },
+    {
+      "name": "K02_taobao_removed",
+      "entry": "home",
+      "text": "https://m.tb.cn/h.x",
+      "tighten": { "platforms": ["jd"] },
+      "expect": { "actionRaw": "search_prefill", "uploadText": null }
+    },
+    {
+      "name": "K30_all_off",
+      "entry": "search_typing",
+      "text": "https://u.jd.com/abc",
+      "tighten": { "platforms": [] },
+      "expect": { "actionRaw": "search_prefill", "uploadText": null }
+    }
+  ],
+  "fingerprint": [
+    {
+      "name": "K08_url",
+      "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "expect": {
+        "hex": "67811a65bca0851dfd5e8e38911ba327badc7322116a01ca81c82af5f2487796",
+        "saltId": "630dcd2966c43366",
+        "notPlainSha256": true
+      }
+    },
+    {
+      "name": "K08_invite",
+      "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "text": "邀请码 K7M2QX",
+      "expect": {
+        "hex": "39ebb0ca04e6c51831cf18da753cc2b05bacef2ebc334a31a7dba4c77b66fdcd",
+        "saltId": "630dcd2966c43366",
+        "notPlainSha256": true
+      }
+    },
+    {
+      "name": "K08_other_salt",
+      "saltHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+      "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+      "expect": {
+        "hex": "3c2f608e7e16251d5fa48c71379eccd924c8801db83f1f0367c5cf659ea4d500",
+        "saltId": "72dbb7336c767800",
+        "notPlainSha256": true
+      }
+    },
+    {
+      "name": "K08_utf8_fullwidth_emoji_newline",
+      "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "text": "全角ＡＢ１２ ￥AbCdEfGh12￥\n🙂",
+      "expect": {
+        "hex": "ad89ca3d1438614346b265944fcfaff4e88b65c612967c8da1c1d4633ce4ad64",
+        "saltId": "630dcd2966c43366",
+        "notPlainSha256": true
+      }
+    },
+    {
+      "name": "K08_utf8_distinct_normalized",
+      "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "text": "全角AB12 ¥AbCdEfGh12¥\n🙂",
+      "expect": {
+        "hex": "5a7c81350865142242c833180910e699fdc99b8afc89b19a5f7fe364a8de1c9e",
+        "saltId": "630dcd2966c43366",
+        "notPlainSha256": true
+      }
+    }
+  ],
+  "records": [
+    {
+      "name": "K08_generate_and_rotate",
+      "steps": [
+        {
+          "op": "nextRandomSalt",
+          "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        },
+        { "op": "saltPresent", "expect": false },
+        { "op": "clock", "nowMs": 1800000000000 },
+        { "op": "recordWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expectOk": true },
+        { "op": "saltPresent", "expect": true },
+        { "op": "checkWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": true },
+        {
+          "op": "storeHas",
+          "hex": "67811a65bca0851dfd5e8e38911ba327badc7322116a01ca81c82af5f2487796"
+        },
+        { "op": "storeHas", "hex": "630dcd2966c43366" },
+        {
+          "op": "storeLacks",
+          "fragments": [
+            "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+            "h.AbCdEf",
+            "tk=Xy12",
+            "1dfb4a50caf5b6d66c4df3b6e2f3fc152ffb3e30ffa00c6ee848d6f88035cae0"
+          ]
+        },
+        { "op": "recordPrompt", "text": "邀请码 K7M2QX", "expectOk": true },
+        { "op": "checkPrompt", "text": "邀请码 K7M2QX", "expect": true },
+        {
+          "op": "storeHas",
+          "hex": "39ebb0ca04e6c51831cf18da753cc2b05bacef2ebc334a31a7dba4c77b66fdcd"
+        },
+        {
+          "op": "storeLacks",
+          "fragments": [
+            "邀请码",
+            "K7M2QX",
+            "1a03ac87a3e8e3da37dac2994145d38b9b222574555cfde83319af039295193f"
+          ]
+        },
+        {
+          "op": "setSalt",
+          "saltHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f"
+        },
+        { "op": "checkWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": false },
+        { "op": "checkPrompt", "text": "邀请码 K7M2QX", "expect": false },
+        { "op": "recordWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expectOk": true },
+        {
+          "op": "storeHas",
+          "hex": "3c2f608e7e16251d5fa48c71379eccd924c8801db83f1f0367c5cf659ea4d500"
+        },
+        { "op": "storeHas", "hex": "72dbb7336c767800" },
+        {
+          "op": "storeLacks",
+          "fragments": [
+            "67811a65bca0851dfd5e8e38911ba327badc7322116a01ca81c82af5f2487796",
+            "39ebb0ca04e6c51831cf18da753cc2b05bacef2ebc334a31a7dba4c77b66fdcd",
+            "630dcd2966c43366"
+          ]
+        },
+        { "op": "checkWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": true }
+      ]
+    },
+    {
+      "name": "K08_withdraw_and_regenerate",
+      "steps": [
+        {
+          "op": "nextRandomSalt",
+          "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        },
+        { "op": "recordWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expectOk": true },
+        { "op": "recordPrompt", "text": "邀请码 K7M2QX", "expectOk": true },
+        { "op": "withdraw", "expectOk": true },
+        { "op": "saltPresent", "expect": false },
+        {
+          "op": "storeLacks",
+          "fragments": [
+            "67811a65bca0851dfd5e8e38911ba327badc7322116a01ca81c82af5f2487796",
+            "39ebb0ca04e6c51831cf18da753cc2b05bacef2ebc334a31a7dba4c77b66fdcd",
+            "630dcd2966c43366"
+          ]
+        },
+        { "op": "checkWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": false },
+        { "op": "saltPresent", "expect": false },
+        {
+          "op": "nextRandomSalt",
+          "saltHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f"
+        },
+        { "op": "recordWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expectOk": true },
+        { "op": "saltPresent", "expect": true },
+        { "op": "checkWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": true },
+        { "op": "checkPrompt", "text": "邀请码 K7M2QX", "expect": false },
+        {
+          "op": "storeHas",
+          "hex": "3c2f608e7e16251d5fa48c71379eccd924c8801db83f1f0367c5cf659ea4d500"
+        },
+        {
+          "op": "storeLacks",
+          "fragments": [
+            "67811a65bca0851dfd5e8e38911ba327badc7322116a01ca81c82af5f2487796",
+            "39ebb0ca04e6c51831cf18da753cc2b05bacef2ebc334a31a7dba4c77b66fdcd",
+            "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+            "1dfb4a50caf5b6d66c4df3b6e2f3fc152ffb3e30ffa00c6ee848d6f88035cae0"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "K08_salt_unavailable",
+      "steps": [
+        { "op": "failSalt" },
+        { "op": "recordWrite", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expectOk": false },
+        { "op": "recordPrompt", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expectOk": false },
+        { "op": "checkPrompt", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": null },
+        {
+          "op": "storeLacks",
+          "fragments": [
+            "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+            "h.AbCdEf",
+            "1dfb4a50caf5b6d66c4df3b6e2f3fc152ffb3e30ffa00c6ee848d6f88035cae0"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "K08_G08_prompt_window",
+      "steps": [
+        {
+          "op": "nextRandomSalt",
+          "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        },
+        { "op": "clock", "nowMs": 1800000000000 },
+        { "op": "recordPrompt", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expectOk": true },
+        { "op": "saltPresent", "expect": true },
+        {
+          "op": "storeHas",
+          "hex": "67811a65bca0851dfd5e8e38911ba327badc7322116a01ca81c82af5f2487796"
+        },
+        {
+          "op": "storeLacks",
+          "fragments": [
+            "https://e.tb.cn/h.AbCdEf?tk=Xy12",
+            "1dfb4a50caf5b6d66c4df3b6e2f3fc152ffb3e30ffa00c6ee848d6f88035cae0"
+          ]
+        },
+        { "op": "clock", "nowMs": 1800003600000 },
+        { "op": "checkPrompt", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": true },
+        { "op": "clock", "nowMs": 1800172800000 },
+        { "op": "checkPrompt", "text": "https://e.tb.cn/h.AbCdEf?tk=Xy12", "expect": false }
+      ]
+    },
+    {
+      "name": "K08_K11_last_ten",
+      "steps": [
+        {
+          "op": "setSalt",
+          "saltHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        },
+        { "op": "recordWrite", "text": "样例自写01", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写02", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写03", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写04", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写05", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写06", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写07", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写08", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写09", "expectOk": true },
+        { "op": "recordWrite", "text": "样例自写10", "expectOk": true },
+        { "op": "checkWrite", "text": "样例自写01", "expect": true },
+        { "op": "recordWrite", "text": "样例自写11", "expectOk": true },
+        { "op": "checkWrite", "text": "样例自写01", "expect": false },
+        { "op": "checkWrite", "text": "样例自写02", "expect": true },
+        { "op": "checkWrite", "text": "样例自写03", "expect": true },
+        { "op": "checkWrite", "text": "样例自写04", "expect": true },
+        { "op": "checkWrite", "text": "样例自写05", "expect": true },
+        { "op": "checkWrite", "text": "样例自写06", "expect": true },
+        { "op": "checkWrite", "text": "样例自写07", "expect": true },
+        { "op": "checkWrite", "text": "样例自写08", "expect": true },
+        { "op": "checkWrite", "text": "样例自写09", "expect": true },
+        { "op": "checkWrite", "text": "样例自写10", "expect": true },
+        { "op": "checkWrite", "text": "样例自写11", "expect": true },
+        { "op": "storeLacks", "fragments": ["样例自写"] }
+      ]
+    }
+  ],
+  "bridgeRead": [
+    {
+      "name": "K12_K13_minimized",
+      "consent": "agreed",
+      "clipboard": "聊天样例 13800138000 验证码482731 https://m.tb.cn/h.x 「耳机」",
+      "expect": { "text": "https://m.tb.cn/h.x\n耳机", "reads": 1 }
+    },
+    {
+      "name": "K04_K13_tpwd",
+      "consent": "agreed",
+      "clipboard": "￥AbCdEfGh12￥",
+      "expect": { "text": "￥AbCdEfGh12￥", "reads": 1 }
+    },
+    {
+      "name": "K13_chat",
+      "consent": "agreed",
+      "clipboard": "今天下午三点见面，验证码482731。",
+      "expect": { "text": "", "reads": 1 }
+    },
+    {
+      "name": "K14_invite_keyword",
+      "consent": "agreed",
+      "clipboard": "邀请码 K7M2QX",
+      "expect": { "text": "", "reads": 1 }
+    },
+    {
+      "name": "K14_A02_invite_landing",
+      "consent": "agreed",
+      "clipboard": "邀请码 K7M2QX https://share.example.test/i/K7M2QX",
+      "shareDomains": ["share.example.test"],
+      "expect": { "text": "", "reads": 1 }
+    },
+    {
+      "name": "K01_unlisted",
+      "consent": "agreed",
+      "clipboard": "https://example.com/a",
+      "expect": { "text": "", "reads": 1 }
+    },
+    {
+      "name": "K12_empty",
+      "consent": "agreed",
+      "clipboard": "",
+      "expect": { "text": "", "reads": 1 }
+    },
+    {
+      "name": "K12_null",
+      "consent": "agreed",
+      "clipboard": null,
+      "expect": { "text": "", "reads": 1 }
+    },
+    {
+      "name": "K12_basic",
+      "consent": "basic",
+      "clipboard": "https://m.tb.cn/h.x",
+      "expect": { "text": "", "reads": 0 }
+    },
+    {
+      "name": "K12_outdated",
+      "consent": "outdated",
+      "clipboard": "￥AbCdEfGh12￥",
+      "expect": { "text": "", "reads": 0 }
+    },
+    {
+      "name": "K07_cap_three",
+      "consent": "agreed",
+      "clipboard": "https://m.tb.cn/h.x ￥AbCdEfGh12￥ https://u.jd.com/abc https://p.pinduoduo.com/abc 「耳机」",
+      "expect": {
+        "text": "https://m.tb.cn/h.x\n￥AbCdEfGh12￥\nhttps://u.jd.com/abc\n耳机",
+        "reads": 1
+      }
+    },
+    {
+      "name": "K02_tighten",
+      "consent": "agreed",
+      "clipboard": "https://m.tb.cn/h.x ￥AbCdEfGh12￥",
+      "tighten": { "platforms": ["jd"] },
+      "expect": { "text": "", "reads": 1 }
+    }
+  ],
+  "shareImport": [
+    {
+      "name": "K16_K20_K26_home_prompt",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/plain",
+      "text": "【淘宝】分享给你 https://m.tb.cn/h.x 「降噪蓝牙耳机」 复制后打开淘宝，聊天样例13800138000 验证码482731",
+      "expect": {
+        "actionRaw": "prompt",
+        "uploadText": "https://m.tb.cn/h.x\n降噪蓝牙耳机",
+        "scene": "share_ext",
+        "display": {
+          "platform": "taobao",
+          "labelRaw": "link",
+          "display": "m.tb.cn/…",
+          "count": 1,
+          "displayName": "淘宝"
+        }
+      }
+    },
+    {
+      "name": "K20_nonproduct_title",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/plain",
+      "text": "这不是首行商品名 https://example.com/a 「耳机」",
+      "expect": { "actionRaw": "search_prefill", "uploadText": null, "prefill": "耳机" }
+    },
+    {
+      "name": "K20_nonproduct_no_title",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/plain",
+      "text": "今天下午三点见面\n第二行文字",
+      "expect": { "actionRaw": "search_prefill", "uploadText": null, "prefill": null }
+    },
+    {
+      "name": "K20_empty",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/plain",
+      "text": "",
+      "expect": { "actionRaw": "home_only", "uploadText": null }
+    },
+    {
+      "name": "K20_null",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/plain",
+      "text": null,
+      "expect": { "actionRaw": "home_only", "uploadText": null }
+    },
+    {
+      "name": "K23_image",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "image/png",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "ignore_mime", "uploadText": null }
+    },
+    {
+      "name": "K23_html",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/html",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "ignore_mime", "uploadText": null }
+    },
+    {
+      "name": "K18_basic",
+      "state": { "consent": "basic", "route": "Home" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K18_outdated",
+      "state": { "consent": "outdated", "route": "Home" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_Login",
+      "state": { "consent": "agreed", "route": "Login" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_BindPhone",
+      "state": { "consent": "agreed", "route": "BindPhone" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_RealName",
+      "state": { "consent": "agreed", "route": "RealName" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_PayoutAccount",
+      "state": { "consent": "agreed", "route": "PayoutAccount" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_Withdraw",
+      "state": { "consent": "agreed", "route": "Withdraw" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_LaborAgreement",
+      "state": { "consent": "agreed", "route": "LaborAgreement" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_DeleteAccount",
+      "state": { "consent": "agreed", "route": "DeleteAccount" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_FindOrder",
+      "state": { "consent": "agreed", "route": "FindOrder" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_route_ForceUpdate",
+      "state": { "consent": "agreed", "route": "ForceUpdate" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_step_up",
+      "state": { "consent": "agreed", "route": "Home", "overlay": "step_up" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_auth_sheet",
+      "state": { "consent": "agreed", "route": "Home", "overlay": "auth_sheet" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_oauth_in_progress",
+      "state": { "consent": "agreed", "route": "Home", "overlay": "oauth_in_progress" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_auth_jump",
+      "state": { "consent": "agreed", "route": "Home", "overlay": "auth_jump" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K18_privacy_first_launch",
+      "state": { "consent": "agreed", "route": "Home", "overlay": "privacy_first_launch" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K19_force_update",
+      "state": { "consent": "agreed", "route": "Home", "overlay": "force_update" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "drop", "uploadText": null }
+    },
+    {
+      "name": "K22_busy",
+      "state": { "consent": "agreed", "route": "Home", "parseInFlight": true },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x",
+      "expect": { "actionRaw": "ignore_busy", "uploadText": null }
+    },
+    {
+      "name": "K20_route_Search",
+      "state": { "consent": "agreed", "route": "Search" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x 「降噪蓝牙耳机」",
+      "expect": {
+        "actionRaw": "prompt",
+        "uploadText": "https://m.tb.cn/h.x\n降噪蓝牙耳机",
+        "scene": "share_ext",
+        "display": {
+          "platform": "taobao",
+          "labelRaw": "link",
+          "display": "m.tb.cn/…",
+          "count": 1,
+          "displayName": "淘宝"
+        }
+      }
+    },
+    {
+      "name": "K20_route_ProductDetail",
+      "state": { "consent": "agreed", "route": "ProductDetail" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x 「降噪蓝牙耳机」",
+      "expect": {
+        "actionRaw": "prompt",
+        "uploadText": "https://m.tb.cn/h.x\n降噪蓝牙耳机",
+        "scene": "share_ext",
+        "display": {
+          "platform": "taobao",
+          "labelRaw": "link",
+          "display": "m.tb.cn/…",
+          "count": 1,
+          "displayName": "淘宝"
+        }
+      }
+    },
+    {
+      "name": "K02_K20_tightened",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/plain",
+      "text": "https://m.tb.cn/h.x 「降噪蓝牙耳机」",
+      "tighten": { "platforms": ["jd"] },
+      "expect": { "actionRaw": "search_prefill", "uploadText": null, "prefill": "降噪蓝牙耳机" }
+    },
+    {
+      "name": "K04_K16_K26_tpwd",
+      "state": { "consent": "agreed", "route": "Home" },
+      "mime": "text/plain",
+      "text": "￥AbCdEfGh12￥",
+      "expect": {
+        "actionRaw": "prompt",
+        "uploadText": "￥AbCdEfGh12￥",
+        "scene": "share_ext",
+        "display": {
+          "platform": "taobao",
+          "labelRaw": "tpwd",
+          "display": null,
+          "count": 1,
+          "displayName": "淘宝"
+        }
+      }
+    }
+  ],
+  "gaps": [
+    "G04/K06：尾随 ASCII 标点如何切分未定，不写期望。",
+    "G04/K07：多段、嵌套或空白标题的细节不写期望；重复候选按 K07 现在的做法不去重，但本次按任务要求不写重复用例。",
+    "K01/K04/K31：正式白名单来源、真实口令样本、京口令与拼多多口令形态、商品路径收窄仍待 B1-07；当前测试只锁定任务书的包内规则。",
+    "K02/G02、K03/G05：config.clipboard 键名与契约结构未定，不按草稿键写配置解析期望；这里只测 limits 与已明确的 features.flags 平台关停映射。",
+    "G08：恰好 24 小时不写期望；指纹原文 UTF-8 与不规范化按 K08。",
+    "FU-CLIP §2.5：超过 4000 字只写了按过长处理，ShareImportAction 的具体 actionRaw、预填与计数字符口径未定；纯空白分享是否等同空串也未定。",
+    "FU-CLIP §2.5：多个分享拒绝条件同时命中时 actionRaw 优先级未定；向量每次只激活一种拒绝条件。",
+    "K06：百分号主机与 IPv6 字面量可能由三端解析器在不同阶段拒绝；只断言 allowed=false，不锁定 reasonRaw。",
+    "K08/K09/K10/K11：生产安全存储、同意前不生成盐、删盐后删记录的顺序、删除失败待清理与重试、升级主动删旧未加盐记录、各端切环境清理登记须由实现方补集成测试；这些不是未定期望，也不由内存 records 测试替代。",
+    "K12/K13/K14/K15：桥真实入口的来源、主框架/iframe、登录、手势、导航/出栈/撤回/换号后的回调失效另做集成测试；鸿蒙入口仍不声明 clipboard.read，回 90001 且读取次数 0，纯 respond 测试不代表开放桥能力。",
+    "K16/K17/K18/K19/K20/K21/K22/K23/K24/K25：系统分享接收、Router 回首页、点击前不请求、scene=share_ext、一次性交接与进程终止丢失、重建与最近任务不重放、不套提示历史/自写排除、未点击提示替换、真实 MIME/Want 接线另做集成测试；鸿蒙官方接线与审核按 K24，iOS 本任务只测 ShareImportAction 纯逻辑。",
+    "K26/K27/K28/K29/K30：平台展示与上传候选同一份、规则变化作废、读屏、按钮附近说明、正式文案键、iOS 纯口令不自动提示与全关后保留入口另做集成/UI 测试。",
+    "FU-CLIP §0.1/§2.4/§2.7：真实入口必须证明系统剪贴板写入次数为 0 且内容前后一致，原文不进日志/埋点/崩溃附件/桥事件/Intent/Want 持久化部分/savedInstanceState，读取与 parse 共享 busy，旧页面回调和迟到结果无效；纯函数向量不覆盖这些执行层证据。",
+    "K32：旧 clipboard-vectors.json 与旧 Codex 测试不改；本次 classify/manualPaste 只写白名单、口令和收紧带来的新增行为。"
+  ]
+}

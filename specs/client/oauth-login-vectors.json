@@ -1,0 +1,548 @@
+{
+  "version": 1,
+  "sources": [
+    "/Users/zhixing/我的项目/couli-runs/NATIVE/APP-05b/brief.md：§2、§4、§5。",
+    "couli origin/main=4070ad5c32fd39816636742a83e01b1476637454：规划/08_业务规则/10_ID_身份授权与合规.md，BR-ID-01/04/05/06/07/10 正文及细则，含 OPS-04。",
+    "同一 couli 提交：规划/01_需求规划.md，F-INV-10；规划/05_里程碑与任务拆分.md，APP-05、HM-05。",
+    "同一 couli 提交：规划/08_业务规则/11_INV_邀请与分销.md，BR-INV-03/18 正文及细则。",
+    "同一 couli 提交：规划/03_前端架构.md §4.2、§4.4、§10.4、§10.5；规划/08_业务规则/12_TEXT_话术与格式.md，BR-TEXT-14。",
+    "同一 couli 提交：规划/04_数据模型与契约.md §6.1，POST /v1/auth/merge 的请求、30411 失败与响应丢失规则。",
+    "rebate-platform 9cd1e6f：contracts/openapi.yaml，createOauthAttempt、loginByWechat、loginByApple、bindPhone、getMe、sendSmsCode、stepUp 及相关 schema。",
+    "同一 rebate-platform 提交：contracts/error-codes.yaml、contracts/texts.default.json、contracts/routes.json、contracts/enums/identity.yaml。",
+    "APP-05a：specs/login-vectors.json 及三端 LoginVector 测试，仅沿用读取、断言与接线方式，不重复短信登录向量。"
+  ],
+  "attempt": [
+    {
+      "name": "current_callback_submits",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": ["a"], "dropped": [] }
+    },
+    {
+      "name": "same_attempt_submits_once",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "submit", "attempt": "a" },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": ["a"], "dropped": [] }
+    },
+    {
+      "name": "cancel_drops_late_callback",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "cancel" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": [], "dropped": [{ "attempt": "a", "seq": 1 }] }
+    },
+    {
+      "name": "cancel_between_callback_and_submit",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "cancel" },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": [], "dropped": [] }
+    },
+    {
+      "name": "leave_drops_late_callback",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "leave" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": [], "dropped": [{ "attempt": "a", "seq": 1 }] }
+    },
+    {
+      "name": "leave_between_callback_and_submit",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "leave" },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": [], "dropped": [] }
+    },
+    {
+      "name": "timeout_drops_late_callback",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "timeout" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": [], "dropped": [{ "attempt": "a", "seq": 1 }] }
+    },
+    {
+      "name": "timeout_between_callback_and_submit",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "timeout" },
+        { "op": "submit", "attempt": "a" }
+      ],
+      "expect": { "submitted": [], "dropped": [] }
+    },
+    {
+      "name": "leave_then_new_attempt",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "leave" },
+        { "op": "create", "attempt": "b" },
+        { "op": "launch", "attempt": "b" },
+        { "op": "callback", "attempt": "a", "seq": 1 },
+        { "op": "submit", "attempt": "a" },
+        { "op": "callback", "attempt": "b", "seq": 1 },
+        { "op": "submit", "attempt": "b" }
+      ],
+      "expect": { "submitted": ["b"], "dropped": [{ "attempt": "a", "seq": 1 }] }
+    },
+    {
+      "name": "cancel_then_new_attempt",
+      "steps": [
+        { "op": "create", "attempt": "a" },
+        { "op": "launch", "attempt": "a" },
+        { "op": "cancel" },
+        { "op": "create", "attempt": "b" },
+        { "op": "launch", "attempt": "b" },
+        { "op": "callback", "attempt": "a", "seq": 2 },
+        { "op": "submit", "attempt": "a" },
+        { "op": "callback", "attempt": "b", "seq": 1 },
+        { "op": "submit", "attempt": "b" }
+      ],
+      "expect": { "submitted": ["b"], "dropped": [{ "attempt": "a", "seq": 2 }] }
+    }
+  ],
+  "loginResult": [
+    {
+      "name": "wechat_existing_user",
+      "provider": "wechat",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a61",
+          "is_new_user": false,
+          "tokens": {
+            "access_token": "example-access-token-one",
+            "access_expires_at": "2026-10-02T11:30:00+08:00",
+            "refresh_token": "example-refresh-token-one",
+            "refresh_expires_at": "2026-11-01T09:30:00+08:00",
+            "session_scope": "full"
+          }
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": { "routeRaw": "done", "saveSession": true }
+    },
+    {
+      "name": "wechat_new_user_default_guide",
+      "provider": "wechat",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a61",
+          "is_new_user": true,
+          "tokens": {
+            "access_token": "example-access-token-one",
+            "access_expires_at": "2026-10-02T11:30:00+08:00",
+            "refresh_token": "example-refresh-token-one",
+            "refresh_expires_at": "2026-11-01T09:30:00+08:00",
+            "session_scope": "full"
+          }
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": { "routeRaw": "bind_phone_guide", "saveSession": true }
+    },
+    {
+      "name": "apple_existing_user",
+      "provider": "apple",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a61",
+          "is_new_user": false,
+          "tokens": {
+            "access_token": "example-access-token-one",
+            "access_expires_at": "2026-10-02T11:30:00+08:00",
+            "refresh_token": "example-refresh-token-one",
+            "refresh_expires_at": "2026-11-01T09:30:00+08:00",
+            "session_scope": "full"
+          }
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": { "routeRaw": "done", "saveSession": true }
+    },
+    {
+      "name": "apple_new_user_default_guide",
+      "provider": "apple",
+      "response": {
+        "code": 0,
+        "msg": "",
+        "data": {
+          "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a61",
+          "is_new_user": true,
+          "tokens": {
+            "access_token": "example-access-token-one",
+            "access_expires_at": "2026-10-02T11:30:00+08:00",
+            "refresh_token": "example-refresh-token-one",
+            "refresh_expires_at": "2026-11-01T09:30:00+08:00",
+            "session_scope": "full"
+          }
+        },
+        "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+      },
+      "expect": { "routeRaw": "bind_phone_guide", "saveSession": true }
+    }
+  ],
+  "loginError": [
+    {
+      "name": "wechat_invalid_credential",
+      "provider": "wechat",
+      "code": 20004,
+      "expect": { "actionRaw": "reauthorize", "textKey": "error.20004" }
+    },
+    {
+      "name": "wechat_provider_unavailable",
+      "provider": "wechat",
+      "code": 50305,
+      "data": { "provider": "wechat" },
+      "expect": { "actionRaw": "provider_unavailable", "textKey": "error.50305" }
+    },
+    {
+      "name": "wechat_invalid_request",
+      "provider": "wechat",
+      "code": 20001,
+      "data": { "fields": ["attempt_id"] },
+      "expect": { "actionRaw": "field_error", "textKey": "error.20001" }
+    },
+    {
+      "name": "wechat_registration_blocked",
+      "provider": "wechat",
+      "code": 44001,
+      "expect": { "actionRaw": "risk_blocked", "textKey": "error.44001" }
+    },
+    {
+      "name": "wechat_restricted_no_account",
+      "provider": "wechat",
+      "code": 10405,
+      "data": { "reason": "no_account", "min_supported_version": "2.0.0" },
+      "expect": { "actionRaw": "force_update", "textKey": "error.10405.no_account" }
+    },
+    {
+      "name": "wechat_attempt_storage_failure",
+      "provider": "wechat",
+      "code": 50001,
+      "expect": { "actionRaw": "service_error", "textKey": "error.50001", "showTrace6": true }
+    },
+    {
+      "name": "wechat_rate_limited",
+      "provider": "wechat",
+      "code": 42901,
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901" }
+    },
+    {
+      "name": "apple_invalid_credential",
+      "provider": "apple",
+      "code": 20004,
+      "expect": { "actionRaw": "reauthorize", "textKey": "error.20004" }
+    },
+    {
+      "name": "apple_provider_unavailable",
+      "provider": "apple",
+      "code": 50305,
+      "data": { "provider": "apple" },
+      "expect": { "actionRaw": "provider_unavailable", "textKey": "error.50305" }
+    },
+    {
+      "name": "apple_invalid_request",
+      "provider": "apple",
+      "code": 20001,
+      "data": { "fields": ["attempt_id"] },
+      "expect": { "actionRaw": "field_error", "textKey": "error.20001" }
+    },
+    {
+      "name": "apple_registration_blocked",
+      "provider": "apple",
+      "code": 44001,
+      "expect": { "actionRaw": "risk_blocked", "textKey": "error.44001" }
+    },
+    {
+      "name": "apple_restricted_no_account",
+      "provider": "apple",
+      "code": 10405,
+      "data": { "reason": "no_account", "min_supported_version": "2.0.0" },
+      "expect": { "actionRaw": "force_update", "textKey": "error.10405.no_account" }
+    },
+    {
+      "name": "apple_attempt_storage_failure",
+      "provider": "apple",
+      "code": 50001,
+      "expect": { "actionRaw": "service_error", "textKey": "error.50001", "showTrace6": true }
+    },
+    {
+      "name": "apple_rate_limited",
+      "provider": "apple",
+      "code": 42901,
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901" }
+    }
+  ],
+  "wechatButton": [
+    {
+      "name": "ios_missing_unavailable",
+      "platform": "ios",
+      "installed": false,
+      "adapterAvailable": false,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "ios_missing_available",
+      "platform": "ios",
+      "installed": false,
+      "adapterAvailable": true,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "ios_installed_unavailable",
+      "platform": "ios",
+      "installed": true,
+      "adapterAvailable": false,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "ios_installed_available",
+      "platform": "ios",
+      "installed": true,
+      "adapterAvailable": true,
+      "expect": { "visible": true }
+    },
+    {
+      "name": "android_missing_unavailable",
+      "platform": "android",
+      "installed": false,
+      "adapterAvailable": false,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "android_missing_available",
+      "platform": "android",
+      "installed": false,
+      "adapterAvailable": true,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "android_installed_unavailable",
+      "platform": "android",
+      "installed": true,
+      "adapterAvailable": false,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "android_installed_available",
+      "platform": "android",
+      "installed": true,
+      "adapterAvailable": true,
+      "expect": { "visible": true }
+    },
+    {
+      "name": "harmony_missing_unavailable",
+      "platform": "harmony",
+      "installed": false,
+      "adapterAvailable": false,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "harmony_missing_available",
+      "platform": "harmony",
+      "installed": false,
+      "adapterAvailable": true,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "harmony_installed_unavailable",
+      "platform": "harmony",
+      "installed": true,
+      "adapterAvailable": false,
+      "expect": { "visible": false }
+    },
+    {
+      "name": "harmony_installed_available",
+      "platform": "harmony",
+      "installed": true,
+      "adapterAvailable": true,
+      "expect": { "visible": true }
+    }
+  ],
+  "appleButton": [
+    { "name": "ios", "platform": "ios", "expect": { "visible": true } },
+    { "name": "android", "platform": "android", "expect": { "visible": false } },
+    { "name": "harmony", "platform": "harmony", "expect": { "visible": false } }
+  ],
+  "bindPhone": [
+    {
+      "name": "bind_succeeded",
+      "response": {
+        "operation": "bindPhone",
+        "body": {
+          "code": 0,
+          "msg": "",
+          "data": {},
+          "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+        }
+      },
+      "expect": { "actionRaw": "done" }
+    },
+    {
+      "name": "occupied_not_mergeable",
+      "error": {
+        "operation": "bindPhone",
+        "body": { "code": 30411, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" }
+      },
+      "expect": { "actionRaw": "error", "textKey": "error.30411" }
+    },
+    {
+      "name": "occupied_mergeable_requires_confirmation",
+      "error": {
+        "operation": "bindPhone",
+        "body": {
+          "code": 30411,
+          "msg": "",
+          "data": { "reason": "mergeable", "merge_ticket": "example-merge-ticket" },
+          "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+        }
+      },
+      "expect": { "actionRaw": "merge_confirm", "textKey": "error.30411.mergeable" }
+    },
+    {
+      "name": "phone_invalid",
+      "error": {
+        "operation": "bindPhone",
+        "body": {
+          "code": 20001,
+          "msg": "",
+          "data": { "fields": ["phone"], "reason": "phone_invalid" },
+          "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+        }
+      },
+      "expect": { "actionRaw": "error", "textKey": "error.20001.phone_invalid" }
+    },
+    {
+      "name": "wrong_bind_code",
+      "error": {
+        "operation": "bindPhone",
+        "body": { "code": 20002, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" }
+      },
+      "expect": { "actionRaw": "error", "textKey": "error.20002" }
+    },
+    {
+      "name": "expired_bind_code",
+      "error": {
+        "operation": "bindPhone",
+        "body": { "code": 20003, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" }
+      },
+      "expect": { "actionRaw": "error", "textKey": "error.20003" }
+    },
+    {
+      "name": "phone_blacklisted",
+      "error": {
+        "operation": "bindPhone",
+        "body": { "code": 44001, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" }
+      },
+      "expect": { "actionRaw": "error", "textKey": "error.44001" }
+    },
+    {
+      "name": "bind_rate_limited",
+      "error": {
+        "operation": "bindPhone",
+        "body": { "code": 42901, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" },
+        "headers": { "Retry-After": "90" }
+      },
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901" }
+    },
+    {
+      "name": "bind_sms_accepted",
+      "response": {
+        "operation": "sendSmsCode",
+        "purpose": "bind",
+        "body": {
+          "code": 0,
+          "msg": "",
+          "data": { "resend_after_sec": 60, "expires_in_sec": 300 },
+          "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+        }
+      },
+      "expect": { "actionRaw": "retry_after" }
+    },
+    {
+      "name": "bind_sms_rate_limited",
+      "error": {
+        "operation": "sendSmsCode",
+        "purpose": "bind",
+        "body": { "code": 42901, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" },
+        "headers": { "Retry-After": "90" }
+      },
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901" }
+    },
+    {
+      "name": "bind_sms_provider_timeout",
+      "error": {
+        "operation": "sendSmsCode",
+        "purpose": "bind",
+        "body": { "code": 50401, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" }
+      },
+      "expect": { "actionRaw": "error", "textKey": "error.50401" }
+    }
+  ],
+  "merge": [
+    {
+      "name": "cancel_before_request",
+      "decision": "cancel",
+      "expect": { "resultRaw": "cancelled", "saveSession": false }
+    },
+    {
+      "name": "confirm_ticket_or_conditions_invalid",
+      "decision": "confirm",
+      "response": { "code": 30411, "msg": "", "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b" },
+      "expect": { "resultRaw": "rejected", "saveSession": false }
+    }
+  ],
+  "gaps": [
+    "TODO(N-29) LOGIN-MERGE：锁定 LoginResponse 没有并号字段，两个登录接口也没有声明 30411。并号入口来自 bindPhone 的 30411 + reason=mergeable + merge_ticket，不伪造 loginResult.routeRaw=merge 的成功响应。",
+    "TODO(N-29) MERGE-SUCCESS：9cd1e6f 的 openapi 没有 /v1/auth/merge operation、成功响应 schema 或示例；规划只写返回手机号账号令牌，未规定 JSON 层级。因此暂不写并号成功/saveSession=true 向量，不能拿 LoginResponse 冒充并号响应。确认后 ticket 过期、已用或条件改变返回 30411 有规划原文，已覆盖。",
+    "TODO(N-29) MERGE-CANCEL：cancel 只表示请求发出前取消确认，不并号、不保存新会话；不规定关闭后落在哪一页。不把请求发出后的取消当作服务端已撤销。缺少 ticket、畸形响应、确认但尚无响应的 resultRaw 未定，不猜。",
+    "TODO(N-29) MERGE-LOST：BR-ID-06 与规划/04 规定并号成功但响应丢失后，旧会话同键重试返回 10002，转重新登录、不重做并号。本 API 没有结果未知/重试上下文，不能把所有 10002 都解释成已并号；需执行器集成测试。",
+    "TODO(N-29) INVITE-STATE：新号分流向量只覆盖 BR-INV-03 默认开启引导的普通 full 会话，routeRaw 是默认候选分流。关闭配置、已展示记录、购买 pending_action、引导可跳过及两处提醒去重须由带状态的执行器另验。firstPurchaseTip 还需 /me.invite_backfill.eligible、配置与服务端已读状态，登录响应不含这些信息，因此全部省略其期望值，不能用 is_new_user 直接替代。",
+    "TODO(N-29) ROUTES：锁定 routes.json 只有 Login、BindPhone，没有 LoginBindPhoneGuide、BindPhoneMerge 独立路由；routeRaw/actionRaw/resultRaw 是测试接线名，不能据此向 Router 传未登记路由或手改快照。deletion_only 的 ForceUpdate 分流不在给定 routeRaw 三值内，沿用 APP-05a 并补执行器接线。",
+    "TODO(N-29) ATTEMPT：attempt 别名、String 句柄及 dropped 的 {attempt,seq} 是观测接线约定，不是服务端字段。callback 接收凭证，submit 是唯一提交边界；dropped 只记录被拒的 callback，不记录被拒的 submit。seq 只标识回调，不判大小顺序。原文未定义未终止时再次 create、重复 SDK 回调的日志计数和前台恢复事件 API，不锁死这些期望；恢复后迟到回调按已经 cancel/leave/timeout 的向量验。",
+    "TODO(N-29) ATTEMPT-INTEGRATION：create/launch 的网络与 SDK 顺序、nonce/state 自查、600 秒服务端尝试有效期、不同设备/用途归属和真实回调关联没有输入接口。Apple nonce 原样或摘要待 specs/oauth/apple.md 固定；不以 seq 冒充 nonce。20004 必须由用户重新取尝试并授权，50305 不自动重试；动作映射之外还需调用次数 spy。",
+    "TODO(N-29) BIND-TRANSPORT：bindPhone 的 response/error 是本地接线包装 {operation,purpose?,body,headers?}，body 才是契约响应，purpose 是原请求上下文。retry_after 表示等待后再操作，发码成功也交给现有倒计时组件；不表示绑手机成功。此 API 不能验证实际发码请求 purpose=bind、首次绑定不带 step-up、Retry-After 的使用和成功后 getMe 刷新，需执行器测试，计时边界不重复 APP-05a。",
+    "TODO(N-29) TRACE：50001 已断言 showTrace6；BindPhoneAction 没有 showTrace6 输出，50401 只能断言字典键，不能证明页面确实显示 trace_id 后六位。50305 有专用动作和文案，本组不推断其额外 trace 展示。",
+    "TODO(N-29) SMS-CONTRACT：锁定 sendSmsCode 仍含 44003，并将供应商结果未知计作发送；当前 BR-ID-05 已取消人机验证，供应商超时为 50401 且不计发送成功。保留差异，不新增 44003 或超时成功向量。",
+    "TODO(N-29) BUTTONS：adapterAvailable 表示适配器已允许启用；本任务三端正式适配器都必须为 false，true 行只用于 Debug 假适配器/能力已获准后的纯逻辑。尤其不能据 harmony 的 true 行启用尚未验证的微信 SDK。installed 的 boolean 无法表达检测失败/未知；BR-ID-04 对未知另有处理，需扩展检测结果或在适配层验。",
+    "TODO(N-29) SESSION：saveSession 是保存意图，不是落盘证明。尚需验证原子保存失败、另一会话变化、等待后世代复核、并号切换主体与清理 pending_action；敏感操作不自动恢复沿用 APP-05a，不在这里重写。",
+    "TODO(N-29) PRIVACY-INVITE：请求构造需另验仅上送规定凭证、legal_versions/consent_at、PrivacyGate、凭证不落盘不进日志及 Apple 不申请邮箱。第三方新号本身没有邀请码输入框；BR-INV-18 的 invite.notice_inviter 在实际补填入口验证，不虚构第三方注册输入。",
+    "TODO(N-29) UI：§10.4、§10.5 的 200% 字号、窄屏、键盘与读屏焦点需要实现后 UI 验收，这些纯函数不能证明。",
+    "TEST-WIRING：56 条向量的名称、attempt 引用及使用的文案键已在内存中核对；只读输出，未写文件、未编译运行。三端测试调用真实待实现 API，不提供测试内替身。expect 缺字段不判定，显式 null 要求无值。raw 名称仅表达源规则中的动作；cancelled=请求前取消，rejected=确认后收到 30411。"
+  ]
+}

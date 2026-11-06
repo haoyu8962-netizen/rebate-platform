@@ -1,0 +1,959 @@
+{
+  "version": 1,
+  "sources": [
+    "任务范围：/Users/zhixing/我的项目/couli-runs/NATIVE/APP-05a/brief.md §2、§4；与原文的冲突见 gaps。",
+    "couli origin/main=dfdc1fbb57a7e9d20c70d98f8932ac010dcac9cc：规划/08_业务规则/10_ID_身份授权与合规.md，BR-ID-01/04/05/07/10/27/28 正文及细则。",
+    "同一 couli 提交：规划/08_业务规则/11_INV_邀请与分销.md，BR-INV-01/02/03/06/18 正文及细则。",
+    "同一 couli 提交：规划/08_业务规则/12_TEXT_话术与格式.md，BR-TEXT-14 正文及细则。",
+    "同一 couli 提交：规划/03_前端架构.md §4.2、§4.4。",
+    "rebate-platform 9cd1e6f9c3748bc99d92aec2fe845b48a26f180a：contracts/openapi.yaml，sendSmsCode/loginBySms/logout/getMe 及其 schema。",
+    "同一 rebate-platform 提交：contracts/error-codes.yaml、contracts/texts.default.json、contracts/routes.json。",
+    "/Users/zhixing/我的项目/couli-runs/design-hifi/project/Login*.dc.html：仅核对页面状态与文案。"
+  ],
+  "phone": [
+    {
+      "name": "ascii",
+      "raw": "13800138000",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    {
+      "name": "lower_second_digit",
+      "raw": "13000000000",
+      "expect": { "valid": true, "normalized": "13000000000" }
+    },
+    {
+      "name": "upper_second_digit",
+      "raw": "19999999999",
+      "expect": { "valid": true, "normalized": "19999999999" }
+    },
+    {
+      "name": "blocked_prefix_is_not_format_error",
+      "raw": "17000000000",
+      "expect": { "valid": true, "normalized": "17000000000" }
+    },
+    {
+      "name": "plus86_spaces_hyphens",
+      "raw": "+86 138-0013-8000",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    {
+      "name": "nfkc_fullwidth",
+      "raw": "＋８６　１３８－００１３－８０００",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    {
+      "name": "prefix0086",
+      "raw": "0086 13800138000",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    {
+      "name": "prefix86",
+      "raw": "8613800138000",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    {
+      "name": "unicode_whitespace",
+      "raw": "\t138\u00a00013\u30008000\r\n",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    {
+      "name": "zero_width",
+      "raw": "1\u200b3\u200c8\u200d0013\ufeff8000",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    {
+      "name": "unicode_hyphens",
+      "raw": "138\u201000\u201113\u201280\u201300\u2014\u2015",
+      "expect": { "valid": true, "normalized": "13800138000" }
+    },
+    { "name": "empty", "raw": "", "expect": { "valid": false, "reason": "phone_invalid" } },
+    {
+      "name": "short",
+      "raw": "1380013800",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "long",
+      "raw": "138001380000",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "second_digit_outside_range",
+      "raw": "12345678901",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "first_digit_not_one",
+      "raw": "23800138000",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "letter",
+      "raw": "13800138O00",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "hong_kong",
+      "raw": "+852 5123 4567",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "foreign_prefix",
+      "raw": "+1 13800138000",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "repeated_country_prefix",
+      "raw": "+86+8613800138000",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "arabic_indic_digits",
+      "raw": "١٣٨٠٠١٣٨٠٠٠",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    },
+    {
+      "name": "parentheses",
+      "raw": "(138)00138000",
+      "expect": { "valid": false, "reason": "phone_invalid" }
+    }
+  ],
+  "agreement": [
+    {
+      "name": "initial_unchecked",
+      "steps": [],
+      "expect": { "showConfirm": false, "proceed": false, "consentRecorded": false }
+    },
+    {
+      "name": "unchecked_requires_confirm",
+      "steps": [{ "op": "tapLogin" }],
+      "expect": { "showConfirm": true, "proceed": false, "consentRecorded": false }
+    },
+    {
+      "name": "cancel_does_not_proceed",
+      "steps": [{ "op": "tapLogin" }, { "op": "cancelConfirm" }],
+      "expect": { "showConfirm": false, "proceed": false, "consentRecorded": false }
+    },
+    {
+      "name": "confirm_records_click",
+      "steps": [{ "op": "tapLogin" }, { "op": "confirmAgree" }],
+      "expect": { "showConfirm": false, "proceed": true, "consentRecorded": true }
+    },
+    {
+      "name": "check_records_without_submitting",
+      "steps": [{ "op": "check" }],
+      "expect": { "showConfirm": false, "proceed": false, "consentRecorded": true }
+    },
+    {
+      "name": "checked_login_uses_check_time",
+      "steps": [{ "op": "check" }, { "op": "tapLogin" }],
+      "expect": { "showConfirm": false, "proceed": true, "consentRecorded": true }
+    },
+    {
+      "name": "uncheck_requires_new_confirmation",
+      "steps": [
+        { "op": "check" },
+        { "op": "uncheck" },
+        { "op": "tapLogin" },
+        { "op": "confirmAgree" }
+      ],
+      "expect": { "showConfirm": false, "proceed": true, "consentRecorded": true }
+    },
+    {
+      "name": "cancel_then_retry_still_requires_confirm",
+      "steps": [{ "op": "tapLogin" }, { "op": "cancelConfirm" }, { "op": "tapLogin" }],
+      "expect": { "showConfirm": true, "proceed": false, "consentRecorded": false }
+    },
+    {
+      "name": "cancel_then_manual_check",
+      "steps": [
+        { "op": "tapLogin" },
+        { "op": "cancelConfirm" },
+        { "op": "check" },
+        { "op": "tapLogin" }
+      ],
+      "expect": { "showConfirm": false, "proceed": true, "consentRecorded": true }
+    },
+    {
+      "name": "unchecked_uncheck_does_not_consent",
+      "steps": [{ "op": "uncheck" }, { "op": "tapLogin" }],
+      "expect": { "showConfirm": true, "proceed": false, "consentRecorded": false }
+    }
+  ],
+  "smsSend": [
+    {
+      "name": "success_at_epoch_zero",
+      "response": { "code": 0 },
+      "nowMillis": 0,
+      "expect": { "countdownSec": 60, "canResend": false, "stateRaw": "code_sent" }
+    },
+    {
+      "name": "success_at_non_round_epoch",
+      "response": { "code": 0 },
+      "nowMillis": 1700000000123,
+      "expect": { "countdownSec": 60, "canResend": false, "stateRaw": "code_sent" }
+    },
+    {
+      "name": "rate_limit_60",
+      "response": { "code": 42901, "headers": { "Retry-After": "60" } },
+      "nowMillis": 1700000000123,
+      "expect": {
+        "countdownSec": 60,
+        "canResend": false,
+        "stateRaw": "rate_limited",
+        "textKey": "error.42901"
+      }
+    },
+    {
+      "name": "rate_limit_61",
+      "response": { "code": 42901, "headers": { "Retry-After": "61" } },
+      "nowMillis": 1700000000123,
+      "expect": {
+        "countdownSec": 61,
+        "canResend": false,
+        "stateRaw": "rate_limited",
+        "textKey": "error.42901"
+      }
+    },
+    {
+      "name": "rate_limit_3600",
+      "response": { "code": 42901, "headers": { "Retry-After": "3600" } },
+      "nowMillis": 1700000000123,
+      "expect": {
+        "countdownSec": 3600,
+        "canResend": false,
+        "stateRaw": "rate_limited",
+        "textKey": "error.42901"
+      }
+    },
+    {
+      "name": "rate_limit_86400",
+      "response": { "code": 42901, "headers": { "Retry-After": "86400" } },
+      "nowMillis": 1700000000123,
+      "expect": {
+        "countdownSec": 86400,
+        "canResend": false,
+        "stateRaw": "rate_limited",
+        "textKey": "error.42901"
+      }
+    }
+  ],
+  "code": [
+    { "name": "empty", "input": "", "expect": { "complete": false, "digitsOnly": true } },
+    {
+      "name": "five_digits",
+      "input": "12345",
+      "expect": { "complete": false, "digitsOnly": true }
+    },
+    { "name": "six_digits", "input": "123456", "expect": { "complete": true, "digitsOnly": true } },
+    {
+      "name": "leading_zero",
+      "input": "012345",
+      "expect": { "complete": true, "digitsOnly": true }
+    },
+    { "name": "all_zero", "input": "000000", "expect": { "complete": true, "digitsOnly": true } },
+    {
+      "name": "seven_digits",
+      "input": "1234567",
+      "expect": { "complete": false, "digitsOnly": true }
+    },
+    { "name": "letter", "input": "12a456", "expect": { "complete": false, "digitsOnly": false } },
+    {
+      "name": "fullwidth",
+      "input": "１２３４５６",
+      "expect": { "complete": false, "digitsOnly": false }
+    },
+    {
+      "name": "arabic_indic",
+      "input": "١٢٣٤٥٦",
+      "expect": { "complete": false, "digitsOnly": false }
+    },
+    { "name": "space", "input": "123 456", "expect": { "complete": false, "digitsOnly": false } },
+    {
+      "name": "trailing_newline",
+      "input": "123456\n",
+      "expect": { "complete": false, "digitsOnly": false }
+    },
+    { "name": "emoji", "input": "12345😀", "expect": { "complete": false, "digitsOnly": false } }
+  ],
+  "loginError": [
+    {
+      "name": "invalid_phone_before_send",
+      "op": "sendSmsCode",
+      "code": 20001,
+      "data": { "fields": ["phone"], "reason": "phone_invalid" },
+      "expect": {
+        "stateRaw": "field_error",
+        "textKey": "error.20001.phone_invalid",
+        "field": "phone",
+        "route": null
+      }
+    },
+    {
+      "name": "invalid_phone_at_login",
+      "op": "loginBySms",
+      "code": 20001,
+      "data": { "fields": ["phone"], "reason": "phone_invalid" },
+      "expect": {
+        "stateRaw": "field_error",
+        "textKey": "error.20001.phone_invalid",
+        "field": "phone",
+        "route": null
+      }
+    },
+    {
+      "name": "unknown_reason_falls_back",
+      "op": "loginBySms",
+      "code": 20001,
+      "data": { "fields": ["code"], "reason": "unlisted_reason" },
+      "expect": {
+        "stateRaw": "field_error",
+        "textKey": "error.20001",
+        "field": "code",
+        "route": null
+      }
+    },
+    {
+      "name": "wrong_code",
+      "op": "loginBySms",
+      "code": 20002,
+      "expect": {
+        "stateRaw": "code_error",
+        "textKey": "error.20002",
+        "field": "code",
+        "route": null
+      }
+    },
+    {
+      "name": "expired_or_invalidated_code",
+      "op": "loginBySms",
+      "code": 20003,
+      "expect": {
+        "stateRaw": "code_expired",
+        "textKey": "error.20003",
+        "field": "code",
+        "route": null
+      }
+    },
+    {
+      "name": "send_rate_limited",
+      "op": "sendSmsCode",
+      "code": 42901,
+      "expect": {
+        "stateRaw": "rate_limited",
+        "textKey": "error.42901",
+        "field": null,
+        "route": null
+      }
+    },
+    {
+      "name": "login_rate_limited",
+      "op": "loginBySms",
+      "code": 42901,
+      "expect": {
+        "stateRaw": "rate_limited",
+        "textKey": "error.42901",
+        "field": null,
+        "route": null
+      }
+    },
+    {
+      "name": "send_risk_blocked",
+      "op": "sendSmsCode",
+      "code": 44001,
+      "expect": {
+        "stateRaw": "risk_blocked",
+        "textKey": "error.44001",
+        "field": null,
+        "route": null
+      }
+    },
+    {
+      "name": "registration_blocked",
+      "op": "loginBySms",
+      "code": 44001,
+      "expect": {
+        "stateRaw": "registration_blocked",
+        "textKey": "error.44001",
+        "field": null,
+        "route": null
+      }
+    },
+    {
+      "name": "restricted_no_account",
+      "op": "loginBySms",
+      "code": 10405,
+      "data": { "reason": "no_account", "min_supported_version": "2.0.0" },
+      "expect": {
+        "stateRaw": "force_update",
+        "textKey": "error.10405.no_account",
+        "field": null,
+        "route": "ForceUpdate"
+      }
+    },
+    {
+      "name": "deletion_processing_is_login_failure",
+      "op": "loginBySms",
+      "code": 10007,
+      "data": { "stage": "processing" },
+      "expect": {
+        "stateRaw": "deletion_processing",
+        "textKey": "error.10007",
+        "field": null,
+        "route": null
+      }
+    },
+    {
+      "name": "session_expired_common_mapper",
+      "op": "loginBySms",
+      "code": 10404,
+      "expect": {
+        "stateRaw": "session_expired",
+        "textKey": "error.10404",
+        "field": null,
+        "route": "Login"
+      }
+    },
+    {
+      "name": "provider_unavailable_common_mapper",
+      "op": "loginBySms",
+      "code": 50305,
+      "data": { "provider": "wechat" },
+      "expect": {
+        "stateRaw": "provider_unavailable",
+        "textKey": "error.50305",
+        "field": null,
+        "route": null
+      }
+    },
+    {
+      "name": "send_server_failure",
+      "op": "sendSmsCode",
+      "code": 50001,
+      "expect": {
+        "stateRaw": "service_error",
+        "textKey": "error.50001",
+        "field": null,
+        "route": null
+      }
+    },
+    {
+      "name": "send_provider_timeout",
+      "op": "sendSmsCode",
+      "code": 50401,
+      "expect": {
+        "stateRaw": "service_error",
+        "textKey": "error.50401",
+        "field": null,
+        "route": null
+      }
+    }
+  ],
+  "invite": [
+    { "name": "optional_empty", "raw": "", "expect": { "valid": true, "normalized": "" } },
+    {
+      "name": "optional_normalized_empty",
+      "raw": " \u3000\u200b\ufeff",
+      "expect": { "valid": true, "normalized": "" }
+    },
+    { "name": "valid_ascii", "raw": "K7M2QX", "expect": { "valid": true, "normalized": "K7M2QX" } },
+    { "name": "lowercase", "raw": "k7m2qx", "expect": { "valid": true, "normalized": "K7M2QX" } },
+    { "name": "nfkc", "raw": "ｋ７ｍ２ｑｘ", "expect": { "valid": true, "normalized": "K7M2QX" } },
+    {
+      "name": "spaces_and_zero_width",
+      "raw": " k\u00a07\u200bM\u200c2\u200dQ\ufeffX\u3000",
+      "expect": { "valid": true, "normalized": "K7M2QX" }
+    },
+    {
+      "name": "allowed_letters",
+      "raw": "JKLMNP",
+      "expect": { "valid": true, "normalized": "JKLMNP" }
+    },
+    { "name": "zero", "raw": "K0M2QX", "expect": { "valid": false, "normalized": "K0M2QX" } },
+    { "name": "letter_o", "raw": "KOM2QX", "expect": { "valid": false, "normalized": "KOM2QX" } },
+    { "name": "one", "raw": "K1M2QX", "expect": { "valid": false, "normalized": "K1M2QX" } },
+    { "name": "letter_i", "raw": "KIM2QX", "expect": { "valid": false, "normalized": "KIM2QX" } },
+    { "name": "short", "raw": "K7M2Q", "expect": { "valid": false, "normalized": "K7M2Q" } },
+    { "name": "long", "raw": "K7M2QXX", "expect": { "valid": false, "normalized": "K7M2QXX" } },
+    {
+      "name": "hyphen_not_removed",
+      "raw": "K7-M2QX",
+      "expect": { "valid": false, "normalized": "K7-M2QX" }
+    }
+  ],
+  "agreementConfirm": [
+    {
+      "name": "get_code_names_button_by_action",
+      "action": "get_code",
+      "expect": {
+        "titleKey": "login.agree_confirm.title",
+        "bodyKey": "login.agree_confirm.body",
+        "primaryKey": "login.agree_confirm.btn_get_code",
+        "secondaryKey": "login.agree_confirm.btn_disagree"
+      }
+    },
+    {
+      "name": "one_tap_login",
+      "action": "one_tap",
+      "expect": {
+        "titleKey": "login.agree_confirm.title",
+        "bodyKey": "login.agree_confirm.body",
+        "primaryKey": "login.agree_confirm.btn_login",
+        "secondaryKey": "login.agree_confirm.btn_disagree"
+      }
+    },
+    {
+      "name": "oauth_login_uses_oauth_body",
+      "action": "oauth",
+      "expect": {
+        "titleKey": "login.agree_confirm.title",
+        "bodyKey": "login.agree_confirm.body_oauth",
+        "primaryKey": "login.agree_confirm.btn_login",
+        "secondaryKey": "login.agree_confirm.btn_disagree"
+      }
+    },
+    {
+      "name": "login_action_primary",
+      "action": "login",
+      "expect": {
+        "primaryKey": "login.agree_confirm.btn_login",
+        "secondaryKey": "login.agree_confirm.btn_disagree"
+      }
+    }
+  ],
+  "codeAutoSubmit": [
+    {
+      "name": "sixth_digit_submits_once_with_phone_page_check_time",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "1", "submits": false },
+        { "op": "input", "code": "12", "submits": false },
+        { "op": "input", "code": "123", "submits": false },
+        { "op": "input", "code": "1234", "submits": false },
+        { "op": "input", "code": "12345", "submits": false },
+        { "op": "input", "code": "123456", "submits": true },
+        { "op": "respond", "code": 0, "current": true }
+      ],
+      "expect": { "requests": [{ "code": "123456", "consentAtStep": 0 }], "sends": 1 }
+    },
+    {
+      "name": "pasted_six_digits_submit_once_then_20002_clears_without_resubmit",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "123456", "submits": true },
+        { "op": "input", "code": "123456", "submits": false },
+        { "op": "respond", "code": 20002, "current": true },
+        { "op": "field", "value": "" },
+        { "op": "input", "code": "654321", "submits": true },
+        { "op": "respond", "code": 20002, "current": true },
+        { "op": "field", "value": "" }
+      ],
+      "expect": {
+        "requests": [
+          { "code": "123456", "consentAtStep": 0 },
+          { "code": "654321", "consentAtStep": 0 }
+        ],
+        "sends": 1
+      }
+    },
+    {
+      "name": "rate_limited_42901_keeps_cells_and_no_submit_until_retry_after",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "111111", "submits": true },
+        { "op": "respond", "code": 20002, "current": true },
+        { "op": "input", "code": "222222", "submits": true },
+        { "op": "respond", "code": 42901, "retryAfter": "30" },
+        { "op": "field", "value": "222222" },
+        { "op": "advance", "ms": 20000 },
+        { "op": "input", "code": "333333", "submits": false },
+        { "op": "advance", "ms": 4000 },
+        { "op": "input", "code": "444444", "submits": false },
+        { "op": "advance", "ms": 5000 },
+        { "op": "input", "code": "555555", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": {
+        "requests": [
+          { "code": "111111", "consentAtStep": 0 },
+          { "code": "222222", "consentAtStep": 0 },
+          { "code": "555555", "consentAtStep": 0 }
+        ],
+        "sends": 1
+      }
+    },
+    {
+      "name": "late_20002_does_not_touch_new_partial_code",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "111111", "submits": true },
+        { "op": "input", "code": "22222", "submits": false },
+        { "op": "respond", "code": 20002, "current": false },
+        { "op": "field", "value": "22222" }
+      ],
+      "expect": { "requests": [{ "code": "111111", "consentAtStep": 0 }], "sends": 1 }
+    },
+    {
+      "name": "late_20003_does_not_touch_new_complete_code_and_input_in_flight_is_not_queued",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "111111", "submits": true },
+        { "op": "input", "code": "222222", "submits": false },
+        { "op": "respond", "code": 20003, "current": false },
+        { "op": "field", "value": "222222" }
+      ],
+      "expect": { "requests": [{ "code": "111111", "consentAtStep": 0 }], "sends": 1 }
+    },
+    {
+      "name": "g12_complete_code_typed_in_flight_is_not_queued_after_20002",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "111111", "submits": true },
+        { "op": "input", "code": "222222", "submits": false },
+        { "op": "respond", "code": 20002, "current": false },
+        { "op": "field", "value": "222222" },
+        { "op": "input", "code": "22222", "submits": false },
+        { "op": "input", "code": "333333", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": {
+        "requests": [
+          { "code": "111111", "consentAtStep": 0 },
+          { "code": "333333", "consentAtStep": 0 }
+        ],
+        "sends": 1
+      }
+    },
+    {
+      "name": "locally_expired_code_not_submitted_until_resend",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "advance", "ms": 300000 },
+        { "op": "input", "code": "111111", "submits": false },
+        { "op": "resend", "step": "code" },
+        { "op": "input", "code": "222222", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": { "requests": [{ "code": "222222", "consentAtStep": 0 }], "sends": 2 }
+    },
+    {
+      "name": "server_expired_20003_clears_and_blocks_until_resend",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "111111", "submits": true },
+        { "op": "respond", "code": 20003, "current": true },
+        { "op": "field", "value": "" },
+        { "op": "input", "code": "222222", "submits": false },
+        { "op": "advance", "ms": 60000 },
+        { "op": "resend", "step": "code" },
+        { "op": "input", "code": "333333", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": {
+        "requests": [
+          { "code": "111111", "consentAtStep": 0 },
+          { "code": "333333", "consentAtStep": 0 }
+        ],
+        "sends": 2
+      }
+    },
+    {
+      "name": "confirm_click_time_is_consent_at_not_code_step_time",
+      "steps": [
+        { "op": "getCode", "step": "phone", "confirm": "get_code" },
+        { "op": "confirmAgree", "step": "code", "confirm": null },
+        { "op": "advance", "ms": 30000 },
+        { "op": "advance", "ms": 30000 },
+        { "op": "input", "code": "123456", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": { "requests": [{ "code": "123456", "consentAtStep": 1 }], "sends": 1 }
+    },
+    {
+      "name": "cancelled_confirm_sends_nothing_and_stays_on_phone_step",
+      "steps": [
+        { "op": "getCode", "step": "phone", "confirm": "get_code" },
+        { "op": "cancelConfirm", "step": "phone", "confirm": null },
+        { "op": "input", "code": "123456", "submits": false },
+        { "op": "confirmAgree", "visible": false, "step": "phone" }
+      ],
+      "expect": { "requests": [], "sends": 0 }
+    },
+    {
+      "name": "confirm_continues_exactly_once",
+      "steps": [
+        { "op": "getCode", "step": "phone", "confirm": "get_code" },
+        { "op": "getCode", "step": "phone", "confirm": "get_code" },
+        { "op": "confirmAgree", "step": "code", "confirm": null },
+        { "op": "confirmAgree", "visible": false, "step": "code" },
+        { "op": "input", "code": "123456", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": { "requests": [{ "code": "123456", "consentAtStep": 2 }], "sends": 1 }
+    },
+    {
+      "name": "g06_continue_entry_without_consent_asks_cancel_keeps_phone_step_confirm_enters",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "back", "step": "phone" },
+        { "op": "uncheck" },
+        { "op": "continueCode", "step": "phone", "confirm": "get_code" },
+        { "op": "input", "code": "123456", "submits": false },
+        { "op": "cancelConfirm", "step": "phone", "confirm": null },
+        { "op": "continueCode", "step": "phone", "confirm": "get_code" },
+        { "op": "confirmAgree", "step": "code", "confirm": null },
+        { "op": "input", "code": "654321", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": { "requests": [{ "code": "654321", "consentAtStep": 8 }], "sends": 1 }
+    },
+    {
+      "name": "g06_get_code_continue_branch_without_consent_asks_and_does_not_resend",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "back", "step": "phone" },
+        { "op": "uncheck" },
+        { "op": "getCode", "step": "phone", "confirm": "get_code" },
+        { "op": "cancelConfirm", "step": "phone", "confirm": null },
+        { "op": "getCode", "step": "phone", "confirm": "get_code" },
+        { "op": "confirmAgree", "step": "code", "confirm": null },
+        { "op": "input", "code": "654321", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": { "requests": [{ "code": "654321", "consentAtStep": 7 }], "sends": 1 }
+    },
+    {
+      "name": "continue_entry_with_consent_enters_without_dialog_or_send",
+      "steps": [
+        { "op": "check" },
+        { "op": "getCode", "step": "code", "confirm": null },
+        { "op": "back", "step": "phone" },
+        { "op": "continueCode", "step": "code", "confirm": null },
+        { "op": "input", "code": "123456", "submits": true },
+        { "op": "respond", "code": 0 }
+      ],
+      "expect": { "requests": [{ "code": "123456", "consentAtStep": 0 }], "sends": 1 }
+    }
+  ],
+  "afterLogin": [
+    {
+      "name": "existing_user_without_pending",
+      "response": { "session_scope": "full", "is_new_user": false },
+      "state": { "update": "supported" },
+      "expect": { "actions": ["save_session"] }
+    },
+    {
+      "name": "new_sms_user_no_bind_phone_guide",
+      "response": { "session_scope": "full", "is_new_user": true },
+      "state": { "update": "supported", "pendingAction": false },
+      "expect": { "actions": ["save_session"] }
+    },
+    {
+      "name": "saved_before_pending_handoff",
+      "response": { "session_scope": "full", "is_new_user": false },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "invite_bound_does_not_replace_pending",
+      "response": {
+        "session_scope": "full",
+        "is_new_user": true,
+        "invite_bind": { "result": "bound", "code": null }
+      },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "invite_failed_30401_still_logged_in",
+      "response": {
+        "session_scope": "full",
+        "is_new_user": true,
+        "invite_bind": { "result": "failed", "code": 30401 }
+      },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "invite_failed_30403_still_logged_in",
+      "response": {
+        "session_scope": "full",
+        "is_new_user": true,
+        "invite_bind": { "result": "failed", "code": 30403 }
+      },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "invite_failed_30408_still_logged_in",
+      "response": {
+        "session_scope": "full",
+        "is_new_user": true,
+        "invite_bind": { "result": "failed", "code": 30408 }
+      },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "invite_failed_42901_still_logged_in",
+      "response": {
+        "session_scope": "full",
+        "is_new_user": true,
+        "invite_bind": { "result": "failed", "code": 42901 }
+      },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "invite_failed_50001_still_logged_in",
+      "response": {
+        "session_scope": "full",
+        "is_new_user": true,
+        "invite_bind": { "result": "failed", "code": 50001 }
+      },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "existing_user_invite_ignored",
+      "response": {
+        "session_scope": "full",
+        "is_new_user": false,
+        "invite_bind": { "result": "ignored_existing_user", "code": null }
+      },
+      "state": { "update": "supported", "pendingAction": true },
+      "expect": { "actions": ["save_session", "resume_pending"] }
+    },
+    {
+      "name": "restricted_unknown_discards_business_pending",
+      "response": { "session_scope": "deletion_only", "is_new_user": false },
+      "state": { "update": "unknown", "pendingAction": true },
+      "expect": { "actions": ["save_session", "discard_pending", "enter_force_update"] }
+    },
+    {
+      "name": "restricted_checking_discards_business_pending",
+      "response": { "session_scope": "deletion_only", "is_new_user": false },
+      "state": { "update": "checking", "pendingAction": true },
+      "expect": { "actions": ["save_session", "discard_pending", "enter_force_update"] }
+    },
+    {
+      "name": "restricted_below_discards_business_pending",
+      "response": { "session_scope": "deletion_only", "is_new_user": false },
+      "state": { "update": "below", "pendingAction": true },
+      "expect": { "actions": ["save_session", "discard_pending", "enter_force_update"] }
+    },
+    {
+      "name": "restricted_unknown_without_pending",
+      "response": { "session_scope": "deletion_only", "is_new_user": false },
+      "state": { "update": "unknown", "pendingAction": false },
+      "expect": { "actions": ["save_session", "enter_force_update"] }
+    },
+    {
+      "name": "full_session_does_not_bypass_force_update",
+      "response": { "session_scope": "full", "is_new_user": false },
+      "state": { "update": "below", "pendingAction": true },
+      "expect": { "actions": ["save_session", "discard_pending", "enter_force_update"] }
+    }
+  ],
+  "gaps": [
+    "AGREE-CONFIRM-01（HM-13a）：确认框按触发动作选键（BR-TEXT-14 表 C login.agree_confirm.*，2026-10-18）：get_code 主按钮 .btn_get_code；login / oauth / one_tap 主按钮 .btn_login；次按钮一律 .btn_disagree；正文 oauth 用 .body_oauth，其余 .body。login 动作的正文不判定。「继续输入验证码」入口按 get_code（scope G06 / G10，不新增键）。",
+    "CODE-AUTO-01（HM-13a，第 2 版改为页面级动作）：codeAutoSubmit 是带执行器的序列向量（各端用真实登录执行器 + 本地假服务跑，经登录页动作调度入口 LoginPageFlow）：check / uncheck 为手机号页勾选框；getCode 为【获取验证码】（含「已收到的码仍有效」时的继续分支）、continueCode 为「继续输入验证码」入口、resend 为验证码页【重新获取】、back 为回手机号步；confirmAgree / cancelConfirm 为确认框主 / 次按钮（visible=false 表示此时没有确认框、点了也不该有动作）；每步可带 step（phone / code）与 confirm（正在显示的确认框按哪个动作取键，null = 没有）。input 是输入框的完整内容，submits 表示这次输入是否发起登录请求（false = 本次输入不提交，之后也不因它补交）；登录应答一律挂起，respond 按顺序兑现最早一个并等这次提交结算，current 表示结算时格子仍是提交的那串码；consentAtStep 是 consent_at 应等于的那一步的时刻（每步时钟 +1000ms，advance 另加）；sends 是发码请求总数。验证码有效期 300 秒、发码倒计时 60 秒按发码成功应答。验证码页不出现勾选框与确认框（BR-ID-04 细则「登录注册改版」）；没有同意时间不进入验证码步（G06）；在途时输入只更新格子不排队、结算后也不补交（G12、G23）；42901 不清空格子（G25）。",
+    "SMS-01：brief §2 写 max(60, Retry-After)，但 BR-TEXT-14、03 §4.2 与锁定 error-codes 的 42901 是按响应头禁用、缺省 5 秒；BR-ID-05 也举 Retry-After=1 的例子。成功发码断言 60 秒；42901 只选 >=60 的无争议向量。小于 60、缺头、非法头、HTTP-date 的期望留待明确。",
+    "SMS-02：after 没有推进时间/恢复倒计时接口，无法验证归零、后台恢复、进程重建、改号和重复请求。50001/50401 已覆盖错误映射，但失败后是否另起倒计时未规定。",
+    "AGREEMENT-01：consentRecorded 仅表示本机保存了本次勾选/确认时刻，不是服务端 consent_records 已写入。取消勾选后是否保留历史时间、重复 confirm 的消费方式未规定；不锁死这些表示，只检验取消勾选后再次登录确实要确认。",
+    "LEGAL-01：请求必带当前 privacy/agreement legal_versions 和 consent_at；本组 API 不构造请求。版本读取、时间上送、登录失败不写用户级记录和 PrivacyGate 阻断需请求/集成测试。",
+    "CODE-01：输入组件如何清洗粘贴、全角转换、拒收字符或截断超长输入未规定。accept 在本接线中仅报告原始候选字符串的形状，不规定 UI 编辑策略。有效期 300 秒、旧码作废、成功核销和错满 5 次由服务端判定。",
+    "INVITE-01：valid 只判邀请码语法（BR-INV-01 字符集、6 位），空值可省略；不判邀请人存在、可用、同设备或绑定成功。2026-10-18 起登录页不再有邀请码输入框（HM-13a），本组只验规范化与语法，供待绑定码与 InviteLink 分流复用；老用户必须忽略邀请码，新号绑定失败不得阻止注册。",
+    "INVITE-02（2026-10-18 改写，HM-13a）：原 showInviteField / noticeKey / restricted 行随登录页邀请码输入框一并删除；待绑定码小字行与受限登录不显示由 PendingInviteRow 另验（HM-13c），不允许据此做延迟深链或安装归因预填。",
+    "TEXT-01：锁定 texts.default.json 缺少规划已有的 login.risk_blocked.desc，登录主按钮、确认框、倒计时、LoginInviteBound/Failed 等文案键也不全。不虚构 login.* 键；44001 只断言标题兜底 error.44001。动态 risk_msg 优先级和缺变量回退需要字典注入接口。",
+    "ROUTE-01：锁定 routes.json 的 Login.params 是禁止附加属性的空对象，没有受限登录参数。restricted 必须接现有内部来源标记或由契约线补齐，不得直接塞入路由参数、手改快照。",
+    "ERROR-01：map 没有当前版本/会话/强更状态，不能判定 10405 旧受限令牌先刷新，或强更中 10404 停在 ForceUpdate。本组 10405 只测 no_account，10404 按普通登录环境测公共映射。",
+    "ERROR-02：50305 属第三方登录错误，10404 属会话失效错误；对应 loginBySms 向量只验公共 ErrorActionMapper 的防御映射，不声明短信端点正常返回这些码。未知码和服务端 msg 回退缺输入，不编造期望。",
+    "AFTER-01：response 是 LoginData 的测试投影，session_scope 来自 tokens.session_scope，不含令牌。plan 只输出会话/路由调度；resume_pending 表示交给现有 Router 守卫，不是直接执行业务。有效期、其余前置条件、一次执行、账号归属和敏感操作不重放另验。",
+    "AFTER-02：full 且 update=checking/unknown 时，恢复取决于 pending_action 类型，布尔值不足以判定。deletion_only 与 supported 并存时的复查次序、强更页继续注销所需目标也缺输入，均不臆造跳转。",
+    "AFTER-03：覆盖 invite_bind 全部失败码不会截断登录；邀请提示相对 pending_action 的先后未明确，不为提示新增固定顺序。LoginInviteBound/Failed 的实际提示展示和缺失文案键另验。",
+    "AFTER-04：processing 登录返回 10007，不是成功 LoginData，因此只在 loginError 测 deletion_processing。cooling 可以登录且不自动撤销注销；LoginData 无注销阶段，不能仅凭成功响应判断 cooling。",
+    "INTEGRATION-01：纯计划不证明会话落盘。执行器须等 ApiClient 保存成功才继续；保存失败、无效令牌、取消/换号/世代变化需集成验证。Tracker 用户更新、普通会话推送重报、受限会话不上报/不拉业务数据需 spy，不强造通知全序。",
+    "INTEGRATION-02：已核对 logout/getMe，但七个 API 没有登出/用户查询入口。另验 logout 吊销当前会话、清本机会话/pending_action、回游客且不影响其他设备；getMe 决定身份与可补填状态。",
+    "CONTRACT-01：锁定 sendSmsCode 仍列 44003，并把供应商结果未知算发送；最新 BR-ID-05 明确 MVP 不返回 44003，供应商超时返回 50401 且不计成功条数。登记差异，不加人机验证向量、不改锁定契约。",
+    "TEST-WIRING：三端接入同一 JSON。iOS 注册 Login/LoginTests target；Android 注册 feature:login 并复用已有 JUnit4/serialization；鸿蒙 gen.py 生成 LoginVectorsData.ets、--check 查漂移、List.test.ets 调用 loginVectorTest。本轮只读输出，未写文件、未编译运行。"
+  ],
+  "pendingInviteSet": {
+    "_doc": "D10-107 \u4e09\u7aef\u5171\u7528\uff1a\u5f85\u7ed1\u5b9a\u9080\u8bf7\u7801\u5199\u5165\uff08PendingInviteCode.set\uff09\u524d\u7684\u89c4\u8303\u5316 + \u683c\u5f0f\u6821\u9a8c\u6837\u4f8b\u3002\u4f9d\u636e BR-INV-01\uff086 \u4f4d\uff0c\u5b57\u7b26\u96c6 23456789ABCDEFGHJKLMNPQRSTUVWXYZ\uff09\u3001BR-INV-02\uff08NFKC \u2192 \u5220\u5168\u90e8 Unicode \u7a7a\u767d\u542b U+3000 \u4e0e\u96f6\u5bbd U+200B\u2013U+200D\u3001U+FEFF \u2192 \u8f6c\u5927\u5199\uff0c\u4e0d\u505a O\u21920 \u7ea0\u9519\uff09\u3002\u4e0d\u5408\u683c\uff1a\u9759\u9ed8\u4e0d\u5199\u3001\u65e7\u7801\u4fdd\u7559\u3001\u65e0 UI \u63d0\u793a\uff08brief-17c-android Q1\uff0c\u540c iOS fe53a11\uff09\u3002\u5404\u7aef\u62f7\u8fdb\u672c\u4ed3\u5e93 specs/login-vectors.json \u7684 pendingInviteSet \u6bb5\uff0c\u5185\u5bb9\u9010\u5b57\u76f8\u540c\u3002\u6765\u6e90\uff1aiOS PendingInviteApp17cTests+InviteLink.swift \u7684 bad \u5217\u8868 + 08 \u4f8b K0M2QX\u3002 v2\uff082026-10-22\uff0cnative-android \u5efa\u8bae\uff09\uff1avalid \u52a0 U+0085\uff08NEL\uff09\u4e00\u6761\u2014\u2014JS \\s / Kotlin \u5199\u6cd5\u90fd\u66fe\u6f0f\u5220\u3002",
+    "version": 2,
+    "valid": [
+      {
+        "raw": "K7M2QX",
+        "stored": "K7M2QX"
+      },
+      {
+        "raw": "k7m2qx",
+        "stored": "K7M2QX"
+      },
+      {
+        "raw": "\uff2b\uff17\uff2d\uff12\uff31\uff38",
+        "stored": "K7M2QX"
+      },
+      {
+        "raw": " K7M2QX\u200b",
+        "stored": "K7M2QX"
+      },
+      {
+        "raw": "K7M2\u3000QX",
+        "stored": "K7M2QX"
+      },
+      {
+        "raw": "\ufeffK7M2QX\n",
+        "stored": "K7M2QX"
+      },
+      {
+        "raw": "T3ST22",
+        "stored": "T3ST22"
+      },
+      {
+        "raw": "K7M2QX\u0085",
+        "stored": "K7M2QX"
+      }
+    ],
+    "invalid": [
+      "",
+      "K7M2Q",
+      "K7M2QXA",
+      "K7M2Q0",
+      "K7M2Q1",
+      "K7M2QI",
+      "K7M2QO",
+      "K7M2Q-",
+      "K7M2Q!",
+      "https://x/i/K7M2QX",
+      "K0M2QX"
+    ],
+    "sequences": [
+      {
+        "steps": ["K7M2QX", "K7M2Q0"],
+        "stored": "K7M2QX",
+        "_doc": "\u5148\u5199\u5408\u683c\u518d\u5199\u4e0d\u5408\u683c\uff0c\u65e7\u7801\u4fdd\u7559"
+      },
+      {
+        "steps": ["K7M2QX", "t3st22"],
+        "stored": "T3ST22",
+        "_doc": "\u5408\u683c\u503c\u8986\u76d6\u65e7\u7801"
+      },
+      {
+        "steps": ["K7M2Q0"],
+        "stored": null,
+        "_doc": "\u7a7a\u5bb9\u5668\u5199\u4e0d\u5408\u683c\u503c\u4ecd\u4e3a\u7a7a"
+      }
+    ]
+  }
+}

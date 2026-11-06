@@ -1,0 +1,695 @@
+{
+  "version": 1,
+  "source": "couli origin/main:规划/08_业务规则/12_TEXT_话术与格式.md：BR-TEXT-10、BR-TEXT-11及细则，BR-TEXT-14表C btn.buy.rebate_suffix；规划/08_业务规则/03_PRICE_价格口径与展示.md：BR-PRICE-04、05、07、08、09及细则；rebate-platform 85af83a:contracts/texts.default.json：rebate_amount_unknown、rebate_login_to_view。模型字段、kind与空值表示按brief.md §3。",
+  "gaps": [
+    "预售：本次限定的BR-PRICE-04、05、07、08、09及细则没有规定预售标签；brief §3只有isPresale/presaleLabel接口。缺少获准使用的业务依据，暂不虚构isPresale=true的完整期望；补充预售规则后必须增加用例。",
+    "BR-TEXT-10没有规定minFen>maxFen、负返利区间；BR-PRICE-04没有规定负价格、负券额、未知平台及矛盾价格字段的容错，不造期望。",
+    "BR-PRICE-07/08没有规定normal却minFen!=maxFen、no_rebate却金额>0、仅一个返利端点为空等矛盾输入的容错。",
+    "loginRequired与basis矛盾时的优先级未定义；只测试basis=login_required、两端为空、loginRequired=true的一致输入。",
+    "BR-TEXT-11没有规定非法ISO日期、过去函数传未来、未来函数传过去、非安全整数时间戳的行为；服务端时钟校准不属于这些纯函数。",
+    "BR-PRICE-09没有规定可展示返利但estNetPriceFen为空时的容错，也没有规定负返后价的业务合法性。",
+    "BR-TEXT-14表C要求loading、禁用、稍后再试不拼后缀；BuyButtonModel.text没有状态入参，须由组件层测试。RebateTagContent没有basis与原始分值，无法验证伪造的kind=amount是否符合拼接条件。",
+    "BR-PRICE-07/09要求同时显示结算说明；BR-TEXT-10要求列表隐藏无返利标签。当前纯模型没有对应入参，须由组件层测试。",
+    "BR-PRICE-08的淘礼金专属文案与无返利原因需要额外字段；当前模型不接收这些字段，不据此推测普通none文案。",
+    "BR-TEXT-10规定0/0的用户文案为「暂无返利」；brief §3将纯rebateRange的不显示映射为null，RebateTagModel则保留none与「暂无返利」。"
+  ],
+  "cases": {
+    "money": [
+      { "fen": 1990, "expect": "¥19.9", "note": "BR-TEXT-10：最多两位小数并去掉末尾0。" },
+      { "fen": 990, "expect": "¥9.9", "note": "BR-TEXT-10细则：990 → ¥9.9。" },
+      { "fen": 1000, "expect": "¥10", "note": "BR-TEXT-10细则：1000 → ¥10。" },
+      { "fen": 1, "expect": "¥0.01", "note": "BR-TEXT-10细则：1 → ¥0.01。" },
+      { "fen": 0, "expect": "¥0", "note": "BR-TEXT-10细则：0 → ¥0。" },
+      { "fen": 10, "expect": "¥0.1", "note": "BR-TEXT-10细则：cent mod 10=0，去末尾0。" },
+      { "fen": 101, "expect": "¥1.01", "note": "BR-TEXT-10细则：否则使用两位cent。" },
+      {
+        "fen": 123456,
+        "expect": "¥1234.56",
+        "note": "BR-TEXT-10细则：123456 → ¥1234.56；不加千分位。"
+      },
+      { "fen": -150, "expect": "-¥1.5", "note": "BR-TEXT-10：负数用ASCII「-」置于「¥」前。" },
+      { "fen": -1, "expect": "-¥0.01", "note": "BR-TEXT-10：可选负号+「¥」+元；两位cent。" },
+      { "fen": -1000, "expect": "-¥10", "note": "BR-TEXT-10：负号在「¥」前；去多余小数点。" },
+      {
+        "fen": 9007199254740991,
+        "expect": "¥90071992547409.91",
+        "note": "BR-TEXT-10：用整数运算格式化，不得用浮点；不加千分位。"
+      },
+      {
+        "fen": -9007199254740991,
+        "expect": "-¥90071992547409.91",
+        "note": "BR-TEXT-10：abs(fen) div 100与mod 100；负号在「¥」前。"
+      },
+      {
+        "fen": 9007199254740990,
+        "expect": "¥90071992547409.9",
+        "note": "BR-TEXT-10：整数分运算；去掉末尾0。"
+      },
+      {
+        "fen": 9007199254740900,
+        "expect": "¥90071992547409",
+        "note": "BR-TEXT-10细则：cent=0 →「¥{yuan}」。"
+      }
+    ],
+    "moneySigned": [
+      { "fen": 0, "expect": "¥0", "note": "BR-TEXT-10：0 → ¥0；只有流水正数加「+」。" },
+      { "fen": 600, "expect": "+¥6", "note": "BR-TEXT-10细则：流水+600 → +¥6。" },
+      { "fen": 1, "expect": "+¥0.01", "note": "BR-TEXT-10：流水正数加「+」；两位cent。" },
+      { "fen": 10, "expect": "+¥0.1", "note": "BR-TEXT-10：流水正数加「+」；去末尾0。" },
+      { "fen": 101, "expect": "+¥1.01", "note": "BR-TEXT-10：流水正数加「+」；最多两位小数。" },
+      { "fen": -150, "expect": "-¥1.5", "note": "BR-TEXT-10：负数用ASCII「-」置于「¥」前。" },
+      { "fen": -1, "expect": "-¥0.01", "note": "BR-TEXT-10：可选负号+「¥」+元。" },
+      { "fen": -1000, "expect": "-¥10", "note": "BR-TEXT-10：负号在「¥」前；去多余小数点。" },
+      {
+        "fen": 9007199254740991,
+        "expect": "+¥90071992547409.91",
+        "note": "BR-TEXT-10：整数分运算；流水正数加「+」。"
+      },
+      {
+        "fen": -9007199254740991,
+        "expect": "-¥90071992547409.91",
+        "note": "BR-TEXT-10：整数分运算；负数用「-」，不加「+」。"
+      }
+    ],
+    "rebateRange": [
+      {
+        "minFen": 320,
+        "maxFen": 450,
+        "expect": "¥3.2–¥4.5",
+        "note": "BR-TEXT-10细则：320/450 → ¥3.2–¥4.5；U+2013前后无空格。"
+      },
+      { "minFen": 450, "maxFen": 450, "expect": "¥4.5", "note": "BR-TEXT-10：min=max时显示单值。" },
+      {
+        "minFen": 0,
+        "maxFen": 5,
+        "expect": "¥0–¥0.05",
+        "note": "BR-PRICE-07：min=0且max>0仍显示「预估返 ¥0–¥x」。"
+      },
+      {
+        "minFen": 0,
+        "maxFen": 0,
+        "expect": null,
+        "note": "BR-TEXT-10：0/0「暂无返利」（列表隐藏）；brief §3约定此函数返回null。"
+      },
+      {
+        "minFen": 1,
+        "maxFen": 1,
+        "expect": "¥0.01",
+        "note": "BR-TEXT-10：min=max显示单值；1 → ¥0.01。"
+      },
+      {
+        "minFen": 100,
+        "maxFen": 100,
+        "expect": "¥1",
+        "note": "BR-TEXT-10：min=max显示单值；cent=0不加小数。"
+      },
+      {
+        "minFen": 101,
+        "maxFen": 110,
+        "expect": "¥1.01–¥1.1",
+        "note": "BR-TEXT-10：两端按金额格式，以「–」连接、无空格。"
+      },
+      {
+        "minFen": 9007199254740990,
+        "maxFen": 9007199254740991,
+        "expect": "¥90071992547409.9–¥90071992547409.91",
+        "note": "BR-TEXT-10：整数运算；min<max用U+2013连接两端。"
+      }
+    ],
+    "timeListPast": [
+      {
+        "epochMillis": 1790643933000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "今天 09:05",
+        "note": "BR-TEXT-11细则：now=2026-09-29 10:00+08，09:05:33 → 今天09:05。"
+      },
+      {
+        "epochMillis": 1790611140000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "昨天 23:59",
+        "note": "BR-TEXT-11细则：2026-09-28 23:59+08 → 昨天23:59。"
+      },
+      {
+        "epochMillis": 1790609400000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "昨天 23:30",
+        "note": "BR-TEXT-11边界：设备在UTC，2026-09-28T23:30+08:00仍显示「昨天23:30」。"
+      },
+      {
+        "epochMillis": 1790488980000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "09-27",
+        "note": "BR-TEXT-11细则：同年、非今天昨天，2026-09-27 14:03+08 → 09-27。"
+      },
+      {
+        "epochMillis": 1767139200000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "2025-12-31",
+        "note": "BR-TEXT-11细则：其他年份显示YYYY-MM-DD。"
+      },
+      {
+        "epochMillis": 1790611199999,
+        "nowEpochMillis": 1790611260000,
+        "expect": "昨天 23:59",
+        "note": "BR-TEXT-11：「前一天」按上海日期；09-29 00:01回看09-28 23:59:59.999。"
+      },
+      {
+        "epochMillis": 1790611200000,
+        "nowEpochMillis": 1790611260000,
+        "expect": "今天 00:00",
+        "note": "BR-TEXT-11：同一天「今天 HH:mm」；上海午夜刚过，24小时制。"
+      },
+      {
+        "epochMillis": 1790524800000,
+        "nowEpochMillis": 1790611260000,
+        "expect": "昨天 00:00",
+        "note": "BR-TEXT-11：「前一天」按日历日期；相差超过24小时仍是昨天。"
+      },
+      {
+        "epochMillis": 1790524799999,
+        "nowEpochMillis": 1790611260000,
+        "expect": "09-27",
+        "note": "BR-TEXT-11：前天按同年MM-DD；不能按距现在24小时分桶。"
+      },
+      {
+        "epochMillis": 1767196740000,
+        "nowEpochMillis": 1767196860000,
+        "expect": "昨天 23:59",
+        "note": "BR-TEXT-11：前一天「昨天 HH:mm」优先；上海2026-01-01回看2025-12-31。"
+      },
+      {
+        "epochMillis": 1767110340000,
+        "nowEpochMillis": 1767196860000,
+        "expect": "2025-12-30",
+        "note": "BR-TEXT-11：跨年且不是昨天，显示YYYY-MM-DD。"
+      }
+    ],
+    "timeListFuture": [
+      {
+        "epochMillis": 1790726400000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "09-30 08:00",
+        "note": "BR-TEXT-11细则：未来2026-09-30 08:00+08 → 09-30 08:00，不用「明天」。"
+      },
+      {
+        "epochMillis": 1798848000000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "2027-01-02 08:00",
+        "note": "BR-TEXT-11细则：未来跨年显示YYYY-MM-DD HH:mm。"
+      },
+      {
+        "epochMillis": 1790647260000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "09-29 10:01",
+        "note": "BR-TEXT-11：未来同年MM-DD HH:mm，同日也不用相对词。"
+      },
+      {
+        "epochMillis": 1798732740000,
+        "nowEpochMillis": 1790647200000,
+        "expect": "12-31 23:59",
+        "note": "BR-TEXT-11：未来同年MM-DD HH:mm；24小时制。"
+      },
+      {
+        "epochMillis": 1798732800000,
+        "nowEpochMillis": 1798732740000,
+        "expect": "2027-01-01 00:00",
+        "note": "BR-TEXT-11：按上海时区判断跨年；两时刻在UTC中仍为同一年。"
+      }
+    ],
+    "dateOnly": [
+      {
+        "isoDate": "2026-09-29",
+        "nowEpochMillis": 1790647200000,
+        "expect": "09-29",
+        "note": "BR-TEXT-11细则：日期2026-09-29 → 09-29，不使用「今天」。"
+      },
+      {
+        "isoDate": "2026-09-30",
+        "nowEpochMillis": 1790647200000,
+        "expect": "09-30",
+        "note": "BR-TEXT-11：纯日期同年MM-DD，不使用「明天」。"
+      },
+      {
+        "isoDate": "2026-10-17",
+        "nowEpochMillis": 1790647200000,
+        "expect": "10-17",
+        "note": "BR-TEXT-11细则：日期2026-10-17 → 10-17。"
+      },
+      {
+        "isoDate": "2027-01-02",
+        "nowEpochMillis": 1790647200000,
+        "expect": "2027-01-02",
+        "note": "BR-TEXT-11细则：纯日期不同年YYYY-MM-DD。"
+      },
+      {
+        "isoDate": "2025-12-31",
+        "nowEpochMillis": 1767196860000,
+        "expect": "2025-12-31",
+        "note": "BR-TEXT-11：纯日期不用「昨天」；今天年份按上海时区判断。"
+      },
+      {
+        "isoDate": "2026-01-01",
+        "nowEpochMillis": 1767196860000,
+        "expect": "01-01",
+        "note": "BR-TEXT-11：与上海今天同年显示MM-DD；不随设备时区变化。"
+      },
+      {
+        "isoDate": "2024-02-29",
+        "nowEpochMillis": 1790647200000,
+        "expect": "2024-02-29",
+        "note": "BR-TEXT-11：合法纯日期在其他年份显示YYYY-MM-DD。"
+      }
+    ],
+    "timeMinute": [
+      {
+        "epochMillis": 1790643933000,
+        "expect": "2026-09-29 09:05",
+        "note": "BR-TEXT-11细则：2026-09-29T09:05:33+08 → 2026-09-29 09:05。"
+      },
+      {
+        "epochMillis": 1790611199999,
+        "expect": "2026-09-28 23:59",
+        "note": "BR-TEXT-11：精确到分钟YYYY-MM-DD HH:mm，不将秒进位到次日。"
+      },
+      {
+        "epochMillis": 1790611200000,
+        "expect": "2026-09-29 00:00",
+        "note": "BR-TEXT-11：固定上海时区；24小时制午夜为00:00。"
+      },
+      {
+        "epochMillis": 1798732800000,
+        "expect": "2027-01-01 00:00",
+        "note": "BR-TEXT-11：固定上海时区；跨年保留完整年份。"
+      },
+      {
+        "epochMillis": 1709136000000,
+        "expect": "2024-02-29 00:00",
+        "note": "BR-TEXT-11：按上海日期显示YYYY-MM-DD HH:mm，保留合法闰日。"
+      },
+      {
+        "epochMillis": 0,
+        "expect": "1970-01-01 08:00",
+        "note": "BR-TEXT-11：客户端展示一律按Asia/Shanghai时区换算。"
+      }
+    ],
+    "priceTag": [
+      {
+        "input": {
+          "platform": "taobao",
+          "priceFen": 3990,
+          "couponFen": 1000,
+          "finalPriceFen": 2990,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "券后",
+          "mainAmount": "¥29.9",
+          "subLine": "券前 ¥39.9 · 券 ¥10",
+          "noCoupon": false,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04细则：3990券1000，主价「券后 ¥29.9」，副行「券前 ¥39.9 · 券 ¥10」。"
+      },
+      {
+        "input": {
+          "platform": "taobao",
+          "priceFen": 3990,
+          "couponFen": 0,
+          "finalPriceFen": 3990,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "售价",
+          "mainAmount": "¥39.9",
+          "subLine": null,
+          "noCoupon": true,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04/05：无券只显示「售价 ¥x」，并显示无券状态。"
+      },
+      {
+        "input": {
+          "platform": "pdd",
+          "priceFen": 1990,
+          "couponFen": 300,
+          "finalPriceFen": 1690,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "拼单券后",
+          "mainAmount": "¥16.9",
+          "subLine": "拼单券前 ¥19.9 · 券 ¥3",
+          "noCoupon": false,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04细则：拼多多1990券300 → 拼单券后¥16.9；副行拼单券前¥19.9·券¥3。"
+      },
+      {
+        "input": {
+          "platform": "pdd",
+          "priceFen": 1990,
+          "couponFen": 0,
+          "finalPriceFen": 1990,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "拼单价",
+          "mainAmount": "¥19.9",
+          "subLine": null,
+          "noCoupon": true,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04细则：拼多多无券1990 → 拼单价¥19.9；只显示一个价格。"
+      },
+      {
+        "input": {
+          "platform": "taobao",
+          "priceFen": 0,
+          "couponFen": 0,
+          "finalPriceFen": 0,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "售价",
+          "mainAmount": "¥0",
+          "subLine": null,
+          "noCoupon": true,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04：无券只显示售价；BR-TEXT-10：0 → ¥0。"
+      },
+      {
+        "input": {
+          "platform": "taobao",
+          "priceFen": 123456,
+          "couponFen": 1,
+          "finalPriceFen": 123455,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "券后",
+          "mainAmount": "¥1234.55",
+          "subLine": "券前 ¥1234.56 · 券 ¥0.01",
+          "noCoupon": false,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04：主价用final_price_fen，副行券前价与券；BR-TEXT-10：无千分位、最多两位小数。"
+      },
+      {
+        "input": {
+          "platform": "pdd",
+          "priceFen": 1000,
+          "couponFen": 100,
+          "finalPriceFen": 900,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "拼单券后",
+          "mainAmount": "¥9",
+          "subLine": "拼单券前 ¥10 · 券 ¥1",
+          "noCoupon": false,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04：拼多多有券加「拼单」；BR-TEXT-10：整元去多余小数点。"
+      },
+      {
+        "input": {
+          "platform": "taobao",
+          "priceFen": 9007199254740991,
+          "couponFen": 0,
+          "finalPriceFen": 9007199254740991,
+          "isPresale": false
+        },
+        "expect": {
+          "mainLabel": "售价",
+          "mainAmount": "¥90071992547409.91",
+          "subLine": null,
+          "noCoupon": true,
+          "presaleLabel": null
+        },
+        "note": "BR-PRICE-04/05：无券主价用final_price_fen；BR-TEXT-10：整数运算、不加千分位。"
+      }
+    ],
+    "rebateTag": [
+      {
+        "input": { "basis": "normal", "minFen": 269, "maxFen": 269, "loginRequired": false },
+        "expect": { "kind": "amount", "text": "预估返 ¥2.69" },
+        "note": "BR-PRICE-07：normal两端相等显示「预估返 ¥x」；BR-PRICE-05：短标签只允许「预估返」。"
+      },
+      {
+        "input": { "basis": "normal", "minFen": 450, "maxFen": 450, "loginRequired": false },
+        "expect": { "kind": "amount", "text": "预估返 ¥4.5" },
+        "note": "BR-TEXT-10：min=max单值、去末尾0；RebateTag「预估返 ¥x」。"
+      },
+      {
+        "input": { "basis": "normal", "minFen": 100, "maxFen": 100, "loginRequired": false },
+        "expect": { "kind": "amount", "text": "预估返 ¥1" },
+        "note": "BR-PRICE-07：normal单值；BR-TEXT-10：整元不带多余小数点。"
+      },
+      {
+        "input": { "basis": "normal", "minFen": 1, "maxFen": 1, "loginRequired": false },
+        "expect": { "kind": "amount", "text": "预估返 ¥0.01" },
+        "note": "BR-PRICE-07：normal单值；BR-TEXT-10：1 → ¥0.01。"
+      },
+      {
+        "input": {
+          "basis": "normal",
+          "minFen": 9007199254740991,
+          "maxFen": 9007199254740991,
+          "loginRequired": false
+        },
+        "expect": { "kind": "amount", "text": "预估返 ¥90071992547409.91" },
+        "note": "BR-PRICE-07：normal单值；BR-TEXT-10：整数运算，不加千分位。"
+      },
+      {
+        "input": {
+          "basis": "price_compare_risk",
+          "minFen": 135,
+          "maxFen": 269,
+          "loginRequired": false
+        },
+        "expect": { "kind": "range", "text": "预估返 ¥1.35–¥2.69" },
+        "note": "BR-PRICE-07：price_compare_risk显示「预估返 ¥a–¥b」；结算说明由disclaimer显示。"
+      },
+      {
+        "input": {
+          "basis": "price_compare_risk",
+          "minFen": 0,
+          "maxFen": 5,
+          "loginRequired": false
+        },
+        "expect": { "kind": "range", "text": "预估返 ¥0–¥0.05" },
+        "note": "BR-PRICE-07：min=0且max>0仍显示「预估返 ¥0–¥x」，不得只显示上限。"
+      },
+      {
+        "input": {
+          "basis": "price_compare_risk",
+          "minFen": 450,
+          "maxFen": 450,
+          "loginRequired": false
+        },
+        "expect": { "kind": "amount", "text": "预估返 ¥4.5" },
+        "note": "BR-TEXT-10：min=max时显示单值；BR-PRICE-07：使用「预估返」。"
+      },
+      {
+        "input": { "basis": "no_rebate", "minFen": 0, "maxFen": 0, "loginRequired": false },
+        "expect": { "kind": "none", "text": "暂无返利" },
+        "note": "BR-PRICE-08：max=0必须为no_rebate；主动粘贴出卡显示「暂无返利」。"
+      },
+      {
+        "input": {
+          "basis": "amount_unknown",
+          "minFen": null,
+          "maxFen": null,
+          "loginRequired": false
+        },
+        "expect": { "kind": "unknown", "text": "可返利，金额以订单为准" },
+        "note": "BR-PRICE-08：两端为空，显示「可返利，金额以订单为准」；85af83a键rebate_amount_unknown。"
+      },
+      {
+        "input": {
+          "basis": "login_required",
+          "minFen": null,
+          "maxFen": null,
+          "loginRequired": true
+        },
+        "expect": { "kind": "login", "text": "登录查看返利" },
+        "note": "BR-PRICE-07细则：游客卡的login_required；85af83a键rebate_login_to_view「登录查看返利」。"
+      }
+    ],
+    "estNet": [
+      {
+        "input": { "basis": "normal", "minFen": 269, "estNetPriceFen": 2721 },
+        "expect": "预估返后 ¥27.21",
+        "note": "BR-PRICE-09细则：normal，rebate=269，est_net=2721 → 预估返后¥27.21。"
+      },
+      {
+        "input": { "basis": "price_compare_risk", "minFen": 135, "estNetPriceFen": 2855 },
+        "expect": "预估返后 ¥28.55",
+        "note": "BR-PRICE-09细则：返利135–269，est_net=2855 → 预估返后¥28.55。"
+      },
+      {
+        "input": { "basis": "price_compare_risk", "minFen": 0, "estNetPriceFen": 2990 },
+        "expect": null,
+        "note": "BR-PRICE-09细则：price_compare_risk，返利0–5，min=0不显示这一行。"
+      },
+      {
+        "input": { "basis": "no_rebate", "minFen": 0, "estNetPriceFen": 2990 },
+        "expect": null,
+        "note": "BR-PRICE-09细则：no_rebate → 不显示这一行。"
+      },
+      {
+        "input": { "basis": "amount_unknown", "minFen": null, "estNetPriceFen": null },
+        "expect": null,
+        "note": "BR-PRICE-08：amount_unknown不显示任何价格与返利金额；BR-PRICE-09：仅min>0时显示。"
+      },
+      {
+        "input": { "basis": "login_required", "minFen": null, "estNetPriceFen": null },
+        "expect": null,
+        "note": "BR-PRICE-09：只有rebate_min_fen>0时才显示；此输入没有下限金额。"
+      },
+      {
+        "input": { "basis": "normal", "minFen": 1, "estNetPriceFen": 0 },
+        "expect": "预估返后 ¥0",
+        "note": "BR-PRICE-09：展示条件是返利下限>0，金额用下发的est_net_price_fen；BR-TEXT-10：0 → ¥0。"
+      },
+      {
+        "input": { "basis": "normal", "minFen": 100, "estNetPriceFen": 1000 },
+        "expect": "预估返后 ¥10",
+        "note": "BR-PRICE-09：「预估返后 ¥x」；BR-TEXT-10：整元去多余小数点。"
+      },
+      {
+        "input": { "basis": "normal", "minFen": 100, "estNetPriceFen": 1990 },
+        "expect": "预估返后 ¥19.9",
+        "note": "BR-PRICE-09：「预估返后 ¥x」；BR-TEXT-10：去掉末尾0。"
+      },
+      {
+        "input": { "basis": "normal", "minFen": 1, "estNetPriceFen": 9007199254740990 },
+        "expect": "预估返后 ¥90071992547409.9",
+        "note": "BR-PRICE-09：显示服务端下发的返后价；BR-TEXT-10：整数运算、不加千分位。"
+      }
+    ],
+    "buyButton": [
+      {
+        "input": {
+          "base": "去淘宝购买",
+          "rebate": { "kind": "amount", "text": "预估返 ¥2.69" },
+          "amountHidden": false,
+          "context": "list"
+        },
+        "expect": "去淘宝购买 · 预估返 ¥2.69",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：单一金额>0、未隐藏且页面显示金额，动词后拼「· 预估返 {amount}」。"
+      },
+      {
+        "input": {
+          "base": "领券购买",
+          "rebate": { "kind": "amount", "text": "预估返 ¥0.01" },
+          "amountHidden": false,
+          "context": "detail"
+        },
+        "expect": "领券购买 · 预估返 ¥0.01",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：详情主按钮拼后缀；金额与同卡RebateTag的格式化结果相同。"
+      },
+      {
+        "input": {
+          "base": "去购买",
+          "rebate": { "kind": "amount", "text": "预估返 ¥4.5" },
+          "amountHidden": false,
+          "context": "agent"
+        },
+        "expect": "去购买 · 预估返 ¥4.5",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：单一金额>0、未隐藏、所在页面显示返利金额时拼。"
+      },
+      {
+        "input": {
+          "base": "去淘宝购买",
+          "rebate": { "kind": "range", "text": "预估返 ¥1.35–¥2.69" },
+          "amountHidden": false,
+          "context": "list"
+        },
+        "expect": "去淘宝购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：区间只写动词，不写「起」或上下限。"
+      },
+      {
+        "input": {
+          "base": "领券购买",
+          "rebate": { "kind": "range", "text": "预估返 ¥0–¥0.05" },
+          "amountHidden": false,
+          "context": "detail"
+        },
+        "expect": "领券购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：区间只写动词；BR-PRICE-07：零下限且max>0仍是区间。"
+      },
+      {
+        "input": {
+          "base": "去购买",
+          "rebate": { "kind": "range", "text": "预估返 ¥1.35–¥2.69" },
+          "amountHidden": false,
+          "context": "agent"
+        },
+        "expect": "去购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：区间只写动词，不写上下限。"
+      },
+      {
+        "input": {
+          "base": "去淘宝购买",
+          "rebate": { "kind": "amount", "text": "预估返 ¥2.69" },
+          "amountHidden": true,
+          "context": "list"
+        },
+        "expect": "去淘宝购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：只有金额隐藏开关未打开才拼。"
+      },
+      {
+        "input": {
+          "base": "去淘宝购买",
+          "rebate": { "kind": "amount", "text": "预估返 ¥2.69" },
+          "amountHidden": false,
+          "context": "link_landing"
+        },
+        "expect": "去淘宝购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：LinkLanding不显示返利金额，不拼。"
+      },
+      {
+        "input": {
+          "base": "去淘宝购买",
+          "rebate": { "kind": "amount", "text": "预估返 ¥2.69" },
+          "amountHidden": false,
+          "context": "share"
+        },
+        "expect": "去淘宝购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：分享中间页、海报不显示金额；本任务share上下文不拼。"
+      },
+      {
+        "input": {
+          "base": "去购买（无返利）",
+          "rebate": { "kind": "none", "text": "暂无返利" },
+          "amountHidden": false,
+          "context": "detail"
+        },
+        "expect": "去购买（无返利）",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：无返利仍为btn.buy.no_rebate；BR-PRICE-08：「去购买（无返利）」。"
+      },
+      {
+        "input": {
+          "base": "去购买",
+          "rebate": { "kind": "unknown", "text": "可返利，金额以订单为准" },
+          "amountHidden": false,
+          "context": "detail"
+        },
+        "expect": "去购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：amount_unknown不拼；BR-PRICE-08：按钮「去购买」。"
+      },
+      {
+        "input": {
+          "base": "去购买",
+          "rebate": { "kind": "login", "text": "登录查看返利" },
+          "amountHidden": false,
+          "context": "list"
+        },
+        "expect": "去购买",
+        "note": "BR-TEXT-14表C btn.buy.rebate_suffix：login_required不拼金额后缀。"
+      }
+    ]
+  }
+}

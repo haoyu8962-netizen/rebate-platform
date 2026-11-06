@@ -1,0 +1,5137 @@
+{
+  "version": 1,
+  "sources": [
+    "任务书：/Users/zhixing/我的项目/couli-runs/NATIVE/APP-08/brief.md §0、§2、§3、§4；同目录 rule-gaps.md G01～G22，TODO(N-31)。",
+    "规划使用 git show origin/main 读取；本次 origin/main=8f09f6a0d06f4daf648893176a72be4ecda2b772。",
+    "规划/08_业务规则/12_TEXT_话术与格式.md：BR-TEXT-02～05、10～12、14；04_ATTR_订单归属与归因.md：BR-ATTR-17、21；10_ID_身份授权与合规.md：BR-ID-13、30。",
+    "规划/01_需求规划.md F-ORD-15、16；规划/03_前端架构.md §4.2；规划/04_数据模型与契约.md §6.4、§10.1；规划/10_首个完整流程验收用例.md AC-S1-25、27、73、84、103、104、106①。",
+    "契约使用 git -C /Users/zhixing/我的项目/rebate-platform show 9cd1e6f:<路径> 读取：contracts/openapi.yaml 的 listOrders、getOrder、listPendingTracks、dismissPendingTrack、参数、订单 schema、Config.help_links、HelpLinkTarget、示例；contracts/error-codes.yaml；contracts/texts.default.json 及 fallbacks；contracts/routes.json；contracts/enums/order.yaml、platform.yaml。",
+    "expect 缺省字段不判定，显式 null 表示无值；params、request、buttons、cards 精确比较。未确定的键名不填占位键，见 gaps。金额格式继续使用各端 CouliFormat，由 specs/format-vectors.json 覆盖。"
+  ],
+  "query": [
+    {
+      "name": "default_self",
+      "steps": [{ "op": "init" }],
+      "expect": { "params": { "scope": "self" }, "sendsRequest": true }
+    },
+    {
+      "name": "route_share",
+      "steps": [{ "op": "init", "value": "share" }],
+      "expect": { "params": { "scope": "share" }, "sendsRequest": true }
+    },
+    {
+      "name": "group_estimating",
+      "steps": [{ "op": "init" }, { "op": "set_group", "value": "estimating" }],
+      "expect": {
+        "params": { "scope": "self", "status_group": "estimating" },
+        "sendsRequest": true
+      }
+    },
+    {
+      "name": "group_credited",
+      "steps": [{ "op": "init" }, { "op": "set_group", "value": "credited" }],
+      "expect": { "params": { "scope": "self", "status_group": "credited" }, "sendsRequest": true }
+    },
+    {
+      "name": "group_no_rebate",
+      "steps": [{ "op": "init" }, { "op": "set_group", "value": "no_rebate" }],
+      "expect": { "params": { "scope": "self", "status_group": "no_rebate" }, "sendsRequest": true }
+    },
+    {
+      "name": "all_omitted",
+      "steps": [
+        { "op": "init" },
+        { "op": "set_group", "value": "credited" },
+        { "op": "set_group", "value": "all" }
+      ],
+      "expect": { "params": { "scope": "self" }, "sendsRequest": true }
+    },
+    {
+      "name": "AC_S1_103_platform_month",
+      "steps": [
+        { "op": "init" },
+        { "op": "set_platform", "value": "taobao" },
+        { "op": "set_month", "value": "2026-10" }
+      ],
+      "expect": {
+        "params": { "scope": "self", "platform": "taobao", "paid_month": "2026-10" },
+        "sendsRequest": true
+      }
+    },
+    {
+      "name": "group_changes_only_group",
+      "steps": [
+        { "op": "init" },
+        { "op": "set_platform", "value": "taobao" },
+        { "op": "set_month", "value": "2026-10" },
+        { "op": "set_q", "value": "纸巾" },
+        { "op": "set_group", "value": "credited" }
+      ],
+      "expect": {
+        "params": {
+          "scope": "self",
+          "status_group": "credited",
+          "platform": "taobao",
+          "paid_month": "2026-10",
+          "q": "纸巾"
+        },
+        "sendsRequest": true
+      }
+    },
+    {
+      "name": "G11_trim_preserve_internal",
+      "steps": [
+        { "op": "init", "value": "self" },
+        { "op": "set_q", "value": " \t纸  巾\n" }
+      ],
+      "expect": { "params": { "scope": "self", "q": "纸  巾" }, "sendsRequest": true }
+    },
+    {
+      "name": "G11_blank",
+      "steps": [
+        { "op": "init", "value": "self" },
+        { "op": "set_q", "value": " \t\n　" }
+      ],
+      "expect": { "params": { "scope": "self" }, "sendsRequest": true }
+    },
+    {
+      "name": "AC_S1_103_full_number",
+      "steps": [
+        { "op": "init", "value": "self" },
+        { "op": "set_q", "value": "3712345678901234567" }
+      ],
+      "expect": { "params": { "scope": "self", "q": "3712345678901234567" }, "sendsRequest": true }
+    },
+    {
+      "name": "AC_S1_103_prefix_only_sent",
+      "steps": [
+        { "op": "init", "value": "self" },
+        { "op": "set_q", "value": "3712345678" }
+      ],
+      "expect": { "params": { "scope": "self", "q": "3712345678" }, "sendsRequest": true }
+    },
+    {
+      "name": "AC_S1_106_share_number_only_sent",
+      "steps": [
+        { "op": "init", "value": "share" },
+        { "op": "set_q", "value": "3712345678901234567" }
+      ],
+      "expect": { "params": { "scope": "share", "q": "3712345678901234567" }, "sendsRequest": true }
+    },
+    {
+      "name": "AC_S1_106_share_hidden_title_only_sent",
+      "steps": [
+        { "op": "init", "value": "share" },
+        { "op": "set_q", "value": "牙刷" }
+      ],
+      "expect": { "params": { "scope": "share", "q": "牙刷" }, "sendsRequest": true }
+    },
+    {
+      "name": "G11_unicode_40",
+      "steps": [
+        { "op": "init", "value": "self" },
+        { "op": "set_q", "value": "123456789012345678901234567890123456789🦊" }
+      ],
+      "expect": {
+        "params": { "scope": "self", "q": "123456789012345678901234567890123456789🦊" },
+        "sendsRequest": true
+      }
+    },
+    {
+      "name": "G11_over40_policy_unspecified",
+      "steps": [
+        { "op": "init" },
+        { "op": "set_q", "value": "1234567890123456789012345678901234567890123" }
+      ],
+      "expect": {}
+    },
+    {
+      "name": "switch_to_self",
+      "steps": [
+        { "op": "init", "value": "share" },
+        { "op": "set_group", "value": "credited" },
+        { "op": "set_platform", "value": "taobao" },
+        { "op": "set_month", "value": "2026-10" },
+        { "op": "set_q", "value": "纸巾" },
+        { "op": "next_page", "nextCursor": "opaque-1" },
+        { "op": "set_scope", "value": "self" }
+      ],
+      "expect": { "params": { "scope": "self" }, "sendsRequest": true }
+    },
+    {
+      "name": "switch_to_share",
+      "steps": [
+        { "op": "init", "value": "self" },
+        { "op": "set_group", "value": "credited" },
+        { "op": "set_platform", "value": "taobao" },
+        { "op": "set_month", "value": "2026-10" },
+        { "op": "set_q", "value": "纸巾" },
+        { "op": "next_page", "nextCursor": "opaque-1" },
+        { "op": "set_scope", "value": "share" }
+      ],
+      "expect": { "params": { "scope": "share" }, "sendsRequest": true }
+    },
+    {
+      "name": "refresh_new_round",
+      "steps": [
+        { "op": "init" },
+        { "op": "set_q", "value": "纸巾" },
+        { "op": "next_page", "nextCursor": "opaque-1" },
+        { "op": "refresh" }
+      ],
+      "expect": { "params": { "scope": "self", "q": "纸巾" }, "sendsRequest": true }
+    },
+    {
+      "name": "next_page_opaque",
+      "steps": [
+        { "op": "init" },
+        { "op": "set_group", "value": "estimating" },
+        { "op": "next_page", "nextCursor": "opaque-1" }
+      ],
+      "expect": {
+        "params": { "scope": "self", "status_group": "estimating", "cursor": "opaque-1" },
+        "sendsRequest": true
+      }
+    },
+    {
+      "name": "next_page_null",
+      "steps": [{ "op": "init" }, { "op": "next_page", "nextCursor": null }],
+      "expect": { "sendsRequest": false }
+    },
+    {
+      "name": "changed_filter_drops_cursor",
+      "steps": [
+        { "op": "init" },
+        { "op": "next_page", "nextCursor": "opaque-1" },
+        { "op": "set_platform", "value": "jd" }
+      ],
+      "expect": { "params": { "scope": "self", "platform": "jd" }, "sendsRequest": true }
+    }
+  ],
+  "monthOptions": [
+    {
+      "name": "G12_null_recent12",
+      "earliestVisibleDate": null,
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": {
+        "months": [
+          "2026-10",
+          "2026-09",
+          "2026-08",
+          "2026-07",
+          "2026-06",
+          "2026-05",
+          "2026-04",
+          "2026-03",
+          "2026-02",
+          "2026-01",
+          "2025-12",
+          "2025-11"
+        ],
+        "includesAll": true
+      }
+    },
+    {
+      "name": "G12_AC_S1_73_N12_inclusive13",
+      "earliestVisibleDate": "2027-01-01",
+      "nowIso": "2028-01-15T10:00:00+08:00",
+      "expect": {
+        "months": [
+          "2028-01",
+          "2027-12",
+          "2027-11",
+          "2027-10",
+          "2027-09",
+          "2027-08",
+          "2027-07",
+          "2027-06",
+          "2027-05",
+          "2027-04",
+          "2027-03",
+          "2027-02",
+          "2027-01"
+        ],
+        "includesAll": true
+      }
+    },
+    {
+      "name": "G12_shanghai_new_year",
+      "earliestVisibleDate": "2026-12-01",
+      "nowIso": "2027-01-01T00:01:00+08:00",
+      "expect": { "months": ["2027-01", "2026-12"], "includesAll": true }
+    }
+  ],
+  "orderNumber": [
+    {
+      "name": "self_full",
+      "item": { "order_no": "3712345678901234567" },
+      "expect": { "text": "3712345678901234567", "copyable": true, "valid": true }
+    },
+    {
+      "name": "share_verbatim_0",
+      "item": { "masked_order_no": "3712****67" },
+      "expect": { "text": "3712****67", "copyable": false, "valid": true }
+    },
+    {
+      "name": "share_verbatim_1",
+      "item": { "masked_order_no": "2510****45" },
+      "expect": { "text": "2510****45", "copyable": false, "valid": true }
+    },
+    {
+      "name": "share_verbatim_2",
+      "item": { "masked_order_no": "****78" },
+      "expect": { "text": "****78", "copyable": false, "valid": true }
+    },
+    {
+      "name": "both_invalid",
+      "item": { "order_no": "3712345678901234567", "masked_order_no": "3712****67" },
+      "expect": { "text": null, "copyable": false, "valid": false }
+    },
+    {
+      "name": "neither_invalid",
+      "item": {},
+      "expect": { "text": null, "copyable": false, "valid": false }
+    }
+  ],
+  "titleImage": [
+    {
+      "name": "regular_image",
+      "item": {
+        "title": "降噪蓝牙耳机",
+        "image_url": "https://img.example.test/p/1.jpg",
+        "is_other_product": false
+      },
+      "expect": { "title": "降噪蓝牙耳机", "usePlaceholderImage": false }
+    },
+    {
+      "name": "regular_no_image",
+      "item": { "title": "降噪蓝牙耳机", "image_url": null, "is_other_product": false },
+      "expect": { "title": "降噪蓝牙耳机", "usePlaceholderImage": true }
+    },
+    {
+      "name": "other_product",
+      "item": { "title": null, "image_url": null, "is_other_product": true },
+      "expect": { "titleKey": "order_list.other_product", "usePlaceholderImage": true }
+    },
+    {
+      "name": "missing_title",
+      "item": {
+        "title": null,
+        "image_url": "https://img.example.test/p/1.jpg",
+        "is_other_product": false
+      },
+      "expect": { "title": null, "usePlaceholderImage": true }
+    }
+  ],
+  "statusText": [
+    {
+      "name": "G01_DEPOSIT_PAID",
+      "displayStatus": "DEPOSIT_PAID",
+      "expect": {
+        "labelKey": "order_status.DEPOSIT_PAID.label",
+        "hintKey": "order_status.DEPOSIT_PAID.hint",
+        "statusRaw": "DEPOSIT_PAID"
+      }
+    },
+    {
+      "name": "G01_PAID",
+      "displayStatus": "PAID",
+      "expect": {
+        "labelKey": "order_status.PAID.label",
+        "hintKey": "order_status.PAID.hint",
+        "statusRaw": "PAID"
+      }
+    },
+    {
+      "name": "G01_WAITING",
+      "displayStatus": "WAITING",
+      "expect": {
+        "labelKey": "order_status.WAITING.label",
+        "hintKey": "order_status.WAITING.hint",
+        "statusRaw": "WAITING"
+      }
+    },
+    {
+      "name": "G01_CREDITING",
+      "displayStatus": "CREDITING",
+      "expect": {
+        "labelKey": "order_status.CREDITING.label",
+        "hintKey": "order_status.CREDITING.hint",
+        "statusRaw": "CREDITING"
+      }
+    },
+    {
+      "name": "G01_RIGHTS_PENDING",
+      "displayStatus": "RIGHTS_PENDING",
+      "expect": {
+        "labelKey": "order_status.RIGHTS_PENDING.label",
+        "hintKey": "order_status.RIGHTS_PENDING.hint",
+        "statusRaw": "RIGHTS_PENDING"
+      }
+    },
+    {
+      "name": "G01_REVIEWING",
+      "displayStatus": "REVIEWING",
+      "expect": {
+        "labelKey": "order_status.REVIEWING.label",
+        "hintKey": "order_status.REVIEWING.hint",
+        "statusRaw": "REVIEWING"
+      }
+    },
+    {
+      "name": "G01_NO_REBATE",
+      "displayStatus": "NO_REBATE",
+      "expect": {
+        "labelKey": "order_status.NO_REBATE.label",
+        "hintKey": null,
+        "statusRaw": "NO_REBATE"
+      }
+    },
+    {
+      "name": "G01_G03_CREDITED",
+      "displayStatus": "CREDITED",
+      "expect": {
+        "labelKey": "order_status.CREDITED.label",
+        "hintKey": null,
+        "statusRaw": "CREDITED"
+      }
+    },
+    {
+      "name": "G01_G03_CREDITED_PART_CLAWED",
+      "displayStatus": "CREDITED_PART_CLAWED",
+      "expect": {
+        "labelKey": "order_status.CREDITED_PART_CLAWED.label",
+        "hintKey": null,
+        "statusRaw": "CREDITED_PART_CLAWED"
+      }
+    },
+    {
+      "name": "G01_INVALID",
+      "displayStatus": "INVALID",
+      "expect": { "labelKey": "order_status.INVALID.label", "statusRaw": "INVALID" }
+    },
+    {
+      "name": "G01_CLAWED_BACK",
+      "displayStatus": "CLAWED_BACK",
+      "expect": { "labelKey": "order_status.CLAWED_BACK.label", "statusRaw": "CLAWED_BACK" }
+    },
+    {
+      "name": "G01_unknown_FUTURE_STATUS",
+      "displayStatus": "FUTURE_STATUS",
+      "expect": {
+        "labelKey": "order_status.UNKNOWN.label",
+        "hintKey": "order_status.UNKNOWN.hint",
+        "statusRaw": "UNKNOWN"
+      }
+    },
+    {
+      "name": "G01_unknown_paid",
+      "displayStatus": "paid",
+      "expect": {
+        "labelKey": "order_status.UNKNOWN.label",
+        "hintKey": "order_status.UNKNOWN.hint",
+        "statusRaw": "UNKNOWN"
+      }
+    },
+    {
+      "name": "G01_unknown_empty",
+      "displayStatus": "",
+      "expect": {
+        "labelKey": "order_status.UNKNOWN.label",
+        "hintKey": "order_status.UNKNOWN.hint",
+        "statusRaw": "UNKNOWN"
+      }
+    }
+  ],
+  "amountCells": [
+    {
+      "name": "G14_DEPOSIT_PAID_self_value",
+      "item": {
+        "display_status": "DEPOSIT_PAID",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "labelKey": "order_list.deposit_amount", "fen": 3000 }, "right": null }
+    },
+    {
+      "name": "G14_DEPOSIT_PAID_self_null",
+      "item": {
+        "display_status": "DEPOSIT_PAID",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": null,
+        "clawback_fen": null,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "labelKey": "order_list.deposit_amount", "fen": null }, "right": null }
+    },
+    {
+      "name": "G14_DEPOSIT_PAID_share_value",
+      "item": {
+        "display_status": "DEPOSIT_PAID",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "labelKey": "order_list.deposit_amount", "fen": 3000 }, "right": null }
+    },
+    {
+      "name": "G14_DEPOSIT_PAID_share_null",
+      "item": {
+        "display_status": "DEPOSIT_PAID",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": null,
+        "clawback_fen": null,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "labelKey": "order_list.deposit_amount", "fen": null }, "right": null }
+    },
+
+    {
+      "name": "G14_G02_PAID_self_value",
+      "item": {
+        "display_status": "PAID",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_G02_PAID_self_null",
+      "item": {
+        "display_status": "PAID",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_G02_PAID_share_value",
+      "item": {
+        "display_status": "PAID",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_G02_PAID_share_null",
+      "item": {
+        "display_status": "PAID",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+
+    {
+      "name": "G14_WAITING_self_value",
+      "item": {
+        "display_status": "WAITING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_WAITING_self_null",
+      "item": {
+        "display_status": "WAITING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_WAITING_share_value",
+      "item": {
+        "display_status": "WAITING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_WAITING_share_null",
+      "item": {
+        "display_status": "WAITING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+
+    {
+      "name": "G14_CREDITING_self_value",
+      "item": {
+        "display_status": "CREDITING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_CREDITING_self_null",
+      "item": {
+        "display_status": "CREDITING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_CREDITING_share_value",
+      "item": {
+        "display_status": "CREDITING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_CREDITING_share_null",
+      "item": {
+        "display_status": "CREDITING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+
+    {
+      "name": "G14_RIGHTS_PENDING_self_value",
+      "item": {
+        "display_status": "RIGHTS_PENDING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_RIGHTS_PENDING_self_null",
+      "item": {
+        "display_status": "RIGHTS_PENDING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_RIGHTS_PENDING_share_value",
+      "item": {
+        "display_status": "RIGHTS_PENDING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_RIGHTS_PENDING_share_null",
+      "item": {
+        "display_status": "RIGHTS_PENDING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+
+    {
+      "name": "G14_REVIEWING_self_value",
+      "item": {
+        "display_status": "REVIEWING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_REVIEWING_self_null",
+      "item": {
+        "display_status": "REVIEWING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_REVIEWING_share_value",
+      "item": {
+        "display_status": "REVIEWING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 450 } }
+    },
+    {
+      "name": "G14_REVIEWING_share_null",
+      "item": {
+        "display_status": "REVIEWING",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+
+    {
+      "name": "G14_NO_REBATE_self_value",
+      "item": {
+        "display_status": "NO_REBATE",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": null }
+    },
+    {
+      "name": "G14_NO_REBATE_self_null",
+      "item": {
+        "display_status": "NO_REBATE",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": null,
+        "clawback_fen": null,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": null }
+    },
+    {
+      "name": "G14_NO_REBATE_share_value",
+      "item": {
+        "display_status": "NO_REBATE",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": null }
+    },
+    {
+      "name": "G14_NO_REBATE_share_null",
+      "item": {
+        "display_status": "NO_REBATE",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": null,
+        "clawback_fen": null,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": null }
+    },
+
+    {
+      "name": "G14_CREDITED_self_value",
+      "item": {
+        "display_status": "CREDITED",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 310 } }
+    },
+    {
+      "name": "G14_CREDITED_self_null",
+      "item": {
+        "display_status": "CREDITED",
+        "pay_amount_fen": null,
+        "est_rebate_fen": 450,
+        "actual_fen": null,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_CREDITED_share_value",
+      "item": {
+        "display_status": "CREDITED",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 310 } }
+    },
+    {
+      "name": "G14_CREDITED_share_null",
+      "item": {
+        "display_status": "CREDITED",
+        "pay_amount_fen": null,
+        "est_rebate_fen": 450,
+        "actual_fen": null,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+
+    {
+      "name": "G14_CREDITED_PART_CLAWED_self_value",
+      "item": {
+        "display_status": "CREDITED_PART_CLAWED",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 310 } }
+    },
+    {
+      "name": "G14_CREDITED_PART_CLAWED_self_null",
+      "item": {
+        "display_status": "CREDITED_PART_CLAWED",
+        "pay_amount_fen": null,
+        "est_rebate_fen": 450,
+        "actual_fen": null,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_CREDITED_PART_CLAWED_share_value",
+      "item": {
+        "display_status": "CREDITED_PART_CLAWED",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 310 } }
+    },
+    {
+      "name": "G14_CREDITED_PART_CLAWED_share_null",
+      "item": {
+        "display_status": "CREDITED_PART_CLAWED",
+        "pay_amount_fen": null,
+        "est_rebate_fen": 450,
+        "actual_fen": null,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null } }
+    },
+
+    {
+      "name": "G14_INVALID_self_value",
+      "item": {
+        "display_status": "INVALID",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 0, "fixedZero": true } }
+    },
+    {
+      "name": "G14_INVALID_self_null",
+      "item": {
+        "display_status": "INVALID",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": null,
+        "clawback_fen": null,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": 0, "fixedZero": true } }
+    },
+    {
+      "name": "G14_INVALID_share_value",
+      "item": {
+        "display_status": "INVALID",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 0, "fixedZero": true } }
+    },
+    {
+      "name": "G14_INVALID_share_null",
+      "item": {
+        "display_status": "INVALID",
+        "pay_amount_fen": null,
+        "est_rebate_fen": null,
+        "actual_fen": null,
+        "clawback_fen": null,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": 0, "fixedZero": true } }
+    },
+
+    {
+      "name": "G14_CLAWED_BACK_self_value",
+      "item": {
+        "display_status": "CLAWED_BACK",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 140, "sign": "minus" } }
+    },
+    {
+      "name": "G14_CLAWED_BACK_self_null",
+      "item": {
+        "display_status": "CLAWED_BACK",
+        "pay_amount_fen": null,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": null,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null, "sign": "minus" } }
+    },
+    {
+      "name": "G14_CLAWED_BACK_share_value",
+      "item": {
+        "display_status": "CLAWED_BACK",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 3000 }, "right": { "fen": 140, "sign": "minus" } }
+    },
+    {
+      "name": "G14_CLAWED_BACK_share_null",
+      "item": {
+        "display_status": "CLAWED_BACK",
+        "pay_amount_fen": null,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": null,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": null }, "right": { "fen": null, "sign": "minus" } }
+    },
+
+    {
+      "name": "G01_unknown_no_right",
+      "item": { "display_status": "FUTURE_STATUS", "pay_amount_fen": 3000, "est_rebate_fen": 450 },
+      "expect": { "right": null }
+    },
+    {
+      "name": "G14_G21_WAITING_self",
+      "item": {
+        "display_status": "WAITING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "masked": true,
+      "expect": { "left": { "fen": 3000, "maskedText": null }, "right": { "maskedText": "****" } }
+    },
+    {
+      "name": "G14_G21_WAITING_share",
+      "item": {
+        "display_status": "WAITING",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "masked": true,
+      "expect": { "left": { "fen": 3000, "maskedText": null }, "right": { "maskedText": "****" } }
+    },
+    {
+      "name": "G14_G21_CREDITED_self",
+      "item": {
+        "display_status": "CREDITED",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "masked": true,
+      "expect": { "left": { "fen": 3000, "maskedText": null }, "right": { "maskedText": "****" } }
+    },
+    {
+      "name": "G14_G21_CREDITED_share",
+      "item": {
+        "display_status": "CREDITED",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "masked_order_no": "3712****67"
+      },
+      "masked": true,
+      "expect": { "left": { "fen": 3000, "maskedText": null }, "right": { "maskedText": "****" } }
+    },
+    {
+      "name": "G14_G21_CLAWED_BACK_self",
+      "item": {
+        "display_status": "CLAWED_BACK",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "masked": true,
+      "expect": { "left": { "fen": 3000, "maskedText": null }, "right": { "maskedText": "****" } }
+    },
+    {
+      "name": "G14_G21_DEPOSIT_PAID_self",
+      "item": {
+        "display_status": "DEPOSIT_PAID",
+        "pay_amount_fen": 3000,
+        "est_rebate_fen": 450,
+        "actual_fen": 310,
+        "clawback_fen": 140,
+        "order_no": "3712345678901234567"
+      },
+      "masked": true,
+      "expect": { "left": { "fen": 3000, "maskedText": null }, "right": null }
+    },
+    {
+      "name": "G14_list_missing_actual_no_est_fallback",
+      "item": {
+        "display_status": "CREDITED",
+        "pay_amount_fen": 2990,
+        "est_rebate_fen": 450,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "left": { "fen": 2990 }, "right": { "fen": null } }
+    },
+    {
+      "name": "G14_list_missing_clawback_no_est_fallback",
+      "item": {
+        "display_status": "CLAWED_BACK",
+        "pay_amount_fen": 2990,
+        "est_rebate_fen": 450,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "left": { "fen": 2990 }, "right": { "fen": null, "sign": "minus" } }
+    }
+  ],
+  "creditPeriod": [
+    {
+      "name": "G01_october_received_november_credit",
+      "displayStatus": "WAITING",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": "order_status.WAITING.hint", "monthText": "11 月" }
+    },
+    {
+      "name": "G01_cross_year",
+      "displayStatus": "WAITING",
+      "period": "2027-01",
+      "nowIso": "2026-12-09T10:00:00+08:00",
+      "expect": { "textKey": "order_status.WAITING.hint", "monthText": "2027 年 1 月" }
+    },
+    {
+      "name": "G01_shanghai_year_boundary",
+      "displayStatus": "WAITING",
+      "period": "2027-01",
+      "nowIso": "2027-01-01T00:01:00+08:00",
+      "expect": { "textKey": "order_status.WAITING.hint", "monthText": "1 月" }
+    },
+    {
+      "name": "waiting_null",
+      "displayStatus": "WAITING",
+      "period": null,
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "DEPOSIT_PAID_no_month",
+      "displayStatus": "DEPOSIT_PAID",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "G01_G05_PAID_no_month",
+      "displayStatus": "PAID",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": "order_status.PAID.hint", "monthText": null }
+    },
+    {
+      "name": "CREDITING_no_month",
+      "displayStatus": "CREDITING",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "RIGHTS_PENDING_no_month",
+      "displayStatus": "RIGHTS_PENDING",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "REVIEWING_no_month",
+      "displayStatus": "REVIEWING",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "NO_REBATE_no_month",
+      "displayStatus": "NO_REBATE",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "CREDITED_no_month",
+      "displayStatus": "CREDITED",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "CREDITED_PART_CLAWED_no_month",
+      "displayStatus": "CREDITED_PART_CLAWED",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "INVALID_no_month",
+      "displayStatus": "INVALID",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "CLAWED_BACK_no_month",
+      "displayStatus": "CLAWED_BACK",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    },
+    {
+      "name": "G01_G05_paid_null_period",
+      "displayStatus": "PAID",
+      "period": null,
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": "order_status.PAID.hint", "monthText": null }
+    },
+    {
+      "name": "unknown_no_month",
+      "displayStatus": "FUTURE_STATUS",
+      "period": "2026-11",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "textKey": null, "monthText": null }
+    }
+  ],
+  "timeline": [
+    {
+      "name": "G01_G16_openapi_normal_four",
+      "displayStatus": "WAITING",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "nodes": [
+        { "node": "paid", "at": "2026-10-02T09:31:00+08:00", "period": null },
+        { "node": "received", "at": "2026-10-05T12:00:00+08:00", "period": null },
+        { "node": "credit_expected", "at": null, "period": "2026-11" },
+        { "node": "credited", "at": null, "period": null }
+      ],
+      "expect": {
+        "rows": [
+          { "time": "2026-10-02 09:31", "grey": false },
+          { "time": "2026-10-05 12:00", "grey": false },
+          { "time": null, "grey": true, "monthText": "11 月" },
+          { "time": null, "grey": true }
+        ]
+      }
+    },
+    {
+      "name": "G01_G16_presale_deposit_time",
+      "displayStatus": "WAITING",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "nodes": [
+        { "node": "deposit_paid", "at": "2026-10-01T08:00:00+08:00", "period": null },
+        { "node": "final_paid", "at": "2026-10-02T09:31:00+08:00", "period": null },
+        { "node": "received", "at": "2026-10-05T12:00:00+08:00", "period": null },
+        { "node": "credit_expected", "at": null, "period": "2026-11" },
+        { "node": "credited", "at": null, "period": null }
+      ],
+      "expect": {
+        "rows": [
+          { "labelKey": "order_timeline.deposit_paid", "time": "2026-10-01 08:00", "grey": false },
+          { "labelKey": "order_timeline.final_paid", "time": "2026-10-02 09:31", "grey": false },
+          { "time": "2026-10-05 12:00", "grey": false },
+          { "time": null, "grey": true, "monthText": "11 月" },
+          { "time": null, "grey": true }
+        ]
+      }
+    },
+    {
+      "name": "G01_G16_presale_deposit_fallback",
+      "displayStatus": "WAITING",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "nodes": [
+        { "node": "deposit_paid", "at": null, "period": null },
+        { "node": "final_paid", "at": "2026-10-02T09:31:00+08:00", "period": null },
+        { "node": "received", "at": "2026-10-05T12:00:00+08:00", "period": null },
+        { "node": "credit_expected", "at": null, "period": "2026-11" },
+        { "node": "credited", "at": null, "period": null }
+      ],
+      "expect": {
+        "rows": [
+          { "labelKey": "order_timeline.deposit_paid", "time": null, "grey": true },
+          { "labelKey": "order_timeline.final_paid", "time": "2026-10-02 09:31", "grey": false },
+          { "time": "2026-10-05 12:00", "grey": false },
+          { "time": null, "grey": true, "monthText": "11 月" },
+          { "time": null, "grey": true }
+        ]
+      }
+    },
+    {
+      "name": "G01_G16_INVALID_appended",
+      "displayStatus": "INVALID",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "nodes": [
+        { "node": "paid", "at": "2026-10-02T09:31:00+08:00", "period": null },
+        { "node": "received", "at": "2026-10-05T12:00:00+08:00", "period": null },
+        { "node": "credit_expected", "at": null, "period": "2026-11" },
+        { "node": "credited", "at": null, "period": null },
+        { "node": "invalid", "at": "2026-10-08T15:00:00+08:00", "period": null }
+      ],
+      "expect": {
+        "rows": [
+          { "time": "2026-10-02 09:31", "grey": false },
+          { "time": "2026-10-05 12:00", "grey": false },
+          { "time": null, "grey": true, "monthText": null },
+          { "time": null, "grey": true },
+          { "time": "2026-10-08 15:00", "grey": false }
+        ]
+      }
+    },
+    {
+      "name": "G01_G16_CLAWED_BACK_appended",
+      "displayStatus": "CLAWED_BACK",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "nodes": [
+        { "node": "paid", "at": "2026-10-02T09:31:00+08:00", "period": null },
+        { "node": "received", "at": "2026-10-05T12:00:00+08:00", "period": null },
+        { "node": "credit_expected", "at": null, "period": "2026-11" },
+        { "node": "credited", "at": null, "period": null },
+        { "node": "clawed_back", "at": "2026-10-08T15:00:00+08:00", "period": null }
+      ],
+      "expect": {
+        "rows": [
+          { "time": "2026-10-02 09:31", "grey": false },
+          { "time": "2026-10-05 12:00", "grey": false },
+          { "time": null, "grey": true, "monthText": null },
+          { "time": null, "grey": true },
+          { "time": "2026-10-08 15:00", "grey": false }
+        ]
+      }
+    },
+    {
+      "name": "G01_G16_CREDITED_PART_CLAWED_appended",
+      "displayStatus": "CREDITED_PART_CLAWED",
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "nodes": [
+        { "node": "paid", "at": "2026-10-02T09:31:00+08:00", "period": null },
+        { "node": "received", "at": "2026-10-05T12:00:00+08:00", "period": null },
+        { "node": "credit_expected", "at": null, "period": "2026-11" },
+        { "node": "credited", "at": null, "period": null },
+        { "node": "part_clawed_back", "at": "2026-10-08T15:00:00+08:00", "period": null }
+      ],
+      "expect": {
+        "rows": [
+          { "time": "2026-10-02 09:31", "grey": false },
+          { "time": "2026-10-05 12:00", "grey": false },
+          { "time": null, "grey": true, "monthText": null },
+          { "time": null, "grey": true },
+          { "time": "2026-10-08 15:00", "grey": false }
+        ]
+      }
+    },
+    {
+      "name": "G01_G16_credit_expected_WAITING_null",
+      "displayStatus": "WAITING",
+      "nodes": [{ "node": "credit_expected", "at": null, "period": null }],
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "rows": [{ "time": null, "grey": true, "monthText": null }] }
+    },
+    {
+      "name": "G01_G16_credit_expected_WAITING_2027-01",
+      "displayStatus": "WAITING",
+      "nodes": [{ "node": "credit_expected", "at": null, "period": "2027-01" }],
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "rows": [{ "time": null, "grey": true, "monthText": "2027 年 1 月" }] }
+    },
+    {
+      "name": "G01_G16_credit_expected_CREDITING_2026-11",
+      "displayStatus": "CREDITING",
+      "nodes": [{ "node": "credit_expected", "at": null, "period": "2026-11" }],
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "rows": [{ "time": null, "grey": true, "monthText": null }] }
+    },
+    {
+      "name": "G01_G16_credit_expected_PAID_2026-11",
+      "displayStatus": "PAID",
+      "nodes": [{ "node": "credit_expected", "at": null, "period": "2026-11" }],
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "rows": [{ "time": null, "grey": true, "monthText": null }] }
+    },
+    {
+      "name": "G01_G16_credit_expected_REVIEWING_2026-11",
+      "displayStatus": "REVIEWING",
+      "nodes": [{ "node": "credit_expected", "at": null, "period": "2026-11" }],
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "rows": [{ "time": null, "grey": true, "monthText": null }] }
+    },
+    {
+      "name": "G01_G16_credit_expected_RIGHTS_PENDING_2026-11",
+      "displayStatus": "RIGHTS_PENDING",
+      "nodes": [{ "node": "credit_expected", "at": null, "period": "2026-11" }],
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": { "rows": [{ "time": null, "grey": true, "monthText": null }] }
+    },
+    {
+      "name": "G01_unknown_node_ignored_order_preserved",
+      "displayStatus": "PAID",
+      "nodes": [
+        { "node": "final_paid", "at": "2026-10-02T09:31:00+08:00", "period": null },
+        { "node": "future_node", "at": "2026-10-03T10:00:00+08:00", "period": null },
+        { "node": "deposit_paid", "at": null, "period": null }
+      ],
+      "nowIso": "2026-10-09T10:00:00+08:00",
+      "expect": {
+        "rows": [
+          { "labelKey": "order_timeline.final_paid", "time": "2026-10-02 09:31", "grey": false },
+          { "labelKey": "order_timeline.deposit_paid", "time": null, "grey": true }
+        ]
+      }
+    }
+  ],
+  "whyNoRebate": [
+    {
+      "name": "G01_AC_S1_27_REFUND",
+      "detail": { "display_status": "INVALID", "reason": "REFUND", "is_price_compare": false },
+      "expect": {
+        "show": true,
+        "titleKey": "order_reason.REFUND.title",
+        "descKey": "order_reason.REFUND.desc"
+      }
+    },
+    {
+      "name": "G01_AC_S1_27_RIGHTS",
+      "detail": { "display_status": "INVALID", "reason": "RIGHTS", "is_price_compare": false },
+      "expect": {
+        "show": true,
+        "titleKey": "order_reason.RIGHTS.title",
+        "descKey": "order_reason.RIGHTS.desc"
+      }
+    },
+    {
+      "name": "G01_AC_S1_27_BLACKLIST",
+      "detail": { "display_status": "INVALID", "reason": "BLACKLIST", "is_price_compare": false },
+      "expect": {
+        "show": true,
+        "titleKey": "order_reason.BLACKLIST.title",
+        "descKey": "order_reason.BLACKLIST.desc"
+      }
+    },
+    {
+      "name": "G01_G04_AC_S1_27_PUNISH",
+      "detail": { "display_status": "INVALID", "reason": "PUNISH", "is_price_compare": false },
+      "expect": {
+        "show": true,
+        "titleKey": "order_reason.PUNISH.title",
+        "descKey": "order_reason.PUNISH.desc"
+      }
+    },
+    {
+      "name": "G01_AC_S1_27_COMMISSION_ZERO",
+      "detail": {
+        "display_status": "INVALID",
+        "reason": "COMMISSION_ZERO",
+        "is_price_compare": false
+      },
+      "expect": {
+        "show": true,
+        "titleKey": "order_reason.COMMISSION_ZERO.title",
+        "descKey": "order_reason.COMMISSION_ZERO.desc"
+      }
+    },
+    {
+      "name": "G01_G04_clawed_punish",
+      "detail": { "display_status": "CLAWED_BACK", "reason": "PUNISH", "is_price_compare": false },
+      "expect": {
+        "show": true,
+        "titleKey": "order_reason.PUNISH.title",
+        "descKey": "order_reason.PUNISH.desc"
+      }
+    },
+    {
+      "name": "price_compare_true",
+      "detail": { "display_status": "NO_REBATE", "reason": null, "is_price_compare": true },
+      "expect": { "show": true, "hintKey": "order.price_compare.hint" }
+    },
+    {
+      "name": "price_compare_false",
+      "detail": { "display_status": "NO_REBATE", "reason": null, "is_price_compare": false },
+      "expect": { "show": false }
+    },
+    {
+      "name": "price_compare_null",
+      "detail": { "display_status": "NO_REBATE", "reason": null, "is_price_compare": null },
+      "expect": { "show": false }
+    },
+    {
+      "name": "G01_G03_diff_PART_REFUND",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PART_REFUND",
+        "is_price_compare": false
+      },
+      "expect": { "show": true, "titleKey": "order_reason.PART_REFUND.title", "descKey": null }
+    },
+    {
+      "name": "G01_G03_diff_PRICE_COMPARE",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "expect": { "show": true, "titleKey": "order_reason.PRICE_COMPARE.title", "descKey": null }
+    },
+    {
+      "name": "G01_G03_diff_PRICE_PROTECT",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_PROTECT",
+        "is_price_compare": false
+      },
+      "expect": { "show": true, "titleKey": "order_reason.PRICE_PROTECT.title", "descKey": null }
+    },
+    {
+      "name": "G01_G03_diff_SETTLE_DIFF",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "SETTLE_DIFF",
+        "is_price_compare": false
+      },
+      "expect": { "show": true, "titleKey": "order_reason.SETTLE_DIFF.title", "descKey": null }
+    },
+    {
+      "name": "G15_unknown_INVALID",
+      "detail": {
+        "display_status": "INVALID",
+        "reason": "FUTURE_REASON",
+        "is_price_compare": false
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "G15_unknown_CLAWED_BACK",
+      "detail": {
+        "display_status": "CLAWED_BACK",
+        "reason": "FUTURE_REASON",
+        "is_price_compare": false
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "G15_unknown_CREDITED",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "FUTURE_REASON",
+        "is_price_compare": false
+      },
+      "expect": { "show": false }
+    }
+  ],
+  "priceCompareEntry": [
+    {
+      "name": "G03_reason_configured",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": {
+        "price_compare": { "route": "Help", "params": { "article_id": "price-compare" } }
+      },
+      "expect": { "show": true, "route": "Help", "params": { "article_id": "price-compare" } }
+    },
+    {
+      "name": "missing_config",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": null,
+      "expect": { "show": false }
+    },
+    {
+      "name": "missing_key",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": {},
+      "expect": { "show": false }
+    },
+    {
+      "name": "no_rebate_true",
+      "detail": { "display_status": "NO_REBATE", "reason": null, "is_price_compare": true },
+      "helpLinks": {
+        "price_compare": { "route": "Help", "params": { "article_id": "price-compare" } }
+      },
+      "expect": { "show": true, "route": "Help", "params": { "article_id": "price-compare" } }
+    },
+    {
+      "name": "no_rebate_null",
+      "detail": { "display_status": "NO_REBATE", "reason": null, "is_price_compare": null },
+      "helpLinks": {
+        "price_compare": { "route": "Help", "params": { "article_id": "price-compare" } }
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "no_rebate_false",
+      "detail": { "display_status": "NO_REBATE", "reason": null, "is_price_compare": false },
+      "helpLinks": {
+        "price_compare": { "route": "Help", "params": { "article_id": "price-compare" } }
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "G03_reason_with_null_flag",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": null
+      },
+      "helpLinks": {
+        "price_compare": { "route": "Help", "params": { "article_id": "price-compare" } }
+      },
+      "expect": { "show": true, "route": "Help", "params": { "article_id": "price-compare" } }
+    },
+    {
+      "name": "unknown_route",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": {
+        "price_compare": { "route": "MissingRoute", "params": { "article_id": "price-compare" } }
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "bad_param_type",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": { "price_compare": { "route": "Help", "params": { "article_id": 42 } } },
+      "expect": { "show": false }
+    },
+    {
+      "name": "extra_param",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": {
+        "price_compare": {
+          "route": "Help",
+          "params": { "article_id": "price-compare", "order_id": "O1" }
+        }
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "empty_article",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": { "price_compare": { "route": "Help", "params": { "article_id": "" } } },
+      "expect": { "show": false }
+    },
+    {
+      "name": "missing_article",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": { "price_compare": { "route": "Help", "params": {} } },
+      "expect": { "show": false }
+    },
+    {
+      "name": "registered_non_help_target",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "is_price_compare": false
+      },
+      "helpLinks": { "price_compare": { "route": "Withdraw", "params": {} } },
+      "expect": { "show": false }
+    }
+  ],
+  "detailActions": [
+    {
+      "name": "G09_clawed_punish",
+      "detail": {
+        "display_status": "CLAWED_BACK",
+        "reason": "PUNISH",
+        "reason_action": ["CONTACT_CS"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          { "actionRaw": "contact_cs", "route": "Help", "primary": true },
+          { "actionRaw": "ledger", "route": "Ledger", "primary": false }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G09_share_clawed_punish",
+      "detail": {
+        "display_status": "CLAWED_BACK",
+        "reason": "PUNISH",
+        "reason_action": ["CONTACT_CS"],
+        "appeal_pending": false,
+        "masked_order_no": "3712****67"
+      },
+      "expect": {
+        "buttons": [
+          { "actionRaw": "contact_cs", "route": "Help", "primary": true },
+          { "actionRaw": "ledger", "route": "Ledger", "primary": false }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "credited_withdraw",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": null,
+        "reason_action": [],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "withdraw", "route": "Withdraw", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "part_clawed_withdraw",
+      "detail": {
+        "display_status": "CREDITED_PART_CLAWED",
+        "reason": "PART_REFUND",
+        "reason_action": [],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "withdraw", "route": "Withdraw", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "clawed_ledger",
+      "detail": {
+        "display_status": "CLAWED_BACK",
+        "reason": "REFUND",
+        "reason_action": [],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "ledger", "route": "Ledger", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G08_blacklist_appeal",
+      "detail": {
+        "display_status": "INVALID",
+        "reason": "BLACKLIST",
+        "reason_action": ["APPEAL"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "appeal", "route": "Appeal", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G09_commission_zero",
+      "detail": {
+        "display_status": "INVALID",
+        "reason": "COMMISSION_ZERO",
+        "reason_action": ["CONTACT_CS"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "contact_cs", "route": "Help", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G09_reauth_route",
+      "detail": {
+        "display_status": "PAID",
+        "reason": null,
+        "reason_action": ["REAUTH"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "reauth", "route": "AuthManage", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "claim_action_route",
+      "detail": {
+        "display_status": "PAID",
+        "reason": null,
+        "reason_action": ["CLAIM"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "claim", "route": "FindOrder", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G09_unknown_ignored",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": null,
+        "reason_action": ["FUTURE_ACTION"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "withdraw", "route": "Withdraw", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G08_G09_first_known_primary",
+      "detail": {
+        "display_status": "INVALID",
+        "reason": "BLACKLIST",
+        "reason_action": ["FUTURE_ACTION", "APPEAL"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "appeal", "route": "Appeal", "primary": true }],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G09_max_two",
+      "detail": {
+        "display_status": "CREDITED",
+        "reason": null,
+        "reason_action": ["CONTACT_CS", "APPEAL", "REAUTH"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          { "actionRaw": "contact_cs", "route": "Help", "primary": true },
+          { "actionRaw": "appeal", "route": "Appeal", "primary": false }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G08_appeal_pending_block",
+      "detail": {
+        "display_status": "INVALID",
+        "reason": "BLACKLIST",
+        "reason_action": ["APPEAL"],
+        "appeal_pending": true,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [{ "actionRaw": "appeal", "route": "Appeal", "primary": true }],
+        "appealPendingBlock": true
+      }
+    },
+    {
+      "name": "refund_no_buttons",
+      "detail": {
+        "display_status": "INVALID",
+        "reason": "REFUND",
+        "reason_action": [],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "buttons": [], "appealPendingBlock": false }
+    },
+    {
+      "name": "G_O08_unknown_empty",
+      "detail": {
+        "display_status": "FUTURE_STATUS",
+        "reason": "BLACKLIST",
+        "reason_action": [],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G_O08_unknown_claim",
+      "detail": {
+        "display_status": "FUTURE_STATUS",
+        "reason": "BLACKLIST",
+        "reason_action": ["CLAIM"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G_O08_unknown_reauth",
+      "detail": {
+        "display_status": "FUTURE_STATUS",
+        "reason": "BLACKLIST",
+        "reason_action": ["REAUTH"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G_O08_unknown_appeal",
+      "detail": {
+        "display_status": "FUTURE_STATUS",
+        "reason": "BLACKLIST",
+        "reason_action": ["APPEAL"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G_O08_unknown_contact",
+      "detail": {
+        "display_status": "FUTURE_STATUS",
+        "reason": "BLACKLIST",
+        "reason_action": ["CONTACT_CS"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G_O08_unknown_all_pending",
+      "detail": {
+        "display_status": "FUTURE_STATUS",
+        "reason": "BLACKLIST",
+        "reason_action": ["CLAIM", "APPEAL", "REAUTH", "CONTACT_CS", "FUTURE_ACTION"],
+        "appeal_pending": true,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": true
+      }
+    },
+    {
+      "name": "G_O08_unknown_share",
+      "detail": {
+        "display_status": "FUTURE_STATUS",
+        "reason": "BLACKLIST",
+        "reason_action": ["APPEAL"],
+        "appeal_pending": true,
+        "masked_order_no": "3712****67"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": true
+      }
+    },
+    {
+      "name": "G_O08_unknown_literal",
+      "detail": {
+        "display_status": "UNKNOWN",
+        "reason": "BLACKLIST",
+        "reason_action": ["APPEAL"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G_O08_unknown_case",
+      "detail": {
+        "display_status": "credited",
+        "reason": "BLACKLIST",
+        "reason_action": ["APPEAL"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    },
+    {
+      "name": "G_O08_unknown_blank",
+      "detail": {
+        "display_status": "",
+        "reason": "BLACKLIST",
+        "reason_action": ["APPEAL"],
+        "appeal_pending": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "buttons": [
+          {
+            "actionRaw": "ledger",
+            "route": "Ledger",
+            "primary": true
+          }
+        ],
+        "appealPendingBlock": false
+      }
+    }
+  ],
+  "viewProduct": [
+    {
+      "name": "AC_S1_104_O7",
+      "detail": {
+        "platform": "taobao",
+        "product_key": "tb:9007",
+        "is_other_product": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": {
+        "show": true,
+        "route": "ProductDetail",
+        "params": { "platform": "taobao", "product_key": "tb:9007" }
+      }
+    },
+    {
+      "name": "AC_S1_104_O8",
+      "detail": {
+        "platform": "taobao",
+        "product_key": null,
+        "is_other_product": false,
+        "order_no": "3712345678901234567"
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "AC_S1_104_O9",
+      "detail": {
+        "platform": "taobao",
+        "product_key": "tb:9009",
+        "is_other_product": false,
+        "masked_order_no": "3712****67"
+      },
+      "expect": {
+        "show": true,
+        "route": "ProductDetail",
+        "params": { "platform": "taobao", "product_key": "tb:9009" }
+      }
+    },
+    {
+      "name": "AC_S1_104_O10",
+      "detail": {
+        "platform": "taobao",
+        "product_key": null,
+        "is_other_product": true,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "show": false }
+    },
+    {
+      "name": "other_product_never_exposes_key",
+      "detail": {
+        "platform": "taobao",
+        "product_key": "tb:9001",
+        "is_other_product": true,
+        "masked_order_no": "3712****67"
+      },
+      "expect": { "show": false }
+    }
+  ],
+  "pendingTracks": [
+    {
+      "name": "G22_ATTR21_multiple_platforms",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        },
+        {
+          "link_id": "L2",
+          "attempt_id": "a2",
+          "platform": "jd",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": false,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "granted",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          },
+          {
+            "platform": "jd",
+            "attemptId": "a2",
+            "linkId": "L2",
+            "claimEntry": false,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_ATTR21_dismissed_hidden",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        },
+        {
+          "link_id": "L2",
+          "attempt_id": "a2",
+          "platform": "jd",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": false,
+          "dismissed": true
+        }
+      ],
+      "session": "member",
+      "notification": "granted",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_same_platform_first_response_item",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": false,
+          "dismissed": false
+        },
+        {
+          "link_id": "L4",
+          "attempt_id": "a4",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T11:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "granted",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": false,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_empty_response",
+      "items": [],
+      "session": "member",
+      "notification": "not_determined",
+      "requestedBefore": false,
+      "expect": { "cards": [] }
+    },
+
+    {
+      "name": "G22_member_not_determined_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "not_determined",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_member_not_determined_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "not_determined",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_member_granted_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "granted",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_member_granted_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "granted",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_member_denied_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "denied",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_member_denied_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "denied",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_member_system_default_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "system_default",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_member_system_default_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "member",
+      "notification": "system_default",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+
+    {
+      "name": "G22_guest_not_determined_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "not_determined",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_guest_not_determined_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "not_determined",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_guest_granted_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "granted",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_guest_granted_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "granted",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_guest_denied_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "denied",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_guest_denied_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "denied",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_guest_system_default_never_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "system_default",
+      "requestedBefore": false,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "G22_guest_system_default_requested",
+      "items": [
+        {
+          "link_id": "L3",
+          "attempt_id": "a3",
+          "platform": "taobao",
+          "jumped_at": "2026-10-02T10:00:00+08:00",
+          "show_claim_entry": true,
+          "dismissed": false
+        }
+      ],
+      "session": "guest",
+      "notification": "system_default",
+      "requestedBefore": true,
+      "expect": {
+        "cards": [
+          {
+            "platform": "taobao",
+            "attemptId": "a3",
+            "linkId": "L3",
+            "claimEntry": true,
+            "notificationRow": false
+          }
+        ]
+      }
+    }
+  ],
+  "pendingDismiss": [
+    {
+      "name": "ok",
+      "card": { "link_id": "L2", "attempt_id": "a2" },
+      "outcome": { "kind": "ok" },
+      "expect": {
+        "request": {
+          "method": "POST",
+          "path": "/v1/orders/pending-tracks/L2/dismiss",
+          "body": { "attempt_id": "a2" }
+        },
+        "actionRaw": "hide"
+      }
+    },
+    {
+      "name": "20001_refetch",
+      "card": { "link_id": "L2", "attempt_id": "a2" },
+      "outcome": { "kind": "error", "code": 20001 },
+      "expect": {
+        "request": {
+          "method": "POST",
+          "path": "/v1/orders/pending-tracks/L2/dismiss",
+          "body": { "attempt_id": "a2" }
+        },
+        "actionRaw": "refetch"
+      }
+    },
+    {
+      "name": "transport_keeps_card",
+      "card": { "link_id": "L2", "attempt_id": "a2" },
+      "outcome": { "kind": "transport" },
+      "expect": {
+        "request": {
+          "method": "POST",
+          "path": "/v1/orders/pending-tracks/L2/dismiss",
+          "body": { "attempt_id": "a2" }
+        },
+        "actionRaw": "keep_and_toast"
+      }
+    },
+    {
+      "name": "42901_seconds",
+      "card": { "link_id": "L2", "attempt_id": "a2" },
+      "outcome": { "kind": "error", "code": 42901, "headers": { "Retry-After": "7" } },
+      "expect": {
+        "request": {
+          "method": "POST",
+          "path": "/v1/orders/pending-tracks/L2/dismiss",
+          "body": { "attempt_id": "a2" }
+        },
+        "actionRaw": "disable",
+        "disableMs": 7000
+      }
+    },
+    {
+      "name": "42901_default",
+      "card": { "link_id": "L2", "attempt_id": "a2" },
+      "outcome": { "kind": "error", "code": 42901 },
+      "expect": {
+        "request": {
+          "method": "POST",
+          "path": "/v1/orders/pending-tracks/L2/dismiss",
+          "body": { "attempt_id": "a2" }
+        },
+        "actionRaw": "disable",
+        "disableMs": 5000
+      }
+    },
+    {
+      "name": "42901_invalid",
+      "card": { "link_id": "L2", "attempt_id": "a2" },
+      "outcome": { "kind": "error", "code": 42901, "headers": { "Retry-After": "n/a" } },
+      "expect": {
+        "request": {
+          "method": "POST",
+          "path": "/v1/orders/pending-tracks/L2/dismiss",
+          "body": { "attempt_id": "a2" }
+        },
+        "actionRaw": "disable",
+        "disableMs": 5000
+      }
+    },
+    {
+      "name": "10405",
+      "card": { "link_id": "L2", "attempt_id": "a2" },
+      "outcome": { "kind": "error", "code": 10405 },
+      "expect": {
+        "request": {
+          "method": "POST",
+          "path": "/v1/orders/pending-tracks/L2/dismiss",
+          "body": { "attempt_id": "a2" }
+        },
+        "actionRaw": "force_update"
+      }
+    }
+  ],
+  "errorAction": [
+    {
+      "name": "detail_30701",
+      "target": "detail",
+      "code": 30701,
+      "hasCache": true,
+      "expect": { "actionRaw": "empty_30701", "textKey": "error.30701" }
+    },
+    {
+      "name": "G10_list_42901_seconds",
+      "target": "list_first_page",
+      "code": 42901,
+      "headers": { "Retry-After": "7" },
+      "hasCache": true,
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 7000 }
+    },
+    {
+      "name": "G10_detail_42901_default",
+      "target": "detail",
+      "code": 42901,
+      "hasCache": true,
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 5000 }
+    },
+    {
+      "name": "G10_42901_invalid",
+      "target": "list_first_page",
+      "code": 42901,
+      "headers": { "Retry-After": "-1" },
+      "hasCache": true,
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "disableMs": 5000 }
+    },
+    {
+      "name": "G10_50001_trace6",
+      "target": "list_first_page",
+      "code": 50001,
+      "traceId": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+      "hasCache": true,
+      "expect": { "actionRaw": "error_trace6", "textKey": "error.50001", "showTrace6": true }
+    },
+    {
+      "name": "G10_50401_trace6",
+      "target": "detail",
+      "code": 50401,
+      "traceId": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+      "hasCache": true,
+      "expect": { "actionRaw": "error_trace6", "textKey": "error.50401", "showTrace6": true }
+    },
+    {
+      "name": "G10_59999_trace6",
+      "target": "list_first_page",
+      "code": 59999,
+      "traceId": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+      "hasCache": true,
+      "expect": { "actionRaw": "error_trace6", "textKey": "error.50001", "showTrace6": true }
+    },
+    {
+      "name": "G10_10405",
+      "target": "detail",
+      "code": 10405,
+      "hasCache": true,
+      "expect": { "actionRaw": "force_update", "textKey": "error.10405" }
+    },
+    {
+      "name": "G10_list_transport_cache_false_filtered_false",
+      "target": "list_first_page",
+      "transport": true,
+      "hasCache": false,
+      "filtered": false,
+      "expect": { "actionRaw": "network_error" }
+    },
+    {
+      "name": "G10_list_transport_cache_false_filtered_true",
+      "target": "list_first_page",
+      "transport": true,
+      "hasCache": false,
+      "filtered": true,
+      "expect": { "actionRaw": "network_error" }
+    },
+    {
+      "name": "G10_list_transport_cache_true_filtered_false",
+      "target": "list_first_page",
+      "transport": true,
+      "hasCache": true,
+      "filtered": false,
+      "expect": { "actionRaw": "show_stale", "textKey": "net.stale_data" }
+    },
+    {
+      "name": "G10_list_transport_cache_true_filtered_true",
+      "target": "list_first_page",
+      "transport": true,
+      "hasCache": true,
+      "filtered": true,
+      "expect": { "actionRaw": "network_error" }
+    },
+    {
+      "name": "G10_detail_transport_cache_false",
+      "target": "detail",
+      "transport": true,
+      "hasCache": false,
+      "expect": { "actionRaw": "network_error" }
+    },
+    {
+      "name": "G10_detail_transport_cache_true",
+      "target": "detail",
+      "transport": true,
+      "hasCache": true,
+      "expect": { "actionRaw": "show_stale", "textKey": "net.stale_data" }
+    },
+    {
+      "name": "G10_next_transport_keep",
+      "target": "list_next_page",
+      "transport": true,
+      "hasCache": true,
+      "expect": { "actionRaw": "page_error", "keepItems": true }
+    },
+    {
+      "name": "G10_next_50001_keep_trace",
+      "target": "list_next_page",
+      "code": 50001,
+      "traceId": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+      "hasCache": true,
+      "expect": {
+        "actionRaw": "page_error",
+        "textKey": "error.50001",
+        "showTrace6": true,
+        "keepItems": true
+      }
+    },
+    {
+      "name": "G10_next_42901_keep",
+      "target": "list_next_page",
+      "code": 42901,
+      "hasCache": true,
+      "expect": {
+        "actionRaw": "retry_after",
+        "textKey": "error.42901",
+        "disableMs": 5000,
+        "keepItems": true
+      }
+    }
+  ],
+  "cachePolicy": [
+    {
+      "name": "G10_default_self",
+      "kind": "list",
+      "query": { "scope": "self" },
+      "expect": { "cacheable": true }
+    },
+    {
+      "name": "G10_default_share",
+      "kind": "list",
+      "query": { "scope": "share" },
+      "expect": { "cacheable": true }
+    },
+    {
+      "name": "G10_explicit_all",
+      "kind": "list",
+      "query": { "scope": "self", "status_group": "all" },
+      "expect": { "cacheable": true }
+    },
+    {
+      "name": "G10_group_estimating",
+      "kind": "list",
+      "query": { "scope": "self", "status_group": "estimating" },
+      "expect": { "cacheable": false }
+    },
+    {
+      "name": "G10_group_credited",
+      "kind": "list",
+      "query": { "scope": "self", "status_group": "credited" },
+      "expect": { "cacheable": false }
+    },
+    {
+      "name": "G10_group_no_rebate",
+      "kind": "list",
+      "query": { "scope": "self", "status_group": "no_rebate" },
+      "expect": { "cacheable": false }
+    },
+    {
+      "name": "G10_platform",
+      "kind": "list",
+      "query": { "scope": "self", "platform": "taobao" },
+      "expect": { "cacheable": false }
+    },
+    {
+      "name": "G10_month",
+      "kind": "list",
+      "query": { "scope": "self", "paid_month": "2026-10" },
+      "expect": { "cacheable": false }
+    },
+    {
+      "name": "G10_search",
+      "kind": "list",
+      "query": { "scope": "share", "q": "伊利" },
+      "expect": { "cacheable": false }
+    },
+    {
+      "name": "G10_next_page",
+      "kind": "list",
+      "query": { "scope": "self", "cursor": "opaque-1" },
+      "expect": { "cacheable": false }
+    },
+    { "name": "G10_detail", "kind": "detail", "expect": { "cacheable": true } }
+  ],
+  "cacheClear": [
+    { "name": "G10_logout", "event": "logout", "expect": { "clear": true } },
+    { "name": "G10_account_switch", "event": "account_switch", "expect": { "clear": true } },
+    { "name": "G10_session_invalid", "event": "session_invalid", "expect": { "clear": true } },
+    { "name": "G10_consent_revoked", "event": "consent_revoked", "expect": { "clear": true } },
+    { "name": "G10_env_switch", "event": "env_switch", "expect": { "clear": true } },
+    { "name": "G10_app_background", "event": "app_background", "expect": { "clear": false } },
+    { "name": "G10_refresh_ok", "event": "refresh_ok", "expect": { "clear": false } }
+  ],
+  "gaps": [
+    "G01、G14：金额格标签没有确定键名；除 order_list.deposit_amount 外不填写 labelKey。自购/分享均覆盖取值，但「实付金额、预估返、实返、返利、扣回、预估推广收益、推广收益」的键名及字典解析须补齐后再锁定，不能用测试作者臆造的键。",
+    "G01：时间线 paid、received、credit_expected（预计月份/联盟结算两态）、credited、invalid、clawed_back、part_clawed_back 未确定键名；相应 rows 省略 labelKey，只锁定顺序、时间、灰态及月份。deposit_paid 无时间仍用同一个键的 fallbacks，不另造 .fallback 键；API 不暴露解析后的标题，fallback 实际文字另做文案集成验收。",
+    "G01：INVALID、CLAWED_BACK 映射表的 hint 是组合原因区，未定义 OrderStatusText 与 WhyNoRebate 如何分配 hintKey / extraKey；这两个 hintKey 及「已从余额扣除」extraKey 不写期望。静态月份句使用 G01 命名下的 PAID.hint、WAITING.hint。",
+    "G02、G03、G04、G05、G08、G09、G10、G12、G15、G16、G21、G22：按 rule-gaps.md 现在的做法；相应用例带 G 号。PAID 无区间；差额不从金额相减；PUNISH 不补子原因；通知 denied 且无本机申请记录按 G22 的系统未开启处理。",
+    "G11：仅明确规整后最多 40 个 Unicode 字符，未规定超长粘贴截断、拒绝或保留旧值；over40 用例不写具体 params/q/sendsRequest，只验证上传 q 不超过上限。组合字符按码点还是字素计未定；40 字边界使用单码点字符，含非 BMP 字符。",
+    "契约明确 status_group 不传表示全部，任务书要求默认参数不传，本向量据此省略；不判定显式 status_group=all 与不传的服务端差异。next_cursor=null 只锁定 sendsRequest=false，不猜不发送时内部 cursor 如何保存。",
+    "G01：UNKNOWN 的「不显示金额」与金额格通用左列实付的边界未细分，UNKNOWN 只锁定右列为空；不对左列猜期望。",
+    "G21：金额为 null 与隐藏同时出现、INVALID 固定零是否受开关影响未明确，不写这两类组合的期望；maskedText 为 **** 的格不重复测试金额格式。",
+    "G10：传输错误的文案键未指定，只断言网络错误动作；Retry-After 日期形式及大小写归一化未规定且 API 没有注入该解析时钟，不写日期头期望。",
+    "BR-TEXT-05 当前每个 reason 最多一个 action；max_two 是任务书 §2.3 明确的防御性多 action 截断规则。CLAIM/REAUTH 路由用 reason=null 的原始 action 输入测试，不构造 NOT_TRACKED 已归因订单。",
+    "AC-S1-104 的 K7/K9 是商品键代号，fixture 使用满足契约长度的 tb:9007/tb:9009；ProductDetail params 必须恰好只有 platform、product_key。",
+    "G06、G07、G13、G17、G18、G19、G20：沿用 rule-gaps.md；本题纯函数 API 不包含置顶、显示位置、平台选项、返回更新、AI 入口、消息路由及开关动作，不伪造对应函数期望。",
+    "OrderSummary 不提供 actual_fen/clawback_fen，但列表仍要求显示实返/扣回；本向量对缺字段只断言空值，不从 est_rebate_fen 推算，完整列表口径待补契约。",
+    "reason=CANCELLED 在枚举里但未启用，BR-TEXT-05 没有对应文案行；不按 REFUND 或未知原因擅自写期望。",
+    "执行层另验：真实 Router/页面、请求世代与出口、旧响应丢弃、状态恢复、复制走 ClipboardWriter、分享单零剪贴板写入和无选择菜单、真实图片状态、权限不自动弹框、42901 执行层与页面双重禁用、10405 强更持久化、trace6 实际末六位及无占位符文案、按账号缓存落盘/最近30条淘汰/删除失败待清理/冷启动恢复。纯函数结果不能替代 brief.md §0、§2.12 的这些验收。",
+    "BR-ID-30 的查询起点由服务端下发；monthOptions 不计算 order.user_query_months。G10 refresh_ok 更新缓存并移除 stale 提示，不等于清空缓存。"
+  ],
+  "visualOrders": {
+    "clock": {
+      "now": "2026-10-12T10:30:00+08:00",
+      "nowMillis": 1791772200000,
+      "staleAtMillis": 1791768600000,
+      "zone": "Asia/Shanghai"
+    },
+    "notes": [
+      "APP-08v-a：只新增视觉组；列表不补 rebate_min/max、actual、clawback、expected_credit_period。",
+      "UNKNOWN、INVALID、CREDITED 的 est 故意非零，验证不会泄漏或推算实返。",
+      "A/C 的 image_url 只由测试位图加载器解析；其他商品无图无原始标题。"
+    ],
+    "pages": {
+      "list_self": {
+        "items": [
+          {
+            "order_id": "A",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          },
+          {
+            "order_id": "B",
+            "platform": "taobao",
+            "title": "样例商品 B：预售电饭煲 4L",
+            "image_url": null,
+            "pay_amount_fen": 3000,
+            "quantity": 1,
+            "display_status": "DEPOSIT_PAID",
+            "reason": null,
+            "est_rebate_fen": null,
+            "paid_at": "2026-10-01T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3798765432109876543"
+          },
+          {
+            "order_id": "M",
+            "platform": "jd",
+            "title": "样例商品 M：收纳盒 3 个装",
+            "image_url": null,
+            "pay_amount_fen": 1990,
+            "quantity": 1,
+            "display_status": "FUTURE_STATUS",
+            "reason": null,
+            "est_rebate_fen": 987654,
+            "paid_at": "2026-09-25T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "309999999999"
+          },
+          {
+            "order_id": "C",
+            "platform": "jd",
+            "title": "样例商品 C：洗衣液 3kg",
+            "image_url": "https://img.example.test/order-v/C.png",
+            "pay_amount_fen": 3990,
+            "quantity": 1,
+            "display_status": "WAITING",
+            "reason": null,
+            "est_rebate_fen": 450,
+            "paid_at": "2026-09-20T14:03:00+08:00",
+            "is_other_product": false,
+            "order_no": "305678901234"
+          },
+          {
+            "order_id": "J",
+            "platform": "taobao",
+            "title": "样例商品 J：蓝牙耳机",
+            "image_url": null,
+            "pay_amount_fen": 8900,
+            "quantity": 1,
+            "display_status": "INVALID",
+            "reason": "REFUND",
+            "est_rebate_fen": 765432,
+            "paid_at": "2026-09-18T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3722222222222222222"
+          }
+        ],
+        "next_cursor": "visual-next-2",
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "list_self_pinned": {
+        "items": [
+          {
+            "order_id": "A",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          },
+          {
+            "order_id": "B",
+            "platform": "taobao",
+            "title": "样例商品 B：预售电饭煲 4L",
+            "image_url": null,
+            "pay_amount_fen": 3000,
+            "quantity": 1,
+            "display_status": "DEPOSIT_PAID",
+            "reason": null,
+            "est_rebate_fen": null,
+            "paid_at": "2026-10-01T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3798765432109876543"
+          },
+          {
+            "order_id": "M",
+            "platform": "jd",
+            "title": "样例商品 M：收纳盒 3 个装",
+            "image_url": null,
+            "pay_amount_fen": 1990,
+            "quantity": 1,
+            "display_status": "FUTURE_STATUS",
+            "reason": null,
+            "est_rebate_fen": 987654,
+            "paid_at": "2026-09-25T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "309999999999"
+          },
+          {
+            "order_id": "C",
+            "platform": "jd",
+            "title": "样例商品 C：洗衣液 3kg",
+            "image_url": "https://img.example.test/order-v/C.png",
+            "pay_amount_fen": 3990,
+            "quantity": 1,
+            "display_status": "WAITING",
+            "reason": null,
+            "est_rebate_fen": 450,
+            "paid_at": "2026-09-20T14:03:00+08:00",
+            "is_other_product": false,
+            "order_no": "305678901234"
+          },
+          {
+            "order_id": "J",
+            "platform": "taobao",
+            "title": "样例商品 J：蓝牙耳机",
+            "image_url": null,
+            "pay_amount_fen": 8900,
+            "quantity": 1,
+            "display_status": "INVALID",
+            "reason": "REFUND",
+            "est_rebate_fen": 765432,
+            "paid_at": "2026-09-18T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3722222222222222222"
+          }
+        ],
+        "next_cursor": "visual-next-2",
+        "earliest_visible_date": null,
+        "claim_entry_pinned": true
+      },
+      "list_share": {
+        "items": [
+          {
+            "order_id": "E",
+            "platform": "taobao",
+            "title": "样例商品 E：保温杯 500ml",
+            "image_url": null,
+            "pay_amount_fen": 5900,
+            "quantity": 1,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 180,
+            "paid_at": "2026-10-12T10:21:00+08:00",
+            "is_other_product": false,
+            "masked_order_no": "3712****67"
+          },
+          {
+            "order_id": "OTHER",
+            "platform": "taobao",
+            "title": null,
+            "image_url": null,
+            "pay_amount_fen": 2680,
+            "quantity": 1,
+            "display_status": "WAITING",
+            "reason": null,
+            "est_rebate_fen": 60,
+            "paid_at": "2026-10-02T10:00:00+08:00",
+            "is_other_product": true,
+            "masked_order_no": "3756****21"
+          },
+          {
+            "order_id": "F",
+            "platform": "jd",
+            "title": "样例商品 F：数据线 2 条装",
+            "image_url": null,
+            "pay_amount_fen": 1990,
+            "quantity": 1,
+            "display_status": "CREDITED",
+            "reason": null,
+            "est_rebate_fen": 98765,
+            "paid_at": "2026-09-18T10:00:00+08:00",
+            "is_other_product": false,
+            "masked_order_no": "3056****34"
+          },
+          {
+            "order_id": "G",
+            "platform": "pdd",
+            "title": "样例商品 G：衣架 20 个装",
+            "image_url": null,
+            "pay_amount_fen": 1580,
+            "quantity": 1,
+            "display_status": "CREDITED",
+            "reason": null,
+            "est_rebate_fen": 87654,
+            "paid_at": "2026-09-12T10:00:00+08:00",
+            "is_other_product": false,
+            "masked_order_no": "2510****45"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "list_self_empty": {
+        "items": [],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "list_share_empty": {
+        "items": [],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "search_self": {
+        "items": [
+          {
+            "order_id": "A",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "search_share_empty": {
+        "items": [],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "stress": {
+        "items": [
+          {
+            "order_id": "STRESS",
+            "platform": "taobao",
+            "title": "超长商品名：纯牛奶家庭装多规格组合用于验证列表只能单行省略而金额和订单号必须完整显示",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 8888888,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 9999999,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "short_number": {
+        "items": [
+          {
+            "order_id": "SHORT",
+            "platform": "jd",
+            "title": "样例商品 M：收纳盒 3 个装",
+            "image_url": null,
+            "pay_amount_fen": 1990,
+            "quantity": 1,
+            "display_status": "FUTURE_STATUS",
+            "reason": null,
+            "est_rebate_fen": 987654,
+            "paid_at": "2026-09-25T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "1234"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "null_amounts": {
+        "items": [
+          {
+            "order_id": "NULL",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": null,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": null,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "history": {
+        "items": [
+          {
+            "order_id": "A",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          },
+          {
+            "order_id": "B",
+            "platform": "taobao",
+            "title": "样例商品 B：预售电饭煲 4L",
+            "image_url": null,
+            "pay_amount_fen": 3000,
+            "quantity": 1,
+            "display_status": "DEPOSIT_PAID",
+            "reason": null,
+            "est_rebate_fen": null,
+            "paid_at": "2026-10-01T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3798765432109876543"
+          },
+          {
+            "order_id": "M",
+            "platform": "jd",
+            "title": "样例商品 M：收纳盒 3 个装",
+            "image_url": null,
+            "pay_amount_fen": 1990,
+            "quantity": 1,
+            "display_status": "FUTURE_STATUS",
+            "reason": null,
+            "est_rebate_fen": 987654,
+            "paid_at": "2026-09-25T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "309999999999"
+          },
+          {
+            "order_id": "C",
+            "platform": "jd",
+            "title": "样例商品 C：洗衣液 3kg",
+            "image_url": "https://img.example.test/order-v/C.png",
+            "pay_amount_fen": 3990,
+            "quantity": 1,
+            "display_status": "WAITING",
+            "reason": null,
+            "est_rebate_fen": 450,
+            "paid_at": "2026-09-20T14:03:00+08:00",
+            "is_other_product": false,
+            "order_no": "305678901234"
+          },
+          {
+            "order_id": "J",
+            "platform": "taobao",
+            "title": "样例商品 J：蓝牙耳机",
+            "image_url": null,
+            "pay_amount_fen": 8900,
+            "quantity": 1,
+            "display_status": "INVALID",
+            "reason": "REFUND",
+            "est_rebate_fen": 765432,
+            "paid_at": "2026-09-18T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3722222222222222222"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": "2026-09-01",
+        "claim_entry_pinned": false
+      },
+      "next_page": {
+        "items": [
+          {
+            "order_id": "C_PAGE_2",
+            "platform": "jd",
+            "title": "样例商品 C：洗衣液 3kg",
+            "image_url": "https://img.example.test/order-v/C.png",
+            "pay_amount_fen": 3990,
+            "quantity": 1,
+            "display_status": "WAITING",
+            "reason": null,
+            "est_rebate_fen": 450,
+            "paid_at": "2026-09-20T14:03:00+08:00",
+            "is_other_product": false,
+            "order_no": "305678901234"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "month_options": {
+        "items": [
+          {
+            "order_id": "A",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          },
+          {
+            "order_id": "B",
+            "platform": "taobao",
+            "title": "样例商品 B：预售电饭煲 4L",
+            "image_url": null,
+            "pay_amount_fen": 3000,
+            "quantity": 1,
+            "display_status": "DEPOSIT_PAID",
+            "reason": null,
+            "est_rebate_fen": null,
+            "paid_at": "2026-10-01T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3798765432109876543"
+          },
+          {
+            "order_id": "M",
+            "platform": "jd",
+            "title": "样例商品 M：收纳盒 3 个装",
+            "image_url": null,
+            "pay_amount_fen": 1990,
+            "quantity": 1,
+            "display_status": "FUTURE_STATUS",
+            "reason": null,
+            "est_rebate_fen": 987654,
+            "paid_at": "2026-09-25T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "309999999999"
+          },
+          {
+            "order_id": "C",
+            "platform": "jd",
+            "title": "样例商品 C：洗衣液 3kg",
+            "image_url": "https://img.example.test/order-v/C.png",
+            "pay_amount_fen": 3990,
+            "quantity": 1,
+            "display_status": "WAITING",
+            "reason": null,
+            "est_rebate_fen": 450,
+            "paid_at": "2026-09-20T14:03:00+08:00",
+            "is_other_product": false,
+            "order_no": "305678901234"
+          },
+          {
+            "order_id": "J",
+            "platform": "taobao",
+            "title": "样例商品 J：蓝牙耳机",
+            "image_url": null,
+            "pay_amount_fen": 8900,
+            "quantity": 1,
+            "display_status": "INVALID",
+            "reason": "REFUND",
+            "est_rebate_fen": 765432,
+            "paid_at": "2026-09-18T10:00:00+08:00",
+            "is_other_product": false,
+            "order_no": "3722222222222222222"
+          }
+        ],
+        "next_cursor": "visual-next-2",
+        "earliest_visible_date": "2026-07-01",
+        "claim_entry_pinned": false
+      }
+    },
+    "statusPages": {
+      "DEPOSIT_PAID": {
+        "items": [
+          {
+            "order_id": "STATUS_DEPOSIT_PAID",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "DEPOSIT_PAID",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "PAID": {
+        "items": [
+          {
+            "order_id": "STATUS_PAID",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "PAID",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "WAITING": {
+        "items": [
+          {
+            "order_id": "STATUS_WAITING",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "WAITING",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "CREDITING": {
+        "items": [
+          {
+            "order_id": "STATUS_CREDITING",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "CREDITING",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "RIGHTS_PENDING": {
+        "items": [
+          {
+            "order_id": "STATUS_RIGHTS_PENDING",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "RIGHTS_PENDING",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "REVIEWING": {
+        "items": [
+          {
+            "order_id": "STATUS_REVIEWING",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "REVIEWING",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "NO_REBATE": {
+        "items": [
+          {
+            "order_id": "STATUS_NO_REBATE",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "NO_REBATE",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "CREDITED": {
+        "items": [
+          {
+            "order_id": "STATUS_CREDITED",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "CREDITED",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "CREDITED_PART_CLAWED": {
+        "items": [
+          {
+            "order_id": "STATUS_CREDITED_PART_CLAWED",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "CREDITED_PART_CLAWED",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "INVALID": {
+        "items": [
+          {
+            "order_id": "STATUS_INVALID",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "INVALID",
+            "reason": "REFUND",
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "CLAWED_BACK": {
+        "items": [
+          {
+            "order_id": "STATUS_CLAWED_BACK",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "CLAWED_BACK",
+            "reason": "REFUND",
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      },
+      "FUTURE_STATUS": {
+        "items": [
+          {
+            "order_id": "STATUS_FUTURE_STATUS",
+            "platform": "taobao",
+            "title": "样例商品 A：纯牛奶 250ml×12 盒",
+            "image_url": "https://img.example.test/order-v/A.png",
+            "pay_amount_fen": 4560,
+            "quantity": 2,
+            "display_status": "FUTURE_STATUS",
+            "reason": null,
+            "est_rebate_fen": 123,
+            "paid_at": "2026-10-12T09:05:00+08:00",
+            "is_other_product": false,
+            "order_no": "3741234567890123456"
+          }
+        ],
+        "next_cursor": null,
+        "earliest_visible_date": null,
+        "claim_entry_pinned": false
+      }
+    },
+    "details": {
+      "detail_estimated": {
+        "order_id": "C",
+        "platform": "jd",
+        "title": "样例商品 C：洗衣液 3kg",
+        "image_url": "https://img.example.test/order-v/C.png",
+        "pay_amount_fen": 3990,
+        "quantity": 1,
+        "display_status": "WAITING",
+        "reason": null,
+        "est_rebate_fen": 450,
+        "paid_at": "2026-09-20T14:03:00+08:00",
+        "is_other_product": false,
+        "order_no": "305678901234",
+        "product_key": "fixture:C",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": "2026-10",
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-20T14:03:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-09-28T10:12:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-10"
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_settled": {
+        "order_id": "H",
+        "platform": "taobao",
+        "title": "样例商品 H：电动牙刷",
+        "image_url": null,
+        "pay_amount_fen": 12900,
+        "quantity": 1,
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "est_rebate_fen": 450,
+        "paid_at": "2026-08-03T20:15:00+08:00",
+        "is_other_product": false,
+        "order_no": "3711111111111111111",
+        "product_key": "fixture:H",
+        "actual_fen": 320,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": true,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-03T20:15:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-09T09:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_part_clawed": {
+        "order_id": "L",
+        "platform": "taobao",
+        "title": "样例商品 L：床上四件套",
+        "image_url": null,
+        "pay_amount_fen": 15900,
+        "quantity": 2,
+        "display_status": "CREDITED_PART_CLAWED",
+        "reason": "PART_REFUND",
+        "est_rebate_fen": 540,
+        "paid_at": "2026-08-12T21:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3733333333333333333",
+        "product_key": "fixture:L",
+        "actual_fen": 140,
+        "clawback_fen": 400,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-12T21:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-18T09:40:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "part_clawed_back",
+            "at": "2026-10-09T14:30:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_no_rebate": {
+        "order_id": "J",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 8900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "REFUND",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:J",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T21:40:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "invalid",
+            "at": "2026-09-22T11:05:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_blacklist": {
+        "order_id": "R",
+        "platform": "taobao",
+        "title": "样例商品 R：电动剃须刀",
+        "image_url": null,
+        "pay_amount_fen": 12900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "BLACKLIST",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-10-02T20:30:00+08:00",
+        "is_other_product": false,
+        "order_no": "3768888888888888888",
+        "product_key": "fixture:R",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": ["APPEAL"],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-10-02T20:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "invalid",
+            "at": "2026-10-06T09:30:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_appeal_pending": {
+        "order_id": "R",
+        "platform": "taobao",
+        "title": "样例商品 R：电动剃须刀",
+        "image_url": null,
+        "pay_amount_fen": 12900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "BLACKLIST",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-10-02T20:30:00+08:00",
+        "is_other_product": false,
+        "order_no": "3768888888888888888",
+        "product_key": "fixture:R",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": true,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-10-02T20:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "invalid",
+            "at": "2026-10-06T09:30:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_presale": {
+        "order_id": "B",
+        "platform": "taobao",
+        "title": "样例商品 B：预售电饭煲 4L",
+        "image_url": null,
+        "pay_amount_fen": 3000,
+        "quantity": 1,
+        "display_status": "DEPOSIT_PAID",
+        "reason": null,
+        "est_rebate_fen": null,
+        "paid_at": "2026-10-01T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3798765432109876543",
+        "product_key": "fixture:B",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "deposit_paid",
+            "at": "2026-10-01T20:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "final_paid",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_rights_pending": {
+        "order_id": "K",
+        "platform": "taobao",
+        "title": "样例商品 K：空气炸锅 4L",
+        "image_url": null,
+        "pay_amount_fen": 9900,
+        "quantity": 1,
+        "display_status": "RIGHTS_PENDING",
+        "reason": null,
+        "est_rebate_fen": 456,
+        "paid_at": "2026-09-03T19:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3755555555555555555",
+        "product_key": "fixture:K",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-03T19:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-09-08T16:20:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reviewing": {
+        "order_id": "S",
+        "platform": "taobao",
+        "title": "样例商品 S：电热水壶 1.7L",
+        "image_url": null,
+        "pay_amount_fen": 8900,
+        "quantity": 1,
+        "display_status": "REVIEWING",
+        "reason": null,
+        "est_rebate_fen": 310,
+        "paid_at": "2026-09-10T20:30:00+08:00",
+        "is_other_product": false,
+        "order_no": "3767777777777777777",
+        "product_key": "fixture:S",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-10T20:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-09-15T11:02:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_crediting": {
+        "order_id": "S",
+        "platform": "taobao",
+        "title": "样例商品 S：电热水壶 1.7L",
+        "image_url": null,
+        "pay_amount_fen": 8900,
+        "quantity": 1,
+        "display_status": "CREDITING",
+        "reason": null,
+        "est_rebate_fen": 310,
+        "paid_at": "2026-09-10T20:30:00+08:00",
+        "is_other_product": false,
+        "order_no": "3767777777777777777",
+        "product_key": "fixture:S",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": true,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-10T20:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-09-15T11:02:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_clawed_back": {
+        "order_id": "T",
+        "platform": "jd",
+        "title": "样例商品 T：蓝牙音箱",
+        "image_url": null,
+        "pay_amount_fen": 19900,
+        "quantity": 1,
+        "display_status": "CLAWED_BACK",
+        "reason": "REFUND",
+        "est_rebate_fen": 98765,
+        "paid_at": "2026-08-20T13:10:00+08:00",
+        "is_other_product": false,
+        "order_no": "306666666666",
+        "product_key": "fixture:T",
+        "actual_fen": null,
+        "clawback_fen": 800,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-20T13:10:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-24T10:05:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "clawed_back",
+            "at": "2026-10-10T14:00:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_share": {
+        "order_id": "OTHER",
+        "platform": "taobao",
+        "title": null,
+        "image_url": null,
+        "pay_amount_fen": 2680,
+        "quantity": 1,
+        "display_status": "WAITING",
+        "reason": null,
+        "est_rebate_fen": 60,
+        "paid_at": "2026-10-02T10:00:00+08:00",
+        "is_other_product": true,
+        "masked_order_no": "3756****21",
+        "product_key": null,
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": "2026-11",
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-10-02T18:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-10-08T15:12:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-11"
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_price_compare_no_rebate": {
+        "order_id": "U",
+        "platform": "pdd",
+        "title": "样例商品 U：手机支架",
+        "image_url": null,
+        "pay_amount_fen": 3990,
+        "quantity": 1,
+        "display_status": "NO_REBATE",
+        "reason": "PRICE_COMPARE",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-20T21:15:00+08:00",
+        "is_other_product": false,
+        "order_no": "260920-111122223333444",
+        "product_key": "fixture:U",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": true,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-20T21:15:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-09-24T10:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_price_compare_risk": {
+        "order_id": "A",
+        "platform": "taobao",
+        "title": "样例商品 A：纯牛奶 250ml×12 盒",
+        "image_url": "https://img.example.test/order-v/A.png",
+        "pay_amount_fen": 4560,
+        "quantity": 2,
+        "display_status": "PAID",
+        "reason": null,
+        "est_rebate_fen": 123,
+        "paid_at": "2026-10-12T09:05:00+08:00",
+        "is_other_product": false,
+        "order_no": "3741234567890123456",
+        "product_key": "fixture:A",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-10-12T09:05:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_unknown": {
+        "order_id": "M",
+        "platform": "jd",
+        "title": "样例商品 M：收纳盒 3 个装",
+        "image_url": null,
+        "pay_amount_fen": 1990,
+        "quantity": 1,
+        "display_status": "FUTURE_STATUS",
+        "reason": null,
+        "est_rebate_fen": 987654,
+        "paid_at": "2026-09-25T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "309999999999",
+        "product_key": "fixture:M",
+        "actual_fen": 88765,
+        "clawback_fen": 77765,
+        "reason_action": ["CLAIM", "REAUTH", "APPEAL", "CONTACT_CS"],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_stress": {
+        "order_id": "A",
+        "platform": "taobao",
+        "title": "超长商品完整名称：家庭装纯牛奶无添加每日早餐营养组合十二盒装，需要在订单详情完整展示",
+        "image_url": "https://img.example.test/order-v/A.png",
+        "pay_amount_fen": 8888888,
+        "quantity": 2,
+        "display_status": "PAID",
+        "reason": null,
+        "est_rebate_fen": 9999999,
+        "paid_at": "2026-10-12T09:05:00+08:00",
+        "is_other_product": false,
+        "order_no": "3741234567890123456",
+        "product_key": "fixture:A",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-10-12T09:05:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_clawed_two": {
+        "order_id": "T",
+        "platform": "jd",
+        "title": "样例商品 T：蓝牙音箱",
+        "image_url": null,
+        "pay_amount_fen": 19900,
+        "quantity": 1,
+        "display_status": "CLAWED_BACK",
+        "reason": "PUNISH",
+        "est_rebate_fen": 98765,
+        "paid_at": "2026-08-20T13:10:00+08:00",
+        "is_other_product": false,
+        "order_no": "306666666666",
+        "product_key": "fixture:T",
+        "actual_fen": null,
+        "clawback_fen": 800,
+        "reason_action": ["CONTACT_CS"],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-20T13:10:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-24T10:05:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "clawed_back",
+            "at": "2026-10-10T14:00:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_null_money": {
+        "order_id": "H",
+        "platform": "taobao",
+        "title": "样例商品 H：电动牙刷",
+        "image_url": null,
+        "pay_amount_fen": null,
+        "quantity": 1,
+        "display_status": "CREDITED",
+        "reason": "PRICE_COMPARE",
+        "est_rebate_fen": 450,
+        "paid_at": "2026-08-03T20:15:00+08:00",
+        "is_other_product": false,
+        "order_no": "3711111111111111111",
+        "product_key": "fixture:H",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": true,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-03T20:15:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-09T09:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          }
+        ]
+      }
+    },
+    "reasonDetails": {
+      "detail_reason_01": {
+        "order_id": "reason-1",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 5900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "RIGHTS",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:reason-1",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_02": {
+        "order_id": "reason-2",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 5900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "PUNISH",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:reason-2",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": ["CONTACT_CS"],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_03": {
+        "order_id": "reason-3",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 5900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "COMMISSION_ZERO",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:reason-3",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": ["CONTACT_CS"],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_04": {
+        "order_id": "reason-4",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 5900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "EXPIRED_CLICK",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:reason-4",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_05": {
+        "order_id": "reason-5",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 5900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "OTHER_TLJ",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:reason-5",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_06": {
+        "order_id": "reason-6",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 5900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "PRESALE_UNPAID",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:reason-6",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_07": {
+        "order_id": "reason-7",
+        "platform": "taobao",
+        "title": "样例商品 J：蓝牙耳机",
+        "image_url": null,
+        "pay_amount_fen": 5900,
+        "quantity": 1,
+        "display_status": "INVALID",
+        "reason": "OTHER",
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-18T10:00:00+08:00",
+        "is_other_product": false,
+        "order_no": "3722222222222222222",
+        "product_key": "fixture:reason-7",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": ["CONTACT_CS"],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-18T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_08": {
+        "order_id": "T",
+        "platform": "jd",
+        "title": "样例商品 T：蓝牙音箱",
+        "image_url": null,
+        "pay_amount_fen": 8900,
+        "quantity": 1,
+        "display_status": "CLAWED_BACK",
+        "reason": "PUNISH",
+        "est_rebate_fen": 98765,
+        "paid_at": "2026-08-20T13:10:00+08:00",
+        "is_other_product": false,
+        "order_no": "306666666666",
+        "product_key": "fixture:T",
+        "actual_fen": null,
+        "clawback_fen": 320,
+        "reason_action": ["CONTACT_CS"],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-20T13:10:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-24T10:05:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          },
+          {
+            "node": "clawed_back",
+            "at": "2026-10-10T14:00:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_09": {
+        "order_id": "H",
+        "platform": "taobao",
+        "title": "样例商品 H：电动牙刷",
+        "image_url": null,
+        "pay_amount_fen": 7900,
+        "quantity": 1,
+        "display_status": "CREDITED",
+        "reason": "PRICE_PROTECT",
+        "est_rebate_fen": 450,
+        "paid_at": "2026-08-03T20:15:00+08:00",
+        "is_other_product": false,
+        "order_no": "3711111111111111111",
+        "product_key": "fixture:H",
+        "actual_fen": 260,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-03T20:15:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-09T09:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_10": {
+        "order_id": "H",
+        "platform": "taobao",
+        "title": "样例商品 H：电动牙刷",
+        "image_url": null,
+        "pay_amount_fen": 9900,
+        "quantity": 1,
+        "display_status": "CREDITED",
+        "reason": "SETTLE_DIFF",
+        "est_rebate_fen": 450,
+        "paid_at": "2026-08-03T20:15:00+08:00",
+        "is_other_product": false,
+        "order_no": "3711111111111111111",
+        "product_key": "fixture:H",
+        "actual_fen": 350,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-08-03T20:15:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-08-09T09:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-09"
+          },
+          {
+            "node": "credited",
+            "at": "2026-09-25T10:00:00+08:00",
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_11": {
+        "order_id": "C",
+        "platform": "jd",
+        "title": "样例商品 C：洗衣液 3kg",
+        "image_url": "https://img.example.test/order-v/C.png",
+        "pay_amount_fen": 7950,
+        "quantity": 1,
+        "display_status": "WAITING",
+        "reason": "PART_REFUND",
+        "est_rebate_fen": 270,
+        "paid_at": "2026-09-20T14:03:00+08:00",
+        "is_other_product": false,
+        "order_no": "305678901234",
+        "product_key": "fixture:C",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-20T14:03:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-09-28T10:12:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": "2026-10"
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      },
+      "detail_reason_12": {
+        "order_id": "U",
+        "platform": "pdd",
+        "title": "样例商品 U：手机支架",
+        "image_url": null,
+        "pay_amount_fen": 1990,
+        "quantity": 1,
+        "display_status": "NO_REBATE",
+        "reason": null,
+        "est_rebate_fen": 765432,
+        "paid_at": "2026-09-20T21:15:00+08:00",
+        "is_other_product": false,
+        "order_no": "260920-111122223333444",
+        "product_key": "fixture:U",
+        "actual_fen": null,
+        "clawback_fen": null,
+        "reason_action": [],
+        "expected_credit_period": null,
+        "credit_overdue": false,
+        "appeal_pending": false,
+        "is_price_compare": false,
+        "timeline": [
+          {
+            "node": "paid",
+            "at": "2026-09-20T21:15:00+08:00",
+            "period": null
+          },
+          {
+            "node": "received",
+            "at": "2026-09-24T10:30:00+08:00",
+            "period": null
+          },
+          {
+            "node": "credit_expected",
+            "at": null,
+            "period": null
+          },
+          {
+            "node": "credited",
+            "at": null,
+            "period": null
+          }
+        ]
+      }
+    }
+  }
+}

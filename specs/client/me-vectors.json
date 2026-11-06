@@ -1,0 +1,3773 @@
+{
+  "version": 1,
+  "sources": [
+    "NATIVE/APP-12/brief.md §0、§2、§3、§4；NATIVE/APP-12/rule-gaps.md G01–G36。",
+    "couli origin/main=6fe408528071315f7e696486916cd91fe8ec923c；规划/08_业务规则/10_ID_身份授权与合规.md BR-ID-02/04/07/11/13/15/16/31/33/36/39。",
+    "同一规划版本：11_INV_邀请与分销.md BR-INV-18/19、OPS-20；12_TEXT_话术与格式.md BR-TEXT-10/11/14/23。",
+    "同一规划版本：01_需求规划.md §4.1/4.2、F-ACC-05/13、F-MSG-04/07、F-OBS-06；03_前端架构.md §4.2/4.9；04_数据模型与契约.md §6.1/9/10.1；10_首个完整流程验收用例.md AC-S1-60/61/62/76/77/84/88/134/135/136/137。",
+    "contract.lock rebate-platform=9cd1e6f9c3748bc99d92aec2fe845b48a26f180a；contracts/snapshot/contracts/openapi.json、error-codes.json、texts.default.json、routes.json、enums/identity.json；contracts/snapshot/specs/system-permissions.json。",
+    "couli-runs/design-hifi/sample-data.md；project/Me.dc.html、Settings.dc.html、SettingsGuest.dc.html、PrivacyCenter.dc.html、PrivacyCenterBasic.dc.html、RiskNoticeFrozen.dc.html、RiskNoticeFrozenAppealing.dc.html、RiskNoticeBannedAppealing.dc.html、CsHandoff.dc.html。group/item/id/lists/buttons 是测试 DTO 的语义标识，不是新增路由或文案键。"
+  ],
+  "meParse": [
+    {
+      "name": "全部13字段_sample",
+      "json": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "expect": {
+        "ok": true,
+        "nickname": "凑狸用户",
+        "inviteCode": "K7M3QX",
+        "inviterBound": true,
+        "withdrawableFen": 1234,
+        "estimatedTotalFen": 5678,
+        "riskStateRaw": "normal",
+        "reasonCategory": null,
+        "frozenUntil": null
+      }
+    },
+    {
+      "name": "缺risk",
+      "json": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false
+      },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "缺withdrawable_fen",
+      "json": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "inviter_bound类型错误",
+      "json": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": "true",
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "未知risk_state",
+      "json": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "future_state", "reason_category": null, "frozen_until": null }
+      },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "nullable_无冻结期限",
+      "json": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": null,
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "frozen", "reason_category": null, "frozen_until": null }
+      },
+      "expect": {
+        "ok": true,
+        "nickname": "凑狸用户",
+        "inviteCode": null,
+        "inviterBound": true,
+        "withdrawableFen": 1234,
+        "estimatedTotalFen": 5678,
+        "riskStateRaw": "frozen",
+        "reasonCategory": null,
+        "frozenUntil": null
+      }
+    },
+    {
+      "name": "nullable_有冻结期限",
+      "json": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": null,
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": {
+          "state": "frozen",
+          "reason_category": null,
+          "frozen_until": "2026-10-15T00:00:00+08:00"
+        }
+      },
+      "expect": {
+        "ok": true,
+        "nickname": "凑狸用户",
+        "inviteCode": null,
+        "inviterBound": true,
+        "withdrawableFen": 1234,
+        "estimatedTotalFen": 5678,
+        "riskStateRaw": "frozen",
+        "reasonCategory": null,
+        "frozenUntil": "2026-10-15T00:00:00+08:00"
+      }
+    }
+  ],
+  "meView": [
+    {
+      "name": "游客只有帮助和设置_G04",
+      "levelRaw": "guest",
+      "me": null,
+      "masked": false,
+      "availableRoutes": [
+        "OrderList",
+        "Wallet",
+        "Ledger",
+        "FindOrder",
+        "InviteShare",
+        "Help",
+        "AuthManage",
+        "Settings",
+        "Messages"
+      ],
+      "earningsFlag": null,
+      "expect": {
+        "loginPrompt": true,
+        "inviteCodeBlock": null,
+        "inviterTextKey": null,
+        "balance": null,
+        "bell": null,
+        "grid": [
+          { "group": "more", "item": "帮助中心", "route": "Help" },
+          { "group": "more", "item": "设置", "route": "Settings" }
+        ]
+      }
+    },
+    {
+      "name": "AC-S1-62_已绑定_G04_G05_G06_G31_G35",
+      "levelRaw": "member",
+      "me": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "masked": false,
+      "availableRoutes": [
+        "OrderList",
+        "Wallet",
+        "Ledger",
+        "FindOrder",
+        "InviteShare",
+        "Help",
+        "AuthManage",
+        "Settings",
+        "Messages"
+      ],
+      "earningsFlag": null,
+      "expect": {
+        "loginPrompt": false,
+        "inviteCodeBlock": { "code": "K7M3QX" },
+        "balance": {
+          "withdrawable": { "fen": 1234 },
+          "estimated": { "fen": 5678 },
+          "withdrawRoute": "Wallet"
+        },
+        "bell": { "route": "Messages", "unreadDot": false },
+        "grid": [
+          { "group": "orders_wallet", "item": "我的订单", "route": "OrderList" },
+          { "group": "orders_wallet", "item": "钱包", "route": "Wallet" },
+          { "group": "orders_wallet", "item": "余额流水", "route": "Ledger" },
+          { "group": "orders_wallet", "item": "找回订单", "route": "FindOrder" },
+          { "group": "promo", "item": "邀请好友", "route": "InviteShare" },
+          { "group": "more", "item": "帮助中心", "route": "Help" },
+          { "group": "more", "item": "联系客服", "route": null, "cs": true },
+          { "group": "more", "item": "授权管理", "route": "AuthManage" },
+          { "group": "more", "item": "设置", "route": "Settings" }
+        ]
+      }
+    },
+    {
+      "name": "AC-S1-62_未绑定_G04_G05_G06_G31_G35",
+      "levelRaw": "member",
+      "me": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": false,
+        "invite_backfill": { "eligible": true, "deadline_at": "2026-10-12T00:00:00+08:00" },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "masked": false,
+      "availableRoutes": [
+        "OrderList",
+        "Wallet",
+        "Ledger",
+        "FindOrder",
+        "InviteShare",
+        "Help",
+        "AuthManage",
+        "Settings",
+        "Messages"
+      ],
+      "earningsFlag": false,
+      "expect": {
+        "loginPrompt": false,
+        "inviteCodeBlock": { "code": "K7M3QX" },
+        "balance": {
+          "withdrawable": { "fen": 1234 },
+          "estimated": { "fen": 5678 },
+          "withdrawRoute": "Wallet"
+        },
+        "bell": { "route": "Messages", "unreadDot": false },
+        "grid": [
+          { "group": "orders_wallet", "item": "我的订单", "route": "OrderList" },
+          { "group": "orders_wallet", "item": "钱包", "route": "Wallet" },
+          { "group": "orders_wallet", "item": "余额流水", "route": "Ledger" },
+          { "group": "orders_wallet", "item": "找回订单", "route": "FindOrder" },
+          { "group": "promo", "item": "邀请好友", "route": "InviteShare" },
+          { "group": "more", "item": "帮助中心", "route": "Help" },
+          { "group": "more", "item": "联系客服", "route": null, "cs": true },
+          { "group": "more", "item": "授权管理", "route": "AuthManage" },
+          { "group": "more", "item": "设置", "route": "Settings" }
+        ]
+      }
+    },
+    {
+      "name": "AC-S1-62_无邀请码_G04_G05_G06_G31_G35",
+      "levelRaw": "member",
+      "me": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": null,
+        "inviter_bound": false,
+        "invite_backfill": { "eligible": true, "deadline_at": "2026-10-12T00:00:00+08:00" },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "masked": false,
+      "availableRoutes": [
+        "OrderList",
+        "Wallet",
+        "Ledger",
+        "FindOrder",
+        "InviteShare",
+        "Help",
+        "AuthManage",
+        "Settings",
+        "Messages"
+      ],
+      "earningsFlag": null,
+      "expect": {
+        "loginPrompt": false,
+        "inviteCodeBlock": null,
+        "balance": {
+          "withdrawable": { "fen": 1234 },
+          "estimated": { "fen": 5678 },
+          "withdrawRoute": "Wallet"
+        },
+        "bell": { "route": "Messages", "unreadDot": false },
+        "grid": [
+          { "group": "orders_wallet", "item": "我的订单", "route": "OrderList" },
+          { "group": "orders_wallet", "item": "钱包", "route": "Wallet" },
+          { "group": "orders_wallet", "item": "余额流水", "route": "Ledger" },
+          { "group": "orders_wallet", "item": "找回订单", "route": "FindOrder" },
+          { "group": "promo", "item": "邀请好友", "route": "InviteShare" },
+          { "group": "more", "item": "帮助中心", "route": "Help" },
+          { "group": "more", "item": "联系客服", "route": null, "cs": true },
+          { "group": "more", "item": "授权管理", "route": "AuthManage" },
+          { "group": "more", "item": "设置", "route": "Settings" }
+        ]
+      }
+    },
+    {
+      "name": "负available且隐藏金额_G04_G06_G31_G35",
+      "levelRaw": "member",
+      "me": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": -900, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "masked": true,
+      "availableRoutes": [
+        "OrderList",
+        "Wallet",
+        "Ledger",
+        "FindOrder",
+        "InviteShare",
+        "Help",
+        "AuthManage",
+        "Settings",
+        "Messages"
+      ],
+      "earningsFlag": null,
+      "expect": {
+        "loginPrompt": false,
+        "inviteCodeBlock": { "code": "K7M3QX" },
+        "balance": {
+          "withdrawable": { "fen": 1234, "maskedText": "****" },
+          "estimated": { "fen": 5678, "maskedText": "****" },
+          "withdrawRoute": "Wallet"
+        },
+        "bell": { "route": "Messages", "unreadDot": false },
+        "grid": [
+          { "group": "orders_wallet", "item": "我的订单", "route": "OrderList" },
+          { "group": "orders_wallet", "item": "钱包", "route": "Wallet" },
+          { "group": "orders_wallet", "item": "余额流水", "route": "Ledger" },
+          { "group": "orders_wallet", "item": "找回订单", "route": "FindOrder" },
+          { "group": "promo", "item": "邀请好友", "route": "InviteShare" },
+          { "group": "more", "item": "帮助中心", "route": "Help" },
+          { "group": "more", "item": "联系客服", "route": null, "cs": true },
+          { "group": "more", "item": "授权管理", "route": "AuthManage" },
+          { "group": "more", "item": "设置", "route": "Settings" }
+        ]
+      }
+    },
+    {
+      "name": "收益开关开但路由不可用_G04_G06_G31_G35",
+      "levelRaw": "member",
+      "me": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "masked": false,
+      "availableRoutes": [
+        "OrderList",
+        "Wallet",
+        "Ledger",
+        "FindOrder",
+        "InviteShare",
+        "Help",
+        "AuthManage",
+        "Settings",
+        "Messages"
+      ],
+      "earningsFlag": true,
+      "expect": {
+        "loginPrompt": false,
+        "inviteCodeBlock": { "code": "K7M3QX" },
+        "balance": {
+          "withdrawable": { "fen": 1234 },
+          "estimated": { "fen": 5678 },
+          "withdrawRoute": "Wallet"
+        },
+        "bell": { "route": "Messages", "unreadDot": false },
+        "grid": [
+          { "group": "orders_wallet", "item": "我的订单", "route": "OrderList" },
+          { "group": "orders_wallet", "item": "钱包", "route": "Wallet" },
+          { "group": "orders_wallet", "item": "余额流水", "route": "Ledger" },
+          { "group": "orders_wallet", "item": "找回订单", "route": "FindOrder" },
+          { "group": "promo", "item": "邀请好友", "route": "InviteShare" },
+          { "group": "more", "item": "帮助中心", "route": "Help" },
+          { "group": "more", "item": "联系客服", "route": null, "cs": true },
+          { "group": "more", "item": "授权管理", "route": "AuthManage" },
+          { "group": "more", "item": "设置", "route": "Settings" }
+        ]
+      }
+    },
+    {
+      "name": "收益开关和路由均可用_G04_G06_G31_G35",
+      "levelRaw": "member",
+      "me": {
+        "user_id": "test-user-A",
+        "nickname": "凑狸用户",
+        "avatar_url": "https://example.test/default.png",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": { "eligible": false, "deadline_at": null },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": { "available_fen": 1234, "withdrawable_fen": 1234, "estimated_total_fen": 5678 },
+        "union_bindings": [{ "platform": "taobao", "status": "active" }],
+        "realname_status": "none",
+        "need_reconsent": false,
+        "risk": { "state": "normal", "reason_category": null, "frozen_until": null }
+      },
+      "masked": false,
+      "availableRoutes": [
+        "OrderList",
+        "Wallet",
+        "Ledger",
+        "FindOrder",
+        "InviteShare",
+        "Help",
+        "AuthManage",
+        "Settings",
+        "Messages",
+        "Earnings"
+      ],
+      "earningsFlag": true,
+      "expect": {
+        "loginPrompt": false,
+        "inviteCodeBlock": { "code": "K7M3QX" },
+        "balance": {
+          "withdrawable": { "fen": 1234 },
+          "estimated": { "fen": 5678 },
+          "withdrawRoute": "Wallet"
+        },
+        "bell": { "route": "Messages", "unreadDot": false },
+        "grid": [
+          { "group": "orders_wallet", "item": "我的订单", "route": "OrderList" },
+          { "group": "orders_wallet", "item": "钱包", "route": "Wallet" },
+          { "group": "orders_wallet", "item": "余额流水", "route": "Ledger" },
+          { "group": "orders_wallet", "item": "找回订单", "route": "FindOrder" },
+          { "group": "promo", "item": "邀请好友", "route": "InviteShare" },
+          { "group": "promo", "item": "收益看板", "route": "Earnings" },
+          { "group": "more", "item": "帮助中心", "route": "Help" },
+          { "group": "more", "item": "联系客服", "route": null, "cs": true },
+          { "group": "more", "item": "授权管理", "route": "AuthManage" },
+          { "group": "more", "item": "设置", "route": "Settings" }
+        ]
+      }
+    }
+  ],
+  "guideBar": [
+    {
+      "name": "拒绝47小时59分_G28",
+      "loggedIn": true,
+      "systemRaw": "denied",
+      "lastDeniedIso": "2026-10-08T12:01:00+08:00",
+      "lastClosedIso": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "show": false }
+    },
+    {
+      "name": "拒绝48小时_G28",
+      "loggedIn": true,
+      "systemRaw": "denied",
+      "lastDeniedIso": "2026-10-08T12:00:00+08:00",
+      "lastClosedIso": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "show": true }
+    },
+    {
+      "name": "关闭6天_G28",
+      "loggedIn": true,
+      "systemRaw": "denied",
+      "lastDeniedIso": "2026-09-30T12:00:00+08:00",
+      "lastClosedIso": "2026-10-04T12:00:00+08:00",
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "show": false }
+    },
+    {
+      "name": "关闭7天_G28",
+      "loggedIn": true,
+      "systemRaw": "denied",
+      "lastDeniedIso": "2026-09-30T12:00:00+08:00",
+      "lastClosedIso": "2026-10-03T12:00:00+08:00",
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "show": true }
+    },
+    {
+      "name": "系统已允许_G28",
+      "loggedIn": true,
+      "systemRaw": "granted",
+      "lastDeniedIso": "2026-10-01T12:00:00+08:00",
+      "lastClosedIso": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "show": false }
+    },
+    {
+      "name": "从未决定_G28",
+      "loggedIn": true,
+      "systemRaw": "not_determined",
+      "lastDeniedIso": null,
+      "lastClosedIso": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "show": false }
+    },
+    {
+      "name": "未登录_G28",
+      "loggedIn": false,
+      "systemRaw": "denied",
+      "lastDeniedIso": "2026-10-01T12:00:00+08:00",
+      "lastClosedIso": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "show": false }
+    }
+  ],
+  "settingsItems": [
+    {
+      "name": "基本模式_ios_G01_G02_G30_G32",
+      "levelRaw": "basic",
+      "platformRaw": "ios",
+      "phoneBound": null,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              },
+              { "id": "关于凑狸", "route": "About" },
+              { "id": "帮助中心", "route": "Help" }
+            ]
+          }
+        ],
+        "footer": "enable_full"
+      }
+    },
+    {
+      "name": "游客_ios_G01_G02_G30_G32",
+      "levelRaw": "guest",
+      "platformRaw": "ios",
+      "phoneBound": null,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              },
+              { "id": "关于凑狸", "route": "About" },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" }
+            ]
+          }
+        ],
+        "footer": "login_prompt"
+      }
+    },
+    {
+      "name": "会员_ios_Release已绑手机_G01_G02_G07_G30_G32",
+      "levelRaw": "member",
+      "platformRaw": "ios",
+      "phoneBound": true,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "账号与安全",
+            "items": [
+              { "id": "昵称", "route": null, "clickable": false },
+              { "id": "手机号", "route": null, "clickable": false },
+              { "id": "授权管理", "route": "AuthManage" }
+            ]
+          },
+          {
+            "group": "隐私",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "group": "通用",
+            "items": [
+              { "id": "通知设置", "route": null, "params": { "serviceSwitchAvailable": false } },
+              { "id": "重新显示下单须知", "route": null },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" },
+              { "id": "关于凑狸", "route": "About" }
+            ]
+          }
+        ],
+        "footer": "logout"
+      }
+    },
+    {
+      "name": "会员_ios_Debug未绑手机_G01_G02_G07_G30_G32",
+      "levelRaw": "member",
+      "platformRaw": "ios",
+      "phoneBound": false,
+      "nicknameEditable": true,
+      "serviceSwitchAvailable": true,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "账号与安全",
+            "items": [
+              { "id": "昵称", "route": null, "clickable": true },
+              { "id": "手机号", "route": "BindPhone", "clickable": true },
+              { "id": "授权管理", "route": "AuthManage" }
+            ]
+          },
+          {
+            "group": "隐私",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "group": "通用",
+            "items": [
+              { "id": "通知设置", "route": null, "params": { "serviceSwitchAvailable": true } },
+              { "id": "重新显示下单须知", "route": null },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" },
+              { "id": "关于凑狸", "route": "About" }
+            ]
+          }
+        ],
+        "footer": "logout"
+      }
+    },
+    {
+      "name": "基本模式_android_G01_G02_G30_G32",
+      "levelRaw": "basic",
+      "platformRaw": "android",
+      "phoneBound": null,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              },
+              { "id": "关于凑狸", "route": "About" },
+              { "id": "帮助中心", "route": "Help" }
+            ]
+          }
+        ],
+        "footer": "enable_full"
+      }
+    },
+    {
+      "name": "游客_android_G01_G02_G30_G32",
+      "levelRaw": "guest",
+      "platformRaw": "android",
+      "phoneBound": null,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              },
+              { "id": "关于凑狸", "route": "About" },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" }
+            ]
+          }
+        ],
+        "footer": "login_prompt"
+      }
+    },
+    {
+      "name": "会员_android_Release已绑手机_G01_G02_G07_G30_G32",
+      "levelRaw": "member",
+      "platformRaw": "android",
+      "phoneBound": true,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "账号与安全",
+            "items": [
+              { "id": "昵称", "route": null, "clickable": false },
+              { "id": "手机号", "route": null, "clickable": false },
+              { "id": "授权管理", "route": "AuthManage" }
+            ]
+          },
+          {
+            "group": "隐私",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "group": "通用",
+            "items": [
+              { "id": "通知设置", "route": null, "params": { "serviceSwitchAvailable": false } },
+              { "id": "重新显示下单须知", "route": null },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" },
+              { "id": "关于凑狸", "route": "About" }
+            ]
+          }
+        ],
+        "footer": "logout"
+      }
+    },
+    {
+      "name": "会员_android_Debug未绑手机_G01_G02_G07_G30_G32",
+      "levelRaw": "member",
+      "platformRaw": "android",
+      "phoneBound": false,
+      "nicknameEditable": true,
+      "serviceSwitchAvailable": true,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "账号与安全",
+            "items": [
+              { "id": "昵称", "route": null, "clickable": true },
+              { "id": "手机号", "route": "BindPhone", "clickable": true },
+              { "id": "授权管理", "route": "AuthManage" }
+            ]
+          },
+          {
+            "group": "隐私",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "group": "通用",
+            "items": [
+              { "id": "通知设置", "route": null, "params": { "serviceSwitchAvailable": true } },
+              { "id": "重新显示下单须知", "route": null },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" },
+              { "id": "关于凑狸", "route": "About" }
+            ]
+          }
+        ],
+        "footer": "logout"
+      }
+    },
+    {
+      "name": "基本模式_harmony_G01_G02_G30_G32",
+      "levelRaw": "basic",
+      "platformRaw": "harmony",
+      "phoneBound": null,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              },
+              { "id": "关于凑狸", "route": "About" },
+              { "id": "帮助中心", "route": "Help" }
+            ]
+          }
+        ],
+        "footer": "enable_full"
+      }
+    },
+    {
+      "name": "游客_harmony_G01_G02_G30_G32",
+      "levelRaw": "guest",
+      "platformRaw": "harmony",
+      "phoneBound": null,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              },
+              { "id": "关于凑狸", "route": "About" },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" }
+            ]
+          }
+        ],
+        "footer": "login_prompt"
+      }
+    },
+    {
+      "name": "会员_harmony_Release已绑手机_G01_G02_G07_G30_G32",
+      "levelRaw": "member",
+      "platformRaw": "harmony",
+      "phoneBound": true,
+      "nicknameEditable": false,
+      "serviceSwitchAvailable": false,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "账号与安全",
+            "items": [
+              { "id": "昵称", "route": null, "clickable": false },
+              { "id": "手机号", "route": null, "clickable": false },
+              { "id": "授权管理", "route": "AuthManage" }
+            ]
+          },
+          {
+            "group": "隐私",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "group": "通用",
+            "items": [
+              { "id": "通知设置", "route": null, "params": { "serviceSwitchAvailable": false } },
+              { "id": "重新显示下单须知", "route": null },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" },
+              { "id": "关于凑狸", "route": "About" }
+            ]
+          }
+        ],
+        "footer": "logout"
+      }
+    },
+    {
+      "name": "会员_harmony_Debug未绑手机_G01_G02_G07_G30_G32",
+      "levelRaw": "member",
+      "platformRaw": "harmony",
+      "phoneBound": false,
+      "nicknameEditable": true,
+      "serviceSwitchAvailable": true,
+      "deleteAccountAvailable": false,
+      "expect": {
+        "groups": [
+          {
+            "group": "账号与安全",
+            "items": [
+              { "id": "昵称", "route": null, "clickable": true },
+              { "id": "手机号", "route": "BindPhone", "clickable": true },
+              { "id": "授权管理", "route": "AuthManage" }
+            ]
+          },
+          {
+            "group": "隐私",
+            "items": [
+              { "id": "隐私中心", "route": "PrivacyCenter" },
+              {
+                "id": "用户协议与隐私政策",
+                "route": null,
+                "params": {
+                  "choices": [
+                    { "route": "Agreement", "params": { "type": "agreement" } },
+                    { "route": "Agreement", "params": { "type": "privacy" } }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "group": "通用",
+            "items": [
+              { "id": "通知设置", "route": null, "params": { "serviceSwitchAvailable": true } },
+              { "id": "重新显示下单须知", "route": null },
+              { "id": "打开 App 自动识别剪贴板", "route": null },
+              { "id": "清除缓存", "route": null },
+              { "id": "帮助中心", "route": "Help" },
+              { "id": "关于凑狸", "route": "About" }
+            ]
+          }
+        ],
+        "footer": "logout"
+      }
+    }
+  ],
+  "privacyCenter": [
+    {
+      "name": "basic_ios_G26",
+      "levelRaw": "basic",
+      "platformRaw": "ios",
+      "permissionStatus": { "push": "not_asked", "photos": "not_asked" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": false,
+        "withdrawButton": false,
+        "enableFullButton": true,
+        "permissionRows": [
+          {
+            "type": "push",
+            "purposeKey": "perm.push.card_hint",
+            "statusKey": "privacy.system_permissions.status.not_asked"
+          },
+          {
+            "type": "photos",
+            "purposeKey": "perm.photos.system_purpose",
+            "statusKey": "privacy.system_permissions.status.not_asked"
+          }
+        ]
+      }
+    },
+    {
+      "name": "guest_ios_G26",
+      "levelRaw": "guest",
+      "platformRaw": "ios",
+      "permissionStatus": { "push": "denied", "photos": "granted" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": true,
+        "withdrawButton": true,
+        "enableFullButton": false,
+        "permissionRows": [
+          {
+            "type": "push",
+            "purposeKey": "perm.push.card_hint",
+            "statusKey": "privacy.system_permissions.status.denied"
+          },
+          {
+            "type": "photos",
+            "purposeKey": "perm.photos.system_purpose",
+            "statusKey": "privacy.system_permissions.status.granted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "member_ios_G26",
+      "levelRaw": "member",
+      "platformRaw": "ios",
+      "permissionStatus": { "push": "granted", "photos": "denied" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": true,
+        "withdrawButton": true,
+        "enableFullButton": false,
+        "permissionRows": [
+          {
+            "type": "push",
+            "purposeKey": "perm.push.card_hint",
+            "statusKey": "privacy.system_permissions.status.granted"
+          },
+          {
+            "type": "photos",
+            "purposeKey": "perm.photos.system_purpose",
+            "statusKey": "privacy.system_permissions.status.denied"
+          }
+        ]
+      }
+    },
+    {
+      "name": "basic_android_G26",
+      "levelRaw": "basic",
+      "platformRaw": "android",
+      "permissionStatus": { "push": "not_asked", "photos": "not_asked" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": false,
+        "withdrawButton": false,
+        "enableFullButton": true,
+        "permissionRows": []
+      }
+    },
+    {
+      "name": "guest_android_G26",
+      "levelRaw": "guest",
+      "platformRaw": "android",
+      "permissionStatus": { "push": "denied", "photos": "granted" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": true,
+        "withdrawButton": true,
+        "enableFullButton": false,
+        "permissionRows": []
+      }
+    },
+    {
+      "name": "member_android_G26",
+      "levelRaw": "member",
+      "platformRaw": "android",
+      "permissionStatus": { "push": "granted", "photos": "denied" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": true,
+        "withdrawButton": true,
+        "enableFullButton": false,
+        "permissionRows": []
+      }
+    },
+    {
+      "name": "basic_harmony_G26",
+      "levelRaw": "basic",
+      "platformRaw": "harmony",
+      "permissionStatus": { "push": "not_asked", "photos": "not_asked" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": false,
+        "withdrawButton": false,
+        "enableFullButton": true,
+        "permissionRows": []
+      }
+    },
+    {
+      "name": "guest_harmony_G26",
+      "levelRaw": "guest",
+      "platformRaw": "harmony",
+      "permissionStatus": { "push": "denied", "photos": "granted" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": true,
+        "withdrawButton": true,
+        "enableFullButton": false,
+        "permissionRows": []
+      }
+    },
+    {
+      "name": "member_harmony_G26",
+      "levelRaw": "member",
+      "platformRaw": "harmony",
+      "permissionStatus": { "push": "granted", "photos": "denied" },
+      "expect": {
+        "lists": ["个人信息收集清单", "第三方共享清单"],
+        "personalizationSwitch": true,
+        "withdrawButton": true,
+        "enableFullButton": false,
+        "permissionRows": []
+      }
+    }
+  ],
+  "personalization": [
+    {
+      "name": "basic_关_G03",
+      "on": false,
+      "legalPrivacyVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "levelRaw": "basic",
+      "expect": { "consentBody": null, "header": null }
+    },
+    {
+      "name": "basic_开_G03",
+      "on": true,
+      "legalPrivacyVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "levelRaw": "basic",
+      "expect": { "consentBody": null, "header": null }
+    },
+    {
+      "name": "guest_关_G03",
+      "on": false,
+      "legalPrivacyVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "levelRaw": "guest",
+      "expect": {
+        "consentBody": {
+          "type": "personalization",
+          "version": 3,
+          "accepted": false,
+          "channel": "privacy_center",
+          "client_at": "2026-10-10T12:00:00+08:00"
+        },
+        "header": "off"
+      }
+    },
+    {
+      "name": "guest_开_G03",
+      "on": true,
+      "legalPrivacyVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "levelRaw": "guest",
+      "expect": {
+        "consentBody": {
+          "type": "personalization",
+          "version": 3,
+          "accepted": true,
+          "channel": "privacy_center",
+          "client_at": "2026-10-10T12:00:00+08:00"
+        },
+        "header": null
+      }
+    },
+    {
+      "name": "member_关_G03",
+      "on": false,
+      "legalPrivacyVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "levelRaw": "member",
+      "expect": {
+        "consentBody": {
+          "type": "personalization",
+          "version": 3,
+          "accepted": false,
+          "channel": "privacy_center",
+          "client_at": "2026-10-10T12:00:00+08:00"
+        },
+        "header": "off"
+      }
+    },
+    {
+      "name": "member_开_G03",
+      "on": true,
+      "legalPrivacyVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "levelRaw": "member",
+      "expect": {
+        "consentBody": {
+          "type": "personalization",
+          "version": 3,
+          "accepted": true,
+          "channel": "privacy_center",
+          "client_at": "2026-10-10T12:00:00+08:00"
+        },
+        "header": null
+      }
+    }
+  ],
+  "privacyWithdraw": [
+    {
+      "name": "撤回_ok_G24_G25",
+      "deviceRegistered": true,
+      "consentedVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "result": { "kind": "ok" },
+      "expect": {
+        "request": {
+          "type": "privacy",
+          "version": 3,
+          "accepted": false,
+          "channel": "privacy_center",
+          "client_at": "2026-10-10T12:00:00+08:00"
+        },
+        "localWithdraw": true,
+        "enterBasicMode": true,
+        "stopPushReport": true
+      }
+    },
+    {
+      "name": "撤回_error_G24_G25",
+      "deviceRegistered": true,
+      "consentedVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "result": { "kind": "error", "code": 50001 },
+      "expect": {
+        "request": {
+          "type": "privacy",
+          "version": 3,
+          "accepted": false,
+          "channel": "privacy_center",
+          "client_at": "2026-10-10T12:00:00+08:00"
+        },
+        "localWithdraw": true,
+        "enterBasicMode": true,
+        "stopPushReport": true
+      }
+    },
+    {
+      "name": "撤回_transport_G24_G25",
+      "deviceRegistered": true,
+      "consentedVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "result": { "kind": "transport" },
+      "expect": {
+        "request": {
+          "type": "privacy",
+          "version": 3,
+          "accepted": false,
+          "channel": "privacy_center",
+          "client_at": "2026-10-10T12:00:00+08:00"
+        },
+        "localWithdraw": true,
+        "enterBasicMode": true,
+        "stopPushReport": true
+      }
+    },
+    {
+      "name": "撤回_skipped_G24_G25",
+      "deviceRegistered": false,
+      "consentedVersion": 3,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "result": { "kind": "skipped" },
+      "expect": {
+        "request": null,
+        "localWithdraw": true,
+        "enterBasicMode": true,
+        "stopPushReport": true
+      }
+    }
+  ],
+  "nickname": [
+    {
+      "name": "去首尾空格_G27_G35",
+      "current": "凑狸用户",
+      "input": " 小狸爱买买 ",
+      "expect": { "trimmed": "小狸爱买买", "length": 5, "saveEnabled": true }
+    },
+    {
+      "name": "空串_G27_G35",
+      "current": "凑狸用户",
+      "input": "",
+      "expect": { "trimmed": "", "length": 0, "saveEnabled": false }
+    },
+    {
+      "name": "ASCII全空白_G27_G35",
+      "current": "凑狸用户",
+      "input": " \t\n ",
+      "expect": { "trimmed": "", "length": 0, "saveEnabled": false }
+    },
+    {
+      "name": "恰16字素_G27_G35",
+      "current": "凑狸用户",
+      "input": "abcdefghijklmnop",
+      "expect": { "trimmed": "abcdefghijklmnop", "length": 16, "saveEnabled": true }
+    },
+    {
+      "name": "17字素_G27_G35",
+      "current": "凑狸用户",
+      "input": "abcdefghijklmnopq",
+      "expect": { "trimmed": "abcdefghijklmnopq", "length": 17, "saveEnabled": false }
+    },
+    {
+      "name": "ZWJ一家人_G27_G35",
+      "current": "凑狸用户",
+      "input": "👨\u200d👩\u200d👧",
+      "expect": { "trimmed": "👨\u200d👩\u200d👧", "length": 1, "saveEnabled": true }
+    },
+    {
+      "name": "组合附加符_G27_G35",
+      "current": "凑狸用户",
+      "input": "é",
+      "expect": { "trimmed": "é", "length": 1, "saveEnabled": true }
+    },
+    {
+      "name": "相同昵称_G27_G35",
+      "current": "小狸爱买买",
+      "input": "小狸爱买买",
+      "expect": { "trimmed": "小狸爱买买", "length": 5, "saveEnabled": false }
+    },
+    {
+      "name": "去空格后相同_G27_G35",
+      "current": "小狸爱买买",
+      "input": " 小狸爱买买 ",
+      "expect": { "trimmed": "小狸爱买买", "length": 5, "saveEnabled": false }
+    }
+  ],
+  "nicknameOutcome": [
+    { "name": "成功_G01", "result": { "kind": "ok" }, "expect": { "actionRaw": "saved" } },
+    {
+      "name": "敏感词_G01",
+      "result": {
+        "kind": "error",
+        "code": 20001,
+        "data": { "reason": "nickname_sensitive", "fields": ["nickname"] }
+      },
+      "expect": {
+        "actionRaw": "field_error",
+        "textKey": "error.20001.nickname_sensitive",
+        "keepInput": true
+      }
+    },
+    {
+      "name": "字段错误_G01",
+      "result": { "kind": "error", "code": 20001, "data": { "fields": ["nickname"] } },
+      "expect": { "actionRaw": "field_error", "textKey": "error.20001", "keepInput": true }
+    },
+    {
+      "name": "次数用完_G01",
+      "result": { "kind": "error", "code": 30415 },
+      "expect": { "actionRaw": "show_error", "textKey": "error.30415", "keepInput": true }
+    },
+    {
+      "name": "限流带秒数_G01",
+      "result": { "kind": "error", "code": 42901, "headers": { "Retry-After": "12" } },
+      "expect": {
+        "actionRaw": "retry_after",
+        "textKey": "error.42901",
+        "keepInput": true,
+        "disableMs": 12000
+      }
+    },
+    {
+      "name": "限流缺省_G01",
+      "result": { "kind": "error", "code": 42901 },
+      "expect": {
+        "actionRaw": "retry_after",
+        "textKey": "error.42901",
+        "keepInput": true,
+        "disableMs": 5000
+      }
+    },
+    {
+      "name": "限流非法_G01",
+      "result": { "kind": "error", "code": 42901, "headers": { "Retry-After": "invalid" } },
+      "expect": {
+        "actionRaw": "retry_after",
+        "textKey": "error.42901",
+        "keepInput": true,
+        "disableMs": 5000
+      }
+    },
+    {
+      "name": "服务端错误_G01",
+      "result": { "kind": "error", "code": 50001, "traceId": "test-trace-ABC123" },
+      "expect": { "actionRaw": "error_trace6", "textKey": "error.50001", "keepInput": true }
+    },
+    {
+      "name": "表外5xxxx_G01",
+      "result": { "kind": "error", "code": 59999, "traceId": "test-trace-XYZ789" },
+      "expect": { "actionRaw": "error_trace6", "textKey": "error.50001", "keepInput": true }
+    },
+    {
+      "name": "强更_G01",
+      "result": { "kind": "error", "code": 10405 },
+      "expect": { "actionRaw": "force_update" }
+    },
+    {
+      "name": "传输失败不自动重试_G01",
+      "result": { "kind": "transport" },
+      "expect": { "actionRaw": "show_error", "keepInput": true }
+    }
+  ],
+  "riskNotice": [
+    {
+      "name": "冻结有期限_恢复时间复用CouliFormat_G08",
+      "risk": {
+        "state": "frozen",
+        "reason_category": "abnormal_trade",
+        "frozen_until": "2026-10-15T00:00:00+08:00"
+      },
+      "enteredBy10006": false,
+      "latestAccountAppeal": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "frozen",
+        "reasonKey": "risk_reason.abnormal_trade",
+        "showBack": true,
+        "primaryRaw": "submit_appeal",
+        "footer": [],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "冻结无期限_G08",
+      "risk": { "state": "frozen", "reason_category": null, "frozen_until": null },
+      "enteredBy10006": false,
+      "latestAccountAppeal": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "frozen",
+        "reasonKey": null,
+        "frozenUntilText": null,
+        "showBack": true,
+        "primaryRaw": "submit_appeal",
+        "footer": [],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "封禁_G08_G09_G30",
+      "risk": { "state": "banned", "reason_category": "malicious_rights", "frozen_until": null },
+      "enteredBy10006": true,
+      "latestAccountAppeal": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "banned",
+        "reasonKey": "risk_reason.malicious_rights",
+        "frozenUntilText": null,
+        "showBack": false,
+        "primaryRaw": "submit_appeal",
+        "footer": ["contact_cs", "logout"],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "封禁申诉中_G08_G10_G30",
+      "risk": { "state": "appealing", "reason_category": "fraud_invite", "frozen_until": null },
+      "enteredBy10006": true,
+      "latestAccountAppeal": { "status": "processing" },
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "banned_appealing",
+        "reasonKey": "risk_reason.fraud_invite",
+        "frozenUntilText": null,
+        "showBack": false,
+        "primaryRaw": "view_progress",
+        "footer": ["contact_cs", "logout"],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "冻结申诉中_G08_G10",
+      "risk": { "state": "appealing", "reason_category": "abnormal_trade", "frozen_until": null },
+      "enteredBy10006": false,
+      "latestAccountAppeal": { "status": "processing" },
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "frozen_appealing",
+        "reasonKey": "risk_reason.abnormal_trade",
+        "frozenUntilText": null,
+        "showBack": true,
+        "primaryRaw": "view_progress",
+        "footer": [],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "维持后仍可申诉_G08_G13_G30",
+      "risk": { "state": "banned", "reason_category": "account_security", "frozen_until": null },
+      "enteredBy10006": true,
+      "latestAccountAppeal": { "status": "upheld" },
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "banned_upheld",
+        "reasonKey": "risk_reason.account_security",
+        "frozenUntilText": null,
+        "showBack": false,
+        "primaryRaw": "submit_appeal",
+        "footer": ["contact_cs", "logout"],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "其他表内原因_G08_G09_G30",
+      "risk": { "state": "banned", "reason_category": "other", "frozen_until": null },
+      "enteredBy10006": true,
+      "latestAccountAppeal": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "banned",
+        "reasonKey": "risk_reason.other",
+        "frozenUntilText": null,
+        "showBack": false,
+        "primaryRaw": "submit_appeal",
+        "footer": ["contact_cs", "logout"],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "表外原因不回落_G08",
+      "risk": { "state": "frozen", "reason_category": "new_category", "frozen_until": null },
+      "enteredBy10006": false,
+      "latestAccountAppeal": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "frozen",
+        "reasonKey": null,
+        "frozenUntilText": null,
+        "showBack": true,
+        "primaryRaw": "submit_appeal",
+        "footer": [],
+        "showsDeadline": false
+      }
+    },
+    {
+      "name": "正常以服务端为准_G09",
+      "risk": { "state": "normal", "reason_category": null, "frozen_until": null },
+      "enteredBy10006": true,
+      "latestAccountAppeal": null,
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": {
+        "layoutRaw": "normal",
+        "reasonKey": null,
+        "frozenUntilText": null,
+        "primaryRaw": "back_home",
+        "showsDeadline": false
+      }
+    }
+  ],
+  "riskReason": [
+    {
+      "name": "原因_malicious_rights_G08",
+      "category": "malicious_rights",
+      "expect": { "key": "risk_reason.malicious_rights" }
+    },
+    {
+      "name": "原因_fraud_invite_G08",
+      "category": "fraud_invite",
+      "expect": { "key": "risk_reason.fraud_invite" }
+    },
+    {
+      "name": "原因_abnormal_trade_G08",
+      "category": "abnormal_trade",
+      "expect": { "key": "risk_reason.abnormal_trade" }
+    },
+    {
+      "name": "原因_account_security_G08",
+      "category": "account_security",
+      "expect": { "key": "risk_reason.account_security" }
+    },
+    { "name": "原因_other_G08", "category": "other", "expect": { "key": "risk_reason.other" } },
+    { "name": "原因_表外_G08", "category": "new_category", "expect": { "key": null } },
+    { "name": "原因_null_G08", "category": null, "expect": { "key": null } }
+  ],
+  "appealView": [
+    {
+      "name": "空列表_G15",
+      "appeals": [],
+      "frozenLayout": false,
+      "expect": { "layoutRaw": "submit" }
+    },
+    {
+      "name": "账户处理中_G15",
+      "appeals": [
+        {
+          "appeal_id": "test-AP1",
+          "target_type": "account",
+          "target_id": null,
+          "status": "processing",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": null
+        }
+      ],
+      "frozenLayout": false,
+      "expect": { "layoutRaw": "progress", "appealId": "test-AP1" }
+    },
+    {
+      "name": "维持_G15",
+      "appeals": [
+        {
+          "appeal_id": "test-AP2",
+          "target_type": "account",
+          "target_id": null,
+          "status": "upheld",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "frozenLayout": false,
+      "expect": { "layoutRaw": "result_upheld", "appealId": "test-AP2" }
+    },
+    {
+      "name": "撤销_G15",
+      "appeals": [
+        {
+          "appeal_id": "test-AP3",
+          "target_type": "account",
+          "target_id": null,
+          "status": "revoked",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "frozenLayout": false,
+      "expect": { "layoutRaw": "result_lifted", "appealId": "test-AP3" }
+    },
+    {
+      "name": "最新订单不盖住较早账户_G15",
+      "appeals": [
+        {
+          "appeal_id": "test-ORDER",
+          "target_type": "order",
+          "target_id": "test-order",
+          "status": "upheld",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": "2026-10-10T11:00:00+08:00"
+        },
+        {
+          "appeal_id": "test-ACCOUNT",
+          "target_type": "account",
+          "target_id": null,
+          "status": "processing",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-09T10:00:00+08:00",
+          "closed_at": null
+        }
+      ],
+      "frozenLayout": false,
+      "expect": { "layoutRaw": "progress", "appealId": "test-ACCOUNT" }
+    },
+    {
+      "name": "未知状态不能提交_G15",
+      "appeals": [
+        {
+          "appeal_id": "test-UNKNOWN",
+          "target_type": "account",
+          "target_id": null,
+          "status": "future_status",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": null
+        }
+      ],
+      "frozenLayout": false,
+      "expect": { "layoutRaw": "progress", "appealId": "test-UNKNOWN" }
+    },
+    {
+      "name": "冻结撤销_G10_G15",
+      "appeals": [
+        {
+          "appeal_id": "test-FROZEN",
+          "target_type": "account",
+          "target_id": null,
+          "status": "revoked",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "frozenLayout": true,
+      "expect": { "layoutRaw": "result_lifted", "appealId": "test-FROZEN" }
+    },
+    {
+      "name": "只取最新账户_G15",
+      "appeals": [
+        {
+          "appeal_id": "test-NEW",
+          "target_type": "account",
+          "target_id": null,
+          "status": "processing",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": null
+        },
+        {
+          "appeal_id": "test-OLD",
+          "target_type": "account",
+          "target_id": null,
+          "status": "upheld",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-09T10:00:00+08:00",
+          "closed_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "frozenLayout": true,
+      "expect": { "layoutRaw": "progress", "appealId": "test-NEW" }
+    }
+  ],
+  "appealSubmit": [
+    {
+      "name": "非空无target_id_G11_G14",
+      "content": "测试申诉，请核查。",
+      "expect": {
+        "enabled": true,
+        "body": { "target_type": "account", "content": "测试申诉，请核查。" }
+      }
+    },
+    { "name": "全空白_G11_G14", "content": " \t\n ", "expect": { "enabled": false } },
+    { "name": "空串_G11_G14", "content": "", "expect": { "enabled": false } },
+    {
+      "name": "首尾空白仅断言资格_G11_G14",
+      "content": "  测试申诉，请核查。  ",
+      "expect": { "enabled": true, "body": { "target_type": "account" } }
+    }
+  ],
+  "appealOutcome": [
+    {
+      "name": "成功_G14_G15",
+      "result": {
+        "kind": "ok",
+        "data": {
+          "appeal_id": "test-AP1",
+          "target_type": "account",
+          "target_id": null,
+          "status": "processing",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": null
+        }
+      },
+      "expect": { "actionRaw": "progress" }
+    },
+    {
+      "name": "处理中再次提交返回原单_G14_G15",
+      "result": {
+        "kind": "ok",
+        "data": {
+          "appeal_id": "test-AP1",
+          "target_type": "account",
+          "target_id": null,
+          "status": "processing",
+          "content": "测试申诉，请核查。",
+          "created_at": "2026-10-10T10:00:00+08:00",
+          "closed_at": null
+        }
+      },
+      "expect": { "actionRaw": "progress" }
+    },
+    {
+      "name": "字段错误",
+      "result": { "kind": "error", "code": 20001, "data": { "fields": ["content"] } },
+      "expect": { "actionRaw": "field_error", "textKey": "error.20001", "keepInput": true }
+    },
+    {
+      "name": "内容不存在_G13",
+      "result": { "kind": "error", "code": 30701 },
+      "expect": { "actionRaw": "show_error", "textKey": "error.30701", "keepInput": true }
+    },
+    {
+      "name": "表外码_G13",
+      "result": { "kind": "error", "code": 30499, "msg": "测试服务端提示" },
+      "expect": { "actionRaw": "show_error", "keepInput": true }
+    },
+    {
+      "name": "封禁统一落点_G09",
+      "result": { "kind": "error", "code": 10006 },
+      "expect": { "actionRaw": "risk_notice" }
+    },
+    {
+      "name": "限流_G14",
+      "result": { "kind": "error", "code": 42901, "headers": { "Retry-After": "9" } },
+      "expect": { "actionRaw": "retry_after", "textKey": "error.42901", "keepInput": true }
+    },
+    {
+      "name": "服务端错误_G14",
+      "result": { "kind": "error", "code": 50001, "traceId": "test-trace-ABC123" },
+      "expect": { "actionRaw": "error_trace6", "textKey": "error.50001", "keepInput": true }
+    },
+    {
+      "name": "表外5xxxx_G14",
+      "result": { "kind": "error", "code": 59999, "traceId": "test-trace-XYZ789" },
+      "expect": { "actionRaw": "error_trace6", "textKey": "error.50001", "keepInput": true }
+    },
+    {
+      "name": "强更_G14",
+      "result": { "kind": "error", "code": 10405 },
+      "expect": { "actionRaw": "force_update" }
+    },
+    {
+      "name": "传输失败不重发_G14",
+      "result": { "kind": "transport" },
+      "expect": { "actionRaw": "show_error", "keepInput": true }
+    }
+  ],
+  "pendingWithdrawals": [
+    {
+      "name": "只取三种状态_G16",
+      "items": [
+        { "withdrawal_id": "test-W1", "status": "PENDING_REVIEW", "amount_fen": 1234 },
+        { "withdrawal_id": "test-W2", "status": "APPROVED", "amount_fen": 1234 },
+        { "withdrawal_id": "test-W3", "status": "PAYING", "amount_fen": 1234 },
+        { "withdrawal_id": "test-W4", "status": "PAID_API", "amount_fen": 1234 },
+        { "withdrawal_id": "test-W5", "status": "PAID_MANUAL", "amount_fen": 1234 },
+        { "withdrawal_id": "test-W6", "status": "REJECTED", "amount_fen": 1234 },
+        { "withdrawal_id": "test-W7", "status": "FAILED", "amount_fen": 1234 },
+        { "withdrawal_id": "test-W8", "status": "FUTURE_STATUS", "amount_fen": 1234 }
+      ],
+      "expect": { "shownIds": ["test-W1", "test-W2", "test-W3"] }
+    },
+    { "name": "无进行中_G16", "items": [], "expect": { "shownIds": [] } }
+  ],
+  "pushReport": [
+    {
+      "name": "登录成功绑定新会话_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "已登录冷启动_G18",
+      "steps": [
+        {
+          "event": "cold_start",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "冷启动强更未知_G18",
+      "steps": [
+        {
+          "event": "cold_start",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "unknown",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "冷启动版本过低_G18",
+      "steps": [
+        {
+          "event": "cold_start",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "below",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "在途只补最新值_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-B" },
+          "expect": { "actionRaw": "mark_pending", "inFlight": true, "pending": true }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-C" },
+          "expect": { "actionRaw": "mark_pending", "inFlight": true, "pending": true }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-C",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "换代先丢旧响应再新登录_G18_G29",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-old-pending" },
+          "expect": { "actionRaw": "mark_pending", "inFlight": true, "pending": true }
+        },
+        {
+          "event": "session_changed",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-B"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "drop", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-B"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-B",
+            "sendSession": "test-session-B",
+            "inFlight": true,
+            "pending": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "旧响应不清新会话待报_G18_G29",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "session_changed",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-B"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-B"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-B",
+            "sendSession": "test-session-B",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-C" },
+          "expect": { "actionRaw": "mark_pending", "inFlight": true, "pending": true }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "drop", "inFlight": true, "pending": true }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-B" },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-C",
+            "sendSession": "test-session-B",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-B" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "连续两次登录换账号_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-B"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-B",
+            "sendSession": "test-session-B",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "drop", "inFlight": true, "pending": false }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-B" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "失败无自动重试等待新触发_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "response_error",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "token_changed",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-B",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "10405进入强更不重发_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "response_10405",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "force_update", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "basic不报_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "basic",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "cold_start",
+          "state": {
+            "levelRaw": "basic",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "token_changed",
+          "state": {
+            "levelRaw": "basic",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "guest不报_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "guest",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "cold_start",
+          "state": {
+            "levelRaw": "guest",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "token_changed",
+          "state": {
+            "levelRaw": "guest",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-B",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "受限会话不报_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "deletion_only",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "cold_start",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "deletion_only",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "Release无令牌_G17_G18",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": false,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "cold_start",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": false,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "logout终止后所有事件不报_G18_G29",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-B" },
+          "expect": { "actionRaw": "mark_pending", "inFlight": true, "pending": true }
+        },
+        {
+          "event": "logout",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "cold_start",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-C" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "response_error",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "response_10405",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "session_changed",
+          "state": { "session": "test-session-B" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "logout",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "consent_withdrawn",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    },
+    {
+      "name": "consent_withdrawn终止后所有事件不报_G18_G29",
+      "steps": [
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": {
+            "actionRaw": "send",
+            "sendToken": "test-token-A",
+            "sendSession": "test-session-A",
+            "inFlight": true,
+            "pending": false
+          }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-B" },
+          "expect": { "actionRaw": "mark_pending", "inFlight": true, "pending": true }
+        },
+        {
+          "event": "consent_withdrawn",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "login_success",
+          "state": {
+            "levelRaw": "member",
+            "sessionScopeRaw": "full",
+            "hasToken": true,
+            "token": "test-token-A",
+            "forceUpdateRaw": "supported",
+            "session": "test-session-A"
+          },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "cold_start",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "token_changed",
+          "state": { "token": "test-token-C" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "response_ok",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "response_error",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "response_10405",
+          "state": { "session": "test-session-A" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "session_changed",
+          "state": { "session": "test-session-B" },
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "logout",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        },
+        {
+          "event": "consent_withdrawn",
+          "expect": { "actionRaw": "none", "inFlight": false, "pending": false }
+        }
+      ]
+    }
+  ],
+  "csEntry": [
+    {
+      "name": "缺客服配置_G20",
+      "kfUrl": null,
+      "wechatRaw": "yes",
+      "expect": {
+        "sheetRaw": "help_only",
+        "openUrl": null,
+        "copyText": null,
+        "buttons": ["go_help"]
+      }
+    },
+    {
+      "name": "非https_G20",
+      "kfUrl": "http://example.test/kf",
+      "wechatRaw": "yes",
+      "expect": {
+        "sheetRaw": "help_only",
+        "openUrl": null,
+        "copyText": null,
+        "buttons": ["go_help"]
+      }
+    },
+    {
+      "name": "已装微信_G20",
+      "kfUrl": "https://example.test/kf?source=config",
+      "wechatRaw": "yes",
+      "openResult": "opened",
+      "expect": {
+        "sheetRaw": "handoff",
+        "openUrl": "https://example.test/kf?source=config",
+        "copyText": null,
+        "buttons": ["open_wechat", "go_help"]
+      }
+    },
+    {
+      "name": "微信拉不起_G20",
+      "kfUrl": "https://example.test/kf?source=config",
+      "wechatRaw": "yes",
+      "openResult": "failed",
+      "expect": {
+        "sheetRaw": "open_failed",
+        "openUrl": "https://example.test/kf?source=config",
+        "copyText": "https://example.test/kf?source=config",
+        "buttons": ["retry", "copy_link", "go_help"]
+      }
+    },
+    {
+      "name": "未装微信不外跳_G20",
+      "kfUrl": "https://example.test/kf?source=config",
+      "wechatRaw": "no",
+      "expect": {
+        "sheetRaw": "wechat_missing",
+        "openUrl": null,
+        "copyText": "https://example.test/kf?source=config",
+        "buttons": ["copy_link", "go_help"]
+      }
+    },
+    {
+      "name": "未知按可尝试_G20",
+      "kfUrl": "https://example.test/kf?source=config",
+      "wechatRaw": "unknown",
+      "expect": {
+        "sheetRaw": "handoff",
+        "openUrl": "https://example.test/kf?source=config",
+        "copyText": null,
+        "buttons": ["open_wechat", "go_help"]
+      }
+    }
+  ],
+  "csLink": [
+    {
+      "name": "账号A原串_G20",
+      "kfUrl": "https://example.test/kf?x=%2F&entry=config#help",
+      "fromRoute": "Me",
+      "account": {
+        "user_id": "test-A",
+        "phone": "138****5678",
+        "device_id": "test-device-A",
+        "invite_code": "K7M3QX"
+      },
+      "expect": { "url": "https://example.test/kf?x=%2F&entry=config#help" }
+    },
+    {
+      "name": "账号B原串_G20",
+      "kfUrl": "https://example.test/kf?x=%2F&entry=config#help",
+      "fromRoute": "Me",
+      "account": {
+        "user_id": "test-B",
+        "phone": "139****0000",
+        "device_id": "test-device-B",
+        "invite_code": "TEST02"
+      },
+      "expect": { "url": "https://example.test/kf?x=%2F&entry=config#help" }
+    },
+    {
+      "name": "无查询串也不加路由_G20",
+      "kfUrl": "https://example.test/kf",
+      "fromRoute": "Wallet",
+      "account": {
+        "user_id": "test-C",
+        "phone": "137****0000",
+        "device_id": "test-device-C",
+        "invite_code": "TEST03"
+      },
+      "expect": { "url": "https://example.test/kf" }
+    }
+  ],
+  "diagnostics": [
+    {
+      "name": "九项白名单值不比字段名_G23",
+      "fields": {
+        "version": "TEST_VERSION",
+        "build": "TEST_BUILD",
+        "channel": "TEST_CHANNEL",
+        "system_version": "TEST_OS",
+        "model": "TEST_MODEL",
+        "device_id": "test-device-prefix-END321",
+        "push_reported": true,
+        "trace_ids": ["TRACE_A", "TRACE_B", "TRACE_C"],
+        "config_version": "CONFIG_123",
+        "home_version": "HOME_456",
+        "access_token": "DO_NOT_COPY_ACCESS",
+        "refresh_token": "DO_NOT_COPY_REFRESH",
+        "h5_token": "DO_NOT_COPY_H5",
+        "install_secret": "DO_NOT_COPY_SECRET",
+        "device_hash": "DO_NOT_COPY_HASH",
+        "phone": "138****5678",
+        "uid": "DO_NOT_COPY_UID",
+        "user_id": "DO_NOT_COPY_USER",
+        "invite_code": "K7M3QX",
+        "push_token": "DO_NOT_COPY_PUSH",
+        "old_trace_id": "DO_NOT_COPY_OLD_TRACE"
+      },
+      "expect": {
+        "lines": [
+          "TEST_VERSION|TEST_BUILD",
+          "TEST_CHANNEL",
+          "TEST_OS",
+          "TEST_MODEL",
+          "END321",
+          "是",
+          "TRACE_A|TRACE_B|TRACE_C",
+          "CONFIG_123",
+          "HOME_456"
+        ],
+        "forbiddenAbsent": [
+          "DO_NOT_COPY_ACCESS",
+          "DO_NOT_COPY_REFRESH",
+          "DO_NOT_COPY_H5",
+          "test-device-prefix-END321",
+          "test-device-prefix",
+          "DO_NOT_COPY_HASH",
+          "138****5678",
+          "DO_NOT_COPY_UID",
+          "DO_NOT_COPY_USER",
+          "K7M3QX",
+          "DO_NOT_COPY_PUSH",
+          "DO_NOT_COPY_OLD_TRACE",
+          "DO_NOT_COPY_SECRET"
+        ]
+      }
+    },
+    {
+      "name": "缺首页版本省略整行_G23",
+      "fields": {
+        "version": "TEST_VERSION",
+        "build": "TEST_BUILD",
+        "channel": "TEST_CHANNEL",
+        "system_version": "TEST_OS",
+        "model": "TEST_MODEL",
+        "device_id": "test-device-prefix-END321",
+        "push_reported": true,
+        "trace_ids": ["TRACE_A", "TRACE_B", "TRACE_C"],
+        "config_version": "CONFIG_123",
+        "access_token": "DO_NOT_COPY_ACCESS",
+        "refresh_token": "DO_NOT_COPY_REFRESH",
+        "h5_token": "DO_NOT_COPY_H5",
+        "install_secret": "DO_NOT_COPY_SECRET",
+        "device_hash": "DO_NOT_COPY_HASH",
+        "phone": "138****5678",
+        "uid": "DO_NOT_COPY_UID",
+        "user_id": "DO_NOT_COPY_USER",
+        "invite_code": "K7M3QX",
+        "push_token": "DO_NOT_COPY_PUSH",
+        "old_trace_id": "DO_NOT_COPY_OLD_TRACE"
+      },
+      "expect": {
+        "lines": [
+          "TEST_VERSION|TEST_BUILD",
+          "TEST_CHANNEL",
+          "TEST_OS",
+          "TEST_MODEL",
+          "END321",
+          "是",
+          "TRACE_A|TRACE_B|TRACE_C",
+          "CONFIG_123"
+        ],
+        "forbiddenAbsent": [
+          "DO_NOT_COPY_ACCESS",
+          "DO_NOT_COPY_REFRESH",
+          "DO_NOT_COPY_H5",
+          "test-device-prefix-END321",
+          "test-device-prefix",
+          "DO_NOT_COPY_HASH",
+          "138****5678",
+          "DO_NOT_COPY_UID",
+          "DO_NOT_COPY_USER",
+          "K7M3QX",
+          "DO_NOT_COPY_PUSH",
+          "DO_NOT_COPY_OLD_TRACE",
+          "HOME_456",
+          "DO_NOT_COPY_SECRET"
+        ]
+      }
+    }
+  ],
+  "about": [
+    {
+      "name": "公示原文_G22",
+      "filingText": "测试模型名称\n测试登记编号：TEST-001",
+      "expect": { "filingSection": "测试模型名称\n测试登记编号：TEST-001", "icpRow": false }
+    },
+    {
+      "name": "空公示_G22",
+      "filingText": "",
+      "expect": { "filingSection": null, "icpRow": false }
+    },
+    {
+      "name": "未配置公示_G22",
+      "filingText": null,
+      "expect": { "filingSection": null, "icpRow": false }
+    }
+  ],
+  "route10006": [
+    {
+      "name": "普通页替换_G09",
+      "topRoute": "Me",
+      "forceUpdateShowing": false,
+      "expect": { "actionRaw": "replace_risk_notice" }
+    },
+    {
+      "name": "已在说明页_G09",
+      "topRoute": "RiskNotice",
+      "forceUpdateShowing": false,
+      "expect": { "actionRaw": "none" }
+    },
+    {
+      "name": "强更优先_G09",
+      "topRoute": "Me",
+      "forceUpdateShowing": true,
+      "expect": { "actionRaw": "none" }
+    }
+  ],
+  "localDataClear": [
+    {
+      "name": "logout_guide_bar_closed_at_G03_G28_G29",
+      "event": "logout",
+      "item": "guide_bar_closed_at",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "logout_personalization_G03_G28_G29",
+      "event": "logout",
+      "item": "personalization",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "logout_push_report_state_G03_G28_G29",
+      "event": "logout",
+      "item": "push_report_state",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "logout_me_snapshot_G03_G28_G29",
+      "event": "logout",
+      "item": "me_snapshot",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "logout_nickname_draft_G03_G28_G29",
+      "event": "logout",
+      "item": "nickname_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "logout_appeal_draft_G03_G28_G29",
+      "event": "logout",
+      "item": "appeal_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "account_switch_guide_bar_closed_at_G03_G28_G29",
+      "event": "account_switch",
+      "item": "guide_bar_closed_at",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "account_switch_personalization_G03_G28_G29",
+      "event": "account_switch",
+      "item": "personalization",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "account_switch_push_report_state_G03_G28_G29",
+      "event": "account_switch",
+      "item": "push_report_state",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "account_switch_me_snapshot_G03_G28_G29",
+      "event": "account_switch",
+      "item": "me_snapshot",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "account_switch_nickname_draft_G03_G28_G29",
+      "event": "account_switch",
+      "item": "nickname_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "account_switch_appeal_draft_G03_G28_G29",
+      "event": "account_switch",
+      "item": "appeal_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "session_invalid_guide_bar_closed_at_G03_G28_G29",
+      "event": "session_invalid",
+      "item": "guide_bar_closed_at",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "session_invalid_personalization_G03_G28_G29",
+      "event": "session_invalid",
+      "item": "personalization",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "session_invalid_push_report_state_G03_G28_G29",
+      "event": "session_invalid",
+      "item": "push_report_state",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "session_invalid_me_snapshot_G03_G28_G29",
+      "event": "session_invalid",
+      "item": "me_snapshot",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "session_invalid_nickname_draft_G03_G28_G29",
+      "event": "session_invalid",
+      "item": "nickname_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "session_invalid_appeal_draft_G03_G28_G29",
+      "event": "session_invalid",
+      "item": "appeal_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "consent_revoked_guide_bar_closed_at_G03_G28_G29",
+      "event": "consent_revoked",
+      "item": "guide_bar_closed_at",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "consent_revoked_personalization_G03_G28_G29",
+      "event": "consent_revoked",
+      "item": "personalization",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "consent_revoked_push_report_state_G03_G28_G29",
+      "event": "consent_revoked",
+      "item": "push_report_state",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "consent_revoked_me_snapshot_G03_G28_G29",
+      "event": "consent_revoked",
+      "item": "me_snapshot",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "consent_revoked_nickname_draft_G03_G28_G29",
+      "event": "consent_revoked",
+      "item": "nickname_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "consent_revoked_appeal_draft_G03_G28_G29",
+      "event": "consent_revoked",
+      "item": "appeal_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "env_switch_guide_bar_closed_at_G03_G28_G29",
+      "event": "env_switch",
+      "item": "guide_bar_closed_at",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "env_switch_personalization_G03_G28_G29",
+      "event": "env_switch",
+      "item": "personalization",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "env_switch_push_report_state_G03_G28_G29",
+      "event": "env_switch",
+      "item": "push_report_state",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "env_switch_me_snapshot_G03_G28_G29",
+      "event": "env_switch",
+      "item": "me_snapshot",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "env_switch_nickname_draft_G03_G28_G29",
+      "event": "env_switch",
+      "item": "nickname_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "env_switch_appeal_draft_G03_G28_G29",
+      "event": "env_switch",
+      "item": "appeal_draft",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "app_background_guide_bar_closed_at_G03_G28_G29",
+      "event": "app_background",
+      "item": "guide_bar_closed_at",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "app_background_personalization_G03_G28_G29",
+      "event": "app_background",
+      "item": "personalization",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "app_background_push_report_state_G03_G28_G29",
+      "event": "app_background",
+      "item": "push_report_state",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "app_background_me_snapshot_G03_G28_G29",
+      "event": "app_background",
+      "item": "me_snapshot",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "app_background_nickname_draft_G03_G28_G29",
+      "event": "app_background",
+      "item": "nickname_draft",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "app_background_appeal_draft_G03_G28_G29",
+      "event": "app_background",
+      "item": "appeal_draft",
+      "expect": { "clear": false }
+    }
+  ],
+  "gaps": [
+    {
+      "refs": [
+        "G01",
+        "G02",
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G09",
+        "G10",
+        "G11",
+        "G12",
+        "G13",
+        "G14",
+        "G15",
+        "G16",
+        "G17",
+        "G18",
+        "G19",
+        "G20",
+        "G21",
+        "G22",
+        "G23",
+        "G24",
+        "G25",
+        "G26",
+        "G27",
+        "G28",
+        "G29",
+        "G30",
+        "G31",
+        "G32",
+        "G33",
+        "G34",
+        "G35",
+        "G36"
+      ],
+      "source": "NATIVE/APP-12/rule-gaps.md",
+      "note": "沿用现在的做法；不为 G01–G05 缺失接口定义请求形状。"
+    },
+    {
+      "id": "未定_昵称空白",
+      "refs": ["G27"],
+      "note": "全角空格是否属于首尾空白未规定，不提供该输入的 trimmed/length/saveEnabled 期望；不自行扩展其他 Unicode 空白或规范化规则。"
+    },
+    {
+      "id": "未定_申诉正文空白",
+      "refs": ["G11", "G14"],
+      "note": "首尾空白影响提交资格已定，但最终 content 是否 trim 未定。带首尾空白用例只断言 enabled、target_type、请求仅有 target_type/content 且不含 target_id，不断言 content 的值。"
+    },
+    {
+      "id": "未定_诊断字段名",
+      "refs": ["G23"],
+      "note": "英文字段名、分隔符和行序未定。expect.lines 每项表示同一行必须出现的值；竖线仅为测试分词符，不是输出分隔符。按无序行匹配并核对总行数，禁止值不能出现。fields 的英文键只是测试输入适配约定。"
+    },
+    {
+      "id": "未定_草稿键名",
+      "refs": ["G35"],
+      "note": "已绑定/未绑定仅给了文案，未给 inviterTextKey 键名；member 的该字段不写期望。昵称本地 hintKey、成功提示键同样省略。邀请人文本需在草稿键定名后的页面测试逐字核对为“邀请人：已绑定 / 未绑定”；不得据这些省略项宣称完整 UI 验收通过。"
+    },
+    {
+      "id": "未定_离页后的输入和正常页次要控件",
+      "refs": ["G09"],
+      "note": "成功、强更、10006 后 keepInput 的纯函数含义未定，省略；normal 的返回按钮与 footer 未规定，省略。其他已定字段照常断言。"
+    },
+    {
+      "id": "接线_设置描述",
+      "refs": ["G02", "G32"],
+      "note": "groups 只描述 Settings 顶层行；group 空串表示未分组。basic 的四行加 footer=enable_full 共五项。协议行 params.choices 是半屏两个按钮的目标描述，不作为 Router 参数整体发送。通知设置行 params.serviceSwitchAvailable 是页内能力标记，不是接口字段；false 表示子页不显示服务开关。"
+    },
+    {
+      "id": "接线_纯函数边界",
+      "refs": ["G18", "G27"],
+      "note": "push state 在非响应事件是当前状态补丁；response_* 的 state.session 是原请求捕获的会话世代，不得覆盖当前会话。inFlight/pending 属于当前世代；换代取消旧逻辑占位，迟到回调仍可能到达。退出/撤回后的同一 Policy 实例终止，重新启用另建实例。G27 字素向量验证完整字素路径；Segmenter 不可用的保守后备须另做能力测试。"
+    },
+    {
+      "id": "接线_现有格式与生成数据",
+      "refs": ["G26"],
+      "note": "非空冻结恢复时间不在向量重复时间格式规则，三端测试与已有 CouliFormat.timeListFuture 比较。金额只断言整数分及隐藏串。鸿蒙 MeVectorsData 同时从锁定 system-permissions.json 生成 ME_PERMISSIONS_JSON，避免另手写权限清单。"
+    },
+    {
+      "id": "后续_页面及执行层验收",
+      "refs": [
+        "G01",
+        "G02",
+        "G03",
+        "G14",
+        "G17",
+        "G18",
+        "G19",
+        "G21",
+        "G24",
+        "G25",
+        "G29",
+        "G34",
+        "G36"
+      ],
+      "note": "纯函数测试不代替 brief §0/§2.17：确认框取消/遮罩/返回不撤回或退出，已有清理入口及落盘失败，匿名请求与 SDK 隔离，真实 Router 按钮及 H5 落点，昵称旧读取不覆盖保存，A失效→B登录→旧页面，执行层 Retry-After/trace6、幂等键、清缓存保留范围、统一剪贴板、Release 排除桩、推送 provider=mobpush 与旧回调取消、个性化网络失败不回滚及未注册不补报。"
+    }
+  ],
+  "visualMe": {
+    "clock": "2026-10-12T10:30:00+08:00",
+    "trace": "me-visual-a1b2c3",
+    "profiles": {
+      "me_member": {
+        "user_id": "me-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 1234,
+          "withdrawable_fen": 1234,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "me_new_user": {
+        "user_id": "me-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "R8T4WN",
+        "inviter_bound": false,
+        "invite_backfill": {
+          "eligible": true,
+          "deadline_at": "2026-10-19T10:00:00+08:00"
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 0,
+          "withdrawable_fen": 0,
+          "estimated_total_fen": 0
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "me_bound_user": {
+        "user_id": "me-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "R8T4WN",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 0,
+          "withdrawable_fen": 0,
+          "estimated_total_fen": 0
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "me_no_invite_code": {
+        "user_id": "me-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": null,
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 1234,
+          "withdrawable_fen": 1234,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "me_negative": {
+        "user_id": "me-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": -567,
+          "withdrawable_fen": 0,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "me_frozen": {
+        "user_id": "me-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 1234,
+          "withdrawable_fen": 1234,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "frozen",
+          "reason_category": "account_security",
+          "frozen_until": "2026-11-30T00:00:00+08:00"
+        }
+      },
+      "me_long": {
+        "user_id": "me-visual-a",
+        "nickname": "一二三四五六七八九十一二三四五六",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 1,
+          "withdrawable_fen": 9999999,
+          "estimated_total_fen": 99999999
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "me_no_sum": {
+        "user_id": "me-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 9900,
+          "withdrawable_fen": 1234,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      }
+    },
+    "routes_beta": [
+      "OrderList",
+      "Wallet",
+      "Ledger",
+      "FindOrder",
+      "InviteShare",
+      "Help",
+      "AuthManage",
+      "Settings",
+      "Messages"
+    ],
+    "routes_public": [
+      "OrderList",
+      "Wallet",
+      "Ledger",
+      "FindOrder",
+      "InviteShare",
+      "Help",
+      "AuthManage",
+      "Settings",
+      "Messages",
+      "Earnings"
+    ],
+    "localStates": {
+      "me_hidden_guide": {
+        "profile": "me_member",
+        "hidden": true,
+        "notification": "denied",
+        "deniedAt": "2026-10-09T10:00:00+08:00",
+        "closedAt": null
+      },
+      "guest": {
+        "level": "guest"
+      },
+      "restricted": {
+        "level": "member",
+        "scope": "deletion_only"
+      }
+    }
+  },
+  "visualSettings": {
+    "clock": "2026-10-12T10:30:00+08:00",
+    "zone": "Asia/Shanghai",
+    "trace": "settings-visual-a1b2c3",
+    "trace6": "a1b2c3",
+    "boards": {
+      "Settings-v2": {
+        "sha12": "d076d94490d7",
+        "page": 1039,
+        "use": "main"
+      },
+      "SettingsGuest-v2": {
+        "sha12": "7663f3b8db53",
+        "page": 780,
+        "use": "order_GS03"
+      },
+      "SettingsBasic": {
+        "sha12": "dca586aae4d5",
+        "page": 800,
+        "use": "order_GS03"
+      },
+      "SettingsClipboardConsent": {
+        "sha12": "668e9c73da58",
+        "page": 1039,
+        "use": "sheet"
+      },
+      "SettingsAgreementSheet-v2": {
+        "sha12": "7a2f9deca056",
+        "page": 1039,
+        "use": "sheet"
+      },
+      "SettingsClearCache-v2": {
+        "sha12": "2aff1c58b7b3",
+        "page": 1039,
+        "use": "dialog"
+      },
+      "SettingsCacheCleared-v2": {
+        "sha12": "b8697ade4555",
+        "page": 1039,
+        "use": "toast"
+      },
+      "SettingsLogoutConfirm-v2": {
+        "sha12": "fbdb33920e19",
+        "page": 1039,
+        "use": "dialog"
+      },
+      "SettingsDeletionWithdrawn-v2": {
+        "sha12": "e1997e11d790",
+        "page": 1039,
+        "use": "toast"
+      },
+      "SettingsNickname": {
+        "sha12": "18c611dc0ba7",
+        "page": 844,
+        "use": "main"
+      },
+      "SettingsNicknameSaved-v2": {
+        "sha12": "0703e0b867ee",
+        "page": 1039,
+        "use": "toast"
+      },
+      "SettingsNicknameLimit": {
+        "sha12": "75c51720903e",
+        "page": 844,
+        "use": "save_enabled_GS10"
+      },
+      "SettingsNicknameSensitive": {
+        "sha12": "12cbff837626",
+        "page": 844,
+        "use": "main"
+      },
+      "SettingsDark": {
+        "sha12": "a7f7f53b5d4a",
+        "page": 1039,
+        "use": "dark"
+      },
+      "NotifySettings": {
+        "sha12": "078b68c7a982",
+        "page": 844,
+        "use": "main"
+      },
+      "NotifySettingsOn": {
+        "sha12": "8fac5337de42",
+        "page": 844,
+        "use": "main"
+      },
+      "NotifySettingsDark": {
+        "sha12": "0a70a74ac8f1",
+        "page": 844,
+        "use": "dark"
+      }
+    },
+    "skippedBoards": {
+      "NotifySettingsNotAsked": "ios_only_GS14",
+      "AuthManage-v2": "GS01",
+      "AuthManageBlocked-v2": "GS01",
+      "AuthManageStates": "GS01",
+      "AuthManageDark": "GS01",
+      "StateLoadFailed": "GM11",
+      "StateNetworkError": "GM11"
+    },
+    "profiles": {
+      "settings_member": {
+        "user_id": "settings-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 1234,
+          "withdrawable_fen": 1234,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "settings_long_nickname": {
+        "user_id": "settings-visual-a",
+        "nickname": "一二三四五六七八九十一二三四五六",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": true,
+        "balance": {
+          "available_fen": 1234,
+          "withdrawable_fen": 1234,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      },
+      "settings_unbound": {
+        "user_id": "settings-visual-a",
+        "nickname": "凑狸用户",
+        "avatar_url": "",
+        "invite_code": "K7M3QX",
+        "inviter_bound": true,
+        "invite_backfill": {
+          "eligible": false,
+          "deadline_at": null
+        },
+        "identity_level": "phone",
+        "phone_bound": false,
+        "balance": {
+          "available_fen": 1234,
+          "withdrawable_fen": 1234,
+          "estimated_total_fen": 5678
+        },
+        "union_bindings": [],
+        "realname_status": "verified",
+        "need_reconsent": false,
+        "risk": {
+          "state": "normal",
+          "reason_category": null,
+          "frozen_until": null
+        }
+      }
+    },
+    "sessions": {
+      "settings_member": {
+        "level": "member",
+        "privacy": "consented",
+        "phoneKnown": true,
+        "cacheBytes": 12582912,
+        "clipboardSwitch": false,
+        "clipboardConsent": false,
+        "agentRow": false
+      },
+      "guest_consented": {
+        "level": "guest",
+        "privacy": "consented",
+        "cacheBytes": 12582912,
+        "clipboardSwitch": false,
+        "clipboardConsent": false
+      },
+      "basic": {
+        "level": "basic",
+        "privacy": "basic_mode",
+        "cacheBytes": 12582912
+      }
+    },
+    "localPhone": "13800005678",
+    "clipboardConfig": {
+      "clipboard": {
+        "consent_version": "purpose-02"
+      }
+    },
+    "routes_beta": [
+      "PrivacyCenter",
+      "Agreement",
+      "About",
+      "Help",
+      "AuthManage",
+      "BindPhone",
+      "Login",
+      "Settings"
+    ],
+    "routes_public": [
+      "PrivacyCenter",
+      "Agreement",
+      "About",
+      "Help",
+      "AuthManage",
+      "BindPhone",
+      "Login",
+      "Settings",
+      "DeleteAccount"
+    ],
+    "nickname": {
+      "original": "凑狸用户",
+      "limit": {
+        "input": "小狸爱买买",
+        "code": 30415
+      },
+      "sensitive": {
+        "input": "小狸省钱王",
+        "code": 20001,
+        "reason": "nickname_sensitive"
+      },
+      "tooLong": "一二三四五六七八九十一二三四五六七",
+      "stress": "一二三四五六七八九十一二三四五六",
+      "grapheme": "👨\u200d👩\u200d👧abcdefghijklmno",
+      "saved": "小狸省钱王"
+    },
+    "notify": {
+      "denied": "denied",
+      "granted": "granted",
+      "notDetermined": "not_determined",
+      "service": true,
+      "loadErrorCode": 50001,
+      "switchErrorCode": 50001
+    },
+    "notices": [
+      {
+        "text": "settings.clear_cache.done",
+        "check": true
+      },
+      {
+        "text": "nickname.saved",
+        "check": true
+      },
+      {
+        "text": "deletion.cancelled_toast",
+        "check": true
+      },
+      {
+        "text": "settings.reset_tip.done",
+        "check": true
+      },
+      {
+        "text": "error.42901",
+        "check": false
+      },
+      {
+        "text": "error.50001",
+        "check": false
+      },
+      {
+        "text": "notify.switch_failed",
+        "check": false
+      }
+    ]
+  }
+}

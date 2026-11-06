@@ -1,0 +1,3655 @@
+{
+  "version": 1,
+  "sources": [
+    "couli-runs/NATIVE/APP-11/brief.md §0、§2、§3、§4",
+    "couli-runs/NATIVE/APP-11/rule-gaps.md G01～G31：期望按「现在的做法」",
+    "couli@c87819e55166974776b68ecea293733d1f4865d2(origin/main):规划/03_前端架构.md §3.6、§4.3、§4.4、§4.7、§6全节、§12",
+    "couli@c87819e55166974776b68ecea293733d1f4865d2(origin/main):规划/01_需求规划.md §4.2、F-HOME-01～09；规划/02_系统架构.md §10；规划/04_数据模型与契约.md §3.2、§6.2",
+    "couli@c87819e55166974776b68ecea293733d1f4865d2(origin/main):规划/08_业务规则/12_TEXT_话术与格式.md BR-TEXT-11、13、17；10_ID_身份授权与合规.md BR-ID-10、11、13、33；11_INV_邀请与分销.md BR-INV-23",
+    "couli@c87819e55166974776b68ecea293733d1f4865d2(origin/main):规划/10_首个完整流程验收用例.md §0.5、AC-S1-81、86、89、90、131",
+    "rebate-android/contracts/snapshot@contract.lock=9cd1e6f:contracts/openapi.json previewPage/listArticles/getConfig及PagePreview/PagePreviewResponse/NoticeItem/NoticeArticleSummary/ArticleListData/RouteTarget/ProductCard/ConfigFeatures",
+    "rebate-android/contracts/snapshot@contract.lock=9cd1e6f:contracts/routes.json、contracts/error-codes.json、specs/events.json",
+    "couli-runs/design-hifi/project/Main.dc.html、MainPopup.dc.html",
+    "既有测试与比较器：rebate-ios@99680bd、rebate-android@4c667c6、rebate-harmony@d8df60c"
+  ],
+  "goldenPages": {
+    "main_v3": {
+      "page_key": "home",
+      "version": 31,
+      "sections": [
+        {
+          "id": "icons",
+          "type": "icon_grid",
+          "version": 1,
+          "props": {
+            "columns": 5,
+            "rows": 2
+          },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "icon": "builtin:platform.taobao",
+                "title": "淘宝",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "platform": "taobao"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:platform.jd",
+                "title": "京东",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "platform": "jd"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:platform.pdd",
+                "title": "拼多多",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "platform": "pdd"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.supermarket",
+                "title": "超市百货",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "超市百货"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.fresh",
+                "title": "食品生鲜",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "食品生鲜"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.baby",
+                "title": "母婴用品",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "母婴用品"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.beauty",
+                "title": "美妆个护",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "美妆个护"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.household",
+                "title": "家居日用",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "家居日用"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.electronics",
+                "title": "数码家电",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "数码家电"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:guide",
+                "title": "新人指南",
+                "action": {
+                  "route": "Help"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "scroll",
+          "type": "product_scroll",
+          "version": 1,
+          "props": {
+            "title": "今日精选",
+            "more_action": {
+              "route": "Search",
+              "params": {
+                "q": "今日精选"
+              }
+            }
+          },
+          "data_source": {
+            "kind": "product_pool",
+            "pool_id": "test_pool_scroll",
+            "limit": 20
+          },
+          "ad_label": "推广"
+        },
+        {
+          "id": "activities",
+          "type": "activity_entry",
+          "version": 1,
+          "props": {},
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "title": "新人怎么拿返利",
+                "subtitle": "三步看懂",
+                "action": {
+                  "route": "Help"
+                }
+              },
+              {
+                "title": "订单没显示怎么办",
+                "subtitle": "填订单号找回",
+                "action": {
+                  "route": "FindOrder"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "grid",
+          "type": "product_grid",
+          "version": 1,
+          "props": {
+            "columns": 2,
+            "title": "超市百货"
+          },
+          "data_source": {
+            "kind": "product_pool",
+            "pool_id": "test_pool_grid",
+            "limit": 20
+          },
+          "ad_label": "推广"
+        },
+        {
+          "id": "feed",
+          "type": "feed_infinite",
+          "version": 1,
+          "data_source": {
+            "kind": "union_material",
+            "platforms": ["taobao", "jd", "pdd"],
+            "mix": "interleave"
+          }
+        }
+      ],
+      "sectionItems": {
+        "scroll": {
+          "items": [
+            {
+              "product_key": "taobao:visual-0",
+              "item_ref": "v1.visual.p0.sig",
+              "platform": "taobao",
+              "title": "林间果 每日坚果 30袋",
+              "image": "https://img.example.test/home-v3/0.png",
+              "shop_name": "样例店铺",
+              "price_fen": 2290,
+              "coupon_fen": 300,
+              "final_price_fen": 1990,
+              "est_net_price_fen": 1880,
+              "rebate_min_fen": 110,
+              "rebate_max_fen": 110,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-0",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "jd:visual-1",
+              "item_ref": "v1.visual.p1.sig",
+              "platform": "jd",
+              "title": "洁澄 洗衣液 3kg 薰衣草香",
+              "image": "https://img.example.test/home-v3/1.png",
+              "shop_name": "样例店铺",
+              "price_fen": 2680,
+              "coupon_fen": 0,
+              "final_price_fen": 2680,
+              "est_net_price_fen": 2590,
+              "rebate_min_fen": 90,
+              "rebate_max_fen": 90,
+              "rebate_basis": "normal",
+              "benefit_tags": [],
+              "is_presale": false,
+              "link_id": "visual-1",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "jd_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "taobao:visual-2",
+              "item_ref": "v1.visual.p2.sig",
+              "platform": "taobao",
+              "title": "加厚双层",
+              "image": "https://img.example.test/home-v3/2.png",
+              "shop_name": "样例店铺",
+              "price_fen": 980,
+              "coupon_fen": 100,
+              "final_price_fen": 880,
+              "est_net_price_fen": 838,
+              "rebate_min_fen": 42,
+              "rebate_max_fen": 42,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-2",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            }
+          ],
+          "next_cursor": null
+        },
+        "grid": {
+          "items": [
+            {
+              "product_key": "taobao:visual-3",
+              "item_ref": "v1.visual.p3.sig",
+              "platform": "taobao",
+              "title": "洗衣凝珠 52 颗 持久留香 低泡易漂",
+              "image": "https://img.example.test/home-v3/3.png",
+              "shop_name": "样例店铺",
+              "price_fen": 1860,
+              "coupon_fen": 300,
+              "final_price_fen": 1560,
+              "est_net_price_fen": 1482,
+              "rebate_min_fen": 78,
+              "rebate_max_fen": 78,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-3",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "jd:visual-4",
+              "item_ref": "v1.visual.p4.sig",
+              "platform": "jd",
+              "title": "电动牙刷替换刷头 4 支装 软毛通用款",
+              "image": "https://img.example.test/home-v3/4.png",
+              "shop_name": "样例店铺",
+              "price_fen": 3200,
+              "coupon_fen": 0,
+              "final_price_fen": 3200,
+              "est_net_price_fen": 3040,
+              "rebate_min_fen": 160,
+              "rebate_max_fen": 160,
+              "rebate_basis": "normal",
+              "benefit_tags": [],
+              "is_presale": false,
+              "link_id": "visual-4",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "jd_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            }
+          ],
+          "next_cursor": null
+        },
+        "feed": {
+          "items": [
+            {
+              "product_key": "taobao:visual-5",
+              "item_ref": "v1.visual.p5.sig",
+              "platform": "taobao",
+              "title": "抽纸 3 层 120 抽 × 24 包 家用整箱装",
+              "image": "https://img.example.test/home-v3/5.png",
+              "shop_name": "样例店铺",
+              "price_fen": 1734,
+              "coupon_fen": 500,
+              "final_price_fen": 1234,
+              "est_net_price_fen": 1178,
+              "rebate_min_fen": 56,
+              "rebate_max_fen": 56,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-5",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "jd:visual-6",
+              "item_ref": "v1.visual.p6.sig",
+              "platform": "jd",
+              "title": "保温杯 500ml 不锈钢 带茶隔",
+              "image": "https://img.example.test/home-v3/6.png",
+              "shop_name": "样例店铺",
+              "price_fen": 4560,
+              "coupon_fen": 0,
+              "final_price_fen": 4560,
+              "est_net_price_fen": 4326,
+              "rebate_min_fen": 234,
+              "rebate_max_fen": 234,
+              "rebate_basis": "normal",
+              "benefit_tags": [],
+              "is_presale": false,
+              "link_id": "visual-6",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "jd_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "pdd:visual-7",
+              "item_ref": "v1.visual.p7.sig",
+              "platform": "pdd",
+              "title": "厨房纸巾 4 卷 加厚 吸油吸水",
+              "image": "https://img.example.test/home-v3/7.png",
+              "shop_name": "样例店铺",
+              "price_fen": 1290,
+              "coupon_fen": 300,
+              "final_price_fen": 990,
+              "est_net_price_fen": 960,
+              "rebate_min_fen": 30,
+              "rebate_max_fen": 30,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-7",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "pdd_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "taobao:visual-8",
+              "item_ref": "v1.visual.p8.sig",
+              "platform": "taobao",
+              "title": "东北长粒香大米 10kg 新米 预售款",
+              "image": "https://img.example.test/home-v3/8.png",
+              "shop_name": "样例店铺",
+              "price_fen": 8800,
+              "coupon_fen": 0,
+              "final_price_fen": 8800,
+              "est_net_price_fen": 8479,
+              "rebate_min_fen": 321,
+              "rebate_max_fen": 321,
+              "rebate_basis": "normal",
+              "benefit_tags": ["预售"],
+              "is_presale": true,
+              "link_id": "visual-8",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    "guest_v3": {
+      "page_key": "home",
+      "version": 31,
+      "sections": [
+        {
+          "id": "icons",
+          "type": "icon_grid",
+          "version": 1,
+          "props": {
+            "columns": 5,
+            "rows": 2
+          },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "icon": "builtin:platform.taobao",
+                "title": "淘宝",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "platform": "taobao"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:platform.jd",
+                "title": "京东",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "platform": "jd"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:platform.pdd",
+                "title": "拼多多",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "platform": "pdd"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.supermarket",
+                "title": "超市百货",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "超市百货"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.fresh",
+                "title": "食品生鲜",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "食品生鲜"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.baby",
+                "title": "母婴用品",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "母婴用品"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.beauty",
+                "title": "美妆个护",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "美妆个护"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.household",
+                "title": "家居日用",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "家居日用"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:category.electronics",
+                "title": "数码家电",
+                "action": {
+                  "route": "Search",
+                  "params": {
+                    "q": "数码家电"
+                  }
+                }
+              },
+              {
+                "icon": "builtin:guide",
+                "title": "新人指南",
+                "action": {
+                  "route": "Help"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "scroll",
+          "type": "product_scroll",
+          "version": 1,
+          "props": {
+            "title": "今日精选",
+            "more_action": {
+              "route": "Search",
+              "params": {
+                "q": "今日精选"
+              }
+            }
+          },
+          "data_source": {
+            "kind": "product_pool",
+            "pool_id": "test_pool_scroll",
+            "limit": 20
+          },
+          "ad_label": "推广"
+        },
+        {
+          "id": "activities",
+          "type": "activity_entry",
+          "version": 1,
+          "props": {},
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "title": "新人怎么拿返利",
+                "subtitle": "三步看懂",
+                "action": {
+                  "route": "Help"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "grid",
+          "type": "product_grid",
+          "version": 1,
+          "props": {
+            "columns": 2,
+            "title": "超市百货"
+          },
+          "data_source": {
+            "kind": "product_pool",
+            "pool_id": "test_pool_grid",
+            "limit": 20
+          },
+          "ad_label": "推广"
+        },
+        {
+          "id": "feed",
+          "type": "feed_infinite",
+          "version": 1,
+          "data_source": {
+            "kind": "union_material",
+            "platforms": ["taobao", "jd", "pdd"],
+            "mix": "interleave"
+          }
+        }
+      ],
+      "sectionItems": {
+        "scroll": {
+          "items": [
+            {
+              "product_key": "taobao:visual-0",
+              "item_ref": "v1.visual.p0.sig",
+              "platform": "taobao",
+              "title": "林间果 每日坚果 30袋",
+              "image": "https://img.example.test/home-v3/0.png",
+              "shop_name": "样例店铺",
+              "price_fen": 2290,
+              "coupon_fen": 300,
+              "final_price_fen": 1990,
+              "est_net_price_fen": 1880,
+              "rebate_min_fen": 110,
+              "rebate_max_fen": 110,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-0",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "jd:visual-1",
+              "item_ref": "v1.visual.p1.sig",
+              "platform": "jd",
+              "title": "洁澄 洗衣液 3kg 薰衣草香",
+              "image": "https://img.example.test/home-v3/1.png",
+              "shop_name": "样例店铺",
+              "price_fen": 2680,
+              "coupon_fen": 0,
+              "final_price_fen": 2680,
+              "est_net_price_fen": 2590,
+              "rebate_min_fen": 90,
+              "rebate_max_fen": 90,
+              "rebate_basis": "normal",
+              "benefit_tags": [],
+              "is_presale": false,
+              "link_id": "visual-1",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "jd_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "taobao:visual-2",
+              "item_ref": "v1.visual.p2.sig",
+              "platform": "taobao",
+              "title": "加厚双层",
+              "image": "https://img.example.test/home-v3/2.png",
+              "shop_name": "样例店铺",
+              "price_fen": 980,
+              "coupon_fen": 100,
+              "final_price_fen": 880,
+              "est_net_price_fen": 838,
+              "rebate_min_fen": 42,
+              "rebate_max_fen": 42,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-2",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            }
+          ],
+          "next_cursor": null
+        },
+        "grid": {
+          "items": [
+            {
+              "product_key": "taobao:visual-3",
+              "item_ref": "v1.visual.p3.sig",
+              "platform": "taobao",
+              "title": "洗衣凝珠 52 颗 持久留香 低泡易漂",
+              "image": "https://img.example.test/home-v3/3.png",
+              "shop_name": "样例店铺",
+              "price_fen": 1860,
+              "coupon_fen": 300,
+              "final_price_fen": 1560,
+              "est_net_price_fen": 1482,
+              "rebate_min_fen": 78,
+              "rebate_max_fen": 78,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-3",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "jd:visual-4",
+              "item_ref": "v1.visual.p4.sig",
+              "platform": "jd",
+              "title": "电动牙刷替换刷头 4 支装 软毛通用款",
+              "image": "https://img.example.test/home-v3/4.png",
+              "shop_name": "样例店铺",
+              "price_fen": 3200,
+              "coupon_fen": 0,
+              "final_price_fen": 3200,
+              "est_net_price_fen": 3040,
+              "rebate_min_fen": 160,
+              "rebate_max_fen": 160,
+              "rebate_basis": "normal",
+              "benefit_tags": [],
+              "is_presale": false,
+              "link_id": "visual-4",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "jd_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            }
+          ],
+          "next_cursor": null
+        },
+        "feed": {
+          "items": [
+            {
+              "product_key": "taobao:visual-5",
+              "item_ref": "v1.visual.p5.sig",
+              "platform": "taobao",
+              "title": "抽纸 3 层 120 抽 × 24 包 家用整箱装",
+              "image": "https://img.example.test/home-v3/5.png",
+              "shop_name": "样例店铺",
+              "price_fen": 1734,
+              "coupon_fen": 500,
+              "final_price_fen": 1234,
+              "est_net_price_fen": 1178,
+              "rebate_min_fen": 56,
+              "rebate_max_fen": 56,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-5",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "jd:visual-6",
+              "item_ref": "v1.visual.p6.sig",
+              "platform": "jd",
+              "title": "保温杯 500ml 不锈钢 带茶隔",
+              "image": "https://img.example.test/home-v3/6.png",
+              "shop_name": "样例店铺",
+              "price_fen": 4560,
+              "coupon_fen": 0,
+              "final_price_fen": 4560,
+              "est_net_price_fen": 4326,
+              "rebate_min_fen": 234,
+              "rebate_max_fen": 234,
+              "rebate_basis": "normal",
+              "benefit_tags": [],
+              "is_presale": false,
+              "link_id": "visual-6",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "jd_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "pdd:visual-7",
+              "item_ref": "v1.visual.p7.sig",
+              "platform": "pdd",
+              "title": "厨房纸巾 4 卷 加厚 吸油吸水",
+              "image": "https://img.example.test/home-v3/7.png",
+              "shop_name": "样例店铺",
+              "price_fen": 1290,
+              "coupon_fen": 300,
+              "final_price_fen": 990,
+              "est_net_price_fen": 960,
+              "rebate_min_fen": 30,
+              "rebate_max_fen": 30,
+              "rebate_basis": "normal",
+              "benefit_tags": ["有券"],
+              "is_presale": false,
+              "link_id": "visual-7",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "pdd_union",
+              "disclaimer_keys": ["price_basis", "rebate_estimate"],
+              "availability": "ok"
+            },
+            {
+              "product_key": "taobao:visual-8",
+              "item_ref": "v1.visual.p8.sig",
+              "platform": "taobao",
+              "title": "东北长粒香大米 10kg 新米 预售款",
+              "image": "https://img.example.test/home-v3/8.png",
+              "shop_name": "样例店铺",
+              "price_fen": 8800,
+              "coupon_fen": 0,
+              "final_price_fen": 8800,
+              "est_net_price_fen": 8479,
+              "rebate_min_fen": 321,
+              "rebate_max_fen": 321,
+              "rebate_basis": "normal",
+              "benefit_tags": ["预售"],
+              "is_presale": true,
+              "link_id": "visual-8",
+              "cta": {
+                "text_key": "btn.buy"
+              },
+              "quoted_at": "2026-10-10T10:00:00+08:00",
+              "stale": false,
+              "age_sec": 30,
+              "source": "taobao_union",
+              "disclaimer_keys": ["price_basis.general", "rebate_estimate"],
+              "availability": "ok"
+            }
+          ],
+          "next_cursor": null
+        }
+      }
+    },
+    "default_home": {
+      "page_key": "home",
+      "version": 1,
+      "sections": [
+        {
+          "id": "default_icons",
+          "type": "icon_grid",
+          "version": 1,
+          "props": { "columns": 5, "rows": 2 },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "icon": "builtin:platform.taobao",
+                "title": "淘宝",
+                "action": { "route": "Search", "params": { "platform": "taobao" } }
+              },
+              {
+                "icon": "builtin:platform.jd",
+                "title": "京东",
+                "action": { "route": "Search", "params": { "platform": "jd" } }
+              },
+              {
+                "icon": "builtin:platform.pdd",
+                "title": "拼多多",
+                "action": { "route": "Search", "params": { "platform": "pdd" } }
+              },
+              {
+                "icon": "builtin:category.supermarket",
+                "title": "超市百货",
+                "action": { "route": "Search", "params": { "q": "超市百货" } }
+              },
+              {
+                "icon": "builtin:category.fresh",
+                "title": "食品生鲜",
+                "action": { "route": "Search", "params": { "q": "食品生鲜" } }
+              },
+              {
+                "icon": "builtin:category.baby",
+                "title": "母婴用品",
+                "action": { "route": "Search", "params": { "q": "母婴用品" } }
+              },
+              {
+                "icon": "builtin:category.beauty",
+                "title": "美妆个护",
+                "action": { "route": "Search", "params": { "q": "美妆个护" } }
+              },
+              {
+                "icon": "builtin:category.household",
+                "title": "家居日用",
+                "action": { "route": "Search", "params": { "q": "家居日用" } }
+              },
+              {
+                "icon": "builtin:category.electronics",
+                "title": "数码家电",
+                "action": { "route": "Search", "params": { "q": "数码家电" } }
+              },
+              { "icon": "builtin:guide", "title": "新人指南", "action": { "route": "Help" } }
+            ]
+          }
+        },
+        {
+          "id": "default_activities",
+          "type": "activity_entry",
+          "version": 1,
+          "props": {},
+          "data_source": {
+            "kind": "static",
+            "items": [
+              { "title": "新人怎么拿返利", "subtitle": "三步看懂", "action": { "route": "Help" } },
+              {
+                "title": "订单没显示怎么办",
+                "subtitle": "填订单号找回",
+                "action": { "route": "FindOrder" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "banner": {
+      "page_key": "home",
+      "version": 2,
+      "sections": [
+        {
+          "id": "banner",
+          "type": "banner",
+          "version": 1,
+          "ad_label": "推广",
+          "props": { "height_ratio": 0.4, "autoplay_ms": 4000 },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "image": "https://img.example.com/banner-a.png",
+                "alt": "测试活动甲",
+                "action": { "route": "Search", "params": { "q": "纸巾" } }
+              },
+              {
+                "image": "https://img.example.com/banner-b.png",
+                "alt": "测试活动乙",
+                "action": {
+                  "route": "ExternalPage",
+                  "params": {
+                    "url": "https://x.example.com/a?b=1",
+                    "title": "品牌活动说明",
+                    "nav_style": "dark"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "icon_grid": {
+      "page_key": "home",
+      "version": 3,
+      "sections": [
+        {
+          "id": "icons",
+          "type": "icon_grid",
+          "version": 1,
+          "props": { "columns": 4, "rows": 1 },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "icon": "https://img.example.com/icon-a.png",
+                "title": "测试入口甲",
+                "badge": "测试",
+                "action": { "route": "Search", "params": { "q": "测试入口甲" } }
+              },
+              {
+                "icon": "https://img.example.com/icon-b.png",
+                "title": "新人指南",
+                "action": { "route": "Help" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "product_scroll": {
+      "page_key": "home",
+      "version": 4,
+      "sections": [
+        {
+          "id": "scroll",
+          "type": "product_scroll",
+          "version": 1,
+          "props": {
+            "title": "今日精选",
+            "more_action": { "route": "Search", "params": { "q": "纸巾" } }
+          },
+          "data_source": { "kind": "product_pool", "pool_id": "test_pool_scroll", "limit": 20 }
+        }
+      ]
+    },
+    "product_grid": {
+      "page_key": "home",
+      "version": 5,
+      "sections": [
+        {
+          "id": "grid",
+          "type": "product_grid",
+          "version": 1,
+          "props": { "columns": 2, "title": "超市百货" },
+          "data_source": { "kind": "product_pool", "pool_id": "test_pool_grid", "limit": 20 }
+        }
+      ]
+    },
+    "activity_entry": {
+      "page_key": "home",
+      "version": 6,
+      "sections": [
+        {
+          "id": "activities",
+          "type": "activity_entry",
+          "version": 1,
+          "props": {},
+          "data_source": {
+            "kind": "static",
+            "items": [
+              { "title": "新人怎么拿返利", "subtitle": "三步看懂", "action": { "route": "Help" } },
+              {
+                "title": "订单没显示怎么办",
+                "subtitle": "填订单号找回",
+                "action": { "route": "FindOrder" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "notice_static": {
+      "page_key": "home",
+      "version": 7,
+      "sections": [
+        {
+          "id": "notice_static",
+          "type": "notice_bar",
+          "version": 1,
+          "props": {
+            "mode": "static",
+            "items": [
+              {
+                "item_id": "notice_main",
+                "content_version": 1,
+                "text": "确认收货后，返利随联盟月度结算入账",
+                "target": { "route": "Notice", "params": { "article_id": "test_notice_main" } },
+                "closable": true,
+                "start_at": "2026-10-01T00:00:00+08:00",
+                "end_at": null
+              }
+            ]
+          },
+          "data_source": { "kind": "static" }
+        }
+      ]
+    },
+    "notice_api": {
+      "page_key": "home",
+      "version": 8,
+      "sections": [
+        {
+          "id": "notice_api",
+          "type": "notice_bar",
+          "version": 1,
+          "props": { "mode": "scroll" },
+          "data_source": { "kind": "api" }
+        }
+      ]
+    },
+    "feed_infinite": {
+      "page_key": "home",
+      "version": 9,
+      "sections": [
+        {
+          "id": "feed",
+          "type": "feed_infinite",
+          "version": 1,
+          "data_source": {
+            "kind": "union_material",
+            "platforms": ["taobao", "jd", "pdd"],
+            "mix": "interleave"
+          }
+        }
+      ]
+    },
+    "popup": {
+      "page_key": "home",
+      "version": 10,
+      "sections": [
+        {
+          "id": "popup",
+          "type": "popup",
+          "version": 1,
+          "props": {
+            "image": "https://img.example.com/popup.png",
+            "daily_max": 1,
+            "time_window": ["09:00", "22:00"]
+          },
+          "data_source": {
+            "kind": "static",
+            "items": [{ "action": { "route": "AuthSheet", "params": { "platform": "taobao" } } }]
+          }
+        }
+      ]
+    },
+    "long_text": {
+      "page_key": "home",
+      "version": 11,
+      "sections": [
+        {
+          "id": "long_title",
+          "type": "activity_entry",
+          "version": 1,
+          "props": {},
+          "data_source": {
+            "kind": "static",
+            "items": [
+              {
+                "title": "测试超长标题：这是专门用于检查首页在窄屏和大字号下换行显示的测试文字，请继续阅读直到这一段测试标题结束",
+                "action": { "route": "Help" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "long_notice",
+          "type": "notice_bar",
+          "version": 1,
+          "props": {
+            "items": [
+              {
+                "item_id": "long",
+                "content_version": 1,
+                "text": "测试超长公告：这是专门用于检查首页公告文字在窄屏和大字号下显示的测试内容，公告关闭按钮应保持可见，文字长度不会改变公告条目的解码结果。",
+                "target": null,
+                "closable": true,
+                "start_at": "2026-10-01T00:00:00+08:00",
+                "end_at": null
+              }
+            ]
+          },
+          "data_source": { "kind": "static" }
+        }
+      ]
+    },
+    "empty_source": {
+      "page_key": "home",
+      "version": 12,
+      "sections": [
+        {
+          "id": "empty_banner",
+          "type": "banner",
+          "version": 1,
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "empty_icons",
+          "type": "icon_grid",
+          "version": 1,
+          "props": { "columns": 5 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "empty_notice",
+          "type": "notice_bar",
+          "version": 1,
+          "props": { "items": [] },
+          "data_source": { "kind": "static" }
+        }
+      ]
+    },
+    "mixed_bad": {
+      "page_key": "home",
+      "version": 13,
+      "sections": [
+        {
+          "id": "good_a",
+          "type": "banner",
+          "version": 1,
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              { "image": "https://img.example.com/good-a.png", "action": { "route": "Help" } }
+            ]
+          }
+        },
+        { "id": "unknown", "type": "future_card", "version": 1 },
+        {
+          "id": "missing_version",
+          "type": "banner",
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "v2",
+          "type": "banner",
+          "version": 2,
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "missing_props",
+          "type": "banner",
+          "version": 1,
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "bad_action",
+          "type": "product_scroll",
+          "version": 1,
+          "props": { "title": "测试坏动作", "more_action": { "js": "test_only" } },
+          "data_source": { "kind": "product_pool", "pool_id": "test_bad_action", "limit": 20 }
+        },
+        {
+          "id": "good_a",
+          "type": "banner",
+          "version": 1,
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "bad_item",
+          "type": "banner",
+          "version": 1,
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [{ "action": { "route": "Help" } }] }
+        },
+        {
+          "id": "good_b",
+          "type": "activity_entry",
+          "version": 1,
+          "props": {},
+          "data_source": {
+            "kind": "static",
+            "items": [{ "title": "测试正常入口", "action": { "route": "Help" } }]
+          }
+        }
+      ]
+    },
+    "min_app_version": {
+      "page_key": "home",
+      "version": 14,
+      "sections": [
+        {
+          "id": "lower",
+          "type": "banner",
+          "version": 1,
+          "min_app_version": { "ios": "1.2.0", "android": "1.2.0", "harmony": "1.2.0" },
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              { "image": "https://img.example.com/lower.png", "action": { "route": "Help" } }
+            ]
+          }
+        },
+        {
+          "id": "equal",
+          "type": "banner",
+          "version": 1,
+          "min_app_version": { "ios": "1.10.0", "android": "1.10.0", "harmony": "1.10.0" },
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              { "image": "https://img.example.com/equal.png", "action": { "route": "Help" } }
+            ]
+          }
+        },
+        {
+          "id": "higher",
+          "type": "banner",
+          "version": 1,
+          "min_app_version": { "ios": "1.11.0", "android": "1.11.0", "harmony": "1.11.0" },
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": {
+            "kind": "static",
+            "items": [
+              { "image": "https://img.example.com/higher.png", "action": { "route": "Help" } }
+            ]
+          }
+        }
+      ]
+    },
+    "with_condition": {
+      "page_key": "home",
+      "version": 15,
+      "sections": [
+        {
+          "id": "condition_facts",
+          "type": "banner",
+          "version": 1,
+          "condition": {
+            "login": "yes",
+            "has_parent": "no",
+            "union_authorized": "no",
+            "has_order": "yes"
+          },
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "condition_false",
+          "type": "banner",
+          "version": 1,
+          "condition": false,
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "condition_text",
+          "type": "banner",
+          "version": 1,
+          "condition": "test_not_an_expression",
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "condition_array",
+          "type": "banner",
+          "version": 1,
+          "condition": [1, false],
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        },
+        {
+          "id": "condition_null",
+          "type": "banner",
+          "version": 1,
+          "condition": null,
+          "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+          "data_source": { "kind": "static", "items": [] }
+        }
+      ]
+    }
+  },
+  "pageDecode": [
+    {
+      "name": "G01_G12_G17_default_home",
+      "page": "default_home",
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "default_icons", "type": "icon_grid" },
+          { "id": "default_activities", "type": "activity_entry" }
+        ],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "default_icons": 10, "default_activities": 2 }
+      }
+    },
+    {
+      "name": "G01_G12_banner",
+      "page": "banner",
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "banner", "type": "banner" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "banner": 2 }
+      }
+    },
+    {
+      "name": "G01_G12_icon_grid",
+      "page": "icon_grid",
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "icons", "type": "icon_grid" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "icons": 2 }
+      }
+    },
+    {
+      "name": "G01_G13_product_scroll",
+      "page": "product_scroll",
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "scroll", "type": "product_scroll" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G01_G13_product_grid",
+      "page": "product_grid",
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "grid", "type": "product_grid" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G01_G12_activity",
+      "page": "activity_entry",
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "activities", "type": "activity_entry" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "activities": 2 }
+      }
+    },
+    {
+      "name": "G01_G10_notice_static",
+      "page": "notice_static",
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "notice_static", "type": "notice_bar" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "notice_static": 1 }
+      }
+    },
+    {
+      "name": "G01_G10_notice_api",
+      "page": "notice_api",
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "notice_api", "type": "notice_bar" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G01_G13_feed",
+      "page": "feed_infinite",
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "feed", "type": "feed_infinite" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G01_G14_popup",
+      "page": "popup",
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "popup", "type": "popup" }],
+        "skipped": [],
+        "dropped": [],
+        "popupId": "popup"
+      }
+    },
+    {
+      "name": "G01_G10_G12_long_text",
+      "page": "long_text",
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "long_title", "type": "activity_entry" },
+          { "id": "long_notice", "type": "notice_bar" }
+        ],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "long_title": 1, "long_notice": 1 }
+      }
+    },
+    {
+      "name": "G08_empty_items_kept_for_hidden_rendering",
+      "page": "empty_source",
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "empty_banner", "type": "banner" },
+          { "id": "empty_icons", "type": "icon_grid" },
+          { "id": "empty_notice", "type": "notice_bar" }
+        ],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "empty_banner": 0, "empty_icons": 0, "empty_notice": 0 }
+      }
+    },
+    {
+      "name": "G01_G07_G08_G21_mixed_bad_isolation",
+      "page": "mixed_bad",
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "good_a", "type": "banner" },
+          { "id": "bad_item", "type": "banner" },
+          { "id": "good_b", "type": "activity_entry" }
+        ],
+        "skipped": [{ "id": "unknown", "reasonRaw": "unknown_type" }],
+        "dropped": [
+          {
+            "id": "missing_version",
+            "type": "banner",
+            "version": null,
+            "reasonRaw": "missing_version"
+          },
+          { "id": "v2", "type": "banner", "version": 2, "reasonRaw": "unsupported_version" },
+          { "id": "missing_props", "type": "banner", "version": 1, "reasonRaw": "missing_field" },
+          { "id": "bad_action", "type": "product_scroll", "version": 1, "reasonRaw": "bad_action" },
+          { "id": "good_a", "type": "banner", "version": 1, "reasonRaw": "duplicate_id" }
+        ],
+        "popupId": null,
+        "itemCounts": { "good_a": 1, "bad_item": 0, "good_b": 1 }
+      }
+    },
+    {
+      "name": "G09_min_version_ios",
+      "page": "min_app_version",
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "lower", "type": "banner" },
+          { "id": "equal", "type": "banner" }
+        ],
+        "skipped": [{ "id": "higher", "reasonRaw": "min_app_version" }],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G09_min_version_android",
+      "page": "min_app_version",
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "lower", "type": "banner" },
+          { "id": "equal", "type": "banner" }
+        ],
+        "skipped": [{ "id": "higher", "reasonRaw": "min_app_version" }],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G09_min_version_harmony",
+      "page": "min_app_version",
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "lower", "type": "banner" },
+          { "id": "equal", "type": "banner" }
+        ],
+        "skipped": [{ "id": "higher", "reasonRaw": "min_app_version" }],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G09_condition_never_evaluated",
+      "page": "with_condition",
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "condition_facts", "type": "banner" },
+          { "id": "condition_false", "type": "banner" },
+          { "id": "condition_text", "type": "banner" },
+          { "id": "condition_array", "type": "banner" },
+          { "id": "condition_null", "type": "banner" }
+        ],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G07_sections_not_array",
+      "page": { "page_key": "home", "version": 1, "sections": {} },
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "pageValid": false, "kept": [], "skipped": [], "dropped": [], "popupId": null }
+    },
+    {
+      "name": "G07_sections_absent",
+      "page": { "page_key": "home", "version": 1 },
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "pageValid": false, "kept": [], "skipped": [], "dropped": [], "popupId": null }
+    },
+    {
+      "name": "G07_page_version_zero",
+      "page": { "page_key": "home", "version": 0, "sections": [] },
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "pageValid": false, "kept": [], "skipped": [], "dropped": [], "popupId": null }
+    },
+    {
+      "name": "G08_G10_bad_items_only",
+      "page": {
+        "page_key": "home",
+        "version": 20,
+        "sections": [
+          {
+            "id": "frames",
+            "type": "banner",
+            "version": 1,
+            "props": { "height_ratio": 0.4, "autoplay_ms": 0 },
+            "data_source": {
+              "kind": "static",
+              "items": [
+                { "action": { "route": "Help" } },
+                { "image": "https://img.example.com/frame.png", "action": { "route": "Help" } }
+              ]
+            }
+          },
+          {
+            "id": "cells",
+            "type": "icon_grid",
+            "version": 1,
+            "props": { "columns": 4 },
+            "data_source": {
+              "kind": "static",
+              "items": [
+                {
+                  "icon": "https://img.example.com/i.png",
+                  "title": "测试坏格",
+                  "action": { "url": "https://x.example.com" }
+                },
+                {
+                  "icon": "https://img.example.com/i.png",
+                  "title": "测试好格",
+                  "action": { "route": "Help" }
+                }
+              ]
+            }
+          },
+          {
+            "id": "notices",
+            "type": "notice_bar",
+            "version": 1,
+            "props": {
+              "items": [
+                {
+                  "item_id": "bad",
+                  "text": "测试缺版本",
+                  "target": null,
+                  "closable": true,
+                  "start_at": "2026-10-01T00:00:00+08:00",
+                  "end_at": null
+                },
+                {
+                  "item_id": "good",
+                  "content_version": 1,
+                  "text": "测试正常公告",
+                  "target": null,
+                  "closable": true,
+                  "start_at": "2026-10-01T00:00:00+08:00",
+                  "end_at": null
+                }
+              ]
+            },
+            "data_source": { "kind": "static" }
+          },
+          {
+            "id": "invalid_unclosable",
+            "type": "notice_bar",
+            "version": 1,
+            "props": {
+              "items": [
+                {
+                  "item_id": "bad_forever",
+                  "content_version": 1,
+                  "text": "测试无失效时刻",
+                  "target": null,
+                  "closable": false,
+                  "start_at": "2026-10-01T00:00:00+08:00",
+                  "end_at": null
+                }
+              ]
+            },
+            "data_source": { "kind": "static" }
+          }
+        ]
+      },
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [
+          { "id": "frames", "type": "banner" },
+          { "id": "cells", "type": "icon_grid" },
+          { "id": "notices", "type": "notice_bar" },
+          { "id": "invalid_unclosable", "type": "notice_bar" }
+        ],
+        "skipped": [],
+        "dropped": [],
+        "popupId": null,
+        "itemCounts": { "frames": 1, "cells": 1, "notices": 1, "invalid_unclosable": 0 }
+      }
+    },
+    {
+      "name": "G12_G14_G21_bad_values",
+      "page": {
+        "page_key": "home",
+        "version": 21,
+        "sections": [
+          {
+            "id": "columns3",
+            "type": "icon_grid",
+            "version": 1,
+            "props": { "columns": 3 },
+            "data_source": { "kind": "static", "items": [] }
+          },
+          {
+            "id": "columns_text",
+            "type": "icon_grid",
+            "version": 1,
+            "props": { "columns": "5" },
+            "data_source": { "kind": "static", "items": [] }
+          },
+          {
+            "id": "four",
+            "type": "activity_entry",
+            "version": 1,
+            "props": {},
+            "data_source": {
+              "kind": "static",
+              "items": [
+                { "title": "测试一", "action": { "route": "Help" } },
+                { "title": "测试二", "action": { "route": "Help" } },
+                { "title": "测试三", "action": { "route": "Help" } },
+                { "title": "测试四", "action": { "route": "Help" } }
+              ]
+            }
+          },
+          {
+            "id": "equal_window",
+            "type": "popup",
+            "version": 1,
+            "props": {
+              "image": "https://img.example.com/p.png",
+              "daily_max": 1,
+              "time_window": ["09:00", "09:00"]
+            },
+            "data_source": { "kind": "static", "items": [] }
+          },
+          {
+            "id": "cross_midnight",
+            "type": "popup",
+            "version": 1,
+            "props": {
+              "image": "https://img.example.com/p.png",
+              "daily_max": 1,
+              "time_window": ["22:00", "09:00"]
+            },
+            "data_source": { "kind": "static", "items": [] }
+          },
+          {
+            "id": "daily_zero",
+            "type": "popup",
+            "version": 1,
+            "props": {
+              "image": "https://img.example.com/p.png",
+              "daily_max": 0,
+              "time_window": ["09:00", "22:00"]
+            },
+            "data_source": { "kind": "static", "items": [] }
+          }
+        ]
+      },
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [],
+        "skipped": [],
+        "dropped": [
+          { "id": "columns3", "type": "icon_grid", "version": 1, "reasonRaw": "bad_value" },
+          { "id": "columns_text", "type": "icon_grid", "version": 1, "reasonRaw": "bad_type" },
+          { "id": "four", "type": "activity_entry", "version": 1, "reasonRaw": "bad_value" },
+          { "id": "equal_window", "type": "popup", "version": 1, "reasonRaw": "bad_value" },
+          { "id": "cross_midnight", "type": "popup", "version": 1, "reasonRaw": "bad_value" },
+          { "id": "daily_zero", "type": "popup", "version": 1, "reasonRaw": "bad_value" }
+        ],
+        "popupId": null
+      }
+    },
+    {
+      "name": "G14_first_successful_popup",
+      "page": {
+        "page_key": "home",
+        "version": 22,
+        "sections": [
+          {
+            "id": "bad_popup",
+            "type": "popup",
+            "version": 2,
+            "props": {
+              "image": "https://img.example.com/p.png",
+              "daily_max": 1,
+              "time_window": ["09:00", "22:00"]
+            },
+            "data_source": { "kind": "static", "items": [] }
+          },
+          {
+            "id": "first_popup",
+            "type": "popup",
+            "version": 1,
+            "props": {
+              "image": "https://img.example.com/p.png",
+              "daily_max": 1,
+              "time_window": ["09:00", "22:00"]
+            },
+            "data_source": { "kind": "static", "items": [] }
+          },
+          {
+            "id": "second_popup",
+            "type": "popup",
+            "version": 1,
+            "props": {
+              "image": "https://img.example.com/p2.png",
+              "daily_max": 1,
+              "time_window": ["09:00", "22:00"]
+            },
+            "data_source": { "kind": "static", "items": [] }
+          }
+        ]
+      },
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": {
+        "pageValid": true,
+        "kept": [{ "id": "first_popup", "type": "popup" }],
+        "skipped": [],
+        "dropped": [
+          { "id": "bad_popup", "type": "popup", "version": 2, "reasonRaw": "unsupported_version" }
+        ],
+        "popupId": "first_popup"
+      }
+    }
+  ],
+  "minAppVersion": [
+    {
+      "name": "G09_ios_absent",
+      "minAppVersion": "absent",
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_ios_lower_numeric_segments",
+      "minAppVersion": { "ios": "1.2.0" },
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_ios_equal",
+      "minAppVersion": { "ios": "1.10.0" },
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_ios_higher",
+      "minAppVersion": { "ios": "1.11.0" },
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_ios_missing_platform",
+      "minAppVersion": { "android": "1.0.0" },
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_ios_invalid",
+      "minAppVersion": { "ios": "1..0" },
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_ios_null_is_present",
+      "minAppVersion": null,
+      "platformRaw": "ios",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_android_absent",
+      "minAppVersion": "absent",
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_android_lower",
+      "minAppVersion": { "android": "1.2.0" },
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_android_equal",
+      "minAppVersion": { "android": "1.10.0" },
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_android_higher",
+      "minAppVersion": { "android": "1.11.0" },
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_android_missing_platform",
+      "minAppVersion": { "harmony": "1.0.0" },
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_android_invalid",
+      "minAppVersion": { "android": "invalid" },
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_android_null_is_present",
+      "minAppVersion": null,
+      "platformRaw": "android",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_harmony_absent",
+      "minAppVersion": "absent",
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_harmony_lower",
+      "minAppVersion": { "harmony": "1.2.0" },
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_harmony_equal",
+      "minAppVersion": { "harmony": "1.10.0" },
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "keep": true }
+    },
+    {
+      "name": "G09_harmony_higher",
+      "minAppVersion": { "harmony": "1.11.0" },
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_harmony_missing_platform",
+      "minAppVersion": { "ios": "1.0.0" },
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_harmony_invalid",
+      "minAppVersion": { "harmony": "" },
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    },
+    {
+      "name": "G09_harmony_null_is_present",
+      "minAppVersion": null,
+      "platformRaw": "harmony",
+      "appVersion": "1.10.0",
+      "expect": { "keep": false }
+    }
+  ],
+  "sourcePolicy": [
+    {
+      "name": "G16_lkg_immediate_background_write_then_pull_replace",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 2 },
+          "expect": { "actionsRaw": ["write_lkg"], "showing": "lkg" }
+        },
+        { "event": "pull_refresh", "expect": { "actionsRaw": ["none"], "showing": "lkg" } },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 3 },
+          "expect": { "actionsRaw": ["show_network", "write_lkg"], "showing": "network" }
+        }
+      ]
+    },
+    {
+      "name": "G16_no_lkg_network_before_1500",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 2 },
+          "expect": { "actionsRaw": ["show_network", "write_lkg"], "showing": "network" }
+        },
+        { "event": "timer_1500", "expect": { "actionsRaw": ["none"], "showing": "network" } }
+      ]
+    },
+    {
+      "name": "G16_default_then_network_replaces_once",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "timer_1500",
+          "expect": { "actionsRaw": ["show_default"], "showing": "default" }
+        },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 2 },
+          "expect": { "actionsRaw": ["show_network", "write_lkg"], "showing": "network" }
+        },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 3 },
+          "expect": { "actionsRaw": ["write_lkg"], "showing": "network" }
+        }
+      ]
+    },
+    {
+      "name": "G16_interaction_prevents_late_replacement",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "timer_1500",
+          "expect": { "actionsRaw": ["show_default"], "showing": "default" }
+        },
+        { "event": "user_interacted", "expect": { "actionsRaw": ["none"], "showing": "default" } },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 2 },
+          "expect": { "actionsRaw": ["write_lkg"], "showing": "default" }
+        },
+        { "event": "pull_refresh", "expect": { "actionsRaw": ["none"], "showing": "default" } },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 3 },
+          "expect": { "actionsRaw": ["show_network", "write_lkg"], "showing": "network" }
+        }
+      ]
+    },
+    {
+      "name": "G16_corrupt_lkg_becomes_no_lkg",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        {
+          "event": "lkg_loaded",
+          "arg": { "valid": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "timer_1500",
+          "expect": { "actionsRaw": ["show_default"], "showing": "default" }
+        }
+      ]
+    },
+    {
+      "name": "G16_invalid_network_keeps_lkg",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "invalid_page" },
+          "expect": { "actionsRaw": ["none"], "showing": "lkg" }
+        }
+      ]
+    },
+    {
+      "name": "G16_invalid_network_keeps_default",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "timer_1500",
+          "expect": { "actionsRaw": ["show_default"], "showing": "default" }
+        },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "invalid_page" },
+          "expect": { "actionsRaw": ["none"], "showing": "default" }
+        }
+      ]
+    },
+    {
+      "name": "G16_pull_5xx_preserves_screen_trace6_execution_gap",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        { "event": "pull_refresh", "expect": { "actionsRaw": ["none"], "showing": "lkg" } },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "http_5xx", "traceId": "test-trace-ABC123" },
+          "expect": { "actionsRaw": ["toast_error:error.50001"], "showing": "lkg" }
+        }
+      ]
+    },
+    {
+      "name": "G16_pull_429_retry_after",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        { "event": "pull_refresh", "expect": { "actionsRaw": ["none"], "showing": "lkg" } },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "http_42901", "retryAfter": "7" },
+          "expect": {
+            "actionsRaw": ["toast_error:error.42901", "disable_refresh"],
+            "showing": "lkg",
+            "refreshDisabledMs": 7000
+          }
+        }
+      ]
+    },
+    {
+      "name": "G16_pull_429_missing_retry_after",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "timer_1500",
+          "expect": { "actionsRaw": ["show_default"], "showing": "default" }
+        },
+        { "event": "pull_refresh", "expect": { "actionsRaw": ["none"], "showing": "default" } },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "http_42901", "retryAfter": null },
+          "expect": {
+            "actionsRaw": ["toast_error:error.42901", "disable_refresh"],
+            "showing": "default",
+            "refreshDisabledMs": 5000
+          }
+        }
+      ]
+    },
+    {
+      "name": "G16_pull_429_invalid_retry_after",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        { "event": "pull_refresh", "expect": { "actionsRaw": ["none"], "showing": "lkg" } },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "http_42901", "retryAfter": "invalid" },
+          "expect": {
+            "actionsRaw": ["toast_error:error.42901", "disable_refresh"],
+            "showing": "lkg",
+            "refreshDisabledMs": 5000
+          }
+        }
+      ]
+    },
+    {
+      "name": "G16_pull_10405_force_update",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        { "event": "pull_refresh", "expect": { "actionsRaw": ["none"], "showing": "lkg" } },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "code_10405" },
+          "expect": { "actionsRaw": ["force_update"], "showing": "lkg" }
+        }
+      ]
+    },
+    {
+      "name": "G16_background_5xx_is_silent",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "http_5xx", "traceId": "test-trace-ABC123" },
+          "expect": { "actionsRaw": ["none"], "showing": "lkg" }
+        }
+      ]
+    },
+    {
+      "name": "G16_background_timeout_falls_to_default",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "timeout" },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "timer_1500",
+          "expect": { "actionsRaw": ["show_default"], "showing": "default" }
+        }
+      ]
+    },
+    {
+      "name": "G16_all_sources_fail",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "network_fail",
+          "arg": { "kind": "offline" },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "default_loaded",
+          "arg": { "valid": false },
+          "expect": { "actionsRaw": ["show_load_failed"], "showing": "load_failed" }
+        }
+      ]
+    },
+    {
+      "name": "G16_identity_invalidates_old_controller_then_restart",
+      "steps": [
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": true },
+          "expect": { "actionsRaw": ["show_lkg"], "showing": "lkg" }
+        },
+        { "event": "identity_changed", "expect": { "actionsRaw": ["none"], "showing": "none" } },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 99 },
+          "expect": { "actionsRaw": ["drop_stale"], "showing": "none" }
+        },
+        {
+          "event": "cold_start",
+          "arg": { "hasLkg": false },
+          "expect": { "actionsRaw": ["none"], "showing": "none" }
+        },
+        {
+          "event": "timer_1500",
+          "expect": { "actionsRaw": ["show_default"], "showing": "default" }
+        },
+        {
+          "event": "network_ok",
+          "arg": { "valid": true, "version": 2 },
+          "expect": { "actionsRaw": ["show_network", "write_lkg"], "showing": "network" }
+        }
+      ]
+    }
+  ],
+  "lkgScope": [
+    {
+      "name": "G16_member_A_prod",
+      "levelRaw": "member",
+      "userId": "A",
+      "envRaw": "prod",
+      "expect": { "scope": "prod:user:A" }
+    },
+    {
+      "name": "G16_member_A_prod_repeat",
+      "levelRaw": "member",
+      "userId": "A",
+      "envRaw": "prod",
+      "expect": { "scope": "prod:user:A" }
+    },
+    {
+      "name": "G16_member_B_prod",
+      "levelRaw": "member",
+      "userId": "B",
+      "envRaw": "prod",
+      "expect": { "scope": "prod:user:B" }
+    },
+    {
+      "name": "G16_member_A_staging",
+      "levelRaw": "member",
+      "userId": "A",
+      "envRaw": "staging",
+      "expect": { "scope": "staging:user:A" }
+    },
+    {
+      "name": "G16_guest_prod",
+      "levelRaw": "guest",
+      "userId": null,
+      "envRaw": "prod",
+      "expect": { "scope": "prod:guest" }
+    },
+    {
+      "name": "G16_guest_prod_repeat",
+      "levelRaw": "guest",
+      "userId": null,
+      "envRaw": "prod",
+      "expect": { "scope": "prod:guest" }
+    },
+    {
+      "name": "G16_guest_staging",
+      "levelRaw": "guest",
+      "userId": null,
+      "envRaw": "staging",
+      "expect": { "scope": "staging:guest" }
+    },
+    {
+      "name": "G16_basic_prod",
+      "levelRaw": "basic",
+      "userId": null,
+      "envRaw": "prod",
+      "expect": { "scope": "prod:basic" }
+    },
+    {
+      "name": "G16_basic_prod_repeat",
+      "levelRaw": "basic",
+      "userId": null,
+      "envRaw": "prod",
+      "expect": { "scope": "prod:basic" }
+    },
+    {
+      "name": "G16_basic_staging",
+      "levelRaw": "basic",
+      "userId": null,
+      "envRaw": "staging",
+      "expect": { "scope": "staging:basic" }
+    },
+    {
+      "name": "G16_member_named_guest",
+      "levelRaw": "member",
+      "userId": "guest",
+      "envRaw": "prod",
+      "expect": { "scope": "prod:user:guest" }
+    }
+  ],
+  "localDataClear": [
+    {
+      "name": "G16_logout_current",
+      "event": "logout",
+      "item": "lkg_current_scope",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G16_logout_other",
+      "event": "logout",
+      "item": "lkg_other_scope",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_logout_notice",
+      "event": "logout",
+      "item": "notice_closed",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_logout_popup",
+      "event": "logout",
+      "item": "popup_count",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G16_switch_current",
+      "event": "account_switch",
+      "item": "lkg_current_scope",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G16_switch_other",
+      "event": "account_switch",
+      "item": "lkg_other_scope",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_switch_notice",
+      "event": "account_switch",
+      "item": "notice_closed",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_switch_popup",
+      "event": "account_switch",
+      "item": "popup_count",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G16_invalid_current",
+      "event": "session_invalid",
+      "item": "lkg_current_scope",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G16_invalid_other",
+      "event": "session_invalid",
+      "item": "lkg_other_scope",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_invalid_notice",
+      "event": "session_invalid",
+      "item": "notice_closed",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_invalid_popup",
+      "event": "session_invalid",
+      "item": "popup_count",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G16_revoke_current",
+      "event": "consent_revoked",
+      "item": "lkg_current_scope",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G16_revoke_other",
+      "event": "consent_revoked",
+      "item": "lkg_other_scope",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G11_revoke_notice",
+      "event": "consent_revoked",
+      "item": "notice_closed",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G11_revoke_popup",
+      "event": "consent_revoked",
+      "item": "popup_count",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G16_env_current",
+      "event": "env_switch",
+      "item": "lkg_current_scope",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G16_env_other",
+      "event": "env_switch",
+      "item": "lkg_other_scope",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G11_env_notice",
+      "event": "env_switch",
+      "item": "notice_closed",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G11_env_popup",
+      "event": "env_switch",
+      "item": "popup_count",
+      "expect": { "clear": true }
+    },
+    {
+      "name": "G16_cache_current",
+      "event": "clear_cache",
+      "item": "lkg_current_scope",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G16_cache_other",
+      "event": "clear_cache",
+      "item": "lkg_other_scope",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_cache_notice",
+      "event": "clear_cache",
+      "item": "notice_closed",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_cache_popup",
+      "event": "clear_cache",
+      "item": "popup_count",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G16_background_current",
+      "event": "app_background",
+      "item": "lkg_current_scope",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G16_background_other",
+      "event": "app_background",
+      "item": "lkg_other_scope",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_background_notice",
+      "event": "app_background",
+      "item": "notice_closed",
+      "expect": { "clear": false }
+    },
+    {
+      "name": "G11_background_popup",
+      "event": "app_background",
+      "item": "popup_count",
+      "expect": { "clear": false }
+    }
+  ],
+  "notice": [
+    {
+      "name": "G10_before_start",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试公告",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-10T10:00:00+08:00",
+          "end_at": null
+        }
+      ],
+      "closedKeys": [],
+      "nowIso": "2026-10-10T09:59:59+08:00",
+      "expect": { "visibleItemIds": [], "closable": {}, "cardHidden": true, "nextExpiryIso": null }
+    },
+    {
+      "name": "G10_at_start",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试公告",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-10T10:00:00+08:00",
+          "end_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "closedKeys": [],
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "expect": {
+        "visibleItemIds": ["n1"],
+        "closable": { "n1": true },
+        "cardHidden": false,
+        "nextExpiryIso": "2026-10-10T11:00:00+08:00"
+      }
+    },
+    {
+      "name": "G10_at_end",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试公告",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-10T10:00:00+08:00",
+          "end_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "closedKeys": [],
+      "nowIso": "2026-10-10T11:00:00+08:00",
+      "expect": { "visibleItemIds": [], "closable": {}, "cardHidden": true, "nextExpiryIso": null }
+    },
+    {
+      "name": "G10_after_end",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试公告",
+          "target": null,
+          "closable": false,
+          "start_at": "2026-10-10T10:00:00+08:00",
+          "end_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "closedKeys": [],
+      "nowIso": "2026-10-10T12:00:00+08:00",
+      "expect": { "visibleItemIds": [], "closable": {}, "cardHidden": true, "nextExpiryIso": null }
+    },
+    {
+      "name": "G10_no_upper_bound",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试长期公告",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": null
+        }
+      ],
+      "closedKeys": [],
+      "nowIso": "2026-10-11T00:30:00+08:00",
+      "expect": {
+        "visibleItemIds": ["n1"],
+        "closable": { "n1": true },
+        "cardHidden": false,
+        "nextExpiryIso": null
+      }
+    },
+    {
+      "name": "G10_closed_same_version",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试公告",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": null
+        }
+      ],
+      "closedKeys": ["nb|n1|1"],
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "expect": { "visibleItemIds": [], "closable": {}, "cardHidden": true, "nextExpiryIso": null }
+    },
+    {
+      "name": "G10_content_version_changed",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 2,
+          "text": "测试改过正文的公告",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": null
+        }
+      ],
+      "closedKeys": ["nb|n1|1"],
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "expect": {
+        "visibleItemIds": ["n1"],
+        "closable": { "n1": true },
+        "cardHidden": false,
+        "nextExpiryIso": null
+      }
+    },
+    {
+      "name": "G10_only_end_changed_still_closed",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试公告",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": "2026-10-20T00:00:00+08:00"
+        }
+      ],
+      "closedKeys": ["nb|n1|1"],
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "expect": { "visibleItemIds": [], "closable": {}, "cardHidden": true, "nextExpiryIso": null }
+    },
+    {
+      "name": "G10_changed_to_unclosable_new_version",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 2,
+          "text": "测试公告",
+          "target": null,
+          "closable": false,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": "2026-10-10T11:00:00+08:00"
+        }
+      ],
+      "closedKeys": ["nb|n1|1"],
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "expect": {
+        "visibleItemIds": ["n1"],
+        "closable": { "n1": false },
+        "cardHidden": false,
+        "nextExpiryIso": "2026-10-10T11:00:00+08:00"
+      }
+    },
+    {
+      "name": "G10_earliest_visible_expiry_preserves_order",
+      "sectionId": "nb",
+      "items": [
+        {
+          "item_id": "n2",
+          "content_version": 1,
+          "text": "测试晚到期",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": "2026-10-10T12:30:00+08:00"
+        },
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试早到期",
+          "target": null,
+          "closable": false,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": "2026-10-10T11:00:00+08:00"
+        },
+        {
+          "item_id": "n3",
+          "content_version": 1,
+          "text": "测试无上界",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": null
+        },
+        {
+          "item_id": "future",
+          "content_version": 1,
+          "text": "测试尚未生效",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-10T10:05:00+08:00",
+          "end_at": "2026-10-10T10:10:00+08:00"
+        }
+      ],
+      "closedKeys": [],
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "expect": {
+        "visibleItemIds": ["n2", "n1", "n3"],
+        "closable": { "n2": true, "n1": false, "n3": true },
+        "cardHidden": false,
+        "nextExpiryIso": "2026-10-10T11:00:00+08:00"
+      }
+    },
+    {
+      "name": "G10_same_item_other_section_not_closed",
+      "sectionId": "other",
+      "items": [
+        {
+          "item_id": "n1",
+          "content_version": 1,
+          "text": "测试另一个卡片",
+          "target": null,
+          "closable": true,
+          "start_at": "2026-10-01T00:00:00+08:00",
+          "end_at": null
+        }
+      ],
+      "closedKeys": ["nb|n1|1"],
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "expect": {
+        "visibleItemIds": ["n1"],
+        "closable": { "n1": true },
+        "cardHidden": false,
+        "nextExpiryIso": null
+      }
+    }
+  ],
+  "noticeCloseKey": [
+    {
+      "name": "G10_key_base",
+      "sectionId": "nb",
+      "itemId": "n1",
+      "contentVersion": 1,
+      "expect": { "key": "nb|n1|1" }
+    },
+    {
+      "name": "G10_key_repeat",
+      "sectionId": "nb",
+      "itemId": "n1",
+      "contentVersion": 1,
+      "expect": { "key": "nb|n1|1" }
+    },
+    {
+      "name": "G10_key_section_differs",
+      "sectionId": "other",
+      "itemId": "n1",
+      "contentVersion": 1,
+      "expect": { "key": "other|n1|1" }
+    },
+    {
+      "name": "G10_key_item_differs",
+      "sectionId": "nb",
+      "itemId": "n2",
+      "contentVersion": 1,
+      "expect": { "key": "nb|n2|1" }
+    },
+    {
+      "name": "G10_key_version_differs",
+      "sectionId": "nb",
+      "itemId": "n1",
+      "contentVersion": 2,
+      "expect": { "key": "nb|n1|2" }
+    }
+  ],
+  "popup": [
+    {
+      "name": "G14_guest_show",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "guest",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "show", "countAfter": 1 }
+    },
+    {
+      "name": "G14_member_show_increments_existing_count",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 2,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 1,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "show", "countAfter": 2 }
+    },
+    {
+      "name": "G14_at_start",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "guest",
+      "nowIso": "2026-10-10T09:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "show", "countAfter": 1 }
+    },
+    {
+      "name": "G14_before_start",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "guest",
+      "nowIso": "2026-10-10T08:59:59+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_at_end",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "guest",
+      "nowIso": "2026-10-10T22:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_daily_max_reached",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 1,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 1 }
+    },
+    {
+      "name": "G14_next_shanghai_day_caller_supplies_zero",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-11T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "show", "countAfter": 1 }
+    },
+    {
+      "name": "G14_cold_start_already_shown",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 2,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 1,
+      "coldStartShown": true,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 1 }
+    },
+    {
+      "name": "G14_privacy_dialog_blocks",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "guest",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": ["privacy_dialog"],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_force_update_blocks",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": ["force_update"],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_update_prompt_blocks",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": ["update_prompt"],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_clipboard_prompt_blocks",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "guest",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": ["clipboard_prompt"],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_sheet_blocks",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": ["sheet_open"],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_home_not_visible_blocks",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": ["home_not_visible"],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_basic_never_shows_or_counts",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "basic",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "skip", "countAfter": 0 }
+    },
+    {
+      "name": "G14_image_not_loaded_no_count",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 2,
+          "time_window": ["09:00", "22:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T10:00:00+08:00",
+      "shownToday": 1,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": false,
+      "expect": { "decisionRaw": "skip", "countAfter": 1 }
+    },
+    {
+      "name": "G14_shanghai_2330",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["22:00", "23:59"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-10T23:30:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "show", "countAfter": 1 }
+    },
+    {
+      "name": "G14_shanghai_0030_next_date",
+      "popup": {
+        "id": "p",
+        "type": "popup",
+        "version": 1,
+        "props": {
+          "image": "https://img.example.com/p.png",
+          "daily_max": 1,
+          "time_window": ["00:00", "01:00"]
+        },
+        "data_source": { "kind": "static", "items": [] }
+      },
+      "levelRaw": "member",
+      "nowIso": "2026-10-11T00:30:00+08:00",
+      "shownToday": 0,
+      "coldStartShown": false,
+      "blockers": [],
+      "imageLoaded": true,
+      "expect": { "decisionRaw": "show", "countAfter": 1 }
+    }
+  ],
+  "action": [
+    {
+      "name": "G05_search",
+      "json": { "route": "Search", "params": { "q": "纸巾" } },
+      "expect": { "ok": true, "route": "Search", "params": { "q": "纸巾" } }
+    },
+    {
+      "name": "G05_external_url_unchanged",
+      "json": {
+        "route": "ExternalPage",
+        "params": {
+          "url": "https://x.example.com/a?b=1",
+          "title": "品牌活动说明",
+          "nav_style": "dark"
+        }
+      },
+      "expect": {
+        "ok": true,
+        "route": "ExternalPage",
+        "params": {
+          "url": "https://x.example.com/a?b=1",
+          "title": "品牌活动说明",
+          "nav_style": "dark"
+        }
+      }
+    },
+    {
+      "name": "G05_external_encoding_unchanged",
+      "json": {
+        "route": "ExternalPage",
+        "params": { "url": "https://x.example.com/a?z=%2f&a=hello+world#part" }
+      },
+      "expect": {
+        "ok": true,
+        "route": "ExternalPage",
+        "params": { "url": "https://x.example.com/a?z=%2f&a=hello+world#part" }
+      }
+    },
+    { "name": "G05_missing_route", "json": { "params": {} }, "expect": { "ok": false } },
+    { "name": "G05_empty_route", "json": { "route": "", "params": {} }, "expect": { "ok": false } },
+    {
+      "name": "G05_numeric_route",
+      "json": { "route": 7, "params": {} },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "G05_params_array",
+      "json": { "route": "Search", "params": [] },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "G05_params_string",
+      "json": { "route": "Search", "params": "纸巾" },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "G05_params_null",
+      "json": { "route": "Search", "params": null },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "G05_url_only",
+      "json": { "url": "https://x.example.com" },
+      "expect": { "ok": false }
+    },
+    { "name": "G05_js_only", "json": { "js": "test_only" }, "expect": { "ok": false } },
+    { "name": "G05_script_only", "json": { "script": "test_only" }, "expect": { "ok": false } },
+    {
+      "name": "G05_other_executable_fields_are_not_actions",
+      "json": { "scheme": "test:", "html": "<p>test</p>", "deeplink": "test://r/Home" },
+      "expect": { "ok": false }
+    },
+    {
+      "name": "G05_valid_route_ignores_js",
+      "json": { "route": "Search", "params": { "q": "纸巾" }, "js": "test_only" },
+      "expect": { "ok": true, "route": "Search", "params": { "q": "纸巾" } }
+    },
+    { "name": "G05_null", "json": null, "expect": { "ok": false } },
+    {
+      "name": "G05_G18_unknown_HotRankList_Router负责",
+      "json": { "route": "HotRankList", "params": {} },
+      "expect": { "ok": true, "route": "HotRankList", "params": {} }
+    },
+    {
+      "name": "G05_optional_params",
+      "json": { "route": "Help" },
+      "expect": { "ok": true, "route": "Help" }
+    }
+  ],
+  "spm": [
+    {
+      "name": "G06_first_slot",
+      "sectionId": "default_icons",
+      "slot": 1,
+      "expect": { "spm": "home.default_icons.1" }
+    },
+    {
+      "name": "G06_later_slot",
+      "sectionId": "feed",
+      "slot": 12,
+      "expect": { "spm": "home.feed.12" }
+    }
+  ],
+  "adLabel": [
+    {
+      "name": "G22_item_priority",
+      "sectionAdLabel": "推广",
+      "itemAdLabel": "测试条目标识",
+      "expect": { "label": "测试条目标识" }
+    },
+    {
+      "name": "G22_item_absent",
+      "sectionAdLabel": "推广",
+      "itemAdLabel": "absent",
+      "expect": { "label": "推广" }
+    },
+    {
+      "name": "G22_item_null",
+      "sectionAdLabel": "推广",
+      "itemAdLabel": null,
+      "expect": { "label": "推广" }
+    },
+    {
+      "name": "G22_both_absent",
+      "sectionAdLabel": "absent",
+      "itemAdLabel": "absent",
+      "expect": { "label": null }
+    },
+    {
+      "name": "G22_both_null",
+      "sectionAdLabel": null,
+      "itemAdLabel": null,
+      "expect": { "label": null }
+    },
+    {
+      "name": "G22_section_absent_item_present",
+      "sectionAdLabel": "absent",
+      "itemAdLabel": "推广",
+      "expect": { "label": "推广" }
+    },
+    {
+      "name": "G22_preserve_spaces_fullwidth",
+      "sectionAdLabel": "推广",
+      "itemAdLabel": " 　推广Ａ　 ",
+      "expect": { "label": " 　推广Ａ　 " }
+    },
+    {
+      "name": "G22_empty_non_null_item_wins",
+      "sectionAdLabel": "推广",
+      "itemAdLabel": "",
+      "expect": { "label": "" }
+    }
+  ],
+  "exposure": [
+    {
+      "name": "G20_continuous_60_percent_500ms",
+      "steps": [
+        { "tMs": 0, "visibleRatio": 0.6, "stay": 1 },
+        { "tMs": 499, "visibleRatio": 0.6 },
+        { "tMs": 500, "visibleRatio": 0.6 },
+        { "tMs": 1000, "visibleRatio": 0.6 }
+      ],
+      "sectionId": "banner",
+      "slot": 1,
+      "expect": { "fireAtMs": [500] }
+    },
+    {
+      "name": "G20_drop_at_499ms",
+      "steps": [
+        { "tMs": 0, "visibleRatio": 0.6, "stay": 1 },
+        { "tMs": 499, "visibleRatio": 0.4 },
+        { "tMs": 500, "visibleRatio": 0.4 }
+      ],
+      "sectionId": "banner",
+      "slot": 1,
+      "expect": { "fireAtMs": [] }
+    },
+    {
+      "name": "G20_same_stay_no_duplicate",
+      "steps": [
+        { "tMs": 0, "visibleRatio": 0.6, "stay": 1 },
+        { "tMs": 500, "visibleRatio": 0.6 },
+        { "tMs": 600, "visibleRatio": 0.4 },
+        { "tMs": 700, "visibleRatio": 0.6 },
+        { "tMs": 1200, "visibleRatio": 0.6 }
+      ],
+      "sectionId": "banner",
+      "slot": 1,
+      "expect": { "fireAtMs": [500] }
+    },
+    {
+      "name": "G20_new_stay_can_fire",
+      "steps": [
+        { "tMs": 0, "visibleRatio": 0.6, "stay": 1 },
+        { "tMs": 500, "visibleRatio": 0.6 },
+        { "tMs": 700, "visibleRatio": 0.6, "stay": 2 },
+        { "tMs": 1199, "visibleRatio": 0.6 },
+        { "tMs": 1200, "visibleRatio": 0.6 }
+      ],
+      "sectionId": "banner",
+      "slot": 1,
+      "expect": { "fireAtMs": [500, 1200] }
+    },
+    {
+      "name": "G20_exactly_50_percent",
+      "steps": [
+        { "tMs": 0, "visibleRatio": 0.5, "stay": 1 },
+        { "tMs": 500, "visibleRatio": 0.5 }
+      ],
+      "sectionId": "icons",
+      "slot": 2,
+      "expect": { "fireAtMs": [500] }
+    },
+    {
+      "name": "G20_below_threshold_resets_continuity",
+      "steps": [
+        { "tMs": 0, "visibleRatio": 0.6, "stay": 1 },
+        { "tMs": 499, "visibleRatio": 0.4 },
+        { "tMs": 600, "visibleRatio": 0.6 },
+        { "tMs": 1099, "visibleRatio": 0.6 },
+        { "tMs": 1100, "visibleRatio": 0.6 }
+      ],
+      "sectionId": "icons",
+      "slot": 2,
+      "expect": { "fireAtMs": [1100] }
+    }
+  ],
+  "cardErrorDedupe": [
+    {
+      "name": "G20_each_key_component_matters",
+      "events": [
+        { "pageVersion": 1, "sectionId": "a", "reasonRaw": "missing_field" },
+        { "pageVersion": 1, "sectionId": "a", "reasonRaw": "missing_field" },
+        { "pageVersion": 2, "sectionId": "a", "reasonRaw": "missing_field" },
+        { "pageVersion": 1, "sectionId": "b", "reasonRaw": "missing_field" },
+        { "pageVersion": 1, "sectionId": "a", "reasonRaw": "bad_type" },
+        { "pageVersion": 1, "sectionId": "a", "reasonRaw": "missing_field" }
+      ],
+      "expect": { "sentIndexes": [0, 2, 3, 4] }
+    }
+  ],
+  "preview": [
+    {
+      "name": "G24_ok_read_only",
+      "routeParams": { "page_key": "home", "token": "test-token-a" },
+      "result": { "kind": "ok", "page": { "page_key": "home", "version": 7, "sections": [] } },
+      "expect": {
+        "screenRaw": "draft",
+        "writesLkg": false,
+        "writesPopupCount": false,
+        "writesNoticeClosed": false,
+        "sendsEvents": false,
+        "switchesEnv": false
+      }
+    },
+    {
+      "name": "G24_30701_expired_or_other_environment",
+      "routeParams": { "page_key": "home", "token": "test-token-b" },
+      "result": { "kind": "error", "code": 30701 },
+      "expect": {
+        "screenRaw": "expired",
+        "writesLkg": false,
+        "writesPopupCount": false,
+        "writesNoticeClosed": false,
+        "sendsEvents": false,
+        "switchesEnv": false
+      }
+    },
+    {
+      "name": "G24_50001_error",
+      "routeParams": { "page_key": "home", "token": "test-token-c" },
+      "result": { "kind": "error", "code": 50001 },
+      "expect": {
+        "screenRaw": "error",
+        "writesLkg": false,
+        "writesPopupCount": false,
+        "writesNoticeClosed": false,
+        "sendsEvents": false,
+        "switchesEnv": false
+      }
+    },
+    {
+      "name": "G24_extra_host_Router丢弃",
+      "routeParams": {
+        "page_key": "home",
+        "token": "test-token-d",
+        "host": "https://other.example.com"
+      },
+      "result": { "kind": "ok", "page": { "page_key": "home", "version": 8, "sections": [] } },
+      "expect": {
+        "screenRaw": "draft",
+        "writesLkg": false,
+        "writesPopupCount": false,
+        "writesNoticeClosed": false,
+        "sendsEvents": false,
+        "switchesEnv": false
+      }
+    }
+  ],
+  "gaps": [
+    "G01、G12～G14：goldenPages 是临时客户端 fixture，不是契约。id、版本号、测试文字、图片地址均为测试值。G17 的 builtin:<名> 资源标识写法是代拟；仅包内默认使用，不能据此允许任意网络图片协议。",
+    "G02、G03：待定 operation 的构建开关期望为 Debug/Staging 的本地假服务可用，Release 不发；Release 的 product_pool/union_material 卡按无数据隐藏。题定纯函数 API 没有 build 参数或请求执行器，因此这里登记执行层验收，不伪造请求形状或声称纯函数已验证制品隔离。",
+    "G03、G13：商品类 golden 只给页面配置；动态条目来自假服务的现有 ProductCard，禁止把尚未约定的响应字段塞进页面 JSON。商品顺序、价格展示、实际空源隐藏及三端截图由实现方接线验收。",
+    "G04：验收编号按任务书与规划/10 §0.5 映射。",
+    "G05、G06、G18：解码不查路由表；未知名称、since、in_app 来源、Release debug_only 隔离与真实点击回调由 Router 集成测试负责。spm 不进入 params。未给 params 时输出缺省还是空对象未规定，仅断言 route，且禁止输出 route/params 之外的字段。",
+    "G07、G08、G21：每个负例只制造一个需要判定的错误；多个错误同时命中时的 reason 优先级未规定，不设期望。未知类型不进入 dropped；坏条目不进入 dropped。",
+    "G14：第二个合法 popup 是否仍保留在解码结果 kept 容器未规定；pageDecode.kept 比较的是普通卡加 popupId 指定的 popup，其他合法 popup 不参与容器断言；popupId 必须准确。skip 的 reasonRaw 枚举未规定，所有 popup 用例均不猜 reasonRaw。",
+    "G14：countAfter 是真正显示后的逻辑计数；图片加载、渲染完成、弹窗关闭按钮、返回键、遮罩与持久化须另做界面接线。shownToday 由调用方按上海自然日提供，因此 23:30/00:30 验证本策略使用上海时间，不能代替计数存储跨日测试。",
+    "G16：scope 的 env:user:id、env:guest、env:basic 是代拟序列化；测试只比较相等关系与隔离关系，不锁定分隔符。成员缺 userId 的行为未规定，不设期望。",
+    "G10：关闭键 sectionId|itemId|contentVersion 的分隔符是代拟；测试比较三元组的相等与不等关系。notice.closedKeys 用 noticeCloseKey 向量映射到生产 closeKey 输出后作为输入；可见性期望仍为文件内常量，不从生产结果计算。",
+    "G16：show_lkg/show_default 表示选择并尝试展示该来源；异步加载失败随后用 lkg_loaded/default_loaded 回报。冷启动 hasLkg=true 后读出无效 LKG 的中间来源不代表坏 JSON 曾被成功渲染。actionsRaw 无顺序规定，测试按多重集合精确比较；无动作编码为 none。",
+    "G16 与 brief §0：现有 API 没有请求编号或世代令牌，只能验证 identity_changed 后、重新 cold_start 前的旧结果丢弃；重建后 A/B 响应混到同一输入流的归属不能靠 page version 代替。须由绑定身份的控制器集成测试验证旧响应不改屏、不写新作用域 LKG。",
+    "G16 与 brief §0：策略返回只有 toast 文案键，没有 trace6 或最终消息。5xx 向量传入 test-trace-ABC123 并断言 error.50001；最终提示追加 ABC123、LKG 原子写及删除失败补清、执行层 Retry-After 禁发，须用已有共用实现另做集成测试。",
+    "G16：①「已交给界面显示才写 LKG」与③④「不替换当前屏但写 LKG」的提交阶段措辞不一致；按③④及本任务明确要求断言 write_lkg，不推定渲染确认回调。零张成功卡、写盘失败的执行层协议不在题定 API 中。",
+    "G24：额外 host 由 Router 丢弃；测试接线仅向 HomePreviewPolicy 传 page_key/token，并核对返回值原样。Release 无代码/路由/字符串、不申请相机权限、token 不进日志、草稿 popup 立即预览一次，均需制品或页面集成测试。",
+    "G11、G15、G20、G22、G25～G31 按 rule-gaps 原文；不猜 home.fallback 语义，不新增 home.* 契约键，不发 exposure/click。基本模式匿名请求与无事件、副作用执行器、首页置灰、诊断版本及无障碍不由本纯函数测试替代。",
+    "版本比较复用 iOS UpdateGate.compareVersions(a:b:)、Android/Harmony UpdateGate.compareOrNull；不在测试里另写比较器或用生产比较器计算期望。BR-TEXT-11 展示文本沿用三端 CouliFormat，已有 format-vectors 覆盖的规则不重复。",
+    "这些文件是实现前测试，未编译、未运行；实现方须增加 HomeCore/:core:home 接线、鸿蒙 HomeVectorsData.ets 生成项和 List.test.ets 登记，然后运行各端既有 CI。"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "format": "couli-client-vectors-manifest/1",
+  "algorithm": "sha256",
+  "files": {
+    "clipboard-candidates-vectors.json": {
+      "sha256": "a97c2f124ff6196676f92bbd66f096f6cbd5500950a0af197a47464321966e74",
+      "bytes": 47933
+    },
+    "clipboard-vectors.json": {
+      "sha256": "fc0efe27eab67dc21edbee53a40c65ef24f48c9dbcb178d297504f9afbd078d2",
+      "bytes": 155802
+    },
+    "format-vectors.json": {
+      "sha256": "69e1fbd9bf6044ae4ec844686d0afcbb2c6526d682de2143404c8d8205021a98",
+      "bytes": 27352
+    },
+    "home-sdui-vectors.json": {
+      "sha256": "d8c0852a862bd305528ac9f45f1b07d32feb979f190abac2be247d5b8355f083",
+      "bytes": 114819
+    },
+    "login-vectors.json": {
+      "sha256": "1c400c92741824cbb6890e161b95cebb90ff0e8c7e9c1b66af9e8b2da1eeb2e1",
+      "bytes": 39862
+    },
+    "me-vectors.json": {
+      "sha256": "d63b7360d7fc1ff421929ec622ea82063ad095a60ac3a8b6bfa756e15d2cba3b",
+      "bytes": 119788
+    },
+    "oauth-login-vectors.json": {
+      "sha256": "9c7611b341a843fe1a97cd45913ca3796d4a50f9ca3832cc643b0caca78aa85f",
+      "bytes": 23016
+    },
+    "order-vectors.json": {
+      "sha256": "8bf935d528a1d1cf447a9ac9371a18a5b01285da6d8052549f3c8746798bc74d",
+      "bytes": 155857
+    },
+    "privacy-visual-vectors.json": {
+      "sha256": "ba1cc1bee7b92d2dabddc742f72532fdb909e6ea380d361d0e99547a5016be5b",
+      "bytes": 7484
+    },
+    "risk-appeal-visual-vectors.json": {
+      "sha256": "28cf2d63714c368304bd06fe6d7cb7634eb3fc9a50a05675b594205d9df07ac5",
+      "bytes": 15469
+    }
+  }
+}

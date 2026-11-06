@@ -1,9 +1,12 @@
-// TOKENS-LAG (规划/05 §3.11; D10-643 ⑥, D10-672 ②): warns when a client's design-token lock or
-// contract lock falls behind its source, and when the client contract locks disagree.
+// TOKENS-LAG (规划/05 §3.11; D10-643 ⑥, D10-672 ②; DSX-42 D10-683): warns when a client's
+// design-token lock or contract lock falls behind its source, when the client contract locks
+// disagree, and (--client-vectors) when the shared client vectors a client locks differ from this
+// repository's specs/client/ manifest.
 //
 //   node tools/ci/tokens-lag.ts --planning <planning repo> [--planning-ref <ref>]
 //     [--platform <this repo>] [--platform-ref <ref>]
-//     [--lock <name>=<contract.lock>]... [--h5] [--now <ISO time>]
+//     [--lock <name>=<contract.lock>]... [--h5] [--client-vectors <specs/client dir>]
+//     [--now <ISO time>]
 //
 //   --planning      local git checkout of the planning repository (zora4523-bot/couli).
 //   --planning-ref  ref whose history is the token source; default origin/main when it resolves,
@@ -15,11 +18,16 @@
 //   --lock          a client contract.lock (android, harmony, ios ...); repeatable. Shape:
 //                   {"rebate_platform": {"commit": "<40hex>"},
 //                    "design_tokens": {"commit": "<40hex>", "path": "design/tokens/design-tokens.json"}}
-//                   (`repo` fields and `files` are not read; `path` is optional but must name the
-//                   token file when present).
+//                   (`repo` fields are not read; `path` is optional but must name the token file
+//                   when present; `files` is read only with --client-vectors, and then only its
+//                   `specs/client/<path>` keys).
 //   --h5            the H5 token lock: contracts/design-tokens.json of this repository (version
 //                   from its metadata.version) and the 40-hex source commit on the
 //                   `design-tokens.json` row of contracts/README.md. H5 has no contract lock.
+//   --client-vectors  the specs/client directory of this repository (manifest.json, see
+//                   client-vectors.ts). The manifest must parse and match the directory's files,
+//                   else input error. Each --lock's `files` table is compared with it: a key
+//                   `specs/client/<path>` maps to the sha256 of manifest entry <path>.
 //   --now           the clock (tests). Default: the later of the newest token commit and the
 //                   current time. Only used for the reported lock age, never for a verdict.
 //
@@ -42,6 +50,13 @@
 //              not contain it; a commit this repository does not have is a warning ("找不到该提交"),
 //              not an input error (a client may lock an unpushed commit).
 //   two or more client locks whose rebate_platform.commit differ -> "三端契约锁不一致".
+//   client vectors (--client-vectors; warnings only, never an input error about a lock):
+//              `client-vectors-mismatch` - a lock's `specs/client/<path>` hash differs from the
+//              manifest, or names a path the manifest does not have (one warning per lock);
+//              `client-vectors-unlocked` - manifest paths the lock has no key for (one warning per
+//              lock; expected until the client adopts the keys, DSX-140 to DSX-142);
+//              `client-vectors-disagree` - two or more locks lock the same path with different
+//              hashes (one warning per path). A lock without a `files` object locks nothing.
 //
 // Output: stdout is one JSON document (see Report); stderr a Chinese summary; under GitHub Actions
 // (GITHUB_ACTIONS=true) every warning is also printed to stderr as `::warning title=TOKENS-LAG::...`
@@ -52,6 +67,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tryGit } from '../lib/git.ts';
+import { LOCK_PREFIX, ownEntry, verifiedManifest } from './client-vectors.ts';
 
 export const TOKENS_PATH = 'design/tokens/design-tokens.json';
 export const H5_SNAPSHOT = 'contracts/design-tokens.json';
@@ -153,7 +169,12 @@ function isObj(v: unknown): v is Obj {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-export type ClientLock = { contractCommit: string; tokensCommit: string };
+export type ClientLock = {
+  contractCommit: string;
+  tokensCommit: string;
+  /** The lock's `files` table when it is an object, else null (only read with --client-vectors). */
+  files: Record<string, unknown> | null;
+};
 
 export function parseContractLock(text: string, label: string): ClientLock {
   let doc: unknown;
@@ -178,7 +199,58 @@ export function parseContractLock(text: string, label: string): ClientLock {
   if (path !== undefined && path !== TOKENS_PATH) {
     throw new InputError(`${label}: design_tokens.path 应为 ${TOKENS_PATH}，实为 ${String(path)}`);
   }
-  return { contractCommit, tokensCommit };
+  const files = doc['files'];
+  return { contractCommit, tokensCommit, files: isObj(files) ? files : null };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Client vectors (pure)
+// ---------------------------------------------------------------------------------------------
+
+export type ClientVectorsMismatch = { path: string; locked: string; manifest: string | null };
+
+export type ClientVectorsLock = {
+  name: string;
+  matched: string[];
+  mismatched: ClientVectorsMismatch[];
+  unlocked: string[];
+};
+
+export type ClientVectorsDisagreement = { path: string; locks: { name: string; sha256: string }[] };
+
+const lockedValue = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v));
+
+/** Compares each lock's `specs/client/<path>` keys with the manifest (path -> sha256). */
+export function judgeClientVectors(
+  manifest: Readonly<Record<string, string>>,
+  locks: readonly { name: string; files: Readonly<Record<string, unknown>> | null }[],
+): { locks: ClientVectorsLock[]; disagreements: ClientVectorsDisagreement[] } {
+  const byPath = new Map<string, { name: string; sha256: string }[]>();
+  const out = locks.map((l): ClientVectorsLock => {
+    const locked = new Map<string, string>();
+    for (const [key, value] of Object.entries(l.files ?? {})) {
+      if (key.startsWith(LOCK_PREFIX))
+        locked.set(key.slice(LOCK_PREFIX.length), lockedValue(value));
+    }
+    const report: ClientVectorsLock = { name: l.name, matched: [], mismatched: [], unlocked: [] };
+    for (const [path, sha] of [...locked].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      const expected = ownEntry(manifest, path);
+      if (expected === sha) report.matched.push(path);
+      else report.mismatched.push({ path, locked: sha, manifest: expected ?? null });
+      const list = byPath.get(path) ?? [];
+      list.push({ name: l.name, sha256: sha });
+      byPath.set(path, list);
+    }
+    report.unlocked = Object.keys(manifest)
+      .filter((p) => !locked.has(p))
+      .sort();
+    return report;
+  });
+  const disagreements = [...byPath]
+    .filter(([, list]) => list.length >= 2 && new Set(list.map((x) => x.sha256)).size > 1)
+    .map(([path, list]) => ({ path, locks: list }))
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { locks: out, disagreements };
 }
 
 /** metadata.version of a token document. */
@@ -300,7 +372,10 @@ export type WarningKind =
   | 'contract-missing'
   | 'contract-mismatch'
   | 'snapshot-mismatch'
-  | 'source-invalid';
+  | 'source-invalid'
+  | 'client-vectors-mismatch'
+  | 'client-vectors-unlocked'
+  | 'client-vectors-disagree';
 
 export type Warning = { lock: string | null; kind: WarningKind; message: string };
 
@@ -336,6 +411,13 @@ export type Report = {
   };
   platform: { ref: string; commit: string; contracts_commit: string; committed_at: string } | null;
   locks: LockReport[];
+  /** Present with --client-vectors. */
+  client_vectors: {
+    dir: string;
+    manifest: Record<string, string>;
+    locks: ClientVectorsLock[];
+    disagreements: ClientVectorsDisagreement[];
+  } | null;
   warnings: Warning[];
 };
 
@@ -346,6 +428,7 @@ export type Options = {
   platformRef?: string;
   locks: { name: string; path: string }[];
   h5: boolean;
+  clientVectors?: string;
   now?: number;
 };
 
@@ -516,6 +599,58 @@ export function buildReport(opts: Options, wallClock: number): Report {
     });
   }
 
+  let clientVectors: Report['client_vectors'] = null;
+  if (opts.clientVectors !== undefined) {
+    const manifest = Object.fromEntries(
+      Object.entries(verifiedManifest(opts.clientVectors).files).map(([p, e]) => [p, e.sha256]),
+    );
+    const judged = judgeClientVectors(
+      manifest,
+      clientLocks.map((l) => ({ name: l.name, files: l.lock.files })),
+    );
+    for (const l of judged.locks) {
+      if (l.mismatched.length > 0) {
+        warnings.push({
+          lock: l.name,
+          kind: 'client-vectors-mismatch',
+          message:
+            `${l.name}: 锁定的共享向量与本仓库清单不一致 ${String(l.mismatched.length)} 个：` +
+            l.mismatched
+              .map((m) =>
+                m.manifest === null
+                  ? `${LOCK_PREFIX}${m.path}（清单里没有）`
+                  : `${LOCK_PREFIX}${m.path}（锁 ${m.locked.slice(0, 12)}，清单 ${m.manifest.slice(0, 12)}）`,
+              )
+              .join('，'),
+        });
+      }
+      if (l.unlocked.length > 0) {
+        warnings.push({
+          lock: l.name,
+          kind: 'client-vectors-unlocked',
+          message:
+            `${l.name}: 清单里有 ${String(l.unlocked.length)} 个共享向量没锁：` +
+            l.unlocked.map((p) => `${LOCK_PREFIX}${p}`).join('，'),
+        });
+      }
+    }
+    for (const d of judged.disagreements) {
+      warnings.push({
+        lock: null,
+        kind: 'client-vectors-disagree',
+        message:
+          `三端锁定的共享向量 ${LOCK_PREFIX}${d.path} 不一致：` +
+          d.locks.map((x) => `${x.name}=${x.sha256.slice(0, 12)}`).join('，'),
+      });
+    }
+    clientVectors = {
+      dir: opts.clientVectors,
+      manifest,
+      locks: judged.locks,
+      disagreements: judged.disagreements,
+    };
+  }
+
   if (opts.h5) {
     const snapshotPath = join(opts.platform, H5_SNAPSHOT);
     const readmePath = join(opts.platform, H5_README);
@@ -557,6 +692,7 @@ export function buildReport(opts: Options, wallClock: number): Report {
     },
     platform,
     locks,
+    client_vectors: clientVectors,
     warnings,
   };
 }
@@ -575,6 +711,15 @@ export function summary(report: Report): string {
         : `；契约 ${short(l.contract.commit)} 找不到该提交`;
     }
     lines.push(line);
+  }
+  if (report.client_vectors) {
+    const total = Object.keys(report.client_vectors.manifest).length;
+    for (const l of report.client_vectors.locks) {
+      lines.push(
+        `  ${l.name}: 共享向量 ${String(total)} 个，一致 ${String(l.matched.length)}、` +
+          `不一致 ${String(l.mismatched.length)}、未锁 ${String(l.unlocked.length)}`,
+      );
+    }
   }
   if (report.warnings.length === 0) lines.push('无告警');
   else {
@@ -596,7 +741,8 @@ export function githubWarning(message: string): string {
 
 const USAGE =
   'usage: node tools/ci/tokens-lag.ts --planning <dir> [--planning-ref <ref>] [--platform <dir>] ' +
-  '[--platform-ref <ref>] [--lock <name>=<contract.lock>]... [--h5] [--now <ISO>]';
+  '[--platform-ref <ref>] [--lock <name>=<contract.lock>]... [--h5] ' +
+  '[--client-vectors <specs/client dir>] [--now <ISO>]';
 
 export function parseArgs(argv: readonly string[], cwd: string): Options {
   const opts: Partial<Options> & { locks: Options['locks'] } = {
@@ -636,6 +782,9 @@ export function parseArgs(argv: readonly string[], cwd: string): Options {
       }
       case '--h5':
         opts.h5 = true;
+        break;
+      case '--client-vectors':
+        opts.clientVectors = resolve(cwd, value());
         break;
       case '--now': {
         const v = value();

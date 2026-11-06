@@ -1,0 +1,464 @@
+{
+  "about_this_file": "APP-12w-c 账号状态 RiskNotice / 申诉 Appeal 视觉的截图与视图数据（三端同一份，G-R15：不往 me-vectors.json 追加）。只放报文与本地态；不带 CT-26e 字段（prev_risk_state、attempt_no、can_resubmit 不在锁定契约 a7c9f1f，G-R01 / G-R18）；键名避开 token / secret / key / sentry / password / auth。",
+  "clock": "2026-11-05T16:00:00+08:00",
+  "zone": "Asia/Shanghai",
+  "boards": {
+    "RiskNoticeBanned-v2": {
+      "sha12": "8c6270eba567",
+      "height": 844,
+      "compare": true,
+      "page": "risk",
+      "risk": "risk_banned",
+      "appeals": "appeals_empty",
+      "entered10006": true,
+      "withdrawals": "withdrawals_pending",
+      "note": "副文案 G-R08 不做（在途提现只显示标题）"
+    },
+    "RiskNoticeBannedAppealing-v2": {
+      "sha12": "1ee8c613ca2b",
+      "height": 844,
+      "compare": true,
+      "page": "risk",
+      "risk": "risk_appealing_banned",
+      "appeals": "appeals_processing_banned",
+      "entered10006": true,
+      "withdrawals": "withdrawals_pending",
+      "note": "封禁 / 冻结写法由 G10 进入标记选：版式对照、选择分支不对照（G-R01）；行不可点（G-R07）"
+    },
+    "RiskNoticeBannedUpheld-v2": {
+      "sha12": "590aeb864498",
+      "height": 844,
+      "compare": true,
+      "page": "risk",
+      "risk": "risk_banned",
+      "appeals": "appeals_upheld_banned",
+      "entered10006": true,
+      "withdrawals": "withdrawals_pending"
+    },
+    "RiskNoticeFrozen": {
+      "sha12": "f11e629fb6a9",
+      "height": 844,
+      "compare": true,
+      "page": "risk",
+      "risk": "risk_frozen",
+      "appeals": "appeals_empty",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none"
+    },
+    "RiskNoticeFrozenAppealing": {
+      "sha12": "eaea66bca604",
+      "height": 844,
+      "compare": true,
+      "page": "risk",
+      "risk": "risk_appealing_frozen",
+      "appeals": "appeals_processing_frozen",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none",
+      "note": "选择分支不对照（G-R01）"
+    },
+    "RiskNoticeStates": {
+      "sha12": "97b956d881d0",
+      "height": 844,
+      "compare": true,
+      "page": "risk",
+      "risk": "risk_frozen_no_until",
+      "appeals": "appeals_empty",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none",
+      "note": "只对 ①冻结不定期；②第 3 次被维持不显示提交依赖 CT-26e can_resubmit，不对照（G-R01）"
+    },
+    "RiskNoticeDark": {
+      "sha12": "fd65380f1a8a",
+      "height": 844,
+      "compare": true,
+      "page": "risk",
+      "risk": "risk_frozen",
+      "appeals": "appeals_empty",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none",
+      "dark": true
+    },
+    "Appeal": {
+      "sha12": "867e969a8ca2",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_banned",
+      "appeals": "appeals_empty",
+      "entered10006": true,
+      "withdrawals": "withdrawals_none"
+    },
+    "AppealFrozen": {
+      "sha12": "c16f5816f4c9",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_frozen",
+      "appeals": "appeals_empty",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none"
+    },
+    "AppealProgress-v2": {
+      "sha12": "4ad2437f61ab",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_appealing_banned",
+      "appeals": "appeals_processing_banned",
+      "entered10006": true,
+      "withdrawals": "withdrawals_none",
+      "note": "申诉内容卡「原因」行按 G-R11 不加"
+    },
+    "AppealProgressFrozen-v2": {
+      "sha12": "9e94939c1429",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_appealing_frozen",
+      "appeals": "appeals_processing_frozen",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none"
+    },
+    "AppealResultLifted-v2": {
+      "sha12": "251aa4ccf1d4",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_normal",
+      "appeals": "appeals_revoked_banned",
+      "entered10006": true,
+      "withdrawals": "withdrawals_none",
+      "note": "标题「账号状态」与无返回按 G-R12 不做；淘宝句条件显示 G-R10 另立 FU"
+    },
+    "AppealResultLiftedFrozen-v2": {
+      "sha12": "9cb0634a9e66",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_normal",
+      "appeals": "appeals_revoked_frozen",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none",
+      "note": "「提现 · 已恢复」行按 G-R11 ⑧ 不加"
+    },
+    "AppealResultUpheld-v2": {
+      "sha12": "e083d8b577ba",
+      "height": 1180,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_banned",
+      "appeals": "appeals_upheld_banned",
+      "entered10006": true,
+      "withdrawals": "withdrawals_none",
+      "note": "【再次申诉】总是显示（无 can_resubmit，G-R01）"
+    },
+    "AppealResultUpheldFrozen-v2": {
+      "sha12": "367dba9c465f",
+      "height": 1240,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_frozen",
+      "appeals": "appeals_upheld_frozen",
+      "entered10006": false,
+      "withdrawals": "withdrawals_none"
+    },
+    "AppealDark": {
+      "sha12": "62a4eda4ba26",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_banned",
+      "appeals": "appeals_empty",
+      "entered10006": true,
+      "withdrawals": "withdrawals_none",
+      "dark": true
+    },
+    "AppealProgressDark": {
+      "sha12": "89b821ca3740",
+      "height": 844,
+      "compare": true,
+      "page": "appeal",
+      "risk": "risk_appealing_banned",
+      "appeals": "appeals_processing_banned",
+      "entered10006": true,
+      "withdrawals": "withdrawals_none",
+      "dark": true
+    }
+  },
+  "superseded": {
+    "RiskNoticeBanned": "7937e6dcd323",
+    "RiskNoticeBannedAppealing": "d73afc4bbad4",
+    "RiskNoticeBannedUpheld": "616c9d15ff3d",
+    "AppealProgress": "8b88ee45acea",
+    "AppealProgressFrozen": "da5810410cc6",
+    "AppealResultLifted": "fbe8871a5252",
+    "AppealResultLiftedFrozen": "3796e9ec4f2c",
+    "AppealResultUpheld": "3ea04703d6eb",
+    "AppealResultUpheldFrozen": "a1b16a732b93"
+  },
+  "profile": {
+    "user_id": "risk-visual-a",
+    "nickname": "凑狸用户",
+    "avatar_url": "",
+    "invite_code": "K7M3QX",
+    "inviter_bound": true,
+    "invite_backfill": {
+      "eligible": false,
+      "deadline_at": null
+    },
+    "identity_level": "phone",
+    "phone_bound": true,
+    "balance": {
+      "available_fen": 1234,
+      "withdrawable_fen": 1234,
+      "estimated_total_fen": 5678
+    },
+    "union_bindings": [],
+    "realname_status": "verified",
+    "need_reconsent": false
+  },
+  "risks": {
+    "risk_banned": {
+      "risk": {
+        "state": "banned",
+        "reason_category": "malicious_rights",
+        "frozen_until": null
+      },
+      "entered10006": true
+    },
+    "risk_frozen": {
+      "risk": {
+        "state": "frozen",
+        "reason_category": "abnormal_trade",
+        "frozen_until": "2026-11-30T00:00:00+08:00"
+      },
+      "entered10006": false
+    },
+    "risk_frozen_no_until": {
+      "risk": {
+        "state": "frozen",
+        "reason_category": "abnormal_trade",
+        "frozen_until": null
+      },
+      "entered10006": false
+    },
+    "risk_appealing_banned": {
+      "risk": {
+        "state": "appealing",
+        "reason_category": "malicious_rights",
+        "frozen_until": null
+      },
+      "entered10006": true
+    },
+    "risk_appealing_frozen": {
+      "risk": {
+        "state": "appealing",
+        "reason_category": "abnormal_trade",
+        "frozen_until": "2026-11-30T00:00:00+08:00"
+      },
+      "entered10006": false
+    },
+    "risk_normal": {
+      "risk": {
+        "state": "normal",
+        "reason_category": null,
+        "frozen_until": null
+      },
+      "entered10006": false
+    },
+    "risk_unknown_reason": {
+      "risk": {
+        "state": "banned",
+        "reason_category": "visual_unlisted_category",
+        "frozen_until": null
+      },
+      "entered10006": true,
+      "why": "反例：表外类别 → 原因行消失、不显示原始编码（G08）"
+    }
+  },
+  "appeals": {
+    "appeals_empty": [],
+    "appeals_order_only": [
+      {
+        "appeal_id": "appeal-visual-order-1",
+        "target_type": "order",
+        "target_id": "order-visual-1",
+        "status": "upheld",
+        "content": "订单申诉干扰项（只看账户申诉，G15）",
+        "created_at": "2026-11-05T10:00:00+08:00",
+        "closed_at": "2026-11-05T11:00:00+08:00"
+      }
+    ],
+    "appeals_processing_banned": [
+      {
+        "appeal_id": "appeal-visual-order-1",
+        "target_type": "order",
+        "target_id": "order-visual-1",
+        "status": "upheld",
+        "content": "订单申诉干扰项（只看账户申诉，G15）",
+        "created_at": "2026-11-05T10:00:00+08:00",
+        "closed_at": "2026-11-05T11:00:00+08:00"
+      },
+      {
+        "appeal_id": "appeal-visual-b1",
+        "target_type": "account",
+        "target_id": null,
+        "status": "processing",
+        "content": "这几笔订单都是我自己正常购买的，收货后没有退款，请帮忙核实。",
+        "created_at": "2026-11-02T15:00:00+08:00",
+        "closed_at": null
+      }
+    ],
+    "appeals_upheld_banned": [
+      {
+        "appeal_id": "appeal-visual-order-1",
+        "target_type": "order",
+        "target_id": "order-visual-1",
+        "status": "upheld",
+        "content": "订单申诉干扰项（只看账户申诉，G15）",
+        "created_at": "2026-11-05T10:00:00+08:00",
+        "closed_at": "2026-11-05T11:00:00+08:00"
+      },
+      {
+        "appeal_id": "appeal-visual-b1",
+        "target_type": "account",
+        "target_id": null,
+        "status": "upheld",
+        "content": "这几笔订单都是我自己正常购买的，收货后没有退款，请帮忙核实。",
+        "created_at": "2026-11-02T15:00:00+08:00",
+        "closed_at": "2026-11-04T16:30:00+08:00"
+      }
+    ],
+    "appeals_revoked_banned": [
+      {
+        "appeal_id": "appeal-visual-order-1",
+        "target_type": "order",
+        "target_id": "order-visual-1",
+        "status": "upheld",
+        "content": "订单申诉干扰项（只看账户申诉，G15）",
+        "created_at": "2026-11-05T10:00:00+08:00",
+        "closed_at": "2026-11-05T11:00:00+08:00"
+      },
+      {
+        "appeal_id": "appeal-visual-b1",
+        "target_type": "account",
+        "target_id": null,
+        "status": "revoked",
+        "content": "这几笔订单都是我自己正常购买的，收货后没有退款，请帮忙核实。",
+        "created_at": "2026-11-02T15:00:00+08:00",
+        "closed_at": "2026-11-04T16:30:00+08:00"
+      }
+    ],
+    "appeals_processing_frozen": [
+      {
+        "appeal_id": "appeal-visual-f1",
+        "target_type": "account",
+        "target_id": null,
+        "status": "processing",
+        "content": "最近几笔订单都是我自己下单的，收货后没有退款，请帮忙核实后恢复提现。",
+        "created_at": "2026-11-03T09:20:00+08:00",
+        "closed_at": null
+      }
+    ],
+    "appeals_upheld_frozen": [
+      {
+        "appeal_id": "appeal-visual-f1",
+        "target_type": "account",
+        "target_id": null,
+        "status": "upheld",
+        "content": "最近几笔订单都是我自己下单的，收货后没有退款，请帮忙核实后恢复提现。",
+        "created_at": "2026-11-03T09:20:00+08:00",
+        "closed_at": "2026-11-05T15:10:00+08:00"
+      }
+    ],
+    "appeals_revoked_frozen": [
+      {
+        "appeal_id": "appeal-visual-f1",
+        "target_type": "account",
+        "target_id": null,
+        "status": "revoked",
+        "content": "最近几笔订单都是我自己下单的，收货后没有退款，请帮忙核实后恢复提现。",
+        "created_at": "2026-11-03T09:20:00+08:00",
+        "closed_at": "2026-11-05T15:10:00+08:00"
+      }
+    ]
+  },
+  "withdrawals": {
+    "withdrawals_none": [],
+    "withdrawals_pending": [
+      {
+        "withdrawal_id": "wd-visual-1",
+        "status": "PENDING_REVIEW",
+        "review_mode": "manual",
+        "amount_fen": 1000,
+        "fee_fen": 0,
+        "tax_fen": 0,
+        "net_fen": 1000,
+        "payout_channel": "alipay",
+        "payout_channel_name": "支付宝",
+        "masked_account": "138****0000",
+        "reason_code": null,
+        "fail_action": null,
+        "created_at": "2026-11-05T09:00:00+08:00"
+      },
+      {
+        "withdrawal_id": "wd-visual-2",
+        "status": "PAID_API",
+        "review_mode": "auto",
+        "amount_fen": 2000,
+        "fee_fen": 0,
+        "tax_fen": 0,
+        "net_fen": 2000,
+        "payout_channel": "alipay",
+        "payout_channel_name": "支付宝",
+        "masked_account": "138****0000",
+        "reason_code": null,
+        "fail_action": null,
+        "created_at": "2026-11-05T09:00:00+08:00"
+      }
+    ]
+  },
+  "expect": {
+    "frozenUntilText": "11-30 00:00",
+    "bannedCreatedText": "2026-11-02 15:00",
+    "bannedClosedText": "2026-11-04 16:30",
+    "frozenCreatedText": "2026-11-03 09:20",
+    "frozenClosedText": "2026-11-05 15:10",
+    "pendingWithdrawalAmount": 1000,
+    "terminalWithdrawalAmount": 2000
+  },
+  "drafts": {
+    "risk.limit.long": "不设期限，直到解除",
+    "risk.banned_upheld.note": "申诉已处理，维持原处理结果。可以再次提交申诉。",
+    "risk.frozen_upheld.note": "申诉已处理，维持原处理结果。可以再次提交申诉。",
+    "risk.frozen.note_no_until": "恢复时会发站内信通知你。如有疑问，可以提交申诉。",
+    "appeal.next.again": "可以再次提交申诉；同一时间只能有一条处理中的申诉。",
+    "appeal.placeholder": "请说明情况，方便我们核实",
+    "risk.banned.desc.no_deletion": "限制期间只能查看本页、提交申诉、联系客服或退出登录。",
+    "appeal.next.logout.with_deletion": "不再使用，可以注销账号；也可以退出登录。"
+  },
+  "draftsKept": {
+    "risk.banned.desc": "限制期间只能查看本页、提交申诉、联系客服、注销账号或退出登录。",
+    "appeal.next.logout": "也可以退出登录。",
+    "appeal.lifted.note.banned": "购物前需重新完成平台授权。限制期间的通知已放进消息中心，现在可以查看。",
+    "appeal.withdraw_ok": "可以正常申请"
+  },
+  "retiredPhrases": ["长期，直到解除", "如有新的情况", "有新的情况或材料"],
+  "forbiddenPhrases": ["工作日", "截止", "小时内", "天内", "前完成审核"],
+  "routes": {
+    "public": ["Home", "Appeal", "RiskNotice", "Wallet", "Messages", "Help", "DeleteAccount"],
+    "internal": ["Home", "Appeal", "RiskNotice", "Wallet", "Messages", "Help"]
+  },
+  "submit": {
+    "input": "这几笔订单都是我自己正常购买的，收货后没有退款，请帮忙核实。",
+    "inputPadded": "  这几笔订单都是我自己正常购买的，收货后没有退款，请帮忙核实。 \n",
+    "blank": "  \n ",
+    "createdAt": "2026-11-05T16:00:00+08:00",
+    "newAppealId": "appeal-visual-new",
+    "fieldCode": 20001,
+    "serverCode": 50001,
+    "rateCode": 42901,
+    "retryAfterSeconds": 30,
+    "trace": "trace-risk-visual-0000c0ffee"
+  }
+}

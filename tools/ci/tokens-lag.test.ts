@@ -2,6 +2,7 @@
 // .tmp/tokens-lag-<pid>/ (a planning repository with a dated token history, a platform repository
 // with a dated contracts/ history and an H5 snapshot), removed afterwards.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
@@ -11,6 +12,7 @@ import {
   contractMismatch,
   distinctVersions,
   githubWarning,
+  judgeClientVectors,
   judgeContract,
   judgeTokens,
   main,
@@ -168,7 +170,13 @@ it('parseContractLock: reads both commits and rejects bad JSON, missing fields a
       }),
       'x',
     ),
-  ).toEqual({ contractCommit: c, tokensCommit: t });
+  ).toEqual({ contractCommit: c, tokensCommit: t, files: {} });
+  expect(
+    parseContractLock(
+      JSON.stringify({ rebate_platform: { commit: c }, design_tokens: { commit: t } }),
+      'x',
+    ).files,
+  ).toBeNull();
   expect(() => parseContractLock('{', 'x')).toThrow(InputError);
   expect(() => parseContractLock(JSON.stringify({ design_tokens: { commit: t } }), 'x')).toThrow(
     /rebate_platform\.commit/,
@@ -290,7 +298,11 @@ function platform(times: number[]): { dir: string; commits: string[] } {
   return { dir, commits };
 }
 
-function lockFile(contract: string, tokensCommit: string): string {
+function lockFile(
+  contract: string,
+  tokensCommit: string,
+  files: Record<string, unknown> = {},
+): string {
   const path = join(SCRATCH, `lock-${String(++fixtureCount)}.json`);
   write(
     SCRATCH,
@@ -298,7 +310,7 @@ function lockFile(contract: string, tokensCommit: string): string {
     JSON.stringify({
       rebate_platform: { repo: '../rebate-platform', commit: contract },
       design_tokens: { repo: '../couli', commit: tokensCommit, path: TOKENS },
-      files: {},
+      files,
     }),
   );
   return path;
@@ -692,4 +704,247 @@ it('--now sets the reported lock age only', () => {
   expect(r.code).toBe(0);
   expect(r.report?.now).toBe(iso(T0 + 40 * DAY_MS));
   expect(r.report?.locks[0]?.tokens.age_days).toBe(40);
+});
+
+// ---------------------------------------------------------------------------------------------
+// --client-vectors (DSX-42)
+// ---------------------------------------------------------------------------------------------
+
+const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
+const VECTORS = { 'login-vectors.json': '{"login": 1}\n', 'order-vectors.json': '{"order": 1}\n' };
+
+/** A specs/client fixture directory with a manifest matching its files. */
+function vectorsDir(files: Record<string, string> = VECTORS): string {
+  const dir = join(SCRATCH, `client-${String(++fixtureCount)}`);
+  const entries: Record<string, { sha256: string; bytes: number }> = {};
+  for (const [rel, text] of Object.entries(files)) {
+    write(dir, rel, text);
+    entries[rel] = { sha256: sha(text), bytes: Buffer.byteLength(text) };
+  }
+  write(
+    dir,
+    'manifest.json',
+    JSON.stringify({
+      format: 'couli-client-vectors-manifest/1',
+      algorithm: 'sha256',
+      files: entries,
+    }),
+  );
+  return dir;
+}
+
+const lockedAll = (): Record<string, string> => ({
+  'contracts/x.json': 'a'.repeat(64),
+  'specs/client/login-vectors.json': sha(VECTORS['login-vectors.json']),
+  'specs/client/order-vectors.json': sha(VECTORS['order-vectors.json']),
+});
+
+it('judgeClientVectors: matched, mismatched (also unknown paths), unlocked and disagreements', () => {
+  const manifest = { 'a.json': 'h-a', 'b.json': 'h-b', 'c.json': 'h-c' };
+  const r = judgeClientVectors(manifest, [
+    {
+      name: 'android',
+      files: {
+        'specs/client/a.json': 'h-a',
+        'specs/client/b.json': 'x',
+        'contracts/a.json': 'h-a',
+      },
+    },
+    { name: 'ios', files: { 'specs/client/b.json': 'y', 'specs/client/z.json': 'h-z' } },
+    { name: 'harmony', files: null },
+  ]);
+  expect(r.locks).toEqual([
+    {
+      name: 'android',
+      matched: ['a.json'],
+      mismatched: [{ path: 'b.json', locked: 'x', manifest: 'h-b' }],
+      unlocked: ['c.json'],
+    },
+    {
+      name: 'ios',
+      matched: [],
+      mismatched: [
+        { path: 'b.json', locked: 'y', manifest: 'h-b' },
+        { path: 'z.json', locked: 'h-z', manifest: null },
+      ],
+      unlocked: ['a.json', 'c.json'],
+    },
+    { name: 'harmony', matched: [], mismatched: [], unlocked: ['a.json', 'b.json', 'c.json'] },
+  ]);
+  expect(r.disagreements).toEqual([
+    {
+      path: 'b.json',
+      locks: [
+        { name: 'android', sha256: 'x' },
+        { name: 'ios', sha256: 'y' },
+      ],
+    },
+  ]);
+});
+
+it('--client-vectors: locks matching the manifest -> no client-vectors warning, exit 0', () => {
+  const p = planning([{ at: T0, version: '0.1.0' }]);
+  const f = platform([T0]);
+  const dir = vectorsDir();
+  const lock = (): string => lockFile(f.commits[0] ?? '', p.commits[0] ?? '', lockedAll());
+  const r = run([
+    '--planning',
+    p.dir,
+    '--platform',
+    f.dir,
+    '--client-vectors',
+    dir,
+    '--lock',
+    `android=${lock()}`,
+    '--lock',
+    `ios=${lock()}`,
+  ]);
+  expect(r.code).toBe(0);
+  expect(kinds(r)).toEqual([]);
+  expect(r.report?.client_vectors).toMatchObject({
+    dir,
+    manifest: {
+      'login-vectors.json': sha(VECTORS['login-vectors.json']),
+      'order-vectors.json': sha(VECTORS['order-vectors.json']),
+    },
+    disagreements: [],
+  });
+  expect(r.report?.client_vectors?.locks.map((l) => [l.name, l.matched.length])).toEqual([
+    ['android', 2],
+    ['ios', 2],
+  ]);
+  expect(r.stderr).toContain('一致 2、不一致 0、未锁 0');
+});
+
+it('--client-vectors: a differing hash -> client-vectors-mismatch per lock and -disagree across locks', () => {
+  const p = planning([{ at: T0, version: '0.1.0' }]);
+  const f = platform([T0]);
+  const dir = vectorsDir();
+  const changed = { ...lockedAll(), 'specs/client/order-vectors.json': 'b'.repeat(64) };
+  const r = run([
+    '--planning',
+    p.dir,
+    '--platform',
+    f.dir,
+    '--client-vectors',
+    dir,
+    '--lock',
+    `android=${lockFile(f.commits[0] ?? '', p.commits[0] ?? '', lockedAll())}`,
+    '--lock',
+    `harmony=${lockFile(f.commits[0] ?? '', p.commits[0] ?? '', changed)}`,
+  ]);
+  expect(r.code).toBe(1);
+  expect(kinds(r)).toEqual(['harmony:client-vectors-mismatch', '*:client-vectors-disagree']);
+  const [mismatch, disagree] = r.report?.warnings ?? [];
+  expect(mismatch?.message).toContain('specs/client/order-vectors.json（锁 bbbbbbbbbbbb');
+  expect(disagree?.message).toContain('specs/client/order-vectors.json 不一致');
+  expect(disagree?.message).toContain('android=');
+  expect(disagree?.message).toContain('harmony=bbbbbbbbbbbb');
+  expect(r.report?.client_vectors?.locks[1]?.mismatched).toEqual([
+    {
+      path: 'order-vectors.json',
+      locked: 'b'.repeat(64),
+      manifest: sha(VECTORS['order-vectors.json']),
+    },
+  ]);
+});
+
+it('--client-vectors: a lock without specs/client keys -> client-vectors-unlocked only (warning, exit 1)', () => {
+  const p = planning([{ at: T0, version: '0.1.0' }]);
+  const f = platform([T0]);
+  const dir = vectorsDir();
+  const partial = { 'specs/client/login-vectors.json': sha(VECTORS['login-vectors.json']) };
+  const r = run([
+    '--planning',
+    p.dir,
+    '--platform',
+    f.dir,
+    '--client-vectors',
+    dir,
+    '--lock',
+    `android=${lockFile(f.commits[0] ?? '', p.commits[0] ?? '', { 'contracts/x.json': 'a'.repeat(64) })}`,
+    '--lock',
+    `ios=${lockFile(f.commits[0] ?? '', p.commits[0] ?? '', partial)}`,
+  ]);
+  expect(r.code).toBe(1);
+  expect(kinds(r)).toEqual(['android:client-vectors-unlocked', 'ios:client-vectors-unlocked']);
+  expect(r.report?.warnings[0]?.message).toContain('2 个共享向量没锁');
+  expect(r.report?.warnings[1]?.message).toContain('specs/client/order-vectors.json');
+  expect(r.report?.warnings[1]?.message).not.toContain('login-vectors');
+});
+
+it('--client-vectors: without the option the files table is ignored and client_vectors is null', () => {
+  const p = planning([{ at: T0, version: '0.1.0' }]);
+  const f = platform([T0]);
+  const changed = { 'specs/client/order-vectors.json': 'b'.repeat(64) };
+  const r = run([
+    '--planning',
+    p.dir,
+    '--platform',
+    f.dir,
+    '--lock',
+    `android=${lockFile(f.commits[0] ?? '', p.commits[0] ?? '', changed)}`,
+  ]);
+  expect(r.code).toBe(0);
+  expect(r.report?.client_vectors).toBeNull();
+});
+
+it('--client-vectors: a missing, broken or stale manifest is an input error (exit 2)', () => {
+  const p = planning([{ at: T0, version: '0.1.0' }]);
+  const f = platform([T0]);
+  const stale = vectorsDir();
+  write(stale, 'login-vectors.json', '{"login": 2}\n');
+  const broken = vectorsDir();
+  write(broken, 'manifest.json', '{"format": ');
+  for (const dir of [join(SCRATCH, 'no-client-dir'), stale, broken]) {
+    const r = run([
+      '--planning',
+      p.dir,
+      '--platform',
+      f.dir,
+      '--client-vectors',
+      dir,
+      '--lock',
+      `android=${lockFile(f.commits[0] ?? '', p.commits[0] ?? '', lockedAll())}`,
+    ]);
+    expect({ dir, code: r.code, out: r.report }).toEqual({ dir, code: 2, out: null });
+    expect(r.stderr).toContain('TOKENS-LAG 输入错误');
+  }
+});
+
+it('--client-vectors: lock keys like specs/client/toString are unknown paths -> mismatch, exit 1', () => {
+  const judged = judgeClientVectors({ 'a.json': 'h-a' }, [
+    {
+      name: 'android',
+      files: JSON.parse(
+        '{"specs/client/toString": "x", "specs/client/__proto__": "y", "specs/client/a.json": "h-a"}',
+      ) as Record<string, unknown>,
+    },
+  ]);
+  expect(judged.locks[0]?.mismatched).toEqual([
+    { path: '__proto__', locked: 'y', manifest: null },
+    { path: 'toString', locked: 'x', manifest: null },
+  ]);
+  expect(judged.locks[0]?.matched).toEqual(['a.json']);
+  const p = planning([{ at: T0, version: '0.1.0' }]);
+  const f = platform([T0]);
+  const dir = vectorsDir();
+  const r = run([
+    '--planning',
+    p.dir,
+    '--platform',
+    f.dir,
+    '--client-vectors',
+    dir,
+    '--lock',
+    `android=${lockFile(f.commits[0] ?? '', p.commits[0] ?? '', {
+      ...lockedAll(),
+      'specs/client/toString': 'c'.repeat(64),
+      'specs/client/constructor': 'd'.repeat(64),
+    })}`,
+  ]);
+  expect(r.code).toBe(1);
+  expect(kinds(r)).toEqual(['android:client-vectors-mismatch']);
+  expect(r.report?.warnings[0]?.message).toContain('specs/client/toString（清单里没有）');
+  expect(r.report?.warnings[0]?.message).toContain('specs/client/constructor（清单里没有）');
 });
