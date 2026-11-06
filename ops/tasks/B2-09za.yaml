@@ -5,6 +5,7 @@ type: migration
 # 2026-11-07 pay 入账（D10-770）。生成任务重跑、手动触发与定时重叠时，同一结算记录（seq）对同一受益人只能有一条待批候选；已批 / 已拒 / 作废的不占位。平台行 user_id、role 为空，用 coalesce 归一。
 # 迁移号落地时取主干最大 +1，排在 identity 0128、agent B2-04zw 之后，落地前在 notices 报编排。规则测试 Codex：重复 pending 被拒、不同 seq / 不同受益人 / 非 pending 不冲突、平台行去重、跨 app 不冲突。
 # 2026-11-07 tester 改 claude-independent：Codex 额度用尽至 11-11 13:15（approvals #36、D10-775）。
+# 2026-11-07 void（D10-780）：表上已有 settle_adjustments_candidate_key（UNIQUE NULLS NOT DISTINCT，含 commission_version）挡住同版本的一切重复；剩下的「同 seq 换了 commission_version、旧 pending 还在」交 B2-09zb 在同一事务里先作废旧的再生成。迁移号 0131 释放。
 refs: [BR-FUND-09]
 refs_hash:
   BR-FUND-09: 6b72b55621fb
@@ -20,4 +21,4 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/db/settlement/settle-adjust-dedupe/**'
-status: todo
+status: void

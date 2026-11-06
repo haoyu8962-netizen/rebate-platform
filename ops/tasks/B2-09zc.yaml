@@ -1,0 +1,34 @@
+id: B2-09zc
+repo: rebate-platform
+title: 月结正差批准 / 拒绝与候选列表（FU-SETTLE-ADJ-POSITIVE，BR-FUND-09 ②，D10-770）——按批次批准逐单锁单重算写 SETTLE_ADJUST 正差凭证、按批次拒绝、列表；adminListSettleAdjustments、adminApproveSettleAdjustBatch、adminRejectSettleAdjustBatch 去 planned
+type: impl
+# 2026-11-07 pay 入账。契约 CT-24zv（#2573）。批准：fund.settle_adjust（totp），批次内逐单各自事务锁单（及受益人 users → 余额）重算：seq 变 → voided_stale_seq；扣回作废 → voided_by_clawback；diff=0 → approved 不出分录；否则写 USER:INCREASE、平台按符号 PLATFORM:INCREASE / DECREASE（键 ADJ:{seq}），更新 booked_base_fen / booked_n_fen；冻结 → 待补记义务，封禁 / 注销 → 平台；row_version CAS，被别的调用先决的单 already_decided。
+# 拒绝：reason，不动账。每次调用一条审计（settle_adjust_batch_approve / reject / settle_adjust_run_request 进 audit-log-view RULES）。RV2；规则测试新鲜独立 Claude（D10-775），money 评审独立 Claude + 只读复核。
+refs: [BR-FUND-09, BR-CALC-02, BR-CALC-09, BR-FUND-15]
+refs_hash:
+  BR-FUND-09: 6b72b55621fb
+  BR-CALC-02: 0ffe8a4d0b65
+  BR-CALC-09: 2414ed15d885
+  BR-FUND-15: 849cd1eab9f2
+deps: [B2-09zb, CT-24zv]
+paths:
+  - 'apps/api/src/modules/settlement/adjust/**'
+  - 'apps/api/src/modules/settlement/http/admin/**'
+  - 'apps/api/src/modules/settlement/settlement.module.ts'
+  - 'apps/api/src/modules/settlement/index.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/settlement/settle-adjust-approve/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/settle-adjust-approve/**'
+status: todo
