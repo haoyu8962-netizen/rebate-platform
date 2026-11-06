@@ -28,6 +28,11 @@
 //     (INVITE_SW below) after watch.enabled.<platform>; expectedNow is EXPECTED + INVITE_SW
 //     (F1-02zt：过渡已收紧, the pair must be present); EXPECTED itself stays the 04 §10.2 table
 //     verbatim.
+//   - B1-05zj (D10-736): the five 04 §10.2 rows of 2026-11-05 (shop.entry / detail.sales /
+//     detail.shop_scores / detail.coupon_end .enabled.<platform>, detail.jd_plus_note.enabled)
+//     join EXPECTED in table order after search.enabled.<platform>, so watch.enabled.<platform>
+//     stays EXPECTED's last row and the INVITE_SW pair stays last in the registry. feedback.enabled
+//     stays a config item (FU-FEEDBACK-SWITCH-TABLE) and is not listed here.
 import type { DB } from '@couli/db';
 import { expect } from 'vitest';
 import type {
@@ -99,6 +104,20 @@ export const EXPECTED: readonly ExpectedSwitch[] = [
     ALL,
   ),
   entry('search.enabled.<platform>', 'search.enabled.jd', BOOL, null, ALL),
+  // B1-05zj (D10-664 S-09, D10-736): 04 §10.2 rows added 2026-11-05 (商品详情 v3), in table
+  // order; defaults per BR-PRICE-21 细则「进店」, BR-TEXT-13 细则「虚拟数据」, BR-PRICE-04 细则
+  // 「商品详情的券标签」 (off) and BR-CALC-17 细则 (on); switch.all only (§11.2).
+  entry('shop.entry.enabled.<platform>', 'shop.entry.enabled.pdd', BOOL, false, ALL),
+  entry('detail.sales.enabled.<platform>', 'detail.sales.enabled.pdd', BOOL, false, ALL),
+  entry(
+    'detail.shop_scores.enabled.<platform>',
+    'detail.shop_scores.enabled.taobao',
+    BOOL,
+    false,
+    ALL,
+  ),
+  entry('detail.coupon_end.enabled.<platform>', 'detail.coupon_end.enabled.jd', BOOL, false, ALL),
+  entry('detail.jd_plus_note.enabled', 'detail.jd_plus_note.enabled', BOOL, true, ALL),
   entry('parse.tpwd.enabled', 'parse.tpwd.enabled', BOOL, true, ALL),
   entry('pdd.direct_convert.enabled', 'pdd.direct_convert.enabled', BOOL, false, ALL),
   entry('agent.enabled', 'agent.enabled', BOOL, true, ALL),

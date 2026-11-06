@@ -90,6 +90,18 @@ const REGISTRY: readonly SwitchSpec[] = Object.freeze([
     valueType: { kind: 'enum', values: ['not_launched', 'maintenance'] },
   }),
   spec('search.enabled.<platform>', null, ALL),
+  // B1-05zj (D10-664 S-09, D10-736): the product detail v3 switches, in 04 §10.2 table order.
+  // `<platform>` here means taobao / jd / pdd; the registry keeps no platform list, so every key
+  // of a pattern shares the one default (off) and no per-platform override is recorded.
+  // 进店 must not default on (BR-PRICE-21 细则「进店」).
+  spec('shop.entry.enabled.<platform>', false, ALL),
+  // 销量与店铺评分 stay off until measured (BR-TEXT-13 细则「虚拟数据」).
+  spec('detail.sales.enabled.<platform>', false, ALL),
+  spec('detail.shop_scores.enabled.<platform>', false, ALL),
+  // 券结束时刻 stays off until measured (BR-PRICE-04 细则「商品详情的券标签」).
+  spec('detail.coupon_end.enabled.<platform>', false, ALL),
+  // 京东详情的 PLUS 提示, on (BR-CALC-17 细则).
+  spec('detail.jd_plus_note.enabled', true, ALL),
   spec('parse.tpwd.enabled', true, ALL),
   spec('pdd.direct_convert.enabled', false, ALL),
   spec('agent.enabled', true, ALL),
