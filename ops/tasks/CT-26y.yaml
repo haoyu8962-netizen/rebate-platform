@@ -1,0 +1,26 @@
+id: CT-26y
+repo: rebate-platform
+title: 契约：S-08 收尾——openapi 示例与 Agent 回放夹具里的旧购买按钮键 btn.buy.coupon 改为 v3 新键（只改示例与夹具，不改形状）
+type: contract
+# 2026-11-09 be 入账（D10-664 S-08 收尾，编排 10:39 / D10-7xx：排在 B1-05zg #2511 合并之后）。B1-05zg 已让服务端按最终 basis 下发 btn.buy.rebate / btn.buy.rebate_unknown / rebate_login_to_view / btn.buy.no_rebate；契约里仍有旧键示例：openapi.yaml 区块条目、热销榜、收藏、SearchProductsOk、ProductOk、ParseInputOk 六处 cta.text_key = btn.buy.coupon，以及 contracts/fixtures/agent-streams/{normal,cancelled,disconnected,fallback}.ndjson 的 product_cta / cta。按同一张卡的 rebate_basis 改为对应新键（normal → btn.buy.rebate 等）。ProductCta 描述已由 CT-26t 改好不动；texts.default.json 里 btn.buy.coupon 键保留不删。夹具被 test/spec/agent/stream-writer、stream-run 与 contracts/agent-stream* 回放 / 校验，只改键值、不改帧结构，改后在宿主跑这些组确认不红。只改示例与夹具。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/fixtures/agent-streams/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
