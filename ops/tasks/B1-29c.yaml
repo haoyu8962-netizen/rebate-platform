@@ -6,6 +6,7 @@ type: impl
 # 取值只看 08 BR-WATCH-19 细则「商品详情价格走势的最常见价」：同一组每日价（最近 30 个自然日 +08:00，每天当天最后一次券后价）里出现天数最多的价，按分精确比较，并列取最近一天出现的；走势为 no_data 时 null。
 # 门槛与走势共用 price_trend.min_distinct_days，不加开关；服务端计算、三端不自算。source_key 按平台 + 有无券选（拼多多 price_trend.source.pdd / .pdd.general，契约 CT-22e）。
 # D10-694：同 PR 内 test-change 段改 B1-29a 冻结测试 test/spec/catalog/price-trend/**（整对象期望补 mode_price_fen、字段清单加该键、拼多多 source_key 改 .pdd 键；不删不放宽，手算期望值），编排按 #24 核后加标签。
+# D10-752：red_exempt 加 price-trend-route/http.test.ts 30 条未改用例（kit.ts 不闭合致整文件判定）。
 # D10-746：test_paths 加 price-trend-route/**，B1-29b 路由冻结用例 [#1] [#2] [#8]×3 [#9] 的期望信封只补 mode_price_fen。
 # D10-704：red_exempt 只登 6 条连带用例（kit.ts 改动致整文件判定，测试体未改）。
 # 2026-11-06 paths 加 price-trend.controller.ts：控制器逐字段组装响应（不带 mode_price_fen），source_key 类型取自契约生成物，CT-22e 合并重生成后需在此加字段、放宽来源键（实现回报）。
@@ -40,6 +41,96 @@ red_exempt:
   - file: test/spec/catalog/price-trend/window.test.ts
     test: '[AC-B1-29a#36] 传给 store.rows 的窗口：Clock = 2031-03-10 07:59:59.999 +08:00 → from 不晚于 Sun Mar 09 2031 23:59:59 GMT+0000 (Coordinated Universal Time) 00:00:00.000 +08:00（窗口首日按 +08:00，不按 UTC 零点），until 晚于 now；身份三元组原样传入'
     reason: 冻结 B1-29a 用例，测试体未改；整文件因 kit.ts 加 NO_DATA / modelTrend 被连带判定，与 mode_price_fen 无关（D10-694 / D10-704）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#12] 商品键形状或平台不匹配（missing-colon）按详情口径返回 20001'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#12] 商品键形状或平台不匹配（tb:）按详情口径返回 20001'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#12] 商品键形状或平台不匹配（TB:route001）按详情口径返回 20001'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#12] 商品键形状或平台不匹配（tb:has space）按详情口径返回 20001'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#12] 商品键形状或平台不匹配（jd:route002）按详情口径返回 20001'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#12] 商品键形状或平台不匹配（unknown:route003）按详情口径返回 20001'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#13] 契约拒绝额外 query 字段（app_id=synthetic_forged），不能覆盖服务端范围'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#13] 契约拒绝额外 query 字段（user_id=synthetic-user），不能覆盖服务端范围'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#13] 契约拒绝额外 query 字段（window_days=60），不能覆盖服务端范围'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#3] auth none 不要求有效登录凭据'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#4] 缺失或非法 platform（）返回 400/20001 和 fields，不调用用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#4] 缺失或非法 platform（platform=）返回 400/20001 和 fields，不调用用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#4] 缺失或非法 platform（platform=unknown）返回 400/20001 和 fields，不调用用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#4] 缺失或非法 platform（platform=ios）返回 400/20001 和 fields，不调用用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#4] 缺失或非法 platform（platform=TAOBAO）返回 400/20001 和 fields，不调用用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#5] product_key 短于契约长度下限（x）返回 400/20001 和 fields'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#5] product_key 短于契约长度下限（tb）返回 400/20001 和 fields'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 taobao 与 URL 解码后的路径 tb:route001 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 jd 与 URL 解码后的路径 jd:route002 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 pdd 与 URL 解码后的路径 pdd:route003 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 meituan 与 URL 解码后的路径 mt:route004 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 vip 与 URL 解码后的路径 vip:route005 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 douyin 与 URL 解码后的路径 dy:route006 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 kuaishou 与 URL 解码后的路径 ks:route008 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#6] 平台枚举 suning 与 URL 解码后的路径 sn:route009 原样传到用例'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#7] 同一应用实例按每次请求的 app_id 隔离读取，不缓存首个请求范围'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#14] 金额超过安全整数上限（9007199254740992n）返回 50001，不输出不安全或舍入的价格'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#14] 金额超过安全整数上限（9007199254740993n）返回 50001，不输出不安全或舍入的价格'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#10] 价格走势与商品详情独立：详情不嵌走势、不额外调用 getPriceTrend'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
+  - file: test/spec/catalog/price-trend-route/http.test.ts
+    test: '[AC-B1-29b#11] api 入口恰好注册一次 getProductPriceTrend 且契约去掉 planned'
+    reason: 冻结 B1-29b 用例，测试体未改；整文件因 kit.ts 用 createRequire 不闭合被连带判定，与 mode_price_fen 无关（D10-746 / D10-752）
 impl: claude
 tester: claude-independent
 accept:
