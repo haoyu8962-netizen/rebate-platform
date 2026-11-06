@@ -14,6 +14,10 @@ paths:
   - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
 test_paths:
   - 'test/spec/union/taobao-order-slot-guard/**'
+  # D10-696（照 D10-327）：三条冻结用例按 D10-692 收紧方向改期望，新鲜独立 Claude 改、另一位只读核，编排 #24 核
+  - 'test/spec/union/taobao-orders/slots.test.ts'
+  - 'test/spec/union/taobao-orders/governance.test.ts'
+  - 'test/spec/union/row-quarantine/rejected.test.ts'
 impl: claude
 tester: claude-independent
 accept:
