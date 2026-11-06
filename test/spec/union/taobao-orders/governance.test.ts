@@ -64,8 +64,8 @@ it.each([1, 2])(
 it('[AC-B1-04f#47] 推广位清单为空时不发请求，也不取配额', async () => {
   const s = setup(windowAnswer({ [W0]: pages }), { slots: [] });
   const take = vi.fn<QuotaLimiter['tryAcquire']>(() => true);
-  const page = await govern(s.adapter, take).listOrders(win, {}, ctx);
-  expect(page).toEqual({ items: [], nextCursor: null });
+  const { rejection } = await import('./kit.ts');
+  await rejection(() => govern(s.adapter, take).listOrders(win, {}, ctx), 'adapter_unimplemented');
   expect(s.transport).not.toHaveBeenCalled();
   expect(take).not.toHaveBeenCalled();
   expect(s.orderSlots).toHaveBeenCalledTimes(1);

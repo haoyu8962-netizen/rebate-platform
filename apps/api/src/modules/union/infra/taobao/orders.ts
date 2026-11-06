@@ -10,7 +10,11 @@
 // - has_next 为 true 但 position_index 缺失 / 空串 / 与本次所带相同 → upstream_unavailable（不得不带位点
 //   重拉首页，也不得原地打转）。
 // - 推广位过滤：只留 adzone_id 属于 TaobaoOrderSlotReader 给出的推广位（PID 最后一段）的订单；
-//   清单为空 → 不发请求、返回空页并告警一次；端口未注入 → adapter_unimplemented。
+//   合法 adzone_id 而不属我方的行计数告警后丢弃。B1-04zzh（D10-692）：读不出推广位（adzone_id 缺失、
+//   不是正整数 / 十进制数字串，或整行不是对象）≠ 别家推广位，按坏行处理（collect 进 rejected，原因只写
+//   adzone_id；不开 collect 跳过并告警），不计入别家；一页 ≥1 行而全部读不出 → upstream_unavailable。
+//   清单为空 → 配置错误，抛 adapter_unimplemented，不发请求；端口未注入 → adapter_unimplemented。
+// - tk_status 缺失或非法：collect 下进 rejected（不知道结没结算，不按未结算放行）。
 // - 金额（BR-CALC-26）：元字符串或 JSON 数字原文经 @couli/money yuanStrToFen；比例经 pctStrToBp；
 //   JSON 数字一律取原文（JSON.parse reviver 的 context.source），不经 JS number。
 // - N 是净额（B1-04zz，BR-CALC-03、BR-CALC-18、D10-105、D10-588）：报文给服务费金额，扣除只在这里，下游不再减：
@@ -54,12 +58,14 @@ export type TaobaoOrderSlotReader = (ctx: CallCtx) => Promise<readonly string[]>
  * Order warnings. None carries an order number, an amount, a PID or credentials:
  * - taobao_order_field_invalid: one optional field was missing or invalid and became null
  *   (`field` is the upstream field name);
- * - taobao_order_row_skipped: a row lacked a required field (trade_id, alipay_total_price,
- *   pub_share_pre_fee) or had it invalid, and was left out (`field` names it); under
- *   CallCtx.rowErrors also the fields of the row's N (requireTaobaoOrder);
+ * - taobao_order_row_skipped: without CallCtx.rowErrors, a row lacked a required field (trade_id,
+ *   alipay_total_price, pub_share_pre_fee, or a readable adzone_id) or had it invalid, and was
+ *   left out (`field` names it). Under rowErrors 'collect' it is never sent (B1-04zzh): the row
+ *   goes to `rejected` and the order sync logs it;
  * - taobao_order_foreign_slot: once per upstream page that held orders of other promotion slots
  *   (`count` is how many were left out);
- * - taobao_order_no_slots: the slot reader gave no usable PID; nothing was requested.
+ * - taobao_order_no_slots: the slot reader gave no usable PID; nothing was requested and
+ *   listOrders throws (B1-04zzh).
  */
 export type TaobaoOrderWarningEvent =
   | 'taobao_order_field_invalid'
@@ -96,6 +102,9 @@ const BEIJING_TEXT = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 const ABSENT_TEXT = '--';
 const INTEGER_TEXT = /^-?(?:0|[1-9][0-9]*)$/;
 const ID_TEXT = /^(?:0|[1-9][0-9]*)$/;
+/** B1-04zzh: an adzone id is a positive decimal integer. */
+const ADZONE_TEXT = /^[1-9][0-9]*$/;
+const ADZONE_FIELD = 'adzone_id';
 /** D10-588：已结算的判据，tk_earning_time 不算。 */
 const TK_STATUS_SETTLED = 3;
 const EST_COMMISSION_FIELD = 'pub_share_pre_fee_for_commission';
@@ -416,21 +425,75 @@ function adzoneOf(row: unknown): string | null {
 }
 
 /**
- * Keeps the rows of our promotion slots, in upstream order; the others (unknown, missing or
- * invalid adzone_id included) are counted and reported once for the page.
+ * B1-04zzh: the row's adzone_id when it can be read (a positive JSON integer or decimal string);
+ * null when it is missing or invalid, or the row is not a JSON object. Such a row is a bad row,
+ * not an order of another slot.
+ */
+export function taobaoOrderAdzone(row: unknown): string | null {
+  if (!isRecord(row) || row instanceof TaobaoRawNumber) return null;
+  const value = row[ADZONE_FIELD];
+  const text =
+    value instanceof TaobaoRawNumber ? value.text : typeof value === 'string' ? value : null;
+  return text !== null && ADZONE_TEXT.test(text) ? text : null;
+}
+
+/**
+ * The rows to map, in upstream order: those of our promotion slots and those whose slot cannot be
+ * read (bad rows: the mapping functions below refuse them on adzone_id). Rows of other slots
+ * (readable adzone_id, not ours) are left out, counted and reported once for the page. A page of
+ * ≥1 row none of whose slot can be read is a format change: upstream_unavailable.
  */
 export function ourRows(
   rows: readonly unknown[],
   adzones: ReadonlySet<string>,
   warn: Warn,
 ): readonly unknown[] {
+  let foreign = 0;
+  let unreadable = 0;
   const kept = rows.filter((row) => {
-    const adzone = adzoneOf(row);
-    return adzone !== null && adzones.has(adzone);
+    const adzone = taobaoOrderAdzone(row);
+    if (adzone === null) {
+      unreadable += 1;
+      return true;
+    }
+    if (adzones.has(adzone)) return true;
+    foreign += 1;
+    return false;
   });
-  const foreign = rows.length - kept.length;
+  if (rows.length > 0 && unreadable === rows.length) {
+    throw unavailable('no order row of the page has a readable adzone_id');
+  }
   if (foreign > 0) warn?.({ event: 'taobao_order_foreign_slot', count: foreign });
   return kept;
+}
+
+/**
+ * B1-04zzh: a row kept by ourRows → UnionOrder, or null (warned as row_skipped): a row whose slot
+ * cannot be read is skipped naming adzone_id, the rest as mapTaobaoOrder.
+ */
+export function mapTaobaoSlotOrder(
+  input: unknown,
+  meta: TaobaoOrderPageMeta,
+  warn: Warn,
+): TaobaoOrder | null {
+  if (taobaoOrderAdzone(input) === null) {
+    warn?.({ event: 'taobao_order_row_skipped', field: ADZONE_FIELD });
+    return null;
+  }
+  return mapTaobaoOrder(input, meta, warn);
+}
+
+/**
+ * B1-04zzh: a row kept by ourRows under CallCtx.rowErrors: a row whose slot cannot be read throws
+ * invalid_dto naming adzone_id only (never the row), the rest as requireTaobaoOrder.
+ */
+export function requireTaobaoSlotOrder(
+  input: unknown,
+  meta: TaobaoOrderPageMeta,
+  warn: Warn,
+): TaobaoOrder {
+  if (taobaoOrderAdzone(input) === null) throw invalid(`${ADZONE_FIELD} is missing or invalid`);
+  return requireTaobaoOrder(input, meta, warn);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -681,8 +744,9 @@ export function mapTaobaoOrder(
 }
 
 /**
- * B1-04zv: the same mapping for CallCtx.rowErrors: a skipped row throws invalid_dto naming the field
- * (the warning stays), so it can be collected. Stricter on the N (BR-CALC-03, B1-04zz): every row
+ * B1-04zv: the same mapping for CallCtx.rowErrors: a skipped row throws invalid_dto naming the field,
+ * so it can be collected; B1-04zzh: without a row_skipped warning (the order sync reports it), and a
+ * row whose tk_status is missing or invalid is refused too (settled or not is unknown). Stricter on the N (BR-CALC-03, B1-04zz): every row
  * needs pub_share_pre_fee_for_commission, and a settled row (tk_status 3, whatever tk_earning_time
  * says) needs pub_share_fee_for_commission and its settlement service fee, because a null there
  * would be settled on the estimate; a negative commission is a value (D10-572). Without rowErrors
@@ -715,15 +779,16 @@ function mapOrSkip(
   warn: Warn,
   strict: boolean,
 ): TaobaoOrder | Skip {
+  // B1-04zzh：collect（strict）下坏行只进 rejected，由订单同步告警，这里不再打 row_skipped。
   if (!isRecord(input)) {
-    warn?.({ event: 'taobao_order_row_skipped' });
+    if (!strict) warn?.({ event: 'taobao_order_row_skipped' });
     return new Skip('order row');
   }
   try {
     return mapRow(input, meta, warn, strict);
   } catch (error) {
     if (!(error instanceof Skip)) throw error;
-    warn?.({ event: 'taobao_order_row_skipped', field: error.field });
+    if (!strict) warn?.({ event: 'taobao_order_row_skipped', field: error.field });
     return error;
   }
 }
@@ -771,6 +836,8 @@ function mapRow(
   const settleFen = f.net(settleGross, settleFee, SETTLE_COMMISSION_FIELD);
   const settledAt = f.time('tk_earning_time');
   if (strict) {
+    // B1-04zzh：tk_status 是已结算的唯一判据（D10-588），缺失或非法不按未结算放行。
+    if (tkStatus === null) throw new Skip('tk_status');
     if (estGross === null) throw new Skip(EST_COMMISSION_FIELD);
     // 已结算行缺结算时间：下游收不下结算额，会按预估生成快照（BR-CALC-03，D10-590 后 06:3x）。
     if (settled && settledAt === null) throw new Skip('tk_earning_time');

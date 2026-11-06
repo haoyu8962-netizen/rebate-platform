@@ -130,12 +130,12 @@ import {
   privilegeLinkParameters,
 } from './privilege-link.ts';
 import {
-  mapTaobaoOrder,
+  mapTaobaoSlotOrder,
   nextTaobaoOrderCursor,
   ourRows,
   parseTaobaoOrderBody,
   planTaobaoOrders,
-  requireTaobaoOrder,
+  requireTaobaoSlotOrder,
   slotAdzones,
   taobaoOrderParameters,
   taobaoRowIdentity,
@@ -879,6 +879,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   /**
    * B1-04f: one page of 大淘客 get-order-details (see the header and orders.ts). B1-04zv: under
    * ctx.rowErrors a row of ours the mapping skips goes to `rejected`; rows of other slots do not.
+   * B1-04zzh: a row whose slot cannot be read is a bad row (rejected / skipped), a page of only such
+   * rows throws upstream_unavailable, and an empty slot list throws before any request.
    */
   async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage> {
     const source = this.#orderSource;
@@ -888,8 +890,13 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     const plan = planTaobaoOrders(win, opt);
     const adzones = slotAdzones(await readSlots(ctx));
     if (adzones.size === 0) {
+      // B1-04zzh：凑狸总有登记过的淘宝推广位；空清单是配置错误，不当成「没有订单」返回空页推进水位。
       this.#orderWarn?.({ event: 'taobao_order_no_slots' });
-      return { items: [], nextCursor: null };
+      throw new UnionError(
+        'adapter_unimplemented',
+        'taobao listOrders: the slot reader gave no usable promotion slot',
+        'taobao',
+      );
     }
     const response = await this.#exchangeOrderData(
       source,
@@ -911,7 +918,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
         ...collectOrderRows(
           rows,
           meta.rawPayloadId,
-          (row) => requireTaobaoOrder(row, meta, this.#orderWarn),
+          (row) => requireTaobaoSlotOrder(row, meta, this.#orderWarn),
           (row) => taobaoRowIdentity(row, meta.like),
         ),
         nextCursor: nextTaobaoOrderCursor(plan, page),
@@ -919,7 +926,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     }
     const items: UnionOrder[] = [];
     for (const row of rows) {
-      const order = mapTaobaoOrder(row, meta, this.#orderWarn);
+      const order = mapTaobaoSlotOrder(row, meta, this.#orderWarn);
       if (order !== null) items.push(order);
     }
     return { items, nextCursor: nextTaobaoOrderCursor(plan, page) };

@@ -47,8 +47,12 @@ function body(data: unknown): string {
   return JSON.stringify({ time: 1, code: 0, msg: 'ok', data });
 }
 
-function setup(answer: (request: UnionTransportRequest) => string) {
+function setup(
+  answer: (request: UnionTransportRequest) => string,
+  options: { readonly slots?: readonly string[] } = {},
+) {
   const clock = new FixedClock('2026-10-31T08:00:00.000Z');
+  const warnings: TaobaoOrderWarning[] = [];
   const transport = vi.fn<UnionTransport>(async (request) => ({
     status: 200,
     headers: {},
@@ -67,9 +71,10 @@ function setup(answer: (request: UnionTransportRequest) => string) {
     transport: vi.fn<UnionTransport>(),
     endpoint: { platform: 'taobao', mode: 'live', baseUrl: 'https://tb.invalid', quotaKey: 'q' },
     orderSource,
-    orderSlots: async () => ['mm_1_2_123456789012'],
+    orderSlots: async () => options.slots ?? ['mm_1_2_123456789012'],
+    orderWarn: (event) => warnings.push(event),
   });
-  return { adapter, transport };
+  return { adapter, transport, warnings };
 }
 
 it('[AC-B1-04f-UNIT#1] 游标里的窗口或口径与本次调用不符 → invalid_dto，不发请求（不按游标的窗口去查）', async () => {
@@ -248,4 +253,69 @@ it('[AC-B1-04f-UNIT#10] 每条都应有的官方字段键缺失 → null 并告�
   const quiet = mapOne(fullRow({ modified_time: '--', relation_id: undefined }));
   expect(quiet.order).toMatchObject({ modified_at: null, special_id: null });
   expect(quiet.warnings).toEqual([]);
+});
+
+// B1-04zzh（D10-692）：读不出推广位 ≠ 别家推广位；空推广位清单抛错；collect 下坏行不打 row_skipped。
+
+const collectCtx: CallCtx = { ...ctx, rowErrors: 'collect' };
+const NOT_A_ROW = 'unit-not-an-order-row-27182';
+
+function pageOf(rows: readonly unknown[]): string {
+  return body({ has_next: false, results: { publisher_order_dto: rows } });
+}
+
+it('[AC-B1-04zzh-UNIT#1] collect：非对象行、读不出 adzone_id、tk_status 非法、其他字段坏都进 rejected，适配器不打 taobao_order_row_skipped；非对象行 detail 只点名 adzone_id、不带行原文', async () => {
+  const rows = [
+    fullRow(),
+    NOT_A_ROW,
+    fullRow({ trade_id: '2900000000000000502', adzone_id: undefined }),
+    fullRow({ trade_id: '2900000000000000503', tk_status: 'x' }),
+    fullRow({ trade_id: '2900000000000000504', alipay_total_price: 'bad' }),
+  ];
+  const { adapter, warnings } = setup(() => pageOf(rows));
+  const page = await adapter.listOrders(win, {}, collectCtx);
+  expect(page.items.map((order) => order.sub_order_id)).toEqual(['2900000000000000501']);
+  expect(page.rejected?.map((row) => [row.sub_order_id, row.detail])).toEqual([
+    [null, 'taobao listOrders: adzone_id is missing or invalid'],
+    ['2900000000000000502', 'taobao listOrders: adzone_id is missing or invalid'],
+    ['2900000000000000503', 'taobao listOrders: tk_status is missing or invalid'],
+    ['2900000000000000504', 'taobao listOrders: alipay_total_price is missing or invalid'],
+  ]);
+  expect(page.rejected?.[0]?.detail).not.toContain(NOT_A_ROW);
+  expect(warnings.map((event) => event.event)).not.toContain('taobao_order_row_skipped');
+});
+
+it('[AC-B1-04zzh-UNIT#2] 页里只有别家推广位行与读不出行（没有我方行）不算整页读不出：collect 返回 rejected、foreign 计 1；不开 collect 跳过并点名 adzone_id', async () => {
+  const rows = [
+    fullRow({ trade_id: '2900000000000000601', adzone_id: 999 }),
+    fullRow({ trade_id: '2900000000000000602', adzone_id: '--' }),
+  ];
+  const collected = setup(() => pageOf(rows));
+  const page = await collected.adapter.listOrders(win, {}, collectCtx);
+  expect(page.items).toEqual([]);
+  expect(page.rejected?.map((row) => row.sub_order_id)).toEqual(['2900000000000000602']);
+  expect(collected.warnings).toEqual([{ event: 'taobao_order_foreign_slot', count: 1 }]);
+
+  const plain = setup(() => pageOf(rows));
+  const skipped = await plain.adapter.listOrders(win, {}, ctx);
+  expect(skipped.items).toEqual([]);
+  expect(plain.warnings).toEqual([
+    { event: 'taobao_order_foreign_slot', count: 1 },
+    { event: 'taobao_order_row_skipped', field: 'adzone_id' },
+  ]);
+});
+
+it('[AC-B1-04zzh-UNIT#3] 整页都读不出推广位 → upstream_unavailable；空页不算', async () => {
+  const bad = setup(() => pageOf([NOT_A_ROW, fullRow({ adzone_id: 0 })]));
+  expect(await failure(() => bad.adapter.listOrders(win, {}, collectCtx))).toBe(
+    'upstream_unavailable',
+  );
+  const empty = setup(() => pageOf([]));
+  expect(await empty.adapter.listOrders(win, {}, collectCtx)).toMatchObject({ items: [] });
+});
+
+it('[AC-B1-04zzh-UNIT#4] 推广位清单没有可用 PID → 抛错，不发请求', async () => {
+  const { adapter, transport } = setup(() => pageOf([fullRow()]), { slots: ['mm_1_2_x'] });
+  expect(await failure(() => adapter.listOrders(win, {}, ctx))).toBe('adapter_unimplemented');
+  expect(transport).not.toHaveBeenCalled();
 });

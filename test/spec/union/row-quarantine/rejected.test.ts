@@ -296,7 +296,7 @@ it('[AC-B1-04zv#4] jd：状态码坏的行单号照取，raw_status 为 null', a
   expect(rejectedOf(page)[0]!.detail).not.toContain('rq-bad-code');
 });
 
-it('[AC-B1-04zv#5] 淘宝：缺 trade_id 的行进 rejected 且原 warn 还在；别的推广位的行不进 rejected', async () => {
+it('[AC-B1-04zv#5] 淘宝：缺 trade_id 的行进 rejected 且不另打 taobao_order_row_skipped；别的推广位的行不进 rejected', async () => {
   const s = taobaoSetup(() =>
     taobaoReply(
       pageData([
@@ -316,9 +316,7 @@ it('[AC-B1-04zv#5] 淘宝：缺 trade_id 的行进 rejected 且原 warn 还在�
   expect(rejected[0]).toMatchObject({ sub_order_id: null, raw_payload_id: '70501' });
   expect(rejected[0]!.detail).toMatch(fieldNamed('trade_id'));
   const warned = s.orderWarn.mock.calls.map(([event]) => event);
-  expect(warned.filter((event) => event.event === 'taobao_order_row_skipped')).toEqual([
-    expect.objectContaining({ field: 'trade_id' }),
-  ]);
+  expect(warned.map((event) => event.event)).not.toContain('taobao_order_row_skipped');
   expect(warned.filter((event) => event.event === 'taobao_order_foreign_slot')).toEqual([
     expect.objectContaining({ count: 2 }),
   ]);

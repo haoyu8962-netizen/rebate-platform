@@ -89,10 +89,9 @@ it('[AC-B1-04f#39] adzone_id 缺失或不是整数的订单不当作我方订单
   expect(orders.map((order) => order.order_id)).toEqual([rowOf(4).trade_id]);
 });
 
-it('[AC-B1-04f#40] 推广位清单为空 → 不取凭据、不发请求，返回空页，告警一次', async () => {
+it('[AC-B1-04f#40] 推广位清单为空 → 不取凭据、不发请求，抛错（配置错误），告警一次', async () => {
   const s = setup(onePage([rowOf(1)]), { slots: [] });
-  const page = await listed(s.adapter.listOrders(win, {}, ctx));
-  expect(page).toEqual({ items: [], nextCursor: null });
+  await rejection(() => s.adapter.listOrders(win, {}, ctx), 'adapter_unimplemented');
   expect(s.orderSlots).toHaveBeenCalledTimes(1);
   expect(s.transport).not.toHaveBeenCalled();
   expect(s.dataokeCredentials).not.toHaveBeenCalled();
