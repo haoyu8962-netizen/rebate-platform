@@ -10,29 +10,23 @@ it.each(['taobao'] as const)(
     const synthetic = loadStatusMap('pdd', SYNTHETIC_CSV);
     expect(synthetic.entries.size).toBeGreaterThan(0);
     const csv = readStatusCsv(platform);
-    // B1-04zzl：淘宝进调度（B1-04zzb）前后两态过渡，合并后收紧为单态
-    if (csv === null) {
-      expect(csv).toBeNull();
-      // null 由启动时的读取层表示缺表；domain 自身不读取文件。
-      expect(() => loadStatusMap(platform, csv)).toThrow(/MISSING_STATUS_MAP/);
-      expect(scheduledPlatforms()).not.toContain(platform);
-    } else {
-      const map = loadStatusMap(platform, csv);
-      const doc = (event: string) => ({
-        event,
-        source: 'doc',
-        verified: false,
-        note: expect.any(String),
-      });
-      expect([...map.entries.keys()].sort()).toEqual(['12', '13', '14', '3']);
-      expect(Object.fromEntries(map.entries)).toEqual({
-        '12': doc('PLATFORM_PAID'),
-        '14': doc('PLATFORM_RECEIVED'),
-        '3': doc('PLATFORM_SETTLED'),
-        '13': doc('PLATFORM_INVALID'),
-      });
-      expect(scheduledPlatforms()).toContain(platform);
-      expect(() => loadStatusMap(platform, null)).toThrow(/MISSING_STATUS_MAP/);
-    }
+    // B1-04zzo：收紧为单态（B1-04zzb 已合并）
+    expect(csv).not.toBeNull();
+    const map = loadStatusMap(platform, csv);
+    const doc = (event: string) => ({
+      event,
+      source: 'doc',
+      verified: false,
+      note: expect.any(String),
+    });
+    expect([...map.entries.keys()].sort()).toEqual(['12', '13', '14', '3']);
+    expect(Object.fromEntries(map.entries)).toEqual({
+      '12': doc('PLATFORM_PAID'),
+      '14': doc('PLATFORM_RECEIVED'),
+      '3': doc('PLATFORM_SETTLED'),
+      '13': doc('PLATFORM_INVALID'),
+    });
+    expect(scheduledPlatforms()).toContain(platform);
+    expect(() => loadStatusMap(platform, null)).toThrow(/MISSING_STATUS_MAP/);
   },
 );

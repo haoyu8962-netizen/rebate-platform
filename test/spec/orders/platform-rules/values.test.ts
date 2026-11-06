@@ -17,7 +17,6 @@ import {
   PINNED,
   REGISTERED_PLATFORMS,
   params,
-  platformsWhere,
   rulesOf,
   tableAttrCode,
   type RegisteredPlatform,
@@ -234,10 +233,9 @@ it('[AC-B1-08za#8] 商品键推送：京东不推（不读 key_prefix、返回 n
 });
 
 it('[AC-B1-08za#9] 同步窗口上限：京东 60 分钟、拼多多 30 分钟，淘宝没有固定上限；调度与手动同步只列有上限的平台', () => {
-  // B1-04zzl：淘宝进调度（B1-04zzb）前后两态过渡，合并后收紧为单态
-  const TB = PLATFORM_RULES.taobao.syncWindowCapMs;
-  expect([null, 20 * 60_000]).toContain(TB);
-  const on = TB !== null;
+  // B1-04zzo：收紧为单态（B1-04zzb 已合并）
+  const TB = 20 * 60_000;
+  expect(PLATFORM_RULES.taobao.syncWindowCapMs).toBe(TB);
   const pinned = (p: RegisteredPlatform): number | null =>
     p === 'taobao' ? TB : PINNED[p].syncWindowCapMs;
   for (const platform of REGISTERED_PLATFORMS) {
@@ -247,11 +245,9 @@ it('[AC-B1-08za#9] 同步窗口上限：京东 60 分钟、拼多多 30 分钟�
     expect(INCREMENT_WINDOW_CAP_MS[platform], platform).toBe(cap ?? undefined);
     expect(Object.hasOwn(INCREMENT_WINDOW_CAP_MS, platform), platform).toBe(cap !== null);
   }
-  // kit 的 PINNED 仍钉淘宝 null（不改 kit）；开态按 pinned() 现算，关态与原断言相同。
-  const capped = on
-    ? [...REGISTERED_PLATFORMS].filter((p) => pinned(p) !== null).sort()
-    : platformsWhere('syncWindowCapMs', (cap) => cap !== null);
-  expect(capped).toEqual(on ? ['jd', 'pdd', 'taobao'] : ['jd', 'pdd']);
+  // kit 的 PINNED 仍钉淘宝 null（不改 kit）；淘宝的 20 分钟按 pinned() 现算。
+  const capped = [...REGISTERED_PLATFORMS].filter((p) => pinned(p) !== null).sort();
+  expect(capped).toEqual(['jd', 'pdd', 'taobao']);
   expect([...scheduledPlatforms()].sort()).toEqual(capped);
   expect([...manualSyncPlatforms()].sort()).toEqual(capped);
 });

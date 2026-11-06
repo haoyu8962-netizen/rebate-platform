@@ -1,0 +1,22 @@
+id: B1-04zzo
+repo: rebate-platform
+title: 收紧测试（FU-B104ZZL-TIGHTEN，D10-742）：B1-04zzl 两态过渡收尾——五处冻结用例只认「淘宝已进调度」单态（20 分钟上限、taobao.csv 四行、回扫 {enabled:true, days:30}、回扫循环 3）
+type: test-change
+# 2026-11-07 入账（content-client；D10-742，先例 F1-02zzzf）。B1-04zzb（#2555）已合并。去掉 B1-04zzl 的 null / 20 分钟两态判据与 off 分支，只留 on 态精确断言。
+# 其中 [AC-B1-08f#11]（status-map/missing-platform）与 [AC-B1-04zm#16]（rescan/config）是 it.each 行：CT-06zzzk 若已合并走其正常路径，否则照 D10-739 作 test-change 单独落地（只收紧，不删断言）。
+# 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；全新上下文 Claude 修改、另一全新上下文 Claude 只读复审，按 approvals #24 由编排加 owner-approved 标签。
+refs: []
+refs_hash: {}
+deps: [B1-04zzl, B1-04zzb]
+paths:
+  - 'test/spec/orders/platform-rules/values.test.ts'
+  - 'test/spec/orders/jd-sync/window.test.ts'
+  - 'test/spec/orders/wiring/module.test.ts'
+  - 'test/spec/orders/status-map/missing-platform.test.ts'
+  - 'test/spec/orders/rescan/config.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: done
+pr: 2564

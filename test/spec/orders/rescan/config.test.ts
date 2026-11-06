@@ -116,20 +116,13 @@ it.each(['taobao', 'synthetic-unlisted'])(
     });
     f.queryableAccount.mockResolvedValue(TAOBAO_ACCOUNT);
     await scheduleOrderRescan({ ...f.scheduler, capsMs: { [code]: 3_600_000 } }, [code]);
-    // B1-04zzl：淘宝进调度（B1-04zzb）前后两态过渡，合并后收紧为单态
+    // B1-04zzo：收紧为单态（B1-04zzb 已合并）
     if (platform === 'taobao') {
-      const TB = PLATFORM_RULES.taobao.syncWindowCapMs;
-      expect([null, 20 * 60_000]).toContain(TB);
-      const on = TB !== null;
-      expect(rescanDefaults('taobao')).toEqual(on ? { enabled: true, days: 30 } : null);
-      if (on) {
-        expect(f.read).toHaveBeenCalled();
-        expect(f.sent()).toHaveLength(1);
-        expect(f.sent()[0]).toMatchObject({ platform: 'taobao', union_account_id: TAOBAO_ACCOUNT });
-      } else {
-        expect(f.read).not.toHaveBeenCalled();
-        expect(f.send).not.toHaveBeenCalled();
-      }
+      expect(PLATFORM_RULES.taobao.syncWindowCapMs).toBe(20 * 60_000);
+      expect(rescanDefaults('taobao')).toEqual({ enabled: true, days: 30 });
+      expect(f.read).toHaveBeenCalled();
+      expect(f.sent()).toHaveLength(1);
+      expect(f.sent()[0]).toMatchObject({ platform: 'taobao', union_account_id: TAOBAO_ACCOUNT });
     } else {
       expect(f.read).not.toHaveBeenCalled();
       expect(f.send).not.toHaveBeenCalled();
