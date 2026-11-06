@@ -1,0 +1,98 @@
+{
+  "task": "B1-25b",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "9e3b572a98582531fd4688e50984ef6ab1632a37",
+  "red_tests": [
+    "test/spec/platform/alerting-eval/compose-port-collisions.test.ts > [AC-B1-25b#11] 三个指标端口不与任何服务的已发布端口或其他 *_PORT 默认值冲突",
+    "test/spec/platform/alerting-eval/compose.test.ts > [AC-B1-25b#3] 三个抓取进程显式配置不同指标端口，容器内监听可经宿主发布端口访问",
+    "test/spec/platform/alerting-eval/compose.test.ts > [AC-B1-25b#4] 指标端口以相同 published/target 只发布到 127.0.0.1，现有端口也不对外",
+    "test/spec/platform/alerting-eval/metrics.test.ts > [AC-B1-25b#8] couli.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源",
+    "test/spec/platform/alerting-eval/metrics.test.ts > [AC-B1-25b#8] couli-fund.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源",
+    "test/spec/platform/alerting-eval/scrape.test.ts > [AC-B1-25b#1] 专用抓取配置恰有 api、worker、admin，各只抓对应 METRICS_PORT 的回环 /metrics",
+    "test/spec/platform/alerting-eval/scrape.test.ts > [AC-B1-25b#2] 内部抓取不带凭据、代理、额外发现源或改写抓取地址的规则",
+    "test/spec/platform/alerting-eval/vmagent.test.ts > [AC-B1-25b#9] couli 专用 vmagent 加载 couli.yml，仅写入节点 VictoriaMetrics 且管理监听不对外",
+    "test/spec/platform/alerting-eval/vmalert-delivery.test.ts > [AC-B1-25b#10] vmalert 不得丢弃通知、只校验后退出或关闭模板校验",
+    "test/spec/platform/alerting-eval/vmalert.test.ts > [AC-B1-25b#5] 专用 vmalert 只加载 couli.yaml 与 couli-fund.yaml，不加载 Pigsty 规则或通配符",
+    "test/spec/platform/alerting-eval/vmalert.test.ts > [AC-B1-25b#6] 求值读节点 VictoriaMetrics，只通知 couli Alertmanager，管理监听不对外",
+    "test/spec/platform/alerting-eval/vmalert.test.ts > [AC-B1-25b#7] 求值间隔为正且不超过 1 分钟及两份规则的最短 for"
+  ],
+  "risk_note": "RV2 by path (infra/**). Config only: infra/monitoring/scrape/couli.yml + vmagent.args (couli-only vmagent scrapes the internal /metrics of api / worker / admin on 127.0.0.1:9461-9463 and writes only to the node VictoriaMetrics 127.0.0.1:8428), infra/monitoring/vmalert/couli.args (couli-only vmalert evaluates only couli.yaml / couli-fund.yaml, reads :8428, notifies only the couli Alertmanager 127.0.0.1:9093), infra/staging/compose.yaml (METRICS_PORT / METRICS_HOST non-secret, ports published on 127.0.0.1 only), infra/staging/README.md §9. Pigsty's monitoring untouched; no external service. Codex wrote test/spec/platform/alerting-eval/** in two rounds (container red 9, then 12); independent Claude spec-test review r1 fail (1 S1, 2 S2), r2 pass (one S2 left: vmagent dry-run style flags not forbidden). Opus implemented; Codex money-checklist review r1 pass with no findings. Full verification is the required CI checks (approvals id 21).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9e3b572a98582531fd4688e50984ef6ab1632a37",
+      "tree": "0ccaa7f984c91d337cf2b0e72cecfbf723352470",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T09:26:04Z",
+      "finished_at": "2026-11-06T09:26:15Z",
+      "red_tests": [
+        "test/spec/platform/alerting-eval/compose-port-collisions.test.ts > [AC-B1-25b#11] 三个指标端口不与任何服务的已发布端口或其他 *_PORT 默认值冲突",
+        "test/spec/platform/alerting-eval/compose.test.ts > [AC-B1-25b#3] 三个抓取进程显式配置不同指标端口，容器内监听可经宿主发布端口访问",
+        "test/spec/platform/alerting-eval/compose.test.ts > [AC-B1-25b#4] 指标端口以相同 published/target 只发布到 127.0.0.1，现有端口也不对外",
+        "test/spec/platform/alerting-eval/metrics.test.ts > [AC-B1-25b#8] couli.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源",
+        "test/spec/platform/alerting-eval/metrics.test.ts > [AC-B1-25b#8] couli-fund.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源",
+        "test/spec/platform/alerting-eval/scrape.test.ts > [AC-B1-25b#1] 专用抓取配置恰有 api、worker、admin，各只抓对应 METRICS_PORT 的回环 /metrics",
+        "test/spec/platform/alerting-eval/scrape.test.ts > [AC-B1-25b#2] 内部抓取不带凭据、代理、额外发现源或改写抓取地址的规则",
+        "test/spec/platform/alerting-eval/vmagent.test.ts > [AC-B1-25b#9] couli 专用 vmagent 加载 couli.yml，仅写入节点 VictoriaMetrics 且管理监听不对外",
+        "test/spec/platform/alerting-eval/vmalert-delivery.test.ts > [AC-B1-25b#10] vmalert 不得丢弃通知、只校验后退出或关闭模板校验",
+        "test/spec/platform/alerting-eval/vmalert.test.ts > [AC-B1-25b#5] 专用 vmalert 只加载 couli.yaml 与 couli-fund.yaml，不加载 Pigsty 规则或通配符",
+        "test/spec/platform/alerting-eval/vmalert.test.ts > [AC-B1-25b#6] 求值读节点 VictoriaMetrics，只通知 couli Alertmanager，管理监听不对外",
+        "test/spec/platform/alerting-eval/vmalert.test.ts > [AC-B1-25b#7] 求值间隔为正且不超过 1 分钟及两份规则的最短 for"
+      ],
+      "expected": [
+        "test/spec/platform/alerting-eval/compose-port-collisions.test.ts",
+        "test/spec/platform/alerting-eval/compose.test.ts",
+        "test/spec/platform/alerting-eval/metrics.test.ts",
+        "test/spec/platform/alerting-eval/scrape.test.ts",
+        "test/spec/platform/alerting-eval/vmagent.test.ts",
+        "test/spec/platform/alerting-eval/vmalert-delivery.test.ts",
+        "test/spec/platform/alerting-eval/vmalert.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "914c37c8dd066ddb6776518faf7159ec3bdf9ea361cd4b3c49a6ea4dc9888314"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "round 1 pass with no findings (couli-runs/B1-25b/review-codex.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "round 1 fail (S1 vmagent remote write unpinned; S2 metrics port collisions; S2 vmalert blackhole / dryRun) fixed by Codex round 2; round 2 pass with one S2 (vmagent dryRun / relabel drop not forbidden) recorded (couli-runs/B1-25b/review-claude-independent.json)"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "0a8099351d616f7cc7a37229886ec0c12c4c01cb",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

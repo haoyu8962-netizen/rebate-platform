@@ -1,0 +1,11 @@
+# Arguments of the couli-only vmalert (B1-25b), one -flag=value per line. It evaluates only the couli
+# rule files (Pigsty's vmalert keeps /infra/rules), reads the node's VictoriaMetrics and notifies only
+# the couli Alertmanager of B1-25a (127.0.0.1:9093). 30s is below every rule's for: (5m).
+-rule=/opt/couli/alerting/rules/couli.yaml
+-rule=/opt/couli/alerting/rules/couli-fund.yaml
+-datasource.url=http://127.0.0.1:8428
+-remoteRead.url=http://127.0.0.1:8428
+-remoteWrite.url=http://127.0.0.1:8428
+-notifier.url=http://127.0.0.1:9093
+-evaluationInterval=30s
+-httpListenAddr=127.0.0.1:8881

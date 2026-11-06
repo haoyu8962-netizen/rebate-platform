@@ -1,0 +1,6 @@
+# Arguments of the couli-only vmagent (B1-25b), one -flag=value per line. Deployed under
+# /opt/couli/alerting/; it scrapes couli.yml and writes only to the node's VictoriaMetrics.
+-promscrape.config=/opt/couli/alerting/scrape/couli.yml
+-remoteWrite.url=http://127.0.0.1:8428/api/v1/write
+-remoteWrite.tmpDataPath=/var/lib/couli-vmagent
+-httpListenAddr=127.0.0.1:8429

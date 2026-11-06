@@ -51,10 +51,18 @@ services:
       # boot.mjs reads the access-token signing key (es256.pem, key-id) from this mounted
       # directory into the process environment; api is the only entry that signs tokens.
       COULI_JWT_DIR: /run/couli-jwt
+      # B1-25b (D10-716): internal /metrics listener of this entry for the couli vmagent; on the
+      # container interface so the 127.0.0.1-only host port below reaches it. Not a secret.
+      METRICS_PORT: '9461'
+      METRICS_HOST: '0.0.0.0'
     ports:
       - host_ip: 127.0.0.1
         target: '${API_PORT:-3100}'
         published: '${API_PORT:-3100}'
+      # B1-25b: the /metrics listener, local only.
+      - host_ip: 127.0.0.1
+        target: '9461'
+        published: '9461'
     volumes:
       # CA of the self-signed database certificate (sslmode=verify-ca&sslrootcert=/etc/pki/ca.crt)
       - type: bind
@@ -286,6 +294,15 @@ services:
       # B2-15k (D10-549 ⑥): fake collection channels until a test merchant is prepared (README 1.9).
       # Not a secret; stream and payout never read any PAY_* variable (BR-PAY-08 ①).
       PAY_CHANNEL_IMPL: fake
+      # B1-25b (D10-716): internal /metrics listener of this entry for the couli vmagent; on the
+      # container interface so the 127.0.0.1-only host port below reaches it. Not a secret.
+      METRICS_PORT: '9462'
+      METRICS_HOST: '0.0.0.0'
+    ports:
+      # B1-25b: the /metrics listener, local only.
+      - host_ip: 127.0.0.1
+        target: '9462'
+        published: '9462'
     volumes:
       # CA of the self-signed database certificate (sslmode=verify-ca&sslrootcert=/etc/pki/ca.crt)
       - type: bind
@@ -386,10 +403,18 @@ services:
       PAY_CHANNEL_IMPL: fake
       # Listen on the container interface so the 127.0.0.1-only host port reaches it.
       API_HOST: '0.0.0.0'
+      # B1-25b (D10-716): internal /metrics listener of this entry for the couli vmagent; on the
+      # container interface so the 127.0.0.1-only host port below reaches it. Not a secret.
+      METRICS_PORT: '9463'
+      METRICS_HOST: '0.0.0.0'
     ports:
       - host_ip: 127.0.0.1
         target: '${ADMIN_PORT:-3102}'
         published: '${ADMIN_PORT:-3102}'
+      # B1-25b: the /metrics listener, local only.
+      - host_ip: 127.0.0.1
+        target: '9463'
+        published: '9463'
     volumes:
       # CA of the self-signed database certificate (sslmode=verify-ca&sslrootcert=/etc/pki/ca.crt)
       - type: bind

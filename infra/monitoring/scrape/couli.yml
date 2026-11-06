@@ -1,0 +1,17 @@
+# Scrape configuration of the couli-only vmagent (B1-25b; 规划/02 §13; D10-716). Business metrics go
+# into the node's existing VictoriaMetrics (vmagent.args: -remoteWrite.url), separate from Pigsty's
+# own scraping (/infra/prometheus.yml is not touched). Each target is the internal /metrics listener
+# of one entry (METRICS_PORT in infra/staging/compose.yaml, published on 127.0.0.1 only).
+global:
+  scrape_interval: '30s'
+  scrape_timeout: '10s'
+scrape_configs:
+  - job_name: 'couli-api'
+    static_configs:
+      - targets: ['127.0.0.1:9461']
+  - job_name: 'couli-worker'
+    static_configs:
+      - targets: ['127.0.0.1:9462']
+  - job_name: 'couli-admin'
+    static_configs:
+      - targets: ['127.0.0.1:9463']

@@ -496,3 +496,11 @@ api / stream / worker 三个进程把 OpenTelemetry 链路以 OTLP/HTTP 导出�
 - 对请求零影响：导出失败只计数并每分钟最多记一条 `otel_export_failed`（含 error_name 与 count），不会抛到请求或任务；进程退出时最多等 2 秒把未发出的 span 发完。
 - 查一条链路：请求的响应头 `X-Trace-Id`（也是日志行的 `reqId`、错误信封的 `trace_id`）就是链路 id 的 UUID 写法；在 VictoriaTraces / Grafana 里按去掉连字符的 32 位十六进制查即可看到 api → pg → 外部 HTTP 的 span（server span 另带 `couli.trace_id` 属性为原 UUID）。span 只带方法、路径、状态码，不带请求体、查询参数值、鉴权头或数据库口令。
 - 验收（B1-31）：部署后发一条真实请求，按其 `X-Trace-Id` 在 VictoriaTraces 查到 api → pg → 外部依赖的 span，且日志行 `reqId` 一致。VictoriaTraces 是否已开、接收地址是什么，待负责人 / ops 确认后填入 env 文件。
+
+## 9. 业务告警（B1-25a / B1-25b）
+
+- 数据库与主机的告警仍走 Pigsty 自带的一套（vmalert、Alertmanager :9059、/infra/rules），本节不动它。
+- 业务指标：api / worker / admin 各开内部 /metrics（compose 的 METRICS_PORT 9461 / 9462 / 9463，只发布到 127.0.0.1）。couli 专用 vmagent 照 `infra/monitoring/scrape/couli.yml` 抓取，参数见 `infra/monitoring/scrape/vmagent.args`，只写入节点现有的 VictoriaMetrics（127.0.0.1:8428）。
+- 规则求值：couli 专用 vmalert 只加载 `infra/monitoring/rules/couli.yaml` 与 `couli-fund.yaml`，参数见 `infra/monitoring/vmalert/couli.args`，只通知 couli Alertmanager（127.0.0.1:9093，配置 `infra/monitoring/alertmanager/alertmanager.yml`）。
+- 节点上的位置：/opt/couli/alerting/（配置与规则的副本），各进程是 systemd 单元 couli-alertmanager、couli-vmagent、couli-vmalert；接收端占位是容器 couli-alert-sink（`log-sink.mjs`，127.0.0.1:9096，只记日志）。部署与演练脚本在 ops 的私有目录，结果记在私有运维手册。
+- 接收渠道（企业微信 / 飞书 / 短信等）与接收人由负责人定；定之前两组都只到日志占位。
