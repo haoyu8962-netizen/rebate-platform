@@ -45,8 +45,13 @@ export function countedLines(text: string): number {
     // `expected_values` section (EXPECTED_VALUES_MAX entries of file / helper / from / to);
     // CT-06zzzc (D10-623): and the `red_exempt_outside` section (RED_EXEMPT_MAX entries of file /
     // reason); CT-06zzze (D10-657): and the `red_exempt_rows` section (RED_EXEMPT_MAX entries of
-    // file / test / reason, as red_exempt).
-    if (/^(red_exempt|red_exempt_outside|red_exempt_rows|renames|expected_values):/.test(line)) {
+    // file / test / reason, as red_exempt); CT-06zzzg (D10-701): and the `modify_existing` section
+    // (RED_EXEMPT_MAX entries together with red_exempt, of file / test / reason / ruling / note).
+    if (
+      /^(red_exempt|red_exempt_outside|red_exempt_rows|modify_existing|renames|expected_values):/.test(
+        line,
+      )
+    ) {
       inExempt = true;
       continue;
     }
@@ -312,7 +317,7 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
   const lines = countedLines(text);
   if (lines > MAX_TASK_LINES) {
     problems.push(
-      `${lines} lines, the limit is ${MAX_TASK_LINES} (规划/11 §5.1; the red_exempt section is not counted, CT-06t, nor the renames section, CT-06zxc, nor expected_values, CT-06zxe, nor red_exempt_outside, CT-06zzzc, nor red_exempt_rows, CT-06zzze)`,
+      `${lines} lines, the limit is ${MAX_TASK_LINES} (规划/11 §5.1; the red_exempt section is not counted, CT-06t, nor the renames section, CT-06zxc, nor expected_values, CT-06zxe, nor red_exempt_outside, CT-06zzzc, nor red_exempt_rows, CT-06zzze, nor modify_existing, CT-06zzzg)`,
     );
   }
 
@@ -530,6 +535,41 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
       } else if (!regularFile(join(root, file))) {
         problems.push(
           `red_exempt_rows: "${file}" does not exist at the base (the trusted root): only a table of a rule-test file that existed before the task can keep rows`,
+        );
+      }
+    }
+  }
+
+  // CT-06zzzg (D10-701): declared changes of frozen tests that stay green name rule-test files
+  // (class 1) of the task that exist at the base (the trusted root): a new file has no frozen test
+  // to change. Unlike red_exempt, a task without a rule-test author (tester: none) may declare
+  // them too: a test-change task that only fixes a flaky frozen test or tightens one (FU-B209R-
+  // FLAKE, B2-09v) has no rule-test author and no red run, yet evidence-check's add-only rule for
+  // class 1 after spec_commit (spec_commit is the base for such a task) is what the entries open.
+  // Such a task has no test_paths (above), so its files must lie inside its paths instead; a task
+  // with a rule-test author names files of its test_paths. The shape, the note length, duplicates
+  // and the cap shared with red_exempt are checked by parseTaskFile.
+  if (task.modify_existing.length > 0) {
+    const scope = task.tester === 'none' ? task.paths : task.test_paths;
+    const scopeName = task.tester === 'none' ? 'paths (tester: none)' : 'test_paths';
+    let class1: string[] = [];
+    try {
+      class1 = ruleTestGlobs(root);
+    } catch (err) {
+      problems.push(`modify_existing: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    for (const file of new Set(task.modify_existing.map((d) => d.file))) {
+      if (!RULE_TEST_FILE.test(file)) {
+        problems.push(`modify_existing: "${file}" is not a rule-test file (*.test.ts)`);
+      } else if (!matchesAny(file, scope)) {
+        problems.push(`modify_existing: "${file}" is not inside the task's ${scopeName}`);
+      } else if (!matchesAny(file, class1)) {
+        problems.push(
+          `modify_existing: "${file}" is not a rule-test asset (class 1 of tools/guard/protected-paths.json)`,
+        );
+      } else if (!regularFile(join(root, file))) {
+        problems.push(
+          `modify_existing: "${file}" does not exist at the base (the trusted root): only a frozen test of a rule-test file that existed before the task can be changed`,
         );
       }
     }

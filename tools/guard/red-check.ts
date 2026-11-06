@@ -33,6 +33,15 @@
 // tables: such a row may pass only when its block keeps rows of a base table by the three checks of
 // lib/test-blocks.ts compareEachRows; the notes say which rows and that the rule-test reviewer
 // confirms them one by one (lib/red-check.ts).
+// The trusted ledger's `modify_existing` (CT-06zzzg, D10-701) declare changed frozen tests that
+// stay green (flake_fix / tighten_only): such a test may pass green when its block is located on
+// both sides by lib/test-blocks.ts compareModifiedBlocks and changed; a declared block that is the
+// base's, cannot be located (removed, renamed, ambiguous) or lies in a file that is not expected is
+// a problem. This check has no way to the owner's approval label (the container is offline):
+// evidence-check requires the label for such a ledger, and the record of each block.
+// A file whose every change against the base lies in its declared blocks is left out of the
+// expected list (D10-701 ②, modifiedOnlyFiles), here and with --print-expected, as a
+// renamed-only file; the notes, or stderr, say which.
 //
 //   node tools/guard/red-check.ts --task <id> --cwd <worktree> --base <ref> --print-expected
 //     prints the expected rule-test files, one per line (tools/ops/verify-container.sh --red uses
@@ -50,6 +59,8 @@ import {
   type RuleTestBaseline,
   checkRedReports,
   expectedRuleTests,
+  modifiedOnlyFiles,
+  modifiedOnlyNote,
   redCheckRequired,
   outsideOnlyFiles,
   outsideOnlyNote,
@@ -168,6 +179,16 @@ runCli(
         left.add(r.file);
         console.error(`red-check note: ${outsideOnlyNote(r)}`);
       }
+      // CT-06zzzg (D10-701): a file whose every change lies in its declared blocks is not run.
+      const modifiedOnly = modifiedOnlyFiles(
+        files.filter((f) => !left.has(f)),
+        { base: (p) => showAt(cwd, base, p), head: (p) => readWorkTree(cwd, p) },
+        task.modify_existing,
+      );
+      for (const r of modifiedOnly) {
+        left.add(r.file);
+        console.error(`red-check note: ${modifiedOnlyNote(r)}`);
+      }
       for (const file of files) if (!left.has(file)) console.log(file);
       return 0;
     }
@@ -199,6 +220,7 @@ runCli(
     let baselines: Map<string, RuleTestBaseline> | undefined;
     let baselineNote: string | null = null;
     const renamedNotes: string[] = [];
+    let modifiedLeftOut: string[] = [];
     if (base !== undefined) {
       try {
         const changes: Change[] =
@@ -235,6 +257,17 @@ runCli(
         const outsideLeft = new Set(outsideOnly.map((r) => r.file));
         expected = expected.filter((f) => !outsideLeft.has(f));
         for (const r of outsideOnly) renamedNotes.push(outsideOnlyNote(r));
+        // CT-06zzzg (D10-701): likewise a file whose every change lies in its declared blocks.
+        const modifiedOnly = modifiedOnlyFiles(
+          [...expected, ...expectedRuleTests(changes, scope)].filter(
+            (f) => !left.has(f) && !outsideLeft.has(f),
+          ),
+          reader,
+          task.modify_existing,
+        );
+        modifiedLeftOut = modifiedOnly.map((r) => r.file);
+        expected = expected.filter((f) => !modifiedLeftOut.includes(f));
+        for (const r of modifiedOnly) renamedNotes.push(modifiedOnlyNote(r));
         // CT-06zxe (D10-371): the trusted ledger's registered expected values, after the renames.
         baselines = ruleTestBaselines(
           expected,
@@ -245,6 +278,7 @@ runCli(
           task.expected_values,
           task.red_exempt_outside,
           task.red_exempt_rows,
+          task.modify_existing,
         );
         renamedNotes.push(...unusedExpectedValueNotes(task.expected_values, baselines));
         renamedNotes.push(...unusedOutsideNotes(task.red_exempt_outside, baselines));
@@ -270,6 +304,8 @@ runCli(
       baselines,
       task.red_exempt,
       task.red_exempt_rows,
+      task.modify_existing,
+      modifiedLeftOut,
     );
     result.notes.unshift(...renamedNotes);
     if (baselineNote !== null) result.notes.unshift(baselineNote);
@@ -280,8 +316,10 @@ runCli(
     if (json) printJson({ task: id, required: true, expected, ...result });
     const exempt = result.exempt?.length ?? 0;
     const declared =
-      result.exempt?.filter((e) => e.declared === true && e.rows !== true).length ?? 0;
+      result.exempt?.filter((e) => e.declared === true && e.rows !== true && e.modified !== true)
+        .length ?? 0;
     const rows = result.exempt?.filter((e) => e.rows === true).length ?? 0;
+    const modified = result.exempt?.filter((e) => e.modified === true).length ?? 0;
     say(
       result.ok
         ? `PASS red-check: ${result.red.length} rule test(s) in ${expected.length} file(s) red for the right reason` +
@@ -293,6 +331,9 @@ runCli(
               : '') +
             (rows > 0
               ? `; ${rows} kept row(s) of split .each tables exempt by the ledger's red_exempt_rows: the rule-test reviewer must confirm them`
+              : '') +
+            (modified > 0
+              ? `; ${modified} changed frozen test(s) declared in modify_existing may stay green: evidence-check requires the owner label and their record`
               : '')
         : `FAIL red-check: ${result.problems.length} problem(s)`,
     );

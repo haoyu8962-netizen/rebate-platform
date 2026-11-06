@@ -1,0 +1,31 @@
+id: CT-06zzzg
+repo: rebate-platform
+title: CT-06zzzg：台账可选段 modify_existing——按条目登记「已有冻结用例只收紧 / 修偶发」，带 owner 标签时 red-check 允许旧代码上为绿、evidence-check 放行这些块的修改（D10-701）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排裁定 D10-701）。起因：B2-09v（#35 超时红改断言红）与 FU-B209R-FLAKE 都是「已有冻结用例、改前改后都绿」，
+#   red-check 要求改过的用例在旧代码上红、evidence-check 的 class1 只增（spec_commit 之后改第一类文件即拒，不看标签）两道都拦，没有路。
+# 条目：file（test_paths 内、基线已存在的规则测试文件）+ test（Vitest 标题）+ reason ∈ {flake_fix, tighten_only} + ruling（编排裁定号 D10-n）+ note。
+# 只对列在条目里的块：① red-check 允许在旧代码上为绿；② evidence-check 的 class1 只增对这些块的修改放行（文件里条目以外的任何改动照旧拒）；
+#   ③ 前提是 PR 头带负责人账号加的 owner-approved-<head 前 12 位>（编排按 #24 核后加），没有标签照旧拒；
+#   ④ 证据 modify_existing 段逐条记改前改后块原文（evidence-check 对基线 / 头机械核对），tighten_only 记变异结果，flake_fix 记本机循环次数与全绿；
+#   ⑤ 条数与 red_exempt 共用 RED_EXEMPT_MAX。删除用例、放宽断言不在本机制内；资金测试的删除或放宽仍走负责人（#24 四类）。
+# 实现 Opus 子代理（工具单测钉正反例）；Codex 对抗评审；按 approvals 第 16 条 / #24 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzg.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

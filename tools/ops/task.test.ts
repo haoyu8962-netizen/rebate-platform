@@ -583,6 +583,150 @@ it('[CT-06zzze] red_exempt_rows name rule-test files of test_paths that exist at
   ).toBe(2);
 });
 
+it('[CT-06zzzg] modify_existing names rule-test files of the task that exist at the base; tester none allowed (files in paths); not counted in the line limit', () => {
+  const RULES = 'test/spec/demo/rules.test.ts';
+  const entry = (file: string, test = '[AC-1] a', reason = 'tighten_only'): string =>
+    `\n  - file: '${file}'\n    test: '${test}'\n    reason: ${reason}\n    ruling: D10-701\n    note: the expectation is unchanged, it now fails by assertion`;
+  // tester none (FU-B209R-FLAKE, B2-09v): no test_paths, the file inside paths.
+  const none = good({
+    id: 'X1-02ha',
+    type: 'test-change',
+    impl: 'claude',
+    tester: 'none',
+    paths: `\n  - '${RULES}'`,
+    modify_existing: entry(RULES, '[AC-1] a') + entry(RULES, '[AC-1] b', 'flake_fix'),
+  });
+  // A body of exactly MAX_TASK_LINES lines plus the section (not counted).
+  const full = `${'# padding\n'.repeat(MAX_TASK_LINES - countedLines(none))}${none}`;
+  expect(countedLines(full)).toBe(MAX_TASK_LINES);
+  writeFiles(root, {
+    'tools/guard/protected-paths.json': JSON.stringify({
+      class1_add_only: ['test/spec/**', 'test/properties/**'],
+      class2_verify_config: [],
+      class3_gates: [],
+    }),
+    [RULES]: "import { it } from 'vitest';\n",
+    'test/spec/demo/dir.test.ts/x.txt': 'x',
+    'apps/api/src/demo.test.ts': 'x',
+    'ops/tasks/X1-02ha.yaml': full,
+    // A task with a rule-test author: inside test_paths.
+    'ops/tasks/X1-02hb.yaml': good({
+      id: 'X1-02hb',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      modify_existing: entry(RULES),
+    }),
+    // Not at the base (a new file); a directory; outside test_paths; not a rule-test file.
+    'ops/tasks/X1-02hc.yaml': good({
+      id: 'X1-02hc',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      modify_existing:
+        entry('test/spec/demo/new.test.ts') +
+        entry('test/spec/demo/dir.test.ts') +
+        entry('test/spec/other/rules.test.ts') +
+        entry('test/spec/demo/kit.ts'),
+    }),
+    // tester none: a file outside paths; a file of paths outside the rule-test assets.
+    'ops/tasks/X1-02hd.yaml': good({
+      id: 'X1-02hd',
+      type: 'test-change',
+      impl: 'claude',
+      tester: 'none',
+      paths: "\n  - 'apps/api/src/**'",
+      modify_existing: entry(RULES) + entry('apps/api/src/demo.test.ts'),
+    }),
+    // A task with a rule-test author: a file inside paths but not test_paths is refused.
+    'ops/tasks/X1-02he.yaml': good({
+      id: 'X1-02he',
+      impl: 'claude',
+      tester: 'codex',
+      paths: `\n  - '${RULES}'`,
+      test_paths: "\n  - 'test/spec/other/**'",
+      modify_existing: entry(RULES),
+    }),
+    // The same test twice; over the cap shared with red_exempt (parseTaskFile).
+    'ops/tasks/X1-02hf.yaml': good({
+      id: 'X1-02hf',
+      type: 'test-change',
+      impl: 'claude',
+      tester: 'none',
+      paths: `\n  - '${RULES}'`,
+      modify_existing: entry(RULES) + entry(RULES),
+    }),
+    'ops/tasks/X1-02hg.yaml': good({
+      id: 'X1-02hg',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      modify_existing: Array.from({ length: 151 }, (_, i) => entry(RULES, `[AC-${i}] m`)).join(''),
+      red_exempt: Array.from(
+        { length: 150 },
+        (_, i) =>
+          `\n  - file: '${RULES}'\n    test: '[AC-${i}] e'\n    reason: unchanged structural test`,
+      ).join(''),
+    }),
+  });
+  try {
+    expect(checkTask('X1-02hf', opts('RV1')).join('\n')).toContain(
+      `modify_existing[1]: "${RULES} > [AC-1] a" is declared twice`,
+    );
+    expect(checkTask('X1-02hg', opts('RV1')).join('\n')).toContain(
+      'modify_existing: 301 entries together with red_exempt, the limit is 300',
+    );
+    expect(checkTask('X1-02ha', opts('RV1'))).toEqual([]);
+    expect(loadTask('X1-02ha', root).modify_existing).toEqual([
+      {
+        file: RULES,
+        test: '[AC-1] a',
+        reason: 'tighten_only',
+        ruling: 'D10-701',
+        note: 'the expectation is unchanged, it now fails by assertion',
+      },
+      {
+        file: RULES,
+        test: '[AC-1] b',
+        reason: 'flake_fix',
+        ruling: 'D10-701',
+        note: 'the expectation is unchanged, it now fails by assertion',
+      },
+    ]);
+    expect(checkTask('X1-02hb', opts('RV1'))).toEqual([]);
+    expect(checkTask('X1-02hc', opts('RV1'))).toEqual([
+      'modify_existing: "test/spec/demo/new.test.ts" does not exist at the base (the trusted root): only a frozen test of a rule-test file that existed before the task can be changed',
+      'modify_existing: "test/spec/demo/dir.test.ts" does not exist at the base (the trusted root): only a frozen test of a rule-test file that existed before the task can be changed',
+      `modify_existing: "test/spec/other/rules.test.ts" is not inside the task's test_paths`,
+      'modify_existing: "test/spec/demo/kit.ts" is not a rule-test file (*.test.ts)',
+    ]);
+    expect(checkTask('X1-02hd', opts('RV1'))).toEqual([
+      `modify_existing: "${RULES}" is not inside the task's paths (tester: none)`,
+      'modify_existing: "apps/api/src/demo.test.ts" is not a rule-test asset (class 1 of tools/guard/protected-paths.json)',
+    ]);
+    expect(checkTask('X1-02he', opts('RV1'))).toEqual([
+      `modify_existing: "${RULES}" is not inside the task's test_paths`,
+    ]);
+  } finally {
+    for (const id of [
+      'X1-02ha',
+      'X1-02hb',
+      'X1-02hc',
+      'X1-02hd',
+      'X1-02he',
+      'X1-02hf',
+      'X1-02hg',
+    ]) {
+      removeDir(`${root}/ops/tasks/${id}.yaml`);
+    }
+    removeDir(`${root}/test`);
+    removeDir(`${root}/apps`);
+  }
+  expect(
+    countedLines(`id: X\nmodify_existing:${entry(RULES)}${entry(RULES, 'b')}\nstatus: todo\n`),
+  ).toBe(2);
+});
+
 it('[ops/approvals.yaml id 19] test_paths stay inside the rule-test assets of a task with a tester', () => {
   writeFiles(root, {
     'tools/guard/protected-paths.json': JSON.stringify({

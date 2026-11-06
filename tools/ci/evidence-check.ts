@@ -95,6 +95,27 @@
 //              change more outside the tests: the file is judged whole, the confirmation is still
 //              asked — one more confirmation, never a looser check).
 //              The expected list is unchanged by them (such a file still needs a red test).
+//              Declared changes of frozen tests (CT-06zzzg, D10-701): a trusted ledger with
+//              `modify_existing` (frozen tests the task only tightens or de-flakes, green before
+//              and after; red-check lets them pass green) needs, whatever its tester, ① the owner's
+//              approval label owner-approved-<head 12> on the PR head (the same label check as the
+//              waiver below, looked up only with --pr-number: without it, or when the lookup fails,
+//              the entries do not apply and the check fails); ② an evidence `modify_existing` list,
+//              one record per ledger entry in ledger order — file, test, reason, the block's raw
+//              text at the merge base (`before`) and at the head (`after`), both compared character
+//              for character with the blocks tools/guard/lib/test-blocks.ts compareModifiedBlocks
+//              finds (a block that is gone at the head, the base's or not found is refused), and
+//              for tighten_only `mutation` (at least one { mutant, result: killed }), for
+//              flake_fix `loops` ({ runs ≥ MODIFY_LOOPS_MIN, all_green: true, where }); a record
+//              too many or too few is refused. With the label, a listed file that changed after
+//              spec_commit (modified, not removed or renamed) is no longer a class 1 hit when every
+//              difference between its spec_commit and head content lies inside the declared
+//              blocks (compareModifiedBlocks: the code outside the tests and every other test
+//              unchanged, nothing added, removed or moved); anything else stays refused.
+//              A rule-test file whose every change against the merge base (base..spec_commit)
+//              lies in its declared blocks, each found and changed, is left out of the expected
+//              list (red-check.ts modifiedOnlyFiles, as outsideOnlyFiles); a file that also adds a
+//              test, or whose blocks cannot be compared, stays expected.
 //              CI records (`mode: ci`) in the evidence file are refused (CR2-06): nothing a copied
 //              record says can be checked against a run; the CI checks count by themselves.
 //              Owner waiver (owner decision 2026-10-02, ops/approvals.yaml id 12): on a branch
@@ -119,10 +140,18 @@ import { git, tryGit } from '../lib/git.ts';
 import type { Change } from '../lib/git.ts';
 import { loadLegacyTasks } from '../lib/legacy-tasks.ts';
 import { parseTaskFile } from '../lib/task-file.ts';
-import type { ExpectedValueDeclaration, RenameDeclaration, TaskFile } from '../lib/task-file.ts';
+import type {
+  ExpectedValueDeclaration,
+  ModifyExistingDeclaration,
+  RenameDeclaration,
+  TaskFile,
+} from '../lib/task-file.ts';
+import { compareModifiedBlocks } from '../guard/lib/test-blocks.ts';
+import type { ModifiedComparison } from '../guard/lib/test-blocks.ts';
 import {
   expectedRuleTests,
   expectedValuesHit,
+  modifiedOnlyFiles,
   outsideOnlyFiles,
   renamedOnlyFiles,
   renamesHit,
@@ -334,6 +363,11 @@ export type EvidenceReport = {
   money_paths: string[];
   /** A pure migration rename hotfix (ops/approvals.yaml id 32): no task branch, no evidence. */
   migration_rename: boolean;
+  /**
+   * CT-06zzzg (D10-701): the trusted ledger declares modify_existing, so the owner approval of the
+   * head decides (main looks it up with --pr-number, as for the waiver).
+   */
+  approval_wanted: boolean;
 };
 
 export type EvidenceInput = {
@@ -436,11 +470,206 @@ export function headTreeWithoutEvidence(
   }
 }
 
-function class1Hits(prDir: string, from: string, to: string, cfg: ProtectedConfig): string[] {
+function class1Hits(
+  prDir: string,
+  from: string,
+  to: string,
+  cfg: ProtectedConfig,
+): { path: string; status: string }[] {
   const globs = cfg.class1_add_only.map((g) => splitFragment(g).glob);
-  return changedBetween(prDir, from, to)
-    .filter((c) => c.status !== 'A' && matchesAny(c.path, globs))
-    .map((c) => `${c.path} (${c.status})`);
+  return changedBetween(prDir, from, to).filter(
+    (c) => c.status !== 'A' && matchesAny(c.path, globs),
+  );
+}
+
+/** The least number of runs a flake_fix record shows all green (CT-06zzzg, D10-701). */
+export const MODIFY_LOOPS_MIN = 20;
+
+/**
+ * What a ledger's modify_existing needs (CT-06zzzg, D10-701): its entries (trusted ledger, in
+ * order), the merge base the `before` blocks are read from, and the owner approval of the head
+ * (null: not looked up).
+ */
+export type ModifyRequirement = {
+  entries: readonly ModifyExistingDeclaration[];
+  base: string;
+  approval: OwnerApproval | null;
+};
+
+/** Why the owner approval does not let modify_existing apply, or null when it does. */
+function modifyApprovalProblem(modify: ModifyRequirement, head: string): string | null {
+  const label = `owner-approved-${head.slice(0, 12)}`;
+  const want = `the ledger declares ${modify.entries.length} change(s) of frozen tests (modify_existing, CT-06zzzg, D10-701): they apply only with the owner's approval label \`${label}\` on the PR head (added by the owner account after the orchestrator checked them, ops/approvals.yaml #24)`;
+  if (modify.approval === null) {
+    return `${want}; the label was not looked up (CI looks it up with --pr-number; a local run cannot see it), so the entries do not apply`;
+  }
+  if (!modify.approval.approved) {
+    return `${want}; owner approval: no (${modify.approval.reason}), so the entries do not apply`;
+  }
+  return null;
+}
+
+/**
+ * Why a class 1 hit after spec_commit is not let through by the ledger's modify_existing, or null
+ * when it is: the owner approved the head, the file was modified (not removed or renamed), and
+ * every difference between its spec_commit and head content lies inside the declared blocks.
+ */
+function modifiedHitProblem(
+  prDir: string,
+  from: string,
+  head: string,
+  hit: { path: string; status: string },
+  modify: ModifyRequirement | undefined,
+): string | null {
+  const names = (modify?.entries ?? []).filter((e) => e.file === hit.path).map((e) => e.test);
+  if (modify === undefined || names.length === 0) return '';
+  if (modifyApprovalProblem(modify, head) !== null) {
+    return 'declared in modify_existing, but without the owner approval label';
+  }
+  if (hit.status !== 'M') return 'declared in modify_existing, but removed or renamed';
+  const before = showOrNull(prDir, from, hit.path);
+  const after = showOrNull(prDir, head, hit.path);
+  if (before === null || after === null) return 'declared in modify_existing, but unreadable';
+  const compared = compareModifiedBlocks(before, after, names);
+  if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
+  const missing = compared.blocks.find((b) => !b.found);
+  if (missing !== undefined && !missing.found) {
+    return `declared in modify_existing, but "${missing.test}": ${missing.reason}`;
+  }
+  if (compared.outside !== null) {
+    return `declared in modify_existing, but changed outside the declared blocks: ${compared.outside}`;
+  }
+  return null;
+}
+
+/**
+ * Problems of the evidence's `modify_existing` list against the ledger entries (CT-06zzzg): one
+ * record per entry in ledger order, its blocks the actual ones of the merge base and the head.
+ */
+function modifyRecordProblems(
+  value: unknown,
+  modify: ModifyRequirement,
+  prDir: string,
+  head: string,
+): string[] {
+  const problems: string[] = [];
+  const at = (field: string, message: string): void => {
+    problems.push(`${field}: ${message}`);
+  };
+  const field = 'modify_existing';
+  const n = modify.entries.length;
+  if (!Array.isArray(value)) {
+    at(
+      field,
+      `must list one record per ledger entry (${n}), in ledger order: { file, test, reason, before, after, mutation | loops }`,
+    );
+    return problems;
+  }
+  if (value.length !== n) {
+    at(field, `${value.length} record(s), the ledger declares ${n}: one record per entry`);
+  }
+  const cache = new Map<string, ModifiedComparison | string>();
+  const actual = (file: string): ModifiedComparison | string => {
+    const names = modify.entries.filter((e) => e.file === file).map((e) => e.test);
+    let got = cache.get(file);
+    if (got === undefined) {
+      const before = showOrNull(prDir, modify.base, file);
+      const after = showOrNull(prDir, head, file);
+      got =
+        before === null
+          ? 'the file does not exist at the merge base'
+          : after === null
+            ? 'the file is gone at the head (a removal is not a change of a frozen test)'
+            : compareModifiedBlocks(before, after, names);
+      cache.set(file, got);
+    }
+    return got;
+  };
+  modify.entries.forEach((entry, i) => {
+    const where = `${field}[${i}]`;
+    const record: unknown = value[i];
+    if (!isRecord(record)) {
+      if (i < value.length) at(where, 'must be an object');
+      return;
+    }
+    const extra = entry.reason === 'tighten_only' ? 'mutation' : 'loops';
+    for (const key of Object.keys(record)) {
+      if (!['file', 'test', 'reason', 'before', 'after', 'note', extra].includes(key)) {
+        at(`${where}.${key}`, `unknown field for a ${entry.reason} record`);
+      }
+    }
+    if (record['file'] !== entry.file)
+      at(`${where}.file`, `must be "${entry.file}" (ledger order)`);
+    if (record['test'] !== entry.test)
+      at(`${where}.test`, `must be "${entry.test}" (ledger order)`);
+    if (record['reason'] !== entry.reason) at(`${where}.reason`, `must be "${entry.reason}"`);
+    const found = actual(entry.file);
+    const block =
+      typeof found === 'string' || !found.ok
+        ? null
+        : found.blocks.find((b) => b.test === entry.test);
+    if (typeof found === 'string' || !found.ok) {
+      at(
+        where,
+        `the declared block cannot be located: ${typeof found === 'string' ? found : found.reason}`,
+      );
+    } else if (block === undefined || block === null || !block.found) {
+      at(
+        where,
+        `the declared block cannot be located: ${block?.found === false ? block.reason : 'not found'}`,
+      );
+    } else if (!block.changed) {
+      at(where, "the declared block is the merge base's: the entry is redundant");
+    } else {
+      if (record['before'] !== block.before) {
+        at(
+          `${where}.before`,
+          "must be the block's text at the merge base, character for character",
+        );
+      }
+      if (record['after'] !== block.after) {
+        at(`${where}.after`, "must be the block's text at the head, character for character");
+      }
+    }
+    if (entry.reason === 'tighten_only') {
+      const mutation = record['mutation'];
+      const good =
+        Array.isArray(mutation) &&
+        mutation.length > 0 &&
+        mutation.every(
+          (m) =>
+            isRecord(m) &&
+            Object.keys(m).every((k) => k === 'mutant' || k === 'result') &&
+            typeof m['mutant'] === 'string' &&
+            m['mutant'].trim() !== '' &&
+            m['result'] === 'killed',
+        );
+      if (!good) {
+        at(
+          `${where}.mutation`,
+          'a tighten_only record lists at least one { mutant, result: "killed" }: a mutant the tightened test kills and the old one did not',
+        );
+      }
+    } else {
+      const loops = record['loops'];
+      const good =
+        isRecord(loops) &&
+        Object.keys(loops).every((k) => ['runs', 'all_green', 'where'].includes(k)) &&
+        typeof loops['runs'] === 'number' &&
+        Number.isInteger(loops['runs']) &&
+        loops['runs'] >= MODIFY_LOOPS_MIN &&
+        loops['all_green'] === true &&
+        typeof loops['where'] === 'string' &&
+        loops['where'].trim() !== '';
+      if (!good) {
+        at(
+          `${where}.loops`,
+          `a flake_fix record says { runs: an integer ≥ ${MODIFY_LOOPS_MIN}, all_green: true, where: e.g. "local container" }`,
+        );
+      }
+    }
+  });
+  return problems;
 }
 
 // TODO(规划/11 §3.2, §4.5): accept `mode: ci` records (browser tests) once the CI evidence archive
@@ -651,6 +880,11 @@ export function evidenceProblems(
     implementer?: 'claude' | 'codex' | 'unknown';
     /** Why the implementer is what it is, for the error message (absent: the implementer). */
     implementerWhy?: string;
+    /**
+     * CT-06zzzg (D10-701): the trusted ledger's modify_existing and the owner approval; absent
+     * when the ledger declares none (an evidence modify_existing list is then refused).
+     */
+    modify?: ModifyRequirement;
   },
 ): string[] {
   const problems: string[] = [];
@@ -676,11 +910,31 @@ export function evidenceProblems(
     if (!isAncestor(ctx.prDir, specCommit, ctx.head)) {
       at('spec_commit', `${specCommit} is not an ancestor of the head ${ctx.head}`);
     } else {
-      const changed = class1Hits(ctx.prDir, specCommit, ctx.head, ctx.cfg);
+      // CT-06zzzg (D10-701): a declared change of frozen tests lying wholly inside the declared
+      // blocks, with the owner's label, is no hit (modifiedHitProblem).
+      const changed = class1Hits(ctx.prDir, specCommit, ctx.head, ctx.cfg)
+        .map((c) => ({
+          hit: c,
+          why: modifiedHitProblem(ctx.prDir, specCommit, ctx.head, c, ctx.modify),
+        }))
+        .filter((c) => c.why !== null)
+        .map((c) => `${c.hit.path} (${c.hit.status})${c.why === '' ? '' : ` [${c.why}]`}`);
       if (changed.length > 0) {
         at('spec_commit', `rule tests changed after the rule-test commit: ${changed.join(', ')}`);
       }
     }
+  }
+
+  // CT-06zzzg (D10-701): declared changes of frozen tests need the owner's label and their record.
+  if (ctx.modify !== undefined) {
+    const approval = modifyApprovalProblem(ctx.modify, ctx.head);
+    if (approval !== null) at('modify_existing', approval);
+    problems.push(...modifyRecordProblems(doc['modify_existing'], ctx.modify, ctx.prDir, ctx.head));
+  } else if (doc['modify_existing'] !== undefined) {
+    at(
+      'modify_existing',
+      'the trusted ledger declares no modify_existing: a record without a ledger entry is refused',
+    );
   }
 
   const evidencePath = `ops/evidence/${ctx.task}.json`;
@@ -1127,6 +1381,16 @@ function implementerOf(
   };
 }
 
+/** The task ledger from the trusted root only; null when absent or unreadable (CT-06zzzg). */
+function readTrustedLedger(input: EvidenceInput, task: string): TaskFile | null {
+  const rel = `ops/tasks/${task}.yaml`;
+  try {
+    return parseTaskFile(readFileSync(join(input.trusted, rel), 'utf8'), rel);
+  } catch {
+    return null;
+  }
+}
+
 /** The task ledger from the trusted root, or from the head when the PR adds it; null if unreadable. */
 function readLedger(input: EvidenceInput, task: string): TaskFile | null {
   const rel = `ops/tasks/${task}.yaml`;
@@ -1233,10 +1497,22 @@ export function redRequirement(
     ledger.red_exempt_outside,
     ledger.red_exempt,
   ).map((r) => r.file);
+  // CT-06zzzg (D10-701): a file whose every change lies in its declared modify_existing blocks is
+  // left out the same way (red-check.ts calls the same function); the label and the record of
+  // each block are still required (evidenceProblems). Codex r1 S2: the entries come from the
+  // trusted root's ledger only (readTrustedLedger, as checkEvidence reads them for the label and
+  // the record); a ledger the PR head adds never leaves a file out.
+  const modifiedOut = modifiedOnlyFiles(
+    all.filter((f) => !left.has(f) && !outsideOut.includes(f)),
+    read,
+    readTrustedLedger(input, task)?.modify_existing ?? [],
+  ).map((r) => r.file);
   // Review r1 S2-1: renames that hit a rule-test file of the task need the reviewer's confirmation.
   const hit = renamesHit(all, read, ledger.renames);
   // CT-06zxe (D10-371): registered expected values that apply need the reviewer's confirmation.
-  const expected = all.filter((f) => !left.has(f) && !outsideOut.includes(f));
+  const expected = all.filter(
+    (f) => !left.has(f) && !outsideOut.includes(f) && !modifiedOut.includes(f),
+  );
   // A file left out by red_exempt_outside still has its registered expected values confirmed.
   const values = expectedValuesHit(
     all.filter((f) => !left.has(f)),
@@ -1341,6 +1617,14 @@ export function checkEvidence(input: EvidenceInput): EvidenceReport {
     problems.push(`RV2 change without ${evidencePath} at the head (规划/11 §3.2 证据文件)`);
   }
 
+  // CT-06zzzg (D10-701): the trusted ledger's modify_existing (never the head's).
+  const trustedLedger = task === null ? null : readTrustedLedger(input, task);
+  const modifyEntries = trustedLedger?.modify_existing ?? [];
+  const modify: ModifyRequirement | undefined =
+    modifyEntries.length === 0
+      ? undefined
+      : { entries: modifyEntries, base: mergeBase, approval: input.approval ?? null };
+
   if (text !== null && task !== null) {
     const red = redRequirement(input, task, mergeBase, text);
     let doc: unknown;
@@ -1362,6 +1646,7 @@ export function checkEvidence(input: EvidenceInput): EvidenceReport {
           red,
           handover: handoverPolicy(input, task, changed, riskMap, cfg),
           ...implementerOf(input, readLedger(input, task), mergeBase, doc),
+          ...(modify === undefined ? {} : { modify }),
         }).map((p) => `${evidencePath}: ${p}`),
       );
     }
@@ -1377,6 +1662,7 @@ export function checkEvidence(input: EvidenceInput): EvidenceReport {
     waived,
     money_paths: moneyPaths,
     migration_rename: task === null && rename.ok,
+    approval_wanted: modify !== undefined,
   };
 }
 
@@ -1421,8 +1707,9 @@ async function main(argv: readonly string[]): Promise<number> {
     trusted: resolve(import.meta.dirname, '../..'),
   };
   let report = checkEvidence(input);
-  // The API is asked only when an approval could change the outcome.
-  if (!report.ok && report.waivable && prNumber !== undefined) {
+  // The API is asked only when an approval could change the outcome (the waiver, or a ledger's
+  // modify_existing, CT-06zzzg).
+  if (!report.ok && (report.waivable || report.approval_wanted) && prNumber !== undefined) {
     const fullHead = git(['rev-parse', '--verify', `${head}^{commit}`], { cwd: input.prDir });
     const approval = await ownerApprovalFromEnv(prNumber, fullHead);
     report = checkEvidence({ ...input, approval });

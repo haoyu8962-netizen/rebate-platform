@@ -67,6 +67,7 @@ describe('parseTaskFile', () => {
       red_exempt: [],
       red_exempt_outside: [],
       red_exempt_rows: [],
+      modify_existing: [],
       renames: [],
       expected_values: [],
       tester: 'claude',
@@ -317,6 +318,130 @@ describe('parseTaskFile', () => {
     expect(parseTaskFile(many(300), 'B2-02a.yaml').red_exempt_rows).toHaveLength(300);
     expect(messageOf(many(301), 'B2-02a.yaml')).toContain(
       'red_exempt_rows: 301 entries, the limit is 300 (CT-06zzze;',
+    );
+  });
+
+  it('[CT-06zzzg] modify_existing: file / test / reason / ruling / note, optional, every malformed entry refused, never also exempt, the cap shared with red_exempt', () => {
+    const FILE = 'test/spec/payout/recon-late-paid/worker.int.test.ts';
+    const declared = (entries: string, extra = ''): string =>
+      EXAMPLE.replace('tester: claude', `tester: claude\nmodify_existing:${entries}${extra}`);
+    const entry = (test: string, fields: Record<string, string> = {}): string => {
+      const all: Record<string, string> = {
+        file: FILE,
+        test: `'${test}'`,
+        reason: 'tighten_only',
+        ruling: 'D10-701',
+        note: "'超时红改断言红，期望不变（FU-B2-09T-ASSERT-NOT-TIMEOUT）'",
+        ...fields,
+      };
+      const lines = Object.entries(all)
+        .filter(([, v]) => v !== '')
+        .map(([k, v], i) => `${i === 0 ? '  - ' : '    '}${k}: ${v}`);
+      return `\n${lines.join('\n')}`;
+    };
+    const one = declared(entry('[AC-B2-09t#35] 迟到回调'));
+    expect(parseTaskFile(one, 'B2-02a.yaml').modify_existing).toEqual([
+      {
+        file: FILE,
+        test: '[AC-B2-09t#35] 迟到回调',
+        reason: 'tighten_only',
+        ruling: 'D10-701',
+        note: '超时红改断言红，期望不变（FU-B2-09T-ASSERT-NOT-TIMEOUT）',
+      },
+    ]);
+    expect(
+      parseTaskFile(declared(entry('[AC-1] a', { reason: 'flake_fix' })), 'B2-02a.yaml')
+        .modify_existing[0]?.reason,
+    ).toBe('flake_fix');
+    // An older ledger without the field: [].
+    expect(parseTaskFile(EXAMPLE, 'B2-02a.yaml').modify_existing).toEqual([]);
+    const cases: [string, string][] = [
+      [
+        declared(' abc'),
+        'modify_existing: must be a list of mappings (file / test / reason / ruling / note)',
+      ],
+      [
+        declared('\n  - abc'),
+        'modify_existing[0]: must be a mapping (file / test / reason / ruling / note)',
+      ],
+      [declared(`${entry('[AC-1] a')}\n    extra: x`), 'modify_existing[0].extra: unknown field'],
+      [
+        declared(entry('[AC-1] a', { file: '' })),
+        'modify_existing[0].file: must be a non-empty repository path',
+      ],
+      [
+        declared(entry('[AC-1] a', { file: '../a.test.ts' })),
+        'modify_existing[0].file: "../a.test.ts" must not contain "." or ".." segments',
+      ],
+      [declared(entry(' ')), "modify_existing[0].test: must be the test's full name (non-empty)"],
+      [
+        declared(entry('[AC-1] a', { reason: '' })),
+        'modify_existing[0].reason: must be one of flake_fix / tighten_only',
+      ],
+      [
+        declared(entry('[AC-1] a', { reason: 'loosen' })),
+        'modify_existing[0].reason: must be one of flake_fix / tighten_only',
+      ],
+      [
+        declared(entry('[AC-1] a', { ruling: '' })),
+        'modify_existing[0].ruling: must be the orchestrator ruling id, D10-<number>',
+      ],
+      [
+        declared(entry('[AC-1] a', { ruling: 'D10-0701x' })),
+        'modify_existing[0].ruling: must be the orchestrator ruling id, D10-<number>',
+      ],
+      [
+        declared(entry('[AC-1] a', { ruling: 'D9-701' })),
+        'modify_existing[0].ruling: must be the orchestrator ruling id, D10-<number>',
+      ],
+      [
+        declared(entry('[AC-1] a', { note: '' })),
+        'modify_existing[0].note: must say why the test is changed (at least 10 characters)',
+      ],
+      [
+        declared(entry('[AC-1] a', { note: 'too short' })),
+        'modify_existing[0].note: must say why the test is changed (at least 10 characters)',
+      ],
+      // The same test twice.
+      [
+        declared(entry('[AC-1] a') + entry('[AC-1] a', { reason: 'flake_fix' })),
+        `modify_existing[1]: "${FILE} > [AC-1] a" is declared twice`,
+      ],
+      // A changed test is not an exempt one.
+      [
+        declared(
+          entry('[AC-1] a'),
+          `\nred_exempt:\n  - file: ${FILE}\n    test: '[AC-1] a'\n    reason: a reason of enough length`,
+        ),
+        `modify_existing: "${FILE} > [AC-1] a" is also declared in red_exempt (a changed test is not an exempt one)`,
+      ],
+      [
+        declared(
+          entry('[AC-1] a'),
+          `\nred_exempt_rows:\n  - file: ${FILE}\n    test: '[AC-1] a'\n    reason: a reason of enough length`,
+        ),
+        `modify_existing: "${FILE} > [AC-1] a" is also declared in red_exempt_rows (a changed test is not an exempt one)`,
+      ],
+    ];
+    for (const [text, want] of cases) expect(messageOf(text, 'B2-02a.yaml'), want).toContain(want);
+    // RED_EXEMPT_MAX counts modify_existing and red_exempt together.
+    const exempt = (n: number): string =>
+      n === 0
+        ? ''
+        : `\nred_exempt:${Array.from(
+            { length: n },
+            (_, i) =>
+              `\n  - file: test/spec/other.test.ts\n    test: '[AC-${i + 1}] x'\n    reason: a reason of enough length`,
+          ).join('')}`;
+    const mixed = (m: number, n: number): string =>
+      declared(Array.from({ length: m }, (_, i) => entry(`[AC-${i + 1}] a`)).join(''), exempt(n));
+    expect(parseTaskFile(mixed(300, 0), 'B2-02a.yaml').modify_existing).toHaveLength(300);
+    expect(parseTaskFile(mixed(100, 200), 'B2-02a.yaml').modify_existing).toHaveLength(100);
+    expect(messageOf(mixed(301, 0), 'B2-02a.yaml')).toContain(
+      'modify_existing: 301 entries together with red_exempt, the limit is 300 (CT-06zzzg;',
+    );
+    expect(messageOf(mixed(101, 200), 'B2-02a.yaml')).toContain(
+      'modify_existing: 301 entries together with red_exempt, the limit is 300 (CT-06zzzg;',
     );
   });
 

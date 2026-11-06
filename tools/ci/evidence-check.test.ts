@@ -2104,3 +2104,421 @@ it("[CT-06zxc] renames that hit need the rule-test reviewer's confirmation, pair
     }),
   ).toBe('');
 });
+
+// CT-06zzzg (D10-701, after B2-09v and FU-B209R-FLAKE): a ledger's modify_existing lets a change
+// of frozen tests after spec_commit through, with the owner's label, inside the declared blocks
+// only, with each block's record.
+const MOD_FILE = 'test/spec/payout/late/worker.int.test.ts';
+const MOD_TEST = '[AC-B2-09t#35] late callback';
+const modTest = (title: string, body: string): string =>
+  `it('${title}', async () => {\n  ${body}\n});`;
+const MOD_OLD = modTest(MOD_TEST, 'await waitFor(60_000);');
+const MOD_NEW = modTest(MOD_TEST, "f.send = () => expect.fail('sent');");
+const modSource = (block: string, opts: { extra?: string; other?: string } = {}): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    ...(opts.extra === undefined ? [] : [opts.extra]),
+    modTest('[AC-B2-09t#34] first', opts.other ?? 'expect(1).toBe(1);'),
+    block,
+    modTest('[AC-B2-09t#36] last', 'expect(3).toBe(3);'),
+    '',
+  ].join('\n');
+
+let modRepo = '';
+let modBase = '';
+const modLedger = (reason: 'tighten_only' | 'flake_fix' | null): string =>
+  [
+    'id: B2-09v',
+    'repo: rebate-platform',
+    'title: tighten a frozen test',
+    'type: test-change',
+    'refs: []',
+    'refs_hash: {}',
+    'deps: []',
+    'paths:',
+    `  - '${MOD_FILE}'`,
+    'impl: claude',
+    'tester: none',
+    'accept:',
+    "  - 'pnpm verify'",
+    'status: todo',
+    ...(reason === null
+      ? []
+      : [
+          'modify_existing:',
+          `  - file: ${MOD_FILE}`,
+          `    test: '${MOD_TEST}'`,
+          `    reason: ${reason}`,
+          '    ruling: D10-701',
+          "    note: 'the expectation is unchanged; a wrong implementation now fails by assertion'",
+        ]),
+    '',
+  ].join('\n');
+const modTrusted = (name: string, reason: 'tighten_only' | 'flake_fix' | null): string => {
+  const dir = join(SCRATCH, name);
+  for (const file of ['tools/guard/protected-paths.json', 'ops/risk-map.yaml']) {
+    write(dir, { [file]: readFileSync(join(REPO, file), 'utf8') });
+  }
+  write(dir, {
+    'tools/guard/legacy-tasks.json': JSON.stringify({ baseline: 'fixture', tasks: [] }),
+    'ops/tasks/B2-09v.yaml': modLedger(reason),
+  });
+  return dir;
+};
+
+/** A task branch from the base whose test file is `content`, plus its evidence; the head. */
+function modBranch(name: string, content: string | null, doc: (tree: string) => Evidence): string {
+  git(modRepo, ['checkout', '-q', '-B', name, modBase]);
+  if (content === null) rmSync(join(modRepo, MOD_FILE));
+  else write(modRepo, { [MOD_FILE]: content });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '--allow-empty', '-m', `test: ${name}`]);
+  const tree = git(modRepo, ['rev-parse', 'HEAD:test/spec']);
+  write(modRepo, { 'ops/evidence/B2-09v.json': `${JSON.stringify(doc(tree), null, 2)}\n` });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', 'evidence']);
+  return git(modRepo, ['rev-parse', 'HEAD']);
+}
+
+const MUTATION = [{ mutant: 'wait for the already-reported state first', result: 'killed' }];
+const LOOPS = { runs: 20, all_green: true, where: 'local container' };
+const modRecord = (extra: Evidence = {}): Evidence => ({
+  file: MOD_FILE,
+  test: MOD_TEST,
+  reason: 'tighten_only',
+  before: MOD_OLD,
+  after: MOD_NEW,
+  mutation: MUTATION,
+  ...extra,
+});
+const modEvidence =
+  (records: unknown = [modRecord()]) =>
+  (tree: string): Evidence => ({
+    task: 'B2-09v',
+    spec_ref: SPEC_REF,
+    spec_commit: modBase,
+    runs: [],
+    reviews: [
+      {
+        reviewer: 'codex',
+        engine: 'codex',
+        model: 'gpt-6-astra',
+        verdict: 'pass',
+        open_s0_s1: 0,
+        checklist_complete: true,
+      },
+    ],
+    trees: { 'test/spec': tree },
+    longrun: { runs: 1000000, seed: 1, passed: true, tree },
+    ...(records === 'omit' ? {} : { modify_existing: records }),
+  });
+
+const modCheck = (head: string, trusted: string, approval?: unknown) =>
+  checkEvidence({
+    prDir: modRepo,
+    base: modBase,
+    head,
+    headRef: 'task/B2-09v',
+    trusted,
+    ...(approval === undefined ? {} : { approval: approval as ReturnType<typeof approved> }),
+  });
+
+it('[CT-06zzzg] with the owner label and every change inside the declared block, the frozen test may change after spec_commit', () => {
+  modRepo = join(SCRATCH, 'modify-repo');
+  mkdirSync(modRepo, { recursive: true });
+  git(modRepo, ['init', '-q', '-b', 'main']);
+  write(modRepo, {
+    SPEC_REF: `${SPEC_REF}\n`,
+    [MOD_FILE]: modSource(MOD_OLD),
+    'test/spec/payout/other.test.ts': "it('other', () => {});\n",
+  });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', 'base']);
+  modBase = git(modRepo, ['rev-parse', 'HEAD']);
+  const trusted = modTrusted('trusted-modify', 'tighten_only');
+  const head = modBranch('mod-good', modSource(MOD_NEW), modEvidence());
+  const ok = modCheck(head, trusted, approved(head));
+  expect(ok.problems).toEqual([]);
+  expect(ok).toMatchObject({ ok: true, risk: 'RV2', task: 'B2-09v', approval_wanted: true });
+  // Without modify_existing in the trusted ledger the same change is refused as before (and a
+  // record without a ledger entry too).
+  const plain = modCheck(head, modTrusted('trusted-modify-none', null), approved(head));
+  expect(plain.ok).toBe(false);
+  expect(plain.approval_wanted).toBe(false);
+  expect(plain.problems.join('\n')).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${MOD_FILE} (M)`,
+  );
+  expect(plain.problems.join('\n')).toContain(
+    'modify_existing: the trusted ledger declares no modify_existing: a record without a ledger entry is refused',
+  );
+});
+
+it('[CT-06zzzg] without the owner label (not looked up, or not the owner) the entries do not apply', () => {
+  const trusted = modTrusted('trusted-modify', 'tighten_only');
+  const head = modBranch('mod-nolabel', modSource(MOD_NEW), modEvidence());
+  const local = modCheck(head, trusted);
+  expect(local.ok).toBe(false);
+  expect(local.approval_wanted).toBe(true);
+  const text = local.problems.join('\n');
+  expect(text).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${MOD_FILE} (M) [declared in modify_existing, but without the owner approval label]`,
+  );
+  expect(text).toContain(
+    `modify_existing: the ledger declares 1 change(s) of frozen tests (modify_existing, CT-06zzzg, D10-701): they apply only with the owner's approval label \`owner-approved-${head.slice(0, 12)}\` on the PR head`,
+  );
+  expect(text).toContain('the label was not looked up (CI looks it up with --pr-number');
+  const refused = modCheck(head, trusted, {
+    ...approved(head),
+    approved: false,
+    actor: 'ci-bot',
+    reason: 'added by `ci-bot`',
+  });
+  expect(refused.ok).toBe(false);
+  expect(refused.problems.join('\n')).toContain('owner approval: no (added by `ci-bot`)');
+});
+
+it('[CT-06zzzg] a change outside the declared block (an import, a helper, another test, a removed test) or the block removed stays refused', () => {
+  const trusted = modTrusted('trusted-modify', 'tighten_only');
+  const cases: [string, string | null, RegExp][] = [
+    [
+      'mod-import',
+      modSource(MOD_NEW, { extra: "import { x } from './x.ts';" }),
+      /changed outside the declared blocks: code outside the tests changed/,
+    ],
+    [
+      'mod-helper',
+      modSource(MOD_NEW, { extra: 'const k = 1;' }),
+      /changed outside the declared blocks: code outside the tests changed/,
+    ],
+    [
+      'mod-other',
+      modSource(MOD_NEW, { other: 'expect(2).toBe(2);' }),
+      /changed outside the declared blocks: test block 1 .* is not declared and differs from the base/,
+    ],
+    [
+      'mod-removed-other',
+      modSource(MOD_NEW).replace(modTest('[AC-B2-09t#36] last', 'expect(3).toBe(3);'), ''),
+      /changed outside the declared blocks: the file has 2 test block\(s\), at the base 3/,
+    ],
+    [
+      'mod-removed',
+      modSource(''),
+      /the test is gone at the head \(removed or renamed: a removal is not a change of a frozen test\)/,
+    ],
+    ['mod-file-removed', null, /\(D\) \[declared in modify_existing, but removed or renamed\]/],
+  ];
+  for (const [name, content, want] of cases) {
+    const head = modBranch(name, content, modEvidence());
+    const report = modCheck(head, trusted, approved(head));
+    expect(report.ok, name).toBe(false);
+    expect(report.problems.join('\n'), name).toMatch(want);
+  }
+});
+
+it('[CT-06zzzg] the evidence records each declared block before and after, character for character, one record per entry', () => {
+  const trusted = modTrusted('trusted-modify', 'tighten_only');
+  const cases: [string, unknown, RegExp][] = [
+    [
+      'before',
+      [modRecord({ before: MOD_NEW })],
+      /modify_existing\[0\]\.before: must be the block's text at the merge base/,
+    ],
+    [
+      'after',
+      [modRecord({ after: `${MOD_NEW} ` })],
+      /modify_existing\[0\]\.after: must be the block's text at the head/,
+    ],
+    ['file', [modRecord({ file: 'test/spec/x.test.ts' })], /modify_existing\[0\]\.file: must be/],
+    ['test', [modRecord({ test: '[AC-1] x' })], /modify_existing\[0\]\.test: must be/],
+    [
+      'reason',
+      [modRecord({ reason: 'flake_fix' })],
+      /modify_existing\[0\]\.reason: must be "tighten_only"/,
+    ],
+    ['missing', 'omit', /modify_existing: must list one record per ledger entry \(1\)/],
+    ['none', [], /modify_existing: 0 record\(s\), the ledger declares 1/],
+    ['two', [modRecord(), modRecord()], /modify_existing: 2 record\(s\), the ledger declares 1/],
+    [
+      'no mutation',
+      [modRecord({ mutation: undefined })],
+      /modify_existing\[0\]\.mutation: a tighten_only record lists at least one/,
+    ],
+    ['empty mutation', [modRecord({ mutation: [] })], /modify_existing\[0\]\.mutation/],
+    [
+      'survived',
+      [modRecord({ mutation: [{ mutant: 'x', result: 'survived' }] })],
+      /modify_existing\[0\]\.mutation/,
+    ],
+    [
+      'loops on tighten_only',
+      [modRecord({ loops: LOOPS })],
+      /modify_existing\[0\]\.loops: unknown field/,
+    ],
+  ];
+  for (const [name, records, want] of cases) {
+    const doc = modEvidence(records);
+    const head = modBranch(`mod-rec-${name.replace(/ /g, '-')}`, modSource(MOD_NEW), (tree) => {
+      const d = doc(tree);
+      if (Array.isArray(d['modify_existing'])) {
+        d['modify_existing'] = (d['modify_existing'] as Evidence[]).map((r) =>
+          Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined)),
+        );
+      }
+      return d;
+    });
+    const report = modCheck(head, trusted, approved(head));
+    expect(report.ok, name).toBe(false);
+    expect(report.problems.join('\n'), name).toMatch(want);
+  }
+  // The declared block unchanged since the merge base: the entry is redundant.
+  const same = modBranch(
+    'mod-rec-same',
+    modSource(MOD_OLD),
+    modEvidence([modRecord({ after: MOD_OLD })]),
+  );
+  expect(modCheck(same, trusted, approved(same)).problems.join('\n')).toContain(
+    "modify_existing[0]: the declared block is the merge base's: the entry is redundant",
+  );
+});
+
+it('[CT-06zzzg] a flake_fix record needs loops: at least 20 runs, all green, where they ran', () => {
+  const trusted = modTrusted('trusted-modify-flake', 'flake_fix');
+  const flake = (extra: Evidence): Evidence[] => [
+    Object.fromEntries(
+      Object.entries(
+        modRecord({ reason: 'flake_fix', mutation: undefined, loops: LOOPS, ...extra }),
+      ).filter(([, v]) => v !== undefined),
+    ),
+  ];
+  const good = modBranch('mod-flake-good', modSource(MOD_NEW), modEvidence(flake({})));
+  expect(modCheck(good, trusted, approved(good)).problems).toEqual([]);
+  const cases: [string, Evidence][] = [
+    ['19 runs', { loops: { ...LOOPS, runs: 19 } }],
+    ['not all green', { loops: { ...LOOPS, all_green: false } }],
+    ['no where', { loops: { runs: 20, all_green: true } }],
+    ['fractional', { loops: { ...LOOPS, runs: 20.5 } }],
+    ['no loops', { loops: undefined }],
+  ];
+  for (const [name, extra] of cases) {
+    const head = modBranch(
+      `mod-flake-${name.replace(/ /g, '-')}`,
+      modSource(MOD_NEW),
+      modEvidence(flake(extra)),
+    );
+    expect(modCheck(head, trusted, approved(head)).problems.join('\n'), name).toContain(
+      'modify_existing[0].loops: a flake_fix record says { runs: an integer ≥ 20, all_green: true',
+    );
+  }
+  const mutation = modBranch(
+    'mod-flake-mutation',
+    modSource(MOD_NEW),
+    modEvidence(flake({ mutation: MUTATION })),
+  );
+  expect(modCheck(mutation, trusted, approved(mutation)).problems.join('\n')).toContain(
+    'modify_existing[0].mutation: unknown field for a flake_fix record',
+  );
+});
+
+it('[CT-06zzzg] a rule-test file whose every change lies in its declared blocks is not expected; with a new test it stays expected', () => {
+  // A ledger with a rule-test author (test_paths): the red run is required.
+  const dir = modTrusted('trusted-modify-codex', 'tighten_only');
+  write(dir, {
+    'ops/tasks/B2-09v.yaml': modLedger('tighten_only')
+      .replace(
+        `paths:\n  - '${MOD_FILE}'`,
+        "paths:\n  - 'apps/api/src/**'\ntest_paths:\n  - 'test/spec/payout/**'",
+      )
+      .replace('tester: none', 'tester: codex'),
+  });
+  const req = (spec: string) =>
+    redRequirement(
+      { prDir: modRepo, base: modBase, head: spec, headRef: 'task/B2-09v', trusted: dir },
+      'B2-09v',
+      modBase,
+      JSON.stringify({ task: 'B2-09v', spec_commit: spec }),
+    );
+  const only = modBranch('mod-req-only', modSource(MOD_NEW), modEvidence());
+  expect(req(only)).toEqual({ required: true, expected: [] });
+  const added = modBranch(
+    'mod-req-added',
+    modSource(MOD_NEW).replace(
+      "it('[AC-B2-09t#36] last'",
+      "it('[AC-B2-09t#37] new', async () => {\n  expect(4).toBe(4);\n});\nit('[AC-B2-09t#36] last'",
+    ),
+    modEvidence(),
+  );
+  expect(req(added)).toEqual({ required: true, expected: [MOD_FILE] });
+  // The declared block the base's: stays expected (red-check then calls the entry redundant).
+  const same = modBranch(
+    'mod-req-same',
+    modSource(MOD_OLD, { other: 'expect(2).toBe(2);' }),
+    modEvidence(),
+  );
+  expect(req(same)).toEqual({ required: true, expected: [MOD_FILE] });
+});
+
+it('[CT-06zzzg] Codex r1 S2: a ledger only at the PR head never applies modify_existing: the file stays expected and the check fails', () => {
+  // The trusted root has no B2-09v ledger; the head adds one with modify_existing.
+  const dir = join(SCRATCH, 'trusted-modify-absent');
+  for (const file of ['tools/guard/protected-paths.json', 'ops/risk-map.yaml']) {
+    write(dir, { [file]: readFileSync(join(REPO, file), 'utf8') });
+  }
+  write(dir, {
+    'tools/guard/legacy-tasks.json': JSON.stringify({ baseline: 'fixture', tasks: [] }),
+  });
+  const headLedger = modLedger('tighten_only')
+    .replace(
+      `paths:\n  - '${MOD_FILE}'`,
+      "paths:\n  - 'apps/api/src/**'\ntest_paths:\n  - 'test/spec/payout/**'",
+    )
+    .replace('tester: none', 'tester: codex');
+  const B = 'test/spec/payout/b.test.ts';
+  git(modRepo, ['checkout', '-q', '-B', 'mod-s2', modBase]);
+  write(modRepo, {
+    'ops/tasks/B2-09v.yaml': headLedger,
+    [MOD_FILE]: modSource(MOD_NEW),
+    [B]: "import { expect, it } from 'vitest';\nit('[AC-B] b', () => { expect(1).toBe(2); });\n",
+  });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', 'test(spec): A changed, B added']);
+  const spec = git(modRepo, ['rev-parse', 'HEAD']);
+  const specTree = git(modRepo, ['rev-parse', `${spec}^{tree}`]);
+  const tree = git(modRepo, ['rev-parse', 'HEAD:test/spec']);
+  const doc = {
+    ...modEvidence('omit')(tree),
+    spec_commit: spec,
+    runs: [
+      {
+        mode: 'container',
+        script: 'red',
+        exit_code: 0,
+        commit: null,
+        tree: specTree,
+        prop_seed: 1,
+        red_tests: [`${B} > [AC-B] b`],
+        expected: [B],
+      },
+    ],
+  };
+  const text = JSON.stringify(doc);
+  // A stays expected: the head's ledger is not read for modify_existing.
+  expect(
+    redRequirement(
+      { prDir: modRepo, base: modBase, head: spec, headRef: 'task/B2-09v', trusted: dir },
+      'B2-09v',
+      modBase,
+      text,
+    ),
+  ).toEqual({ required: true, expected: [B, MOD_FILE] });
+  write(modRepo, { 'ops/evidence/B2-09v.json': `${JSON.stringify(doc, null, 2)}\n` });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', 'evidence']);
+  const head = git(modRepo, ['rev-parse', 'HEAD']);
+  // No label, no record of each block: the red run does not cover A, the check fails.
+  const report = modCheck(head, dir);
+  expect(report.ok).toBe(false);
+  expect(report.approval_wanted).toBe(false);
+  expect(report.problems.join('\n')).toContain(
+    `runs[0].expected: does not cover ${MOD_FILE}, a rule-test file the task added`,
+  );
+});

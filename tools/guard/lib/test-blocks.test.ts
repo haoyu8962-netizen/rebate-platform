@@ -10,6 +10,7 @@ import {
   type PathKind,
   TestParseError,
   compareEachRows,
+  compareModifiedBlocks,
   compareOutsideChanged,
   formatEachTitle,
   formatObjectTitle,
@@ -2979,4 +2980,97 @@ it('[CT-06zzzf] formatEachTitle and formatObjectTitle name a BigInt as Vitest do
   expect(
     formatObjectTitle('$v', new Map([['v', { literal: true, value: 10n ** 40n }]]), 0),
   ).toBeNull();
+});
+
+// CT-06zzzg (D10-701, after B2-09v and FU-B209R-FLAKE): the declared blocks of changed frozen tests.
+it('[CT-06zzzg] compareModifiedBlocks: a declared block changed in place, its raw text both sides, nothing else changed', () => {
+  const base = src(test('[AC-1] a'), '', test('[AC-2] b', 'expect(2).toBe(2); // two'));
+  const head = src(test('[AC-1] a'), '', test('[AC-2] b', 'expect(2).toStrictEqual(2); // two'));
+  expect(compareModifiedBlocks(base, head, ['[AC-2] b'])).toEqual({
+    ok: true,
+    blocks: [
+      {
+        test: '[AC-2] b',
+        found: true,
+        before: "it('[AC-2] b', () => {\n  expect(2).toBe(2); // two\n});",
+        after: "it('[AC-2] b', () => {\n  expect(2).toStrictEqual(2); // two\n});",
+        changed: true,
+      },
+    ],
+    outside: null,
+  });
+  // The declared block unchanged: found, changed false (the caller calls the entry redundant).
+  expect(compareModifiedBlocks(base, base, ['[AC-2] b'])).toMatchObject({
+    ok: true,
+    blocks: [{ test: '[AC-2] b', found: true, changed: false }],
+    outside: null,
+  });
+  // A comment-only change is no change (normalised as compareTestFile), but `before` / `after`
+  // are the raw texts.
+  const comment = src(test('[AC-1] a'), '', test('[AC-2] b', 'expect(2).toBe(2); // 2'));
+  const only = compareModifiedBlocks(base, comment, ['[AC-2] b']);
+  expect(only).toMatchObject({ ok: true, blocks: [{ found: true, changed: false }] });
+  expect(only.ok && only.blocks[0]?.found === true ? only.blocks[0].after : '').toContain('// 2');
+});
+
+it('[CT-06zzzg] compareModifiedBlocks: any change outside the declared blocks is said in outside', () => {
+  const base = src(test('[AC-1] a'), test('[AC-2] b'));
+  const tightened = test('[AC-2] b', 'expect(2).toStrictEqual(2);');
+  const cases: [string, string, RegExp][] = [
+    [
+      'an import',
+      `import { x } from './x.ts';\n${src(test('[AC-1] a'), tightened)}`,
+      /code outside the tests changed/,
+    ],
+    [
+      'a helper',
+      src('const k = 1;', test('[AC-1] a'), tightened),
+      /code outside the tests changed/,
+    ],
+    [
+      'another test',
+      src(test('[AC-1] a', 'expect(3).toBe(3);'), tightened),
+      /test block 1 \("\[AC-1\] a"\) is not declared and differs from the base/,
+    ],
+    [
+      'a test added',
+      src(test('[AC-1] a'), tightened, test('[AC-3] c')),
+      /a test was added or removed/,
+    ],
+    ['a test removed', src(tightened), /a test was added or removed/],
+    ['moved', src(tightened, test('[AC-1] a')), /moved|not declared/],
+  ];
+  for (const [name, head, why] of cases) {
+    const got = compareModifiedBlocks(base, head, ['[AC-2] b']);
+    expect(got.ok, name).toBe(true);
+    expect(got.ok ? got.outside : null, name).toMatch(why);
+  }
+});
+
+it('[CT-06zzzg] compareModifiedBlocks: a declared block gone, renamed, ambiguous or not static is not found; an unreadable side is not ok', () => {
+  const base = src(test('[AC-1] a'), test('[AC-2] b'));
+  const notFound = (b: string, h: string, names: string[]): string[] => {
+    const got = compareModifiedBlocks(b, h, names);
+    if (!got.ok) throw new Error(got.reason);
+    return got.blocks.map((x) => (x.found ? 'found' : x.reason));
+  };
+  expect(notFound(base, src(test('[AC-1] a')), ['[AC-2] b'])).toEqual([
+    'the test is gone at the head (removed or renamed: a removal is not a change of a frozen test)',
+  ]);
+  expect(notFound(base, src(test('[AC-1] a'), test('[AC-2] b2')), ['[AC-2] b'])).toEqual([
+    'the test is gone at the head (removed or renamed: a removal is not a change of a frozen test)',
+  ]);
+  expect(notFound(base, base, ['[AC-9] z'])).toEqual(['no test block of the base is named so']);
+  expect(notFound(src(test('[AC-2] b'), test('[AC-2] b')), base, ['[AC-2] b'])).toEqual([
+    '2 test blocks of the base may produce the name',
+  ]);
+  const each = src("it.each([1, 2])('[AC-2] b %s', (n) => { expect(n).toBe(n); });");
+  expect(notFound(each, each, ['[AC-2] b 1'])[0]).toMatch(/not a static literal/);
+  // Two names on one block.
+  expect(notFound(base, base, ['[AC-2] b', 'x > [AC-2] b'])).toEqual([
+    'found',
+    'another declared name is on the same block',
+  ]);
+  expect(compareModifiedBlocks('it((', base, ['[AC-2] b'])).toMatchObject({ ok: false });
+  expect(compareModifiedBlocks(base, 'it((', ['[AC-2] b'])).toMatchObject({ ok: false });
 });

@@ -1787,6 +1787,165 @@ export function compareEachRows(base: string, head: string): (EachRows | null)[]
   });
 }
 
+// Declared changes of frozen tests (CT-06zzzg; orchestrator ruling D10-701, after B2-09v and
+// FU-B209R-FLAKE): a task may tighten a frozen test, or fix its flakiness, keeping it green before
+// and after. The ledger names each such test (`modify_existing`); compareModifiedBlocks tells, for
+// a base and a head text of one rule-test file, which block each name is on both sides, their raw
+// text, whether the block changed, and whether anything else of the file differs:
+// - A name is found only when exactly one block of each side matches it and that block's title
+//   and describe titles are static (no wildcard: a template with `${…}`, a non-literal title, a
+//   `%x` / `$name` of an `.each` title): the name then is the block, nothing more. Two names on
+//   one block, a block found on one side only (removed, renamed or added), or several candidate
+//   blocks: not found, with the reason.
+// - `outside` is null only when the shared rest is the base's (imports, helpers, hooks, describe
+//   titles: compared as compareTestFile does) and the two block lists are the same length and,
+//   place by place, either the same block (same text, same place in the shared rest, same
+//   describes) or the found block of the same name at the same place and describes. Any other
+//   difference — another test changed, added, removed or moved — is said in `outside`.
+// - A side that cannot be read as tests: ok false (the caller fails closed).
+
+/** One declared name and its block at the base and the head (compareModifiedBlocks). */
+export type ModifiedBlock =
+  | {
+      test: string;
+      found: true;
+      /** The block's source at the base: from its first token to its last (its `;` included). */
+      before: string;
+      /** The block's source at the head, likewise. */
+      after: string;
+      /** The block differs from the base (normalised as compareTestFile compares blocks). */
+      changed: boolean;
+    }
+  | { test: string; found: false; reason: string };
+
+export type ModifiedComparison =
+  | { ok: false; reason: string }
+  | {
+      ok: true;
+      /** One per name, in the order given. */
+      blocks: ModifiedBlock[];
+      /** Null when every difference lies inside the found blocks; else what differs besides. */
+      outside: string | null;
+    };
+
+type BlockView = {
+  pattern: RegExp;
+  title: string;
+  static: boolean;
+  /** Place in the shared rest and describes (the key without the block text). */
+  place: string;
+  key: string;
+  raw: string;
+};
+
+function blockViews(source: string): { shared: string; blocks: BlockView[] } {
+  const { tokens, suites, tests } = scanTests(source);
+  const parsed = parseTestFile(source);
+  const blocks = tests.map((c, i): BlockView => {
+    const b = parsed.blocks[i] as TestBlock;
+    const around = suites.filter((s) => s.open < c.start && c.start < s.close);
+    const first = tokens[c.start] as Token;
+    const last = tokens[c.end] as Token;
+    const from = first.start ?? 0;
+    const to = (last.start ?? 0) + last.text.length;
+    const parts = b.key.split('\u0000');
+    return {
+      pattern: b.pattern,
+      title: b.title,
+      static: !c.title.includes(null) && around.every((s) => !s.title.includes(null)),
+      place: `${parts[0] ?? ''}\u0000${parts[1] ?? ''}`,
+      key: b.key,
+      raw: source.slice(from, to),
+    };
+  });
+  return { shared: parsed.shared, blocks };
+}
+
+/** See the comment above ModifiedBlock (CT-06zzzg, D10-701). */
+export function compareModifiedBlocks(
+  base: string,
+  head: string,
+  names: readonly string[],
+): ModifiedComparison {
+  let before: ReturnType<typeof blockViews>;
+  let after: ReturnType<typeof blockViews>;
+  try {
+    before = blockViews(base);
+  } catch (err) {
+    return { ok: false, reason: `the file at the base cannot be read as tests (${String(err)})` };
+  }
+  try {
+    after = blockViews(head);
+  } catch (err) {
+    return { ok: false, reason: `the file cannot be read as tests (${String(err)})` };
+  }
+  const locate = (
+    side: BlockView[],
+    name: string,
+    where: string,
+  ): { index: number } | { reason: string } => {
+    const hits = side.map((b, i) => [b, i] as const).filter(([b]) => b.pattern.test(name));
+    if (hits.length === 0) return { reason: `no test block of the ${where} is named so` };
+    if (hits.length > 1) {
+      return { reason: `${hits.length} test blocks of the ${where} may produce the name` };
+    }
+    const [b, i] = hits[0] as readonly [BlockView, number];
+    if (!b.static) {
+      return {
+        reason: `its block at the ${where} has a title or describe title that is not a static literal (a template, a non-literal or an .each placeholder)`,
+      };
+    }
+    return { index: i };
+  };
+  const pairs = new Map<number, number>();
+  const usedBase = new Set<number>();
+  const blocks = names.map((test): ModifiedBlock => {
+    const b = locate(before.blocks, test, 'base');
+    if (!('index' in b)) return { test, found: false, reason: b.reason };
+    const h = locate(after.blocks, test, 'head');
+    if (!('index' in h)) {
+      return {
+        test,
+        found: false,
+        reason: h.reason.startsWith('no test block')
+          ? 'the test is gone at the head (removed or renamed: a removal is not a change of a frozen test)'
+          : h.reason,
+      };
+    }
+    if (usedBase.has(b.index) || pairs.has(h.index)) {
+      return { test, found: false, reason: 'another declared name is on the same block' };
+    }
+    usedBase.add(b.index);
+    pairs.set(h.index, b.index);
+    const x = before.blocks[b.index] as BlockView;
+    const y = after.blocks[h.index] as BlockView;
+    return { test, found: true, before: x.raw, after: y.raw, changed: x.key !== y.key };
+  });
+  let outside: string | null = null;
+  if (before.shared !== after.shared) {
+    outside =
+      'code outside the tests changed (imports, helpers, hooks, top-level tables or describe titles)';
+  } else if (before.blocks.length !== after.blocks.length) {
+    outside = `the file has ${after.blocks.length} test block(s), at the base ${before.blocks.length}: a test was added or removed`;
+  } else {
+    for (let i = 0; i < after.blocks.length; i += 1) {
+      const y = after.blocks[i] as BlockView;
+      const x = before.blocks[i] as BlockView;
+      const declared = pairs.get(i);
+      if (declared !== undefined) {
+        if (declared !== i || x.place !== y.place) {
+          outside = `the declared block of test block ${i + 1} moved`;
+          break;
+        }
+      } else if (x.key !== y.key) {
+        outside = `test block ${i + 1} ("${y.title}") is not declared and differs from the base`;
+        break;
+      }
+    }
+  }
+  return { ok: true, blocks, outside };
+}
+
 /**
  * Whether a report test (its full name) is exempt from the red requirement: exactly one block's
  * pattern matches it and that block is unchanged.

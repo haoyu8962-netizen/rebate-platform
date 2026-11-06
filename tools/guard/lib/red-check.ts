@@ -208,11 +208,32 @@
 // an unchanged block, or any other test, exempt. A file whose every test is unchanged or a
 // declared kept row still fails (nothing would be shown red). The table being an imported constant
 // (`it.each(PLATFORMS)`) is not covered: ② fails.
+//
+// Declared changes of frozen tests (CT-06zzzg; orchestrator ruling D10-701, after B2-09v, whose
+// frozen [AC-B2-09t#35] went from red by timeout to red by assertion, and FU-B209R-FLAKE, a flaky
+// frozen test): a task that only tightens a frozen test or fixes its flakiness keeps it green on
+// the old code, where a changed block must be red. The trusted ledger names each such test
+// (`modify_existing`: file, full name, reason flake_fix / tighten_only, ruling D10-<n>, note;
+// tools/lib/task-file.ts, tools/ops/task.ts). For a file it names, ruleTestBaselines asks
+// test-blocks.ts compareModifiedBlocks, against the same base the blocks were compared with,
+// which block each name is: exactly one block with a static title on each side. In
+// checkRedReports a test whose full name is a declared name may then pass green (red needs a valid
+// reason as always); it is listed in `exempt` with `modified: true`. A declared name whose block
+// is the base's is a problem (the entry is redundant), and so is one whose block cannot be found
+// (gone at the head: a removal is not covered; renamed; ambiguous) and an entry of a file that is
+// not expected. Everything else is judged exactly as before: the file's other tests (changed or
+// new ones must be red), a file judged as a whole (its code outside the tests changed, or it
+// could not be read: the entries then do not apply, fail-closed), a report not from the red
+// reporter. A file whose every changed test is declared still fails (nothing would be shown red).
+// red-check has no way to the owner's approval label (it runs in the verify container, offline):
+// evidence-check requires the label for any ledger with modify_existing, and the evidence record
+// of each block before and after (tools/ci/evidence-check.ts).
 import { matchesAny } from '../../lib/glob.ts';
 import type { Change } from '../../lib/git.ts';
 import { RED_EXEMPT_REASON_MIN } from '../../lib/task-file.ts';
 import type {
   ExpectedValueDeclaration,
+  ModifyExistingDeclaration,
   RedExemptDeclaration,
   RedExemptOutsideDeclaration,
   RedExemptRowDeclaration,
@@ -221,7 +242,9 @@ import type {
 } from '../../lib/task-file.ts';
 import {
   type ComparedBlock,
+  type ModifiedComparison,
   compareEachRows,
+  compareModifiedBlocks,
   compareOutsideChanged,
   compareTestFile,
   helperImpact,
@@ -300,6 +323,11 @@ export type RedExempt = {
    * (spec_test_review.red_exempt_rows_confirmed).
    */
   rows?: true;
+  /**
+   * CT-06zzzg (D10-701): the test is a changed frozen test the ledger declares in
+   * `modify_existing` (declared too); evidence-check requires the owner label and the record.
+   */
+  modified?: true;
 };
 export type RedResult = {
   ok: boolean;
@@ -360,6 +388,11 @@ export type RuleTestBaseline =
      * of kind `support` because of it; `void` says why it did not apply or was not needed.
      */
     outside?: { reason: string; lines?: string; void?: string };
+    /**
+     * CT-06zzzg (D10-701): for a file the ledger's modify_existing name, which block each declared
+     * name is at the base and the head (compareModifiedBlocks, in ledger order).
+     */
+    modified?: ModifiedComparison;
   };
 
 /**
@@ -639,6 +672,51 @@ export function outsideOnlyNote(r: OutsideOnly): string {
   return `${r.file}: all ${r.tests} tests unchanged and declared exempt; allowed because the file is declared in red_exempt_outside (D10-629 / D10-630; reason: ${r.reason}), left out of the expected list (not run, not judged): nothing in it is shown red; code outside the tests changed at ${r.lines} (head lines; a removal is shown at the lines around it); the rule-test reviewer confirms these changes with the exemptions (evidence spec_test_review.red_exempt_confirmed) and the orchestrator checks them one by one (#24)`;
 }
 
+/**
+ * A rule-test file left out of the expected list because every change against its base lies in
+ * the ledger's modify_existing blocks (CT-06zzzg, D10-701 ②, after outsideOnlyFiles): `tests` the
+ * declared names.
+ */
+export type ModifiedOnly = { file: string; tests: string[] };
+
+/**
+ * The files among `files` that existed at the base and are left out of the expected list
+ * (CT-06zzzg, D10-701), as outsideOnlyFiles: red-check.ts --print-expected, the check itself and
+ * tools/ci/evidence-check.ts all call it. A file qualifies only when test-blocks.ts
+ * compareModifiedBlocks, on its base and head as they are (no renames or expected values applied:
+ * a file that needs them stays expected), can be made, finds every declared block of it on both
+ * sides, each changed, and says nothing else differs (`outside` null: no new, removed, moved or
+ * other changed test, no change outside the tests). Anything else — the comparison cannot be made,
+ * a declared block is the base's or gone at the head, a new test next to them — stays expected and
+ * is judged as before (the new test must be red; checkRedReports says what is wrong with the
+ * entries).
+ */
+export function modifiedOnlyFiles(
+  files: readonly string[],
+  read: Pick<BaselineReader, 'base' | 'head'>,
+  modified: readonly ModifyExistingDeclaration[],
+): ModifiedOnly[] {
+  if (modified.length === 0) return [];
+  const listed = new Set(modified.map((d) => d.file));
+  const out: ModifiedOnly[] = [];
+  for (const file of [...new Set(files)].filter((f) => listed.has(f)).sort()) {
+    const before = read.base(file);
+    const after = read.head(file);
+    if (before === null || after === null || !COMPARABLE.test(file)) continue;
+    const names = modified.filter((d) => d.file === file).map((d) => d.test);
+    const compared = compareModifiedBlocks(before, after, names);
+    if (!compared.ok || compared.outside !== null) continue;
+    if (!compared.blocks.every((b) => b.found && b.changed)) continue;
+    out.push({ file, tests: names });
+  }
+  return out;
+}
+
+/** The note that says a file was left out by modify_existing (CT-06zzzg, D10-701). */
+export function modifiedOnlyNote(r: ModifiedOnly): string {
+  return `${r.file}: every change against the base lies in the ${r.tests.length} block(s) the ledger declares in modify_existing (D10-701: ${r.tests.join(' | ')}), left out of the expected list (not run, not judged): nothing in it is shown red; evidence-check requires the owner's approval label and the record of each block (evidence modify_existing)`;
+}
+
 /** The note that says a file was left out of the expected list (CT-06zxc). */
 export function renamedOnlyNote(r: RenamedOnly): string {
   return `${r.file}: unchanged after the ledger's renames (D10-347: ${r.applied.join(', ')}), left out of the expected list (not run, not judged); the rule-test reviewer confirms the renames are literal follow-ups only`;
@@ -659,6 +737,7 @@ export function ruleTestBaselines(
   expectedValues: readonly ExpectedValueDeclaration[] = [],
   outside: readonly RedExemptOutsideDeclaration[] = [],
   rowsDeclared: readonly RedExemptRowDeclaration[] = [],
+  modified: readonly ModifyExistingDeclaration[] = [],
 ): Map<string, RuleTestBaseline> {
   const out = new Map<string, RuleTestBaseline>();
   const support = new Set<string>();
@@ -683,9 +762,11 @@ export function ruleTestBaselines(
     const listed = outside.find((o) => o.file === file);
     let outsideState: RuleTestBaseline['outside'] =
       listed === undefined ? undefined : { reason: listed.reason };
+    let modifiedState: ModifiedComparison | undefined;
     const set = (baseline: RuleTestBaseline): void => {
       out.set(file, {
         ...baseline,
+        ...(modifiedState === undefined ? {} : { modified: modifiedState }),
         ...(renamedBase.applied.length === 0
           ? {}
           : { renamed: { applied: renamedBase.applied, identical: before === after } }),
@@ -822,6 +903,11 @@ export function ruleTestBaselines(
           };
         });
       }
+    }
+    // CT-06zzzg (D10-701): for a file the ledger's modify_existing name, which block each name is.
+    const modifiedHere = modified.filter((d) => d.file === file).map((d) => d.test);
+    if (modifiedHere.length > 0) {
+      modifiedState = compareModifiedBlocks(comparedBase, after, modifiedHere);
     }
     const others = [...support].filter((s) => s !== file).sort();
     const closure =
@@ -1327,6 +1413,9 @@ export function checkRedReports(
   baselines?: ReadonlyMap<string, RuleTestBaseline>,
   declared: readonly RedExemptDeclaration[] = [],
   rows: readonly RedExemptRowDeclaration[] = [],
+  modified: readonly ModifyExistingDeclaration[] = [],
+  /** CT-06zzzg: files left out by modifiedOnlyFiles (their entries are not redundant). */
+  modifiedLeftOut: readonly string[] = [],
 ): RedResult {
   const problems: RedProblem[] = [];
   const red: string[] = [];
@@ -1339,6 +1428,9 @@ export function checkRedReports(
   // Declarations that named an expected file (the others are said in the notes at the end).
   const declaredSeen = new Set<RedExemptDeclaration>();
   const rowsSeen = new Set<RedExemptRowDeclaration>();
+  const modifiedSeen = new Set<ModifyExistingDeclaration>();
+  const modifiedConfirmation =
+    "evidence-check requires the owner's approval label on the PR head and the block before and after (evidence modify_existing)";
   const prefix = root.endsWith('/') ? root : `${root}/`;
   const seen = new Map<string, FileResult>();
   // Files reported by the trusted red reporter: only their full names are `describe > … > test`.
@@ -1461,6 +1553,8 @@ export function checkRedReports(
     for (const d of declaredHere) declaredSeen.add(d);
     const rowsHere = baselines === undefined ? [] : rows.filter((d) => d.file === file);
     for (const d of rowsHere) rowsSeen.add(d);
+    const modifiedHere = baselines === undefined ? [] : modified.filter((d) => d.file === file);
+    for (const d of modifiedHere) modifiedSeen.add(d);
     let blocks: ComparedBlock[] | null = null;
     let declarable: ComparedBlock[] | null = null;
     const wholeDespite = (why: string): void => {
@@ -1472,6 +1566,11 @@ export function checkRedReports(
       if (rowsHere.length > 0) {
         notes.push(
           `${file}: ${rowsHere.length} declared kept row(s) (red_exempt_rows) do not apply: ${why} (they apply only to a file that existed at the base, compared test by test)`,
+        );
+      }
+      if (modifiedHere.length > 0) {
+        notes.push(
+          `${file}: ${modifiedHere.length} declared change(s) of frozen tests (modify_existing) do not apply: ${why} (they apply only to a file that existed at the base, compared test by test); every test is judged as before`,
         );
       }
     };
@@ -1500,7 +1599,7 @@ export function checkRedReports(
       notes.push(
         `${file}: existed at the base, judged as a whole except the tests the ledger declares exempt (every other test must be red): ${baseline.reason}`,
       );
-    } else if (declaredHere.length > 0 || rowsHere.length > 0) {
+    } else if (declaredHere.length > 0 || rowsHere.length > 0 || modifiedHere.length > 0) {
       wholeDespite('the file is new, renamed or could not be compared with the base');
     }
     let required = 0;
@@ -1508,6 +1607,41 @@ export function checkRedReports(
     const rowsMatched = new Set<RedExemptRowDeclaration>();
     // CT-06zzze: the blocks a kept-row declaration is judged against (kind tests or support).
     const compared = blocks ?? declarable;
+    // CT-06zzzg (D10-701): the declared changed frozen tests that may pass green here.
+    const modifiable = new Map<string, ModifyExistingDeclaration>();
+    const modifiedMatched = new Set<ModifyExistingDeclaration>();
+    if (compared !== null && modifiedHere.length > 0) {
+      const result = baseline?.modified;
+      if (result === undefined) {
+        notes.push(
+          `${file}: ${modifiedHere.length} declared change(s) of frozen tests (modify_existing) do not apply: the blocks were not located (ruleTestBaselines without the declarations); every test is judged as before`,
+        );
+      } else if (!result.ok) {
+        notes.push(
+          `${file}: ${modifiedHere.length} declared change(s) of frozen tests (modify_existing) do not apply: ${result.reason}; every test is judged as before`,
+        );
+      } else {
+        modifiedHere.forEach((d) => {
+          const b = result.blocks.find((x) => x.test === d.test);
+          if (b === undefined || !b.found) {
+            problems.push({
+              file,
+              test: d.test,
+              reason: `declared in modify_existing, but the declaration does not apply: ${b === undefined ? 'its block was not located' : b.reason}`,
+            });
+          } else if (!b.changed) {
+            problems.push({
+              file,
+              test: d.test,
+              reason:
+                "declared in modify_existing, but its block is the base's: the entry is redundant (remove it from the ledger)",
+            });
+          } else {
+            modifiable.set(d.test, d);
+          }
+        });
+      }
+    }
     for (const t of tests) {
       const fullName = text(t.fullName);
       const name = fullName || text(t.title);
@@ -1546,19 +1680,33 @@ export function checkRedReports(
           }
         }
       }
+      // CT-06zzzg (D10-701): a declared changed frozen test (its block located and changed).
+      let modifiedEntry: ModifyExistingDeclaration | null = null;
+      if (!unchanged && fullName !== '') {
+        const d = modifiable.get(fullName);
+        if (d !== undefined) {
+          modifiedMatched.add(d);
+          modifiedEntry = d;
+          unchanged = true;
+        }
+      }
       if (!unchanged) required += 1;
       const exemptEntry = (status: 'passed' | 'failed'): RedExempt =>
-        row !== null
-          ? { file, test: name, status, declared: true, reason: row.reason, rows: true }
-          : declaration === null
-            ? { file, test: name, status }
-            : { file, test: name, status, declared: true, reason: declaration.reason };
+        modifiedEntry !== null
+          ? { file, test: name, status, declared: true, reason: modifiedEntry.note, modified: true }
+          : row !== null
+            ? { file, test: name, status, declared: true, reason: row.reason, rows: true }
+            : declaration === null
+              ? { file, test: name, status }
+              : { file, test: name, status, declared: true, reason: declaration.reason };
       const exemptNote = (how: string): string =>
-        row !== null
-          ? `${file} > ${name}: a kept row of an .each table whose title template, callback and rows are the base's (rows removed only), exempt by the task's red_exempt_rows declaration (${how}; reason: ${row.reason}); ${rowConfirmation}`
-          : declaration === null
-            ? `${file} > ${name}: unchanged since the base, exempt from the red rule (${how})`
-            : `${file} > ${name}: unchanged since the base, exempt by the task's declaration (${how}; reason: ${declaration.reason}); ${confirmation}`;
+        modifiedEntry !== null
+          ? `${file} > ${name}: a changed frozen test declared in modify_existing (${modifiedEntry.reason}, ${modifiedEntry.ruling}; ${how}; note: ${modifiedEntry.note}), not held to the red rule; ${modifiedConfirmation}`
+          : row !== null
+            ? `${file} > ${name}: a kept row of an .each table whose title template, callback and rows are the base's (rows removed only), exempt by the task's red_exempt_rows declaration (${how}; reason: ${row.reason}); ${rowConfirmation}`
+            : declaration === null
+              ? `${file} > ${name}: unchanged since the base, exempt from the red rule (${how})`
+              : `${file} > ${name}: unchanged since the base, exempt by the task's declaration (${how}; reason: ${declaration.reason}); ${confirmation}`;
       if (status === 'passed') {
         if (unchanged) {
           exempt.push(exemptEntry('passed'));
@@ -1633,14 +1781,23 @@ export function checkRedReports(
         );
       }
     }
+    for (const d of modifiable.values()) {
+      if (!modifiedMatched.has(d)) {
+        notes.push(
+          `${file}: the declared change of a frozen test (modify_existing) "${d.test}" matches no test of the report (the full name must be exactly the red reporter's)`,
+        );
+      }
+    }
     if (blocks !== null && required === 0) {
       problems.push({
         file,
         test: null,
         reason:
-          rowsMatched.size === 0
-            ? `existed at the base and has no new or changed test: nothing is shown red (${tests.length} unchanged test(s))`
-            : `existed at the base and every test is unchanged or a declared kept row: nothing is shown red (${tests.length} test(s))`,
+          modifiedMatched.size > 0
+            ? `existed at the base and every test is unchanged or a declared change of a frozen test (modify_existing): nothing is shown red (${tests.length} test(s))`
+            : rowsMatched.size === 0
+              ? `existed at the base and has no new or changed test: nothing is shown red (${tests.length} unchanged test(s))`
+              : `existed at the base and every test is unchanged or a declared kept row: nothing is shown red (${tests.length} test(s))`,
       });
     }
     if (declarable !== null && required === 0) {
@@ -1664,6 +1821,16 @@ export function checkRedReports(
         notes.push(
           `declared kept row (red_exempt_rows) of ${d.file} > ${d.test}: ${d.file} is not an expected rule-test file (ignored)`,
         );
+      }
+    }
+    for (const d of modified) {
+      if (!modifiedSeen.has(d) && !modifiedLeftOut.includes(d.file)) {
+        problems.push({
+          file: d.file,
+          test: d.test,
+          reason:
+            'declared in modify_existing, but the file is not an expected rule-test file of the red run (unchanged since the base, or left out): the entry is redundant',
+        });
       }
     }
   }

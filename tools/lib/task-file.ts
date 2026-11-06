@@ -74,6 +74,24 @@ export type TaskFile = {
    */
   red_exempt_rows: RedExemptRowDeclaration[];
   /**
+   * CT-06zzzg (orchestrator ruling D10-701, after B2-09v and FU-B209R-FLAKE): frozen tests of a
+   * rule-test file that existed at the base which the task only tightens (`tighten_only`: the
+   * expectation is the same, a wrong implementation now fails sooner or for the right reason) or
+   * whose flakiness it fixes (`flake_fix`), green before and after. red-check would need them red
+   * on the old code (a changed block), and evidence-check refuses any change of a class 1 file
+   * after spec_commit. Each entry names the file (a rule-test file of test_paths — or of paths for
+   * a task without a rule-test author, which has no test_paths — existing at the base:
+   * tools/ops/task.ts), the test's full name, the reason, the orchestrator ruling (D10-<n>) and a
+   * note of at least RED_EXEMPT_REASON_MIN characters. Only the named blocks are covered: red-check
+   * lets them pass green (tools/guard/lib/red-check.ts), and evidence-check lets a change after
+   * spec_commit through only when it lies wholly inside them, the PR head carries the owner's
+   * approval label and the evidence records each block before and after
+   * (tools/ci/evidence-check.ts). Removing a test or loosening it is not covered. Read from the
+   * trusted root like red_exempt; together with red_exempt at most RED_EXEMPT_MAX entries.
+   * Optional, [] when absent.
+   */
+  modify_existing: ModifyExistingDeclaration[];
+  /**
    * CT-06zxc (orchestrator ruling D10-347): literal renames the task makes inside rule-test files
    * that existed at the base (a queue job name 'freeze-expiry' → 'freeze_expiry' its frozen tests
    * must follow). red-check replaces every `from` by its `to` in the base content of such a file,
@@ -134,6 +152,25 @@ export type RedExemptRowDeclaration = {
   test: string;
   /** Why the row cannot be shown red (at least RED_EXEMPT_REASON_MIN characters). */
   reason: string;
+};
+
+/** Why a frozen test is changed while it stays green (CT-06zzzg, D10-701). */
+export const MODIFY_EXISTING_REASONS = ['flake_fix', 'tighten_only'] as const;
+
+/** An orchestrator ruling id (CT-06zzzg): `D10-<number>`. */
+export const RULING_PATTERN = /^D10-[1-9][0-9]*$/;
+
+/** One declared change of a frozen test that stays green (CT-06zzzg, D10-701). */
+export type ModifyExistingDeclaration = {
+  /** The rule-test file, repository-relative, existing at the base (tools/ops/task.ts). */
+  file: string;
+  /** The test's full name as the red reporter writes it (`describe > … > title`). */
+  test: string;
+  reason: (typeof MODIFY_EXISTING_REASONS)[number];
+  /** The orchestrator ruling that allowed it (RULING_PATTERN). */
+  ruling: string;
+  /** Why the test is changed (at least RED_EXEMPT_REASON_MIN characters). */
+  note: string;
 };
 
 /** One declared literal rename (CT-06zxc, D10-347): every `from` of a base becomes `to`. */
@@ -232,6 +269,7 @@ export const RED_EXEMPT_REASON_MIN = 10;
 // shares the cap).
 // CT-06zzze (D10-657): red_exempt_rows has the same cap of its own (counted apart from red_exempt,
 // like red_exempt_outside): each entry is still checked mechanically and confirmed one by one.
+// CT-06zzzg (D10-701): modify_existing shares the cap with red_exempt (both counted together).
 export const RED_EXEMPT_MAX = 300;
 
 export const TASK_REPOS = ['rebate-platform', 'ios', 'android', 'harmony'] as const;
@@ -269,6 +307,7 @@ const KNOWN_KEYS = new Set([
   'red_exempt',
   'red_exempt_outside',
   'red_exempt_rows',
+  'modify_existing',
   'renames',
   'expected_values',
   'impl',
@@ -447,6 +486,84 @@ function redExemptOutsideList(value: unknown, problems: string[]): RedExemptOuts
     }
     seen.add(file as string);
     out.push({ file: file as string, reason: reason as string });
+  });
+  return out;
+}
+
+/**
+ * The `modify_existing` list (CT-06zzzg, D10-701): a list of mappings with exactly `file` / `test`
+ * / `reason` / `ruling` / `note`, the file a repository-relative path, the test a non-empty full
+ * name, the reason one of MODIFY_EXISTING_REASONS, the ruling RULING_PATTERN, the note at least
+ * RED_EXEMPT_REASON_MIN characters once trimmed, and no file + test named twice. The cap shared
+ * with red_exempt and whether the file is a rule-test file of the task that exists at the base
+ * are checked by parseTaskFile and tools/ops/task.ts.
+ */
+function modifyExistingList(value: unknown, problems: string[]): ModifyExistingDeclaration[] {
+  const label = 'modify_existing';
+  const fields = ['file', 'test', 'reason', 'ruling', 'note'];
+  if (!Array.isArray(value)) {
+    problems.push(`${label}: must be a list of mappings (${fields.join(' / ')})`);
+    return [];
+  }
+  const out: ModifyExistingDeclaration[] = [];
+  const seen = new Set<string>();
+  value.forEach((item, index) => {
+    const at = `${label}[${index}]`;
+    if (!isRecord(item)) {
+      problems.push(`${at}: must be a mapping (${fields.join(' / ')})`);
+      return;
+    }
+    for (const key of Object.keys(item)) {
+      if (!fields.includes(key)) problems.push(`${at}.${key}: unknown field`);
+    }
+    const file = item['file'];
+    const test = item['test'];
+    const reason = item['reason'];
+    const ruling = item['ruling'];
+    const note = item['note'];
+    let ok = true;
+    if (typeof file !== 'string' || file === '') {
+      problems.push(`${at}.file: must be a non-empty repository path`);
+      ok = false;
+    } else {
+      const problem = pathProblem(file);
+      if (problem !== null) {
+        problems.push(`${at}.file: "${file}" ${problem}`);
+        ok = false;
+      }
+    }
+    if (typeof test !== 'string' || test.trim() === '') {
+      problems.push(`${at}.test: must be the test's full name (non-empty)`);
+      ok = false;
+    }
+    if (!oneOf(reason, MODIFY_EXISTING_REASONS)) {
+      problems.push(`${at}.reason: must be one of ${MODIFY_EXISTING_REASONS.join(' / ')}`);
+      ok = false;
+    }
+    if (typeof ruling !== 'string' || !RULING_PATTERN.test(ruling)) {
+      problems.push(`${at}.ruling: must be the orchestrator ruling id, D10-<number>`);
+      ok = false;
+    }
+    if (typeof note !== 'string' || note.trim().length < RED_EXEMPT_REASON_MIN) {
+      problems.push(
+        `${at}.note: must say why the test is changed (at least ${RED_EXEMPT_REASON_MIN} characters)`,
+      );
+      ok = false;
+    }
+    if (!ok) return;
+    const key = `${file as string}\u0000${test as string}`;
+    if (seen.has(key)) {
+      problems.push(`${at}: "${file as string} > ${test as string}" is declared twice`);
+      return;
+    }
+    seen.add(key);
+    out.push({
+      file: file as string,
+      test: test as string,
+      reason: reason as ModifyExistingDeclaration['reason'],
+      ruling: ruling as string,
+      note: note as string,
+    });
   });
   return out;
 }
@@ -642,6 +759,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
       key !== 'red_exempt' &&
       key !== 'red_exempt_outside' &&
       key !== 'red_exempt_rows' &&
+      key !== 'modify_existing' &&
       key !== 'renames' &&
       key !== 'expected_values' &&
       !Object.hasOwn(doc, key)
@@ -713,6 +831,33 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
       problems.push(
         `red_exempt_rows: "${row.file} > ${row.test}" is also declared in red_exempt (declare a test in one of them)`,
       );
+    }
+  }
+  const modifyExisting = Object.hasOwn(doc, 'modify_existing')
+    ? modifyExistingList(doc['modify_existing'], problems)
+    : [];
+  // CT-06zzzg (D10-701): modify_existing shares RED_EXEMPT_MAX with red_exempt; a test is either
+  // an unchanged declared block (red_exempt, red_exempt_rows) or a changed one (modify_existing).
+  if (Object.hasOwn(doc, 'modify_existing') && Array.isArray(doc['modify_existing'])) {
+    const total =
+      (doc['modify_existing'] as unknown[]).length +
+      (Array.isArray(doc['red_exempt']) ? (doc['red_exempt'] as unknown[]).length : 0);
+    if (total > RED_EXEMPT_MAX) {
+      problems.push(
+        `modify_existing: ${total} entries together with red_exempt, the limit is ${RED_EXEMPT_MAX} (CT-06zzzg; the two sections share the cap)`,
+      );
+    }
+  }
+  for (const entry of modifyExisting) {
+    for (const [section, list] of [
+      ['red_exempt', redExempt],
+      ['red_exempt_rows', redExemptRows],
+    ] as const) {
+      if (list.some((d) => d.file === entry.file && d.test === entry.test)) {
+        problems.push(
+          `modify_existing: "${entry.file} > ${entry.test}" is also declared in ${section} (a changed test is not an exempt one)`,
+        );
+      }
     }
   }
   const renames = Object.hasOwn(doc, 'renames') ? renameList(doc['renames'], problems) : [];
@@ -797,6 +942,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
     red_exempt: redExempt,
     red_exempt_outside: redExemptOutside,
     red_exempt_rows: redExemptRows,
+    modify_existing: modifyExisting,
     renames,
     expected_values: expectedValues,
     impl: impl as TaskFile['impl'],

@@ -14,6 +14,8 @@ import {
   checkRedReports,
   expectedRuleTests,
   expectedValuesHit,
+  modifiedOnlyFiles,
+  modifiedOnlyNote,
   redCheckRequired,
   renamedOnlyFiles,
   renamedOnlyNote,
@@ -3165,4 +3167,308 @@ it('[CT-06zzze] with red_exempt_outside: the kept rows may pass, every other rul
     [],
   );
   expect(changed.problems.map((p) => p.test)).toEqual([...ROW_NAMES, '[AC-9] other']);
+});
+
+// CT-06zzzg (D10-701, after B2-09v and FU-B209R-FLAKE): modify_existing lets a declared changed
+// frozen test pass green; everything else of the file is judged as before.
+const MOD = 'test/spec/z/modify.int.test.ts';
+const MOD_BASE = file(
+  spec('[AC-1] a'),
+  spec('[AC-2] late', 'await waitFor(60_000);'),
+  spec('[AC-3] c'),
+);
+const MOD_TIGHT = spec('[AC-2] late', 'f.send = () => expect.fail("sent");');
+const MOD_HEAD = file(spec('[AC-1] a'), MOD_TIGHT, spec('[AC-3] c'), spec('[AC-4] new'));
+const MOD_NOTE = 'the expectation is unchanged, a wrong implementation now fails by assertion';
+const modDeclared = (tests: string[] = ['[AC-2] late'], file = MOD) =>
+  tests.map((test) => ({
+    file,
+    test,
+    reason: 'tighten_only' as const,
+    ruling: 'D10-701',
+    note: MOD_NOTE,
+  }));
+const modBaselines = (head = MOD_HEAD, declared = modDeclared(), base: string | null = MOD_BASE) =>
+  ruleTestBaselines(
+    [MOD],
+    [{ path: MOD, status: base === null ? 'A' : 'M' }],
+    ['test/spec/z/**'],
+    reader(base === null ? {} : { [MOD]: base }, { [MOD]: head }),
+    [],
+    [],
+    [],
+    [],
+    declared,
+  );
+const MOD_TESTS: RedTest[] = [
+  ['[AC-1] a', 'passed'],
+  ['[AC-2] late', 'passed'],
+  ['[AC-3] c', 'passed'],
+  ['[AC-4] new', 'failed', 'AssertionError: expected 1 to be 2'],
+];
+
+it('[CT-06zzzg] a declared changed frozen test may pass green, listed with modified: true; the new test must still be red', () => {
+  const b = modBaselines();
+  // The new test is a change outside the declared block (said in `outside`): red-check judges
+  // it by the usual rules; only evidence-check's class 1 rule after spec_commit reads `outside`.
+  expect(b.get(MOD)).toMatchObject({
+    kind: 'tests',
+    modified: { ok: true, blocks: [{ test: '[AC-2] late', found: true, changed: true }] },
+  });
+  const result = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(result.problems).toEqual([]);
+  expect(result.ok).toBe(true);
+  expect(result.red).toEqual([`${MOD} > [AC-4] new`]);
+  expect(result.exempt).toContainEqual({
+    file: MOD,
+    test: '[AC-2] late',
+    status: 'passed',
+    declared: true,
+    reason: MOD_NOTE,
+    modified: true,
+  });
+  expect(result.notes.join('\n')).toContain(
+    `${MOD} > [AC-2] late: a changed frozen test declared in modify_existing (tighten_only, D10-701; green; note: ${MOD_NOTE}), not held to the red rule; evidence-check requires the owner's approval label`,
+  );
+  // The new test green: no teeth, as before.
+  const green = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.map(([n]): RedTest => [n, 'passed']),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(green.problems).toEqual([{ file: MOD, test: '[AC-4] new', reason: NO_TEETH }]);
+});
+
+it('[CT-06zzzg] without the declaration, or for an undeclared changed test, the changed frozen test must be red', () => {
+  const none = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(MOD_HEAD, []),
+  );
+  expect(none.problems).toEqual([{ file: MOD, test: '[AC-2] late', reason: NO_TEETH }]);
+  // [AC-1] changed too but is not declared: it must be red; the declared one may stay green.
+  const head = file(
+    spec('[AC-1] a', 'expect(2).toBe(2);'),
+    MOD_TIGHT,
+    spec('[AC-3] c'),
+    spec('[AC-4] new'),
+  );
+  const other = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(head),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(other.problems).toEqual([{ file: MOD, test: '[AC-1] a', reason: NO_TEETH }]);
+});
+
+it("[CT-06zzzg] a declared block that is the base's, gone at the head, or in a file that is not expected: a problem (redundant or not covered)", () => {
+  const same = file(
+    spec('[AC-1] a'),
+    spec('[AC-2] late', 'await waitFor(60_000);'),
+    spec('[AC-3] c'),
+    spec('[AC-4] new'),
+  );
+  const redundant = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(same),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(redundant.ok).toBe(false);
+  expect(redundant.problems).toEqual([
+    {
+      file: MOD,
+      test: '[AC-2] late',
+      reason:
+        "declared in modify_existing, but its block is the base's: the entry is redundant (remove it from the ledger)",
+    },
+  ]);
+  const gone = file(spec('[AC-1] a'), spec('[AC-3] c'), spec('[AC-4] new'));
+  const removed = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.filter(([n]) => n !== '[AC-2] late'),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    modBaselines(gone),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(removed.problems).toEqual([
+    {
+      file: MOD,
+      test: '[AC-2] late',
+      reason:
+        'declared in modify_existing, but the declaration does not apply: the test is gone at the head (removed or renamed: a removal is not a change of a frozen test)',
+    },
+  ]);
+  const elsewhere = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(),
+    [],
+    [],
+    [...modDeclared(), ...modDeclared(['[AC-1] x'], 'test/spec/z/other.test.ts')],
+  );
+  expect(elsewhere.problems).toEqual([
+    {
+      file: 'test/spec/z/other.test.ts',
+      test: '[AC-1] x',
+      reason:
+        'declared in modify_existing, but the file is not an expected rule-test file of the red run (unchanged since the base, or left out): the entry is redundant',
+    },
+  ]);
+});
+
+it('[CT-06zzzg] a file judged as a whole (code outside the tests changed, a new file, not the red reporter), or only declared changes: the entries do not apply, fail-closed', () => {
+  const imported = `import { x } from './x.ts';\n${MOD_HEAD}`;
+  const whole = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(imported),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(whole.problems).toContainEqual({
+    file: MOD,
+    test: '[AC-2] late',
+    reason: 'green on the skeleton: the test has no teeth',
+  });
+  expect(whole.notes.join('\n')).toContain(
+    `${MOD}: 1 declared change(s) of frozen tests (modify_existing) do not apply`,
+  );
+  const fresh = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(MOD_HEAD, modDeclared(), null),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(fresh.ok).toBe(false);
+  expect(fresh.notes.join('\n')).toContain(
+    'the file is new, renamed or could not be compared with the base',
+  );
+  const vitestOnly = checkRedReports(
+    [redReport(MOD, MOD_TESTS, 'json')],
+    [MOD],
+    ROOT,
+    modBaselines(),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(vitestOnly.ok).toBe(false);
+  expect(vitestOnly.notes.join('\n')).toContain('the report is not from the red reporter');
+  // Only the declared change in the file: nothing is shown red.
+  const only = file(spec('[AC-1] a'), MOD_TIGHT, spec('[AC-3] c'));
+  const nothing = checkRedReports(
+    [redReport(MOD, MOD_TESTS.slice(0, 3))],
+    [MOD],
+    ROOT,
+    modBaselines(only),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(nothing.problems).toEqual([
+    {
+      file: MOD,
+      test: null,
+      reason:
+        'existed at the base and every test is unchanged or a declared change of a frozen test (modify_existing): nothing is shown red (3 test(s))',
+    },
+  ]);
+});
+
+it('[CT-06zzzg] a file whose every change lies in its declared blocks is left out of the expected list; a new test next to them keeps it expected', () => {
+  const only = file(spec('[AC-1] a'), MOD_TIGHT, spec('[AC-3] c'));
+  const read = (head: string) => reader({ [MOD]: MOD_BASE }, { [MOD]: head });
+  expect(modifiedOnlyFiles([MOD], read(only), modDeclared())).toEqual([
+    { file: MOD, tests: ['[AC-2] late'] },
+  ]);
+  expect(modifiedOnlyNote({ file: MOD, tests: ['[AC-2] late'] })).toContain(
+    'left out of the expected list (not run, not judged)',
+  );
+  // Left out, its entry is not called redundant by the check of the other files.
+  const other = 'test/spec/z/new.test.ts';
+  const result = checkRedReports(
+    [redReport(other, [['[AC-9] n', 'failed', 'AssertionError: expected 1 to be 2']])],
+    [other],
+    ROOT,
+    new Map(),
+    [],
+    [],
+    modDeclared(),
+    [MOD],
+  );
+  expect(result.problems).toEqual([]);
+  // A new test next to the declared block: stays expected, and the new test must be red.
+  expect(modifiedOnlyFiles([MOD], read(MOD_HEAD), modDeclared())).toEqual([]);
+  const kept = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.map(([n]): RedTest => [n, 'passed']),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    modBaselines(),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(kept.problems).toEqual([{ file: MOD, test: '[AC-4] new', reason: NO_TEETH }]);
+});
+
+it("[CT-06zzzg] not left out when the comparison cannot be made, a declared block is the base's or gone, the file is new, or there is no declaration", () => {
+  const only = file(spec('[AC-1] a'), MOD_TIGHT, spec('[AC-3] c'));
+  const read = (base: string | null, head: string | null) =>
+    reader(base === null ? {} : { [MOD]: base }, head === null ? {} : { [MOD]: head });
+  const cases: [string, string | null, string | null, ReturnType<typeof modDeclared>][] = [
+    ['unreadable', MOD_BASE, 'it((', modDeclared()],
+    ['unchanged block', MOD_BASE, MOD_BASE, modDeclared()],
+    ['gone', MOD_BASE, file(spec('[AC-1] a'), spec('[AC-3] c')), modDeclared()],
+    ['one of two unchanged', MOD_BASE, only, modDeclared(['[AC-2] late', '[AC-1] a'])],
+    ['an import too', MOD_BASE, `import { x } from './x.ts';\n${only}`, modDeclared()],
+    ['new file', null, only, modDeclared()],
+    ['no declaration', MOD_BASE, only, []],
+  ];
+  for (const [name, base, head, declared] of cases) {
+    expect(modifiedOnlyFiles([MOD], read(base, head), declared), name).toEqual([]);
+  }
 });
