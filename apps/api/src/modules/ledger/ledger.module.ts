@@ -7,11 +7,13 @@ import {
   EVENT_BUS,
   IDEMPOTENCY,
   JOB_QUEUE,
+  ROOT_LOGGER,
   type AuditPort,
   type Clock,
   type EventBus,
   type Idempotency,
   type JobQueue,
+  type RootLogger,
 } from '../platform/index.ts';
 import type {
   CloseAdminReconDiffDeps,
@@ -104,12 +106,14 @@ export interface LedgerAdminOptions {
   /**
    * B2-07e: payout's W11 over the entry's handle, clock, job queue and event bus (the port the
    * write-off of an R2 payer-side difference calls; payout is the single writer of withdrawals).
+   * B2-08f: and the entry's root logger, for the warn lines W11 writes (tax_ytd_identity_missing).
    */
   readonly writeOff: (context: {
     readonly db: Kysely<Database>;
     readonly clock: Clock;
     readonly queue: JobQueue;
     readonly eventBus: EventBus;
+    readonly logger: RootLogger;
   }) => ReconDiffWriteOff;
   /** B2-04zs: payout's water level of the enterprise Alipay channel. */
   readonly waterLevel: AdminFundLedgerDeps['waterLevel'];
@@ -235,6 +239,7 @@ export class LedgerAdminModule {
           provide: RECON_DIFF_WRITE_OFF_DEPS,
           inject: [
             CLOCK,
+            ROOT_LOGGER,
             { token: DB, optional: true },
             { token: IDEMPOTENCY, optional: true },
             { token: JOB_QUEUE, optional: true },
@@ -242,6 +247,7 @@ export class LedgerAdminModule {
           ],
           useFactory: (
             clock: Clock,
+            logger: RootLogger,
             db?: Kysely<Database>,
             idempotency?: Idempotency,
             queue?: JobQueue,
@@ -258,7 +264,7 @@ export class LedgerAdminModule {
                   idempotency,
                   auditOn: (trx) => options.auditWriter(trx, clock),
                   holds: options.holdRelease(clock),
-                  writeOff: options.writeOff({ db, clock, queue, eventBus }),
+                  writeOff: options.writeOff({ db, clock, queue, eventBus, logger }),
                 },
         },
       ],

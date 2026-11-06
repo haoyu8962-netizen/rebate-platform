@@ -1,0 +1,70 @@
+{
+  "task": "B2-08f",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "ff3e43e50373ffcd42fef757bce7915b9bc5d1f2",
+  "red_tests": [
+    "test/spec/payout/proven-success-logger/w11-logger.int.test.ts > [AC-B2-08f#1] 申请在上一年，到账与核销在以后年度：未实名 W11 恰一条 payout warn、整笔回滚；补实名同请求重试及重放只累计一次",
+    "test/spec/payout/proven-success-logger/w11-logger.int.test.ts > [AC-B2-08f#1] 申请 UTC 仍为上年，+08:00 已跨年：未实名 W11 恰一条 payout warn、整笔回滚；补实名同请求重试及重放只累计一次"
+  ],
+  "risk_note": "RV2 path (W11 write-off: ledger admin module + app.module wiring), log only: no entry, no status change, no answer change, no contract, no migration (withdraw lane, model Claude Fable 5.1; FU-B208B-W11-LOGGER, orchestrator D10-710, which authorised this lane to change ledger.module.ts for this one wiring; funds copied). When the member of a written-off withdrawal has no verified real name, the tax_ytd accumulation throws and the whole write-off rolls back (BR-WDR-20, B2-08b) — unchanged. What was missing is the warn line tax_ytd_identity_missing in the production assembly: ledger.module's write-off context carried no logger. The context now carries the entry's root logger and app.module hands its payout child to createWithdrawalProvenSuccess. The line carries app_id, withdrawal_id, user_id and the year only. Real risk: a changed injection order in the write-off factory breaking the route — the rule tests run the real admin entry end to end (failure with rollback, retry with the real name, replay). Full verification is the required CI checks (approvals 21; AWS runners disabled, D10-555); the red run and the implementation's run of the rule tests were made in the local Docker container.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ff3e43e50373ffcd42fef757bce7915b9bc5d1f2",
+      "tree": "606781a24c55cc5d034fc39f7e483c8febec0919",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T08:55:48Z",
+      "finished_at": "2026-11-06T08:57:31Z",
+      "red_tests": [
+        "test/spec/payout/proven-success-logger/w11-logger.int.test.ts > [AC-B2-08f#1] 申请在上一年，到账与核销在以后年度：未实名 W11 恰一条 payout warn、整笔回滚；补实名同请求重试及重放只累计一次",
+        "test/spec/payout/proven-success-logger/w11-logger.int.test.ts > [AC-B2-08f#1] 申请 UTC 仍为上年，+08:00 已跨年：未实名 W11 恰一条 payout warn、整笔回滚；补实名同请求重试及重放只累计一次"
+      ],
+      "expected": ["test/spec/payout/proven-success-logger/w11-logger.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b568899e519acde3007b98a4448fe7c85a95587ac698c729f46ff26ae468a823"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex via codex-run.sh, static, read-only, base = the fork point. Round 1 passed with no findings: ROOT_LOGGER injection, the payout child logger, the warning's fields and the rollback chain checked; checklist rounding n/a, sign ok, idempotency ok, concurrency ok, partial_refund n/a, clock ok, app_id ok. Reviewed before the landing rebase; the implementation commit is unchanged by it."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex wrote the rule tests in 1 attempt (test/spec/payout/proven-success-logger: w11-logger.int.test.ts [AC-B2-08f#1], two cases across the year boundary, with admin-kit.ts and seed-kit.ts; no skeleton change, red on main by assertion). A fresh independent Claude reviewed, static. r1: its answer was a pass with no findings, but claude-run rejected the output (exit 12, position assertion: the lane edited the two implementation files, uncommitted, in the reviewed worktree while the review ran) — a mistake of the lane, reported to the orchestrator; counted, not evidence. The edits were moved to a separate worktree and the task worktree restored to the spec commit. r2 on the unchanged spec tree passed with no findings."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7d1c6c6a83c7dc6db08a8d1f87dfec14b3311018",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

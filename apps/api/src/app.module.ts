@@ -4761,7 +4761,7 @@ export class AppModule {
                 // users row → ledger.lockBalances, the CAS to PAID_API, the success voucher, the
                 // attempt-append job for the payout process and the wallet event; the switch
                 // payout.proven_success_writeoff.enabled through content's reader.
-                writeOff: ({ clock, queue, eventBus }) =>
+                writeOff: ({ clock, queue, eventBus, logger }) =>
                   createWithdrawalProvenSuccess({
                     ledger: createLedger({
                       clock,
@@ -4775,9 +4775,11 @@ export class AppModule {
                     },
                     queue,
                     eventBus,
-                    // B2-08b: the same port for W11's tax_ytd row (ledger.module's write-off
-                    // context carries no logger; the missing-real-name throw still rolls back).
+                    // B2-08b: the same port for W11's tax_ytd row; the missing-real-name throw
+                    // rolls the write-off back. B2-08f: its warn line tax_ytd_identity_missing
+                    // goes to the entry's logger (ids and year only), as W5's does.
                     identityKey: createRealnameIdentityKeyReader(),
+                    logger: logger.child({ module: 'payout' }),
                   }),
               }),
             ]
