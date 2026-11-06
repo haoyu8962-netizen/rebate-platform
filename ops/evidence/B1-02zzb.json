@@ -1,0 +1,84 @@
+{
+  "red_tests": [
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#1] devices.user_id carries a non-empty column comment that marks it deprecated",
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#2] the column stays: devices keeps every column, user_id is still a nullable uuid without default",
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#3] devices_user_fkey and the other devices constraints are unchanged and still enforced",
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#4] couli_readonly loses SELECT on user_id only; every other originally granted column stays readable",
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#5] as couli_readonly, reading or filtering on user_id is denied while the other columns read normally",
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#6] couli_app keeps table-level SELECT / INSERT / UPDATE / DELETE on devices, including user_id",
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#7] couli_app still inserts with user_id = NULL, reads it back, updates and deletes the row",
+    "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#8] couli_payout and couli_maint still have no privilege on devices"
+  ],
+  "risk_note": "RV2 (db migration). FU-DEVICES-USER-ID-COLUMN (D10-730): new migration only adds COMMENT ON COLUMN app.devices.user_id (deprecated: production never writes it, device ownership is read from app.sessions per D10-571 / D10-585, to be dropped later as FU-DEVICES-USER-ID-DROP) and revokes couli_readonly's column-level SELECT (user_id). The column, devices_user_fkey, the other constraints and all other grants are unchanged; no frozen test touched (the only frozen readonly assertion on devices, [AC-B1-02b#12], uses has_any_column_privilege and still holds). Migration renumbered to main max + 1 at landing. Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "general review r1 pass (couli-runs/B1-02zzb/review-general-r1.json); Codex unavailable (approvals #36)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude through claude-run.sh (attempt 1; attempt 2 mechanical: assert the comment is a string before toMatch so the pre-migration failure is an assertion); container red PASS 8 tests in 1 file; spec-test review r1 pass (couli-runs/B1-02zzb/review-spec-r1.json)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1ae68c02ca2453622be5eecb3e5d8840d11fd3dd",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  },
+  "task": "B1-02zzb",
+  "spec_commit": "270ce1a348497054d13677c28c542e4dbf757fa4",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "270ce1a348497054d13677c28c542e4dbf757fa4",
+      "tree": "c1841a1cddef5fc831283d423025241aeae5be45",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T12:15:37Z",
+      "finished_at": "2026-11-06T12:15:51Z",
+      "red_tests": [
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#1] devices.user_id carries a non-empty column comment that marks it deprecated",
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#2] the column stays: devices keeps every column, user_id is still a nullable uuid without default",
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#3] devices_user_fkey and the other devices constraints are unchanged and still enforced",
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#4] couli_readonly loses SELECT on user_id only; every other originally granted column stays readable",
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#5] as couli_readonly, reading or filtering on user_id is denied while the other columns read normally",
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#6] couli_app keeps table-level SELECT / INSERT / UPDATE / DELETE on devices, including user_id",
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#7] couli_app still inserts with user_id = NULL, reads it back, updates and deletes the row",
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts > [AC-B1-02zzb#8] couli_payout and couli_maint still have no privilege on devices"
+      ],
+      "expected": [
+        "test/spec/db/identity/devices-user-id-deprecated/devices-user-id-deprecated.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e8c1f5fb172c4960040a91271d8045a7d369104063876f8f519c185c86fe3981"
+        }
+      ]
+    }
+  ]
+}

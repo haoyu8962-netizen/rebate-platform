@@ -3155,6 +3155,13 @@ CREATE TABLE app.devices (
 
 
 --
+-- Name: COLUMN devices.user_id; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON COLUMN app.devices.user_id IS '已弃用（deprecated）：生产不写（注册时插入 NULL，之后不更新）；设备归属以 app.sessions 为准（D10-571 / D10-730）；待删（FU-DEVICES-USER-ID-DROP）。';
+
+
+--
 -- Name: dict_items; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -14190,13 +14197,6 @@ GRANT SELECT(id) ON TABLE app.devices TO couli_readonly;
 --
 
 GRANT SELECT(app_id) ON TABLE app.devices TO couli_readonly;
-
-
---
--- Name: COLUMN devices.user_id; Type: ACL; Schema: app; Owner: -
---
-
-GRANT SELECT(user_id) ON TABLE app.devices TO couli_readonly;
 
 
 --

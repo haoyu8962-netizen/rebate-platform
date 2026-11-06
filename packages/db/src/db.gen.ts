@@ -709,6 +709,9 @@ export interface Devices {
   revoked_at: Timestamp | null;
   row_version: Generated<number>;
   updated_at: Generated<Timestamp>;
+  /**
+   * 已弃用（deprecated）：生产不写（注册时插入 NULL，之后不更新）；设备归属以 app.sessions 为准（D10-571 / D10-730）；待删（FU-DEVICES-USER-ID-DROP）。
+   */
   user_id: string | null;
 }
 
