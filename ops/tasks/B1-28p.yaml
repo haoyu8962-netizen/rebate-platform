@@ -26,4 +26,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/feedback/product-feedback/**'
-status: todo
+status: done
+pr: 2483
