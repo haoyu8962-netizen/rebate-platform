@@ -15,6 +15,8 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/feedback/admin-product-feedbacks/**'
+  - 'test/spec/contracts/admin-product-feedbacks/permission.test.ts' # CT-26x 的 #4 钉「仍是 planned」，去 planned 后改为已实现（先例 B1-10n）
+  - 'test/spec/contracts/admin-product-feedbacks/operation.test.ts' # 同上，#5 的 x-implementation 断言
 impl: claude
 tester: claude-independent
 accept:
