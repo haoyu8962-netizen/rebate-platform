@@ -3,13 +3,15 @@ repo: rebate-platform
 title: 淘宝订单归档只存自家推广位的行（别家订单原文不入库）
 type: impl
 # 2026-11-03 be 入账（D10-588；变更记录 20261031-淘宝订单经大淘客 §1 第 24 行「按凑狸的推广位过滤，不入库别家订单」）。联盟账号与优券汇共用，大淘客返回两边全部订单。现在归档在传输层，ourRows 过滤之前，union_raw_payloads 存了别家订单原文。改成过滤后归档，raw_payload_id 仍能回到这一页。先看 infra/archive.ts 的传输包装与 test/spec/union/archive/**。不动金额。RV2。
+# 2026-11-09 be 补（D10-776 开工，只读盘点）：方案 A——UnionTransportRequest 加一个独立于 ArchiveContext 的可选字段（如 archiveBody），由大淘客订单详情请求传入纯函数，归档包装存改写后的 gzip：只删「推广位可读且非自家」的行，读不出推广位的坏行照样归档（坏行原文只在归档里，row-quarantine 人工处理要用），外层字段与 has_next / position_index 不动、JSON 数字原文不失真；改写失败存空串、记 error_code、打日志，不放弃插入；维权 / 违规 / 搜索 / 转链不传、归档不变；别家行计数仍只由 ourRows 那一条 taobao_order_foreign_slot 发，归档侧不另发。冻结测试无钉整页原文入档的用例，test_paths 只新目录。Codex 额度用尽（D10-775），规则测试与评审为新鲜独立 Claude。
 refs: []
 refs_hash: {}
 deps: [B1-04zz]
 paths:
   - 'apps/api/src/modules/union/infra/taobao/**'
   - 'apps/api/src/modules/union/infra/dataoke/**'
-  - 'apps/api/src/modules/union/infra/archive.ts'
+  - 'apps/api/src/modules/union/infra/archive{.ts,.test.ts}'
+  - 'apps/api/src/modules/union/infra/replay.ts'
   - 'test/spec/union/taobao-order-archive/**'
 test_paths:
   - 'test/spec/union/taobao-order-archive/**'
