@@ -30,7 +30,15 @@ afterAll(async () => {
   await close(h);
 }, TIMEOUT);
 
-const REQUIRED = ['settle_run_id', 'app_id', 'bill_id', 'part', 'row_version', 'updated_at'];
+const REQUIRED = [
+  'settle_run_id',
+  'app_id',
+  'bill_id',
+  'part',
+  'row_version',
+  'updated_at',
+  'published_credited_count',
+];
 
 function escape(name: string): string {
   return name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -57,6 +65,10 @@ it('[AC-B2-04zfa#2] 类型、可空与默认值：settle_run_id uuid 无默认�
     expect(byName.get(name)?.default_expr ?? null, `${name} 无默认`).toBeNull();
   }
   expect(byName.get('part')?.default_expr, 'part 默认 0').toBe('0');
+  expect(
+    byName.get('published_credited_count')?.default_expr,
+    'published_credited_count 默认 0',
+  ).toBe('0');
   // settle_batches.settle_run_id 是同值来源，类型必须一致。
   const batches = await sql<{ type: string }>`
     SELECT t.typname::text AS type
@@ -84,7 +96,7 @@ it('[AC-B2-04zfa#2] 只给必填列插入时 part 为 0、last_outcome 为空；
   const row = await run(h.app);
   expect(await sqlState(insert(h.app, row))).toBe('ok');
   expect(await stored(h.app, row['settle_run_id'])).toEqual([
-    expect.objectContaining({ part: 0, last_outcome: null }),
+    expect.objectContaining({ part: 0, last_outcome: null, published_credited_count: 0 }),
   ]);
   // 未发布过的 run 是 (0, NULL)；发布过的 part ≥ 1 带结果。两者之间的配对不在这里规定。
   for (const [part, outcome] of [

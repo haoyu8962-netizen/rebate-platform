@@ -61,6 +61,8 @@ it('[AC-B2-04a#1] 八表保留规划 04 §3.2 字段，app_id 非空，金额为
       'started_at',
       'finished_at',
       'paused_by_switch_at',
+      // B2-04zy（D10-726）：本批已入账明细数，入账同事务 +1。
+      'credited_count',
     ],
     settle_batch_items: [
       'batch_id',
@@ -243,7 +245,10 @@ it('[AC-B2-04a#2] 未执行记录允许结果、确认、关闭信息为空；S8
   for (const [table, names] of [
     ['settle_jobs', ['job', 'platform', 'run_at', 'status']],
     ['settle_bills', ['bill_id', 'generation_started_at']],
-    ['settle_batches', ['batch_id', 'bill_id', 'platform', 'kind', 'status', 'settle_mode']],
+    [
+      'settle_batches',
+      ['batch_id', 'bill_id', 'platform', 'kind', 'status', 'settle_mode', 'credited_count'],
+    ],
     ['settle_batch_items', ['batch_id', 'item_type', 'order_id', 'settle_seq']],
     [
       'beneficiary_credits',

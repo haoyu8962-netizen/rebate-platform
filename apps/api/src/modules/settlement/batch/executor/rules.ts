@@ -91,29 +91,26 @@ export function runRest(members: readonly RunMember[]): RunRest {
   };
 }
 
-/** One counted batch of a resting run, as runCredited sees it. */
-export interface RunCreditMember {
-  readonly status: string;
-  /**
-   * Items of the batch with result 'credited' whose credit happened in this execution, i.e. after
-   * settle_runs.part_started_at (all of them while the run has no published part yet; D10-492 ④).
-   */
-  readonly creditedItems: number;
-  /** finished_at is after settle_runs.part_started_at (true for every DONE batch before part 1). */
-  readonly doneSinceStart: boolean;
-}
+/** What a resting run does with its credit count against the published watermark. */
+export type RunWatermark = 'publish' | 'nothing_new' | 'behind';
 
 /**
- * D10-477 补正: a resting run publishes only when this execution credited something — a batch that
- * reached DONE since the execution started (every DONE batch while no part was published yet), or
- * a PARTIAL batch with items credited since then (a continue stopped again before its first credit
- * counts zero). Batches paused before they started credit nothing.
+ * D10-726 / D10-732: whether this execution of a resting run credited anything is decided by
+ * counts only (never by timestamps). `total` is the sum of credited_count over the run's batches,
+ * `watermark` the published_credited_count of the last publish (0 before the first). Greater →
+ * publish (and the publish writes `total` as the new watermark); equal → nothing credited since
+ * the last publish, no event, no part used up (also when a batch reached DONE); smaller → the
+ * counters went backwards, which cannot happen (counts only grow): no publish, the caller logs it.
  */
-export function runCredited(members: readonly RunCreditMember[]): boolean {
-  return members.some(
-    (m) =>
-      (m.status === 'DONE' && m.doneSinceStart) || (m.status === 'PARTIAL' && m.creditedItems > 0),
-  );
+export function runWatermark(total: number, watermark: number): RunWatermark {
+  if (!Number.isSafeInteger(total) || total < 0) {
+    throw new RangeError(`settle run credit total is not a count: ${String(total)}`);
+  }
+  if (!Number.isSafeInteger(watermark) || watermark < 0) {
+    throw new RangeError(`settle run watermark is not a count: ${String(watermark)}`);
+  }
+  if (total > watermark) return 'publish';
+  return total === watermark ? 'nothing_new' : 'behind';
 }
 
 /**

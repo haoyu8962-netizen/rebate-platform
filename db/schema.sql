@@ -5552,9 +5552,11 @@ CREATE TABLE app.settle_batches (
     paused_by_switch_at timestamp with time zone,
     row_version integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    credited_count integer DEFAULT 0 NOT NULL,
     CONSTRAINT settle_batches_cancelled_reason_check CHECK ((((status = 'CANCELLED'::text) = (cancelled_reason IS NOT NULL)) AND (cancelled_reason <> ''::text))),
     CONSTRAINT settle_batches_confirmed_check CHECK (((status <> ALL (ARRAY['CONFIRMED'::text, 'EXECUTING'::text, 'PARTIAL'::text, 'DONE'::text])) OR (confirmed_at IS NOT NULL))),
     CONSTRAINT settle_batches_confirmed_pair_check CHECK (((confirmed_by IS NULL) = (confirmed_at IS NULL))),
+    CONSTRAINT settle_batches_credited_count_check CHECK ((credited_count >= 0)),
     CONSTRAINT settle_batches_kind_check CHECK ((kind = ANY (ARRAY['main'::text, 'supplement'::text]))),
     CONSTRAINT settle_batches_order_count_check CHECK ((order_count >= 0)),
     CONSTRAINT settle_batches_platform_check CHECK ((platform = ANY (ARRAY['taobao'::text, 'jd'::text, 'pdd'::text, 'meituan'::text, 'vip'::text, 'douyin'::text, 'eleme'::text, 'kuaishou'::text, 'suning'::text]))),
@@ -5626,9 +5628,11 @@ CREATE TABLE app.settle_runs (
     row_version integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    published_credited_count integer DEFAULT 0 NOT NULL,
     CONSTRAINT settle_runs_app_id_check CHECK ((app_id <> ''::text)),
     CONSTRAINT settle_runs_last_outcome_check CHECK ((last_outcome = ANY (ARRAY['done'::text, 'partial'::text]))),
     CONSTRAINT settle_runs_part_check CHECK ((part >= 0)),
+    CONSTRAINT settle_runs_published_credited_count_check CHECK ((published_credited_count >= 0)),
     CONSTRAINT settle_runs_row_version_check CHECK ((row_version >= 0))
 );
 
@@ -16713,6 +16717,13 @@ GRANT UPDATE(row_version) ON TABLE app.settle_batches TO couli_app;
 
 
 --
+-- Name: COLUMN settle_batches.credited_count; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(credited_count) ON TABLE app.settle_batches TO couli_app;
+
+
+--
 -- Name: TABLE settle_bills; Type: ACL; Schema: app; Owner: -
 --
 
@@ -16852,6 +16863,13 @@ GRANT UPDATE(row_version) ON TABLE app.settle_runs TO couli_app;
 --
 
 GRANT UPDATE(updated_at) ON TABLE app.settle_runs TO couli_app;
+
+
+--
+-- Name: COLUMN settle_runs.published_credited_count; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(published_credited_count) ON TABLE app.settle_runs TO couli_app;
 
 
 --

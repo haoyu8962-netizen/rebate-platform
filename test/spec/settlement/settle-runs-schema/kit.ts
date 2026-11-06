@@ -7,6 +7,9 @@
 //   - settlement (couli_app) is the only writer: SELECT, INSERT, and UPDATE only on the columns a
 //     publish moves; no DELETE. couli_readonly, couli_payout, couli_maint get nothing (D10-492 ②).
 //   - Table only, no backfill.
+//   - B2-04zy (D10-726, only adds): published_credited_count int NOT NULL DEFAULT 0, the count
+//     watermark a publish moves, so couli_app may also UPDATE it; its CHECK and grant come with the
+//     later migration that adds the column.
 // The start column's name is not fixed by SPEC_REF (04 §3.2 write-back came later, couli #236), so
 // it is found as the single column outside the named ones (created_at allowed besides).
 // Rows go through raw SQL: the generated DB types do not know the table before the snapshot.
@@ -44,9 +47,16 @@ export const NAMED: Record<string, readonly [string, boolean]> = {
   last_outcome: ['text', true],
   row_version: ['int4', false],
   updated_at: ['timestamptz', false],
+  published_credited_count: ['int4', false],
 };
-// Columns a publish (B2-04zf CAS) moves; the start column is added at run time.
-export const MUTABLE = ['part', 'last_outcome', 'row_version', 'updated_at'] as const;
+// Columns a publish (B2-04zf CAS, B2-04zy watermark) moves; the start column is added at run time.
+export const MUTABLE = [
+  'part',
+  'last_outcome',
+  'row_version',
+  'updated_at',
+  'published_credited_count',
+] as const;
 // Identity columns: never rewritten once the run exists.
 export const IMMUTABLE = ['settle_run_id', 'app_id', 'bill_id'] as const;
 export const START_TYPES = ['timestamptz', 'int4', 'int8'] as const;
@@ -174,23 +184,34 @@ export async function columnPrivilege(
 }
 
 // The one migration that creates app.settle_runs, located by content (the number is taken at
-// landing time), with comments and identifier quotes stripped.
+// landing time), followed by the statements of every later migration that name app.settle_runs
+// (B2-04zy: the ALTER that adds published_credited_count with its named CHECK, and its grant);
+// comments and identifier quotes stripped. Only those statements are taken from a later
+// migration, so what it does to other tables (settle_batches.credited_count) is not read as a
+// change of this table.
 export function migrationSource(): string {
   const directory = new URL('../../../../db/migrations/', import.meta.url);
   const creates = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?app\.settle_runs\s*\(/i;
-  const found = readdirSync(directory)
+  const names = /\bapp\.settle_runs\b/i;
+  const files = readdirSync(directory)
     .filter((name) => /^\d{4}_[a-z0-9-]+\.sql$/.test(name))
+    .sort()
     .map((name) => ({
       name,
       source: readFileSync(new URL(name, directory), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/--[^\n]*/g, '')
         .replace(/"/g, ''),
-    }))
-    .filter((file) => creates.test(file.source));
+    }));
+  const found = files.filter((file) => creates.test(file.source));
   expect(
     found.map((file) => file.name),
     '恰好一个迁移创建 app.settle_runs',
   ).toHaveLength(1);
-  return found[0]!.source;
+  const created = found[0]!;
+  const later = files
+    .filter((file) => file.name > created.name)
+    .flatMap((file) => file.source.split(';').filter((statement) => names.test(statement)))
+    .map((statement) => `${statement.trim()};`);
+  return [created.source, ...later].join('\n');
 }

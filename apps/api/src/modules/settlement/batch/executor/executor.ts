@@ -46,9 +46,13 @@
 //          'tlj_deduct_unsupported'); amount_fen stays null;
 //        - item_type beneficiary: deps.creditBeneficiary.execute(trx, …) (B2-04q); result /
 //          amount_fen / skip_reason as returned;
-//        - the item row is written on the same transaction as the credit. Right before commit the
-//          day check above runs again: crossed into a day whose snapshot check d fails → the
-//          transaction rolls back (the item stays unprocessed) and the run ends 'day_rollover'.
+//        - the item row is written on the same transaction as the credit. An item whose result is
+//          'credited' also adds 1 to the batch's credited_count on that transaction (D10-726; one
+//          UPDATE of settle_batches WHERE status = 'EXECUTING', no row_version change, any other
+//          row count rolls the item back); skipped and deferred items add nothing. Right before
+//          commit the day check above runs again: crossed into a day whose snapshot check d fails
+//          → the transaction rolls back (the item and its count stay undone) and the run ends
+//          'day_rollover'.
 //      An unexpected error of an item transaction rolls it back and run() rejects with that error;
 //      the batch stays EXECUTING for a later SB9 take-over.
 //   5. No item left: one transaction moves EXECUTING → DONE (SB6, event COMPLETE, CAS), sets
@@ -64,21 +68,24 @@
 //      paused_by_switch_at, any more, the run rests: outcome 'partial' when a batch of it was
 //      stopped by a switch (PARTIAL, or CONFIRMED with paused_by_switch_at), else 'done'; DRAFT
 //      and CANCELLED batches neither count nor block. A batch without settle_run_id has no run.
-//      Part and the start of the current execution live in settlement's own app.settle_runs
-//      (migration 0108), read on the same transaction: a run without a row has published nothing
-//      (part 0) and its current execution has no lower bound. The run publishes only when this
-//      execution credited something (D10-477 补正, D10-492 ④): a batch with finished_at after
-//      part_started_at, or a PARTIAL batch with a credited item whose credit is after
-//      part_started_at (order items: the order's credited_at, written by the B2-04m credit on the
-//      item transaction; beneficiary items: the obligation's closed_at, B2-04q). Otherwise
-//      nothing is published and no part is used up. Publishing: part = row part + 1; the row
-//      moves to that part and outcome, part_started_at = clock.now() (the next execution starts
-//      after this rest), row_version + 1 — a CAS on row_version, or the INSERT of the row at the
-//      run's first publish (ON CONFLICT DO NOTHING) — then settle.run_done with payload
+//      Part and the count watermark live in settlement's own app.settle_runs (migrations 0108,
+//      0127), read on the same transaction: a run without a row has published nothing (part 0,
+//      watermark 0). Whether this execution credited anything is decided by counts only, never by
+//      comparing timestamps (D10-726; worker clocks may differ): total = the sum of
+//      credited_count over the run's batches (read by the same query as their statuses); the run
+//      publishes only when total > published_credited_count. Equal → nothing credited since the
+//      last publish: nothing is published and no part is used up, also when the batch just
+//      reached DONE (D10-732, BR-TEXT-09 「0 笔不发」). Smaller cannot happen (counts only grow):
+//      an error is logged and nothing is published, without failing the batch's move.
+//      Publishing: part = row part + 1; the row moves to that part and outcome,
+//      published_credited_count = total, part_started_at = clock.now() (audit only, no decision
+//      reads it), row_version + 1 — a CAS on row_version, or the INSERT of the row at the run's
+//      first publish (ON CONFLICT DO NOTHING) — then settle.run_done with payload
 //      { settle_run_id, bill_id, part, outcome, batch_count } and an event id derived from
 //      (app, run, part), all on that same transaction. A lost CAS or INSERT publishes nothing
-//      (the batch move still commits); a failing publish rolls the transaction back (the batch
-//      keeps its state, the row stays as it was). event_log is never read.
+//      and leaves the watermark (the batch move still commits; those credits count for the next
+//      publish); a failing publish rolls the transaction back (the batch keeps its state, the row
+//      and its watermark stay as they were). event_log is never read.
 // Batch status only through the generated settle-batch transition(), every write a row_version CAS.
 // Time only from deps.clock; logs only through deps.logger.
 import type { DB } from '@couli/db';
@@ -96,9 +103,9 @@ import type { CreditOrder, CreditRole } from '../../credit/index.ts';
 import {
   compareItems,
   previousDay,
-  runCredited,
   runDoneEventId,
   runRest,
+  runWatermark,
   switchOn,
 } from './rules.ts';
 
@@ -208,7 +215,8 @@ interface BatchRow {
 /** The run's app.settle_runs row as step 6 reads it. */
 interface RunRow {
   readonly part: number;
-  readonly part_started_at: Date;
+  /** published_credited_count: the credit count of the last publish (D10-726). */
+  readonly published_credited_count: number;
   readonly row_version: number;
 }
 
@@ -454,6 +462,24 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
     }
   }
 
+  /**
+   * D10-726: one credited item, +1 on the batch's credited_count on the item transaction. Not a
+   * row_version move (the later SB7 / SB6 CAS use the version this run holds).
+   */
+  async function countCredit(trx: Transaction<DB>, batch: BatchRow): Promise<void> {
+    const updated = await trx
+      .withSchema('app')
+      .updateTable('settle_batches')
+      .set((eb) => ({ credited_count: eb('credited_count', '+', 1) }))
+      .where('app_id', '=', batch.app_id)
+      .where('batch_id', '=', batch.batch_id)
+      .where('status', '=', 'EXECUTING')
+      .executeTakeFirst();
+    if (updated.numUpdatedRows !== 1n) {
+      throw new Error(`settle batch ${batch.batch_id} credited_count not counted`);
+    }
+  }
+
   /** Step 6, first statement of a completing transaction: serialise the run's completions. */
   async function lockRun(trx: Transaction<DB>, batch: BatchRow): Promise<void> {
     if (batch.settle_run_id === null) return;
@@ -471,83 +497,10 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
     return trx
       .withSchema('app')
       .selectFrom('settle_runs')
-      .select(['part', 'part_started_at', 'row_version'])
+      .select(['part', 'published_credited_count', 'row_version'])
       .where('app_id', '=', appId)
       .where('settle_run_id', '=', runId)
       .executeTakeFirst();
-  }
-
-  /**
-   * Credited items of each PARTIAL batch whose credit happened in this execution (after `since`;
-   * all of them when `since` is null): an order item by its order's credited_at, a beneficiary
-   * item by its obligation's closed_at.
-   */
-  async function creditedCounts(
-    trx: Transaction<DB>,
-    appId: string,
-    partial: readonly string[],
-    since: Date | null,
-  ): Promise<Map<string, number>> {
-    const credited = new Map<string, number>();
-    if (partial.length === 0) return credited;
-    let query = trx
-      .withSchema('app')
-      .selectFrom('settle_batch_items as i')
-      .select(['i.batch_id', (eb) => eb.fn.countAll<string>().as('n')])
-      .where('i.app_id', '=', appId)
-      .where('i.batch_id', 'in', partial)
-      .where('i.result', '=', 'credited');
-    if (since !== null) {
-      query = query.where((eb) =>
-        eb.or([
-          eb.and([
-            eb('i.item_type', '=', 'order'),
-            eb.exists(
-              eb
-                .selectFrom('orders as o')
-                .select(sql<number>`1`.as('one'))
-                .whereRef('o.app_id', '=', 'i.app_id')
-                .whereRef('o.order_id', '=', 'i.order_id')
-                .where('o.credited_at', '>', since),
-            ),
-          ]),
-          eb.and([
-            eb('i.item_type', '=', 'beneficiary'),
-            eb.exists(
-              eb
-                .selectFrom('beneficiary_credits as b')
-                .select(sql<number>`1`.as('one'))
-                .whereRef('b.app_id', '=', 'i.app_id')
-                .whereRef('b.beneficiary_credit_id', '=', 'i.beneficiary_credit_id')
-                .where('b.closed_at', '>', since),
-            ),
-          ]),
-        ]),
-      );
-    }
-    for (const c of await query.groupBy('i.batch_id').execute()) {
-      credited.set(c.batch_id, Number(c.n));
-    }
-    return credited;
-  }
-
-  /** D10-477 补正 / D10-492 ④: whether this execution of the run credited anything. */
-  async function executionCredited(
-    trx: Transaction<DB>,
-    appId: string,
-    rows: readonly { batch_id: string; status: string; finished_at: Date | null }[],
-    since: Date | null,
-  ): Promise<boolean> {
-    const partial = rows.filter((r) => r.status === 'PARTIAL').map((r) => r.batch_id);
-    const credited = await creditedCounts(trx, appId, partial, since);
-    return runCredited(
-      rows.map((r) => ({
-        status: r.status,
-        creditedItems: credited.get(r.batch_id) ?? 0,
-        doneSinceStart:
-          r.finished_at !== null && (since === null || r.finished_at.getTime() > since.getTime()),
-      })),
-    );
   }
 
   /**
@@ -561,6 +514,7 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
     row: RunRow | undefined,
     part: number,
     outcome: 'done' | 'partial',
+    total: number,
   ): Promise<boolean> {
     const now = clock.now();
     if (row === undefined) {
@@ -573,6 +527,7 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
           bill_id: batch.bill_id,
           part,
           last_outcome: outcome,
+          published_credited_count: total,
           part_started_at: now,
           row_version: 0,
           created_at: now,
@@ -600,6 +555,7 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
       .set({
         part,
         last_outcome: outcome,
+        published_credited_count: total,
         part_started_at: now,
         row_version: row.row_version + 1,
         updated_at: now,
@@ -618,7 +574,7 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
     const rows = await trx
       .withSchema('app')
       .selectFrom('settle_batches')
-      .select(['batch_id', 'status', 'paused_by_switch_at', 'finished_at'])
+      .select(['status', 'paused_by_switch_at', 'credited_count'])
       .where('app_id', '=', batch.app_id)
       .where('settle_run_id', '=', runId)
       .execute();
@@ -626,13 +582,29 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
       rows.map((r) => ({ status: r.status, pausedBySwitch: r.paused_by_switch_at !== null })),
     );
     if (!rest.settled) return;
+    const total = rows.reduce((sum, r) => sum + Number(r.credited_count), 0);
     const row = await readRunRow(trx, batch.app_id, runId);
-    const since = row?.part_started_at ?? null;
-    // D10-477 补正: nothing credited in this execution → no event, no part used up.
-    if (!(await executionCredited(trx, batch.app_id, rows, since))) return;
+    const watermark = Number(row?.published_credited_count ?? 0);
+    // D10-726 / D10-732: only counts decide; nothing credited since the last publish → no event,
+    // no part used up.
+    const decision = runWatermark(total, watermark);
+    if (decision === 'behind') {
+      logger.error(
+        {
+          app_id: batch.app_id,
+          settle_run_id: runId,
+          total,
+          watermark,
+          event: 'settle_run_behind',
+        },
+        'settle run credit count below its published watermark',
+      );
+      return;
+    }
+    if (decision === 'nothing_new') return;
     const part = (row?.part ?? 0) + 1;
     const fields = { app_id: batch.app_id, settle_run_id: runId, part };
-    if (!(await saveRunPart(trx, batch, runId, row, part, rest.outcome))) {
+    if (!(await saveRunPart(trx, batch, runId, row, part, rest.outcome, total))) {
       logger.warn({ ...fields, event: 'settle_run_cas_lost' }, 'settle run part already taken');
       return;
     }
@@ -762,6 +734,7 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
         await conn.transaction().execute(async (trx) => {
           const write = await executeItem(trx, batch, item);
           await writeItem(trx, batch, item, write);
+          if (write.result === 'credited') await countCredit(trx, batch);
           // Right before commit: crossing into a day whose snapshot is not ready rolls back.
           const after = await dayCheck(trx, batch.app_id, day);
           if (after === null) throw new DayRollover();

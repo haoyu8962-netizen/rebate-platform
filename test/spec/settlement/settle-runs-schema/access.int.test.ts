@@ -1,7 +1,8 @@
 // B2-04zfa rule tests (编排裁定 D10-492 ②): grants of app.settle_runs. settlement (couli_app) is
 // the only writer: it reads, inserts a run and moves part / last_outcome / the start column /
-// row_version / updated_at on publish; the identity columns are never rewritten and rows are never
-// deleted. No other role gets any privilege.
+// row_version / updated_at on publish (and, since B2-04zy, the watermark published_credited_count);
+// the identity columns are never rewritten and rows are never deleted. No other role gets any
+// privilege.
 import { createTestDatabase } from '@couli/db/testing';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -100,18 +101,24 @@ it('[AC-B2-04zfa#4] couli_app 能插入并按发布推进 part / last_outcome / 
   const row = await run(h.app);
   expect(await sqlState(insert(h.app, row))).toBe('ok');
 
-  // 一次发布（按 row_version 比较并更新）由 couli_app 完成。
+  // 一次发布（按 row_version 比较并更新，同时写入新水位）由 couli_app 完成。
   const later = startValue(start, 5);
   const published = await sql`
     UPDATE app.settle_runs
     SET part = part + 1, last_outcome = 'partial', ${sql.ref(start.name)} = ${later},
-      row_version = row_version + 1, updated_at = ${new Date('2032-07-01T10:00:00+08:00')}
+      row_version = row_version + 1, updated_at = ${new Date('2032-07-01T10:00:00+08:00')},
+      published_credited_count = published_credited_count + 1
     WHERE settle_run_id = ${row['settle_run_id']} AND row_version = 0
   `.execute(h.app);
   expect(published.numAffectedRows).toBe(1n);
   const before = await stored(h.app, row['settle_run_id']);
   expect(before).toEqual([
-    expect.objectContaining({ part: 1, last_outcome: 'partial', row_version: 1 }),
+    expect.objectContaining({
+      part: 1,
+      last_outcome: 'partial',
+      row_version: 1,
+      published_credited_count: 1,
+    }),
   ]);
 
   for (const [column, value] of [

@@ -3,9 +3,9 @@ import { expect, it } from 'vitest';
 import {
   compareItems,
   previousDay,
-  runCredited,
   runDoneEventId,
   runRest,
+  runWatermark,
   type RunMember,
   switchOn,
   type SortableItem,
@@ -118,38 +118,22 @@ it('[AC-B2-04zf-UNIT#2] run 事件 id 是小写规范 UUID，同一 (app, run, p
   );
 });
 
-it('[AC-B2-04zf-UNIT#4] 本次执行一笔都没入账（全部批次开始前被开关停住、PARTIAL 无入账明细、DONE 早于本次起点）不发；有新 DONE 或 PARTIAL 的已入账部分才发', () => {
-  const m = (status: string, creditedItems = 0, doneSinceStart = false) => ({
-    status,
-    creditedItems,
-    doneSinceStart,
-  });
-  // D10-477 补正: both batches paused before they started, nothing credited.
-  expect(runCredited([m('CONFIRMED'), m('CONFIRMED')])).toBe(false);
-  expect(runCredited([m('PARTIAL', 0), m('CONFIRMED')])).toBe(false);
-  // A DONE batch that finished before this execution started.
-  expect(runCredited([m('DONE', 0, false), m('PARTIAL', 0)])).toBe(false);
-  // Something credited in this execution.
-  expect(runCredited([m('DONE', 0, true), m('CONFIRMED')])).toBe(true);
-  expect(runCredited([m('PARTIAL', 2), m('CONFIRMED')])).toBe(true);
-  expect(runCredited([m('DONE', 0, false), m('PARTIAL', 1)])).toBe(true);
+it('[AC-B2-04zy-UNIT#1] 计数水位：各批计数之和大于已发布水位才发；相等（本次零入账，含批次照样 DONE）不发；小于为不可能的倒退，不发', () => {
+  // D10-732: nothing credited at all, also when every batch reached DONE.
+  expect(runWatermark(0, 0)).toBe('nothing_new');
+  // First publish of a run that credited something.
+  expect(runWatermark(1, 0)).toBe('publish');
+  // A continue that credited one more item after part 1 (watermark 3 → 4).
+  expect(runWatermark(4, 3)).toBe('publish');
+  // A continue stopped again before its first credit: the earlier credits are in the watermark.
+  expect(runWatermark(3, 3)).toBe('nothing_new');
+  // Counts only grow; a smaller sum is reported, never published.
+  expect(runWatermark(2, 3)).toBe('behind');
 });
 
-it('[AC-B2-04zf-UNIT#5] 继续执行后第一笔前又被开关停住（本次新入账 0）不发、part 不加；之后继续执行到 DONE 才发', () => {
-  // money r2 S1 / D10-492 ④: creditedItems counts only the items credited since part_started_at,
-  // so o0 credited before part 1 no longer counts for the PARTIAL batch after it.
-  const m = (status: string, creditedItems = 0, doneSinceStart = false) => ({
-    status,
-    creditedItems,
-    doneSinceStart,
-  });
-  // Single batch: continued, stopped again before o1.
-  expect(runCredited([m('PARTIAL', 0)])).toBe(false);
-  // taobao continued and stopped again, jd still paused before start, nothing new.
-  expect(runCredited([m('PARTIAL', 0), m('CONFIRMED')])).toBe(false);
-  // jd reached DONE in part 1, taobao continued and stopped again with nothing new.
-  expect(runCredited([m('PARTIAL', 0), m('DONE', 0, false)])).toBe(false);
-  // The next continue that credits, or reaches DONE, publishes.
-  expect(runCredited([m('PARTIAL', 1), m('CONFIRMED')])).toBe(true);
-  expect(runCredited([m('DONE', 0, true)])).toBe(true);
+it('[AC-B2-04zy-UNIT#2] 计数水位只收非负整数：负数、小数、NaN 都抛错', () => {
+  for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    expect(() => runWatermark(bad, 0)).toThrow(RangeError);
+    expect(() => runWatermark(0, bad)).toThrow(RangeError);
+  }
 });

@@ -56,13 +56,30 @@ export async function ready(db: Kysely<DB>): Promise<void> {
   }
 }
 
+// The settlement-core migration, followed by the statements of every later migration that ALTER
+// app.settle_batches (B2-04zy: credited_count with its named CHECK and its grant); comments
+// stripped. Only those statements are taken from a later migration.
 export function migrationSource(): string {
   const directory = new URL('../../../../../db/migrations/', import.meta.url);
-  const names = readdirSync(directory).filter((name) => /^\d{4}_settlement-core\.sql$/.test(name));
+  const strip = (name: string) =>
+    readFileSync(new URL(name, directory), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/--[^\n]*/g, '');
+  const all = readdirSync(directory)
+    .filter((name) => /^\d{4}_[a-z0-9-]+\.sql$/.test(name))
+    .sort();
+  const names = all.filter((name) => /^\d{4}_settlement-core\.sql$/.test(name));
   expect(names, '迁移按后缀定位，不固定序号').toHaveLength(1);
-  return readFileSync(new URL(names[0]!, directory), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/--[^\n]*/g, '');
+  const core = names[0]!;
+  const alters = /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?app\.settle_batches\b/i;
+  const touches = /\bapp\.settle_batches\b/i;
+  const later = all
+    .filter((name) => name > core)
+    .map((name) => strip(name).replace(/"/g, ''))
+    .filter((source) => alters.test(source))
+    .flatMap((source) => source.split(';').filter((statement) => touches.test(statement)))
+    .map((statement) => `${statement.trim()};`);
+  return [strip(core), ...later].join('\n');
 }
 
 export function enumValues(name: string): string[] {

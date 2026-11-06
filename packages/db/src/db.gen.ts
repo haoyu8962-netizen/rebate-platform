@@ -1920,6 +1920,7 @@ export interface SettleBatches {
   confirmed_at: Timestamp | null;
   confirmed_by: string | null;
   created_at: Generated<Timestamp>;
+  credited_count: Generated<number>;
   finished_at: Timestamp | null;
   kind: string;
   order_count: number;
@@ -1986,6 +1987,7 @@ export interface SettleRuns {
   last_outcome: string | null;
   part: Generated<number>;
   part_started_at: Timestamp;
+  published_credited_count: Generated<number>;
   row_version: Generated<number>;
   settle_run_id: string;
   updated_at: Generated<Timestamp>;
