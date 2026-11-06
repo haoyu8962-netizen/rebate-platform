@@ -265,7 +265,7 @@ export function ClaimForm({
                   <span
                     className={`flex h-8 items-center gap-couli-1 rounded-couli-pill border px-couli-3 ${FOOTNOTE} ${
                       selected
-                        ? 'border-couli-brand-subtle bg-couli-brand-subtle font-couli-semibold text-couli-brand-primary'
+                        ? 'border-couli-brand-subtle bg-couli-brand-subtle font-couli-semibold text-couli-brand-emphasis'
                         : 'border-couli-border-subtle bg-couli-background-surface text-couli-text-primary'
                     }`}
                   >

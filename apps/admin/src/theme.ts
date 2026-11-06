@@ -4,6 +4,7 @@
 // Dark mode follows the CSS that is in effect (the tokens' dark blocks set `color-scheme: dark`):
 // antd then derives its own shades (overlays, fills, splits) with darkAlgorithm, while every colour
 // token still comes from the same variables.
+import { tokenValues } from '@couli/ui-tokens';
 import { theme as antdTheme, type ThemeConfig } from 'antd';
 
 type ColorToken =
@@ -46,6 +47,23 @@ const COLOR_VARIABLES: readonly (readonly [ColorToken, string])[] = [
   ['colorInfoBorderHover', '--color-background-muted'],
 ];
 
+/** CSS pixels per rem: the admin root font size is the browser default. */
+const ROOT_FONT_PX = 16;
+
+/** A ui-tokens dimension (`14px`, `0.875rem`) in CSS pixels, the unit antd's numeric tokens use. */
+function tokenPx(value: string): number {
+  const match = /^(\d+(?:\.\d+)?)(px|rem)$/.exec(value);
+  if (match === null) throw new Error(`Unsupported ui-tokens dimension: ${value}`);
+  const amount = Number(match[1]);
+  return match[2] === 'rem' ? amount * ROOT_FONT_PX : amount;
+}
+
+// Dimensions are the same in light and dark, so the light values are read.
+const FONT_SIZE = tokenPx(tokenValues.light.font.size.footnote);
+const RADIUS = tokenPx(tokenValues.light.radius.small);
+const MENU_ITEM_MARGIN_INLINE = tokenPx(tokenValues.light.space['2']);
+const BUTTON_PADDING_INLINE = tokenPx(tokenValues.light.space['4']);
+
 /** True when the computed `color-scheme` of `root` is dark only (the dark token blocks). */
 export function isDarkScheme(root: Element = document.documentElement): boolean {
   const words = getComputedStyle(root).getPropertyValue('color-scheme').trim().split(/\s+/);
@@ -77,11 +95,16 @@ export function createAntdTheme(root: Element = document.documentElement): Theme
     token: {
       ...colors,
       fontFamily: 'var(--font-family-system)',
-      fontSize: 14,
-      borderRadius: 8,
+      fontSize: FONT_SIZE,
+      borderRadius: RADIUS,
     },
     components: {
-      Button: { controlHeight: 36, fontWeight: 600, paddingInline: 16 },
+      Button: {
+        // TODO(规划/11 §7.1): 按钮高 36 改读 admin.* 令牌 — blocked on DSX-105
+        controlHeight: 36,
+        fontWeight: 600,
+        paddingInline: BUTTON_PADDING_INLINE,
+      },
       Input: { controlHeight: 40 },
       Form: { itemMarginBottom: 20, verticalLabelPadding: '0 0 6px' },
       // Shell (design-hifi Adm* boards): 220 wide light sider, 56 high header on the surface.
@@ -95,7 +118,7 @@ export function createAntdTheme(root: Element = document.documentElement): Theme
       Menu: {
         itemHeight: 32,
         itemMarginBlock: 4,
-        itemMarginInline: 8,
+        itemMarginInline: MENU_ITEM_MARGIN_INLINE,
         groupTitleFontSize: 12,
         activeBarBorderWidth: 0,
         ...(menuSelectedBg === '' ? {} : { itemSelectedBg: menuSelectedBg }),

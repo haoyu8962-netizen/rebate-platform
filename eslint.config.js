@@ -3,6 +3,7 @@
 import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 import { platform } from './packages/contracts-ts/src/enums.gen.ts';
+import { stylePlugin, styleRules } from './lint/style/index.js';
 
 const TS_FILES = ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts'];
 const TEST_FILES = ['**/*.test.ts', '**/*.test.tsx', 'test/**/*.ts'];
@@ -226,5 +227,14 @@ export default tseslint.config(
     rules: {
       'no-restricted-syntax': ['error', ...NO_HARD_CODED_CHINESE, ...NO_DYNAMIC_CONFORMANCE_IMPORT],
     },
+  },
+  {
+    // LINT-STYLE-web (规划/05 §3.11.3): no hard-coded styles in H5 / admin source; the existing
+    // violations are tolerated up to lint/style/baseline.json, which only shrinks.
+    files: FRONTEND_SOURCES,
+    ignores: TEST_FILES,
+    plugins: { 'couli-style': stylePlugin },
+    processor: 'couli-style/baseline',
+    rules: styleRules,
   },
 );

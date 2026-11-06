@@ -1,0 +1,107 @@
+{
+  "red_tests": [
+    "test/spec/frontend/lint-style-web/baseline.test.ts > [AC-F1-01w-BASELINE#1] 基线入库且只减不增：每个文件每条规则的当前违规数 ≤ 基线计数，基线之外的文件为 0",
+    "test/spec/frontend/lint-style-web/baseline.test.ts > [AC-F1-01w-BASELINE#2] 按 eslint.config.js 原路径 lint：入库文件不报，比基线多出违规即报错",
+    "test/spec/frontend/lint-style-web/baseline.test.ts > [AC-F1-01w-SCAN#1] 扫描范围含后台 src/pages/** 与 src/components/**（及 H5 src/**）：数字 fontSize、TSX hex、字面任意值、小字品牌色都被规则报出，后台这两处没有基线外违规",
+    "test/spec/frontend/lint-style-web/pill.test.ts > [AC-F1-01w-PILL#1] 浅色：选中胶囊（收益页平台与期间、找回订单平台、邀请页提示）文字在 brand-subtle 底上对比度 ≥ 4.5:1",
+    "test/spec/frontend/lint-style-web/pill.test.ts > [AC-F1-01w-PILL#2] 深色：选中胶囊（收益页平台与期间、找回订单平台、邀请页提示）文字在 brand-subtle 底上对比度 ≥ 4.5:1",
+    "test/spec/frontend/lint-style-web/pill.test.ts > [AC-F1-01w-PILL#3] 邀请页链接 LINK 用 text-couli-text-link，不再用 text-couli-brand-primary",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#1] H5 的 Tailwind 任意值（text-[13px]、text-[2rem]、mt-[7px]、rounded-[6px]、模板串里的 p-[3px]）报错，令牌类名不报",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#2] 小字（caption / footnote）用 text-couli-brand-primary 报错；text-link、brand-emphasis、大标题、品牌色作底不报",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#3] style 对象里数字 fontSize / borderRadius / margin* / padding* 报错（含负数与具名常量），令牌值与非尺寸数字不报",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#4] TSX 与 style 里的 hex 色值（3 / 6 / 8 位、嵌在边框简写里、SVG 属性、bg-[#…]）报错，锚点与路由的 # 不报",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#5] 传给 ui.setNavBar 的 hex 色值（bg_color、text_color、bg_gradient）报错，传入变量不报",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#6] 后台页面里 fontSize: 12（style 与样式常量）、数字 padding / borderRadius、hex、任意值报错，token.fontSizeSM 等 antd 令牌不报",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#7] 写了 eslint-disable-next-line 豁免注释（带理由）的任意值不报，豁免只管下一行",
+    "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#8] eslint.config.js 引用 lint/style 下的规则，对 H5 与后台源码全部以 error 开启；基线里的规则都已开启",
+    "test/spec/frontend/lint-style-web/theme.test.ts > [AC-F1-01w-THEME#1] theme.ts 没有 14 字面量，从 @couli/ui-tokens 读取：token.fontSize 等于 font.size.footnote",
+    "test/spec/frontend/lint-style-web/theme.test.ts > [AC-F1-01w-THEME#2] theme.ts 没有 8 字面量：token.borderRadius 等于 radius.small，菜单项左右外边距等于 space.2",
+    "test/spec/frontend/lint-style-web/theme.test.ts > [AC-F1-01w-THEME#3] Button 控件高 36 暂留字面量（admin.* 令牌归 DSX-105），theme.ts 里每处 36 都带 DSX-105 的 TODO 注释"
+  ],
+  "risk_note": "LINT-STYLE-web (规划/05 §3.11.3, D10-643 ⑧). New ESLint plugin lint/style (couli-style/: no-arbitrary-value, no-small-brand-text, no-numeric-style, no-hex-color, exemption-reason) for apps/h5 and apps/admin, .ts and .tsx; existing violations are recorded in lint/style/baseline.json with counts equal to the current ones (5 H5 arbitrary values, 188 admin numeric sizes left for DSX-105) and a processor reports a file only when its count exceeds the baseline, so the baseline can only shrink; exemptions need a reason. eslint.config.js (protected class 2) only gains the import and one config entry enabling the plugin, processor and rules (orchestrator checks per #16 / #24; no owner sign-off needed per the 11-06 06:11 note). Admin theme 14 / 8 / 16 read ui-tokens (values unchanged); the button height 36 stays a literal with TODO blocked on DSX-105 (orchestrator technical decision: no token exists). Selected pills in earnings-page, claim-form and invite-page use brand-emphasis on brand-subtle (≥ 4.5:1 light and dark), the invite link uses text-link. Non-funds. Rule tests written by an independent Claude in three rounds (round 2 the 36 decision, round 3 fixed a TypeError red reason in the test's own scanner); Claude spec-test review r1 pass (four S2 carried into the implementation constraints), round 3 incremental review pass; red on the local container (red/2; AWS runners off since D10-555). Implementation by Opus 5.5; local container browser green; verify-fast failed only on the ledger hash of CT-24zt fixed on main by #2469, so the orchestrator ran lint-style-web and h5-dark on the host (8 files, 27 tests green) and eslint over apps/h5 and apps/admin (0 problems); after rebasing on main the full verification is the required CI checks. Independent Claude money review r1 pass (no findings). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 pass, no findings (RV2 because of eslint.config.js and paths outside the whitelist; no money path touched); independent Claude (approvals #36)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "fresh Claude subagents: round 1 pass with four S2 carried into the implementation constraints; round 3 test change (scanner TypeError fix) incremental review pass; tests written by an independent Claude (claude-run.sh) in three rounds"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-01w",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "88b02be57e669d39e23a7fdeb340f16855bcc4d0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "88b02be57e669d39e23a7fdeb340f16855bcc4d0",
+      "tree": "7b0f6eeef20be4b8a0569d8d8ed681a13aaf2cd4",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T08:22:14Z",
+      "finished_at": "2026-11-06T08:22:25Z",
+      "red_tests": [
+        "test/spec/frontend/lint-style-web/baseline.test.ts > [AC-F1-01w-BASELINE#1] 基线入库且只减不增：每个文件每条规则的当前违规数 ≤ 基线计数，基线之外的文件为 0",
+        "test/spec/frontend/lint-style-web/baseline.test.ts > [AC-F1-01w-BASELINE#2] 按 eslint.config.js 原路径 lint：入库文件不报，比基线多出违规即报错",
+        "test/spec/frontend/lint-style-web/baseline.test.ts > [AC-F1-01w-SCAN#1] 扫描范围含后台 src/pages/** 与 src/components/**（及 H5 src/**）：数字 fontSize、TSX hex、字面任意值、小字品牌色都被规则报出，后台这两处没有基线外违规",
+        "test/spec/frontend/lint-style-web/pill.test.ts > [AC-F1-01w-PILL#1] 浅色：选中胶囊（收益页平台与期间、找回订单平台、邀请页提示）文字在 brand-subtle 底上对比度 ≥ 4.5:1",
+        "test/spec/frontend/lint-style-web/pill.test.ts > [AC-F1-01w-PILL#2] 深色：选中胶囊（收益页平台与期间、找回订单平台、邀请页提示）文字在 brand-subtle 底上对比度 ≥ 4.5:1",
+        "test/spec/frontend/lint-style-web/pill.test.ts > [AC-F1-01w-PILL#3] 邀请页链接 LINK 用 text-couli-text-link，不再用 text-couli-brand-primary",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#1] H5 的 Tailwind 任意值（text-[13px]、text-[2rem]、mt-[7px]、rounded-[6px]、模板串里的 p-[3px]）报错，令牌类名不报",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#2] 小字（caption / footnote）用 text-couli-brand-primary 报错；text-link、brand-emphasis、大标题、品牌色作底不报",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#3] style 对象里数字 fontSize / borderRadius / margin* / padding* 报错（含负数与具名常量），令牌值与非尺寸数字不报",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#4] TSX 与 style 里的 hex 色值（3 / 6 / 8 位、嵌在边框简写里、SVG 属性、bg-[#…]）报错，锚点与路由的 # 不报",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#5] 传给 ui.setNavBar 的 hex 色值（bg_color、text_color、bg_gradient）报错，传入变量不报",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#6] 后台页面里 fontSize: 12（style 与样式常量）、数字 padding / borderRadius、hex、任意值报错，token.fontSizeSM 等 antd 令牌不报",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#7] 写了 eslint-disable-next-line 豁免注释（带理由）的任意值不报，豁免只管下一行",
+        "test/spec/frontend/lint-style-web/rule.test.ts > [AC-F1-01w-LINT#8] eslint.config.js 引用 lint/style 下的规则，对 H5 与后台源码全部以 error 开启；基线里的规则都已开启",
+        "test/spec/frontend/lint-style-web/theme.test.ts > [AC-F1-01w-THEME#1] theme.ts 没有 14 字面量，从 @couli/ui-tokens 读取：token.fontSize 等于 font.size.footnote",
+        "test/spec/frontend/lint-style-web/theme.test.ts > [AC-F1-01w-THEME#2] theme.ts 没有 8 字面量：token.borderRadius 等于 radius.small，菜单项左右外边距等于 space.2",
+        "test/spec/frontend/lint-style-web/theme.test.ts > [AC-F1-01w-THEME#3] Button 控件高 36 暂留字面量（admin.* 令牌归 DSX-105），theme.ts 里每处 36 都带 DSX-105 的 TODO 注释"
+      ],
+      "expected": [
+        "test/spec/frontend/lint-style-web/baseline.test.ts",
+        "test/spec/frontend/lint-style-web/pill.test.ts",
+        "test/spec/frontend/lint-style-web/rule.test.ts",
+        "test/spec/frontend/lint-style-web/theme.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "6f74ed38ac423b58367f0cf2aae4d645e10096f62ac4c156025d9262d5e2e275"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "226652588101ab5943ca2462ccd2ef1672e09128",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}

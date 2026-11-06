@@ -40,7 +40,7 @@ const NO_AUTO_FETCH = {
 const CARD = 'rounded-couli-card bg-couli-background-surface p-couli-4 shadow-couli-card';
 const CAPTION = 'text-couli-caption leading-couli-caption text-couli-text-secondary';
 const FOOTNOTE = 'text-couli-footnote leading-couli-footnote';
-const LINK = `${FOCUS_RING} inline-flex min-h-11 flex-none cursor-pointer items-center gap-couli-1 ${FOOTNOTE} font-couli-medium text-couli-brand-primary`;
+const LINK = `${FOCUS_RING} inline-flex min-h-11 flex-none cursor-pointer items-center gap-couli-1 ${FOOTNOTE} font-couli-medium text-couli-text-link`;
 /** 邀请码卡底部并排的两个按钮：内边距比通用按钮窄，375 宽下一行放得下「复制邀请链接」，大字号时换行。 */
 const ACTION = `${FOCUS_RING} inline-flex min-h-couli-component-button-min-height min-w-0 flex-1 basis-32 cursor-pointer items-center justify-center gap-couli-1 rounded-couli-button px-couli-2 py-couli-2 text-couli-body leading-couli-body`;
 const ACTION_SECONDARY = `${ACTION} border border-couli-border-control bg-couli-background-surface font-couli-medium text-couli-text-primary active:bg-couli-background-muted`;
@@ -258,6 +258,7 @@ function CodeCard({
     <section className={`${CARD} flex flex-col gap-couli-4`}>
       <div className="flex flex-col items-center gap-couli-1 text-center">
         <p className={`${FOOTNOTE} text-couli-text-secondary`}>{inviteTexts.codeLabel}</p>
+        {/* eslint-disable-next-line couli-style/no-arbitrary-value -- invite code display size and spacing from the design board (no ui-tokens step yet) */}
         <p className="text-[2rem] leading-tight font-couli-semibold tracking-[0.2em] tabular-nums [overflow-wrap:anywhere]">
           {code}
         </p>
@@ -427,7 +428,7 @@ function RewardCard({
         entry={t('invite.share.reward_rules')}
         target={link}
       />
-      <p className="flex items-start gap-couli-2 rounded-couli-button border border-couli-brand-subtle bg-couli-brand-subtle px-couli-3 py-couli-2 text-couli-body leading-couli-body font-couli-semibold text-couli-brand-primary">
+      <p className="flex items-start gap-couli-2 rounded-couli-button border border-couli-brand-subtle bg-couli-brand-subtle px-couli-3 py-couli-2 text-couli-body leading-couli-body font-couli-semibold text-couli-brand-emphasis">
         <GiftIcon />
         <span className="min-w-0 [overflow-wrap:anywhere]">
           {t('invite.reward.tip_inviter', { amount: formatYuan(reward.amountFen) })}

@@ -291,7 +291,7 @@ const PILL_BUTTON = `${FOCUS_RING} flex min-h-11 flex-none cursor-pointer items-
 const PILL =
   'flex h-8 items-center gap-couli-1 whitespace-nowrap rounded-couli-pill border px-couli-4 text-couli-footnote leading-couli-footnote';
 const PILL_ON =
-  'border-couli-brand-subtle bg-couli-brand-subtle font-couli-medium text-couli-brand-primary';
+  'border-couli-brand-subtle bg-couli-brand-subtle font-couli-medium text-couli-brand-emphasis';
 const PILL_OFF = 'border-couli-border-subtle bg-couli-background-surface text-couli-text-primary';
 
 /** 平台筛选：「全部」加开放中的平台；32 高胶囊，按钮命中区 44（规格 §2、§6），选中项以 aria-pressed 播报。 */
@@ -367,7 +367,7 @@ function PeriodSwitch({
             aria-pressed={on}
             className={`${FOCUS_RING} min-h-11 min-w-0 flex-1 basis-0 cursor-pointer rounded-couli-small px-couli-1 text-couli-footnote leading-couli-footnote ${
               on
-                ? 'bg-couli-brand-subtle font-couli-semibold text-couli-brand-primary'
+                ? 'bg-couli-brand-subtle font-couli-semibold text-couli-brand-emphasis'
                 : 'text-couli-text-secondary'
             }`}
             onClick={() => onSelect(key)}
