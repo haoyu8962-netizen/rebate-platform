@@ -4,6 +4,7 @@ title: W10 判成功的凭证交叉核对实现（FU-W10-VOUCHER-CROSSCHECK，BR
 type: impl
 # 2026-11-06 pay 入账（D10-703）。契约 CT-24zu。四条按序：别的单的成功账单行（out_biz_no 非空且不是本单）→ resolve_order_id_other_order；本单成功查询或成功账单行的流水号不同 → resolve_order_id_mismatch；本单成功账单行金额 ≠ net_fen → resolve_amount_mismatch；到账时间只告警。
 # 拒绝时业务数据一律不写，另写一条拒绝审计（操作人、提现单、冲突类别），所以要在回滚之外落审计；audit-log-view 的 RULES 随之补这个动作。RV2，规则测试 Codex，新鲜 Claude 评，Codex money。
+# 2026-11-06 补 paths：2xxxx 拒绝时幂等整体回滚，拒绝审计要另开事务落库，写依赖要在 payout.module.ts 注入 db（编排 16:00）。
 refs: [BR-WDR-15, BR-TEXT-14]
 refs_hash:
   BR-WDR-15: 862cdb2e711a
@@ -12,8 +13,17 @@ deps: [CT-24zu, B2-09w]
 paths:
   - 'apps/api/src/modules/payout/application/admin-unknown-payouts.ts'
   - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'apps/api/src/modules/payout/payout.module.ts'
 test_paths:
+  - 'test/spec/payout/w10-late-paid/w10.int.test.ts'
   - 'test/spec/payout/w10-voucher-crosscheck/**'
+red_exempt_rows:
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#11] 贯通 W10 真实任务：历史账单已 succeeded，missing 分支准确复核'
+    reason: 'it.each 表拆分（D10-737，照 B1-05zc / D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线，只拆出须随 D10-703 改期望的 [AC-B2-09u#10] 行（已在 w10-voucher-crosscheck 写成新用例）；本行行为不变，在旧代码上照常为绿'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#12] 贯通 W10 真实任务：历史账单已 succeeded，channel_order_id 分支准确复核'
+    reason: 'it.each 表拆分（D10-737，照 B1-05zc / D10-657）：所在块的标题模板与回调体与基线逐字相同，本行字面量同基线，只拆出须随 D10-703 改期望的 [AC-B2-09u#10] 行（已在 w10-voucher-crosscheck 写成新用例）；本行行为不变，在旧代码上照常为绿'
 impl: claude
 tester: codex
 accept:
