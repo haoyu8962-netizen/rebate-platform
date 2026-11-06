@@ -1,0 +1,24 @@
+id: CT-26w
+repo: rebate-platform
+title: 契约：texts.default.json 补 8 个 H5 页面标题键（find_order / ledger / messages / invite / rules / help / notice / agreement .title，D10-745，F1-01x 前置）
+type: contract
+# 2026-11-06 w1 入账（D10-745）。08 BR-TEXT-01 / 表 C 只登记了 earnings.title，其余 8 页没有页面标题，取值照 contracts/routes.json 的 page 名（不自造）；Help 去掉括号里的可达性注释取「帮助中心」；Agreement 的 page 名是内容清单，暂取 08 已登记的 settings.agreements「用户协议与隐私政策」——这几处在报号时列为「08 未登记的取值」交编排回写 08。fund-term-keys 八键归普通（不含资金术语词）。
+# 规则测试钉：八键都在 texts.default.json、非空、不含数字与 BR-TEXT-13 禁用词、在 fund-term-keys 里归类；不钉具体措辞（等 08 回写）。
+refs: [BR-TEXT-01, BR-TEXT-13]
+refs_hash:
+  BR-TEXT-01: e4ef1bcb1985
+  BR-TEXT-13: 81791b1bb9dd
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'test/spec/contracts/page-titles/**'
+test_paths:
+  - 'test/spec/contracts/page-titles/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
