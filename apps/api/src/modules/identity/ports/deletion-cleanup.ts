@@ -11,9 +11,10 @@
 // the port.
 //
 // Closing adjustment (D10-137 ①, BR-FUND-24 ⑧): asked inside the completion transaction; anything
-// but none_needed / done keeps the request in processing. Until the funds port exists, app.module
-// assembles closingAdjustmentFromBalance over DeletionBalanceReader (0 → none_needed, anything
-// else → pending).
+// but none_needed / done keeps the request in processing. B2-12d: app.module assembles ledger's
+// closingAdjustmentGate (PENDING ACCOUNT_CLOSED form or a balance → pending); the stand-in
+// closingAdjustmentFromBalance over DeletionBalanceReader (0 → none_needed, anything else →
+// pending) stays exported for callers without the funds port.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports,
 // relative imports with `.ts`.
@@ -77,7 +78,6 @@ export interface DeletionClosingAdjustmentReader {
 export function closingAdjustmentFromBalance(
   balance: DeletionBalanceReader,
 ): DeletionClosingAdjustmentReader {
-  // TODO(规划/11 §2.3): ACCOUNT_CLOSED 调减单状态读资金模块（BR-FUND-24 ⑧） — blocked on 资金端口 closingAdjustmentState 的属主任务
   return {
     async closingAdjustmentState(trx, input) {
       const available = await balance.availableFen(trx, {

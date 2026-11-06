@@ -198,3 +198,20 @@ export type { UserLedgerActivitySelection } from './application/user-ledger-acti
 // B2-11a: BR-WDR-29 ② ⑦ — the member's own entries (read only).
 export { createWithdrawRiskEntryReader } from './ports/withdraw-risk-entries.ts';
 export type { WithdrawRiskEntryReader } from './ports/withdraw-risk-entries.ts';
+// B2-12d: the system-prefilled ACCOUNT_CLOSED decrease of a deletion (BR-FUND-24 ⑧, D10-590 ③):
+// identity's prefill and closing gate ports, assembled by app.module on the worker entry.
+export {
+  closingAdjustmentGate,
+  prefillClosingAdjustment,
+} from './application/admin-adjustment-closing.ts';
+export {
+  ADJUSTMENT_PREFILL_ACTION,
+  ADJUSTMENT_PREFILL_ACTOR,
+} from './application/admin-adjustment-closing.ts';
+export type {
+  ClosingAdjustmentAuditPort,
+  ClosingAdjustmentPrefillDeps,
+  ClosingAdjustmentGateState,
+  ClosingAdjustmentPrefillRequest,
+  ClosingAdjustmentSubject,
+} from './application/admin-adjustment-closing.ts';

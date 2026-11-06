@@ -195,6 +195,17 @@ const RULES: readonly ActionRule[] = Object.freeze([
   ...rules(['payout_batch_execute'], 'payout_batch', null, fixed('payout.execute')),
   // payout (B2-09i): target the reading's id.
   ...rules(['payout_watermark_create'], 'payout_watermark', null, fixed('fund.cash_entry')),
+  // ledger (B2-12c, B2-12d): target the adjust_id. Filing, reversal, approval and rejection are all
+  // under fund.adjust; adjustment_denied (a 10403 of that point) has no target; the system's
+  // prefill of the ACCOUNT_CLOSED decrease (system:ledger) uses no point.
+  ...rules(
+    ['adjustment_create', 'adjustment_reverse', 'adjustment_approve', 'adjustment_reject'],
+    'admin_adjustment',
+    null,
+    fixed('fund.adjust'),
+  ),
+  ...rules(['adjustment_denied'], 'admin_adjustment', null, fixed('fund.adjust')),
+  ...rules(['adjustment_prefill'], 'admin_adjustment', null, NONE),
 ]);
 
 const BY_ACTION: ReadonlyMap<string, ActionRule> = new Map(

@@ -213,6 +213,10 @@ export type {
   DeletionCleanupUnavailable,
   DeletionClosingAdjustmentReader,
 } from './ports/deletion-cleanup.ts';
+export type {
+  ClosingAdjustmentPrefillInput,
+  DeletionClosingAdjustmentPrefill,
+} from './ports/closing-adjustment-prefill.ts';
 export type { WithdrawalSucceededReader } from './ports/withdrawal-in-flight.ts';
 export type { AppleTokenRevokeInput, AppleTokenRevoker } from './ports/apple-token-revoker.ts';
 export { unconfiguredAppleTokenRevoker } from './infra/unconfigured-apple-token-revoker.ts';

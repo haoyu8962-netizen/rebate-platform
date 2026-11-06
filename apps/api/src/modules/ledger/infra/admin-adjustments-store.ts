@@ -3,6 +3,7 @@
 // Every query is scoped by app_id. `reversed_by` is derived from the reversal row (unique on
 // (app_id, reverses_adjust_id)); the original row is never updated by a reversal.
 import type { DB } from '@couli/db';
+import { transitionAdminAdjustment } from '@couli/domain';
 import { sql, type Kysely, type Selectable, type Transaction } from 'kysely';
 
 export type AdminAdjustmentRow = Selectable<DB['admin_adjustments']>;
@@ -116,11 +117,18 @@ export interface AdminAdjustmentInsert {
   readonly voucherId: string;
 }
 
-/** The executed form, born APPROVED with the caller as filer and reviewer. */
+/**
+ * The executed form with the caller as filer and reviewer; its status comes from the generated
+ * transition (SUBMIT from no row → APPROVED).
+ */
 export async function insertApprovedAdjustment(
   trx: Transaction<DB>,
   input: AdminAdjustmentInsert,
 ): Promise<AdminAdjustmentRow> {
+  const transition = transitionAdminAdjustment(null, 'SUBMIT');
+  if (!transition.ok || transition.noop) {
+    throw new Error('admin_adjustments: SUBMIT from no row is not a transition');
+  }
   return trx
     .withSchema('app')
     .insertInto('admin_adjustments')
@@ -137,7 +145,7 @@ export async function insertApprovedAdjustment(
       contra_subject: input.contraSubject,
       contra_platform: input.contraPlatform,
       note: input.note,
-      status: 'APPROVED',
+      status: transition.to,
       reverses_adjust_id: input.reversesAdjustId,
       created_by: input.adminId,
       created_at: input.at,

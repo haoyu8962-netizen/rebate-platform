@@ -186,11 +186,11 @@ import {
   createInviteRewardDeletedPhoneReader,
   revokeSessionsByUser,
   unbindRevoked,
-  closingAdjustmentFromBalance,
   unconfiguredAppleTokenRevoker,
   type AfterSessionsRevoked,
   type AppleTokenRevoker,
   type DeletionCleanupPorts,
+  type DeletionClosingAdjustmentPrefill,
   type DeletionClosingAdjustmentReader,
   type WithdrawalSucceededReader,
   type IdentityAttrCodeReader,
@@ -232,10 +232,12 @@ import {
   LedgerModule,
   WalletLedgerModule,
   WalletSummaryModule,
+  closingAdjustmentGate,
   createLedger,
   getAssetSnapshotStatus,
   getOrderNets,
   hasUserBalanceEntries,
+  prefillClosingAdjustment,
   readForfeitAmount,
   readPersonalDataCopyLedgerEntries,
   readUnionAuthoritativeOrderKeys,
@@ -244,6 +246,7 @@ import {
   type EarningsSummaryDependencies,
   type WalletLedgerDependencies,
   type WalletSummaryDependencies,
+  type ClosingAdjustmentAuditPort,
   readOrderFiguresLedger,
 } from './modules/ledger/index.ts';
 // B1-02zn: GET /v1/me's balance reads the wallet summary query through ledger's read-only entry.
@@ -837,14 +840,36 @@ export function agentDeletionCleanup(
 }
 
 /**
- * B1-15g (D10-137 ①, BR-FUND-24 ⑧): the closing adjustment gate of the deletion completion. Until
- * the funds port exists, identity's stand-in over the same available_fen reader as the expiry: 0 →
- * none_needed, anything else → pending (never done with a balance).
+ * B1-15g (D10-137 ①, BR-FUND-24 ⑧): the closing adjustment gate of the deletion completion.
+ * B2-12d: ledger's closingAdjustmentGate on identity's completion transaction (users row locked;
+ * the balance row locked by the gate): a PENDING ACCOUNT_CLOSED form or a balance ≠ 0 → pending,
+ * otherwise done (an approved ACCOUNT_CLOSED decrease exists) or none_needed. Replaces the stand-in
+ * closingAdjustmentFromBalance (still exported by identity).
  */
 const deletionClosingAdjustment = {
+  inject: [],
+  useFactory: (): DeletionClosingAdjustmentReader => ({
+    closingAdjustmentState: (trx, input) => closingAdjustmentGate(trx, input),
+  }),
+};
+
+/**
+ * B2-12d (BR-FUND-24 ⑧, D10-590 ③): ledger's prefill of the PENDING ACCOUNT_CLOSED decrease, on
+ * identity's transaction (users row locked): by the cooling-period expiry as the request enters
+ * processing, and by the processing round while the closing gate is pending (at most one new form
+ * per accounting day). BR-FUND-24 ①「全程写 audit_logs」: a landed insert writes one system audit
+ * record (system:ledger, adjustment_prefill) on the same transaction through admin's system
+ * audit writer, as payout's went-negative rejection does.
+ */
+const deletionClosingPrefill = {
   inject: [CLOCK],
-  useFactory: (clock: Clock): DeletionClosingAdjustmentReader =>
-    closingAdjustmentFromBalance(deletionBalance.useFactory(clock)),
+  useFactory: (clock: Clock): DeletionClosingAdjustmentPrefill => {
+    const writer = createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS });
+    const audit: ClosingAdjustmentAuditPort = {
+      appendAction: (trx, input) => writer.appendAction(trx, input),
+    };
+    return { prefill: (trx, input) => prefillClosingAdjustment(trx, input, { audit }) };
+  },
 };
 
 /**
@@ -5073,6 +5098,7 @@ export class AppModule {
                 balance: deletionBalance,
                 cleanup: deletionCleanupPorts,
                 funds: deletionClosingAdjustment,
+                closingPrefill: deletionClosingPrefill,
                 apple: deletionAppleRevoker,
                 afterRevoked: deletionAfterRevoked,
                 deletionProgress: deletionProgressNotice,

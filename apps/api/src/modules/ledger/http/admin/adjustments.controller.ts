@@ -3,6 +3,12 @@
 // BR-FUND-24; 04 §11.1, §11.2). Only authorisation, the parameters and the call into
 // application/admin-adjustment.ts live here.
 //
+// B2-12d: POST /admin/v1/adjustments/{adjust_id}/approve and .../reject (adminApproveAdjustment,
+// adminRejectAdjustment) of the system-prefilled ACCOUNT_CLOSED form: the approval needs fund.adjust
+// with the sms-tier step-up (the guard consumes the token on success); the rejection runs the guard
+// read-only on fund.adjust (no step-up, no token read or consumed; 细则「驳回与撤回不需二次验证」,
+// D10-590 ⑦). Both answer the idempotency module's exact bytes; a 10403 is audited as for create.
+//
 // Mounted only by LedgerAdminModule.forAdmin on the admin entry; the route schema runs first
 // (D10-590 ⑥). Reads: any one of fund.adjust or fund.view, read only (no step-up, no audit).
 // The submission: fund.adjust with the sms-tier X-Step-Up-Token (the guard; super admins too),
@@ -45,6 +51,10 @@ import {
   type AdminAdjustmentCreateDeps,
   type AdminAdjustmentReadDeps,
 } from '../../application/admin-adjustment.ts';
+import {
+  approveAdminAdjustment,
+  rejectAdminAdjustment,
+} from '../../application/admin-adjustment-closing.ts';
 
 /** Nest token of the read dependencies (null in a process without database). */
 export const ADJUSTMENT_READ_DEPS = Symbol('LEDGER_ADJUSTMENT_READ_DEPS');
@@ -108,7 +118,7 @@ function isPermissionDenied(error: unknown): boolean {
 function deniedTarget(body: unknown): Record<string, string> {
   const raw = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
   const out: Record<string, string> = {};
-  for (const name of ['user_id', 'reverses_adjust_id', 'direction', 'reason_code']) {
+  for (const name of ['user_id', 'reverses_adjust_id', 'direction', 'reason_code', 'adjust_id']) {
     if (typeof raw[name] === 'string') out[name] = raw[name] as string;
   }
   if (typeof raw['amount_fen'] === 'number') out['amount_fen'] = String(raw['amount_fen']);
@@ -176,6 +186,74 @@ export class AdminAdjustmentsController {
       });
     } catch (error: unknown) {
       if (isPermissionDenied(error)) await this.#auditDenied(request, body);
+      throw error;
+    }
+    if (sent === undefined) throw new Error('ledger: admin guard returned without an answer');
+    reply.code(sent.status).type('application/json; charset=utf-8').send(sent.body);
+  }
+
+  async approve(
+    request: AdminAdjustmentsRequest,
+    adjustId: string,
+    body: Schema<'AdminEmptyActionRequest'>,
+    reply: AdminAdjustmentsRawReply,
+  ): Promise<void> {
+    await this.#acting(request, reply, { adjust_id: adjustId }, false, (deps, actor) =>
+      approveAdminAdjustment(deps, {
+        appId: actor.appId,
+        adminId: actor.adminId,
+        ip: ipOf(request),
+        adjustId,
+        rawBody: body,
+        key: header(request, 'idempotency-key'),
+        traceId: request.id,
+      }),
+    );
+  }
+
+  async reject(
+    request: AdminAdjustmentsRequest,
+    adjustId: string,
+    body: Schema<'AdminAdjustmentRejectRequest'>,
+    reply: AdminAdjustmentsRawReply,
+  ): Promise<void> {
+    await this.#acting(request, reply, { adjust_id: adjustId }, true, (deps, actor) =>
+      rejectAdminAdjustment(deps, {
+        appId: actor.appId,
+        adminId: actor.adminId,
+        ip: ipOf(request),
+        adjustId,
+        reason: typeof body?.reason === 'string' ? body.reason : '',
+        rawBody: body,
+        key: header(request, 'idempotency-key'),
+        traceId: request.id,
+      }),
+    );
+  }
+
+  /** approve / reject: the guard, then the use case's exact bytes; a 10403 is audited. */
+  async #acting(
+    request: AdminAdjustmentsRequest,
+    reply: AdminAdjustmentsRawReply,
+    deniedBody: Record<string, string>,
+    readOnly: boolean,
+    act: (
+      deps: AdminAdjustmentCreateDeps,
+      actor: { readonly appId: string; readonly adminId: string },
+    ) => Promise<IdempotentResponse>,
+  ): Promise<void> {
+    let sent: IdempotentResponse | undefined;
+    try {
+      await this.#guard.run({ request, permission: ADJUST, readOnly }, async (actor) => {
+        const deps = this.#create;
+        if (deps === null) {
+          throw new Error('ledger: adjustments need the database, event bus and idempotency');
+        }
+        sent = await act(deps, actor);
+        return { statusCode: sent.status, body: JSON.parse(sent.body) as { code: number } };
+      });
+    } catch (error: unknown) {
+      if (isPermissionDenied(error)) await this.#auditDenied(request, deniedBody);
       throw error;
     }
     if (sent === undefined) throw new Error('ledger: admin guard returned without an answer');
@@ -256,6 +334,24 @@ export class AdminAdjustmentsController {
   Post('adjustments')(prototype, 'create', create);
   HttpCode(200)(prototype, 'create', create);
   RouteSchema(contractRouteSchema('adminCreateAdjustment'))(prototype, 'create', create);
+
+  const approve = Object.getOwnPropertyDescriptor(prototype, 'approve')!;
+  Req()(prototype, 'approve', 0);
+  Param('adjust_id')(prototype, 'approve', 1);
+  Body()(prototype, 'approve', 2);
+  Res()(prototype, 'approve', 3);
+  Post('adjustments/:adjust_id/approve')(prototype, 'approve', approve);
+  HttpCode(200)(prototype, 'approve', approve);
+  RouteSchema(contractRouteSchema('adminApproveAdjustment'))(prototype, 'approve', approve);
+
+  const reject = Object.getOwnPropertyDescriptor(prototype, 'reject')!;
+  Req()(prototype, 'reject', 0);
+  Param('adjust_id')(prototype, 'reject', 1);
+  Body()(prototype, 'reject', 2);
+  Res()(prototype, 'reject', 3);
+  Post('adjustments/:adjust_id/reject')(prototype, 'reject', reject);
+  HttpCode(200)(prototype, 'reject', reject);
+  RouteSchema(contractRouteSchema('adminRejectAdjustment'))(prototype, 'reject', reject);
 
   Controller('admin/v1')(AdminAdjustmentsController);
 }

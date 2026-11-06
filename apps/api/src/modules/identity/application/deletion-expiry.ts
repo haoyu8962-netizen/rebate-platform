@@ -22,6 +22,8 @@
 //      ⑥ ≥ 0 and every withdrawal terminal → users CAS normal → deleting (row_version + 1,
 //      updated_at = now), then transition('cooling', 'PROCESS') → processing (row_version + 1,
 //      updated_at = now), same transaction; users.status not normal → nothing written, warn, skip.
+//      B2-12d: available > 0 → the optional prefill port writes the PENDING ACCOUNT_CLOSED decrease
+//      on the same transaction (BR-FUND-24 ⑧).
 //      processed_at (time of done) and balance_snapshot_fen (fixed at application) are not written.
 //   c. Overdue: requests in cooling or processing with apply_at <= now - 15 days (coarse filter),
 //      keyset batches on (apply_at, id); deadline = 24:00 (+08:00) of the 15th working day after
@@ -43,6 +45,7 @@ import type { Clock, RootLogger } from '../../platform/index.ts';
 import { resolveWorkingDayDeadline } from '../../risk/index.ts';
 import { lockUsersForUpdate } from '../ports/lock-users.ts';
 import type { DeletionBalanceReader } from '../ports/deletion-balance.ts';
+import type { DeletionClosingAdjustmentPrefill } from '../ports/closing-adjustment-prefill.ts';
 import type { DeletionProgressNotice } from '../ports/deletion-progress-notice.ts';
 import type { WithdrawalNonTerminalReader } from '../ports/withdrawal-in-flight.ts';
 import { instantPlus } from './config-seconds.ts';
@@ -62,6 +65,12 @@ export interface DeletionExpiryOptions {
   readonly calendar: DeletionCalendarConfigReader;
   /** B1-15i: written on the cancellation's transaction; absent or null → no message. */
   readonly notice?: DeletionProgressNotice | null;
+  /**
+   * B2-12d (BR-FUND-24 ⑧): the system-prefilled ACCOUNT_CLOSED decrease, written on ⑥'s
+   * transaction right after the request moved to processing when available > 0; absent or null →
+   * no form.
+   */
+  readonly prefill?: DeletionClosingAdjustmentPrefill | null;
   readonly batchSize?: number;
 }
 
@@ -126,6 +135,7 @@ export function createDeletionExpiry(options: DeletionExpiryOptions): DeletionEx
   const { db, clock, logger, withdrawals, balance, calendar } = options;
   const batchSize = batchSizeOf(options.batchSize);
   const notice = options.notice ?? null;
+  const prefill = options.prefill ?? null;
   const dedup = createDailyDedup();
 
   /** One request, one transaction; `now` read once and used for the decision and the writes. */
@@ -217,6 +227,17 @@ export function createDeletionExpiry(options: DeletionExpiryOptions): DeletionEx
         .executeTakeFirst();
       if (processed.numUpdatedRows !== 1n) {
         throw new Error('identity: deletion request changed concurrently');
+      }
+      // B2-12d (BR-FUND-24 ⑧): a positive balance gets its ACCOUNT_CLOSED decrease on this very
+      // transaction (available as read in ③, the users row still locked); a failure rolls the
+      // move to processing back with it.
+      if (available > 0n && prefill !== null) {
+        await prefill.prefill(trx, {
+          appId: due.app_id,
+          userId: due.user_id,
+          deletionRequestId: row.id,
+          at: now,
+        });
       }
       return { kind: 'processing' };
     });

@@ -45,6 +45,7 @@ import {
 import type { AfterSessionsRevoked } from './application/revoke-sessions.ts';
 import type { AppleTokenRevoker } from './ports/apple-token-revoker.ts';
 import type { DeletionBalanceReader } from './ports/deletion-balance.ts';
+import type { DeletionClosingAdjustmentPrefill } from './ports/closing-adjustment-prefill.ts';
 import type { DeletionProgressNotice } from './ports/deletion-progress-notice.ts';
 import type {
   DeletionCleanupPorts,
@@ -76,6 +77,15 @@ export interface IdentityDeletionExpiryModuleOptions {
    * Missing → the expiry writes no message.
    */
   readonly deletionProgress?: Omit<FactoryProvider<DeletionProgressNotice | null>, 'provide'>;
+  /**
+   * B2-12d (BR-FUND-24 ⑧, D10-590 ③): the system-prefilled ACCOUNT_CLOSED decrease, written by the
+   * expiry when a request with a balance enters processing and rebuilt by the processing round
+   * while the closing gate is pending. Missing → no form is prefilled.
+   */
+  readonly closingPrefill?: Omit<
+    FactoryProvider<DeletionClosingAdjustmentPrefill | null>,
+    'provide'
+  >;
 }
 
 /** One round: processing first, then the cooling-period expiry (brief B1-15g §9.2 #1). */
@@ -111,6 +121,7 @@ const FUNDS = Symbol('IDENTITY_DELETION_PROCESSING_FUNDS');
 const APPLE = Symbol('IDENTITY_DELETION_PROCESSING_APPLE');
 const AFTER_REVOKED = Symbol('IDENTITY_DELETION_PROCESSING_AFTER_REVOKED');
 const DELETION_PROGRESS = Symbol('IDENTITY_DELETION_EXPIRY_PROGRESS_NOTICE');
+const CLOSING_PREFILL = Symbol('IDENTITY_DELETION_CLOSING_PREFILL');
 
 @Module({})
 export class IdentityDeletionExpiryModule {
@@ -128,6 +139,9 @@ export class IdentityDeletionExpiryModule {
         options.deletionProgress === undefined
           ? { provide: DELETION_PROGRESS, useValue: null }
           : { ...options.deletionProgress, provide: DELETION_PROGRESS },
+        options.closingPrefill === undefined
+          ? { provide: CLOSING_PREFILL, useValue: null }
+          : { ...options.closingPrefill, provide: CLOSING_PREFILL },
         {
           provide: deletionExpiryToken(),
           inject: [
@@ -141,6 +155,7 @@ export class IdentityDeletionExpiryModule {
             APPLE,
             AFTER_REVOKED,
             DELETION_PROGRESS,
+            CLOSING_PREFILL,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
             { token: EXPORT_STORE, optional: true },
@@ -156,6 +171,7 @@ export class IdentityDeletionExpiryModule {
             apple: AppleTokenRevoker,
             afterRevoked: AfterSessionsRevoked,
             notice: DeletionProgressNotice | null,
+            prefill: DeletionClosingAdjustmentPrefill | null,
             db?: Kysely<Database>,
             crypto?: FieldCrypto,
             store?: ExportStore,
@@ -172,6 +188,7 @@ export class IdentityDeletionExpiryModule {
               balance,
               calendar,
               notice: notice ?? null,
+              prefill: prefill ?? null,
             });
             const processing = createDeletionProcessing({
               db,
@@ -180,6 +197,7 @@ export class IdentityDeletionExpiryModule {
               ...(crypto === undefined || crypto === null ? {} : { crypto }),
               cleanup,
               funds,
+              prefill: prefill ?? null,
               withdrawals,
               apple,
               afterRevoked,

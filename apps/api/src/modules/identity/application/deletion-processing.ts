@@ -18,7 +18,8 @@
 //      copy file of the user still recorded (delivered and unexpired ones included) is deleted
 //      through dataCopyStore and object_key cleared — a failed delete is one warn line and the file
 //      stays recorded for its expire job; without dataCopyStore the files wait for those jobs.
-//   ③ completion transaction: closing adjustment none_needed / done required; phone_hmac and the
+//   ③ completion transaction: closing adjustment none_needed / done required (pending → the
+//      optional prefill port rebuilds the ACCOUNT_CLOSED form, D10-590 ③); phone_hmac and the
 //      device hashes into deleted_identities (180 days), user_oauth deleted, users tombstone
 //      (status deleted), the request COMPLETE → done.
 // Progress columns (cleaned_at, apple_*) never move row_version / updated_at.
@@ -43,6 +44,7 @@ import type {
   DeletionCleanupStep,
   DeletionClosingAdjustmentReader,
 } from '../ports/deletion-cleanup.ts';
+import type { DeletionClosingAdjustmentPrefill } from '../ports/closing-adjustment-prefill.ts';
 import { cancelOpenCopiesOfUser, deleteCopyFilesOfUser } from '../infra/personal-data-copies.ts';
 import { lockUsersForUpdate } from '../ports/lock-users.ts';
 import type { WithdrawalSucceededReader } from '../ports/withdrawal-in-flight.ts';
@@ -61,6 +63,13 @@ export interface DeletionProcessingOptions {
   readonly crypto?: FieldCrypto;
   readonly cleanup: DeletionCleanupPorts;
   readonly funds: DeletionClosingAdjustmentReader;
+  /**
+   * B2-12d (D10-590 ③): when the closing gate is pending, the completion transaction asks this
+   * port to rebuild the PENDING ACCOUNT_CLOSED decrease (it writes nothing while one is PENDING,
+   * the balance is not above 0, or a form was already created or reviewed that accounting day).
+   * Absent or null → nothing is rebuilt.
+   */
+  readonly prefill?: DeletionClosingAdjustmentPrefill | null;
   /** D10-137 ②: a paid-out withdrawal keeps the real-name ciphertext (tax_retained). */
   readonly withdrawals: WithdrawalSucceededReader;
   readonly apple: AppleTokenRevoker;
@@ -162,6 +171,7 @@ function fixedAt(now: Date): Clock {
 export function createDeletionProcessing(options: DeletionProcessingOptions): DeletionProcessing {
   const { db, clock, logger, crypto, cleanup, funds, withdrawals, apple, afterRevoked } = options;
   const dataCopyStore = options.dataCopyStore;
+  const prefill = options.prefill ?? null;
   const batchSize = batchSizeOf(options.batchSize);
   const dedup = createDailyDedup();
 
@@ -443,6 +453,11 @@ export function createDeletionProcessing(options: DeletionProcessingOptions): De
       // D10-137 ①, BR-FUND-24 ⑧: a balance never passes to done.
       const state = await funds.closingAdjustmentState(trx, { appId, userId });
       if (state !== 'none_needed' && state !== 'done') {
+        // D10-590 ③: a rejected (or reversed) closing form is rebuilt once per accounting day; the
+        // pending result commits this transaction, the form with it.
+        if (prefill !== null) {
+          await prefill.prefill(trx, { appId, userId, deletionRequestId: row.id, at: now });
+        }
         return { kind: 'adjustment_pending', state: String(state) };
       }
 
