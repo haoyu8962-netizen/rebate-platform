@@ -4,18 +4,7 @@ import type {
   UnionAdapter,
   UpstreamGate,
 } from '../../../../apps/api/src/modules/union/domain/types.ts';
-import {
-  collect,
-  ctx,
-  govern,
-  listed,
-  positionOf,
-  rowOf,
-  setup,
-  walk,
-  win,
-  windowAnswer,
-} from './kit.ts';
+import { collect, ctx, govern, positionOf, rowOf, setup, walk, win, windowAnswer } from './kit.ts';
 
 // 计量照拼多多（B1-04w）：listOrdersMetering = 'per_request'，每个上游请求经 CallCtx.gateUpstream 各取
 // 一个配额（用途 order_sync），取消信号是该次尝试的；调用方伪造的 gateUpstream 被包装层换掉。
@@ -75,7 +64,7 @@ it.each([1, 2])(
 it('[AC-B1-04f#47] 推广位清单为空时不发请求，也不取配额', async () => {
   const s = setup(windowAnswer({ [W0]: pages }), { slots: [] });
   const take = vi.fn<QuotaLimiter['tryAcquire']>(() => true);
-  const page = await listed(govern(s.adapter, take).listOrders(win, {}, ctx));
+  const page = await govern(s.adapter, take).listOrders(win, {}, ctx);
   expect(page).toEqual({ items: [], nextCursor: null });
   expect(s.transport).not.toHaveBeenCalled();
   expect(take).not.toHaveBeenCalled();
