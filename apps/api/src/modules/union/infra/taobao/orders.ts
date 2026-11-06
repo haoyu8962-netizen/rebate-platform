@@ -366,6 +366,28 @@ export interface TaobaoOrderPageData {
   readonly position: string | null;
 }
 
+/** The JSON tree of `text`, every number as its literal (TaobaoRawNumber); throws when not JSON. */
+function parseRawJson(text: string): unknown {
+  return JSON.parse(text, (_name: string, value: unknown, context?: ReviverContext) =>
+    typeof value === 'number'
+      ? new TaobaoRawNumber(typeof context?.source === 'string' ? context.source : String(value))
+      : value,
+  );
+}
+
+/** B1-04zzc: JSON text of a parseRawJson tree, every TaobaoRawNumber written as its literal. */
+function rawJsonText(value: unknown): string {
+  if (value instanceof TaobaoRawNumber) return value.text;
+  if (Array.isArray(value)) return `[${value.map(rawJsonText).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    const members = Object.entries(value).map(
+      ([name, member]) => `${JSON.stringify(name)}:${rawJsonText(member)}`,
+    );
+    return `{${members.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 /**
  * The `data` object of a 大淘客 response body, every JSON number kept as its literal
  * (TaobaoRawNumber). Not JSON / no data object → upstream_unavailable.
@@ -376,11 +398,7 @@ export function parseTaobaoRawData(
 ): Record<string, unknown> {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(body, (_name: string, value: unknown, context?: ReviverContext) =>
-      typeof value === 'number'
-        ? new TaobaoRawNumber(typeof context?.source === 'string' ? context.source : String(value))
-        : value,
-    );
+    parsed = parseRawJson(body);
   } catch {
     throw unavailable('response is not JSON', operation);
   }
@@ -435,6 +453,31 @@ export function taobaoOrderAdzone(row: unknown): string | null {
   const text =
     value instanceof TaobaoRawNumber ? value.text : typeof value === 'string' ? value : null;
   return text !== null && ADZONE_TEXT.test(text) ? text : null;
+}
+
+/**
+ * B1-04zzc（D10-776，方案 A）: the order details body as the archive stores it. Rows of other
+ * companies' promotion slots (adzone_id readable as taobaoOrderAdzone reads it, and not in
+ * `adzones`) are dropped from data.results.publisher_order_dto; our rows and rows whose slot cannot
+ * be read (missing / invalid adzone_id, not an object: the bad-row evidence) stay, in upstream
+ * order. Every other member is kept and JSON number literals are written as received. A body with
+ * nothing to drop (or without that list) is returned unchanged. Throws when the body is not JSON.
+ * Pure: no warning here (the foreign count comes from ourRows only).
+ */
+export function taobaoOrderArchiveBody(body: string, adzones: ReadonlySet<string>): string {
+  const tree = parseRawJson(body);
+  const data = isRecord(tree) && !(tree instanceof TaobaoRawNumber) ? tree.data : undefined;
+  const results = isRecord(data) && !(data instanceof TaobaoRawNumber) ? data.results : undefined;
+  if (!isRecord(results) || results instanceof TaobaoRawNumber) return body;
+  const list = results.publisher_order_dto;
+  if (!Array.isArray(list)) return body;
+  const kept = list.filter((row) => {
+    const adzone = taobaoOrderAdzone(row);
+    return adzone === null || adzones.has(adzone);
+  });
+  if (kept.length === list.length) return body;
+  results.publisher_order_dto = kept;
+  return rawJsonText(tree);
 }
 
 /**

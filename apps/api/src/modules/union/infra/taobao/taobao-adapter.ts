@@ -140,6 +140,7 @@ import {
   planTaobaoOrders,
   requireTaobaoSlotOrder,
   slotAdzones,
+  taobaoOrderArchiveBody,
   taobaoOrderParameters,
   taobaoRowIdentity,
   TAOBAO_ORDER_PATH,
@@ -921,6 +922,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_ORDER_VERSION,
       taobaoOrderParameters(plan),
       ctx,
+      // B1-04zzc：订单详情的归档只存去掉别家推广位行的报文（维权、违规、搜索、转链不改写）。
+      (body) => taobaoOrderArchiveBody(body, adzones),
     );
     const page = parseTaobaoOrderBody(response.body);
     // 归档行 id 只取归档传输挂在响应上的元数据（十进制字符串），不读报文里的同名值。
@@ -959,12 +962,14 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     version: string,
     parameters: Readonly<Record<string, string | number>>,
     ctx: CallCtx,
+    archiveBody?: (body: string) => string,
   ): Promise<UnionTransportResponse> {
     const archive = archiveOf(ctx, 'order');
     const send = (signal: AbortSignal | undefined) =>
       source.exchange('GET', path, parameters, {
         version,
         archive,
+        ...(archiveBody === undefined ? {} : { archiveBody }),
         ...(signal === undefined ? {} : { signal }),
       });
     const gate: UpstreamGate | undefined = ctx?.gateUpstream;

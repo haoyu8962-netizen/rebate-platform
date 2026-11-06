@@ -11,6 +11,7 @@ import {
   parseTaobaoOrderBody,
   planTaobaoOrders,
   slotAdzones,
+  taobaoOrderArchiveBody,
   taobaoOrderCursor,
   type TaobaoOrderWarning,
 } from './orders.ts';
@@ -318,4 +319,118 @@ it('[AC-B1-04zzh-UNIT#4] 推广位清单没有可用 PID → 抛错，不发请�
   const { adapter, transport } = setup(() => pageOf([fullRow()]), { slots: ['mm_1_2_x'] });
   expect(await failure(() => adapter.listOrders(win, {}, ctx))).toBe('adapter_unimplemented');
   expect(transport).not.toHaveBeenCalled();
+});
+
+// B1-04zzc：归档正文改写（纯函数）。推广位全部合成。
+const OURS = new Set(['111111111111', '111111111122']);
+
+function archivePage(rows: readonly string[], extra = ''): string {
+  return `{"time":1793600000000,"code":0,"msg":"ok"${extra},"data":{"has_next":true,"position_index":"p-1_SYN","total_results":9007199254740993,"results":{"publisher_order_dto":[${rows.join(',')}]}}}`;
+}
+
+it('[AC-B1-04zzc-UNIT#4] 只删推广位可读且不是我方的行；我方行（在用与已停用）与读不出推广位的坏行原序保留，外层字段原样', () => {
+  const rows = [
+    '{"trade_id":"2900000000000001001","adzone_id":111111111111}',
+    '{"trade_id":"2900000000000001050","adzone_id":222222222222}',
+    '{"trade_id":"2900000000000001002","adzone_id":"111111111122"}',
+    '{"trade_id":"2900000000000001051","adzone_id":"222222222233"}',
+    '{"trade_id":"2900000000000001003"}',
+    '{"trade_id":"2900000000000001004","adzone_id":0}',
+    '{"trade_id":"2900000000000001005","adzone_id":-222222222222}',
+    '{"trade_id":"2900000000000001006","adzone_id":222222222222.5}',
+    '{"trade_id":"2900000000000001007","adzone_id":null}',
+    '{"trade_id":"2900000000000001008","adzone_id":"synthetic"}',
+    '"synthetic-row-text"',
+    '2900000000000001999',
+    'null',
+    '[{"trade_id":"2900000000000001052","adzone_id":222222222222}]',
+  ];
+  const kept = rows.filter((_row, index) => index !== 1 && index !== 3);
+  const stored = taobaoOrderArchiveBody(archivePage(rows, ',"request_id":"r-1"'), OURS);
+  expect(JSON.parse(stored)).toEqual(JSON.parse(archivePage(kept, ',"request_id":"r-1"')));
+  expect(stored).not.toContain('2900000000000001050');
+  expect(stored).not.toContain('2900000000000001051');
+  expect(stored).toContain('2900000000000001052');
+});
+
+it('[AC-B1-04zzc-UNIT#5] 删行后重写的正文里 JSON 数字原文不失真（长整型、小数、指数写法）', () => {
+  const rows = [
+    '{"trade_parent_id":2900000000000000123,"income":0.29999999999999999,"price":7.10,"rate":1E-7,"adzone_id":111111111111}',
+    '{"income":0.10000000000000001,"adzone_id":222222222222}',
+  ];
+  const stored = taobaoOrderArchiveBody(archivePage(rows), OURS);
+  for (const literal of [
+    '2900000000000000123',
+    '0.29999999999999999',
+    '7.10',
+    '1E-7',
+    '9007199254740993',
+    '1793600000000',
+    '111111111111',
+  ]) {
+    expect(stored).toContain(literal);
+  }
+  expect(stored).not.toContain('0.10000000000000001');
+  expect(stored).not.toContain('222222222222');
+});
+
+it('[AC-B1-04zzc-UNIT#6] 没有可删的行、没有订单数组（results 为 null / 缺失、错误外壳）时原样返回；正文不是 JSON 才抛错', () => {
+  const unchanged = [
+    archivePage(['{"adzone_id":111111111111,"income":0.29999999999999999}']),
+    archivePage([]),
+    '{"code":0,"data":{"has_next":false,"results":null}}',
+    '{"code":0,"data":{"has_next":false}}',
+    '{"code":-1,"msg":"synthetic error"}',
+    '{"code":0,"data":{"results":{"publisher_order_dto":{"adzone_id":222222222222}}}}',
+    '[1,2]',
+    '7',
+  ];
+  for (const body of unchanged) expect(taobaoOrderArchiveBody(body, OURS)).toBe(body);
+  for (const body of ['synthetic not json', archivePage(['{"adzone_id":2']).slice(0, -5), '']) {
+    expect(() => taobaoOrderArchiveBody(body, OURS)).toThrow(SyntaxError);
+  }
+});
+
+it('[AC-B1-04zzc-UNIT#7] 订单详情请求带 archiveBody（去掉别家行），调用方拿到的正文不变；维权请求不带', async () => {
+  const requests: UnionTransportRequest[] = [];
+  const body = archivePage([
+    '{"trade_id":"2900000000000001001","adzone_id":111111111111}',
+    '{"trade_id":"2900000000000001050","adzone_id":222222222222}',
+  ]);
+  const transport = vi.fn<UnionTransport>(async (request) => {
+    requests.push(request);
+    return { status: 200, headers: {}, body };
+  });
+  const clock = new FixedClock('2026-10-31T08:00:00.000Z');
+  const orderSource = new DataokeClient({
+    baseUrl: 'https://unit-dataoke.invalid',
+    clock,
+    credentials: async () => ({ appKey: 'unit-key', appSecret: 'unit-secret-unit-secret' }),
+    random: () => 1,
+    transport,
+  });
+  const adapter = new TaobaoUnionAdapter({
+    clock,
+    credentials: async () => ({ appKey: 'k', appSecret: 's' }),
+    transport: vi.fn<UnionTransport>(),
+    endpoint: {
+      platform: 'taobao',
+      mode: 'live',
+      baseUrl: 'https://unit-taobao.invalid/router/rest',
+      quotaKey: 'unit-taobao',
+    },
+    orderSource,
+    orderSlots: async () => ['mm_1_2_111111111111', 'mm_1_2_111111111122'],
+  });
+  const narrow: TimeWindow = { from: '2026-10-30T02:00:00Z', to: '2026-10-30T03:00:00Z' };
+  await adapter.listOrders(narrow, {}, { ...ctx, rowErrors: 'collect' }).catch(() => undefined);
+  await adapter.listRefunds(narrow, ctx).catch(() => undefined);
+  expect(requests).toHaveLength(2);
+  const rewrite = requests[0]!.archiveBody;
+  expect(rewrite).toBeTypeOf('function');
+  const stored = rewrite!(body);
+  expect(stored).toContain('2900000000000001001');
+  expect(stored).not.toContain('2900000000000001050');
+  expect(requests[0]!.archive).toEqual({ appId: ctx.appId, kind: 'order' });
+  expect(requests[1]!).not.toHaveProperty('archiveBody');
 });

@@ -1,0 +1,109 @@
+{
+  "risk_note": "RV2 (union; order ownership path). D10-776: the archive (union_raw_payloads) of 大淘客 Taobao order-details requests stores the page with other companies' promotion-slot rows removed (changelog 20261031 §1 row 24 「不入库别家订单」). UnionTransportRequest gains an optional archiveBody rewrite function, separate from ArchiveContext; createArchivingTransport stores the gzip of the rewritten body (content_hash of what is stored); taobaoOrderArchiveBody drops only rows whose slot is readable and not ours (same taobaoOrderAdzone reading as ourRows), keeps unreadable rows and all outer fields, keeps number literals verbatim (reviver context.source); a body that is not JSON stores an empty payload with error_code (the upstream code first, else archive_body_rewrite_failed) and still inserts; success sets no error_code; failure log carries only event/platform/kind/error_name. Refund, punishment, search and convert requests pass no rewrite function (archive unchanged). The foreign-slot warning stays one per page from ourRows. No amount change.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage exhausted until 11-11 (D10-775): money review by a fresh independent Claude via tools/agent/claude-run.sh, round 1 pass; plus a separate fresh read-only re-check (D10-775) CONFIRMED with no S0/S1 and three S2 recorded as FU-TB-ARCHIVE-EDGE (duplicate JSON keys and a non-array publisher_order_dto could keep a foreign row in the archive; a non-2xx HTML error page is now stored empty)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests (test/spec/union/taobao-order-archive/) by fresh independent Claude contexts in 2 counted attempts (the 2nd only turned a property's boolean result into expect), 18 tests in 6 files red at the base; round 1 pass with three S2 (no error_code on success, no body in the failure log, empty windows are not failures), all handled in the implementation."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/taobao-order-archive/failure.test.ts > [AC-B1-04zzc#10] 纯文本：归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 有值；listOrders 仍以 upstream_unavailable 失败",
+    "test/spec/union/taobao-order-archive/failure.test.ts > [AC-B1-04zzc#10] 截断的 JSON（夹着别家行）：归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 有值；listOrders 仍以 upstream_unavailable 失败",
+    "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#1] 不开 collect：混合页的归档只剩自家推广位（在用与已停用）的行、按上游顺序；别家行（adzone_id 是 JSON 整数或十进制串）在 gunzip 后的报文里一个字也没有",
+    "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#1] collect：混合页的归档只剩自家推广位（在用与已停用）的行、按上游顺序；别家行（adzone_id 是 JSON 整数或十进制串）在 gunzip 后的报文里一个字也没有",
+    "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#2] 读不出推广位的坏行（缺 adzone_id、非法值、JSON null、整行不是对象）照样在归档里，不当别家行删",
+    "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#3] 外层字段与 JSON 数字原文原样：顶层其余键、has_next、position_index、data 下其余键都在；小数与长整型数字的原文不失真",
+    "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#4] 一整页全是别家行：归档里 rows 为空数组，其余字段保留；listOrders 照常给空页，别家计数仍是这一页一条",
+    "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#11] 维权 get-order-refund 的归档仍是收到的原文（夹带的 publisher_order_dto 形状也不动），同一适配器的订单详情归档已去掉别家行",
+    "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#12] 违规 get-foul-order-list 的归档仍是收到的原文（别家推广位的违规行也在），同一适配器的订单详情归档已去掉别家行",
+    "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#13] 大淘客搜索的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行",
+    "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#14] 大淘客转链的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行",
+    "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#6] 不开 collect：好行的 raw_payload_id 是这一页那条（已去掉别家行的）归档行的 id，每页恰好插入一行",
+    "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#6] collect：好行的 raw_payload_id 是这一页那条（已去掉别家行的）归档行的 id，每页恰好插入一行",
+    "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#7] collect：rejected 行（读不出推广位、缺 tk_status）的 raw_payload_id 也是这条去掉别家行的归档行的 id",
+    "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#8] 连续两页：每页的订单挂各自那页归档行的 id，两条归档都没有别家行，别家计数每页一条",
+    "test/spec/union/taobao-order-archive/property.test.ts > [AC-B1-04zzc#5] 任意顺序的自家 / 别家 / 坏行混合页：归档恰好一行，等于去掉别家行后的原序列",
+    "test/spec/union/taobao-order-archive/warnings.test.ts > [AC-B1-04zzc#9] 不开 collect：taobao_order_foreign_slot 这一页恰好一条（count 3），归档侧不另发 warn / error；告警与日志里没有订单号与金额",
+    "test/spec/union/taobao-order-archive/warnings.test.ts > [AC-B1-04zzc#9] collect：taobao_order_foreign_slot 这一页恰好一条（count 3），归档侧不另发 warn / error；告警与日志里没有订单号与金额"
+  ],
+  "task": "B1-04zzc",
+  "spec_commit": "2e7a1862d1184aae1483f10a76920b671ec53757",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "2e7a1862d1184aae1483f10a76920b671ec53757",
+      "tree": "42e7fabd7ee7b2f1dcb6a76ab91d7d1f3fd7d086",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T19:29:55Z",
+      "finished_at": "2026-11-06T19:30:05Z",
+      "red_tests": [
+        "test/spec/union/taobao-order-archive/failure.test.ts > [AC-B1-04zzc#10] 纯文本：归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 有值；listOrders 仍以 upstream_unavailable 失败",
+        "test/spec/union/taobao-order-archive/failure.test.ts > [AC-B1-04zzc#10] 截断的 JSON（夹着别家行）：归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 有值；listOrders 仍以 upstream_unavailable 失败",
+        "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#1] 不开 collect：混合页的归档只剩自家推广位（在用与已停用）的行、按上游顺序；别家行（adzone_id 是 JSON 整数或十进制串）在 gunzip 后的报文里一个字也没有",
+        "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#1] collect：混合页的归档只剩自家推广位（在用与已停用）的行、按上游顺序；别家行（adzone_id 是 JSON 整数或十进制串）在 gunzip 后的报文里一个字也没有",
+        "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#2] 读不出推广位的坏行（缺 adzone_id、非法值、JSON null、整行不是对象）照样在归档里，不当别家行删",
+        "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#3] 外层字段与 JSON 数字原文原样：顶层其余键、has_next、position_index、data 下其余键都在；小数与长整型数字的原文不失真",
+        "test/spec/union/taobao-order-archive/filter.test.ts > [AC-B1-04zzc#4] 一整页全是别家行：归档里 rows 为空数组，其余字段保留；listOrders 照常给空页，别家计数仍是这一页一条",
+        "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#11] 维权 get-order-refund 的归档仍是收到的原文（夹带的 publisher_order_dto 形状也不动），同一适配器的订单详情归档已去掉别家行",
+        "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#12] 违规 get-foul-order-list 的归档仍是收到的原文（别家推广位的违规行也在），同一适配器的订单详情归档已去掉别家行",
+        "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#13] 大淘客搜索的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行",
+        "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#14] 大淘客转链的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行",
+        "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#6] 不开 collect：好行的 raw_payload_id 是这一页那条（已去掉别家行的）归档行的 id，每页恰好插入一行",
+        "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#6] collect：好行的 raw_payload_id 是这一页那条（已去掉别家行的）归档行的 id，每页恰好插入一行",
+        "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#7] collect：rejected 行（读不出推广位、缺 tk_status）的 raw_payload_id 也是这条去掉别家行的归档行的 id",
+        "test/spec/union/taobao-order-archive/payload-id.test.ts > [AC-B1-04zzc#8] 连续两页：每页的订单挂各自那页归档行的 id，两条归档都没有别家行，别家计数每页一条",
+        "test/spec/union/taobao-order-archive/property.test.ts > [AC-B1-04zzc#5] 任意顺序的自家 / 别家 / 坏行混合页：归档恰好一行，等于去掉别家行后的原序列",
+        "test/spec/union/taobao-order-archive/warnings.test.ts > [AC-B1-04zzc#9] 不开 collect：taobao_order_foreign_slot 这一页恰好一条（count 3），归档侧不另发 warn / error；告警与日志里没有订单号与金额",
+        "test/spec/union/taobao-order-archive/warnings.test.ts > [AC-B1-04zzc#9] collect：taobao_order_foreign_slot 这一页恰好一条（count 3），归档侧不另发 warn / error；告警与日志里没有订单号与金额"
+      ],
+      "expected": [
+        "test/spec/union/taobao-order-archive/failure.test.ts",
+        "test/spec/union/taobao-order-archive/filter.test.ts",
+        "test/spec/union/taobao-order-archive/others.test.ts",
+        "test/spec/union/taobao-order-archive/payload-id.test.ts",
+        "test/spec/union/taobao-order-archive/property.test.ts",
+        "test/spec/union/taobao-order-archive/warnings.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4f65871f28f90a142cd8216020b1ac43bd3132dcb2ee953614f4d5861eaf8cbd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "058e709f67ee4b575f1b3ab748df4457dacc7fea",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  }
+}

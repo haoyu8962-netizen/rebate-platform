@@ -54,6 +54,12 @@ export interface UnionTransportRequest {
   readonly signal?: AbortSignal;
   /** B1-04p: archive context; transports never put it on the wire. */
   readonly archive?: ArchiveContext;
+  /**
+   * B1-04zzc: rewrites the response body before the archiving transport stores it (e.g. the
+   * 大淘客 order details drop the rows of other companies' promotion slots). Read only by the
+   * archiving transport; the caller still gets the body as received. Kept apart from `archive`.
+   */
+  readonly archiveBody?: (body: string) => string;
 }
 
 export interface UnionTransportResponse {

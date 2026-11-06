@@ -7,11 +7,13 @@ import {
   type CompiledQuery,
   type QueryResult,
 } from 'kysely';
+import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { expect, it, vi } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import { UnionError } from '../domain/types.ts';
 import {
+  ARCHIVE_BODY_FAILED,
   createArchivingTransport,
   isSensitiveParameter,
   requestSummary,
@@ -180,4 +182,103 @@ it('[AC-B1-08e-UNIT#2] 插入失败或无上下文时不挂 raw_payload_id', asy
     { db: fakeDb(false, 7n).db, clock, logger },
   );
   expect(await wrapped(plain)).not.toHaveProperty('raw_payload_id');
+});
+
+/** Column → bound value of the single-row insert. */
+function inserted(statement: CompiledQuery): Record<string, unknown> {
+  const match = /\(([^)]*)\) values \(([^)]*)\)/.exec(statement.sql);
+  expect(match).not.toBeNull();
+  const names = match![1]!.split(',').map((name) => name.trim().replace(/"/g, ''));
+  const slots = match![2]!.split(',').map((slot) => Number(slot.trim().slice(1)) - 1);
+  return Object.fromEntries(names.map((name, i) => [name, statement.parameters[slots[i]!]]));
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+it('[AC-B1-04zzc-UNIT#1] 带 archiveBody：存改写后的正文（content_hash 是存下的 gzip 的 sha256），error_code 不加标记，调用方拿到原响应', async () => {
+  const { db, statements } = fakeDb(false, 11n);
+  const clock = new FixedClock('2026-10-15T00:00:00.000Z');
+  const logger = { warn: vi.fn(), error: vi.fn() };
+  const reply = { status: 200, headers: {}, body: 'raw-with-foreign' };
+  const rewrite = vi.fn((body: string) => body.replace('-with-foreign', ''));
+  const wrapped = createArchivingTransport(async () => reply, { db, clock, logger });
+  const result = await wrapped({ ...base, archiveBody: rewrite });
+  expect(result).toBe(reply);
+  expect(result.body).toBe('raw-with-foreign');
+  expect(result.raw_payload_id).toBe('11');
+  expect(rewrite).toHaveBeenCalledExactlyOnceWith('raw-with-foreign');
+  const row = inserted(statements[0]!);
+  const payload = row['payload'] as Buffer;
+  expect(gunzipSync(payload).toString()).toBe('raw');
+  expect(row['content_hash']).toBe(sha256(payload));
+  expect(row['error_code']).toBeNull();
+  expect(logger.error).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-04zzc-UNIT#2] 改写抛错：照样插入一行，payload 是空串的 gzip、error_code 有值（非 2xx 保留 http_<status>），error 日志不带正文，调用结果不变', async () => {
+  const clock = new FixedClock('2026-10-15T00:00:00.000Z');
+  for (const [status, code] of [
+    [200, ARCHIVE_BODY_FAILED],
+    [502, 'http_502'],
+  ] as const) {
+    const { db, statements } = fakeDb(false, 12n);
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const reply = { status, headers: {}, body: 'secret-order-2900000000000001050' };
+    const wrapped = createArchivingTransport(async () => reply, { db, clock, logger });
+    const result = await wrapped({
+      ...base,
+      archiveBody: () => {
+        throw new SyntaxError('synthetic rewrite failure 2900000000000001050');
+      },
+    });
+    expect(result).toBe(reply);
+    expect(result.raw_payload_id).toBe('12');
+    expect(statements).toHaveLength(1);
+    const row = inserted(statements[0]!);
+    const payload = row['payload'] as Buffer;
+    expect(gunzipSync(payload).toString()).toBe('');
+    expect(row['content_hash']).toBe(sha256(payload));
+    expect(row['error_code']).toBe(code);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      {
+        event: 'union.raw_payload.archive_body_failed',
+        platform: 'pdd',
+        kind: 'query',
+        error_name: 'SyntaxError',
+      },
+      expect.any(String),
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain('2900000000000001050');
+  }
+});
+
+it('[AC-B1-04zzc-UNIT#3] 不带 archiveBody：存收到的原文，行为与之前相同；inner 抛错时不调用改写', async () => {
+  const { db, statements } = fakeDb();
+  const clock = new FixedClock('2026-10-15T00:00:00.000Z');
+  const logger = { warn: vi.fn(), error: vi.fn() };
+  const wrapped = createArchivingTransport(
+    async () => ({ status: 200, headers: {}, body: 'raw-as-received' }),
+    { db, clock, logger },
+  );
+  await wrapped(base);
+  const row = inserted(statements[0]!);
+  expect(gunzipSync(row['payload'] as Buffer).toString()).toBe('raw-as-received');
+  expect(row['error_code']).toBeNull();
+
+  const failure = new UnionError('upstream_unavailable', 'unit failure', 'pdd');
+  const rewrite = vi.fn((body: string) => body);
+  const failing = createArchivingTransport(
+    async () => {
+      throw failure;
+    },
+    { db, clock, logger },
+  );
+  await expect(failing({ ...base, archiveBody: rewrite })).rejects.toBe(failure);
+  expect(rewrite).not.toHaveBeenCalled();
+  const second = inserted(statements[1]!);
+  expect(gunzipSync(second['payload'] as Buffer).toString()).toBe('');
+  expect(second['error_code']).toBe('upstream_unavailable');
+  expect(logger.error).not.toHaveBeenCalled();
 });

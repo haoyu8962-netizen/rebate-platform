@@ -10,7 +10,8 @@
 // - 凭据每次请求经注入的提供者取一次，构造时不取；appSecret 只在内存参与签名，不进 URL、表单、
 //   请求头、错误、warn 与对象自身。不读 process.env、不读文件。
 // - 经注入的 UnionTransport 发送（platform 'taobao'）；调用方 AbortSignal 与归档上下文原样挂在传输请求上，
-//   不上线路。传输抛错（非 UnionError）→ upstream_unavailable（不带原文、不挂 cause）。
+//   不上线路（B1-04zzc：归档正文改写函数 archiveBody 同样只挂在传输请求上）。
+//   传输抛错（非 UnionError）→ upstream_unavailable（不带原文、不挂 cause）。
 // - 响应解包与错误分类见 response.ts；返回 data 对象，不做订单字段映射（B1-04f / B1-04z）。
 // - B1-04d：调用方可按接口给出外层 code 细分表（outerCodes），只覆盖表内 code 的分类。
 // - B1-04f：exchange 与 request 同样签名、发送、解包与分类，另把传输响应原样交回（订单映射要从原文
@@ -64,6 +65,11 @@ export interface DataokeRequestOptions {
   readonly signal?: AbortSignal;
   /** Rides on the transport request for the archiving transport only; never on the wire. */
   readonly archive?: ArchiveContext;
+  /**
+   * B1-04zzc: rides on the transport request as `archiveBody` (the body the archiving transport
+   * stores); never on the wire, the caller's response is unchanged.
+   */
+  readonly archiveBody?: (body: string) => string;
   /**
    * B1-04d: per-interface refinement of non-zero outer codes (string form), e.g. the privilege
    * link's goods-not-promotable codes → item_unavailable. Codes not listed keep the gz-13 grouping.
@@ -179,7 +185,7 @@ export class DataokeClient {
     method: DataokeHttpMethod,
     path: string,
     parameters: DataokeParameters,
-    { version, signal, archive }: DataokeRequestOptions,
+    { version, signal, archive, archiveBody }: DataokeRequestOptions,
   ): Promise<UnionTransportResponse> {
     // 不需要凭据的同步检查在前：不合格的调用不取凭据、不发请求。
     if (method !== 'GET' && method !== 'POST') throw invalidDto(path, 'unsupported method');
@@ -212,6 +218,7 @@ export class DataokeClient {
         ...request,
         ...(signal === undefined ? {} : { signal }),
         ...(archive === undefined ? {} : { archive }),
+        ...(archiveBody === undefined ? {} : { archiveBody }),
       });
     } catch (error) {
       if (error instanceof UnionError) throw error;

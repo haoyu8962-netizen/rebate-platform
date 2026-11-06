@@ -5,6 +5,8 @@
 // - payload 是响应 body 原文的 gzip（库内归档用于对账与重放，不做录制脱敏）；content_hash 是它的 sha256。
 // - 开始、结束各取一次注入的 Clock；归档失败只记一条 error 日志，调用结果不变。
 // - B1-08e：插入成功时把行 id（returning id）以不可枚举的 raw_payload_id 挂在响应对象上。
+// - B1-04zzc：请求带 archiveBody 时存的是它改写后的正文（调用方拿到的响应不变）；改写抛错时照样插入，
+//   payload 存空串的 gzip、error_code 记 archive_body_rewrite_failed（非 2xx 仍记 http_<status>），打 error 日志。
 // 演示适配器不经传输，因此从不归档。
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
@@ -134,6 +136,9 @@ export function responseErrorCode(response: UnionTransportResponse): string | nu
   return String(envelope['error_code'] ?? envelope['code']);
 }
 
+/** B1-04zzc: error_code of a row whose body rewrite (request.archiveBody) failed. */
+export const ARCHIVE_BODY_FAILED = 'archive_body_rewrite_failed';
+
 type Outcome =
   | { readonly ok: true; readonly response: UnionTransportResponse }
   | { readonly ok: false; readonly error: unknown };
@@ -164,6 +169,38 @@ export function createArchivingTransport(
 ): UnionTransport {
   const { db, clock, logger } = deps;
 
+  /**
+   * B1-04zzc: the body text to store. With request.archiveBody, the rewritten body; when the
+   * rewrite throws (or gives no string), an empty body and an error log (never the body itself), so
+   * a body that may hold rows the rewrite should have dropped is never stored.
+   */
+  const storedBody = (
+    request: UnionTransportRequest,
+    context: ArchiveContext,
+    response: UnionTransportResponse,
+  ): { readonly body: string; readonly rewriteFailed: boolean } => {
+    const rewrite = request.archiveBody;
+    if (rewrite === undefined) return { body: response.body, rewriteFailed: false };
+    let failure: unknown;
+    try {
+      const body = rewrite(response.body);
+      if (typeof body === 'string') return { body, rewriteFailed: false };
+      failure = new TypeError('archive body rewrite gave no string');
+    } catch (error) {
+      failure = error;
+    }
+    logger.error(
+      {
+        event: 'union.raw_payload.archive_body_failed',
+        platform: request.platform,
+        kind: context.kind,
+        error_name: errorName(failure),
+      },
+      'union raw payload body rewrite failed; stored an empty payload',
+    );
+    return { body: '', rewriteFailed: true };
+  };
+
   const archive = async (
     request: UnionTransportRequest,
     context: ArchiveContext,
@@ -172,9 +209,11 @@ export function createArchivingTransport(
     outcome: Outcome,
   ): Promise<string | undefined> => {
     try {
-      const payload = gzipSync(outcome.ok ? outcome.response.body : '');
+      const stored = outcome.ok ? storedBody(request, context, outcome.response) : null;
+      const payload = gzipSync(stored === null ? '' : stored.body);
+      const rewriteFailed = stored !== null && stored.rewriteFailed;
       const errorCode = outcome.ok
-        ? responseErrorCode(outcome.response)
+        ? (responseErrorCode(outcome.response) ?? (rewriteFailed ? ARCHIVE_BODY_FAILED : null))
         : outcome.error instanceof UnionError
           ? outcome.error.code
           : null;
