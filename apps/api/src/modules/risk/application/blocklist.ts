@@ -45,6 +45,13 @@
 // no decision of its own — is checked here: rows of a disabled rule are dropped and, with none
 // left, nothing is written.
 //
+// B2-05q (BR-ID-36 细则「被拦截请求申诉」提现提交类): a caller that never holds the plaintext phone
+// (payout's refused withdrawal application) gives the related phone as identity stores it — the
+// users.phone digest (users.phone_hmac, the value blindIndex gives here) and the masked number —
+// or null for an account without a phone, which leaves both columns null (the table allows that
+// for withdraw and payout_account, never for register or phone_change). Only recordDecidedHit
+// takes this form: such a caller has decided on the rule in force already.
+//
 // Nothing logged identifies the person: no phone, value, HMAC or device hash.
 //
 // Also compiled by the `test` project (through ../index.ts): erasable syntax only, `import type`
@@ -82,14 +89,33 @@ export function blocklistHmacContexts(): Readonly<
   return HMAC_CONTEXTS;
 }
 
-export interface BlockedRequest {
+/** What every blocked request carries, whichever way its related phone is given. */
+export interface BlockedRequestBase {
   readonly app_id: string;
   readonly request_type: 'register' | 'withdraw' | 'phone_change' | 'payout_account' | null;
-  readonly related_phone: string;
   readonly user_id?: string;
   readonly amount_fen?: bigint;
   /** Reuse the first hit's UUIDv7 for other dimensions of the same request. */
   readonly ref_id?: string;
+}
+
+export interface BlockedRequest extends BlockedRequestBase {
+  /** Plaintext; stored only as its users.phone blind index and its masked form. */
+  readonly related_phone: string;
+}
+
+/** The related phone as identity already stores it: users.phone_hmac and the masked number. */
+export interface RelatedPhoneDigest {
+  readonly hmac: string;
+  readonly masked: string;
+}
+
+/**
+ * B2-05q: a blocked request whose caller holds no plaintext phone. `related_phone_digest` null =
+ * the account has no phone (both related phone columns stay null).
+ */
+export interface DigestBlockedRequest extends BlockedRequestBase {
+  readonly related_phone_digest: RelatedPhoneDigest | null;
 }
 
 export type BlocklistInput = BlockedRequest & {
@@ -120,6 +146,9 @@ export interface RecordBlockedHit extends BlockedRequest, BlockedHitTarget {
    */
   readonly decided_in_force?: true;
 }
+
+/** B2-05q: a decided hit of a request given with the stored phone digest (recordDecidedHit). */
+export interface RecordDigestBlockedHit extends DigestBlockedRequest, BlockedHitTarget {}
 
 /** A registration refusal decided but not recorded yet (matchRegistration). */
 export interface RegistrationBlock {
@@ -170,9 +199,12 @@ export interface BlocklistService {
   /**
    * B1-03zh (BR-ID-36, one read per judgement): recordHit of a refusal the caller already decided
    * on the rule in force (decided_in_force: true). Optional so that hand-written fakes of this port
-   * stay valid; createBlocklistService has it.
+   * stay valid; createBlocklistService has it. B2-05q: also takes the request with the stored
+   * phone digest instead of the plaintext phone.
    */
-  recordDecidedHit?(input: RecordBlockedHit): Promise<{ readonly ref_id: string }>;
+  recordDecidedHit?(
+    input: RecordBlockedHit | RecordDigestBlockedHit,
+  ): Promise<{ readonly ref_id: string }>;
   /**
    * All hit rows of one blocked request, one shared ref_id, in a short transaction of its own.
    * Rows matchRegistration returned are decided and written without a second status read.
@@ -222,7 +254,7 @@ export function createBlocklistService(options: BlocklistOptions): BlocklistServ
 
   /** The rows whose rule is in force (BR-ID-36: a disabled rule writes no hit). */
   async function rowsInForce(
-    request: BlockedRequest,
+    request: BlockedRequestBase,
     rows: readonly BlockedHitTarget[],
   ): Promise<BlockedHitTarget[]> {
     const enabled = new Set<string>();
@@ -245,6 +277,17 @@ export function createBlocklistService(options: BlocklistOptions): BlocklistServ
     if (input.value_hmac !== undefined) return input.value_hmac;
     if (input.dimension === 'device') return input.value;
     return crypto.blindIndex(input.value, HMAC_CONTEXTS[input.dimension]);
+  }
+
+  /** The two related phone columns: hashed and masked here, or as identity stored them. */
+  function relatedPhoneOf(
+    request: BlockedRequest | DigestBlockedRequest,
+  ): RelatedPhoneDigest | null {
+    if ('related_phone_digest' in request) return request.related_phone_digest;
+    return {
+      hmac: crypto.blindIndex(request.related_phone, HMAC_CONTEXTS.phone),
+      masked: maskPhone(request.related_phone),
+    };
   }
 
   /** The violation type of an active, unexpired entry of this value, or null. */
@@ -276,7 +319,7 @@ export function createBlocklistService(options: BlocklistOptions): BlocklistServ
    * recordHits take decided rows as they are and filter the others first).
    */
   async function writeHits(
-    request: BlockedRequest,
+    request: BlockedRequest | DigestBlockedRequest,
     rows: readonly BlockedHitTarget[],
   ): Promise<{ readonly ref_id: string }> {
     if (rows.length === 0) throw new Error('risk: a blocked request needs at least one hit row');
@@ -285,7 +328,7 @@ export function createBlocklistService(options: BlocklistOptions): BlocklistServ
     const register = request.request_type === 'register';
     const userId = register ? null : (request.user_id ?? null);
     const amount = request.request_type === 'withdraw' ? (request.amount_fen ?? null) : null;
-    const relatedHmac = crypto.blindIndex(request.related_phone, HMAC_CONTEXTS.phone);
+    const related = relatedPhoneOf(request);
     const scene = request.request_type ?? 'blocked_request';
     await db.transaction().execute(async (trx) => {
       const app = trx.withSchema('app');
@@ -320,8 +363,8 @@ export function createBlocklistService(options: BlocklistOptions): BlocklistServ
             ref_type: 'blocked_request',
             ref_id: refId,
             request_type: request.request_type,
-            related_phone_hmac: relatedHmac,
-            related_phone_masked: maskPhone(request.related_phone),
+            related_phone_hmac: related === null ? null : related.hmac,
+            related_phone_masked: related === null ? null : related.masked,
             amount_fen: amount,
             created_at: now,
           })),
@@ -380,7 +423,7 @@ export function createBlocklistService(options: BlocklistOptions): BlocklistServ
    * rows of disabled rules are dropped; none left → nothing written.
    */
   async function recordInForce(
-    request: BlockedRequest,
+    request: BlockedRequest | DigestBlockedRequest,
     rows: readonly BlockedHitTarget[],
     decided = false,
   ): Promise<{ readonly ref_id: string }> {
@@ -433,7 +476,9 @@ export function createBlocklistService(options: BlocklistOptions): BlocklistServ
       );
     },
 
-    recordDecidedHit(input: RecordBlockedHit): Promise<{ readonly ref_id: string }> {
+    recordDecidedHit(
+      input: RecordBlockedHit | RecordDigestBlockedHit,
+    ): Promise<{ readonly ref_id: string }> {
       return recordInForce(
         input,
         [{ dimension: input.dimension, value_hmac: input.value_hmac, rule_id: input.rule_id }],

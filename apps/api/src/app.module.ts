@@ -287,6 +287,7 @@ import {
   type PayoutQueuePausePort,
   type ReverifyGatePort,
   type WithdrawApplyService,
+  type WithdrawBlockedHits,
   type WithdrawRulesOptions,
   type WithdrawRulesService,
   readWithdrawalAdjustRefs,
@@ -430,6 +431,7 @@ import {
   RiskScanModule,
   SIGNATURE_CHECK,
   createBlocklistService,
+  createWithdrawalReviewHits,
   createInviteRelationHitWriter,
   createRiskRuleStatusReader,
   createSameDeviceAccountsCheck,
@@ -3945,6 +3947,64 @@ function withdrawRuleOptions(
   };
 }
 
+/**
+ * B2-05q (BR-ID-36 细则「被拦截请求申诉」提现提交类): the hit record of a withdrawal application
+ * refused with 44001, through risk's blocklist service in a short transaction of its own (the
+ * controller calls it after the application's transaction has ended). The decision already found
+ * the rule in force, so the decided write is used and the status is not read again. The related
+ * phone is the account's current one as identity stores it: users.phone_hmac and the masked number
+ * of identity's port (nothing is decrypted here); an account without a phone leaves both empty.
+ * The digest and the masked number are read on one snapshot (a REPEATABLE READ, read-only
+ * transaction that ends before the hit is written): a phone change committed between the two
+ * reads can never pair the old digest with the new masked number (money r1 S1).
+ */
+function withdrawBlockedHits(deps: {
+  db: Kysely<Database>;
+  clock: Clock;
+  crypto: FieldCrypto;
+  logger: RootLogger;
+}): WithdrawBlockedHits {
+  const { db, crypto } = deps;
+  const blocklist = createBlocklistService(deps);
+  return {
+    async record(input) {
+      if (blocklist.recordDecidedHit === undefined) {
+        throw new Error('payout: the blocklist service cannot record a decided hit');
+      }
+      const related = await db
+        .transaction()
+        .setIsolationLevel('repeatable read')
+        .setAccessMode('read only')
+        .execute(async (snapshot) => {
+          const user = await snapshot
+            .withSchema('app')
+            .selectFrom('users')
+            .select('phone_hmac')
+            .where('app_id', '=', input.appId)
+            .where('id', '=', input.userId)
+            .executeTakeFirst();
+          const hmac = user?.phone_hmac ?? null;
+          if (hmac === null) return null;
+          const phones = await createMaskedPhoneReader(snapshot, crypto).maskedPhones(input.appId, [
+            input.userId,
+          ]);
+          const masked = phones.get(input.userId) ?? null;
+          return masked === null ? null : { hmac, masked };
+        });
+      await blocklist.recordDecidedHit({
+        app_id: input.appId,
+        request_type: 'withdraw',
+        user_id: input.userId,
+        amount_fen: input.amountFen,
+        related_phone_digest: related,
+        dimension: input.hit.dimension,
+        value_hmac: input.hit.value_hmac,
+        rule_id: input.hit.rule_id,
+      });
+    },
+  };
+}
+
 /** The nil UUID: no device of the member (the live blocklist check then covers the rest). */
 const NO_DEVICE = '00000000-0000-0000-0000-000000000000';
 
@@ -3955,7 +4015,9 @@ const NO_DEVICE = '00000000-0000-0000-0000-000000000000';
  * verified realname's birth date (BR-ID-26, 18 at the decision instant; no verified record → not
  * adult; without the field keyring the check throws and the decision is retried), and ⑫ the live
  * BR-WDR-29 ⑨ blacklist_hit: risk's blocklist match over the member's phone, id number, every
- * device of the member and the snapshot payee HMAC.
+ * device of the member and the snapshot payee HMAC. B2-05q (BR-ID-36): match() is the same walk
+ * and names the first target that hit; blacklistHits is risk's writer of that hit on the decision's
+ * transaction.
  */
 function autoPayoutPorts(deps: {
   db: Kysely<Database>;
@@ -3966,6 +4028,43 @@ function autoPayoutPorts(deps: {
   const realname = crypto === undefined ? null : createRealnameReader(crypto);
   // B2-11f (BR-ID-36): a dimension whose rule is disabled is no ⑨ hit.
   const blocklist = createBlocklistMatchReader({ rules: createRiskRuleStatusReader({ clock }) });
+  type BlacklistSubject = Parameters<AutoPayoutPorts['blacklist']['hit']>[1];
+  /** The first device (none first) for which `check` answers; null when none does. */
+  async function overDevices<T>(
+    handle: Kysely<Database>,
+    input: BlacklistSubject,
+    check: (subject: Parameters<typeof blocklist.read>[1]) => Promise<T | null>,
+  ): Promise<T | null> {
+    const method =
+      input.payoutMethod === 'alipay' ||
+      input.payoutMethod === 'bank_card' ||
+      input.payoutMethod === 'wechat'
+        ? input.payoutMethod
+        : null;
+    // D10-571 (B1-03zi): every device of the member's sessions, revoked ones included, no time
+    // window, as BR-ID-28's deletion does. ⑨ only sends the withdrawal to manual review.
+    const devices = await handle
+      .withSchema('app')
+      .selectFrom('sessions')
+      .select('device_id')
+      .distinct()
+      .where('app_id', '=', input.appId)
+      .where('user_id', '=', input.userId)
+      .execute();
+    const now = clock.now();
+    for (const deviceId of [NO_DEVICE, ...devices.map((device) => device.device_id)]) {
+      const matched = await check({
+        appId: input.appId,
+        userId: input.userId,
+        deviceId,
+        payeeHmac: input.payeeHmac,
+        payoutMethod: method,
+        now,
+      });
+      if (matched !== null) return matched;
+    }
+    return null;
+  }
   return {
     config: {
       configValue: (appId, key, handle) =>
@@ -4002,37 +4101,17 @@ function autoPayoutPorts(deps: {
     },
     blacklist: {
       async hit(handle, input) {
-        const method =
-          input.payoutMethod === 'alipay' ||
-          input.payoutMethod === 'bank_card' ||
-          input.payoutMethod === 'wechat'
-            ? input.payoutMethod
-            : null;
-        // D10-571 (B1-03zi): every device of the member's sessions, revoked ones included, no time
-        // window, as BR-ID-28's deletion does. ⑨ only sends the withdrawal to manual review.
-        const devices = await handle
-          .withSchema('app')
-          .selectFrom('sessions')
-          .select('device_id')
-          .distinct()
-          .where('app_id', '=', input.appId)
-          .where('user_id', '=', input.userId)
-          .execute();
-        const now = clock.now();
-        for (const deviceId of [NO_DEVICE, ...devices.map((device) => device.device_id)]) {
-          const matched = await blocklist.read(handle, {
-            appId: input.appId,
-            userId: input.userId,
-            deviceId,
-            payeeHmac: input.payeeHmac,
-            payoutMethod: method,
-            now,
-          });
-          if (matched !== null) return true;
-        }
-        return false;
+        return (
+          (await overDevices(handle, input, (subject) => blocklist.read(handle, subject))) !== null
+        );
+      },
+      async match(handle, input) {
+        const { match } = blocklist;
+        if (match === undefined) throw new Error('payout: the blocklist reader has no match()');
+        return overDevices(handle, input, (subject) => match(handle, subject));
       },
     },
+    blacklistHits: createWithdrawalReviewHits({ clock }),
   };
 }
 
@@ -4281,6 +4360,8 @@ function payoutModule(): DynamicModule {
           snapshot: createWithdrawPayeeSnapshotReader(crypto),
           outBizNo: () => generateOutBizNo(randomBytes),
           ...(eventBus === undefined ? {} : { eventBus }),
+          // B2-05q (BR-ID-36): the hit record of an application refused with 44001.
+          blockedHits: withdrawBlockedHits({ db, clock, crypto, logger }),
           // B2-11a: the BR-WDR-29 snapshot at BR-WDR-03 ⑭; thresholds through content's reader on
           // the W1 transaction, ③ through risk's BR-ID-37 check judged on that transaction.
           riskFlags: createWithdrawRiskFlags({

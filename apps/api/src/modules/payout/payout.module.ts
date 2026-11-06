@@ -215,7 +215,7 @@ export interface PayoutWorkerOptions {
 /** What app.module supplies to the automatic payout decision (BR-WDR-30). */
 export type AutoPayoutPorts = Pick<
   AutoPayoutOptions,
-  'config' | 'risk' | 'appeal' | 'facts' | 'adult' | 'blacklist'
+  'config' | 'risk' | 'appeal' | 'facts' | 'adult' | 'blacklist' | 'blacklistHits'
 >;
 
 /** The automatic payout consumer's registration token (worker entry). */

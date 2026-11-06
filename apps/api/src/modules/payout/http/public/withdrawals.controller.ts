@@ -17,6 +17,11 @@
 // else rolls back and leaves the key reusable; withStepUp consumes the step-up token on code 0
 // and releases it otherwise (BR-WDR-01). `msg` is the package default text
 // (contracts/texts.default.json) and `data` only what the result carries.
+// B2-05q (BR-ID-36 细则「被拦截请求申诉」): a 44001 the handler produced in this call has its hit
+// recorded after executeInTransaction (and the step-up wrapper) returned — the application's
+// transaction has rolled back and released its connection — and before the answer is written; an
+// answer of the idempotency layer (source other than 'handler') records nothing. A failed record
+// throws (5xx, as identity's bind-phone): the refusal stays, nothing was created or stored.
 //
 // B2-05f: GET /v1/withdrawals (listWithdrawals) and GET /v1/withdrawals/{withdrawal_id}
 // (getWithdrawal): x-auth login, unsigned, not idempotent. The subject is the token principal;
@@ -282,6 +287,8 @@ export class WithdrawalsController {
     const header = request.headers['idempotency-key'];
     const key = typeof header === 'string' ? header : undefined;
     const body = request.body;
+    // The hit record of this call's own 44001 (B2-05q); set by the handler only.
+    const blocked: { record: (() => Promise<void>) | null } = { record: null };
     const response = await stepUp(request, () =>
       idempotency.executeInTransaction(
         {
@@ -302,10 +309,12 @@ export class WithdrawalsController {
             amountFen: BigInt(body.amount_fen),
             stepUpValid: true,
           });
+          blocked.record = isWithdrawAccepted(result) ? null : (result.recordBlocked ?? null);
           return applyResult(result, request.id);
         },
       ),
     );
+    if (blocked.record !== null && response.source === 'handler') await blocked.record();
     const envelope = JSON.parse(response.body) as unknown;
     if (response.status === 200) return envelope as Schema<'WithdrawalResponse'>;
     throw new HttpException(envelope as Record<string, unknown>, response.status);

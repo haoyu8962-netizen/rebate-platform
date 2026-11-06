@@ -13,11 +13,18 @@
 //   inputs                       ⑤ active withdraw_holds or risk_state ∈ {frozen, appealing} or
 //                                frozen_fen > amount_fen; ⑥ ⑧ with t = created_at (B2-11a's facts
 //                                reader); ⑩ adult; ⑪ payout.channel_enabled.<channel of the snapshot>;
-//                                ⑫ risk_flags ∩ risk_block_flags and the live blacklist_hit; ⑬ no
+//                                ⑫ risk_flags ∩ risk_block_flags and the live blacklist_hit (one
+//                                check: match() when the reader has it, else hit()); ⑬ no
 //                                withdrawal block, available_fen ≥ 0, blocked_reason null; then
 //                                decideAutoPayout (B2-11b) compares.
 //   write                        auto_decision {result, failed_conditions, warn_values, rule_version,
 //                                decided_at} and review_mode.
+//   hit record                   B2-05q (BR-ID-36, BR-WDR-29 ⑨): a decision that lists
+//                                risk_flag:blacklist_hit writes one risk_hits row through risk's
+//                                writer (blacklistHits) on this transaction — ref_type withdrawal,
+//                                risk_action manual_review, the matched dimension / digest / rule.
+//                                A withdrawal is judged once, so it has at most one; the digest
+//                                never enters auto_decision or a log.
 //   manual                       review_deadline = created_at + 24 working hours (BR-WDR-26).
 //   auto                         system W2 through B2-05e's approve (CAS status = PENDING_REVIEW,
 //                                reviewer_id null) → executeBatch with executor 'system:auto_payout'
@@ -43,7 +50,12 @@ import { accountingDate, chinaDayRange, chinaMonth, chinaMonthRange } from '@cou
 import { addFen, fenToJsonNumber, mulDivCeil, parseFen } from '@couli/money';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { ReceivedEvent } from '../../platform/index.ts';
-import type { AppealPrevStateReader, RiskStateBatchReader } from '../../risk/index.ts';
+import type {
+  AppealPrevStateReader,
+  BlockedHitTarget,
+  RiskStateBatchReader,
+  WithdrawalReviewHits,
+} from '../../risk/index.ts';
 import {
   computeAutoPayoutWarnValues,
   decideAutoPayout,
@@ -88,6 +100,11 @@ export interface AutoPayoutBlacklistReader {
       payoutMethod: string;
     },
   ): Promise<boolean>;
+  /** A decided target from the same live check; legacy readers keep their boolean hit(). */
+  match?(
+    handle: Kysely<DB>,
+    input: Parameters<AutoPayoutBlacklistReader['hit']>[1],
+  ): Promise<{ risk_msg_code: string; hit: BlockedHitTarget } | null>;
 }
 
 /** Why an automatic withdrawal stayed APPROVED: the batch refusal or the member's left reason. */
@@ -118,6 +135,11 @@ export interface AutoPayoutOptions extends WithdrawalCommandsOptions {
   facts: WithdrawRiskFactsReader;
   adult: AutoPayoutAdultReader;
   blacklist: AutoPayoutBlacklistReader;
+  /**
+   * B2-05q (BR-ID-36): risk's writer of the ⑨ hit, on the decision's transaction. Without it, or
+   * with a reader that has no match(), the decision is the same and no hit is recorded.
+   */
+  blacklistHits?: WithdrawalReviewHits;
   /** B2-06c's EXECUTE. */
   execute: Pick<PayoutExecute, 'executeBatch'>;
 }
@@ -137,6 +159,8 @@ const DAILY_LOCK = 'auto_payout_daily';
 const PREFIX = 'withdraw.auto_payout.';
 const NOT_COUNTED: readonly string[] = ['REJECTED', 'FAILED'];
 const PENDING_REVIEW = 'PENDING_REVIEW';
+/** auto_decision.failed_conditions entry of the live BR-WDR-29 ⑨ check (domain/auto-decision.ts). */
+const BLACKLIST_HIT_CONDITION = 'risk_flag:blacklist_hit';
 /** The alert line: total × 10000 ≥ max × 8000 (no rounding of 80% first). */
 const NEAR_CAP_BP = 8000n;
 const BP = 10000n;
@@ -563,6 +587,21 @@ export function createAutoPayoutConsumer(options: AutoPayoutOptions): AutoPayout
       .executeTakeFirstOrThrow();
     const platformToday = parseFen(platform.total);
 
+    const adult = await options.adult.isAdult(trx, { appId, userId, at: now });
+    // ⑫ the live BR-WDR-29 ⑨ check, once: match() also names the target for the hit record.
+    const blacklistSubject = {
+      appId,
+      userId,
+      payeeHmac: row.payee_hmac,
+      payoutMethod: row.payout_method,
+    };
+    const { blacklist } = options;
+    const blacklistMatch =
+      blacklist.match === undefined ? null : await blacklist.match(trx, blacklistSubject);
+    const blacklistHit =
+      blacklist.match === undefined
+        ? await blacklist.hit(trx, blacklistSubject)
+        : blacklistMatch !== null;
     const decision: AutoPayoutDecision = decideAutoPayout({
       config: group,
       amount_fen: amount,
@@ -580,15 +619,10 @@ export function createAutoPayoutConsumer(options: AutoPayoutOptions): AutoPayout
       },
       warn_actuals: warnActuals,
       platform_daily_auto_fen: platformToday,
-      adult: await options.adult.isAdult(trx, { appId, userId, at: now }),
+      adult,
       channel_enabled: channelOn,
       risk_flags: riskFlagsOf(row.risk_flags),
-      blacklist_hit: await options.blacklist.hit(trx, {
-        appId,
-        userId,
-        payeeHmac: row.payee_hmac,
-        payoutMethod: row.payout_method,
-      }),
+      blacklist_hit: blacklistHit,
       w2_guard_passed: !memberBlocked && available >= 0n && row.blocked_reason === null,
     });
     const record: AutoPayoutDecisionRecord = {
@@ -633,6 +667,22 @@ export function createAutoPayoutConsumer(options: AutoPayoutOptions): AutoPayout
         .where('app_id', '=', appId)
         .where('id', '=', id)
         .execute();
+    }
+
+    // B2-05q (BR-ID-36): the hit of a decision that lists the blacklist flag, with the decision.
+    if (
+      blacklistMatch !== null &&
+      options.blacklistHits !== undefined &&
+      decision.failed_conditions.includes(BLACKLIST_HIT_CONDITION)
+    ) {
+      await options.blacklistHits.record(trx, {
+        app_id: appId,
+        user_id: userId,
+        withdrawal_id: id,
+        dimension: blacklistMatch.hit.dimension,
+        value_hmac: blacklistMatch.hit.value_hmac,
+        rule_id: blacklistMatch.hit.rule_id,
+      });
     }
 
     if (row.status !== PENDING_REVIEW) {

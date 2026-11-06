@@ -25,6 +25,13 @@
 // Answers (not exceptions) for the chain's refusals, so the caller stores 3xxxx with the key;
 // infrastructure failures throw and roll everything back. Nothing of the payee (name, account,
 // cipher, HMAC) is logged.
+// B2-05q (BR-ID-36 细则「被拦截请求申诉」提现提交类): a first-pass 44001 (③a) whose reader named the
+// hit carries `recordBlocked` beside code / data — the hit record of this refused application
+// (member, applied amount, dimension, value digest, rule code) through the blockedHits port. It is
+// not written here: the caller runs it after this transaction has ended and released its
+// connection (the refusal rolls back; the record is risk's own short transaction, as bind-phone's),
+// and only for the answer this call produced. Without the port, or without a named hit, the
+// result is the plain refusal.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports,
 // relative imports with `.ts`.
@@ -44,7 +51,11 @@ import {
 } from '../domain/review-deadline.ts';
 import { validateLockedWithdrawal } from '../domain/withdraw-locked.ts';
 import type { WithdrawRiskFlag } from '../domain/risk-flags.ts';
-import { validateWithdrawal, type WithdrawBlock } from '../domain/withdraw-rules.ts';
+import {
+  validateWithdrawal,
+  type WithdrawBlock,
+  type WithdrawBlocklistHit,
+} from '../domain/withdraw-rules.ts';
 import type { WithdrawApplyRiskOptions } from './withdraw-risk-flags.ts';
 import {
   readWithdrawInput,
@@ -63,6 +74,21 @@ export interface WithdrawPayeeSnapshot {
   account: string;
 }
 
+/**
+ * B2-05q (BR-ID-36): risk's hit record of an application refused with 44001, assembled by
+ * app.module (risk's blocklist service with the member's current phone as identity stores it).
+ * Called outside any transaction of the application; a failure rejects.
+ */
+export interface WithdrawBlockedHits {
+  record(input: {
+    appId: string;
+    userId: string;
+    /** The amount applied for, whole fen. */
+    amountFen: bigint;
+    hit: WithdrawBlocklistHit;
+  }): Promise<void>;
+}
+
 export interface WithdrawApplyOptions extends WithdrawApplyRiskOptions {
   /** Reuse B2-05c's validator and readers for the first pass and locked subset ⑦⑧⑩⑪⑫. */
   rules: WithdrawRulesOptions;
@@ -77,6 +103,8 @@ export interface WithdrawApplyOptions extends WithdrawApplyRiskOptions {
   /** New candidate for each insert attempt; at most three retries after a collision. */
   outBizNo(): string;
   eventBus?: EventBus;
+  /** B2-05q: without it a 44001 refusal carries no hit record (nothing is written). */
+  blockedHits?: WithdrawBlockedHits;
 }
 
 export interface WithdrawApplyCommand extends WithdrawActor {
@@ -89,7 +117,16 @@ export interface WithdrawAccepted {
   data: Schema<'Withdrawal'>;
 }
 
-export type WithdrawApplyResult = WithdrawAccepted | WithdrawBlock;
+/** A refusal of the chain; a 44001 with a named hit also carries its record (B2-05q). */
+export interface WithdrawRefused extends WithdrawBlock {
+  /**
+   * Writes the risk_hits row of this refused application. For the caller to run once, after the
+   * transaction given to apply() has ended; never part of the response.
+   */
+  recordBlocked?: () => Promise<void>;
+}
+
+export type WithdrawApplyResult = WithdrawAccepted | WithdrawRefused;
 
 /** Narrows the result: code 0 carries the contract's Withdrawal, anything else a refusal. */
 export function isWithdrawAccepted(result: WithdrawApplyResult): result is WithdrawAccepted {
@@ -271,7 +308,23 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
       let tax = quote.tax_fen;
       let net = subFen(subFen(amount, fee), tax);
       const refused = validateWithdrawal(first, amount, net);
-      if (refused !== null) return refused;
+      if (refused !== null) {
+        // ③a with a named hit (B2-05q): the record leaves with the answer, to be written by the
+        // caller once this transaction is over; ③a is judged in this pass only.
+        const hit = first.blocklist_hit ?? null;
+        const { blockedHits } = options;
+        if (refused.code !== 44001 || hit === null || blockedHits === undefined) return refused;
+        return {
+          ...refused,
+          recordBlocked: () =>
+            blockedHits.record({
+              appId: actor.appId,
+              userId: actor.userId,
+              amountFen: amount,
+              hit,
+            }),
+        };
+      }
       // BR-WDR-03 ⑭: the risk-flag snapshot, before the locks; ③ is judged under this id.
       const id = newUuidV7(t);
       let riskFlags: readonly WithdrawRiskFlag[] | null = null;

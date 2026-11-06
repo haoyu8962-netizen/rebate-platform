@@ -408,3 +408,76 @@ it('[AC-B1-03zh#15][BR-ID-36] matchRegistration 判定过的命中行交给 reco
   expect(inserts(statements, 'risk_hits')).toHaveLength(3);
   expect(inserts(statements, 'risk_hits')[2]).toMatchObject({ app_id: 'other' });
 });
+
+it('[AC-B2-05q-UNIT#1][BR-ID-36] recordDecidedHit 收手机号摘要 + 脱敏号：原样入库、不再算摘要、不读规则状态', async () => {
+  const { service, statements } = setup([], ['BLACKLIST_DEVICE']);
+  await service.recordDecidedHit!({
+    app_id: 'couli',
+    request_type: 'withdraw',
+    user_id: '018f0000-0000-7000-8000-000000000001',
+    amount_fen: 1300n,
+    related_phone_digest: { hmac: 'stored-digest', masked: '138****5678' },
+    dimension: 'device',
+    value_hmac: DEVICE_HASH,
+    rule_id: 'BLACKLIST_DEVICE',
+  });
+  expect(
+    statements.filter((s) => s.sql.includes('"risk_rules"') && s.sql.startsWith('select')),
+  ).toEqual([]);
+  expect(inserts(statements, 'risk_hits')).toEqual([
+    expect.objectContaining({
+      ref_type: 'blocked_request',
+      request_type: 'withdraw',
+      risk_action: 'block',
+      user_id: '018f0000-0000-7000-8000-000000000001',
+      amount_fen: 1300n,
+      dimension: 'device',
+      value_hmac: DEVICE_HASH,
+      rule_id: 'BLACKLIST_DEVICE',
+      related_phone_hmac: 'stored-digest',
+      related_phone_masked: '138****5678',
+    }),
+  ]);
+});
+
+it('[AC-B2-05q-UNIT#2][BR-ID-36] recordDecidedHit 的账号没有手机号（摘要给 null）：关联手机号两列同空，命中照写', async () => {
+  const { service, statements } = setup();
+  const { ref_id: refId } = await service.recordDecidedHit!({
+    app_id: 'couli',
+    request_type: 'withdraw',
+    user_id: '018f0000-0000-7000-8000-000000000002',
+    amount_fen: 500n,
+    related_phone_digest: null,
+    dimension: 'alipay',
+    value_hmac: 'payee-digest',
+    rule_id: 'BLACKLIST_ALIPAY',
+  });
+  expect(inserts(statements, 'risk_hits')).toEqual([
+    expect.objectContaining({
+      ref_id: refId,
+      amount_fen: 500n,
+      related_phone_hmac: null,
+      related_phone_masked: null,
+    }),
+  ]);
+});
+
+it('[AC-B2-05q-UNIT#3][BR-ID-36] 明文手机号的给法不变：摘要取 users.phone 盲索引，脱敏 3 + 4', async () => {
+  const { service, statements } = setup();
+  await service.recordDecidedHit!({
+    app_id: 'couli',
+    request_type: 'payout_account',
+    user_id: '018f0000-0000-7000-8000-000000000003',
+    related_phone: PHONE,
+    dimension: 'alipay',
+    value_hmac: 'payee-digest',
+    rule_id: 'BLACKLIST_ALIPAY',
+  });
+  expect(inserts(statements, 'risk_hits')).toEqual([
+    expect.objectContaining({
+      related_phone_hmac: `hmac(users.phone:${PHONE})`,
+      related_phone_masked: '138****5678',
+      amount_fen: null,
+    }),
+  ]);
+});

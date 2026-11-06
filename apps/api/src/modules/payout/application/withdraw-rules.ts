@@ -333,12 +333,17 @@ export async function readWithdrawInput(
   });
   const payeeHmac = subject === null ? null : subject.payee_hmac;
   const payoutMethod = subject === null ? null : subject.payout_method;
-  const blocked = await options.blocklist.read(handle, {
-    ...actor,
-    payeeHmac,
-    payoutMethod,
-    now,
-  });
+  // ③a: one judgement either way. B2-05q (BR-ID-36): a reader with match() also names what hit,
+  // so that a refused application can be recorded without judging a second time.
+  const blocklistSubject = { ...actor, payeeHmac, payoutMethod, now };
+  const matched =
+    options.blocklist.match === undefined
+      ? null
+      : await options.blocklist.match(handle, blocklistSubject);
+  const blocked =
+    options.blocklist.match === undefined
+      ? await options.blocklist.read(handle, blocklistSubject)
+      : matched;
   const signed = await options.laborAgreementSigned(handle, subjectKey);
   const balances = await options.ledger.getBalances(handle, {
     appId: actor.appId,
@@ -357,6 +362,7 @@ export async function readWithdrawInput(
     risk_state: riskState,
     prev_risk_state: prev,
     blocklist_risk_msg_code: blocked === null ? null : blocked.risk_msg_code,
+    blocklist_hit: matched === null ? null : matched.hit,
     reverify,
     realname_verified: realnameStatus === 'verified' && realname !== null,
     payout_method: payoutMethod,

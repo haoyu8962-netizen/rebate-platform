@@ -240,7 +240,11 @@ export type {
   BlocklistInput,
   BlocklistHit,
   BlockedRequest,
+  BlockedRequestBase,
+  DigestBlockedRequest,
+  RelatedPhoneDigest,
   RecordBlockedHit,
+  RecordDigestBlockedHit,
   BlockedHitTarget,
   RegistrationBlock,
   BlockedRegistrationInput,
@@ -261,6 +265,11 @@ export { createAppealPrevStateReader } from './ports/appeal-prev-state.ts';
 export type { AppealPrevStateReader } from './ports/appeal-prev-state.ts';
 export { createBlocklistMatchReader } from './ports/blocklist-match.ts';
 export type { BlocklistMatchReader } from './ports/blocklist-match.ts';
+export { createWithdrawalReviewHits } from './application/withdrawal-review-hits.ts';
+export type {
+  WithdrawalReviewHit,
+  WithdrawalReviewHits,
+} from './application/withdrawal-review-hits.ts';
 // B1-03z: appeal restore differences of revoked ban appeals (BR-FUND-22, BR-CALC-13 细则「申诉恢复」).
 // Rule tests: test/spec/risk/appeal-restore/**.
 export { createAppealRestoreHandler } from './application/appeal-restore.ts';

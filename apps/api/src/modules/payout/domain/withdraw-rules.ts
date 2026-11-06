@@ -49,12 +49,25 @@ export interface WithdrawReverifyBlock {
   };
 }
 
+/**
+ * B2-05q (BR-ID-36): what the ③a refusal hit — the blocklist dimension, the digest of its value
+ * and the rule code. A fact for the hit record only: it never changes the chain's answer and is
+ * never part of it.
+ */
+export interface WithdrawBlocklistHit {
+  readonly dimension: string;
+  readonly value_hmac: string;
+  readonly rule_id: string;
+}
+
 export interface WithdrawRuleInput {
   limits: WithdrawLimits;
   step_up_valid: boolean;
   risk_state: 'normal' | 'frozen' | 'banned' | 'appealing';
   prev_risk_state: 'frozen' | 'banned' | null;
   blocklist_risk_msg_code: string | null;
+  /** B2-05q: the target behind blocklist_risk_msg_code, when the reader names it (else absent). */
+  blocklist_hit?: WithdrawBlocklistHit | null;
   reverify: WithdrawReverifyBlock | null;
   realname_verified: boolean;
   payout_method: 'alipay' | 'bank_card' | 'wechat' | null;

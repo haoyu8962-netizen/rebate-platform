@@ -12,12 +12,17 @@
 // B2-11f (BR-ID-36, D10-537 ②): a dimension whose rule BLACKLIST_<DIMENSION> is disabled is skipped and
 // the next one is looked at; the answer keeps its shape. The state is read on the caller's handle; a
 // failed read rejects, it never counts as disabled. Without `rules` every dimension is in force.
+// B2-05q (BR-ID-36): match() is the same walk (same order, the same single status read per
+// dimension looked at) and also names what hit — the dimension, its value digest and the rule code
+// — so that the caller can record the decided hit without judging or reading the status again.
+// read() keeps its answer: the text code only.
 //
 // Also compiled by the `test` project (through ../index.ts): erasable syntax only, `import type`
 // for type-only imports, relative imports with `.ts`.
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 import { blocklistRule } from '../application/blocklist.ts';
+import type { BlockedHitTarget } from '../application/blocklist.ts';
 import type { RiskRuleStatusReader } from '../application/risk-rule-status.ts';
 
 /** Risk resolves identity-owned HMACs via its existing identity ports. */
@@ -33,6 +38,14 @@ export interface BlocklistMatchReader {
       now: Date;
     },
   ): Promise<{ risk_msg_code: string } | null>;
+  /**
+   * B2-05q (BR-ID-36): read()'s decision together with its target (dimension, value digest, rule
+   * code) for hit recording; legacy readers may omit this member.
+   */
+  match?(
+    handle: Kysely<DB>,
+    subject: Parameters<BlocklistMatchReader['read']>[1],
+  ): Promise<{ risk_msg_code: string; hit: BlockedHitTarget } | null>;
 }
 
 type Dimension = 'phone' | 'id_no' | 'device' | 'alipay' | 'bank_card' | 'wechat_openid';
@@ -74,44 +87,60 @@ export function createBlocklistMatchReader(
     return row?.violation_type ?? null;
   }
 
+  /** The first dimension in force with an active entry, in the fixed order; null without one. */
+  async function decide(
+    handle: Kysely<DB>,
+    subject: Parameters<BlocklistMatchReader['read']>[1],
+  ): Promise<{ risk_msg_code: string; hit: BlockedHitTarget } | null> {
+    const app = handle.withSchema('app');
+    const values: { dimension: Dimension; hmac: string }[] = [];
+    const user = await app
+      .selectFrom('users')
+      .select('phone_hmac')
+      .where('app_id', '=', subject.appId)
+      .where('id', '=', subject.userId)
+      .executeTakeFirst();
+    if (user?.phone_hmac) values.push({ dimension: 'phone', hmac: user.phone_hmac });
+    const realname = await app
+      .selectFrom('realname')
+      .select('id_no_hmac')
+      .where('app_id', '=', subject.appId)
+      .where('user_id', '=', subject.userId)
+      .where('status', '=', 'verified')
+      .executeTakeFirst();
+    if (realname?.id_no_hmac) values.push({ dimension: 'id_no', hmac: realname.id_no_hmac });
+    const device = await app
+      .selectFrom('devices')
+      .select('device_hash')
+      .where('app_id', '=', subject.appId)
+      .where('id', '=', subject.deviceId)
+      .executeTakeFirst();
+    if (device?.device_hash) values.push({ dimension: 'device', hmac: device.device_hash });
+    if (subject.payeeHmac !== null && subject.payoutMethod !== null) {
+      values.push({ dimension: PAYEE_DIMENSION[subject.payoutMethod], hmac: subject.payeeHmac });
+    }
+    for (const { dimension, hmac } of values) {
+      const ruleId = blocklistRule(dimension);
+      if (rules !== undefined) {
+        const key = { app_id: subject.appId, rule_id: ruleId };
+        if (!(await rules.isEnabled(key, handle))) continue;
+      }
+      const violation = await match(handle, subject.appId, dimension, hmac, subject.now);
+      if (violation !== null) {
+        return {
+          risk_msg_code: `blocklist.${violation}`,
+          hit: { dimension, value_hmac: hmac, rule_id: ruleId },
+        };
+      }
+    }
+    return null;
+  }
+
   return {
     async read(handle, subject) {
-      const app = handle.withSchema('app');
-      const values: { dimension: Dimension; hmac: string }[] = [];
-      const user = await app
-        .selectFrom('users')
-        .select('phone_hmac')
-        .where('app_id', '=', subject.appId)
-        .where('id', '=', subject.userId)
-        .executeTakeFirst();
-      if (user?.phone_hmac) values.push({ dimension: 'phone', hmac: user.phone_hmac });
-      const realname = await app
-        .selectFrom('realname')
-        .select('id_no_hmac')
-        .where('app_id', '=', subject.appId)
-        .where('user_id', '=', subject.userId)
-        .where('status', '=', 'verified')
-        .executeTakeFirst();
-      if (realname?.id_no_hmac) values.push({ dimension: 'id_no', hmac: realname.id_no_hmac });
-      const device = await app
-        .selectFrom('devices')
-        .select('device_hash')
-        .where('app_id', '=', subject.appId)
-        .where('id', '=', subject.deviceId)
-        .executeTakeFirst();
-      if (device?.device_hash) values.push({ dimension: 'device', hmac: device.device_hash });
-      if (subject.payeeHmac !== null && subject.payoutMethod !== null) {
-        values.push({ dimension: PAYEE_DIMENSION[subject.payoutMethod], hmac: subject.payeeHmac });
-      }
-      for (const { dimension, hmac } of values) {
-        if (rules !== undefined) {
-          const key = { app_id: subject.appId, rule_id: blocklistRule(dimension) };
-          if (!(await rules.isEnabled(key, handle))) continue;
-        }
-        const violation = await match(handle, subject.appId, dimension, hmac, subject.now);
-        if (violation !== null) return { risk_msg_code: `blocklist.${violation}` };
-      }
-      return null;
+      const decided = await decide(handle, subject);
+      return decided === null ? null : { risk_msg_code: decided.risk_msg_code };
     },
+    match: decide,
   };
 }

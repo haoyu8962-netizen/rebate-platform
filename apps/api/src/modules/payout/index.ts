@@ -53,6 +53,8 @@ export type {
   WithdrawApplyCommand,
   WithdrawApplyResult,
   WithdrawAccepted,
+  WithdrawRefused,
+  WithdrawBlockedHits,
   WithdrawPayeeSnapshot,
 } from './application/withdraw-apply.ts';
 export { createWithdrawUsageReader } from './infra/withdraw-usage.ts';
