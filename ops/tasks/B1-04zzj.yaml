@@ -24,6 +24,9 @@ paths:
   - 'apps/api/src/modules/orders/infra/snapshot-retry-input.ts'
 test_paths:
   - 'test/spec/union/misc-20261106/**'
+  # D10-706（照 D10-327）：kit 图片助手合成主机换成 alicdn 子域合成主机，[AC-B1-04zh#23]、[#26]、[#30] 断言不动；新鲜独立 Claude 改、另一位只读核，编排 #24 核
+  - 'test/spec/union/taobao-search/kit.ts'
+  - 'test/spec/union/taobao-search/mapping.test.ts'
 impl: claude
 tester: claude-independent
 accept:
