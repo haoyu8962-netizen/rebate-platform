@@ -1,0 +1,119 @@
+{
+  "task": "B2-04zx",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "50c9ee57a467728445f82f23af885ead70ab8603",
+  "red_tests": [
+    "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账后订单，RIGHTS：API 先 PROCESSING 再 FAILED，…：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+    "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账后订单，RIGHTS：API 直接 FAILED，联盟后报 SUCCEED…：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+    "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账后订单，PUNISH：API FAILED，联盟后报 SUCCEEDED：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+    "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账前订单（WAITING），RIGHTS：API FAILED，联盟后报 S…：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+    "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#2] 缺审计端口时的拒绝只对 D10-699 重开：同一订单上被拒的那条之外，另一条维权单号的 PROCESSING → SUCCEEDED（应扣佣金 400）照常 applied、按 BR-FUND-08 ② 扣回（键带 R{id}）；被拒那条仍是 FAILED 原样，审计表无行、无该原因告警",
+    "test/spec/settlement/rights-audit-port/injected.int.test.ts > [AC-B2-04zx#3] 入账后订单：缺端口的命令拒绝重开、什么都不写；注入（记录调用的假）审计端口的命令对同一重开 applied——同一条记录 SUCCEEDED、row_version + 1，按 BR-FUND-08 ② 扣回一次 170 / 34 / 17、平台 179（键带 R{id}）；端口恰被调用一次、用的是 record 的同一事务、入参为系统身份 + 动作 order_rights_success_after_closed + 目标 order_rights:<id> + 前后状态与原因；审计表无行（settlement 不自写）；该原因告警一条；重放 → duplicate，端口不再被调用、不重复扣",
+    "test/spec/settlement/rights-audit-port/injected.int.test.ts > [AC-B2-04zx#4] 入账前订单（WAITING）：缺端口的命令拒绝重开、什么都不写；注入（记录调用的假）审计端口的命令对同一重开 applied——同一条记录 SUCCEEDED，按 R7 RIGHTS_PARTIAL 处理（返利状态不变、无凭证）；端口恰被调用一次、同一事务、入参同上；审计表无行；该原因告警一条",
+    "test/spec/settlement/rights-audit-port/injected.int.test.ts > [AC-B2-04zx#5] 注入 admin 真实的 createSystemAuditWriter（生产的接法）：缺端口的命令先拒绝；经端口的重开若调用方事务随后失败 → 维权记录、扣回、审计行一起回滚（仍 FAILED、无审计行）；提交时恰一条审计行（本 App、admin_id 为空、system_actor 为系统身份、动作 order_rights_success_after_closed、目标 order_rights:<id>、带原因）",
+    "test/spec/settlement/rights-audit-port/source.test.ts > [AC-B2-04zx#7] settlement/rights/** 源码（不含 *.test.ts）去掉注释后不出现 audit_logs；整个 settlement 模块源码去掉注释后没有对 audit_logs 的写入语句（审计只经注入的端口）",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API PROCESSING → SUCCEEDED（应扣佣金 400…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API PROCESSING → FAILED：applied、app…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后导入 SUCCEEDED 无应扣佣金（WAIT_COMMISSION）→…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 WAIT_COMMISSION 期间同一结果重放：applied、du…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API SUCCEEDED 重放：applied、duplicate，…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API SUCCEEDED 之后报 FAILED（成功后回退）：app…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后导入 FAILED 之后联盟报成功：applied、duplicate；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 之后同一单号以导入源报 SUCCEEDED（应扣…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 之后报 PROCESSING：applied、d…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 之后报成功而无应扣佣金（会落 WAIT_COMM…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 重放：applied、duplicate；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+    "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账前（WAITING）API PROCESSING → FAILED：app…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写"
+  ],
+  "risk_note": "RV2 settlement (B2-04zx; FU-B104ZZA-AUDIT-PORT; D10-717 ① / D10-723 / D10-739; BR-FUND-06, BR-FUND-08). The D10-699 reopen (an API-source FAILED order_rights row the union later reports SUCCEEDED) now writes its system audit only through the injected audit port; settlement no longer writes admin's audit table itself (rights-store insertSystemAudit removed). Without an audit port the reopen is refused before any write (fail-closed: row stays FAILED, no clawback, no audit, no alert); every other path is unchanged without a port. Production injects admin createSystemAuditWriter in both assemblies. The frozen success-after-closed blocks were moved to a prior test-change (#2519, D10-739) so this branch does not change them.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "50c9ee57a467728445f82f23af885ead70ab8603",
+      "tree": "1e8fd87c51a84d6065a95617df59a201ce307375",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T15:24:45Z",
+      "finished_at": "2026-11-06T15:25:06Z",
+      "red_tests": [
+        "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账后订单，RIGHTS：API 先 PROCESSING 再 FAILED，…：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+        "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账后订单，RIGHTS：API 直接 FAILED，联盟后报 SUCCEED…：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+        "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账后订单，PUNISH：API FAILED，联盟后报 SUCCEEDED：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+        "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#1] 缺审计端口、入账前订单（WAITING），RIGHTS：API FAILED，联盟后报 S…：record 在写任何东西之前抛错（fail-closed）——同一调用方事务里抛错后读到的与调用前完全一致（order_rights 仍 FAILED、row_version 不变，无凭证 / 分录 / 余额 / 历史 / 事件 / 待处理 / 审计行），不调记账、事件、估值边界，不告警；事务仍可用、回滚后库与调用前一致；再来一次照样拒绝",
+        "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts > [AC-B2-04zx#2] 缺审计端口时的拒绝只对 D10-699 重开：同一订单上被拒的那条之外，另一条维权单号的 PROCESSING → SUCCEEDED（应扣佣金 400）照常 applied、按 BR-FUND-08 ② 扣回（键带 R{id}）；被拒那条仍是 FAILED 原样，审计表无行、无该原因告警",
+        "test/spec/settlement/rights-audit-port/injected.int.test.ts > [AC-B2-04zx#3] 入账后订单：缺端口的命令拒绝重开、什么都不写；注入（记录调用的假）审计端口的命令对同一重开 applied——同一条记录 SUCCEEDED、row_version + 1，按 BR-FUND-08 ② 扣回一次 170 / 34 / 17、平台 179（键带 R{id}）；端口恰被调用一次、用的是 record 的同一事务、入参为系统身份 + 动作 order_rights_success_after_closed + 目标 order_rights:<id> + 前后状态与原因；审计表无行（settlement 不自写）；该原因告警一条；重放 → duplicate，端口不再被调用、不重复扣",
+        "test/spec/settlement/rights-audit-port/injected.int.test.ts > [AC-B2-04zx#4] 入账前订单（WAITING）：缺端口的命令拒绝重开、什么都不写；注入（记录调用的假）审计端口的命令对同一重开 applied——同一条记录 SUCCEEDED，按 R7 RIGHTS_PARTIAL 处理（返利状态不变、无凭证）；端口恰被调用一次、同一事务、入参同上；审计表无行；该原因告警一条",
+        "test/spec/settlement/rights-audit-port/injected.int.test.ts > [AC-B2-04zx#5] 注入 admin 真实的 createSystemAuditWriter（生产的接法）：缺端口的命令先拒绝；经端口的重开若调用方事务随后失败 → 维权记录、扣回、审计行一起回滚（仍 FAILED、无审计行）；提交时恰一条审计行（本 App、admin_id 为空、system_actor 为系统身份、动作 order_rights_success_after_closed、目标 order_rights:<id>、带原因）",
+        "test/spec/settlement/rights-audit-port/source.test.ts > [AC-B2-04zx#7] settlement/rights/** 源码（不含 *.test.ts）去掉注释后不出现 audit_logs；整个 settlement 模块源码去掉注释后没有对 audit_logs 的写入语句（审计只经注入的端口）",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API PROCESSING → SUCCEEDED（应扣佣金 400…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API PROCESSING → FAILED：applied、app…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后导入 SUCCEEDED 无应扣佣金（WAIT_COMMISSION）→…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 WAIT_COMMISSION 期间同一结果重放：applied、du…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API SUCCEEDED 重放：applied、duplicate，…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API SUCCEEDED 之后报 FAILED（成功后回退）：app…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后导入 FAILED 之后联盟报成功：applied、duplicate；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 之后同一单号以导入源报 SUCCEEDED（应扣…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 之后报 PROCESSING：applied、d…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 之后报成功而无应扣佣金（会落 WAIT_COMM…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账后 API FAILED 重放：applied、duplicate；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts > [AC-B2-04zx#6] 缺审计端口、入账前（WAITING）API PROCESSING → FAILED：app…；不写审计行、无该原因告警；对照：同一订单另一条 API 源 FAILED → 联盟报 SUCCEEDED（应扣佣金 100）被缺端口的命令拒绝，什么都不写"
+      ],
+      "expected": [
+        "test/spec/settlement/rights-audit-port/fail-closed.int.test.ts",
+        "test/spec/settlement/rights-audit-port/injected.int.test.ts",
+        "test/spec/settlement/rights-audit-port/source.test.ts",
+        "test/spec/settlement/rights-audit-port/unaffected.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "63efa6c0e846e273dc96707fbfb3b8dbb9e6524348674f2e805863c0582b8ee8"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d1158b90149eaf0504b8c7ecefd87895bad12f14660a8fd1672a07951fe7e38a"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: fallback removal, refusal before any write without a port, production injection, replay and transaction rollback checked against BR-FUND-06 / 08. Static review, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by an independent Claude in 2 attempts. Round 1 fail (S1: an IMPORT-source SUCCEEDED after an API FAILED must stay duplicate, also without a port), round 2 incremental pass. The frozen success-after-closed blocks (port injection, two added assertions) went in first as test-change #2519, checked read-only by a fresh Claude (CONFIRMED)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "39c104bb299159207f06ec9bfcf6f8daf0e77e15",
+    "specs": "9e57900c342339bf28cd82120b289fc6d10f73f1"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

@@ -16,8 +16,10 @@
 //      - D10-699 (B1-04zza money r1 S0): a stored FAILED row of source API and an incoming API
 //        record whose stored status is SUCCEEDED (the union reports success after the record was
 //        closed without charging us, e.g. Taobao refund_status 14 / 15 then 12 / 13) → the same
-//        in-place result as above (applied), plus one system audit row and one alert, reason
-//        union_reported_success_after_closed;
+//        in-place result as above (applied), plus one system audit row through the injected
+//        audit port and one alert, reason union_reported_success_after_closed; without an injected
+//        audit port (D10-723) the record throws before writing anything (fail-closed, the caller's
+//        transaction rolls back whole);
 //      - anything else on a stored key (a replay, a closed SUCCEEDED row, an ADMIN / IMPORT FAILED
 //        row, FAILED → PROCESSING / WAIT_COMMISSION, FAILED again) → duplicate, nothing written,
 //        never a second clawback.
@@ -66,7 +68,6 @@ import { readRebateOrder } from '../rebate/infra/rebate-store.ts';
 import {
   findRights,
   insertRights,
-  insertSystemAudit,
   readOpenDeductionTotal,
   updateRightsResult,
   type OrderRightsRow,
@@ -99,8 +100,8 @@ export interface RightsCommandDependencies {
   readonly rebate: Pick<RebatePort, 'apply'>;
   /**
    * D10-699: the system audit of a closed API record reopened as successful (production: admin's
-   * createSystemAuditWriter). Absent, the row is inserted on the same transaction by this module's
-   * store with the same columns (system actor, admin_id null, at from the injected Clock).
+   * createSystemAuditWriter). D10-723: the audit is only written through this port; absent, such a
+   * reopen is refused before anything is written (every other path works without it).
    */
   readonly audit?: RightsSystemAudit;
 }
@@ -179,10 +180,7 @@ function reopensAsSucceeded(
 }
 
 export function createRightsCommandPort(deps: RightsCommandDependencies): RightsCommandPort {
-  const { logger, clawback, rebate, clock } = deps;
-  const audit: RightsSystemAudit = deps.audit ?? {
-    appendAction: (trx, input) => insertSystemAudit(trx, input, clock.now()),
-  };
+  const { logger, clawback, rebate, audit } = deps;
 
   /** BR-FUND-06 / 07 before credit: R6 / R7 through the rebate port (generated transition()). */
   async function precredit(
@@ -332,13 +330,17 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
         logger.info({ ...base, outcome: 'duplicate' }, 'rights record replayed');
         return { kind: 'duplicate' };
       }
+      if (reopens && audit === undefined) {
+        // D10-723: no audit port, no reopen — refused before any write (fail-closed).
+        throw new Error('settlement rights: reopening a closed record needs the audit port');
+      }
       const ok = await updateRightsResult(trx, stored, result);
       if (!ok) throw new Error('settlement rights: order_rights CAS matched no row');
       rightsId = stored.id;
       if (reopens) reopened = stored;
     }
 
-    if (reopened !== undefined) {
+    if (reopened !== undefined && audit !== undefined) {
       // D10-699: on this transaction, so the audit commits or rolls back with the result.
       await audit.appendAction(trx, {
         appId: order.app_id,

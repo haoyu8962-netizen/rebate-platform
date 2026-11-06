@@ -404,21 +404,3 @@ export interface RightsSystemAuditInput {
     readonly reason: string;
   };
 }
-
-/**
- * The audit row of a system action on the caller's transaction, columns as admin's
- * createSystemAuditWriter stores them (admin_id null, ip null, at = `at` from the injected Clock).
- * Only used when no audit writer is injected; the values carry no sensitive field.
- */
-export async function insertSystemAudit(
-  trx: Transaction<DB>,
-  input: RightsSystemAuditInput,
-  at: Date,
-): Promise<void> {
-  await sql`insert into app.audit_logs
-      (app_id, admin_id, system_actor, action, target, before, after, ip, at)
-      values (${input.appId}, null, ${input.actor}, ${input.action}, ${input.target},
-        ${JSON.stringify(input.before)}::jsonb, ${JSON.stringify(input.after)}::jsonb, null, ${at})`.execute(
-    trx,
-  );
-}
