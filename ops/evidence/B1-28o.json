@@ -1,0 +1,113 @@
+{
+  "task": "B1-28o",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "spec_commit": "4c411cc8dfa22d7a083b63648f15cf967784eef6",
+  "red_tests": [
+    "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 组卡后 rebate_basis=no_rebate 的不出卡；其余名次沿用频道原位次，被滤掉的名次空缺、不前移",
+    "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 后续页同样过滤：第 3 页名次仍为 40 + 位次 + 1，滤掉的号空着",
+    "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 整页都无返利：items 为空，不出任何 no_rebate 卡",
+    "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#8][BR-PRICE-08] 上游丢位（positions）与无返利过滤同页：名次 = 原位次，两种空号并存",
+    "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#8] 第 2 页带 positions 并过滤：名次 = 20 + 原位次 + 1",
+    "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#9] notice_key 仍为 rank.notice；出卡入口跳过的（价格异常）照旧跳过，与无返利空号并存",
+    "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 属性：任意无返利模式与页号（上游无更多），下发的恰为有返利条目、名次 = first + 原下标 + 1",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][BR-PRICE-08] 分页例：第 1 页滤掉 6 个且上游有更多 → 只补拉第 2 页一次，返回恰 20 条，第 2 页条目按自己的位次编名次，游标 page_no=3",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][BR-PRICE-08] 第 1 页 20 件对当前用户全是无返利、上游有更多：过滤后为空也要补拉第 2 页，返回第 2 页 20 条（名次 21–40），游标 page_no=3",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][AC-B1-28o#8][BR-PRICE-08] 补拉页带 positions：补拉条目的名次 = (2-1)*20 + 补拉页自己的位次 + 1，不按数组下标编号",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][AC-B1-28o#8][BR-PRICE-08] 补拉页带 positions 且自身也有被滤掉的：按原顺序取前几条有返利的，名次仍按补拉页的位次",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][BR-PRICE-08] 游标只记上游页码：接着取的是上游第 3 页（名次 41 起），补拉页没下发的条目不再出现",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#3][BR-PRICE-08] 补拉后仍不足 20：返回实际 17 条，不补拉第 3 页；补拉页 hasMore=true 决定游标",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#3][BR-PRICE-08] 补拉后仍不足 20：返回实际 17 条，不补拉第 3 页；补拉页 hasMore=false 决定游标",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#3][BR-PRICE-08] 补拉页全是无返利、上游还有更多：只返回第 1 页剩下的，不补第 3 页，游标 page_no=3",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#4] 第 1 页一个都没滤掉：不补拉、游标 page_no=2（同现状）；同一页只滤掉 1 条就补拉第 2 页、游标 page_no=3",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#5][BR-PRICE-08] 第 1 页有被滤掉但上游 hasMore=false：不补拉，返回剩余条目，next_cursor=null",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#6] 当前页已是 HOT_RANK_MAX_PAGE_NO：有被滤掉、上游还有更多也不补拉，不发游标",
+    "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#6] 倒数第二页补拉到 HOT_RANK_MAX_PAGE_NO 就停：补拉页还有更多也不发游标",
+    "test/spec/catalog/hot-rank-no-rebate/viewer.test.ts > [AC-B1-28o#7][BR-PRICE-08] 同一上游页对两个用户各自过滤（组卡一个 normal、一个 no_rebate）；上游与缓存收到、返回的仍是原始整页（cached=false）",
+    "test/spec/catalog/hot-rank-no-rebate/viewer.test.ts > [AC-B1-28o#7][BR-PRICE-08] 同一上游页对两个用户各自过滤（组卡一个 normal、一个 no_rebate）；上游与缓存收到、返回的仍是原始整页（cached=true）",
+    "test/spec/catalog/hot-rank-no-rebate/viewer.test.ts > [AC-B1-28o#7][BR-PRICE-08] 先看全的用户再看被过滤的用户：后者照样滤掉自己无返利的卡，前者的结果不影响后者"
+  ],
+  "risk_note": "RV1 apps/api/src/modules/catalog/hot-rank.ts：热销榜按用户组卡后过滤 no_rebate，名次沿用原位次，最多补拉 1 页；缓存与上游层不动；无迁移、无资金路径",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "4c411cc8dfa22d7a083b63648f15cf967784eef6",
+      "tree": "99721ebb24dc0fe73feac8bb9f04244a5a8fc2f4",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T01:24:47Z",
+      "finished_at": "2026-11-06T01:24:56Z",
+      "red_tests": [
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 组卡后 rebate_basis=no_rebate 的不出卡；其余名次沿用频道原位次，被滤掉的名次空缺、不前移",
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 后续页同样过滤：第 3 页名次仍为 40 + 位次 + 1，滤掉的号空着",
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 整页都无返利：items 为空，不出任何 no_rebate 卡",
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#8][BR-PRICE-08] 上游丢位（positions）与无返利过滤同页：名次 = 原位次，两种空号并存",
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#8] 第 2 页带 positions 并过滤：名次 = 20 + 原位次 + 1",
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#9] notice_key 仍为 rank.notice；出卡入口跳过的（价格异常）照旧跳过，与无返利空号并存",
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts > [AC-B1-28o#1][BR-PRICE-08] 属性：任意无返利模式与页号（上游无更多），下发的恰为有返利条目、名次 = first + 原下标 + 1",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][BR-PRICE-08] 分页例：第 1 页滤掉 6 个且上游有更多 → 只补拉第 2 页一次，返回恰 20 条，第 2 页条目按自己的位次编名次，游标 page_no=3",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][BR-PRICE-08] 第 1 页 20 件对当前用户全是无返利、上游有更多：过滤后为空也要补拉第 2 页，返回第 2 页 20 条（名次 21–40），游标 page_no=3",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][AC-B1-28o#8][BR-PRICE-08] 补拉页带 positions：补拉条目的名次 = (2-1)*20 + 补拉页自己的位次 + 1，不按数组下标编号",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][AC-B1-28o#8][BR-PRICE-08] 补拉页带 positions 且自身也有被滤掉的：按原顺序取前几条有返利的，名次仍按补拉页的位次",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#2][BR-PRICE-08] 游标只记上游页码：接着取的是上游第 3 页（名次 41 起），补拉页没下发的条目不再出现",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#3][BR-PRICE-08] 补拉后仍不足 20：返回实际 17 条，不补拉第 3 页；补拉页 hasMore=true 决定游标",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#3][BR-PRICE-08] 补拉后仍不足 20：返回实际 17 条，不补拉第 3 页；补拉页 hasMore=false 决定游标",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#3][BR-PRICE-08] 补拉页全是无返利、上游还有更多：只返回第 1 页剩下的，不补第 3 页，游标 page_no=3",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#4] 第 1 页一个都没滤掉：不补拉、游标 page_no=2（同现状）；同一页只滤掉 1 条就补拉第 2 页、游标 page_no=3",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#5][BR-PRICE-08] 第 1 页有被滤掉但上游 hasMore=false：不补拉，返回剩余条目，next_cursor=null",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#6] 当前页已是 HOT_RANK_MAX_PAGE_NO：有被滤掉、上游还有更多也不补拉，不发游标",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts > [AC-B1-28o#6] 倒数第二页补拉到 HOT_RANK_MAX_PAGE_NO 就停：补拉页还有更多也不发游标",
+        "test/spec/catalog/hot-rank-no-rebate/viewer.test.ts > [AC-B1-28o#7][BR-PRICE-08] 同一上游页对两个用户各自过滤（组卡一个 normal、一个 no_rebate）；上游与缓存收到、返回的仍是原始整页（cached=false）",
+        "test/spec/catalog/hot-rank-no-rebate/viewer.test.ts > [AC-B1-28o#7][BR-PRICE-08] 同一上游页对两个用户各自过滤（组卡一个 normal、一个 no_rebate）；上游与缓存收到、返回的仍是原始整页（cached=true）",
+        "test/spec/catalog/hot-rank-no-rebate/viewer.test.ts > [AC-B1-28o#7][BR-PRICE-08] 先看全的用户再看被过滤的用户：后者照样滤掉自己无返利的卡，前者的结果不影响后者"
+      ],
+      "expected": [
+        "test/spec/catalog/hot-rank-no-rebate/filter.test.ts",
+        "test/spec/catalog/hot-rank-no-rebate/refill.test.ts",
+        "test/spec/catalog/hot-rank-no-rebate/viewer.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ed9fcc82e5e2a6a1a00b12ff059d12dbad8e01372fee105b7bc9096ea67f4bfa"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "round 1 pass, 0 findings (couli-runs/B1-28o/review-codex-general-r1.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "spec-test r1 fail (S1x3) -> r2: two S1 closed; the remaining S1 (property callback must return a boolean) conflicts with red-check CR2-03 and was closed by orchestrator ruling D10-705 (assert with expect inside the property, return true at the end). Rule tests by claude-independent (claude-run.sh), 3 attempts. couli-runs/B1-28o/review-codex-spec-test-r{1,2}.json"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "63d0e241da3faab5bc724ee9413ad15f5057f85b",
+    "specs": "4e438a320cb0da577f7f5ef420f3aa5a7c15b9b6"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

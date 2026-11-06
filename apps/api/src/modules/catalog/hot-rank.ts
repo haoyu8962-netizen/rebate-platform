@@ -218,6 +218,44 @@ function errorFields(error: unknown): Record<string, string> {
 }
 
 /**
+ * Appends the cards of one channel page to `items` until it holds HOT_RANK_PAGE_SIZE, in channel
+ * order, each ranked by its own channel position (`positions` when the upstream dropped some).
+ * Positions the card entry skips or that come out as no_rebate for the current viewer (BR-PRICE-08)
+ * leave their rank unused. Returns how many no_rebate cards were left out.
+ */
+async function collect(
+  page: HotRankUpstreamPage,
+  pageNo: number,
+  items: HotRankData['items'],
+  options: HotRankOptions,
+): Promise<number> {
+  const first = (pageNo - 1) * HOT_RANK_PAGE_SIZE;
+  let filtered = 0;
+  for (const [index, entry] of page.items.slice(0, HOT_RANK_PAGE_SIZE).entries()) {
+    if (items.length >= HOT_RANK_PAGE_SIZE) break;
+    const result = await options.cards.assemble({
+      item: entry.item,
+      ref: entry.ref,
+      entrySource: RANK_ENTRY_SOURCE,
+      stale: page.stale === true,
+      scene: 'retrieval',
+    });
+    if (result.kind !== 'card') continue;
+    if (result.card.rebate_basis === 'no_rebate') {
+      filtered += 1;
+      continue;
+    }
+    const position = page.positions?.[index] ?? index;
+    items.push({
+      rank: first + position + 1,
+      sales_text: entry.salesText,
+      product_card: result.card,
+    });
+  }
+  return filtered;
+}
+
+/**
  * One page of the hot-sales list of a platform: a selectable whitelisted channel checked before
  * every fetch (none → 50304 rank_unavailable), its categories, items in channel order with rank
  * counted from 1 across pages, sales_text passed through, cards registering a link and quote
@@ -226,8 +264,10 @@ function errorFields(error: unknown): Record<string, string> {
  *
  * Order: whitelist (50304 rank_unavailable) → cursor (20001) → viewer → categories → category
  * (20001) → channel page → one card per position through the single card entry. A position the
- * card entry skips (price anomaly) or the upstream dropped (D10-422 ②, `positions`) leaves its rank
- * number unused: ranks are the channel's own positions, never renumbered or refilled.
+ * card entry skips (price anomaly), the upstream dropped (D10-422 ②, `positions`) or that is
+ * no_rebate for the viewer (BR-PRICE-08) leaves its rank number unused: ranks are the channel's own
+ * positions, never renumbered. Only a page that lost a no_rebate card is refilled, once, from the
+ * next channel page (its items ranked by their own positions); the cursor then points past it.
  */
 export async function getHotRank(
   query: HotRankQuery,
@@ -296,26 +336,31 @@ export async function getHotRank(
     }),
   );
 
-  const first = (pageNo - 1) * HOT_RANK_PAGE_SIZE;
   const items: HotRankData['items'] = [];
-  for (const [index, entry] of page.items.slice(0, HOT_RANK_PAGE_SIZE).entries()) {
-    const result = await options.cards.assemble({
-      item: entry.item,
-      ref: entry.ref,
-      entrySource: RANK_ENTRY_SOURCE,
-      stale: page.stale === true,
-      scene: 'retrieval',
-    });
-    if (result.kind !== 'card') continue;
-    const position = page.positions?.[index] ?? index;
-    items.push({
-      rank: first + position + 1,
-      sales_text: entry.salesText,
-      product_card: result.card,
-    });
+  const filtered = await collect(page, pageNo, items, options);
+
+  // BR-PRICE-08: a page that lost a no_rebate card is refilled once from the next channel page;
+  // a page short only because of upstream gaps or price anomalies is not. The cursor counts
+  // upstream pages, never filtered offsets.
+  let lastPageNo = pageNo;
+  let lastPage = page;
+  if (filtered > 0 && page.hasMore && pageNo < HOT_RANK_MAX_PAGE_NO) {
+    const refillNo = pageNo + 1;
+    lastPage = await fromUnion('page', () =>
+      upstream.page({
+        appId,
+        platform,
+        channelId,
+        categoryId: category,
+        pageNo: refillNo,
+        pageSize: HOT_RANK_PAGE_SIZE,
+      }),
+    );
+    lastPageNo = refillNo;
+    await collect(lastPage, refillNo, items, options);
   }
 
-  const more = page.hasMore && pageNo < HOT_RANK_MAX_PAGE_NO;
+  const more = lastPage.hasMore && lastPageNo < HOT_RANK_MAX_PAGE_NO;
   return {
     channel: channelId,
     categories: categories.map((entry) => ({ category_id: entry.categoryId, name: entry.name })),
@@ -326,7 +371,7 @@ export async function getHotRank(
           platform,
           channel_id: channelId,
           category_id: category,
-          page_no: pageNo + 1,
+          page_no: lastPageNo + 1,
         })
       : null,
   };
