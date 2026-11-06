@@ -1896,6 +1896,8 @@ const ORDER_SYNC_APP_ID = 'couli';
  * is then skipped); suffixVoidEnabled, content's attr.blacklist.order_suffix_void_enabled of the
  * order's App, anything but true being off (08's default; BR-ATTR-26).
  * B1-10n: `rightsImports`, what the rights_import job needs; see orderSyncWorker.
+ * B1-04zza: `rightsSync`, settlement's rights.record for the refund / punishment sync; see
+ * orderSyncWorker.
  */
 function orderSyncPorts(
   union: DynamicModule,
@@ -1903,6 +1905,7 @@ function orderSyncPorts(
   keyring: () => FieldCrypto | undefined,
   rebate: OrderRebatePortFactory,
   rightsImports: NonNullable<OrdersWorkerOptions['rightsImports']>,
+  rightsSync: NonNullable<OrdersWorkerOptions['rightsSync']>,
 ): OrdersWorkerOptions {
   return {
     union,
@@ -1914,6 +1917,7 @@ function orderSyncPorts(
     platformRestore: (clock) => orderPlatformRestorePort(clock),
     rebate,
     rightsImports,
+    rightsSync,
     blocklist: (_db, clock) => {
       const crypto = keyring();
       return crypto === undefined ? undefined : createOrderBlocklistPorts({ clock, crypto });
@@ -1947,6 +1951,8 @@ function orderSyncPorts(
  * command of the rights_import job; both are built once, when the runtime is. The beneficiary gate
  * needs the field keyring: without one (local / test only, see above) neither is built, with one
  * warning line, and the settle worker does not run there either, so no order is credited.
+ * B1-04zza: the refund / punishment sync gets its own rights command over the same clawback and
+ * rebate port (undefined where the clawback is not built: no rights / punish timer there).
  */
 function orderSyncWorker(
   union: DynamicModule,
@@ -1985,8 +1991,28 @@ function orderSyncWorker(
     const { clock, logger, events } = assembly;
     return {
       store: createImportStore({ appEnv: entry.appEnv, logger }),
-      rights: createRightsCommandPort({ clock, logger, events, clawback, rebate: port }),
+      rights: createRightsCommandPort({
+        clock,
+        logger,
+        events,
+        clawback,
+        rebate: port,
+        audit: createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
+      }),
     };
+  };
+  const rightsSync: NonNullable<OrdersWorkerOptions['rightsSync']> = (assembly) => {
+    const { port, clawback } = wire(assembly);
+    if (clawback === undefined) return undefined;
+    const { clock, logger, events } = assembly;
+    return createRightsCommandPort({
+      clock,
+      logger,
+      events,
+      clawback,
+      rebate: port,
+      audit: createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
+    });
   };
   const keyring = (): FieldCrypto | undefined => {
     if (entry === undefined) throw new Error('orders: the blacklist step needs the worker entry');
@@ -2002,6 +2028,7 @@ function orderSyncWorker(
       keyring,
       (assembly) => wire(assembly).port,
       rightsImports,
+      rightsSync,
     ),
   );
   const runtime = orderSyncToken();

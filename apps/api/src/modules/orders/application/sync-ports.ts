@@ -27,6 +27,12 @@ export interface OrderRescanWindow extends RescanStream, JobPayload {
   readonly window_end: string;
 }
 
+/** B1-04zza: any stream's window as the cursor store sees it (rights streams included). */
+export interface SyncCursorWindow extends SyncStream {
+  readonly window_start: string;
+  readonly window_end: string;
+}
+
 export interface SyncAccount {
   readonly app_id: string;
   readonly platform: RegisteredPlatform;
@@ -37,7 +43,7 @@ export interface SyncAccount {
 export interface SyncCursorStore {
   read(stream: SyncStream): Promise<string | null>;
   /** One transaction: insert if absent, otherwise CAS from window_start to window_end. */
-  advance(window: OrderSyncWindow | OrderRescanWindow): Promise<boolean>;
+  advance(window: OrderSyncWindow | OrderRescanWindow | SyncCursorWindow): Promise<boolean>;
   /**
    * B1-04zt: one statement moves this stream's cursor to `to`. `expected` a string: CAS of the
    * existing row, a missing row or another cursor_at writes nothing and resolves false. `expected`

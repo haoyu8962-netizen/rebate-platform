@@ -8,14 +8,21 @@
 //   ctx.gateUpstream），nextCursor 是不透明串（与订单游标互不通用）。has_next 为 true 而 position_index
 //   缺失 / 空 / 与本次相同 → upstream_unavailable。归档 kind = order。
 // - 映射（data.result[]）：order_id = tb_trade_id；refund_id = refund_suit_id；base_refund_fen =
-//   tk_commission_fee_refund − tk_commission_alimm_refund_fee − tk_commission_agent_refund_fee；
-//   subsidy_refund_fen = tk_subsidy_fee_refund − tk_subsidy_alimm_refund_fee −
-//   tk_subsidy_agent_refund_fee；refund_fen = base_refund_fen。各金额先按 BR-CALC-26 yuanStrToFen 单独
-//   取分（JSON 数字取原文），再相减。必需字段缺失 / 非法 → 跳过该条并告警；任一差为负 → 跳过并告警。
+//   tk_commission_fee_refund 原值（B1-04zza，D10-645 ①：该字段已不含技术服务费与渠道专项服务费，
+//   alimm / agent 两项只校验、不相减）；subsidy_refund_fen = tk_subsidy_fee_refund −
+//   tk_subsidy_alimm_refund_fee − tk_subsidy_agent_refund_fee；refund_fen = base_refund_fen。各金额先按 BR-CALC-26 yuanStrToFen 单独
+//   取分（JSON 数字取原文），补贴再相减。必需字段缺失 / 非法 → 跳过该条并告警；补贴差为负 → 跳过并告警。
+// - rights_status（B1-04zza，D10-645 ②）：refund_status 4 / 11 → PROCESSING；2 / 12 / 13 → SUCCEEDED；
+//   3 → FAILED；14 / 15 → CLOSED_NO_CHARGE；缺失或别的码 → null（不当成功）。
 // - 维权记录没有推广位字段：union 侧不过滤，原样返回；是否凑狸订单由 orders / funds 按已入库订单匹配。
 // TODO(规划/11 §4.5): 明细字段按文档写（录制窗口内 0 条），待大淘客维权录制复核 — blocked on 大淘客录制
-// TODO(w1): 扣哪几项服务费待与 specs/attribution.md 的淘宝 N 映射对齐（该文件尚无淘宝映射）
-import type { RefundQueryOpt, TimeWindow, UnionError, UnionRefund } from '../../domain/types.ts';
+import type {
+  RefundQueryOpt,
+  TimeWindow,
+  UnionError,
+  UnionRefund,
+  UnionRightsStatus,
+} from '../../domain/types.ts';
 import {
   beijingText,
   isRecord,
@@ -34,8 +41,8 @@ import {
  * Refund warnings. None carries an order number, a refund id or an amount:
  * - taobao_refund_row_skipped: a required field (tb_trade_id, refund_suit_id or one of the six
  *   tk_*_refund amounts) was missing or invalid; `field` is the upstream field name;
- * - taobao_refund_negative: base_refund_fen or subsidy_refund_fen came out negative (`field`
- *   names which); the refund was left out;
+ * - taobao_refund_negative: subsidy_refund_fen came out negative (`field` names it); the refund
+ *   was left out;
  * - taobao_refund_field_invalid: an optional field was invalid and became null (`field`).
  */
 export type TaobaoRefundWarningEvent =
@@ -67,7 +74,7 @@ const QUERY_TYPES: Readonly<Record<string, number>> = Object.freeze({
   update: 5,
 });
 
-/** The six required amounts, in the order they are checked. */
+/** The six required amounts, in the order they are checked (all six must be valid). */
 const COMMISSION_FIELDS = [
   'tk_commission_fee_refund',
   'tk_commission_alimm_refund_fee',
@@ -78,6 +85,24 @@ const SUBSIDY_FIELDS = [
   'tk_subsidy_alimm_refund_fee',
   'tk_subsidy_agent_refund_fee',
 ] as const;
+
+/** Taobao refund_status → the normalized refund state (D10-645 ②); other codes are unknown. */
+const RIGHTS_STATUS: Readonly<Record<string, UnionRightsStatus>> = Object.freeze({
+  '4': 'PROCESSING',
+  '11': 'PROCESSING',
+  '2': 'SUCCEEDED',
+  '12': 'SUCCEEDED',
+  '13': 'SUCCEEDED',
+  '3': 'FAILED',
+  '14': 'CLOSED_NO_CHARGE',
+  '15': 'CLOSED_NO_CHARGE',
+});
+
+/** null for a missing status or a code not listed (never taken as a success). */
+export function taobaoRightsStatus(code: string | null): UnionRightsStatus | null {
+  if (code === null || !Object.hasOwn(RIGHTS_STATUS, code)) return null;
+  return RIGHTS_STATUS[code] ?? null;
+}
 
 type Warn = ((event: TaobaoRefundWarning) => void) | undefined;
 
@@ -283,7 +308,7 @@ function requiredFen(row: Record<string, unknown>, field: string): bigint {
   return fen;
 }
 
-/** gross − alimm − agent, each already floored to fen (BR-CALC-26); negative skips the row. */
+/** The three amounts of a group, each floored to fen on its own (BR-CALC-26). */
 function netFen(
   row: Record<string, unknown>,
   fields: readonly [string, string, string],
@@ -320,9 +345,8 @@ function mapRow(row: Record<string, unknown>, like: Date, warn: Warn): UnionRefu
   const refundId = requiredId(row, 'refund_suit_id');
   const commission = netFen(row, COMMISSION_FIELDS);
   const subsidy = netFen(row, SUBSIDY_FIELDS);
-  // TODO(w1): 扣哪几项服务费待与 specs/attribution.md 的淘宝 N 映射对齐（该文件尚无淘宝映射）；
-  // 现按任务书公式：佣金 / 补贴各减技术服务费（alimm）与渠道专项服务费（agent）。
-  const baseFen = difference(commission, 'base_refund_fen');
+  // D10-645 ①：应扣佣金取 tk_commission_fee_refund 原值（已不含两项服务费），alimm / agent 只校验。
+  const baseFen = commission[0];
   const subsidyFen = difference(subsidy, 'subsidy_refund_fen');
 
   const bad = (field: string): null => {
@@ -345,6 +369,9 @@ function mapRow(row: Record<string, unknown>, like: Date, warn: Warn): UnionRefu
     return taobaoBeijingDate(value, like) ?? bad(field);
   };
 
+  // Same evaluation order as before, so the optional-field warnings keep their order.
+  const showReturnFen = optionalFen('show_return_fee');
+  const refundStatus = optionalText('refund_status');
   return Object.freeze({
     order_id: orderId,
     refund_id: refundId,
@@ -352,8 +379,9 @@ function mapRow(row: Record<string, unknown>, like: Date, warn: Warn): UnionRefu
     refund_fen: baseFen,
     base_refund_fen: baseFen,
     subsidy_refund_fen: subsidyFen,
-    show_return_fen: optionalFen('show_return_fee'),
-    refund_status: optionalText('refund_status'),
+    show_return_fen: showReturnFen,
+    refund_status: refundStatus,
+    rights_status: taobaoRightsStatus(refundStatus),
     refund_created_at: time('tk_refund_time'),
     refund_finished_at: time('tk_refund_suit_time'),
     modified_at: time('modified_time'),

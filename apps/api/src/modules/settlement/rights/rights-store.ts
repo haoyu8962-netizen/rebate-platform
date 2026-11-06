@@ -385,3 +385,40 @@ export async function readOpenDeductionTotals(
   }
   return totals;
 }
+
+/** D10-699: one system audit row (the shape of admin's SystemActionAudit). */
+export interface RightsSystemAuditInput {
+  readonly appId: string;
+  readonly actor: 'system:risk';
+  readonly action: string;
+  readonly target: string;
+  readonly before: {
+    readonly order_rights_id: string;
+    readonly status: string;
+    readonly source: string;
+  };
+  readonly after: {
+    readonly order_rights_id: string;
+    readonly status: string;
+    readonly source: string;
+    readonly reason: string;
+  };
+}
+
+/**
+ * The audit row of a system action on the caller's transaction, columns as admin's
+ * createSystemAuditWriter stores them (admin_id null, ip null, at = `at` from the injected Clock).
+ * Only used when no audit writer is injected; the values carry no sensitive field.
+ */
+export async function insertSystemAudit(
+  trx: Transaction<DB>,
+  input: RightsSystemAuditInput,
+  at: Date,
+): Promise<void> {
+  await sql`insert into app.audit_logs
+      (app_id, admin_id, system_actor, action, target, before, after, ip, at)
+      values (${input.appId}, null, ${input.actor}, ${input.action}, ${input.target},
+        ${JSON.stringify(input.before)}::jsonb, ${JSON.stringify(input.after)}::jsonb, null, ${at})`.execute(
+    trx,
+  );
+}

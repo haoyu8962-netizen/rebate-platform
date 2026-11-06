@@ -67,6 +67,7 @@ import {
   type UnionOrder,
   type UnionPunish,
   type UnionRefund,
+  type UnionRightsSources,
   type UpstreamGate,
 } from '../../domain/types.ts';
 import type { DataokeClient } from '../dataoke/dataoke-client.ts';
@@ -355,6 +356,16 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   /** B1-04z: one upstream request per listRefunds / listPunishments call, each gated. */
   readonly listRefundsMetering = 'per_request' as const;
   readonly listPunishmentsMetering = 'per_request' as const;
+
+  /**
+   * B1-04zza (money r1 S2 ①): listRefunds needs the 大淘客 order source, listPunishments also the
+   * order slots (same conditions as the methods below); without them the methods stay
+   * adapter_unimplemented and the order sync dispatches nothing for them.
+   */
+  get rightsSources(): UnionRightsSources {
+    const refunds = this.#orderSource !== undefined;
+    return { refunds, punishments: refunds && this.#orderSlots !== undefined };
+  }
 
   constructor(options: TaobaoAdapterOptions) {
     if (options.endpoint.platform !== 'taobao') {

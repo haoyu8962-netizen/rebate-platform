@@ -48,6 +48,10 @@
 // - B1-04zm: job name 'rescan.window' is routed to jobs/order-rescan.ts on both branches, and
 //   scheduledPlatforms() are the platforms it accepts. With ports.rescanConfig given, start() also
 //   arms the rescan loops of those platforms and stop() stops them; absent → no rescan timer.
+// - B1-04zza: with ports.rightsSync given and answering a port (settlement's rights.record), the
+//   handler routes 'rights.window' / 'punish.window' to jobs/rights-sync.ts (writes only through
+//   that port), and start() also arms the refund / punishment loops (application/rights-sync.ts)
+//   when some governed adapter has listRefunds / listPunishments. Absent or undefined → neither.
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports.
 import { readFileSync } from 'node:fs';
 import type { DB } from '@couli/db';
@@ -74,6 +78,14 @@ import {
   type UnionRegistry,
 } from '../union/index.ts';
 import { ORDER_RESCAN_JOB, createOrderRescanScheduler } from './application/order-rescan.ts';
+import {
+  PUNISH_SYNC_JOB,
+  RIGHTS_SYNC_JOB,
+  createRightsSyncScheduler,
+  createRightsSyncWriter,
+  type RightsCursorStore,
+  type RightsSyncRegistry,
+} from './application/rights-sync.ts';
 import { createOrderPipeline } from './application/pipeline-port.ts';
 import type { OrderPipelineDeps, OrderPipelinePort } from './application/pipeline-types.ts';
 import {
@@ -120,6 +132,7 @@ import { createRightsImportProcessors } from './application/rights-import-rows.t
 import { RIGHTS_IMPORT_JOB } from './application/rights-imports.ts';
 import type { RightsCommandPort } from './application/rights-ports.ts';
 import { handleRightsImport } from './jobs/rights-import.ts';
+import { handlePunishWindow, handleRightsWindow } from './jobs/rights-sync.ts';
 import { handleManualSyncJob, isManualSyncJob } from './jobs/manual-sync.ts';
 import { createOrderSyncRequestProgress } from './infra/order-sync-requests.ts';
 
@@ -208,6 +221,14 @@ export interface OrderSyncReadPorts {
    * reading nothing until used. Absent → no rescan timer; 'rescan.window' jobs are routed either way.
    */
   readonly rescanConfig?: (db: Kysely<DB>, clock: Clock) => SyncIntervalConfig;
+  /**
+   * B1-04zza: settlement's rights.record for the refund / punishment sync (application/
+   * rights-sync.ts), called once at assembly and reading nothing until used. Absent or undefined →
+   * no rights / punish timer. Given: start() also arms the rights loops of every platform whose
+   * adapter has listRefunds / listPunishments, and the handler routes 'rights.window' /
+   * 'punish.window' to jobs/rights-sync.ts.
+   */
+  readonly rightsSync?: (assembly: OrderRebateAssembly) => RightsCommandPort | undefined;
 }
 
 export interface OrderSyncRuntimeDeps {
@@ -417,10 +438,54 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
     platforms: scheduledPlatforms(),
     logger,
   };
+  // B1-04zza: refunds and punishments, only with settlement's rights.record injected.
+  const rightsPort = deps.ports.rightsSync?.({ db, clock, logger, events });
+  const rightsRegistry: RightsSyncRegistry = {
+    get(platform) {
+      const entry = governed.get(platform);
+      if (entry === undefined) throw new Error(`union: no endpoint for ${platform}`);
+      return entry.adapter;
+    },
+  };
+  const rightsCursorBase = createSyncCursorStore(db, clock);
+  const rightsCursors: RightsCursorStore = {
+    read: (stream) => rightsCursorBase.read(stream),
+    advance: (win) => rightsCursorBase.advance(win),
+    rewind: (stream, expected, to) =>
+      rightsCursorBase.rewind === undefined
+        ? Promise.resolve(false)
+        : rightsCursorBase.rewind(stream, expected, to),
+  };
+  const rightsHandler =
+    rightsPort === undefined
+      ? undefined
+      : {
+          clock,
+          access,
+          cursors: rightsCursors,
+          registry: rightsRegistry,
+          writer: createRightsSyncWriter({ db, clock, rights: rightsPort }),
+          logger,
+        };
+  const rightsSync =
+    rightsPort === undefined
+      ? undefined
+      : createRightsSyncScheduler({
+          clock,
+          queue,
+          cursors: rightsCursors,
+          access,
+          registry: rightsRegistry,
+          logger,
+        });
   const windowJob = (job: ReceivedJob): Promise<void> =>
-    job.name === ORDER_RESCAN_JOB
-      ? handleOrderRescanWindow(job, rescanHandler)
-      : handleOrderSyncWindow(job, handler);
+    rightsHandler !== undefined && job.name === RIGHTS_SYNC_JOB
+      ? handleRightsWindow(job, rightsHandler)
+      : rightsHandler !== undefined && job.name === PUNISH_SYNC_JOB
+        ? handlePunishWindow(job, rightsHandler)
+        : job.name === ORDER_RESCAN_JOB
+          ? handleOrderRescanWindow(job, rescanHandler)
+          : handleOrderSyncWindow(job, handler);
   const rescanConfig = deps.ports.rescanConfig?.(db, clock);
   const rescan =
     rescanConfig === undefined
@@ -439,9 +504,10 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
   const startSync = (): { stop(): Promise<void> } => {
     const syncRunning = sync.start();
     const rescanRunning = rescan?.start();
+    const rightsRunning = rightsSync?.start();
     return {
       async stop() {
-        await Promise.all([syncRunning.stop(), rescanRunning?.stop()]);
+        await Promise.all([syncRunning.stop(), rescanRunning?.stop(), rightsRunning?.stop()]);
       },
     };
   };

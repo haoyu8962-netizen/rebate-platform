@@ -13,8 +13,14 @@
 //        row and an incoming SUCCEEDED that carries deduction_commission_fen → the result of that
 //        same record (BR-FUND-06「维权结果」): the row is updated in place (same id; status,
 //        amounts, row_version + 1, updated_at = input.now) → applied;
-//      - anything else on a stored key (a replay, a closed SUCCEEDED / FAILED row) → duplicate,
-//        nothing written, never a second clawback.
+//      - D10-699 (B1-04zza money r1 S0): a stored FAILED row of source API and an incoming API
+//        record whose stored status is SUCCEEDED (the union reports success after the record was
+//        closed without charging us, e.g. Taobao refund_status 14 / 15 then 12 / 13) → the same
+//        in-place result as above (applied), plus one system audit row and one alert, reason
+//        union_reported_success_after_closed;
+//      - anything else on a stored key (a replay, a closed SUCCEEDED row, an ADMIN / IMPORT FAILED
+//        row, FAILED → PROCESSING / WAIT_COMMISSION, FAILED again) → duplicate, nothing written,
+//        never a second clawback.
 //      (In-place result kept as reported to the orchestrator; BR-FUND-06 needs it for platforms
 //      that report PROCESSING first.)
 //   3. by the row's status after step 2:
@@ -60,9 +66,28 @@ import { readRebateOrder } from '../rebate/infra/rebate-store.ts';
 import {
   findRights,
   insertRights,
+  insertSystemAudit,
   readOpenDeductionTotal,
   updateRightsResult,
+  type OrderRightsRow,
+  type RightsSystemAuditInput,
 } from './rights-store.ts';
+
+/** D10-699: the reason (audit and alert) of a closed API record the union later reports successful. */
+export const RIGHTS_SUCCESS_AFTER_CLOSED = 'union_reported_success_after_closed';
+/** The audit action of that change (target order_rights:<id>). */
+export const RIGHTS_REOPEN_AUDIT_ACTION = 'order_rights_success_after_closed';
+/**
+ * The system identity of the audit row. contracts/enums/admin.yaml audit_system_actor has no
+ * order-sync value yet; system:risk is the existing value the row is stored under.
+ * TODO(规划/11 §7.1): a dedicated order-sync system actor — blocked on the contract enum.
+ */
+const RIGHTS_AUDIT_ACTOR = 'system:risk';
+
+/** admin's system audit on the caller's transaction, by shape (settlement imports no admin code). */
+export interface RightsSystemAudit {
+  appendAction(trx: Transaction<DB>, input: RightsSystemAuditInput): Promise<void>;
+}
 
 export interface RightsCommandDependencies {
   readonly clock: Clock;
@@ -72,6 +97,12 @@ export interface RightsCommandDependencies {
   readonly clawback: ClawbackOrder;
   /** B2-04j rebate port: R6 / R7 commands before credit (apply). */
   readonly rebate: Pick<RebatePort, 'apply'>;
+  /**
+   * D10-699: the system audit of a closed API record reopened as successful (production: admin's
+   * createSystemAuditWriter). Absent, the row is inserted on the same transaction by this module's
+   * store with the same columns (system actor, admin_id null, at from the injected Clock).
+   */
+  readonly audit?: RightsSystemAudit;
 }
 
 type StoredStatus = 'PROCESSING' | 'WAIT_COMMISSION' | 'SUCCEEDED' | 'FAILED';
@@ -130,8 +161,28 @@ function causeOf(type: RightsRecordInput['type']): ClawbackCause {
   }
 }
 
+/**
+ * D10-699: the only transition out of a closed record — stored FAILED from the union (source API),
+ * the union now reporting success (an API record stored as SUCCEEDED, i.e. with its deduction).
+ */
+function reopensAsSucceeded(
+  stored: OrderRightsRow,
+  input: RightsRecordInput,
+  status: StoredStatus,
+): boolean {
+  return (
+    stored.status === 'FAILED' &&
+    stored.source === 'API' &&
+    input.source === 'API' &&
+    status === 'SUCCEEDED'
+  );
+}
+
 export function createRightsCommandPort(deps: RightsCommandDependencies): RightsCommandPort {
-  const { logger, clawback, rebate } = deps;
+  const { logger, clawback, rebate, clock } = deps;
+  const audit: RightsSystemAudit = deps.audit ?? {
+    appendAction: (trx, input) => insertSystemAudit(trx, input, clock.now()),
+  };
 
   /** BR-FUND-06 / 07 before credit: R6 / R7 through the rebate port (generated transition()). */
   async function precredit(
@@ -261,6 +312,7 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
       now: input.now,
     };
     let rightsId: string;
+    let reopened: OrderRightsRow | undefined;
     const stored = await findRights(trx, key);
     if (stored === undefined) {
       const id = await insertRights(trx, { ...key, ...result, source: input.source });
@@ -271,9 +323,11 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
       }
       rightsId = id;
     } else {
+      const reopens = reopensAsSucceeded(stored, input, status);
       const resolves =
         (stored.status === 'PROCESSING' && status !== 'PROCESSING') ||
-        (stored.status === 'WAIT_COMMISSION' && status === 'SUCCEEDED');
+        (stored.status === 'WAIT_COMMISSION' && status === 'SUCCEEDED') ||
+        reopens;
       if (!resolves) {
         logger.info({ ...base, outcome: 'duplicate' }, 'rights record replayed');
         return { kind: 'duplicate' };
@@ -281,6 +335,34 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
       const ok = await updateRightsResult(trx, stored, result);
       if (!ok) throw new Error('settlement rights: order_rights CAS matched no row');
       rightsId = stored.id;
+      if (reopens) reopened = stored;
+    }
+
+    if (reopened !== undefined) {
+      // D10-699: on this transaction, so the audit commits or rolls back with the result.
+      await audit.appendAction(trx, {
+        appId: order.app_id,
+        actor: RIGHTS_AUDIT_ACTOR,
+        action: RIGHTS_REOPEN_AUDIT_ACTION,
+        target: `order_rights:${reopened.id}`,
+        before: { order_rights_id: reopened.id, status: reopened.status, source: reopened.source },
+        after: {
+          order_rights_id: reopened.id,
+          status,
+          source: input.source,
+          reason: RIGHTS_SUCCESS_AFTER_CLOSED,
+        },
+      });
+      logger.warn(
+        {
+          ...base,
+          alert: RIGHTS_SUCCESS_AFTER_CLOSED,
+          reason: RIGHTS_SUCCESS_AFTER_CLOSED,
+          rebate_status: order.rebate_status,
+          outcome: 'reopened',
+        },
+        'closed rights record reported successful by the union; handled as succeeded',
+      );
     }
 
     if (isPrecredit(order.rebate_status)) await precredit(trx, input, status);

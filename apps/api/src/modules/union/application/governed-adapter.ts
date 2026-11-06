@@ -168,6 +168,13 @@ export function governAdapter(
     taobaoShareCode,
     shortenTaobaoUrl,
   } = adapter;
+  const rightsSources =
+    adapter.rightsSources === undefined
+      ? undefined
+      : {
+          refunds: adapter.rightsSources.refunds,
+          punishments: adapter.rightsSources.punishments,
+        };
 
   /** UnionIdentity is built only by linking on the server (BR-ATTR-05, BR-AI-03). */
   const assertIdentity = (identity: UnionIdentity, ctx: CallCtx, operation: string): void => {
@@ -202,6 +209,8 @@ export function governAdapter(
           bindPublisher: (req, ctx) =>
             run('write', ctx, (c) => bindPublisher.call(adapter, req, c)),
         }),
+    // B1-04zza (money r1 S2 ①): the adapter's configured rights sources, read once here.
+    ...(rightsSources === undefined ? {} : { rightsSources }),
     // B1-04z: `opt` goes through as given (and is left out when the caller left it out).
     ...(listRefunds === undefined
       ? {}
