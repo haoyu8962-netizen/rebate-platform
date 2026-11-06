@@ -17,6 +17,34 @@ paths:
 test_paths:
   - 'test/spec/payout/w10-late-paid/w10.int.test.ts'
   - 'test/spec/payout/w10-voucher-crosscheck/**'
+red_exempt:
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#1] alipay W10 恰一个无延迟任务，payload 三字段准确，与 PAID_API 状态变更事件的 xmin 相同；同键重放仍一个'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#2] 银行卡与微信 W10 判成功不入复核队列，同场 alipay 成功才入队'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#3] resolve_query_failed 拒绝不入队，修正条件后同键判成功恰一个任务'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#4] resolve_order_id_taken 拒绝不入队，修正条件后同键判成功恰一个任务'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#5] resolve_paid_at_invalid 拒绝不入队，修正条件后同键判成功恰一个任务'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#6] audit 故障回滚不留任务；同键重试成功才入队'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#7] voucher 故障回滚不留任务；同键重试成功才入队'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#8] tax_ytd 故障回滚不留任务；同键重试成功才入队'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
+  - file: test/spec/payout/w10-late-paid/w10.int.test.ts
+    test: '[AC-B2-09u#9] 缺少已核实名 resolve_identity_missing 不留任务；实名完整的单正常入队'
+    reason: '冻结 B2-09u 用例，测试体与基线逐字相同；只因 admin-unknown-payouts/unknown-harness.ts 以计算名动态 import（@couli/db/testing 的 new URL 写法），被判可能读到本单新加的 w10-voucher-crosscheck/crosscheck-harness.ts，整份评判（CT-06r）'
 red_exempt_rows:
   - file: test/spec/payout/w10-late-paid/w10.int.test.ts
     test: '[AC-B2-09u#11] 贯通 W10 真实任务：历史账单已 succeeded，missing 分支准确复核'
