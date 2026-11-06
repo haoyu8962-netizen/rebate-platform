@@ -110,6 +110,9 @@ export type {
   ItemRefRequest,
   ItemRefService,
 } from './application/item-ref.ts';
+// Task B1-05zg (BR-TEXT-12 购买按钮): the one button-key rule, for cards re-based outside catalog.
+export { ctaKeyFor } from './domain/card.ts';
+export type { CtaBasis } from './domain/card.ts';
 export { CatalogError, RAW_ID_MAX_AGE_MS } from './domain/rules.ts';
 export type { CatalogErrorCode } from './domain/rules.ts';
 export type {

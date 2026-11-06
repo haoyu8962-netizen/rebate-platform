@@ -57,6 +57,7 @@ function productCard(): ProductCard {
     benefit_tags: ['有券'],
     is_presale: false,
     link_id: 'synthetic-link',
+    // A retired key on the incoming card: the delivered button is re-keyed from rebate_basis.
     cta: { text_key: 'btn.buy.coupon' },
     quoted_at: '2026-10-15T08:00:00+08:00',
     stale: false,
@@ -162,5 +163,17 @@ describe('B3-04c get_rebate_quote card references (B3-05i)', () => {
     expect(outcome.cards).toHaveLength(1);
     expect(cardReference).toHaveBeenCalledWith(expect.anything(), 0);
     expect(outcome.modelView).toMatchObject({ products: [{ card_id: '@ref-0' }] });
+  });
+});
+
+describe('B1-05zg get_rebate_quote buy button (BR-TEXT-12)', () => {
+  it('[AC-B1-05zg#unit-quote] the delivered button follows rebate_basis, not the incoming key', async () => {
+    const { deps } = setup({});
+    const outcome = await createRebateQuoteHandler(deps).run({ product_key: KEY }, context());
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') return;
+    const data = outcome.cards[0]?.data as { product: Record<string, unknown> };
+    expect(data.product['rebate_basis']).toBe('normal');
+    expect(data.product['cta']).toEqual({ text_key: 'btn.buy.rebate' });
   });
 });

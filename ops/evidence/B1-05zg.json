@@ -1,0 +1,98 @@
+{
+  "risk_note": "RV2 by path (catalog and agent; money review). D10-664 S-08, 08 BR-TEXT-12 细则「购买按钮」: cta.text_key now follows the final rebate basis only — normal (single amount) and the no-longer-produced price_compare_risk → btn.buy.rebate, amount_unknown → btn.buy.rebate_unknown, login_required → rebate_login_to_view, no_rebate → btn.buy.no_rebate; btn.buy.coupon and btn.buy.rebate_suffix are no longer sent (keys kept); benefit_tags unchanged. ctaKeyFor (catalog/domain/card.ts) drops the coupon argument; catalog/index.ts exports it; the Agent search card recomputes the key from the final basis (incl. the guest login_to_view mask) and the rebate-quote card likewise. LinkLanding / share cards carry no cta by contract (client shows btn.buy) and are out of scope. The ProductCta contract text was already updated by CT-26t.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 pass, no findings: the five-basis mapping and the guest mask sync on the product, Agent quote and Agent search cards against BR-TEXT-12 / BR-TEXT-15 / BR-AI-11 at SPEC_REF. Static only. (A first attempt was rejected by the position check because the orchestrator pushed an unrelated ledger branch during the run; rerun after rebasing onto main.)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context in one attempt: test/spec/catalog/card-cta/ (real createCardAssembler plus the search, parse, detail, favorites and hot-rank entries) and test/spec/agent/tools-search-cta/ (guest mask, amount_unknown, rebate quote), 13 tests in 5 files red at the base; frozen [AC-B1-05f#1] / [#8] in catalog/card/assembly.test.ts changed per D10-327 (before/after in card-cta/author-notes.md). Round 1 pass with one S2 (amounts below 2^31 do not catch a 32-bit coercion)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/agent/tools-search-cta/cards.test.ts > [AC-B1-05zg#8] BR-AI-11 / BR-TEXT-12：游客开关开的平台，Agent 搜索卡遮罩为 login_required 时按钮为 rebate_login_to_view；开关关的平台 normal 卡仍为 btn.buy.rebate",
+    "test/spec/agent/tools-search-cta/cards.test.ts > [AC-B1-05zg#9] BR-AI-11 / BR-TEXT-12：游客开关开时未知金额（amount_unknown）的卡也变 login_required，按钮同步为 rebate_login_to_view",
+    "test/spec/agent/tools-search-cta/cards.test.ts > [AC-B1-05zg#10] BR-TEXT-12：不遮罩时按钮按最终状态取键 —— amount_unknown 卡为 btn.buy.rebate_unknown，入口已是 login_required 的卡为 rebate_login_to_view",
+    "test/spec/agent/tools-search-cta/quote.test.ts > [AC-B1-05zg#11] BR-TEXT-12：查返利 normal 单值卡有券、无券的购买按钮都是 btn.buy.rebate",
+    "test/spec/catalog/card-cta/assembly.test.ts > [AC-B1-05zg#1] BR-TEXT-12：normal 单值卡有券、无券同为 btn.buy.rebate，no_rebate 仍为 btn.buy.no_rebate，有券标签不变",
+    "test/spec/catalog/card-cta/assembly.test.ts > [AC-B1-05zg#2] 属性 BR-TEXT-12：任意平台、来源、券额与返利额，按钮只看返利状态（有返利 btn.buy.rebate，归零 btn.buy.no_rebate），从不下发 btn.buy.coupon / btn.buy.rebate_suffix",
+    "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#3] BR-TEXT-12：搜索（GET /v1/products/search）有券单值卡按钮为 btn.buy.rebate",
+    "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#4] BR-TEXT-12：识别（粘贴链接解析）有券单值卡按钮为 btn.buy.rebate",
+    "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#5] BR-TEXT-12：详情（GET /v1/products/{product_key}）有券单值卡按钮为 btn.buy.rebate",
+    "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#6] BR-TEXT-12：收藏列表的有效卡（收藏取卡端口）按钮为 btn.buy.rebate",
+    "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#7] BR-TEXT-12：热销榜（GET /v1/rank/hot）有券单值卡按钮为 btn.buy.rebate",
+    "test/spec/catalog/card/assembly.test.ts > [AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端口的本人份额（淘宝搜索卡单值，有券按钮 btn.buy.rebate）",
+    "test/spec/catalog/card/assembly.test.ts > [AC-B1-05f#8] 无券正常返利与有券同用 btn.buy.rebate 购买按钮，JSON 金额保留安全整数上界"
+  ],
+  "task": "B1-05zg",
+  "spec_commit": "7b7a24065c33a0ce3952051dfacfe757320fcf40",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7b7a24065c33a0ce3952051dfacfe757320fcf40",
+      "tree": "7f6e82e3c1123b104d528b49d89e9d6510667e7f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T12:48:11Z",
+      "finished_at": "2026-11-06T12:48:23Z",
+      "red_tests": [
+        "test/spec/agent/tools-search-cta/cards.test.ts > [AC-B1-05zg#8] BR-AI-11 / BR-TEXT-12：游客开关开的平台，Agent 搜索卡遮罩为 login_required 时按钮为 rebate_login_to_view；开关关的平台 normal 卡仍为 btn.buy.rebate",
+        "test/spec/agent/tools-search-cta/cards.test.ts > [AC-B1-05zg#9] BR-AI-11 / BR-TEXT-12：游客开关开时未知金额（amount_unknown）的卡也变 login_required，按钮同步为 rebate_login_to_view",
+        "test/spec/agent/tools-search-cta/cards.test.ts > [AC-B1-05zg#10] BR-TEXT-12：不遮罩时按钮按最终状态取键 —— amount_unknown 卡为 btn.buy.rebate_unknown，入口已是 login_required 的卡为 rebate_login_to_view",
+        "test/spec/agent/tools-search-cta/quote.test.ts > [AC-B1-05zg#11] BR-TEXT-12：查返利 normal 单值卡有券、无券的购买按钮都是 btn.buy.rebate",
+        "test/spec/catalog/card-cta/assembly.test.ts > [AC-B1-05zg#1] BR-TEXT-12：normal 单值卡有券、无券同为 btn.buy.rebate，no_rebate 仍为 btn.buy.no_rebate，有券标签不变",
+        "test/spec/catalog/card-cta/assembly.test.ts > [AC-B1-05zg#2] 属性 BR-TEXT-12：任意平台、来源、券额与返利额，按钮只看返利状态（有返利 btn.buy.rebate，归零 btn.buy.no_rebate），从不下发 btn.buy.coupon / btn.buy.rebate_suffix",
+        "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#3] BR-TEXT-12：搜索（GET /v1/products/search）有券单值卡按钮为 btn.buy.rebate",
+        "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#4] BR-TEXT-12：识别（粘贴链接解析）有券单值卡按钮为 btn.buy.rebate",
+        "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#5] BR-TEXT-12：详情（GET /v1/products/{product_key}）有券单值卡按钮为 btn.buy.rebate",
+        "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#6] BR-TEXT-12：收藏列表的有效卡（收藏取卡端口）按钮为 btn.buy.rebate",
+        "test/spec/catalog/card-cta/entries.test.ts > [AC-B1-05zg#7] BR-TEXT-12：热销榜（GET /v1/rank/hot）有券单值卡按钮为 btn.buy.rebate",
+        "test/spec/catalog/card/assembly.test.ts > [AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端口的本人份额（淘宝搜索卡单值，有券按钮 btn.buy.rebate）",
+        "test/spec/catalog/card/assembly.test.ts > [AC-B1-05f#8] 无券正常返利与有券同用 btn.buy.rebate 购买按钮，JSON 金额保留安全整数上界"
+      ],
+      "expected": [
+        "test/spec/agent/tools-search-cta/cards.test.ts",
+        "test/spec/agent/tools-search-cta/quote.test.ts",
+        "test/spec/catalog/card-cta/assembly.test.ts",
+        "test/spec/catalog/card-cta/entries.test.ts",
+        "test/spec/catalog/card/assembly.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "00d56c044dd7de1bd7109e6e5d8425f554ff2f2d1ac930f8eba01549511b9e4e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "166718a2ece54ac3fa3a8b20acdcf8c6209763a3",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}

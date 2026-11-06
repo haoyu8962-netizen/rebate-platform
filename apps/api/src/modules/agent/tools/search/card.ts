@@ -1,7 +1,7 @@
 // B3-04b · BR-AI-04 / BR-AI-11: turns catalog's priced card into the Agent stream's product_card
 // (contracts/agent-stream.schema.json $defs.product_card). Every field is present; a card missing
 // required data is refused here (null), never patched with 0, a cache or a model value.
-import type { ProductCard, UnlinkedCard } from '../../../catalog/index.ts';
+import { ctaKeyFor, type ProductCard, type UnlinkedCard } from '../../../catalog/index.ts';
 
 type Tlj = NonNullable<ProductCard['tlj']>;
 
@@ -150,7 +150,8 @@ export function normalizeCard(
     spec_text: textOrNull(raw['spec_text']),
     is_presale: card.is_presale === true,
     tlj,
-    cta: card.cta,
+    // BR-TEXT-12: the buy button follows the final basis here (login_to_view masking re-keys it).
+    cta: { text_key: ctaKeyFor(basis) },
     quoted_at: card.quoted_at,
     stale: card.stale === true,
     age_sec: ageSec,
@@ -164,7 +165,8 @@ export function normalizeCard(
 
 /**
  * BR-AI-11: applied to a selected guest card after sorting, never before. The card becomes
- * login_required without rebate amounts, and without the net price that would reveal them.
+ * login_required without rebate amounts, and without the net price that would reveal them; its
+ * buy button becomes the login_required one (BR-TEXT-12).
  */
 export function maskLoginToView<T extends AgentUnlinkedCard>(card: T): T {
   return {
@@ -173,5 +175,7 @@ export function maskLoginToView<T extends AgentUnlinkedCard>(card: T): T {
     rebate_min_fen: null,
     rebate_max_fen: null,
     est_net_price_fen: null,
+    // BR-TEXT-12: the button follows the masked basis.
+    cta: { text_key: ctaKeyFor('login_required') },
   };
 }

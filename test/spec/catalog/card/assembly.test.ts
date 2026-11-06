@@ -15,7 +15,8 @@ import {
 } from './kit.ts';
 
 // B1-05zc (D10-641): a taobao search card is one amount (normal, min = max) with rebate_estimate.
-it('[AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端口的本人份额（淘宝搜索卡单值）', async () => {
+// B1-05zg (D10-664 S-08, BR-TEXT-12 v3): a normal card with a coupon now carries btn.buy.rebate.
+it('[AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端口的本人份额（淘宝搜索卡单值，有券按钮 btn.buy.rebate）', async () => {
   const f = fixture();
   const input = request();
   const card = await f.service.assemble(input);
@@ -41,7 +42,7 @@ it('[AC-B1-05f#1] BR-PRICE-01/06：保留三个价格字段，只透传报价端
     availability: 'ok',
     source: 'taobao_union',
     rebate_basis: 'normal',
-    cta: { text_key: 'btn.buy.coupon' },
+    cta: { text_key: 'btn.buy.rebate' },
     link_id: 'registered-link',
     item_ref: 'opaque-item-ref',
   });
@@ -185,7 +186,8 @@ it('[AC-B1-05f#7] BR-PRICE-07：报价端口回比价区间（0–1）时拒绝�
   expect(f.register).not.toHaveBeenCalled();
 });
 
-it('[AC-B1-05f#8] 无券正常返利使用普通购买按钮，JSON 金额保留安全整数上界', async () => {
+// B1-05zg (D10-664 S-08, BR-TEXT-12 v3): with or without a coupon the same btn.buy.rebate.
+it('[AC-B1-05f#8] 无券正常返利与有券同用 btn.buy.rebate 购买按钮，JSON 金额保留安全整数上界', async () => {
   const f = fixture();
   const large = item({
     price_fen: 9007199254740991n,
@@ -209,7 +211,7 @@ it('[AC-B1-05f#8] 无券正常返利使用普通购买按钮，JSON 金额保留
     max: 1n,
     net: 9007199254740990n,
   });
-  expect(card.cta).toEqual({ text_key: 'btn.buy' });
+  expect(card.cta).toEqual({ text_key: 'btn.buy.rebate' });
   // BR-PRICE-03: a no-coupon card carries exactly one of price_basis and price_basis.general.
   expect(
     card.disclaimer_keys.filter((key) => key === 'price_basis' || key === 'price_basis.general'),

@@ -291,9 +291,77 @@ describe('guest login_to_view keeps the raw rebate for sorting (BR-AI-09 / BR-AI
         rebate_min_fen: null,
         rebate_max_fen: null,
         est_net_price_fen: null,
+        cta: { text_key: 'rebate_login_to_view' },
       });
     }
     expect(JSON.stringify(outcome)).not.toMatch(/"(rebate_min_fen|rebate_max_fen)":(100|500)/u);
+  });
+});
+
+describe('B1-05zg buy button follows the final rebate_basis (BR-TEXT-12)', () => {
+  type Outcome = Awaited<ReturnType<ReturnType<typeof createSearchProductsHandler>['run']>>;
+
+  function buttons(outcome: Outcome) {
+    if (outcome.kind !== 'ok') return null;
+    const items = (outcome.cards[0]!.data as { items: ProductCard[] }).items;
+    return Object.fromEntries(
+      items.map((item) => [item.product_key, [item.rebate_basis, item.cta]]),
+    );
+  }
+
+  it('[AC-B1-05zg#unit-search-1] unmasked: normal, amount_unknown and login_required each get their key', async () => {
+    const rows = [
+      candidate('tb:synthetic-normal', 'taobao'),
+      candidate('tb:synthetic-unknown', 'taobao'),
+      candidate('jd:synthetic-hidden', 'jd'),
+    ];
+    const h = setup(rows, new Set(), {
+      patch: {
+        'tb:synthetic-unknown': {
+          rebate_basis: 'amount_unknown',
+          rebate_min_fen: null,
+          rebate_max_fen: null,
+        },
+        'jd:synthetic-hidden': {
+          rebate_basis: 'login_required',
+          rebate_min_fen: null,
+          rebate_max_fen: null,
+        },
+      },
+    });
+    const outcome = await createSearchProductsHandler(h.deps).run({ q: '合成商品' }, ctx());
+    expect(buttons(outcome)).toEqual({
+      'tb:synthetic-normal': ['normal', { text_key: 'btn.buy.rebate' }],
+      'tb:synthetic-unknown': ['amount_unknown', { text_key: 'btn.buy.rebate_unknown' }],
+      'jd:synthetic-hidden': ['login_required', { text_key: 'rebate_login_to_view' }],
+    });
+  });
+
+  it('[AC-B1-05zg#unit-search-2] guest switch on: masked normal and amount_unknown cards get rebate_login_to_view', async () => {
+    const rows = [
+      candidate('tb:synthetic-normal', 'taobao'),
+      candidate('tb:synthetic-unknown', 'taobao'),
+    ];
+    const h = setup(rows, new Set(), {
+      settings: { 'agent.guest_login_to_view.taobao': true },
+      patch: {
+        'tb:synthetic-normal': { cta: { text_key: 'btn.buy.rebate' } },
+        'tb:synthetic-unknown': {
+          rebate_basis: 'amount_unknown',
+          rebate_min_fen: null,
+          rebate_max_fen: null,
+          cta: { text_key: 'btn.buy.rebate_unknown' },
+        },
+      },
+    });
+    const outcome = await createSearchProductsHandler(h.deps).run(
+      { q: '合成商品', platforms: ['taobao'] },
+      guestCtx(),
+    );
+    expect(buttons(outcome)).toEqual({
+      'tb:synthetic-normal': ['login_required', { text_key: 'rebate_login_to_view' }],
+      'tb:synthetic-unknown': ['login_required', { text_key: 'rebate_login_to_view' }],
+    });
   });
 });
 

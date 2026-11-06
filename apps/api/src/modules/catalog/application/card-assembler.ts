@@ -206,7 +206,7 @@ export function createCardAssembler(options: CardAssemblerOptions): CardAssemble
       rebate_basis: cardBasis,
       benefit_tags: benefitTagsFor(item.coupon_fen),
       is_presale: false,
-      cta: { text_key: ctaKeyFor(cardBasis, item.coupon_fen) },
+      cta: { text_key: ctaKeyFor(cardBasis) },
       quoted_at: toPlusEight(quotedAtMs),
       stale: input.stale,
       // Response instant: read after the quote and registration (BR-PRICE-11).

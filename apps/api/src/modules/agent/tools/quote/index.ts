@@ -2,7 +2,12 @@
 // resolve_link runner (parse_input URL → parsing → quote card) and register_links (one link row
 // with the quote snapshot, never a conversion: TRADE-03). resolve_link and register_links are not
 // model tools; only get_rebate_quote is a ToolHandler. Identity comes only from ToolCallContext.
-import type { CatalogCardEntry, CatalogCardInput, ProductCard } from '../../../catalog/index.ts';
+import {
+  ctaKeyFor,
+  type CatalogCardEntry,
+  type CatalogCardInput,
+  type ProductCard,
+} from '../../../catalog/index.ts';
 import {
   ParsingError,
   type Candidate,
@@ -245,7 +250,8 @@ function agentProduct(card: ProductCard): Record<string, unknown> {
     // Taolijin and material lines belong to B3-07.
     tlj: null,
     link_id: card.link_id,
-    cta: { text_key: card.cta.text_key },
+    // BR-TEXT-12: the buy button follows the card's final rebate_basis (same rule as catalog).
+    cta: { text_key: ctaKeyFor(card.rebate_basis) },
     quoted_at: card.quoted_at,
     stale: card.stale,
     age_sec: card.age_sec,

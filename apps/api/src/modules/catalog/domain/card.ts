@@ -34,10 +34,26 @@ export function disclaimerKeysFor(basis: CardBasis, couponFen: bigint): string[]
   return [priceKey, 'rebate_estimate'];
 }
 
-/** BR-PRICE-21 three states: 有券有返 / 无券有返 / 无返利 (button keys per BR-TEXT-12). */
-export function ctaKeyFor(basis: CardBasis, couponFen: bigint): string {
-  if (basis === 'no_rebate') return 'btn.buy.no_rebate';
-  return couponFen > 0n ? 'btn.buy.coupon' : 'btn.buy';
+/** Every rebate_basis a delivered card can end up with (contract ProductCard.rebate_basis). */
+export type CtaBasis = CardBasis | 'amount_unknown' | 'login_required';
+
+/**
+ * BR-TEXT-12 购买按钮 (2026-11-05 v3): the server sends the button key and it depends on the final
+ * rebate_basis only — never on the coupon (有券无券同一句). price_compare_risk is no longer
+ * produced but keeps the single-amount button; btn.buy.coupon / btn.buy.rebate_suffix are retired.
+ */
+export function ctaKeyFor(basis: CtaBasis): string {
+  switch (basis) {
+    case 'normal':
+    case 'price_compare_risk':
+      return 'btn.buy.rebate';
+    case 'amount_unknown':
+      return 'btn.buy.rebate_unknown';
+    case 'login_required':
+      return 'rebate_login_to_view';
+    case 'no_rebate':
+      return 'btn.buy.no_rebate';
+  }
 }
 
 /** Server-generated labels (contract ProductCard.benefit_tags); 有券 only when coupon_fen > 0. */

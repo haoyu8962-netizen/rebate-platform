@@ -26,13 +26,19 @@ describe('card rules', () => {
       'rebate_estimate',
     ]);
     expect(disclaimerKeysFor('no_rebate', 0n)).toEqual(['price_basis.general']);
-    expect(ctaKeyFor('no_rebate', 100n)).toBe('btn.buy.no_rebate');
-    expect(ctaKeyFor('normal', 0n)).toBe('btn.buy');
-    expect(ctaKeyFor('price_compare_risk', 1n)).toBe('btn.buy.coupon');
+    expect(ctaKeyFor('no_rebate')).toBe('btn.buy.no_rebate');
     expect(benefitTagsFor(0n)).toEqual([]);
     expect(benefitTagsFor(1n)).toEqual(['有券']);
     expect(unionSourceFor('pdd')).toBe('pdd_union');
     expect(() => unionSourceFor('meituan')).toThrow(TypeError);
+  });
+
+  it('[AC-B1-05zg] BR-TEXT-12: the buy button key follows the final rebate_basis only', () => {
+    expect(ctaKeyFor('normal')).toBe('btn.buy.rebate');
+    expect(ctaKeyFor('price_compare_risk')).toBe('btn.buy.rebate');
+    expect(ctaKeyFor('amount_unknown')).toBe('btn.buy.rebate_unknown');
+    expect(ctaKeyFor('login_required')).toBe('rebate_login_to_view');
+    expect(ctaKeyFor('no_rebate')).toBe('btn.buy.no_rebate');
   });
 
   it('[AC-B1-05f] BR-PRICE-11: zoned instants only, same instant in +08:00, floored age', () => {
