@@ -4093,7 +4093,7 @@ function withdrawBlockedHits(deps: {
   };
 }
 
-/** The nil UUID: no device of the member (the live blocklist check then covers the rest). */
+/** The nil UUID: `deviceId` of a walk that lists its devices in `deviceIds` instead (not read). */
 const NO_DEVICE = '00000000-0000-0000-0000-000000000000';
 
 /**
@@ -4117,7 +4117,11 @@ function autoPayoutPorts(deps: {
   // B2-11f (BR-ID-36): a dimension whose rule is disabled is no ⑨ hit.
   const blocklist = createBlocklistMatchReader({ rules: createRiskRuleStatusReader({ clock }) });
   type BlacklistSubject = Parameters<AutoPayoutPorts['blacklist']['hit']>[1];
-  /** The first device (none first) for which `check` answers; null when none does. */
+  /**
+   * One walk of risk's blocklist match over the member's phone, id number, every device of the
+   * member's sessions and the payee account (B1-03zj, D10-731 ①: the order ③a uses — phone → id_no
+   * → device → payee — so ⑨ names the dimension ③a would; each rule status read once per walk).
+   */
   async function overDevices<T>(
     handle: Kysely<Database>,
     input: BlacklistSubject,
@@ -4130,7 +4134,8 @@ function autoPayoutPorts(deps: {
         ? input.payoutMethod
         : null;
     // D10-571 (B1-03zi): every device of the member's sessions, revoked ones included, no time
-    // window, as BR-ID-28's deletion does. ⑨ only sends the withdrawal to manual review.
+    // window, as BR-ID-28's deletion does. ⑨ only sends the withdrawal to manual review. Ordered by
+    // id so that, among several listed devices, the one named is the same on every run.
     const devices = await handle
       .withSchema('app')
       .selectFrom('sessions')
@@ -4138,20 +4143,17 @@ function autoPayoutPorts(deps: {
       .distinct()
       .where('app_id', '=', input.appId)
       .where('user_id', '=', input.userId)
+      .orderBy('device_id')
       .execute();
-    const now = clock.now();
-    for (const deviceId of [NO_DEVICE, ...devices.map((device) => device.device_id)]) {
-      const matched = await check({
-        appId: input.appId,
-        userId: input.userId,
-        deviceId,
-        payeeHmac: input.payeeHmac,
-        payoutMethod: method,
-        now,
-      });
-      if (matched !== null) return matched;
-    }
-    return null;
+    return check({
+      appId: input.appId,
+      userId: input.userId,
+      deviceId: NO_DEVICE,
+      deviceIds: devices.map((device) => device.device_id),
+      payeeHmac: input.payeeHmac,
+      payoutMethod: method,
+      now: clock.now(),
+    });
   }
   return {
     config: {

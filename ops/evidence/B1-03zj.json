@@ -1,0 +1,78 @@
+{
+  "red_tests": [
+    "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#1] ⑨ 先设备后收款账号：先后登录 X、Y、Z，从 Y 发起；最早登录的 X 或最近登录的 Z 与收款账号同时在黑名单，转人工，risk_hits 记 device（该设备哈希、BLACKLIST_DEVICE）",
+    "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#2] ⑨ 先设备后收款账号，设备口径不变：会话已退出登录的设备、撤回同意吊销了的设备与收款账号同时在黑名单，仍转人工、risk_hits 记 device",
+    "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#3] ③a 与 ⑨ 一致：设备 X 与收款账号同时在黑名单，从 X 发起得 44001（设备的违规类型）且 blocked_request 记 device；同一会员从 Y 发起的单 ⑨ 也记同一台 device",
+    "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#4] 顺序前段不变：手机号或身份证与设备、收款账号同时在黑名单，⑨ 与 ③a 都记手机号 / 身份证",
+    "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#5] 收款账号不丢：只有收款账号在黑名单时 ⑨ 与 ③a 都记收款账号；什么都不在黑名单时 ⑨ 不命中、无记录",
+    "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#6] 启停语义不变（BR-ID-36）：BLACKLIST_DEVICE 启用时记 device；停用时设备与收款账号同时在黑名单，⑨ 与 ③a 都记收款账号"
+  ],
+  "risk_note": "RV2 (risk blocklist read + app.module payout decision wiring). D10-731 ① (from the D10-727 ① (a) review S2): the auto-payout ⑨ blacklist_hit now walks phone → id_no → device (any device of the member's sessions, revoked included, D10-571) → payee account, the same order as ③a, so risk_hits names the same dimension in both places. blocklist-match gains an optional deviceIds input walked in device-id order within one decision; each dimension's rule status is read at most once, all on the caller's transaction. Hit / no hit, manual-review outcome, rule toggles (BR-ID-36) and the device scope are unchanged; ③a passes one device and behaves as before. Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "money review r1 pass, 0 findings (couli-runs/B1-03zj/review-money-r1.json); Codex unavailable (approvals #36)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude through claude-run.sh (attempt 1); container red PASS 6 tests in 1 file; on the implementation the local container ran all 6 green; spec-test review r1 pass with one S2 (phone and id_no both listed not covered; the shared reader's order is pinned by AC-B2-05q#11) (couli-runs/B1-03zj/review-spec-r1.json)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "752eeec46c2896afe418d85d05e78450da112149",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  },
+  "task": "B1-03zj",
+  "spec_commit": "14b425c75493b98717cc35012c1ec05e9da11fd1",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "14b425c75493b98717cc35012c1ec05e9da11fd1",
+      "tree": "203505d0944a819fbcc0ae6f9e1a6a1be9adbb38",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T12:41:18Z",
+      "finished_at": "2026-11-06T12:43:06Z",
+      "red_tests": [
+        "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#1] ⑨ 先设备后收款账号：先后登录 X、Y、Z，从 Y 发起；最早登录的 X 或最近登录的 Z 与收款账号同时在黑名单，转人工，risk_hits 记 device（该设备哈希、BLACKLIST_DEVICE）",
+        "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#2] ⑨ 先设备后收款账号，设备口径不变：会话已退出登录的设备、撤回同意吊销了的设备与收款账号同时在黑名单，仍转人工、risk_hits 记 device",
+        "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#3] ③a 与 ⑨ 一致：设备 X 与收款账号同时在黑名单，从 X 发起得 44001（设备的违规类型）且 blocked_request 记 device；同一会员从 Y 发起的单 ⑨ 也记同一台 device",
+        "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#4] 顺序前段不变：手机号或身份证与设备、收款账号同时在黑名单，⑨ 与 ③a 都记手机号 / 身份证",
+        "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#5] 收款账号不丢：只有收款账号在黑名单时 ⑨ 与 ③a 都记收款账号；什么都不在黑名单时 ⑨ 不命中、无记录",
+        "test/spec/risk/blocklist-hit-order/hit-order.int.test.ts > [AC-B1-03zj#6] 启停语义不变（BR-ID-36）：BLACKLIST_DEVICE 启用时记 device；停用时设备与收款账号同时在黑名单，⑨ 与 ③a 都记收款账号"
+      ],
+      "expected": ["test/spec/risk/blocklist-hit-order/hit-order.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "f59788354b73c59865700a1fe602631f69c2b366e175a4d4310eb5a0ba017f69"
+        }
+      ]
+    }
+  ]
+}

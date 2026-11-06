@@ -16,6 +16,11 @@
 // dimension looked at) and also names what hit — the dimension, its value digest and the rule code
 // — so that the caller can record the decided hit without judging or reading the status again.
 // read() keeps its answer: the text code only.
+// B1-03zj (BR-WDR-29 ⑨, D10-731 ①): `deviceIds`, when given, stands for `deviceId` — every device
+// of the member (⑨ asks over all devices of the member's sessions). The walk keeps its order, with
+// the device step looking at each listed device's hash in the order given: phone → id_no → each
+// device → payee account, so ⑨ names the dimension ③a would; each dimension's rule status is still
+// read at most once per walk, and everything stays on the caller's handle.
 //
 // Also compiled by the `test` project (through ../index.ts): erasable syntax only, `import type`
 // for type-only imports, relative imports with `.ts`.
@@ -33,6 +38,11 @@ export interface BlocklistMatchReader {
       appId: string;
       userId: string;
       deviceId: string;
+      /**
+       * B1-03zj: the devices to look at in place of `deviceId` (in this order, duplicates looked
+       * at once); `deviceId` is then not read. An empty list looks at no device.
+       */
+      deviceIds?: readonly string[];
       payeeHmac: string | null;
       payoutMethod: 'alipay' | 'bank_card' | 'wechat' | null;
       now: Date;
@@ -109,22 +119,39 @@ export function createBlocklistMatchReader(
       .where('status', '=', 'verified')
       .executeTakeFirst();
     if (realname?.id_no_hmac) values.push({ dimension: 'id_no', hmac: realname.id_no_hmac });
-    const device = await app
-      .selectFrom('devices')
-      .select('device_hash')
-      .where('app_id', '=', subject.appId)
-      .where('id', '=', subject.deviceId)
-      .executeTakeFirst();
-    if (device?.device_hash) values.push({ dimension: 'device', hmac: device.device_hash });
+    const deviceIds = [...new Set(subject.deviceIds ?? [subject.deviceId])];
+    if (deviceIds.length > 0) {
+      const devices = await app
+        .selectFrom('devices')
+        .select(['id', 'device_hash'])
+        .where('app_id', '=', subject.appId)
+        .where('id', 'in', deviceIds)
+        .execute();
+      const hashOf = new Map(devices.map((row) => [row.id, row.device_hash]));
+      for (const id of deviceIds) {
+        const hash = hashOf.get(id);
+        if (hash) values.push({ dimension: 'device', hmac: hash });
+      }
+    }
     if (subject.payeeHmac !== null && subject.payoutMethod !== null) {
       values.push({ dimension: PAYEE_DIMENSION[subject.payoutMethod], hmac: subject.payeeHmac });
     }
+    // One status read per dimension looked at, however many devices the device step has.
+    const inForce = new Map<Dimension, boolean>();
+    const looked = new Set<string>();
     for (const { dimension, hmac } of values) {
       const ruleId = blocklistRule(dimension);
       if (rules !== undefined) {
-        const key = { app_id: subject.appId, rule_id: ruleId };
-        if (!(await rules.isEnabled(key, handle))) continue;
+        let enabled = inForce.get(dimension);
+        if (enabled === undefined) {
+          enabled = await rules.isEnabled({ app_id: subject.appId, rule_id: ruleId }, handle);
+          inForce.set(dimension, enabled);
+        }
+        if (!enabled) continue;
       }
+      const seen = `${dimension}:${hmac}`;
+      if (looked.has(seen)) continue;
+      looked.add(seen);
       const violation = await match(handle, subject.appId, dimension, hmac, subject.now);
       if (violation !== null) {
         return {
