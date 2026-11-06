@@ -40,6 +40,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // rebate.taobao.compare_rate_ratio_bp, in this order; B2-03u (D10-608): then share_domains;
   // B2-03v (D10-610): then bridge_origins; B2-03w (D10-637): then me.default_avatar_url; B2-03x
   // (D10-646): then the six legal.labor_agreement.* / legal.operator_entity.* keys, in this order;
+  // B1-28q (D10-698): then feedback.enabled and feedback.daily_limit_per_device, in this order;
   // nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
@@ -118,6 +119,8 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'legal.labor_agreement.resign_from_version',
     'legal.operator_entity.name',
     'legal.operator_entity.credit_code',
+    'feedback.enabled',
+    'feedback.daily_limit_per_device',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),

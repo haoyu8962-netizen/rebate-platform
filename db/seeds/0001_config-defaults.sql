@@ -123,5 +123,8 @@ INSERT INTO app.config_items (app_id, key, value, updated_by) VALUES
   ('couli', 'pool.max_age_sec', '7200'::jsonb, 'seed'), -- BR-PRICE-11
   ('couli', 'pool.refresh_interval_sec', '3600'::jsonb, 'seed'), -- BR-PRICE-11
   -- 第 17 批：旧号提现加验天数（B1-02zs，B1-02zp 前置）；0 = 关闭旧号加验，三端加验页上线后由负责人在后台改为 08 细则的 180
-  ('couli', 'withdraw.dormant_reverify_days', '0'::jsonb, 'seed') -- BR-WDR-01
+  ('couli', 'withdraw.dormant_reverify_days', '0'::jsonb, 'seed'), -- BR-WDR-01
+  -- 第 18 批：商品反馈开关与每设备每日条数上限（B1-28q，D10-698）；默认开、每台设备每个 +08:00 自然日 20 条
+  ('couli', 'feedback.enabled', 'true'::jsonb, 'seed'), -- 规划/01 F-PROD-15、04 §10.1 / §10.2
+  ('couli', 'feedback.daily_limit_per_device', '20'::jsonb, 'seed') -- BR-ID-02 细则「商品反馈与进店」
 ON CONFLICT (app_id, key) DO NOTHING;

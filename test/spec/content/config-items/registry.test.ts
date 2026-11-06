@@ -34,6 +34,8 @@
 // row (AVATAR_UNSEEDED).
 // B2-03x (D10-646): the six legal.labor_agreement.* / legal.operator_entity.* keys follow it (kit
 // LABOR), unset by default with no seed rows (LABOR_UNSEEDED).
+// B1-28q (D10-698): feedback.enabled and feedback.daily_limit_per_device follow them (kit
+// FEEDBACK), both seeded.
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -56,6 +58,7 @@ import {
   BRIDGE,
   BRIDGE_UNSEEDED,
   EXPECTED,
+  FEEDBACK,
   FUND_FLAGS,
   INVITE_CFG,
   INVITE_ELIG,
@@ -168,6 +171,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...BRIDGE,
         ...AVATAR,
         ...LABOR,
+        ...FEEDBACK,
       ].map((entry) => entry.key),
     ),
   );
@@ -353,6 +357,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...BRIDGE,
     ...AVATAR,
     ...LABOR,
+    ...FEEDBACK,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -411,6 +416,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...BRIDGE,
     ...AVATAR,
     ...LABOR,
+    ...FEEDBACK,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -477,6 +483,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...BRIDGE,
       ...AVATAR,
       ...LABOR,
+      ...FEEDBACK,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -496,6 +503,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...BRIDGE,
     ...AVATAR,
     ...LABOR,
+    ...FEEDBACK,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({
@@ -824,6 +832,58 @@ it('[AC-F1-10e#70] ledger.advance_alert_fen 是可改的 config.business 整数�
     Number.NaN,
     Number.POSITIVE_INFINITY,
     '100000',
+    true,
+    null,
+    [],
+  ];
+  for (const value of refused) expect(configValueFits(spec, value), String(value)).toBe(false);
+});
+
+// B1-28q (D10-698, 规划/01 F-PROD-15, 04 §10.1 / §10.2): the type, permission and editable flag are
+// checked in #58; here the values the product feedback switch accepts: JSON booleans only (off =
+// features.flags.product_feedback false and 30145), and it is not an emergency switch.
+it('[AC-F1-10e#71] feedback.enabled 是可改的 config.business 布尔，只收 JSON 布尔，不是开关键（B1-28q，D10-698）', () => {
+  const spec = registered('feedback.enabled');
+  expect(spec).toMatchObject({
+    valueType: 'boolean',
+    options: null,
+    permission: 'config.business',
+    adminEditable: true,
+  });
+  expect(spec.range).toBeUndefined();
+  expect(switchSpecOf('feedback.enabled')).toBeNull();
+  for (const value of [true, false]) {
+    expect(configValueFits(spec, value), String(value)).toBe(true);
+  }
+  for (const value of ['true', 'false', 1, 0, null, [], {}]) {
+    expect(configValueFits(spec, value), JSON.stringify(value)).toBe(false);
+  }
+});
+
+// B1-28q (D10-698, 08 BR-ID-02 细则「商品反馈与进店」): the type, permission and editable flag are
+// checked in #58; here the values the per-device daily cap accepts: a whole number of at least 1
+// (0 would refuse every submission; int4 max, 08 gives no upper bound).
+it('[AC-F1-10e#72] feedback.daily_limit_per_device 是可改的 config.business 整数，下限 1，拒绝 0、负数、浮点与隐式转换（B1-28q，BR-ID-02）', () => {
+  const spec = registered('feedback.daily_limit_per_device');
+  expect(spec).toMatchObject({
+    valueType: 'number',
+    options: null,
+    permission: 'config.business',
+    adminEditable: true,
+  });
+  expect(spec.range).toStrictEqual({ integer: true, min: 1, max: 2147483647 });
+  for (const value of [1, 20, 100, 2147483647]) {
+    expect(configValueFits(spec, value), String(value)).toBe(true);
+  }
+  const refused = [
+    0,
+    -1,
+    0.5,
+    20.5,
+    2147483648,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    '20',
     true,
     null,
     [],

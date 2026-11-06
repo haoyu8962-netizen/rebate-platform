@@ -397,6 +397,13 @@ export const LABOR: readonly Expected[] = [
 ];
 /** B2-03x (D10-646): the values are the owner's, hence no seed rows. */
 export const LABOR_UNSEEDED: readonly string[] = LABOR.map((entry) => entry.key);
+// B1-28q (D10-698): the two product feedback keys, registered right after LABOR in this order:
+// editable config.business, the switch a boolean and the per-device daily cap a number, options
+// null; both seeded (true and 20). Not part of expectedNow() either.
+export const FEEDBACK: readonly Expected[] = [
+  row('feedback.enabled', 'boolean', 'config.business'),
+  row('feedback.daily_limit_per_device', 'number', 'config.business'),
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -418,6 +425,7 @@ export const expectedOf = (key: string): Expected => {
     ...BRIDGE,
     ...AVATAR,
     ...LABOR,
+    ...FEEDBACK,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

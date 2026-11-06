@@ -42,7 +42,8 @@ it('[AC-F1-02zx#1] 资格天数是唯一的可改业务配置，整数范围 1�
 // tech_fee_bp and rebate.taobao.compare_rate_ratio_bp follow it in this order. B2-03u (D10-608):
 // share_domains follows them. B2-03v (D10-610): bridge_origins follows it. B2-03w (D10-637):
 // me.default_avatar_url follows it. B2-03x (D10-646): the six legal.labor_agreement.* /
-// legal.operator_entity.* keys follow it in this order, ending the tail.
+// legal.operator_entity.* keys follow it in this order. B1-28q (D10-698): feedback.enabled and
+// feedback.daily_limit_per_device follow them in this order, ending the tail.
 const PAYOUT_KEYS = [
   'payout.single_cap_fen',
   'payout.daily_cap_fen',
@@ -128,6 +129,7 @@ const LABOR_KEYS = [
   'legal.operator_entity.name',
   'legal.operator_entity.credit_code',
 ];
+const FEEDBACK_KEYS = ['feedback.enabled', 'feedback.daily_limit_per_device'];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -155,6 +157,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...BRIDGE_KEYS,
     ...AVATAR_KEYS,
     ...LABOR_KEYS,
+    ...FEEDBACK_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);

@@ -12,6 +12,7 @@ import {
   AVATAR,
   BRIDGE,
   EXPECTED,
+  FEEDBACK,
   KEYS,
   LABOR,
   ORDER_RESCAN,
@@ -59,7 +60,8 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // B1-05l: + search.hot_words and search.keyword_routes; B1-15zd: + the seven retention.* keys;
   // B2-08cz: + the three tax.SERVICE_FEE.* keys; B1-05s: + feed.fallback_pool_id and pool.*;
   // B1-02zs: + withdraw.dormant_reverify_days; B1-06ze: + the three Taobao promotion link keys;
-  // B1-04zq: + the four order_sync.rescan.* keys; B2-04zo: + ledger.advance_alert_fen.
+  // B1-04zq: + the four order_sync.rescan.* keys; B2-04zo: + ledger.advance_alert_fen;
+  // B1-28q: + feedback.enabled and feedback.daily_limit_per_device.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -79,6 +81,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...BRIDGE,
     ...AVATAR,
     ...LABOR,
+    ...FEEDBACK,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

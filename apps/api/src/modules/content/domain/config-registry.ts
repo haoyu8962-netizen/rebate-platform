@@ -293,6 +293,14 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   businessInteger('legal.labor_agreement.resign_from_version', 1),
   spec('legal.operator_entity.name', 'string', 'config.business'),
   spec('legal.operator_entity.credit_code', 'string', 'config.business'),
+  // B1-28q (D10-698): the product feedback items (规划/01 F-PROD-15, 04 §10.1 / §10.2),
+  // config.business, editable. The switch of the entry and of submitting (off: /v1/config
+  // features.flags.product_feedback=false and the endpoint answers 30145), seeded true; and the
+  // most a device may submit per +08:00 calendar day (08 BR-ID-02 细则「商品反馈与进店」, beyond it
+  // 42901 and nothing written), a whole number of at least 1, int4 max, seeded 20.
+  // Registration only.
+  spec('feedback.enabled', 'boolean', 'config.business'),
+  businessInteger('feedback.daily_limit_per_device', 1),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(
