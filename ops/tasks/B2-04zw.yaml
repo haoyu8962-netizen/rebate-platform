@@ -11,7 +11,7 @@ refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
   BR-FUND-04: 497806f6f068
   BR-TEXT-09: fd7184fa4d2c
-deps: [B2-04zu, B2-04zv]
+deps: [B2-04zy, B2-04zv]
 paths:
   - 'db/migrations/**'
   - 'db/schema.sql'

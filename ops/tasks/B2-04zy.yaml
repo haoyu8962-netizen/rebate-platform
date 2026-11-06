@@ -1,0 +1,35 @@
+id: B2-04zy
+repo: rebate-platform
+title: 结算 run 静止发布改用计数水位（上线缺口第 26 项，D10-726）——settle_batches.credited_count 入账同事务 +1，settle_runs.published_credited_count 记已发布水位，「本次有入账」= 各批计数之和 > 水位，不比任何时间戳
+type: impl
+# 2026-11-06 agent 入账（D10-726，承接作废的 B2-04zu）。迁移 NNNN（落地取主干最大号 + 1，排迁移槽）：settle_batches ADD credited_count integer NOT NULL DEFAULT 0 CHECK ≥ 0、settle_runs ADD
+# published_credited_count 同形，各加 couli_app 列级 UPDATE；不回填（部署前编排核「有 run 号且 EXECUTING 或未停的 CONFIRMED 批次」为 0）。执行器在明细事务内 writeItem 结果为 credited 后给本批 +1
+# （不动 row_version）；publishRunRest 在 run 锁下对本 run 各批求和，> 水位才发布并在首发 INSERT / CAS UPDATE 写水位；part_started_at 照写、只作审计；删时间比较。行为变化：一次执行零入账而批次 DONE 不再发 run_done（D10-477 口径）。
+# 规则测试：沿用 B2-04zu r2 的 run-done-skew/**（7 条，行为口径不变）+ 新 run-credit-watermark/**（结构 / 授权 / CHECK、回滚与重复投递不计、接管重试后前次入账仍算、慢时钟人工续跑），新鲜独立 Claude 写。
+# 冻结测试（D10-327，只加列、不删断言，新鲜独立 Claude 改、另一位复审）：settle-runs-schema/{kit,shape,access}、db/settlement/core/{kit,schema}；同文件未改用例按需 red_exempt。Codex money，funds 只读复核。RV2。
+refs: [BR-FUND-04, BR-TEXT-09]
+refs_hash:
+  BR-FUND-04: 497806f6f068
+  BR-TEXT-09: fd7184fa4d2c
+deps: [B2-04zt]
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'apps/api/src/modules/settlement/batch/executor/**'
+test_paths:
+  - 'test/spec/settlement/run-done-skew/**'
+  - 'test/spec/settlement/run-credit-watermark/**'
+  - 'test/spec/settlement/settle-runs-schema/kit.ts'
+  - 'test/spec/settlement/settle-runs-schema/shape.int.test.ts'
+  - 'test/spec/settlement/settle-runs-schema/access.int.test.ts'
+  - 'test/spec/db/settlement/core/kit.ts'
+  - 'test/spec/db/settlement/core/schema.int.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/run-done-skew/**'
+  - 'test/spec/settlement/run-credit-watermark/**'
+status: todo
+pr: null

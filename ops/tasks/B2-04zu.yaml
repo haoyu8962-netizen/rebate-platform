@@ -7,6 +7,7 @@ type: impl
 # 改法：发布时在 run 锁下、同一 trx 内把起点夹紧为 GREATEST(clock.now(), 本 run 批次 max(finished_at), 本 run 已入账明细 max(credited_at / closed_at))；时间仍只来自注入的 Clock 与已有数据，
 # 不用数据库 now()、不迁移、不动冻结测试（现用例同一 FixedClock，夹紧值即 now()）。漏发只剩「人工续跑落在时钟偏差内」，在代码注释写明。packages/domain 会计日函数不涉及。
 # 新鲜独立 Claude 写规则测试（自建偏慢 FixedClock 造多发，改前红）；Codex money。RV2。排在 B2-04zt 之后（同改 / 同钉 saveRunPart）。
+# 2026-11-06 作废（D10-726）：夹紧方案两轮 Codex money 同一根因 S1，改走计数水位，由 B2-04zy 承接；r2 规则测试 run-done-skew/** 并入 B2-04zy。
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
   BR-FUND-04: 497806f6f068
@@ -22,5 +23,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/run-done-skew/**'
-status: todo
+status: void
 pr: null
