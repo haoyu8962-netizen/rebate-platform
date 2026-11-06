@@ -639,8 +639,10 @@ jobs:
       # @couli/testing default of 10000, which was not a choice ([AC-B2-02f#23] alone took 783 s).
       # verify-props and longrun-props keep their own run counts.
       # The root `test:int` script (`turbo run test:int --env-mode=loose`); pnpm passes `-- --shard`
-      # on to turbo, which appends it to each package's script (CT-06zzb).
-      - run: pnpm test:int -- --shard=1/2
+      # on to turbo, which appends it to each package's script (CT-06zzb). --log-order=stream
+      # (CT-06zzzj, orchestrator 11-06 14:29): each package's output reaches the log line by line instead of when the
+      # package finishes, so a cancelled or timed-out shard still shows where it was.
+      - run: pnpm test:int --log-order=stream -- --shard=1/2
         env:
           TEST_REDIS_URL: redis://127.0.0.1:6379/0
           PROP_RUNS: '2000'
@@ -753,7 +755,7 @@ jobs:
         env:
           REDIS_ID: ${{ job.services.redis.id }}
       # PROP_RUNS as in verify-int-1 (D10-210, CT-06zg).
-      - run: pnpm test:int -- --shard=2/2
+      - run: pnpm test:int --log-order=stream -- --shard=2/2
         env:
           TEST_REDIS_URL: redis://127.0.0.1:6379/0
           PROP_RUNS: '2000'

@@ -1,0 +1,21 @@
+id: CT-06zzzj
+repo: rebate-platform
+title: CT-06zzzj：verify-int 两片的 test:int 加 turbo --log-order=stream，被取消或超时的分片也能看到停在哪个文件（编排 11-06 14:29）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排 14:29 照准；排在 B1-25a / B1-25b 之间）。起因：#2470 verify-int-2 第 2 次尝试 20 分钟被取消，日志里没有一行文件进度——
+#   turbo 默认把每个包的输出缓冲到该包跑完才吐出，spec-tests 没跑完就没有输出。
+# 改法：两片 run 行改为 `pnpm test:int --log-order=stream -- --shard=i/2`（pnpm 原样交给 turbo，本机核过 turbo 2.11.3 解析该参数、透传参数不变）；
+#   tools/ops/verify-container.test.ts [CT-06zzc] 与 verify-container.services.test.ts「Redis has one image」逐字断言随之改。用例、判据、超时都不变。按 #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/verify-container.services.test.ts'
+  - 'ops/tasks/CT-06zzzj.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

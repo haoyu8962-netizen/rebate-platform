@@ -224,10 +224,10 @@ it(
     }
     // The same number as the verify-int job (D10-210).
     const ci = readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8');
-    // CT-06zzb: verify-int is split into verify-int-1 / -2; each shard carries the same env.
+    // CT-06zzb: verify-int is split into verify-int-1 / -2 (CT-06zzzj: turbo streams its log); each shard carries the same env.
     for (const shard of ['1/2', '2/2']) {
       expect(ci).toContain(
-        `      - run: pnpm test:int -- --shard=${shard}\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n          PROP_RUNS: '2000'\n`,
+        `      - run: pnpm test:int --log-order=stream -- --shard=${shard}\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n          PROP_RUNS: '2000'\n`,
       );
     }
     expect(existsSync(join(runs, 'V1-06'))).toBe(false);
