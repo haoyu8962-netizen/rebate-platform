@@ -1061,15 +1061,24 @@ export class PayoutAdminModule {
           provide: ADMIN_UNKNOWN_PAYOUT_READS,
           inject: [
             CLOCK,
+            ROOT_LOGGER,
             { token: DB_TOKEN, optional: true },
             { token: FIELD_CRYPTO, optional: true },
           ],
           useFactory: (
             clock: Clock,
+            logger: RootLogger,
             db?: Kysely<DB>,
             crypto?: FieldCrypto,
           ): AdminUnknownPayoutReadDeps | null =>
-            db === undefined ? null : { db, clock, phones: options.phones(db, crypto ?? null) },
+            db === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  phones: options.phones(db, crypto ?? null),
+                  logger: logger.child({ module: 'payout' }),
+                },
         },
         {
           provide: ADMIN_UNKNOWN_PAYOUT_WRITES,

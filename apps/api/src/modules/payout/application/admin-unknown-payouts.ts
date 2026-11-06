@@ -69,6 +69,8 @@ type Blocker = Schema<'AdminUnknownPayoutFailBlocker'>;
 export interface AdminUnknownPayoutReadDeps {
   readonly db: Kysely<DB>;
   readonly clock: Clock;
+  /** FU-W10-LIST-ROW-500: a row without a transfer attempt is listed and warned about. */
+  readonly logger: Pick<Logger, 'warn'>;
   /** identity's masked phones: user_id → 3 + 4, or null without a phone (absent reads as null). */
   readonly phones: (
     appId: string,
@@ -125,9 +127,10 @@ function conflictRefusal(traceId: string): HandlerResult {
 }
 
 /** What stops a failed resolution now, in the order of resolve's checks. */
-function failBlockers(firstTransferAt: Date, now: Date): Blocker[] {
+function failBlockers(firstTransferAt: Date | null, now: Date): Blocker[] {
   const blockers: Blocker[] = [];
-  if (now.getTime() - firstTransferAt.getTime() < FAIL_AFTER_MS) {
+  // Without a T the 24 hours cannot have passed (CT-24zt).
+  if (firstTransferAt === null || now.getTime() - firstTransferAt.getTime() < FAIL_AFTER_MS) {
     blockers.push('resolve_too_early');
   }
   blockers.push('resolve_bill_unverifiable', 'resolve_query_unverifiable');
@@ -221,7 +224,8 @@ export async function listAdminUnknownPayouts(
           .where('a.kind', '=', 'transfer')
           .as('first_transfer_at'),
     ])
-    .orderBy('first_transfer_at')
+    // Rows without a transfer attempt (no T) come last (CT-24zt).
+    .orderBy(sql`first_transfer_at asc nulls last`)
     .orderBy('w.id')
     .limit(pageSize)
     .offset((page - 1) * pageSize)
@@ -230,7 +234,14 @@ export async function listAdminUnknownPayouts(
   const items: Schema<'AdminUnknownPayoutItem'>[] = [];
   for (const row of rows) {
     const firstAt = row.first_transfer_at as Date | null;
-    if (firstAt === null) throw new Error(`payout: needs_manual without a transfer: ${row.id}`);
+    if (firstAt === null) {
+      // FU-W10-LIST-ROW-500: listed with a null T rather than failing the page; how it got here
+      // must be traceable.
+      deps.logger.warn(
+        { app_id: appId, withdrawal_id: row.id },
+        'payout_unknown_payout_without_transfer',
+      );
+    }
     const latest = await latestQuery(deps.db, appId, row.id);
     items.push({
       withdrawal_id: row.id,
@@ -239,7 +250,7 @@ export async function listAdminUnknownPayouts(
       payout_channel: row.payout_channel as Schema<'AdminUnknownPayoutItem'>['payout_channel'],
       amount_fen: fenToJsonNumber(row.amount_fen),
       net_fen: fenToJsonNumber(row.net_fen),
-      first_transfer_at: firstAt.toISOString(),
+      first_transfer_at: firstAt === null ? null : firstAt.toISOString(),
       latest_query: latest === undefined ? null : latestQueryView(latest),
       fail_blockers: failBlockers(firstAt, now),
     });
