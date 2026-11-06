@@ -246,6 +246,11 @@ function agentProduct(card: ProductCard): Record<string, unknown> {
     // A directly referenced product, not a relaxed search result (BR-AI-24).
     match_tag: 'matched',
     spec_text: null,
+    // B1-05zh (BR-PROD-04): copied from the catalog card (absent is null), independent of match_tag.
+    price_spec_hint:
+      card.price_spec_hint === 'price_from' || card.price_spec_hint === 'spec_uncertain'
+        ? card.price_spec_hint
+        : null,
     is_presale: card.is_presale,
     // Taolijin and material lines belong to B3-07.
     tlj: null,

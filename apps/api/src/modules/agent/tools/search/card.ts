@@ -24,6 +24,8 @@ export interface AgentProductCard {
   readonly benefit_tags: readonly string[];
   readonly match_tag: 'matched' | 'relaxed' | 'spec_unconfirmed';
   readonly spec_text: string | null;
+  /** BR-PROD-04: copied from the catalog card; absent there is null (agent-stream CT-26v). */
+  readonly price_spec_hint?: ProductCard['price_spec_hint'] | null;
   readonly is_presale: boolean;
   readonly tlj: Tlj | null;
   readonly link_id: string;
@@ -59,6 +61,11 @@ function nullableFen(value: unknown): number | null | undefined {
 
 function textOrNull(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
+}
+
+/** A catalog price_spec_hint value; anything else (absent included) is null, never invented. */
+function priceSpecHintOf(value: unknown): 'price_from' | 'spec_uncertain' | null {
+  return value === 'price_from' || value === 'spec_uncertain' ? value : null;
 }
 
 /**
@@ -148,6 +155,8 @@ export function normalizeCard(
     // B3-04d decides match_tag / spec_text; until then the catalog value or the plain default.
     match_tag: match === 'relaxed' || match === 'spec_unconfirmed' ? match : 'matched',
     spec_text: textOrNull(raw['spec_text']),
+    // B1-05zh (BR-PROD-04): the catalog decision, unchanged and independent of match_tag.
+    price_spec_hint: priceSpecHintOf(raw['price_spec_hint']),
     is_presale: card.is_presale === true,
     tlj,
     // BR-TEXT-12: the buy button follows the final basis here (login_to_view masking re-keys it).

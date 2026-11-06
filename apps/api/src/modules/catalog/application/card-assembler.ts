@@ -22,6 +22,7 @@ import {
   type CardBasis,
   type QuoteBasis,
 } from '../domain/card.ts';
+import { priceSpecHintFor } from '../domain/spec-hint.ts';
 import type { ProductRef } from '../domain/types.ts';
 import type {
   CatalogConfigReader,
@@ -91,6 +92,19 @@ export interface CardAssembler {
    * candidate afterwards (filtered, over the page limit, a losing duplicate) registers nothing.
    */
   prepare(input: AssembleCardInput): Promise<PreparedCard>;
+}
+
+/**
+ * B1-05zh (D10-713, BR-PROD-03): the JD mode a card's own product_key was derived under —
+ * `jd:i_<n>` is item mode, any other `jd:<skuId>` is sku mode. No configuration or union item
+ * field (itemId / skuId) is read; a key that is not of that shape counts as item (fail closed).
+ */
+function jdModeOf(productKey: string | null): 'item' | 'sku' {
+  if (typeof productKey !== 'string') return 'item';
+  const colon = productKey.indexOf(':');
+  if (colon <= 0) return 'item';
+  const stableId = productKey.slice(colon + 1);
+  return stableId !== '' && !stableId.startsWith('i_') ? 'sku' : 'item';
 }
 
 /** Contract ItemRef maxLength: a longer token is never issued, so no card goes out without one. */
@@ -214,6 +228,11 @@ export function createCardAssembler(options: CardAssemblerOptions): CardAssemble
       source,
       disclaimer_keys: disclaimerKeysFor(cardBasis, item.coupon_fen),
       availability: 'ok',
+      // B1-05zh (BR-PROD-04, D10-713): one decision for every card, whatever its source or stale.
+      price_spec_hint: priceSpecHintFor({
+        platform: item.platform,
+        jdMode: jdModeOf(ref.productKey),
+      }),
     };
     let committed: Promise<ProductCard> | undefined;
     const commit = (): Promise<ProductCard> => {

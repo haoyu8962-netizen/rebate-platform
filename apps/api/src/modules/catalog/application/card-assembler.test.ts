@@ -182,3 +182,26 @@ describe('createDemoRebateQuoter', () => {
     );
   });
 });
+
+describe('price_spec_hint wiring', () => {
+  it('[AC-B1-05zh] BR-PROD-04: JD mode is read from the card product_key shape, never from item fields', async () => {
+    const { service } = setup();
+    const jdItem = item({ platform: 'jd', item_id: null, itemId: 'U_77', skuId: '1001' });
+    const hint = async (productKey: string) => {
+      const card = await service.assemble({
+        item: jdItem,
+        ref: { ...ref, platform: 'jd', productKey },
+        entrySource: 'search',
+        stale: false,
+      });
+      expect(card).toHaveProperty('price_spec_hint');
+      return card.price_spec_hint;
+    };
+    expect(await hint('jd:1001')).toBeNull();
+    expect(await hint('jd:i_77')).toBe('spec_uncertain');
+    // Not of the derived shape: fail closed to item mode.
+    expect(await hint('jd:')).toBe('spec_uncertain');
+    const tb = await service.assemble({ item: item(), ref, entrySource: 'search', stale: true });
+    expect(tb.price_spec_hint).toBe('spec_uncertain');
+  });
+});
