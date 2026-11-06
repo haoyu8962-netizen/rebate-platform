@@ -37,6 +37,7 @@ const SYSTEM_ACTOR_NAMES: Readonly<Record<AuditSystemActor, string>> = Object.fr
   'system:risk': '系统（风控）',
   'system:payout': '系统（打款）',
   'system:ledger': '系统（账务）',
+  'system:settlement': '系统（结算）',
 });
 
 /** The enum's Chinese name of a stored system_actor; null for a value the enum does not have. */

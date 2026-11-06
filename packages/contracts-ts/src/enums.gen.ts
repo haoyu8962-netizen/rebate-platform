@@ -180,6 +180,7 @@ export const audit_system_actor = [
   "system:risk", // 系统（风控）
   "system:payout", // 系统（打款）
   "system:ledger", // 系统（账务）
+  "system:settlement", // 系统（结算）
 ] as const;
 export type AuditSystemActor = (typeof audit_system_actor)[number];
 

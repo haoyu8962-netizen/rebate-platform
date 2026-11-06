@@ -69,3 +69,8 @@ GET /admin/v1/audit-logs/{id} added the new `system:ledger` enum value to the `d
 # contract.lock, so they take the new values when they move the lock.
 GET /v1/products/{product_key}/price-trend added the new `price_trend.source.pdd` enum value to the `data/source_key` response property for the response status `200`
 GET /v1/products/{product_key}/price-trend added the new `price_trend.source.pdd.general` enum value to the `data/source_key` response property for the response status `200`
+# CT-26z (B2-04zz, D10-699 / D10-717 ②): audit_system_actor gains system:settlement for settlement's system
+# audit of a dispute reopen (union_reported_success_after_closed). Only /admin/v1/** responses widen, shipped
+# together with the console (D10-557, D10-619 precedent).
+GET /admin/v1/audit-logs added the new `system:settlement` enum value to the `data/items/items/system_actor` response property for the response status `200`
+GET /admin/v1/audit-logs/{id} added the new `system:settlement` enum value to the `data/system_actor` response property for the response status `200`
