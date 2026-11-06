@@ -138,6 +138,7 @@ enums:
     values:
       system:risk: 系统（风控）
       system:payout: 系统（打款）
+      system:ledger: 系统（账务）
   admin_claim_match_field:
     source: 规划/01 F-ADM-06；规划/04 §6.6 claims；规划/08 BR-ATTR-17、BR-ATTR-18；design/specs/admin-claims.md 证据视图（CT-24d）
     description: GET /admin/v1/claims/{claim_id} 的 items[].matches[].field，证据视图逐项比对用户填写与联盟回传的字段；预售单的联盟侧付款日期取定金支付日

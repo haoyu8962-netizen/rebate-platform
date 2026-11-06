@@ -16288,7 +16288,7 @@ export interface components {
          *     account leave it out.
          * @enum {string}
          */
-        AdminAuditSystemActor: "system:risk" | "system:payout";
+        AdminAuditSystemActor: "system:risk" | "system:payout" | "system:ledger";
         AdminAuditLogListItem: {
             id: components["schemas"]["AdminAuditLogId"];
             /** @description The admin who acted; null on a system row (no account acted). */

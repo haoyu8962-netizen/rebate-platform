@@ -36,6 +36,7 @@ export const ORDER_AUTO_HOLD_ACTION = 'order_auto_hold';
 const SYSTEM_ACTOR_NAMES: Readonly<Record<AuditSystemActor, string>> = Object.freeze({
   'system:risk': '系统（风控）',
   'system:payout': '系统（打款）',
+  'system:ledger': '系统（账务）',
 });
 
 /** The enum's Chinese name of a stored system_actor; null for a value the enum does not have. */

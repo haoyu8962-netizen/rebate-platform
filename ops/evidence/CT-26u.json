@@ -1,0 +1,38 @@
+{
+  "red_tests": [],
+  "risk_note": "RV1 (contract only). audit_system_actor gains system:ledger (openapi enum, contracts/enums/admin.yaml label 系统（账务）, generated enums), for the system-prefilled ACCOUNT_CLOSED form audit of B2-12d. Two oasdiff accepted lines as D10-619: only GET /admin/v1/audit-logs and /{id} responses widen, console ships with the server.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "codex-run.sh review --review-type contract: round 1 fail only because the branch was behind main (CT-26p and CT-26s fields looked deleted); after the rebase round 2 pass, the diff only appends system:ledger."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "legacy_no_red": true,
+  "task": "CT-26u",
+  "spec_commit": "159ff45e2eca681011f1197d4d30fe273f7b3a69",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "521230305f80c6ed4e391374eb00d42c4347493e",
+    "specs": "1eb0346e048c3f1b23d351e993f19a70c37a282f"
+  }
+}

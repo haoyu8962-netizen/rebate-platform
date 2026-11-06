@@ -45512,6 +45512,7 @@ components:
       enum:
         - system:risk
         - system:payout
+        - system:ledger
     AdminAuditLogListItem:
       type: object
       additionalProperties: false
