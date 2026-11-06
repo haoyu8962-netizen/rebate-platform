@@ -27,4 +27,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/risk/bad-debt-linked/**'
-status: todo
+status: done
+pr: 2565
