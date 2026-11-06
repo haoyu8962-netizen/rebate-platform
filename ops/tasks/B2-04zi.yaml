@@ -4,6 +4,10 @@ title: 入账后结算变化（R10）的同步路径——已入账订单收到�
 type: impl
 # 2026-11-02 入账（admin-backend，编排 D10-579）。来源 B1-10n money r1 S0：clawback-order.ts 的 onUpdated 只在有 WAIT_COMMISSION 维权时看新结算记录（settleAnswer），其余 left to R10，未实现；不是 B1-10n 引入。
 # 与 D10-578 那批（版本推进、FU-CREDITED-AMOUNT-ROWS、FU-NEGATIVE-SETTLE-SNAPSHOT ②、FU-BILL-OPEN-DEDUCTIONS）并成一组，归 funds（11-06）或 w1（R7 之后），编排届时定。上线前必须合并。
+# 2026-11-06 归 withdraw（D10-753 ③、D10-755）。范围：同步路径上已入账单本次写了新的结算记录时——(a) 新结算额正数部分为 0，或原基数 > 0 而新基数为 0 → R8 整单扣回（走现成的 apply）；(b) 负差 → 同事务即时写 SETTLE_ADJUST（键 …:ADJ:{seq}），booked 成对更新，R10 留痕，负差一路里封禁 / 注销受益人的多出部分并入平台、未完成补记义务照 BR-FUND-09 关闭；(c) 部分退款 / 有维权记录的 R9 遇到新结算记录时 N_new 取新结算额（BR-FUND-08 ①）。判定先后照 08：R9 → R10 → R9b；B2-04lb「等待联盟的维权被新结算记录回应」并入同一段核心逻辑、行为不变。
+# 「本次同步写了新的结算记录」由 settlement 的结算记录写入口在事务内记下、扣回向它问，不动 orders（change 的字段集由冻结用例逐字钉着）。
+# 正差不在本单：同步时不动账、不改 booked；等待联盟的维权 + 正差维持现状（留着等待并告警）。**FU-SETTLE-ADJ-POSITIVE（上线前必做，归 funds，D10-755 ①）**：R1 随月结账单生成正差候选 + 后台批准后记账（BR-FUND-09 ②；settle_adjustments / settle_adjust_batches 已建表，生成与批准的代码未写）。
+# 冻结的 test/spec/settlement/clawback/** 里钉现行「结算额变化 → not_reverse / 只存档」的用例，开工后实测列全，照 D10-327 / modify_existing 报核。
 refs: [BR-FUND-01, BR-FUND-08, BR-FUND-09, BR-CALC-23, BR-CALC-02]
 refs_hash:
   BR-FUND-01: b541996f8582
@@ -14,6 +18,7 @@ refs_hash:
 deps: [B1-10n, B2-03s]
 paths:
   - 'apps/api/src/modules/settlement/clawback/**'
+  - 'apps/api/src/modules/settlement/settlements/**'
   - 'apps/api/src/modules/settlement/index.ts'
   - 'packages/domain/src/settlement/adjust/**'
 test_paths:

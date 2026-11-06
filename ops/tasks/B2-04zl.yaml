@@ -3,6 +3,8 @@ repo: rebate-platform
 title: 账单与未关闭应扣（FU-BILL-OPEN-DEDUCTIONS，D10-583）——有结算单 R7 后金额行等于减应扣后的应得；账单 candidates 金额与 R5 实际入账同口径
 type: impl
 # 2026-11-03 W1 入账，范围按 D10-583 缩小：比对本身不用改（未关闭应扣必晚于最新结算记录）。开工前先核 candidates 用未减的 bSettle、R5 减了 open 有没有下游校验，再定 paths 是否收窄。
+# 2026-11-06 作废（D10-753 ②，withdraw 只读核对）：实际入账（R5 减未关闭应扣）与用户读侧（钱包、订单页）都对；「有结算记录的 R7 不推版本、账单比对不减应扣」是 B2-03r 的现行取舍，由冻结 [AC-B2-03r#11 / #12 / #13 / #29] 钉着，本期不动。账单 candidates 的合计与批次明细 b_settle_fen 没有下游校验，只在后台账单页展示。
+# 改登 **FU-BILL-OPEN-DEDUCTIONS-DISPLAY（P1，不排期）**：后台账单页合计与 b_settle 未减未关闭应扣、直接读金额行的风控标签偏大。
 refs: [BR-FUND-04, BR-FUND-06, BR-CALC-15]
 refs_hash:
   BR-FUND-04: 497806f6f068
@@ -20,5 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/bill-open-deductions/**'
-status: todo
+status: void
 pr: null

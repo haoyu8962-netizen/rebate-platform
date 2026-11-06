@@ -3,6 +3,7 @@ repo: rebate-platform
 title: 首次入库即已结算的快照取结算额（FU-NEGATIVE-SETTLE-SNAPSHOT ①，D10-583）
 type: impl
 # 2026-11-03 W1 入账。pipeline-port 给快照的 settle_commission_fen 恒 null，N 取预估；P12 的单应取结算额，负结算 B=0。② 在 B2-03s。
+# 2026-11-06 作废（D10-753 ①，withdraw 只读核对）：已被 B2-04zj（#2272）覆盖——pipeline-port 把 reportedSettleFen 传给快照输入，取值结算优先；[AC-B2-04zj#12]、[AC-B1-04zw#8]、[AC-B2-03s#19 / #40] 已钉。「经 pipeline-port 首次入库 + 负结算」的组合不单补。
 refs: [BR-CALC-02, BR-CALC-10, BR-FUND-02]
 refs_hash:
   BR-CALC-02: 0ffe8a4d0b65
@@ -20,5 +21,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/orders/first-settled-snapshot/**'
-status: todo
+status: void
 pr: null
