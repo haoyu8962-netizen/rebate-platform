@@ -1,0 +1,102 @@
+{
+  "red_tests": [
+    "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#1] 同设备：被核销用户 A 真实登录过 D1、D2；B 在 D1 登录两次、C 在 D2 登录、U 只在自己的 D3 → 批准核销后 B、C 各一行 device 标记（source_user_id=A、source_ref=候选单 id、created_at=批准时刻），U 与 A 本人没有；核销本身照旧（凭证、余额、应答不变）",
+    "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#2] 已吊销的会话与设备也算（D10-571）：A 在 D1 的会话已退出登录、B 在 D1 的会话也已退出；A 在 D2 撤回隐私同意（设备与会话吊销），C 先前在 D2 登录过 → B、C 各一行 device 标记",
+    "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#3] 不牵连：别的 app 里设备哈希、身份证号、收款账号都与 A 相同的 X 不打标；本 app 里身份证 HMAC 与 A 相同但实名不是 verified（注销后保留的 tax_retained）的 R 不打标；不相关的 U 与 A 本人不打标；与 A 同设备的 B 打标（对照）",
+    "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#4] 批准时余额已回正 → 候选单 CANCELLED、不写凭证，也不打标；同一 app 另一笔照常核销的只给它自己的关联账户打标（对照）",
+    "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#5] frozen > 0 拒绝批准（writeoff_frozen_pending）时不打标；提现单退回后 available 0 再批准 → CANCELLED，仍不打标（BR-FUND-12 E-35 例）；另一笔照常核销的打标（对照）",
+    "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#6] 不重复：同一幂等键重放、换新键再批（20902）都不新增或改动标记行；risk 的标记端口对同一候选单再调一次（时钟已后移）也不新增、不改动（ON CONFLICT DO NOTHING）",
+    "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#7] 同一事务：写标记失败时批准整笔回滚（50001；候选单仍 PENDING、无凭证、余额不变、无审计、无标记）；写审计失败时标记也随之回滚；换新幂等键重试后核销生效并打标",
+    "test/spec/risk/bad-debt-linked/deletion.int.test.ts > [AC-B2-12g#9] 注销口径同 risk_hits（D10-758）：被打标的 B 与被核销的 A 都走完注销处理（请求 done、users 为 deleted）后，标记行仍在、逐字段不变",
+    "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#10] 同收款账号含历史行：B 先绑支付宝 P、后换绑 Q；A 再绑 P（BR-WDR-02 允许）；U 只绑自己的号 → A 核销批准后 B 一行 payout_account 标记（source_user_id=A、source_ref=候选单 id），U 与 A 本人没有",
+    "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#11] 同收款账号的其余组合：A 先绑支付宝 X 后换绑 Z、G 随后绑 X（A 历史行对 G 当前行）；A 与 C 都绑过又换掉银行卡 K（两边都是历史行，按 bank_card_hmac）→ G、C 各一行 payout_account 标记；只绑过别的卡 K2 的 D 不打标",
+    "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#12] 同设备按 device_hash：A 在 d1（哈希 H）登录，同一手机重装后登记 d2（哈希 H、新设备行），B 只在 d2 登录；C 只在 e1（哈希 H2）登录，A 在 e1 重装后的 e2 登录；U 在别的手机 → B、C 各一行 device 标记，U 与 A 本人没有",
+    "test/spec/risk/bad-debt-linked/schema.int.test.ts > [AC-B2-12g#10] 列恰为 id（identity）、app_id、user_id、source_user_id、source_ref、dimension、created_at，全部非空；不存明文与 HMAC",
+    "test/spec/risk/bad-debt-linked/schema.int.test.ts > [AC-B2-12g#11] 约束：(app_id, source_ref, user_id, dimension) 唯一；同一用户另一维度、另一候选单各成一行；user_id、source_user_id 须是同一 app 的用户（外键）；user_id 不能等于 source_user_id；dimension 只收 id_no / device / payout_account",
+    "test/spec/risk/bad-debt-linked/schema.int.test.ts > [AC-B2-12g#12] 授权：couli_app 只能 SELECT / INSERT（UPDATE、DELETE 被拒，无 TRUNCATE、无列级 UPDATE）；couli_readonly 能读全部列、不能写；couli_payout、couli_maint 无任何表级或列级权限",
+    "test/spec/risk/bad-debt-linked/trace-only.int.test.ts > [AC-B2-12g#8] 只留痕：B 因与 A 同设备被打标后，B 的 GET /v1/withdrawals/rules 应答与打标前相同，users 行不变，没有站内信或通知记录；B 打标后申请提现照常建单（PENDING_REVIEW）"
+  ],
+  "risk_note": "RV2 (new risk table + ledger approve path). BR-FUND-12 关联账户风控标记, minimal shape per D10-727 ③ / D10-590 ⑤ / D10-758 / D10-767: migration 0128 creates the insert-only table app.risk_linked_marks (app, marked user, written-off user, candidate, dimension; unique per (app, candidate, user, dimension); no plaintext or HMAC; couli_app SELECT / INSERT only) plus four lookup indexes on devices / payout_accounts (non-concurrent, accepted by the orchestrator; header comment says later such indexes need a CONCURRENTLY migration). risk's single writer is called on ledger's approving transaction right after the BAD_DEBT_WRITEOFF voucher; CANCELLED and frozen refusals mark nothing; ON CONFLICT DO NOTHING. Dimensions this round: device (device_hash of every device on the written-off member's sessions, revoked included, D10-571) and payout_account (all payout_accounts rows incl. history; Alipay and bank card only, there is no WeChat column). Same-realname is not built (D10-767: needs the isolated prior identities; FU-BAD-DEBT-LINKED-REALNAME). Trace only: no withdrawal decision reads the marks. Rows stay on deletion like risk_hits (BR-ID-30). Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "r1 fail (S1 current-only payout match unreachable under the is_current unique index; S1 device id misses a reinstall's new row) → rule tests attempt 2, implementation r2; r2 fail only because the brief still asked for same-realname after D10-767 → brief §13 added; r3 pass, 0 findings (couli-runs/B2-12g/review-money-r1.saved.json, review-money-r2-stale-brief.json, review-money-r3.json); Codex unavailable (approvals #36)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude through claude-run.sh: attempt 1, attempt 2 (history rows, device_hash), attempt 3 (same-realname) dropped per D10-767 (kept on backup/B2-12g-with-attempt3, not landed); red PASS 12 → 15 tests; spec-test r1 pass, r2 fail on the stale brief (same-realname), r3 pass with one S2 recorded (no case gives one member two dimensions; test attempts exhausted per the orchestrator) (couli-runs/B2-12g/review-spec-r1.json, review-spec-r2-stale-brief.json, review-spec-r3.json)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2ae5f95de43f0d1c60f9181aa9f4470a4cdb1c4a",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  },
+  "task": "B2-12g",
+  "spec_commit": "7b1e6b35183e6fe6f7981a51a35b7384ff551489",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7b1e6b35183e6fe6f7981a51a35b7384ff551489",
+      "tree": "e24b0c97e358de877d2a36133df8184d0a72d602",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T17:06:47Z",
+      "finished_at": "2026-11-06T17:07:08Z",
+      "red_tests": [
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#1] 同设备：被核销用户 A 真实登录过 D1、D2；B 在 D1 登录两次、C 在 D2 登录、U 只在自己的 D3 → 批准核销后 B、C 各一行 device 标记（source_user_id=A、source_ref=候选单 id、created_at=批准时刻），U 与 A 本人没有；核销本身照旧（凭证、余额、应答不变）",
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#2] 已吊销的会话与设备也算（D10-571）：A 在 D1 的会话已退出登录、B 在 D1 的会话也已退出；A 在 D2 撤回隐私同意（设备与会话吊销），C 先前在 D2 登录过 → B、C 各一行 device 标记",
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#3] 不牵连：别的 app 里设备哈希、身份证号、收款账号都与 A 相同的 X 不打标；本 app 里身份证 HMAC 与 A 相同但实名不是 verified（注销后保留的 tax_retained）的 R 不打标；不相关的 U 与 A 本人不打标；与 A 同设备的 B 打标（对照）",
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#4] 批准时余额已回正 → 候选单 CANCELLED、不写凭证，也不打标；同一 app 另一笔照常核销的只给它自己的关联账户打标（对照）",
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#5] frozen > 0 拒绝批准（writeoff_frozen_pending）时不打标；提现单退回后 available 0 再批准 → CANCELLED，仍不打标（BR-FUND-12 E-35 例）；另一笔照常核销的打标（对照）",
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#6] 不重复：同一幂等键重放、换新键再批（20902）都不新增或改动标记行；risk 的标记端口对同一候选单再调一次（时钟已后移）也不新增、不改动（ON CONFLICT DO NOTHING）",
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts > [AC-B2-12g#7] 同一事务：写标记失败时批准整笔回滚（50001；候选单仍 PENDING、无凭证、余额不变、无审计、无标记）；写审计失败时标记也随之回滚；换新幂等键重试后核销生效并打标",
+        "test/spec/risk/bad-debt-linked/deletion.int.test.ts > [AC-B2-12g#9] 注销口径同 risk_hits（D10-758）：被打标的 B 与被核销的 A 都走完注销处理（请求 done、users 为 deleted）后，标记行仍在、逐字段不变",
+        "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#10] 同收款账号含历史行：B 先绑支付宝 P、后换绑 Q；A 再绑 P（BR-WDR-02 允许）；U 只绑自己的号 → A 核销批准后 B 一行 payout_account 标记（source_user_id=A、source_ref=候选单 id），U 与 A 本人没有",
+        "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#11] 同收款账号的其余组合：A 先绑支付宝 X 后换绑 Z、G 随后绑 X（A 历史行对 G 当前行）；A 与 C 都绑过又换掉银行卡 K（两边都是历史行，按 bank_card_hmac）→ G、C 各一行 payout_account 标记；只绑过别的卡 K2 的 D 不打标",
+        "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#12] 同设备按 device_hash：A 在 d1（哈希 H）登录，同一手机重装后登记 d2（哈希 H、新设备行），B 只在 d2 登录；C 只在 e1（哈希 H2）登录，A 在 e1 重装后的 e2 登录；U 在别的手机 → B、C 各一行 device 标记，U 与 A 本人没有",
+        "test/spec/risk/bad-debt-linked/schema.int.test.ts > [AC-B2-12g#10] 列恰为 id（identity）、app_id、user_id、source_user_id、source_ref、dimension、created_at，全部非空；不存明文与 HMAC",
+        "test/spec/risk/bad-debt-linked/schema.int.test.ts > [AC-B2-12g#11] 约束：(app_id, source_ref, user_id, dimension) 唯一；同一用户另一维度、另一候选单各成一行；user_id、source_user_id 须是同一 app 的用户（外键）；user_id 不能等于 source_user_id；dimension 只收 id_no / device / payout_account",
+        "test/spec/risk/bad-debt-linked/schema.int.test.ts > [AC-B2-12g#12] 授权：couli_app 只能 SELECT / INSERT（UPDATE、DELETE 被拒，无 TRUNCATE、无列级 UPDATE）；couli_readonly 能读全部列、不能写；couli_payout、couli_maint 无任何表级或列级权限",
+        "test/spec/risk/bad-debt-linked/trace-only.int.test.ts > [AC-B2-12g#8] 只留痕：B 因与 A 同设备被打标后，B 的 GET /v1/withdrawals/rules 应答与打标前相同，users 行不变，没有站内信或通知记录；B 打标后申请提现照常建单（PENDING_REVIEW）"
+      ],
+      "expected": [
+        "test/spec/risk/bad-debt-linked/approve.int.test.ts",
+        "test/spec/risk/bad-debt-linked/deletion.int.test.ts",
+        "test/spec/risk/bad-debt-linked/history.int.test.ts",
+        "test/spec/risk/bad-debt-linked/schema.int.test.ts",
+        "test/spec/risk/bad-debt-linked/trace-only.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "3cf21a168d6003fdeacc17aebc4c6d429816ed5be1fdff7ff53ec0b0f97adfb9"
+        }
+      ]
+    }
+  ]
+}

@@ -435,6 +435,7 @@ import {
   createAppealPrevStateReader,
   createOrderBlocklistPorts,
   createRiskStateBatchReader,
+  createBadDebtLinkedMarker,
   RiskAdminModule,
   RiskAppealsAdminModule,
   RiskRulesAdminModule,
@@ -4427,6 +4428,9 @@ const badDebtWriteoffPorts: BadDebtWriteoffPorts = {
     return closing;
   },
   lockUsersForUpdate: (trx, input) => lockUsersForUpdate(trx, input),
+  // B2-12g (BR-FUND-12, trace only): risk's marks of the linked accounts, on the approving
+  // transaction of a voucher-writing approval.
+  markLinkedAccounts: (trx, clock, input) => createBadDebtLinkedMarker({ clock }).mark(trx, input),
 };
 
 function payoutProcessOptions(): PayoutProcessOptions {

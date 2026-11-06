@@ -4,7 +4,7 @@
 // only) and adminApproveBadDebtWriteoff (POST /admin/v1/bad-debt-writeoffs/{id}/approve,
 // fund.writeoff, step-up sms, Idempotency-Key); specs/state-machines/bad-debt-writeoff.yaml (BD1–BD3,
 // only through the generated transitionBadDebtWriteoff) and the BAD_DEBT_WRITEOFF template of
-// specs/ledger-templates.csv. The linked accounts' risk mark is not part of this task (B2-12g).
+// specs/ledger-templates.csv. B2-12g: the linked accounts' risk marks (risk's writer, a port).
 //
 // - Generation runs on the worker entry only, through LedgerBadDebtWriteoffModule.forWorker
 //   (../bad-debt-writeoff.module.ts), which app.module calls once: a timer whose first tick is at
@@ -26,7 +26,11 @@
 //   (BR-WDR-07 order), then the candidate FOR UPDATE; the candidate and the balance are read again
 //   under the locks; the amount is −available at that moment. negative_since and payout's
 //   NEGATIVE_BALANCE block are cleared by the ledger's own recovery path of the posting.
-// Ledger imports neither identity nor content: their parts arrive as ports from app.module.
+// - B2-12g (BR-FUND-12, trace only): when, and only when, the approval writes the
+//   BAD_DEBT_WRITEOFF voucher, risk's linked-accounts marker runs on the same transaction, before
+//   the audit row (a failure of either rolls the whole approval back). A CANCELLED candidate and
+//   the frozen refusal mark nothing.
+// Ledger imports neither identity, content nor risk: their parts arrive as ports from app.module.
 import type { DB } from '@couli/db';
 import {
   accountingDate,
@@ -91,6 +95,19 @@ export interface BadDebtWriteoffPorts {
     trx: Transaction<DB>,
     input: { readonly appId: string; readonly userIds: readonly string[] },
   ) => Promise<unknown>;
+  /**
+   * risk (B2-12g): marks the accounts linked to the written-off member, on the approving
+   * transaction; a replay inserts nothing new.
+   */
+  readonly markLinkedAccounts: (
+    trx: Transaction<DB>,
+    clock: Clock,
+    input: {
+      readonly appId: string;
+      readonly sourceUserId: string;
+      readonly sourceRef: string;
+    },
+  ) => Promise<void>;
 }
 
 export interface BadDebtCandidateTickDependencies {
@@ -561,6 +578,11 @@ async function approve(
       voucherId: posted.voucherId,
     });
     if (updated !== 1) throw new Error('ledger: the locked PENDING candidate did not change');
+    await deps.ports.markLinkedAccounts(trx, deps.clock, {
+      appId,
+      sourceUserId: first.user_id,
+      sourceRef: id,
+    });
     row = {
       ...first,
       status: to,

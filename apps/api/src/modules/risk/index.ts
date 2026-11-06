@@ -312,3 +312,12 @@ export type {
   RiskRuleStatusReader,
   RiskRuleStatusReaderOptions,
 } from './application/risk-rule-status.ts';
+// B2-12g: the linked accounts' marks of a bad-debt write-off (BR-FUND-12; trace only), written on
+// ledger's approving transaction. Rule tests: test/spec/risk/bad-debt-linked/**.
+export { createBadDebtLinkedMarker } from './application/bad-debt-linked.ts';
+export type {
+  BadDebtLinkedDimension,
+  BadDebtLinkedMarkInput,
+  BadDebtLinkedMarker,
+  BadDebtLinkedMarkerOptions,
+} from './application/bad-debt-linked.ts';

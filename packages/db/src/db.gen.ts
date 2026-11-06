@@ -1859,6 +1859,16 @@ export interface RiskJudgements {
   user_id: string;
 }
 
+export interface RiskLinkedMarks {
+  app_id: string;
+  created_at: Generated<Timestamp>;
+  dimension: string;
+  id: Generated<ColumnType<bigint, bigint, bigint>>;
+  source_ref: string;
+  source_user_id: string;
+  user_id: string;
+}
+
 export interface RiskRules {
   app_id: string;
   conditions: Json;
@@ -2425,6 +2435,7 @@ export interface DB {
   rights_imports: RightsImports;
   risk_hits: RiskHits;
   risk_judgements: RiskJudgements;
+  risk_linked_marks: RiskLinkedMarks;
   risk_rules: RiskRules;
   sessions: Sessions;
   settle_adjust_batches: SettleAdjustBatches;

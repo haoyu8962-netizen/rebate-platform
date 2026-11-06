@@ -5419,6 +5419,38 @@ ALTER TABLE app.risk_judgements ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY
 
 
 --
+-- Name: risk_linked_marks; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.risk_linked_marks (
+    id bigint NOT NULL,
+    app_id text NOT NULL,
+    user_id uuid NOT NULL,
+    source_user_id uuid NOT NULL,
+    source_ref text NOT NULL,
+    dimension text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT risk_linked_marks_dimension_check CHECK ((dimension = ANY (ARRAY['id_no'::text, 'device'::text, 'payout_account'::text]))),
+    CONSTRAINT risk_linked_marks_not_self_check CHECK ((user_id <> source_user_id)),
+    CONSTRAINT risk_linked_marks_source_ref_check CHECK (((char_length(source_ref) >= 1) AND (char_length(source_ref) <= 128)))
+);
+
+
+--
+-- Name: risk_linked_marks_id_seq; Type: SEQUENCE; Schema: app; Owner: -
+--
+
+ALTER TABLE app.risk_linked_marks ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME app.risk_linked_marks_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: risk_rules; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -8033,6 +8065,22 @@ ALTER TABLE ONLY app.risk_judgements
 
 
 --
+-- Name: risk_linked_marks risk_linked_marks_mark_key; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.risk_linked_marks
+    ADD CONSTRAINT risk_linked_marks_mark_key UNIQUE (app_id, source_ref, user_id, dimension);
+
+
+--
+-- Name: risk_linked_marks risk_linked_marks_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.risk_linked_marks
+    ADD CONSTRAINT risk_linked_marks_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: risk_rules risk_rules_pkey; Type: CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -8960,6 +9008,13 @@ CREATE INDEX device_registrations_device_created_idx ON app.device_registrations
 
 
 --
+-- Name: devices_app_id_device_hash_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX devices_app_id_device_hash_idx ON app.devices USING btree (app_id, device_hash);
+
+
+--
 -- Name: devices_app_id_id_key; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -9394,6 +9449,27 @@ CREATE INDEX payout_account_verify_attempts_user_date_idx ON app.payout_account_
 
 
 --
+-- Name: payout_accounts_app_id_alipay_hmac_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX payout_accounts_app_id_alipay_hmac_idx ON app.payout_accounts USING btree (app_id, alipay_hmac) WHERE (alipay_hmac IS NOT NULL);
+
+
+--
+-- Name: payout_accounts_app_id_bank_card_hmac_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX payout_accounts_app_id_bank_card_hmac_idx ON app.payout_accounts USING btree (app_id, bank_card_hmac) WHERE (bank_card_hmac IS NOT NULL);
+
+
+--
+-- Name: payout_accounts_app_id_user_id_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX payout_accounts_app_id_user_id_idx ON app.payout_accounts USING btree (app_id, user_id);
+
+
+--
 -- Name: payout_accounts_current_alipay_key; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -9657,6 +9733,20 @@ CREATE UNIQUE INDEX risk_hits_same_device_once_key ON app.risk_hits USING btree 
 --
 
 CREATE INDEX risk_hits_user_idx ON app.risk_hits USING btree (app_id, user_id) WHERE (user_id IS NOT NULL);
+
+
+--
+-- Name: risk_linked_marks_app_id_source_user_id_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX risk_linked_marks_app_id_source_user_id_idx ON app.risk_linked_marks USING btree (app_id, source_user_id);
+
+
+--
+-- Name: risk_linked_marks_app_id_user_id_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX risk_linked_marks_app_id_user_id_idx ON app.risk_linked_marks USING btree (app_id, user_id);
 
 
 --
@@ -11671,6 +11761,22 @@ ALTER TABLE ONLY app.risk_judgements
 
 ALTER TABLE ONLY app.risk_judgements
     ADD CONSTRAINT risk_judgements_user_fkey FOREIGN KEY (app_id, user_id) REFERENCES app.users(app_id, id);
+
+
+--
+-- Name: risk_linked_marks risk_linked_marks_source_user_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.risk_linked_marks
+    ADD CONSTRAINT risk_linked_marks_source_user_fkey FOREIGN KEY (app_id, source_user_id) REFERENCES app.users(app_id, id);
+
+
+--
+-- Name: risk_linked_marks risk_linked_marks_user_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.risk_linked_marks
+    ADD CONSTRAINT risk_linked_marks_user_fkey FOREIGN KEY (app_id, user_id) REFERENCES app.users(app_id, id);
 
 
 --
@@ -16449,6 +16555,14 @@ GRANT INSERT(judged_at) ON TABLE app.risk_judgements TO couli_app;
 --
 
 GRANT INSERT(created_at) ON TABLE app.risk_judgements TO couli_app;
+
+
+--
+-- Name: TABLE risk_linked_marks; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.risk_linked_marks TO couli_app;
+GRANT SELECT ON TABLE app.risk_linked_marks TO couli_readonly;
 
 
 --
