@@ -1,0 +1,25 @@
+id: CT-24zt
+repo: rebate-platform
+title: 契约：未知结果列表一行异常不挂整页（FU-W10-LIST-ROW-500，BR-WDR-15，D10-702 ①）——AdminUnknownPayoutItem.first_transfer_at 改为可空，null 表示没有打款尝试，后台显示「—」；该行 fail_blockers 照常给出
+type: contract
+# 2026-11-06 pay 入账（D10-702 ①）。现状：needs_manual 的 PAYING 单若没有 kind=transfer 尝试，adminListUnknownPayouts 整页 500（admin-unknown-payouts.ts:232 throw）。
+# 本单只改契约：first_transfer_at 可空（同 AdminAuditLog.actor_id 的写法）；null 时 fail_blockers 含 resolve_too_early（T 不存在，按未满 24 小时计）在前；这类行排在最后。判定接口不变（无 T 的单仍 20902）。
+# 只 /admin/v1/** 响应放宽，照 D10-619 / D10-557 先例登 oasdiff 接受项（后台同发）。实现另开单（列表不再 throw、照常出行并打告警）。
+refs: [BR-WDR-15]
+refs_hash:
+  BR-WDR-15: 8b11285236c2
+deps: [CT-24zs]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
