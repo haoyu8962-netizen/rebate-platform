@@ -1,0 +1,26 @@
+id: B1-25a
+repo: rebate-platform
+title: 业务告警外发第一步：Alertmanager 路由（资金类 fund="true" → 财务组且不受夜间静默、同时 @ 值班；其余 → 值班组，夜间 22:00–08:00 静默、08:00 后补推），接收组先用 staging 内部只记日志的占位（D10-714）
+type: impl
+# 2026-11-06 ops 入账（编排 D10-714，上线缺口第 20 项）。B1-25 是数据库告警外发（Pigsty 自带 Alertmanager），本单只管 couli 业务告警，不动 Pigsty 那套。
+# 交付：infra/monitoring/alertmanager/alertmanager.yml（couli 专用实例的配置）与 log-sink.mjs（只把收到的 webhook 记日志的占位接收端，Node 内置模块）。
+# 路由：按规则文件现有标签 fund="true" 分流（couli-fund.yaml 每条都有；不另加 team 标签，避免改冻结规则测试钉住的 labels）；
+#   财务组 receiver 不挂静默、continue 到值班组的资金分支（02 §13「资金类同时 @ 值班人」）；非资金告警进值班组，mute_time_intervals 22:00–08:00（Asia/Shanghai）。
+#   分组 group_by alertname + app_id；同类 30 分钟内合并（BR-WDR-24 细则）→ group_interval 30m；group_wait、repeat_interval 是代理补全默认，PR 正文列出。
+# 接收端 URL 只指 staging 内部 127.0.0.1 上的 log-sink，不接任何外部服务、不填真实联系方式；渠道 / 接收人由负责人定（需求单另报）。
+# staging 部署与演练（另起 couli 专用 alertmanager 实例 + log-sink，经 API 人为触发一条资金、一条运维告警）由 ops 在仓库外脚本做，结果写私有 README。
+refs: [BR-WDR-24, BR-WDR-26]
+refs_hash:
+  BR-WDR-24: 1e9585c4b8bf
+  BR-WDR-26: 158db40de631
+deps: []
+paths:
+  - 'infra/monitoring/alertmanager/**'
+  - 'ops/tasks/B1-25a.yaml'
+test_paths:
+  - 'test/spec/platform/alerting/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+status: todo
