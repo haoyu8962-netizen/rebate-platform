@@ -8957,7 +8957,8 @@ export interface paths {
          *     Rows are the withdrawals of the console's app in status PAYING with `needs_manual=true`,
          *     longest waiting first: `withdrawal_id`, `out_biz_no`, the masked `user` as in
          *     listAdminWithdrawals (no payee account or name), `payout_channel`, `amount_fen`, `net_fen`,
-         *     `first_transfer_at` (T, the earliest kind=transfer attempt), `latest_query` (the newest
+         *     `first_transfer_at` (T, the earliest kind=transfer attempt; null when there is none, such a
+         *     row is listed last and the page never fails for it), `latest_query` (the newest
          *     kind=query attempt, null when there is none: `result`, `at`, and what the channel answered,
          *     `resp_code`, `resp_sub_code`, `channel_status`, `channel_order_id` and `paid_at`, each null
          *     when absent and never the payee's account or name, so that a person can read the answer and
@@ -8965,7 +8966,8 @@ export interface paths {
          *     stops this withdrawal from being judged failed right now, in the order of
          *     adminResolveUnknownPayout's checks. While the channel's 「订单不存在」 code and the bill read
          *     are missing (D10-625) it always holds `resolve_bill_unverifiable` and
-         *     `resolve_query_unverifiable`, so the page can say why before anyone submits.
+         *     `resolve_query_unverifiable`, so the page can say why before anyone submits. Without a T,
+         *     `resolve_too_early` comes first (24 hours from T cannot have passed).
          */
         get: operations["adminListUnknownPayouts"];
         put?: never;
@@ -19277,10 +19279,11 @@ export interface components {
             amount_fen: components["schemas"]["Fen"];
             net_fen: components["schemas"]["Fen"];
             /**
-             * Format: date-time
-             * @description T, the earliest kind=transfer attempt.
+             * @description T, the earliest kind=transfer attempt; null when the withdrawal has no transfer attempt
+             *     (the console shows 「—」). Such a row is still listed, never fails the page (FU-W10-LIST-ROW-500,
+             *     D10-702 ①).
              */
-            first_transfer_at: string;
+            first_transfer_at: string | null;
             latest_query: components["schemas"]["AdminUnknownPayoutLatestQuery"] | null;
             /** @description In the order of adminResolveUnknownPayout's checks. */
             fail_blockers: components["schemas"]["AdminUnknownPayoutFailBlocker"][];

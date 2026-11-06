@@ -1,0 +1,37 @@
+{
+  "risk_note": "Contract only, RV2 by path. AdminUnknownPayoutItem.first_transfer_at becomes nullable: a PAYING needs_manual withdrawal without any kind=transfer attempt made adminListUnknownPayouts answer 500 for the whole page (admin-unknown-payouts.ts:232 throws). Null means no transfer attempt, the console shows 「—」, such a row is listed last and its fail_blockers start with resolve_too_early. adminResolveUnknownPayout is unchanged: without a T it still answers 20902. Only an /admin/v1/** response widens, accepted in contracts/oasdiff-accepted.txt under the D10-557 / D10-619 precedent (the console ships with the server). The implementation (list no longer throws, logs a warning) follows in a separate task.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-24zt/contract-review-r1.json, static, no findings. Reviewed before the rebase."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zt",
+  "spec_commit": "a89c1ec3a7f4de0b069742af909eba6545358ea3",
+  "spec_ref": "b144fc0d07aeafb9503457ffd824056a6ac8e02d",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "9a11e6a6b29b303425802027911344d3d03ed48e",
+    "specs": "91a566154637d22d47c53fd4dc5b086bb2436028"
+  }
+}

@@ -55,3 +55,7 @@ GET /admin/v1/order-syncs/limits the `data/items/items/max_order_nos` response p
 # and the audit pages show the server's actor_name and do not read this enum.
 GET /admin/v1/audit-logs added the new `system:payout` enum value to the `data/items/items/system_actor` response property for the response status `200`
 GET /admin/v1/audit-logs/{id} added the new `system:payout` enum value to the `data/system_actor` response property for the response status `200`
+# D10-702 ① / D10-557 (CT-24zt, FU-W10-LIST-ROW-500): AdminUnknownPayoutItem first_transfer_at becomes
+# nullable (no transfer attempt; the row is listed instead of failing the page). Only /admin/v1/**
+# responses: the console ships with the server (后台同发), so no old client reads these rows.
+GET /admin/v1/unknown-payouts response property `data/items/items/first_transfer_at` list-of-types was widened by adding types `null` to media type `application/json` of response `200`
