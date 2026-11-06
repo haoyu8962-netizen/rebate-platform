@@ -1,0 +1,27 @@
+id: B1-25b
+repo: rebate-platform
+title: 业务告警规则求值接上：couli 专用 vmalert 加载 infra/monitoring/rules 的 couli.yaml / couli-fund.yaml，抓取 api / worker / admin 的内部 /metrics，告警发往 B1-25a 的 couli Alertmanager（D10-716）
+type: impl
+# 2026-11-06 ops 入账（编排 D10-716，排 B1-25a 后）。B1-25「业务指标是否并入同一套监控」按「并入、与 Pigsty 那套分实例」定：
+#   指标写入节点现有 VictoriaMetrics（:8428），规则求值另起 couli 专用 vmalert（不改 Pigsty 的 vmalert 与 /infra/rules），notifier 只指 couli Alertmanager（127.0.0.1:9093）。
+# 交付：infra/monitoring/vmalert/（couli vmalert 启动参数说明与规则清单，规则文件本身不改）、infra/monitoring/scrape/（抓取配置：各进程 METRICS_PORT，只抓 127.0.0.1）；
+#   infra/staging/compose.yaml 给 api / worker / admin 设非密钥 METRICS_PORT（容器内 METRICS_HOST 按需），端口只发布到 127.0.0.1，不对外。
+# 规则测试钉：vmalert 规则清单正好是 couli.yaml + couli-fund.yaml；抓取目标覆盖 api / worker / admin 且只在 127.0.0.1；compose 端口不发布到 0.0.0.0。
+# staging 部署后用 B1-25a 的演练再走一遍「规则真的触发 → 路由到对的组」（人为让一条资金规则、一条运维规则成立），结果写私有 README。不接外部服务。
+refs: [BR-WDR-24]
+refs_hash:
+  BR-WDR-24: 1e9585c4b8bf
+deps: [B1-25a]
+paths:
+  - 'infra/monitoring/vmalert/**'
+  - 'infra/monitoring/scrape/**'
+  - 'infra/staging/compose.yaml'
+  - 'infra/staging/README.md'
+  - 'ops/tasks/B1-25b.yaml'
+test_paths:
+  - 'test/spec/platform/alerting-eval/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+status: todo
