@@ -121,7 +121,12 @@ it.each(['14', '15'] as const)(
   async (code) => {
     const h = await harness(p.db);
     const o = await h.credited();
-    const sync = rightsSync(h);
+    // B2-04zx（D10-723）：settlement 不再兜底直写审计表，本用例自己注入审计端口——admin 的
+    // createSystemAuditWriter（同生产接法），写入方接的是注入了它的 settlement rights.record。在用例内动态
+    // 导入，冻结文件在用例之外不改（D10-701 modify_existing）。
+    const audited = await import('../../settlement/rights-audit-port/kit.ts');
+    const port = audited.auditedRights(h).withAudit(await audited.adminAuditWriter(h.clock));
+    const sync = rightsSync({ ...h, recordPort: () => port });
 
     expect(await sync.deliver(o, { refund_status: '4', rights_status: 'PROCESSING' })).toBe(
       'applied',
@@ -203,6 +208,10 @@ it.each(['14', '15'] as const)(
     const audits = await reasonAudits(h);
     expect(audits).toHaveLength(1);
     expect(audits[0]).toMatchObject({ app_id: h.appId, admin_id: null });
+    expect(audits[0]).toMatchObject({
+      action: 'order_rights_success_after_closed',
+      target: `order_rights:${succeeded.id}`,
+    });
     expect(reasonAlerts(h)).toHaveLength(1);
     const settled = await h.everything();
 
@@ -303,11 +312,16 @@ it.each(GUARDS)(
     expect(reasonAlerts(h)).toEqual([]);
 
     // 对照：只有 API 源、已存 FAILED、再报成功（带应扣佣金）这一种放开。
+    // B2-04zx（D10-723）：放开的那一次经注入了审计端口（admin 的 createSystemAuditWriter）的 settlement
+    // rights.record；在用例内动态导入，冻结文件在用例之外不改（D10-701 modify_existing）。
+    const audited = await import('../../settlement/rights-audit-port/kit.ts');
+    const rights = audited.auditedRights(h);
+    const port = rights.withAudit(await audited.adminAuditWriter(h.clock));
     expect(
       await h.record(o, { source: 'API', status: 'FAILED', deductionFen: 100n, rightsNo: OPEN_NO }),
     ).toEqual({ kind: 'applied' });
     expect(
-      await h.record(o, {
+      await rights.commit(port, o, {
         source: 'API',
         status: 'SUCCEEDED',
         deductionFen: 100n,
