@@ -10,7 +10,7 @@ type: impl
 # 2026-10-25（W1）：Codex 至 10-30 不可用，tester 改 claude-independent（approvals #36）。队列取舍改为**复用 orders 自有的 order-sync 队列、任务名 rights_import**，不新建 rights-import 队列：新队列须改三份钉死全目录的平台冻结测试（queue/contract.test.ts、metrics/kit.ts、dead-letter-scan/kit.ts），kit 改动会让同目录大批用例被整体判定、先红过不了（同 B1-03w / B1-09e）；代价是导入与订单同步共用单并发队列，上线前可接受，记 followups，需要时再拆。catalog.ts 不改。
 refs: [BR-FUND-06]
 refs_hash:
-  BR-FUND-06: 2076b932478c
+  BR-FUND-06: 9f92492d273a
 deps: [CT-24n, B1-09e, B1-09fa]
 paths:
   - 'apps/api/src/modules/orders/**'

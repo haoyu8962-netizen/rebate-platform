@@ -5,7 +5,7 @@ type: impl
 # 2026-11-01 入账（admin-backend，编排 D10-551 ②、D10-552，FU-PROD-WIRING 第 A 条）。审计照实记系统身份，不种假账号。admin_id 可空、system_actor 文本列、CHECK 二者恰有其一（外键对 NULL 不生效）。适配器只从 admin/index.ts 导出，生产装配归 w1 的 B1-09n。迁移排在 B2-08e 之后。
 refs: [BR-FUND-06]
 refs_hash:
-  BR-FUND-06: 2076b932478c
+  BR-FUND-06: 9f92492d273a
 deps: [CT-24zj]
 paths:
   - 'db/migrations/**'

@@ -9,7 +9,7 @@ type: impl
 #   定位函数只按子订单号匹配（app_id 限定、拼多多去连字符），能识别「只给了主订单号」以便上层记 sub_order_no_missing（D10-152 ⑨），不展开到子订单；调用方先取 order_key advisory 锁（lockOrderKey）。
 refs: [BR-FUND-06]
 refs_hash:
-  BR-FUND-06: 2076b932478c
+  BR-FUND-06: 9f92492d273a
 deps: [B2-04j]
 paths:
   - 'apps/api/src/modules/orders/**'

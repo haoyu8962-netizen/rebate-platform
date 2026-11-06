@@ -7,7 +7,7 @@ type: impl
 # 2026-11-02 admin：refs 换成导入实际依据（原 BR-ATTR-31 不相干），deps 补 B2-03q、B1-10m、B1-09n（createRebatePort 的生产装配在 B1-09n，本单复用同一实例，clawback.onUpdated 路由排在 refresh 之后）。
 refs: [BR-FUND-06, BR-FUND-07, BR-FUND-08, BR-ATTR-26]
 refs_hash:
-  BR-FUND-06: 2076b932478c
+  BR-FUND-06: 9f92492d273a
   BR-FUND-07: 3d63741c52d9
   BR-FUND-08: 4fad67b21a32
   BR-ATTR-26: 7070dbe36696
