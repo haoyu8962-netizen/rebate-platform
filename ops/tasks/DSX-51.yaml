@@ -4,6 +4,7 @@ title: 后台 200% 缩放与窄视口重排：按适配约定的后台视口分�
 type: impl
 # 2026-11-06 入账（前端线 f1-frontend-7，编排 D10-724 ②）。整改计划 DSX-51 验收：「浏览器测试在 1280、960、800 宽和 200% 缩放下，除数据表格外没有页面级横向滚动，侧栏可以收起；页面代码里不写断点数字」。依据：适配约定「后台 · 视口分档」与规划 03 §10.4 后台行。
 # 冻结测试（admin-*/** 的布局、截图与 1280 / 1440 浏览器用例）若与重排冲突，规则测试作者先列出，按 #24 另开 test-change，不在本单改。资金页面（withdrawals / adjustments 目录）只受外壳与表格组件的共用改动，不改其业务代码。
+# 2026-11-07 补 paths（规则测试过审 r1 S1）：工作台 pages/dashboard/dashboard.css 第 34、39 行已有 @media 1280 / 1100 断点，验收「页面代码里不写断点数字」要求它改按外壳分档（断点移进外壳、页面只用外壳提供的分档类或变量），故加入 paths。全后台 pages 扫描只有这一处真断点。
 # 非资金；评审 general 口径（若因路径判 RV2 则按 money 口径）。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
 refs: []
 refs_hash: {}
@@ -14,6 +15,7 @@ paths:
   - 'apps/admin/src/shell-options.ts'
   - 'apps/admin/src/components/**'
   - 'apps/admin/src/texts/shell.ts'
+  - 'apps/admin/src/pages/dashboard/dashboard.css'
 test_paths:
   - 'test/spec/frontend/admin-responsive/**'
 impl: claude
