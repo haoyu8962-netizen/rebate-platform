@@ -6,6 +6,7 @@ type: test-change
 # [AC-B2-04zfa#3] 134-145 行要求表上每个约束都在「建表那个迁移」（kit.ts migrationSource，只读 0108）里显式具名，新约束写在新迁移里会让它红。照 B3-09k 先例拆前置：
 # 只把具名检查的取源扩为「创建或 ALTER app.settle_runs 的全部迁移」，「每个约束都显式具名」本身不放宽，主键与跨 app 冲突断言一字不动；现行主干全绿，可先合。
 # 改既有规则测试属第一类保护路径：非 task 分支、不带证据；新鲜独立 Claude 改、另一位只读复审（写进 PR 正文）；标签由编排核后加（#24）。RV2。
+# 2026-11-07 作废（编排 02:4x 认可）：B2-04zy #2548 已把 settle-runs-schema/kit.ts 的 migrationSource 扩到建表之后各迁移里涉及 app.settle_runs 的语句，本单要做的已覆盖。
 refs: []
 refs_hash: {}
 deps: [B2-04zfa]
@@ -16,5 +17,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
+status: void
 pr: null

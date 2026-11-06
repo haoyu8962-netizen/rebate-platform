@@ -31,8 +31,8 @@ accept:
   - 'pnpm verify'
   - 'test/spec/settlement/run-done-skew/**'
   - 'test/spec/settlement/run-credit-watermark/**'
-status: todo
-pr: null
+status: done
+pr: 2548
 red_exempt:
   - file: test/spec/db/settlement/core/schema.int.test.ts
     test: '[AC-B2-04a#25] couli_app 出账完成时回填六个账单汇总列与完成时刻并原样读回'
