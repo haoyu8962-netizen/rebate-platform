@@ -1,0 +1,18 @@
+id: CT-06zzzh
+repo: rebate-platform
+title: CT-06zzzh：规则测试评审提示词的属性测试写法与 red-check CR2-03 对齐（回调内 expect、末尾 return true，D10-705）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排裁定 D10-705）。起因：tools/agent/prompts/review-spec-test.md 第 149–150 行要求属性测试「返回布尔、在 fc.assert 外断言一次」，
+#   而 red-check（tools/guard/lib/red-check.ts causeVerdict，CR2-03）把「属性只返回 false」判为无效红，要求在回调内用 expect 断言；B1-28o 的 Codex r2 因此报 S1。
+# 只改这两行为「回调内用 expect 断言、末尾 return true」并注明 CR2-03 / D10-705；提示词其余评审要求一字不改，red-check 不动。按 #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/prompts/review-spec-test.md'
+  - 'ops/tasks/CT-06zzzh.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

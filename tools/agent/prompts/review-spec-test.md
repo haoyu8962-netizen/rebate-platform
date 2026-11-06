@@ -146,8 +146,9 @@ the in-scope rules is stated as not applicable in `summary`, with the reason.
 - Rule tests for the funds packages use top-level `it`, never `describe` (规划/11 §4.3); mixing
   both in one file is a finding.
 - No `.skip`, `.only`, `retry`; every test asserts. No mocks of `packages/money` or the ledger.
-- Property tests take runs and seed only from `PROP_RUNS` / `PROP_SEED`, return booleans from the
-  property body and assert once outside `fc.assert`; generators cover 0, 1, odd amounts and
+- Property tests take runs and seed only from `PROP_RUNS` / `PROP_SEED`, assert with `expect`
+  inside the property callback and end it with `return true` (a property that only returns false
+  is not a valid red for red-check, CR2-03; D10-705); generators cover 0, 1, odd amounts and
   amounts above 2^31.
 - Expected values are computed by hand from the BR text or taken from its examples, never
   produced by calling the code under test.
