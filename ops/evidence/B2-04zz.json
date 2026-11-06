@@ -1,0 +1,83 @@
+{
+  "task": "B2-04zz",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "4c9ee6159d38e35d814fb2842e903408db469cd4",
+  "red_tests": [
+    "test/spec/settlement/rights-audit-actor/actor.int.test.ts > [AC-B2-04zz#1] 入账后订单：API 源已 FAILED、联盟后报 SUCCEEDED 的重开经注入（记录调用的假）审计端口 applied；端口恰被调用一次、同一事务，入参 actor 恰为 system:settlement，动作 order_rights_success_after_closed、目标 order_rights:<id>、前后状态与原因 union_reported_success_after_closed 不变；入参任何位置都不含 system:risk；扣回照旧一次（键带 R{id}）",
+    "test/spec/settlement/rights-audit-actor/actor.int.test.ts > [AC-B2-04zz#2] 入账前订单（WAITING）：同一重开经注入（记录调用的假）审计端口 applied，按 R7 RIGHTS_PARTIAL 处理（返利状态不变、无凭证）；端口恰被调用一次、同一事务，入参 actor 恰为 system:settlement，其余审计字段不变；入参任何位置都不含 system:risk",
+    "test/spec/settlement/rights-audit-actor/actor.int.test.ts > [AC-B2-04zz#3] 注入 admin 真实的 createSystemAuditWriter（生产的接法）：重开提交后恰一条审计行——本 App、admin_id 为空、system_actor = system:settlement、动作 order_rights_success_after_closed、目标 order_rights:<id>、before / after 不变（after.reason = union_reported_success_after_closed）；本 App 的审计行里没有 system:risk；后台审计查询（admin 的列表与详情读取，不起 HTTP，看全部审计的账号）对这行显示系统操作人 system:settlement、中文名「系统（结算）」、无账号",
+    "test/spec/settlement/rights-audit-actor/source.test.ts > [AC-B2-04zz#4] rights-command.ts 全文（含注释）不出现 system:risk、不留等契约枚举的 TODO；去掉注释后出现字面值 system:settlement（契约 audit_system_actor 已有此值，中文名「系统（结算）」）"
+  ],
+  "risk_note": "RV2 settlement (B2-04zz; FU-AUDIT-ACTOR-SETTLEMENT; D10-717 ② / D10-769). The system audit of a dispute reopen (an API-source FAILED order_rights row the union later reports SUCCEEDED, D10-699) is now written under system_actor system:settlement (added to the contract by CT-26z #2581) instead of the temporary system:risk; the audit port input type is narrowed to that literal. Action, target, reason union_reported_success_after_closed, admin_id null and every money path are unchanged.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "4c9ee6159d38e35d814fb2842e903408db469cd4",
+      "tree": "32d2f0f632200a99d79bac412a172b633a1a0186",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T20:14:18Z",
+      "finished_at": "2026-11-06T20:14:41Z",
+      "red_tests": [
+        "test/spec/settlement/rights-audit-actor/actor.int.test.ts > [AC-B2-04zz#1] 入账后订单：API 源已 FAILED、联盟后报 SUCCEEDED 的重开经注入（记录调用的假）审计端口 applied；端口恰被调用一次、同一事务，入参 actor 恰为 system:settlement，动作 order_rights_success_after_closed、目标 order_rights:<id>、前后状态与原因 union_reported_success_after_closed 不变；入参任何位置都不含 system:risk；扣回照旧一次（键带 R{id}）",
+        "test/spec/settlement/rights-audit-actor/actor.int.test.ts > [AC-B2-04zz#2] 入账前订单（WAITING）：同一重开经注入（记录调用的假）审计端口 applied，按 R7 RIGHTS_PARTIAL 处理（返利状态不变、无凭证）；端口恰被调用一次、同一事务，入参 actor 恰为 system:settlement，其余审计字段不变；入参任何位置都不含 system:risk",
+        "test/spec/settlement/rights-audit-actor/actor.int.test.ts > [AC-B2-04zz#3] 注入 admin 真实的 createSystemAuditWriter（生产的接法）：重开提交后恰一条审计行——本 App、admin_id 为空、system_actor = system:settlement、动作 order_rights_success_after_closed、目标 order_rights:<id>、before / after 不变（after.reason = union_reported_success_after_closed）；本 App 的审计行里没有 system:risk；后台审计查询（admin 的列表与详情读取，不起 HTTP，看全部审计的账号）对这行显示系统操作人 system:settlement、中文名「系统（结算）」、无账号",
+        "test/spec/settlement/rights-audit-actor/source.test.ts > [AC-B2-04zz#4] rights-command.ts 全文（含注释）不出现 system:risk、不留等契约枚举的 TODO；去掉注释后出现字面值 system:settlement（契约 audit_system_actor 已有此值，中文名「系统（结算）」）"
+      ],
+      "expected": [
+        "test/spec/settlement/rights-audit-actor/actor.int.test.ts",
+        "test/spec/settlement/rights-audit-actor/source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "7f46effc442b31c722956d81067eedea7b48f02d64be7791ae3f46ad54081fdb"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "424aec38b3357bfdde93852637ab7fb272c45ac2fbad351ba50a12910d3ad5d9"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex quota exhausted until 11-11 (D10-775): money review by a fresh independent Claude via claude-run.sh, round 1 pass, no findings; only the audit actor literal and its input type change, no amount, ledger or state path touched. Static review, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by an independent Claude in 1 attempt (new directory rights-audit-actor/**, 4 cases: stored actor system:settlement, admin display 系统（结算）, action / target / reason unchanged, no system:risk left in source); spec-test round 1 pass."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c8744ccb86c65f0912bd3ec861fff27450e1dd1e",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

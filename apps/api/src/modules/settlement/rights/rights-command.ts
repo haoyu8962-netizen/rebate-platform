@@ -78,16 +78,17 @@ import {
 export const RIGHTS_SUCCESS_AFTER_CLOSED = 'union_reported_success_after_closed';
 /** The audit action of that change (target order_rights:<id>). */
 export const RIGHTS_REOPEN_AUDIT_ACTION = 'order_rights_success_after_closed';
-/**
- * The system identity of the audit row. contracts/enums/admin.yaml audit_system_actor has no
- * order-sync value yet; system:risk is the existing value the row is stored under.
- * TODO(规划/11 §7.1): a dedicated order-sync system actor — blocked on the contract enum.
- */
-const RIGHTS_AUDIT_ACTOR = 'system:risk';
+/** The system identity of the audit row (contracts/enums/admin.yaml audit_system_actor, CT-26z). */
+const RIGHTS_AUDIT_ACTOR = 'system:settlement';
+
+/** One reopen audit row: the store's shape, under settlement's own system identity. */
+export type RightsReopenAuditInput = Omit<RightsSystemAuditInput, 'actor'> & {
+  readonly actor: typeof RIGHTS_AUDIT_ACTOR;
+};
 
 /** admin's system audit on the caller's transaction, by shape (settlement imports no admin code). */
 export interface RightsSystemAudit {
-  appendAction(trx: Transaction<DB>, input: RightsSystemAuditInput): Promise<void>;
+  appendAction(trx: Transaction<DB>, input: RightsReopenAuditInput): Promise<void>;
 }
 
 export interface RightsCommandDependencies {
