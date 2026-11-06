@@ -1278,6 +1278,26 @@ export const CONTRACT_SIGNING_ROUTES = [
   },
   {
     "method": "GET",
+    "path": "/admin/v1/settle-adjustments",
+    "signed": false
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-batches/:batch_id/approve",
+    "signed": false
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-batches/:batch_id/reject",
+    "signed": false
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-runs",
+    "signed": false
+  },
+  {
+    "method": "GET",
     "path": "/admin/v1/withdrawals",
     "signed": false
   },

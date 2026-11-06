@@ -295,6 +295,8 @@ it('[AC-CT-01c#3] limits 20902 resources to active contracts (04 §7)', () => {
     'bad_debt_writeoff',
     // CT-24zh: union collection whole-record reversal, a record is reversed once (D10-538, BR-FUND-16, BR-FUND-20).
     'union_receipt',
+    // CT-24zv: settle-adjust batch approve / reject, nothing pending left (BR-FUND-09 ②, D10-770).
+    'settle_adjust_batch',
   ]);
 });
 

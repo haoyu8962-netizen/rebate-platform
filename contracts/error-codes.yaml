@@ -314,7 +314,9 @@ codes:
         - admin_adjustment
         - bad_debt_writeoff
         - union_receipt
+        - settle_adjust_batch
     sources:
+      - BR-FUND-09
       - BR-FUND-01
       - BR-FUND-04
       - BR-ATTR-20

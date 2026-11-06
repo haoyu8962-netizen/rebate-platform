@@ -1,0 +1,37 @@
+{
+  "risk_note": "Contract only, RV2 by path; every new operation is x-implementation planned (the routes come with B2-09zb and B2-09zc). FU-SETTLE-ADJ-POSITIVE (D10-769, D10-770): a positive settlement difference (BR-FUND-09 ②) has no code yet, so money the union settled above what was booked never reaches the member, an underpayment that must not go live. adminListSettleAdjustments lists candidates (members masked, a rights-waiting mark); adminApproveSettleAdjustBatch approves a batch under fund.settle_adjust with a totp step-up, recomputing each order from the current settlement (stale seq voided, a zero difference approved with no voucher, the platform voucher following the sign of its own difference, frozen beneficiaries turned into obligations, banned or deleted ones to the platform), each order on its own transaction, one audit record per call; adminRejectSettleAdjustBatch rejects with a reason and no ledger change; adminRunSettleAdjust queues the candidate run of one platform and bill day. 20902 resource settle_adjust_batch is registered. Only /admin/v1/** and the console ships with the server.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "A fresh Claude via claude-run.sh (Codex usage limit until 11-11 13:15, approvals #36, D10-775), static. r1 failed on one S1 (the platform's recomputed difference can be negative, so its voucher must follow the sign: INCREASE, DECREASE or none) and three S2 (a batch whose candidates were all voided must answer 200 and be confirmed, not 20902; an already_decided outcome for orders another call decided first; the clawback filter applies only while settle.adjust.void_on_clawback.enabled is on). All four fixed; r2 incremental pass. Reviewed before the rebase."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zv",
+  "spec_commit": "44378698c47a5ef1ab8a3c243b864f907da4a1b5",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "de15ef8386778bc2282788015d4978c4a3576042",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  }
+}

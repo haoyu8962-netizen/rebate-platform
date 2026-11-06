@@ -2575,6 +2575,46 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "adminListSettleAdjustments",
+    "method": "GET",
+    "path": "/admin/v1/settle-adjustments",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
+    "operationId": "adminApproveSettleAdjustBatch",
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-batches/:batch_id/approve",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
+    "operationId": "adminRejectSettleAdjustBatch",
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-batches/:batch_id/reject",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
+    "operationId": "adminRunSettleAdjust",
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-runs",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "listAdminWithdrawals",
     "method": "GET",
     "path": "/admin/v1/withdrawals",

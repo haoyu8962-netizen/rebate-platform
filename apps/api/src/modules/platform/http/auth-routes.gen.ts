@@ -1278,6 +1278,26 @@ export const CONTRACT_AUTH_ROUTES = [
   },
   {
     "method": "GET",
+    "path": "/admin/v1/settle-adjustments",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-batches/:batch_id/approve",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-batches/:batch_id/reject",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/settle-adjust-runs",
+    "auth": "admin"
+  },
+  {
+    "method": "GET",
     "path": "/admin/v1/withdrawals",
     "auth": "admin"
   },
