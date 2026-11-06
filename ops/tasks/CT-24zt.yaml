@@ -7,7 +7,7 @@ type: contract
 # 只 /admin/v1/** 响应放宽，照 D10-619 / D10-557 先例登 oasdiff 接受项（后台同发）。实现另开单（列表不再 throw、照常出行并打告警）。
 refs: [BR-WDR-15]
 refs_hash:
-  BR-WDR-15: 8b11285236c2
+  BR-WDR-15: 862cdb2e711a
 deps: [CT-24zs]
 paths:
   - 'contracts/openapi.yaml'
