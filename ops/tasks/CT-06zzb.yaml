@@ -1,0 +1,26 @@
+id: CT-06zzb
+repo: rebate-platform
+title: CT-06zzb：verify-int 按文件 --shard=i/2 拆为 verify-int-1 / verify-int-2 两个并行作业，各限 60 分钟（CT-06-INT-SHARD）
+type: guard-change
+# 2026-11-06 入账（ops 线，编排 07:42 派 CT-06-INT-SHARD；号沿 CT-06zza 注释里预留的 CT-06zzb）。起因：主干最近 3 次绿的
+#   test:int 4198–4409 s（70–73 分钟），作业 77–80 分钟，上限 90；1624 个文件里 1618 个在 @couli/spec-tests。
+# 做法照 CT-06zxa：ci.yml 的 verify-int 换成 verify-int-1 / -2，各跑根脚本的同一条命令
+#   `pnpm test:int -- --shard=i/2`（pnpm 把 -- 后的参数交给 turbo，再透传给三个包的 vitest run），各自起一次性 PG（Testcontainers）与
+#   Redis（service）；浏览器测试、构建冒烟、db:check 只在 verify-int-1。上传 verified-verify-int-<i>-<tree>；verify-reuse 的作业
+#   清单与 ci-gate 的 needs / 判定 / 摘要改认两个新名。timeout 90 → 60。不减用例、不加 continue-on-error、不放宽别的。
+# 两个 tools 测试逐字钉着 ci.yml 的 `- run: pnpm test:int` + env 段，改为两片各自都要带同样的 env（只收紧）。
+# 分支规则集的必过检查只有 ci-gate 等六个（ops/branch-protection.json），verify-int 不在其中，不改规则集。
+# 验收：本 PR 上两片各自通过，两片的 Test Files / Tests 之和等于主干同期 test:int 的总数，各片耗时报编排。按 #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'ops/tasks/CT-06zzb.yaml'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/verify-container.services.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

@@ -830,9 +830,12 @@ it('Redis has one image and one configuration in the verify container, CI and th
   expect(ci).toContain('if exec 3<>/dev/tcp/127.0.0.1/6379; then\n');
   expect(ci).toContain("printf 'PING\\r\\n' >&3\n");
   expect(ci).toContain(`if [ "\${pong%$'\\r'}" != '+PONG' ]; then\n`);
-  expect(ci).toContain(
-    '      - run: pnpm test:int\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n',
-  );
+  // CT-06zzb: verify-int is split into verify-int-1 / -2; each shard connects the same way.
+  for (const shard of ['1/2', '2/2']) {
+    expect(ci).toContain(
+      `      - run: pnpm test:int -- --shard=${shard}\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n`,
+    );
+  }
 });
 
 // --- host services (COULI_VERIFY_HOST_SERVICES=1, the AWS test machine) -------------------------
