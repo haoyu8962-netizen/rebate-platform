@@ -1,0 +1,34 @@
+id: B1-04zzp
+repo: rebate-platform
+title: 淘宝违规单号归档只存自家推广位的行（别家违规原文不入库）
+type: impl
+# 2026-11-07 be 入账（D10-793 ① / D10-778 ① FU-TB-ARCHIVE-FOREIGN-RIGHTS 的违规半边；上线前必做，淘宝 PID 登记前要合）。依据同 B1-04zzc：变更记录 20261031 §1 第 24 行「不入库别家订单」。get-foul-order-list 的归档在 ourPunishRows 过滤之前，别家推广位的违规单号原文入档。
+# 做法照 B1-04zzc 方案 A（D10-778）：listPunishments 给大淘客请求传 archiveBody 纯函数，从 data.results 删掉 tk_adzone_id 可读且不在凑狸推广位清单里的行；读不出 tk_adzone_id 的行照存；外层字段（total_count 等）与 JSON 数字原文不动；没有可删的行或 results 不是数组时原样返回；正文不是 JSON 时由既有归档包装存空串、记 error_code、照样插入。清单为空时不发请求（不变）。维权（get-order-refund）没有推广位字段，另等编排定口径（拟 B1-04zzq），本单不动。taobao_punish_foreign_slot 仍只由 ourPunishRows 每页发一条。不动金额。
+# 冻结用例 [AC-B1-04zzc#12]（违规归档仍是原文）与本单相反：照 D10-327 由新鲜独立 Claude 只改这一条的期望，另一位只读复审「只改这一处」；同文件其余用例登 red_exempt。Codex 额度用尽（D10-775），规则测试与评审为新鲜独立 Claude。
+refs: []
+refs_hash: {}
+deps: [B1-04zzc]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/punishments{.ts,.test.ts}'
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
+  - 'test/spec/union/taobao-punish-archive/**'
+  - 'test/spec/union/taobao-order-archive/others.test.ts'
+test_paths:
+  - 'test/spec/union/taobao-punish-archive/**'
+  - 'test/spec/union/taobao-order-archive/others.test.ts'
+red_exempt:
+  - file: test/spec/union/taobao-order-archive/others.test.ts
+    test: '[AC-B1-04zzc#11] 维权 get-order-refund 的归档仍是收到的原文（夹带的 publisher_order_dto 形状也不动），同一适配器的订单详情归档已去掉别家行'
+    reason: 维权归档用例体未改；维权不在本单范围，行为不变
+  - file: test/spec/union/taobao-order-archive/others.test.ts
+    test: '[AC-B1-04zzc#13] 大淘客搜索的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行'
+    reason: 搜索归档用例体未改，行为不变
+  - file: test/spec/union/taobao-order-archive/others.test.ts
+    test: '[AC-B1-04zzc#14] 大淘客转链的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行'
+    reason: 转链归档用例体未改，行为不变
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
