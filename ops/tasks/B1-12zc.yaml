@@ -37,4 +37,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/notification/clawback-message/**'
   - 'test/spec/notification/settle-adjusted-message/**'
-status: todo
+status: done
+pr: 2617
