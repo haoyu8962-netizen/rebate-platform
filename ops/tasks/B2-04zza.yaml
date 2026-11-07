@@ -1,0 +1,25 @@
+id: B2-04zza
+repo: rebate-platform
+title: 放开「入账后维权等待中 + 新结算记录负差 + 受益人有待补记义务」一路的 R10 义务处置（FU-RIGHTS-WAIT-ADJ-OBLIGATION）：clawback-order 的拦截只留正差
+type: impl
+# 2026-11-07 identity 入账（编排 D10-779 / D10-781 / D10-792；方案 couli-runs/FU-RIGHTS-WAIT-ADJ/plan.md）。B2-04zi（#2575）对「有 WAIT_COMMISSION 维权 + 新结算记录负差 + 受益人义务要没收 / 新开延后 / 保持重算」
+#   留着等待并告警 rights_settle_adjust_unsupported（clawback-order.ts 的 unsupported 判断）；08 06_FUND:604（D10-474 ②）定入账后新结算记录回应待佣金维权按 R10 SETTLE_ADJUST 处理并同事务关闭维权记录，没有等待例外。
+# 做法：把 unsupported 收窄为只拦正差（route === 'approval'，正差仍归 FU-SETTLE-ADJ-POSITIVE），删对应 TODO；settleObligations、存储层、领域计划都已具备，不要迁移、不要契约、不加锁。
+# 不动任何冻结用例（B2-04lb #10 #11 #20 #21 均无义务；无用例断言该告警），不走 D10-327。D10-781：维持 R10（P2，08 :85 / :185 由编排回写）；退款数量增加 + 等待维权维持走 R10（P3，规则测试钉住）；
+#   义务关闭不记 voucher_id 另登 FU-OBLIGATION-CLOSE-VOUCHER-REF（admin B2-04zzb，排本单合并后）。与 withdraw B2-04zk、content B2-04zzd 同改 clawback-order.ts，后合者变基。RV2。
+refs: [BR-FUND-08, BR-FUND-09]
+refs_hash:
+  BR-FUND-08: 4fad67b21a32
+  BR-FUND-09: 6b72b55621fb
+deps: [B2-04zi]
+paths:
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
+test_paths:
+  - 'test/spec/settlement/rights-wait-adj-obligation/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/rights-wait-adj-obligation/**'
+status: todo
