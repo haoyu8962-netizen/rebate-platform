@@ -7,7 +7,7 @@ type: test-change
 # 只新增 test/spec/settlement/settle-adjust-tighten/**，不改已有文件、不动实现；须在现行主干上跑绿，变异实跑（把 B2-09zb 的三处修正各自改回）应各红（先例 B2-09zd / D10-799）。分工：新鲜独立 Claude 写，评审用 Codex（D10-823）；非 task 分支、不带证据文件，标签由编排核对后加。RV2。
 refs: [BR-FUND-09, BR-CALC-09]
 refs_hash:
-  BR-FUND-09: 6b72b55621fb
+  BR-FUND-09: 3162bdea830e
   BR-CALC-09: 2414ed15d885
 deps: [B2-09zb]
 paths:
