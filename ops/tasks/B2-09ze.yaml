@@ -5,9 +5,9 @@ type: impl
 # 2026-11-07 ops 入账（D10-678 原派 pay，D10-805 ④ 改归 ops）。现状：CouliPayoutWaterLow 只在有新鲜 W 时出样本，W 未录或超过 2 小时（BR-WDR-18 ②）时没有样本、告警不响，
 #   而这时 EXECUTE 会整批拒绝。口径（ops 提议，报编排核）：某 app 有待执行的提现（APPROVED）且该通道没有 2 小时内的 W（从未录入或 t_W 距今 > 2 小时）→ 1，
 #   否则 0；没有待执行单就不报（夜里财务不录 W 属正常，不让它每晚响）。只 worker 导出，照 water-low 的采集做法（payout 只读端口经 entry.ts 接线、5 分钟缓存、读失败即抓取失败）。
-# 规则 fund: 'true'、severity warning、for 15m；couli-fund.yaml 第 19 行「W < 1.5P blocked on B2-06fz」TODO 已由 B2-09j 落地，删掉。
+# 规则 fund: 'true'、severity warning、for 5m；couli-fund.yaml 第 19 行「W < 1.5P blocked on B2-06fz」TODO 已由 B2-09j 落地，删掉。
 # 冻结 [AC-B1-01zzi#6] 指标白名单要加新指标名，照 B2-09j 先例只增不减，用 modify_existing（tighten_only 之外的「加名」由编排按 #24 核）登记，具体用例标题等测试作者定后补台账。
-# RV2（payout 指标与资金告警）。规则测试新鲜独立 Claude（D10-775），Opus 实现，Codex money 评审。
+# RV2（payout 指标与资金告警）。规则测试新鲜独立 Claude（D10-775），Opus 实现，新鲜独立 Claude 评审 + 只读复核（D10-807 ②，Codex 额度到 11-11）。
 refs: [BR-WDR-18]
 refs_hash:
   BR-WDR-18: 9247640dde57
@@ -22,6 +22,29 @@ paths:
 test_paths:
   - 'test/spec/platform/metrics/water-stale/**'
   - 'test/spec/platform/fund-metrics/rules.test.ts'
+  - 'test/spec/platform/metrics/water-level/rules.test.ts'
+  - 'test/spec/platform/alerting-eval/metrics.test.ts'
+modify_existing:
+  - file: test/spec/platform/fund-metrics/rules.test.ts
+    test: '[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标'
+    reason: tighten_only
+    ruling: D10-807
+    note: '允许清单只加 couli_payout_water_stale 一个名（照 B2-09j 先例），其他断言不改；编排按 #24 核'
+  - file: test/spec/platform/metrics/water-level/rules.test.ts
+    test: '[AC-B2-09j#24] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处'
+    reason: tighten_only
+    ruling: D10-807
+    note: '收集指标名的正则从 couli_payout_water_[a-z0-9_]+ 收窄到 couli_payout_water_low 本身，原意「只有这一处读 water_low」不变；新规则读 water_stale 不再误伤'
+red_exempt:
+  - file: test/spec/platform/alerting-eval/metrics.test.ts
+    test: '[AC-B1-25b#8] couli.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源'
+    reason: '冻结用例体未改；本文件只在用例外的 registry 夹具里补 collectWaterStale（照 B2-09j 补 collectWaterLow 的先例），让新规则 CouliPayoutWaterStale 能找到导出方；新旧实现下都成立'
+  - file: test/spec/platform/alerting-eval/metrics.test.ts
+    test: '[AC-B1-25b#8] couli-fund.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源'
+    reason: '冻结用例体未改；本文件只在用例外的 registry 夹具里补 collectWaterStale（照 B2-09j 补 collectWaterLow 的先例），让新规则 CouliPayoutWaterStale 能找到导出方；新旧实现下都成立'
+red_exempt_outside:
+  - file: test/spec/platform/alerting-eval/metrics.test.ts
+    reason: '用例外只在 registry 夹具里补 collectWaterStale（一行，照 collectWaterLow），用例体未改'
 impl: claude
 tester: claude-independent
 accept:
