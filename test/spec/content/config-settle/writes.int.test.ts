@@ -218,7 +218,9 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
   // (D10-698) then feedback.enabled and feedback.daily_limit_per_device in this order, and B2-12e
   // (D10-590) then ledger.bad_debt_days and ledger.bad_debt_min_fen in this order, and B1-05zi
   // (D10-736) then shop.entry.source.taobao / jd / pdd in this order, and B1-08zi (D10-814 ⑥)
-  // then orders.jd.refunded_quantity_r9_enabled.
+  // then orders.jd.refunded_quantity_r9_enabled, and B1-04zzz (D10-877) then
+  // order_sync.rescan.taobao.enabled / days / hour.enabled / week.enabled / window_minutes in this
+  // order.
   const keys = items.map((item) => item.key);
   const tail = [
     ...inviteNow().map((entry) => entry.key),
@@ -301,6 +303,11 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'shop.entry.source.jd',
     'shop.entry.source.pdd',
     'orders.jd.refunded_quantity_r9_enabled',
+    'order_sync.rescan.taobao.enabled',
+    'order_sync.rescan.taobao.days',
+    'order_sync.rescan.taobao.hour.enabled',
+    'order_sync.rescan.taobao.week.enabled',
+    'order_sync.rescan.taobao.window_minutes',
   ];
   const settleEnd = keys.length - tail.length;
   const settleStart = settleEnd - 16;

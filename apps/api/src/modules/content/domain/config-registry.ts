@@ -331,6 +331,17 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // the reader's default, until operations turn it on after CAP-JD-08 is measured. Registration
   // only.
   spec('orders.jd.refunded_quantity_r9_enabled', 'boolean', 'config.business'),
+  // B1-04zzz (B1-04zzr / D10-798 / D10-845 / D10-877): the Taobao order rescan items, in this
+  // order — the day tier switch, the day tier's days (a whole number from 1 to 90), the hour tier
+  // switch, the week tier switch and the window in minutes of one rescan query (a whole number
+  // from 1 to 180, 09 CAP-TB-07: a routine single query spans at most 3 hours), all
+  // config.business, editable. No seed rows; unset = day tier on, 30 days, hour tier on, week tier
+  // off and 180 minutes, the orders reader's defaults. Registration only.
+  spec('order_sync.rescan.taobao.enabled', 'boolean', 'config.business'),
+  businessInteger('order_sync.rescan.taobao.days', 1, 90),
+  spec('order_sync.rescan.taobao.hour.enabled', 'boolean', 'config.business'),
+  spec('order_sync.rescan.taobao.week.enabled', 'boolean', 'config.business'),
+  businessInteger('order_sync.rescan.taobao.window_minutes', 1, 180),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

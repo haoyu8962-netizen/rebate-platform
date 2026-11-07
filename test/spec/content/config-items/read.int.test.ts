@@ -17,6 +17,7 @@ import {
   KEYS,
   LABOR,
   ORDER_RESCAN,
+  ORDER_RESCAN_TAOBAO,
   ORDERS_JD,
   PAYOUT,
   POOL,
@@ -66,7 +67,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // B1-04zq: + the four order_sync.rescan.* keys; B2-04zo: + ledger.advance_alert_fen;
   // B1-28q: + feedback.enabled and feedback.daily_limit_per_device; B2-12e: + ledger.bad_debt_days
   // and ledger.bad_debt_min_fen; B1-05zi: + the three shop.entry.source.* keys; B1-08zi: +
-  // orders.jd.refunded_quantity_r9_enabled.
+  // orders.jd.refunded_quantity_r9_enabled; B1-04zzz: + the five order_sync.rescan.taobao.* keys.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -90,6 +91,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...BAD_DEBT,
     ...SHOP_SOURCE,
     ...ORDERS_JD,
+    ...ORDER_RESCAN_TAOBAO,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

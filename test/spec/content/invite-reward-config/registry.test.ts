@@ -45,7 +45,9 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // B1-28q (D10-698) feedback.enabled and feedback.daily_limit_per_device in this order, then
 // B2-12e (D10-590) ledger.bad_debt_days and ledger.bad_debt_min_fen in this order, then B1-05zi
 // (D10-736) shop.entry.source.taobao / jd / pdd in this order, then B1-08zi (D10-814 ⑥)
-// orders.jd.refunded_quantity_r9_enabled, and nothing else.
+// orders.jd.refunded_quantity_r9_enabled, then B1-04zzz (D10-877)
+// order_sync.rescan.taobao.enabled / days / hour.enabled / week.enabled / window_minutes in this
+// order, and nothing else.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
   const i = keys.indexOf('settle.statement.grace_days');
@@ -135,6 +137,11 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'shop.entry.source.jd',
     'shop.entry.source.pdd',
     'orders.jd.refunded_quantity_r9_enabled',
+    'order_sync.rescan.taobao.enabled',
+    'order_sync.rescan.taobao.days',
+    'order_sync.rescan.taobao.hour.enabled',
+    'order_sync.rescan.taobao.week.enabled',
+    'order_sync.rescan.taobao.window_minutes',
   ]);
 });
 

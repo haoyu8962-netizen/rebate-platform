@@ -1,0 +1,26 @@
+id: B1-04zzzt
+repo: rebate-platform
+title: test-change B1-04zzz 前置：config-registry 末尾登记淘宝回扫五键（order_sync.rescan.taobao.enabled / .days / .hour.enabled / .week.enabled / .window_minutes，无种子），冻结注册表用例只追加 ORDER_RESCAN_TAOBAO_UNSEEDED（D10-877）
+type: test-change
+# 2026-11-07 w1 入账（D10-877，照 B1-08zit #2677 / B2-12e 先例）。kit.ts 是支持文件，任务分支上改会让引用它的冻结文件整份判定、red_exempt 超上限，所以加键与冻结用例的追加同到主干，改前改后都绿。五键接在 B1-08zi 的 ORDERS_JD 之后：两个开关与 week 开关 boolean，days 1～90、window_minutes 1～180（09 CAP-TB-07 日常单次 ≤3 小时），config.business、可改、无种子，未设走 orders 默认（天档开、30 天、小时档开、周档关、180 分钟）。冻结改动由新鲜独立 Claude 写、另一位只读复核；另照 D10-892 改 [AC-B1-04zzb#13]（「不登记」→ 已登记，标题不动、正文注明过时）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'test/spec/orders/taobao-sync/schedule.test.ts' # D10-892：[AC-B1-04zzb#13] 两处 toBeNull() 改为断言已登记，标题不动
+  - 'ops/tasks/B1-04zzzt.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

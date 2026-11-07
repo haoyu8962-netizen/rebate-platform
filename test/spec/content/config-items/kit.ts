@@ -432,6 +432,24 @@ export const ORDERS_JD: readonly Expected[] = [
 ];
 /** B1-08zi (D10-814 ⑥): off until CAP-JD-08 is measured, hence no seed row (unset = off). */
 export const ORDERS_JD_UNSEEDED: readonly string[] = ['orders.jd.refunded_quantity_r9_enabled'];
+// B1-04zzz (D10-877): the five Taobao order rescan keys, registered right after ORDERS_JD in this
+// order: editable config.business, options null (days 1 to 90, window_minutes 1 to 180). Not part
+// of expectedNow() either.
+export const ORDER_RESCAN_TAOBAO: readonly Expected[] = [
+  row('order_sync.rescan.taobao.enabled', 'boolean', 'config.business'),
+  row('order_sync.rescan.taobao.days', 'number', 'config.business'),
+  row('order_sync.rescan.taobao.hour.enabled', 'boolean', 'config.business'),
+  row('order_sync.rescan.taobao.week.enabled', 'boolean', 'config.business'),
+  row('order_sync.rescan.taobao.window_minutes', 'number', 'config.business'),
+];
+/** B1-04zzz (D10-877): all five are unset by default (on, 30, on, off, 180), hence no seed rows. */
+export const ORDER_RESCAN_TAOBAO_UNSEEDED: readonly string[] = [
+  'order_sync.rescan.taobao.enabled',
+  'order_sync.rescan.taobao.days',
+  'order_sync.rescan.taobao.hour.enabled',
+  'order_sync.rescan.taobao.week.enabled',
+  'order_sync.rescan.taobao.window_minutes',
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -457,6 +475,7 @@ export const expectedOf = (key: string): Expected => {
     ...BAD_DEBT,
     ...SHOP_SOURCE,
     ...ORDERS_JD,
+    ...ORDER_RESCAN_TAOBAO,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;
