@@ -1,0 +1,36 @@
+id: B2-04zzh
+repo: rebate-platform
+title: 京东入账前剩余数量守卫与一次性重评（FU-JD-REMAINING-ZERO-SWITCH-ON，D10-923）——开关 orders.jd.refunded_quantity_r9_enabled 开时，单笔入账（R5）锁内重读到京东 quantity − refunded_quantity ≤ 0 的 WAITING 单按 B2-04zzg 同一判定走 R6 → VOID、不入账、不写分录、同事务 order.invalidated，批次项记 skipped；另给运维一次性重评入口，扫京东未入账剩余 ≤ 0 的单逐单在锁内走同一判定
+type: impl
+# 2026-11-08 withdraw 入账（编排 D10-923 / D10-924 / D10-930；来由 B2-04zzg money r1 S1-a）。开关关期间退完的京东入账前单只告警；开关打开后联盟报文若内容不变，orders pipeline-port 在 content_hash 相同时直接返回 unchanged，不到 rebate，不会重评。本单不改 orders 管线（D10-923 (a)）。
+# 做法：① settlement/credit/credit-order.ts 第 2 步锁内重读之后、读归因之前：platform=jd、两列都非空、quantity − refunded_quantity ≤ 0 且开关开（取值口径同 B1-08zi jdRefundR9Enabled，只认 JSON true）→ 经 rebate 端口按 B2-04zzg 的同一判定（PLATFORM_INVALID → R6 → VOID，orders.reason REFUND，不写分录，同事务 order.invalidated；同报文推过的版本照 BASE_ZERO 刷金额行）作废，返回 skipped（新原因 jd_remaining_zero_void，settle_batch_items.skip_reason 是 text、无契约枚举）；开关关 → 照常入账，只写一条 warn（复用 alert jd_remaining_zero_r6_disabled）。② 一次性重评入口 apps/api/scripts/jd-remaining-zero-reevaluate.ts（运维 CLI，照 union-pids.ts 的外壳写法；D10-930 ①）：按 app 扫京东、rebate_status ∈ {UNATTRIBUTED, ESTIMATED, WAITING}、剩余 ≤ 0 的单；**默认只列清单（dry-run）**，显式 --apply 才逐单取 orders.lockOrderKey 后在独立事务里走同一判定，同事务发 order.invalidated，并在 audit_logs 留一条（actor 写运维执行人，target orders:<id>）；开关关时 --apply 也只列清单不改；可重跑（已 VOID 的跳过）；输出处理数 / 作废数 / 跳过数，不打子订单号与用户。D10-930 ②：skip_reason jd_remaining_zero_void 进 08 / 04 取值清单前先查有无对应枚举，没有就在 PR「要知道的」写明、编排补规划。
+# 规则测试钉：开关开时入账批次里剩余 0 的 WAITING 京东单不入账、VOID、无分录、余额不变、一条 order.invalidated、批次项 skipped + 新原因；剩余 > 0 照常入账；开关关照常入账并告警；非京东不受影响；重评入口开关开作废、关只列清单、重跑幂等、app 隔离；入账事务失败整体回滚。tester 新鲜独立 Claude；money 评审 Codex（D10-823）。生产在本单落地前不开此开关（D10-923，编排上线清单）。
+refs: [BR-CALC-15, BR-FUND-01, BR-FUND-04, BR-FUND-07]
+refs_hash:
+  BR-CALC-15: e18291194b6e
+  BR-FUND-01: 7267d70f0bc8
+  BR-FUND-04: 497806f6f068
+  BR-FUND-07: 3d63741c52d9
+deps: [B2-04zzg]
+paths:
+  - 'apps/api/src/modules/settlement/credit/credit-order.ts'
+  - 'apps/api/src/modules/settlement/credit/credit-order.test.ts'
+  - 'apps/api/src/modules/settlement/credit/index.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.test.ts'
+  - 'apps/api/src/modules/settlement/index.ts'
+  - 'apps/api/src/modules/settlement/rebate/domain/**'
+  - 'apps/api/src/modules/settlement/settlement.module.ts'
+  - 'apps/api/src/modules/settlement/worker/assemble.ts'
+  - 'apps/api/src/modules/settlement/worker/ports.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/scripts/jd-remaining-zero-reevaluate.ts'
+test_paths:
+  - 'test/spec/settlement/jd-remaining-zero-switch-on/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/jd-remaining-zero-switch-on/**'
+status: todo
+pr: null

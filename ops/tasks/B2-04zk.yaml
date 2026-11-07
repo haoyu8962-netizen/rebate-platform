@@ -22,5 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/credited-amount-rows/**'
-status: todo
-pr: null
+status: done
+pr: 2672

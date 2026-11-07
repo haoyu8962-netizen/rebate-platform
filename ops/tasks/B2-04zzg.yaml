@@ -22,5 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/jd-remaining-zero/**'
-status: todo
-pr: null
+status: done
+pr: 2708
