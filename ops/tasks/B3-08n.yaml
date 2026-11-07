@@ -1,0 +1,19 @@
+id: B3-08n
+repo: rebate-platform
+title: B3-08n：Agent 答复模板下沉 core 的四处规则补测试（FU-B308M-TIGHTEN，D10-879 收紧单）——模板调用失败 / 限流无卡后降级仍出模板、模板工具被拒或参数坏仍计调用、未调模板工具的 run 在限额与降级出口照发、同一订单只算一次
+type: test-change
+# 2026-11-07 agent 线入账（编排 D10-879 ②）。B3-08m 门禁 spec-test（新鲜独立 Claude 全量）的 S1 / S2 因写测试次数用满，由实现单测（orchestrator/core/reply-templates.run.test.ts）+ Codex money 评审覆盖，本单补到规则层：
+# ① 本 run 调过 search_rules（失败、无卡）或 explain_order（rate_limited、无卡）后，下一轮降级 / 结构化文本 / 格式不合规时不走降级路径，只出 agent.rule.not_found / agent.order.lookup_limited；② 模板工具被 registry 判 invalid_args 或参数 JSON 坏掉也算调用过，之后模型文本不下发；③ 提供了模板工具但只调 search_products 的 run，在轮数上限、工具调用上限、无卡后降级三个出口文本逐字照发、finish reason 不变；④ 同一 run 里 list_my_orders 与 explain_order 指向同一订单时只算一笔，出单笔模板。
+# 只新增 test/spec/agent/core-reply-templates-tighten/**，不改已有文件、不动实现；须在现行主干上跑绿，变异实跑（把 B3-08m 的 S1-1 / S1-2 修正各自改回）应各红（先例 B2-09zf / B2-09zd、D10-799）。分工：新鲜独立 Claude 写，评审用 Codex（D10-823）；非 task 分支、不带证据文件，标签由编排核对后加。RV2。
+refs: [BR-AI-07]
+refs_hash:
+  BR-AI-07: 0da3ace82049
+deps: [B3-08m]
+paths:
+  - 'test/spec/agent/core-reply-templates-tighten/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
