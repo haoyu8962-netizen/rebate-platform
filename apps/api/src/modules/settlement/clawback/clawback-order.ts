@@ -72,7 +72,15 @@
 //     unchanged and no deduction that is ③ WAIT_COMMISSION (an existing order_rights row →
 //     WAIT_COMMISSION). 待编排裁定: change carries no refunded_quantity, so how the increase is
 //     detected (orders.refunded_quantity re-read under the lock against
-//     refunded_quantity_at_credit, or a new change field) is left to the implementation;
+//     refunded_quantity_at_credit, or a new change field) is left to the implementation.
+//     B2-04zi: when this sync wrote a new settlement record that decides the amount (settlements
+//     newDecidingSeq), N_new is that settlement amount (BR-FUND-08 ①); an amount above the booked
+//     pair is a positive difference: nothing written, warn settle_adjust_positive_pending;
+//   - otherwise (B2-04zi) a new deciding settlement record → R10 / BR-FUND-09 (settleDiff below):
+//     R8 through apply (cause COMMISSION); the negative route posts SETTLE_ADJUST immediately; the
+//     positive route writes nothing and warns settle_adjust_positive_pending (the candidate is
+//     FU-SETTLE-ADJ-POSITIVE); an equal pair is no action. No R9b diff for an estimate changed by
+//     the same sync;
 //   - otherwise settlement record unchanged and est_commission_fen changed → R9b: archive only
 //     (no voucher, booked pair unchanged); when the estimate's base (BR-CALC-02, snapshot
 //     reserve_bp) differs from booked_base_fen and settle.estimate_change_diff.enabled is not off,
@@ -86,6 +94,7 @@
 // 待编排裁定 (implementation): a refunded_quantity increase is read as orders.refunded_quantity >
 // COALESCE(refunded_quantity_at_credit, 0) under the lock; R9b writes no rebate history row.
 // Amounts only through @couli/money; time only from the injected Clock.
+import { randomUUID } from 'node:crypto';
 import type { DB } from '@couli/db';
 import {
   buildVouchers,
@@ -147,11 +156,13 @@ import {
   closeObligation,
   computeRightsPending,
   hasOrderRights,
+  insertDeferredObligation,
   markRightsWaitCommission,
   readOpenObligations,
   voidPendingCandidates,
   type BeneficiaryCreditRow,
 } from './clawback-store.ts';
+import { settleDirection } from './settle-direction.ts';
 
 /** The reverse event behind one clawback (BR-FUND-08 细则「sub_type 与订单原因码」). */
 export type ClawbackCause =
@@ -270,6 +281,7 @@ const FROM_STATUS = 'CREDITED';
 const BIZ_TYPE = 'ORDER_CLAWBACK';
 const ADJUST_BIZ_TYPE = 'ORDER_SETTLE_ADJUST';
 const ALERT_ADJUST_HELD = 'rights_settle_adjust_unsupported';
+const ALERT_ADJUST_POSITIVE = 'settle_adjust_positive_pending';
 const OPERATOR = 'system';
 const DIFF_SWITCH = 'settle.estimate_change_diff.enabled';
 const FULL_CAUSES: readonly ClawbackCause[] = [
@@ -617,7 +629,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
   async function settleObligations(
     trx: Transaction<DB>,
     order: OrderRow,
-    transition: 'R8' | 'R9',
+    transition: 'R8' | 'R9' | 'R10',
     rightsEventId: string,
     rows: readonly AdjustmentBeneficiaryResult[],
     obligations: ReadonlyMap<string, BeneficiaryCreditRow>,
@@ -626,8 +638,24 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     for (const b of rows) {
       const action = b.obligation_action;
       if (action === null || action === 'keep') continue;
-      if (action !== 'voided' && action !== 'forfeited') {
-        // 'open' / 'done' never arise on the clawback path; refuse instead of guessing.
+      if (action === 'open' && transition === 'R10') {
+        // BR-FUND-04 ⑫: the negative route of BR-FUND-09 left this beneficiary's positive
+        // difference pending and no obligation is open for it → a deferred one, opened by R10.
+        await insertDeferredObligation(trx, {
+          beneficiary_credit_id: randomUUID(),
+          app_id: order.app_id,
+          order_id: order.order_id,
+          user_id: b.user_id,
+          role: b.role as CreditRole,
+          opened_ref: rightsEventId,
+          split_ref: `commission_version:${String(order.commission_version)}`,
+          opened_at: now,
+        });
+        continue;
+      }
+      if (action !== 'forfeited' && !(action === 'voided' && transition === 'R8')) {
+        // 'done' never arises here, 'open' only on R10, 'voided' only on R8 (the schema allows a
+        // voided obligation for R8 / R14 alone); refuse instead of guessing.
         throw new Error(`settlement clawback: unexpected obligation action ${action}`);
       }
       const row = obligations.get(identity(b.user_id, b.role));
@@ -978,29 +1006,58 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     return { outcome: 'estimate_archived', orderKey: key, reconDiff: 'registered' };
   }
 
+  /** BR-FUND-09 ②: a positive difference is a candidate to approve; the sync writes nothing. */
+  function warnPositive(order: OrderRow, key: string, seq: number): void {
+    // TODO(规划/11 §4.2): 入账后结算正差的候选生成与批准 — blocked on FU-SETTLE-ADJ-POSITIVE（D10-755，归 funds）
+    logger.warn(
+      {
+        alert: ALERT_ADJUST_POSITIVE,
+        app_id: order.app_id,
+        order_id: order.order_id,
+        order_key: key,
+        seq,
+      },
+      'settlement record above the booked pair after credit: positive difference not written',
+    );
+  }
+
   /**
-   * B2-04lb (D10-474 ②; BR-FUND-06「等联盟回传新佣金后按 R7/R9 处理并关闭」, BR-FUND-08「联盟新的结算记录
-   * 带来的变化按 BR-FUND-09 与迁移 R10 处理」, BR-CALC-23 (a)): on a CREDITED order whose rights success
-   * waits for the union (WAIT_COMMISSION), the union's new settlement record moves the money as R10
-   * SETTLE_ADJUST (sub_type SETTLE_DIFF, keys `…:ADJ:{seq}`) and, on the same transaction, closes the
-   * WAIT_COMMISSION rows, recomputes rights_pending and resolves the CLAWBACK_NO_COMMISSION pending
-   * rows. R8 (new commission's positive part 0, or base > 0 → 0) goes through apply (cause
-   * COMMISSION). Only the immediate route is written here: a positive difference (BR-FUND-09 ②
-   * candidate) or an obligation to open / close leaves the rows waiting with an alert.
+   * The union's new settlement amount on a CREDITED order as BR-FUND-09 / R10 (BR-FUND-08「联盟新的
+   * 结算记录带来的变化按 BR-FUND-09 与迁移 R10 处理」, BR-CALC-23 (a)); one core, two callers.
+   *
+   * Both: R8 (the new commission's positive part 0, or base > 0 → 0) goes through apply (cause
+   * COMMISSION). Otherwise users rows → balance rows → states (B2-04m lock flow), the plan from
+   * planCommissionAdjustment({ event: 'settlement' }), and on the negative (immediate) route, in
+   * this transaction: SETTLE_ADJUST vouchers (sub_type SETTLE_DIFF, keys `…:ADJ:{seq}`; a
+   * beneficiary in deletion processing / done → BAD_DEBT), the booked pair with a CAS, one rebate
+   * history row SETTLE_NEGATIVE_DIFF; rebate_status stays CREDITED and order.clawed_back is not
+   * published (not a reverse event).
+   *
+   * answersRights false — B2-04zi, the ordinary sync path (BR-FUND-01「R9 与 R9b 的判定」→ R10): the
+   * negative route also settles the obligations the plan names (BR-FUND-04 ⑫): a banned / deleted
+   * beneficiary's open obligation → forfeited (closed_by R10) plus the forfeited event, a pending
+   * positive difference without an open obligation → a new deferred one (opened_by R10); an open
+   * obligation that stays is not touched. The positive route writes nothing and warns
+   * (settle_adjust_positive_pending); an equal pair is no action.
+   *
+   * answersRights true — B2-04lb (D10-474 ②; BR-FUND-06「等联盟回传新佣金后按 R7/R9 处理并关闭」): the
+   * order's rights success waits for the union (WAIT_COMMISSION). Behaviour as before B2-04zi: only
+   * the plain negative route is written, and with it the WAIT_COMMISSION rows close, rights_pending
+   * is recomputed and the CLAWBACK_NO_COMMISSION pending rows resolve; a positive difference or an
+   * obligation to open / close leaves the rows waiting with an alert.
    */
-  async function settleAnswer(
+  async function settleDiff(
     trx: Transaction<DB>,
     order: OrderRow,
     key: string,
     settleFen: bigint,
+    answersRights: boolean,
   ): Promise<ClawbackResult> {
     const { app_id: appId, order_id: orderId } = order;
     const booked = bookedOf(order);
     const snapshot = await readSnapshotOf(trx, order);
     const reserveBp = BigInt(snapshot.reserveBp);
-    const nPositive = positive(settleFen);
-    const { after_reserve_fen: baseNew } = applyReserve(settleFen, reserveBp);
-    if (nPositive === 0n || (booked.base > 0n && baseNew === 0n)) {
+    if (settleDirection(settleFen, booked, reserveBp) === 'zero') {
       return apply(trx, {
         appId,
         orderId,
@@ -1045,18 +1102,23 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       beneficiaries: beneficiariesOf(snapshot, states, nets, obligations),
     });
     const now = clock.now();
+    if (!answersRights && plan.route === 'approval') {
+      warnPositive(order, key, seq);
+      return { outcome: 'skipped', reason: 'not_reverse' };
+    }
     const unsupported =
-      plan.route === 'approval' ||
-      (plan.transition !== null && plan.transition !== 'R10') ||
-      plan.beneficiaries.some(
-        (b) =>
-          b.delta_fen > 0n ||
-          b.forfeit_fen !== 0n ||
-          b.pending_after_fen !== b.pending_before_fen ||
-          (b.obligation_action !== null && b.obligation_action !== 'keep'),
-      );
+      answersRights &&
+      (plan.route === 'approval' ||
+        (plan.transition !== null && plan.transition !== 'R10') ||
+        plan.beneficiaries.some(
+          (b) =>
+            b.delta_fen > 0n ||
+            b.forfeit_fen !== 0n ||
+            b.pending_after_fen !== b.pending_before_fen ||
+            (b.obligation_action !== null && b.obligation_action !== 'keep'),
+        ));
     if (unsupported) {
-      // TODO(规划/11 §4.2): 入账后维权等待中的正差候选与义务处置 — blocked on BR-FUND-09 ② 候选写入（D10-474 ② 只裁定负差 R10）
+      // TODO(规划/11 §4.2): 入账后维权等待中的正差候选与义务处置 — blocked on FU-SETTLE-ADJ-POSITIVE / FU-RIGHTS-WAIT-ADJ-OBLIGATION（D10-474 ② 只裁定负差 R10；D10-760 ② 维持不变）
       logger.warn(
         {
           alert: ALERT_ADJUST_HELD,
@@ -1070,8 +1132,15 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       return { outcome: 'wait_commission', orderKey: key, rightsEventId };
     }
     if (plan.transition === null) {
-      await closeAnsweredRights(trx, { kind: 'commission' }, order, now);
+      if (answersRights) await closeAnsweredRights(trx, { kind: 'commission' }, order, now);
       return { outcome: 'no_change', orderKey: key, rightsEventId };
+    }
+    if (plan.transition !== 'R10' || plan.route !== 'immediate') {
+      // R8 left through apply above and the positive route returned: anything else is a plan this
+      // path must not post.
+      throw new Error(
+        `settlement clawback: unexpected settlement plan ${plan.transition}/${plan.route}`,
+      );
     }
     const step = transitionOrderRebate(FROM_STATUS, 'SETTLE_NEGATIVE_DIFF');
     if (!step.ok || step.id !== 'R10' || step.to !== FROM_STATUS) {
@@ -1081,6 +1150,10 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     const base = { order_key: key, platform: order.platform, seq: String(seq) };
     for (const b of plan.beneficiaries) {
       if (b.delta_fen === 0n) continue;
+      if (b.delta_fen > 0n) {
+        // The negative route never pays out: a positive difference stays pending (BR-CALC-09).
+        throw new Error('settlement clawback: positive beneficiary delta on the negative route');
+      }
       const template = `SETTLE_ADJUST:SETTLE_DIFF:${b.posting === 'bad_debt' ? 'BAD_DEBT' : 'USER:DECREASE'}`;
       const params: BuildVoucherParams = {
         ...base,
@@ -1108,6 +1181,10 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       }
     }
 
+    // BR-FUND-04 ⑫: obligations whose share this adjustment disposed of, same transaction. With
+    // answersRights every action here is keep / none (anything else was left waiting above).
+    await settleObligations(trx, order, 'R10', rightsEventId, plan.beneficiaries, obligations, now);
+
     const written = await casClawbackOrder(trx, order, {
       to: step.to,
       booked_base_fen: plan.booked_after.booked_base_fen,
@@ -1122,7 +1199,8 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       'system',
       now,
     );
-    await closeAnsweredRights(trx, { kind: 'commission' }, order, now);
+    if (answersRights) await closeAnsweredRights(trx, { kind: 'commission' }, order, now);
+    // TODO(规划/11 §4.2): 负向补差同事务发布 order.settle_adjusted（BR-FUND-09 细则「补差负向时发站内信并附原因」）— blocked on FU-SETTLE-ADJ-NOTIFY 的 B 单（发布端，归 content，依赖本单合并；D10-762 / D10-773 / D10-774）
     logger.info(
       {
         app_id: appId,
@@ -1131,7 +1209,9 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
         rights_event_id: rightsEventId,
         booked_base_fen: String(plan.booked_after.booked_base_fen),
       },
-      'waiting rights answered by a new settlement record (R10)',
+      answersRights
+        ? 'waiting rights answered by a new settlement record (R10)'
+        : 'settlement record below the booked pair after credit (R10)',
     );
     return {
       outcome: 'settle_adjusted',
@@ -1176,25 +1256,55 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     if (change.settle_commission_fen !== null && order.settle_commission_fen !== null) {
       const recordAt = await settlements.latestDecidingRecordAt(trx, { appId, orderId });
       if (recordAt !== null && (await hasWaitingRightsBefore(trx, appId, orderId, recordAt))) {
-        return settleAnswer(trx, order, key, order.settle_commission_fen);
+        return settleDiff(trx, order, key, order.settle_commission_fen, true);
       }
     }
+
+    // B2-04zi (BR-FUND-01「R9 与 R9b 的判定」, BR-FUND-08 ①): a new settlement record is the one this
+    // sync wrote on this transaction and that decides orders.settle_commission_fen (re-read under
+    // the lock above). A replayed report writes none; beside a STATEMENT an API record decides none.
+    const newSeq =
+      order.settle_commission_fen === null
+        ? null
+        : settlements.newDecidingSeq(trx, { appId, orderId });
+    const newSettleFen = newSeq === null ? null : order.settle_commission_fen;
 
     const estChanged = change.est_after !== change.est_before;
     const refundIncreased =
       (order.refunded_quantity ?? 0) > (order.refunded_quantity_at_credit ?? 0);
     const settled = change.settle_commission_fen !== null;
-    const r9 = refundIncreased || (estChanged && (await hasOrderRights(trx, appId, orderId)));
+    const r9 =
+      refundIncreased ||
+      ((estChanged || newSeq !== null) && (await hasOrderRights(trx, appId, orderId)));
     if (r9) {
-      // BR-FUND-01「R9 与 R9b 的判定」: never R9b. With a settlement record only a new seq is ①
-      // (left to R10), so the estimate does not count and N_new comes from ② or ③.
+      // BR-FUND-01「R9 与 R9b 的判定」: never R9b, and R9 before R10. With a settlement record only
+      // a new seq is ① — then N_new is the new settlement amount; without a new seq the estimate
+      // does not count and N_new comes from ② or ③.
+      if (newSeq !== null && newSettleFen !== null) {
+        const snapshot = await readSnapshotOf(trx, order);
+        const direction = settleDirection(
+          newSettleFen,
+          bookedOf(order),
+          BigInt(snapshot.reserveBp),
+        );
+        if (direction === 'up') {
+          // D10-760 ①: a clawback never pays out and R9 opens no obligation: above the booked pair
+          // the record is a positive difference, left to the BR-FUND-09 ② candidate like on the
+          // R10 path; equal is no change, lower is clawed back as R9 below.
+          warnPositive(order, key, newSeq);
+          return { outcome: 'skipped', reason: 'not_reverse' };
+        }
+      }
       return apply(trx, {
         ...base,
         cause: 'PARTIAL_REFUND',
         ref: { kind: 'commission' },
-        newCommissionFen: settled ? null : change.est_after,
+        newCommissionFen: newSettleFen ?? (settled ? null : change.est_after),
       });
     }
+    // R10 (BR-FUND-09): no refund increase, no rights record, a new settlement record. An estimate
+    // changed by the same sync is only archived by orders: no R9b diff.
+    if (newSettleFen !== null) return settleDiff(trx, order, key, newSettleFen, false);
     if (!estChanged) return { outcome: 'skipped', reason: 'not_reverse' };
     if (!settled) {
       if (change.est_after === null) return { outcome: 'skipped', reason: 'not_reverse' };

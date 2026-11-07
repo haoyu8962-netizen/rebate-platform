@@ -183,3 +183,42 @@ it('[AC-B2-04zj#U15] latestDecidingRecordAt 有 STATEMENT 取最新 STATEMENT，
   expect(apiOnly.value).toEqual(at(2));
   expect((await read([])).value).toBeNull();
 });
+
+it('[AC-B2-04zi#U5] newDecidingSeq：本事务新写且无 STATEMENT 才给 seq；别的端口实例同事务可问，别的事务、别的订单问不到', async () => {
+  const ref = { appId: 'unit-app', orderId: input().orderId };
+  const writer = createSettlementRecords({ clock });
+  const asker = createSettlementRecords({ clock });
+  const { db } = scripted([{ seq: 1, source: 'API', content_hash: 'older' }]);
+  await db.transaction().execute(async (trx) => {
+    expect(asker.newDecidingSeq(trx, ref)).toBeNull();
+    await expect(writer.recordApi(trx, input())).resolves.toEqual({ seq: 2, inserted: true });
+    expect(asker.newDecidingSeq(trx, ref)).toBe(2);
+    expect(asker.newDecidingSeq(trx, { ...ref, appId: 'other-app' })).toBeNull();
+    expect(
+      asker.newDecidingSeq(trx, { ...ref, orderId: '019a0000-0000-7000-8000-000000000002' }),
+    ).toBeNull();
+  });
+  await db.transaction().execute((trx) => {
+    expect(asker.newDecidingSeq(trx, ref)).toBeNull();
+    return Promise.resolve();
+  });
+});
+
+it('[AC-B2-04zi#U6] newDecidingSeq：同内容重放不新写、有 STATEMENT 时新 API 不决定金额，都是 null', async () => {
+  const ref = { appId: 'unit-app', orderId: input().orderId };
+  const records = createSettlementRecords({ clock });
+  const hash = await hashOf(input());
+  const replay = scripted([{ seq: 1, source: 'API', content_hash: hash }]);
+  await replay.db.transaction().execute(async (trx) => {
+    await expect(records.recordApi(trx, input())).resolves.toEqual({ seq: 1, inserted: false });
+    expect(records.newDecidingSeq(trx, ref)).toBeNull();
+  });
+  const beside = scripted([
+    { seq: 2, source: 'STATEMENT', content_hash: 'statement' },
+    { seq: 1, source: 'API', content_hash: 'older' },
+  ]);
+  await beside.db.transaction().execute(async (trx) => {
+    await expect(records.recordApi(trx, input())).resolves.toEqual({ seq: 3, inserted: true });
+    expect(records.newDecidingSeq(trx, ref)).toBeNull();
+  });
+});

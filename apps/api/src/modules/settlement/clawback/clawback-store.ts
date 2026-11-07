@@ -30,7 +30,8 @@ export interface ObligationClose {
   readonly beneficiary_credit_id: string;
   readonly row_version: number;
   readonly status: 'voided' | 'forfeited';
-  readonly closed_by: 'R8' | 'R9';
+  /** R10 (B2-04zi) only forfeits: voided stays with R8 / R14 (beneficiary_credits_voided_check). */
+  readonly closed_by: 'R8' | 'R9' | 'R10';
   readonly closed_ref: string;
   readonly closed_at: Date;
 }
@@ -56,6 +57,52 @@ export async function closeObligation(
     .where('row_version', '=', close.row_version)
     .executeTakeFirst();
   return (result.numUpdatedRows ?? 0n) === 1n;
+}
+
+export interface DeferredObligation {
+  readonly beneficiary_credit_id: string;
+  readonly app_id: string;
+  readonly order_id: string;
+  readonly user_id: string;
+  readonly role: 'self' | 'share' | 'direct' | 'indirect';
+  /** The event that deferred the difference: `S{seq}` of the settlement record. */
+  readonly opened_ref: string;
+  readonly split_ref: string;
+  readonly opened_at: Date;
+}
+
+/**
+ * BR-FUND-04 ⑫ (B2-04zi): one open deferred obligation for a positive difference the negative route
+ * of BR-FUND-09 left pending, opened by R10 with its origin SETTLE_ADJUST / SETTLE_DIFF. The partial
+ * unique index on open rows refuses a second one for the same (order, beneficiary, role).
+ */
+export async function insertDeferredObligation(
+  trx: Transaction<DB>,
+  row: DeferredObligation,
+): Promise<void> {
+  await trx
+    .withSchema('app')
+    .insertInto('beneficiary_credits')
+    .values({
+      beneficiary_credit_id: row.beneficiary_credit_id,
+      app_id: row.app_id,
+      order_id: row.order_id,
+      user_id: row.user_id,
+      role: row.role,
+      kind: 'deferred',
+      opened_by: 'R10',
+      opened_ref: row.opened_ref,
+      origin_ledger_type: 'SETTLE_ADJUST',
+      origin_sub_type: 'SETTLE_DIFF',
+      split_ref: row.split_ref,
+      status: 'open',
+      closed_by: null,
+      closed_ref: null,
+      voucher_id: null,
+      opened_at: row.opened_at,
+      closed_at: null,
+    })
+    .execute();
 }
 
 /** BR-FUND-09 ② / 决-10 A: every pending candidate of the order → voided_by_clawback. */

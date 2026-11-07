@@ -46,6 +46,15 @@ export interface SettlementRecords {
    * A later API record beside a STATEMENT decides nothing, so its time answers no rights record.
    */
   latestDecidingRecordAt(trx: Transaction<DB>, ref: SettlementOrderRef): Promise<Date | null>;
+  /**
+   * B2-04zi (BR-FUND-01「R9 与 R9b 的判定」「有新的结算记录（BR-FUND-09 seq 变化）」): the seq of the
+   * API record recordApi inserted for this order on this very transaction, when that record decides
+   * orders.settle_commission_fen (the order has no STATEMENT). null otherwise: nothing was inserted
+   * on this transaction (a replayed report, or one that only touched other fields), or a STATEMENT
+   * keeps deciding the amount. Answers for every port built in this process: the sync writes through
+   * one port and the clawback asks through another, on the same transaction object.
+   */
+  newDecidingSeq(trx: Transaction<DB>, ref: SettlementOrderRef): number | null;
 }
 
 export interface SettlementRecordsDependencies {
@@ -62,6 +71,18 @@ function contentHash(commissionFen: bigint, reportedSettledAt: Date | null): str
     reportedSettledAt === null ? null : reportedSettledAt.toISOString(),
   ]);
   return createHash('sha256').update(content).digest('hex');
+}
+
+/**
+ * B2-04zi: the deciding API records written per transaction, keyed by the transaction object the
+ * caller holds (never a derived builder), so the entry lives exactly as long as that transaction:
+ * a rollback or a redelivery runs on a new object and starts with nothing. Module-level on purpose,
+ * see newDecidingSeq. Nothing here is read from or written to another transaction.
+ */
+const writtenDeciding = new WeakMap<Transaction<DB>, Map<string, number>>();
+
+function orderSlot(ref: SettlementOrderRef): string {
+  return JSON.stringify([ref.appId, ref.orderId]);
 }
 
 export function createSettlementRecords(deps: SettlementRecordsDependencies): SettlementRecords {
@@ -96,6 +117,16 @@ export function createSettlementRecords(deps: SettlementRecordsDependencies): Se
           created_at: now,
         })
         .execute();
+      // BR-FUND-09: beside a STATEMENT the new API record decides nothing (orders keeps the
+      // STATEMENT amount), so it is not a new settlement record for R9 / R10.
+      if (!rows.some((row) => row.source === 'STATEMENT')) {
+        let slots = writtenDeciding.get(trx);
+        if (slots === undefined) {
+          slots = new Map();
+          writtenDeciding.set(trx, slots);
+        }
+        slots.set(orderSlot(input), seq);
+      }
       return { seq, inserted: true };
     },
 
@@ -124,6 +155,10 @@ export function createSettlementRecords(deps: SettlementRecordsDependencies): Se
         .execute();
       const deciding = rows.find((row) => row.source === 'STATEMENT') ?? rows[0];
       return deciding?.created_at ?? null;
+    },
+
+    newDecidingSeq(trx, ref) {
+      return writtenDeciding.get(trx)?.get(orderSlot(ref)) ?? null;
     },
   };
 }
