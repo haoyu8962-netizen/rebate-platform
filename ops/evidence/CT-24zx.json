@@ -1,0 +1,68 @@
+{
+  "task": "CT-24zx",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "fa6093c2ff693c88b985a5419c473172b662e1eb",
+  "red_tests": [
+    "test/spec/contracts/orders-quantity/order-reason-sub.test.ts > [AC-CT-24zx#1] OrderSummary（listOrders）与 OrderDetail（getOrder）都有可选可空的 reason_sub：不进 required，anyOf 为 $ref OrderReasonSub 与 null，示例取值合法"
+  ],
+  "risk_note": "RV1 (contracts + generated types only): the user-side OrderDetail (getOrder) and OrderSummary (listOrders) gain an optional nullable reason_sub (OrderReasonSub from CT-24zw; set only for PUNISH / REFUND / RIGHTS); descriptions follow 08 BR-TEXT-05 — with a sub-reason the App shows {title}：{sub.desc}, without one the parent reason's title and desc; AdminOrderDetail.reason_sub description aligned. Additive only, not required (endpoints already live). Implementation (read endpoints fill it) is be's D10-850 ②. Contract task, tester none. Codex contract r1 fail (S1 null showed parent title only) → r2 pass. Full verification is the required CI checks (approvals #21). Frozen [AC-CT-04b#1] (orders-quantity compares OrderSummary / OrderDetail with baselineWithoutQuantity): per ruling D10-904 (precedent CT-26p) the ledger adds test_paths orders-quantity/**, tester claude-independent and modify_existing; a fresh independent Claude only appended the optional nullable reason_sub to both baselines in baseline.ts (test(spec)); orders-quantity.test.ts unchanged. Per D10-910 / D10-911 a fresh independent Claude added test/spec/contracts/orders-quantity/order-reason-sub.test.ts: [AC-CT-24zx#1] pins reason_sub on OrderSummary and OrderDetail (not required, anyOf OrderReasonSub / null, and the display rules in the description — readOnly is not a keyword in the contract, so not asserted); red at spec, green with the contract. The two modify_existing entries were dropped (#2701); the baseline.ts change is a class-1 test-support file covered by the owner label as for CT-26p.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "fa6093c2ff693c88b985a5419c473172b662e1eb",
+      "tree": "8d4584c39ff8593ee908dee521f0d5db9f2041cf",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T18:33:47Z",
+      "finished_at": "2026-11-07T18:34:07Z",
+      "red_tests": [
+        "test/spec/contracts/orders-quantity/order-reason-sub.test.ts > [AC-CT-24zx#1] OrderSummary（listOrders）与 OrderDetail（getOrder）都有可选可空的 reason_sub：不进 required，anyOf 为 $ref OrderReasonSub 与 null，示例取值合法"
+      ],
+      "expected": ["test/spec/contracts/orders-quantity/order-reason-sub.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "3e7b7cfc0abf96deb7c0325c705cdbd530383cdf6bf0bbcf088f4381c0a6cf39"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 3,
+      "review_type": "contract",
+      "checklist_complete": true,
+      "note": "Codex contract r1 S1 fixed, r2 pass, r3 (incremental, baseline append) pass (couli-runs/CT-24zx/review-codex-r1/-r2/-r3.json)"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "0f2616667cd9fefcc695de94b5de5152b9f1d795",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 fail (S1: description only checked non-empty) → assertions added → r2 pass (couli-runs/CT-24zx/review-codex-spectest-r1.json, -r2.json); the baseline append also covered by Codex contract r3 pass"
+  }
+}

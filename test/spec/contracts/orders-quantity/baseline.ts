@@ -49,6 +49,11 @@ const detailProperties = {
   is_price_compare: { type: ['boolean', 'null'] },
 };
 
+// CT-24zx（D10-850 ①）：列表项与详情都新增可选可空的 reason_sub，不进 required（同 CT-26p 的做法）。
+const optionalProperties = {
+  reason_sub: { anyOf: [{ $ref: '#/components/schemas/OrderReasonSub' }, { type: 'null' }] },
+};
+
 function stringBranch(name: string) {
   return { type: 'object', properties: { [name]: { type: 'string' } }, required: [name] };
 }
@@ -60,8 +65,8 @@ export function baselineWithoutQuantity(name: 'OrderSummary' | 'OrderDetail') {
     additionalProperties: false,
     required: detail ? [...commonRequired, ...Object.keys(detailProperties)] : commonRequired,
     properties: detail
-      ? { ...commonProperties, ...detailProperties }
-      : { ...commonProperties, ...summaryProperties },
+      ? { ...commonProperties, ...detailProperties, ...optionalProperties }
+      : { ...commonProperties, ...summaryProperties, ...optionalProperties },
     not: {
       type: 'object',
       additionalProperties: true,
