@@ -65,4 +65,5 @@ red_exempt:
   - file: test/spec/contracts/admin-product-feedbacks/permission.test.ts
     test: '[AC-CT-26x#3] 生成的权限快照 permissions.gen.ts 含 feedback.view（无 step-up），版本与 YAML 一致'
     reason: '冻结 CT-26x 契约用例，测试体未改；本任务只把同文件的 [AC-CT-26x#4] / [#5] 从 planned 改成已实现（台账 #2568，先例 B1-10n）。同文件被整体判定'
-status: todo
+status: done
+pr: 2590

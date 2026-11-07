@@ -31,4 +31,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/bad-debt-writeoffs/**'
-status: todo
+status: done
+pr: 2546
