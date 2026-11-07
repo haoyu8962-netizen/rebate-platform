@@ -314,11 +314,17 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // B1-05zi (D10-736): where the shop entry takes a shop's promotion link from, per platform
   // (04 §10.1 / §11.2, 08 BR-PRICE-21 细则「进店」), config.business, editable; every change goes
   // through the generic config item write and so leaves a config_item_versions row. Platforms
-  // taobao / jd / pdd only (no meituan), hence not perPlatform. The only source this phase is
-  // dataoke (official has no implementation, so it is not an option). Seeded dataoke for taobao
-  // only; jd and pdd have no seed row (unset = no source, no shop entry). Registration only.
+  // taobao / jd / pdd only (no meituan), hence not perPlatform, in this order. The options are per
+  // platform (B1-05zl, D10-812): taobao's only source this phase is dataoke (official has no
+  // implementation, so it is not an option), editable. 08 BR-PRICE-21 细则「进店」leaves the jd and
+  // pdd sources to be decided when 09 registers them, so those two have no options and are read
+  // only (the console shows them unset; a write is refused 20001 [key]); a later task opens them
+  // once decided. Seeded dataoke for taobao only; jd and pdd have no seed row (unset = no source,
+  // no shop entry). Registration only.
   ...SHOP_ENTRY_PLATFORMS.map((platform) =>
-    businessEnum(`shop.entry.source.${platform}`, ['dataoke']),
+    platform === 'taobao'
+      ? businessEnum(`shop.entry.source.${platform}`, ['dataoke'])
+      : businessEnum(`shop.entry.source.${platform}`, [], false),
   ),
 ]);
 

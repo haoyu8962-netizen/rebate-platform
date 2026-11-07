@@ -412,12 +412,13 @@ export const BAD_DEBT: readonly Expected[] = [
   row('ledger.bad_debt_min_fen', 'number', 'config.business'),
 ];
 // B1-05zi (D10-736): the three shop entry source keys, registered right after BAD_DEBT in this
-// order (taobao / jd / pdd, no meituan): editable config.business enums whose only option is
-// dataoke. Not part of expectedNow() either.
+// order (taobao / jd / pdd, no meituan), config.business enums. B1-05zl (D10-812): taobao is
+// editable and its only option is dataoke; jd and pdd have no options and are read only (08
+// BR-PRICE-21 细则「进店」leaves their sources to 09). Not part of expectedNow() either.
 export const SHOP_SOURCE: readonly Expected[] = [
   enumRow('shop.entry.source.taobao', ['dataoke']),
-  enumRow('shop.entry.source.jd', ['dataoke']),
-  enumRow('shop.entry.source.pdd', ['dataoke']),
+  enumRow('shop.entry.source.jd', [], false),
+  enumRow('shop.entry.source.pdd', [], false),
 ];
 /** B1-05zi (D10-736): only taobao is seeded (dataoke); jd and pdd have no seed rows. */
 export const SHOP_SOURCE_UNSEEDED: readonly string[] = [

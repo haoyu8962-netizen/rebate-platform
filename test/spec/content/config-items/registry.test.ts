@@ -240,11 +240,15 @@ const AUTO_READ_ONLY = [
   'withdraw.auto_payout.same_day_policy',
 ];
 
-it('[AC-F1-10e#4] 裁定 14：6 个资金规则标志与 agent.page_guide.routes、external_hosts 不可改（B2-11y 另加自动到账两项策略只读），其余全部可改', () => {
+it('[AC-F1-10e#4] 裁定 14：6 个资金规则标志与 agent.page_guide.routes、external_hosts 不可改（B2-11y 另加自动到账两项策略只读，B1-05zl 另加京东 / 拼多多进店来源只读），其余全部可改', () => {
+  // B1-05zl (D10-812, D10-833): the jd and pdd shop entry sources are read only as well.
+  const shopSourceReadOnly = ['shop.entry.source.jd', 'shop.entry.source.pdd'];
   const locked = configRegistry()
     .filter((spec) => !spec.adminEditable)
     .map((spec) => spec.key);
-  expect(sorted(locked)).toStrictEqual(sorted([...FUND_FLAGS, ...EXTRA, ...AUTO_READ_ONLY]));
+  expect(sorted(locked)).toStrictEqual(
+    sorted([...FUND_FLAGS, ...EXTRA, ...AUTO_READ_ONLY, ...shopSourceReadOnly]),
+  );
   for (const key of FUND_FLAGS) {
     expect(registered(key)).toMatchObject({ permission: 'config.business', adminEditable: false });
   }
@@ -982,14 +986,17 @@ it('[AC-F1-10e#74] ledger.bad_debt_min_fen 是可改的 config.business 整数�
 // one's type, options, permission and editable flag (#58 checks only options-null entries), the
 // values it accepts (dataoke only: official has no implementation yet), that it is not an
 // emergency switch, that meituan is not registered, and that only taobao is seeded (dataoke).
-it('[AC-F1-10e#75] shop.entry.source.<platform> 只登记 taobao / jd / pdd，可改的 config.business 枚举、只收 dataoke，不是开关键；只有淘宝有种子 dataoke（B1-05zi，D10-736）', () => {
+it('[AC-F1-10e#75] shop.entry.source.<platform> 只登记 taobao / jd / pdd，config.business 枚举，不是开关键；淘宝可改、只收 dataoke，京东 / 拼多多选项为空、只读（B1-05zl，D10-812）；只有淘宝有种子 dataoke（B1-05zi，D10-736）', () => {
   expect(SHOP_SOURCE.map((entry) => entry.key)).toStrictEqual([
     'shop.entry.source.taobao',
     'shop.entry.source.jd',
     'shop.entry.source.pdd',
   ]);
+  // B1-05zl (D10-812): taobao editable with dataoke; jd and pdd no options, read only.
+  const taobao = 'shop.entry.source.taobao';
   for (const entry of SHOP_SOURCE) {
     const spec = registered(entry.key);
+    const isTaobao = entry.key === taobao;
     expect({
       key: spec.key,
       valueType: spec.valueType,
@@ -999,14 +1006,14 @@ it('[AC-F1-10e#75] shop.entry.source.<platform> 只登记 taobao / jd / pdd，�
     }).toStrictEqual({
       key: entry.key,
       valueType: 'enum',
-      options: ['dataoke'],
+      options: isTaobao ? ['dataoke'] : [],
       permission: 'config.business',
-      adminEditable: true,
+      adminEditable: isTaobao,
     });
     expect(spec.range).toBeUndefined();
     expect(configItemSpecOf(entry.key), entry.key).toBe(spec);
     expect(switchSpecOf(entry.key), entry.key).toBeNull();
-    expect(configValueFits(spec, 'dataoke'), entry.key).toBe(true);
+    expect(configValueFits(spec, 'dataoke'), entry.key).toBe(isTaobao);
     for (const value of ['official', 'DATAOKE', '', 'api', 1, true, null, ['dataoke'], {}]) {
       expect(configValueFits(spec, value), `${entry.key}: ${JSON.stringify(value)}`).toBe(false);
     }
