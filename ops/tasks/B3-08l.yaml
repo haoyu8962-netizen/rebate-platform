@@ -7,7 +7,7 @@ type: impl
 # 同步：worker 入口按 app 定时调用 syncRuleChunks（content reader 由 app.module 组合根构造注入，agent 不直接查 articles，D10-294 / B3-08k）；周期沿用 B3-08i 台账的默认 300 秒（08 未登记 agent.rag.sync_interval_seconds，本单写成代码常量、不新增配置键，另报编排）；启动后先跑一轮；按 entry.ts 既有定时器写法：停机先停、正在跑的一轮等完、无 provider 不起定时器不报错。各 app 一轮内逐个跑，单个 app 失败只记日志不影响其他 app。
 # 检索：assembly 注册 createSearchRulesHandler；activeChunks(appId) 只读本 app status=active 的块（BR-AI-03：app 只来自服务端上下文）；min_score 经 content 配置读（08 BR-AI-07：默认 0.2，取值 0–1，做成配置可调），读不到时 handler 已回落默认。
 # 冻结用例：test/spec/agent/stream-assembly-orders/** 的 [AC-B3-08g#1/#2/#3] 钉了「6 个、不含 search_rules」，须按 D10-327 由新鲜独立 Claude 改期望、另一位只读复审；实际改到的用例逐条列在实现 PR 正文，同文件未改用例登 red_exempt。#1、#3 标题本身写「6 个」「不含 search_rules」「游客只见 handoff_to_human 与商品两工具」，标题能否随之改已报编排定。
-# 风险 RV2（app.module.ts / entry.ts 不在白名单）。分工：新鲜独立 Claude 写规则测试（D10-775，Codex 额度用尽至 11-11），Opus 实现，独立 Claude 评审。
+# 2026-11-08 作废（D10-852）：代码评审 3 轮均为 BR-AI-07 在 stream/mount 外挂闸门上的不同漏法，改由 B3-08m 在 orchestrator/core 统一替换模板并连同本单全部接线一起落；本单已写的规则测试（spec eb33fff23）原样带进 B3-08m 作第 1 次测试。原注：RV2，新鲜独立 Claude 写规则测试，Opus 实现。
 # 2026-11-07 补 paths（规则测试作者第 1 次交回指出）：① db/seeds 现无 agent.tools.search_rules.enabled（0003 / 0004 只种另六个），不种则生产读为关；08 BR-AI-02 细则「MVP 工具默认 on」，照 0004（B3-08j）新增 0005 种 couli 一行 true，ON CONFLICT DO NOTHING。② content 的 published-articles.ts 与 index.ts：worker 要列出有已发布 help / rule 文章的 app，现读取器只有 list(appId)，由 content 加只读 app 列表入口，组合根不直接查 app.articles（D10-294 / B3-08k）。
 refs: [BR-AI-02, BR-AI-07]
 refs_hash:
@@ -36,5 +36,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/agent/rule-search-wiring/**'
   - 'test/spec/agent/stream-assembly-orders/**'
-status: todo
+status: void
 pr: null

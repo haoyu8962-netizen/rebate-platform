@@ -1,0 +1,40 @@
+id: B3-08m
+repo: rebate-platform
+title: Agent 规则与订单答复模板下沉 orchestrator/core：按本 run 工具调用在 core 所有文本出口统一替换模板（search_rules 命中 / 无命中 agent.rule.found / not_found，list_my_orders / explain_order 套 order_status.* / order_list.summary，最终轮空文本也出模板），按 run 隔离；连同 search_rules 生产接线（worker 同步 syncRuleChunks、handler 注册、allowlist、开关种子 0005、content app 列表入口）一起落（取代 B3-08l，并入 FU-AGENT-ORDER-TEMPLATE-TRACE）
+type: impl
+# 2026-11-08 agent 线入账（编排 D10-852；取代 B3-08l，并入 D10-842 的 FU-AGENT-ORDER-TEMPLATE-TRACE）。
+# 缘由：B3-08l 在 stream/mount 外挂文本闸门，Codex 三轮各找到一条漏法（工具轮先发、首次 search_rules 前已发、无句末标点残句被 guard.end() 冲出）；生产意图端口 trace.calls 恒为空（stream/mount/assembly.ts），订单工具模板同样不生效。
+# 做法：core/run.ts 在 finalRound、finishText 及其余写出模型文本的出口，按本 run 已执行的工具调用（search_rules 是否命中、订单工具结果的 display_status / reason_code）决定替换为模板或照发；本 run 调过这些工具时模型文本一律不下发（BR-AI-07），最终轮空文本也出模板；记录按 runId 隔离、run 结束即清；不用 stream/mount 外挂闸门。
+# 接线（B3-08l 原内容）：worker 每 300 秒（代码常量）按 app 跑 syncRuleChunks，app 列表经 content 只读入口；流装配注册 createSearchRulesHandler；allowlist 加 search_rules；db/seeds/0005 种 couli 开关 true（BR-AI-02 MVP 工具默认 on）。
+# 测试：B3-08l 规则测试（spec eb33fff23：rule-search-wiring/**、stream-assembly-orders 期望改动）原样带入作第 1 次；第 2 次由新鲜独立 Claude 补 core 每个文本出口、交错两 run 互不影响、订单模板、最终轮空文本。冻结标题按 D10-808 (b) 不改。 风险 RV2；新鲜独立 Claude 写规则测试，Opus 实现，Codex 代码评审（D10-823）。
+refs: [BR-AI-02, BR-AI-07]
+refs_hash:
+  BR-AI-02: 40bc4f6f4109
+  BR-AI-07: 0da3ace82049
+deps: [B3-08b, B3-08g, B3-08i]
+paths:
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/entry.ts'
+  - 'apps/api/src/modules/agent/agent.module.ts'
+  - 'apps/api/src/modules/agent/index.ts'
+  - 'apps/api/src/modules/agent/orchestrator/**'
+  - 'apps/api/src/modules/agent/rag/chunks/**'
+  - 'apps/api/src/modules/agent/tools/rules/**'
+  - 'apps/api/src/modules/agent/tools/orders/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/content/application/published-articles.ts'
+  - 'apps/api/src/modules/content/index.ts'
+  - 'specs/agent-tools.allowlist'
+  - 'db/seeds/0005_agent-rules-tool-switch.sql'
+test_paths:
+  - 'test/spec/agent/rule-search-wiring/**'
+  - 'test/spec/agent/stream-assembly-orders/**'
+  - 'test/spec/agent/core-reply-templates/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/rule-search-wiring/**'
+  - 'test/spec/agent/core-reply-templates/**'
+status: todo
+pr: null
