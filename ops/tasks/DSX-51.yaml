@@ -23,5 +23,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-responsive/**'
-status: todo
-pr: null
+status: done
+pr: 2592

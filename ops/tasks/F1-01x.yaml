@@ -17,5 +17,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/h5-nav/**'
-status: todo
-pr: null
+status: done
+pr: 2572
