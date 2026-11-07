@@ -2,6 +2,7 @@ id: B2-04zk
 repo: rebate-platform
 title: 已入账单 R9 后金额行等于新应得（FU-CREDITED-AMOUNT-ROWS 余下，D10-583）——clawback apply 之后推版本并按 N_new 写行
 type: impl
+# 2026-11-07 回给 withdraw（D10-792，先 D10-769 ② 移 funds、后改回）：做法照 withdraw 06:47——clawback 的 apply 在「R9 且 N_new 来自维权应扣」时随 booked 的同一条 CAS 推 commission_version、再调 commission estimates.refresh 按 N_new 写金额行；estimates 端口为可选依赖（三处冻结夹具直接构造扣回对象不带它，不改冻结夹具）；R8 终态不写 0 行；重放不推版本；paths 加 app.module.ts（orderClawback 接线一处）。与 identity 的 B2-04zza 并行、后合者变基。准备树实测：settlement + commission + orders 整树无新增冻结冲突。
 # 2026-11-03 W1 入账。R10 那半在 B2-03s。rights.record 走的 R9 不加版本，同版本主键写不了，要在 apply 更新 booked 之后推版本再 refresh 带 N_new。与 B2-04zi 同文件，排其后。funds 11-06 回来时未开则改给 funds。
 refs: [BR-FUND-08, BR-CALC-15, BR-CALC-27]
 refs_hash:
@@ -13,6 +14,7 @@ paths:
   - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
   - 'apps/api/src/modules/settlement/clawback/clawback-store.ts'
   - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
+  - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/settlement/credited-amount-rows/**'
 impl: claude

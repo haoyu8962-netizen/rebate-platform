@@ -8,6 +8,10 @@ type: impl
 # 「本次同步写了新的结算记录」由 settlement 的结算记录写入口在事务内记下、扣回向它问，不动 orders（change 的字段集由冻结用例逐字钉着）。
 # 正差不在本单：同步时不动账、不改 booked；等待联盟的维权 + 正差维持现状（留着等待并告警）。**FU-SETTLE-ADJ-POSITIVE（上线前必做，归 funds，D10-755 ①）**：R1 随月结账单生成正差候选 + 后台批准后记账（BR-FUND-09 ②；settle_adjustments / settle_adjust_batches 已建表，生成与批准的代码未写）。
 # 冻结的 test/spec/settlement/clawback/** 里钉现行「结算额变化 → not_reverse / 只存档」的用例，开工后实测列全，照 D10-327 / modify_existing 报核。
+# 2026-11-07 第 4 次规则测试（负责人批准，approvals 50；编排 D10-784）：PR #2575 全量 CI 只红两条 B2-03s 冻结用例 commission/version-rule/credited.int.test.ts，它们钉旧行为「已入账单结算额下降后 booked / 分录 / 余额不动」（文件头自写「调整本身在 B2-04zi，这里不断言」）。只改两处、只收紧不删断言，由新鲜独立 Claude 改（D10-775）、另一位只读复审「只改这两处」：
+#   [AC-B2-03s#14] 的 [800n, 400n] 行：旧 booked 1000 / 1000、moneyRows 不变、available 500 → 新 booked 800 / 800（BR-FUND-09、BR-FUND-01 R10）、多两张 SETTLE_ADJUST …:ADJ:2（用户 100 / 平台 100，BR-FUND-09 ①）、available 400（BR-CALC-23 (a)）；版本 +1 与金额行 [800, 400] 的断言不变。1200n / 1001n 两行（正差，本单不动账）不变，登 red_exempt_rows。
+#   [AC-B2-03s#15]：旧末尾 moneyRows 与同步前相同 → 新多 ADJ:2（用户 100 / 平台 100）与 ADJ:3（用户 50 / 平台 50）、余额 500 → 350；同值重放不新增凭证。版本号、金额行、moves 不变。
+#   #16 不动，登 red_exempt。教训：deps 任务的冻结目录也要跑。
 refs: [BR-FUND-01, BR-FUND-08, BR-FUND-09, BR-CALC-23, BR-CALC-02]
 refs_hash:
   BR-FUND-01: b541996f8582
@@ -23,8 +27,20 @@ paths:
   - 'packages/domain/src/settlement/adjust/**'
 test_paths:
   - 'test/spec/settlement/settle-diff-sync/**'
+  - 'test/spec/commission/version-rule/credited.int.test.ts'
+red_exempt:
+  - file: test/spec/commission/version-rule/credited.int.test.ts
+    test: '[AC-B2-03s#16][BR-CALC-15][BR-CALC-23] 已入账单结算记录没变、只有预估变：不推版本，没有新行，est 存档，booked、分录、余额不动'
+    reason: '冻结 B2-03s 用例，测试体与基线逐字相同；本单照 approvals 50 / D10-784 只改同一文件里的 [AC-B2-03s#14] 800n 行与 [AC-B2-03s#15]，本条不动，在旧代码上照常为绿'
+red_exempt_rows:
+  - file: test/spec/commission/version-rule/credited.int.test.ts
+    test: '[AC-B2-03s#14][BR-CALC-23][BR-CALC-15] R10：已入账单结算额变成 1200n：版本 +1，新行等于新应得 600n，不是复制；booked、分录、余额不动'
+    reason: 'it.each 表拆分（照 D10-737 / D10-657）：只拆出须随 approvals 50 / D10-784 改期望的 [800n, 400n] 行；本行字面量与回调体同基线，正差本单不动账，在旧代码上照常为绿'
+  - file: test/spec/commission/version-rule/credited.int.test.ts
+    test: '[AC-B2-03s#14][BR-CALC-23][BR-CALC-15] R10：已入账单结算额变成 1001n：版本 +1，新行等于新应得 500n，不是复制；booked、分录、余额不动'
+    reason: 'it.each 表拆分（照 D10-737 / D10-657）：只拆出须随 approvals 50 / D10-784 改期望的 [800n, 400n] 行；本行字面量与回调体同基线，正差本单不动账，在旧代码上照常为绿'
 impl: claude
-tester: codex
+tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/settle-diff-sync/**'
