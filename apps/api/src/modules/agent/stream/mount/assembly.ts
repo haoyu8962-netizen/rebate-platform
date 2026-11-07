@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import type { StreamReviewOptions, StreamReviewPorts } from './review.ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
-import type { CatalogCardEntry, CatalogConfigReader } from '../../../catalog/index.ts';
+import type { Catalog, CatalogCardEntry, CatalogConfigReader } from '../../../catalog/index.ts';
 import type { ContentReader } from '../../../content/index.ts';
 import { parseToken, parseUrl, type ParsingOptions } from '../../../parsing/index.ts';
 import type { Clock, RootLogger, Scheduler } from '../../../platform/index.ts';
@@ -83,6 +83,13 @@ export interface AgentStreamProvidedPorts {
   readonly claimEntries?: ClaimDraftDeps['clicks'];
   /** B3-08g: the explain_order-by-number daily counter (Redis; no Redis rejects). */
   readonly dailyCounter?: DailyCounter;
+  /**
+   * B1-04zzy (D10-860): catalog's category blocklist (app.module: the stream entry's Catalog).
+   * createProductionStreamAssembly judges every search candidate through it, with no cache: a
+   * candidate the port drops, or any failure of the port (fail closed, one warn line without the
+   * product), is not allowed. Absent: every candidate is allowed (fixtures without it).
+   */
+  readonly categories?: Pick<Catalog, 'filterCategories'>;
 }
 
 export interface AgentStreamAssemblyContext {

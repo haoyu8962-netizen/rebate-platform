@@ -1,0 +1,89 @@
+{
+  "task": "B1-04zzy",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "423a9cf0fb31d9a4598e7a13c21f4aa66243a47e",
+  "red_tests": [
+    "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#1] 装了 categories 端口：同应用同平台类目全等的启用行判禁，别的类目与别的平台放行；端口收到应用、平台、类目与标题；未装端口时同一候选放行",
+    "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#2] 类目行带关键词：标题字面含关键词才判禁，正则符号按字面",
+    "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#3] 无类目候选（categoryId 为空）：只按同平台带关键词行的标题字面匹配，不带关键词的类目行与别平台行不生效",
+    "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#4] 名单按请求的应用判：A 应用的行不影响 B 应用的同一候选",
+    "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#5] 名单不加缓存：每次判定都读端口，行启用、停用在下一次判定即生效",
+    "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#6] 读名单失败从严：端口抛错时该候选不放行，并记 warn；warn 不带商品 ID、商品键与标题；恢复后照常判",
+    "test/spec/agent/category-blocklist/wiring.int.test.ts > [AC-B1-04zzy#7] 生产装配：真实 AppModule 的 Agent 搜索经 catalog 名单按联盟一级类目判——启用行下次搜索即不出该类目商品（降级关键词搜索与 search_products 都是），他应用的行不生效，行改为禁用后恢复",
+    "test/spec/agent/category-blocklist/wiring.int.test.ts > [AC-B1-04zzy#8] 生产装配：联盟商品无一级类目时按无类目判——同平台带关键词行按标题字面匹配即不出卡，不带关键词的类目行不生效"
+  ],
+  "risk_note": "RV2 (agent/** RV1 plus app.module.ts outside the whitelist): Agent search categoryAllowed goes through catalog filterCategories via the optional ports.categories (read failure blocks and warns); app.module passes category_l1_id and wires categories; filtering stays inside categoryAllowed so the pipeline's all-filtered prohibited path still applies. Independent Claude (approvals #36) wrote test/spec/agent/category-blocklist/** in 2 attempts (r2 after implementation: [#7] used a random runId; re-ordered before the implementation; red/2). Implementation model: Claude Opus 5.5 (1 round). Locally tsc -b test apps/api 0, depcruise clean, agent rule / unit suites pass; full verification is the required CI checks.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "423a9cf0fb31d9a4598e7a13c21f4aa66243a47e",
+      "tree": "365d9e27e4a0624d1c960d2c144e74fdaff60c2d",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T18:41:11Z",
+      "finished_at": "2026-11-07T18:41:34Z",
+      "red_tests": [
+        "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#1] 装了 categories 端口：同应用同平台类目全等的启用行判禁，别的类目与别的平台放行；端口收到应用、平台、类目与标题；未装端口时同一候选放行",
+        "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#2] 类目行带关键词：标题字面含关键词才判禁，正则符号按字面",
+        "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#3] 无类目候选（categoryId 为空）：只按同平台带关键词行的标题字面匹配，不带关键词的类目行与别平台行不生效",
+        "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#4] 名单按请求的应用判：A 应用的行不影响 B 应用的同一候选",
+        "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#5] 名单不加缓存：每次判定都读端口，行启用、停用在下一次判定即生效",
+        "test/spec/agent/category-blocklist/allowed.test.ts > [AC-B1-04zzy#6] 读名单失败从严：端口抛错时该候选不放行，并记 warn；warn 不带商品 ID、商品键与标题；恢复后照常判",
+        "test/spec/agent/category-blocklist/wiring.int.test.ts > [AC-B1-04zzy#7] 生产装配：真实 AppModule 的 Agent 搜索经 catalog 名单按联盟一级类目判——启用行下次搜索即不出该类目商品（降级关键词搜索与 search_products 都是），他应用的行不生效，行改为禁用后恢复",
+        "test/spec/agent/category-blocklist/wiring.int.test.ts > [AC-B1-04zzy#8] 生产装配：联盟商品无一级类目时按无类目判——同平台带关键词行按标题字面匹配即不出卡，不带关键词的类目行不生效"
+      ],
+      "expected": [
+        "test/spec/agent/category-blocklist/allowed.test.ts",
+        "test/spec/agent/category-blocklist/wiring.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "8b3a0ab64b87b71cc9d288fb4c79378443953e2655f522ba57b400c9b5623623"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "8ab4405fd7ca2eb82a7570083ce494c2b0969f7f49b5ac9d30fa34149aa15c51"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "money r1 pass, no findings (couli-runs/B1-04zzy/review-codex.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "r1 pass with one S2 (filter only via ports.categories in production.ts, done by the implementation); r2 (after the #7 runId fix) pass with the same S2"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "46e07c601239393fbd99981b2dd1432214ce3cc0",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

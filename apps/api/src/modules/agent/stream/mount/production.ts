@@ -40,6 +40,7 @@ import {
   type AgentOrderToolPorts,
   type AgentStreamAssembly,
   type AgentStreamAssemblyContext,
+  type AgentStreamBusinessPorts,
   type AgentStreamProvidedPorts,
 } from './assembly.ts';
 import { createOrderCardRefs, createOrderNoQuota } from './orders.ts';
@@ -194,6 +195,39 @@ function orderToolPorts(
   };
 }
 
+/**
+ * B1-04zzy (D10-860): the result-layer category blocklist. Each candidate goes through catalog's
+ * filterCategories (read on every call, no cache) as {platform, categoryId ('' without one),
+ * title}; kept means allowed. A failing port is fail closed: not allowed, with one warn line that
+ * names only the event and the platform (never the product). Without the port every candidate is
+ * allowed (fixtures without it; app.module always provides it).
+ */
+export function createCategoryAllowed(
+  categories: AgentStreamProvidedPorts['categories'],
+  logger: AgentStreamAssemblyContext['logger'],
+): AgentStreamBusinessPorts['search']['categoryAllowed'] {
+  if (categories === undefined) return async () => true;
+  return async (appId, candidate) => {
+    const platform = candidate.item.platform;
+    try {
+      const kept = await categories.filterCategories(appId, [
+        { platform, categoryId: candidate.categoryId, title: candidate.item.title },
+      ]);
+      return kept.length === 1;
+    } catch (error) {
+      logger.warn(
+        {
+          event: 'agent_category_blocklist_failed',
+          platform,
+          error_name: error instanceof Error ? error.name : typeof error,
+        },
+        'agent category blocklist unavailable; candidate blocked',
+      );
+      return false;
+    }
+  };
+}
+
 export function createProductionStreamAssembly(
   context: AgentStreamAssemblyContext,
 ): AgentStreamAssembly {
@@ -256,8 +290,7 @@ export function createProductionStreamAssembly(
         searchProducts: ports.searchProducts,
         // BR-AI-18: the same prohibited words as the input check, on the model's keyword.
         prohibited: async (_appId, q) => keywords.hits('prohibited', normalizeForKeywords(q)),
-        // TODO(规划/11 §2.3): 结果层禁售类目黑名单 — blocked on 联盟 DTO 提供类目 ID（UnionItem 目前没有类目字段）
-        categoryAllowed: async () => true,
+        categoryAllowed: createCategoryAllowed(ports.categories, context.logger),
       },
       readProduct: ports.readProduct,
       parsing: ports.parsing,

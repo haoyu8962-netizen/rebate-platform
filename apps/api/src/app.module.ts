@@ -3388,10 +3388,12 @@ function agentStreamPorts(union: DynamicModule, source: UnionQuotaSource): Dynam
                 // The uncached union side reads no promotion slot (search-wiring.ts).
                 promotionSlot: '',
               });
-              // TODO(规划/11 §4.5): 候选的类目 ID 与销量 — blocked on 联盟 DTO 增加类目与销量字段（UnionItem 目前没有）
+              // B1-04zzy: the union item's level-one category ('' without one); the blocklist is
+              // judged by the Agent's categoryAllowed over `categories` below, never here.
+              // TODO(规划/11 §4.5): 候选的销量 — blocked on 联盟 DTO 增加销量字段（UnionItem 目前没有）
               return result.items.map((candidate) => ({
                 ...candidate,
-                categoryId: '',
+                categoryId: candidate.item.category_l1_id ?? '',
                 sales: null,
               }));
             },
@@ -3437,6 +3439,8 @@ function agentStreamPorts(union: DynamicModule, source: UnionQuotaSource): Dynam
               };
             },
             parsing,
+            // B1-04zzy (D10-860): catalog's category blocklist for the Agent's categoryAllowed.
+            categories: catalog,
             cards(context, registration) {
               const caller = {
                 appId: context.appId,
