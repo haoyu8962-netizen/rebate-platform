@@ -1,0 +1,19 @@
+id: B2-09zd
+repo: rebate-platform
+title: B2-09zd：W10 凭证交叉核对的拒绝审计在 admin 池打满时不死锁——三类拒绝都写出审计、不超时（FU-B209X-POOL-TEST，补 B2-09x 测试缺口）
+type: test-change
+# 2026-11-07 入账（agent2-acct4；原报 B2-09zb 与 pay 撞号，改 B2-09zd），裁定 D10-782（从 pay 移来）。B2-09x（#2558，已合并）：凭证交叉核对拒绝（resolve_order_id_other_order / resolve_order_id_mismatch / resolve_amount_mismatch）时请求事务整体回滚、连接归还后另开事务写拒绝审计；「admin 池 3 个连接不互等」没有规则测试（B2-09x 测试轮已满）。
+# 只新增 test/spec/payout/w10-voucher-crosscheck-pool/**，不改已有文件、不动实现：并发打满 admin 池时三类拒绝都写出审计、不死锁、不超时；须在现行主干上跑绿，变异实跑（把审计挪回请求事务内）应红。
+# 分工：新鲜独立 Claude 写（Codex 可用时优先），另一位新鲜独立 Claude / Codex 复审（D10-775）；非 task 分支、不带证据文件，标签由编排核对后加（先例 B3-03s / B3-04j）。RV2。
+refs: [BR-WDR-15]
+refs_hash:
+  BR-WDR-15: 862cdb2e711a
+deps: [B2-09x]
+paths:
+  - 'test/spec/payout/w10-voucher-crosscheck-pool/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
