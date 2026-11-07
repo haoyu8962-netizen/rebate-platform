@@ -17,7 +17,6 @@ import {
   noStepUp,
   PREVIEW_LINK,
   QR_PLACEHOLDER,
-  qrPlaceholderPending,
   settled,
   FLOW_TIMEOUT,
 } from './helpers.ts';
@@ -54,14 +53,11 @@ it(
     }
     await message(new RegExp(TOKEN));
     await settled(server);
-    // Transition (F1-09ut): the dictionary placeholder picks the branch; the page must agree with it.
-    const pending = qrPlaceholderPending();
     const raw = document.body.textContent ?? '';
-    // New branch: the only allowed `://` is the exact HomePreview deep link for this token.
-    const text = pending ? raw : raw.split(PREVIEW_LINK).join(' ');
+    // The only allowed `://` is the exact HomePreview deep link for this token.
+    const text = raw.split(PREVIEW_LINK).join(' ');
     expect(raw).toContain('home');
-    if (pending) expect(raw).toContain('二维码待深链定稿');
-    else expect(raw).not.toContain(QR_PLACEHOLDER);
+    expect(raw).not.toContain(QR_PLACEHOLDER);
     expect(raw).toMatch(/2026[-/]10[-/]18/);
     expect(raw).toMatch(/10:40/);
     expect(raw).toMatch(/北京时间|UTC\+8|GMT\+8/);
@@ -75,9 +71,7 @@ it(
         /:\/\/|^\/\//,
       );
     }
-    if (pending)
-      expect(document.querySelector('canvas, .ant-qrcode, img[alt*="二维码"]')).toBeNull();
-    else expectSinglePreviewQr();
+    expectSinglePreviewQr();
     expect(server.requests('POST', path)).toHaveLength(1);
     noStepUp(server);
   },

@@ -1,0 +1,21 @@
+id: F1-09uv
+repo: rebate-platform
+title: 收紧测试改动（F1-09ut 跟进，D10-834 ①）：后台首页配置草稿预览冻结测试去掉「无二维码、二维码待深链定稿」旧支，只认「预览区恰一个二维码、:// 只许 couli://r/HomePreview」单态
+type: test-change
+# 2026-11-07 入账（前端线 f1-frontend-7，编排 D10-834 ①；D10-742 做法：两态过渡在后续单合并后收紧为单态）。
+# F1-09u（#2616）已合并：字典已撤「二维码待深链定稿」，主干只走新支。test/spec/frontend/admin-home-config/preview.test.ts [AC-F1-09l-PREVIEW#1] 与 source.test.ts [AC-F1-09l-SOURCE#2] 删去旧支与选支判据，只留新支断言（逐字同 F1-09ut 新支，不放宽）；helpers.ts 里仅供选支的 qrPlaceholderPending 等若不再被引用则删除，其余导出语义不变。
+# 顺带收 F1-09ut 复审 S2-1：整页二维码计数选择器补上不在 .ant-qrcode 内的裸 svg 二维码（图标与 Empty 插图仍排除），只会更严。测试标题与测试数不变（S2-2 标题「且不造二维码」语义过时，标题改动另由编排定，本单不改）。
+# 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；全新上下文 Claude 修改，Codex 只读复审（D10-823），按 approvals #24 由编排加 owner-approved 标签。
+refs: []
+refs_hash: {}
+deps: [F1-09ut, F1-09u]
+paths:
+  - 'test/spec/frontend/admin-home-config/preview.test.ts'
+  - 'test/spec/frontend/admin-home-config/source.test.ts'
+  - 'test/spec/frontend/admin-home-config/helpers.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

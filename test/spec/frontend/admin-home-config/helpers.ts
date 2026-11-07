@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, vi } from 'vitest';
@@ -124,16 +122,8 @@ export function noStepUp(server: Server): void {
   expect(screen.queryByRole('textbox', { name: /动态码/ })).toBeNull();
 }
 
-// Two-state transition for F1-09u: the dictionary placeholder picks the branch, and the page must agree.
+/** Placeholder copy withdrawn by F1-09u; the dictionary and the page must not show it. */
 export const QR_PLACEHOLDER = '二维码待深链定稿';
-const moduleUrl = import.meta.url;
-export const HOME_CONFIG_TEXTS = fileURLToPath(
-  new URL('../../../../apps/admin/src/texts/home-config.ts', moduleUrl),
-);
-/** True while the dictionary still carries the "QR pending deep link" placeholder (old branch). */
-export function qrPlaceholderPending(): boolean {
-  return readFileSync(HOME_CONFIG_TEXTS, 'utf8').includes(QR_PLACEHOLDER);
-}
 /** Remove only `couli://r/HomePreview` prefixes followed by a query, a quote or the end of the text. */
 export function withoutPreviewLinkPrefix(text: string): string {
   return text.replace(/couli:\/\/r\/HomePreview(?=[?'"`\s]|$)/gm, '');
@@ -148,10 +138,15 @@ export function qrCodes(scope: ParentNode): Element[] {
 }
 /** Expect exactly one QR on the page, rendered in the region that shows the preview token. */
 export function expectSinglePreviewQr(): void {
-  const roots = [...document.querySelectorAll('.ant-qrcode, canvas, img[alt*="二维码"]')].filter(
-    (node) => !node.parentElement?.closest('.ant-qrcode'),
+  // Bare svg QRs count too; antd icon svgs and the Empty illustration do not.
+  const roots = [
+    ...document.querySelectorAll('.ant-qrcode, canvas, svg, img[alt*="二维码"]'),
+  ].filter(
+    (node) =>
+      !node.parentElement?.closest('.ant-qrcode') &&
+      !(node.matches('svg') && node.closest('.anticon, .ant-empty')),
   );
-  expect(roots, 'exactly one QR container / canvas on the page').toHaveLength(1);
+  expect(roots, 'exactly one QR container / canvas / svg on the page').toHaveLength(1);
   const qr = roots[0]!;
   let region = qr.parentElement;
   while (region && !(region.textContent ?? '').includes(TOKEN)) region = region.parentElement;

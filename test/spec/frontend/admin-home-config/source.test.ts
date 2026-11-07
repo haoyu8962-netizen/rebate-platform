@@ -162,14 +162,10 @@ it('[AC-F1-09l-SOURCE#2] 文案在 texts/home-config.ts；请求经现有层，�
   expect(identifiers).not.toContain('location');
   expect(identifiers).not.toContain('hostname');
   const copy = readFileSync(dictionary, 'utf8');
-  // Transition (F1-09ut): while the placeholder stays, no `://` at all; once withdrawn, `://` may
-  // only appear as the couli://r/HomePreview deep-link prefix.
-  const pending = copy.includes(QR_PLACEHOLDER);
-  const allow = (text: string): string => (pending ? text : withoutPreviewLinkPrefix(text));
-  expect(allow([...identifiers, ...literals].join('\n'))).not.toMatch(
+  // `://` may only appear as the couli://r/HomePreview deep-link prefix.
+  expect(withoutPreviewLinkPrefix([...identifiers, ...literals].join('\n'))).not.toMatch(
     /union_host|material-channels|:\/\/|window\.location|location\.origin|hostname/,
   );
-  if (pending) expect(copy).toContain('二维码待深链定稿');
-  else expect(copy).not.toContain(QR_PLACEHOLDER);
-  expect(allow(copy)).not.toMatch(/:\/\//);
+  expect(copy).not.toContain(QR_PLACEHOLDER);
+  expect(withoutPreviewLinkPrefix(copy)).not.toMatch(/:\/\//);
 });
