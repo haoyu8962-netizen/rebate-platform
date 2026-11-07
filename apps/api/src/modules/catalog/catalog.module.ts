@@ -788,6 +788,9 @@ export class CatalogModule {
               ),
               ...(priceHistory === undefined ? {} : { priceHistory }),
               ...(poolReader === undefined ? {} : { poolReader }),
+              // B1-05zm (S17-c1): shop_entry condition ③ reads the governed adapter's
+              // shopConvertSources declaration; no adapter method is called for it.
+              shopAdapters: union,
             }),
         },
       ],

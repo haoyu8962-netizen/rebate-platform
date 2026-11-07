@@ -3,7 +3,7 @@ import {
   detailExtraSwitchKeys,
   detailExtras,
   emptyDetailExtras,
-  shopEntry,
+  shopEntryOf,
   switchOn,
 } from './detail-extras.ts';
 
@@ -74,6 +74,20 @@ it('[AC-B1-05zk] 开关开但联盟没给：null / null / null / [] / false，�
   });
 });
 
-it('[AC-B1-05zk] S-17 前 shop_entry 恒为 false', () => {
-  expect(shopEntry()).toBe(false);
+it('[AC-B1-05zm-UNIT#1] detailExtras 不传进店判定时 shop_entry 为 false，传 true 才为 true', () => {
+  expect(detailExtras(FULL, ON).shop_entry).toBe(false);
+  expect(detailExtras(FULL, ON, true).shop_entry).toBe(true);
+});
+
+it('[AC-B1-05zm-UNIT#2] 进店判定：来源须在适配器声明里且严格相等，店铺两字段须非空', () => {
+  const met = {
+    enabled: true,
+    source: 'dataoke',
+    adapterSources: ['dataoke'],
+    item: { shop_ref: '123', shop_name: '合成店' },
+  } as const;
+  expect(shopEntryOf(met)).toBe(true);
+  expect(shopEntryOf({ ...met, adapterSources: ['other'] })).toBe(false);
+  expect(shopEntryOf({ ...met, source: ' dataoke' })).toBe(false);
+  expect(shopEntryOf({ ...met, item: { shop_ref: '123' } })).toBe(false);
 });

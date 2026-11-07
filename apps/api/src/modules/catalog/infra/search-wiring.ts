@@ -185,7 +185,8 @@ export function createUnionSearchUpstream(options: UnionSearchUpstreamOptions): 
         receivedAt,
         canonicalUrl: null,
         title: item.title,
-        shopId: null,
+        // B1-05zm (S17-c1): the union's shop id of the item, null when it gave none.
+        shopId: nonEmpty(item.shop_ref) ?? null,
         shopType: null,
         source: 'search',
       };

@@ -1,8 +1,9 @@
 // B1-05zk (D10-664 S-09 S09b, D10-736; 04 §8.3「商品详情专用字段」; contract CT-26s): the five
 // detail-only keys of the GET /v1/products/{product_key} card, read from the union detail and the
 // platform's switches (a switch is on only when its value is exactly `true`). The union data is
-// cached whatever the switches say; only the card blanks it (D10-736 ⑦). shop_entry stays false
-// until S-17. Rule tests: test/spec/catalog/detail-extras/**.
+// cached whatever the switches say; only the card blanks it (D10-736 ⑦). B1-05zm (S17-c1):
+// shop_entry is judged by shopEntryOf. Rule tests: test/spec/catalog/detail-extras/**,
+// test/spec/catalog/shop-entry/**.
 import type { components } from '@couli/contracts-ts';
 import type { UnionItemDetail } from '../../union/index.ts';
 
@@ -38,21 +39,59 @@ export function switchOn(value: unknown): boolean {
   return value === true;
 }
 
+/** B1-05zm (S17-c1): configuration keys of a platform's shop entry (platform code, e.g. taobao). */
+export interface ShopEntryKeys {
+  /** shop.entry.enabled.<platform> (switch, default off). */
+  readonly enabled: string;
+  /** shop.entry.source.<platform> (where the shop link is converted, e.g. dataoke). */
+  readonly source: string;
+}
+
+/** B1-05zm: shop.entry.enabled.<platform> and shop.entry.source.<platform> of a platform. */
+export function shopEntryKeys(platform: string): ShopEntryKeys {
+  return {
+    enabled: `shop.entry.enabled.${platform}`,
+    source: `shop.entry.source.${platform}`,
+  };
+}
+
+/** B1-05zm: everything shop_entry is decided from; nothing here is asked of the union. */
+export interface ShopEntryFacts {
+  /** The value of shop.entry.enabled.<platform> as read (absent: undefined). */
+  readonly enabled: unknown;
+  /** The value of shop.entry.source.<platform> as read (absent: undefined). */
+  readonly source: unknown;
+  /** The platform adapter's shopConvertSources; undefined when it declares none. */
+  readonly adapterSources: readonly string[] | undefined;
+  /** The union detail's shop fields. */
+  readonly item: Pick<UnionItemDetail, 'shop_ref' | 'shop_name'>;
+}
+
 /**
- * BR-PRICE-21 细则「进店」, D10-736 ②: true only when shop.entry.enabled.<platform> is on,
- * shop.entry.source.<platform> is configured and that source supports the platform, and the product
- * carries a shop id (shop_ref); decided from these alone, without asking the source beforehand.
- * Nothing can make a shop link carrying the user's attribution yet, so the answer is always false.
- * TODO(规划/11 §2.3): shop_entry 店铺转链能力 — blocked on S-17
+ * B1-05zm (S17-c1; BR-PRICE-21 细则「进店」, D10-736 ②): true only when ① enabled is exactly
+ * `true`, ② source is a configured (non-empty) source, ③ the adapter declares shopConvertSources
+ * and it contains that source, and ④ the item carries both a non-empty shop_ref and shop_name.
  */
-export function shopEntry(): false {
-  return false;
+export function shopEntryOf(facts: ShopEntryFacts): boolean {
+  const { enabled, source, adapterSources, item } = facts;
+  return (
+    switchOn(enabled) &&
+    typeof source === 'string' &&
+    source !== '' &&
+    adapterSources !== undefined &&
+    adapterSources.includes(source) &&
+    typeof item.shop_ref === 'string' &&
+    item.shop_ref !== '' &&
+    typeof item.shop_name === 'string' &&
+    item.shop_name !== ''
+  );
 }
 
 /** The five keys of a union detail answer under the given switches. */
 export function detailExtras(
   item: Pick<UnionItemDetail, 'coupon_end_at' | 'sales_text' | 'shop_logo' | 'shop_scores'>,
   switches: DetailExtraSwitches,
+  shopEntry = false,
 ): DetailExtras {
   return {
     coupon_end_at: switches.couponEnd ? (item.coupon_end_at ?? null) : null,
@@ -62,7 +101,7 @@ export function detailExtras(
       switches.shopScores && item.shop_scores !== undefined
         ? item.shop_scores.map(({ key, value }) => ({ key, value }))
         : [],
-    shop_entry: shopEntry(),
+    shop_entry: shopEntry,
   };
 }
 

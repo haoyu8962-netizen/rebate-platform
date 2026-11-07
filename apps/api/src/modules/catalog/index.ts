@@ -64,6 +64,10 @@ export type {
   CatalogProductSummary,
 } from './application/product-reader.ts';
 export { createDbCatalogProductReader } from './infra/product-reader-wiring.ts';
+// Task B1-05zm (S17-c1): the read-only shop port for linking (detail cache, then product_refs;
+// never the union), rule tests test/spec/catalog/shop-entry/**.
+export { createShopOf } from './application/shop-of.ts';
+export type { ShopOf, ShopOfAnswer, ShopOfOptions, ShopOfRefs } from './application/shop-of.ts';
 // B3-03j: the uncached union search and detail sides, for the stream entry's Agent tools (app.module
 // wires them; the Agent reads fresh, outside the HTTP search session and the detail cache).
 export { createUnionSearchUpstream } from './infra/search-wiring.ts';

@@ -13,6 +13,7 @@ export interface CatalogStore {
    * One conditional upsert: inserts the row, or overwrites every mutable column only when the
    * stored refreshed_at is strictly older (BR-PROD-05). An equal or newer row is kept as is.
    * A write without canonical_url keeps the stored one: only parse knows it (BR-PROD-05).
+   * A write without shop_id keeps the stored one too (B1-05zm): not every answer carries it.
    * The statement takes the row lock itself, so concurrent writers serialise on the row and the
    * newest response wins whatever the commit order.
    */
@@ -96,7 +97,8 @@ export function createKyselyCatalogStore(db: Kysely<DB>): CatalogStore {
                 string | null
               >`COALESCE(excluded.canonical_url, product_refs.canonical_url)`,
               title: eb.ref('excluded.title'),
-              shop_id: eb.ref('excluded.shop_id'),
+              // B1-05zm (S17-c1): a response without a shop id keeps the stored one.
+              shop_id: sql<string | null>`COALESCE(excluded.shop_id, product_refs.shop_id)`,
               shop_type: eb.ref('excluded.shop_type'),
               source: eb.ref('excluded.source'),
               refreshed_at: eb.ref('excluded.refreshed_at'),

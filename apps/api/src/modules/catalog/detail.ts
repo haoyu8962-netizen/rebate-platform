@@ -24,6 +24,8 @@ import {
   detailExtraSwitchKeys,
   detailExtras,
   emptyDetailExtras,
+  shopEntryKeys,
+  shopEntryOf,
   switchOn,
   type DetailExtras,
 } from './domain/detail-extras.ts';
@@ -31,7 +33,7 @@ import { detailImages, type DetailImage } from './domain/detail-images.ts';
 import { CatalogError, isFresh } from './domain/rules.ts';
 import { priceSpecHintFor } from './domain/spec-hint.ts';
 import type { Catalog, ProductCapabilities, ProductRef, RequestRawRef } from './domain/types.ts';
-import type { CatalogConfigReader, ViewerContext } from './ports.ts';
+import type { CatalogConfigReader, GovernedUnion, ViewerContext } from './ports.ts';
 import type { PriceSnapshotRecorder } from './price-history/types.ts';
 
 export interface ProductDetailQuery {
@@ -136,6 +138,12 @@ export interface ProductDetailOptions {
    * /v1/products/{product_key}. Absent means the detail route: the card carries all five.
    */
   readonly detailExtras?: boolean;
+  /**
+   * B1-05zm (S17-c1): the governed adapters, read only for their shopConvertSources declaration
+   * (shop_entry condition ③); no adapter method is called. Absent, no platform has a shop source
+   * and shop_entry stays false.
+   */
+  readonly shopAdapters?: Pick<GovernedUnion, 'adapter'>;
 }
 
 export type ProductDetailData = components['schemas']['ProductResponse']['data'];
@@ -257,24 +265,56 @@ function withImages(
 }
 
 /**
+ * B1-05zm (S17-c1): the shopConvertSources the platform's governed adapter declares, read only (no
+ * adapter method is called). No adapters handed in, or a lookup that throws, declares none.
+ */
+function declaredShopSources(
+  shopAdapters: Pick<GovernedUnion, 'adapter'> | undefined,
+  platform: RegisteredPlatform,
+): readonly string[] | undefined {
+  if (shopAdapters === undefined) return undefined;
+  try {
+    return shopAdapters.adapter(platform).shopConvertSources;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * B1-05zk: the five detail-only keys under the platform's switches (only an exact `true` is on). A
- * cache hit or a stale entry is the same UnionItemDetail, so it reads the same way.
+ * cache hit or a stale entry is the same UnionItemDetail, so it reads the same way. B1-05zm:
+ * shop_entry by shopEntryOf over the product's own platform (BR-PRICE-21 细则「进店」, D10-736 ②:
+ * two configuration keys and the adapter's declaration, no union request).
  */
 async function readDetailExtras(
   item: UnionItemDetail,
   appId: string,
-  platform: string,
+  platform: RegisteredPlatform,
   config: CatalogConfigReader,
+  shopAdapters: Pick<GovernedUnion, 'adapter'> | undefined,
 ): Promise<DetailExtras> {
   const keys = detailExtraSwitchKeys(platform);
-  const on = async (key: string): Promise<boolean> =>
-    switchOn((await config.configValue(appId, key))?.value);
-  const [couponEnd, sales, shopScores] = await Promise.all([
-    on(keys.couponEnd),
-    on(keys.sales),
-    on(keys.shopScores),
+  const entryKeys = shopEntryKeys(platform);
+  const read = async (key: string): Promise<unknown> =>
+    (await config.configValue(appId, key))?.value;
+  const [couponEnd, sales, shopScores, entryEnabled, entrySource] = await Promise.all([
+    read(keys.couponEnd),
+    read(keys.sales),
+    read(keys.shopScores),
+    read(entryKeys.enabled),
+    read(entryKeys.source),
   ]);
-  return detailExtras(item, { couponEnd, sales, shopScores });
+  const shopEntry = shopEntryOf({
+    enabled: entryEnabled,
+    source: entrySource,
+    adapterSources: declaredShopSources(shopAdapters, platform),
+    item,
+  });
+  return detailExtras(
+    item,
+    { couponEnd: switchOn(couponEnd), sales: switchOn(sales), shopScores: switchOn(shopScores) },
+    shopEntry,
+  );
 }
 
 /**
@@ -489,7 +529,8 @@ export async function getProduct(
     receivedAt,
     canonicalUrl: null,
     title: item.title,
-    shopId: null,
+    // B1-05zm (S17-c1): the union detail's shop id, null when it gave none.
+    shopId: nonEmpty(item.shop_ref) ?? null,
     shopType: null,
     source: 'detail',
   };
@@ -509,7 +550,9 @@ export async function getProduct(
   // B1-05ze: a cache hit or a stale entry is the same UnionItemDetail, so it reads the same way.
   const card = withDetailExtras(
     withImages(withUnionDetailHint(issuedCard(result), ref, options), detailImages(item), options),
-    options.detailExtras === false ? null : await readDetailExtras(item, appId, platform, config),
+    options.detailExtras === false
+      ? null
+      : await readDetailExtras(item, appId, platform, config, options.shopAdapters),
   );
   // BR-PROD-11: a valid tapped token that supplied this call's raw ID goes back unchanged (原样
   // 透传), even if the union now reports another raw ID for the same key; otherwise the card's
