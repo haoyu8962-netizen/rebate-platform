@@ -25,6 +25,12 @@ export interface RightsRecordInput {
   readonly platform_rights_no: string | null;
   /** Injected Clock instant, distinct from the platform's occurred_at. */
   readonly now: Date;
+  /**
+   * B2-04zze: the union's violation text of a PUNISH record as delivered (Taobao / 大淘客
+   * violation_type), only for settlement's reason_sub mapping; never stored
+   * (FU-REASON-SUB-RAW-BACKFILL). Absent or null: no text.
+   */
+  readonly violation_type?: string | null | undefined;
 }
 
 export interface AdminHoldInput {

@@ -41,7 +41,9 @@
 //   9. booked_base_fen = B_new and booked_n_fen = N_new positive part together, rebate_status
 //      through the generated order-rebate transition() with a CAS on (rebate_status, row_version);
 //      a rebate history row; R8 also writes orders.reason, R9 writes diff_reason_code PART_REFUND
-//      and leaves orders.reason unchanged.
+//      and leaves orders.reason unchanged. B2-04zze: R8 writes orders.reason_sub in the same CAS
+//      (rebate/domain/reason-sub.ts; an unmapped Taobao violation text → PUNISH_ORDER and one warn
+//      order_reason_sub_unmapped with platform and raw text only).
 //  10. R8 and R9 publish order.clawed_back on the same transaction (B2-04lb, D10-474 ③): order_id,
 //      order_key, rights_event_id, transition, reason (R8: the R8 reason; R9: the R9 sub_type —
 //      RIGHTS / PART_REFUND, D10-817 ②), beneficiaries [{ user_id, role,
@@ -156,6 +158,13 @@ import {
 } from '../rights/rights-store.ts';
 import { createSettlementRecords } from '../settlements/index.ts';
 import {
+  REASON_SUB_UNMAPPED_ALERT,
+  reasonSubWithReason,
+  type ReasonSubContext,
+  type ReasonSubMaps,
+} from '../rebate/domain/reason-sub.ts';
+import { defaultReasonSubMaps } from '../rebate/infra/reason-sub-table.ts';
+import {
   casClawbackOrder,
   casRightsPending,
   closeObligation,
@@ -194,6 +203,11 @@ export interface ClawbackCommand {
   readonly newCommissionFen: bigint | null;
   /** ② the commission to deduct given by the order_rights record; or null. */
   readonly rightsDeductFen: bigint | null;
+  /**
+   * B2-04zze: what the caller knows of the cause for the reason_sub written with the R8 reason
+   * (violation text, platform status before the sync); the record type follows from the cause.
+   */
+  readonly reasonSub?: ReasonSubContext;
 }
 
 /** One order_sync_pending entry (orders owns the table; written only through deps.pending). */
@@ -246,6 +260,11 @@ export interface ClawbackDependencies {
       value?: { readonly commissionFen: bigint },
     ): Promise<void>;
   };
+  /**
+   * B2-04zze: the sub-reason tables (specs/reason-sub-map/); absent → the process' tables, read
+   * once when the orchestrator is built.
+   */
+  readonly reasonSubMaps?: ReasonSubMaps;
 }
 
 export type ClawbackSkipReason = 'not_credited' | 'not_reverse';
@@ -459,9 +478,21 @@ function identity(userId: string, role: string): string {
   return JSON.stringify([userId, role]);
 }
 
+/** B2-04zze: the rights record type a cause stands for, for the REFUND sub-reason. */
+function subContextOf(command: ClawbackCommand): ReasonSubContext {
+  const cause = command.cause;
+  const rightsType =
+    cause === 'INVALID_AFTER_SETTLE' || cause === 'REFUND_AFTER_SETTLE' ? cause : undefined;
+  return {
+    ...(rightsType === undefined ? {} : { rightsType }),
+    ...command.reasonSub,
+  };
+}
+
 export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
   const { clock, logger, ledger, gate, events } = deps;
   const settlements = createSettlementRecords({ clock });
+  const reasonSubMaps = deps.reasonSubMaps ?? defaultReasonSubMaps();
 
   interface Locked {
     readonly order: OrderRow;
@@ -965,11 +996,17 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     // never moved the version: move it here with the booked pair, then write its rows on N_new.
     const estimates = deps.estimates;
     const repriced = estimates !== undefined && transition === 'R9' && selected.source === 'rights';
+    // B2-04zze: R8 writes the display sub-reason with its reason (R9 leaves both unchanged).
+    const sub =
+      transition === 'R8'
+        ? reasonSubWithReason(order, rules.r8Reason, subContextOf(command), reasonSubMaps)
+        : ({ write: false } as const);
     const written = await casClawbackOrder(trx, order, {
       to: step.to,
       booked_base_fen: plan.booked_after.booked_base_fen,
       booked_n_fen: plan.booked_after.booked_n_fen,
       ...(transition === 'R8' ? { reason: rules.r8Reason } : { diff_reason_code: 'PART_REFUND' }),
+      ...(sub.write ? { reason_sub: { value: sub.value } } : {}),
       ...(repriced
         ? {
             commission_version: {
@@ -981,6 +1018,18 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       at: now,
     });
     if (!written) throw new Error('settlement clawback: order CAS matched no row');
+    if (sub.write && sub.unmapped !== null) {
+      // D10-862 ①: platform and raw text only (no order / rights number, user or amount).
+      logger.warn(
+        {
+          alert: REASON_SUB_UNMAPPED_ALERT,
+          platform: order.platform,
+          violation_type: sub.unmapped.raw,
+          reason_sub: 'PUNISH_ORDER',
+        },
+        'violation text outside the sub-reason table; fallback sub-reason written',
+      );
+    }
     if (repriced) {
       await estimates.refresh(
         trx,
@@ -1367,6 +1416,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
         ...base,
         cause: change.from_status === 'SETTLED' ? 'INVALID_AFTER_SETTLE' : 'PLATFORM_INVALID',
         ref: { kind: 'platform' },
+        reasonSub: { fromPlatformStatus: change.from_status },
       });
     }
     if (source.event === 'PLATFORM_PUNISH') {

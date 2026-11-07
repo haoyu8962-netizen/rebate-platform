@@ -210,6 +210,9 @@ export type {
   UnmappedOrderInfo,
 } from './application/update-step.ts';
 export type { PlatformStatusEvent } from './domain/status-map.ts';
+// B2-04zze：违规文本 → PUNISH 子原因（specs/reason-sub-map/<platform>.csv，精确匹配；settlement 写 reason_sub 时用）。
+export { ReasonSubMapError, loadReasonSubMap, mapViolationType } from './domain/reason-sub.ts';
+export type { ReasonSubMap, ViolationTypeMapping } from './domain/reason-sub.ts';
 // B1-08zc：平台恢复差错单（BR-FUND-22）的 ref_id / dedupe_key（settlement 的 P9 登记复用）与登记端口形状。
 export { platformRestoreDedupeKey, platformRestoreRefId } from './domain/platform-restore.ts';
 export type {

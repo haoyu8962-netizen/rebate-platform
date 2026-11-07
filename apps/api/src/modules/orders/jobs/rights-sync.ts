@@ -8,7 +8,8 @@
 //   FAILED as is, CLOSED_NO_CHARGE → FAILED (counted), null → nothing written (counted). The
 //   stream's cursor moves once, after every page.
 // - punish.window: every page of listPunishments, each as type PUNISH, status SUCCEEDED,
-//   platform_rights_no = punishment_id, occurred_at = the Clock; no cursor.
+//   platform_rights_no = punishment_id, occurred_at = the Clock, violation_type passed on as is
+//   in the writer's extras (B2-04zze, for settlement's reason_sub); no cursor.
 // - not_found (an order of someone else's slot) is counted only; logs never carry order numbers.
 import type { Clock, ReceivedJob } from '../../platform/index.ts';
 import {
@@ -321,14 +322,19 @@ export async function handlePunishWindow(
       counts.pages += 1;
       for (const punishment of punishments) {
         counts.count += 1;
-        const result = await deps.writer.write(targetOf(win, punishment.order_id), {
-          type: 'PUNISH',
-          status: 'SUCCEEDED',
-          amount_fen: null,
-          deduction_commission_fen: punishment.deduction_fen,
-          occurred_at: syncedAt,
-          platform_rights_no: punishment.punishment_id,
-        });
+        const result = await deps.writer.write(
+          targetOf(win, punishment.order_id),
+          {
+            type: 'PUNISH',
+            status: 'SUCCEEDED',
+            amount_fen: null,
+            deduction_commission_fen: punishment.deduction_fen,
+            occurred_at: syncedAt,
+            platform_rights_no: punishment.punishment_id,
+          },
+          // B2-04zze (D10-862): the violation text as delivered, for settlement's reason_sub.
+          { violation_type: punishment.violation_type ?? null },
+        );
         tally(counts, result);
       }
     },

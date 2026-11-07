@@ -50,6 +50,13 @@ import {
 } from '../../rights/rights-store.ts';
 import { createSettlementRecords } from '../../settlements/index.ts';
 import { IllegalTransition, RebateError } from './errors.ts';
+import {
+  REASON_SUB_UNMAPPED_ALERT,
+  reasonSubWithReason,
+  type ReasonSubContext,
+  type ReasonSubMaps,
+} from '../domain/reason-sub.ts';
+import { defaultReasonSubMaps } from '../infra/reason-sub-table.ts';
 
 /** B2-04zzg：京东剩余数量为 0 但开关关，只告警。 */
 const ALERT_JD_REMAINING_ZERO_OFF = 'jd_remaining_zero_r6_disabled';
@@ -94,7 +101,16 @@ export interface RebateHoldAudit extends RebateOrderRef {
  */
 export type RebatePort = OrderPipelineDeps['rebate'] &
   OrderUpdateDeps['rebate'] & {
-    apply(trx: Transaction<DB>, order: RebateChangeInput, event: PrecreditEvent): Promise<void>;
+    /**
+     * B2-04zze: `subContext` (optional) is what the caller knows of the cause, for the reason_sub
+     * written with the reason (the rights command passes the record type and violation text).
+     */
+    apply(
+      trx: Transaction<DB>,
+      order: RebateChangeInput,
+      event: PrecreditEvent,
+      subContext?: ReasonSubContext,
+    ): Promise<void>;
   };
 
 export interface RebateDependencies {
@@ -139,6 +155,11 @@ export interface RebateDependencies {
   readonly audit: {
     append(trx: Transaction<DB>, input: RebateHoldAudit): Promise<void>;
   };
+  /**
+   * B2-04zze: the sub-reason tables (specs/reason-sub-map/); absent → the process' tables, read
+   * once when the port is built.
+   */
+  readonly reasonSubMaps?: ReasonSubMaps;
 }
 
 type MutableSet = { -readonly [K in keyof RebateSet]: RebateSet[K] };
@@ -222,6 +243,26 @@ function refOf(order: { app_id: string; order_id: string; attr_at: Date }): Reba
 export function createRebatePort(deps: RebateDependencies): RebatePort {
   const { logger } = deps;
   const settlements = createSettlementRecords({ clock: deps.clock });
+  const reasonSubMaps = deps.reasonSubMaps ?? defaultReasonSubMaps();
+
+  /**
+   * B2-04zze: a plan that writes orders.reason also writes orders.reason_sub in the same CAS
+   * (domain/reason-sub.ts); returns the plan to run and the raw text to alert on (unmapped).
+   */
+  function withReasonSub(
+    row: OrderRow,
+    plan: Plan,
+    context: ReasonSubContext,
+  ): { readonly plan: Plan; readonly unmapped: { readonly raw: string | null } | null } {
+    const reason = plan.set.reason;
+    if (!plan.write || reason === undefined) return { plan, unmapped: null };
+    const decision = reasonSubWithReason(row, reason, context, reasonSubMaps);
+    if (!decision.write) return { plan, unmapped: null };
+    return {
+      plan: { ...plan, set: { ...plan.set, reason_sub: decision.value } },
+      unmapped: decision.unmapped,
+    };
+  }
 
   /**
    * 重读 → 判定 → CAS；CAS 0 行重读一次再判定（02 §18），仍 0 行抛 ORDER_CAS_CONFLICT。
@@ -232,6 +273,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     ref: RebateOrderRef,
     source: 'sync' | 'system',
     decide: (row: OrderRow, now: Date) => Promise<Plan | null>,
+    subContext: ReasonSubContext = {},
   ): Promise<void> {
     const now = deps.clock.now();
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -240,8 +282,9 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
         logger.warn({ app_id: ref.appId, outcome: 'order_not_found' }, 'rebate order not found');
         throw new RebateError('ORDER_NOT_FOUND', 'order not found for app_id/order_id/attr_at');
       }
-      const plan = await decide(row, now);
-      if (plan === null) return;
+      const decided = await decide(row, now);
+      if (decided === null) return;
+      const { plan, unmapped } = withReasonSub(row, decided, subContext);
       if (plan.write) {
         const hit = await casUpdateRebate(trx, row, plan.set, plan.guards, now);
         if (!hit) {
@@ -253,6 +296,18 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
         }
       }
       await insertRebateHistory(trx, row, plan.steps, source, now);
+      if (unmapped !== null) {
+        // D10-862 ①: platform and raw text only (no order / rights number, user or amount).
+        logger.warn(
+          {
+            alert: REASON_SUB_UNMAPPED_ALERT,
+            platform: row.platform,
+            violation_type: unmapped.raw,
+            reason_sub: 'PUNISH_ORDER',
+          },
+          'violation text outside the sub-reason table; fallback sub-reason written',
+        );
+      }
       if (plan.invalidated !== null) {
         await deps.events.publish(trx, {
           appId: row.app_id,
@@ -672,8 +727,12 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       change: OrderUpdateChange,
       source: OrderStatusSource,
     ): Promise<void> {
-      await execute(trx, refOf(change), 'sync', (row, now) =>
-        decideUpdate(trx, row, change, source, now),
+      await execute(
+        trx,
+        refOf(change),
+        'sync',
+        (row, now) => decideUpdate(trx, row, change, source, now),
+        { fromPlatformStatus: change.from_status },
       );
       await closeAnsweredRights(trx, change);
     },
@@ -706,13 +765,20 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       trx: Transaction<DB>,
       order: RebateChangeInput,
       event: PrecreditEvent,
+      subContext?: ReasonSubContext,
     ): Promise<void> {
       const ref: RebateOrderRef = {
         appId: order.appId,
         orderId: order.orderId,
         attrAt: order.attrAt,
       };
-      await execute(trx, ref, 'system', (row) => decideApply(trx, row, order, event));
+      await execute(
+        trx,
+        ref,
+        'system',
+        (row) => decideApply(trx, row, order, event),
+        subContext ?? {},
+      );
     },
   };
 }

@@ -1,7 +1,9 @@
 // B2-04j：返利列的读取、CAS 写入与 rebate 历史（只插入）。只写 settlement 拥有的列：rebate_status、reason、
 // hold、hold_reason、settle_period、received_synced_at，以及 row_version / updated_at（BR-FUND-01；02 §18）；
 // B2-03r：R7 重算预估的 commission_version + 1 也在这条 CAS 里（BR-CALC-15）。
+// B2-04zze：展示用子原因 reason_sub 与 reason 同一条 CAS 写；终态单的子原因细化走 casReasonSub。
 // 调用方已在本事务里取得子订单 advisory 锁。
+import type { OrderReasonSub } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Selectable, Transaction } from 'kysely';
 import type { RebateStep, VoidReason } from '../domain/rules.ts';
@@ -32,6 +34,8 @@ export async function readRebateOrder(
 export interface RebateSet {
   readonly rebate_status?: string;
   readonly reason?: VoidReason;
+  /** B2-04zze: written only with reason (domain/reason-sub.ts). */
+  readonly reason_sub?: OrderReasonSub | null;
   readonly hold?: true;
   readonly hold_reason?: 'UNMAPPED_STATUS';
   readonly settle_period?: string;
@@ -75,6 +79,36 @@ export async function casUpdateRebate(
   }
   const result = await query.executeTakeFirst();
   return (result.numUpdatedRows ?? 0n) > 0n;
+}
+
+/**
+ * B2-04zze: only orders.reason_sub (a later, more specific PUNISH sub-reason on a terminal order),
+ * row_version + 1, updated_at; WHERE rebate_status, reason and row_version as read under the lock and
+ * reason_sub_manual = false. Returns whether one row was hit.
+ */
+export async function casReasonSub(
+  trx: Transaction<DB>,
+  current: Pick<
+    OrderRow,
+    'app_id' | 'order_id' | 'attr_at' | 'rebate_status' | 'row_version' | 'reason'
+  >,
+  value: OrderReasonSub | null,
+  now: Date,
+): Promise<boolean> {
+  if (current.reason === null) return false;
+  const result = await trx
+    .withSchema('app')
+    .updateTable('orders')
+    .set({ reason_sub: value, row_version: current.row_version + 1, updated_at: now })
+    .where('app_id', '=', current.app_id)
+    .where('order_id', '=', current.order_id)
+    .where('attr_at', '=', current.attr_at)
+    .where('rebate_status', '=', current.rebate_status)
+    .where('reason', '=', current.reason)
+    .where('reason_sub_manual', '=', false)
+    .where('row_version', '=', current.row_version)
+    .executeTakeFirst();
+  return (result.numUpdatedRows ?? 0n) === 1n;
 }
 
 export async function insertRebateHistory(

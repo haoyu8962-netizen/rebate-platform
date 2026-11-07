@@ -1,0 +1,13 @@
+violation_type,reason_sub,source,verified,note
+违规推广,VIOLATION_PROMO,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+店铺淘宝客,SHOP_TK,doc,false,08 BR-TEXT-05 子原因表 desc 原文；淘宝文档列出的违规类型
+站内推广,INSITE_PROMO,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+违规代购,PROXY_BUY,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+虚假交易,FAKE_TRADE,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+订单虚假交易,FAKE_TRADE,doc,false,淘宝文档列出的违规类型（08 BR-TEXT-05 写入来源 ①）
+站内二次售卖,INSITE_RESALE,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+累计超出上限,OVER_LIMIT,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+扰乱市场秩序,MARKET_DISRUPT,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+多笔交易异常,MULTI_TRADE_ABNORMAL,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+单笔交易异常,SINGLE_TRADE_ABNORMAL,doc,false,08 BR-TEXT-05 子原因表 desc 原文
+风险订单,RISK_ORDER,doc,false,08 BR-TEXT-05 子原因表 desc 原文

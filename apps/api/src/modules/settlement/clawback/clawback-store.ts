@@ -3,6 +3,7 @@
 // (rebate_status, booked pair, reason, diff_reason_code, rights_pending, row_version / updated_at;
 // BR-FUND-01), order_rights (written only through settlement, BR-FUND-01), beneficiary_credits
 // (BR-FUND-04 ⑫) and settle_adjustments (BR-FUND-09 ②).
+import type { OrderReasonSub } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Selectable, Transaction } from 'kysely';
 
@@ -237,6 +238,8 @@ export interface ClawbackCas {
   readonly reason?: string;
   /** R9: PART_REFUND; R8: unchanged (undefined). */
   readonly diff_reason_code?: string;
+  /** B2-04zze: R8's display sub-reason, written with the reason; undefined → unchanged. */
+  readonly reason_sub?: { readonly value: OrderReasonSub | null };
   /**
    * B2-04zk (BR-CALC-15): the R9 whose N_new came from a rights deduction moves the version in
    * this same CAS, with the optimistic guard commission_version = the version read under the lock.
@@ -260,6 +263,7 @@ export async function casClawbackOrder(
       booked_n_fen: cas.booked_n_fen,
       ...(cas.reason === undefined ? {} : { reason: cas.reason }),
       ...(cas.diff_reason_code === undefined ? {} : { diff_reason_code: cas.diff_reason_code }),
+      ...(cas.reason_sub === undefined ? {} : { reason_sub: cas.reason_sub.value }),
       ...(cas.commission_version === undefined
         ? {}
         : { commission_version: cas.commission_version.to }),

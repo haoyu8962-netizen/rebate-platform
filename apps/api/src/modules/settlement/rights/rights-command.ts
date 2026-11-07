@@ -48,6 +48,11 @@
 //   4. orders.rights_pending recomputed in the same transaction (some row of the order PROCESSING
 //      or WAIT_COMMISSION) and written with a CAS (row_version + 1, updated_at = input.now) only
 //      when it changes.
+// B2-04zze (08 BR-TEXT-05「子原因 reason_sub」; D10-862): the R6 / R8 this command triggers write
+// orders.reason_sub with the reason (rebate port / clawback), from the record type and the
+// union's violation_type of a punishment (passed through, never stored). A successful punishment
+// on a terminal VOID / CLAWED_BACK order whose parent stays PUNISH only refines PUNISH_ORDER (or
+// an empty sub-reason) to a mapped sub-reason; status, reason, history and ledger are unchanged.
 // BR-FUND-06 is 待验证 (which platforms send a「处理中」signal): no platform signal is invented
 // here; a platform without one only reaches record with the result.
 // Time only from input.now / the injected Clock; amounts only through @couli/money.
@@ -64,7 +69,14 @@ import type { ClawbackCause, ClawbackOrder } from '../clawback/index.ts';
 import { computeRightsPending, casRightsPending } from '../clawback/clawback-store.ts';
 import type { PrecreditEvent, RebatePort } from '../rebate/application/rebate.ts';
 import { isPrecredit } from '../rebate/domain/rules.ts';
-import { readRebateOrder } from '../rebate/infra/rebate-store.ts';
+import {
+  REASON_SUB_UNMAPPED_ALERT,
+  reasonSubOnLaterPunish,
+  type ReasonSubContext,
+  type ReasonSubMaps,
+} from '../rebate/domain/reason-sub.ts';
+import { casReasonSub, readRebateOrder } from '../rebate/infra/rebate-store.ts';
+import { defaultReasonSubMaps } from '../rebate/infra/reason-sub-table.ts';
 import {
   findRights,
   insertRights,
@@ -105,6 +117,11 @@ export interface RightsCommandDependencies {
    * reopen is refused before anything is written (every other path works without it).
    */
   readonly audit?: RightsSystemAudit;
+  /**
+   * B2-04zze: the sub-reason tables (specs/reason-sub-map/); absent → the process' tables, read
+   * once when the port is built.
+   */
+  readonly reasonSubMaps?: ReasonSubMaps;
 }
 
 type StoredStatus = 'PROCESSING' | 'WAIT_COMMISSION' | 'SUCCEEDED' | 'FAILED';
@@ -180,8 +197,55 @@ function reopensAsSucceeded(
   );
 }
 
+/** B2-04zze: what the record tells the sub-reason written with the reason. */
+function subContextOf(input: RightsRecordInput): ReasonSubContext {
+  return {
+    rightsType: input.type,
+    ...(input.type === 'PUNISH' ? { violationType: input.violation_type ?? null } : {}),
+  };
+}
+
 export function createRightsCommandPort(deps: RightsCommandDependencies): RightsCommandPort {
   const { logger, clawback, rebate, audit } = deps;
+  const reasonSubMaps = deps.reasonSubMaps ?? defaultReasonSubMaps();
+
+  /**
+   * B2-04zze: a successful punishment on a terminal order (status and reason unchanged): only a
+   * PUNISH_ORDER / empty sub-reason of a PUNISH order is refined, in its own CAS.
+   */
+  async function refineTerminalSub(
+    trx: Transaction<DB>,
+    input: RightsRecordInput,
+    mappedOnly = false,
+  ): Promise<void> {
+    if (input.type !== 'PUNISH') return;
+    const ref = {
+      appId: input.before.app_id,
+      orderId: input.order_id,
+      attrAt: input.before.attr_at,
+    };
+    const order = await readRebateOrder(trx, ref);
+    if (order === undefined) throw new Error('settlement rights: order not found for app');
+    if (!isTerminal(order.rebate_status)) return;
+    const decision = reasonSubOnLaterPunish(order, input.violation_type, reasonSubMaps, {
+      mappedOnly,
+    });
+    if (!decision.write) return;
+    const ok = await casReasonSub(trx, order, decision.value, input.now);
+    if (!ok) throw new Error('settlement rights: reason_sub CAS matched no row');
+    if (decision.unmapped !== null) {
+      // D10-862 ①: platform and raw text only (no order / rights number, user or amount).
+      logger.warn(
+        {
+          alert: REASON_SUB_UNMAPPED_ALERT,
+          platform: order.platform,
+          violation_type: decision.unmapped.raw,
+          reason_sub: 'PUNISH_ORDER',
+        },
+        'violation text outside the sub-reason table; fallback sub-reason written',
+      );
+    }
+  }
 
   /** BR-FUND-06 / 07 before credit: R6 / R7 through the rebate port (generated transition()). */
   async function precredit(
@@ -239,7 +303,7 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
             : { ...unchanged, settleCommissionFen: nNew };
       }
     }
-    await rebate.apply(trx, change, event);
+    await rebate.apply(trx, change, event, subContextOf(input));
   }
 
   /** BR-FUND-08 on a CREDITED order: the clawback's rights success entry (ref R{order_rights.id}). */
@@ -257,6 +321,7 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
       ref: { kind: 'rights', orderRightsId: rightsId },
       newCommissionFen: null,
       rightsDeductFen: input.type === 'RIGHTS' ? input.deduction_commission_fen : null,
+      reasonSub: subContextOf(input),
     });
     logger.info(
       {
@@ -328,6 +393,17 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
         (stored.status === 'WAIT_COMMISSION' && status === 'SUCCEEDED') ||
         reopens;
       if (!resolves) {
+        if (
+          input.type === 'PUNISH' &&
+          stored.status === 'SUCCEEDED' &&
+          status === 'SUCCEEDED' &&
+          isTerminal(order.rebate_status)
+        ) {
+          // B2-04zze (money r1 S1): the same punishment replayed with a violation text the first
+          // delivery lacked refines PUNISH_ORDER / an empty sub-reason; the record, status,
+          // amounts and history stay; still a duplicate.
+          await refineTerminalSub(trx, input, true);
+        }
         logger.info({ ...base, outcome: 'duplicate' }, 'rights record replayed');
         return { kind: 'duplicate' };
       }
@@ -370,7 +446,11 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
 
     if (isPrecredit(order.rebate_status)) await precredit(trx, input, status);
     else if (order.rebate_status === 'CREDITED') await credited(trx, input, status, rightsId);
-    // VOID / CLAWED_BACK: recorded only (BR-FUND-01 细则「订单锁定」).
+    else if (isTerminal(order.rebate_status) && status === 'SUCCEEDED') {
+      // VOID / CLAWED_BACK: recorded only (BR-FUND-01 细则「订单锁定」); B2-04zze refines the
+      // display sub-reason of a PUNISH order only.
+      await refineTerminalSub(trx, input);
+    }
 
     await syncRightsPending(trx, input);
     logger.info({ ...base, status, outcome: 'applied' }, 'rights record applied');

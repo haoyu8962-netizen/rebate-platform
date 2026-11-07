@@ -125,12 +125,25 @@ export interface RightsSyncItem {
   readonly platform_rights_no: string;
 }
 
+/**
+ * B2-04zze: what a record carries besides the item, kept off RightsSyncItem (whose six fields
+ * B1-04zza's rule tests pin). violation_type: UnionPunish.violation_type of a punishment (null when
+ * absent), passed on to rights.record as is; refunds pass none.
+ */
+export interface RightsSyncExtras {
+  readonly violation_type?: string | null | undefined;
+}
+
 export type RightsSyncWriteResult = {
   readonly kind: 'applied' | 'duplicate' | 'not_applicable' | 'not_found';
 };
 
 export interface RightsSyncWriter {
-  write(target: RightsSyncTarget, item: RightsSyncItem): Promise<RightsSyncWriteResult>;
+  write(
+    target: RightsSyncTarget,
+    item: RightsSyncItem,
+    extras?: RightsSyncExtras,
+  ): Promise<RightsSyncWriteResult>;
 }
 
 export interface RightsSyncWriterDeps {
@@ -435,7 +448,7 @@ export function createRightsSyncWriter(deps: RightsSyncWriterDeps): RightsSyncWr
   const { db, clock, rights } = deps;
   const ports = { rights };
   return {
-    async write(target, item) {
+    async write(target, item, extras) {
       return await db.transaction().execute(async (trx): Promise<RightsSyncWriteResult> => {
         const found = await findOrderForRights(trx, {
           app_id: target.app_id,
@@ -459,6 +472,10 @@ export function createRightsSyncWriter(deps: RightsSyncWriterDeps): RightsSyncWr
           occurred_at: item.occurred_at,
           platform_rights_no: item.platform_rights_no,
           now: clock.now(),
+          // B2-04zze: a punishment's violation text, only for settlement's reason_sub mapping.
+          ...(extras?.violation_type === undefined
+            ? {}
+            : { violation_type: extras.violation_type }),
         });
         return { kind: result.kind };
       });
