@@ -1,0 +1,22 @@
+id: B2-04zzb
+repo: rebate-platform
+title: 义务关闭关联凭证（FU-OBLIGATION-CLOSE-VOUCHER-REF，D10-797）——R9 没收、R10 处置关闭待补记义务时，同事务把本事务平台凭证 id 写入 beneficiary_credits.voucher_id；平台差额 0 未写凭证时 null、closed_ref 兜底；R8 作废不带凭证
+type: impl
+# 2026-11-07 入账（admin-backend，编排 D10-794 ①、D10-797；方案 couli-runs/FU-OBLIGATION-CLOSE-VOUCHER-REF/plan.md）。B2-04zza（identity）合并后开工：同改 settleObligations，一次覆盖 R9 与 R10；与 withdraw 的 B2-04zk 后合者变基。无迁移（列、CHECK、授权在 0066）、不改契约、不动冻结用例。
+# refs 留空：BR-FUND-04 原文 58 KB 超任务书上限；照 B2-05j 先例，⑫「都关联实际履约的凭证」由编排者摘进任务书。RV2，测试与评审新鲜独立 Claude + 只读复核（D10-775）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-store.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-store.test.ts'
+test_paths:
+  - 'test/spec/settlement/obligation-close-voucher/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/obligation-close-voucher/**'
+status: todo
