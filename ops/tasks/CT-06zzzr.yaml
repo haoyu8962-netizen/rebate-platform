@@ -1,0 +1,21 @@
+id: CT-06zzzr
+repo: rebate-platform
+title: CT-06zzzr：verify-props 两轮拆成独立作业、各 3 片、各 40 分钟上限，加 --logHeapUsage（FU-CI-PROPS-HEADROOM，D10-902）
+type: guard-change
+# 2026-11-07 入账（agent2-acct4），D10-894 / D10-902。方案 couli-runs/FU-CI-PROPS-HEADROOM/plan.md：verify-props-1 今天成功中位 52.7 分、p90 58.5 分（上限 60），6 次在 60 分被砍；
+#   每作业跑固定种子与按提交种子两轮，vitest --shard 按路径均分文件数，片 1 耗时为片 2 的 2.3 倍。
+# 改法：verify-props-1..3 只跑固定种子一轮（--shard=i/3），新增 verify-props-sha-1..3 只跑按提交种子一轮（--shard=i/3），各 timeout-minutes 40，命令加 --logHeapUsage；
+#   同步 verify-reuse 作业清单与 ci-gate 的依赖、汇总与结论；PROP_RUNS / PROP_SEED 取值、跑法与上传的通过记录口径不变。不调大 NODE_OPTIONS 堆（4 核 16 GB 已名义超配）。
+# 只改 .github/workflows/ci.yml 与本台账；第三类保护路径，RV2；Opus 实现，Codex 对抗评审（medium）；按 #24 / #16 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'ops/tasks/CT-06zzzr.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: done
+pr: 2693

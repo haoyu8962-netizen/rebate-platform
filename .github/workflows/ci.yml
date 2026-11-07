@@ -40,7 +40,9 @@ jobs:
     # labeled / unlabeled event the verify jobs reuse what already passed instead of running a
     # second time. Reuse holds only when, for EACH of verify-static, verify-unit, verify-spec-1,
     # verify-spec-2 (the four jobs that replaced verify-fast, CT-06zx), verify-props-1,
-    # verify-props-2 (the two shards that replaced verify-props, CT-06zxa), verify-int-1 and
+    # verify-props-2, verify-props-3, verify-props-sha-1, verify-props-sha-2, verify-props-sha-3
+    # (the fixed-seed and commit-SHA-seed passes, three shards each, that replaced verify-props,
+    # CT-06zxa, D10-902 / CT-06zzzr), verify-int-1 and
     # verify-int-2 (the two shards that replaced verify-int, CT-06zzb), an
     # earlier run of this workflow file (ci.yml) for the same PR head SHA has that job's latest
     # attempt concluded `success` AND carries the artifact `verified-<job>-<tree>` that the job
@@ -71,7 +73,7 @@ jobs:
           runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
             --jq ".workflow_runs[] | select(.id != $RUN_ID) | .id")
           reuse=true
-          for job in verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-int-1 verify-int-2; do
+          for job in verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2; do
             found=''
             for run in $runs; do
               ok=$(gh api "repos/$REPO/actions/runs/$run/jobs?filter=latest&per_page=100" \
@@ -316,17 +318,20 @@ jobs:
     # D10-242 (CT-06zm): skipped only when verify-reuse found a success of this very job on the
     # same tested tree (see verify-reuse); every other event, and any failure of verify-reuse,
     # runs it in full.
-    # D10-304 (CT-06zxa): split into verify-props-1 / verify-props-2, each running both passes on
-    # half of the spec-test files (vitest --shard=i/2, as verify-spec-1 / -2); runs, seeds and
-    # steps unchanged. The 12 latest green runs of the single job took 27–53 min (p50 40, p90
-    # 52.5) against its 60-minute cap; each shard keeps the 60-minute cap. pnpm store cached.
+    # D10-902 (CT-06zzzr, FU-CI-PROPS-HEADROOM): the two passes are separate jobs, each on a third
+    # of the spec-test files (vitest --shard=i/3): verify-props-1 / -2 / -3 run the fixed-seed pass,
+    # verify-props-sha-1 / -2 / -3 the commit-SHA-seed pass; runs, seeds and commands unchanged,
+    # except --logHeapUsage (diagnostics only: each file's heap is printed). Each job uploads its
+    # own `verified-<job>-<tree>` record once its one pass passed. Before this (D10-304, CT-06zxa)
+    # verify-props-1 / -2 each ran both passes on half of the files (--shard=i/2) under a
+    # 60-minute cap; on 2026-11-07 verify-props-1 took p50 52.7 / p90 58.5 min, timed out at 60
+    # min six times and hit one worker OOM, its shard holding 2.3× the test time of the other.
+    # 40 minutes: the slowest single-pass third is estimated at ~24 min (incl. install), with a
+    # 1.5× margin 35, rounded up. NODE_OPTIONS is left as set at workflow level.
     needs: [verify-reuse]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
     runs-on: ubuntu-latest
-    # 35 → 60 (2026-10-19, CT-06z): green in the 30 latest ci runs 16m40s–32m13s, p90 31m30s
-    # (90% of the cap); the maximum with a 1.5× margin, rounded up to a multiple of 5, is 50,
-    # plus 10 for the [AC-B2-01j#20] property test of B2-01l (#812), which makes this job longer.
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -345,18 +350,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Property tests, 100k runs, fixed seed
-        run: pnpm --filter @couli/spec-tests run test --shard=1/2
+        run: pnpm --filter @couli/spec-tests run test --shard=1/3 --logHeapUsage
         env:
           PROP_RUNS: '100000'
-      - name: Property tests, 100k runs, seed from commit SHA
-        run: |
-          PROP_SEED="$((16#${COMMIT_SHA:0:8}))"
-          export PROP_SEED
-          echo "PROP_SEED=${PROP_SEED}"
-          pnpm --filter @couli/spec-tests run test --shard=1/2
-        env:
-          PROP_RUNS: '100000'
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-verify-props-1-${{ steps.tested.outputs.tree }}
@@ -367,14 +363,11 @@ jobs:
           if-no-files-found: error
 
   verify-props-2:
-    # Same as verify-props-1, other shard.
+    # Same as verify-props-1, shard 2/3 (fixed seed).
     needs: [verify-reuse]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
     runs-on: ubuntu-latest
-    # 35 → 60 (2026-10-19, CT-06z): green in the 30 latest ci runs 16m40s–32m13s, p90 31m30s
-    # (90% of the cap); the maximum with a 1.5× margin, rounded up to a multiple of 5, is 50,
-    # plus 10 for the [AC-B2-01j#20] property test of B2-01l (#812), which makes this job longer.
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -393,21 +386,171 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Property tests, 100k runs, fixed seed
-        run: pnpm --filter @couli/spec-tests run test --shard=2/2
+        run: pnpm --filter @couli/spec-tests run test --shard=2/3 --logHeapUsage
         env:
           PROP_RUNS: '100000'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-props-2-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-props-3:
+    # Same as verify-props-1, shard 3/3 (fixed seed).
+    needs: [verify-reuse]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Property tests, 100k runs, fixed seed
+        run: pnpm --filter @couli/spec-tests run test --shard=3/3 --logHeapUsage
+        env:
+          PROP_RUNS: '100000'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-props-3-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-props-sha-1:
+    # The commit-SHA-seed pass of verify-props-1 (D10-902, CT-06zzzr), shard 1/3.
+    needs: [verify-reuse]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Property tests, 100k runs, seed from commit SHA
         run: |
           PROP_SEED="$((16#${COMMIT_SHA:0:8}))"
           export PROP_SEED
           echo "PROP_SEED=${PROP_SEED}"
-          pnpm --filter @couli/spec-tests run test --shard=2/2
+          pnpm --filter @couli/spec-tests run test --shard=1/3 --logHeapUsage
         env:
           PROP_RUNS: '100000'
           COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: verified-verify-props-2-${{ steps.tested.outputs.tree }}
+          name: verified-verify-props-sha-1-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-props-sha-2:
+    # The commit-SHA-seed pass of verify-props-2 (D10-902, CT-06zzzr), shard 2/3.
+    needs: [verify-reuse]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Property tests, 100k runs, seed from commit SHA
+        run: |
+          PROP_SEED="$((16#${COMMIT_SHA:0:8}))"
+          export PROP_SEED
+          echo "PROP_SEED=${PROP_SEED}"
+          pnpm --filter @couli/spec-tests run test --shard=2/3 --logHeapUsage
+        env:
+          PROP_RUNS: '100000'
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-props-sha-2-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-props-sha-3:
+    # The commit-SHA-seed pass of verify-props-3 (D10-902, CT-06zzzr), shard 3/3.
+    needs: [verify-reuse]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Property tests, 100k runs, seed from commit SHA
+        run: |
+          PROP_SEED="$((16#${COMMIT_SHA:0:8}))"
+          export PROP_SEED
+          echo "PROP_SEED=${PROP_SEED}"
+          pnpm --filter @couli/spec-tests run test --shard=3/3 --logHeapUsage
+        env:
+          PROP_RUNS: '100000'
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-props-sha-3-${{ steps.tested.outputs.tree }}
           # The artifact name is the record (job and tested tree); the file only holds the tree id,
           # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
           path: ${{ runner.temp }}/verified-tree.txt
@@ -850,7 +993,8 @@ jobs:
   ci-gate:
     # Summary job: the only required check of this workflow (ops/branch-protection.json).
     # CT-06zx: verify-static, verify-unit, verify-spec-1 and verify-spec-2 replace verify-fast;
-    # each must pass (or be reused) on its own; so must verify-props-1 and verify-props-2 (CT-06zxa),
+    # each must pass (or be reused) on its own; so must verify-props-1 / -2 / -3 and
+    # verify-props-sha-1 / -2 / -3 (CT-06zxa, split into one pass per job by D10-902 / CT-06zzzr),
     # and verify-int-1 and verify-int-2 (CT-06zzb).
     if: always()
     needs:
@@ -860,6 +1004,10 @@ jobs:
       - verify-spec-2
       - verify-props-1
       - verify-props-2
+      - verify-props-3
+      - verify-props-sha-1
+      - verify-props-sha-2
+      - verify-props-sha-3
       - verify-int-1
       - verify-int-2
       - guard-git
@@ -869,7 +1017,7 @@ jobs:
     steps:
       - name: Summarise
         run: |
-          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-int-1=${INT1} verify-int-2=${INT2} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE}"
+          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE}"
           # A verify job passes when it succeeded, or (label event, D10-242) when verify-reuse
           # itself succeeded and found its success on the same tested tree, so it was skipped.
           reused() { [ "$REUSE_RESULT" = success ] && [ "$REUSE" = true ] && [ "$1" = skipped ]; }
@@ -879,6 +1027,10 @@ jobs:
           [ "$SPEC2" = success ] || reused "$SPEC2" || exit 1
           [ "$PROPS1" = success ] || reused "$PROPS1" || exit 1
           [ "$PROPS2" = success ] || reused "$PROPS2" || exit 1
+          [ "$PROPS3" = success ] || reused "$PROPS3" || exit 1
+          [ "$PROPSSHA1" = success ] || reused "$PROPSSHA1" || exit 1
+          [ "$PROPSSHA2" = success ] || reused "$PROPSSHA2" || exit 1
+          [ "$PROPSSHA3" = success ] || reused "$PROPSSHA3" || exit 1
           [ "$INT1" = success ] || reused "$INT1" || exit 1
           [ "$INT2" = success ] || reused "$INT2" || exit 1
           if [ "$EVENT" = pull_request ]; then
@@ -893,6 +1045,10 @@ jobs:
           SPEC2: ${{ needs.verify-spec-2.result }}
           PROPS1: ${{ needs.verify-props-1.result }}
           PROPS2: ${{ needs.verify-props-2.result }}
+          PROPS3: ${{ needs.verify-props-3.result }}
+          PROPSSHA1: ${{ needs.verify-props-sha-1.result }}
+          PROPSSHA2: ${{ needs.verify-props-sha-2.result }}
+          PROPSSHA3: ${{ needs.verify-props-sha-3.result }}
           INT1: ${{ needs.verify-int-1.result }}
           INT2: ${{ needs.verify-int-2.result }}
           GUARD: ${{ needs.guard-git.result }}
