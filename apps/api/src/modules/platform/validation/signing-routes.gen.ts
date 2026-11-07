@@ -753,6 +753,11 @@ export const CONTRACT_SIGNING_ROUTES = [
   },
   {
     "method": "POST",
+    "path": "/admin/v1/orders/:order_id/reason-sub",
+    "signed": false
+  },
+  {
+    "method": "POST",
     "path": "/admin/v1/orders/:order_id/reassign",
     "signed": false
   },

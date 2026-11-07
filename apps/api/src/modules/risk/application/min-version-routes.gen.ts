@@ -1525,6 +1525,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": false
   },
   {
+    "operationId": "adminSetOrderReasonSub",
+    "method": "POST",
+    "path": "/admin/v1/orders/:order_id/reason-sub",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "adminReassignOrder",
     "method": "POST",
     "path": "/admin/v1/orders/:order_id/reassign",

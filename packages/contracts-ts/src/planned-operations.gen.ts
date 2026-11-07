@@ -15,6 +15,7 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "adminRejectSettleAdjustBatch",
   "adminRunSettleAdjust",
   "adminSearch",
+  "adminSetOrderReasonSub",
   "bindOauthIdentity",
   "listAgentSessionMessages",
   "loginByHuawei",

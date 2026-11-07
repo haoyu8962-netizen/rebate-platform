@@ -51,6 +51,7 @@ export const ENUM_BINDINGS: Readonly<Record<string, string>> = {
   OrderStatusGroup: 'order_status_group',
   OrderDisplayStatus: 'display_status',
   OrderReasonCode: 'order_reason',
+  OrderReasonSub: 'order_reason_sub',
   OrderTimelineNode: 'order_timeline_node',
   H5TokenScope: 'h5_token_scope',
   LoginProvider: 'login_provider',
@@ -297,6 +298,9 @@ export const ENUM_SUBSETS: Readonly<Record<string, string>> = {
   // Operators hold / unhold with RISK or CS only; UNMAPPED_STATUS is set by the system alone
   // (BR-FUND-02, BR-FUND-06 细则「后台 hold / unhold」, CT-24n).
   AdminOrderStaffHoldReason: 'order_hold_reason',
+  // A punish import picks one of the 12 PUNISH sub-reasons (08 BR-TEXT-05, D10-819, CT-24zw); the
+  // 「无」 choice is AdminOrderReasonSubNone (`none`), not a value of order_reason_sub.
+  AdminOrderPunishReasonSub: 'order_reason_sub',
   // One multipart branch per import form (CT-24n): rights / punish by sub-order, channel alone.
   'AdminRightsImportByOrder/properties/kind': 'rights_import_kind',
   'AdminRightsImportChannel/properties/kind': 'rights_import_kind',

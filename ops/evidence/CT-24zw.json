@@ -1,0 +1,37 @@
+{
+  "task": "CT-24zw",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "439bc242310a488a45ef9ea5f3060bc1268cc480",
+  "red_tests": [],
+  "risk_note": "RV1 (contracts + generated files only): order_reason_sub enum (15 codes with parent PUNISH/REFUND/RIGHTS, 08 BR-TEXT-05 sub-reason table at SPEC_REF b79958d) and order_reason_sub.<SUB>.desc texts verbatim; adminCreateRightsImport gains an optional reason_sub part (punish only; none = explicitly empty; anything else or another kind → 20001 [reason_sub]) echoed in list/detail; new planned adminSetOrderReasonSub (POST /admin/v1/orders/{order_id}/reason-sub, CAS, order.claim, audit order_reason_sub_set, reason_sub only); AdminOrderDetail gains optional nullable reason_sub. Additive only. Admin hint/none texts left to the admin front-end texts (03 §9); App order detail reason_sub not in this contract (follow-up). Contract task, tester none (no rule tests). Codex contract r1 pass (S2: the multipart schema cannot itself reject reason_sub on kind=rights — the implementation's business check must; recorded for the implementation task). Full verification is the required CI checks (approvals #21).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "contract",
+      "checklist_complete": true,
+      "note": "Codex contract r1 pass, S2 x1 (couli-runs/CT-24zw/review-codex.json)"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "392f70389f9c443a8ba7ecd43f918999b8123411",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

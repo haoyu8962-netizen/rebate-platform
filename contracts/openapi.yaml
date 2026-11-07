@@ -13402,6 +13402,96 @@ paths:
                   $ref: '#/components/examples/AdminTokenExpired'
         5XX:
           $ref: '#/components/responses/ServerError'
+  /admin/v1/orders/{order_id}/reason-sub:
+    post:
+      operationId: adminSetOrderReasonSub
+      tags:
+        - admin-orders
+      summary: Change the sub-reason of one sub-order (改子原因)
+      description: |
+        The 【改子原因】 action of the order detail page (08 BR-TEXT-05 子原因 reason_sub 写入来源 ②
+        后台人工; D10-818 / D10-819): an operator corrects the sub-reason the automatic mapping
+        wrote (for instance PUNISH_ORDER, the fallback when nothing matched) with a single choice
+        from the sub-reasons of the order's reason plus 「无」; the console notes next to the choice
+        that the App shows it to the user (App 端会展示给用户). Planned: no route yet (CT-24zw
+        declares it; the implementation task removes the marker). Permission point `order.claim`
+        (04 §11.2); lacking it is 10403 with `data.reason=admin_permission_denied`. No step-up, no
+        Idempotency-Key.
+
+        `reason_sub` is a value of enum order_reason_sub that belongs to the order's current
+        `reason` (PUNISH: the 12 PUNISH sub-reasons; REFUND: IN_SALE or AFTER_SETTLE; RIGHTS:
+        AFTER_SALE), or `none` (「无」: orders.reason_sub becomes null). A value outside the enum and
+        `none`, a sub-reason of another reason, or any value while the order's reason is not
+        PUNISH, REFUND or RIGHTS (including null) is 20001 with `data.fields=[reason_sub]`. An
+        unknown `order_id` or an order of another app is 20001 with `data.fields=[order_id]` (no
+        404, as GET /admin/v1/orders/{order_id}).
+
+        Only orders.reason_sub changes, and orders.reason_sub_manual is set (人工选过), so later
+        automatic mapping from a sync does not overwrite it (08 BR-TEXT-05). Amounts, `reason`,
+        its kind, rebate_status, platform_status and hold are not changed, and no status
+        transition is written. CAS: `expected_row_version` is the `row_version` GET
+        /admin/v1/orders/{order_id} returned; a mismatch is 20902 with `data.resource=order`.
+        Writes an audit record (action `order_reason_sub_set`, with the old and new
+        reason_sub, `none` written as null, and the order's reason; no personal information). The
+        response is the order detail as it is now (same shape as GET /admin/v1/orders/{order_id}).
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+        - 20902
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminOrderIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminOrderReasonSubSetRequest'
+            example:
+              reason_sub: FAKE_TRADE
+              expected_row_version: 9
+      responses:
+        '200':
+          description: The order detail as it is now (sub-reason changed).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrderDetailResponse'
+              examples:
+                reasonSubSet:
+                  $ref: '#/components/examples/AdminOrderDetailReasonSubSet'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not changed (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                unknownOrder:
+                  $ref: '#/components/examples/AdminUnknownOrder'
+                reasonSubInvalid:
+                  $ref: '#/components/examples/AdminOrderReasonSubInvalid'
+                conflict:
+                  $ref: '#/components/examples/AdminOrderReasonSubConflict'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
   /admin/v1/orders/{order_id}/reassign:
     post:
       operationId: adminReassignOrder
@@ -13839,6 +13929,15 @@ paths:
           it is accepted and ignored (04 §6.6; 08 BR-FUND-06). Rows outside the window are
           skipped (`skipped_rows`; row rules in BR-FUND-06 细则「维权导入任务」). With
           `kind=channel` any of the three is 20001 with `data.fields` naming it;
+        - for punish only: optional `reason_sub` (08 BR-TEXT-05 子原因, D10-818 / D10-819), the
+          sub-reason the console's single choice picked (选项旁注明「App 端会展示给用户」): one of the
+          12 sub-reasons of PUNISH (enum order_reason_sub) or `none` (「无」: write no
+          sub-reason). Not sent: the automatic mapping decides, as before. Sent: it replaces the
+          automatic mapping for the orders this import marks PUNISH (`none` writes null) and counts
+          as chosen by hand, so a later sync does not overwrite it. Any other value, including a
+          sub-reason of REFUND or RIGHTS, is 20001 with `data.fields=[reason_sub]`; so is
+          `reason_sub` with `kind=rights` (维权单 has no manual choice, D10-819 ②) or with
+          `kind=channel`;
         - `file`: the xlsx file, at most 10,000 rows (1 万行).
 
         A file that is not xlsx or cannot be read is 20001 with `data.fields=[file]`, and so is a
@@ -13936,6 +14035,15 @@ paths:
                       fields:
                         - kind
                     trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+                reasonSubInvalid:
+                  summary: 20001 reason_sub not a sub-reason of PUNISH nor none, or sent with kind=rights or kind=channel
+                  value:
+                    code: 20001
+                    msg: 参数错误
+                    data:
+                      fields:
+                        - reason_sub
+                    trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
                 timeBasisMissing:
                   summary: 20001 from / to without time_basis, or time_basis with kind=channel
                   value:
@@ -13983,6 +14091,8 @@ paths:
         the counts but no `failures`; the row failures are in GET
         /admin/v1/rights-imports/{import_id}. The importing admin is flat as `created_by` and
         `created_by_name` (display_name, else the username; null when the account is deleted).
+        `reason_sub` echoes the part the import was created with (`none` as sent; null when not
+        sent; CT-24zw).
         Reading does not write an audit record.
       x-auth: admin
       x-error-codes:
@@ -31444,6 +31554,83 @@ components:
         data:
           resource: order
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminOrderDetailReasonSubSet:
+      summary: The order detail after the sub-reason of a clawed-back PUNISH order was set to FAKE_TRADE
+      value:
+        code: 0
+        msg: ''
+        data:
+          order_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f6a01
+          sub_order_id: 231006-1234567891
+          parent_order_id: 231006-1234567890
+          platform: pdd
+          title: 抽纸 3 层 120 抽 24 包
+          image_url: https://img.example.com/p/a1.jpg
+          user:
+            user_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c01
+            phone_masked: '138****5678'
+          paid_at: '2026-10-06T10:58:40+08:00'
+          pay_amount_fen: 3990
+          est_commission_fen: 500
+          settle_commission_fen: 500
+          platform_status: SETTLED
+          rebate_status: CLAWED_BACK
+          hold_reason: null
+          flags:
+            locked: true
+            status_locked: true
+            rights_pending: false
+            hold: false
+          raw_item_id: '61234'
+          product_key: null
+          quantity: 1
+          refunded_quantity: 0
+          display_status: CLAWED_BACK
+          reason: PUNISH
+          reason_sub: FAKE_TRADE
+          buy_type: self
+          scene_basis: param
+          user_basis: claim
+          is_presale: false
+          deposit_paid_at: null
+          received_at: '2026-10-09T15:20:00+08:00'
+          settled_at: '2026-10-20T03:00:00+08:00'
+          credited_at: '2026-11-01T02:00:00+08:00'
+          settle_period: '2026-10'
+          commission_rate_bp: 1000
+          row_version: 10
+          unmapped_pending_open: false
+          last_hold_by: null
+          last_hold_by_name: null
+          last_hold_note: null
+          last_hold_at: null
+          status_history:
+            - field: rebate
+              from: CREDITED
+              to: CLAWED_BACK
+              event: R8
+              source: sync
+              at: '2026-11-05T10:00:00+08:00'
+          commission_split: null
+          link_logs: []
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminOrderReasonSubInvalid:
+      summary: 20001 reason_sub not in order_reason_sub nor none, not a sub-reason of the order's reason, or the order's reason has no sub-reasons
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - reason_sub
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminOrderReasonSubConflict:
+      summary: 20902 row_version moved on since the detail was read
+      value:
+        code: 20902
+        msg: 状态已变化，请刷新后重试
+        data:
+          resource: order
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminOrderAttributionConflict:
       summary: 20902 the order is already attributed (user_id non-null) or locked differs from expected_locked
       value:
@@ -35487,6 +35674,31 @@ components:
         - OTHER_TLJ
         - RELATION_INVALID
         - CANCELLED
+    OrderReasonSub:
+      type: string
+      description: |
+        Order sub-reason (enum order_reason_sub; 08 BR-TEXT-05 子原因 reason_sub, D10-818). Each value
+        belongs to one parent reason: PUNISH has VIOLATION_PROMO to PUNISH_ORDER (12), REFUND has
+        IN_SALE and AFTER_SETTLE, RIGHTS has AFTER_SALE; no other reason has a sub-reason. It only
+        refines what the user reads (「{title}：{sub.desc}」, text key order_reason_sub.<value>.desc
+        from /v1/dict); it never changes an amount, the reason's kind or a status. No sub-reason
+        (「无」) is null; 「其他原因」 is the reason OTHER, not a sub-reason.
+      enum:
+        - VIOLATION_PROMO
+        - SHOP_TK
+        - INSITE_PROMO
+        - PROXY_BUY
+        - FAKE_TRADE
+        - INSITE_RESALE
+        - OVER_LIMIT
+        - MARKET_DISRUPT
+        - MULTI_TRADE_ABNORMAL
+        - SINGLE_TRADE_ABNORMAL
+        - RISK_ORDER
+        - PUNISH_ORDER
+        - IN_SALE
+        - AFTER_SETTLE
+        - AFTER_SALE
     OrderTimelineNode:
       type: string
       description: |
@@ -48455,6 +48667,15 @@ components:
           anyOf:
             - $ref: '#/components/schemas/OrderReasonCode'
             - type: 'null'
+        reason_sub:
+          description: |
+            orders.reason_sub (enum order_reason_sub; 08 BR-TEXT-05 子原因, D10-818): what the App
+            shows after the reason's title; null when there is none (「无」). Optional: absent is the
+            same as null (CT-24zw adds it ahead of the server). Changed by hand with POST
+            /admin/v1/orders/{order_id}/reason-sub.
+          anyOf:
+            - $ref: '#/components/schemas/OrderReasonSub'
+            - type: 'null'
         buy_type:
           description: null until decided.
           anyOf:
@@ -48625,6 +48846,52 @@ components:
           $ref: '#/components/schemas/AdminOrderStaffHoldReason'
         note:
           $ref: '#/components/schemas/AdminOrderHoldNote'
+        expected_row_version:
+          type: integer
+          format: int32
+          minimum: 0
+          description: The order's row_version from GET /admin/v1/orders/{order_id}.
+    AdminOrderReasonSubNone:
+      type: string
+      description: |
+        The 「无」 choice of the console's sub-reason picker (08 BR-TEXT-05): no sub-reason is written
+        (orders.reason_sub becomes null) and the choice still counts as made by hand. Not a value
+        of enum order_reason_sub and never stored as one.
+      enum:
+        - none
+    AdminOrderPunishReasonSub:
+      type: string
+      description: The sub-reasons of the reason PUNISH (subset of enum order_reason_sub; 08 BR-TEXT-05).
+      enum:
+        - VIOLATION_PROMO
+        - SHOP_TK
+        - INSITE_PROMO
+        - PROXY_BUY
+        - FAKE_TRADE
+        - INSITE_RESALE
+        - OVER_LIMIT
+        - MARKET_DISRUPT
+        - MULTI_TRADE_ABNORMAL
+        - SINGLE_TRADE_ABNORMAL
+        - RISK_ORDER
+        - PUNISH_ORDER
+    AdminOrderReasonSubChoice:
+      description: A sub-reason of enum order_reason_sub, or `none` (「无」).
+      anyOf:
+        - $ref: '#/components/schemas/OrderReasonSub'
+        - $ref: '#/components/schemas/AdminOrderReasonSubNone'
+    AdminOrderReasonSubSetRequest:
+      type: object
+      description: |
+        Body of POST /admin/v1/orders/{order_id}/reason-sub. `reason_sub` must belong to the
+        order's current reason (PUNISH, REFUND or RIGHTS) or be `none`.
+      additionalProperties: false
+      required:
+        - reason_sub
+        - expected_row_version
+      properties:
+        reason_sub:
+          $ref: '#/components/schemas/AdminOrderReasonSubChoice'
         expected_row_version:
           type: integer
           format: int32
@@ -49086,12 +49353,22 @@ components:
       type: string
       format: binary
       description: The xlsx file, at most 10,000 rows.
+    AdminRightsImportReasonSub:
+      description: |
+        The sub-reason an operator picks for a punish import (违规单; 08 BR-TEXT-05, D10-819): a
+        sub-reason of PUNISH or `none` (「无」, write no sub-reason). Applied to the orders the
+        import marks PUNISH, instead of the automatic mapping, and counts as chosen by hand.
+      anyOf:
+        - $ref: '#/components/schemas/AdminOrderPunishReasonSub'
+        - $ref: '#/components/schemas/AdminOrderReasonSubNone'
     AdminRightsImportByOrder:
       type: object
       description: |
         multipart parts of a rights (维权单) or punish (违规单) import. A window (`from` or `to`)
         needs both ends and `time_basis`; without a window no row is filtered and `time_basis`
         is optional (sent alone it is accepted and ignored; 04 §6.6, BR-FUND-06 维权导入任务).
+        `reason_sub` is for punish only: with kind=rights it is 20001 with
+        `data.fields=[reason_sub]` (D10-819 ②).
       additionalProperties: false
       required:
         - kind
@@ -49115,6 +49392,8 @@ components:
           type: string
           format: date-time
           description: Window end, exclusive (ISO 8601 with offset).
+        reason_sub:
+          $ref: '#/components/schemas/AdminRightsImportReasonSub'
         file:
           $ref: '#/components/schemas/AdminRightsImportFile'
       dependentRequired:
@@ -49229,6 +49508,14 @@ components:
           $ref: '#/components/schemas/AdminRightsImportRowCount'
         created_by:
           $ref: '#/components/schemas/Id'
+        reason_sub:
+          description: |
+            The `reason_sub` part the import was created with (`none` as sent); null when it was
+            not sent (automatic mapping) and for rights and channel imports. Optional: absent is
+            the same as null (CT-24zw adds it ahead of the server).
+          anyOf:
+            - $ref: '#/components/schemas/AdminRightsImportReasonSub'
+            - type: 'null'
         created_by_name:
           $ref: '#/components/schemas/AdminRightsImportCreatedByName'
         created_at:
@@ -49294,6 +49581,14 @@ components:
           $ref: '#/components/schemas/AdminRightsImportRowCount'
         created_by:
           $ref: '#/components/schemas/Id'
+        reason_sub:
+          description: |
+            The `reason_sub` part the import was created with (`none` as sent); null when it was
+            not sent (automatic mapping) and for rights and channel imports. Optional: absent is
+            the same as null (CT-24zw adds it ahead of the server).
+          anyOf:
+            - $ref: '#/components/schemas/AdminRightsImportReasonSub'
+            - type: 'null'
         created_by_name:
           $ref: '#/components/schemas/AdminRightsImportCreatedByName'
         created_at:

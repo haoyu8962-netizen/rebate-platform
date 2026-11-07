@@ -1583,6 +1583,29 @@ export const order_reason = [
 export type OrderReason = (typeof order_reason)[number];
 
 /**
+ * orders.reason_sub，细分 orders.reason 的说明，不改金额、不改父编码的 kind 与状态迁移；每个值只属一个父编码（说明里写明），PUNISH 12 项、REFUND 2 项、RIGHTS 1 项，其余父编码没有子原因；「无」= 不写（null），「其他原因」= 父编码 OTHER，不另设子原因；用户文案取字典 order_reason_sub.<值>.desc；编码为凑狸自定
+ * Source: 08 BR-TEXT-05 子原因 reason_sub 表；D10-818、D10-819（CT-24zw） (contracts/enums/order.yaml).
+ */
+export const order_reason_sub = [
+  "VIOLATION_PROMO", // 父编码 PUNISH，违规推广
+  "SHOP_TK", // 父编码 PUNISH，店铺淘宝客
+  "INSITE_PROMO", // 父编码 PUNISH，站内推广
+  "PROXY_BUY", // 父编码 PUNISH，违规代购
+  "FAKE_TRADE", // 父编码 PUNISH，虚假交易
+  "INSITE_RESALE", // 父编码 PUNISH，站内二次售卖
+  "OVER_LIMIT", // 父编码 PUNISH，累计超出上限
+  "MARKET_DISRUPT", // 父编码 PUNISH，扰乱市场秩序
+  "MULTI_TRADE_ABNORMAL", // 父编码 PUNISH，多笔交易异常
+  "SINGLE_TRADE_ABNORMAL", // 父编码 PUNISH，单笔交易异常
+  "RISK_ORDER", // 父编码 PUNISH，风险订单
+  "PUNISH_ORDER", // 父编码 PUNISH，处罚订单（自动映射对不上任何一项时的兜底，后续同步得到更具体的子原因可覆盖）
+  "IN_SALE", // 父编码 REFUND，售中退款
+  "AFTER_SETTLE", // 父编码 REFUND，结算后退款
+  "AFTER_SALE", // 父编码 RIGHTS，售后退款
+] as const;
+export type OrderReasonSub = (typeof order_reason_sub)[number];
+
+/**
  * orders.diff_reason_code，差额原因只用这 4 个
  * Source: 规划/04 §2.3；BR-CALC-14；08 §13.2（settle_diff_reason） (contracts/enums/order.yaml).
  */
@@ -2290,6 +2313,7 @@ export const enums = {
   order_status_group,
   order_timeline_node,
   order_reason,
+  order_reason_sub,
   diff_reason,
   order_rights_status,
   order_rights_type,

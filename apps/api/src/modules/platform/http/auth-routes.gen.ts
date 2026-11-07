@@ -753,6 +753,11 @@ export const CONTRACT_AUTH_ROUTES = [
   },
   {
     "method": "POST",
+    "path": "/admin/v1/orders/:order_id/reason-sub",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
     "path": "/admin/v1/orders/:order_id/reassign",
     "auth": "admin"
   },
