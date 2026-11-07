@@ -24,6 +24,7 @@ paths:
   - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
   - 'apps/api/src/modules/growth/application/invite-reward.ts'
   - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'db/seeds/0006_orders-jd-r9-switch.sql' # D10-854 ①：照 0005 先例种 false，不动冻结 [AC-F1-10e#1]；号落地前核主干，被占顺延
 test_paths:
   - 'test/spec/orders/refunded-quantity/**'
   - 'test/spec/settlement/credit-refund-baseline/**'
