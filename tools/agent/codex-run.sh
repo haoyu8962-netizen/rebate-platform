@@ -28,9 +28,10 @@
 # A spec-test review of a task whose rule tests Codex wrote (ledger tester: codex) is refused:
 # that review goes to a fresh Claude subagent (README §11).
 #
-# Reasoning effort (owner decision 2026-10-09, ops/approvals.yaml id 27): Codex is the only code
-# reviewer of what Claude implemented, at a light effort. review mode passes
-# model_reasoning_effort = $CODEX_REVIEW_EFFORT, default low. The variable is a switch to change
+# Reasoning effort (owner decision 2026-10-09, ops/approvals.yaml id 27; default raised to medium
+# by the owner on 2026-11-07, ops/approvals.yaml id 52): Codex is the only code reviewer of what
+# Claude implemented. review mode passes model_reasoning_effort = $CODEX_REVIEW_EFFORT, default
+# medium. The variable is a switch to change
 # only when the owner decides otherwise (只在负责人另有决定时改), not an orchestrator knob; only
 # minimal, low, medium, high and xhigh are accepted, anything else is a usage error (exit 2).
 # impl mode stays at high.
@@ -119,7 +120,7 @@ usage: codex-run.sh impl   <id> [--phase test|handover] [--worktree <dir>] [--ti
        codex-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
                                 [--base <ref>] [--timeout-min <n>] [--dry-run]
        codex-run.sh selfcheck
-env:   CODEX_REVIEW_EFFORT  review reasoning effort: minimal|low|medium|high|xhigh (default low;
+env:   CODEX_REVIEW_EFFORT  review reasoning effort: minimal|low|medium|high|xhigh (default medium;
                             change only when the owner decides otherwise; impl stays high)
 exit:  0 usable output | 10 no usable output | 11 model capacity | 12 position assertion failed
        124 timeout | 2 usage error or refused argument
@@ -137,9 +138,10 @@ refuse() {
   exit 2
 }
 
-# Sets REVIEW_EFFORT from CODEX_REVIEW_EFFORT (default low, ops/approvals.yaml id 27).
+# Sets REVIEW_EFFORT from CODEX_REVIEW_EFFORT (default medium, ops/approvals.yaml id 52; id 27 set the
+# variable and the old default low).
 resolve_review_effort() {
-  REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-low}"
+  REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-medium}"
   case "$REVIEW_EFFORT" in
     minimal | low | medium | high | xhigh) ;;
     *) fail_usage "CODEX_REVIEW_EFFORT must be minimal, low, medium, high or xhigh (got \"$REVIEW_EFFORT\")" ;;

@@ -1,0 +1,21 @@
+id: CT-06zzzs
+repo: rebate-platform
+title: CT-06zzzs：codex-run.sh 的 CODEX_REVIEW_EFFORT 默认值 low → medium（ops/approvals.yaml 第 52 条，D10-884 / D10-885 ②）
+type: guard-change
+# 2026-11-07 w1 入账（D10-885 ②，ops 在账号 2 停着挪来；编排派工写作「approvals 53」，主干实际登记为第 52 条，#2680）。只改默认值：REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-medium}"，注释与帮助文本引第 52 条（第 27 条留作出处）；模型仍 gpt-6-astra、impl 仍 high、可接受的五个取值不变。
+# 测试随改：codex-run.test.ts 的 dry-run argv 与 review effort 用例默认值断言 low → medium（显式取值的循环改为覆盖 low），codex-run-group.test.ts selfcheck 断言 low → medium；README 两处。第三类保护路径，RV2；评审 Codex（额度至 11-11，按 D10-775 由新鲜独立 Claude 评审），编排按 #24 核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/codex-run-group.test.ts'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzs.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: done
+pr: 2696

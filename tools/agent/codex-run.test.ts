@@ -93,7 +93,7 @@ function expectedReviewArgv(fx: Fixture, prompt: string): string[] {
     '-m',
     'gpt-6-astra',
     '-c',
-    'model_reasoning_effort="low"',
+    'model_reasoning_effort="medium"',
     '-c',
     'skills.include_instructions=false',
     '--disable',
@@ -770,7 +770,7 @@ it('review type follows the risk level: RV2 defaults to money and refuses genera
 });
 
 it(
-  '[ops/approvals.yaml id 27] review effort: default low, CODEX_REVIEW_EFFORT, impl stays high',
+  '[ops/approvals.yaml id 27 / id 52] review effort: default medium, CODEX_REVIEW_EFFORT, impl stays high',
   LONG,
   () => {
     const fx = fixture('review-effort');
@@ -779,11 +779,11 @@ it(
     const review = ['review', TASK, '--base', fx.baseSha, '--dry-run'];
     const byDefault = codexRun(fx, review);
     expect(byDefault.status, byDefault.stderr).toBe(0);
-    expect(effortOf(decodeDryRun(byDefault.stdout))).toBe('model_reasoning_effort="low"');
+    expect(effortOf(decodeDryRun(byDefault.stdout))).toBe('model_reasoning_effort="medium"');
     // An empty value falls back to the default.
     const empty = codexRun(fx, review, { CODEX_REVIEW_EFFORT: '' });
-    expect(effortOf(decodeDryRun(empty.stdout))).toBe('model_reasoning_effort="low"');
-    for (const effort of ['minimal', 'medium', 'high', 'xhigh']) {
+    expect(effortOf(decodeDryRun(empty.stdout))).toBe('model_reasoning_effort="medium"');
+    for (const effort of ['minimal', 'low', 'high', 'xhigh']) {
       const res = codexRun(fx, review, { CODEX_REVIEW_EFFORT: effort });
       expect(res.status, res.stderr).toBe(0);
       expect(effortOf(decodeDryRun(res.stdout))).toBe(`model_reasoning_effort="${effort}"`);

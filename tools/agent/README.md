@@ -6,13 +6,13 @@
 
 **默认分工（负责人 2026-10-05，`ops/approvals.yaml` 第 19 条；规划/11 §1.1）：Opus 实现、Codex 写测试与评审。**
 
-**评审只用 Codex（负责人 2026-10-09，`ops/approvals.yaml` 第 27 条）**：Claude 写的实现不再派 Claude 新子代理做第二家评审（RV2 也不派），所有风险级的代码评审只跑 Codex 新只读会话（`gpt-6-astra`，推理档位 `low`；环境变量 `CODEX_REVIEW_EFFORT` 是保留的开关，只在负责人另有决定时改）；Codex 写的规则测试仍由 Claude 新子代理过审（§11），Codex 实现的代码（换家、第 23 / 30 条首发）仍由 Claude 评审。
+**评审只用 Codex（负责人 2026-10-09，`ops/approvals.yaml` 第 27 条）**：Claude 写的实现不再派 Claude 新子代理做第二家评审（RV2 也不派），所有风险级的代码评审只跑 Codex 新只读会话（`gpt-6-astra`，推理档位默认 `medium`，第 52 条；环境变量 `CODEX_REVIEW_EFFORT` 是保留的开关，只在负责人另有决定时改）；Codex 写的规则测试仍由 Claude 新子代理过审（§11），Codex 实现的代码（换家、第 23 / 30 条首发）仍由 Claude 评审。
 
 | 谁 | 做什么 | 经什么 |
 | --- | --- | --- |
 | Claude Opus 5.5 子代理（`claude-opus-5-5`） | 主实现，所有区域 | 编排会话用 Claude Code 的 Agent 能力起，见 §10 |
 | Codex | 实现前写规则 / 验收测试和只抛 `NotImplemented` 的骨架，先红 | `codex-run.sh impl <id> --phase test`（`dispatch.sh <id>`） |
-| Codex 新只读会话 | 对抗评审（所有区域、所有风险级；Claude 写的实现只由它评审，推理档位默认 `low`） | `codex-run.sh review <id>` |
+| Codex 新只读会话 | 对抗评审（所有区域、所有风险级；Claude 写的实现只由它评审，推理档位默认 `medium`，`ops/approvals.yaml` 第 52 条） | `codex-run.sh review <id>` |
 | Claude 新子代理（不是实现那个） | 规则测试过审（spec-test）；Codex 实现的代码（换家、第 23 / 30 条首发）的评审 | §11 |
 | Codex（换家，一次） | Opus 超限后的 RV0 / RV1 实现 | `dispatch.sh <id> --handover`（`codex-run.sh impl --phase handover`） |
 | 独立 Claude 新上下文（`claude-opus-5-5`，每次 `claude -p` 新会话） | Codex 不可用或额度不足时顶替 Codex：写规则测试（先红）、对抗评审（money / general / contract / spec-test）；Codex 能用时仍优先 Codex（负责人 2026-10-21，`ops/approvals.yaml` 第 36 条） | `claude-run.sh impl <id> --phase test`、`claude-run.sh review <id>`，见 §14 |
@@ -205,7 +205,7 @@ TODO(规划/11 §2.4, §9.3)：上面第 2–4 步尚未执行 — blocked on �
 | `COULI_CODEX_BIN` | 换一个 `codex` 可执行文件；只在 `COULI_AGENT_TEST=1` 且运行目录在 `.tmp` 下时接受（测试夹具用），否则拒绝 |
 | `COULI_SESSION` | 编排会话名；`dispatch.sh` 用它作认领的 owner，同名会话才能续期自己的认领。不设时每次派工用一个唯一名字，仍被占着的认领不会被续期 |
 | `COULI_KILL_GRACE_SECS` | TERM 到 KILL 的等待秒数，默认 5，上限 5 |
-| `CODEX_REVIEW_EFFORT` | `review` 模式的推理档位（`model_reasoning_effort`）：`minimal` / `low` / `medium` / `high` / `xhigh`，默认 `low`（`ops/approvals.yaml` 第 27 条），只在负责人另有决定时改，其他值退出 2；`impl` 模式（Codex 写测试、换家实现）固定 `high`，不受它影响 |
+| `CODEX_REVIEW_EFFORT` | `review` 模式的推理档位（`model_reasoning_effort`）：`minimal` / `low` / `medium` / `high` / `xhigh`，默认 `medium`（`ops/approvals.yaml` 第 52 条，负责人 2026-11-07 由第 27 条的 `low` 改为 `medium`），只在负责人另有决定时改，其他值退出 2；`impl` 模式（Codex 写测试、换家实现）固定 `high`，不受它影响 |
 | `COULI_CODEX_TIMEOUT_SECS`、`COULI_CODEX_IDLE_SECS` | 把硬超时、无活动阈值调小（测试与首次自检用）；调不大。这两个变量是本目录自己加的，根 `.env.example` 末尾有注释说明 |
 | `COULI_CODEX_WRAPPER=1` | 只由本脚本设置，`codex` 垫片据此放行 |
 
