@@ -1,0 +1,25 @@
+id: B1-04zga
+repo: rebate-platform
+title: 京东违规码 13、25–28、36–43 补进 jd.csv 按订单失效处理（FU-JD-VIOLATION-CODES-MAP）
+type: impl
+# 2026-11-07 be 入账（D10-867：负责人 18:09「订单失效就好了」；取代 D10-529 ⑥「处罚码实测前不进表」）。京东 validCode 13、25、26、27、28、36、37、38、39、40、41、42、43 照 30 的现有做法补进 specs/order-status-map/jd.csv 映 PLATFORM_INVALID（source doc、verified false，note 写「无效-违规（D10-867）」，不臆造平台释义）：未入账的单作废（R6 VOID），已入账的单按现有失效口径扣回（R8，sub_type FULL），首次入库即该码照 P13 建行再作废。不改走 PUNISH、不写子原因、不改状态机与扣回规则。14、40 的推广位 / siteId 配置错误告警（D10-529 ⑦）不变。其余表外码（-1、33、44、15、18）不变。
+# 冻结夹具 test/spec/orders/jd-status-map/kit.ts 的 UNMAPPED 名单钉着这些码不进表（[AC-B1-04zg#3] / #22 等），照 D10-327 由新鲜独立 Claude 只把这 13 个码从 UNMAPPED 移到 MAPPED（期望 PLATFORM_INVALID），另一位只读复审「只改这一处」；读它的冻结文件中未改的用例按先红报告补登 red_exempt。新规则测试目录钉「这些码不再挂 UNMAPPED_STATUS、不再拒收，按失效处理」。不动金额。D10-823：spec-test 评审新鲜独立 Claude（D10-848），money 评审 Codex（medium）。
+refs: []
+refs_hash: {}
+deps: [B1-04zg]
+paths:
+  - 'specs/order-status-map/jd.csv'
+  - 'test/spec/orders/jd-violation-codes/**'
+  - 'test/spec/orders/jd-status-map/kit.ts'
+test_paths:
+  - 'test/spec/orders/jd-violation-codes/**'
+  - 'test/spec/orders/jd-status-map/kit.ts'
+  - 'test/spec/orders/jd-status-map/mapping.test.ts'
+  - 'test/spec/orders/jd-status-map/jd-status.test.ts'
+  - 'test/spec/orders/jd-status-map/real-map.int.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
