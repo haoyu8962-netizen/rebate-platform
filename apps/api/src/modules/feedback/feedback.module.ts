@@ -10,6 +10,10 @@ import type { Kysely } from 'kysely';
 import { CLOCK, DB, type Clock } from '../platform/index.ts';
 import type { FeedbackAccountReader, FeedbackLinkReader } from './application/submit.ts';
 import {
+  ADMIN_PRODUCT_FEEDBACKS_DB,
+  AdminProductFeedbacksController,
+} from './http/admin/product-feedbacks.controller.ts';
+import {
   FEEDBACK_ROUTE,
   FeedbackController,
   type FeedbackConfigReader,
@@ -52,3 +56,26 @@ export class FeedbackModule {
 }
 
 Module({})(FeedbackModule);
+
+/**
+ * B1-28s: GET /admin/v1/product-feedbacks (adminListProductFeedbacks, feedback.view, read only).
+ * Loaded by app.module on the admin entry only; the AdminOperationGuard comes from the admin auth
+ * module on that entry. Without a database the route registers and fails closed (50001).
+ */
+export class FeedbackAdminModule {
+  static forAdmin(): DynamicModule {
+    return {
+      module: FeedbackAdminModule,
+      controllers: [AdminProductFeedbacksController],
+      providers: [
+        {
+          provide: ADMIN_PRODUCT_FEEDBACKS_DB,
+          inject: [{ token: DB, optional: true }],
+          useFactory: (db: Kysely<Database> | undefined): Kysely<Database> | null => db ?? null,
+        },
+      ],
+    };
+  }
+}
+
+Module({})(FeedbackAdminModule);

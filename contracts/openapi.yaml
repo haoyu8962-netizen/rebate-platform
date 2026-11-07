@@ -29345,7 +29345,6 @@ paths:
         device identifier or app_id; `note` is the optional remark of at most 100 characters as
         sent.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403

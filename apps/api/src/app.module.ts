@@ -337,6 +337,7 @@ import {
   createLandingLinks,
 } from './modules/linking/index.ts';
 import {
+  FeedbackAdminModule,
   FeedbackModule,
   deleteFeedbackForUser,
   type FeedbackAccountReader,
@@ -4672,6 +4673,10 @@ export class AppModule {
               }),
             ]
           : []),
+        // feedback's GET /admin/v1/product-feedbacks (B1-28s, CT-26x): guarded by
+        // AdminOperationGuard (feedback.view, read only, no step-up, no audit row); reads only
+        // feedback's own table, scoped to the console's app.
+        ...(options.entry === 'admin' ? [FeedbackAdminModule.forAdmin()] : []),
         // risk's /admin/v1 appeal console reads (B1-03zd, CT-24r; BR-ID-36): guarded by
         // AdminOperationGuard (risk.appeal, read only); identity's masked phones, normaliser and
         // phone holders, admin's display names and orders' sub-order numbers through ports; only a

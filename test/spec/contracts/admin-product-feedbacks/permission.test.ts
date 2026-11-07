@@ -47,6 +47,6 @@ it('[AC-CT-26x#3] 生成的权限快照 permissions.gen.ts 含 feedback.view（�
   expect(generated.version).toBe(text(yaml('specs/permissions.yaml')['version']));
 });
 
-it('[AC-CT-26x#4] 生成的 planned 清单含 adminListProductFeedbacks', () => {
-  expect(plannedOperations.has(operationId)).toBe(true);
+it('[AC-CT-26x#4] 生成的 planned 清单不含 adminListProductFeedbacks（已实现，不再 planned）', () => {
+  expect(plannedOperations.has(operationId)).toBe(false);
 });

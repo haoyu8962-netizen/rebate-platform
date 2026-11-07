@@ -64,10 +64,11 @@ function propertyNames(value: unknown): string[] {
   return [...own, ...Object.values(node).flatMap(propertyNames)];
 }
 
-it('[AC-CT-26x#5] 登记 GET /admin/v1/product-feedbacks：adminListProductFeedbacks、后台鉴权、planned、无幂等与 step-up、错误码恰为 10001/10403/20001', () => {
+it('[AC-CT-26x#5] 登记 GET /admin/v1/product-feedbacks：adminListProductFeedbacks、后台鉴权、已实现（不再 planned）、无幂等与 step-up、错误码恰为 10001/10403/20001', () => {
   const doc = contract();
   const op = operation(doc);
-  expect(op).toMatchObject({ operationId, 'x-auth': 'admin', 'x-implementation': 'planned' });
+  expect(op).toMatchObject({ operationId, 'x-auth': 'admin' });
+  expect(op['x-implementation']).not.toBe('planned');
   expect(op['security']).toEqual([{ adminBearerAuth: [] }]);
   for (const key of ['x-signed', 'x-idempotent', 'x-min-version-gate'])
     expect([undefined, false], key).toContain(op[key]);

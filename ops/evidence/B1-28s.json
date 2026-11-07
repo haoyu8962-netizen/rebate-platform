@@ -1,0 +1,102 @@
+{
+  "risk_note": "RV2 by path (app.module; the feedback module itself is RV1). S-16, rulings D10-757, D10-775. Implements the read-only admin list GET /admin/v1/product-feedbacks (adminListProductFeedbacks, CT-26x #2559) and removes planned: guard feedback.view with readOnly (no step-up, no audit); the list SQL and the count SQL both filter app_id = the console's app and the same platform / reason / from (>=) / to (<) filters; from >= to (equal included) → 20001 fields [from, to]; order created_at DESC, id DESC; only the contract's 12 columns are selected (no device_id, app_id or phone); mounted on the admin entry only (FeedbackAdminModule). No write, no migration. The CT-26x tests [#4] / [#5] were changed from planned to implemented (ledger #2568, precedent B1-10n); the other 14 tests of those two files are red_exempt (#2578). Integration spec/feedback 71/71 pass. Follow-up: feedback/AGENTS.md still says api entry only (protected path, the orchestrator updates it).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 11-11 13:15 (D10-775, approvals 36): fresh independent Claude via claude-run.sh review --review-type money (the task is RV2 by app.module), round 1 pass with no findings; checklist rounding ok, sign na, idempotency na, concurrency na, partial_refund na, clock ok, app_id ok. A second fresh independent Claude re-checked the same diff read-only (D10-775 ②): pass, no findings, same checklist. couli-runs/B1-28s/review-money-r1.json, review-money-r1b.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36, D10-775). Spec-test round 1 pass with no findings; round 2 pass and confirms the 14 red_exempt entries one by one: in the two CT-26x files only the [AC-CT-26x#4] and [#5] blocks differ from main, the other 14 blocks and all code outside the tests are byte-identical, they test what CT-26x delivered and are green on the skeleton; #4 / #5 stay red on the skeleton for the right reason. couli-runs/B1-28s/review-spec-r1.json, review-spec-r2.json."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-28s",
+  "spec_commit": "b7d2972fe061e268fd528dcf9d8a47a30e668afd",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "red_tests": [
+    "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#5] 登记 GET /admin/v1/product-feedbacks：adminListProductFeedbacks、后台鉴权、已实现（不再 planned）、无幂等与 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#4] 生成的 planned 清单不含 adminListProductFeedbacks（已实现，不再 planned）",
+    "test/spec/feedback/admin-product-feedbacks/access.int.test.ts > [AC-B1-28s#2] 权限：持 feedback.view（只此一点、或另有别的点）与超管 200 且结果相同；没有任何点、只有 fund.view / fund.recon 等别的点 → 10403 data.reason=admin_permission_denied；不带令牌 → 10001；不需要 step-up：带有效的 totp / sms step-up 令牌或乱写的令牌结果与不带完全一样，同一令牌可反复带；无权限的账号带上 step-up 令牌仍是 10403",
+    "test/spec/feedback/admin-product-feedbacks/access.int.test.ts > [AC-B1-28s#3] 只读、不审计：成功的列表（默认、带全部筛选、翻页、超管、带 step-up 头）与参数被拒的列表前后 audit_logs 行数不变；任何 app 的 app.product_feedbacks 行不增不减不改",
+    "test/spec/feedback/admin-product-feedbacks/contract.test.ts > [AC-B1-28s#1] adminListProductFeedbacks 去掉 x-implementation: planned（生成的 planned 清单同步、生成请求 schema），x-auth admin、不幂等、x-error-codes [10001, 10403, 20001] 不变；admin 入口恰好挂一次 GET /admin/v1/product-feedbacks 并带契约的 query schema，api 入口不挂",
+    "test/spec/feedback/admin-product-feedbacks/deletion.int.test.ts > [AC-B1-28s#10] 注销：用户注销完成（经 B1-28p 的注销清理步骤删掉其名下反馈）后，其反馈不再出现、不计入 total（按其原因筛选也不出现）；同设备与别的设备上的游客记录、别的用户的记录仍在且原样",
+    "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#4] app 隔离：只列本 app 的反馈，别的 app 的记录（同平台、同原因、同设备与同一 user_id、时间更新）不出现、不计入 total，筛选下也不出现；别的 app 的后台只看到它自己的",
+    "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#5] 字段：每项恰为契约 12 个字段；游客记录 user_id 为 null、登录用户记录为其 UID；金额（0、2^53−1）、时间（到毫秒）、可空字段（null、空串、1024 字符的 item_ref、100 字的说明）原样；整份响应查不到手机号、昵称、手机号摘要、device_id 与 app_id",
+    "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#6] 筛选：platform、reason 各自生效且可组合（AND）；from 含、to 不含（恰在 from 的在、早 1 毫秒的不在；恰在 to 的不在、早 1 毫秒的在），只给一端也可；+08:00 与 UTC 写法同一时刻结果相同；与分页组合时 total 为筛选集合数；没有命中是空页",
+    "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#7] 参数被拒：from 等于 to（含不同写法的同一时刻）或晚于 to → 20001 data.fields=[from, to]（带其他筛选也一样）；平台、原因不在枚举内（含大小写不同）→ 20001 指名该参数；from / to 不是带时区的日期时间 → 20001 指名该参数；page_size 0 或超过 200、page 0 → 20001 指名该参数；from 早 to 1 毫秒可以",
+    "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#8] 排序与分页：created_at 降序；12 条同一 created_at 的记录按 page_size 3、5 翻完所有页恰好得到全集，不重不漏，三种页长得到同一顺序；每页 page / page_size / total 照实；最后一页之后是 items=[]（total 不变）",
+    "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#9] 页长：默认 page 1 / page_size 20；page_size 200 一页取 200 条、第 2 页取剩下 1 条、第 3 页为空，total 恒为 201；page_size 1 的第 201 页是最早的一条；page_size 201 → 20001 [page_size]"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b7d2972fe061e268fd528dcf9d8a47a30e668afd",
+      "tree": "90a610d9015ea417a9653beea3fc4f235e2b18a5",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T19:39:52Z",
+      "finished_at": "2026-11-06T19:40:16Z",
+      "red_tests": [
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts > [AC-CT-26x#5] 登记 GET /admin/v1/product-feedbacks：adminListProductFeedbacks、后台鉴权、已实现（不再 planned）、无幂等与 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-product-feedbacks/permission.test.ts > [AC-CT-26x#4] 生成的 planned 清单不含 adminListProductFeedbacks（已实现，不再 planned）",
+        "test/spec/feedback/admin-product-feedbacks/access.int.test.ts > [AC-B1-28s#2] 权限：持 feedback.view（只此一点、或另有别的点）与超管 200 且结果相同；没有任何点、只有 fund.view / fund.recon 等别的点 → 10403 data.reason=admin_permission_denied；不带令牌 → 10001；不需要 step-up：带有效的 totp / sms step-up 令牌或乱写的令牌结果与不带完全一样，同一令牌可反复带；无权限的账号带上 step-up 令牌仍是 10403",
+        "test/spec/feedback/admin-product-feedbacks/access.int.test.ts > [AC-B1-28s#3] 只读、不审计：成功的列表（默认、带全部筛选、翻页、超管、带 step-up 头）与参数被拒的列表前后 audit_logs 行数不变；任何 app 的 app.product_feedbacks 行不增不减不改",
+        "test/spec/feedback/admin-product-feedbacks/contract.test.ts > [AC-B1-28s#1] adminListProductFeedbacks 去掉 x-implementation: planned（生成的 planned 清单同步、生成请求 schema），x-auth admin、不幂等、x-error-codes [10001, 10403, 20001] 不变；admin 入口恰好挂一次 GET /admin/v1/product-feedbacks 并带契约的 query schema，api 入口不挂",
+        "test/spec/feedback/admin-product-feedbacks/deletion.int.test.ts > [AC-B1-28s#10] 注销：用户注销完成（经 B1-28p 的注销清理步骤删掉其名下反馈）后，其反馈不再出现、不计入 total（按其原因筛选也不出现）；同设备与别的设备上的游客记录、别的用户的记录仍在且原样",
+        "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#4] app 隔离：只列本 app 的反馈，别的 app 的记录（同平台、同原因、同设备与同一 user_id、时间更新）不出现、不计入 total，筛选下也不出现；别的 app 的后台只看到它自己的",
+        "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#5] 字段：每项恰为契约 12 个字段；游客记录 user_id 为 null、登录用户记录为其 UID；金额（0、2^53−1）、时间（到毫秒）、可空字段（null、空串、1024 字符的 item_ref、100 字的说明）原样；整份响应查不到手机号、昵称、手机号摘要、device_id 与 app_id",
+        "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#6] 筛选：platform、reason 各自生效且可组合（AND）；from 含、to 不含（恰在 from 的在、早 1 毫秒的不在；恰在 to 的不在、早 1 毫秒的在），只给一端也可；+08:00 与 UTC 写法同一时刻结果相同；与分页组合时 total 为筛选集合数；没有命中是空页",
+        "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#7] 参数被拒：from 等于 to（含不同写法的同一时刻）或晚于 to → 20001 data.fields=[from, to]（带其他筛选也一样）；平台、原因不在枚举内（含大小写不同）→ 20001 指名该参数；from / to 不是带时区的日期时间 → 20001 指名该参数；page_size 0 或超过 200、page 0 → 20001 指名该参数；from 早 to 1 毫秒可以",
+        "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#8] 排序与分页：created_at 降序；12 条同一 created_at 的记录按 page_size 3、5 翻完所有页恰好得到全集，不重不漏，三种页长得到同一顺序；每页 page / page_size / total 照实；最后一页之后是 items=[]（total 不变）",
+        "test/spec/feedback/admin-product-feedbacks/list.int.test.ts > [AC-B1-28s#9] 页长：默认 page 1 / page_size 20；page_size 200 一页取 200 条、第 2 页取剩下 1 条、第 3 页为空，total 恒为 201；page_size 1 的第 201 页是最早的一条；page_size 201 → 20001 [page_size]"
+      ],
+      "expected": [
+        "test/spec/contracts/admin-product-feedbacks/operation.test.ts",
+        "test/spec/contracts/admin-product-feedbacks/permission.test.ts",
+        "test/spec/feedback/admin-product-feedbacks/access.int.test.ts",
+        "test/spec/feedback/admin-product-feedbacks/contract.test.ts",
+        "test/spec/feedback/admin-product-feedbacks/deletion.int.test.ts",
+        "test/spec/feedback/admin-product-feedbacks/list.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "1d4e4a03521581644d457b32e5d54f3c137fcd600cb512c2907d832969c8d6a7"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "281d9b7d1efba9e63a491903c1d669610d873b8e9a9e111c3ba9a66aa467cbf1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "37a413230636c870eb31950d6777153b5816af6f",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  }
+}
