@@ -45,6 +45,7 @@ import {
 import type { UnionTransport } from './infra/replay.ts';
 import type {
   TaobaoOrderSlotReader,
+  TaobaoOwnOrderReader,
   TaobaoOrderWarning,
   TaobaoSearchSlotReader,
   TaobaoSearchWarning,
@@ -71,7 +72,24 @@ import { readTaobaoSearchSlot } from './pids/taobao-search-slot.ts';
  */
 export interface UnionModuleOptions {
   readonly config?: (db: Kysely<Database>, clock: Clock) => TaobaoPriceConfigReader;
+  /**
+   * B1-04zzu (D10-796 ② 甲): orders' read of 凑狸's stored taobao orders (app.module: orders'
+   * readOwnTaobaoOrderNos). With the 大淘客 order source, the live Taobao adapter asks it over the
+   * module's optional database handle and ctx.appId for every refund page, so the refund archive
+   * keeps only 凑狸's orders. Without it (or without a database) the refund archive is unchanged.
+   */
+  readonly taobaoOwnOrders?: UnionTaobaoOwnOrders;
 }
+
+/**
+ * B1-04zzu: which of `orderNos` are stored taobao orders of `appId` (sub or parent order number,
+ * verbatim), on `db`; read only. An empty `orderNos` reads nothing and answers an empty set.
+ */
+export type UnionTaobaoOwnOrders = (
+  db: Kysely<Database>,
+  appId: string,
+  orderNos: readonly string[],
+) => Promise<ReadonlySet<string>>;
 
 /** Nest injection tokens provided by `UnionModule`. */
 export const UNION_ENDPOINTS = Symbol('UNION_ENDPOINTS');
@@ -309,6 +327,26 @@ function logJdWarning(logger: RootLogger, warning: JdWarning): void {
   );
 }
 
+/**
+ * B1-04zzu (D10-796 ② 甲): the live Taobao adapter's own-order lookup for the refund archive,
+ * orders' read (UnionModuleOptions.taobaoOwnOrders) over the optional database read per call with
+ * ctx.appId. Without a database it rejects `adapter_unimplemented` without asking (the archive then
+ * stores the body as received; without a database nothing is archived anyway).
+ */
+function taobaoOwnOrders(source: QueryPidSource, read: UnionTaobaoOwnOrders): TaobaoOwnOrderReader {
+  return async (appId, orderNos) => {
+    const db = source.db;
+    if (db === undefined) {
+      throw new UnionError(
+        'adapter_unimplemented',
+        'Union adapter for taobao has no database to read the stored orders from (listRefunds)',
+        'taobao',
+      );
+    }
+    return read(db, appId, orderNos);
+  };
+}
+
 /** Filled by the UNION_QUERY_PID_SOURCE provider; `db` stays undefined without a database. */
 interface QueryPidSource {
   db: Kysely<Database> | undefined;
@@ -446,6 +484,7 @@ async function startUnionRegistry(
   source: QueryPidSource,
   priceConfig: PriceConfigSource | undefined,
   searchCounter: TaobaoSearchCounter,
+  ownOrders: UnionTaobaoOwnOrders | undefined,
 ): Promise<UnionRegistry> {
   const options = {
     endpoints,
@@ -538,6 +577,8 @@ async function startUnionRegistry(
             // The slot reader only with the order source; it needs the optional database per call.
             orderSlots: taobaoOrderSlots(source),
             orderWarn: (warning: TaobaoOrderWarning) => logTaobaoOrderWarning(logger, warning),
+            // B1-04zzu: the refund archive keeps only 凑狸's stored orders (orders' read).
+            ...(ownOrders === undefined ? {} : { ownOrders: taobaoOwnOrders(source, ownOrders) }),
           }),
     };
   }
@@ -634,6 +675,7 @@ export class UnionModule {
               source,
               priceConfig,
               searchCounter,
+              options.taobaoOwnOrders,
             ),
         },
         { provide: taobaoSearchCounterToken(), useValue: searchCounter },

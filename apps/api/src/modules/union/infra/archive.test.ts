@@ -14,6 +14,8 @@ import { FixedClock } from '../../platform/index.ts';
 import { UnionError } from '../domain/types.ts';
 import {
   ARCHIVE_BODY_FAILED,
+  ARCHIVE_BODY_LOOKUP_FAILED,
+  ArchiveBodyLookupError,
   createArchivingTransport,
   isSensitiveParameter,
   requestSummary,
@@ -281,4 +283,53 @@ it('[AC-B1-04zzc-UNIT#3] 不带 archiveBody：存收到的原文，行为与之�
   expect(gunzipSync(second['payload'] as Buffer).toString()).toBe('');
   expect(second['error_code']).toBe('upstream_unavailable');
   expect(logger.error).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-04zzu-UNIT#1] archiveBody 返回 Promise：存它给出的正文；以 ArchiveBodyLookupError 失败时照样插入、存收到的原文、error_code 是 archive_body_lookup_failed（非 2xx 保留 http_<status>），日志只带错误名', async () => {
+  const clock = new FixedClock('2026-11-07T00:00:00.000Z');
+  const resolved = fakeDb(false, 21n);
+  const quiet = { warn: vi.fn(), error: vi.fn() };
+  const ok = createArchivingTransport(
+    async () => ({ status: 200, headers: {}, body: 'raw-with-foreign' }),
+    { db: resolved.db, clock, logger: quiet },
+  );
+  await ok({ ...base, archiveBody: async (body) => body.replace('-with-foreign', '') });
+  const kept = inserted(resolved.statements[0]!);
+  expect(gunzipSync(kept['payload'] as Buffer).toString()).toBe('raw');
+  expect(kept['error_code']).toBeNull();
+  expect(quiet.error).not.toHaveBeenCalled();
+
+  expect(ARCHIVE_BODY_LOOKUP_FAILED).not.toBe(ARCHIVE_BODY_FAILED);
+  for (const [status, code] of [
+    [200, ARCHIVE_BODY_LOOKUP_FAILED],
+    [502, 'http_502'],
+  ] as const) {
+    const { db, statements } = fakeDb(false, 22n);
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const reply = { status, headers: {}, body: 'body-with-order-2900000000000001077' };
+    const wrapped = createArchivingTransport(async () => reply, { db, clock, logger });
+    const result = await wrapped({
+      ...base,
+      archiveBody: async () => {
+        throw new ArchiveBodyLookupError(new RangeError('lookup down 2900000000000001077'));
+      },
+    });
+    expect(result).toBe(reply);
+    expect(result.raw_payload_id).toBe('22');
+    const row = inserted(statements[0]!);
+    const payload = row['payload'] as Buffer;
+    expect(gunzipSync(payload).toString()).toBe(reply.body);
+    expect(row['content_hash']).toBe(sha256(payload));
+    expect(row['error_code']).toBe(code);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      {
+        event: 'union.raw_payload.archive_body_lookup_failed',
+        platform: 'pdd',
+        kind: 'query',
+        error_name: 'RangeError',
+      },
+      expect.any(String),
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain('2900000000000001077');
+  }
 });

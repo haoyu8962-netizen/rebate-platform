@@ -58,8 +58,10 @@ export interface UnionTransportRequest {
    * B1-04zzc: rewrites the response body before the archiving transport stores it (e.g. the
    * 大淘客 order details drop the rows of other companies' promotion slots). Read only by the
    * archiving transport; the caller still gets the body as received. Kept apart from `archive`.
+   * B1-04zzu: may give a promise (the 淘宝 refund archive asks orders which rows are 凑狸's); see
+   * archive.ts ArchiveBodyLookupError.
    */
-  readonly archiveBody?: (body: string) => string;
+  readonly archiveBody?: (body: string) => string | Promise<string>;
 }
 
 export interface UnionTransportResponse {

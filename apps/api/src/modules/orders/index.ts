@@ -12,6 +12,8 @@ export type {
   OrderRightsPorts,
 } from './application/rights-ports.ts';
 export { findOrderForRights } from './infra/rights-order-lookup.ts';
+// B1-04zzu: union's taobao refund archive asks which tb_trade_id are stored taobao orders (read only).
+export { readOwnTaobaoOrderNos } from './infra/own-taobao-orders.ts';
 export type {
   RightsOrderLookupInput,
   RightsOrderLookupResult,

@@ -15,6 +15,8 @@
 // - rights_status（B1-04zza，D10-645 ②）：refund_status 4 / 11 → PROCESSING；2 / 12 / 13 → SUCCEEDED；
 //   3 → FAILED；14 / 15 → CLOSED_NO_CHARGE；缺失或别的码 → null（不当成功）。
 // - 维权记录没有推广位字段：union 侧不过滤，原样返回；是否凑狸订单由 orders / funds 按已入库订单匹配。
+// - B1-04zzu（D10-796 ② 甲）：注入 TaobaoOwnOrderReader 时，维权请求的归档只存 tb_trade_id 读不出、或是凑狸
+//   已入库淘宝订单的行（别家维权原文不入库）；listRefunds 返回的条目、nextCursor、告警都不变。
 // TODO(规划/11 §4.5): 明细字段按文档写（录制窗口内 0 条），待大淘客维权录制复核 — blocked on 大淘客录制
 import type {
   RefundQueryOpt,
@@ -27,6 +29,7 @@ import {
   beijingText,
   isRecord,
   parseTaobaoRawData,
+  TaobaoRawNumber,
   taobaoAbsent,
   taobaoBeijingDate,
   taobaoDecimalId,
@@ -51,6 +54,108 @@ export type TaobaoRefundWarningEvent =
 export interface TaobaoRefundWarning {
   readonly event: TaobaoRefundWarningEvent;
   readonly field?: string;
+}
+
+/**
+ * B1-04zzu (D10-796 ② 甲): which of `orderNos` (the readable tb_trade_id of one refund page,
+ * deduplicated) are 凑狸's stored taobao orders of `appId` (app.orders, platform taobao, sub or
+ * parent order number compared verbatim); the answer holds only members of `orderNos`. Read only
+ * (no lock, no write). UnionModule assembles it from orders' reader (union never imports orders).
+ * When it rejects, the refund archive stores the body as received with error_code
+ * `archive_body_lookup_failed` (archive.ts ArchiveBodyLookupFailed) and listRefunds is unchanged.
+ */
+export type TaobaoOwnOrderReader = (
+  appId: string,
+  orderNos: readonly string[],
+) => Promise<ReadonlySet<string>>;
+
+/**
+ * B1-04zzu: tb_trade_id of a refund row as mapTaobaoRefund reads it (requiredId): a string that is
+ * not blank and not "--" as is, a JSON integer literal as its decimal text; otherwise (missing,
+ * JSON null, blank, "--", another type, or a row that is not an object) null, i.e. unreadable.
+ */
+function refundTradeId(row: unknown): string | null {
+  if (!isRecord(row) || row instanceof TaobaoRawNumber) return null;
+  const value = row.tb_trade_id;
+  if (typeof value === 'string') return value.trim() === '' || value === '--' ? null : value;
+  return taobaoDecimalId(value);
+}
+
+/**
+ * The data.result list of a refund body as a tree with every JSON number kept as its literal, or
+ * null when there is none (data not an object, result not an array). Throws when the body is not
+ * JSON.
+ */
+function refundTree(body: string): {
+  readonly tree: Record<string, unknown>;
+  readonly data: Record<string, unknown>;
+  readonly list: unknown[];
+} | null {
+  // 先确认正文是一个完整的 JSON 值（不是就抛），再借 parseTaobaoRawData（数字保原文）取整棵树。
+  const plain: unknown = JSON.parse(body);
+  if (!isRecord(plain)) return null;
+  // 包一层 data 让 parseTaobaoRawData 交回整棵正文树（它返回外层的 data 成员）。
+  const tree = parseTaobaoRawData(`{"data":${body}}`, OPERATION);
+  const data = tree.data;
+  if (!isRecord(data) || data instanceof TaobaoRawNumber) return null;
+  const list = data.result;
+  if (!Array.isArray(list)) return null;
+  return { tree, data, list };
+}
+
+/**
+ * B1-04zzu: the readable tb_trade_id of the rows of a refund body's data.result (read as
+ * mapTaobaoRefund reads it: a string that is not blank and not "--" as is, a JSON integer as its
+ * decimal text), deduplicated in page order. A row whose tb_trade_id is missing or unreadable
+ * (JSON null, blank, "--", another type), or that is not an object, gives none; so does a body that
+ * is not JSON, whose data is not an object or whose result is not an array.
+ */
+export function taobaoRefundTradeIds(body: string): readonly string[] {
+  let found: ReturnType<typeof refundTree>;
+  try {
+    found = refundTree(body);
+  } catch {
+    return [];
+  }
+  if (found === null) return [];
+  const ids = new Set<string>();
+  for (const row of found.list) {
+    const id = refundTradeId(row);
+    if (id !== null) ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
+ * B1-04zzu: the refund body to archive: data.result without the rows whose tb_trade_id is readable
+ * (as taobaoRefundTradeIds reads it) and not in `own`; rows whose tb_trade_id cannot be read stay,
+ * in upstream order; every other member and every JSON number literal is kept as received. Nothing
+ * to drop (or data not an object, result not an array): the body as received. Throws when the body
+ * is not JSON. Pure: no warning, no log.
+ */
+export function taobaoRefundArchiveBody(body: string, own: ReadonlySet<string>): string {
+  const found = refundTree(body);
+  if (found === null) return body;
+  const kept = found.list.filter((row) => {
+    const id = refundTradeId(row);
+    return id === null || own.has(id);
+  });
+  if (kept.length === found.list.length) return body;
+  found.data.result = kept;
+  return literalJson(found.tree);
+}
+
+/** JSON text of a parsed tree, every TaobaoRawNumber written as its literal (as punishments.ts). */
+function literalJson(value: unknown): string {
+  if (value instanceof TaobaoRawNumber) return value.text;
+  if (Array.isArray(value)) return `[${value.map(literalJson).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    const members = Object.entries(value).map(
+      ([name, member]) => `${JSON.stringify(name)}:${literalJson(member)}`,
+    );
+    return `{${members.join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 export const TAOBAO_REFUND_PATH = '/api/tb-service/get-order-refund';

@@ -55,6 +55,7 @@ import {
   type TaobaoCredentials,
   type TaobaoOrderSlotReader,
   type TaobaoOrderWarning,
+  type TaobaoOwnOrderReader,
   type TaobaoSearchSlotReader,
   type TaobaoSearchSource,
   type TaobaoSearchWarning,
@@ -110,6 +111,11 @@ export interface TaobaoLiveOptions {
   readonly orderSlots?: TaobaoOrderSlotReader;
   /** B1-04zn: handed to TaobaoUnionAdapter as `orderWarn` (order mapping / slot-filter warnings). */
   readonly orderWarn?: (event: TaobaoOrderWarning) => void;
+  /**
+   * B1-04zzu (D10-796 ② 甲): handed to TaobaoUnionAdapter as `ownOrders` (the refund archive keeps
+   * only 凑狸's stored orders). Absent, the refund archive is the body as received.
+   */
+  readonly ownOrders?: TaobaoOwnOrderReader;
 }
 
 /**
@@ -250,6 +256,8 @@ export function createUnionRegistry(options?: UnionRegistryOptions): UnionRegist
           ...(live.fallbackWarn === undefined ? {} : { fallbackWarn: live.fallbackWarn }),
           ...(live.orderSlots === undefined ? {} : { orderSlots: live.orderSlots }),
           ...(live.orderWarn === undefined ? {} : { orderWarn: live.orderWarn }),
+          // B1-04zzu: the refund archive's own-order lookup as it is.
+          ...(live.ownOrders === undefined ? {} : { ownOrders: live.ownOrders }),
         });
       }
       if (endpoint.platform === 'jd' && endpoint.mode === 'live' && options.jdLive) {

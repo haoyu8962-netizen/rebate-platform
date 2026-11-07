@@ -390,6 +390,7 @@ import {
   readPersonalDataCopyOrders,
   type OrdersWorkerOptions,
   readExistingOrderKeys,
+  readOwnTaobaoOrderNos,
 } from './modules/orders/index.ts';
 import {
   ParsingError,
@@ -4668,13 +4669,17 @@ export class AppModule {
     // routes, and every /v1/agent/ route is optional.
     // Stage ⑥ (B1-15m) is assembled on stream alone, in streamRiskModule's two lists.
     // One module object per import: Nest builds union and linking once. B1-22q: union reads
-    // price.taobao.* (BR-PRICE-02) through content's configuration reader, per call.
+    // price.taobao.* (BR-PRICE-02) through content's configuration reader, per call. B1-04zzu
+    // (D10-796 ② 甲): the 淘宝 refund archive keeps only 凑狸's stored orders, read by orders.
     const union =
       options.entry === 'api' ||
       options.entry === 'worker' ||
       options.entry === 'stream' ||
       options.entry === 'admin'
-        ? UnionModule.forRoot(undefined, { config: contentReader })
+        ? UnionModule.forRoot(undefined, {
+            config: contentReader,
+            taobaoOwnOrders: readOwnTaobaoOrderNos,
+          })
         : undefined;
     // B1-22v (D10-460): one union quota source per entry, so an entry without REDIS builds at most
     // one fallback whichever of its modules asks first.

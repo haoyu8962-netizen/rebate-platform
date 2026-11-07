@@ -70,6 +70,7 @@ import {
   type UnionRightsSources,
   type UpstreamGate,
 } from '../../domain/types.ts';
+import { ArchiveBodyLookupError } from '../archive.ts';
 import type { DataokeClient } from '../dataoke/dataoke-client.ts';
 import { collectOrderRows } from '../order-row.ts';
 import type { ArchiveContext, UnionTransport, UnionTransportResponse } from '../replay.ts';
@@ -165,9 +166,12 @@ import {
   nextTaobaoRefundCursor,
   parseTaobaoRefundBody,
   planTaobaoRefunds,
+  taobaoRefundArchiveBody,
   taobaoRefundParameters,
+  taobaoRefundTradeIds,
   TAOBAO_REFUND_PATH,
   TAOBAO_REFUND_VERSION,
+  type TaobaoOwnOrderReader,
   type TaobaoRefundWarning,
 } from './refunds.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
@@ -200,7 +204,11 @@ export type {
   TaobaoOrderWarning,
   TaobaoOrderWarningEvent,
 } from './orders.ts';
-export type { TaobaoRefundWarning, TaobaoRefundWarningEvent } from './refunds.ts';
+export type {
+  TaobaoOwnOrderReader,
+  TaobaoRefundWarning,
+  TaobaoRefundWarningEvent,
+} from './refunds.ts';
 export type { TaobaoPunishWarning, TaobaoPunishWarningEvent } from './punishments.ts';
 
 /** Application-level key pair; fetched once per request, never stored on the adapter. */
@@ -272,6 +280,13 @@ export interface TaobaoAdapterOptions {
   readonly orderWarn?: (event: TaobaoOrderWarning) => void;
   /** B1-04z: refund mapping warnings (see TaobaoRefundWarning in refunds.ts). */
   readonly refundWarn?: (event: TaobaoRefundWarning) => void;
+  /**
+   * B1-04zzu (D10-796 ② 甲): 凑狸's stored taobao orders among a refund page's tb_trade_id, asked
+   * with ctx.appId. With it the refund archive keeps only the rows of those orders and the rows
+   * whose tb_trade_id cannot be read (see refunds.ts); listRefunds' items, nextCursor and warnings
+   * do not change. Without it the refund archive is the body as received (B1-04zzc #11).
+   */
+  readonly ownOrders?: TaobaoOwnOrderReader;
   /** B1-04z: punishment mapping and slot-filter warnings (see punishments.ts). */
   readonly punishWarn?: (event: TaobaoPunishWarning) => void;
 }
@@ -307,6 +322,8 @@ const PUBLIC_PARAMETERS: ReadonlySet<string> = new Set([
 ]);
 
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded;charset=utf-8';
+/** B1-04zzu: the own-order answer of a refund page with no readable tb_trade_id (nothing asked). */
+const NO_ORDERS: ReadonlySet<string> = new Set();
 
 /** item.info.upgrade.get 的 15 细分：50001 无结果（不存在 / 不可推广）、1911 scene 不支持。 */
 const DETAIL_SUB_CODES: TaobaoSubCodeMap = Object.freeze({
@@ -352,6 +369,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   readonly #orderWarn: ((event: TaobaoOrderWarning) => void) | undefined;
   readonly #refundWarn: ((event: TaobaoRefundWarning) => void) | undefined;
   readonly #punishWarn: ((event: TaobaoPunishWarning) => void) | undefined;
+  readonly #ownOrders: TaobaoOwnOrderReader | undefined;
 
   /**
    * B1-04f: listOrders sends one upstream request per call, each through CallCtx.gateUpstream
@@ -415,6 +433,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#orderWarn = options.orderWarn;
     this.#refundWarn = options.refundWarn;
     this.#punishWarn = options.punishWarn;
+    this.#ownOrders = options.ownOrders;
   }
 
   /** Internal request foundation; returns the inner object of `options.envelope`. */
@@ -923,7 +942,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_ORDER_VERSION,
       taobaoOrderParameters(plan),
       ctx,
-      // B1-04zzc：订单详情的归档只存去掉别家推广位行的报文（违规见 listPunishments；维权、搜索、转链不改写）。
+      // B1-04zzc：订单详情的归档只存去掉别家推广位行的报文（违规见 listPunishments，维权见 listRefunds；搜索、转链不改写）。
       (body) => taobaoOrderArchiveBody(body, adzones),
     );
     const page = parseTaobaoOrderBody(response.body);
@@ -963,14 +982,18 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     version: string,
     parameters: Readonly<Record<string, string | number>>,
     ctx: CallCtx,
-    archiveBody?: (body: string) => string,
+    archiveBody?: (body: string) => string | Promise<string>,
   ): Promise<UnionTransportResponse> {
     const archive = archiveOf(ctx, 'order');
+    // B1-04zzu: DataokeClient forwards archiveBody to the archiving transport untouched, and that
+    // transport awaits it (replay.ts allows a promise); DataokeRequestOptions still declares the
+    // synchronous form (outside this task's paths), hence the widening assertion.
+    const forwarded = archiveBody as ((body: string) => string) | undefined;
     const send = (signal: AbortSignal | undefined) =>
       source.exchange('GET', path, parameters, {
         version,
         archive,
-        ...(archiveBody === undefined ? {} : { archiveBody }),
+        ...(forwarded === undefined ? {} : { archiveBody: forwarded }),
         ...(signal === undefined ? {} : { signal }),
       });
     const gate: UpstreamGate | undefined = ctx?.gateUpstream;
@@ -994,6 +1017,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_REFUND_VERSION,
       taobaoRefundParameters(plan),
       ctx,
+      this.#refundArchiveBody(ctx),
     );
     const page = parseTaobaoRefundBody(response.body);
     const like = this.#clock.now();
@@ -1003,6 +1027,30 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       if (refund !== null) items.push(refund);
     }
     return { items, nextCursor: nextTaobaoRefundCursor(plan, page) };
+  }
+
+  /**
+   * B1-04zzu (D10-796 ② 甲): the refund archive rewrite with the own-order lookup, asked once per
+   * page with ctx.appId and the page's readable tb_trade_id (deduplicated; none → not asked). Rows
+   * of other companies' orders (and refunds that precede their order's storage) are left out of the
+   * archive only; listRefunds' result is built from the body as received. A failed lookup is an
+   * ArchiveBodyLookupError (the archive then stores the body as received). Without the lookup the
+   * archive is the body as received.
+   */
+  #refundArchiveBody(ctx: CallCtx): ((body: string) => Promise<string>) | undefined {
+    const ownOrders = this.#ownOrders;
+    if (ownOrders === undefined) return undefined;
+    return async (body) => {
+      const orderNos = taobaoRefundTradeIds(body);
+      if (orderNos.length === 0) return taobaoRefundArchiveBody(body, NO_ORDERS);
+      let own: ReadonlySet<string>;
+      try {
+        own = await ownOrders(ctx.appId, orderNos);
+      } catch (error) {
+        throw new ArchiveBodyLookupError(error);
+      }
+      return taobaoRefundArchiveBody(body, own);
+    };
   }
 
   /** B1-04z: one page of 大淘客 get-foul-order-list (see the header and punishments.ts). */
@@ -1027,7 +1075,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_PUNISH_VERSION,
       taobaoPunishParameters(plan),
       ctx,
-      // B1-04zzp：违规的归档同样只存去掉别家推广位行的报文（维权不改写）。
+      // B1-04zzp：违规的归档同样只存去掉别家推广位行的报文（维权按自家订单查询改写，见 #refundArchiveBody）。
       (body) => taobaoPunishArchiveBody(body, adzones),
     );
     const page = parseTaobaoPunishBody(response.body);
