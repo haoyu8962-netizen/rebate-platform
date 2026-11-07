@@ -1,0 +1,22 @@
+id: DSX-48
+repo: rebate-platform
+title: H5 状态件：骨架改微光、超过约 300 ms 才出且出现后至少约 300 ms（防闪），减弱动态时停播；接入令牌 v0.5.2 motion 组（--motion-*），连同 DSX-108 的减弱动态与强制配色回退（规划/05 §3.11.3 DSX-48、DSX-108，编排 D10-837 ③ / D10-838）
+type: impl
+# 2026-11-07 入账（前端线 f1-frontend-7，D10-837 ③；令牌 couli #296 v0.5.2 motion 组、03 §10.6）。依据：design/ui-rules/README.md §2 L2 骨架（带微光、>300 ms 才出、至少 300 ms、减弱动态不播微光）、§3.3（尊重减弱动态）；D10-838 ①：H5 读 --motion-duration-* / --motion-easing-* / skeleton 三个数，代码仓库令牌生成器先核能否吃 duration / cubicBezier 新类型，不能就最小改动支持（照 sync-brand.py 转换规则）。
+# 整改计划 DSX-48 另含「Toast 只在站外分支保留底部定位」与状态键对齐，本单一并核；DSX-108 验收「apps/h5 和 ui-tokens 里有 forced-colors 规则」。非资金。规则测试新鲜独立 Claude，评审 Codex（D10-823）。
+refs: []
+refs_hash: {}
+deps: [DSX-46]
+paths:
+  - 'apps/h5/src/components/base/**'
+  - 'apps/h5/src/shared/**'
+  - 'packages/ui-tokens/**'
+test_paths:
+  - 'test/spec/frontend/h5-state-motion/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-state-motion/**'
+status: todo
+pr: null

@@ -1,0 +1,23 @@
+id: DSX-47
+repo: rebate-platform
+title: H5 页面私有的按钮、胶囊、卡片、列表行迁移到基础件（29 处无按压反馈的可点件清零），重复手写图标收拢，couli-style 加规则「可点件只来自基础件」（基线只减不增）（规划/05 §3.11.3 DSX-47，编排 D10-837 ②）
+type: impl
+# 2026-11-07 入账（前端线 f1-frontend-7，D10-837 ②）。整改计划验收：「H5 页面私有的按钮、胶囊、卡片常量与原生 button 清零，全部改用 base 组件」。审计（主干 54fdc055c）：可点 button 37 个只有 8 个有按压态；CARD 常量 7 处各写；ChevronIcon 重复 6 次。
+# 新规则写在 lint/style/**（不在 tools/ 下，非保护路径；守卫类改动照 RV2 走、Codex 评审，D10-837 ④）；若需在 eslint.config.* 注册新规则名，那一步属保护路径，另开或按 #24 挂标签。页面迁移后 DSX-50 截图基准如有变化只报告不挡；若冻结测试钉住页面私有类名，规则测试作者列出，按 #24 另开 test-change。
+# 可能分批（按页面），批次由实现前的规则测试定；非资金。规则测试新鲜独立 Claude，评审 Codex（D10-823）。
+refs: []
+refs_hash: {}
+deps: [DSX-46]
+paths:
+  - 'apps/h5/src/entries/app/**'
+  - 'apps/h5/src/components/**'
+  - 'lint/style/**'
+test_paths:
+  - 'test/spec/frontend/h5-base-migration/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-base-migration/**'
+status: todo
+pr: null

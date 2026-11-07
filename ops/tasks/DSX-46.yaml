@@ -1,0 +1,22 @@
+id: DSX-46
+repo: rebate-platform
+title: H5 基础件补齐（按压态）：Button（主 / 次 / 文字 / 图标，含按钮内加载态）、Chip / Segmented、Card（可整卡点击）、ListRow，按下都有可见反馈、焦点框统一，全局去掉 WebView 默认点按高亮（规划/05 §3.11.3 DSX-46，编排 D10-834 ③ / D10-837 ①）
+type: impl
+# 2026-11-07 入账（前端线 f1-frontend-7，D10-837 ①：方案 couli-runs/F1-frontend/feel-plan-h5-admin.md 认可）。整改计划 DSX-46 列 Button、Chip / Segmented、NoticeBar、Field、Card；本单按手感方案先做「可点件」——Button、Chip / Segmented、Card（整卡可点）、ListRow，NoticeBar / Field 不在本单（随 DSX-47 迁移时按需补）。
+# 依据：design/ui-rules/README.md §3.1（所有可点区域按下都有反馈）、§3.6（提交类按钮用按钮内加载态并防连点）；03 §10.4–§10.5（200% 字号、读屏）。按压只用颜色 / 轻缩放变化，不依赖动效令牌（v0.5.2 motion 组随 DSX-48 接入）。
+# 只建件与全局样式，不迁移页面（DSX-47）；现有 styles.ts 的 PRIMARY / SECONDARY 等常量保留导出供未迁移页面使用。非资金。规则测试由新鲜独立 Claude 写（D10-823 ②），评审用 Codex（D10-823 ①）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/components/base/**'
+  - 'apps/h5/src/shared/styles/index.css'
+test_paths:
+  - 'test/spec/frontend/h5-base-press/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-base-press/**'
+status: todo
+pr: null
