@@ -1,0 +1,27 @@
+id: CT-06zzzv
+repo: rebate-platform
+title: CT-06zzzv：只改台账的 PR 走快速 CI——可信 base 副本判定 diff 只含 ops/tasks/*.yaml 时跳过重作业，ci-gate 认这种跳过（FU-CI-LEDGER-ONLY-FAST，D10-935）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-935：约 20 张 PR 同开、每张约 20 个作业，GitHub 并发吃满，台账 PR 排队 1～2 小时，近一半只改 ops/tasks/**）。基于主干。
+# 判定：新脚本 tools/ci/ledger-only.ts --repo <pr 检出> --base <sha> --head <sha>，base...head 的每个改动路径（改名两侧、删除都算）都匹配 ops/tasks/<id>.yaml、
+#   且至少有一个改动时输出 only=true，其他一律 false（含 ops/evidence、ops/ 其他文件、tools、test、apps、.github，以及 git 出错）。
+# ci.yml：新作业 ledger-only-detect（只在 pull_request）照 evidence.yml 的做法检出 PR 与 base，运行 base 副本里的判定脚本，防 PR 自己改判定；base 没有脚本时 only=false。
+#   重作业 verify-unit、verify-spec-1/2、verify-props-1/2/3、verify-props-sha-1/2/3、verify-int-1/2 在 only=true 时跳过；verify-static、guard-git 照跑，
+#   verify-static 加一步 node tools/ops/task.ts check（所有事件都跑）。ci-gate 只在 ledger-only-detect 成功且 only=true 时把这些重作业的 skipped 当通过。
+#   其他工作流（evidence、protected-paths、gitleaks、contracts、longrun-props）不动。
+# 工具测试由新鲜独立 Claude 上下文先写、Opus（high，D10-917）再实现；Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ci/ledger-only.ts'
+  - 'tools/ci/ledger-only.test.ts'
+  - 'tools/ci/ci-ledger-only-workflow.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzv.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

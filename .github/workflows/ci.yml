@@ -8,6 +8,12 @@
 #   - job ids are unique across all workflows and jobs carry no `name:`, so the check context
 #     equals the job id;
 #   - every action is pinned to a full commit SHA with a version comment.
+#
+# Ledger-only fast path (D10-935, CT-06zzzv): on a pull request whose base...head changes nothing
+# but task ledgers (ops/tasks/<id>.yaml), as decided by ledger-only-detect from the base copy of
+# tools/ci/ledger-only.ts, the eleven heavy verify jobs are skipped; verify-static (with the task
+# ledger check) and guard-git still run, and ci-gate accepts those skips only when the detection
+# itself succeeded and said only=true.
 name: ci
 
 on:
@@ -51,6 +57,10 @@ jobs:
     # moved since then (a different merge result) means a full run; failed, cancelled or skipped
     # jobs never count. Any other event, a missing record or an API error: reuse is not output and
     # everything runs as before. guard-git and the other workflows still run on label events.
+    # D10-935 (CT-06zzzv): a ledger-only pull request skipped the heavy jobs, so it has no
+    # `verified-<job>-<tree>` record of them and reuse is false on its label events: the heavy jobs
+    # are skipped again by ledger-only-detect, but verify-static may run a second time. That is the
+    # known cost of the fast path.
     if: >-
       github.event_name == 'pull_request' &&
       (github.event.action == 'labeled' || github.event.action == 'unlabeled')
@@ -99,13 +109,65 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ID: ${{ github.run_id }}
 
+  ledger-only-detect:
+    # D10-935 (CT-06zzzv, FU-CI-LEDGER-ONLY-FAST): about half of the pull requests change nothing
+    # but task ledgers, and twenty of them open at once queued behind the heavy jobs of each other
+    # for one to two hours. This job decides whether base...head (the merge-base diff) changes only
+    # ops/tasks/<id>.yaml (both sides of a rename, deletions too, at least one path); the eleven
+    # heavy jobs (verify-unit, verify-spec-1 / -2, verify-props-1 / -2 / -3, verify-props-sha-1 /
+    # -2 / -3, verify-int-1 / -2) are then skipped, while verify-static (which runs
+    # `node tools/ops/task.ts check`) and guard-git run as always. ops/evidence, any other ops/ file,
+    # tools, test, apps or .github is never ledger-only.
+    # The decision runs from the BASE copy of tools/ci/ledger-only.ts against the PR checkout (the
+    # way guard-git and evidence-check do), so a branch cannot change the rule that lets it skip
+    # its own tests; Node built-ins only, nothing is installed, nothing of the PR is executed. A
+    # base without the script, any git error, or this job failing means only is not `true`: every
+    # job runs. Pull requests only; on push to main this job is skipped and everything runs.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      only: ${{ steps.detect.outputs.only }}
+    steps:
+      - name: Check out the PR head with full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: pr
+          persist-credentials: false
+      - name: Check out the base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: base/.nvmrc
+          package-manager-cache: false
+      - name: Decide from the base copy of tools/ci whether only task ledgers change
+        id: detect
+        run: |
+          if [ ! -f base/tools/ci/ledger-only.ts ]; then
+            echo "::notice::the base branch has no base/tools/ci/ledger-only.ts; every job runs"
+            echo "only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node base/tools/ci/ledger-only.ts --repo "$GITHUB_WORKSPACE/pr" \
+            --base "$BASE_SHA" --head "$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
   # D10-298 (CT-06zx): the former verify-fast job ran `pnpm verify:fast` on one runner, 849–1475 s
   # (p90 about 23–25 minutes), most of it `turbo run test` with 12 packages competing for 4 cores.
   # It is split into the four parallel jobs below, which together run every command of the
   # verify:fast script (package.json; the script itself is unchanged and still runs whole locally
   # and in tools/ops/verify-container.sh):
   #   verify-static  typecheck, lint, format:check, depcruise, lint:migrations, contracts:check,
-  #                  guard:static
+  #                  guard:static (and, not part of verify:fast, `node tools/ops/task.ts check`,
+  #                  D10-935)
   #   verify-unit    `turbo run test` without @couli/spec-tests (so with @couli/tools), then
   #                  `pnpm --filter @couli/api run smoke:entries`
   #   verify-spec-1  @couli/spec-tests `test` with --shard=1/2
@@ -119,6 +181,10 @@ jobs:
   # of verify-reuse, runs it in full. timeout-minutes 30 each (D10-298); after a day of runs:
   # if the p90 is still above 20 minutes or verify-unit becomes the critical path, tools and the
   # spec tests are split further.
+  # D10-935 (CT-06zzzv): verify-unit, verify-spec-1 / -2 and the other heavy jobs below are also
+  # skipped when ledger-only-detect says only=true (the pull request changes nothing but
+  # ops/tasks/<id>.yaml); verify-static never is. On push ledger-only-detect is skipped, its output
+  # is empty, and `!cancelled()` lets every job run as before.
   verify-static:
     needs: [verify-reuse]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
@@ -161,6 +227,15 @@ jobs:
       - run: pnpm run guard:static
         env:
           COULI_SPEC_REPO: ${{ github.workspace }}/.tmp/spec-repo
+      # D10-935 (CT-06zzzv): the task ledger check, on every event. A ledger-only pull request skips
+      # the heavy jobs (ledger-only-detect), so its ledgers are checked here; the tools tests in
+      # verify-unit check them too when that job runs. task.ts reads the planning text at SPEC_REF
+      # from COULI_SPEC_REPO; with no couli-runs directory on the runner its trusted root (the risk
+      # map and guards it asks) is this checkout, as for every other step of this job.
+      - name: Task ledger check
+        run: node tools/ops/task.ts check
+        env:
+          COULI_SPEC_REPO: ${{ github.workspace }}/.tmp/spec-repo
       # DSX-42 (D10-683): specs/client/manifest.json must list exactly the shared client vector
       # files with their sha256. A failure is this repository's own error (a vector changed
       # without `node tools/ci/client-vectors.ts --write`), so it fails the job.
@@ -185,8 +260,8 @@ jobs:
           if-no-files-found: error
 
   verify-unit:
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -242,8 +317,8 @@ jobs:
     # read no planning text (verify-props runs the same suite the same way), so neither a build
     # nor the planning repository is needed here. PROP_RUNS / PROP_SEED stay unset, as in
     # verify:fast.
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -276,8 +351,8 @@ jobs:
 
   verify-spec-2:
     # Same as verify-spec-1, other shard.
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -328,8 +403,10 @@ jobs:
     # min six times and hit one worker OOM, its shard holding 2.3× the test time of the other.
     # 40 minutes: the slowest single-pass third is estimated at ~24 min (incl. install), with a
     # 1.5× margin 35, rounded up. NODE_OPTIONS is left as set at workflow level.
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    # D10-935 (CT-06zzzv): also skipped when ledger-only-detect says only=true (see that job); so
+    # are the other heavy jobs, each with the same condition.
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -364,8 +441,8 @@ jobs:
 
   verify-props-2:
     # Same as verify-props-1, shard 2/3 (fixed seed).
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -400,8 +477,8 @@ jobs:
 
   verify-props-3:
     # Same as verify-props-1, shard 3/3 (fixed seed).
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -436,8 +513,8 @@ jobs:
 
   verify-props-sha-1:
     # The commit-SHA-seed pass of verify-props-1 (D10-902, CT-06zzzr), shard 1/3.
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -477,8 +554,8 @@ jobs:
 
   verify-props-sha-2:
     # The commit-SHA-seed pass of verify-props-2 (D10-902, CT-06zzzr), shard 2/3.
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -518,8 +595,8 @@ jobs:
 
   verify-props-sha-3:
     # The commit-SHA-seed pass of verify-props-3 (D10-902, CT-06zzzr), shard 3/3.
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -564,6 +641,7 @@ jobs:
   # shard passed through to every package's `vitest run`; vitest sorts each package's files by the SHA-1 of their path and
   # cuts them into contiguous ranges, so the two shards are disjoint and their union is the whole
   # set. Each shard starts its own one-shot PostgreSQL (Testcontainers) and Redis (service).
+  # Both shards are skipped when ledger-only-detect says only=true (D10-935, CT-06zzzv).
   # verify-int-1 also runs the browser tests, the build smoke and db:check as before; verify-int-2
   # runs only its shard. No test is dropped, nothing is allowed to fail.
   verify-int-1:
@@ -573,8 +651,8 @@ jobs:
     # D10-242 (CT-06zm): skipped only when verify-reuse found a success of this very job on the
     # same tested tree (see verify-reuse); every other event, and any failure of verify-reuse,
     # runs it in full.
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     # 30 → 45 (2026-10-19, CT-06z): green in the 30 latest ci runs 17m05s–29m16s, p90 29m05s
     # (97% of the cap); 45 is the maximum with a 1.5× margin, rounded up to a multiple of 5.
@@ -854,8 +932,8 @@ jobs:
     # Same as verify-int-1, other shard (CT-06zzb): its half of the test:int files only; the
     # browser tests, the build smoke and db:check stay in verify-int-1. Skipped only when
     # verify-reuse found a success of this very job on the same tested tree (D10-242).
-    needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     services:
@@ -996,6 +1074,11 @@ jobs:
     # each must pass (or be reused) on its own; so must verify-props-1 / -2 / -3 and
     # verify-props-sha-1 / -2 / -3 (CT-06zxa, split into one pass per job by D10-902 / CT-06zzzr),
     # and verify-int-1 and verify-int-2 (CT-06zzb).
+    # D10-935 (CT-06zzzv): a skipped heavy job (all eleven but verify-static) also passes when
+    # ledger-only-detect itself succeeded on a pull_request event and said exactly only=true: the
+    # pull request changes nothing but task ledgers. A failed, cancelled or skipped detection, or
+    # any other output, never lets a skip pass; verify-static and guard-git are not covered by it.
+    # The reuse rule and the push rule are unchanged.
     if: always()
     needs:
       - verify-static
@@ -1012,27 +1095,35 @@ jobs:
       - verify-int-2
       - guard-git
       - verify-reuse
+      - ledger-only-detect
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Summarise
         run: |
-          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE}"
+          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE} ledger-only-detect=${LEDGER_RESULT}/${LEDGER_ONLY}"
           # A verify job passes when it succeeded, or (label event, D10-242) when verify-reuse
           # itself succeeded and found its success on the same tested tree, so it was skipped.
           reused() { [ "$REUSE_RESULT" = success ] && [ "$REUSE" = true ] && [ "$1" = skipped ]; }
+          # A heavy job (not verify-static) also passes when it was skipped because the pull
+          # request changes only task ledgers: ledger-only-detect succeeded and said only=true
+          # (D10-935, CT-06zzzv).
+          ledger_only() {
+            [ "$EVENT" = pull_request ] && [ "$LEDGER_RESULT" = success ] &&
+              [ "$LEDGER_ONLY" = true ] && [ "$1" = skipped ]
+          }
           [ "$STATIC" = success ] || reused "$STATIC" || exit 1
-          [ "$UNIT" = success ] || reused "$UNIT" || exit 1
-          [ "$SPEC1" = success ] || reused "$SPEC1" || exit 1
-          [ "$SPEC2" = success ] || reused "$SPEC2" || exit 1
-          [ "$PROPS1" = success ] || reused "$PROPS1" || exit 1
-          [ "$PROPS2" = success ] || reused "$PROPS2" || exit 1
-          [ "$PROPS3" = success ] || reused "$PROPS3" || exit 1
-          [ "$PROPSSHA1" = success ] || reused "$PROPSSHA1" || exit 1
-          [ "$PROPSSHA2" = success ] || reused "$PROPSSHA2" || exit 1
-          [ "$PROPSSHA3" = success ] || reused "$PROPSSHA3" || exit 1
-          [ "$INT1" = success ] || reused "$INT1" || exit 1
-          [ "$INT2" = success ] || reused "$INT2" || exit 1
+          [ "$UNIT" = success ] || reused "$UNIT" || ledger_only "$UNIT" || exit 1
+          [ "$SPEC1" = success ] || reused "$SPEC1" || ledger_only "$SPEC1" || exit 1
+          [ "$SPEC2" = success ] || reused "$SPEC2" || ledger_only "$SPEC2" || exit 1
+          [ "$PROPS1" = success ] || reused "$PROPS1" || ledger_only "$PROPS1" || exit 1
+          [ "$PROPS2" = success ] || reused "$PROPS2" || ledger_only "$PROPS2" || exit 1
+          [ "$PROPS3" = success ] || reused "$PROPS3" || ledger_only "$PROPS3" || exit 1
+          [ "$PROPSSHA1" = success ] || reused "$PROPSSHA1" || ledger_only "$PROPSSHA1" || exit 1
+          [ "$PROPSSHA2" = success ] || reused "$PROPSSHA2" || ledger_only "$PROPSSHA2" || exit 1
+          [ "$PROPSSHA3" = success ] || reused "$PROPSSHA3" || ledger_only "$PROPSSHA3" || exit 1
+          [ "$INT1" = success ] || reused "$INT1" || ledger_only "$INT1" || exit 1
+          [ "$INT2" = success ] || reused "$INT2" || ledger_only "$INT2" || exit 1
           if [ "$EVENT" = pull_request ]; then
             [ "$GUARD" = success ] || exit 1
           else
@@ -1055,3 +1146,5 @@ jobs:
           REUSE_RESULT: ${{ needs.verify-reuse.result }}
           REUSE: ${{ needs.verify-reuse.outputs.reuse }}
           EVENT: ${{ github.event_name }}
+          LEDGER_RESULT: ${{ needs.ledger-only-detect.result }}
+          LEDGER_ONLY: ${{ needs.ledger-only-detect.outputs.only }}
