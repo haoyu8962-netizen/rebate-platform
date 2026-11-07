@@ -1,0 +1,29 @@
+id: CT-06zzzq
+repo: rebate-platform
+title: CT-06zzzq：在途状态按台账收口（state.ts reconcile）与看板 warnings 按类聚合（FU-STATE-HYGIENE，D10-900）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-872 ③ / D10-900 / D10-920；方案 couli-runs/FU-STATE-HYGIENE/plan.md）。基于主干。
+# 现状：couli-runs/state 下约 1190 个状态文件，status.ts 的四类 warnings 共 826 条（A 台账 done 而状态非 ready 261、B pid 已不在 87、
+#   C 租约过期约 470、D 有状态无台账 9），Markdown 看板约 75 KB，超 规划/11 §5.2 的开场预算。
+# 改法一：state.ts 新子命令 reconcile [--apply] [--done-only]，只读可信根台账与状态文件，默认 dry-run 逐类列出会改什么。
+#   A 台账 done 且状态非 ready：置 ready、清 pid、放租约；B 台账未完成且 pid 已不在：只清 pid；C 只放台账已 done 任务的过期租约；D 只列不动。
+#   轮次、pending bumps、熔断历史一律不动。--apply 写前把状态目录打包备份到 couli-runs/state-backups/<UTC 时间>.tgz，删 7 天前的备份，
+#   往 couli-runs/state-reconcile.log 追加一行各类条数；--done-only 供夜间例行用，跳过台账未完成任务的 B 类。
+# 改法二：status.ts 的 Markdown 把这四类 warnings 按类聚合成一类一行（条数 + 前 10 个号 + 全量见 --json）；台账未完成任务的过期租约按持有者聚合；
+#   --json 照旧逐条全量。其他 warnings 不变。
+# 工具测试由新鲜独立 Claude 上下文先写、Opus（high，D10-917）再实现；Codex general 评审；按 #16 / #24 编排核后加标签。合并后 ops 先跑 dry-run 报编排。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/state.ts'
+  - 'tools/ops/state.test.ts'
+  - 'tools/ops/status.ts'
+  - 'tools/ops/status.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzq.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

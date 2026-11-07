@@ -379,3 +379,231 @@ it(
   },
   CLI_TIMEOUT,
 );
+
+// ---------------------------------------------------------------------------------------------
+// CT-06zzzq (FU-STATE-HYGIENE, D10-900): the Markdown board folds the four state warnings
+// (status.ts: ledger done but state not ready, dead pid, expired lease, state file without a
+// ledger entry) into one line per class, with the count and at most the first 10 task ids; the
+// expired leases of open tasks are folded per holder. `--json` keeps every warning as before.
+
+const DEAD = 2147480000;
+
+/** `WA-1aa`, `WA-1ab`, …: ids whose digits never collide with a count. */
+function idsOf(prefix: string, n: number): string[] {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  return Array.from(
+    { length: n },
+    (_, i) => `${prefix}-1${letters[Math.floor(i / 26)] ?? 'z'}${letters[i % 26] ?? 'z'}`,
+  );
+}
+
+type FoldFixture = {
+  root: string;
+  runs: string;
+  a: string[];
+  b: string[];
+  c: string[];
+  d: string[];
+  laneX: string[];
+  laneY: string[];
+  /** board.warnings as status.ts computes them today, in order. */
+  expected: string[];
+};
+
+/**
+ * A ledger with `nA` done tasks whose state is still doing (A), 3 open tasks with a dead pid
+ * (B), 4 done tasks with an expired lease (C), 2 state files without a ledger entry (D), open
+ * tasks with an expired lease held by lane-x (3) and lane-y (2), a task depending on a void one
+ * and a task branch without a state file.
+ */
+function foldFixture(name: string, nA: number): FoldFixture {
+  const dir = join(base, name);
+  const fxRoot = join(dir, 'repo');
+  const fxRuns = join(dir, 'runs');
+  const a = idsOf('WA', nA);
+  const b = idsOf('WB', 3);
+  const c = idsOf('WC', 4);
+  const d = idsOf('WD', 2);
+  const laneX = idsOf('WE', 3);
+  const laneY = idsOf('WF', 2);
+  const files: Record<string, string> = { 'README.md': 'fixture\n' };
+  const done = { status: 'done', pr: '7' };
+  const own = (id: string): string => `\n  - 'apps/api/src/modules/${id.toLowerCase()}/**'`;
+  for (const id of [...a, ...c])
+    files[`ops/tasks/${id}.yaml`] = task(id, { ...done, paths: own(id) });
+  for (const id of [...b, ...laneX, ...laneY])
+    files[`ops/tasks/${id}.yaml`] = task(id, { paths: own(id) });
+  files['ops/tasks/WV-1a.yaml'] = task('WV-1a', { status: 'void', paths: own('WV-1a') });
+  files['ops/tasks/WV-1b.yaml'] = task('WV-1b', { deps: '[WV-1a]', paths: own('WV-1b') });
+  writeFiles(fxRoot, files);
+  fixtureGit(fxRoot, ['init', '-q', '-b', 'main']);
+  fixtureGit(fxRoot, ['add', '-A']);
+  fixtureGit(fxRoot, ['commit', '-q', '-m', 'fixture']);
+  fixtureGit(fxRoot, ['branch', 'task/WZ-1a']);
+  const expiredAt = hoursAgo(5).toISOString();
+  withRuns(fxRuns, () => {
+    for (const id of a) updateState(id, { state: 'doing' }, hoursAgo(1));
+    for (const id of b) updateState(id, { state: 'doing', pid: DEAD }, hoursAgo(1));
+    for (const id of c) {
+      updateState(
+        id,
+        { state: 'ready', owner_session: 'w-done', lease_until: expiredAt },
+        hoursAgo(6),
+      );
+    }
+    for (const id of d) updateState(id, { state: 'ready' }, hoursAgo(1));
+    for (const [owner, ids] of [
+      ['lane-x', laneX],
+      ['lane-y', laneY],
+    ] as const) {
+      for (const id of ids) {
+        updateState(
+          id,
+          { state: 'doing', owner_session: owner, lease_until: expiredAt },
+          hoursAgo(6),
+        );
+      }
+    }
+  });
+  const lease = (id: string, owner: string): string =>
+    `${id} 的租约已过期（持有者 ${owner}），其他会话可接手`;
+  const expected = [
+    'WV-1b 依赖的 WV-1a 已作废（void），改依赖或作废本任务',
+    ...a.map((id) => `${id} 台账已 done，在途状态仍是 doing`),
+    ...b.map((id) => `${id} 记录的后台进程 ${DEAD} 已不在：按孤儿回收（规划/11 §2.5）`),
+    ...c.map((id) => lease(id, 'w-done')),
+    ...d.map((id) => `${id} 有在途状态文件，但台账里没有这个任务`),
+    ...laneX.map((id) => lease(id, 'lane-x')),
+    ...laneY.map((id) => lease(id, 'lane-y')),
+    '分支 task/WZ-1a 存在，但没有在途状态文件',
+  ];
+  return { root: fxRoot, runs: fxRuns, a, b, c, d, laneX, laneY, expected };
+}
+
+/** Runs `fn` with COULI_RUNS pointing at a fixture's runs directory (state files, usage, lock). */
+function withRuns<T>(dir: string, fn: () => T): T {
+  const prev = process.env.COULI_RUNS;
+  process.env.COULI_RUNS = dir;
+  try {
+    return fn();
+  } finally {
+    process.env.COULI_RUNS = prev;
+  }
+}
+
+function foldBoard(fx: FoldFixture): ReturnType<typeof collectBoard> {
+  return withRuns(fx.runs, () => collectBoard({ root: fx.root, now: NOW, risk: fixedRisk('RV1') }));
+}
+
+/** The non-empty lines after `需要处理：`, the last section of the Markdown board. */
+function warningSection(text: string): string[] {
+  const lines = text.split('\n');
+  const at = lines.indexOf('需要处理：');
+  expect(at, 'the board has its 需要处理： section').toBeGreaterThanOrEqual(0);
+  return lines.slice(at + 1).filter((l) => l.trim() !== '');
+}
+
+/** `12 条` / `12 个`, not part of a task id. */
+function hasCount(line: string, n: number): boolean {
+  return new RegExp(`(^|[^0-9A-Za-z-])${n} ?(条|个)`).test(line);
+}
+
+/** The one line of the section that carries ids of a class. */
+function classLine(section: string[], ids: string[]): string {
+  const hits = section.filter((l) => ids.some((id) => l.includes(id)));
+  expect(hits, `one line for ${ids[0] ?? ''}…`).toHaveLength(1);
+  return hits[0] ?? '';
+}
+
+it(
+  '[CT-06zzzq] the Markdown board folds each of the four state warning classes into one line',
+  () => {
+    const fx = foldFixture('fold-12', 12);
+    const section = warningSection(renderBoard(foldBoard(fx)));
+    // A: 12 of them, only the first 10 ids listed, the rest is in --json.
+    const lineA = classLine(section, fx.a);
+    expect(fx.a.filter((id) => lineA.includes(id))).toEqual(fx.a.slice(0, 10));
+    expect(hasCount(lineA, 12), lineA).toBe(true);
+    expect(section.join('\n')).toContain('--json');
+    // B and D: under 10, every id listed, with the count.
+    const lineB = classLine(section, fx.b);
+    expect(fx.b.filter((id) => lineB.includes(id))).toEqual(fx.b);
+    expect(hasCount(lineB, 3), lineB).toBe(true);
+    const lineD = classLine(section, fx.d);
+    expect(fx.d.filter((id) => lineD.includes(id))).toEqual(fx.d);
+    expect(hasCount(lineD, 2), lineD).toBe(true);
+    // C: the expired leases of done tasks on one line (counted alone or with the open ones).
+    const lineC = classLine(section, fx.c);
+    expect(fx.c.filter((id) => lineC.includes(id))).toEqual(fx.c);
+    expect(hasCount(lineC, 4) || hasCount(lineC, 9), lineC).toBe(true);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzq] the expired leases of open tasks are folded per holder on the Markdown board',
+  () => {
+    const fx = foldFixture('fold-owner', 12);
+    const section = warningSection(renderBoard(foldBoard(fx)));
+    for (const [owner, ids] of [
+      ['lane-x', fx.laneX],
+      ['lane-y', fx.laneY],
+    ] as const) {
+      const lines = section.filter(
+        (l) => l.includes(owner) && ids.every((id) => l.includes(id)) && hasCount(l, ids.length),
+      );
+      expect(lines, `${owner}: one line with its ${ids.length} tasks`).toHaveLength(1);
+      // Not one line per task of that holder.
+      for (const id of ids)
+        expect(section.filter((l) => l.includes(id)).length, id).toBeLessThanOrEqual(2);
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzq] the other warnings stay one per line on the Markdown board',
+  () => {
+    const fx = foldFixture('fold-other', 12);
+    const section = warningSection(renderBoard(foldBoard(fx)));
+    expect(section).toContain('- WV-1b 依赖的 WV-1a 已作废（void），改依赖或作废本任务');
+    expect(section).toContain('- 分支 task/WZ-1a 存在，但没有在途状态文件');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzq] --json keeps every warning, one by one, as before the folding',
+  () => {
+    const fx = foldFixture('fold-json', 12);
+    const board = foldBoard(fx);
+    expect(board.warnings).toEqual(fx.expected);
+    const json = JSON.parse(JSON.stringify(boardJson(board, 'open'))) as { warnings: string[] };
+    expect(json.warnings).toEqual(fx.expected);
+    expect(json.warnings).toHaveLength(1 + 12 + 3 + 4 + 2 + 3 + 2 + 1);
+    // Rendering the Markdown board does not cut the board's own list.
+    renderBoard(board);
+    expect(board.warnings).toEqual(fx.expected);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzq] the warnings section of the Markdown board does not grow with the number of warnings',
+  () => {
+    const small = foldFixture('fold-size-12', 12);
+    const large = foldFixture('fold-size-60', 60);
+    const boardLarge = foldBoard(large);
+    expect(boardLarge.warnings).toHaveLength(large.expected.length);
+    expect(boardLarge.warnings.length).toBeGreaterThanOrEqual(76);
+    const s12 = warningSection(renderBoard(foldBoard(small)));
+    const s60 = warningSection(renderBoard(boardLarge));
+    expect(s60.length).toBe(s12.length);
+    // Four classes, two holders, two other warnings and a few fixed lines.
+    expect(s60.length).toBeLessThanOrEqual(4 + 2 + 2 + 4);
+    const lineA = classLine(s60, large.a);
+    expect(hasCount(lineA, 60), lineA).toBe(true);
+    expect(large.a.filter((id) => lineA.includes(id))).toEqual(large.a.slice(0, 10));
+  },
+  CLI_TIMEOUT,
+);

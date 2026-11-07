@@ -8,6 +8,11 @@
 // adds the done rows back (rows_scope "all"). Every other field is the same
 // either way: counts, ready, warnings and the rest are computed from the whole
 // ledger before the rows are cut (FU-STATUS-JSON-SIZE, CT-06zzzn).
+//
+// The Markdown board folds the four state warnings (ledger done but state not ready, dead pid,
+// expired lease, state file without a ledger entry) into one line per class with the count and
+// the first 10 ids; the expired leases of tasks the ledger has not marked done are folded per
+// holder. `--json` keeps every warning, one by one (CT-06zzzq, D10-900; 规划/11 §5.2 budget).
 import { parseArgs } from 'node:util';
 import { git } from '../lib/git.ts';
 import { repoRoot, specRef } from '../lib/paths.ts';
@@ -23,6 +28,7 @@ import {
   listStates,
   MAX_CALLS_PER_TASK,
   MAX_CONSECUTIVE_NO_OUTPUT,
+  pidAlive,
   taskCalls,
 } from './state.ts';
 import type { BreakerReason, TaskState } from './state.ts';
@@ -88,14 +94,17 @@ function inFlight(state: TaskState | undefined): boolean {
   return state !== undefined && state.state !== 'ready';
 }
 
-function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
+/** One of the four state warnings, in a form the Markdown board can fold (CT-06zzzq). */
+type StateNote =
+  | { kind: 'not_ready' | 'dead_pid' | 'lease_done' | 'no_ledger'; id: string }
+  | { kind: 'lease_open'; id: string; owner: string };
+
+/**
+ * The state warnings of a board by their index in `warnings`, with their text. Kept off the
+ * board itself so that `--json` keeps its shape; a board without an entry (built by hand, read
+ * back from JSON) is rendered one warning per line.
+ */
+const stateNotes = new WeakMap<Board, Map<number, { text: string; note: StateNote }>>();
 
 /** Hours between two instants that fall on Monday to Friday in +08:00. */
 export function workingHoursBetween(from: Date, to: Date): number {
@@ -242,17 +251,32 @@ export function collectBoard(opts: BoardOptions = {}): Board {
     }
   }
 
+  const notes = new Map<number, { text: string; note: StateNote }>();
+  const noted = (text: string, note: StateNote): void => {
+    warnings.push(text);
+    notes.set(warnings.length - 1, { text, note });
+  };
   for (const s of states.values()) {
     const task = tasks.get(s.id);
-    if (!task) warnings.push(`${s.id} 有在途状态文件，但台账里没有这个任务`);
+    if (!task)
+      noted(`${s.id} 有在途状态文件，但台账里没有这个任务`, { kind: 'no_ledger', id: s.id });
     else if (task.status === 'done' && s.state !== 'ready') {
-      warnings.push(`${s.id} 台账已 done，在途状态仍是 ${s.state}`);
+      noted(`${s.id} 台账已 done，在途状态仍是 ${s.state}`, { kind: 'not_ready', id: s.id });
     }
     if (s.pid !== null && !pidAlive(s.pid)) {
-      warnings.push(`${s.id} 记录的后台进程 ${s.pid} 已不在：按孤儿回收（规划/11 §2.5）`);
+      noted(`${s.id} 记录的后台进程 ${s.pid} 已不在：按孤儿回收（规划/11 §2.5）`, {
+        kind: 'dead_pid',
+        id: s.id,
+      });
     }
     if (s.lease_until !== null && Date.parse(s.lease_until) < now.getTime()) {
-      warnings.push(`${s.id} 的租约已过期（持有者 ${s.owner_session ?? '未知'}），其他会话可接手`);
+      const owner = s.owner_session ?? '未知';
+      noted(
+        `${s.id} 的租约已过期（持有者 ${owner}），其他会话可接手`,
+        task?.status === 'done'
+          ? { kind: 'lease_done', id: s.id }
+          : { kind: 'lease_open', id: s.id, owner },
+      );
     }
   }
 
@@ -269,7 +293,7 @@ export function collectBoard(opts: BoardOptions = {}): Board {
     for (const engine of ENGINES) breakers.push(...taskCalls(s.id, engine).reasons);
   }
 
-  return {
+  const board: Board = {
     at: now.toISOString(),
     spec_ref: specRef(),
     lock: orchestratorLockStatus(now),
@@ -284,6 +308,68 @@ export function collectBoard(opts: BoardOptions = {}): Board {
     stall,
     warnings,
   };
+  stateNotes.set(board, notes);
+  return board;
+}
+
+/** Ids printed on a folded warning line; the rest is in `--json`. */
+const FOLD_SHOWN = 10;
+
+const FOLD_LABELS: Record<Exclude<StateNote['kind'], 'lease_open'>, string> = {
+  not_ready: '台账已 done，在途状态不是 ready',
+  dead_pid: '记录的后台进程已不在，按孤儿回收（规划/11 §2.5）',
+  lease_done: '台账已 done 的任务租约已过期',
+  no_ledger: '有在途状态文件，但台账里没有这个任务（改号、作废还是误建，报编排定）',
+};
+
+function foldedLine(head: string, ids: string[]): string {
+  const sorted = [...ids].sort();
+  const shown = sorted.slice(0, FOLD_SHOWN).join('、');
+  const rest = sorted.length > FOLD_SHOWN ? ' 等，全量见 --json' : '';
+  return `- ${head}：${shown}${rest}`;
+}
+
+/**
+ * The lines of the 需要处理 section: the four state warnings folded (one line per class, one per
+ * holder for the expired leases of tasks not done), each at the place of its first warning; every
+ * other warning as it is.
+ */
+function warningLines(b: Board): string[] {
+  const notes = stateNotes.get(b);
+  const groups = new Map<string, { head: (n: number) => string; ids: string[] }>();
+  const slots: (string | { group: string })[] = [];
+  b.warnings.forEach((w, i) => {
+    const hit = notes?.get(i);
+    if (hit === undefined || hit.text !== w) {
+      slots.push(`- ${w}`);
+      return;
+    }
+    const { note } = hit;
+    const key = note.kind === 'lease_open' ? `lease_open:${note.owner}` : note.kind;
+    let group = groups.get(key);
+    if (group === undefined) {
+      group =
+        note.kind === 'lease_open'
+          ? {
+              head: (n) => `${note.owner} 名下 ${n} 个台账未完成的任务租约已过期（这条线可能停了）`,
+              ids: [],
+            }
+          : {
+              head: (n) =>
+                `${FOLD_LABELS[note.kind]}：${n} 个` +
+                (note.kind === 'not_ready' ? '（收口：state.ts reconcile）' : ''),
+              ids: [],
+            };
+      groups.set(key, group);
+      slots.push({ group: key });
+    }
+    group.ids.push(note.id);
+  });
+  return slots.map((slot) => {
+    if (typeof slot === 'string') return slot;
+    const group = groups.get(slot.group);
+    return group === undefined ? '' : foldedLine(group.head(group.ids.length), group.ids);
+  });
 }
 
 function cell(text: string): string {
@@ -388,7 +474,7 @@ export function renderBoard(b: Board): string {
   if (b.warnings.length > 0) {
     out.push('');
     out.push('需要处理：');
-    for (const w of b.warnings) out.push(`- ${w}`);
+    out.push(...warningLines(b));
   }
   return `${out.join('\n')}\n`;
 }

@@ -1,7 +1,16 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { LEASE_MS } from './lock.ts';
+import * as stateModule from './state.ts';
 import {
   ATTEMPT_LIMITS,
   BUMP_CLOCK_SKEW_MS,
@@ -23,10 +32,19 @@ import {
   settleCall,
   stateFile,
   taskCalls,
+  type TaskState,
   uncountedReason,
   updateState,
+  writeState,
 } from './state.ts';
-import { CLI_TIMEOUT, removeDir, runCli, scratchDir } from './test-helpers.ts';
+import {
+  CLI_TIMEOUT,
+  removeDir,
+  runCli,
+  scratchDir,
+  taskYaml,
+  writeFiles,
+} from './test-helpers.ts';
 
 const T0 = new Date('2026-10-01T04:00:00.000Z');
 const later = (ms: number): Date => new Date(T0.getTime() + ms);
@@ -1408,3 +1426,1265 @@ it(
     removeDir(stateFile(id));
   },
 );
+
+// ---------------------------------------------------------------------------------------------
+// CT-06zzzq (FU-STATE-HYGIENE, D10-900): `state.ts reconcile [--apply] [--done-only]` closes the
+// in-flight state files by the ledger of the trusted root. Classes:
+//   A  ledger done, state not ready      → ready, pid cleared, lease released; history kept
+//   B  recorded pid no longer alive      → only the pid is cleared (not when the task is in A)
+//   C  expired lease of a done task      → lease released (not when the task is in A); the
+//                                          expired lease of an open task is left alone
+//   D  state file without a ledger entry → listed only, never touched
+// The exported function is looked up at run time so that this file still loads (and the older
+// tests still run) before it exists.
+
+/** What reconcileStates returns, and `state.ts reconcile` prints as JSON. Lists sorted by id. */
+type ReconcileReport = {
+  apply: boolean;
+  done_only: boolean;
+  a: string[];
+  b: string[];
+  c: string[];
+  d: string[];
+  /** The .tgz written before an --apply changed anything; null in a dry run. */
+  backup: string | null;
+  /**
+   * r1 S1: tasks whose state lock another writer held when --apply came to write them; left
+   * byte for byte as they were, and in none of a / b / c. Empty in a dry run (no locks taken).
+   */
+  skipped?: string[];
+};
+type ReconcileOptions = {
+  /** Root of the ledger (ops/tasks/*.yaml); the CLI uses the trusted root. */
+  root: string;
+  now?: Date;
+  apply?: boolean;
+  doneOnly?: boolean;
+  /**
+   * r1 S1, tests only: called once after the scan and before any task is locked and written, so
+   * that another writer can change a state file in between.
+   */
+  afterScan?: () => void;
+};
+
+function reconcile(opts: ReconcileOptions): ReconcileReport {
+  const fn = (stateModule as unknown as { reconcileStates?: unknown }).reconcileStates;
+  expect(typeof fn, 'tools/ops/state.ts exports reconcileStates(opts)').toBe('function');
+  return (fn as (o: ReconcileOptions) => ReconcileReport)(opts);
+}
+
+/** Not a running process (as in status.test.ts); the test process itself is a live one. */
+const DEAD_PID = 2147480000;
+
+/** Whole seconds: a backup is named by the second, and file times are compared by the second. */
+function nowSeconds(): Date {
+  return new Date(Math.floor(Date.now() / 1000) * 1000);
+}
+
+/** `20261008T040000Z`: an ISO instant without separators and milliseconds. */
+function basicUtc(d: Date): string {
+  return d
+    .toISOString()
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace(/[-:]/g, '');
+}
+
+function fullState(id: string, over: Partial<TaskState>): TaskState {
+  return {
+    id,
+    state: 'doing',
+    attempts: { test: 1, impl: 2, handover: 0, 'spec-test': 1, code: 2 },
+    spec_commit: 'abc1234',
+    implementer: 'claude',
+    pid: null,
+    started_at: null,
+    owner_session: null,
+    lease_until: null,
+    ask_created_at: null,
+    last_error: `/runs/${id}/r2-output.json`,
+    uncounted_calls: [
+      { kind: 'code', started_at: '2026-10-01T01:00:00Z', exit_code: 124, reason: 'timeout' },
+    ],
+    pending_bumps: [
+      {
+        kind: 'code',
+        engine: 'codex',
+        bumped_at: '2026-10-01T00:59:59.000Z',
+        consumed_by: '2026-10-01T01:00:00Z',
+        outcome: 'refunded',
+      },
+      {
+        kind: 'impl',
+        engine: 'codex',
+        bumped_at: '2026-10-01T02:00:00.000Z',
+        consumed_by: null,
+        outcome: null,
+      },
+    ],
+    opus_failures: { total: 2, consecutive: 1, last_reason: 'timeout' },
+    opus_runs: [
+      { run_id: 'o1', outcome: 'timeout', at: '2026-10-01T02:30:00.000Z' },
+      { run_id: 'o2', outcome: 'ok', at: '2026-10-01T03:00:00.000Z' },
+      { run_id: 'o3', outcome: 'timeout', at: '2026-10-01T03:30:00.000Z' },
+    ],
+    updated_at: '2026-10-01T04:00:00.000Z',
+    ...over,
+  };
+}
+
+type ReconcileFixture = {
+  base: string;
+  /** The ledger root (trusted root of the CLI). */
+  root: string;
+  runs: string;
+  now: Date;
+  /** Bytes of every state file, by task id. */
+  snapshot: () => Record<string, string>;
+  /** The parsed state file of a task. */
+  read: (id: string) => TaskState;
+  /** Runs `fn` with COULI_RUNS pointing at this fixture's runs directory. */
+  within: <T>(fn: () => T) => T;
+  remove: () => void;
+};
+
+/**
+ * One state file per case, against a ledger in which R1-* exist and R9-01 does not:
+ *   R1-01 done, doing, dead pid, expired lease        → A (only: not B, not C)
+ *   R1-02 done, review                                 → A
+ *   R1-03 todo, doing, dead pid, lease not expired     → B: pid cleared, lease kept
+ *   R1-04 todo, doing, live pid (this process)         → untouched
+ *   R1-05 done, ready, expired lease                   → C: lease released
+ *   R1-06 todo, doing, expired lease                   → untouched (a lane stopped: for a person)
+ *   R1-07 done, ready, lease not expired               → untouched
+ *   R1-08 todo, verify, no pid, no lease               → untouched
+ *   R1-09 done, ready, dead pid                        → B (of a done task): pid cleared
+ *   R9-01 no ledger entry, doing, dead pid, expired    → D: listed, untouched
+ */
+function reconcileFixture(now: Date = nowSeconds()): ReconcileFixture {
+  const base = scratchDir('reconcile');
+  const root = join(base, 'repo');
+  const fixtureRuns = join(base, 'runs');
+  const done = { status: 'done', pr: '7' };
+  const ledger: Record<string, Record<string, string>> = {
+    'R1-01': done,
+    'R1-02': done,
+    'R1-03': {},
+    'R1-04': {},
+    'R1-05': done,
+    'R1-06': {},
+    'R1-07': done,
+    'R1-08': {},
+    'R1-09': done,
+  };
+  writeFiles(
+    root,
+    Object.fromEntries(
+      Object.entries(ledger).map(([id, fields]) => [
+        `ops/tasks/${id}.yaml`,
+        taskYaml({
+          id,
+          title: `任务 ${id}`,
+          paths: `\n  - 'apps/api/src/modules/${id}/**'`,
+          ...fields,
+        }),
+      ]),
+    ),
+  );
+  const expired = new Date(now.getTime() - 2 * 3600_000).toISOString();
+  const valid = new Date(now.getTime() + 2 * 3600_000).toISOString();
+  const started = new Date(now.getTime() - 3 * 3600_000).toISOString();
+  const states: TaskState[] = [
+    fullState('R1-01', {
+      pid: DEAD_PID,
+      started_at: started,
+      owner_session: 'w1',
+      lease_until: expired,
+    }),
+    fullState('R1-02', { state: 'review' }),
+    fullState('R1-03', {
+      pid: DEAD_PID,
+      started_at: started,
+      owner_session: 'w2',
+      lease_until: valid,
+    }),
+    fullState('R1-04', { pid: process.pid, started_at: started }),
+    fullState('R1-05', { state: 'ready', owner_session: 'w3', lease_until: expired }),
+    fullState('R1-06', { owner_session: 'w4', lease_until: expired }),
+    fullState('R1-07', { state: 'ready', owner_session: 'w5', lease_until: valid }),
+    fullState('R1-08', { state: 'verify' }),
+    fullState('R1-09', { state: 'ready', pid: DEAD_PID, started_at: started }),
+    fullState('R9-01', {
+      pid: DEAD_PID,
+      started_at: started,
+      owner_session: 'w6',
+      lease_until: expired,
+    }),
+  ];
+  const within = <T>(fn: () => T): T => {
+    const prev = process.env.COULI_RUNS;
+    process.env.COULI_RUNS = fixtureRuns;
+    try {
+      return fn();
+    } finally {
+      process.env.COULI_RUNS = prev;
+    }
+  };
+  within(() => {
+    for (const s of states) writeState(s);
+  });
+  const dir = join(fixtureRuns, 'state');
+  return {
+    base,
+    root,
+    runs: fixtureRuns,
+    now,
+    snapshot: () =>
+      Object.fromEntries(
+        readdirSync(dir)
+          .filter((f) => f.endsWith('.json'))
+          .sort()
+          .map((f) => [f.slice(0, -'.json'.length), readFileSync(join(dir, f), 'utf8')]),
+      ),
+    read: (id) => JSON.parse(readFileSync(join(dir, `${id}.json`), 'utf8')) as TaskState,
+    within,
+    remove: () => removeDir(base),
+  };
+}
+
+/** The fields reconcile never changes: rounds, pending bumps, breaker history, the rest. */
+function history(s: TaskState): Record<string, unknown> {
+  return {
+    id: s.id,
+    attempts: s.attempts,
+    spec_commit: s.spec_commit,
+    implementer: s.implementer,
+    last_error: s.last_error,
+    uncounted_calls: s.uncounted_calls,
+    pending_bumps: s.pending_bumps,
+    opus_failures: s.opus_failures,
+    opus_runs: s.opus_runs,
+  };
+}
+
+function without(s: TaskState, keys: (keyof TaskState)[]): Record<string, unknown> {
+  const copy: Record<string, unknown> = { ...s };
+  for (const k of keys) delete copy[k];
+  return copy;
+}
+
+const UNTOUCHED = ['R1-04', 'R1-06', 'R1-07', 'R1-08', 'R9-01'];
+
+it('[CT-06zzzq] reconcile is a dry run by default: it lists classes A / B / C / D and writes nothing', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    const { skipped, ...report } = fx.within(() => reconcile({ root: fx.root, now: fx.now }));
+    expect(skipped ?? []).toEqual([]);
+    expect(report).toEqual({
+      apply: false,
+      done_only: false,
+      a: ['R1-01', 'R1-02'],
+      b: ['R1-03', 'R1-09'],
+      c: ['R1-05'],
+      d: ['R9-01'],
+      backup: null,
+    });
+    // Not one byte changed, no backup directory, no log: only the state directory is there.
+    expect(fx.snapshot()).toEqual(before);
+    expect(readdirSync(fx.runs).sort()).toEqual(['state']);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply: class A becomes ready without pid or lease, its history kept', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    const report = fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    expect(report).toMatchObject({ apply: true, a: ['R1-01', 'R1-02'] });
+    for (const id of ['R1-01', 'R1-02']) {
+      const was = JSON.parse(before[id] ?? '') as TaskState;
+      const now = fx.read(id);
+      expect(now).toMatchObject({
+        state: 'ready',
+        pid: null,
+        owner_session: null,
+        lease_until: null,
+      });
+      // Rounds, pending bumps and the breaker history stay for the audit.
+      expect(history(now)).toEqual(history(was));
+    }
+    // A task in A is counted there only, although its pid is gone and its lease expired.
+    expect(report.b).not.toContain('R1-01');
+    expect(report.c).not.toContain('R1-01');
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply: class B only clears a dead pid; a live pid is left alone', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    const report = fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    expect(report.b).toEqual(['R1-03', 'R1-09']);
+    const was = JSON.parse(before['R1-03'] ?? '') as TaskState;
+    const now = fx.read('R1-03');
+    expect(now.pid).toBeNull();
+    // State, lease, owner and every other field stay as they were.
+    expect(now).toMatchObject({
+      state: 'doing',
+      owner_session: 'w2',
+      lease_until: was.lease_until,
+    });
+    expect(without(now, ['pid', 'started_at', 'updated_at'])).toEqual(
+      without(was, ['pid', 'started_at', 'updated_at']),
+    );
+    // A done task whose pid is gone has it cleared too, and stays ready.
+    expect(fx.read('R1-09')).toMatchObject({ state: 'ready', pid: null });
+    // The pid of this very process is alive: that file keeps every byte.
+    expect(fx.snapshot()['R1-04']).toBe(before['R1-04']);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply: class C releases expired leases of done tasks only', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    const report = fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    // R1-01 also has an expired lease, but it is in A already: not counted twice.
+    expect(report.c).toEqual(['R1-05']);
+    const was = JSON.parse(before['R1-05'] ?? '') as TaskState;
+    const now = fx.read('R1-05');
+    expect(now).toMatchObject({
+      state: 'ready',
+      pid: null,
+      owner_session: null,
+      lease_until: null,
+    });
+    expect(history(now)).toEqual(history(was));
+    const after = fx.snapshot();
+    // The expired lease of an open task is a stopped lane, for a person to look at.
+    expect(after['R1-06']).toBe(before['R1-06']);
+    // A lease that has not expired stays, of a done task and of an open one (B touched its pid).
+    expect(after['R1-07']).toBe(before['R1-07']);
+    const open = JSON.parse(before['R1-03'] ?? '') as TaskState;
+    expect(open.lease_until).not.toBeNull();
+    expect(fx.read('R1-03')).toMatchObject({ owner_session: 'w2', lease_until: open.lease_until });
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply: class D (state file, no ledger entry) is listed and left as it is', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    const report = fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    expect(report.d).toEqual(['R9-01']);
+    // Dead pid and expired lease notwithstanding: D is for the orchestrator to decide.
+    for (const list of [report.a, report.b, report.c]) expect(list).not.toContain('R9-01');
+    expect(existsSync(join(fx.runs, 'state', 'R9-01.json'))).toBe(true);
+    expect(fx.snapshot()['R9-01']).toBe(before['R9-01']);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply --done-only skips class B of open tasks, still closes A and C', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    const report = fx.within(() =>
+      reconcile({ root: fx.root, now: fx.now, apply: true, doneOnly: true }),
+    );
+    expect(report).toMatchObject({
+      apply: true,
+      done_only: true,
+      a: ['R1-01', 'R1-02'],
+      b: ['R1-09'],
+      c: ['R1-05'],
+      d: ['R9-01'],
+    });
+    const after = fx.snapshot();
+    // The open task's dead pid is left for its lane (规划/11 §2.5 orphan handling).
+    expect(after['R1-03']).toBe(before['R1-03']);
+    expect(fx.read('R1-03').pid).toBe(DEAD_PID);
+    expect(fx.read('R1-01')).toMatchObject({ state: 'ready', pid: null, lease_until: null });
+    expect(fx.read('R1-05')).toMatchObject({ owner_session: null, lease_until: null });
+    // A done task's dead pid is still cleared (D10-900 ③: A and done tasks' B / C).
+    expect(fx.read('R1-09').pid).toBeNull();
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply backs the state up first and drops backups older than 7 days', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    const backups = join(fx.runs, 'state-backups');
+    const day = 24 * 3600_000;
+    const old = new Date(fx.now.getTime() - 8 * day);
+    const recent = new Date(fx.now.getTime() - 3 * day);
+    mkdirSync(backups, { recursive: true });
+    for (const d of [old, recent]) {
+      const file = join(backups, `${basicUtc(d)}.tgz`);
+      writeFileSync(file, 'an earlier backup\n');
+      utimesSync(file, d, d);
+    }
+    const report = fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    const made = join(backups, `${basicUtc(fx.now)}.tgz`);
+    expect(report.backup).toBe(made);
+    expect(existsSync(made)).toBe(true);
+    expect(readdirSync(backups).sort()).toEqual(
+      [`${basicUtc(recent)}.tgz`, `${basicUtc(fx.now)}.tgz`].sort(),
+    );
+    // The archive holds every state file as it was before the changes.
+    const out = join(fx.base, 'unpacked');
+    mkdirSync(out);
+    const tar = spawnSync('tar', ['-xzf', made, '-C', out], { encoding: 'utf8' });
+    expect(tar.status, tar.stderr).toBe(0);
+    const unpacked: Record<string, string> = {};
+    for (const rel of readdirSync(out, { recursive: true }) as string[]) {
+      const name = basename(rel);
+      if (name.endsWith('.json')) {
+        unpacked[name.slice(0, -'.json'.length)] = readFileSync(join(out, rel), 'utf8');
+      }
+    }
+    expect(unpacked).toEqual(before);
+    expect(fx.snapshot()['R1-01']).not.toBe(before['R1-01']);
+  } finally {
+    fx.remove();
+  }
+});
+
+/** `a=2` and the like in a log line; case and the separator around it are free. */
+function countIn(line: string, cls: string, n: number): boolean {
+  return new RegExp(`(^|[^A-Za-z0-9_])${cls}=${n}(?![0-9])`, 'i').test(line);
+}
+
+it('[CT-06zzzq] every reconcile --apply appends exactly one line with the counts; a dry run none', () => {
+  const fx = reconcileFixture();
+  try {
+    const log = join(fx.runs, 'state-reconcile.log');
+    fx.within(() => reconcile({ root: fx.root, now: fx.now }));
+    expect(existsSync(log)).toBe(false);
+    fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    const first = readFileSync(log, 'utf8');
+    expect(first.endsWith('\n')).toBe(true);
+    const lines = first.split('\n').filter((l) => l !== '');
+    expect(lines).toHaveLength(1);
+    const line = lines[0] ?? '';
+    expect(line).toContain(fx.now.toISOString());
+    for (const [cls, n] of [
+      ['a', 2],
+      ['b', 2],
+      ['c', 1],
+      ['d', 1],
+    ] as const) {
+      expect(countIn(line, cls, n), `${cls}=${n} in: ${line}`).toBe(true);
+    }
+    // A dry run in between leaves the log alone; the next --apply adds one line.
+    fx.within(() => reconcile({ root: fx.root, now: new Date(fx.now.getTime() + 30_000) }));
+    expect(readFileSync(log, 'utf8')).toBe(first);
+    const later2 = new Date(fx.now.getTime() + 60_000);
+    fx.within(() => reconcile({ root: fx.root, now: later2, apply: true }));
+    const text = readFileSync(log, 'utf8');
+    expect(text.startsWith(first)).toBe(true);
+    const added = text
+      .slice(first.length)
+      .split('\n')
+      .filter((l) => l !== '');
+    expect(added).toHaveLength(1);
+    expect(added[0]).toContain(later2.toISOString());
+    expect(countIn(added[0] ?? '', 'a', 0)).toBe(true);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply is idempotent: a second run finds no A / B / C and changes nothing', () => {
+  const fx = reconcileFixture();
+  try {
+    fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    const once = fx.snapshot();
+    const again = fx.within(() =>
+      reconcile({ root: fx.root, now: new Date(fx.now.getTime() + 60_000), apply: true }),
+    );
+    expect(again).toMatchObject({ apply: true, a: [], b: [], c: [], d: ['R9-01'] });
+    expect(fx.snapshot()).toEqual(once);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply leaves every other state file byte for byte as it was', () => {
+  const fx = reconcileFixture();
+  try {
+    const before = fx.snapshot();
+    fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true }));
+    const after = fx.snapshot();
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    for (const id of UNTOUCHED) expect(after[id], id).toBe(before[id]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it(
+  '[CT-06zzzq] state.ts reconcile on the command line: a dry run, then --apply --done-only',
+  () => {
+    const fx = reconcileFixture();
+    try {
+      // The ledger is read from the trusted root, never from the branch under test.
+      const env = { COULI_RUNS: fx.runs, COULI_TRUSTED_ROOT: fx.root };
+      const before = fx.snapshot();
+      const dry = runCli('state.ts', ['reconcile'], env);
+      expect(dry.status, dry.stderr).toBe(0);
+      expect(JSON.parse(dry.stdout)).toMatchObject({
+        apply: false,
+        a: ['R1-01', 'R1-02'],
+        b: ['R1-03', 'R1-09'],
+        c: ['R1-05'],
+        d: ['R9-01'],
+        backup: null,
+      });
+      expect(fx.snapshot()).toEqual(before);
+      expect(readdirSync(fx.runs).sort()).toEqual(['state']);
+
+      const applied = runCli('state.ts', ['reconcile', '--apply', '--done-only'], env);
+      expect(applied.status, applied.stderr).toBe(0);
+      const report = JSON.parse(applied.stdout) as ReconcileReport;
+      expect(report).toMatchObject({
+        apply: true,
+        done_only: true,
+        a: ['R1-01', 'R1-02'],
+        b: ['R1-09'],
+        c: ['R1-05'],
+        d: ['R9-01'],
+      });
+      expect(report.backup).toMatch(/state-backups\/\d{8}T\d{6}Z\.tgz$/);
+      expect(existsSync(report.backup ?? '')).toBe(true);
+      expect(
+        readFileSync(join(fx.runs, 'state-reconcile.log'), 'utf8').trim().split('\n'),
+      ).toHaveLength(1);
+      expect(fx.read('R1-01')).toMatchObject({ state: 'ready', pid: null, lease_until: null });
+      expect(fx.read('R1-03').pid).toBe(DEAD_PID);
+      for (const id of UNTOUCHED) expect(fx.snapshot()[id], id).toBe(before[id]);
+    } finally {
+      fx.remove();
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+// ---------------------------------------------------------------------------------------------
+// CT-06zzzq r1 S1: one short per-task state mutex for every read-modify-write of a state file
+// (updateState, bumpAttempt, settleCall, recordOpusRun, migrateState, each write of reconcile).
+// Not a lease (lock.ts): it is held only around one read-modify-write.
+//   <runs>/state-locks/<id>.lock   created exclusively (open 'wx'), holding
+//                                  {"pid": <holder pid>, "acquired_at": "<ISO instant>"}
+// A writer that finds it held waits up to STATE_LOCK_WAIT_MS (COULI_STATE_LOCK_WAIT_MS, read on
+// every call, overrides it), then fails without writing. A lock whose holder pid is not alive, or
+// whose acquired_at is older than STATE_LOCK_STALE_MS, is stale and may be taken over. reconcile
+// never waits: a held lock skips that task (report.skipped). The lock lives outside the state
+// directory so that state/ keeps only <id>.json files (listStates, the backup archive).
+
+function lockConstant(name: 'STATE_LOCK_WAIT_MS' | 'STATE_LOCK_STALE_MS'): number {
+  const v = (stateModule as unknown as Record<string, unknown>)[name];
+  expect(typeof v, `tools/ops/state.ts exports ${name}`).toBe('number');
+  expect(v as number).toBeGreaterThan(0);
+  return v as number;
+}
+
+function lockFile(fixtureRuns: string, id: string): string {
+  return join(fixtureRuns, 'state-locks', `${id}.lock`);
+}
+
+/** Another writer holds the lock of `id`; the parent process is alive and is not this one. */
+function holdLock(
+  fixtureRuns: string,
+  id: string,
+  pid: number = process.ppid,
+  at: Date = new Date(),
+  token = `held-by-test-${String(++heldLocks)}`,
+): string {
+  const file = lockFile(fixtureRuns, id);
+  mkdirSync(dirname(file), { recursive: true });
+  // r2 S1: every lock carries the token of its acquisition.
+  writeFileSync(file, `${JSON.stringify({ pid, acquired_at: at.toISOString(), token })}\n`);
+  return file;
+}
+let heldLocks = 0;
+
+/** Lock files left behind under <runs>/state-locks (the directory itself may stay). */
+function leftLocks(fixtureRuns: string): string[] {
+  const dir = join(fixtureRuns, 'state-locks');
+  return existsSync(dir) ? readdirSync(dir) : [];
+}
+
+function withLockWait<T>(ms: number, fn: () => T): T {
+  const prev = process.env.COULI_STATE_LOCK_WAIT_MS;
+  process.env.COULI_STATE_LOCK_WAIT_MS = String(ms);
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete process.env.COULI_STATE_LOCK_WAIT_MS;
+    else process.env.COULI_STATE_LOCK_WAIT_MS = prev;
+  }
+}
+
+it('[CT-06zzzq] reconcile --apply skips a task whose state lock a live writer holds, without waiting', () => {
+  const fx = reconcileFixture();
+  try {
+    expect(process.ppid).not.toBe(process.pid);
+    const before = fx.snapshot();
+    const held = holdLock(fx.runs, 'R1-01');
+    const heldText = readFileSync(held, 'utf8');
+    const t0 = Date.now();
+    // A long wait for the other writers: reconcile must not use it.
+    const report = withLockWait(20_000, () =>
+      fx.within(() => reconcile({ root: fx.root, now: fx.now, apply: true })),
+    );
+    expect(Date.now() - t0).toBeLessThan(10_000);
+    expect(report.skipped).toEqual(['R1-01']);
+    expect(report.a).toEqual(['R1-02']);
+    for (const list of [report.b, report.c]) expect(list).not.toContain('R1-01');
+    // The locked task keeps every byte, and the lock is not reconcile's to remove.
+    expect(fx.snapshot()['R1-01']).toBe(before['R1-01']);
+    expect(readFileSync(held, 'utf8')).toBe(heldText);
+    // Every other task is closed as before.
+    expect(report.b).toEqual(['R1-03', 'R1-09']);
+    expect(report.c).toEqual(['R1-05']);
+    expect(fx.read('R1-02')).toMatchObject({ state: 'ready' });
+    expect(fx.read('R1-03').pid).toBeNull();
+    expect(fx.read('R1-05')).toMatchObject({ owner_session: null, lease_until: null });
+    expect(leftLocks(fx.runs)).toEqual(['R1-01.lock']);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply re-reads under the lock: a bump made after the scan is kept', () => {
+  const fx = reconcileFixture();
+  try {
+    let hooked = 0;
+    const report = fx.within(() =>
+      reconcile({
+        root: fx.root,
+        now: fx.now,
+        apply: true,
+        afterScan: () => {
+          hooked += 1;
+          // dispatch counts a round of R1-01 (class A) and R1-03 (class B) meanwhile.
+          bumpAttempt('R1-01', 'impl', fx.now);
+          bumpAttempt('R1-03', 'code', fx.now);
+        },
+      }),
+    );
+    expect(hooked).toBe(1);
+    const a = fx.read('R1-01');
+    expect(a.attempts.impl).toBe(3);
+    expect(a.pending_bumps).toHaveLength(3);
+    expect(a.pending_bumps?.at(-1)).toMatchObject({ kind: 'impl', outcome: null });
+    // Classified again under the lock: still A, so still closed.
+    expect(a).toMatchObject({ state: 'ready', pid: null, owner_session: null, lease_until: null });
+    expect(report.a).toContain('R1-01');
+    const b = fx.read('R1-03');
+    expect(b.attempts.code).toBe(3);
+    expect(b.pending_bumps).toHaveLength(3);
+    expect(b).toMatchObject({ state: 'doing', pid: null, owner_session: 'w2' });
+    expect(report.b).toContain('R1-03');
+    expect(report.skipped ?? []).toEqual([]);
+    expect(leftLocks(fx.runs)).toEqual([]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] reconcile --apply re-classifies under the lock: a pid that is alive again is kept', () => {
+  const fx = reconcileFixture();
+  try {
+    let afterHook = '';
+    const report = fx.within(() =>
+      reconcile({
+        root: fx.root,
+        now: fx.now,
+        apply: true,
+        afterScan: () => {
+          // The lane of R1-03 came back and started a new run.
+          updateState('R1-03', { pid: process.pid }, fx.now);
+          afterHook = readFileSync(join(fx.runs, 'state', 'R1-03.json'), 'utf8');
+        },
+      }),
+    );
+    expect(afterHook).not.toBe('');
+    expect(report.b).not.toContain('R1-03');
+    expect(fx.read('R1-03').pid).toBe(process.pid);
+    expect(readFileSync(join(fx.runs, 'state', 'R1-03.json'), 'utf8')).toBe(afterHook);
+    // The rest of class B is still closed.
+    expect(report.b).toEqual(['R1-09']);
+    expect(fx.read('R1-09').pid).toBeNull();
+  } finally {
+    fx.remove();
+  }
+});
+
+it(
+  '[CT-06zzzq] a writer that finds the state lock held waits a bounded time, fails and writes nothing',
+  () => {
+    lockConstant('STATE_LOCK_WAIT_MS');
+    const fx = reconcileFixture();
+    try {
+      const before = fx.snapshot();
+      const held = holdLock(fx.runs, 'R1-04');
+      withLockWait(300, () =>
+        fx.within(() => {
+          const t0 = Date.now();
+          expect(() => bumpAttempt('R1-04', 'impl', fx.now)).toThrow(/lock/i);
+          const waited = Date.now() - t0;
+          expect(waited).toBeGreaterThanOrEqual(250);
+          expect(waited).toBeLessThan(10_000);
+          expect(() => updateState('R1-04', { state: 'verify' }, fx.now)).toThrow(/lock/i);
+          // A task without a state file yet: none is created either.
+          holdLock(fx.runs, 'R1-77');
+          expect(() => updateState('R1-77', { state: 'doing' }, fx.now)).toThrow(/lock/i);
+          expect(existsSync(join(fx.runs, 'state', 'R1-77.json'))).toBe(false);
+        }),
+      );
+      expect(fx.snapshot()).toEqual(before);
+      // On the command line: exit 1, nothing written.
+      const cli = runCli('state.ts', ['set', 'R1-04', '--state', 'verify'], {
+        COULI_RUNS: fx.runs,
+        COULI_STATE_LOCK_WAIT_MS: '300',
+      });
+      expect(cli.status).toBe(1);
+      expect(cli.stderr).toMatch(/lock/i);
+      expect(fx.snapshot()).toEqual(before);
+      // Once the holder lets go, the same write goes through and leaves no lock of its own.
+      removeDir(held);
+      const bumped = fx.within(() => bumpAttempt('R1-04', 'impl', fx.now));
+      expect(bumped.attempts.impl).toBe(3);
+      expect(fx.read('R1-04').attempts.impl).toBe(3);
+      expect(leftLocks(fx.runs)).toEqual(['R1-77.lock']);
+    } finally {
+      fx.remove();
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it('[CT-06zzzq] a stale state lock (dead holder, or older than the limit) is taken over', () => {
+  const stale = lockConstant('STATE_LOCK_STALE_MS');
+  const fx = reconcileFixture();
+  try {
+    withLockWait(20_000, () =>
+      fx.within(() => {
+        holdLock(fx.runs, 'R1-04', DEAD_PID);
+        const t0 = Date.now();
+        expect(bumpAttempt('R1-04', 'impl', fx.now).attempts.impl).toBe(3);
+        expect(Date.now() - t0).toBeLessThan(10_000);
+        // A live holder, but the lock is older than the limit.
+        holdLock(fx.runs, 'R1-08', process.ppid, new Date(Date.now() - stale - 60_000));
+        expect(updateState('R1-08', { state: 'review' }, fx.now).state).toBe('review');
+      }),
+    );
+    expect(fx.read('R1-04').attempts.impl).toBe(3);
+    expect(fx.read('R1-08').state).toBe('review');
+    expect(leftLocks(fx.runs)).toEqual([]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] every state writer takes the lock and leaves no lock file behind', () => {
+  const fx = reconcileFixture();
+  try {
+    // An old-shape file for migrateState (one shared review counter, no review left unrecorded).
+    fx.within(() =>
+      writeFileSync(
+        stateFile('R8-01'),
+        JSON.stringify({
+          id: 'R8-01',
+          state: 'doing',
+          attempts: { impl: 1, review: 0 },
+          spec_commit: null,
+          pid: null,
+          started_at: null,
+          owner_session: null,
+          lease_until: null,
+          ask_created_at: null,
+          last_error: null,
+          updated_at: fx.now.toISOString(),
+        }),
+      ),
+    );
+    const settle = meta({ ...NO_OUTPUT, review_type: 'money', started_at: fx.now.toISOString() });
+    const writers: [string, string, () => unknown][] = [
+      ['updateState', 'R1-04', () => updateState('R1-04', { last_error: '/x' }, fx.now)],
+      ['bumpAttempt', 'R1-06', () => bumpAttempt('R1-06', 'test', fx.now)],
+      ['settleCall', 'R1-08', () => settleCall('R1-08', settle, fx.now)],
+      ['recordOpusRun', 'R1-07', () => recordOpusRun('R1-07', 'run-x', 'ok', 'RV1', fx.now)],
+      ['migrateState', 'R8-01', () => migrateState('R8-01', { now: fx.now })],
+    ];
+    const before = fx.snapshot();
+    withLockWait(100, () =>
+      fx.within(() => {
+        for (const [name, id, write] of writers) {
+          const held = holdLock(fx.runs, id);
+          expect(write, `${name} with the lock of ${id} held`).toThrow(/lock/i);
+          removeDir(held);
+        }
+      }),
+    );
+    expect(fx.snapshot()).toEqual(before);
+    // Free locks: every writer goes through and removes its own lock.
+    fx.within(() => {
+      for (const [, , write] of writers) write();
+      reconcile({ root: fx.root, now: fx.now, apply: true });
+      claimTask('R1-02', { owner: 'session-a', now: fx.now });
+      releaseTask('R1-02', { owner: 'session-a', now: fx.now });
+    });
+    const after = fx.snapshot();
+    for (const [name, id] of writers) expect(after[id], name).not.toBe(before[id]);
+    expect(leftLocks(fx.runs)).toEqual([]);
+    // The state directory still holds state files only.
+    expect(readdirSync(join(fx.runs, 'state')).every((f) => f.endsWith('.json'))).toBe(true);
+  } finally {
+    fx.remove();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// CT-06zzzq r2 S1: taking over a stale state lock must never remove a live holder's lock.
+//   <runs>/state-locks/<id>.lock            {"pid", "acquired_at", "token"}: token unique per
+//                                           acquisition (also for the same pid)
+//   <runs>/state-locks/<id>.lock.takeover   the takeover gate, created exclusively ('wx'); every
+//                                           unlink of <id>.lock happens while holding it
+// Takeover: judged stale → take the gate (not to be had: wait as for a held lock) → re-read the
+// lock and unlink it only if its token is still the one judged stale → drop the gate → the usual
+// 'wx' create. Release: take the gate, unlink only our own token, drop the gate. A holder re-reads
+// the lock before it writes the state file and refuses (an error naming the lock) when the token
+// is no longer its own. A gate is never reclaimed automatically, not even of a dead pid: a writer
+// that cannot get it fails at the wait limit with the gate's path in the message.
+// Test seam, exported by state.ts:
+//   tryStateLock(id): string | null        one attempt, no waiting; our token, or null
+//   releaseStateLock(id, token): void      the release described above
+//   setStateLockHooks(hooks | null): void  process-wide hooks, consulted at every point:
+//     afterStale({id, seen})    a held lock was judged stale (seen: its token), gate not tried yet
+//     afterGate({id, seen})     the gate is held, the lock not re-read nor unlinked yet
+//     afterAcquire({id, token}) withStateLock took the lock, before the read-modify-write runs
+
+type StateLockHooks = {
+  afterStale?: (e: { id: string; seen: string }) => void;
+  afterGate?: (e: { id: string; seen: string }) => void;
+  afterAcquire?: (e: { id: string; token: string }) => void;
+  /**
+   * Write under the gate: the takeover gate is held and the lock was just checked to carry
+   * `token`; the state file is not written yet.
+   */
+  beforeWrite?: (e: { id: string; token: string }) => void;
+};
+type StateLockApi = {
+  tryStateLock: (id: string) => string | null;
+  releaseStateLock: (id: string, token: string) => void;
+  setStateLockHooks: (hooks: StateLockHooks | null) => void;
+};
+
+function lockApi(): StateLockApi {
+  const m = stateModule as unknown as Record<string, unknown>;
+  for (const name of ['tryStateLock', 'releaseStateLock', 'setStateLockHooks']) {
+    expect(typeof m[name], `tools/ops/state.ts exports ${name}`).toBe('function');
+  }
+  return m as unknown as StateLockApi;
+}
+
+function withHooks<T>(api: StateLockApi, hooks: StateLockHooks, fn: () => T): T {
+  api.setStateLockHooks(hooks);
+  try {
+    return fn();
+  } finally {
+    api.setStateLockHooks(null);
+  }
+}
+
+function gateFile(fixtureRuns: string, id: string): string {
+  return `${lockFile(fixtureRuns, id)}.takeover`;
+}
+
+/** The token of the lock file of `id`, or null when there is none. */
+function lockToken(fixtureRuns: string, id: string): string | null {
+  const file = lockFile(fixtureRuns, id);
+  if (!existsSync(file)) return null;
+  return (JSON.parse(readFileSync(file, 'utf8')) as { token?: string }).token ?? null;
+}
+
+it('[CT-06zzzq] three writers and one stale lock: the late taker-over leaves the new holder alone', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const id = 'R1-04';
+    const before = fx.snapshot();
+    holdLock(fx.runs, id, DEAD_PID, new Date(), 'old-token');
+    let phase: 'B' | 'A and C' | 'B again' = 'B';
+    let tokenA: string | null = null;
+    const gates: { phase: string; seen: string; current: string | null }[] = [];
+    const tokenB = withLockWait(100, () =>
+      fx.within(() =>
+        withHooks(
+          api,
+          {
+            afterStale: ({ seen }) => {
+              if (phase !== 'B') return;
+              // B has judged the old lock stale and stops here; A and C come in.
+              expect(seen).toBe('old-token');
+              phase = 'A and C';
+              tokenA = api.tryStateLock(id);
+              expect(tokenA).not.toBeNull();
+              expect(lockToken(fx.runs, id)).toBe(tokenA);
+              // C cannot create the lock, nor get into a write.
+              expect(api.tryStateLock(id)).toBeNull();
+              expect(() => updateState(id, { state: 'verify' }, fx.now)).toThrow(/lock/i);
+              expect(lockToken(fx.runs, id)).toBe(tokenA);
+              phase = 'B again';
+            },
+            afterGate: ({ seen }) => {
+              expect(existsSync(gateFile(fx.runs, id)), 'the gate is held').toBe(true);
+              gates.push({ phase, seen, current: lockToken(fx.runs, id) });
+            },
+          },
+          () => api.tryStateLock(id),
+        ),
+      ),
+    );
+    // B came to the takeover after A held the lock: it removed nothing and has no lock.
+    expect(tokenB).toBeNull();
+    expect(phase).toBe('B again');
+    expect(lockToken(fx.runs, id)).toBe(tokenA);
+    // A took over the old lock under the gate; whatever B saw under the gate was A's lock.
+    expect(gates.filter((g) => g.phase === 'A and C')).toEqual([
+      { phase: 'A and C', seen: 'old-token', current: 'old-token' },
+    ]);
+    for (const g of gates.filter((x) => x.phase === 'B again')) expect(g.current).toBe(tokenA);
+    expect(existsSync(gateFile(fx.runs, id))).toBe(false);
+    expect(fx.snapshot()).toEqual(before);
+    // A lets go: no lock and no gate left, and the next writer gets through.
+    fx.within(() => api.releaseStateLock(id, tokenA ?? ''));
+    expect(leftLocks(fx.runs)).toEqual([]);
+    expect(fx.within(() => updateState(id, { state: 'verify' }, fx.now)).state).toBe('verify');
+    expect(leftLocks(fx.runs)).toEqual([]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] a takeover finding a new lock under the gate removes nothing and goes back to wait', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const id = 'R1-04';
+    const before = fx.snapshot();
+    holdLock(fx.runs, id, DEAD_PID, new Date(), 'old-token');
+    let swapped = 0;
+    const hooks: StateLockHooks = {
+      afterGate: ({ seen }) => {
+        expect(seen).toBe('old-token');
+        if (lockToken(fx.runs, id) !== 'old-token') return;
+        // Between the stale judgement and the gate, another writer's new lock took its place.
+        holdLock(fx.runs, id, process.ppid, new Date(), 'fresh-other');
+        swapped += 1;
+      },
+    };
+    const token = fx.within(() => withHooks(api, hooks, () => api.tryStateLock(id)));
+    expect(swapped).toBe(1);
+    expect(token).toBeNull();
+    expect(lockToken(fx.runs, id)).toBe('fresh-other');
+    expect(existsSync(gateFile(fx.runs, id))).toBe(false);
+    // A writer in the same spot waits for the live lock and fails; nothing written.
+    holdLock(fx.runs, id, DEAD_PID, new Date(), 'old-token');
+    withLockWait(150, () =>
+      fx.within(() =>
+        withHooks(api, hooks, () => expect(() => bumpAttempt(id, 'impl', fx.now)).toThrow(/lock/i)),
+      ),
+    );
+    expect(lockToken(fx.runs, id)).toBe('fresh-other');
+    expect(fx.snapshot()).toEqual(before);
+    expect(leftLocks(fx.runs)).toEqual([`${id}.lock`]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] a holder releasing a lock that is no longer its own leaves the other lock alone', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const id = 'R1-04';
+    fx.within(() => {
+      const token = api.tryStateLock(id);
+      expect(token).not.toBeNull();
+      expect(lockToken(fx.runs, id)).toBe(token);
+      holdLock(fx.runs, id, process.ppid, new Date(), 'someone-else');
+      api.releaseStateLock(id, token ?? '');
+    });
+    expect(lockToken(fx.runs, id)).toBe('someone-else');
+    expect(leftLocks(fx.runs)).toEqual([`${id}.lock`]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] a holder whose lock was replaced refuses to write the state file', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const before = fx.snapshot();
+    let acquired = 0;
+    const hooks: StateLockHooks = {
+      afterAcquire: ({ id, token }) => {
+        acquired += 1;
+        expect(lockToken(fx.runs, id)).toBe(token);
+        holdLock(fx.runs, id, process.ppid, new Date(), `other-${id}`);
+      },
+    };
+    fx.within(() =>
+      withHooks(api, hooks, () => {
+        expect(() => updateState('R1-04', { state: 'verify' }, fx.now)).toThrow(/lock/i);
+        expect(() => bumpAttempt('R1-06', 'test', fx.now)).toThrow(/lock/i);
+        expect(() => recordOpusRun('R1-07', 'run-y', 'ok', 'RV1', fx.now)).toThrow(/lock/i);
+      }),
+    );
+    expect(acquired).toBe(3);
+    expect(fx.snapshot()).toEqual(before);
+    // The other holders' locks stay: the refusing writer removed none of them.
+    for (const id of ['R1-04', 'R1-06', 'R1-07'])
+      expect(lockToken(fx.runs, id)).toBe(`other-${id}`);
+    expect(leftLocks(fx.runs).sort()).toEqual(['R1-04.lock', 'R1-06.lock', 'R1-07.lock']);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] a held takeover gate, even of a dead pid, is never reclaimed: the writer fails naming it', () => {
+  const fx = reconcileFixture();
+  try {
+    lockApi();
+    const before = fx.snapshot();
+    for (const [id, pid] of [
+      ['R1-04', DEAD_PID],
+      ['R1-08', process.ppid],
+    ] as const) {
+      const lock = holdLock(fx.runs, id, DEAD_PID, new Date(), `stale-${id}`);
+      const gate = gateFile(fx.runs, id);
+      const gateText = `${JSON.stringify({ pid, acquired_at: new Date(0).toISOString() })}\n`;
+      writeFileSync(gate, gateText);
+      const lockText = readFileSync(lock, 'utf8');
+      let message = '';
+      const t0 = Date.now();
+      withLockWait(200, () =>
+        fx.within(() => {
+          try {
+            updateState(id, { state: 'review' }, fx.now);
+          } catch (err) {
+            message = err instanceof Error ? err.message : String(err);
+          }
+        }),
+      );
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(150);
+      expect(message).toMatch(/lock/i);
+      expect(message).toContain(gate);
+      // Neither the gate nor the stale lock behind it was removed.
+      expect(readFileSync(gate, 'utf8')).toBe(gateText);
+      expect(readFileSync(lock, 'utf8')).toBe(lockText);
+    }
+    expect(fx.snapshot()).toEqual(before);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] the state lock has a token per acquisition; locks and gates never stay behind', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const id = 'R1-04';
+    fx.within(() => {
+      const first = api.tryStateLock(id);
+      expect(first).toEqual(expect.any(String));
+      const held = JSON.parse(readFileSync(lockFile(fx.runs, id), 'utf8')) as Record<
+        string,
+        unknown
+      >;
+      expect(held).toMatchObject({ pid: process.pid, token: first });
+      expect(Number.isNaN(Date.parse(String(held.acquired_at)))).toBe(false);
+      // Held: a second attempt gets nothing, also from the same process.
+      expect(api.tryStateLock(id)).toBeNull();
+      api.releaseStateLock(id, first ?? '');
+      expect(leftLocks(fx.runs)).toEqual([]);
+      const second = api.tryStateLock(id);
+      expect(second).toEqual(expect.any(String));
+      expect(second).not.toBe(first);
+      api.releaseStateLock(id, second ?? '');
+      // A stale lock taken over through the gate: lock and gate both gone afterwards.
+      holdLock(fx.runs, id, DEAD_PID, new Date(), 'old-token');
+      const third = api.tryStateLock(id);
+      expect(third).toEqual(expect.any(String));
+      expect(lockToken(fx.runs, id)).toBe(third);
+      api.releaseStateLock(id, third ?? '');
+      // The ordinary writers, back to back.
+      updateState(id, { last_error: '/y' }, fx.now);
+      bumpAttempt(id, 'impl', fx.now);
+      holdLock(fx.runs, 'R1-06', DEAD_PID, new Date(), 'old-token');
+      updateState('R1-06', { state: 'verify' }, fx.now);
+      reconcile({ root: fx.root, now: fx.now, apply: true });
+    });
+    expect(leftLocks(fx.runs)).toEqual([]);
+    expect(fx.read('R1-06').state).toBe('verify');
+  } finally {
+    fx.remove();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// CT-06zzzq, write under the gate: a holder paused past STATE_LOCK_STALE_MS could be taken over
+// between its token check and the write. The check and the write therefore both happen while the
+// writer holds the takeover gate <id>.lock.takeover; a takeover needs the gate too, so nobody can
+// take the lock in between. Hook `beforeWrite({id, token})`: gate held, token checked, not
+// written yet. A gate held by somebody else at write time is waited for up to the wait limit
+// (COULI_STATE_LOCK_WAIT_MS); then the write fails naming the gate and nothing is written.
+
+it('[CT-06zzzq] every state write lands while its writer holds the takeover gate and its own lock', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    fx.within(() =>
+      writeFileSync(
+        stateFile('R8-01'),
+        JSON.stringify({
+          id: 'R8-01',
+          state: 'doing',
+          attempts: { impl: 1, review: 0 },
+          spec_commit: null,
+          pid: null,
+          started_at: null,
+          owner_session: null,
+          lease_until: null,
+          ask_created_at: null,
+          last_error: null,
+          updated_at: fx.now.toISOString(),
+        }),
+      ),
+    );
+    const settle = meta({ ...NO_OUTPUT, review_type: 'money', started_at: fx.now.toISOString() });
+    const writers: [string, string, () => unknown][] = [
+      ['updateState', 'R1-04', () => updateState('R1-04', { last_error: '/x' }, fx.now)],
+      ['bumpAttempt', 'R1-06', () => bumpAttempt('R1-06', 'test', fx.now)],
+      ['settleCall', 'R1-08', () => settleCall('R1-08', settle, fx.now)],
+      ['recordOpusRun', 'R1-07', () => recordOpusRun('R1-07', 'run-z', 'ok', 'RV1', fx.now)],
+      ['migrateState', 'R8-01', () => migrateState('R8-01', { now: fx.now })],
+    ];
+    type Seen = { writer: string; id: string; gate: boolean; own: boolean; unwritten: boolean };
+    const seen: Seen[] = [];
+    let writer = '';
+    let pre: Record<string, string> = {};
+    const hooks: StateLockHooks = {
+      beforeWrite: ({ id, token }) => {
+        seen.push({
+          writer,
+          id,
+          gate: existsSync(gateFile(fx.runs, id)),
+          own: lockToken(fx.runs, id) === token,
+          unwritten: readFileSync(join(fx.runs, 'state', `${id}.json`), 'utf8') === pre[id],
+        });
+      },
+    };
+    const before = fx.snapshot();
+    fx.within(() =>
+      withHooks(api, hooks, () => {
+        for (const [name, , write] of writers) {
+          writer = name;
+          pre = fx.snapshot();
+          write();
+        }
+        writer = 'reconcile';
+        pre = fx.snapshot();
+        reconcile({ root: fx.root, now: fx.now, apply: true });
+      }),
+    );
+    for (const [name, id] of writers) {
+      expect(
+        seen.filter((s) => s.writer === name && s.id === id).length,
+        `${name} wrote ${id} through beforeWrite`,
+      ).toBeGreaterThanOrEqual(1);
+    }
+    expect(
+      seen
+        .filter((s) => s.writer === 'reconcile')
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(['R1-01', 'R1-02', 'R1-03', 'R1-05', 'R1-09']);
+    // At every write: the gate held, the lock still the writer's own, the file not yet written.
+    expect(seen.filter((s) => !(s.gate && s.own && s.unwritten))).toEqual([]);
+    const after = fx.snapshot();
+    for (const [name, id] of writers) expect(after[id], name).not.toBe(before[id]);
+    // Neither locks nor gates stay behind.
+    expect(leftLocks(fx.runs)).toEqual([]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzq] a write whose takeover gate another process holds waits, fails naming the gate and writes nothing', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const before = fx.snapshot();
+    const fail = (write: () => unknown): { message: string; waited: number } => {
+      const t0 = Date.now();
+      let message = '';
+      try {
+        write();
+      } catch (err) {
+        message = err instanceof Error ? err.message : String(err);
+      }
+      return { message, waited: Date.now() - t0 };
+    };
+    // The gate taken by another process right after this writer took the lock.
+    const gate = gateFile(fx.runs, 'R1-04');
+    const gateText = `${JSON.stringify({ pid: process.ppid, acquired_at: new Date().toISOString() })}\n`;
+    const hooks: StateLockHooks = {
+      afterAcquire: ({ id }) => {
+        if (id === 'R1-04' && !existsSync(gate)) writeFileSync(gate, gateText);
+      },
+    };
+    const late = withLockWait(200, () =>
+      fx.within(() =>
+        withHooks(api, hooks, () => fail(() => updateState('R1-04', { state: 'verify' }, fx.now))),
+      ),
+    );
+    expect(late.message).toContain(gate);
+    expect(late.waited).toBeGreaterThanOrEqual(150);
+    expect(late.waited).toBeLessThan(10_000);
+    expect(readFileSync(gate, 'utf8')).toBe(gateText);
+    // A gate already there, left by a dead process: never reclaimed, the write fails the same way.
+    const stuck = gateFile(fx.runs, 'R1-06');
+    const stuckText = `${JSON.stringify({ pid: DEAD_PID, acquired_at: new Date(0).toISOString() })}\n`;
+    mkdirSync(dirname(stuck), { recursive: true });
+    writeFileSync(stuck, stuckText);
+    const early = withLockWait(200, () =>
+      fx.within(() => fail(() => bumpAttempt('R1-06', 'test', fx.now))),
+    );
+    expect(early.message).toContain(stuck);
+    expect(early.waited).toBeGreaterThanOrEqual(150);
+    expect(early.waited).toBeLessThan(10_000);
+    expect(readFileSync(stuck, 'utf8')).toBe(stuckText);
+    // Nothing was written.
+    expect(fx.snapshot()).toEqual(before);
+  } finally {
+    fx.remove();
+  }
+});
