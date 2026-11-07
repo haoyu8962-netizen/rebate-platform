@@ -9,7 +9,14 @@
 //   nothing is sent afterwards.
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
-import type { Clock, EventBus, FieldCrypto, JobHandler, JobQueue } from '../../platform/index.ts';
+import type {
+  Clock,
+  EventBus,
+  FieldCrypto,
+  JobHandler,
+  JobQueue,
+  RootLogger,
+} from '../../platform/index.ts';
 import {
   createBatchExecutor,
   type BeneficiaryItemCredit,
@@ -52,6 +59,14 @@ export interface SettleWorkerRuntime {
   readonly logger: SettleWorkerLogger;
 }
 
+/**
+ * The settle handler's handles: the worker module hands in its pino child logger, which the invite
+ * trigger port (B2-04zzc) is built over as well.
+ */
+export interface SettleWorkerHandlerRuntime extends SettleWorkerRuntime {
+  readonly logger: RootLogger;
+}
+
 /** B2-04q's result as the executor's item result; the obligation must be the item's own. */
 function itemCredit(credit: BeneficiaryCredit): BeneficiaryItemCredit {
   return {
@@ -92,7 +107,7 @@ function itemCredit(credit: BeneficiaryCredit): BeneficiaryItemCredit {
 /** The handler of queue settle over the real bill job, executor and credits. */
 export function createSettleWorkerHandler(
   ports: SettlementWorkerPorts,
-  runtime: SettleWorkerRuntime,
+  runtime: SettleWorkerHandlerRuntime,
 ): JobHandler {
   const { db, clock, crypto, events, logger } = runtime;
   const config = ports.config(db, clock);
@@ -118,6 +133,10 @@ export function createSettleWorkerHandler(
     readTljDeductFen: ports.readTljDeductFen,
     appendBeneficiaryEvent,
     events,
+    // B2-04zzc (D10-805 ②): growth's invite reward trigger, when app.module wired it.
+    ...(ports.inviteRewardTrigger === undefined
+      ? {}
+      : { inviteTrigger: ports.inviteRewardTrigger({ db, clock, logger }) }),
   });
   const beneficiaryCredit = createBeneficiaryCredit({
     clock,

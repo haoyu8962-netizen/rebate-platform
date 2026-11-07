@@ -119,6 +119,7 @@ import {
   createInviteRewardPayout,
   createInviteRewardQualifier,
   createInviteRewardScanner,
+  createInviteRewardTrigger,
   inviteRewardScannerToken,
   createLandingInviteBinder,
   createMyInviteReader,
@@ -1636,7 +1637,8 @@ function inviteRewardWorkerModule(): DynamicModule {
           }
           const reads = growthReadPorts(clock, crypto, events);
           const base = { db, clock, logger, config: transactionConfig(clock) };
-          const orders = createInviteRewardOrderFacts();
+          // D10-810: the expiry's late trigger judges「B > 0」on the booked base, as R5's trigger.
+          const orders = bookedBaseOrderFacts(createInviteRewardOrderFacts());
           const payout = createInviteRewardPayout({
             ...base,
             orders,
@@ -3885,7 +3887,78 @@ function settlementWorkerModule(): DynamicModule {
       get: async (appId, key) =>
         (await createContentReader({ db, clock }).configValue(appId, key))?.value,
     }),
+    // B2-04zzc (D10-805 ②): R5 hands each credited order to growth's invite reward trigger on the
+    // credit's transaction (savepoint inside, failures logged and swallowed).
+    inviteRewardTrigger: ({ db, clock, logger }) =>
+      createInviteRewardTrigger({
+        db,
+        clock,
+        logger,
+        config: transactionConfig(clock),
+        orders: bookedBaseOrderFacts(createInviteRewardOrderFacts()),
+      }),
   });
+}
+
+type InviteRewardOrderFacts = ReturnType<typeof createInviteRewardOrderFacts>;
+type InviteRewardOrderFact = NonNullable<Awaited<ReturnType<InviteRewardOrderFacts['read']>>>;
+/** The booked base of each listed order of one app (orders.booked_base_fen; absent when unknown). */
+export type BookedBaseReader = (
+  trx: Transaction<Database>,
+  appId: string,
+  orderIds: readonly string[],
+) => Promise<ReadonlyMap<string, bigint | null>>;
+
+const readBookedBaseFen: BookedBaseReader = async (trx, appId, orderIds) => {
+  const rows = await trx
+    .withSchema('app')
+    .selectFrom('orders')
+    .select(['order_id', 'booked_base_fen'])
+    .where('app_id', '=', appId)
+    .where('order_id', 'in', [...orderIds])
+    .execute();
+  return new Map(rows.map((row) => [row.order_id, row.booked_base_fen]));
+};
+
+/**
+ * D10-810: the B of BR-INV-24 ②'s「B > 0」is the booked base R5 wrote, not the estimated
+ * orders.base_fen orders' fact port reads. One layer for every invite reward path that can trigger
+ * (R5's trigger on the credit's transaction, after the credit wrote it; the daily expiry's late
+ * trigger; the payout scan): a CREDITED order's fact carries orders.booked_base_fen as base_fen,
+ * read on the caller's transaction (null when none was booked, so it never counts as B > 0); an
+ * order not yet credited keeps its fact as orders reads it.
+ */
+export function bookedBaseOrderFacts(
+  facts: InviteRewardOrderFacts,
+  readBooked: BookedBaseReader = readBookedBaseFen,
+): InviteRewardOrderFacts {
+  async function overlay(
+    trx: Transaction<Database>,
+    list: readonly InviteRewardOrderFact[],
+  ): Promise<InviteRewardOrderFact[]> {
+    const credited = new Map<string, string[]>();
+    for (const fact of list) {
+      if (fact.rebate_status !== 'CREDITED') continue;
+      const ids = credited.get(fact.app_id) ?? [];
+      ids.push(fact.order_id);
+      credited.set(fact.app_id, ids);
+    }
+    const booked = new Map<string, ReadonlyMap<string, bigint | null>>();
+    for (const [appId, ids] of credited) booked.set(appId, await readBooked(trx, appId, ids));
+    return list.map((fact) =>
+      fact.rebate_status === 'CREDITED'
+        ? { ...fact, base_fen: booked.get(fact.app_id)?.get(fact.order_id) ?? null }
+        : fact,
+    );
+  }
+  return {
+    async read(trx, input) {
+      const fact = await facts.read(trx, input);
+      return fact === null ? null : ((await overlay(trx, [fact]))[0] ?? null);
+    },
+    listSelfOrdersInWindow: async (trx, input) =>
+      overlay(trx, await facts.listSelfOrdersInWindow(trx, input)),
+  };
 }
 
 type SharedContentReader = (db: Kysely<Database>, clock: Clock) => ContentReader;

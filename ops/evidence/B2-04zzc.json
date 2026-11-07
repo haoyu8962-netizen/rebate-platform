@@ -1,0 +1,115 @@
+{
+  "red_tests": [
+    "test/spec/settlement/credit-invite-trigger/assembly.test.ts > [AC-B2-04zzc#2] 生产组装带了触发端口：app.module 在 worker 入口交给 SettlementModule.forWorker 的 inviteRewardTrigger 是函数，用 worker 的句柄构造出带 onCredited 的触发器（构造时不连库）",
+    "test/spec/settlement/credit-invite-trigger/concurrency.int.test.ts > [AC-B2-04zzc#7] 同一被邀请人的两笔自购单在两个批次里并发入账：先提交的一笔（订单 id 较大的那笔，排除按 id 取单）记为触发，后一笔只入账不改触发；两笔都 CREDITED 各一次，资格 row_version 为 1",
+    "test/spec/settlement/credit-invite-trigger/concurrency.int.test.ts > [AC-B2-04zzc#11] 被邀请人的入账与他的发放、过期任务并发（入账先持有用户行锁，发放与过期都在锁上等待）：三者都完成、无死锁；结果与「入账 → 发放 → 过期」依次执行一致——触发为该单，发放 processed（两方 granted、两张 INVITE_REWARD 凭证、总预算占用 2000 转为已发放），订单只入账一次",
+    "test/spec/settlement/credit-invite-trigger/expiry-booked-base.int.test.ts > [AC-B2-04zzc#18] 过期扫描的迟到触发同样取入账基数（D10-810，money r1 S1）：有效期内只有一笔自购单，预估 orders.base_fen = 320、入账 booked_base_fen = 0、实付 4990 达标 → 入账时不触发；时钟推进到有效期结束（08-14）之后，跑一轮 worker 入口生产装配的邀请奖励扫描 → 不写 trigger_order_id / triggered_at、不发放（无 INVITE_REWARD 凭证），资格按「期内无合格单」转 expired，释放总预算占用 2000",
+    "test/spec/settlement/credit-invite-trigger/expiry-booked-base.int.test.ts > [AC-B2-04zzc#19] 对照（修的是读口径，不是关掉迟到触发）：两名被邀请人各一笔有效期内的自购单，入账 booked_base_fen 都是 1000、预估分别为 320 与 0，入账时 worker 未接触发端口而没有触发；有效期结束后同一生产装配的扫描对两人都按入账基数迟到触发（trigger_order_id 为各自的单、triggered_at 为扫描时刻），资格不过期、总预算占用不释放",
+    "test/spec/settlement/credit-invite-trigger/payout.int.test.ts > [AC-B2-04zzc#9] 入账事务里只记触发：发布 order.credited 时同一事务里已有触发记录，但没有 REWARD 凭证、预算未动；提交后仍未发放；随后发放扫描才发放（两张 INVITE_REWARD 凭证，总预算占用 2000 转为已发放，当日已发放 2000，资格 processed）",
+    "test/spec/settlement/credit-invite-trigger/payout.int.test.ts > [AC-B2-04zzc#10] 触发后、发放前触发订单被扣回：发放扫描判作废（voided，order_clawed_back），两方都不发、释放总预算占用 2000；之后该被邀请人再入账的自购单不触发（触发仍是原单，状态仍 voided，无 REWARD 凭证）",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#1] 真实 worker 装配（端口取自 AppModule worker 入口，测试不自造触发器）：被邀请人有 qualified 资格，其自购单经批次 R5 入账提交后，资格的 trigger_order_id 等于该单、triggered_at 等于入账时的 Clock，状态仍 qualified",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#3] 触发与 R5 的 CAS 同一事务：order.credited 发布时注入失败 → 入账（CREDITED、R5 历史行）与触发记录一起回滚、投递失败；恢复后重跑同一批次，只入账一次、只触发一次（trigger_order_id 为该单，row_version 只加 1）",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#4] 触发端口的 SQL 出错（写 invite_rewards 的语句在 PostgreSQL 里真实报错）：入账照常提交为 CREDITED，资格不变（qualified、无触发、row_version 0），worker 日志记一条 error，error 行不含邀请人 / 被邀请人 id 与昵称",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#5] 钩子在 R5 的 CAS 之后、发布 order.credited 之前：端口被调用时同一事务里读到的订单已是 CREDITED（booked_base_fen 已写 1000）；发布 order.credited 时同一事务里已能看到触发记录",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#6] 不合格的单入账照常、不触发、资格仍 qualified：分享单（buy_type=share）、B=0（预留 10000，入账基数 0）、实付 4999 低于 min_paid_fen 5000、下单时间不在有效期内（资格 30 天已于 05-01 到期）；同批次里实付恰为 5000 的合格自购单照常触发",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#8] 已有触发后再入账的订单不改 trigger_order_id / triggered_at：第一单 07-24 入账触发；时钟到 07-25 第二单入账后，触发仍是第一单与 07-24 的时刻，row_version 仍为 1",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#12] 多 App：B App 的订单入账只触发 B App 的资格；A App 的资格与预算不动；端口只收到一次调用（在入账事务内，app_id = B、order_id = 该单）",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#13] R13（CLAWED_BACK → CREDITED 后台恢复）不经触发端口：恢复后已是 CREDITED 的自购单在批次里按 not_waiting 跳过，端口不收到它，资格不变；同批次后一笔 WAITING 自购单 R5 入账才触发",
+    "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#14] 「B > 0」取入账基数 booked_base_fen：预估 orders.base_fen = 320 > 0 但入账 booked_base_fen = 0（预留 10000）的单入账时不触发、资格不作废（仍 qualified）；之后一笔合格单入账时触发",
+    "test/spec/settlement/credit-invite-trigger/window-base-commission.int.test.ts > [AC-B2-04zzc#15] 有效期按下单时间（orders.attr_at）判、不按入账时间（08 BR-INV-24 细则「有效期」：下单时间在取得资格时刻起锁定天数内的才可触发，该订单在期限之后才月结入账，照发）：资格 06-15 取得、30 天到 07-15，06-20 下单、07-24 才入账 → 触发（triggered_at 为 07-24 的入账时刻）；对照：资格 07-01 取得、60 天（入账时刻在期内）但 06-20 下单早于取得资格 → 不触发、资格仍 qualified",
+    "test/spec/settlement/credit-invite-trigger/window-base-commission.int.test.ts > [AC-B2-04zzc#16] 「B > 0」取入账基数 booked_base_fen（D10-810），与 #14 成对：预估 orders.base_fen = 0、联盟结算后入账 booked_base_fen = 1000，其余条件都满足（自购、实付 4990 ≥ 下限 0、有效期内下单）→ 入账时触发（trigger_order_id 为该单，row_version 加 1）",
+    "test/spec/settlement/credit-invite-trigger/window-base-commission.int.test.ts > [AC-B2-04zzc#17] 触发不改订单分佣（BR-INV-24 ⑤，触发只写 invite_rewards）：同一 App 两个已取得资格的被邀请人各一笔同样的自购单，一笔经带生产触发端口的 worker 入账并触发，另一笔经不接触发端口的 worker 入账；两单的 booked_base_fen / booked_n_fen、分佣份额行、受益人事件、入账凭证与分录金额、双方余额完全相同（booked 1000，自购 400、直推 80、平台 520）"
+  ],
+  "risk_note": "RV2 (settlement credit path + app.module wiring). FU-INVITE-REWARD-ON-CREDITED (prod-wiring gap 2; D10-805 ②, D10-810): settlement credit-order calls the invite-reward trigger through an optional injected port inside the R5 CREDITED transaction, after the CAS / history write and before publishing order.credited; app.module wires growth's createInviteRewardTrigger.onCredited; settlement does not import growth. R13 (CLAWED_BACK → CREDITED) does not trigger. BR-INV-24 ②'s B > 0 uses the booked base: app.module wraps the order-facts reader (bookedBaseOrderFacts) so a CREDITED order's base_fen is booked_base_fen for the immediate trigger, the expiry scan's late trigger and the payout scan alike (Codex money r1 S1); growth files untouched. The trigger only writes invite_rewards and runs under its own savepoint: a trigger error leaves the credit committed. No frozen test changed (the port is optional). Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 fail (S1: the expiry scan's late trigger still read the estimated base_fen) → rule tests attempt 3 (#18 #19) + implementation r2 → r2 pass, 0 findings (couli-runs/B2-04zzc/review-money-r1.saved.json, review-money-r2.json); reviews back on Codex per D10-823"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude through claude-run.sh (attempts 1–3; attempt 1 relaunched once with a hand-assembled brief because brief.ts refused BR-INV-24 over 24KB); Codex spec-test r1 fail (3 S1: window by order time, estimate 0 / booked > 0, trigger leaves commission rows unchanged) → attempt 2 → r2 pass; attempt 3 added #18 #19 for money r1; red PASS 14 → 17 → 19; on the implementation the local container ran all 19 green (couli-runs/B2-04zzc/review-spec-r1.json, review-spec-r2.json)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "540ee188f0a6e566fb012c8d4ae9bfb47f3c698c",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  },
+  "task": "B2-04zzc",
+  "spec_commit": "ee4dc7b4aea4ed45c5a472e9f1d71a218b882f98",
+  "spec_ref": "3f2b91dfa359fcbce54dc59c4b43c7763885cf58",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ee4dc7b4aea4ed45c5a472e9f1d71a218b882f98",
+      "tree": "f972d82907ab8b7ad4afdb329e82f2ba01730993",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T05:17:12Z",
+      "finished_at": "2026-11-07T05:18:56Z",
+      "red_tests": [
+        "test/spec/settlement/credit-invite-trigger/assembly.test.ts > [AC-B2-04zzc#2] 生产组装带了触发端口：app.module 在 worker 入口交给 SettlementModule.forWorker 的 inviteRewardTrigger 是函数，用 worker 的句柄构造出带 onCredited 的触发器（构造时不连库）",
+        "test/spec/settlement/credit-invite-trigger/concurrency.int.test.ts > [AC-B2-04zzc#7] 同一被邀请人的两笔自购单在两个批次里并发入账：先提交的一笔（订单 id 较大的那笔，排除按 id 取单）记为触发，后一笔只入账不改触发；两笔都 CREDITED 各一次，资格 row_version 为 1",
+        "test/spec/settlement/credit-invite-trigger/concurrency.int.test.ts > [AC-B2-04zzc#11] 被邀请人的入账与他的发放、过期任务并发（入账先持有用户行锁，发放与过期都在锁上等待）：三者都完成、无死锁；结果与「入账 → 发放 → 过期」依次执行一致——触发为该单，发放 processed（两方 granted、两张 INVITE_REWARD 凭证、总预算占用 2000 转为已发放），订单只入账一次",
+        "test/spec/settlement/credit-invite-trigger/expiry-booked-base.int.test.ts > [AC-B2-04zzc#18] 过期扫描的迟到触发同样取入账基数（D10-810，money r1 S1）：有效期内只有一笔自购单，预估 orders.base_fen = 320、入账 booked_base_fen = 0、实付 4990 达标 → 入账时不触发；时钟推进到有效期结束（08-14）之后，跑一轮 worker 入口生产装配的邀请奖励扫描 → 不写 trigger_order_id / triggered_at、不发放（无 INVITE_REWARD 凭证），资格按「期内无合格单」转 expired，释放总预算占用 2000",
+        "test/spec/settlement/credit-invite-trigger/expiry-booked-base.int.test.ts > [AC-B2-04zzc#19] 对照（修的是读口径，不是关掉迟到触发）：两名被邀请人各一笔有效期内的自购单，入账 booked_base_fen 都是 1000、预估分别为 320 与 0，入账时 worker 未接触发端口而没有触发；有效期结束后同一生产装配的扫描对两人都按入账基数迟到触发（trigger_order_id 为各自的单、triggered_at 为扫描时刻），资格不过期、总预算占用不释放",
+        "test/spec/settlement/credit-invite-trigger/payout.int.test.ts > [AC-B2-04zzc#9] 入账事务里只记触发：发布 order.credited 时同一事务里已有触发记录，但没有 REWARD 凭证、预算未动；提交后仍未发放；随后发放扫描才发放（两张 INVITE_REWARD 凭证，总预算占用 2000 转为已发放，当日已发放 2000，资格 processed）",
+        "test/spec/settlement/credit-invite-trigger/payout.int.test.ts > [AC-B2-04zzc#10] 触发后、发放前触发订单被扣回：发放扫描判作废（voided，order_clawed_back），两方都不发、释放总预算占用 2000；之后该被邀请人再入账的自购单不触发（触发仍是原单，状态仍 voided，无 REWARD 凭证）",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#1] 真实 worker 装配（端口取自 AppModule worker 入口，测试不自造触发器）：被邀请人有 qualified 资格，其自购单经批次 R5 入账提交后，资格的 trigger_order_id 等于该单、triggered_at 等于入账时的 Clock，状态仍 qualified",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#3] 触发与 R5 的 CAS 同一事务：order.credited 发布时注入失败 → 入账（CREDITED、R5 历史行）与触发记录一起回滚、投递失败；恢复后重跑同一批次，只入账一次、只触发一次（trigger_order_id 为该单，row_version 只加 1）",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#4] 触发端口的 SQL 出错（写 invite_rewards 的语句在 PostgreSQL 里真实报错）：入账照常提交为 CREDITED，资格不变（qualified、无触发、row_version 0），worker 日志记一条 error，error 行不含邀请人 / 被邀请人 id 与昵称",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#5] 钩子在 R5 的 CAS 之后、发布 order.credited 之前：端口被调用时同一事务里读到的订单已是 CREDITED（booked_base_fen 已写 1000）；发布 order.credited 时同一事务里已能看到触发记录",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#6] 不合格的单入账照常、不触发、资格仍 qualified：分享单（buy_type=share）、B=0（预留 10000，入账基数 0）、实付 4999 低于 min_paid_fen 5000、下单时间不在有效期内（资格 30 天已于 05-01 到期）；同批次里实付恰为 5000 的合格自购单照常触发",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#8] 已有触发后再入账的订单不改 trigger_order_id / triggered_at：第一单 07-24 入账触发；时钟到 07-25 第二单入账后，触发仍是第一单与 07-24 的时刻，row_version 仍为 1",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#12] 多 App：B App 的订单入账只触发 B App 的资格；A App 的资格与预算不动；端口只收到一次调用（在入账事务内，app_id = B、order_id = 该单）",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#13] R13（CLAWED_BACK → CREDITED 后台恢复）不经触发端口：恢复后已是 CREDITED 的自购单在批次里按 not_waiting 跳过，端口不收到它，资格不变；同批次后一笔 WAITING 自购单 R5 入账才触发",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts > [AC-B2-04zzc#14] 「B > 0」取入账基数 booked_base_fen：预估 orders.base_fen = 320 > 0 但入账 booked_base_fen = 0（预留 10000）的单入账时不触发、资格不作废（仍 qualified）；之后一笔合格单入账时触发",
+        "test/spec/settlement/credit-invite-trigger/window-base-commission.int.test.ts > [AC-B2-04zzc#15] 有效期按下单时间（orders.attr_at）判、不按入账时间（08 BR-INV-24 细则「有效期」：下单时间在取得资格时刻起锁定天数内的才可触发，该订单在期限之后才月结入账，照发）：资格 06-15 取得、30 天到 07-15，06-20 下单、07-24 才入账 → 触发（triggered_at 为 07-24 的入账时刻）；对照：资格 07-01 取得、60 天（入账时刻在期内）但 06-20 下单早于取得资格 → 不触发、资格仍 qualified",
+        "test/spec/settlement/credit-invite-trigger/window-base-commission.int.test.ts > [AC-B2-04zzc#16] 「B > 0」取入账基数 booked_base_fen（D10-810），与 #14 成对：预估 orders.base_fen = 0、联盟结算后入账 booked_base_fen = 1000，其余条件都满足（自购、实付 4990 ≥ 下限 0、有效期内下单）→ 入账时触发（trigger_order_id 为该单，row_version 加 1）",
+        "test/spec/settlement/credit-invite-trigger/window-base-commission.int.test.ts > [AC-B2-04zzc#17] 触发不改订单分佣（BR-INV-24 ⑤，触发只写 invite_rewards）：同一 App 两个已取得资格的被邀请人各一笔同样的自购单，一笔经带生产触发端口的 worker 入账并触发，另一笔经不接触发端口的 worker 入账；两单的 booked_base_fen / booked_n_fen、分佣份额行、受益人事件、入账凭证与分录金额、双方余额完全相同（booked 1000，自购 400、直推 80、平台 520）"
+      ],
+      "expected": [
+        "test/spec/settlement/credit-invite-trigger/assembly.test.ts",
+        "test/spec/settlement/credit-invite-trigger/concurrency.int.test.ts",
+        "test/spec/settlement/credit-invite-trigger/expiry-booked-base.int.test.ts",
+        "test/spec/settlement/credit-invite-trigger/payout.int.test.ts",
+        "test/spec/settlement/credit-invite-trigger/trigger.int.test.ts",
+        "test/spec/settlement/credit-invite-trigger/window-base-commission.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e539055005271809e909a3ea30ec2ed80cc8e1b27bcf720c933908ad8b5992ac"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d32e6c5bdff0f557e8296dfa3726f52aee1530390b8f10dfb6a4d2042e191a63"
+        }
+      ]
+    }
+  ]
+}

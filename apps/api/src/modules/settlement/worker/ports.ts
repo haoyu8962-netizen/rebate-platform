@@ -18,11 +18,15 @@
 //   readers; minors = identity createMinorStatusBatchReader (B1-03zc); riskState = risk
 //   createRiskStateBatchReader;
 // - config = content's configuration reader (value of the item, undefined / null when unset);
-// - platforms = union REGISTERED_PLATFORMS (the bill is seeded daily for every app × platform).
+// - platforms = union REGISTERED_PLATFORMS (the bill is seeded daily for every app × platform);
+// - inviteRewardTrigger (B2-04zzc, D10-805 ②) = growth createInviteRewardTrigger over the runtime
+//   handles below, orders' createInviteRewardOrderFacts and content's configuration reader on the
+//   caller's transaction (optional for SettlementModule, always given by app.module on the worker);
+//   the order facts it reads carry the credit's booked base as base_fen (D10-810).
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
 import type { Ledger, OrderNetSelection, OrderNets } from '../../ledger/index.ts';
-import type { Clock, EventBus, FieldCrypto } from '../../platform/index.ts';
+import type { Clock, EventBus, FieldCrypto, RootLogger } from '../../platform/index.ts';
 import type { RiskStateBatchReader } from '../../risk/index.ts';
 import type { BillSourceDependencies } from '../bill/infra/bill-source.ts';
 import type { BillJobDependencies } from '../bill/job.ts';
@@ -32,7 +36,19 @@ import type {
   RealnameStatusBatchReader,
   UserDeletionStatusReader,
 } from '../credit/beneficiary-gate.ts';
-import type { BeneficiaryEventInput, CreditOrderDependencies } from '../credit/credit-order.ts';
+import type {
+  BeneficiaryEventInput,
+  CreditInviteTrigger,
+  CreditOrderDependencies,
+} from '../credit/credit-order.ts';
+
+/** B2-04zzc: the worker's own handles the invite trigger factory is built over. */
+export interface SettlementInviteTriggerRuntime {
+  readonly db: Kysely<DB>;
+  readonly clock: Clock;
+  /** The worker's logger: the trigger logs its failures here (app id and error class only). */
+  readonly logger: RootLogger;
+}
 
 /** content's switch / setting reader: the stored value, undefined or null when unset. */
 export interface SettlementConfigReader {
@@ -83,4 +99,10 @@ export interface SettlementWorkerPorts {
   readonly minors: (crypto: FieldCrypto) => MinorStatusReader;
   /** content's configuration reader on the worker's database. */
   readonly config: (db: Kysely<DB>, clock: Clock) => SettlementConfigReader;
+  /**
+   * B2-04zzc (D10-805 ②, D10-810; BR-INV-24 ②): growth createInviteRewardTrigger, built once per
+   * settle handler over the worker's handles and handed to createCreditOrder as its inviteTrigger.
+   * Optional: without it the credit triggers nothing.
+   */
+  readonly inviteRewardTrigger?: (runtime: SettlementInviteTriggerRuntime) => CreditInviteTrigger;
 }

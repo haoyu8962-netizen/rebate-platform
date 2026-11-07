@@ -27,7 +27,10 @@
 //      WAITING → CREDITED through the generated order-rebate transition() with a CAS on
 //      (rebate_status, row_version); a CAS that matches no row throws (the caller's transaction then
 //      rolls back as a whole); write the rebate history row;
-//   9. publish order.credited on the same transaction.
+//   9. B2-04zzc: when the inviteTrigger port is wired and B_credit > 0, hand the order to growth's
+//      invite reward trigger on the same transaction (it runs under its own savepoint and never
+//      throws on its own failures);
+//  10. publish order.credited on the same transaction.
 // B2-04lb: N is the settlement commission less the deductions of successful partial rights results
 // received at or after the latest settlement record (D10-474 ①; floor 0).
 // Amounts only through @couli/money; time only from the injected Clock.
@@ -98,7 +101,36 @@ export interface BeneficiaryEventInput {
   readonly reason: CreditForfeitReason | null;
 }
 
+/**
+ * B2-04zzc (编排 D10-805 ②, D10-810; 08 BR-INV-24 ②): growth's InviteRewardTrigger, structurally
+ * (settlement never imports growth). It records the order as the trigger of its owner's invite
+ * reward qualification; it never posts a voucher and never touches a budget (the payout scan does,
+ * after this transaction committed). It catches its own failures under its own savepoint, so a
+ * failing trigger never fails the credit.
+ */
+export interface CreditInviteTrigger {
+  onCredited(trx: Transaction<DB>, input: CreditInviteTriggerInput): Promise<void>;
+}
+
+export interface CreditInviteTriggerInput {
+  readonly app_id: string;
+  readonly order_id: string;
+  /**
+   * The booked base this credit just wrote (orders.booked_base_fen, always > 0 here): D10-810 makes
+   * it the B of BR-INV-24 ②'s「B > 0」, in place of the estimated orders.base_fen.
+   */
+  readonly booked_base_fen: bigint;
+}
+
 export interface CreditOrderDependencies {
+  /**
+   * B2-04zzc: optional. When given, R5 calls it once per credited order on the credit's own
+   * transaction, after the CAS to CREDITED and the rebate history row and before order.credited is
+   * published, with { app_id, order_id, booked_base_fen } of the order. A skipped order (any CreditSkipReason) does
+   * not call it, and an order credited with booked_base_fen = 0 never triggers (D10-810: the B > 0
+   * of BR-INV-24 ② is the booked base). Only R5 calls it (R13, the admin restore, does not).
+   */
+  readonly inviteTrigger?: CreditInviteTrigger;
   readonly clock: Clock;
   readonly logger: Pick<RootLogger, 'info' | 'warn' | 'error'>;
   readonly ledger: Pick<Ledger, 'openUserAccount' | 'lockBalances' | 'post'>;
@@ -417,7 +449,18 @@ export function createCreditOrder(deps: CreditOrderDependencies): CreditOrder {
       now,
     );
 
-    // 9. order.credited on the same transaction.
+    // 9. B2-04zzc: the invite reward trigger after the CAS, before order.credited (BR-INV-24 ②;
+    //    D10-810: booked base 0 never triggers). growth catches its own failures under a savepoint,
+    //    so a failing trigger leaves the credit to commit.
+    if (deps.inviteTrigger !== undefined && bCredit > 0n) {
+      await deps.inviteTrigger.onCredited(trx, {
+        app_id: appId,
+        order_id: orderId,
+        booked_base_fen: bCredit,
+      });
+    }
+
+    // 10. order.credited on the same transaction.
     await events.publish(trx, {
       appId,
       name: 'order.credited',
