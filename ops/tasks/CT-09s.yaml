@@ -6,8 +6,8 @@ type: contract
 # 规则测试钉：yaml 每行字段齐全、编号唯一；文案键都在 texts.default.json 且只取表 A～C 允许的前缀；state.* 七键取值与 08 表 C 逐字相同；fund-term-keys 归类；90003 行照 08。
 refs: [BR-TEXT-10, BR-TEXT-14]
 refs_hash:
-  BR-TEXT-10: 3dab37cc5da0
-  BR-TEXT-14: 932adf2fcdcc
+  BR-TEXT-10: 585ad9a61b27
+  BR-TEXT-14: 2f694d1d9ac6
 deps: []
 paths:
   - 'specs/ui-states.yaml'

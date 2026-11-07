@@ -7,7 +7,7 @@ type: impl
 # 02 §7.2、BR-FUND-02（待验证）细则「映射表之外的状态码」；未实测的行在 csv 标 verified=false（待编排裁定 ③），不按猜测补码。内部事件编码与 08 §13.2 一致。
 refs: [BR-FUND-02]
 refs_hash:
-  BR-FUND-02: bffd22853853
+  BR-FUND-02: 9e5f85009b0e
 deps: [B1-08b, B1-08e]
 paths:
   - 'specs/order-status-map/**'

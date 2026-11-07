@@ -6,7 +6,7 @@ type: impl
 # 冻结 [AC-B2-04l] expectR7 的夹具有结算记录，按方案 refresh 调用不变，预计不用改；[AC-B2-03q#23、#28] 预计不用改；以完整 verify 为准，红了按 D10-327 报编排补 test_paths。
 refs: [BR-FUND-03, BR-FUND-06, BR-FUND-07, BR-FUND-18, BR-CALC-02, BR-CALC-15, BR-CALC-27]
 refs_hash:
-  BR-FUND-03: 4b5c1f1d901b
+  BR-FUND-03: 0a35db902f66
   BR-FUND-06: f903ec00076a
   BR-FUND-07: 3d63741c52d9
   BR-FUND-18: c7ebd23ee75e

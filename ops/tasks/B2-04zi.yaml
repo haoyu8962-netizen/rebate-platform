@@ -14,7 +14,7 @@ type: impl
 #   #16 不动，登 red_exempt。教训：deps 任务的冻结目录也要跑。
 refs: [BR-FUND-01, BR-FUND-08, BR-FUND-09, BR-CALC-23, BR-CALC-02]
 refs_hash:
-  BR-FUND-01: ee0d91aebb13
+  BR-FUND-01: 7267d70f0bc8
   BR-FUND-08: 4fad67b21a32
   BR-FUND-09: 3162bdea830e
   BR-CALC-23: 2fe92d9959ba

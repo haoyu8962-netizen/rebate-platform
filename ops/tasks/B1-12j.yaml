@@ -7,8 +7,8 @@ type: impl
 # 现有 readCommissionSnapshot 只给 ratioBp、须传 commissionVersion，不够用，新增端口不改它；金额只读 commission_split_amounts，不重算。所有查询带 app_id。
 refs: [BR-FUND-03, BR-TEXT-09]
 refs_hash:
-  BR-FUND-03: 4b5c1f1d901b
-  BR-TEXT-09: 992029dd30ff
+  BR-FUND-03: 0a35db902f66
+  BR-TEXT-09: 374a555d9753
 deps: [B1-08k]
 paths:
   - 'apps/api/src/modules/commission/index.ts'

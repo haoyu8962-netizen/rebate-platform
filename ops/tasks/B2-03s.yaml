@@ -9,7 +9,7 @@ refs_hash:
   BR-CALC-15: e18291194b6e
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-27: ff78446ad011
-  BR-FUND-03: 4b5c1f1d901b
+  BR-FUND-03: 0a35db902f66
   BR-CALC-23: 2fe92d9959ba
 deps: [B1-08zh, B2-04zj]
 paths:

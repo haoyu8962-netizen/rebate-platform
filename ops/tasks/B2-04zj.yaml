@@ -6,7 +6,7 @@ type: impl
 # seq 在订单锁内取最大 +1，created_at 用注入 Clock。首次入库 P12 同样写记录并写列。API 与明细不一致的差错单、明细导入（source=STATEMENT）归 FU-SETTLE-STATEMENT-IMPORT，不在本单。入账后结算变化的处理在 B2-04zi。与 B1-08zh 重叠 update-step，后落地者变基。
 refs: [BR-FUND-02, BR-FUND-04, BR-FUND-09, BR-CALC-02]
 refs_hash:
-  BR-FUND-02: bffd22853853
+  BR-FUND-02: 9e5f85009b0e
   BR-FUND-04: 497806f6f068
   BR-FUND-09: 3162bdea830e
   BR-CALC-02: 0ffe8a4d0b65
