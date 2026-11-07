@@ -1,0 +1,37 @@
+{
+  "risk_note": "Test only, tighten (orchestrator D10-931 ②, FU-B204ZZG-VERSION-ROW-TIGHTEN): one new file test/spec/settlement/jd-remaining-zero/version-row.int.test.ts, no existing file or kit changed. It pins what B2-04zzg's money r1 S1-b fix (#2708) does but [AC-B2-04zzg#5] did not assert: a jd order that one report fully refunds while its estimate moves (1000→0 / →600; ESTIMATED and WAITING) ends VOID / REFUND with commission_version 2, version 2 has amount rows and four amounts (B2-03q / BR-CALC-15), version 1 rows unchanged, no vouchers or entries, balances unchanged; control: estimate unchanged stays version 1. Written by a fresh Claude; green on main through the real worker (4/4, local container slot); full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/B2-04zzj/review-codex-money-r1.json, static, no findings: the four new cases, the shared kit, the amount readers and the sync implementation were checked; assertions cover the version move, v2 rows and four amounts, unchanged v1 and no booking. tester none, so the money type is used (B2-09z precedent); read-only review by a different engine than the writer."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "B2-04zzj",
+  "spec_commit": "8384913c46f941753b381ee85686afc54edbce20",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5e837ac35cce6ada865741055fe2af24a1653eea",
+    "specs": "4bb2e0f635f8129c191380cd7b3fd7b8069437fc"
+  }
+}
