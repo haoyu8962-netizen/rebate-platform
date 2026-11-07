@@ -36,29 +36,6 @@ afterEach(() => vi.restoreAllMocks());
 
 const PRODUCT_TOOLS = ['search_products', 'get_rebate_quote'];
 
-it('[AC-B3-08g#1][BR-AI-02] 生产装配注册的工具集合与 specs/agent-tools.allowlist 行集合精确相等（6 个），无重复；不含 search_rules、get_my_earnings 与内部步骤、意图', async () => {
-  const f = await ordersFixture(pg.db);
-  const assembly = f.build();
-  const names = await definitionNames(assembly, f.caller);
-  const allowlist = allowlistNames();
-
-  expect([...names].sort()).toEqual([...EXPECTED_TOOLS].sort());
-  expect([...allowlist].sort()).toEqual([...EXPECTED_TOOLS].sort());
-  expect(new Set(names).size, 'no duplicate registration').toBe(names.length);
-  expect(new Set(allowlist).size, 'no duplicate allowlist line').toBe(allowlist.length);
-  expect(sameSet(names, allowlist)).toBe(true);
-  for (const name of NEVER_OFFERED) {
-    expect(names, name).not.toContain(name);
-    expect(allowlist, name).not.toContain(name);
-  }
-  // The comparison itself: one more or one less on either side is a failure.
-  expect(sameSet([...names, 'get_balance'], allowlist)).toBe(false);
-  expect(sameSet(names.slice(1), allowlist)).toBe(false);
-  expect(sameSet(names, [...allowlist, 'search_rules'])).toBe(false);
-  expect(sameSet(names, allowlist.slice(0, -1))).toBe(false);
-  expect(sameSet([...names, names[0]!], [...allowlist, allowlist[0]!])).toBe(false);
-}, 120_000);
-
 it('[AC-B3-08g#1][BR-AI-02] 生产装配注册的工具集合与 specs/agent-tools.allowlist 行集合精确相等（7 个），无重复；含 search_rules；不含 get_my_earnings 与内部步骤、意图', async () => {
   const f = await ordersFixture(pg.db);
   const assembly = f.build();
@@ -122,43 +99,6 @@ it('[AC-B3-08g#2][BR-AI-02] denylist 两处扫描均不命中：(a) tools/regist
   expect(probed.filter((text) => DENYLIST.test(text)).length).toBeGreaterThan(0);
 }, 120_000);
 
-it('[AC-B3-08g#3][BR-AI-01][BR-AI-02] 下发 = 注册 ∩ 开启 ∩ 主体：游客与未绑手机只见 handoff_to_human 与商品两工具，已绑手机见全部 6 个；对未绑主体直接调用订单类工具 → rejected 且不触达任何订单端口', async () => {
-  const f = await ordersFixture(pg.db);
-  const guest = await newGuest(pg.db);
-  const unbound = await newMember(pg.db, { phoneBound: false });
-  const assembly = f.build();
-
-  expect((await definitionNames(assembly, f.caller)).sort()).toEqual([...EXPECTED_TOOLS].sort());
-  for (const subject of [guest, unbound]) {
-    // B3-08l (D10-327 / D10-808 (b)): search_rules is audience all, so guests and unbound users see
-    // it too; the title above is kept word for word and is outdated on this point.
-    expect((await definitionNames(assembly, subject)).sort()).toEqual(
-      [...PRODUCT_TOOLS, 'handoff_to_human', 'search_rules'].sort(),
-    );
-  }
-
-  // handoff_to_human is for everyone: a guest gets exactly the one handoff card.
-  const handoff = await callTool(assembly.tools, f.contextOf(guest), 'handoff_to_human', {});
-  expect(cardsOf(handoff).map((card) => card.type)).toEqual(['handoff']);
-
-  const calls: readonly (readonly [string, Record<string, unknown>])[] = [
-    ['list_my_orders', { date_from: '2026-10-01', date_to: '2026-10-06' }],
-    ['explain_order', { order_no: '3900112233445566778', platform: 'taobao' }],
-    ['explain_order', { card_id: 'c1' }],
-    ['prefill_claim', { platform: 'taobao', order_no: '3900112233445566778' }],
-  ];
-  for (const subject of [guest, unbound]) {
-    for (const [name, args] of calls) {
-      const outcome = await callTool(assembly.tools, f.contextOf(subject), name, args);
-      expect(outcome, `${name} ${String(subject.userId)}`).toEqual({
-        kind: 'rejected',
-        modelView: { error: 'invalid_args' },
-      });
-    }
-  }
-  expect(f.orderPortCalls(), 'no order port reached for a refused subject').toBe(0);
-}, 120_000);
-
 it('[AC-B3-08g#3][BR-AI-01][BR-AI-02] 下发 = 注册 ∩ 开启 ∩ 主体：游客与未绑手机只见 handoff_to_human、search_rules 与商品两工具，已绑手机见全部 7 个；对未绑主体直接调用订单类工具 → rejected 且不触达任何订单端口', async () => {
   const f = await ordersFixture(pg.db);
   const guest = await newGuest(pg.db);
@@ -168,7 +108,7 @@ it('[AC-B3-08g#3][BR-AI-01][BR-AI-02] 下发 = 注册 ∩ 开启 ∩ 主体：�
   expect((await definitionNames(assembly, f.caller)).sort()).toEqual([...EXPECTED_TOOLS].sort());
   for (const subject of [guest, unbound]) {
     // B3-08l (D10-327 / D10-808 (b)): search_rules is audience all, so guests and unbound users see
-    // it too; the title above is kept word for word and is outdated on this point.
+    // it too.
     expect((await definitionNames(assembly, subject)).sort()).toEqual(
       [...PRODUCT_TOOLS, 'handoff_to_human', 'search_rules'].sort(),
     );
