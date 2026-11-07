@@ -1,0 +1,19 @@
+id: B2-09zf
+repo: rebate-platform
+title: B2-09zf：月结正差候选的三处资金规则补测试（D10-828 收紧单，补 B2-09zb money r1 / r2 的测试缺口）——待补额不扣、单笔失败不吞、基数不变不出受益人行
+type: test-change
+# 2026-11-07 pay 入账，裁定 D10-828（含 13:21 追加第三条）。B2-09zb 的 money 评审（Codex）r1 S0 / S2、r2 S0 只在实现里修，规则测试轮已用完，由本单补：
+# ① 受益人有未完成义务（待补额 pending）且基数变大时，正差候选 = 新份额 − 已入账净额，不扣 pending；② 单笔订单失败不被吞：其余订单照写、整次 run 失败、settle_jobs settle_adjust 记 failed、重投幂等补上；③ 基数不变（只有佣金变化，含基数 0 仍记预留）时即使有受益人带待补额也不写任何受益人行，只写平台行。
+# 只新增 test/spec/settlement/settle-adjust-tighten/**，不改已有文件、不动实现；须在现行主干上跑绿，变异实跑（把 B2-09zb 的三处修正各自改回）应各红（先例 B2-09zd / D10-799）。分工：新鲜独立 Claude 写，评审用 Codex（D10-823）；非 task 分支、不带证据文件，标签由编排核对后加。RV2。
+refs: [BR-FUND-09, BR-CALC-09]
+refs_hash:
+  BR-FUND-09: 6b72b55621fb
+  BR-CALC-09: 2414ed15d885
+deps: [B2-09zb]
+paths:
+  - 'test/spec/settlement/settle-adjust-tighten/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
