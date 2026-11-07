@@ -35,7 +35,7 @@ export const AVAILABLE = 'user_available';
  */
 export const TITLES = {
   CLAWBACK: { self: '返利扣回', share: '推广收益扣回', invite: '推广收益扣回' },
-  SETTLE_ADJUSTED: { self: '返利已调整', share: '推广收益已调整', invite: '邀请奖励已调整' },
+  SETTLE_ADJUSTED: { self: '返利已调整', share: '推广收益已调整', invite: '推广收益已调整' },
 } as const;
 
 /** BR-TEXT-05 原因码字典 order_reason.<CODE>.title, verbatim (08 l.443–456). */
@@ -61,7 +61,7 @@ export const settleBody = {
   self: (amount: string, reason: string) => `订单返利已按结算金额调整，减少 ${amount}：${reason}`,
   share: (amount: string, reason: string) =>
     `一笔分享订单的推广收益已按结算金额调整，减少 ${amount}：${reason}`,
-  invite: (amount: string) => `一笔邀请奖励已按结算金额调整，减少 ${amount}`,
+  invite: (amount: string) => `一笔推广收益已按结算金额调整，减少 ${amount}`,
 } as const;
 
 /** The order's product title and the buyer's nickname: never in an upline's message (J7). */

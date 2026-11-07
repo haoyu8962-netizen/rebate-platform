@@ -16,14 +16,14 @@
 //
 // Variants by role: self → self, share → share, direct / indirect → invite. Titles:
 // CLAWBACK self「返利扣回」, share and invite「推广收益扣回」(inbox.title.CLAWBACK.self / .promo);
-// SETTLE_ADJUSTED self「返利已调整」, share「推广收益已调整」, invite「邀请奖励已调整」.
+// SETTLE_ADJUSTED self「返利已调整」, share「推广收益已调整」, invite「推广收益已调整」.
 // Bodies (BR-TEXT-09 table; D10-773 ④):
 //   CLAWBACK self   「订单返利已扣回 {amount}：{reason.title}」
 //   CLAWBACK share  「一笔分享订单的推广收益已扣回 {amount}：{reason.title}」
 //   CLAWBACK invite 「一笔邀请订单的推广收益已扣回 {amount}」(no reason, J7)
 //   SETTLE_ADJUSTED self   「订单返利已按结算金额调整，减少 {amount}：{reason.title}」
 //   SETTLE_ADJUSTED share  「一笔分享订单的推广收益已按结算金额调整，减少 {amount}：{reason.title}」
-//   SETTLE_ADJUSTED invite 「一笔邀请奖励已按结算金额调整，减少 {amount}」(no reason, J7)
+//   SETTLE_ADJUSTED invite 「一笔推广收益已按结算金额调整，减少 {amount}」(no reason, J7)
 // {amount}: CLAWBACK negative (-¥3.2); SETTLE_ADJUSTED the decrease's absolute value (¥3.2), both
 // per BR-TEXT-10. {reason.title}: BR-TEXT-05 order_reason.<CODE>.title (CLAWBACK the event's
 // reason, SETTLE_ADJUSTED the sub_type). Route: self and share → OrderDetail { order_id }; invite →
@@ -133,7 +133,7 @@ const DEFAULT_TITLES: Readonly<Record<DeductionCode, Readonly<Record<DeductionVa
     SETTLE_ADJUSTED: Object.freeze({
       self: '返利已调整',
       share: '推广收益已调整',
-      invite: '邀请奖励已调整',
+      invite: '推广收益已调整',
     }),
   });
 
@@ -148,7 +148,7 @@ const DEFAULT_BODIES: Readonly<Record<DeductionCode, Readonly<Record<DeductionVa
     SETTLE_ADJUSTED: Object.freeze({
       self: '订单返利已按结算金额调整，减少 {amount}：{reason.title}',
       share: '一笔分享订单的推广收益已按结算金额调整，减少 {amount}：{reason.title}',
-      invite: '一笔邀请奖励已按结算金额调整，减少 {amount}',
+      invite: '一笔推广收益已按结算金额调整，减少 {amount}',
     }),
   });
 

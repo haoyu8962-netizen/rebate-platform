@@ -1,0 +1,128 @@
+{
+  "risk_note": "RV2 (frozen test/** expectations; wording only). Orchestrator D10-803 / D10-816 ①: the SETTLE_ADJUSTED invite variant used 「邀请奖励」, which 08 BR-TEXT-01 reserves for the BR-INV invite campaign; referral shares are 「推广收益」 (08 BR-TEXT-09 updated in couli #291). contracts/texts.default.json inbox.title.SETTLE_ADJUSTED.invite → 「推广收益已调整」; notification clawback-message.ts invite title and body → 「一笔推广收益已按结算金额调整，减少 {amount}」. Self / share rows, J7 (no reason), route and the absolute {amount} unchanged. No money moved, no schema or API shape change. Frozen tests changed only in their invite-row expectations (D10-327): settle-adjusted-template/kit.ts, clawback-message/kit.ts, settle-adjusted-message/render.test.ts; the [AC-B1-12zc#36] it.each table was split (D10-657 / D10-737) so its self / share rows stay byte-identical to base and are declared in red_exempt_rows. Full verification by the required CI checks (ops/approvals.yaml #21; D10-772).",
+  "reviews": [
+    {
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "round": 1,
+      "reviewer": "claude-independent",
+      "review_type": "contract",
+      "note": "Fresh independent Claude via claude-run.sh (Codex unavailable, D10-775 / approvals #36), contract r1 pass, no findings."
+    },
+    {
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "round": 1,
+      "reviewer": "claude-independent",
+      "review_type": "money",
+      "note": "Fresh independent Claude, money r1 pass, no findings (wording-only change; checklist items not applicable)."
+    },
+    {
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "round": 1,
+      "reviewer": "claude-independent",
+      "review_type": "money",
+      "note": "Second fresh independent Claude re-reviewing the same diff per D10-775 ②, pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_rows_confirmed": true,
+    "note": "Rule tests and frozen invite-row edits by fresh independent Claude contexts in 3 test rounds: r1 wrote settle-adjusted-invite-wording/** (6 tests) and the invite-row edits; red/1 failed only because the self / share rows of the [AC-B1-12zc#36] table are green on base, so r2 split that table (kept rows declared in red_exempt_rows, ledger #2643); the implementer then found [AC-B1-12zd#4] asserting 24 rows for a 36-iteration loop, r3 changed only that count. red/3 PASS (18 red, 17 unchanged exempt, 2 kept rows exempt). Spec-test r1 pass confirmed the frozen edits touch only invite rows and that the kept #36 rows 'self 只覆盖标题' / 'share 两项都覆盖' keep literals, title template and callback unchanged from base (this is also the D10-327 read-only re-review); r2 (incremental, the count fix) pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#1] 契约文案 inbox.title.SETTLE_ADJUSTED.invite 改为「推广收益已调整」，self / share 两键不变，三键都不含「邀请奖励」",
+    "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#2] 直接上级（direct）负差 → 标题「推广收益已调整」、正文「一笔推广收益已按结算金额调整，减少 ¥3.2」逐字，不带原因（J7），跳余额流水",
+    "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#3] 间接上级（indirect，PRICE_PROTECT）负差 → 与直接上级同一邀请行：标题「推广收益已调整」，正文逐字且不带「：商家价保退差」",
+    "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#4] 邀请行的标题与正文都不含「邀请奖励」：两种上级 × 三种 sub_type × 多个金额，无覆盖与覆盖全为空时都一样",
+    "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#5] 只改邀请行：同一负差下自购 / 分享两行的标题与正文原样不变，邀请行换成「推广收益」措辞",
+    "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#6] 邀请行只覆盖正文时标题回退新默认「推广收益已调整」；只覆盖标题时正文回退新默认句",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#32] 上级 direct（SETTLE_DIFF）→ SETTLE_ADJUSTED invite「一笔推广收益已按结算金额调整，减少 {amount}」：不带原因（J7），标题「推广收益已调整」，跳余额流水不跳订单",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#32] 上级 indirect（PRICE_PROTECT）→ SETTLE_ADJUSTED invite「一笔推广收益已按结算金额调整，减少 {amount}」：不带原因（J7），标题「推广收益已调整」，跳余额流水不跳订单",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#32] 上级 direct（PRICE_COMPARE）→ SETTLE_ADJUSTED invite「一笔推广收益已按结算金额调整，减少 {amount}」：不带原因（J7），标题「推广收益已调整」，跳余额流水不跳订单",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -1n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥0.01（写「减少 ¥x」，不写「减少 -¥x」）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -10n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥0.1（写「减少 ¥x」，不写「减少 -¥x」）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -320n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥3.2（写「减少 ¥x」，不写「减少 -¥x」）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -990n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥9.9（写「减少 ¥x」，不写「减少 -¥x」）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -1000n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥10（写「减少 ¥x」，不写「减少 -¥x」）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -123456n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥1234.56（写「减少 ¥x」，不写「减少 -¥x」）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -9007199254740993n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥90071992547409.93（写「减少 ¥x」，不写「减少 -¥x」）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#36] 标题与正文分别覆盖、分别回退（邀请行）：invite 覆盖正文并替换 {amount}（绝对值）",
+    "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#36] 标题与正文分别覆盖、分别回退（邀请行）：两项覆盖都为空回退包内默认"
+  ],
+  "task": "B1-12zd",
+  "spec_commit": "01da20038ea13211c9c777e3934d72b49d7815c9",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "01da20038ea13211c9c777e3934d72b49d7815c9",
+      "tree": "d9fe299c3e9927f95b4edd397e0a83c741e28b07",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T10:00:18Z",
+      "finished_at": "2026-11-07T10:00:29Z",
+      "red_tests": [
+        "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#1] 契约文案 inbox.title.SETTLE_ADJUSTED.invite 改为「推广收益已调整」，self / share 两键不变，三键都不含「邀请奖励」",
+        "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#2] 直接上级（direct）负差 → 标题「推广收益已调整」、正文「一笔推广收益已按结算金额调整，减少 ¥3.2」逐字，不带原因（J7），跳余额流水",
+        "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#3] 间接上级（indirect，PRICE_PROTECT）负差 → 与直接上级同一邀请行：标题「推广收益已调整」，正文逐字且不带「：商家价保退差」",
+        "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#4] 邀请行的标题与正文都不含「邀请奖励」：两种上级 × 三种 sub_type × 多个金额，无覆盖与覆盖全为空时都一样",
+        "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#5] 只改邀请行：同一负差下自购 / 分享两行的标题与正文原样不变，邀请行换成「推广收益」措辞",
+        "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts > [AC-B1-12zd#6] 邀请行只覆盖正文时标题回退新默认「推广收益已调整」；只覆盖标题时正文回退新默认句",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#32] 上级 direct（SETTLE_DIFF）→ SETTLE_ADJUSTED invite「一笔推广收益已按结算金额调整，减少 {amount}」：不带原因（J7），标题「推广收益已调整」，跳余额流水不跳订单",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#32] 上级 indirect（PRICE_PROTECT）→ SETTLE_ADJUSTED invite「一笔推广收益已按结算金额调整，减少 {amount}」：不带原因（J7），标题「推广收益已调整」，跳余额流水不跳订单",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#32] 上级 direct（PRICE_COMPARE）→ SETTLE_ADJUSTED invite「一笔推广收益已按结算金额调整，减少 {amount}」：不带原因（J7），标题「推广收益已调整」，跳余额流水不跳订单",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -1n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥0.01（写「减少 ¥x」，不写「减少 -¥x」）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -10n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥0.1（写「减少 ¥x」，不写「减少 -¥x」）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -320n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥3.2（写「减少 ¥x」，不写「减少 -¥x」）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -990n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥9.9（写「减少 ¥x」，不写「减少 -¥x」）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -1000n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥10（写「减少 ¥x」，不写「减少 -¥x」）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -123456n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥1234.56（写「减少 ¥x」，不写「减少 -¥x」）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#33] 调减 -9007199254740993n 分的 {amount} 取绝对值按 BR-TEXT-10 格式为 ¥90071992547409.93（写「减少 ¥x」，不写「减少 -¥x」）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#36] 标题与正文分别覆盖、分别回退（邀请行）：invite 覆盖正文并替换 {amount}（绝对值）",
+        "test/spec/notification/settle-adjusted-message/render.test.ts > [AC-B1-12zc#36] 标题与正文分别覆盖、分别回退（邀请行）：两项覆盖都为空回退包内默认"
+      ],
+      "expected": [
+        "test/spec/notification/settle-adjusted-invite-wording/wording.test.ts",
+        "test/spec/notification/settle-adjusted-message/render.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "920e204e54501d149c20a60c88677acde1ba6c18a94f77269ef4039583a4f5d4"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "9e853afd02eb5841e64913dd5446b7ddacdc8b5c",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}

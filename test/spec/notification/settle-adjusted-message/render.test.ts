@@ -63,15 +63,15 @@ it.each([
   ['indirect', 'PRICE_PROTECT'],
   ['direct', 'PRICE_COMPARE'],
 ] as const)(
-  '[AC-B1-12zc#32] 上级 %s（%s）→ SETTLE_ADJUSTED invite「一笔邀请奖励已按结算金额调整，减少 {amount}」：不带原因（J7），标题「邀请奖励已调整」，跳余额流水不跳订单',
+  '[AC-B1-12zc#32] 上级 %s（%s）→ SETTLE_ADJUSTED invite「一笔推广收益已按结算金额调整，减少 {amount}」：不带原因（J7），标题「推广收益已调整」，跳余额流水不跳订单',
   (role, sub_type) => {
     const message = renderSettleAdjustedMessage(facts({ role, sub_type }), null);
     expect(message).toMatchObject({
       code: 'SETTLE_ADJUSTED',
       variant: 'invite',
       category: 'service',
-      title: '邀请奖励已调整',
-      body: '一笔邀请奖励已按结算金额调整，减少 ¥3.2',
+      title: '推广收益已调整',
+      body: '一笔推广收益已按结算金额调整，减少 ¥3.2',
     });
     expect(isLedger(message?.route)).toBe(true);
     expect(JSON.stringify(message)).not.toContain(ORDER_ID);
@@ -96,7 +96,7 @@ it.each([
     expect(bodies).toEqual([
       `订单返利已按结算金额调整，减少 ${yuan}：结算金额调整`,
       `一笔分享订单的推广收益已按结算金额调整，减少 ${yuan}：结算金额调整`,
-      `一笔邀请奖励已按结算金额调整，减少 ${yuan}`,
+      `一笔推广收益已按结算金额调整，减少 ${yuan}`,
     ]);
     for (const body of bodies) expect(body).not.toContain('-¥');
   },
@@ -138,25 +138,11 @@ it.each([
     body: '订单返利已按结算金额调整，减少 ¥3.2：商家价保退差',
   },
   {
-    label: 'invite 覆盖正文并替换 {amount}（绝对值）',
-    input: facts({ role: 'direct' }),
-    override: { title_override: null, body_override: '奖励减少 {amount}，再说一次 {amount}' },
-    title: '邀请奖励已调整',
-    body: '奖励减少 ¥3.2，再说一次 ¥3.2',
-  },
-  {
     label: 'share 两项都覆盖',
     input: facts({ role: 'share', sub_type: 'PRICE_COMPARE' }),
     override: { title_override: '分享收益变动', body_override: '减少 {amount}' },
     title: '分享收益变动',
     body: '减少 ¥3.2',
-  },
-  {
-    label: '两项覆盖都为空回退包内默认',
-    input: facts({ role: 'indirect' }),
-    override: { title_override: null, body_override: null },
-    title: '邀请奖励已调整',
-    body: '一笔邀请奖励已按结算金额调整，减少 ¥3.2',
   },
 ])('[AC-B1-12zc#36] 标题与正文分别覆盖、分别回退：$label', ({ input, override, title, body }) => {
   expect(renderSettleAdjustedMessage(input, override)).toMatchObject({
@@ -166,6 +152,33 @@ it.each([
     body,
   });
 });
+
+it.each([
+  {
+    label: 'invite 覆盖正文并替换 {amount}（绝对值）',
+    input: facts({ role: 'direct' }),
+    override: { title_override: null, body_override: '奖励减少 {amount}，再说一次 {amount}' },
+    title: '推广收益已调整',
+    body: '奖励减少 ¥3.2，再说一次 ¥3.2',
+  },
+  {
+    label: '两项覆盖都为空回退包内默认',
+    input: facts({ role: 'indirect' }),
+    override: { title_override: null, body_override: null },
+    title: '推广收益已调整',
+    body: '一笔推广收益已按结算金额调整，减少 ¥3.2',
+  },
+])(
+  '[AC-B1-12zc#36] 标题与正文分别覆盖、分别回退（邀请行）：$label',
+  ({ input, override, title, body }) => {
+    expect(renderSettleAdjustedMessage(input, override)).toMatchObject({
+      code: 'SETTLE_ADJUSTED',
+      category: 'service',
+      title,
+      body,
+    });
+  },
+);
 
 it('[AC-B1-12zc#37] 后台渠道目录加 SETTLE_ADJUSTED：默认推送 + 站内、可开关（不是只发站内）、无固定短信，变体 self / share / invite 的变量与 CLAWBACK 同形；CLAWBACK 原样不变', () => {
   const clawback = {

@@ -41,7 +41,7 @@ export const previousCodes = [
 export const titles: Record<string, string> = {
   'inbox.title.SETTLE_ADJUSTED.self': '返利已调整',
   'inbox.title.SETTLE_ADJUSTED.share': '推广收益已调整',
-  'inbox.title.SETTLE_ADJUSTED.invite': '邀请奖励已调整',
+  'inbox.title.SETTLE_ADJUSTED.invite': '推广收益已调整',
 };
 
 /** 本单之前 texts.default.json 的全部 inbox.title.* 键与值，本单一个不改、不删。 */
