@@ -4,6 +4,8 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import { LEASE_MS } from './lock.ts';
 import {
   ATTEMPT_LIMITS,
+  BUMP_CLOCK_SKEW_MS,
+  BUMP_MATCH_WINDOW_MS,
   bumpAttempt,
   type CallMeta,
   callKind,
@@ -1027,5 +1029,232 @@ it(
     });
     expect(runCli('state.ts', ['breakers', id, '--engine', 'gemini']).status).toBe(2);
     removeDir(join(runs, id));
+  },
+);
+
+// CT-06zzzp (FU-CODEX-RUN-REJECT-COUNT, D10-898): `release <id> <kind> [--review-type …]
+// [--engine …] --reason <text>` gives back the round a caller bumped for a call that
+// codex-run.sh / claude-run.sh refused before it started (no meta.json, so settle never ran).
+// Not to be confused with `release <id> [--owner …]`, which drops a claim.
+
+const SPEC_REVIEW = ['review', '--review-type', 'spec-test'];
+
+/** The pending bumps of a state file as plain records (a released bump carries more fields). */
+function bumpsOf(id: string): Record<string, unknown>[] {
+  return (readState(id)?.pending_bumps ?? []) as unknown as Record<string, unknown>[];
+}
+
+function releaseBump(id: string, args: string[], reason = 'refused before the call') {
+  return runCli('state.ts', ['release', id, ...args, '--reason', reason]);
+}
+
+/** Exit 0, the hint, and the state file byte for byte as it was. */
+function expectNothingReleased(id: string, args: string[]): void {
+  const before = readFileSync(stateFile(id), 'utf8');
+  const res = releaseBump(id, args);
+  expect(res.status, `${args.join(' ')}: ${res.stderr}`).toBe(0);
+  expect(res.stdout + res.stderr, args.join(' ')).toContain('nothing to release');
+  expect(readFileSync(stateFile(id), 'utf8'), args.join(' ')).toBe(before);
+}
+
+it(
+  '[CT-06zzzp] release consumes the bump of a refused call: outcome refused, attempts as before the bump, reason and time recorded',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-01';
+    claimTask(id, { owner: 'session-r' });
+    // One round used by a call with output, then a bump for a call that was refused.
+    expect(runCli('state.ts', ['bump-attempt', id, ...SPEC_REVIEW]).status).toBe(0);
+    expect(settleCall(id, meta({ started_at: new Date().toISOString() })).pre_counted).toBe(true);
+    expect(runCli('state.ts', ['bump-attempt', id, ...SPEC_REVIEW]).status).toBe(0);
+    expect(readState(id)?.attempts['spec-test']).toBe(2);
+    const from = Date.now();
+    const res = releaseBump(id, SPEC_REVIEW, 'tester: none');
+    const to = Date.now();
+    expect(res.status, res.stderr).toBe(0);
+    expect(res.stdout + res.stderr).not.toContain('nothing to release');
+    const state = readState(id);
+    expect(state?.attempts).toEqual({ test: 0, impl: 0, handover: 0, 'spec-test': 1, code: 0 });
+    const [kept, refused] = bumpsOf(id);
+    expect(kept).toMatchObject({ outcome: 'kept' });
+    expect(refused).toMatchObject({
+      kind: 'spec-test',
+      engine: 'codex',
+      outcome: 'refused',
+      reason: 'tester: none',
+    });
+    expect(typeof refused?.['consumed_by']).toBe('string');
+    const at = Date.parse(String(refused?.['released_at']));
+    expect(at).toBeGreaterThanOrEqual(from - 1000);
+    expect(at).toBeLessThanOrEqual(to + 1000);
+    // Giving back a bump is no claim release.
+    expect(state?.owner_session).toBe('session-r');
+    expect(existsSync(claimDir(id))).toBe(true);
+    removeDir(claimDir(id));
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzp] release gives back only the latest unconsumed bump of the kind',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-02';
+    const now = Date.now();
+    bumpAttempt(id, 'spec-test', new Date(now - 120_000));
+    bumpAttempt(id, 'spec-test', new Date(now - 60_000));
+    expect(readState(id)?.attempts['spec-test']).toBe(2);
+    const res = releaseBump(id, SPEC_REVIEW);
+    expect(res.status, res.stderr).toBe(0);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    const [older, later] = bumpsOf(id);
+    expect(older).toMatchObject({
+      bumped_at: new Date(now - 120_000).toISOString(),
+      consumed_by: null,
+      outcome: null,
+    });
+    expect(later).toMatchObject({
+      bumped_at: new Date(now - 60_000).toISOString(),
+      outcome: 'refused',
+    });
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzp] release leaves a bump of another kind, review type or engine alone',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-03';
+    const now = Date.now();
+    bumpAttempt(id, 'spec-test', new Date(now - 60_000));
+    bumpAttempt(id, 'test', new Date(now - 60_000), 'claude-independent');
+    for (const args of [
+      // A money / general review is no spec-test review.
+      ['review', '--review-type', 'money'],
+      ['review', '--review-type', 'general'],
+      // Codex and the independent Claude never give back each other's rounds.
+      [...SPEC_REVIEW, '--engine', 'claude-independent'],
+      ['test'],
+      ['test', '--engine', 'codex'],
+      ['handover', '--engine', 'claude-independent'],
+    ]) {
+      expectNothingReleased(id, args);
+    }
+    expect(readState(id)?.attempts).toMatchObject({ test: 1, 'spec-test': 1 });
+    // Each is given back by its own kind and engine.
+    expect(releaseBump(id, SPEC_REVIEW).status).toBe(0);
+    expect(releaseBump(id, ['test', '--engine', 'claude-independent']).status).toBe(0);
+    expect(readState(id)?.attempts).toMatchObject({ test: 0, 'spec-test': 0 });
+    expect(bumpsOf(id).map((b) => [b['kind'], b['engine'], b['outcome']])).toEqual([
+      ['spec-test', 'codex', 'refused'],
+      ['test', 'claude-independent', 'refused'],
+    ]);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  "[CT-06zzzp] release gives back no bump older than settle's matching window",
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-04';
+    const stale = new Date(Date.now() - BUMP_MATCH_WINDOW_MS - BUMP_CLOCK_SKEW_MS - 60_000);
+    bumpAttempt(id, 'code', stale);
+    expectNothingReleased(id, ['review', '--review-type', 'money']);
+    expect(readState(id)?.attempts.code).toBe(1);
+    // Inside the window it is given back; the stale one stays pending (and counted).
+    bumpAttempt(id, 'code', new Date(Date.now() - BUMP_MATCH_WINDOW_MS + 60_000));
+    expect(releaseBump(id, ['review', '--review-type', 'money']).status).toBe(0);
+    expect(readState(id)?.attempts.code).toBe(1);
+    expect(bumpsOf(id).map((b) => b['outcome'])).toEqual([null, 'refused']);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzp] release and settle exclude each other: a kept or refunded bump is not released, a released one is not settled',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-05';
+    // Kept by a call with output.
+    bumpAttempt(id, 'spec-test', new Date(Date.now() - 1000));
+    const s1 = new Date().toISOString();
+    expect(settleCall(id, meta({ started_at: s1 })).pre_counted).toBe(true);
+    expectNothingReleased(id, SPEC_REVIEW);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    // Refunded by a call without output.
+    bumpAttempt(id, 'spec-test', new Date(Date.now() - 1000));
+    const s2 = new Date().toISOString();
+    expect(settleCall(id, meta({ ...NO_OUTPUT, started_at: s2 })).pre_counted).toBe(true);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    expectNothingReleased(id, SPEC_REVIEW);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    // Released first: a later call without output cannot give it back a second time.
+    bumpAttempt(id, 'spec-test', new Date(Date.now() - 1000));
+    expect(releaseBump(id, SPEC_REVIEW).status).toBe(0);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    const s3 = new Date().toISOString();
+    expect(settleCall(id, meta({ ...NO_OUTPUT, started_at: s3 })).pre_counted).toBe(false);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    expect(bumpsOf(id).map((b) => b['outcome'])).toEqual(['kept', 'refunded', 'refused']);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzp] release is idempotent: a second call finds nothing, changes nothing and exits 0',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-06';
+    bumpAttempt(id, 'test', new Date(Date.now() - 1000));
+    const first = releaseBump(id, ['test']);
+    expect(first.status, first.stderr).toBe(0);
+    expect(readState(id)?.attempts.test).toBe(0);
+    expectNothingReleased(id, ['test']);
+    expect(readState(id)?.attempts.test).toBe(0);
+    expect(bumpsOf(id).map((b) => b['outcome'])).toEqual(['refused']);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzp] release without a state file or without a pending bump exits 0 and writes nothing',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-07';
+    const none = releaseBump(id, ['test']);
+    expect(none.status, none.stderr).toBe(0);
+    expect(existsSync(stateFile(id))).toBe(false);
+    expect(existsSync(claimDir(id))).toBe(false);
+    updateState(id, { state: 'doing' }, T0);
+    const before = readFileSync(stateFile(id), 'utf8');
+    const empty = releaseBump(id, SPEC_REVIEW);
+    expect(empty.status, empty.stderr).toBe(0);
+    expect(readFileSync(stateFile(id), 'utf8')).toBe(before);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzp] release of a bump checks its arguments like bump-attempt and needs --reason',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-08';
+    bumpAttempt(id, 'code', new Date(Date.now() - 1000));
+    const before = readFileSync(stateFile(id), 'utf8');
+    for (const args of [
+      ['review', '--reason', 'r'],
+      ['review', '--review-type', 'unknown', '--reason', 'r'],
+      ['deploy', '--reason', 'r'],
+      ['test', '--review-type', 'money', '--reason', 'r'],
+      ['review', '--review-type', 'money', '--engine', 'gemini', '--reason', 'r'],
+      ['review', '--review-type', 'money'],
+    ]) {
+      const res = runCli('state.ts', ['release', id, ...args]);
+      expect(res.status, args.join(' ')).toBe(2);
+      expect(readFileSync(stateFile(id), 'utf8'), args.join(' ')).toBe(before);
+    }
+    removeDir(stateFile(id));
   },
 );

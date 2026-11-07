@@ -1,0 +1,29 @@
+id: CT-06zzzp
+repo: rebate-platform
+title: CT-06zzzp：codex-run / claude-run 在调用前就拒绝时退回调用方已计的那一轮——state.ts release（FU-CODEX-RUN-REJECT-COUNT，D10-898）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-898；方案 couli-runs/FU-CODEX-RUN-REJECT-COUNT/plan.md）。D10-920：CT-06zzzo 暂缓不合，本单直接基于主干。
+# 根因：调用方先 state.ts bump-attempt 计一轮，codex-run 跑完用 meta.json 调 settle 退回无产出的轮；但所有拒绝（fail_usage / refuse，exit 2）都在写 meta 之前，
+#   settle 不跑，pending bump 不被消费，之后真跑时它已在配对窗外，按「已取代」照样计数。
+# 改法：state.ts 新子命令 release <id> <kind> [--review-type] [--engine] --reason：只退同 kind / review_type / engine、bumped_at 在 settle 的 BUMP_MATCH_WINDOW_MS
+#   （30 分钟，含 BUMP_CLOCK_SKEW_MS）内的最新一条未消费 bump，标 outcome refused、attempts 减 1、记 reason；与 settle 互斥、可重复调用；找不到就不改、exit 0。
+#   codex-run.sh 在 TASK / MODE 已知、非 dry-run、可信根有 state.ts 时，拒绝路径先 release 再 exit 2，退出码不变，release 失败只记 warning；参数错误（TASK 未知）不调。
+# 不扩大现有口子（不 bump 就调用、bump 了不调用），本单不处理。工具测试由新鲜独立 Claude 上下文先写、Opus（high，D10-917）再实现；Codex general 评审；按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/state.ts'
+  - 'tools/ops/state.test.ts'
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/claude-run.test.ts'
+  - 'tools/agent/testing/**'
+  - 'tools/ops/README.md'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzp.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

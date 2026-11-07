@@ -7,6 +7,10 @@
 //                                    [--implementer claude|codex|none]
 //   node tools/ops/state.ts claim <id> [--owner <session>] [--renew]
 //   node tools/ops/state.ts release <id> [--owner <session>]
+//   node tools/ops/state.ts release <id> test|impl|handover [--engine codex|claude-independent]
+//                                   --reason <text>
+//   node tools/ops/state.ts release <id> review --review-type money|general|contract|spec-test
+//                                   [--engine codex|claude-independent] --reason <text>
 //   node tools/ops/state.ts bump-attempt <id> test|impl|handover [--engine codex|claude-independent]
 //   node tools/ops/state.ts bump-attempt <id> review --review-type money|general|contract|spec-test
 //                                        [--engine codex|claude-independent]
@@ -56,6 +60,15 @@
 //   its run so that it cannot be paired with a later call, and by the same rule gives the round
 //   back only when a bump paired (a run without a result that pairs with none still counts as an
 //   Opus failure and is recorded with `refunded: false`).
+// - `release <id> <kind> … --reason` (CT-06zzzp, FU-CODEX-RUN-REJECT-COUNT, D10-898) gives back
+//   the round of a call that codex-run.sh / claude-run.sh refused before it started (exit 2: no
+//   meta.json, so settle never runs). It consumes the latest unconsumed pending bump of the same
+//   kind and engine bumped in settle's window before now ([now - BUMP_MATCH_WINDOW_MS, now +
+//   BUMP_CLOCK_SKEW_MS]): outcome `refused`, attempts minus 1, with `reason` and `released_at`.
+//   Older pending bumps are left alone (not superseded). A bump consumed by settle or opus-run is
+//   never released, and a released one is never paired by settle, so each bump is given back at
+//   most once. Without such a bump (or without a state file) nothing is written: exit 0,
+//   "nothing to release". `release <id>` without a kind still drops the claim (below).
 //
 // Opus failure breaker (RO2-03; default split of 2026-10-05, ops/approvals.yaml id 19): the
 // Opus implementation subagent is no Codex call and leaves no meta.json, so its runs are
@@ -163,18 +176,26 @@ export type UncountedCall = {
 /**
  * One successful `bump-attempt`, waiting for `settle` to pair it with its call (CT-06zxk). It is
  * consumed once: `refunded` / `kept` by the call it paired with, `superseded` when a later bump
- * of the same kind and engine was paired first.
+ * of the same kind and engine was paired first, `refused` by `release` when the runner refused
+ * the call before it started (CT-06zzzp).
  */
 export type PendingBump = {
   kind: AttemptKind;
   engine: Engine;
   bumped_at: string;
-  /** `started_at` of the call (or `opus:<run id>`) that consumed it; null while pending. */
+  /**
+   * `started_at` of the call (or `opus:<run id>`, or `release:<time>`) that consumed it; null
+   * while pending.
+   */
   consumed_by: string | null;
-  outcome: 'refunded' | 'kept' | 'superseded' | null;
+  outcome: 'refunded' | 'kept' | 'superseded' | 'refused' | null;
+  /** `refused` only: why the runner refused the call (`release --reason`). */
+  reason?: string;
+  /** `refused` only: when the round was given back. */
+  released_at?: string;
 };
 
-const PENDING_OUTCOMES = ['refunded', 'kept', 'superseded'] as const;
+const PENDING_OUTCOMES = ['refunded', 'kept', 'superseded', 'refused'] as const;
 
 /**
  * A bump pairs with a call that started at most this long before it: meta.json times are whole
@@ -345,9 +366,13 @@ export function parseState(raw: unknown, file: string): TaskState {
       typeof e.bumped_at !== 'string' ||
       !isNullableString(e.consumed_by) ||
       !(e.outcome === null || (PENDING_OUTCOMES as readonly unknown[]).includes(e.outcome)) ||
-      (e.consumed_by === null) !== (e.outcome === null)
+      (e.consumed_by === null) !== (e.outcome === null) ||
+      (e.reason !== undefined && typeof e.reason !== 'string') ||
+      (e.released_at !== undefined && typeof e.released_at !== 'string')
     ) {
-      bad(`pending_bumps[${i}] must be {kind, engine, bumped_at, consumed_by, outcome}`);
+      bad(
+        `pending_bumps[${i}] must be {kind, engine, bumped_at, consumed_by, outcome[, reason, released_at]}`,
+      );
     }
   });
   if (!(o.pid === null || isCount(o.pid))) bad('pid must be an integer or null');
@@ -491,6 +516,29 @@ export function bumpAttempt(
 }
 
 /**
+ * Index of the latest unconsumed bump of `kind` and `engine` (any engine when null) bumped in
+ * [refMs - window, refMs + BUMP_CLOCK_SKEW_MS], or -1. Shared by settle and release.
+ */
+function latestPendingBump(
+  bumps: PendingBump[],
+  kind: AttemptKind,
+  engine: Engine | null,
+  refMs: number,
+  window: number,
+): number {
+  let pick = -1;
+  bumps.forEach((b, i) => {
+    if (b.outcome !== null || b.kind !== kind || (engine !== null && b.engine !== engine)) return;
+    const at = Date.parse(b.bumped_at);
+    if (Number.isNaN(at) || Number.isNaN(refMs)) return;
+    if (at > refMs + BUMP_CLOCK_SKEW_MS || at < refMs - window) return;
+    const best = pick < 0 ? undefined : bumps[pick];
+    if (best === undefined || at >= Date.parse(best.bumped_at)) pick = i;
+  });
+  return pick;
+}
+
+/**
  * Consumes the pending bump a call pairs with: the latest unconsumed one of its kind and engine
  * (any engine when null) bumped in [started - window, started + skew]. Older unconsumed ones of
  * that kind and engine are superseded. Returns the new list and whether one paired.
@@ -506,14 +554,7 @@ function consumeBump(
 ): { bumps: PendingBump[]; paired: boolean } {
   const sameKind = (b: PendingBump): boolean =>
     b.outcome === null && b.kind === kind && (engine === null || b.engine === engine);
-  let pick = -1;
-  bumps.forEach((b, i) => {
-    const at = Date.parse(b.bumped_at);
-    if (!sameKind(b) || Number.isNaN(at) || Number.isNaN(startedMs)) return;
-    if (at > startedMs + BUMP_CLOCK_SKEW_MS || at < startedMs - window) return;
-    const best = pick < 0 ? undefined : bumps[pick];
-    if (best === undefined || at >= Date.parse(best.bumped_at)) pick = i;
-  });
+  const pick = latestPendingBump(bumps, kind, engine, startedMs, window);
   const chosen = pick < 0 ? undefined : bumps[pick];
   if (chosen === undefined) return { bumps, paired: false };
   const pickedAt = Date.parse(chosen.bumped_at);
@@ -527,6 +568,48 @@ function consumeBump(
       return b;
     }),
   };
+}
+
+export type ReleaseResult = {
+  /** The state after the call; null without a state file. */
+  state: TaskState | null;
+  /** True when a pending bump was given back (and the state file written). */
+  released: boolean;
+};
+
+/**
+ * Gives back the round a caller bumped for a call the runner refused before it started
+ * (CT-06zzzp, FU-CODEX-RUN-REJECT-COUNT): the latest unconsumed pending bump of `kind` and
+ * `engine` bumped in settle's window before `now` becomes `refused` (with `reason` and
+ * `released_at`) and its counter goes down by one. Older pending bumps are left alone. Without
+ * such a bump, or without a state file, nothing is written; calling it again is therefore
+ * harmless, and a bump that settle or opus-run consumed is never given back.
+ */
+export function releaseRound(
+  id: string,
+  kind: AttemptKind,
+  engine: Engine,
+  reason: string,
+  now: Date = new Date(),
+): ReleaseResult {
+  const prev = readState(id);
+  if (prev === null) return { state: null, released: false };
+  const bumps = prev.pending_bumps ?? [];
+  const pick = latestPendingBump(bumps, kind, engine, now.getTime(), BUMP_MATCH_WINDOW_MS);
+  if (pick < 0) return { state: prev, released: false };
+  const at = now.toISOString();
+  const next: TaskState = {
+    ...prev,
+    attempts: { ...prev.attempts, [kind]: Math.max(0, prev.attempts[kind] - 1) },
+    pending_bumps: bumps.map((b, i) =>
+      i === pick
+        ? { ...b, consumed_by: `release:${at}`, outcome: 'refused', reason, released_at: at }
+        : b,
+    ),
+    updated_at: at,
+  };
+  writeState(next);
+  return { state: next, released: true };
 }
 
 export type OpusRunResult = {
@@ -954,6 +1037,35 @@ export function releaseTask(id: string, opts: { owner?: string; now?: Date } = {
   return updateState(id, { owner_session: null, lease_until: null, pid: null }, now);
 }
 
+/** The counter named on the command line: `test|impl|handover` or `review --review-type <t>`. */
+function parseKindArg(
+  cmd: string,
+  kindArg: string | undefined,
+  type: string | undefined,
+): AttemptKind {
+  if (kindArg === 'test' || kindArg === 'impl' || kindArg === 'handover') {
+    if (type !== undefined) throw new UsageError('--review-type applies to review only');
+    return kindArg;
+  }
+  if (kindArg === 'review') {
+    if (type === undefined || !(REVIEW_TYPES as readonly string[]).includes(type)) {
+      throw new UsageError(
+        `${cmd} <id> review needs --review-type ${REVIEW_TYPES.join('|')} (each review type has its own rounds, 规划/11 §2.5)`,
+      );
+    }
+    return reviewKind(type as ReviewType);
+  }
+  throw new UsageError(`${cmd} <id> test|impl|handover | ${cmd} <id> review --review-type <type>`);
+}
+
+function parseEngine(value: string | undefined): Engine {
+  const engine = value ?? 'codex';
+  if (!(ENGINES as readonly string[]).includes(engine)) {
+    throw new UsageError(`--engine must be ${ENGINES.join(' or ')}`);
+  }
+  return engine as Engine;
+}
+
 function parseNullable(value: string | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   return value === 'none' ? null : value;
@@ -979,6 +1091,7 @@ function main(argv: string[]): number {
       risk: { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       engine: { type: 'string' },
+      reason: { type: 'string' },
     },
     allowPositionals: true,
   });
@@ -1037,45 +1150,52 @@ function main(argv: string[]): number {
     console.log(JSON.stringify(claimTask(id, { owner, renew: values.renew }), null, 2));
     return 0;
   }
-  if (cmd === 'release') {
+  if (cmd === 'release' && extra === undefined) {
+    // Without a kind: drops the claim (the round options belong to the other form).
+    for (const flag of ['reason', 'review-type', 'engine'] as const) {
+      if (values[flag] !== undefined) {
+        throw new UsageError(
+          `release <id> --${flag} needs a kind: release <id> <kind> --reason <text>`,
+        );
+      }
+    }
     const opts = values.owner === undefined ? {} : { owner: values.owner };
     console.log(JSON.stringify(releaseTask(id, opts), null, 2));
     return 0;
   }
-  if (cmd === 'bump-attempt') {
-    let kind: AttemptKind;
-    if (extra === 'test' || extra === 'impl' || extra === 'handover') {
-      if (values['review-type'] !== undefined) {
-        throw new UsageError('--review-type applies to review only');
-      }
-      kind = extra;
-    } else if (extra === 'review') {
-      const type = values['review-type'];
-      if (type === undefined || !(REVIEW_TYPES as readonly string[]).includes(type)) {
-        throw new UsageError(
-          `bump-attempt <id> review needs --review-type ${REVIEW_TYPES.join('|')} (each review type has its own rounds, 规划/11 §2.5)`,
-        );
-      }
-      kind = reviewKind(type as ReviewType);
-    } else {
-      throw new UsageError(
-        'bump-attempt <id> test|impl|handover | bump-attempt <id> review --review-type <type>',
+  if (cmd === 'release') {
+    // With a kind: gives back the round of a refused call (CT-06zzzp); the claim is untouched.
+    if (values.owner !== undefined) {
+      throw new UsageError('--owner applies to releasing a claim (release <id> without a kind)');
+    }
+    const kind = parseKindArg('release', extra, values['review-type']);
+    const engine = parseEngine(values.engine);
+    const reason = values.reason?.trim() ?? '';
+    if (reason === '') {
+      throw new UsageError('release <id> <kind> needs --reason <why the call was refused>');
+    }
+    const res = releaseRound(id, kind, engine, reason);
+    if (!res.released) {
+      console.log(
+        `${id}: nothing to release (no pending ${kind} bump of ${engine} in the last ${BUMP_MATCH_WINDOW_MS / 60_000} minutes)`,
       );
+      return 0;
     }
-    const engine = values.engine ?? 'codex';
-    if (!(ENGINES as readonly string[]).includes(engine)) {
-      throw new UsageError(`--engine must be ${ENGINES.join(' or ')}`);
-    }
-    const state = bumpAttempt(id, kind, new Date(), engine as Engine);
+    console.log(
+      JSON.stringify({ task: id, released: true, kind, engine, attempts: res.state?.attempts }),
+    );
+    return 0;
+  }
+  if (cmd === 'bump-attempt') {
+    const kind = parseKindArg('bump-attempt', extra, values['review-type']);
+    const engine = parseEngine(values.engine);
+    const state = bumpAttempt(id, kind, new Date(), engine);
     console.log(JSON.stringify(state, null, 2));
     return 0;
   }
   if (cmd === 'breakers') {
-    const engine = values.engine ?? 'codex';
-    if (!(ENGINES as readonly string[]).includes(engine)) {
-      throw new UsageError(`--engine must be ${ENGINES.join(' or ')}`);
-    }
-    const calls = taskCalls(id, engine as Engine);
+    const engine = parseEngine(values.engine);
+    const calls = taskCalls(id, engine);
     console.log(JSON.stringify({ ...calls, engine }));
     if (calls.reasons.length > 0) {
       throw new BreakerError(calls.reasons.map((r) => r.message).join('\n'));

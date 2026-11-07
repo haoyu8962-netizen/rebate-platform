@@ -569,3 +569,24 @@ it(
     expect(existsSync(join(fx.run, 'impl.json.rejected'))).toBe(true);
   },
 );
+
+it(
+  '[CT-06zzzp] claude-run.sh: a refused call gives back its round as claude-independent',
+  LONG,
+  () => {
+    const fx = fixture('release');
+    writeStub(join(fx.trusted, 'tools', 'ops', 'state.ts'), 'state');
+    ledger(fx, { tester: undefined });
+    const res = claudeRun(fx, ['review', TASK, '--base', fx.baseSha, '--review-type', 'spec-test']);
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain('the rule-test author is unknown');
+    const calls = stubCalls(fx, 'state').filter((call) => call[1] === 'release');
+    expect(calls).toHaveLength(1);
+    const argv = calls[0] ?? [];
+    expect(argv.slice(0, 4)).toEqual(['state', 'release', TASK, 'review']);
+    expect(after(argv, '--review-type')).toBe('spec-test');
+    expect(after(argv, '--engine')).toBe('claude-independent');
+    expect(after(argv, '--reason') ?? '').not.toBe('');
+    expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
+  },
+);

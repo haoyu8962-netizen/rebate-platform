@@ -2,6 +2,7 @@
 // through COULI_CODEX_BIN; the real codex is never started and no quota is used.
 import { spawnSync } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -26,6 +27,7 @@ import {
   runScript,
   stubCalls,
   TASK,
+  TOOLS_DIR,
   writeStub,
 } from './testing/fixture.ts';
 
@@ -1290,3 +1292,175 @@ it(
     expect(thirdPrompt).toContain('- Increment to review: `git diff ');
   },
 );
+
+// CT-06zzzp (FU-CODEX-RUN-REJECT-COUNT, D10-898): the caller bumps a round before it calls
+// codex-run.sh; a call refused before it starts (exit 2, no meta.json, so no settle) gives that
+// round back with `state.ts release` and still exits 2.
+
+/** The real tools/ops/state.ts (and what it imports) in the trusted root instead of a stub. */
+function realState(fx: Fixture): void {
+  for (const file of ['state.ts', 'cli.ts', 'lock.ts']) {
+    cpSync(join(TOOLS_DIR, 'ops', file), join(fx.trusted, 'tools', 'ops', file));
+  }
+}
+
+/** Runs the trusted state.ts the way a caller bumps a round before the call. */
+function bumpRound(fx: Fixture, args: readonly string[]): void {
+  const res = spawnSync(
+    process.execPath,
+    [join(fx.trusted, 'tools', 'ops', 'state.ts'), 'bump-attempt', TASK, ...args],
+    { encoding: 'utf8', env: fx.env },
+  );
+  expect(res.status, res.stderr).toBe(0);
+}
+
+type BumpRecord = Record<string, unknown>;
+
+function taskState(fx: Fixture): { attempts: Record<string, number>; pending_bumps: BumpRecord[] } {
+  return JSON.parse(readFileSync(join(fx.runs, 'state', `${TASK}.json`), 'utf8')) as {
+    attempts: Record<string, number>;
+    pending_bumps: BumpRecord[];
+  };
+}
+
+function taskLedger(fx: Fixture, fields: Record<string, unknown>): void {
+  writeStub(join(fx.trusted, 'tools', 'ops', 'task.ts'), 'task', [
+    { when: ['show'], stdout: JSON.stringify({ id: TASK, type: 'impl', ...fields }) },
+  ]);
+}
+
+function flagValue(argv: readonly string[], flag: string): string | undefined {
+  const at = argv.indexOf(flag);
+  return at === -1 ? undefined : argv[at + 1];
+}
+
+function releaseCalls(fx: Fixture): string[][] {
+  return stubCalls(fx, 'state').filter((call) => call[1] === 'release');
+}
+
+/** A Codex spec-test review of a task whose ledger names no rule-test author: refused. */
+function specReview(fx: Fixture): string[] {
+  return ['review', TASK, '--base', fx.baseSha, '--review-type', 'spec-test'];
+}
+
+function expectSpecRelease(call: readonly string[] | undefined): void {
+  const argv = call ?? [];
+  expect(argv.slice(0, 4)).toEqual(['state', 'release', TASK, 'review']);
+  expect(flagValue(argv, '--review-type')).toBe('spec-test');
+  expect(flagValue(argv, '--engine')).toBe('codex');
+  expect(flagValue(argv, '--reason') ?? '').not.toBe('');
+}
+
+it(
+  '[CT-06zzzp] a call refused before it starts gives back the round bumped for it, exit stays 2',
+  LONG,
+  () => {
+    const fx = fixture('release-refused');
+    realState(fx);
+    taskLedger(fx, { risk: 'RV2', tester: 'none' });
+    bumpRound(fx, ['review', '--review-type', 'spec-test']);
+    expect(taskState(fx).attempts['spec-test']).toBe(1);
+    const spec = codexRun(fx, specReview(fx));
+    expect(spec.status).toBe(2);
+    expect(spec.stderr).toContain('the rule-test author is unknown');
+    let state = taskState(fx);
+    expect(state.attempts['spec-test']).toBe(0);
+    expect(state.pending_bumps).toEqual([
+      expect.objectContaining({ kind: 'spec-test', engine: 'codex', outcome: 'refused' }),
+    ]);
+    expect(String(state.pending_bumps[0]?.['reason'] ?? '')).not.toBe('');
+    // impl mode gives back the counter of its phase: a handover of an RV2 task is refused.
+    bumpRound(fx, ['handover']);
+    const handover = codexRun(fx, ['impl', TASK, '--phase', 'handover']);
+    expect(handover.status).toBe(2);
+    expect(handover.stderr).toContain('RV0 / RV1 only');
+    state = taskState(fx);
+    expect(state.attempts).toMatchObject({ handover: 0, 'spec-test': 0 });
+    expect(state.pending_bumps.map((b) => [b['kind'], b['outcome']])).toEqual([
+      ['spec-test', 'refused'],
+      ['handover', 'refused'],
+    ]);
+    expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
+  },
+);
+
+it(
+  '[CT-06zzzp] a usage error before the task id is known releases nothing; a refusal of a known task does',
+  LONG,
+  () => {
+    const fx = fixture('release-usage');
+    writeStub(join(fx.trusted, 'tools', 'ops', 'state.ts'), 'state');
+    taskLedger(fx, { risk: 'RV1', tester: 'none' });
+    for (const args of [
+      [],
+      ['review'],
+      ['impl'],
+      ['review', '../escape', '--review-type', 'spec-test'],
+      ['impl', 'not-a-task'],
+    ]) {
+      expect(codexRun(fx, args).status, args.join(' ')).toBe(2);
+    }
+    expect(stubCalls(fx, 'state')).toEqual([]);
+    const refused = codexRun(fx, specReview(fx));
+    expect(refused.status).toBe(2);
+    const calls = releaseCalls(fx);
+    expect(calls).toHaveLength(1);
+    expectSpecRelease(calls[0]);
+  },
+);
+
+it('[CT-06zzzp] a refused --dry-run releases nothing; the same call without it does', LONG, () => {
+  const fx = fixture('release-dry');
+  writeStub(join(fx.trusted, 'tools', 'ops', 'state.ts'), 'state');
+  taskLedger(fx, { risk: 'RV1', tester: 'none' });
+  const dry = codexRun(fx, [...specReview(fx), '--dry-run']);
+  expect(dry.status).toBe(2);
+  expect(dry.stderr).toContain('the rule-test author is unknown');
+  expect(releaseCalls(fx)).toEqual([]);
+  const real = codexRun(fx, specReview(fx));
+  expect(real.status).toBe(2);
+  const calls = releaseCalls(fx);
+  expect(calls).toHaveLength(1);
+  expectSpecRelease(calls[0]);
+});
+
+it(
+  '[CT-06zzzp] a call that ran with output keeps its round through settle; only the refused one is given back',
+  LONG,
+  () => {
+    const fx = fixture('release-kept');
+    realState(fx);
+    taskLedger(fx, { risk: 'RV1', tester: 'none' });
+    bumpRound(fx, ['test']);
+    const ok = codexRun(fx, ['impl', TASK]);
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(taskState(fx).attempts.test).toBe(1);
+    expect(taskState(fx).pending_bumps).toEqual([
+      expect.objectContaining({ kind: 'test', outcome: 'kept' }),
+    ]);
+    bumpRound(fx, ['review', '--review-type', 'spec-test']);
+    expect(codexRun(fx, specReview(fx)).status).toBe(2);
+    const state = taskState(fx);
+    expect(state.attempts).toMatchObject({ test: 1, 'spec-test': 0 });
+    expect(state.pending_bumps.map((b) => [b['kind'], b['outcome']])).toEqual([
+      ['test', 'kept'],
+      ['spec-test', 'refused'],
+    ]);
+  },
+);
+
+it('[CT-06zzzp] a failing release is a warning: the refusal still exits 2', LONG, () => {
+  const fx = fixture('release-fails');
+  writeStub(join(fx.trusted, 'tools', 'ops', 'state.ts'), 'state', [
+    { when: ['release'], exit: 1, stderr: 'state.ts: cannot write the state file' },
+  ]);
+  taskLedger(fx, { risk: 'RV1', tester: 'none' });
+  const res = codexRun(fx, specReview(fx));
+  expect(res.status).toBe(2);
+  expect(res.stderr).toContain('the rule-test author is unknown');
+  expect(releaseCalls(fx)).toHaveLength(1);
+  expect(
+    res.stderr.split('\n').some((line) => line.includes('warning') && line.includes('release')),
+    res.stderr,
+  ).toBe(true);
+});

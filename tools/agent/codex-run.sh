@@ -97,6 +97,11 @@ REVIEW_EFFORT=''
 BASE_ARG=''
 TIMEOUT_MIN=''
 DRY_RUN=0
+# CT-06zzzp: a refusal gives back the caller's round only once the arguments are parsed (task id,
+# mode, phase, --dry-run known) and the trusted root is resolved.
+ARGS_PARSED=0
+ROOTS_RESOLVED=0
+ROUND_RELEASED=0
 
 log() { printf '%s: %s\n' "${SCRIPT_NAME%.sh}" "$*" >&2; }
 
@@ -127,14 +132,43 @@ exit:  0 usable output | 10 no usable output | 11 model capacity | 12 position a
 EOF
 }
 
+# CT-06zzzp (FU-CODEX-RUN-REJECT-COUNT, D10-898): the caller bumped a round before this call
+# (state.ts bump-attempt); a call refused before it starts writes no meta.json, so settle never
+# runs and that round would stay counted. A refusal therefore gives it back with `state.ts release`
+# (kind as settle counts it: impl by phase, review by review type; an empty review type is a code
+# review, as in callKind; engine AGENT_ENGINE; reason the first part of the refusal). Only when the
+# task id, mode and options are known, the trusted root is resolved, it is not --dry-run and the
+# trusted root has state.ts; at most once per call. A failing release is a warning: the exit code
+# stays 2.
+release_refused_round() {
+  [ "$ROUND_RELEASED" = 0 ] && [ "$ARGS_PARSED" = 1 ] && [ "$ROOTS_RESOLVED" = 1 ] &&
+    [ "$DRY_RUN" = 0 ] || return 0
+  ROUND_RELEASED=1
+  [ -f "$TRUSTED/tools/ops/state.ts" ] || return 0
+  local reason="${1%%;*}" kind_args
+  # No leading dash or blank: the value must not read as an option.
+  reason="${reason#"${reason%%[!- ]*}"}"
+  [ -n "$reason" ] || reason=refused
+  if [ "$MODE" = impl ]; then
+    kind_args=("$PHASE")
+  else
+    kind_args=(review --review-type "${REVIEW_TYPE:-general}")
+  fi
+  node "$TRUSTED/tools/ops/state.ts" release "$TASK" "${kind_args[@]}" \
+    --engine "$AGENT_ENGINE" --reason "$reason" >&2 ||
+    log "warning: the refused round was not released (tools/ops/state.ts release failed); it stays counted"
+}
+
 fail_usage() {
   log "$1"
+  release_refused_round "$1"
   print_usage >&2
   exit 2
 }
 
 refuse() {
   log "refused: $1 (规划/11 §2.4 禁用)"
+  release_refused_round "$1"
   exit 2
 }
 
@@ -225,6 +259,7 @@ parse_args() {
     if [ "$AGENT_ENGINE" = claude-independent ] && [ "$PHASE" != test ]; then
       fail_usage "an independent Claude run writes rule tests only (--phase test); --phase $PHASE is not covered by ops/approvals.yaml id 36"
     fi
+    ARGS_PARSED=1
   else
     [ -z "$PHASE" ] || fail_usage "--phase applies to impl only"
     resolve_review_effort
@@ -236,6 +271,7 @@ parse_args() {
     if [ -n "$BASE_ARG" ]; then
       [[ "$BASE_ARG" =~ $REF_PATTERN ]] || fail_usage "invalid base ref: $BASE_ARG"
     fi
+    ARGS_PARSED=1
   fi
 }
 
@@ -379,6 +415,7 @@ claude_child_env() {
 
 resolve_roots() {
   agent_resolve_roots || exit 2
+  ROOTS_RESOLVED=1
 }
 
 # The review type follows the risk level computed by the trusted tools from the task paths
@@ -520,6 +557,7 @@ check_breakers() {
   out="$(node "$TRUSTED/tools/ops/state.ts" breakers "$TASK" --engine "$AGENT_ENGINE" 2>&1)" || rc=$?
   if [ "$rc" = 3 ]; then
     log "refused: a failure breaker of $TASK is open for $AGENT_ENGINE: $out"
+    release_refused_round "a failure breaker of $TASK is open for $AGENT_ENGINE"
     exit 2
   fi
 }
