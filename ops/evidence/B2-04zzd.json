@@ -1,0 +1,109 @@
+{
+  "risk_note": "RV2 (settlement clawback path; events only, no new money movement). FU-SETTLE-ADJ-NOTIFY publisher (orchestrator D10-773 B, D10-816 ②, D10-817). settleDiff's R10 negative route now publishes order.settle_adjusted with events.publish(trx, …) in the same sync transaction, after the SETTLE_ADJUST vouchers, obligations, order CAS and history (a publish failure rolls everything back): { order_id, order_key, settle_seq, sub_type 'SETTLE_DIFF', beneficiaries [{ user_id, role, adjust_fen (signed decimal string, = delta_fen), bucket ('bad_debt' when posting is bad_debt, else 'user_available') }] } for delta_fen != 0; the platform difference is not listed; published with beneficiaries [] when only the platform moves (rule test). apply step 10: order.clawed_back for R9 now carries reason = the R9 sub_type (cause RIGHTS -> RIGHTS, PARTIAL_REFUND -> PART_REFUND); R8 unchanged. Positive / no-change / held paths publish nothing. Consumer B1-12zc (#2617) reads this payload. Existing settlement spec tests reaching R9 / R10 were read one by one: R9 payload checks use toMatchObject / objectContaining; the fake buses that refuse other events (forfeited-state/kit.ts, admin-recon-restore/after-restore) never reach R10; none expected red, confirmed by the required CI checks (ops/approvals.yaml #21; D10-772).",
+  "reviews": [
+    {
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "reviewer": "claude-independent",
+      "note": "Fresh independent Claude via claude-run.sh (Codex unavailable, D10-775 / approvals #36), money r1 pass, no findings; checklist rounding / sign / idempotency / concurrency / partial refund / clock / app_id filled."
+    },
+    {
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "reviewer": "claude-independent",
+      "note": "Second fresh independent Claude re-reviewing the same diff per D10-775 ②, pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context: 14 tests in test/spec/settlement/settle-adjusted-event/** (publish, routes, clawed-back-reason), no frozen file touched; container red/1 PASS (14 red for the right reason). Spec-test r1 pass, no findings. Ledger refs emptied in #2643 (BR-FUND-09 text too long for the 24KB brief, B1-12u precedent) with the relevant BR-FUND-09 text excerpted in the brief."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/settlement/settle-adjusted-event/clawed-back-reason.int.test.ts > [AC-B2-04zzd#12] 入账后维权部分成功（应扣佣金 400）按 R9 扣回：order.clawed_back 带 reason RIGHTS；另一单维权全额成功（1200）按 R8 仍带 reason RIGHTS",
+    "test/spec/settlement/settle-adjusted-event/clawed-back-reason.int.test.ts > [AC-B2-04zzd#13] 维权 WAIT_COMMISSION 后联盟新佣金 600 经维权成功入口（cause RIGHTS，ref 该维权记录）按 R9 扣回：order.clawed_back 带 reason RIGHTS",
+    "test/spec/settlement/settle-adjusted-event/clawed-back-reason.int.test.ts > [AC-B2-04zzd#14] 部分退款（cause PARTIAL_REFUND，新佣金 600，键 C5）按 R9 扣回：order.clawed_back 带 reason PART_REFUND；另一单新佣金 0 按 R8 仍带 reason COMMISSION_ZERO",
+    "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#1] 1000→601 三位受益人负差：同步事务发一条 order.settle_adjusted，载荷逐项为订单 id、订单键、settle_seq 2、sub_type SETTLE_DIFF 与本人 -200 / 直推 -40 / 间推 -20（整数分字符串，bucket user_available），平台差不列入，不发 order.clawed_back",
+    "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#2] 受益人注销处理中（deleting）遇 1000→800：本人 100 记 BAD_DEBT，order.settle_adjusted 仍列入该行，adjust_fen -100、bucket bad_debt；再降到 600 的第二条 settle_seq 3",
+    "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#3] 受益人已注销（deleted）遇 1000→800：本人 100 记 BAD_DEBT，order.settle_adjusted 列入 adjust_fen -100、bucket bad_debt；再降到 600 的第二条 settle_seq 3",
+    "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#4] 基数相等只平台冲回（N 2→1、预留 7500：base 0 不变，受益人差额 0、只记平台 1 分）：R10 仍发一条 order.settle_adjusted，beneficiaries 为空数组（作者裁定：照发，消费端无信可发）",
+    "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#5] 同事务：order.settle_adjusted 入队时同一事务里已有本次两张 SETTLE_ADJUST 凭证；入队失败 → 整个同步回滚，凭证、余额、订单列、历史、结算记录与事件都不留下；重投后恰好一套凭证、一条事件",
+    "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#6] 同一结算记录重放（同报文、仅 mtime 变）：不追加凭证，也不再发 order.settle_adjusted，始终只有 settle_seq 2 那一条",
+    "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#7] 正差 1200 只告警、不发 order.settle_adjusted；随后 800 按 booked 1000 负差：只发一条，settle_seq 3、本人 -100",
+    "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#8] 同额新记录（seq 2、金额 1000）无动作、不发 order.settle_adjusted；随后 800 负差只发一条 settle_seq 3",
+    "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#9] 结算佣金降到 0 走 R8（CLAWED_BACK、COMMISSION_ZERO）：只发 order.clawed_back，不发 order.settle_adjusted；另一单 1000→800 负差发一条",
+    "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#10] 维权等待中（WAIT_COMMISSION）遇正差 1200：留待、不发 order.settle_adjusted；另一单等待中遇 800 负差：维权关闭，同事务发一条 settle_seq 2、本人 -100",
+    "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#11] 退款数量增加时同步新结算 600：走 R9 不走 R10，不发 order.settle_adjusted；order.clawed_back 载荷逐项为订单 id、订单键、C{版本}、R9、reason PART_REFUND 与本人扣回 200"
+  ],
+  "task": "B2-04zzd",
+  "spec_commit": "1e6581a915fac817a9470b06a342fdd8169369e8",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1e6581a915fac817a9470b06a342fdd8169369e8",
+      "tree": "a2f7f5e15b7eef168d40bb7b27df350dba07c676",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T16:11:13Z",
+      "finished_at": "2026-11-07T16:11:46Z",
+      "red_tests": [
+        "test/spec/settlement/settle-adjusted-event/clawed-back-reason.int.test.ts > [AC-B2-04zzd#12] 入账后维权部分成功（应扣佣金 400）按 R9 扣回：order.clawed_back 带 reason RIGHTS；另一单维权全额成功（1200）按 R8 仍带 reason RIGHTS",
+        "test/spec/settlement/settle-adjusted-event/clawed-back-reason.int.test.ts > [AC-B2-04zzd#13] 维权 WAIT_COMMISSION 后联盟新佣金 600 经维权成功入口（cause RIGHTS，ref 该维权记录）按 R9 扣回：order.clawed_back 带 reason RIGHTS",
+        "test/spec/settlement/settle-adjusted-event/clawed-back-reason.int.test.ts > [AC-B2-04zzd#14] 部分退款（cause PARTIAL_REFUND，新佣金 600，键 C5）按 R9 扣回：order.clawed_back 带 reason PART_REFUND；另一单新佣金 0 按 R8 仍带 reason COMMISSION_ZERO",
+        "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#1] 1000→601 三位受益人负差：同步事务发一条 order.settle_adjusted，载荷逐项为订单 id、订单键、settle_seq 2、sub_type SETTLE_DIFF 与本人 -200 / 直推 -40 / 间推 -20（整数分字符串，bucket user_available），平台差不列入，不发 order.clawed_back",
+        "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#2] 受益人注销处理中（deleting）遇 1000→800：本人 100 记 BAD_DEBT，order.settle_adjusted 仍列入该行，adjust_fen -100、bucket bad_debt；再降到 600 的第二条 settle_seq 3",
+        "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#3] 受益人已注销（deleted）遇 1000→800：本人 100 记 BAD_DEBT，order.settle_adjusted 列入 adjust_fen -100、bucket bad_debt；再降到 600 的第二条 settle_seq 3",
+        "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#4] 基数相等只平台冲回（N 2→1、预留 7500：base 0 不变，受益人差额 0、只记平台 1 分）：R10 仍发一条 order.settle_adjusted，beneficiaries 为空数组（作者裁定：照发，消费端无信可发）",
+        "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#5] 同事务：order.settle_adjusted 入队时同一事务里已有本次两张 SETTLE_ADJUST 凭证；入队失败 → 整个同步回滚，凭证、余额、订单列、历史、结算记录与事件都不留下；重投后恰好一套凭证、一条事件",
+        "test/spec/settlement/settle-adjusted-event/publish.int.test.ts > [AC-B2-04zzd#6] 同一结算记录重放（同报文、仅 mtime 变）：不追加凭证，也不再发 order.settle_adjusted，始终只有 settle_seq 2 那一条",
+        "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#7] 正差 1200 只告警、不发 order.settle_adjusted；随后 800 按 booked 1000 负差：只发一条，settle_seq 3、本人 -100",
+        "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#8] 同额新记录（seq 2、金额 1000）无动作、不发 order.settle_adjusted；随后 800 负差只发一条 settle_seq 3",
+        "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#9] 结算佣金降到 0 走 R8（CLAWED_BACK、COMMISSION_ZERO）：只发 order.clawed_back，不发 order.settle_adjusted；另一单 1000→800 负差发一条",
+        "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#10] 维权等待中（WAIT_COMMISSION）遇正差 1200：留待、不发 order.settle_adjusted；另一单等待中遇 800 负差：维权关闭，同事务发一条 settle_seq 2、本人 -100",
+        "test/spec/settlement/settle-adjusted-event/routes.int.test.ts > [AC-B2-04zzd#11] 退款数量增加时同步新结算 600：走 R9 不走 R10，不发 order.settle_adjusted；order.clawed_back 载荷逐项为订单 id、订单键、C{版本}、R9、reason PART_REFUND 与本人扣回 200"
+      ],
+      "expected": [
+        "test/spec/settlement/settle-adjusted-event/clawed-back-reason.int.test.ts",
+        "test/spec/settlement/settle-adjusted-event/publish.int.test.ts",
+        "test/spec/settlement/settle-adjusted-event/routes.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b03d2e0ab74c3b3666c57aa223210990e5ad368e1a1e6f4a332a68b99b41283b"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2ff2d6d3ae97a2582ef5da5f4f73e48f2e8b7b75",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  }
+}

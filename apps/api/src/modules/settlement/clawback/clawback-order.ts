@@ -40,7 +40,8 @@
 //      a rebate history row; R8 also writes orders.reason, R9 writes diff_reason_code PART_REFUND
 //      and leaves orders.reason unchanged.
 //  10. R8 and R9 publish order.clawed_back on the same transaction (B2-04lb, D10-474 ③): order_id,
-//      order_key, rights_event_id, transition, R8 reason, beneficiaries [{ user_id, role,
+//      order_key, rights_event_id, transition, reason (R8: the R8 reason; R9: the R9 sub_type —
+//      RIGHTS / PART_REFUND, D10-817 ②), beneficiaries [{ user_id, role,
 //      clawback_fen (decimal string) }] for the beneficiaries clawed back from their balance.
 //  11. (B2-04l, BR-FUND-06「等联盟回传新佣金后按 R7/R9 处理并关闭」) after an R8 / R9: the WAIT_COMMISSION
 //      order_rights rows this event answers are closed as SUCCEEDED (a rights ref: that row; a
@@ -77,7 +78,8 @@
 //     newDecidingSeq), N_new is that settlement amount (BR-FUND-08 ①); an amount above the booked
 //     pair is a positive difference: nothing written, warn settle_adjust_positive_pending;
 //   - otherwise (B2-04zi) a new deciding settlement record → R10 / BR-FUND-09 (settleDiff below):
-//     R8 through apply (cause COMMISSION); the negative route posts SETTLE_ADJUST immediately; the
+//     R8 through apply (cause COMMISSION); the negative route posts SETTLE_ADJUST immediately and
+//     publishes order.settle_adjusted on the same transaction (B2-04zzd); the
 //     positive route writes nothing and warns settle_adjust_positive_pending (the candidate is
 //     FU-SETTLE-ADJ-POSITIVE); an equal pair is no action. No R9b diff for an estimate changed by
 //     the same sync;
@@ -973,7 +975,8 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
         order_key: key,
         rights_event_id: rightsEventId,
         transition,
-        ...(transition === 'R8' ? { reason: rules.r8Reason } : {}),
+        // D10-817 ②: R9 carries the cause's reason too, the R9 sub_type of the table above.
+        reason: transition === 'R8' ? rules.r8Reason : subType,
         beneficiaries: plan.beneficiaries
           .filter((b) => b.delta_fen < 0n && b.posting === 'user_available')
           .map((b) => ({
@@ -1242,7 +1245,28 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       now,
     );
     if (answersRights) await closeAnsweredRights(trx, { kind: 'commission' }, order, now);
-    // TODO(规划/11 §4.2): 负向补差同事务发布 order.settle_adjusted（BR-FUND-09 细则「补差负向时发站内信并附原因」）— blocked on FU-SETTLE-ADJ-NOTIFY 的 B 单（发布端，归 content，依赖本单合并；D10-762 / D10-773 / D10-774）
+    // BR-FUND-09 细则「补差负向时发站内信并附原因」(D10-773 B, D10-817 ①): order.settle_adjusted on the
+    // same transaction as the SETTLE_ADJUST vouchers; a publish failure rolls the whole sync back.
+    // Every beneficiary with a non-zero difference is listed (a BAD_DEBT one as bucket bad_debt);
+    // the platform difference never is; with no such row it is still published, beneficiaries [].
+    await events.publish(trx, {
+      appId,
+      name: 'order.settle_adjusted',
+      payload: {
+        order_id: orderId,
+        order_key: key,
+        settle_seq: seq,
+        sub_type: 'SETTLE_DIFF',
+        beneficiaries: plan.beneficiaries
+          .filter((b) => b.delta_fen !== 0n)
+          .map((b) => ({
+            user_id: b.user_id,
+            role: b.role,
+            adjust_fen: String(b.delta_fen),
+            bucket: b.posting === 'bad_debt' ? 'bad_debt' : 'user_available',
+          })),
+      },
+    });
     logger.info(
       {
         app_id: appId,
