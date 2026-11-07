@@ -19,4 +19,4 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/obligation-close-voucher/**'
-status: todo
+status: done
