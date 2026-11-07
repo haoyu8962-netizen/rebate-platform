@@ -1,0 +1,30 @@
+id: B2-04zzf
+repo: rebate-platform
+title: R9 扣回后的退件基线（FU-R9-REFUND-BASELINE）：orders 新增 refunded_quantity_r9_baseline，「退款数量增加」改比 COALESCE(基线, at_credit, 0)，R8 / R9 / R10 写库与正差跳过、无变化出口推进，等联盟佣金时不推进
+type: impl
+# 2026-11-07 identity 入账（编排 D10-814 ⑤ / D10-868 ② / D10-870；方案 couli-runs/FU-R9-REFUND-BASELINE/plan.md）。现状 clawback-order 比 refunded_quantity > refunded_quantity_at_credit（入账定格），
+#   入账后退过一次件即每次有变化的同步都再走 R9：R9 后新结算负差被记成 CLAWBACK / PART_REFUND 并发 order.clawed_back（应为 R10 SETTLE_ADJUST），且只有内容变化时误开 CLAWBACK_NO_COMMISSION 待处理并重复告警。
+# D10-870：新列可空、不回填（未上线，staging 存量按旧路由多走一次可接受，迁移注释写明）；唯一写者 settlement clawback——casClawbackOrder（R8 / R9 / R10）同一语句推进，R9 正差跳过与 no_change 两出口补只推基线的 CAS（row_version，WHERE CREDITED）；
+#   等联盟佣金（WAIT）不推进；京东开关关（alert_only）也推进。growth 邀请奖励与 BR-TEXT-03 继续比 at_credit 不动。R13 恢复后的基线另登 FU-R13-R9-BASELINE。不改冻结用例（实现单先红与 CI 全量确认）。
+#   迁移号落地前报编排定（在途 0131 B1-09u #2649、0132 B1-09w/x）。规划回写编排做（08 06_FUND「R9 与 R9b 的判定」比较基准、04 orders 加列）。RV2。
+refs: [BR-FUND-01, BR-FUND-08, BR-FUND-09]
+refs_hash:
+  BR-FUND-01: 7267d70f0bc8
+  BR-FUND-08: 4fad67b21a32
+  BR-FUND-09: 3162bdea830e
+deps: [B1-08zi, B2-04zza]
+paths:
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-store.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/settlement/refund-r9-baseline/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/refund-r9-baseline/**'
+status: todo
