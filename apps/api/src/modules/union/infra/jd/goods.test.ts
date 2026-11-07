@@ -214,3 +214,43 @@ it('[AC-B1-04zzm-UNIT#3] 京东 shopId 为 0、负数、小数（数字或字符
   }
   expect(mapJdGoods(shopRow({ shopId: '73129' }), page()).shop_ref).toBe('73129');
 });
+
+it.each([
+  ['JdRawNumber', num('7000101')],
+  ['JS number', 7000101],
+  ['字符串', '7000101'],
+] as const)('[AC-B1-04zzv-UNIT#1] cid1 为%s → category_l1_id 十进制串', (_label, cid1) => {
+  const item = mapJdGoods(goods({ categoryInfo: { cid1, cid1Name: '合成一级类目' } }), page());
+  expect(item.category_l1_id).toBe('7000101');
+  expect(item.category_l1_name).toBe('合成一级类目');
+});
+
+it.each([
+  ['字符串 00', '00'],
+  ['字符串 000', '000'],
+  ['字符串 0123', '0123'],
+  ['JdRawNumber 0123', num('0123')],
+  ['JS number 0', 0],
+  ['JS number 负数', -5],
+  ['JS number 小数', 1.5],
+  ['JS number NaN', Number.NaN],
+  ['JS number 超出安全整数', 2 ** 60],
+  ['JdRawNumber 指数写法', num('7e6')],
+  ['字符串带空格', ' 7000101'],
+] as const)('[AC-B1-04zzv-UNIT#2] cid1 为%s → 不出 category_l1_id，不告警', (_label, cid1) => {
+  const warn = vi.fn();
+  const item = mapJdGoods(goods({ categoryInfo: { cid1 } }), page(warn));
+  expect(Object.hasOwn(item, 'category_l1_id')).toBe(false);
+  expect(item.price_status).toBe('ok');
+  expect(warn).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-04zzv-UNIT#3] 价格异常的行同样带一级类目（类目不依赖价格）', () => {
+  const item = mapJdGoods(
+    goods({ priceInfo: {}, categoryInfo: { cid1: num('7000101'), cid1Name: '\u3000合成\u3000' } }),
+    page(),
+  );
+  expect(item.price_status).toBe('anomaly');
+  expect(item.category_l1_id).toBe('7000101');
+  expect(item.category_l1_name).toBe('\u3000合成\u3000');
+});

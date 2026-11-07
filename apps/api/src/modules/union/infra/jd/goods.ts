@@ -3,7 +3,7 @@
 // 权限批下前只按文档，字段待实测再校。映射只读下列字段，从不 spread 整份报文：itemId、skuId、skuName、
 // priceInfo.{price, lowestCouponPrice}、commissionInfo.commissionShare、
 // couponInfo.couponList[].{discount, quota, useStartTime, useEndTime, couponStatus}，
-// 以及 shopInfo.{shopName, shopLevel, shopId}（B1-04zzg / B1-04zzm）。
+// 以及 shopInfo.{shopName, shopLevel, shopId}（B1-04zzg / B1-04zzm）、categoryInfo.{cid1, cid1Name}（B1-04zzv）。
 // lowestPrice 不读；lowestCouponPrice 只用于比对告警，不参与计算；isBest 不看；图片不映射（B1-22s）。
 // 报价字段的 JSON 数字先 String(Number(原文)) 再交 parseYuanToFen（D10-525），佣金比例取原文按
 // BR-CALC-26 floor。错误与告警只带固定文案、商品标识与分值，不带报文内容、比例原文、关键词、券链接。
@@ -65,6 +65,8 @@ const JINGFEN_DETAIL =
 /** skuId 为 0 不是商品标识：当作缺失，否则所有商品落到同一个键上。 */
 const SKU_ID = /^[1-9][0-9]*$/;
 const NOT_CLAIMABLE_STATUS = '-1';
+/** 一级类目 ID 只收正整数的十进制写法；0、负数、小数、前导零（'00'、'0123'）都不收。 */
+const CATEGORY_L1_ID = /^[1-9][0-9]{0,18}$/;
 
 /** 一页商品报文的取数信息；warn 收 PRICE_ANOMALY、PRICE_CALC_DIFF。 */
 export interface JdGoodsPage {
@@ -333,6 +335,26 @@ function jdShopExtras(
   };
 }
 
+/**
+ * B1-04zzv（D10-805 ⑤）：一级类目只读 categoryInfo.cid1 / cid1Name，不取 cid2 / cid3，顶层同名键不读。
+ * cid1 收 JSON 数字（JdRawNumber 原文）、JS number 与字符串，只收正整数的十进制写法，其余不出；
+ * cid1Name trim 后非空才出，值原样（同淘宝 goods.ts）。不合格只缺省，不告警、不跳行。
+ * 淘宝的 level_one_category_id 收非负值，口径不同，所以不共用归一函数。
+ */
+function jdCategoryL1(
+  row: Record<string, unknown>,
+): Pick<UnionItemDetail, 'category_l1_id' | 'category_l1_name'> {
+  const info = recordField(row, 'categoryInfo');
+  const cid1 = field(info, 'cid1');
+  const text =
+    typeof cid1 === 'number' && Number.isSafeInteger(cid1) ? String(cid1) : scalarText(cid1);
+  const name = nonBlank(field(info, 'cid1Name'));
+  return {
+    ...(text !== undefined && CATEGORY_L1_ID.test(text) ? { category_l1_id: text } : {}),
+    ...(name === undefined ? {} : { category_l1_name: name }),
+  };
+}
+
 type QuotedFields = 'price_fen' | 'coupon_fen' | 'final_price_fen' | 'commission_rate_bp';
 type UnquotedItem = Omit<UnionItemDetail, QuotedFields> & { readonly item_id: string };
 
@@ -379,6 +401,7 @@ export function mapJdGoods(input: unknown, page: JdGoodsPage): UnionItemDetail {
     ...shopNameField(field(recordField(row, 'shopInfo'), 'shopName')),
     quoted_at: page.now.toISOString(),
     ...jdShopExtras(row),
+    ...jdCategoryL1(row),
   };
   const price = jdPrice(row, page.now.getTime());
   if (price.status === 'anomaly') return anomalyItem(base, price.reason, page.warn);

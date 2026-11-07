@@ -6,6 +6,7 @@ type: impl
 # union/infra/jd/goods.ts：搜索与详情（都走 jd.union.open.goods.query）从 categoryInfo.cid1 取一级类目 ID、cid1Name 取名称；口径同淘宝 goods.ts:233——ID 归一为十进制字符串（文档类型 Number、示例为字符串，京东数字解析为 JdRawNumber，两种都收；非正整数 / 缺失 → 缺省，不编造），名称非空白才出。出处 docs-mirror/jd/api/jd.union.open.goods.query.md（字段必返、明确一级）；goods.query 尚无录制（权限未批），规则测试用合成报文。
 # 京东无冻结用例钉「不出类目」。可把淘宝的归一抽成 union/domain 共享函数（B1-04zzw 复用），或各自内联。后两步（Jev 判、w1 接 filterCategories / 生产装配 agent/stream/mount/production.ts:177 的 categoryAllowed）等本单与 B1-04zzw 合并再派。
 # 风险：union 适配器 → RV2；新鲜独立 Claude 写规则测试，资金评审。
+# 完成 2026-11-07（#2642）：jdCategoryL1 内联于 jd/goods.ts，未抽共享函数、淘宝未动；cid1 三形态、拒前导零。
 refs: []
 refs_hash: {}
 deps: []
@@ -23,4 +24,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/jd-category/**'
-status: todo
+status: done
+pr: 2642
