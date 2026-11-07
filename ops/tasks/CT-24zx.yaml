@@ -5,6 +5,7 @@ type: contract
 # 2026-11-07 入账（agent2-acct4），D10-850 ①。CT-24zw（#2645）已加 order_reason_sub 枚举与 desc 文案、后台订单详情 reason_sub；用户侧 getOrder（OrderDetail）与 listOrders（OrderSummary）目前只有 reason，无 reason_sub。
 # 本单：OrderDetail、OrderSummary 各加可选可空 reason_sub（$ref OrderReasonSub），描述写 App 显示「{title}：{order_reason_sub.<SUB>.desc}」，null 只显示父标题；只读、只增不改。实现（订单读接口回填）归 be（D10-850 ②），三端渲染归 D10-850 ③。
 # 2026-11-07 台账补丁（编排 20:54）：#2668 红在冻结 [AC-CT-04b#1]（orders-quantity baseline 逐字比结构），照 CT-26p 先例加 test_paths、tester claude-independent、modify_existing，新鲜独立 Claude 只给两份 baseline 追加 reason_sub。
+# 2026-11-08 台账补丁（编排 D10-911）：去掉 modify_existing 两条——orders-quantity.test.ts 本身没改，改的是辅助文件 baseline.ts，red-check 判这两条多余；照 CT-26p 先例（无 modify_existing，baseline.ts 的改动靠 PR 上 owner 标签按 #24 放行）。先红改由新增的 orders-quantity/order-reason-sub.test.ts [AC-CT-24zx#1] 提供（D10-910）；tester、test_paths 不变。
 # 依据 08 BR-TEXT-05 子原因表（SPEC_REF b79958d）。只读准备见 couli-runs/AGENT2-lane/d10-850-prep.md。RV1，Codex contract 评审（D10-823）。
 refs: [BR-TEXT-05]
 refs_hash:
@@ -26,17 +27,6 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/contracts/orders-quantity/**'
-modify_existing:
-  - file: test/spec/contracts/orders-quantity/orders-quantity.test.ts
-    test: '[AC-CT-04b#1] OrderSummary 的必填 quantity 可空且保留整数约束，其他结构及 planned 状态不变'
-    reason: tighten_only
-    ruling: 'D10-904'
-    note: '编排 2026-11-07 20:54（先例 CT-26p）：baselineWithoutQuantity 的 OrderSummary 期望结构只追加 reason_sub（可选可空、只读，同契约），其余不动（先例 CT-26p 加 is_price_compare）'
-  - file: test/spec/contracts/orders-quantity/orders-quantity.test.ts
-    test: '[AC-CT-04b#1] OrderDetail 的必填 quantity 可空且保留整数约束，其他结构及 planned 状态不变'
-    reason: tighten_only
-    ruling: 'D10-904'
-    note: '编排 2026-11-07 20:54（先例 CT-26p）：baselineWithoutQuantity 的 OrderDetail 期望结构只追加 reason_sub（可选可空、只读，同契约），其余不动（先例 CT-26p）'
 impl: claude
 tester: claude-independent
 accept:
