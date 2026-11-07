@@ -23,4 +23,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/credit-invite-trigger/**'
-status: todo
+status: done
+pr: 2628
