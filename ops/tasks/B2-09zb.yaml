@@ -6,7 +6,7 @@ type: impl
 # 逐受益人 diff = 按 B_settle 与快照重拆的应得 − 已入账净额（同 BR-FUND-08）；冻结受益人照常生成（批准时转待补记）；封禁、注销中 / 已注销并入平台行。一次运行一个 settle_adjust_batches，同事务写行，不动账、不改 booked。
 # D10-780：同单同 seq 已有旧 commission_version 的 pending 时，同事务先把旧的置 voided_stale_seq（表无新状态，reason 写 superseded_by_version，decided_at 记 Clock，审计照记）再生成；同版本重复由既有 candidate_key 挡。已批准 / 已拒绝的不动。
 # RV2。规则测试由新鲜独立 Claude 写（Codex 额度用尽至 11-11，D10-775）；money 评审独立 Claude + 另一位只读复核。B2-09za 已写的有用场景并进本单规则测试。
-# 2026-11-07 补 paths：settlement 的 worker 端口没有审计端口，D10-780 的换版本作废审计要由 app.module 注入 admin createSystemAuditWriter（同 B2-09p 给 payout 接系统审计）；端口设可选，worker 夹具不受影响。
+# 2026-11-07 补 paths：settlement 的 worker 端口没有审计端口，D10-780 的换版本作废审计要由 app.module 注入 admin createSystemAuditWriter（同 B2-09p 给 payout 接系统审计）；端口设可选，worker 夹具不受影响。 2026-11-07 D10-787：test_paths 补 worker-catchup（新鲜独立 Claude 只给 kit.ts 的 billRunsOf 加 job = 'bill' 过滤，期望不变；另一位只读复审只加过滤），引用 kit.ts 的 12 条冻结用例登 red_exempt；去掉未用的 settlement/index.ts。
 refs: [BR-FUND-09, BR-FUND-04, BR-CALC-02, BR-CALC-09]
 refs_hash:
   BR-FUND-09: 6b72b55621fb
@@ -20,7 +20,6 @@ paths:
   - 'apps/api/src/modules/settlement/bill/job.ts'
   - 'apps/api/src/modules/settlement/http/admin/**'
   - 'apps/api/src/modules/settlement/settlement.module.ts'
-  - 'apps/api/src/modules/settlement/index.ts'
   - 'apps/api/src/app.module.ts'
   - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
   - 'contracts/openapi.yaml'
@@ -32,6 +31,44 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/settlement/settle-adjust-generate/**'
+  - 'test/spec/settlement/worker-catchup/**'
+red_exempt:
+  - file: test/spec/settlement/worker-catchup/catch-up.int.test.ts
+    test: '[AC-B2-04zg#3] 补出账回看最近一个已到账单日 D*：账单日整日停机后的次日、到下个账单日前一刻、账单日当天，都给每个有订单的 app × 每个平台送 D* 的 bill（负载与 singletonKey 同当日补种，事务外、立即或数分钟内）；账单日前一天回看上月账单日；跨过下个账单日零点即换成新一期'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/catch-up.int.test.ts
+    test: '[AC-B2-04zg#4] 更早期次不追溯：账单月 2032-06（07-24）与 2032-05（06-24）都未生成时，次日与下月初的补出账只问、只送 07-24 这一期，06-24 不问不送'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/catch-up.int.test.ts
+    test: '[AC-B2-04zg#5] 补出账按库内状态取舍：账单月已生成（generated）或已有排队 / 执行中任务（pending）不送，absent 才送；连续两轮（新的存储与调用，即重启后）判定相同，已生成的一期不会再送'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/catch-up.int.test.ts
+    test: '[AC-B2-04zg#6] 回看用各 app 自己的 settle.bill_day（未设按 24）：设 26 的 app 在 07-25 回看 06-26；某 app 的 settle.bill_day 非法（30）只让该 app 失败，其余照送，失败在全部试完后抛出'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/catch-up.int.test.ts
+    test: '[AC-B2-04zg#7] 一个 app 送失败不挡其他 app：其余照送，失败在全部试完后抛出；下一轮补出账再送'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/recover.int.test.ts
+    test: '[AC-B2-04zg#9] 账单日整日停机：次日补出账补投 07-24 的 bill，快照前提按补跑当天（07-25 → 查 07-24 的快照）判定，生成账单月 2032-06 恰一次；同日再补、隔天补、新的存储都不再送，重放同一任务不重复生成；更早的 06-24 不补；到下个账单日才轮到 2032-07'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/recover.int.test.ts
+    test: '[AC-B2-04zg#10] 账单日 bill 全失败（进死信、settle_jobs failed，CouliSettleBillJobFailed 计 1）→ 次日补出账再投同一期；补跑仍失败照旧是同一行 failed（告警计数仍 1）、不生成账单；之后补跑成功生成 2032-06，failed 清零，不再补送'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/store.int.test.ts
+    test: '[AC-B2-04zg#8] 补出账状态存储：未送 absent；排队、执行中、等待重试 pending；只完成了投递（deferred / not_due）、失败进死信、被取消、settle_jobs failed 行仍 absent；settle_jobs 有 (bill, 平台, D* 00:00 +08:00) done 行或 settle_bills 账单月已记该平台即 generated（队列里有任务也一样）；别的平台 / 别的 run_at / 别的 app 不算；新实例判定相同'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/timer-deferred.int.test.ts
+    test: '[AC-B2-04zg#13] 真实 worker 账单日启动、D−1 快照未完成：模块定时器投出的首个 bill 答 deferred 并完成（retry_count 0，无 retry / failed，settle.dead 无副本，不写 settle_jobs / settle_bills）；随后快照完成、注入 Clock 推进到当日 09:00，不手动补种也不手动投递，靠定时器后续跳生成 2032-06 恰一次，全部投递不耗队列重试'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/worker.int.test.ts
+    test: '[AC-B2-04zg#11] 真实 worker：账单日快照未完成时 bill 答 deferred——投递完成、不耗队列重试（retry_count 0、无 retry / failed、settle.dead 无副本），不写 settle_jobs / settle_bills；补出账随后重排同一期（新的投递，仍不耗重试）；快照完成后补跑生成 2032-06 恰一次，之后不再重排'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/worker.int.test.ts
+    test: '[AC-B2-04zg#12] worker 启动自愈：账单日整日停机、次日启动的 worker 由模块自己的定时器（无人调用补种）补投 07-24 的 bill，按 07-25 当天判定快照，生成 2032-06 恰一次，任务一个、不耗重试；更早的 06-24 不补'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
+  - file: test/spec/settlement/worker-catchup/handler.test.ts
+    test: '[AC-B2-04zg#2] 处理器 bill：账单任务 deferred（快照未完成）不当失败——本次投递正常完成（不耗队列重试），账单任务只调用一次、run_at 仍为 D 00:00 +08:00；账单任务抛错时投递照旧失败；非账单日 not_due 照旧完成'
+    reason: '冻结 B2-04zg 用例，测试体与基线逐字相同；只因同目录夹具 kit.ts 的 billRunsOf 按 D10-787 加 job = bill 过滤（期望值不变），引用该夹具的文件被整份评判（CT-06r）；在旧代码上照常为绿'
 impl: claude
 tester: claude-independent
 accept:
