@@ -6,16 +6,38 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { CARD, CARD_CLICKABLE } from './styles.ts';
+import { CARD_PADDING, CARD_PRESSABLE, CARD_SURFACE } from './styles.ts';
 
 /**
  * Plain container without `onClick`. With `onClick` the whole card is one button named by its
- * first line of content or by `aria-label` (used only when clickable).
+ * first line of content or by `aria-label`; a plain card takes `aria-label` only as a landmark or
+ * region (`as` other than `div`).
  */
 export interface CardProps {
   onClick?: () => void;
   'aria-label'?: string;
+  /** Inner padding; defaults to 16 all round. */
+  padding?: CardPadding;
+  /** Layout classes added to the card (display, gap, overflow …); surface and shape stay the card's. */
+  className?: string;
+  /** Element of a plain card (a clickable card is always one `role="button"` element). */
+  as?: CardElement;
+  /** Names a plain card that is a landmark or region (`as="nav"` / `"section"`). */
+  'aria-labelledby'?: string;
   children?: ReactNode;
+}
+
+export type CardPadding = keyof typeof CARD_PADDING;
+export type CardElement = 'div' | 'section' | 'article' | 'nav' | 'ul';
+
+function cardClass(
+  padding: CardPadding,
+  className: string | undefined,
+  pressable: boolean,
+): string {
+  return [CARD_SURFACE, CARD_PADDING[padding], pressable ? CARD_PRESSABLE : '', className ?? '']
+    .filter((part) => part !== '')
+    .join(' ');
 }
 
 /** Enter on keydown and Space on keyup, as a native button does. */
@@ -64,10 +86,12 @@ function firstTextElement(root: HTMLElement): HTMLElement {
 function ClickableCard({
   onClick,
   ariaLabel,
+  className,
   children,
 }: {
   onClick: () => void;
   ariaLabel: string | undefined;
+  className: string;
   children?: ReactNode;
 }): ReactElement {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -96,7 +120,7 @@ function ClickableCard({
       tabIndex={0}
       aria-label={ariaLabel}
       aria-describedby={contentId}
-      className={CARD_CLICKABLE}
+      className={className}
       onClick={onClick}
       {...pressKeys(onClick)}
     >
@@ -108,12 +132,32 @@ function ClickableCard({
 }
 
 /** Surface card: a plain container, or one button over the whole card when `onClick` is set. */
-export function Card({ onClick, 'aria-label': ariaLabel, children }: CardProps): ReactElement {
+export function Card({
+  onClick,
+  'aria-label': ariaLabel,
+  padding = 'default',
+  className,
+  as: Element = 'div',
+  'aria-labelledby': labelledBy,
+  children,
+}: CardProps): ReactElement {
   if (onClick === undefined) {
-    return <div className={CARD}>{children}</div>;
+    return (
+      <Element
+        className={cardClass(padding, className, false)}
+        aria-label={Element === 'div' ? undefined : ariaLabel}
+        aria-labelledby={labelledBy}
+      >
+        {children}
+      </Element>
+    );
   }
   return (
-    <ClickableCard onClick={onClick} ariaLabel={ariaLabel}>
+    <ClickableCard
+      onClick={onClick}
+      ariaLabel={ariaLabel}
+      className={cardClass(padding, className, true)}
+    >
       {children}
     </ClickableCard>
   );

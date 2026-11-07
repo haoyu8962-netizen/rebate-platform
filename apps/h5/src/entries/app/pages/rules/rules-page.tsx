@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ArticleBody } from '../../../../components/article-body/index.ts';
-import { EmptyState, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  ListRow,
+  Skeleton,
+} from '../../../../components/base/index.ts';
+import { AlertIcon, ChevronIcon, DocumentIcon } from '../../../../components/icons/index.tsx';
 import { useApi } from '../../../../shared/api/app-api.ts';
 import type { H5ApiClient } from '../../../../shared/api/index.ts';
 import { mediaOrigins } from '../../../../shared/env.ts';
@@ -28,61 +36,6 @@ export function beijingDate(instant: string): string | null {
   const time = Date.parse(instant);
   if (Number.isNaN(time)) return null;
   return new Date(time + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
-}
-
-const CARD = 'rounded-couli-card bg-couli-background-surface shadow-couli-card';
-
-function DocumentIcon(): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="size-5 flex-none"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M7 3.5h7l4 4v13H7v-17Z" />
-      <path d="M14 3.5v4h4M9.5 12h6M9.5 15.5h6" />
-    </svg>
-  );
-}
-
-/** Load-failure illustration of the error states (circle with an exclamation mark). */
-function AlertIcon(): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7.5v5.5M12 16.2v.3" />
-    </svg>
-  );
-}
-
-function ChevronIcon(): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="size-5 flex-none text-couli-text-secondary"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m9.5 6 6 6-6 6" />
-    </svg>
-  );
 }
 
 function ArticleSkeleton(): ReactElement {
@@ -218,10 +171,10 @@ function RulesContent({
   if (list.data === undefined) {
     return (
       <Page>
-        <article className={`${CARD} flex flex-col gap-couli-4 p-couli-4`}>
+        <Card as="article" className="flex flex-col gap-couli-4">
           <Skeleton width="40%" height="1.375rem" />
           <ArticleSkeleton />
-        </article>
+        </Card>
       </Page>
     );
   }
@@ -273,7 +226,7 @@ function RulesContent({
 
   return (
     <Page>
-      <article className={`${CARD} flex flex-col gap-couli-4 p-couli-4`}>
+      <Card as="article" className="flex flex-col gap-couli-4">
         <header className="flex flex-col gap-couli-4">
           <h1
             ref={titleRef}
@@ -289,53 +242,52 @@ function RulesContent({
           )}
         </header>
         {body}
-      </article>
+      </Card>
       {others.length === 0 && !hasNextPage ? null : (
-        <nav aria-label={rulesTexts.otherRules} className={`${CARD} px-couli-4 py-couli-1`}>
+        <Card
+          as="nav"
+          aria-label={rulesTexts.otherRules}
+          padding="none"
+          className="overflow-hidden py-couli-1"
+        >
           <ul className="flex flex-col divide-y divide-couli-border-subtle">
             {others.map((item) => (
               <li key={item.article_id}>
-                <button
-                  type="button"
-                  className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-couli-3 py-couli-2 text-left text-couli-footnote leading-couli-footnote text-couli-text-primary focus-visible:outline-solid focus-visible:outline-[length:var(--focus-width)] focus-visible:outline-offset-[var(--focus-offset)] focus-visible:outline-couli-focus-ring"
+                <ListRow
+                  leading={<DocumentIcon />}
+                  title={<span className="break-words">{item.title}</span>}
+                  trailing={<ChevronIcon />}
                   onClick={() => {
                     switched.current = true;
                     setSelectedId(item.article_id);
                   }}
-                >
-                  <span className="flex min-w-0 items-center gap-couli-3">
-                    <DocumentIcon />
-                    <span className="min-w-0 break-words">{item.title}</span>
-                  </span>
-                  <ChevronIcon />
-                </button>
+                />
               </li>
             ))}
           </ul>
           {moreFailed ? (
-            <div className="flex min-h-11 items-center justify-between gap-couli-3 border-t border-couli-border-subtle py-couli-2">
+            <div className="flex min-h-11 items-center justify-between gap-couli-3 border-t border-couli-border-subtle px-couli-4 py-couli-2">
               <p
                 role="alert"
                 className="text-couli-footnote leading-couli-footnote text-couli-text-secondary"
               >
                 {rulesTexts.moreFailed}
               </p>
-              <button
-                type="button"
-                className="min-h-11 flex-none cursor-pointer px-couli-2 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link focus-visible:outline-solid focus-visible:outline-[length:var(--focus-width)] focus-visible:outline-offset-[var(--focus-offset)] focus-visible:outline-couli-focus-ring"
+              <Button
+                variant="text"
                 onClick={() => {
                   fetchNextPage().catch(() => undefined);
                 }}
               >
                 {rulesTexts.retry}
-              </button>
+              </Button>
             </div>
           ) : hasNextPage ? (
-            <div className="border-t border-couli-border-subtle py-couli-3">
+            <div className="border-t border-couli-border-subtle px-couli-4 py-couli-3">
               <Skeleton width="50%" height="0.875rem" />
             </div>
           ) : null}
-        </nav>
+        </Card>
       )}
     </Page>
   );

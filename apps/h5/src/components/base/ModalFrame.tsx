@@ -329,7 +329,7 @@ export function ModalFrame(props: ModalFrameProps): ReactElement | null {
           <button
             type="button"
             aria-label={closeLabel}
-            className={`absolute flex size-couli-interaction-target-minimum cursor-pointer items-center justify-center rounded-couli-button text-couli-text-secondary ${FOCUS_RING} ${style.close}`}
+            className={`absolute flex size-couli-interaction-target-minimum cursor-pointer items-center justify-center rounded-couli-button text-couli-text-secondary active:bg-couli-background-muted active:opacity-70 ${FOCUS_RING} ${style.close}`}
             onClick={onClose}
           >
             <CloseIcon />

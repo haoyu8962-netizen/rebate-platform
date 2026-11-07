@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type TouchEvent,
 } from 'react';
-import { EmptyState, Skeleton } from '../../../../components/base/index.ts';
+import { Button, Card, EmptyState, ListRow, Skeleton } from '../../../../components/base/index.ts';
 import { RetryPage } from '../../../../components/retry/index.ts';
 import { useApi } from '../../../../shared/api/app-api.ts';
 import { ApiError, type H5ApiClient } from '../../../../shared/api/index.ts';
@@ -35,11 +35,7 @@ const PAGE_LIMIT = 20;
 const PULL_THRESHOLD = 64;
 const LIST_KEY = ['messages', 'list'] as const;
 
-const CARD = 'rounded-couli-card bg-couli-background-surface px-couli-4 shadow-couli-card';
-const FOCUS =
-  'focus-visible:outline-solid focus-visible:outline-[length:var(--focus-width)] focus-visible:outline-offset-[var(--focus-offset)] focus-visible:outline-couli-focus-ring';
 const CAPTION = 'text-couli-caption leading-couli-caption text-couli-text-secondary';
-const TEXT_BUTTON = `${FOCUS} min-h-11 flex-none cursor-pointer px-couli-2 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link`;
 
 /** 注销冷静期内标已读的回包错误码（编排裁定 D10-542）。 */
 const COOLING_OFF = 10007;
@@ -316,11 +312,11 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
     return (
       <Page>
         <Header action={null} />
-        <div className={CARD}>
+        <Card padding="inline">
           <RowSkeleton />
           <RowSkeleton />
           <RowSkeleton />
-        </div>
+        </Card>
       </Page>
     );
   }
@@ -335,9 +331,9 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
       <p role="alert" className={`${CAPTION} min-w-0 [overflow-wrap:anywhere]`}>
         {refreshError}
       </p>
-      <button type="button" className={TEXT_BUTTON} onClick={refresh}>
+      <Button variant="text" onClick={refresh}>
         {messagesTexts.retry}
-      </button>
+      </Button>
     </div>
   );
 
@@ -359,25 +355,20 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
 
   // 标已读回过 10007（注销冷静期）后不显示「全部已读」（D10-542，BR-ID-27 细则 W-20）。
   const readAllButton = !cooling ? (
-    <button
-      type="button"
-      className={`${TEXT_BUTTON} disabled:cursor-default disabled:text-couli-text-secondary`}
-      disabled={readingAll}
-      onClick={readAll}
-    >
+    <Button variant="text" disabled={readingAll} onClick={readAll}>
       {messagesText('messages.read_all')}
-    </button>
+    </Button>
   ) : null;
 
   let footer: ReactElement | null = null;
   if (isFetchingNextPage) {
     footer = (
-      <div className={CARD}>
+      <Card padding="inline">
         <p role="status" className="sr-only">
           {messagesTexts.loadingMore}
         </p>
         <RowSkeleton />
-      </div>
+      </Card>
     );
   } else if (isFetchNextPageError) {
     footer = (
@@ -385,9 +376,9 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
         <p role="alert" className={CAPTION}>
           {messagesTexts.moreFailed}
         </p>
-        <button type="button" className={TEXT_BUTTON} onClick={loadMore}>
+        <Button variant="text" onClick={loadMore}>
           {messagesTexts.retry}
-        </button>
+        </Button>
       </div>
     );
   } else if (hasNextPage) {
@@ -402,7 +393,7 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
     <Page {...touch}>
       <Header action={readAllButton} />
       {banner}
-      <ul className={`${CARD} flex flex-col`}>
+      <Card as="ul" padding="none" className="flex flex-col overflow-hidden">
         {items.map((message) => (
           <MessageItem
             key={message.message_id}
@@ -411,42 +402,41 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
             open={open}
           />
         ))}
-      </ul>
+      </Card>
       {footer}
       {showSentinel ? <div ref={sentinel} aria-hidden="true" className="h-px" /> : null}
     </Page>
   );
 }
 
-const ROW = 'flex min-h-11 w-full min-w-0 flex-col gap-couli-1 py-couli-3 text-left';
+const ROW = 'flex min-h-11 w-full min-w-0 flex-col gap-couli-1 px-couli-4 py-couli-3 text-left';
 
-function RowContent({ message, time }: { message: InboxMessage; time: string }): ReactElement {
+/** First line: unread mark, title and time. */
+function RowHead({ message, time }: { message: InboxMessage; time: string }): ReactElement {
   const unread = isUnread(message);
   return (
-    <>
-      <span className="flex w-full min-w-0 items-center gap-couli-2">
-        {unread ? (
-          <>
-            <span
-              aria-hidden="true"
-              className="size-2 flex-none rounded-full bg-couli-badge-background"
-            />
-            <span className="sr-only">{messagesText('messages.unread')}</span>
-          </>
-        ) : null}
-        <span className="min-w-0 flex-1 text-couli-body leading-couli-body font-couli-medium [overflow-wrap:anywhere]">
-          {shortTitle(message.title)}
-        </span>
-        <time className={`${CAPTION} flex-none tabular-nums`} dateTime={message.created_at}>
-          {time}
-        </time>
+    <span className="flex w-full min-w-0 items-center gap-couli-2">
+      {unread ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="size-2 flex-none rounded-full bg-couli-badge-background"
+          />
+          <span className="sr-only">{messagesText('messages.unread')}</span>
+        </>
+      ) : null}
+      <span className="min-w-0 flex-1 text-couli-body leading-couli-body font-couli-medium text-couli-text-primary [overflow-wrap:anywhere]">
+        {shortTitle(message.title)}
       </span>
-      <span className="w-full text-couli-footnote leading-couli-footnote text-couli-text-secondary [overflow-wrap:anywhere]">
-        {message.body}
-      </span>
-    </>
+      <time className={`${CAPTION} flex-none tabular-nums`} dateTime={message.created_at}>
+        {time}
+      </time>
+    </span>
   );
 }
+
+const BODY =
+  'w-full text-couli-footnote leading-couli-footnote text-couli-text-secondary [overflow-wrap:anywhere]';
 
 function MessageItem({
   message,
@@ -462,15 +452,15 @@ function MessageItem({
     'border-b border-couli-border-subtle last:border-b-0 [content-visibility:auto] [contain-intrinsic-size:auto_4.5rem]';
   const target = targetOf(message);
   if (target !== null && open !== null) {
+    // 可点的行：整行一个按钮，以行内容为可访问名（未读、标题、时间、正文）。
     return (
       <li className={item}>
-        <button
-          type="button"
-          className={`${ROW} ${FOCUS} cursor-pointer text-couli-text-primary`}
+        <ListRow
+          labelFrom="content"
+          title={<RowHead message={message} time={time} />}
+          subtitle={<span className="[overflow-wrap:anywhere]">{message.body}</span>}
           onClick={() => open(message, target)}
-        >
-          <RowContent message={message} time={time} />
-        </button>
+        />
       </li>
     );
   }
@@ -478,7 +468,8 @@ function MessageItem({
   return (
     <li className={item}>
       <div className={ROW}>
-        <RowContent message={message} time={time} />
+        <RowHead message={message} time={time} />
+        <span className={BODY}>{message.body}</span>
       </div>
     </li>
   );

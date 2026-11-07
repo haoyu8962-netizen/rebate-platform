@@ -1,5 +1,11 @@
 import type { MouseEvent, ReactElement, ReactNode } from 'react';
-import { BUTTON_LABEL, BUTTON_LOADING, BUTTON_SPINNER, BUTTON_VARIANT } from './styles.ts';
+import {
+  BUTTON_FULL_WIDTH,
+  BUTTON_LABEL,
+  BUTTON_LOADING,
+  BUTTON_SPINNER,
+  BUTTON_VARIANT,
+} from './styles.ts';
 
 /** `icon` is the icon-only button: the icon is the child and `aria-label` names it. */
 export type ButtonVariant = keyof typeof BUTTON_VARIANT;
@@ -15,8 +21,12 @@ export interface ButtonProps {
    */
   loading?: boolean;
   disabled?: boolean;
+  /** Fills the width of its container (block actions, "load more"). */
+  fullWidth?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   'aria-label'?: string;
+  /** The button opens a dialog (e.g. a sheet with an explanation). */
+  'aria-haspopup'?: 'dialog';
   children?: ReactNode;
 }
 
@@ -26,8 +36,10 @@ export function Button({
   type = 'button',
   loading = false,
   disabled = false,
+  fullWidth = false,
   onClick,
   'aria-label': ariaLabel,
+  'aria-haspopup': hasPopup,
   children,
 }: ButtonProps): ReactElement {
   const handleClick = (event: MouseEvent<HTMLButtonElement>): void => {
@@ -41,10 +53,13 @@ export function Button({
   return (
     <button
       type={type}
-      className={BUTTON_VARIANT[variant]}
+      className={
+        fullWidth ? `${BUTTON_VARIANT[variant]} ${BUTTON_FULL_WIDTH}` : BUTTON_VARIANT[variant]
+      }
       disabled={disabled}
       aria-busy={loading ? true : undefined}
       aria-label={ariaLabel}
+      aria-haspopup={hasPopup}
       onClick={handleClick}
     >
       {/* The label stays laid out (and named) while loading, so the width does not jump. */}

@@ -1,0 +1,107 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-base-migration/icons.test.ts > [AC-DSX-47-ICON#1] Chevron / Document / Alert 图标组件在 apps/h5/src 只声明一处，且在页面入口目录之外",
+    "test/spec/frontend/h5-base-migration/icons.test.ts > [AC-DSX-47-ICON#2] 这三种图标的路径数据在 apps/h5/src 只出现在一个文件里，且不在页面入口目录下（页面不再手写）",
+    "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#1] couli-style 插件导出 no-raw-pressable，并在 styleRules 里以 error 开启",
+    "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#2] H5 页面里的 <button>、挂 onClick 的 div / li / span / section / 无 href 的 a 每处报一次，报在开标签那一行",
+    "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#3] 基础件（Button / Card / ListRow / Chip / Segmented）、带 href 的链接、触摸与表单事件、无 onClick 的容器都不报",
+    "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#4] 作用范围：apps/h5/src 下的页面代码报；components/base、conformance 入口与 apps/admin 下同样的代码不报",
+    "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#5] 有理由的 eslint-disable-next-line couli-style/no-raw-pressable -- 理由 可豁免（如遮罩点击），无理由的豁免由 exemption-reason 报出",
+    "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#6] 迁移后 apps/h5/src/entries/app 下每个源码文件按该规则 0 报，baseline.json 也不给这些文件留额度",
+    "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#1] 公告列表的整卡按下时，卡片区域的像素与常态不同",
+    "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#2] 规则页「其他规则」列表行按下时，行区域的像素与常态不同",
+    "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#3] 收益页期间分段的选项按下时，选项区域的像素与常态不同",
+    "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#4] 公告列表「加载更多」文字按钮按下时，按钮区域的像素与常态不同",
+    "test/spec/frontend/h5-base-migration/source.test.ts > [AC-DSX-47-SRC#1] App 页面源码里没有原生 <button>，也没有给原生元素挂 onClick（带 href 的 a 除外）",
+    "test/spec/frontend/h5-base-migration/source.test.ts > [AC-DSX-47-SRC#2] App 页面私有的按钮 / 链接 / 胶囊 / 卡片类名常量清零，也不从 base/styles 取按钮、胶囊、卡片类名拼接",
+    "test/spec/frontend/h5-base-migration/source.test.ts > [AC-DSX-47-SRC#3] App 页面类名里没有手写的按压态（active:）、手形光标（cursor-pointer）与卡片面（卡片圆角 + 表面底色、卡片阴影）"
+  ],
+  "risk_note": "DSX-47 H5 pages migrated to the base pressables (规划/05 §3.11.3 DSX-47, D10-837 ②): every pressable in entries/app now comes from components/base (Button / Chip / Segmented / Card / ListRow, plus a new Tabs piece for find-order), page-private button / chip / card class constants removed, duplicated icons moved to components/icons, and a couli-style rule no-raw-pressable (lint/style; enabled through the existing styleRules, no eslint.config change) with baseline count 1 for components/retry/retry-page.tsx, which stays native because moving it onto Button would push the claim-form route bundle past the 150 KiB entry limit (about 149.5 KiB now). Copy, accessible names and click behaviour unchanged; the earnings period switch is now a radiogroup (its unit test updated). The frozen lint-style-web pill tests were made two-state by F1-01wt (#2671) first. Rule tests by an independent Claude; Codex spec-test review r1 pass; red on the local container (15 tests, right reason). Implementation by Opus 5.5: local container browser run green; container verify-fast OOM-killed at tsc twice, host jsdom H5 directories, eslint apps/h5 and lint-style-web stand in, CI runs full verification. Non-funds; lint/style is a guard change, so reviewed at RV2 with the money checklist. Codex money review: round 1 ran against a stale base (the branch predated main's settlement commits, so main's additions showed as deletions) and was voided; after a rebase round 2 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "round 1 voided (stale base: main's later settlement changes read as deletions), round 2 after rebase pass with no findings; guard-type lint change reviewed as RV2 per D10-837"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test review round 1 pass; tests written by an independent Claude (claude-run.sh, D10-823 ②)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-47",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "e6263e31eb9c9ecfcb453ba825ee3aca895b9985",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e6263e31eb9c9ecfcb453ba825ee3aca895b9985",
+      "tree": "d8d58e7fa4782c95ee417438f82e3f24616f7a52",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-07T13:41:55Z",
+      "finished_at": "2026-11-07T13:42:06Z",
+      "red_tests": [
+        "test/spec/frontend/h5-base-migration/icons.test.ts > [AC-DSX-47-ICON#1] Chevron / Document / Alert 图标组件在 apps/h5/src 只声明一处，且在页面入口目录之外",
+        "test/spec/frontend/h5-base-migration/icons.test.ts > [AC-DSX-47-ICON#2] 这三种图标的路径数据在 apps/h5/src 只出现在一个文件里，且不在页面入口目录下（页面不再手写）",
+        "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#1] couli-style 插件导出 no-raw-pressable，并在 styleRules 里以 error 开启",
+        "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#2] H5 页面里的 <button>、挂 onClick 的 div / li / span / section / 无 href 的 a 每处报一次，报在开标签那一行",
+        "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#3] 基础件（Button / Card / ListRow / Chip / Segmented）、带 href 的链接、触摸与表单事件、无 onClick 的容器都不报",
+        "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#4] 作用范围：apps/h5/src 下的页面代码报；components/base、conformance 入口与 apps/admin 下同样的代码不报",
+        "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#5] 有理由的 eslint-disable-next-line couli-style/no-raw-pressable -- 理由 可豁免（如遮罩点击），无理由的豁免由 exemption-reason 报出",
+        "test/spec/frontend/h5-base-migration/lint-rule.test.ts > [AC-DSX-47-LINT#6] 迁移后 apps/h5/src/entries/app 下每个源码文件按该规则 0 报，baseline.json 也不给这些文件留额度",
+        "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#1] 公告列表的整卡按下时，卡片区域的像素与常态不同",
+        "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#2] 规则页「其他规则」列表行按下时，行区域的像素与常态不同",
+        "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#3] 收益页期间分段的选项按下时，选项区域的像素与常态不同",
+        "test/spec/frontend/h5-base-migration/press.browser.test.ts > [AC-DSX-47-PRESS#4] 公告列表「加载更多」文字按钮按下时，按钮区域的像素与常态不同",
+        "test/spec/frontend/h5-base-migration/source.test.ts > [AC-DSX-47-SRC#1] App 页面源码里没有原生 <button>，也没有给原生元素挂 onClick（带 href 的 a 除外）",
+        "test/spec/frontend/h5-base-migration/source.test.ts > [AC-DSX-47-SRC#2] App 页面私有的按钮 / 链接 / 胶囊 / 卡片类名常量清零，也不从 base/styles 取按钮、胶囊、卡片类名拼接",
+        "test/spec/frontend/h5-base-migration/source.test.ts > [AC-DSX-47-SRC#3] App 页面类名里没有手写的按压态（active:）、手形光标（cursor-pointer）与卡片面（卡片圆角 + 表面底色、卡片阴影）"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-base-migration/icons.test.ts",
+        "test/spec/frontend/h5-base-migration/lint-rule.test.ts",
+        "test/spec/frontend/h5-base-migration/press.browser.test.ts",
+        "test/spec/frontend/h5-base-migration/source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "1bbfe185e146605e3e6d0472b0d656199d1827fe7b800e0352eab7382b6ae51a"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f30a83a67c2616de97a54f585be732271e8759a1757b1ce4d264eacc6531471f"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8ecf84cdd4d8c31f7906c14a2c51ef61f3af7c19",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}

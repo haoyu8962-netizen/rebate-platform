@@ -11,7 +11,8 @@ import {
   type ReactNode,
   type TouchEvent,
 } from 'react';
-import { EmptyState, Skeleton } from '../../../../components/base/index.ts';
+import { Button, Card, EmptyState, ListRow, Skeleton } from '../../../../components/base/index.ts';
+import { ChevronIcon } from '../../../../components/icons/index.tsx';
 import { RetryPage } from '../../../../components/retry/index.ts';
 import { useApi } from '../../../../shared/api/app-api.ts';
 import { ApiError, type H5ApiClient } from '../../../../shared/api/index.ts';
@@ -33,9 +34,6 @@ const PAGE_LIMIT = 20;
 const PULL_THRESHOLD = 64;
 const QUERY_KEY = ['wallet', 'ledger'] as const;
 
-const CARD = 'rounded-couli-card bg-couli-background-surface px-couli-4 shadow-couli-card';
-const FOCUS =
-  'focus-visible:outline-solid focus-visible:outline-[length:var(--focus-width)] focus-visible:outline-offset-[var(--focus-offset)] focus-visible:outline-couli-focus-ring';
 const CAPTION = 'text-couli-caption leading-couli-caption text-couli-text-secondary';
 
 /**
@@ -89,14 +87,6 @@ function ListIcon(): ReactElement {
     <svg {...ICON}>
       <rect x="5.5" y="3.5" width="13" height="17" rx="2" />
       <path d="M9 8.5h6M9 12h6M9 15.5h6" />
-    </svg>
-  );
-}
-
-function ChevronIcon(): ReactElement {
-  return (
-    <svg {...ICON} strokeWidth={1.75} className="size-5 flex-none text-couli-text-secondary">
-      <path d="m9.5 6 6 6-6 6" />
     </svg>
   );
 }
@@ -259,11 +249,11 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
   if (data === undefined) {
     return (
       <Page>
-        <div className={CARD}>
+        <Card padding="inline">
           <RowSkeleton />
           <RowSkeleton />
           <RowSkeleton />
-        </div>
+        </Card>
       </Page>
     );
   }
@@ -293,9 +283,9 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
   let footer: ReactElement | null = null;
   if (isFetchingNextPage) {
     footer = (
-      <div className={CARD}>
+      <Card padding="inline">
         <RowSkeleton />
-      </div>
+      </Card>
     );
   } else if (isFetchNextPageError) {
     footer = (
@@ -303,13 +293,9 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
         <p role="alert" className={CAPTION}>
           {ledgerTexts.moreFailed}
         </p>
-        <button
-          type="button"
-          className={`${FOCUS} min-h-11 flex-none cursor-pointer px-couli-2 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link`}
-          onClick={loadMore}
-        >
+        <Button variant="text" onClick={loadMore}>
           {ledgerTexts.retry}
-        </button>
+        </Button>
       </div>
     );
   } else if (!hasNextPage) {
@@ -322,11 +308,11 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
       {groups.map((group) => (
         <section key={group.key} className="flex flex-col gap-couli-2">
           <h2 className={`${CAPTION} px-couli-1`}>{group.title}</h2>
-          <ul className={`${CARD} flex flex-col`}>
+          <Card as="ul" padding="none" className="flex flex-col overflow-hidden">
             {group.rows.map(({ key, row }) => (
               <LedgerItem key={key} row={row} open={open} />
             ))}
-          </ul>
+          </Card>
         </section>
       ))}
       {footer}
@@ -355,41 +341,49 @@ function RefreshFailed({
       <p role="alert" className={`${CAPTION} min-w-0 [overflow-wrap:anywhere]`}>
         {message}
       </p>
-      <button
-        type="button"
-        className={`${FOCUS} min-h-11 flex-none cursor-pointer px-couli-2 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link`}
-        onClick={onRetry}
-      >
+      <Button variant="text" onClick={onRetry}>
         {ledgerTexts.retry}
-      </button>
+      </Button>
     </div>
   );
 }
 
-const ROW = 'flex min-h-11 w-full items-center gap-couli-2 py-couli-3 text-left';
+const ROW = 'flex min-h-11 w-full items-center gap-couli-2 px-couli-4 py-couli-3 text-left';
+const TITLE = 'text-couli-body leading-couli-body font-couli-medium [overflow-wrap:anywhere]';
+
+/** Second line of a row: the hint (if any) and the accounting date. */
+function secondLine(row: LedgerRow): string {
+  return row.hint === null ? row.date : `${row.hint} · ${row.date}`;
+}
+
+/** Signed amount and, below it, the balance after the entry. */
+function Figures({ row }: { row: LedgerRow }): ReactElement {
+  return (
+    <span className="flex max-w-[55%] flex-none flex-col items-end gap-couli-1 text-right">
+      <span
+        className={`text-couli-body leading-couli-body font-couli-semibold tabular-nums [overflow-wrap:anywhere] ${
+          row.accent ? 'text-couli-rebate-text' : 'text-couli-text-primary'
+        }`}
+      >
+        {row.amount}
+      </span>
+      {row.balance === null ? null : (
+        <span className={`${CAPTION} tabular-nums [overflow-wrap:anywhere]`}>{row.balance}</span>
+      )}
+    </span>
+  );
+}
 
 function RowContent({ row }: { row: LedgerRow }): ReactElement {
-  const second = row.hint === null ? row.date : `${row.hint} · ${row.date}`;
   return (
     <>
       <span className="flex min-w-0 flex-1 flex-col gap-couli-1">
-        <span className="text-couli-body leading-couli-body font-couli-medium [overflow-wrap:anywhere]">
-          {row.name}
+        <span className={TITLE}>{row.name}</span>
+        <span className={`${CAPTION} tabular-nums [overflow-wrap:anywhere]`}>
+          {secondLine(row)}
         </span>
-        <span className={`${CAPTION} tabular-nums [overflow-wrap:anywhere]`}>{second}</span>
       </span>
-      <span className="flex max-w-[55%] flex-none flex-col items-end gap-couli-1 text-right">
-        <span
-          className={`text-couli-body leading-couli-body font-couli-semibold tabular-nums [overflow-wrap:anywhere] ${
-            row.accent ? 'text-couli-rebate-text' : 'text-couli-text-primary'
-          }`}
-        >
-          {row.amount}
-        </span>
-        {row.balance === null ? null : (
-          <span className={`${CAPTION} tabular-nums [overflow-wrap:anywhere]`}>{row.balance}</span>
-        )}
-      </span>
+      <Figures row={row} />
     </>
   );
 }
@@ -397,14 +391,16 @@ function RowContent({ row }: { row: LedgerRow }): ReactElement {
 function Details({ row }: { row: LedgerRow }): ReactElement | null {
   if (row.details === null) return null;
   return (
-    <dl className="mb-couli-3 flex flex-col gap-couli-1 rounded-couli-button bg-couli-background-muted p-couli-3 text-couli-footnote leading-couli-footnote text-couli-text-secondary">
-      {row.details.map((item) => (
-        <div key={item.label} className="flex items-start justify-between gap-couli-3">
-          <dt className="min-w-0 [overflow-wrap:anywhere]">{item.label}</dt>
-          <dd className="flex-none text-right tabular-nums">{item.amount}</dd>
-        </div>
-      ))}
-    </dl>
+    <div className="px-couli-4">
+      <dl className="mb-couli-3 flex flex-col gap-couli-1 rounded-couli-button bg-couli-background-muted p-couli-3 text-couli-footnote leading-couli-footnote text-couli-text-secondary">
+        {row.details.map((item) => (
+          <div key={item.label} className="flex items-start justify-between gap-couli-3">
+            <dt className="min-w-0 [overflow-wrap:anywhere]">{item.label}</dt>
+            <dd className="flex-none text-right tabular-nums">{item.amount}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 
@@ -419,16 +415,23 @@ function LedgerItem({
   const item = 'border-b border-couli-border-subtle last:border-b-0';
   const link = row.link;
   if (link !== null && open !== null) {
+    // 可点的行：整行一个按钮，以行内容为可访问名（名称、日期、带符号金额）。
     return (
       <li className={item}>
-        <button
-          type="button"
-          className={`${ROW} ${FOCUS} cursor-pointer text-couli-text-primary`}
+        <ListRow
+          labelFrom="content"
+          title={<span className={TITLE}>{row.name}</span>}
+          subtitle={
+            <span className="tabular-nums [overflow-wrap:anywhere]">{secondLine(row)}</span>
+          }
+          trailing={
+            <span className="flex min-w-0 items-center gap-couli-2">
+              <Figures row={row} />
+              <ChevronIcon />
+            </span>
+          }
           onClick={() => open(link)}
-        >
-          <RowContent row={row} />
-          <ChevronIcon />
-        </button>
+        />
         <Details row={row} />
       </li>
     );

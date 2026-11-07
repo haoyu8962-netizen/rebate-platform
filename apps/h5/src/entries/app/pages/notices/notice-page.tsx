@@ -1,22 +1,24 @@
 import { useMemo, useRef, type ReactElement } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ArticleBody } from '../../../../components/article-body/index.ts';
-import { EmptyState, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Skeleton,
+} from '../../../../components/base/index.ts';
+import { AlertIcon, ChevronIcon, DocumentIcon } from '../../../../components/icons/index.tsx';
 import { useApi } from '../../../../shared/api/app-api.ts';
 import type { ApiData, H5ApiClient } from '../../../../shared/api/index.ts';
 import { mediaOrigins } from '../../../../shared/env.ts';
 import { noticesTexts } from '../../../../texts/notices.ts';
 import { Component as PagePending } from '../page-pending.tsx';
 import {
-  AlertIcon,
   ARTICLE_STALE_MS,
   beijingDate,
   beijingDateTime,
-  CARD,
   CenteredState,
-  ChevronIcon,
-  DocumentIcon,
-  FOCUS,
   isArticleNotFound,
   Page,
   TITLE,
@@ -57,11 +59,11 @@ function NoticeRoute({ api }: { api: H5ApiClient }): ReactElement {
 
 function ListSkeleton(): ReactElement {
   return (
-    <div className={`${CARD} flex flex-col gap-couli-2 p-couli-4`}>
+    <Card className="flex flex-col gap-couli-2">
       <Skeleton width="50%" height="1.3125rem" />
       <Skeleton width="100%" height="1.3125rem" />
       <Skeleton width="30%" height="1.125rem" />
-    </div>
+    </Card>
   );
 }
 
@@ -75,28 +77,26 @@ function NoticeCard({
   const date = beijingDate(item.published_at);
   const summary = item.category === 'notice' ? item.notice.text : '';
   return (
-    <button
-      type="button"
-      className={`${CARD} ${FOCUS} flex w-full cursor-pointer flex-col gap-couli-2 p-couli-4 text-left text-couli-text-primary`}
-      onClick={() => onOpen(item.article_id)}
-    >
-      <span className="flex w-full items-center justify-between gap-couli-3">
-        <span className="min-w-0 truncate text-couli-footnote leading-couli-footnote font-couli-semibold">
-          {item.title}
+    <Card onClick={() => onOpen(item.article_id)}>
+      <span className="flex flex-col gap-couli-2">
+        <span className="flex w-full items-center justify-between gap-couli-3">
+          <span className="min-w-0 truncate text-couli-footnote leading-couli-footnote font-couli-semibold">
+            {item.title}
+          </span>
+          <ChevronIcon />
         </span>
-        <ChevronIcon />
+        {summary === '' ? null : (
+          <span className="line-clamp-2 text-couli-footnote leading-couli-footnote break-words text-couli-text-secondary">
+            {summary}
+          </span>
+        )}
+        {date === null ? null : (
+          <span className="text-couli-caption leading-couli-caption text-couli-text-secondary tabular-nums">
+            {date}
+          </span>
+        )}
       </span>
-      {summary === '' ? null : (
-        <span className="line-clamp-2 text-couli-footnote leading-couli-footnote break-words text-couli-text-secondary">
-          {summary}
-        </span>
-      )}
-      {date === null ? null : (
-        <span className="text-couli-caption leading-couli-caption text-couli-text-secondary tabular-nums">
-          {date}
-        </span>
-      )}
-    </button>
+    </Card>
   );
 }
 
@@ -200,25 +200,16 @@ function NoticeList({ api }: { api: H5ApiClient }): ReactElement {
         <p role="alert" className={`${FOOTER} text-couli-text-secondary`}>
           {noticesTexts.moreFailed}
         </p>
-        <button
-          type="button"
-          className={`${FOCUS} min-h-11 flex-none cursor-pointer px-couli-2 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link`}
-          onClick={loadMore}
-        >
+        <Button variant="text" onClick={loadMore}>
           {noticesTexts.retry}
-        </button>
+        </Button>
       </div>
     );
   } else if (hasNextPage) {
     footer = (
-      <button
-        type="button"
-        disabled={isFetchingNextPage}
-        className={`${FOCUS} min-h-11 w-full cursor-pointer text-center text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link disabled:cursor-default disabled:text-couli-text-secondary`}
-        onClick={loadMore}
-      >
+      <Button variant="text" fullWidth disabled={isFetchingNextPage} onClick={loadMore}>
         {isFetchingNextPage ? noticesTexts.loadingMore : noticesTexts.loadMore}
-      </button>
+      </Button>
     );
   } else {
     footer = <p className={`${FOOTER} text-couli-text-secondary`}>{noticesTexts.noMore}</p>;
@@ -294,7 +285,7 @@ function NoticeDetail({ api, articleId }: { api: H5ApiClient; articleId: string 
   if (article === undefined) {
     return (
       <Page>
-        <article className={`${CARD} flex flex-col gap-couli-4 p-couli-4`}>
+        <Card as="article" className="flex flex-col gap-couli-4">
           <Skeleton width="60%" height="1.75rem" />
           <Skeleton width="40%" height="1.125rem" />
           <div className="flex flex-col gap-couli-3">
@@ -302,7 +293,7 @@ function NoticeDetail({ api, articleId }: { api: H5ApiClient; articleId: string 
             <Skeleton width="100%" height="1.0625rem" />
             <Skeleton width="60%" height="1.0625rem" />
           </div>
-        </article>
+        </Card>
       </Page>
     );
   }
@@ -310,7 +301,7 @@ function NoticeDetail({ api, articleId }: { api: H5ApiClient; articleId: string 
   const time = beijingDateTime(article.published_at);
   return (
     <Page>
-      <article className={`${CARD} flex flex-col gap-couli-4 p-couli-4`}>
+      <Card as="article" className="flex flex-col gap-couli-4">
         <h1 className={TITLE}>{article.title}</h1>
         {time === null ? null : (
           <p className="text-couli-caption leading-couli-caption text-couli-text-secondary tabular-nums">
@@ -318,7 +309,7 @@ function NoticeDetail({ api, articleId }: { api: H5ApiClient; articleId: string 
           </p>
         )}
         <ArticleBody body={article.body} mediaOrigins={configuredOrigins} />
-      </article>
+      </Card>
     </Page>
   );
 }

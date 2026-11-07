@@ -87,7 +87,9 @@ it('[AC-F1-12a-UNIT#6] 「全部」已加载后切平台失败：胶囊与期间
   await user.click(await screen.findByRole('button', { name: '京东' }));
   expect((await screen.findByRole('alert')).textContent).toContain(t('h5.load_failed'));
   expect(screen.getByRole('button', { name: t('h5.retry') })).not.toBeNull();
-  expect(screen.getByRole('group', { name: earningsText('earnings.period.label') })).not.toBeNull();
+  expect(
+    screen.getByRole('radiogroup', { name: earningsText('earnings.period.label') }),
+  ).not.toBeNull();
   await user.click(pill(earningsText('earnings.platform.all')));
   await screen.findByText(SELF);
   await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());

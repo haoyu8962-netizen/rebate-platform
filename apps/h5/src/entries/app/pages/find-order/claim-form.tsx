@@ -10,7 +10,8 @@ import {
   type ReactElement,
 } from 'react';
 import type { AppApiBridge } from '../../../../shared/api/app-api.ts';
-import { PRIMARY_BUTTON } from '../../../../components/base/styles.ts';
+import { Button, Card, Chip } from '../../../../components/base/index.ts';
+import { ChevronIcon } from '../../../../components/icons/index.tsx';
 import { t } from '../../../../shared/texts.ts';
 import { getPlatformName } from '../../../../texts/platform.ts';
 import { findOrderTexts } from '../../../../texts/find-order.ts';
@@ -19,9 +20,9 @@ import pddIcon from '../../../../components/platform/assets/pinduoduo.png?no-inl
 import taobaoIcon from '../../../../components/platform/assets/taobao.png?no-inline';
 import { clearDailyBlock, readDailyBlock, writeDailyBlock } from './daily-block.ts';
 import { activeBlockMessage, msUntilNextShanghaiDay, shanghaiToday } from './dates.ts';
-import { ChevronIcon, ClockIcon, InfoIcon, WarningIcon } from './icons.tsx';
+import { ClockIcon, InfoIcon, WarningIcon } from './icons.tsx';
 import type { DailyBlock, Claim, ClaimConfig, ClaimPlatform } from './model.ts';
-import { CAPTION, CARD, FOCUS, FOOTNOTE } from './parts.tsx';
+import { CAPTION, FOCUS, FOOTNOTE } from './parts.tsx';
 import type { SubmitOutcome } from './submit.ts';
 
 /** 平台胶囊里的 16px 官方图标（与 PlatformBadge 同一批内置图）。 */
@@ -241,7 +242,7 @@ export function ClaimForm({
         <span className="min-w-0">{findOrderTexts.intro}</span>
       </p>
 
-      <div className={`${CARD} flex flex-col gap-couli-4 p-couli-4`}>
+      <Card className="flex flex-col gap-couli-4">
         <div className="flex flex-col gap-couli-1">
           <p id={ids.platform} className={`${FOOTNOTE} font-couli-semibold`}>
             {findOrderTexts.platformLabel}
@@ -254,30 +255,20 @@ export function ClaimForm({
             {platforms.map((item) => {
               const selected = item === platform;
               return (
-                <button
+                <Chip
                   key={item}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => choose(item)}
-                  className={`${FOCUS} flex min-h-11 min-w-11 cursor-pointer items-center rounded-couli-pill`}
+                  kind="radio"
+                  selected={selected}
+                  onSelectedChange={() => choose(item)}
                 >
-                  <span
-                    className={`flex h-8 items-center gap-couli-1 rounded-couli-pill border px-couli-3 ${FOOTNOTE} ${
-                      selected
-                        ? 'border-couli-brand-subtle bg-couli-brand-subtle font-couli-semibold text-couli-brand-emphasis'
-                        : 'border-couli-border-subtle bg-couli-background-surface text-couli-text-primary'
-                    }`}
-                  >
-                    <img
-                      src={CAPSULE_ICONS[item]}
-                      alt=""
-                      aria-hidden="true"
-                      className="block size-couli-4 flex-none rounded-couli-small"
-                    />
-                    <span>{getPlatformName(item)}</span>
-                  </span>
-                </button>
+                  <img
+                    src={CAPSULE_ICONS[item]}
+                    alt=""
+                    aria-hidden="true"
+                    className="block size-couli-4 flex-none rounded-couli-small"
+                  />
+                  <span>{getPlatformName(item)}</span>
+                </Chip>
               );
             })}
           </div>
@@ -311,14 +302,12 @@ export function ClaimForm({
             {orderHint}
           </p>
           {openGuide === null ? null : (
-            <button
-              type="button"
-              onClick={openGuide}
-              className={`${FOCUS} -my-couli-2 flex min-h-11 cursor-pointer items-center gap-couli-1 self-start ${FOOTNOTE} font-couli-medium text-couli-text-link`}
-            >
-              {t('claim.guide.entry')}
-              <ChevronIcon className="size-couli-4 flex-none" />
-            </button>
+            <span className="-my-couli-2 flex self-start">
+              <Button variant="text" onClick={openGuide}>
+                {t('claim.guide.entry')}
+                <ChevronIcon className="size-couli-4 flex-none" />
+              </Button>
+            </span>
           )}
         </div>
 
@@ -348,7 +337,7 @@ export function ClaimForm({
             {t('claim.guide.paid_date')}
           </p>
         </div>
-      </div>
+      </Card>
 
       {windowText === null ? null : (
         <p
@@ -368,13 +357,13 @@ export function ClaimForm({
           <span className="min-w-0">{t('claim.guide.caution')}</span>
         </p>
         {footerMessage === null ? null : <FieldError message={footerMessage} />}
-        <button
+        <Button
           type="submit"
+          fullWidth
           disabled={submitting || blocked !== null || platform === null}
-          className={`${PRIMARY_BUTTON} w-full disabled:cursor-default disabled:bg-couli-button-primary-disabled-background disabled:text-couli-button-primary-disabled-text`}
         >
           {findOrderTexts.submit}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -51,12 +51,18 @@ export const BUTTON_LOADING = 'absolute inset-0 flex items-center justify-center
 export const BUTTON_SPINNER =
   'size-couli-component-icon-inline rounded-couli-pill border-2 border-current border-t-transparent motion-safe:animate-spin';
 
-const CHIP_BASE = `inline-flex min-h-couli-component-chip-height cursor-pointer items-center justify-center rounded-couli-pill border px-couli-3 py-couli-1 text-couli-footnote leading-couli-footnote disabled:cursor-default ${FOCUS_RING}`;
+/**
+ * Chip: a 44 px tall transparent hit area (the native control, focus ring included) around the
+ * 32 px visual pill; the pill changes on `:active` of the control (`group-active:`).
+ */
+export const CHIP_HIT = `group inline-flex min-h-couli-interaction-target-minimum flex-none cursor-pointer items-center rounded-couli-pill disabled:cursor-default ${FOCUS_RING}`;
+const CHIP_BASE =
+  'inline-flex min-h-couli-component-chip-height items-center justify-center gap-couli-1 whitespace-nowrap rounded-couli-pill border px-couli-3 py-couli-1 text-couli-footnote leading-couli-footnote';
 
-/** Chip: unselected surface pill, selected brand-subtle pill; pressed darkens / dims. */
+/** Chip pill: unselected surface pill, selected brand-subtle pill; pressed darkens / dims. */
 export const CHIP = {
-  unselected: `${CHIP_BASE} border-couli-border-control bg-couli-background-surface font-couli-regular text-couli-text-primary active:bg-couli-background-muted disabled:text-couli-text-secondary`,
-  selected: `${CHIP_BASE} border-couli-brand-primary bg-couli-brand-subtle font-couli-medium text-couli-brand-emphasis active:opacity-70 disabled:active:opacity-100`,
+  unselected: `${CHIP_BASE} border-couli-border-control bg-couli-background-surface font-couli-regular text-couli-text-primary group-active:bg-couli-background-muted group-disabled:text-couli-text-secondary group-disabled:group-active:bg-couli-background-surface`,
+  selected: `${CHIP_BASE} border-couli-brand-primary bg-couli-brand-subtle font-couli-medium text-couli-brand-emphasis group-active:opacity-70 group-disabled:group-active:opacity-100`,
 } as const;
 
 /** Segmented: muted track, the checked option is a raised surface. */
@@ -69,9 +75,13 @@ export const SEGMENT = {
 } as const;
 
 /** Card: surface panel; clickable cards add the pressed fill and the focus ring. */
-export const CARD =
-  'block w-full rounded-couli-card bg-couli-background-surface p-couli-4 text-start text-couli-text-primary shadow-couli-card';
-export const CARD_CLICKABLE = `${CARD} cursor-pointer active:bg-couli-background-muted ${FOCUS_RING}`;
+export const CARD_SURFACE =
+  'w-full rounded-couli-card bg-couli-background-surface text-start text-couli-text-primary shadow-couli-card';
+/** Inner padding of a card: 16 all round (default), 16 left and right only, or none. */
+export const CARD_PADDING = { default: 'p-couli-4', inline: 'px-couli-4', none: '' } as const;
+export const CARD_PRESSABLE = `cursor-pointer active:bg-couli-background-muted ${FOCUS_RING}`;
+export const CARD = `${CARD_SURFACE} ${CARD_PADDING.default}`;
+export const CARD_CLICKABLE = `${CARD} ${CARD_PRESSABLE}`;
 
 /** List row: title / subtitle column and a trailing accessory. */
 export const LIST_ROW = `flex w-full min-h-couli-interaction-target-minimum items-center gap-couli-3 bg-couli-background-surface px-couli-4 py-couli-3 text-start text-couli-text-primary`;
@@ -81,3 +91,15 @@ export const LIST_ROW_TITLE = 'text-couli-body leading-couli-body text-couli-tex
 export const LIST_ROW_SUBTITLE =
   'text-couli-footnote leading-couli-footnote text-couli-text-secondary';
 export const LIST_ROW_TRAILING = 'flex flex-none items-center text-couli-text-secondary';
+export const LIST_ROW_LEADING = 'flex flex-none items-center';
+
+/** Tabs: muted track, the selected tab is a raised surface (like Segmented, 44 px tall tabs). */
+export const TAB_LIST = 'flex gap-couli-1 rounded-couli-card bg-couli-background-muted p-couli-1';
+const TAB_BASE = `min-h-couli-interaction-target-minimum min-w-0 flex-1 cursor-pointer rounded-couli-button px-couli-2 text-couli-footnote leading-couli-footnote ${FOCUS_RING}`;
+export const TAB = {
+  unselected: `${TAB_BASE} font-couli-regular text-couli-text-secondary active:bg-couli-background-surface active:opacity-70`,
+  selected: `${TAB_BASE} bg-couli-background-surface font-couli-semibold text-couli-text-primary shadow-couli-card active:opacity-70`,
+} as const;
+
+/** Button that fills its container's width (block-level actions, "load more"). */
+export const BUTTON_FULL_WIDTH = 'w-full';

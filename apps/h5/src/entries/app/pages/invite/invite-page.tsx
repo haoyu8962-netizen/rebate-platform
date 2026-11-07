@@ -2,8 +2,8 @@ import { call, has } from '@couli/bridge-sdk';
 import { formatYuan } from '@couli/money';
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactElement, type ReactNode } from 'react';
-import { ErrorState, Skeleton } from '../../../../components/base/index.ts';
-import { FOCUS_RING, SECONDARY_BUTTON } from '../../../../components/base/styles.ts';
+import { Button, Card, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import { ChevronIcon } from '../../../../components/icons/index.tsx';
 import { RetryPage } from '../../../../components/retry/index.ts';
 import { useApi } from '../../../../shared/api/app-api.ts';
 import { ApiError, type H5ApiClient } from '../../../../shared/api/index.ts';
@@ -37,14 +37,10 @@ const NO_AUTO_FETCH = {
   refetchIntervalInBackground: false,
 } as const;
 
-const CARD = 'rounded-couli-card bg-couli-background-surface p-couli-4 shadow-couli-card';
 const CAPTION = 'text-couli-caption leading-couli-caption text-couli-text-secondary';
 const FOOTNOTE = 'text-couli-footnote leading-couli-footnote';
-const LINK = `${FOCUS_RING} inline-flex min-h-11 flex-none cursor-pointer items-center gap-couli-1 ${FOOTNOTE} font-couli-medium text-couli-text-link`;
-/** 邀请码卡底部并排的两个按钮：内边距比通用按钮窄，375 宽下一行放得下「复制邀请链接」，大字号时换行。 */
-const ACTION = `${FOCUS_RING} inline-flex min-h-couli-component-button-min-height min-w-0 flex-1 basis-32 cursor-pointer items-center justify-center gap-couli-1 rounded-couli-button px-couli-2 py-couli-2 text-couli-body leading-couli-body`;
-const ACTION_SECONDARY = `${ACTION} border border-couli-border-control bg-couli-background-surface font-couli-medium text-couli-text-primary active:bg-couli-background-muted`;
-const ACTION_PRIMARY = `${ACTION} bg-couli-button-primary-default-background font-couli-semibold text-couli-button-primary-default-text active:bg-couli-button-primary-pressed-background active:text-couli-button-primary-pressed-text disabled:cursor-not-allowed disabled:bg-couli-button-primary-disabled-background disabled:text-couli-button-primary-disabled-text`;
+/** 邀请码卡底部并排的两个按钮各占一半，375 宽下一行放得下「复制邀请链接」，大字号时换行。 */
+const ACTION_SLOT = 'flex min-w-0 flex-1 basis-32';
 
 /**
  * 邀请好友（F1-05a，路由 InviteShare，h5 `/invite`）：经应用级 API 客户端（内部经桥取 H5 令牌）读 getMyInvite，
@@ -152,14 +148,14 @@ function InviteContent({ api }: { api: H5ApiClient }): ReactElement {
   if (data === undefined || config.isPending) {
     return (
       <Page>
-        <div className={`${CARD} flex flex-col items-center gap-couli-3`}>
+        <Card className="flex flex-col items-center gap-couli-3">
           <Skeleton width="30%" height="1.125rem" />
           <Skeleton width="60%" height="2.5rem" />
           <Skeleton width="100%" height="2.75rem" />
-        </div>
-        <div className={CARD}>
+        </Card>
+        <Card>
           <Skeleton width="40%" height="1.3125rem" />
-        </div>
+        </Card>
       </Page>
     );
   }
@@ -255,64 +251,61 @@ function CodeCard({
   }
 
   return (
-    <section className={`${CARD} flex flex-col gap-couli-4`}>
+    <Card as="section" className="flex flex-col gap-couli-4">
       <div className="flex flex-col items-center gap-couli-1 text-center">
         <p className={`${FOOTNOTE} text-couli-text-secondary`}>{inviteTexts.codeLabel}</p>
         {/* eslint-disable-next-line couli-style/no-arbitrary-value -- invite code display size and spacing from the design board (no ui-tokens step yet) */}
         <p className="text-[2rem] leading-tight font-couli-semibold tracking-[0.2em] tabular-nums [overflow-wrap:anywhere]">
           {code}
         </p>
-        <button
-          type="button"
-          className={LINK}
-          onClick={() => copy(code, t('invite.copy_code.done'))}
-        >
+        <Button variant="text" onClick={() => copy(code, t('invite.copy_code.done'))}>
           <CopyIcon />
           {t('invite.share.copy_code')}
-        </button>
+        </Button>
       </div>
       {posterUrl === null || posterBroken ? null : (
-        <button
-          type="button"
-          aria-label={inviteTexts.posterPreview}
-          className={`${FOCUS_RING} mx-auto block w-3/5 max-w-60 cursor-pointer overflow-hidden rounded-couli-card bg-couli-background-muted`}
-          onClick={preview}
-        >
-          <img
-            src={posterUrl}
-            alt=""
-            className="block aspect-[750/1334] w-full object-cover"
-            onError={() => setPosterBroken(true)}
-          />
-        </button>
+        <div className="mx-auto w-3/5 max-w-60">
+          <Card
+            aria-label={inviteTexts.posterPreview}
+            padding="none"
+            className="overflow-hidden"
+            onClick={preview}
+          >
+            <img
+              src={posterUrl}
+              alt=""
+              className="block aspect-[750/1334] w-full bg-couli-background-muted object-cover"
+              onError={() => setPosterBroken(true)}
+            />
+          </Card>
+        </div>
       )}
       <div className="flex flex-wrap gap-couli-3">
-        <button
-          type="button"
-          className={ACTION_SECONDARY}
-          onClick={() => copy(link, t('invite.copy_link.done'))}
-        >
-          <LinkIcon />
-          {t('invite.share.copy_link')}
-        </button>
-        <button
-          type="button"
-          disabled={posterUrl === null}
-          className={ACTION_PRIMARY}
-          onClick={save}
-        >
-          <DownloadIcon />
-          {t('invite.share.save_poster')}
-        </button>
+        <span className={ACTION_SLOT}>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => copy(link, t('invite.copy_link.done'))}
+          >
+            <LinkIcon />
+            {t('invite.share.copy_link')}
+          </Button>
+        </span>
+        <span className={ACTION_SLOT}>
+          <Button variant="primary" fullWidth disabled={posterUrl === null} onClick={save}>
+            <DownloadIcon />
+            {t('invite.share.save_poster')}
+          </Button>
+        </span>
       </div>
-    </section>
+    </Card>
   );
 }
 
 function UnavailableCard(): ReactElement {
   const support = has('cs.open');
   return (
-    <section className={`${CARD} flex flex-col items-center gap-couli-3 py-couli-6 text-center`}>
+    <Card as="section" className="flex flex-col items-center gap-couli-3 py-couli-6 text-center">
       <div
         aria-hidden="true"
         className="flex size-24 items-center justify-center rounded-couli-card bg-couli-background-muted text-couli-text-secondary"
@@ -326,24 +319,23 @@ function UnavailableCard(): ReactElement {
         {t('invite.share.unavailable_hint')}
       </p>
       {support === null ? null : (
-        <button
-          type="button"
-          className={SECONDARY_BUTTON}
+        <Button
+          variant="secondary"
           onClick={() => {
             call(support, { entry: SUPPORT_ENTRY }).catch(() => undefined);
           }}
         >
           {inviteTexts.contactSupport}
-        </button>
+        </Button>
       )}
-    </section>
+    </Card>
   );
 }
 
 function CountCard({ count }: { count: number }): ReactElement {
   // 人数只显示 direct_count，不可点；说明进余额流水（BR-INV-16、BR-INV-20）。
   return (
-    <section className={`${CARD} flex flex-wrap items-center gap-couli-3`}>
+    <Card as="section" className="flex flex-wrap items-center gap-couli-3">
       <div className="flex min-w-0 flex-1 items-center gap-couli-3">
         <span
           aria-hidden="true"
@@ -358,15 +350,15 @@ function CountCard({ count }: { count: number }): ReactElement {
           </span>
         </span>
       </div>
-      <button
-        type="button"
-        className={`${FOCUS_RING} ml-auto flex min-h-11 min-w-0 cursor-pointer flex-col items-end text-right ${CAPTION}`}
-        onClick={openLedger}
-      >
-        <span>{t('invite.share.promo_label')}</span>
-        <span>{t('invite.share.promo_where')}</span>
-      </button>
-    </section>
+      <span className="ml-auto flex min-w-0">
+        <Button variant="text" onClick={openLedger}>
+          <span className={`flex min-w-0 flex-col items-end text-right ${CAPTION}`}>
+            <span>{t('invite.share.promo_label')}</span>
+            <span>{t('invite.share.promo_where')}</span>
+          </span>
+        </Button>
+      </span>
+    </Card>
   );
 }
 
@@ -384,10 +376,10 @@ function CardHeader({
     <div className="flex flex-wrap items-center justify-between gap-x-couli-3">
       <h2 className="text-couli-body leading-couli-body font-couli-semibold">{title}</h2>
       {target === null ? null : (
-        <button type="button" className={LINK} onClick={() => openArticle(target)}>
+        <Button variant="text" onClick={() => openArticle(target)}>
           {entry}
-          <ChevronIcon />
-        </button>
+          <ChevronIcon className="size-4 flex-none" />
+        </Button>
       )}
     </div>
   );
@@ -422,7 +414,7 @@ function RewardCard({
     inviteRewardRules.limited,
   ];
   return (
-    <section className={`${CARD} flex flex-col gap-couli-3`}>
+    <Card as="section" className="flex flex-col gap-couli-3">
       <CardHeader
         title={t('invite.share.reward_title')}
         entry={t('invite.share.reward_rules')}
@@ -435,7 +427,7 @@ function RewardCard({
         </span>
       </p>
       <RuleList items={rules} />
-    </section>
+    </Card>
   );
 }
 
@@ -451,14 +443,14 @@ function RulesCard({
     ? inviteRuleSummary
     : [...inviteRuleSummary, t('invite.share.rule.no_reward')];
   return (
-    <section className={`${CARD} flex flex-col gap-couli-3`}>
+    <Card as="section" className="flex flex-col gap-couli-3">
       <CardHeader
         title={t('invite.share.rules_title')}
         entry={t('invite.share.rules_full')}
         target={link}
       />
       <RuleList items={items} />
-    </section>
+    </Card>
   );
 }
 
@@ -514,14 +506,6 @@ function DownloadIcon(): ReactElement {
   return (
     <svg {...ICON} className="size-5 flex-none">
       <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
-    </svg>
-  );
-}
-
-function ChevronIcon(): ReactElement {
-  return (
-    <svg {...ICON} className="size-4 flex-none">
-      <path d="m9.5 6 6 6-6 6" />
     </svg>
   );
 }

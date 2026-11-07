@@ -1,11 +1,11 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useRef, type ReactElement } from 'react';
-import { EmptyState, Skeleton } from '../../../../components/base/index.ts';
+import { Button, Card, EmptyState, Skeleton } from '../../../../components/base/index.ts';
 import { RetryPage } from '../../../../components/retry/index.ts';
 import type { H5ApiClient } from '../../../../shared/api/index.ts';
 import { findOrderText, findOrderTexts } from '../../../../texts/find-order.ts';
 import { RECORDS_KEY, type LocateTarget } from './model.ts';
-import { CAPTION, CARD, FOCUS, FOOTNOTE } from './parts.tsx';
+import { CAPTION, FOCUS, FOOTNOTE } from './parts.tsx';
 import {
   claimMatches,
   locateStep,
@@ -30,11 +30,11 @@ export interface ClaimRecordsProps {
 
 function RecordSkeleton(): ReactElement {
   return (
-    <div className={`${CARD} flex flex-col gap-couli-2 p-couli-4`}>
+    <Card className="flex flex-col gap-couli-2">
       <Skeleton width="40%" height="1.25rem" />
       <Skeleton width="70%" height="1.3125rem" />
       <Skeleton width="50%" height="1.125rem" />
-    </div>
+    </Card>
   );
 }
 
@@ -175,13 +175,11 @@ export function ClaimRecords({
         </p>
       ) : null}
       {hasNextPage && !isFetchingNextPage ? (
-        <button
-          type="button"
-          onClick={() => void list.fetchNextPage({ cancelRefetch: false })}
-          className={`${FOCUS} min-h-11 cursor-pointer self-center px-couli-3 ${FOOTNOTE} font-couli-medium text-couli-text-link`}
-        >
-          {findOrderTexts.more}
-        </button>
+        <span className="flex self-center">
+          <Button variant="text" onClick={() => void list.fetchNextPage({ cancelRefetch: false })}>
+            {findOrderTexts.more}
+          </Button>
+        </span>
       ) : null}
       <p className={`${CAPTION} pt-couli-1 text-center`}>{findOrderText('claim.records.footer')}</p>
     </div>
@@ -199,41 +197,44 @@ function RecordCard({
 }): ReactElement {
   const single = view.lines.length === 1 && view.lines[0]?.subOrderId === null;
   return (
-    <article
-      ref={register}
-      tabIndex={-1}
-      data-claim-id={view.claimId}
-      className={`${CARD} ${FOCUS} flex flex-col gap-couli-1 p-couli-4`}
-    >
-      <div className="flex items-center justify-between gap-couli-2">
-        {view.platform === null ? <span /> : <Badge platform={view.platform} />}
-        <StatusTag state={view.state} label={stateLabel(view.state)} />
-      </div>
-      <p className="mt-couli-2 text-couli-footnote leading-couli-footnote font-couli-semibold tabular-nums [overflow-wrap:anywhere]">
-        {findOrderTexts.orderNo} {view.orderNo}
-      </p>
-      <p className={`${CAPTION} tabular-nums`}>
-        {findOrderTexts.paidDate} {view.paidDate} · {findOrderTexts.submittedAt} {view.createdAt}
-      </p>
-      <div className="mt-couli-2 border-t border-couli-border-subtle pt-couli-3">
-        {single ? (
-          <p className={`${FOOTNOTE} [overflow-wrap:anywhere]`}>{view.lines[0]?.text}</p>
-        ) : (
-          <ul className="flex flex-col gap-couli-3">
-            {view.lines.map((line) => (
-              <li key={line.subOrderId} className="flex flex-col gap-couli-1">
-                <div className="flex items-center justify-between gap-couli-2">
-                  <span className={`${CAPTION} min-w-0 tabular-nums [overflow-wrap:anywhere]`}>
-                    {findOrderTexts.subOrder} {line.subOrderId}
-                  </span>
-                  <StatusTag state={line.state} label={stateLabel(line.state)} />
-                </div>
-                <p className={`${FOOTNOTE} [overflow-wrap:anywhere]`}>{line.text}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </article>
+    // 卡片面来自基础件 Card；定位用的焦点落在卡内整块（tabIndex -1，焦点环随卡片圆角）。
+    <Card padding="none">
+      <article
+        ref={register}
+        tabIndex={-1}
+        data-claim-id={view.claimId}
+        className={`${FOCUS} flex flex-col gap-couli-1 rounded-couli-card p-couli-4`}
+      >
+        <div className="flex items-center justify-between gap-couli-2">
+          {view.platform === null ? <span /> : <Badge platform={view.platform} />}
+          <StatusTag state={view.state} label={stateLabel(view.state)} />
+        </div>
+        <p className="mt-couli-2 text-couli-footnote leading-couli-footnote font-couli-semibold tabular-nums [overflow-wrap:anywhere]">
+          {findOrderTexts.orderNo} {view.orderNo}
+        </p>
+        <p className={`${CAPTION} tabular-nums`}>
+          {findOrderTexts.paidDate} {view.paidDate} · {findOrderTexts.submittedAt} {view.createdAt}
+        </p>
+        <div className="mt-couli-2 border-t border-couli-border-subtle pt-couli-3">
+          {single ? (
+            <p className={`${FOOTNOTE} [overflow-wrap:anywhere]`}>{view.lines[0]?.text}</p>
+          ) : (
+            <ul className="flex flex-col gap-couli-3">
+              {view.lines.map((line) => (
+                <li key={line.subOrderId} className="flex flex-col gap-couli-1">
+                  <div className="flex items-center justify-between gap-couli-2">
+                    <span className={`${CAPTION} min-w-0 tabular-nums [overflow-wrap:anywhere]`}>
+                      {findOrderTexts.subOrder} {line.subOrderId}
+                    </span>
+                    <StatusTag state={line.state} label={stateLabel(line.state)} />
+                  </div>
+                  <p className={`${FOOTNOTE} [overflow-wrap:anywhere]`}>{line.text}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </article>
+    </Card>
   );
 }

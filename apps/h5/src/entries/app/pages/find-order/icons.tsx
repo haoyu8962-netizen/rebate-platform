@@ -38,11 +38,3 @@ export function ClockIcon({ className }: { className: string }): ReactElement {
     </svg>
   );
 }
-
-export function ChevronIcon({ className }: { className: string }): ReactElement {
-  return (
-    <svg {...ICON} className={className}>
-      <path d="m9.5 6 6 6-6 6" />
-    </svg>
-  );
-}

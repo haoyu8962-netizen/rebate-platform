@@ -1,19 +1,17 @@
 import { useMemo, type ReactElement } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArticleBody } from '../../../../components/article-body/index.ts';
-import { EmptyState, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import { Card, EmptyState, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import { AlertIcon, DocumentIcon } from '../../../../components/icons/index.tsx';
 import { useApi } from '../../../../shared/api/app-api.ts';
 import type { H5ApiClient } from '../../../../shared/api/index.ts';
 import { mediaOrigins } from '../../../../shared/env.ts';
 import { agreementsTexts } from '../../../../texts/agreements.ts';
 import { Component as PagePending } from '../page-pending.tsx';
 import {
-  AlertIcon,
   ARTICLE_STALE_MS,
   beijingDate,
-  CARD,
   CenteredState,
-  DocumentIcon,
   isArticleNotFound,
   Page,
   TITLE,
@@ -32,7 +30,7 @@ function agreementType(value: string | null): AgreementType {
 const CHIP =
   'inline-flex h-5.5 items-center rounded-couli-pill bg-couli-background-muted px-couli-2 text-couli-caption leading-couli-caption whitespace-nowrap text-couli-text-secondary tabular-nums';
 /** Agreement text is set smaller than notices: 14 body, 12 between paragraphs (design board). */
-const BODY = `${CARD} p-couli-4 [&_p]:text-couli-footnote [&_p]:leading-couli-footnote [&>div]:gap-couli-3`;
+const BODY = '[&_p]:text-couli-footnote [&_p]:leading-couli-footnote [&>div]:gap-couli-3';
 
 /**
  * Agreement route (F1-03c): `/agreement?type=agreement|privacy|sdk_list` shows the current
@@ -94,11 +92,11 @@ function AgreementContent({ api, type }: { api: H5ApiClient; type: AgreementType
           <Skeleton width="50%" height="1.75rem" />
           <Skeleton width="40%" height="1.375rem" />
         </div>
-        <div className={`${CARD} flex flex-col gap-couli-2 p-couli-4`}>
+        <Card className="flex flex-col gap-couli-2">
           <Skeleton width="100%" height="0.75rem" />
           <Skeleton width="92%" height="0.75rem" />
           <Skeleton width="64%" height="0.75rem" />
-        </div>
+        </Card>
       </Page>
     );
   }
@@ -113,9 +111,9 @@ function AgreementContent({ api, type }: { api: H5ApiClient; type: AgreementType
           {date === null ? null : <span className={CHIP}>{agreementsTexts.updatedAt(date)}</span>}
         </p>
       </header>
-      <div className={BODY}>
+      <Card className={BODY}>
         <ArticleBody body={article.body} mediaOrigins={configuredOrigins} />
-      </div>
+      </Card>
     </Page>
   );
 }

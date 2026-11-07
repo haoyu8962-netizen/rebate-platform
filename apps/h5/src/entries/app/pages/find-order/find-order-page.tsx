@@ -9,7 +9,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { Skeleton } from '../../../../components/base/index.ts';
+import { Card, Skeleton, Tabs } from '../../../../components/base/index.ts';
 import { RetryPage } from '../../../../components/retry/index.ts';
 import { useApi, type AppApiBridge } from '../../../../shared/api/app-api.ts';
 import type { H5ApiClient } from '../../../../shared/api/index.ts';
@@ -23,7 +23,6 @@ import {
   type ClaimPlatform,
   type LocateTarget,
 } from './model.ts';
-import { CARD, FOCUS, FOOTNOTE } from './parts.tsx';
 
 export interface FindOrderPageProps {
   /** Injectable SDK facade; production uses @couli/bridge-sdk. */
@@ -77,22 +76,22 @@ function preloadTabs(): void {
 /** 表单的加载态（配置未到、表单块未到时共用）。 */
 function FormSkeleton(): ReactElement {
   return (
-    <div className={`${CARD} flex flex-col gap-couli-3 p-couli-4`}>
+    <Card className="flex flex-col gap-couli-3">
       <Skeleton width="30%" height="1.3125rem" />
       <Skeleton width="100%" height="2.75rem" />
       <Skeleton width="30%" height="1.3125rem" />
       <Skeleton width="100%" height="2.75rem" />
-    </div>
+    </Card>
   );
 }
 
 function RecordCardSkeleton(): ReactElement {
   return (
-    <div className={`${CARD} flex flex-col gap-couli-2 p-couli-4`}>
+    <Card className="flex flex-col gap-couli-2">
       <Skeleton width="40%" height="1.25rem" />
       <Skeleton width="70%" height="1.3125rem" />
       <Skeleton width="50%" height="1.125rem" />
-    </div>
+    </Card>
   );
 }
 
@@ -209,33 +208,20 @@ function FindOrderContent({
 
   return (
     <Page>
-      <div
-        role="tablist"
+      <Tabs
         aria-label={findOrderTexts.tabsLabel}
-        className="flex gap-couli-1 rounded-couli-card bg-couli-background-muted p-couli-1"
-      >
-        {tabs.map((item) => {
-          const selected = item.key === tab;
-          return (
-            <button
-              key={item.key}
-              id={item.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              aria-controls={item.panel}
-              onClick={() => select(item.key)}
-              className={`${FOCUS} min-h-11 flex-1 cursor-pointer rounded-couli-button ${FOOTNOTE} ${
-                selected
-                  ? 'bg-couli-background-surface font-couli-semibold text-couli-text-primary shadow-couli-card'
-                  : 'font-couli-regular text-couli-text-secondary'
-              }`}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+        items={tabs.map((item) => ({
+          value: item.key,
+          label: item.label,
+          id: item.id,
+          panelId: item.panel,
+        }))}
+        value={tab}
+        onChange={(value) => {
+          const next = tabs.find((item) => item.key === value);
+          if (next !== undefined) select(next.key);
+        }}
+      />
       <section
         id={ids.applyPanel}
         role="tabpanel"

@@ -5,6 +5,8 @@
 //   couli-style/no-numeric-style     numeric fontSize / border*Radius / margin* / padding*
 //   couli-style/no-hex-color         hex colours in strings (style objects, TSX, ui.setNavBar …)
 //   couli-style/exemption-reason     an eslint-disable of a couli-style rule without `-- reason`
+//   couli-style/no-raw-pressable     on H5 page code, a JSX <button> or onClick on a native element
+//                                    (not a link with href): clickables come from components/base
 // The rules are syntactic: they need no type information. An exception is written as ESLint's own
 // `eslint-disable-next-line couli-style/<rule> -- <reason>`.
 //
@@ -249,6 +251,62 @@ const exemptionReason = {
   },
 };
 
+// --- no-raw-pressable ------------------------------------------------------------------------
+
+/** H5 sources the rule covers; the base components (and their lint copies) and conformance are out. */
+const PRESSABLE_SCOPE = 'apps/h5/src/';
+const PRESSABLE_EXEMPT = ['apps/h5/src/components/base/', 'apps/h5/src/entries/conformance/'];
+
+function pressableScope(filename) {
+  const file = repoPath(filename);
+  return file.startsWith(PRESSABLE_SCOPE) && !PRESSABLE_EXEMPT.some((dir) => file.startsWith(dir));
+}
+
+/** Names of the plain (non-spread) attributes of a JSX opening element. */
+function jsxAttributeNames(node) {
+  const names = new Set();
+  for (const attribute of node.attributes) {
+    if (attribute.type === 'JSXAttribute' && attribute.name.type === 'JSXIdentifier')
+      names.add(attribute.name.name);
+  }
+  return names;
+}
+
+const noRawPressable = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Disallow native buttons and onClick on native elements in H5 page code (use components/base).',
+    },
+    schema: [],
+    messages: {
+      button:
+        'Native <button> in H5 page code: use Button / Chip / Segmented / Tabs / Card / ListRow from components/base (规划/05 §3.11.3).',
+      click:
+        'onClick on a native <{{tag}}>: use a clickable component from components/base, or exempt an intended non-interactive tap with `eslint-disable-next-line … -- <reason>`.',
+    },
+  },
+  create(context) {
+    if (!pressableScope(context.filename)) return {};
+    return {
+      JSXOpeningElement(node) {
+        // Intrinsic elements only: components are capitalised or dotted (`<Base.Card>`).
+        if (node.name.type !== 'JSXIdentifier' || !/^[a-z]/.test(node.name.name)) return;
+        const tag = node.name.name;
+        if (tag === 'button') {
+          context.report({ node, messageId: 'button' });
+          return;
+        }
+        const names = jsxAttributeNames(node);
+        if (!names.has('onClick')) return;
+        if (tag === 'a' && names.has('href')) return;
+        context.report({ node, messageId: 'click', data: { tag } });
+      },
+    };
+  },
+};
+
 // --- baseline --------------------------------------------------------------------------------
 
 function readBaseline() {
@@ -298,6 +356,7 @@ export const stylePlugin = {
     'no-numeric-style': noNumericStyle,
     'no-hex-color': noHexColor,
     'exemption-reason': exemptionReason,
+    'no-raw-pressable': noRawPressable,
   },
   processors: { baseline: baselineProcessor },
 };

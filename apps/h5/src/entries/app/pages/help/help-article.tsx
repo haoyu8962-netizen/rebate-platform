@@ -1,20 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, type ReactElement } from 'react';
 import { ArticleBody } from '../../../../components/article-body/index.ts';
-import { EmptyState, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Skeleton,
+} from '../../../../components/base/index.ts';
+import { AlertIcon, DocumentIcon } from '../../../../components/icons/index.tsx';
 import { ApiError, type H5ApiClient } from '../../../../shared/api/index.ts';
 import { mediaOrigins } from '../../../../shared/env.ts';
 import { helpTexts } from '../../../../texts/help.ts';
-import {
-  AlertIcon,
-  beijingDate,
-  CARD,
-  CenteredState,
-  ChatIcon,
-  DocumentIcon,
-  FOCUS,
-  Page,
-} from './parts.tsx';
+import { beijingDate, CenteredState, ChatIcon, Page } from './parts.tsx';
 import { useNavigate } from './router.ts';
 
 const STALE_MS = 5 * 60 * 1000;
@@ -23,7 +21,7 @@ const ARTICLE_NOT_FOUND = 30701;
 
 function ArticleSkeleton(): ReactElement {
   return (
-    <article className={`${CARD} flex flex-col gap-couli-4 p-couli-4`}>
+    <Card as="article" className="flex flex-col gap-couli-4">
       <Skeleton width="70%" height="1.375rem" />
       <Skeleton width="40%" height="0.875rem" />
       <div className="flex flex-col gap-couli-3">
@@ -31,7 +29,7 @@ function ArticleSkeleton(): ReactElement {
         <Skeleton width="100%" height="1.0625rem" />
         <Skeleton width="60%" height="1.0625rem" />
       </div>
-    </article>
+    </Card>
   );
 }
 
@@ -120,7 +118,7 @@ export function HelpArticle({
   const updated = beijingDate(article.published_at);
   return (
     <Page>
-      <article className={`${CARD} flex flex-col gap-couli-4 p-couli-4`}>
+      <Card as="article" className="flex flex-col gap-couli-4">
         <header className="flex flex-col gap-couli-4">
           <h1 className="text-couli-title leading-couli-title font-couli-semibold break-words">
             {article.title}
@@ -135,16 +133,12 @@ export function HelpArticle({
           </div>
         </header>
         <ArticleBody body={article.body} mediaOrigins={origins} />
-      </article>
+      </Card>
       {openSupport === null ? null : (
-        <button
-          type="button"
-          className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-couli-1 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link ${FOCUS}`}
-          onClick={openSupport}
-        >
+        <Button variant="text" onClick={openSupport}>
           <ChatIcon className="size-4 flex-none" />
           {helpTexts.articleSupport}
-        </button>
+        </Button>
       )}
     </Page>
   );

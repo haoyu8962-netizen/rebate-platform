@@ -1,18 +1,17 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo, type ReactElement } from 'react';
-import { EmptyState, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  ListRow,
+  Skeleton,
+} from '../../../../components/base/index.ts';
+import { AlertIcon, ChevronIcon, DocumentIcon } from '../../../../components/icons/index.tsx';
 import type { H5ApiClient } from '../../../../shared/api/index.ts';
 import { helpTexts } from '../../../../texts/help.ts';
-import {
-  AlertIcon,
-  CARD,
-  CenteredState,
-  ChatIcon,
-  ChevronIcon,
-  DocumentIcon,
-  FOCUS,
-  Page,
-} from './parts.tsx';
+import { CenteredState, ChatIcon, Page } from './parts.tsx';
 import { useNavigate } from './router.ts';
 
 /** Help questions change rarely; going back from an article reuses the loaded list. */
@@ -22,9 +21,7 @@ const PAGE_LIMIT = 20;
 
 function SupportCard({ onOpen }: { onOpen: () => void }): ReactElement {
   return (
-    <section
-      className={`${CARD} flex flex-wrap items-center justify-between gap-couli-3 p-couli-4`}
-    >
+    <Card as="section" className="flex flex-wrap items-center justify-between gap-couli-3">
       <p className="flex flex-col">
         <span className="text-couli-footnote leading-couli-footnote font-couli-semibold">
           {helpTexts.supportTitle}
@@ -33,25 +30,21 @@ function SupportCard({ onOpen }: { onOpen: () => void }): ReactElement {
           {helpTexts.supportDescription}
         </span>
       </p>
-      <button
-        type="button"
-        className={`flex min-h-11 cursor-pointer items-center gap-couli-2 rounded-couli-button border border-couli-border-control bg-couli-background-surface px-couli-4 py-couli-2 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-primary active:bg-couli-background-muted ${FOCUS}`}
-        onClick={onOpen}
-      >
+      <Button variant="secondary" onClick={onOpen}>
         <ChatIcon className="size-5 flex-none" />
         {helpTexts.contactSupport}
-      </button>
-    </section>
+      </Button>
+    </Card>
   );
 }
 
 function ListSkeleton(): ReactElement {
   return (
-    <div className={`${CARD} flex flex-col gap-couli-4 px-couli-4 py-couli-4`}>
+    <Card className="flex flex-col gap-couli-4">
       <Skeleton width="80%" height="1.0625rem" />
       <Skeleton width="65%" height="1.0625rem" />
       <Skeleton width="75%" height="1.0625rem" />
-    </div>
+    </Card>
   );
 }
 
@@ -125,37 +118,34 @@ export function HelpHome({
     content = <ListSkeleton />;
   } else if (items.length === 0) {
     content = (
-      <div className={`${CARD} py-couli-8`}>
+      <Card padding="none" className="py-couli-8">
         <EmptyState
           icon={<DocumentIcon />}
           title={helpTexts.emptyTitle}
           description={helpTexts.emptyDescription}
         />
-      </div>
+      </Card>
     );
   } else {
     content = (
-      <div className={`${CARD} px-couli-4 py-couli-1`}>
+      <Card padding="none" className="overflow-hidden py-couli-1">
         <ul className="flex flex-col divide-y divide-couli-border-subtle">
           {items.map((item) => (
             <li key={item.article_id}>
-              <button
-                type="button"
-                className={`flex min-h-11 w-full cursor-pointer items-center justify-between gap-couli-3 py-couli-2 text-left text-couli-footnote leading-couli-footnote text-couli-text-primary ${FOCUS}`}
+              <ListRow
+                title={<span className="break-words">{item.title}</span>}
+                trailing={<ChevronIcon />}
                 onClick={() => {
                   void navigate({
                     search: `?${new URLSearchParams({ article_id: item.article_id })}`,
                   });
                 }}
-              >
-                <span className="min-w-0 break-words">{item.title}</span>
-                <ChevronIcon />
-              </button>
+              />
             </li>
           ))}
         </ul>
         {hasNextPage ? (
-          <div className="flex flex-col items-center border-t border-couli-border-subtle py-couli-1">
+          <div className="flex flex-col items-center border-t border-couli-border-subtle px-couli-4 py-couli-1">
             {isFetchNextPageError && !isFetchingNextPage ? (
               <p
                 role="alert"
@@ -164,17 +154,12 @@ export function HelpHome({
                 {helpTexts.moreFailed}
               </p>
             ) : null}
-            <button
-              type="button"
-              disabled={isFetchingNextPage}
-              className={`min-h-11 w-full cursor-pointer text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link disabled:cursor-default disabled:text-couli-text-secondary ${FOCUS}`}
-              onClick={loadMore}
-            >
+            <Button variant="text" fullWidth disabled={isFetchingNextPage} onClick={loadMore}>
               {helpTexts.loadMore}
-            </button>
+            </Button>
           </div>
         ) : null}
-      </div>
+      </Card>
     );
   }
 

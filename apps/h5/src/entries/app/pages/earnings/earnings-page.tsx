@@ -1,8 +1,15 @@
 import { call, has } from '@couli/bridge-sdk';
 import { useQuery } from '@tanstack/react-query';
 import { useRef, useState, type ReactElement, type ReactNode, type TouchEvent } from 'react';
-import { ErrorState, Sheet, Skeleton } from '../../../../components/base/index.ts';
-import { FOCUS_RING } from '../../../../components/base/styles.ts';
+import {
+  Button,
+  Card,
+  Chip,
+  ErrorState,
+  Segmented,
+  Sheet,
+  Skeleton,
+} from '../../../../components/base/index.ts';
 import jdIcon from '../../../../components/platform/assets/jd.png?no-inline';
 import pinduoduoIcon from '../../../../components/platform/assets/pinduoduo.png?no-inline';
 import taobaoIcon from '../../../../components/platform/assets/taobao.png?no-inline';
@@ -55,7 +62,6 @@ const PLATFORM_ICONS: Readonly<Record<EarningsPlatform, string>> = {
   pdd: pinduoduoIcon,
 };
 
-const CARD = 'rounded-couli-card bg-couli-background-surface p-couli-4 shadow-couli-card';
 const CAPTION = 'text-couli-caption leading-couli-caption text-couli-text-secondary';
 const AMOUNT =
   'text-couli-title leading-couli-title font-couli-semibold tabular-nums [overflow-wrap:anywhere]';
@@ -211,13 +217,9 @@ function Dashboard({ api }: { api: H5ApiClient }): ReactElement {
           <p role="alert" className={`${CAPTION} min-w-0 [overflow-wrap:anywhere]`}>
             {refreshError}
           </p>
-          <button
-            type="button"
-            className={`${FOCUS_RING} min-h-11 flex-none cursor-pointer px-couli-2 text-couli-footnote leading-couli-footnote font-couli-medium text-couli-text-link`}
-            onClick={refresh}
-          >
+          <Button variant="text" onClick={refresh}>
             {t('h5.retry')}
-          </button>
+          </Button>
         </div>
       )}
       <PlatformPills
@@ -287,13 +289,6 @@ function Page({
   );
 }
 
-const PILL_BUTTON = `${FOCUS_RING} flex min-h-11 flex-none cursor-pointer items-center rounded-couli-pill disabled:cursor-default`;
-const PILL =
-  'flex h-8 items-center gap-couli-1 whitespace-nowrap rounded-couli-pill border px-couli-4 text-couli-footnote leading-couli-footnote';
-const PILL_ON =
-  'border-couli-brand-subtle bg-couli-brand-subtle font-couli-medium text-couli-brand-emphasis';
-const PILL_OFF = 'border-couli-border-subtle bg-couli-background-surface text-couli-text-primary';
-
 /** 平台筛选：「全部」加开放中的平台；32 高胶囊，按钮命中区 44（规格 §2、§6），选中项以 aria-pressed 播报。 */
 function PlatformPills({
   platforms,
@@ -316,28 +311,24 @@ function PlatformPills({
       {items.map((item) => {
         const on = item === selected;
         return (
-          <button
+          <Chip
             key={item ?? 'all'}
-            type="button"
-            aria-pressed={on}
+            selected={on}
             disabled={disabled}
-            className={PILL_BUTTON}
-            onClick={() => {
+            onSelectedChange={() => {
               if (!on) onSelect(item);
             }}
           >
-            <span className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}>
-              {item === null ? null : (
-                <img
-                  src={PLATFORM_ICONS[item]}
-                  alt=""
-                  aria-hidden="true"
-                  className="block size-4 flex-none"
-                />
-              )}
-              {item === null ? earningsText('earnings.platform.all') : getPlatformName(item)}
-            </span>
-          </button>
+            {item === null ? null : (
+              <img
+                src={PLATFORM_ICONS[item]}
+                alt=""
+                aria-hidden="true"
+                className="block size-4 flex-none"
+              />
+            )}
+            {item === null ? earningsText('earnings.platform.all') : getPlatformName(item)}
+          </Chip>
         );
       })}
     </div>
@@ -353,30 +344,18 @@ function PeriodSwitch({
   onSelect: (period: PeriodKey) => void;
 }): ReactElement {
   return (
-    <div
-      role="group"
+    <Segmented
       aria-label={earningsText('earnings.period.label')}
-      className="flex gap-couli-1 rounded-couli-button border border-couli-border-subtle bg-couli-background-surface p-couli-1"
-    >
-      {PERIODS.map((key) => {
-        const on = key === selected;
-        return (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={on}
-            className={`${FOCUS_RING} min-h-11 min-w-0 flex-1 basis-0 cursor-pointer rounded-couli-small px-couli-1 text-couli-footnote leading-couli-footnote ${
-              on
-                ? 'bg-couli-brand-subtle font-couli-semibold text-couli-brand-emphasis'
-                : 'text-couli-text-secondary'
-            }`}
-            onClick={() => onSelect(key)}
-          >
-            {earningsText(`earnings.period.${key}`)}
-          </button>
-        );
-      })}
-    </div>
+      options={PERIODS.map((key) => ({
+        value: key,
+        label: earningsText(`earnings.period.${key}`),
+      }))}
+      value={selected}
+      onChange={(value) => {
+        const next = PERIODS.find((key) => key === value);
+        if (next !== undefined) onSelect(next);
+      }}
+    />
   );
 }
 
@@ -385,13 +364,13 @@ function LoadingCards(): ReactElement {
     <>
       <Skeleton width="40%" height="1.125rem" />
       {[0, 1, 2].map((index) => (
-        <div key={index} className={`${CARD} flex flex-col gap-couli-3`}>
+        <Card key={index} className="flex flex-col gap-couli-3">
           <Skeleton width="35%" height="1.5rem" />
           <div className="grid grid-cols-2 gap-couli-3">
             <Skeleton width="70%" height="2.75rem" />
             <Skeleton width="70%" height="2.75rem" />
           </div>
-        </div>
+        </Card>
       ))}
     </>
   );
@@ -439,7 +418,7 @@ function Figures({
             ? earningsText('earnings.metric.est.name_self')
             : earningsText('earnings.metric.est.name_promo');
         return (
-          <section key={column} className={`${CARD} flex flex-col gap-couli-3`}>
+          <Card key={column} as="section" className="flex flex-col gap-couli-3">
             <CardTitle
               title={
                 column === 'self'
@@ -470,7 +449,7 @@ function Figures({
                 onNote={onNote}
               />
             </div>
-          </section>
+          </Card>
         );
       })}
       {summary.referral === null ? null : (
@@ -526,15 +505,17 @@ function Metric({
       >
         <span className="min-w-0 [overflow-wrap:anywhere]">{name}</span>
         {hint === null ? null : (
-          <button
-            type="button"
-            aria-label={earningsText('earnings.metric.note_label', { name })}
-            aria-haspopup="dialog"
-            className={`${FOCUS_RING} -mx-[0.9375rem] -my-[0.8125rem] flex size-11 flex-none cursor-pointer items-center justify-center text-couli-text-secondary`}
-            onClick={() => onNote(name, hint)}
-          >
-            <QuestionIcon />
-          </button>
+          // 44 的命中区向四周外扩，不撑高名称行（画板：问号紧贴名称）。
+          <span className="-mx-[0.9375rem] -my-[0.8125rem] flex flex-none">
+            <Button
+              variant="icon"
+              aria-label={earningsText('earnings.metric.note_label', { name })}
+              aria-haspopup="dialog"
+              onClick={() => onNote(name, hint)}
+            >
+              <QuestionIcon />
+            </Button>
+          </span>
         )}
       </span>
       <span
@@ -564,7 +545,7 @@ function Referral({
 }): ReactElement {
   const estName = earningsText('earnings.metric.est.name_promo');
   return (
-    <section className={`${CARD} flex flex-col gap-couli-3`}>
+    <Card as="section" className="flex flex-col gap-couli-3">
       <CardTitle
         title={earningsText('earnings.section.referral')}
         tag={filtered ? earningsText('earnings.referral.platform_note') : undefined}
@@ -600,7 +581,7 @@ function Referral({
         ))}
       </div>
       <p className={CAPTION}>{earningsText('earnings.referral.note')}</p>
-    </section>
+    </Card>
   );
 }
 
@@ -616,7 +597,7 @@ const ICON = {
 
 function QuestionIcon(): ReactElement {
   return (
-    <svg {...ICON} className="size-3.5">
+    <svg {...ICON} className="size-3.5 text-couli-text-secondary">
       <circle cx="12" cy="12" r="8.5" />
       <path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.4v.6" />
       <path d="M12 16.8v.2" />

@@ -35,11 +35,6 @@ export function beijingDate(instant: string): string | null {
   return new Date(time + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-export const CARD = 'rounded-couli-card bg-couli-background-surface shadow-couli-card';
-
-export const FOCUS =
-  'focus-visible:outline-solid focus-visible:outline-[length:var(--focus-width)] focus-visible:outline-offset-[var(--focus-offset)] focus-visible:outline-couli-focus-ring';
-
 export function Page({ children }: { children: ReactNode }): ReactElement {
   return (
     <main className="flex min-h-dvh flex-col gap-couli-3 bg-couli-background-canvas px-couli-4 pt-couli-2 pb-couli-6 font-couli-system text-couli-text-primary">
@@ -69,37 +64,10 @@ function Icon({ className, children }: { className: string; children: ReactNode 
   );
 }
 
-export function ChevronIcon(): ReactElement {
-  return (
-    <Icon className="size-5 flex-none text-couli-text-secondary">
-      <path d="m9.5 6 6 6-6 6" />
-    </Icon>
-  );
-}
-
 export function ChatIcon({ className }: { className: string }): ReactElement {
   return (
     <Icon className={className}>
       <path d="M5 6.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-6l-4 3v-3H5A1.5 1.5 0 0 1 3.5 16V8A1.5 1.5 0 0 1 5 6.5Z" />
-    </Icon>
-  );
-}
-
-export function DocumentIcon(): ReactElement {
-  return (
-    <Icon className="size-5 flex-none">
-      <path d="M7 3.5h7l4 4v13H7v-17Z" />
-      <path d="M14 3.5v4h4M9.5 12h6M9.5 15.5h6" />
-    </Icon>
-  );
-}
-
-/** Load-failure illustration of the error states (circle with an exclamation mark). */
-export function AlertIcon(): ReactElement {
-  return (
-    <Icon className="size-5 flex-none">
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7.5v5.5M12 16.2v.3" />
     </Icon>
   );
 }

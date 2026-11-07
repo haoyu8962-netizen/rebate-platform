@@ -28,9 +28,6 @@ export function beijingDateTime(instant: string): string | null {
   return beijing(instant)?.replace('T', ' ') ?? null;
 }
 
-export const CARD = 'rounded-couli-card bg-couli-background-surface shadow-couli-card';
-export const FOCUS =
-  'focus-visible:outline-solid focus-visible:outline-[length:var(--focus-width)] focus-visible:outline-offset-[var(--focus-offset)] focus-visible:outline-couli-focus-ring';
 export const TITLE =
   'text-couli-title leading-couli-title font-couli-semibold text-couli-text-primary';
 
@@ -45,41 +42,4 @@ export function Page({ children }: { children: ReactNode }): ReactElement {
 
 export function CenteredState({ children }: { children: ReactNode }): ReactElement {
   return <div className="flex flex-1 items-center justify-center py-couli-16">{children}</div>;
-}
-
-const ICON = {
-  'aria-hidden': true,
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.6,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-} as const;
-
-export function DocumentIcon(): ReactElement {
-  return (
-    <svg {...ICON}>
-      <path d="M7 3.5h7l4 4v13H7v-17Z" />
-      <path d="M14 3.5v4h4M9.5 12h6M9.5 15.5h6" />
-    </svg>
-  );
-}
-
-/** Load-failure illustration of the error states (circle with an exclamation mark). */
-export function AlertIcon(): ReactElement {
-  return (
-    <svg {...ICON}>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7.5v5.5M12 16.2v.3" />
-    </svg>
-  );
-}
-
-export function ChevronIcon(): ReactElement {
-  return (
-    <svg {...ICON} strokeWidth={1.75} className="size-5 flex-none text-couli-text-secondary">
-      <path d="m9.5 6 6 6-6 6" />
-    </svg>
-  );
 }
