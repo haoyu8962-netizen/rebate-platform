@@ -192,3 +192,28 @@ export function fieldsOf(cause: unknown): string[] {
 export function serverMessage(cause: unknown): string {
   return cause instanceof AdminApiError && cause.kind === 'api' ? cause.msg : '';
 }
+
+/** HomePreview route of the App (contracts/routes.json): scheme `couli`, no host. */
+const HOME_PREVIEW_DEEP_LINK = 'couli://r/HomePreview';
+
+/** Content of the draft preview QR code: the HomePreview deep link with page_key and token only. */
+export function previewDeepLink(preview: PreviewToken): string {
+  const query = `page_key=${encodeURIComponent(preview.page_key)}&token=${encodeURIComponent(preview.token)}`;
+  return `${HOME_PREVIEW_DEEP_LINK}?${query}`;
+}
+
+/**
+ * error_count / render_count as a percentage, rounded half up to at most two decimals with
+ * trailing zeros dropped (3/200 → "1.5%", 1/3 → "33.33%"); null when there are no renders.
+ * Integer arithmetic only (BigInt, so large counts cannot lose precision): hundredths of a
+ * percent = round(errors × 10000 / renders).
+ */
+export function errorRate(renders: number, errors: number): string | null {
+  if (!Number.isSafeInteger(renders) || !Number.isSafeInteger(errors) || renders <= 0 || errors < 0)
+    return null;
+  const r = BigInt(renders);
+  const hundredths = (BigInt(errors) * 20000n + r) / (r * 2n);
+  const whole = hundredths / 100n;
+  const fraction = (hundredths % 100n).toString().padStart(2, '0').replace(/0+$/, '');
+  return t.history.rate(fraction === '' ? whole.toString() : `${whole}.${fraction}`);
+}

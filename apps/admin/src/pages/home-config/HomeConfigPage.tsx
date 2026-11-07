@@ -351,6 +351,8 @@ export function HomeConfigPage({ access }: HomeConfigPageProps): ReactElement {
         setBasedOn(response.data.version);
         setLatest(summaryOf(response.data));
       } else if (op.kind === 'preview') {
+        // A refused or unknown re-issue must not leave the previous token's QR code on screen.
+        setPreview(null);
         const response = await custom()<PreviewToken>({
           url: actionUrl(key, 'preview'),
           method: 'post',

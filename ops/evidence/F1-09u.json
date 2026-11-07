@@ -1,0 +1,93 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-home-config-qr/error-rate.test.ts > [AC-F1-09u-RATE#1] 版本列表有错误率列：error_count / render_count 的百分比（至多 2 位小数、去尾零），render_count 为 0 显示「—」，无 NaN / Infinity / 0%",
+    "test/spec/frontend/admin-home-config-qr/pages.browser.test.ts > [AC-F1-09u-BROWSER#1] 1440 保存草稿后草稿预览：预览区出现可见二维码，读出恰为 couli://r/HomePreview?page_key=home&token=<本次 token>",
+    "test/spec/frontend/admin-home-config-qr/pages.browser.test.ts > [AC-F1-09u-BROWSER#2] 1440 版本历史：错误率列可见，3/200 显示 1.5%、1/3 显示 33.33%",
+    "test/spec/frontend/admin-home-config-qr/preview-qr.test.ts > [AC-F1-09u-QR#1] 保存草稿后草稿预览：预览区恰一个有可访问名称的二维码，内容恰为 couli://r/HomePreview?page_key=home&token=<本次 token>，页键 / token / 北京时间照旧",
+    "test/spec/frontend/admin-home-config-qr/preview-qr.test.ts > [AC-F1-09u-QR#2] 非 home 页：二维码的 page_key 取所选页并按 URL 查询串编码（custom:activity_618 → custom%3Aactivity_618）",
+    "test/spec/frontend/admin-home-config-qr/preview-qr.test.ts > [AC-F1-09u-QR#3] 签发失败不显示二维码；重新签发换了 token 后二维码内容随之更新；再签发失败时不再显示二维码",
+    "test/spec/frontend/admin-home-config-qr/source.test.ts > [AC-F1-09u-SOURCE#1] 字典撤掉「二维码待深链定稿」占位文案，EditorView.tsx 不再出现 no QR code",
+    "test/spec/frontend/admin-home-config-qr/source.test.ts > [AC-F1-09u-SOURCE#2] 深链前缀 couli://r/HomePreview 在实现里恰出现一次且是 const 常量，其余源码（含注释）不出现 ://"
+  ],
+  "risk_note": "F1-09u admin home-config draft preview QR and version error-rate column (规划/05 §3.11.3 F1-09-qr, D10-724 ④; popup upload slots excluded until the owner finalizes their spec). After adminCreatePagePreviewToken the preview shows one antd QRCode (type svg, no icon, role=img with a dictionary label) encoding couli://r/HomePreview?page_key=<encodeURIComponent>&token=<token> (scheme couli per 06 Q-A5, shape per 03 §4.4, routes.json HomePreview has no host); the prefix is a single const in model.ts; the preview state is cleared before every issue so a failed (re)issue shows no QR. The placeholder copy and the 'no QR code' header comment are gone (frozen admin-home-config preview / source tests take their new branch, F1-09ut #2596). Error rate = error_count / render_count with BigInt integer rounding to at most 2 decimals, trailing zeros dropped; render_count 0 shows the dash. Rule tests by an independent Claude (decode the SVG QR, self-checked against antd's @rc-component/qrcode encoder); Claude spec-test review r1 pass; red on the local container (8 tests, right reason). Implementation by Opus 5.5: local container browser run green; container verify-fast was OOM-killed at tsc four times (local Docker memory, not the change), so host jsdom runs of admin-home-config-qr + admin-home-config (59/59), admin unit (7/7), eslint and prettier stand in and CI runs full verification. Non-funds; RV2 only by the default tier of the task. Independent Claude money review r1 pass (no findings). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 pass, no findings (admin home-config UI only; reviewed with the money checklist because the task is RV2); independent Claude (approvals #36)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "fresh Claude subagent round 1 pass (S2: SOURCE#2 requires the const value to be exactly couli://r/HomePreview, written into the implementation constraints; out of scope: 10-minute read-only token is server-side); tests written by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-09u",
+  "spec_ref": "3f2b91dfa359fcbce54dc59c4b43c7763885cf58",
+  "spec_commit": "9ce2ef08da508798fd064135b924a3fa211cb6a2",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9ce2ef08da508798fd064135b924a3fa211cb6a2",
+      "tree": "726e7d63665da0039430d77c917d15a787ce1b5f",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-07T03:59:59Z",
+      "finished_at": "2026-11-07T04:00:24Z",
+      "red_tests": [
+        "test/spec/frontend/admin-home-config-qr/error-rate.test.ts > [AC-F1-09u-RATE#1] 版本列表有错误率列：error_count / render_count 的百分比（至多 2 位小数、去尾零），render_count 为 0 显示「—」，无 NaN / Infinity / 0%",
+        "test/spec/frontend/admin-home-config-qr/pages.browser.test.ts > [AC-F1-09u-BROWSER#1] 1440 保存草稿后草稿预览：预览区出现可见二维码，读出恰为 couli://r/HomePreview?page_key=home&token=<本次 token>",
+        "test/spec/frontend/admin-home-config-qr/pages.browser.test.ts > [AC-F1-09u-BROWSER#2] 1440 版本历史：错误率列可见，3/200 显示 1.5%、1/3 显示 33.33%",
+        "test/spec/frontend/admin-home-config-qr/preview-qr.test.ts > [AC-F1-09u-QR#1] 保存草稿后草稿预览：预览区恰一个有可访问名称的二维码，内容恰为 couli://r/HomePreview?page_key=home&token=<本次 token>，页键 / token / 北京时间照旧",
+        "test/spec/frontend/admin-home-config-qr/preview-qr.test.ts > [AC-F1-09u-QR#2] 非 home 页：二维码的 page_key 取所选页并按 URL 查询串编码（custom:activity_618 → custom%3Aactivity_618）",
+        "test/spec/frontend/admin-home-config-qr/preview-qr.test.ts > [AC-F1-09u-QR#3] 签发失败不显示二维码；重新签发换了 token 后二维码内容随之更新；再签发失败时不再显示二维码",
+        "test/spec/frontend/admin-home-config-qr/source.test.ts > [AC-F1-09u-SOURCE#1] 字典撤掉「二维码待深链定稿」占位文案，EditorView.tsx 不再出现 no QR code",
+        "test/spec/frontend/admin-home-config-qr/source.test.ts > [AC-F1-09u-SOURCE#2] 深链前缀 couli://r/HomePreview 在实现里恰出现一次且是 const 常量，其余源码（含注释）不出现 ://"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-home-config-qr/error-rate.test.ts",
+        "test/spec/frontend/admin-home-config-qr/pages.browser.test.ts",
+        "test/spec/frontend/admin-home-config-qr/preview-qr.test.ts",
+        "test/spec/frontend/admin-home-config-qr/source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "12b971c66b42afc79cfc5ffcd500001050ef0a68c96cf9423b69942c7cd15168"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ce18006b2eb54aaad45ed4776774415e8fd1f971a6c5832fd4eec18f1a274606"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6c52f22fa84c12287c141c53d88bbfdef1bfc832",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}

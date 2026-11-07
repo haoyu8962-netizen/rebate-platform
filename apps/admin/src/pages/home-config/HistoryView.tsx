@@ -9,6 +9,7 @@ import { homeConfigTexts as t } from '../../texts/home-config.ts';
 import {
   beijingTime,
   canRollback,
+  errorRate,
   percentOf,
   roleOf,
   type PageConfig,
@@ -108,6 +109,15 @@ export function HistoryView(props: HistoryViewProps): ReactElement {
       width: 96,
       align: 'right',
       render: (_, row) => <Typography.Text>{String(row.error_count)}</Typography.Text>,
+    },
+    {
+      key: 'errorRate',
+      title: t.history.columns.errorRate,
+      width: 96,
+      align: 'right',
+      render: (_, row) => (
+        <Typography.Text>{errorRate(row.render_count, row.error_count) ?? t.dash}</Typography.Text>
+      ),
     },
     {
       key: 'publisher',

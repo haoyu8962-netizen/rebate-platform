@@ -1,15 +1,16 @@
 // Editor view of the home page configuration (design-hifi AdmHomeConfig): page selector, status
 // tags, the read-only block list (type, id, audience) on the left and the whole-page sections
 // JSON on the right. Only the JSON text is edited; there is no form, drag, add or local preview.
-// The preview token panel shows page_key, token and the Beijing expiry: no QR code and no deep
-// link until the App's preview link is decided.
+// The preview token panel shows page_key, token, the Beijing expiry and a QR code of the App's
+// HomePreview deep link for this token (drawn as SVG, no icon).
 import { HistoryOutlined } from '@ant-design/icons';
-import { Button, Card, Empty, Flex, Input, Select, Tag, Typography, theme } from 'antd';
+import { Button, Card, Empty, Flex, Input, QRCode, Select, Tag, Typography, theme } from 'antd';
 import type { ReactElement, ReactNode } from 'react';
 import { homeConfigTexts as t } from '../../texts/home-config.ts';
 import {
   beijingTime,
   pageOptionLabel,
+  previewDeepLink,
   type BlockSummary,
   type PageConfig,
   type PreviewToken,
@@ -169,9 +170,24 @@ export function EditorView(props: EditorViewProps): ReactElement {
                 </Typography.Text>
               </Flex>
             </Flex>
-            <Typography.Text type="secondary" style={small}>
-              {t.preview.qr}
-            </Typography.Text>
+            <Flex align="center" gap={16} wrap>
+              <div
+                role="img"
+                aria-label={t.preview.qrLabel(props.preview.page_key, props.preview.version)}
+                style={{ flex: 'none' }}
+              >
+                <QRCode
+                  value={previewDeepLink(props.preview)}
+                  type="svg"
+                  errorLevel="M"
+                  size={160}
+                  aria-hidden="true"
+                />
+              </div>
+              <Typography.Text type="secondary" style={small}>
+                {t.preview.qr}
+              </Typography.Text>
+            </Flex>
             <Typography.Text type="secondary" style={small}>
               {t.preview.savedOnly}
             </Typography.Text>
