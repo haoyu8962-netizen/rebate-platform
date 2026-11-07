@@ -11,6 +11,8 @@ paths:
   - 'apps/api/src/modules/orders/application/**'
   - 'apps/api/src/modules/orders/domain/rights-import*.ts'
   - 'apps/api/src/modules/orders/infra/**'
+  - 'apps/api/src/modules/settlement/rights/rights-command.ts' # 维权记录写入 order_rights.reason_sub / reason_sub_manual（规则测试写手指出的路径缺口）
+  - 'apps/api/src/modules/settlement/rights/rights-store.ts'
   - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
   - 'apps/api/src/modules/settlement/clawback/clawback-store.ts'
   - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
