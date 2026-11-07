@@ -6,6 +6,7 @@ type: impl
 # union/infra/taobao/dataoke-search.ts：大淘客搜索行 sellerId → shop_ref，口径同 domain/types.ts 的 shopRefField（只收正整数十进制字符串原样，非法 → 缺省）；UnionItem（不只 UnionItemDetail）加可选 shop_ref。官方搜索、TOP 详情、粘贴 / 收藏商品本期不出（D10-806 ①；TOP 详情 seller_id 随 09 §2.10 复录另开）。
 # 规则测试须用纯数字合成 sellerId 覆盖正向分支（kit 默认 synthetic-seller-NNNN 过不了 shopRefField，只覆盖缺省分支）。不改 B1-04zzq 已放宽的冻结文件。
 # 风险：union 适配器 → RV2；新鲜独立 Claude 写规则测试，资金评审。
+# 完成 2026-11-07（#2640）：dataokeShopRefField 复用 shopRefField，安全正整数 number 先转十进制串；官方搜索 / TOP 详情不出。
 refs: []
 refs_hash: {}
 deps: [B1-04zzq, B1-04zzm]
@@ -21,4 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/taobao-seller-shop-ref/**'
-status: todo
+status: done
+pr: 2640

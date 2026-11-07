@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import {
   DATAOKE_SEARCH_PATH,
   dataokeImageHost,
+  dataokeShopRefField,
   mapDataokeSearchItem,
   reportDroppedImageHosts,
   type DataokeDroppedImageHosts,
@@ -121,4 +122,82 @@ it('[B1-04zzk unit] smallImages are filtered (validity, whitelist, duplicates) b
   expect(item.main_image_url).toBe('https://img.alicdn.com/syn-main-3.jpg');
   // Distinct foreign addresses, including the one past the cap.
   expect([...dropped]).toEqual([['img.example.test', 3]]);
+});
+
+it('[B1-04zzs unit] dataokeShopRefField: a positive decimal string as given, a safe positive integer as its decimal text', () => {
+  expect(dataokeShopRefField('7300000000001')).toEqual({ shop_ref: '7300000000001' });
+  expect(dataokeShopRefField('1')).toEqual({ shop_ref: '1' });
+  // Past the safe-integer range is fine as text: kept as given, never through a number.
+  expect(dataokeShopRefField('123456789012345678901234567890')).toEqual({
+    shop_ref: '123456789012345678901234567890',
+  });
+  expect(dataokeShopRefField(7_300_000_000_002)).toEqual({ shop_ref: '7300000000002' });
+  expect(dataokeShopRefField(Number.MAX_SAFE_INTEGER)).toEqual({
+    shop_ref: String(Number.MAX_SAFE_INTEGER),
+  });
+});
+
+it('[B1-04zzs unit] dataokeShopRefField: anything else gives no shop_ref key', () => {
+  const tab = String.fromCharCode(9);
+  const ideographicSpace = String.fromCharCode(0x3000);
+  const invalid: unknown[] = [
+    undefined,
+    null,
+    '',
+    '0',
+    '00',
+    '01',
+    '-1',
+    '+1',
+    '1.5',
+    '1.0',
+    '1e5',
+    ' 1',
+    '1 ',
+    `${tab}1`,
+    `1${ideographicSpace}`,
+    'syn-seller-1',
+    0,
+    -0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    1n,
+    true,
+    {},
+    [],
+    ['1'],
+  ];
+  for (const value of invalid) {
+    const field = dataokeShopRefField(value);
+    expect(field, String(value)).toEqual({});
+    expect(Object.hasOwn(field, 'shop_ref')).toBe(false);
+  }
+});
+
+/** JSON text of an item, bigint amounts as decimal strings. */
+function serialized(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => (typeof v === 'bigint' ? String(v) : v));
+}
+
+it('[B1-04zzs unit] the mapped item carries shop_ref from its own row only', () => {
+  const base = candidate(1, 'https://img.alicdn.com/syn-main-1.jpg', []);
+  const withRef = mapDataokeSearchItem(
+    { ...base, row: { ...base.row, sellerId: '7300000000003', shopId: '999' } },
+    'syn-item-1',
+    RECEIVED_AT,
+    undefined,
+  );
+  expect(withRef.shop_ref).toBe('7300000000003');
+  expect(serialized(withRef).split('7300000000003')).toHaveLength(2);
+  const without = mapDataokeSearchItem(
+    { ...base, row: { ...base.row, sellerId: '07300000000003' } },
+    'syn-item-1',
+    RECEIVED_AT,
+    undefined,
+  );
+  expect(Object.hasOwn(without, 'shop_ref')).toBe(false);
+  expect(serialized(without)).not.toContain('7300000000003');
 });

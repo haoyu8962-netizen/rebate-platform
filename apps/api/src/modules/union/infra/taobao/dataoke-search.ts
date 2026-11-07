@@ -29,7 +29,11 @@
 //   （非空白字符串），否则 dtitle；主图 / 多图经 normalizeItemImages（main_image_url = mainPic，
 //   image_urls = smallImages 有效项）；quoted_at = 收到搜索响应（不是换算响应）时的注入 Clock。
 //   一级类目字段不填。不映射不外露：estimateAmount、couponLink、itemLink、大淘客 id、goodsSign、
-//   sellerId、goodsId。
+//   goodsId。
+//   店铺标识（B1-04zzs，S-17 S17-u1，D10-806 ①；dataokeShopRefField）：shop_ref 只取同一行的 sellerId——
+//   正整数十进制字符串（/^[1-9][0-9]*$/，与 domain shopRefField 同口径）原样，或安全正整数 number 的
+//   十进制文本；缺失、空串、0、负数、小数、科学计数、前导零、带空白、其他类型 → 不带 shop_ref，不跳行、
+//   不告警。sellerId 不出现在 shop_ref 以外的任何字段、告警或请求里。
 //   价格（BR-PRICE-01，D10-515 / D10-525；券前价口径按编排 D10-530）：price_fen = actualPrice +
 //   couponPrice，coupon_fen = couponPrice（无券为 0），final_price_fen = actualPrice（即 price_fen −
 //   coupon_fen）；originalPrice 只存不进三价（它缺失 / 非法、或与 actualPrice + couponPrice 不一致，
@@ -58,7 +62,12 @@ import { addFen, pctStrToBp } from '@couli/money';
 import type { Clock } from '../../../platform/index.ts';
 import { MAX_ITEM_IMAGES, normalizeItemImages, type ItemImages } from '../../domain/item-images.ts';
 import { isPriceAnomaly, type PriceAnomalyReason } from '../../domain/taobao-price.ts';
-import { shopNameField, UnionError, type UnionItemDetail } from '../../domain/types.ts';
+import {
+  shopNameField,
+  shopRefField,
+  UnionError,
+  type UnionItemDetail,
+} from '../../domain/types.ts';
 import type { DataokeParameters } from '../dataoke/dataoke-client.ts';
 import type { TaobaoWarning } from './response.ts';
 
@@ -408,6 +417,19 @@ export function createTaobaoItemIdCache(clock: Clock): TaobaoItemIdCache {
   };
 }
 
+/**
+ * B1-04zzs (S-17 S17-u1, D10-806 ①): the shop_ref of one search row from its own `sellerId` (see
+ * the header ⑤): a positive decimal string as given, or a safe positive integer as its decimal
+ * text → `{ shop_ref }`; anything else → `{}` (the key stays absent; the row is still returned).
+ */
+export function dataokeShopRefField(sellerId: unknown): { readonly shop_ref?: string } {
+  if (typeof sellerId === 'string') return shopRefField(sellerId);
+  if (typeof sellerId === 'number' && Number.isSafeInteger(sellerId) && sellerId > 0) {
+    return shopRefField(String(sellerId));
+  }
+  return {};
+}
+
 /** Fen of an amount (BR-PRICE-01, D10-525); absent or invalid → undefined. */
 function amountFen(value: unknown): bigint | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -475,6 +497,8 @@ export function mapDataokeSearchItem(
     title,
     // B1-04zzg：店铺名只取 data.list[].shopName，换算详情的 shop_title 不补。
     ...shopNameField(row.shopName),
+    // B1-04zzs：店铺标识只取同一行的 sellerId（header 店铺标识段）。
+    ...dataokeShopRefField(row.sellerId),
     // 价格异常：三价 0n 占位（不出截断值、不出部分价格），出不出卡由 catalog 决定。
     price_fen: price.status === 'ok' ? price.price : 0n,
     coupon_fen: price.status === 'ok' ? price.coupon : 0n,

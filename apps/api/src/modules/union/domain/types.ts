@@ -182,6 +182,13 @@ export interface UnionItem extends ItemRef {
   readonly category_l1_id?: string;
   /** B1-04l: the union's level-one category name as given (Taobao level_one_category_name). */
   readonly category_l1_name?: string;
+  /**
+   * The product side's shop id, a positive decimal integer without leading zeros (shopRefField).
+   * B1-04zzm: details — Pinduoduo mall_id, jd shopInfo.shopId. B1-04zzs (S-17 S17-u1, D10-806 ①):
+   * the Taobao 大淘客 search row's own sellerId; the official Taobao search and the TOP detail
+   * give none this round.
+   */
+  readonly shop_ref?: string;
 }
 
 /** B1-04zzj (D10-692 S2-7): longest shop_name kept, in code points (04 / 契约无上限，union 技术值). */
@@ -239,8 +246,6 @@ export interface UnionItemDetail extends UnionItem {
    * unchanged. Pinduoduo desc_txt / serv_txt / lgst_txt; jd only shopInfo.shopLevel as `level`.
    */
   readonly shop_scores?: readonly UnionShopScore[];
-  /** B1-04zzm: the product side's shop id as given (Pinduoduo mall_id, jd shopInfo.shopId). */
-  readonly shop_ref?: string;
 }
 
 /** B1-04zzm: key of one shop score (contracts ProductShopScore.key). */
