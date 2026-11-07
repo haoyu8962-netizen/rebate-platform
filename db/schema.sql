@@ -9367,6 +9367,20 @@ CREATE INDEX orders_default_app_id_link_id_idx ON app.orders_default USING btree
 
 
 --
+-- Name: orders_parent_order_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX orders_parent_order_idx ON ONLY app.orders USING btree (app_id, parent_order_id) WHERE (parent_order_id IS NOT NULL);
+
+
+--
+-- Name: orders_default_app_id_parent_order_id_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX orders_default_app_id_parent_order_id_idx ON app.orders_default USING btree (app_id, parent_order_id) WHERE (parent_order_id IS NOT NULL);
+
+
+--
 -- Name: orders_user_paid_idx; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -10176,6 +10190,13 @@ ALTER INDEX app.link_logs_pkey ATTACH PARTITION app.link_logs_default_pkey;
 --
 
 ALTER INDEX app.orders_link_idx ATTACH PARTITION app.orders_default_app_id_link_id_idx;
+
+
+--
+-- Name: orders_default_app_id_parent_order_id_idx; Type: INDEX ATTACH; Schema: app; Owner: -
+--
+
+ALTER INDEX app.orders_parent_order_idx ATTACH PARTITION app.orders_default_app_id_parent_order_id_idx;
 
 
 --

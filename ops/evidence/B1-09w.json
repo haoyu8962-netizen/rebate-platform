@@ -1,0 +1,76 @@
+{
+  "risk_note": "RV2 migration 0132 (FU-ORDERS-OWN-LOOKUP-INDEX; rulings D10-851 ①, D10-853, D10-889). One non-unique partial index: CREATE INDEX orders_parent_order_idx ON app.orders (app_id, parent_order_id) WHERE parent_order_id IS NOT NULL, without ONLY (as 0007), so PostgreSQL builds and attaches a child index on every existing partition in the same transaction, including the month partitions that db:partitions and the worker's partition maintenance pre-create on deployed databases, and new partitions inherit it. D10-889 replaced the ledger title's ON ONLY + orders_default + ATTACH plan (the ledger keeps its original title; the change is in a comment). The runner is one transaction, so no CONCURRENTLY: writes to orders and its partitions wait while the index builds (small before launch); lock_timeout 5s, statement_timeout 5min. No data change, no down migration. Snapshot: db/schema.sql gains the index definitions only; packages/db/src/db.gen.ts unchanged. Integration spec/db/orders and lint-migrations 136/136 pass; packages/db migrations.test 8/8. Limitation recorded as FU-TEST-PARTITIONS-BEFORE-MIGRATION: tests cannot reproduce month partitions that exist before the migration runs, so that case is held by the static assertion on the migration source.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (D10-823): round 1 pass with no findings; checklist rounding na, sign na, idempotency na, concurrency ok, partial_refund na, clock na, app_id ok. Codex noted it could not check lock stacking with 0131 in the same batch because 0131 was not yet on its base; 0131 (#2649) has since merged. couli-runs/B1-09w/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude (D10-848). Round 1 pass, but its out_of_scope S2 showed the ON ONLY plan leaves deployed month partitions without a child index; D10-889 changed the migration and the tests were rewritten (second writing): #5 now requires the plain CREATE INDEX on app.orders and forbids ON ONLY / ATTACH PARTITION / CONCURRENTLY, and the all-partitions check runs after creating the current and next month partitions. Round 2 pass; its S2 (the regex does not accept an equivalent USING btree form) is avoided by writing the 0007 form."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-09w",
+  "spec_commit": "1ba9577c96231b740be5ed90200f53d3bbafa829",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "red_tests": [
+    "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#1] app.orders has orders_parent_order_idx on exactly (app_id, parent_order_id) WHERE parent_order_id IS NOT NULL",
+    "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#2] with the current and next month partitions created, every orders partition carries an attached same-shape child index and the parent index is valid and ready (pre-existing partitions: see #5)",
+    "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#3] a month partition created after the migration gets a same-shape child index automatically",
+    "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#4] the index is not unique: one app may hold several orders with the same parent order id",
+    "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#5] the migration builds the index with a plain CREATE INDEX orders_parent_order_idx ON app.orders (no ONLY / ATTACH PARTITION / CONCURRENTLY / UNIQUE, no data or drop statements)"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1ba9577c96231b740be5ed90200f53d3bbafa829",
+      "tree": "c7b594dd4a98244e005e52f3af159c5198e4e92d",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T17:14:43Z",
+      "finished_at": "2026-11-07T17:14:55Z",
+      "red_tests": [
+        "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#1] app.orders has orders_parent_order_idx on exactly (app_id, parent_order_id) WHERE parent_order_id IS NOT NULL",
+        "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#2] with the current and next month partitions created, every orders partition carries an attached same-shape child index and the parent index is valid and ready (pre-existing partitions: see #5)",
+        "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#3] a month partition created after the migration gets a same-shape child index automatically",
+        "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#4] the index is not unique: one app may hold several orders with the same parent order id",
+        "test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts > [AC-B1-09w#5] the migration builds the index with a plain CREATE INDEX orders_parent_order_idx ON app.orders (no ONLY / ATTACH PARTITION / CONCURRENTLY / UNIQUE, no data or drop statements)"
+      ],
+      "expected": ["test/spec/db/orders/parent-order-index/parent-order-index.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a751eec653ad4903e569beeb93242048d19f3d37cd472adb37d2b49bdcef7611"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "58a10a1e115f5179722d096ace44a66261da8a21",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  }
+}

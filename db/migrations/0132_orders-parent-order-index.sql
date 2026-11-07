@@ -1,0 +1,44 @@
+-- Up Migration
+-- Partial index for looking up app.orders by parent order number (FU-ORDERS-OWN-LOOKUP-INDEX; task
+-- B1-09w; orchestrator rulings D10-851 ①, D10-853, D10-889). Task B1-09x reworks the lookups of
+-- orders by order number: an exact sub-order number is resolved through app.order_keys and
+-- the order is then read by primary key (order_id, attr_at); a parent order number, which order_keys
+-- does not hold, is looked up with this index (admin order search, H5 order claim, the parent probe
+-- of the rights lookup, the Taobao rights archive). The key leads with app_id and leaves platform
+-- out, so an admin search without a platform filter can use it and a query with one filters the few
+-- matches. Orders without a parent order number (NULL) are not indexed. The PDD match that ignores
+-- hyphens keeps its scan: no expression index here (FU-PDD-ORDERNO-NORMALIZED-INDEX).
+-- Compatibility: additive, one new index and nothing else: orders_parent_order_idx (app_id,
+-- parent_order_id) WHERE parent_order_id IS NOT NULL, not unique (the sub-orders of one parent order
+-- share the value). No column, constraint, data or grant change; existing reads and writes keep
+-- working. A plain CREATE INDEX on the partitioned app.orders (no ONLY, written like the orders
+-- indexes of 0007) creates the partitioned index on the parent and, in the same statement, builds a
+-- child index on every partition that exists at that point and attaches it: orders_default, and on
+-- a deployed database also the month partitions that `pnpm db:partitions` already created. The
+-- parent index is therefore valid at commit. Partitions created later by app.ensure_month_partition
+-- (CREATE TABLE … PARTITION OF) get a matching child index automatically. PostgreSQL names the
+-- children (orders_default_app_id_parent_order_id_idx, as for the indexes of 0007). ON ONLY plus a
+-- child index attached on orders_default alone would leave the parent index invalid on a database
+-- that already has month partitions (D10-889).
+-- Guard: orders is a funds and attribution table (tools/ci/lint-migrations.ts), so the index is
+-- named and no squawk exception is used; a new index is not a guard rebuild, so the file needs no
+-- APPROVED_GUARD_CHANGES entry. require-concurrent-index-creation is excluded globally in
+-- .squawk.toml (the runner applies migrations in one transaction).
+-- Recovery: no down migration. A failed run (lock or statement timeout) rolls back the whole deploy
+-- transaction and changes nothing; run the deploy again. Once committed the index stays: app.orders
+-- is a funds and attribution table, so its indexes are never dropped by a migration; an unused index
+-- only costs its upkeep on order writes.
+--
+-- Locks and timeouts: the runner applies all pending migrations in one transaction, so the build
+-- cannot be CONCURRENTLY. CREATE INDEX takes a SHARE lock on app.orders and on each of its
+-- partitions, held to commit: writes to app.orders (order sync inserts and updates included) wait
+-- while the child indexes build and until the deploy commits; reads are not blocked. Before launch
+-- orders is small and the build takes seconds. 5s lock wait so a deploy blocked by a long write
+-- transaction fails fast and is retried instead of queueing order writes behind it; 5min overall as
+-- a generous ceiling for the build, after which the statement is cancelled and the deploy rolls
+-- back. After launch, building another index on the large orders table needs its own window agreed
+-- with the orchestrator (D10-853 ②).
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
+CREATE INDEX orders_parent_order_idx ON app.orders (app_id, parent_order_id) WHERE parent_order_id IS NOT NULL;
