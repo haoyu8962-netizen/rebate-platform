@@ -1,0 +1,24 @@
+id: B1-08zj
+repo: rebate-platform
+title: 邀请奖励订单事实读口补 o.platform（FU-INVITE-REWARD-ORDER-PLATFORM）：京东已退件数开关关时不作废未发奖励，非京东照旧
+type: impl
+# 2026-11-07 identity 入账（编排 D10-854 ② / D10-868 ①，从 funds 移来）。B1-08zi（#2660）让 growth invite-reward 的作废判定按平台区分：只有 platform = jd 的
+#   「已退件数 > 入账定格」受开关 orders.jd.refunded_quantity_r9_enabled 约束（默认关：只告警不作废），但 orders/ports/invite-reward.ts 的 FACT_COLUMNS 没选 o.platform，
+#   growth 拿到 platform 为空 → 当作非京东 → 开关关时京东订单已退件数增加仍作废未发奖励。本单只补这一列（及其类型映射），growth 判定逻辑不动。
+# 现在无生产影响（京东结算明细导入未做、邀请奖励总开关默认关），属收紧。B1-08zi 合并后开工。RV2（邀请奖励发放 / 作废，资金）。
+refs: [BR-INV-24, BR-FUND-03]
+refs_hash:
+  BR-INV-24: 8c11043a392c
+  BR-FUND-03: 4b5c1f1d901b
+deps: [B1-08zi]
+paths:
+  - 'apps/api/src/modules/orders/ports/invite-reward.ts'
+  - 'apps/api/src/modules/orders/ports/invite-reward.test.ts'
+test_paths:
+  - 'test/spec/growth/invite-reward-jd-platform/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/growth/invite-reward-jd-platform/**'
+status: todo
