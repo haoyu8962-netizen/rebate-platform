@@ -29,6 +29,7 @@ import {
 } from './domain/detail-extras.ts';
 import { detailImages, type DetailImage } from './domain/detail-images.ts';
 import { CatalogError, isFresh } from './domain/rules.ts';
+import { priceSpecHintFor } from './domain/spec-hint.ts';
 import type { Catalog, ProductCapabilities, ProductRef, RequestRawRef } from './domain/types.ts';
 import type { CatalogConfigReader, ViewerContext } from './ports.ts';
 import type { PriceSnapshotRecorder } from './price-history/types.ts';
@@ -276,6 +277,41 @@ async function readDetailExtras(
   return detailExtras(item, { couponEnd, sales, shopScores });
 }
 
+/**
+ * B1-04zzn: the JD mode the card's own product_key was derived under, read exactly as the card
+ * assembler reads it (application/card-assembler.ts jdModeOf): `jd:i_<n>` is item, any other
+ * `jd:<id>` is sku, a key of another shape counts as item.
+ */
+function jdModeOfKey(productKey: string): 'item' | 'sku' {
+  const colon = productKey.indexOf(':');
+  if (colon <= 0) return 'item';
+  const stableId = productKey.slice(colon + 1);
+  return stableId !== '' && !stableId.startsWith('i_') ? 'sku' : 'item';
+}
+
+/**
+ * B1-04zzn (S-19, D10-728 ②, BR-PROD-04): the price of a union detail answer (fresh, cache hit or
+ * stale entry alike) is pdd.ddk.goods.detail's lowest-SKU price, so the detail route re-decides
+ * price_spec_hint with fromUnionDetail. Only the detail route narrows: a caller that opted out of
+ * the detail-only keys (favorites: images / detailExtras false) keeps the assembler's hint, and the
+ * pool fallback never comes here.
+ */
+function withUnionDetailHint(
+  card: ProductDetailData,
+  ref: Pick<ProductRef, 'platform' | 'productKey'>,
+  options: Pick<ProductDetailOptions, 'images' | 'detailExtras'>,
+): ProductDetailData {
+  if (options.images === false || options.detailExtras === false) return card;
+  return {
+    ...card,
+    price_spec_hint: priceSpecHintFor({
+      platform: ref.platform,
+      jdMode: jdModeOfKey(ref.productKey),
+      fromUnionDetail: true,
+    }),
+  };
+}
+
 /** B1-05zk: the card with the five keys; unchanged when the caller opted out. */
 function withDetailExtras(card: ProductDetailData, extras: DetailExtras | null): ProductDetailData {
   return extras === null ? card : { ...card, ...extras };
@@ -472,7 +508,7 @@ export async function getProduct(
   });
   // B1-05ze: a cache hit or a stale entry is the same UnionItemDetail, so it reads the same way.
   const card = withDetailExtras(
-    withImages(issuedCard(result), detailImages(item), options),
+    withImages(withUnionDetailHint(issuedCard(result), ref, options), detailImages(item), options),
     options.detailExtras === false ? null : await readDetailExtras(item, appId, platform, config),
   );
   // BR-PROD-11: a valid tapped token that supplied this call's raw ID goes back unchanged (原样

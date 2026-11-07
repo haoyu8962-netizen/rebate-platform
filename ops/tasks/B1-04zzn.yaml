@@ -7,6 +7,7 @@ type: impl
 # need_sku_info、item.details.get、京东 sku 模式等权限本期不申请（D10-728 ③）。
 # **B1-05zh 合并前只入账、不开工**（D10-728 ②）。与 be 的 S09b 同碰 catalog 详情组装时按合并先后变基。
 # 风险：catalog 价格展示 → RV1 主体，按路径取最高；新鲜独立 Claude 写规则测试。
+# 完成 2026-11-07（#2585）：priceSpecHintFor 加 fromUnionDetail；detail.ts 联盟详情分支（新鲜 / 缓存 / stale）重判；池回退与收藏卡（images / detailExtras=false）保持 spec_uncertain（收藏卡口径待编排定）。
 refs: [BR-PROD-04]
 refs_hash:
   BR-PROD-04: 287b67ace136
@@ -23,4 +24,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/catalog/pdd-detail-price-from/**'
-status: todo
+status: done
+pr: 2585

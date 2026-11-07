@@ -11,7 +11,13 @@ import type { CardQuoteContext } from './application/card-assembler.ts';
 import { createCatalogCardEntry } from './application/card-entry.ts';
 import { createItemRefService } from './application/item-ref.ts';
 import type { PoolCandidate, PoolReader } from './application/pool-read.ts';
-import { getProduct, type ProductDetailOptions, type ProductDetailRequest } from './detail.ts';
+import {
+  getProduct,
+  markCachedDetail,
+  markStaleDetail,
+  type ProductDetailOptions,
+  type ProductDetailRequest,
+} from './detail.ts';
 import { CatalogError, isPlatformServed } from './domain/rules.ts';
 import type { PlatformRecord, ProductCapabilities, ProductRef } from './domain/types.ts';
 import { createUnionDetailUpstream } from './infra/detail-wiring.ts';
@@ -410,5 +416,78 @@ describe('getProduct: detail-only card keys (B1-05zk, D10-736)', () => {
     );
     for (const key of KEYS) expect(Object.hasOwn(card, key)).toBe(false);
     for (const key of SWITCHES) expect(configValue).not.toHaveBeenCalledWith(APP_ID, key);
+  });
+});
+
+describe('getProduct: pinduoduo price_spec_hint from the union detail (B1-04zzn, D10-728 ②)', () => {
+  const PDD_KEY = 'pdd:synthetic001';
+  const PDD_SIGN = 'synthetic-unit-sign';
+
+  function pddItem(overrides: Partial<UnionItemDetail> = {}): UnionItemDetail {
+    // A pinduoduo answer carries goods_id / goods_sign, not taobao's item_id.
+    return {
+      platform: 'pdd',
+      goods_id: 'synthetic001',
+      goods_sign: PDD_SIGN,
+      title: '合成拼多多详情商品',
+      price_fen: 3990n,
+      coupon_fen: 1000n,
+      final_price_fen: 2990n,
+      commission_rate_bp: 2000n,
+      quoted_at: NOW,
+      ...overrides,
+    };
+  }
+
+  it('[AC-B1-04zzn] 拼多多联盟详情（新鲜、缓存命中、stale）→ price_from', async () => {
+    for (const answer of [
+      () => pddItem(),
+      () => markCachedDetail(pddItem()),
+      () => markStaleDetail(pddItem()),
+    ]) {
+      const f = setup(async () => answer());
+      const card = await getProduct({ product_key: PDD_KEY }, f.options);
+      expect(card.product_key).toBe(PDD_KEY);
+      expect(card.price_spec_hint).toBe('price_from');
+    }
+  });
+
+  it('[AC-B1-04zzn] 淘宝联盟详情仍 spec_uncertain', async () => {
+    const f = setup(async () => item());
+    const card = await getProduct({ product_key: PRODUCT_KEY }, f.options);
+    expect(card.price_spec_hint).toBe('spec_uncertain');
+  });
+
+  it('[AC-B1-04zzn] 拼多多池回退（50401 用池行）仍 spec_uncertain', async () => {
+    const pooled: PoolCandidate = {
+      item: pddItem({ quoted_at: POOL_QUOTED_AT }),
+      ref: {
+        ...poolCandidate().ref,
+        platform: 'pdd',
+        productKey: PDD_KEY,
+        rawItemId: PDD_SIGN,
+      },
+    };
+    const f = setup(() => Promise.reject(new UnionError('upstream_unavailable', 'x', 'pdd')));
+    const poolReader: PoolReader = {
+      page: async () => null,
+      fallbackPoolId: async () => null,
+      detail: async () => pooled,
+    };
+    const card = await getProduct({ product_key: PDD_KEY }, { ...f.options, poolReader });
+    expect(card.stale).toBe(true);
+    expect(card.price_spec_hint).toBe('spec_uncertain');
+  });
+
+  it('[AC-B1-04zzn] 收藏卡（images / detailExtras 为 false 的非详情路由调用方）仍 spec_uncertain', async () => {
+    for (const optOut of [
+      { images: false, detailExtras: false },
+      { images: false },
+      { detailExtras: false },
+    ] as const) {
+      const f = setup(async () => pddItem());
+      const card = await getProduct({ product_key: PDD_KEY }, { ...f.options, ...optOut });
+      expect(card.price_spec_hint).toBe('spec_uncertain');
+    }
   });
 });
