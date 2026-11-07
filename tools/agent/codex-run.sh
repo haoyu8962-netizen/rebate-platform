@@ -102,6 +102,9 @@ DRY_RUN=0
 ARGS_PARSED=0
 ROOTS_RESOLVED=0
 ROUND_RELEASED=0
+# CT-06zzzu: the id of this call (UTC time and pid; never starts with `-`), given to every
+# release as --call, so that a repeated release of the same refused call gives back nothing more.
+CALL_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 
 log() { printf '%s: %s\n' "${SCRIPT_NAME%.sh}" "$*" >&2; }
 
@@ -139,7 +142,8 @@ EOF
 # review, as in callKind; engine AGENT_ENGINE; reason the first part of the refusal). Only when the
 # task id, mode and options are known, the trusted root is resolved, it is not --dry-run and the
 # trusted root has state.ts; at most once per call. A failing release is a warning: the exit code
-# stays 2.
+# stays 2. CT-06zzzu: the release names this call (--call "$CALL_ID"), and the refusals that exit 2
+# directly once the trusted root is resolved go through refuse_start.
 release_refused_round() {
   [ "$ROUND_RELEASED" = 0 ] && [ "$ARGS_PARSED" = 1 ] && [ "$ROOTS_RESOLVED" = 1 ] &&
     [ "$DRY_RUN" = 0 ] || return 0
@@ -155,7 +159,7 @@ release_refused_round() {
     kind_args=(review --review-type "${REVIEW_TYPE:-general}")
   fi
   node "$TRUSTED/tools/ops/state.ts" release "$TASK" "${kind_args[@]}" \
-    --engine "$AGENT_ENGINE" --reason "$reason" >&2 ||
+    --engine "$AGENT_ENGINE" --reason "$reason" --call "$CALL_ID" >&2 ||
     log "warning: the refused round was not released (tools/ops/state.ts release failed); it stays counted"
 }
 
@@ -168,6 +172,14 @@ fail_usage() {
 
 refuse() {
   log "refused: $1 (规划/11 §2.4 禁用)"
+  release_refused_round "$1"
+  exit 2
+}
+
+# CT-06zzzu (FU-CODEX-RUN-REJECT-COUNT-REST): a refusal before the call starts that logs its text
+# as it is (no "refused:" prefix, no usage), gives back the caller's round and exits 2.
+refuse_start() {
+  log "$1"
   release_refused_round "$1"
   exit 2
 }
@@ -355,18 +367,12 @@ resolve_codex_bin() {
       *) refuse "$switch needs a run-state directory under a .tmp directory (got $RUNS)" ;;
     esac
     CODEX_BIN="$replacement"
-    [ -x "$CODEX_BIN" ] || {
-      log "$switch is not executable: $CODEX_BIN"
-      exit 2
-    }
+    [ -x "$CODEX_BIN" ] || refuse_start "$switch is not executable: $CODEX_BIN"
     resolve_claude_account
     return 0
   fi
   CODEX_BIN="$(command -v "$name" || true)"
-  [ -n "$CODEX_BIN" ] || {
-    log "$name binary not found on PATH"
-    exit 2
-  }
+  [ -n "$CODEX_BIN" ] || refuse_start "$name binary not found on PATH"
   real="$(perl -MCwd=realpath -e 'print realpath($ARGV[0]) // $ARGV[0]' "$CODEX_BIN")"
   local root
   for root in "$SELF_REPO" "$TRUSTED" "$(real_dir "$RUNS")" "$RUNS"; do
@@ -595,22 +601,15 @@ position_fail() {
 
 # Position assertion, part 1 (before the run). Sets WT_REAL.
 assert_position() {
-  [ -d "$WT" ] || {
-    log "worktree not found: $WT"
-    exit 2
-  }
+  [ -d "$WT" ] || refuse_start "worktree not found: $WT"
   WT_REAL="$(cd "$WT" && pwd -P)"
-  git -C "$WT_REAL" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-    log "not a git worktree: $WT_REAL"
-    exit 2
-  }
+  git -C "$WT_REAL" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+    refuse_start "not a git worktree: $WT_REAL"
   local top common gitdir path
   top="$(real_dir "$(git -C "$WT_REAL" rev-parse --show-toplevel)")"
   # 规划/11 §2.4 规则可见性: Codex always runs at the repository root.
-  [ "$top" = "$WT_REAL" ] || {
-    log "worktree must be the repository root (got $WT_REAL, root is $top)"
-    exit 2
-  }
+  [ "$top" = "$WT_REAL" ] ||
+    refuse_start "worktree must be the repository root (got $WT_REAL, root is $top)"
   common="$(git -C "$WT_REAL" rev-parse --git-common-dir)"
   case "$common" in
     /*) ;;
@@ -785,8 +784,7 @@ archive_previous() {
     local old_pgid
     old_pgid="$(head -n 1 "$WORK/pgid" | tr -cd '0-9')"
     if [ -n "$old_pgid" ] && agent_group_alive "$old_pgid"; then
-      log "a previous $MODE run of $TASK is still alive (process group $old_pgid)"
-      exit 2
+      refuse_start "a previous $MODE run of $TASK is still alive (process group $old_pgid)"
     fi
   fi
   if [ -d "$RUN/attempts" ]; then
@@ -816,8 +814,7 @@ archive_previous() {
   fi
   rm -f "$OUT"
   if [ -e "$OUT" ]; then
-    log "cannot remove the old output file: $OUT"
-    exit 2
+    refuse_start "cannot remove the old output file: $OUT"
   fi
 }
 
@@ -917,10 +914,8 @@ print_argv() {
 }
 
 read_brief() {
-  [ -s "$RUN/brief.md" ] || {
-    log "task brief missing or empty: $RUN/brief.md (generate it with: pnpm ops:brief $TASK)"
-    exit 2
-  }
+  [ -s "$RUN/brief.md" ] ||
+    refuse_start "task brief missing or empty: $RUN/brief.md (generate it with: pnpm ops:brief $TASK)"
   BRIEF="$(cat "$RUN/brief.md")"
 }
 
@@ -1108,10 +1103,7 @@ $(cat "$guide")
 # round on also the previous round (build_previous_round).
 build_review_prompt() {
   local prompt_file="$TRUSTED/tools/agent/prompts/review-$REVIEW_TYPE.md"
-  [ -s "$prompt_file" ] || {
-    log "review prompt missing in the trusted root: $prompt_file"
-    exit 2
-  }
+  [ -s "$prompt_file" ] || refuse_start "review prompt missing in the trusted root: $prompt_file"
   local changed untracked spec_ref=''
   if [ -f "$WT_REAL/SPEC_REF" ]; then
     spec_ref="$(head -n 1 "$WT_REAL/SPEC_REF" | tr -cd '0-9a-f')"
@@ -1251,10 +1243,7 @@ run_task() {
     build_review_prompt
   fi
   case "$PROMPT" in
-    -*)
-      log "prompt must not start with '-'"
-      exit 2
-      ;;
+    -*) refuse_start "prompt must not start with '-'" ;;
   esac
   # claude-independent: the model has no shell; say where the wrapper's git context is.
   if [ "$AGENT_ENGINE" = claude-independent ]; then

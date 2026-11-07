@@ -1,0 +1,29 @@
+id: CT-06zzzu
+repo: rebate-platform
+title: CT-06zzzu：codex-run 直接 exit 2 的拒绝也退回轮次，release 按调用标识幂等（FU-CODEX-RUN-REJECT-COUNT-REST，CT-06zzzp Codex r1 两条 S2）
+type: guard-change
+# 2026-11-08 ops 入账（编排 01:54 认可把 #2709 两条 S2 并成本单，排在 CT-06zzzq 之后）。基于主干（含 #2709）。
+# ① 可信根确定之后、调用开跑之前那些直接 exit 2 的拒绝，统一改走会 release 的退出函数，退出码仍是 2：
+#   找不到或不可执行的 codex / claude 二进制、worktree 不存在 / 不是仓库 / 不是仓库根、同一任务同一模式上一轮仍活着、旧输出文件删不掉、
+#   缺任务书、可信根缺评审提示词、prompt 以 - 开头。可信根确定之前的（缺 node / perl / git、未知 AGENT_ENGINE、CODEX_HOME 拒绝）不调。
+# ② state.ts release 新增 --call <调用标识>：退掉的 bump 记 call；同一 call 已退过时什么都不改、exit 0、打印 nothing to release，
+#   不再去退更早的 bump。codex-run 每次调用生成一个标识（UTC 时间加 pid），拒绝时带上。不带 --call 的用法照旧。
+# 工具测试由新鲜独立 Claude 上下文先写、Opus（high，D10-917）再实现；Codex general 评审；按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/state.ts'
+  - 'tools/ops/state.test.ts'
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/claude-run.test.ts'
+  - 'tools/agent/testing/**'
+  - 'tools/ops/README.md'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzu.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

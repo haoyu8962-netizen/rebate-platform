@@ -8,9 +8,10 @@
 //   node tools/ops/state.ts claim <id> [--owner <session>] [--renew]
 //   node tools/ops/state.ts release <id> [--owner <session>]
 //   node tools/ops/state.ts release <id> test|impl|handover [--engine codex|claude-independent]
-//                                   --reason <text>
+//                                   --reason <text> [--call <call id>]
 //   node tools/ops/state.ts release <id> review --review-type money|general|contract|spec-test
 //                                   [--engine codex|claude-independent] --reason <text>
+//                                   [--call <call id>]
 //   node tools/ops/state.ts bump-attempt <id> test|impl|handover [--engine codex|claude-independent]
 //   node tools/ops/state.ts bump-attempt <id> review --review-type money|general|contract|spec-test
 //                                        [--engine codex|claude-independent]
@@ -68,7 +69,12 @@
 //   Older pending bumps are left alone (not superseded). A bump consumed by settle or opus-run is
 //   never released, and a released one is never paired by settle, so each bump is given back at
 //   most once. Without such a bump (or without a state file) nothing is written: exit 0,
-//   "nothing to release". `release <id>` without a kind still drops the claim (below).
+//   "nothing to release". `--call <call id>` (CT-06zzzu, FU-CODEX-RUN-REJECT-COUNT-REST: the
+//   runner's id of the refused call, one per call) makes it idempotent per call: the released bump
+//   records `call`, and when a refused bump of the same kind and engine already records that call,
+//   nothing is written either (exit 0, "nothing to release"), instead of giving back an older
+//   pending bump. Without `--call` it behaves as before. `release <id>` without a kind still drops
+//   the claim (below); `--call` is a usage error there.
 //
 // Opus failure breaker (RO2-03; default split of 2026-10-05, ops/approvals.yaml id 19): the
 // Opus implementation subagent is no Codex call and leaves no meta.json, so its runs are
@@ -193,6 +199,8 @@ export type PendingBump = {
   reason?: string;
   /** `refused` only: when the round was given back. */
   released_at?: string;
+  /** `refused` only: the runner's id of the refused call (`release --call`, CT-06zzzu). */
+  call?: string;
 };
 
 const PENDING_OUTCOMES = ['refunded', 'kept', 'superseded', 'refused'] as const;
@@ -368,10 +376,11 @@ export function parseState(raw: unknown, file: string): TaskState {
       !(e.outcome === null || (PENDING_OUTCOMES as readonly unknown[]).includes(e.outcome)) ||
       (e.consumed_by === null) !== (e.outcome === null) ||
       (e.reason !== undefined && typeof e.reason !== 'string') ||
-      (e.released_at !== undefined && typeof e.released_at !== 'string')
+      (e.released_at !== undefined && typeof e.released_at !== 'string') ||
+      (e.call !== undefined && typeof e.call !== 'string')
     ) {
       bad(
-        `pending_bumps[${i}] must be {kind, engine, bumped_at, consumed_by, outcome[, reason, released_at]}`,
+        `pending_bumps[${i}] must be {kind, engine, bumped_at, consumed_by, outcome[, reason, released_at, call]}`,
       );
     }
   });
@@ -575,6 +584,8 @@ export type ReleaseResult = {
   state: TaskState | null;
   /** True when a pending bump was given back (and the state file written). */
   released: boolean;
+  /** True when nothing was given back because the call had already given back its round. */
+  repeated?: true;
 };
 
 /**
@@ -582,8 +593,10 @@ export type ReleaseResult = {
  * (CT-06zzzp, FU-CODEX-RUN-REJECT-COUNT): the latest unconsumed pending bump of `kind` and
  * `engine` bumped in settle's window before `now` becomes `refused` (with `reason` and
  * `released_at`) and its counter goes down by one. Older pending bumps are left alone. Without
- * such a bump, or without a state file, nothing is written; calling it again is therefore
- * harmless, and a bump that settle or opus-run consumed is never given back.
+ * such a bump, or without a state file, nothing is written, and a bump that settle or opus-run
+ * consumed is never given back. With `call` (CT-06zzzu) the released bump records it, and a call
+ * that already gave back a bump of this kind and engine gives back nothing more: one release per
+ * refused call, however often it is repeated.
  */
 export function releaseRound(
   id: string,
@@ -591,10 +604,19 @@ export function releaseRound(
   engine: Engine,
   reason: string,
   now: Date = new Date(),
+  call: string | null = null,
 ): ReleaseResult {
   const prev = readState(id);
   if (prev === null) return { state: null, released: false };
   const bumps = prev.pending_bumps ?? [];
+  if (
+    call !== null &&
+    bumps.some(
+      (b) => b.outcome === 'refused' && b.kind === kind && b.engine === engine && b.call === call,
+    )
+  ) {
+    return { state: prev, released: false, repeated: true };
+  }
   const pick = latestPendingBump(bumps, kind, engine, now.getTime(), BUMP_MATCH_WINDOW_MS);
   if (pick < 0) return { state: prev, released: false };
   const at = now.toISOString();
@@ -603,7 +625,14 @@ export function releaseRound(
     attempts: { ...prev.attempts, [kind]: Math.max(0, prev.attempts[kind] - 1) },
     pending_bumps: bumps.map((b, i) =>
       i === pick
-        ? { ...b, consumed_by: `release:${at}`, outcome: 'refused', reason, released_at: at }
+        ? {
+            ...b,
+            consumed_by: `release:${at}`,
+            outcome: 'refused',
+            reason,
+            released_at: at,
+            ...(call === null ? {} : { call }),
+          }
         : b,
     ),
     updated_at: at,
@@ -1092,6 +1121,7 @@ function main(argv: string[]): number {
       'dry-run': { type: 'boolean', default: false },
       engine: { type: 'string' },
       reason: { type: 'string' },
+      call: { type: 'string' },
     },
     allowPositionals: true,
   });
@@ -1152,7 +1182,7 @@ function main(argv: string[]): number {
   }
   if (cmd === 'release' && extra === undefined) {
     // Without a kind: drops the claim (the round options belong to the other form).
-    for (const flag of ['reason', 'review-type', 'engine'] as const) {
+    for (const flag of ['reason', 'review-type', 'engine', 'call'] as const) {
       if (values[flag] !== undefined) {
         throw new UsageError(
           `release <id> --${flag} needs a kind: release <id> <kind> --reason <text>`,
@@ -1174,8 +1204,17 @@ function main(argv: string[]): number {
     if (reason === '') {
       throw new UsageError('release <id> <kind> needs --reason <why the call was refused>');
     }
-    const res = releaseRound(id, kind, engine, reason);
+    let call: string | null = null;
+    if (values.call !== undefined) {
+      call = values.call.trim();
+      if (call === '') throw new UsageError('--call needs the id of the refused call');
+    }
+    const res = releaseRound(id, kind, engine, reason, new Date(), call);
     if (!res.released) {
+      if (res.repeated === true) {
+        console.log(`${id}: nothing to release (call ${call} already gave back its ${kind} round)`);
+        return 0;
+      }
       console.log(
         `${id}: nothing to release (no pending ${kind} bump of ${engine} in the last ${BUMP_MATCH_WINDOW_MS / 60_000} minutes)`,
       );

@@ -1258,3 +1258,153 @@ it(
     removeDir(stateFile(id));
   },
 );
+
+// CT-06zzzu (FU-CODEX-RUN-REJECT-COUNT-REST, #2709 Codex r1 S2 ①): `release <id> <kind> …
+// --reason <text> --call <id of the refused call>`. The released bump records `call`; a call that
+// already gave back its round gives back nothing more (exit 0, "nothing to release", the state
+// file unchanged), instead of releasing an older pending bump of the same kind and engine.
+
+it(
+  '[CT-06zzzu] release --call records the call on the bump it gives back, besides refused, reason and released_at',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-11';
+    bumpAttempt(id, 'test', new Date(Date.now() - 1000));
+    expect(readState(id)?.attempts.test).toBe(1);
+    const from = Date.now();
+    const res = releaseBump(id, ['test', '--call', 'C1'], 'tester: none');
+    const to = Date.now();
+    expect(res.status, res.stderr).toBe(0);
+    expect(res.stdout + res.stderr).not.toContain('nothing to release');
+    // readState validates the file: a bump with `call` is a valid state file.
+    const state = readState(id);
+    expect(state?.attempts.test).toBe(0);
+    const [refused] = bumpsOf(id);
+    expect(refused).toMatchObject({
+      kind: 'test',
+      engine: 'codex',
+      outcome: 'refused',
+      reason: 'tester: none',
+      call: 'C1',
+    });
+    expect(typeof refused?.['consumed_by']).toBe('string');
+    const at = Date.parse(String(refused?.['released_at']));
+    expect(at).toBeGreaterThanOrEqual(from - 1000);
+    expect(at).toBeLessThanOrEqual(to + 1000);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzu] the same --call twice with two pending bumps: the second gives back nothing, the older bump stays pending',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    // #2709 Codex r1 S2: a repeated release of one refused call took the older bump as well.
+    const id = 'R9-12';
+    const now = Date.now();
+    bumpAttempt(id, 'spec-test', new Date(now - 120_000));
+    bumpAttempt(id, 'spec-test', new Date(now - 60_000));
+    expect(readState(id)?.attempts['spec-test']).toBe(2);
+    const first = releaseBump(id, [...SPEC_REVIEW, '--call', 'C1']);
+    expect(first.status, first.stderr).toBe(0);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    let [older, later] = bumpsOf(id);
+    expect(later).toMatchObject({
+      bumped_at: new Date(now - 60_000).toISOString(),
+      outcome: 'refused',
+      call: 'C1',
+    });
+    expect(older).toMatchObject({ consumed_by: null, outcome: null });
+    // The same call again: exit 0, "nothing to release", the file byte for byte as it was.
+    expectNothingReleased(id, [...SPEC_REVIEW, '--call', 'C1']);
+    expect(readState(id)?.attempts['spec-test']).toBe(1);
+    [older, later] = bumpsOf(id);
+    expect(older).toMatchObject({
+      bumped_at: new Date(now - 120_000).toISOString(),
+      consumed_by: null,
+      outcome: null,
+    });
+    expect(older?.['call'] ?? null).toBeNull();
+    expect(later).toMatchObject({ outcome: 'refused', call: 'C1' });
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzu] another --call gives back the next pending bump, the older one',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-13';
+    const now = Date.now();
+    bumpAttempt(id, 'test', new Date(now - 120_000));
+    bumpAttempt(id, 'test', new Date(now - 60_000));
+    expect(releaseBump(id, ['test', '--call', 'C1']).status).toBe(0);
+    expectNothingReleased(id, ['test', '--call', 'C1']);
+    expect(readState(id)?.attempts.test).toBe(1);
+    const res = releaseBump(id, ['test', '--call', 'C2']);
+    expect(res.status, res.stderr).toBe(0);
+    expect(res.stdout + res.stderr).not.toContain('nothing to release');
+    expect(readState(id)?.attempts.test).toBe(0);
+    expect(bumpsOf(id).map((b) => [b['bumped_at'], b['outcome'], b['call']])).toEqual([
+      [new Date(now - 120_000).toISOString(), 'refused', 'C2'],
+      [new Date(now - 60_000).toISOString(), 'refused', 'C1'],
+    ]);
+    // Both calls have given back their round: neither gives back anything more.
+    expectNothingReleased(id, ['test', '--call', 'C1']);
+    expectNothingReleased(id, ['test', '--call', 'C2']);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzu] release without --call works as in CT-06zzzp: each release gives back the latest pending bump',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-14';
+    const now = Date.now();
+    bumpAttempt(id, 'code', new Date(now - 120_000));
+    bumpAttempt(id, 'code', new Date(now - 60_000));
+    const money = ['review', '--review-type', 'money'];
+    expect(releaseBump(id, money).status).toBe(0);
+    expect(readState(id)?.attempts.code).toBe(1);
+    expect(bumpsOf(id).map((b) => b['outcome'])).toEqual([null, 'refused']);
+    expect(releaseBump(id, money).status).toBe(0);
+    expect(readState(id)?.attempts.code).toBe(0);
+    const bumps = bumpsOf(id);
+    expect(bumps.map((b) => b['outcome'])).toEqual(['refused', 'refused']);
+    // A release without --call records no call.
+    for (const b of bumps) expect(b['call'] ?? null).toBeNull();
+    expectNothingReleased(id, money);
+    removeDir(stateFile(id));
+  },
+);
+
+it(
+  '[CT-06zzzu] release --call needs a value that is not blank, and only with a kind',
+  { timeout: CLI_TIMEOUT },
+  () => {
+    const id = 'R9-15';
+    claimTask(id, { owner: 'session-c' });
+    bumpAttempt(id, 'test', new Date(Date.now() - 1000));
+    const before = readFileSync(stateFile(id), 'utf8');
+    for (const args of [
+      ['test', '--reason', 'r', '--call', ''],
+      ['test', '--reason', 'r', '--call', '   '],
+      ['test', '--reason', 'r', '--call', '\t'],
+      ['test', '--reason', 'r', '--call=   '],
+      ['test', '--reason', 'r', '--call'],
+      // --call belongs to giving back a round, not to dropping the claim.
+      ['--call', 'C1'],
+    ]) {
+      const res = runCli('state.ts', ['release', id, ...args]);
+      expect(res.status, JSON.stringify(args)).toBe(2);
+      expect(readFileSync(stateFile(id), 'utf8'), JSON.stringify(args)).toBe(before);
+    }
+    expect(existsSync(claimDir(id))).toBe(true);
+    // With a value the same bump is given back.
+    expect(releaseBump(id, ['test', '--call', 'C1']).status).toBe(0);
+    expect(readState(id)?.attempts.test).toBe(0);
+    removeDir(claimDir(id));
+    removeDir(stateFile(id));
+  },
+);

@@ -6,9 +6,11 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,14 +22,19 @@ import {
   FAKE_CODEX,
   type Fixture,
   gitIn,
+  installLoggedState,
+  isAlive,
   makeFixture,
   observed,
   observedArgv,
   readJson,
+  type RunResult,
   runScript,
   stubCalls,
   TASK,
   TOOLS_DIR,
+  trustedState,
+  trustedTaskState,
   writeStub,
 } from './testing/fixture.ts';
 
@@ -1464,3 +1471,379 @@ it('[CT-06zzzp] a failing release is a warning: the refusal still exits 2', LONG
     res.stderr,
   ).toBe(true);
 });
+
+// CT-06zzzu (FU-CODEX-RUN-REJECT-COUNT-REST, #2709 Codex r1 S2 ②): the refusals that exit 2
+// directly once the trusted root is resolved (no codex binary, an invalid worktree, a previous run
+// still alive, no task brief, no review prompt in the trusted root, a prompt starting with `-`)
+// give back the caller's round as well, and every release names the refused call (`--call`).
+
+const groups: number[] = [];
+afterEach(() => {
+  for (const pgid of groups.splice(0)) {
+    try {
+      process.kill(-pgid, 'SIGKILL');
+    } catch {
+      // already gone
+    }
+  }
+});
+
+/** A fixture with the real state.ts behind the logging shim and an RV1 ledger. */
+function refusalFixture(name: string): Fixture {
+  const fx = fixture(name);
+  installLoggedState(fx);
+  taskLedger(fx, { risk: 'RV1', tester: 'none' });
+  return fx;
+}
+
+type Bump = { args: readonly string[]; kind: string; engine?: string };
+const TEST_ROUND: Bump = { args: ['test'], kind: 'test' };
+const GENERAL_ROUND: Bump = { args: ['review', '--review-type', 'general'], kind: 'code' };
+
+/** Bumps a round as the caller does and empties the call log, so it holds only the next call. */
+function bumpThenClear(fx: Fixture, bump: Bump): number {
+  const before = trustedTaskState(fx)?.attempts[bump.kind] ?? 0;
+  const engine = bump.engine ?? 'codex';
+  const res = trustedState(fx, ['bump-attempt', TASK, ...bump.args, '--engine', engine]);
+  expect(res.status, res.stderr).toBe(0);
+  expect(trustedTaskState(fx)?.attempts[bump.kind]).toBe(before + 1);
+  rmSync(join(fx.log, 'calls.log'), { force: true });
+  return before;
+}
+
+/**
+ * Bumps a round, runs a call the wrapper refuses before it starts and checks the refusal: exit
+ * still 2, the stated reason, the counter back where it was before the bump, that bump `refused`
+ * with the call id, and exactly one release, carrying the same id. Returns the call id.
+ */
+function expectRoundGivenBack(
+  fx: Fixture,
+  bump: Bump,
+  run: () => RunResult,
+  why: string | null,
+): string {
+  const before = bumpThenClear(fx, bump);
+  const engine = bump.engine ?? 'codex';
+  const res = run();
+  expect(res.status, res.stderr).toBe(2);
+  if (why !== null) expect(res.stderr).toContain(why);
+  expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
+  const state = trustedTaskState(fx);
+  expect(state?.attempts[bump.kind], res.stderr).toBe(before);
+  const last = state?.pending_bumps.at(-1);
+  expect(last).toMatchObject({ kind: bump.kind, engine, outcome: 'refused' });
+  const call = String(last?.['call'] ?? '');
+  expect(call).not.toBe('');
+  expect(call.startsWith('-')).toBe(false);
+  const releases = releaseCalls(fx);
+  expect(releases, res.stderr).toHaveLength(1);
+  const argv = releases[0] ?? [];
+  expect(flagValue(argv, '--engine')).toBe(engine);
+  expect(flagValue(argv, '--call')).toBe(call);
+  return call;
+}
+
+/**
+ * fx's PATH without any of `names`: a directory that holds one of them is replaced by a farm of
+ * symlinks to its other entries (node, for one, sits next to codex and claude in an nvm bin).
+ */
+function pathWithout(fx: Fixture, names: readonly string[]): string {
+  const farm = join(fx.root, `path-without-${names.join('-')}`);
+  mkdirSync(farm, { recursive: true });
+  const dirs: string[] = [];
+  for (const dir of (fx.env['PATH'] ?? '').split(':')) {
+    if (dir === '') continue;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    if (!names.some((name) => entries.includes(name))) {
+      dirs.push(dir);
+      continue;
+    }
+    if (!dirs.includes(farm)) dirs.push(farm);
+    for (const entry of entries) {
+      if (names.includes(entry)) continue;
+      try {
+        symlinkSync(join(dir, entry), join(farm, entry));
+      } catch {
+        // an earlier directory of PATH already provides it
+      }
+    }
+  }
+  return dirs.join(':');
+}
+
+it(
+  '[CT-06zzzu] no codex binary on PATH, or a replacement that is not executable: exit 2, the round is given back',
+  LONG,
+  () => {
+    const fx = refusalFixture('rest-bin');
+    const env = { COULI_CODEX_BIN: '', PATH: pathWithout(fx, ['codex', 'claude']) };
+    const calls = [
+      expectRoundGivenBack(
+        fx,
+        TEST_ROUND,
+        () => codexRun(fx, ['impl', TASK], env),
+        'codex binary not found on PATH',
+      ),
+    ];
+    const notExec = join(fx.root, 'codex-not-executable');
+    writeFileSync(notExec, '#!/bin/sh\nexit 0\n', { mode: 0o644 });
+    calls.push(
+      expectRoundGivenBack(
+        fx,
+        TEST_ROUND,
+        () => codexRun(fx, ['impl', TASK], { COULI_CODEX_BIN: notExec }),
+        'is not executable',
+      ),
+    );
+    expect(new Set(calls).size).toBe(calls.length);
+    expect(trustedTaskState(fx)?.pending_bumps.map((b) => b['outcome'])).toEqual([
+      'refused',
+      'refused',
+    ]);
+  },
+);
+
+it(
+  '[CT-06zzzu] a worktree that does not exist, is not the repository root or is no repository: exit 2, the round is given back',
+  LONG,
+  () => {
+    const fx = refusalFixture('rest-worktree');
+    const plain = join(fx.root, 'plain-dir');
+    mkdirSync(plain);
+    const calls = [
+      expectRoundGivenBack(
+        fx,
+        TEST_ROUND,
+        () => codexRun(fx, ['impl', TASK, '--worktree', join(fx.root, 'no-such-worktree')]),
+        'worktree not found',
+      ),
+      expectRoundGivenBack(
+        fx,
+        TEST_ROUND,
+        () => codexRun(fx, ['impl', TASK, '--worktree', join(fx.worktree, 'src')]),
+        'must be the repository root',
+      ),
+      // Not a git repository of its own (inside the checkout's .tmp it is a subdirectory of the
+      // checkout, elsewhere no repository at all): refused either way.
+      expectRoundGivenBack(
+        fx,
+        TEST_ROUND,
+        () => codexRun(fx, ['impl', TASK, '--worktree', plain]),
+        null,
+      ),
+    ];
+    expect(new Set(calls).size).toBe(calls.length);
+    expect(trustedTaskState(fx)?.attempts.test).toBe(0);
+  },
+);
+
+it(
+  '[CT-06zzzu] a task brief that is missing or empty: exit 2, the round is given back',
+  LONG,
+  () => {
+    const fx = refusalFixture('rest-brief');
+    rmSync(join(fx.run, 'brief.md'));
+    const calls = [
+      expectRoundGivenBack(
+        fx,
+        TEST_ROUND,
+        () => codexRun(fx, ['impl', TASK]),
+        'task brief missing or empty',
+      ),
+    ];
+    writeFileSync(join(fx.run, 'brief.md'), '');
+    calls.push(
+      expectRoundGivenBack(
+        fx,
+        GENERAL_ROUND,
+        () => codexRun(fx, ['review', TASK, '--review-type', 'general', '--base', fx.baseSha]),
+        'task brief missing or empty',
+      ),
+    );
+    expect(new Set(calls).size).toBe(calls.length);
+    expect(trustedTaskState(fx)?.attempts).toMatchObject({ test: 0, code: 0 });
+  },
+);
+
+it(
+  '[CT-06zzzu] review: the trusted root has no prompts/review-<type>.md: exit 2, the round is given back',
+  LONG,
+  () => {
+    const fx = refusalFixture('rest-prompt');
+    rmSync(join(fx.trusted, 'tools', 'agent', 'prompts', 'review-general.md'));
+    expectRoundGivenBack(
+      fx,
+      GENERAL_ROUND,
+      () => codexRun(fx, ['review', TASK, '--review-type', 'general', '--base', fx.baseSha]),
+      'review prompt missing in the trusted root',
+    );
+    // A review prompt that is there but empty is missing as well.
+    writeFileSync(join(fx.trusted, 'tools', 'agent', 'prompts', 'review-general.md'), '');
+    expectRoundGivenBack(
+      fx,
+      GENERAL_ROUND,
+      () => codexRun(fx, ['review', TASK, '--review-type', 'general', '--base', fx.baseSha]),
+      'review prompt missing in the trusted root',
+    );
+    expect(trustedTaskState(fx)?.attempts.code).toBe(0);
+  },
+);
+
+it(
+  '[CT-06zzzu] a previous run of the same task and mode still alive: exit 2, the round is given back',
+  LONG,
+  () => {
+    const fx = refusalFixture('rest-alive');
+    // A live process group, as in dispatch.test.ts (post-run: an orphaned Codex group).
+    const started = spawnSync(
+      'bash',
+      ['-c', `perl -e 'setpgrp(0, 0); exec "sleep", "120"' >/dev/null 2>&1 </dev/null & echo $!`],
+      { encoding: 'utf8' },
+    );
+    const pgid = Number(started.stdout.trim());
+    expect(pgid).toBeGreaterThan(1);
+    groups.push(pgid);
+    const deadline = Date.now() + 5_000;
+    while (!isAlive(pgid) && Date.now() < deadline) spawnSync('sleep', ['0.05']);
+    expect(isAlive(pgid)).toBe(true);
+    mkdirSync(join(fx.run, 'wrapper-impl'), { recursive: true });
+    writeFileSync(join(fx.run, 'wrapper-impl', 'pgid'), `${pgid}\n`);
+    expectRoundGivenBack(fx, TEST_ROUND, () => codexRun(fx, ['impl', TASK]), 'is still alive');
+    // The live run is left alone.
+    expect(isAlive(pgid)).toBe(true);
+  },
+);
+
+it("[CT-06zzzu] a prompt that starts with '-': exit 2, the round is given back", LONG, () => {
+  const fx = refusalFixture('rest-dash');
+  // A test-phase brief whose first line is its phase line: the prompt starts with '-'.
+  writeFileSync(join(fx.run, 'brief.md'), '- 本轮阶段：test（fixture）\n\nDo not commit.\n');
+  expectRoundGivenBack(
+    fx,
+    TEST_ROUND,
+    () => codexRun(fx, ['impl', TASK]),
+    "prompt must not start with '-'",
+  );
+});
+
+it(
+  '[CT-06zzzu] one call releases at most once, with one non-empty call id that does not start with -; each call has its own',
+  LONG,
+  () => {
+    const fx = fixture('rest-once');
+    writeStub(join(fx.trusted, 'tools', 'ops', 'state.ts'), 'state');
+    taskLedger(fx, { risk: 'RV1', tester: 'none' });
+    rmSync(join(fx.run, 'brief.md'));
+    const refusals: [string, () => RunResult][] = [
+      ['no brief', () => codexRun(fx, ['impl', TASK])],
+      ['no worktree', () => codexRun(fx, ['impl', TASK, '--worktree', join(fx.root, 'none')])],
+      [
+        'no codex',
+        () =>
+          codexRun(fx, ['impl', TASK], {
+            COULI_CODEX_BIN: '',
+            PATH: pathWithout(fx, ['codex', 'claude']),
+          }),
+      ],
+      [
+        'no brief, review',
+        () => codexRun(fx, ['review', TASK, '--review-type', 'general', '--base', fx.baseSha]),
+      ],
+      // A refusal that already released before CT-06zzzu (CT-06zzzp) names its call as well.
+      ['spec-test, no author', () => codexRun(fx, specReview(fx))],
+    ];
+    const ids: string[] = [];
+    for (const [label, run] of refusals) {
+      rmSync(join(fx.log, 'calls.log'), { force: true });
+      const res = run();
+      expect(res.status, `${label}: ${res.stderr}`).toBe(2);
+      const releases = releaseCalls(fx);
+      expect(releases, label).toHaveLength(1);
+      const call = flagValue(releases[0] ?? [], '--call') ?? '';
+      expect(call, label).not.toBe('');
+      expect(call.trim(), label).toBe(call);
+      expect(call.startsWith('-'), label).toBe(false);
+      ids.push(call);
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+  },
+);
+
+it(
+  '[CT-06zzzu] a refused --dry-run releases nothing and leaves the state alone; without --dry-run the same refusal does',
+  LONG,
+  () => {
+    const fx = refusalFixture('rest-dry');
+    rmSync(join(fx.run, 'brief.md'));
+    bumpThenClear(fx, TEST_ROUND);
+    const stateFile = join(fx.runs, 'state', `${TASK}.json`);
+    const before = readFileSync(stateFile, 'utf8');
+    for (const args of [
+      ['impl', TASK, '--dry-run'],
+      ['impl', TASK, '--worktree', join(fx.root, 'no-such-worktree'), '--dry-run'],
+    ]) {
+      const res = codexRun(fx, args);
+      expect(res.status, args.join(' ')).toBe(2);
+      expect(releaseCalls(fx), args.join(' ')).toEqual([]);
+      expect(readFileSync(stateFile, 'utf8'), args.join(' ')).toBe(before);
+    }
+    // The bump of the dry runs is still pending; the real call gives it back.
+    const res = codexRun(fx, ['impl', TASK]);
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain('task brief missing or empty');
+    expect(releaseCalls(fx)).toHaveLength(1);
+    expect(trustedTaskState(fx)?.attempts.test).toBe(0);
+    expect(trustedTaskState(fx)?.pending_bumps).toEqual([
+      expect.objectContaining({ kind: 'test', outcome: 'refused' }),
+    ]);
+  },
+);
+
+it(
+  '[CT-06zzzu] a refusal before the trusted root is known releases nothing: no perl, an unknown AGENT_ENGINE, CODEX_HOME',
+  LONG,
+  () => {
+    const fx = refusalFixture('rest-early');
+    rmSync(join(fx.run, 'brief.md'));
+    bumpThenClear(fx, TEST_ROUND);
+    const stateFile = join(fx.runs, 'state', `${TASK}.json`);
+    const before = readFileSync(stateFile, 'utf8');
+    // codex-run.sh sourced with an engine nobody defined (claude-run.sh sources it the same way).
+    const other = join(fx.root, 'other-run.sh');
+    writeFileSync(
+      other,
+      `#!/usr/bin/env bash\nset -euo pipefail\nAGENT_ENGINE=gemini\n. "${join(AGENT_DIR, 'codex-run.sh')}" "$@"\n`,
+    );
+    const early: [string, () => RunResult][] = [
+      ['no perl', () => codexRun(fx, ['impl', TASK], { PATH: pathWithout(fx, ['perl']) })],
+      [
+        'unknown engine',
+        () => {
+          const res = spawnSync('bash', [other, 'impl', TASK], { encoding: 'utf8', env: fx.env });
+          return { status: res.status, stdout: res.stdout, stderr: res.stderr };
+        },
+      ],
+      [
+        'CODEX_HOME',
+        () => codexRun(fx, ['impl', TASK], { CODEX_HOME: join(fx.root, 'other-home') }),
+      ],
+    ];
+    for (const [label, run] of early) {
+      const res = run();
+      expect(res.status, `${label}: ${res.stderr}`).toBe(2);
+      expect(releaseCalls(fx), label).toEqual([]);
+      expect(readFileSync(stateFile, 'utf8'), label).toBe(before);
+    }
+    expect(trustedTaskState(fx)?.attempts.test).toBe(1);
+    // Once the trusted root is known the same pending round is given back.
+    const res = codexRun(fx, ['impl', TASK]);
+    expect(res.status).toBe(2);
+    expect(releaseCalls(fx)).toHaveLength(1);
+    expect(trustedTaskState(fx)?.attempts.test).toBe(0);
+  },
+);

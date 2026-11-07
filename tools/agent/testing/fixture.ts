@@ -283,3 +283,55 @@ export function isAlive(pid: number): boolean {
     return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
+
+/**
+ * CT-06zzzu: the real tools/ops/state.ts (with what it imports) in the trusted root, behind a
+ * shim that first logs its argv to `<FAKE_OPS_LOG>/calls.log` as `["state", ...argv]` (the same
+ * log as writeStub) and then runs the real one as `state-real.ts`. Tests see both the state file
+ * the real state.ts writes and every call the wrapper made (stubCalls(fx, 'state')).
+ */
+export function installLoggedState(fx: Fixture): void {
+  const ops = join(fx.trusted, 'tools', 'ops');
+  mkdirSync(ops, { recursive: true });
+  for (const file of ['cli.ts', 'lock.ts']) cpSync(join(TOOLS_DIR, 'ops', file), join(ops, file));
+  cpSync(join(TOOLS_DIR, 'ops', 'state.ts'), join(ops, 'state-real.ts'));
+  const source = [
+    "import { spawnSync } from 'node:child_process';",
+    "import { appendFileSync, mkdirSync } from 'node:fs';",
+    "import { dirname, join } from 'node:path';",
+    "import { fileURLToPath } from 'node:url';",
+    "const dir = process.env['FAKE_OPS_LOG'] ?? '';",
+    'const args = process.argv.slice(2);',
+    "if (dir !== '') {",
+    '  mkdirSync(dir, { recursive: true });',
+    "  appendFileSync(join(dir, 'calls.log'), JSON.stringify(['state', ...args]) + '\\n');",
+    '}',
+    "const real = join(dirname(fileURLToPath(import.meta.url)), 'state-real.ts');",
+    "const res = spawnSync(process.execPath, [real, ...args], { stdio: 'inherit' });",
+    'process.exitCode = res.status ?? 2;',
+    '',
+  ].join('\n');
+  writeFileSync(join(ops, 'state.ts'), source);
+}
+
+/** CT-06zzzu: runs the trusted state.ts directly (not logged), e.g. a caller's bump-attempt. */
+export function trustedState(fx: Fixture, args: readonly string[]): RunResult {
+  const res = spawnSync(
+    process.execPath,
+    [join(fx.trusted, 'tools', 'ops', 'state-real.ts'), ...args],
+    { encoding: 'utf8', env: fx.env },
+  );
+  return { status: res.status, stdout: res.stdout, stderr: res.stderr };
+}
+
+/** CT-06zzzu: the task's state file in the fixture's run-state directory, or null. */
+export function trustedTaskState(
+  fx: Fixture,
+): { attempts: Record<string, number>; pending_bumps: Record<string, unknown>[] } | null {
+  const file = join(fx.runs, 'state', `${TASK}.json`);
+  if (!existsSync(file)) return null;
+  return JSON.parse(readFileSync(file, 'utf8')) as {
+    attempts: Record<string, number>;
+    pending_bumps: Record<string, unknown>[];
+  };
+}

@@ -16,6 +16,7 @@ import { afterEach, expect, it } from 'vitest';
 import {
   FAKE_CLAUDE,
   type Fixture,
+  installLoggedState,
   makeFixture,
   observed,
   observedArgv,
@@ -23,6 +24,8 @@ import {
   runScript,
   stubCalls,
   TASK,
+  trustedState,
+  trustedTaskState,
   writeFakeFormatters,
   writeStub,
 } from './testing/fixture.ts';
@@ -587,6 +590,40 @@ it(
     expect(after(argv, '--review-type')).toBe('spec-test');
     expect(after(argv, '--engine')).toBe('claude-independent');
     expect(after(argv, '--reason') ?? '').not.toBe('');
+    expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
+  },
+);
+
+it(
+  '[CT-06zzzu] claude-run.sh: a direct exit 2 (no task brief) gives back the round as claude-independent, with the call id',
+  LONG,
+  () => {
+    const fx = fixture('release-rest');
+    installLoggedState(fx);
+    ledger(fx, {});
+    rmSync(join(fx.run, 'brief.md'));
+    const engine = ['--engine', 'claude-independent'];
+    const bump = trustedState(fx, ['bump-attempt', TASK, 'test', ...engine]);
+    expect(bump.status, bump.stderr).toBe(0);
+    expect(trustedTaskState(fx)?.attempts['test']).toBe(1);
+    rmSync(join(fx.log, 'calls.log'), { force: true });
+    const res = claudeRun(fx, ['impl', TASK]);
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain('task brief missing or empty');
+    const state = trustedTaskState(fx);
+    expect(state?.attempts['test']).toBe(0);
+    expect(state?.pending_bumps).toEqual([
+      expect.objectContaining({ kind: 'test', engine: 'claude-independent', outcome: 'refused' }),
+    ]);
+    const call = String(state?.pending_bumps[0]?.['call'] ?? '');
+    expect(call).not.toBe('');
+    expect(call.startsWith('-')).toBe(false);
+    const calls = stubCalls(fx, 'state').filter((c) => c[1] === 'release');
+    expect(calls).toHaveLength(1);
+    const argv = calls[0] ?? [];
+    expect(argv.slice(0, 4)).toEqual(['state', 'release', TASK, 'test']);
+    expect(after(argv, '--engine')).toBe('claude-independent');
+    expect(after(argv, '--call')).toBe(call);
     expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
   },
 );
