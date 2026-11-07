@@ -5,6 +5,7 @@ type: impl
 # 2026-11-07 入账（前端线 f1-frontend-7，D10-837 ③；令牌 couli #296 v0.5.2 motion 组、03 §10.6）。依据：design/ui-rules/README.md §2 L2 骨架（带微光、>300 ms 才出、至少 300 ms、减弱动态不播微光）、§3.3（尊重减弱动态）；D10-838 ①：H5 读 --motion-duration-* / --motion-easing-* / skeleton 三个数，代码仓库令牌生成器先核能否吃 duration / cubicBezier 新类型，不能就最小改动支持（照 sync-brand.py 转换规则）。
 # 整改计划 DSX-48 另含「Toast 只在站外分支保留底部定位」与状态键对齐，本单一并核；DSX-108 验收「apps/h5 和 ui-tokens 里有 forced-colors 规则」。非资金。规则测试新鲜独立 Claude，评审 Codex（D10-823）。
 # 2026-11-07 22:1x 补 paths（前端线）：代码仓库 contracts/design-tokens.json 仍是 0.5.1（无 motion 组），规划仓库已到 0.5.2（couli #296）。本单先把快照整份换成 0.5.2（contracts/README 该行改版本号与来源提交，照 CT-11a 口径），ui-tokens 生成器支持 duration（ms）与 cubicBezier 两种新类型并重生成生成物，再在 H5 读 --motion-*。
+# 2026-11-08 04:0x 补 test_paths（前端线）：规则测试 r1 交回时报冻结 test/spec/frontend/ui-tokens/** 钉 0.5.1 / f088f04（snapshot AC-CT-11a#1/#2、drift #10–#13、upgrade AC-CT-11ba#1、kit SOURCE_COMMIT 与两个夹具），升 0.5.2 后必红。照 CT-11ba / CT-11b 先例由测试作者换成 c98ae93f 与 0.5.2、补 motion 组的生成断言，只改钉值、不放宽，按 #24 报核；dark.test 若只换夹具路径记 red_exempt_outside。.prettierignore 若新快照不合 prettier 照 D10-675 加逐字快照忽略。
 refs: []
 refs_hash: {}
 deps: [DSX-46]
@@ -14,8 +15,10 @@ paths:
   - 'packages/ui-tokens/**'
   - 'contracts/design-tokens.json'
   - 'contracts/README.md'
+  - '.prettierignore'
 test_paths:
   - 'test/spec/frontend/h5-state-motion/**'
+  - 'test/spec/frontend/ui-tokens/**'
 impl: claude
 tester: claude-independent
 accept:
