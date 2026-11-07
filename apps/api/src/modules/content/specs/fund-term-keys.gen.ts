@@ -124,6 +124,7 @@ export const FUND_TERM_KEYS = {
       "ORDER_INVALID",
       "CREDITED",
       "CLAWBACK",
+      "SETTLE_ADJUSTED",
       "WD_SUCCESS",
       "WD_REJECTED",
       "WD_FAILED",

@@ -1,0 +1,102 @@
+{
+  "risk_note": "RV1 contract (FU-SETTLE-ADJ-NOTIFY part A; orchestrator D10-773, values marked as agent-completed defaults, 08 / 04 written back by the orchestrator after merge). notify_template_code gains SETTLE_ADJUSTED right after CLAWBACK (contracts/enums/ops.yaml); texts.default.json gains inbox.title.SETTLE_ADJUSTED.self 「返利已调整」, .share 「推广收益已调整」, .invite 「邀请奖励已调整」 (variant names as ORDER_TRACKED / ORDER_INVALID); specs/fund-term-keys.yaml lists SETTLE_ADJUSTED under fund_terms.notify_templates. Body texts stay in the consumer task B1-12zc's code like CLAWBACK and WD_*; no openapi shape change (AdminNotifyTemplateCode is a pattern string); no migration. Generated files regenerated (pnpm codegen, generate-text-specs). Full verification by the required CI checks (ops/approvals.yaml #21; D10-772).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex unavailable (quota until 11-11); fresh independent Claude via tools/agent/claude-run.sh (ops/approvals.yaml #36), round 1 pass, no findings. Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context (16 tests in 3 files under test/spec/contracts/settle-adjusted-template/, container red/1 PASS, red for the right reason). Spec-test round 1 pass with two S2 left open: [AC-CT-26za#6] compares only the existing inbox.title.* keys (a deleted non-inbox key would not be caught by these tests; the CI text and contract checks cover the dictionary), and expectInserted does not reject an extra unrelated enum value."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/settle-adjusted-template/enums.test.ts > [AC-CT-26za#1] ops.yaml notify_template_code 新增 SETTLE_ADJUSTED，紧随 CLAWBACK，原有值一个不少",
+    "test/spec/contracts/settle-adjusted-template/enums.test.ts > [AC-CT-26za#2] 新增 SETTLE_ADJUSTED 后原有编码的中文名一个不改",
+    "test/spec/contracts/settle-adjusted-template/enums.test.ts > [AC-CT-26za#3] 生成的 notify_template_code 与 ops.yaml 同步含 SETTLE_ADJUSTED",
+    "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#8] fund_terms.notify_templates 加 SETTLE_ADJUSTED，原有资金类模板一个不少",
+    "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#9] ordinary.notify_templates 不变且不含 SETTLE_ADJUSTED，每个模板编码只落一段",
+    "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#10] 生成的 fund-term-keys.gen.ts 与 YAML 同步含 SETTLE_ADJUSTED",
+    "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#11] 资金术语清单整体核对（键与模板归类、例外表）在新增后无问题",
+    "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#12] inbox.title.SETTLE_ADJUSTED.self 归资金术语且过禁用词检查（不出现被禁的资金措辞）",
+    "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#12] inbox.title.SETTLE_ADJUSTED.share 归资金术语且过禁用词检查（不出现被禁的资金措辞）",
+    "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#12] inbox.title.SETTLE_ADJUSTED.invite 归资金术语且过禁用词检查（不出现被禁的资金措辞）",
+    "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#4] inbox.title.SETTLE_ADJUSTED.self 默认文案逐字等于 D10-773 定案",
+    "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#4] inbox.title.SETTLE_ADJUSTED.share 默认文案逐字等于 D10-773 定案",
+    "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#4] inbox.title.SETTLE_ADJUSTED.invite 默认文案逐字等于 D10-773 定案",
+    "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#5] 契约只加三个站内信短标题，不加正文键",
+    "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#6] 新增标题后原有 inbox.title.* 键与取值一个不改、不删",
+    "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#7] 三个新键按字典序插在 inbox.title.* 之间"
+  ],
+  "task": "CT-26za",
+  "spec_commit": "c7af87843c128ead21fe35fd8f569383ef064f94",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c7af87843c128ead21fe35fd8f569383ef064f94",
+      "tree": "8b671b90fdeffeb9db1d9892259c267f493e32e5",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T19:33:15Z",
+      "finished_at": "2026-11-06T19:33:23Z",
+      "red_tests": [
+        "test/spec/contracts/settle-adjusted-template/enums.test.ts > [AC-CT-26za#1] ops.yaml notify_template_code 新增 SETTLE_ADJUSTED，紧随 CLAWBACK，原有值一个不少",
+        "test/spec/contracts/settle-adjusted-template/enums.test.ts > [AC-CT-26za#2] 新增 SETTLE_ADJUSTED 后原有编码的中文名一个不改",
+        "test/spec/contracts/settle-adjusted-template/enums.test.ts > [AC-CT-26za#3] 生成的 notify_template_code 与 ops.yaml 同步含 SETTLE_ADJUSTED",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#8] fund_terms.notify_templates 加 SETTLE_ADJUSTED，原有资金类模板一个不少",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#9] ordinary.notify_templates 不变且不含 SETTLE_ADJUSTED，每个模板编码只落一段",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#10] 生成的 fund-term-keys.gen.ts 与 YAML 同步含 SETTLE_ADJUSTED",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#11] 资金术语清单整体核对（键与模板归类、例外表）在新增后无问题",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#12] inbox.title.SETTLE_ADJUSTED.self 归资金术语且过禁用词检查（不出现被禁的资金措辞）",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#12] inbox.title.SETTLE_ADJUSTED.share 归资金术语且过禁用词检查（不出现被禁的资金措辞）",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts > [AC-CT-26za#12] inbox.title.SETTLE_ADJUSTED.invite 归资金术语且过禁用词检查（不出现被禁的资金措辞）",
+        "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#4] inbox.title.SETTLE_ADJUSTED.self 默认文案逐字等于 D10-773 定案",
+        "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#4] inbox.title.SETTLE_ADJUSTED.share 默认文案逐字等于 D10-773 定案",
+        "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#4] inbox.title.SETTLE_ADJUSTED.invite 默认文案逐字等于 D10-773 定案",
+        "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#5] 契约只加三个站内信短标题，不加正文键",
+        "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#6] 新增标题后原有 inbox.title.* 键与取值一个不改、不删",
+        "test/spec/contracts/settle-adjusted-template/texts.test.ts > [AC-CT-26za#7] 三个新键按字典序插在 inbox.title.* 之间"
+      ],
+      "expected": [
+        "test/spec/contracts/settle-adjusted-template/enums.test.ts",
+        "test/spec/contracts/settle-adjusted-template/fund-terms.test.ts",
+        "test/spec/contracts/settle-adjusted-template/texts.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1788b8f0b25dbd2c570e5ec55afd29cedf0a111a872102df3dab953273925332"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "cbba8a240dcb5549739aae08ad026abff5367fcf",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}

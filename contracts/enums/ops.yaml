@@ -9,6 +9,7 @@ enums:
       ORDER_INVALID: 订单失效
       CREDITED: 月结批次入账（按受益人汇总）
       CLAWBACK: 扣回
+      SETTLE_ADJUSTED: 结算调整（入账后结算负差调减）
       WD_SUCCESS: 提现成功
       WD_REJECTED: 提现驳回
       WD_FAILED: 提现失败
