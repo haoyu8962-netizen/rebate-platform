@@ -1,0 +1,81 @@
+{
+  "task": "B1-01zzr",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "914b1cc9bbc7e2afb7b9fad2a842b470387c9fb8",
+  "red_tests": [
+    "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#1] collectWorkerMetrics：水位滞后按平台取同步流最老游标（取整），排除 rescan / rights / manual，其余 query_kind（含 updated_at）照常计入；只剩被排除流的平台没有序列；跟注入时钟、不写库",
+    "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#2] 排除表逐项（rescan）：该 query_kind 的流再老也不进水位滞后；平台只剩该类流时没有水位序列（快照与渲染文本一致）",
+    "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#2] 排除表逐项（rights）：该 query_kind 的流再老也不进水位滞后；平台只剩该类流时没有水位序列（快照与渲染文本一致）",
+    "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#2] 排除表逐项（manual）：该 query_kind 的流再老也不进水位滞后；平台只剩该类流时没有水位序列（快照与渲染文本一致）",
+    "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#3] worker registry 同一次 collect 渲染回扫位置 gauge：每组 rescan 流按 (app_id, platform, query_kind) 出 now − 最老游标（取整、不为负），rights / manual 不出；下次 scrape 跟注入时钟；告警规则不挂它、水位告警表达式不变",
+    "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#4] 没有回扫流就没有回扫序列：回扫流改成别的被排除类后，下一次 scrape 不留旧值，水位滞后不变",
+    "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#5] 回扫位置 gauge 只在 worker 出：api / stream / admin / payout 给了同一 collect 也不调用、不出该指标名；worker 不给 collect 也没有"
+  ],
+  "risk_note": "RV2 by path (platform/metrics). The watermark lag gauge leaves out sync_cursors rows whose query_kind is rescan / rights / manual (exclusion table; GREATEST(0, floor(...)) unchanged), since a rescan cursor is a scan position that lags 0-30 days by design (D10-747). A new gauge couli_sync_rescan_position_seconds{app_id, platform, query_kind} reports the rescan positions, worker only, with no alert. WorkerMetricsSnapshot keeps its shape (new data in an optional field); alert rules unchanged; frozen B1-01zzh tests untouched. No money, ledger, contract or migration change.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "914b1cc9bbc7e2afb7b9fad2a842b470387c9fb8",
+      "tree": "8fbfb10d70134568f0f6e9132d220d7637ceba4f",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T19:35:44Z",
+      "finished_at": "2026-11-06T19:36:00Z",
+      "red_tests": [
+        "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#1] collectWorkerMetrics：水位滞后按平台取同步流最老游标（取整），排除 rescan / rights / manual，其余 query_kind（含 updated_at）照常计入；只剩被排除流的平台没有序列；跟注入时钟、不写库",
+        "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#2] 排除表逐项（rescan）：该 query_kind 的流再老也不进水位滞后；平台只剩该类流时没有水位序列（快照与渲染文本一致）",
+        "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#2] 排除表逐项（rights）：该 query_kind 的流再老也不进水位滞后；平台只剩该类流时没有水位序列（快照与渲染文本一致）",
+        "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#2] 排除表逐项（manual）：该 query_kind 的流再老也不进水位滞后；平台只剩该类流时没有水位序列（快照与渲染文本一致）",
+        "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#3] worker registry 同一次 collect 渲染回扫位置 gauge：每组 rescan 流按 (app_id, platform, query_kind) 出 now − 最老游标（取整、不为负），rights / manual 不出；下次 scrape 跟注入时钟；告警规则不挂它、水位告警表达式不变",
+        "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#4] 没有回扫流就没有回扫序列：回扫流改成别的被排除类后，下一次 scrape 不留旧值，水位滞后不变",
+        "test/spec/platform/metrics-sync-streams/collect.int.test.ts > [AC-B1-01zzr#5] 回扫位置 gauge 只在 worker 出：api / stream / admin / payout 给了同一 collect 也不调用、不出该指标名；worker 不给 collect 也没有"
+      ],
+      "expected": ["test/spec/platform/metrics-sync-streams/collect.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "14d1468236d7b14c16828a72b14b8876425ed27c0a6b37dd0e677f80852c7465"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "round 1 pass with no findings; round 2 (increment: WorkerCollection moved to collect.ts to break the collect <-> rescan-position import cycle that CI depcruise no-circular caught) pass with no findings; static only"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by independent Claude: r1, then r2 changing only the title prefix to [AC-B1-01zzr#n]; test/spec/platform/metrics-sync-streams/, 7 cases, container red run passed. Review r1 pass with two S2 (no counted sync stream ahead of the clock, so dropping GREATEST(0, ...) would pass; no fractional rescan offset at or above .5, so round instead of floor would pass), not blocking."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "46551694cf30c761850a823761982c8a743d5eb5",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

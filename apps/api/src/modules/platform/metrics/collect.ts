@@ -1,9 +1,16 @@
 // Whole-database worker metrics (B1-01zzh; 规划/02 §11, §13; ADR-0001 §4.2 #14). Read-only SQL over
 // pgboss.queue, pgboss.job and app.sync_cursors; "now" is the injected Clock only (never the
-// database's now()). Only the worker exports them.
+// database's now()). Only the worker exports them. B1-01zzr: the watermark lag leaves out the
+// streams of the exclusion table (rescan / rights / manual); the rescan positions come with the
+// same collect.
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import type { Clock } from '../clock/index.ts';
+import {
+  NON_SYNC_QUERY_KINDS,
+  collectRescanPositions,
+  type RescanPositionSnapshot,
+} from './rescan-position.ts';
 
 /** One scrape's values, keyed by the label value (queue name or platform). */
 export interface WorkerMetricsSnapshot {
@@ -15,8 +22,19 @@ export interface WorkerMetricsSnapshot {
   readonly backlog: Readonly<Record<string, number>>;
   /** Every `evt.*` queue: max(now - start_after) in seconds of its created, due jobs; 0 if none. */
   readonly oldestDueEvtAgeSeconds: Readonly<Record<string, number>>;
-  /** Per platform with a cursor: now - min(cursor_at) in whole seconds. */
+  /**
+   * Per platform with a sync stream: now - min(cursor_at) in whole seconds, over its streams whose
+   * query_kind is not in the exclusion table (rescan / rights / manual, B1-01zzr).
+   */
   readonly syncWatermarkLagSeconds: Readonly<Record<string, number>>;
+}
+
+/**
+ * What the worker's collect hands to the registry: the frozen B1-01zzh snapshot plus the rescan
+ * positions, optional so a bare WorkerMetricsSnapshot still renders (no rescan series).
+ */
+export interface WorkerCollection extends WorkerMetricsSnapshot {
+  readonly rescanPositionSeconds?: RescanPositionSnapshot;
 }
 
 /**
@@ -50,7 +68,7 @@ interface CursorRow {
 export async function collectWorkerMetrics(
   db: Kysely<DB>,
   clock: Clock,
-): Promise<WorkerMetricsSnapshot> {
+): Promise<WorkerCollection> {
   const now = clock.now().toISOString();
   const queues = await sql<QueueRow>`
     SELECT
@@ -77,6 +95,7 @@ export async function collectWorkerMetrics(
       platform,
       GREATEST(0, floor(extract(epoch FROM (${now}::timestamptz - min(cursor_at)))))::integer AS lag
     FROM app.sync_cursors
+    WHERE query_kind NOT IN (${sql.join([...NON_SYNC_QUERY_KINDS])})
     GROUP BY platform
     ORDER BY platform
   `.execute(db);
@@ -96,5 +115,14 @@ export async function collectWorkerMetrics(
   }
   const syncWatermarkLagSeconds: Record<string, number> = {};
   for (const row of cursors.rows) syncWatermarkLagSeconds[row.platform] = Number(row.lag);
-  return { queueFailed, deadLetters, backlog, oldestDueEvtAgeSeconds, syncWatermarkLagSeconds };
+  // The rescan positions of the same scrape (B1-01zzr): a scan position, not a watermark.
+  const rescanPositionSeconds = await collectRescanPositions(db, clock);
+  return {
+    queueFailed,
+    deadLetters,
+    backlog,
+    oldestDueEvtAgeSeconds,
+    syncWatermarkLagSeconds,
+    rescanPositionSeconds,
+  };
 }

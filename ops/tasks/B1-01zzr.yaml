@@ -21,4 +21,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/metrics-sync-streams/**'
-status: todo
+status: done
+pr: 2582

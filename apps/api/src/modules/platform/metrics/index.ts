@@ -9,7 +9,13 @@ export type {
 export { cacheFundCollector } from './cache.ts';
 export { countPddServiceFeeMissing } from './pdd-service-fee.ts';
 export { collectWorkerMetrics } from './collect.ts';
-export type { WorkerMetricsSnapshot } from './collect.ts';
+export type { WorkerCollection, WorkerMetricsSnapshot } from './collect.ts';
+export { collectRescanPositions } from './rescan-position.ts';
+export type {
+  NonSyncQueryKind,
+  RescanPositionSample,
+  RescanPositionSnapshot,
+} from './rescan-position.ts';
 export type { FundMetricsSnapshot } from './fund.ts';
 export { cacheReviewOverdueCollector } from './review-overdue.ts';
 export type { ReviewOverdueSnapshot } from './review-overdue.ts';

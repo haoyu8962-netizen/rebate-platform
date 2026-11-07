@@ -11,7 +11,7 @@
 import { performance } from 'node:perf_hooks';
 import type { EntryName } from '../entries.ts';
 import type { AutoPayoutDailySnapshot } from './auto-payout.ts';
-import type { WorkerMetricsSnapshot } from './collect.ts';
+import type { WorkerCollection, WorkerMetricsSnapshot } from './collect.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
 import { pddServiceFeeMissingTotal } from './pdd-service-fee.ts';
 import { REVIEW_OVERDUE_GAUGE, type ReviewOverdueSnapshot } from './review-overdue.ts';
@@ -19,8 +19,11 @@ import { WATER_LOW_GAUGE, type WaterLowSnapshot } from './water-low.ts';
 
 export interface MetricsRegistryOptions {
   readonly entry: EntryName;
-  /** Used only when entry is 'worker'; called once per render(). */
-  readonly collect?: () => Promise<WorkerMetricsSnapshot>;
+  /**
+   * Used only when entry is 'worker'; called once per render(). Its optional rescan positions
+   * (B1-01zzr) fill couli_sync_rescan_position_seconds in the same scrape.
+   */
+  readonly collect?: () => Promise<WorkerCollection>;
   /** The fund gauges (B1-01zzi). Used only when entry is 'worker'; called once per render(). */
   readonly collectFund?: () => Promise<FundMetricsSnapshot>;
   /** The auto-payout daily gauges (B1-01zzp). Used only on 'worker'; called once per render(). */
@@ -92,6 +95,12 @@ const BUSINESS_GAUGES: Readonly<
 };
 
 const BUSINESS_KEYS = Object.keys(BUSINESS_GAUGES) as (keyof WorkerMetricsSnapshot)[];
+
+/** The rescan position gauge (B1-01zzr): a scan position, not a watermark; no alert reads it. */
+const RESCAN_POSITION_GAUGE = {
+  name: 'couli_sync_rescan_position_seconds',
+  help: 'Seconds between now and the oldest rescan cursor (query_kind rescan) of each app_id, platform and query_kind; a scan position, not a watermark.',
+} as const;
 
 /** The fund gauge with one label (reason): open order_sync_pending rows (BR-FUND-02). */
 const PENDING_GAUGE = {
@@ -238,8 +247,8 @@ function processFamilies(): Family[] {
   ];
 }
 
-function businessFamilies(snapshot: WorkerMetricsSnapshot): Family[] {
-  return BUSINESS_KEYS.map((key) => {
+function businessFamilies(snapshot: WorkerCollection): Family[] {
+  const gauges = BUSINESS_KEYS.map((key) => {
     const { name, help, label } = BUSINESS_GAUGES[key];
     // Only this snapshot's series: one that disappeared does not keep its previous value.
     const samples = Object.entries(snapshot[key]).map(([value, sample]) => ({
@@ -248,6 +257,18 @@ function businessFamilies(snapshot: WorkerMetricsSnapshot): Family[] {
     }));
     return { name, help, type: 'gauge' as const, samples };
   });
+  // Only this snapshot's rescan groups: none (or a bare snapshot without them) has no series.
+  const rescan = snapshot.rescanPositionSeconds ?? [];
+  const rescanPosition: Family = {
+    name: RESCAN_POSITION_GAUGE.name,
+    help: RESCAN_POSITION_GAUGE.help,
+    type: 'gauge',
+    samples: rescan.map(({ appId, platform, queryKind, seconds }) => ({
+      labels: { app_id: appId, platform, query_kind: queryKind },
+      value: seconds,
+    })),
+  };
+  return [...gauges, rescanPosition];
 }
 
 function fundFamilies(snapshot: FundMetricsSnapshot): Family[] {
