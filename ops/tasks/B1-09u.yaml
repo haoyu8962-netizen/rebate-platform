@@ -27,4 +27,5 @@ red_exempt:
   - file: test/spec/settlement/rights-answered-schema/shape.int.test.ts
     test: '[AC-B2-04lb#29] D10-483 settlement 写入角色 couli_app 可把 answered_at 置为联盟回传时刻并原样读回（timestamptz 不丢时区），也可在同一行再改；其余列不受影响'
     reason: '冻结用例测试体未改；本单只往同目录 kit.ts 的 SHAPE 加两列名，同文件因读改过的 kit 被整体判定（D10-863）'
-status: todo
+status: done
+pr: 2649

@@ -3,6 +3,7 @@ repo: rebate-platform
 title: 迁移：orders 父订单号部分索引 orders_parent_order_idx (app_id, parent_order_id) WHERE parent_order_id IS NOT NULL（FU-ORDERS-OWN-LOOKUP-INDEX，D10-853）——ON ONLY 父表 + orders_default 分区索引 + ATTACH
 type: migration
 # 2026-11-07 入账（admin-backend，编排 D10-851 ①、D10-853；方案 couli-runs/FU-ORDERS-OWN-LOOKUP-INDEX/plan.md）。迁移号 0132（落地前 ls 主干核一次，被占取最大 +1 报编排）。执行器单事务不能 CONCURRENTLY：建索引期间订单同步写入等待，上线前数据小、秒级；lock_timeout 5s、statement_timeout 给足；上线后再动大表须另报编排定窗口。只建这一个索引，拼多多去横线表达式索引不做（FU-PDD-ORDERNO-NORMALIZED-INDEX）。RV2。
+# 2026-11-07 编排 D10-889 更正写法（标题保留入账原文）：迁移改为不加 ONLY 的 CREATE INDEX orders_parent_order_idx ON app.orders (...)，PG 同事务给所有现有分区（含部署库预建的月分区）建子索引并挂接；标题里「ON ONLY + orders_default + ATTACH」作废。
 refs: []
 refs_hash: {}
 deps: []

@@ -18,4 +18,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/growth/invite-reward-wiring/**'
-status: todo
+status: done
+pr: 2627
