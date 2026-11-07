@@ -17,6 +17,19 @@ paths:
   - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
 test_paths:
   - 'test/spec/settlement/rights-wait-adj-obligation/**'
+red_exempt:
+  - file: test/spec/settlement/rights-wait-adj-obligation/positive-wait.int.test.ts
+    test: '[AC-B2-04zza#9] 回归：受益人都正常，维权等佣金中联盟新结算记录 1200（B 1020 > booked 850）是正差 → 仍等待并告警（rights_settle_adjust_unsupported），不记账、不生成候选、维权记录仍 WAIT_COMMISSION、rights_pending 仍 true'
+    reason: 回归用例：正差仍等待并告警，本单前后行为不变（D10-781；只拦正差），实现前已绿
+  - file: test/spec/settlement/rights-wait-adj-obligation/positive-wait.int.test.ts
+    test: '[AC-B2-04zza#10] 回归：基数相等而结算佣金高于 booked_n（新记录 1001 → B 仍 850、N 1001 > 1000）也是正差 → 仍等待并告警，什么都不写'
+    reason: 回归用例：正差仍等待并告警，本单前后行为不变（D10-781；只拦正差），实现前已绿
+  - file: test/spec/settlement/rights-wait-adj-obligation/positive-wait.int.test.ts
+    test: '[AC-B2-04zza#11] 回归：本人入账时冻结（first_credit 义务）且仍冻结，正差记录 1200 → 仍等待并告警，义务原样、不补给、不进候选'
+    reason: 回归用例：正差仍等待并告警，本单前后行为不变（D10-781；只拦正差），实现前已绿
+  - file: test/spec/settlement/rights-wait-adj-obligation/positive-wait.int.test.ts
+    test: '[AC-B2-04zza#12] 回归：本人入账时冻结、之后封禁（有 first_credit 义务），正差记录 1200 → 仍等待并告警：义务不没收、不追加 forfeited 事件、不记账'
+    reason: 回归用例：正差仍等待并告警，本单前后行为不变（D10-781；只拦正差），实现前已绿
 impl: claude
 tester: claude-independent
 accept:
