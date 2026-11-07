@@ -31,9 +31,12 @@
 //      instead, same key, beneficiary columns kept); platform difference ≠ 0
 //      `{order_key}:PLATFORM:CLAWBACK:{rights_event_id}` (DECREASE / INCREASE templates).
 //      A stored uniq_key is a duplicate, never a second clawback.
-//   7. unfinished obligations (beneficiary_credits): R8 → voided (closed_by R8); R9 → a
-//      beneficiary whose remaining amount went to the platform → forfeited (closed_by R9) plus a
-//      forfeited beneficiary event; others kept open.
+//   7. unfinished obligations (beneficiary_credits): R8 → voided (closed_by R8, voucher_id null);
+//      R9 → a beneficiary whose remaining amount went to the platform → forfeited (closed_by R9)
+//      plus a forfeited beneficiary event; others kept open. B2-04zzb (BR-FUND-04 ⑫「都关联实际履约的
+//      凭证」): a forfeited row's voucher_id is the platform voucher of step 6 (the stored one on a
+//      duplicate uniq_key); platform difference 0 → no platform voucher, voucher_id null and
+//      closed_ref (the rights_event_id) is the reference.
 //   8. pending settle_adjustments of this order → voided_by_clawback (decided_at = Clock now).
 //   9. booked_base_fen = B_new and booked_n_fen = N_new positive part together, rebate_status
 //      through the generated order-rebate transition() with a CAS on (rebate_status, row_version);
@@ -614,6 +617,28 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     };
   }
 
+  /**
+   * B2-04zzb (BR-FUND-04 ⑫): posts the transaction's one platform voucher and returns its id — the
+   * stored voucher's id when the uniq_key already exists (same app, same event: never a second one) —
+   * so the obligations this transaction disposes of can reference it.
+   */
+  async function postPlatformVoucher(
+    trx: Transaction<DB>,
+    appId: string,
+    key: string,
+    built: readonly BuiltVoucher[],
+    accounts: ReadonlyMap<string, string>,
+    kind: 'CLAWBACK' | 'SETTLE_ADJUST',
+  ): Promise<string> {
+    const [voucher] = built;
+    if (voucher === undefined || built.length !== 1) {
+      throw new Error('settlement clawback: expected exactly one platform voucher');
+    }
+    const posted = await ledger.post(trx, postingOf(appId, key, voucher, null, accounts, kind));
+    return posted.voucherId;
+  }
+
+  /** Step 6; returns the platform voucher's id, null when the platform difference is 0. */
   async function postVouchers(
     trx: Transaction<DB>,
     order: OrderRow,
@@ -622,7 +647,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     subType: SubType,
     plan: AdjustmentPlan,
     accounts: ReadonlyMap<string, string>,
-  ): Promise<void> {
+  ): Promise<string | null> {
     const base = { order_key: key, platform: order.platform, rights_event_id: rightsEventId };
     for (const b of plan.beneficiaries) {
       if (b.delta_fen === 0n) continue;
@@ -643,19 +668,28 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       }
     }
     const delta = plan.platform_delta_fen;
-    if (delta !== 0n) {
-      // platform_delta_fen = new − old: < 0 → DECREASE (debit COMMISSION_REVENUE), > 0 → INCREASE.
-      const template = `CLAWBACK:${subType}:PLATFORM:${delta < 0n ? 'DECREASE' : 'INCREASE'}`;
-      const params: BuildVoucherParams = {
-        ...base,
-        clawback_fen: delta < 0n ? subFen(0n, delta) : delta,
-      };
-      for (const built of buildVouchers(template, params)) {
-        await ledger.post(trx, postingOf(order.app_id, key, built, null, accounts));
-      }
-    }
+    if (delta === 0n) return null;
+    // platform_delta_fen = new − old: < 0 → DECREASE (debit COMMISSION_REVENUE), > 0 → INCREASE.
+    const template = `CLAWBACK:${subType}:PLATFORM:${delta < 0n ? 'DECREASE' : 'INCREASE'}`;
+    const params: BuildVoucherParams = {
+      ...base,
+      clawback_fen: delta < 0n ? subFen(0n, delta) : delta,
+    };
+    return postPlatformVoucher(
+      trx,
+      order.app_id,
+      key,
+      buildVouchers(template, params),
+      accounts,
+      'CLAWBACK',
+    );
   }
 
+  /**
+   * BR-FUND-04 ⑫ on this transaction. platformVoucherId: the platform voucher this transaction wrote
+   * (null when the platform difference was 0); a forfeited obligation references it (B2-04zzb), a
+   * voided one (R8) never carries a voucher.
+   */
   async function settleObligations(
     trx: Transaction<DB>,
     order: OrderRow,
@@ -663,6 +697,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     rightsEventId: string,
     rows: readonly AdjustmentBeneficiaryResult[],
     obligations: ReadonlyMap<string, BeneficiaryCreditRow>,
+    platformVoucherId: string | null,
     now: Date,
   ): Promise<void> {
     for (const b of rows) {
@@ -701,6 +736,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
         status: action,
         closed_by: transition,
         closed_ref: rightsEventId,
+        voucher_id: action === 'forfeited' ? platformVoucherId : null,
         closed_at: now,
       });
       if (!closed) throw new Error('settlement clawback: obligation CAS matched no row');
@@ -901,9 +937,17 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     }
 
     // 6. vouchers (a stored uniq_key is a duplicate, never a second clawback).
-    await postVouchers(trx, order, key, rightsEventId, subType, plan, accounts);
+    const platformVoucherId = await postVouchers(
+      trx,
+      order,
+      key,
+      rightsEventId,
+      subType,
+      plan,
+      accounts,
+    );
 
-    // 7. obligations; 8. candidates.
+    // 7. obligations (a forfeit references the platform voucher of step 6); 8. candidates.
     await settleObligations(
       trx,
       order,
@@ -911,6 +955,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       rightsEventId,
       plan.beneficiaries,
       obligations,
+      platformVoucherId,
       now,
     );
     if (plan.void_pending_candidates) await voidCandidates(trx, order, now);
@@ -1215,20 +1260,37 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       }
     }
     const delta = plan.platform_delta_fen;
+    let platformVoucherId: string | null = null;
     if (delta !== 0n) {
       const template = `SETTLE_ADJUST:SETTLE_DIFF:PLATFORM:${delta < 0n ? 'DECREASE' : 'INCREASE'}`;
       const params: BuildVoucherParams = {
         ...base,
         adjust_fen: delta < 0n ? subFen(0n, delta) : delta,
       };
-      for (const built of buildVouchers(template, params)) {
-        await ledger.post(trx, postingOf(appId, key, built, null, accounts, 'SETTLE_ADJUST'));
-      }
+      platformVoucherId = await postPlatformVoucher(
+        trx,
+        appId,
+        key,
+        buildVouchers(template, params),
+        accounts,
+        'SETTLE_ADJUST',
+      );
     }
 
     // BR-FUND-04 ⑫: obligations whose share this adjustment disposed of, same transaction, in both
-    // modes (forfeited / opened as deferred by R10 / kept, its pending amount following booked).
-    await settleObligations(trx, order, 'R10', rightsEventId, plan.beneficiaries, obligations, now);
+    // modes (forfeited / opened as deferred by R10 / kept, its pending amount following booked). A
+    // forfeit references the `{order_key}:PLATFORM:ADJ:{seq}` voucher above (B2-04zzb); platform
+    // difference 0 → voucher_id null, closed_ref `S{seq}` is the reference.
+    await settleObligations(
+      trx,
+      order,
+      'R10',
+      rightsEventId,
+      plan.beneficiaries,
+      obligations,
+      platformVoucherId,
+      now,
+    );
 
     const written = await casClawbackOrder(trx, order, {
       to: step.to,

@@ -1,0 +1,112 @@
+{
+  "task": "B2-04zzb",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "8f0c32c65d050f8a76fb62321bdf5516310887c1",
+  "red_tests": [
+    "test/spec/settlement/obligation-close-voucher/property.int.test.ts > [AC-B2-04zzb#19] 属性：任意入账佣金 O（1000～99999 与大于 2^31 分）与更低的新佣金 N（含奇数、大于 2^31、平台差额为 0 的情形，以及 0 与 1 分）、任意没收状态（封禁 / 注销中 / 已注销）、R9（维权带新佣金）或 R10（普通同步：组装好的同步 worker，联盟报文带新结算金额、recordApi 写记录 seq 2）：新基数 ≥ 1 时被没收义务的 voucher_id 恰为本事务平台凭证的 id（平台差额 ≠ 0），平台差额为 0 时为 null 且不写平台凭证，closed_ref 恒为该事务的 rights_event_id / S{seq}；N 为 0 或 1（新基数为 0）时两条入口都是 R8，写平台扣回凭证但义务 voided / closed_by R8、voucher_id 为 null",
+    "test/spec/settlement/obligation-close-voucher/property.int.test.ts > [AC-B2-04zzb#20] 生成器边界：840 时平台新净额恰为 448（差额 0），600 时为 320（差额 −128），999 时为 533（差额 +85，平台凭证为 INCREASE）；经真实入口 R9：840 不写平台凭证、义务不关联，999 关联其平台扣回凭证",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#9] 本人入账时冻结（first_credit 义务、待补记 425），之后banned；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:3（SETTLE_ADJUST，平台 +76）的 id；追加 forfeited 事件（banned）",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#10] 本人入账时冻结（first_credit 义务、待补记 425），之后deleting；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:3（SETTLE_ADJUST，平台 +76）的 id；追加 forfeited 事件（deleted）",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#11] 本人入账时冻结（first_credit 义务、待补记 425），之后deleted；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:3（SETTLE_ADJUST，平台 +76）的 id；追加 forfeited 事件（deleted）",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#12] 本人此前已有延后差额义务（deferred，待补记 425），现封禁；维权等佣金中联盟新结算记录 600 负差 → R10：延后义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 PLATFORM:ADJ:3 的 id（不追加 forfeited 事件）",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#13] 同一 R10 事务里：直推（冻结后封禁）义务 forfeited 并关联本事务平台凭证 PLATFORM:ADJ:3（平台冲回 128），间推（仍冻结）义务保持 open、voucher_id null、一列不改",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#14] 同一 R10 事务里：直推义务 forfeited 并关联本事务平台凭证 PLATFORM:ADJ:3，间推新开的延后差额义务（opened_by R10）open、voucher_id null",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#15] 普通订单同步（无维权记录，组装好的同步 worker，联盟报文带新结算金额、由 recordApi 写记录）：会员入账时冻结后封禁，新结算 600（seq 2）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S2，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:2（平台 +100）的 id；另一 app 同样前置、新结算 500 → 平台差额为 0、不写平台凭证，义务 forfeited、voucher_id null、closed_ref S2 兜底",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#16] 平台差额为 0：维权等佣金中联盟新结算记录 840（seq 3）→ R10 只扣本人 68、间推 7，不写平台凭证 → 直推义务 forfeited、voucher_id null、closed_ref S3（结算记录 seq）兜底；同 app 另一单记录 600 → 平台冲回 128，voucher_id = 其 PLATFORM:ADJ:3",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#17] 重投：R10 之后同一同步变更再投递一次 → 不再记账，已关闭义务的 voucher_id / closed_* 不被改写，订单凭证不增加",
+    "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#18] 原子：R10 同步事务里义务处置之后一步失败、或义务 CAS 未命中 → 整体回滚（PLATFORM:ADJ:3 与义务都不落，维权记录仍等佣金，全部行与之前相同）；之后正常同步一次 → 凭证与义务同事务落库，voucher_id = 该平台凭证",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#1] 直推入账时冻结（first_credit 义务、待补记 85），之后banned；维权成功带联盟新佣金 600 → R9：直推份额归平台、义务 forfeited / closed_by R9 / closed_ref R{id}，voucher_id = 本事务平台扣回凭证 {order_key}:PLATFORM:CLAWBACK:R{id}（平台冲回 128，同 app、同单、无受益人键）的 id；追加 forfeited 事件（banned）",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#2] 直推入账时冻结（first_credit 义务、待补记 85），之后deleting；维权成功带联盟新佣金 600 → R9：直推份额归平台、义务 forfeited / closed_by R9 / closed_ref R{id}，voucher_id = 本事务平台扣回凭证 {order_key}:PLATFORM:CLAWBACK:R{id}（平台冲回 128，同 app、同单、无受益人键）的 id；追加 forfeited 事件（deleted）",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#3] 直推入账时冻结（first_credit 义务、待补记 85），之后deleted；维权成功带联盟新佣金 600 → R9：直推份额归平台、义务 forfeited / closed_by R9 / closed_ref R{id}，voucher_id = 本事务平台扣回凭证 {order_key}:PLATFORM:CLAWBACK:R{id}（平台冲回 128，同 app、同单、无受益人键）的 id；追加 forfeited 事件（deleted）",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#4] 平台差额为 0 不写平台凭证 → voucher_id 为 null，closed_ref 记该事务的 rights_event_id 兜底；同 app 另一单平台差额非 0 → voucher_id 为其平台扣回凭证：新佣金 840 时平台新净额 840 − 357 − 35 = 448 与原 448 相同（只扣本人 68、间推 7），600 时平台冲回 128",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#5] 同一单直推冻结后封禁、间推冻结仍冻结：R9（600）直推义务 forfeited 并关联平台扣回凭证，间推义务保持 open、voucher_id null；之后整单失效（P7 → R8）：间推义务 voided / closed_by R8、voucher_id 仍为 null（作废不带凭证，也不关联 R8 的平台凭证），直推已关闭的义务一列不改（voucher_id 仍是 R9 的平台凭证）",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#6] 重投：同一维权事件的 R9 再处理一次 → 无变化（义务已关、CAS 不再命中），已关闭行的 voucher_id / closed_* / row_version 不被改写，订单凭证不增加、平台凭证不重复",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#7] 多租户：两个 App 各有一单同形订单（直推冻结后封禁；order_keys 与 users 不带 app_id，子订单号不同）：只对 App A 做 R9 → A 的义务关联 A 本事务的平台凭证（凭证行 app_id = A）；App B 的义务仍 open、voucher_id null，B 的全部行不变",
+    "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#8] 原子：R9 事务里义务关闭语句执行后失败、或义务 CAS 未命中 → 整个事务回滚，平台扣回凭证与义务都不落（凭证键、余额、订单列、义务行、forfeited 事件都与之前相同）；之后正常重试一次 → 凭证与义务同事务落库，voucher_id = 该平台凭证"
+  ],
+  "risk_note": "RV2 settlement (B2-04zzb; FU-OBLIGATION-CLOSE-VOUCHER-REF; D10-797 ① / D10-906 / D10-915 / D10-916; BR-FUND-04 ⑫, refs empty, the ⑫ text excerpted into the brief). When R9 forfeits or R10 disposes of an unfinished beneficiary obligation, the same transaction writes beneficiary_credits.voucher_id = the platform voucher this transaction posted (stored voucher id on a duplicate uniq_key); platform difference 0 → no platform voucher, voucher_id null, closed_ref unchanged as the fallback; R8 void never carries a voucher (closeObligation refuses one). R10 / R9 trigger conditions unchanged (the r1 xmin fallback was removed, D10-915). No migration, no contract, no frozen test changed.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8f0c32c65d050f8a76fb62321bdf5516310887c1",
+      "tree": "f707ccbddc7e07590eedb206d6e883622b460716",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-07T17:25:10Z",
+      "finished_at": "2026-11-07T17:25:42Z",
+      "red_tests": [
+        "test/spec/settlement/obligation-close-voucher/property.int.test.ts > [AC-B2-04zzb#19] 属性：任意入账佣金 O（1000～99999 与大于 2^31 分）与更低的新佣金 N（含奇数、大于 2^31、平台差额为 0 的情形，以及 0 与 1 分）、任意没收状态（封禁 / 注销中 / 已注销）、R9（维权带新佣金）或 R10（普通同步：组装好的同步 worker，联盟报文带新结算金额、recordApi 写记录 seq 2）：新基数 ≥ 1 时被没收义务的 voucher_id 恰为本事务平台凭证的 id（平台差额 ≠ 0），平台差额为 0 时为 null 且不写平台凭证，closed_ref 恒为该事务的 rights_event_id / S{seq}；N 为 0 或 1（新基数为 0）时两条入口都是 R8，写平台扣回凭证但义务 voided / closed_by R8、voucher_id 为 null",
+        "test/spec/settlement/obligation-close-voucher/property.int.test.ts > [AC-B2-04zzb#20] 生成器边界：840 时平台新净额恰为 448（差额 0），600 时为 320（差额 −128），999 时为 533（差额 +85，平台凭证为 INCREASE）；经真实入口 R9：840 不写平台凭证、义务不关联，999 关联其平台扣回凭证",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#9] 本人入账时冻结（first_credit 义务、待补记 425），之后banned；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:3（SETTLE_ADJUST，平台 +76）的 id；追加 forfeited 事件（banned）",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#10] 本人入账时冻结（first_credit 义务、待补记 425），之后deleting；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:3（SETTLE_ADJUST，平台 +76）的 id；追加 forfeited 事件（deleted）",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#11] 本人入账时冻结（first_credit 义务、待补记 425），之后deleted；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:3（SETTLE_ADJUST，平台 +76）的 id；追加 forfeited 事件（deleted）",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#12] 本人此前已有延后差额义务（deferred，待补记 425），现封禁；维权等佣金中联盟新结算记录 600 负差 → R10：延后义务 forfeited / closed_by R10 / closed_ref S3，voucher_id = 本事务平台凭证 PLATFORM:ADJ:3 的 id（不追加 forfeited 事件）",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#13] 同一 R10 事务里：直推（冻结后封禁）义务 forfeited 并关联本事务平台凭证 PLATFORM:ADJ:3（平台冲回 128），间推（仍冻结）义务保持 open、voucher_id null、一列不改",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#14] 同一 R10 事务里：直推义务 forfeited 并关联本事务平台凭证 PLATFORM:ADJ:3，间推新开的延后差额义务（opened_by R10）open、voucher_id null",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#15] 普通订单同步（无维权记录，组装好的同步 worker，联盟报文带新结算金额、由 recordApi 写记录）：会员入账时冻结后封禁，新结算 600（seq 2）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S2，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:2（平台 +100）的 id；另一 app 同样前置、新结算 500 → 平台差额为 0、不写平台凭证，义务 forfeited、voucher_id null、closed_ref S2 兜底",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#16] 平台差额为 0：维权等佣金中联盟新结算记录 840（seq 3）→ R10 只扣本人 68、间推 7，不写平台凭证 → 直推义务 forfeited、voucher_id null、closed_ref S3（结算记录 seq）兜底；同 app 另一单记录 600 → 平台冲回 128，voucher_id = 其 PLATFORM:ADJ:3",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#17] 重投：R10 之后同一同步变更再投递一次 → 不再记账，已关闭义务的 voucher_id / closed_* 不被改写，订单凭证不增加",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts > [AC-B2-04zzb#18] 原子：R10 同步事务里义务处置之后一步失败、或义务 CAS 未命中 → 整体回滚（PLATFORM:ADJ:3 与义务都不落，维权记录仍等佣金，全部行与之前相同）；之后正常同步一次 → 凭证与义务同事务落库，voucher_id = 该平台凭证",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#1] 直推入账时冻结（first_credit 义务、待补记 85），之后banned；维权成功带联盟新佣金 600 → R9：直推份额归平台、义务 forfeited / closed_by R9 / closed_ref R{id}，voucher_id = 本事务平台扣回凭证 {order_key}:PLATFORM:CLAWBACK:R{id}（平台冲回 128，同 app、同单、无受益人键）的 id；追加 forfeited 事件（banned）",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#2] 直推入账时冻结（first_credit 义务、待补记 85），之后deleting；维权成功带联盟新佣金 600 → R9：直推份额归平台、义务 forfeited / closed_by R9 / closed_ref R{id}，voucher_id = 本事务平台扣回凭证 {order_key}:PLATFORM:CLAWBACK:R{id}（平台冲回 128，同 app、同单、无受益人键）的 id；追加 forfeited 事件（deleted）",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#3] 直推入账时冻结（first_credit 义务、待补记 85），之后deleted；维权成功带联盟新佣金 600 → R9：直推份额归平台、义务 forfeited / closed_by R9 / closed_ref R{id}，voucher_id = 本事务平台扣回凭证 {order_key}:PLATFORM:CLAWBACK:R{id}（平台冲回 128，同 app、同单、无受益人键）的 id；追加 forfeited 事件（deleted）",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#4] 平台差额为 0 不写平台凭证 → voucher_id 为 null，closed_ref 记该事务的 rights_event_id 兜底；同 app 另一单平台差额非 0 → voucher_id 为其平台扣回凭证：新佣金 840 时平台新净额 840 − 357 − 35 = 448 与原 448 相同（只扣本人 68、间推 7），600 时平台冲回 128",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#5] 同一单直推冻结后封禁、间推冻结仍冻结：R9（600）直推义务 forfeited 并关联平台扣回凭证，间推义务保持 open、voucher_id null；之后整单失效（P7 → R8）：间推义务 voided / closed_by R8、voucher_id 仍为 null（作废不带凭证，也不关联 R8 的平台凭证），直推已关闭的义务一列不改（voucher_id 仍是 R9 的平台凭证）",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#6] 重投：同一维权事件的 R9 再处理一次 → 无变化（义务已关、CAS 不再命中），已关闭行的 voucher_id / closed_* / row_version 不被改写，订单凭证不增加、平台凭证不重复",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#7] 多租户：两个 App 各有一单同形订单（直推冻结后封禁；order_keys 与 users 不带 app_id，子订单号不同）：只对 App A 做 R9 → A 的义务关联 A 本事务的平台凭证（凭证行 app_id = A）；App B 的义务仍 open、voucher_id null，B 的全部行不变",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts > [AC-B2-04zzb#8] 原子：R9 事务里义务关闭语句执行后失败、或义务 CAS 未命中 → 整个事务回滚，平台扣回凭证与义务都不落（凭证键、余额、订单列、义务行、forfeited 事件都与之前相同）；之后正常重试一次 → 凭证与义务同事务落库，voucher_id = 该平台凭证"
+      ],
+      "expected": [
+        "test/spec/settlement/obligation-close-voucher/property.int.test.ts",
+        "test/spec/settlement/obligation-close-voucher/r10.int.test.ts",
+        "test/spec/settlement/obligation-close-voucher/r9.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a49dd57ef7c16c385e1ba95a792bb752a644d1875866467a839735cb99bec370"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base the spec commit (whole implementation). Implementation round 1 had added an xmin-based fallback to the sync hook's new-settlement detection to satisfy a rule-test fixture; ruled out (D10-915), the fixture fixed in rule-test attempt 3 and the fallback removed in implementation round 2, which is what this review saw. Static review, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by an independent Claude (claude-run.sh) in 3 attempts. Codex spec-test r1 fail (2 S1: property callback return true; amount boundaries 0 / 1 / odd / > 2^31), r2 incremental pass. Attempt 3 (after implementation r1 showed the ordinary-sync R10 branch of #15 / #19 was skipped on trunk because the fixture inserted a STATEMENT directly): that branch now runs on the assembled sync worker (recordApi), assertions unchanged; r3 incremental (D10-916 one-off exception, medium) pass."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1835806ae711297ee205dd7ad3bfb1f8b242f18a",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

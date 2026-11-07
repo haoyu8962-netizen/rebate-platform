@@ -33,14 +33,27 @@ export interface ObligationClose {
   /** R10 (B2-04zi) only forfeits: voided stays with R8 / R14 (beneficiary_credits_voided_check). */
   readonly closed_by: 'R8' | 'R9' | 'R10';
   readonly closed_ref: string;
+  /**
+   * B2-04zzb (BR-FUND-04 ⑫「都关联实际履约的凭证」): a forfeit references the platform voucher this
+   * same transaction wrote (the share went to the platform); null when the platform difference was 0
+   * and no platform voucher was written (closed_ref then names the event). A void never carries one
+   * (beneficiary_credits_voucher_check).
+   */
+  readonly voucher_id: string | null;
   readonly closed_at: Date;
 }
 
-/** open → voided / forfeited with a CAS on (status open, row_version); returns whether it matched. */
+/**
+ * open → voided / forfeited with a CAS on (status open, row_version), voucher_id in the same SET;
+ * returns whether it matched (an obligation already closed by a replay is not rewritten).
+ */
 export async function closeObligation(
   trx: Transaction<DB>,
   close: ObligationClose,
 ): Promise<boolean> {
+  if (close.status === 'voided' && close.voucher_id !== null) {
+    throw new Error('settlement clawback: a voided obligation carries no voucher');
+  }
   const result = await trx
     .withSchema('app')
     .updateTable('beneficiary_credits')
@@ -49,6 +62,7 @@ export async function closeObligation(
       closed_by: close.closed_by,
       closed_ref: close.closed_ref,
       closed_at: close.closed_at,
+      voucher_id: close.voucher_id,
       row_version: close.row_version + 1,
     })
     .where('app_id', '=', close.app_id)
