@@ -67,6 +67,9 @@ export function runCli(
   const res = spawnSync(process.execPath, [join(OPS_DIR, script), ...args], {
     encoding: 'utf8',
     env: { ...process.env, ...env },
+    // The real board's JSON outgrew spawnSync's default 1 MiB buffer (1.16 MB on 2026-11-07), which
+    // killed the child and reported status null (-1 here); 64 MiB leaves ample headroom.
+    maxBuffer: 64 * 1024 * 1024,
   });
   return { status: res.status ?? -1, stdout: res.stdout, stderr: res.stderr };
 }
