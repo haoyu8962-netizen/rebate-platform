@@ -1,0 +1,36 @@
+id: B1-08zi
+repo: rebate-platform
+title: 已退件数与件数写入 + 入账定格（FU-REFUNDED-QUANTITY-WRITER，上线缺口 17，D10-811 ① / D10-814）——京东 skuReturnNum / skuNum 写 orders.refunded_quantity / quantity（淘宝、拼多多保持 null），缺失沿用库内值、只增不减；入账 CAS 同一条语句定格 refunded_quantity_at_credit；京东已退件数增加驱动 R9 扣回挂开关默认关
+type: impl
+# 2026-11-07 funds 入账，方案 couli-runs/B3-lane/refunded-quantity-writer-plan-20261107.md，D10-814 六处：① 淘宝 / 拼多多 null、不推算；② 缺失沿用、只增不减，变小不写并告警；③ 只数量变不推 commission_version（BR-CALC-15 / D10-578）；④ at_credit 只在 casCreditOrder 定格一次；⑤ quantity 并进本单，FU-R9-REFUND-BASELINE 本单后另开；⑥ R9 判定挂开关 orders.jd.refunded_quantity_r9_enabled 默认关，关时只写告警不动钱（同 BR-ATTR-26）。
+# 不放进 OrderSyncColumns（冻结 [AC-B1-08i#14] 列集合）。邀请奖励 invite-reward clawedBack 用同一比较，开关关时一并不据此作废（paths 含它，报编排核）。实现排 #2575 合并后。RV2，独立 Claude 写测试、money 评审。
+refs: [BR-FUND-03, BR-FUND-07, BR-CALC-15, BR-FUND-01, BR-FUND-05]
+refs_hash:
+  BR-FUND-03: 4b5c1f1d901b
+  BR-FUND-07: 3d63741c52d9
+  BR-CALC-15: e18291194b6e
+  BR-FUND-01: ee0d91aebb13
+  BR-FUND-05: 972b05594c07
+deps: [B2-04zi]
+paths:
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/infra/jd/orders.ts'
+  - 'apps/api/src/modules/orders/domain/update-plan.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+  - 'apps/api/src/modules/orders/application/pipeline-port.ts'
+  - 'apps/api/src/modules/orders/infra/order-update-store.ts'
+  - 'apps/api/src/modules/settlement/credit/credit-store.ts'
+  - 'apps/api/src/modules/settlement/credit/credit-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/growth/application/invite-reward.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+test_paths:
+  - 'test/spec/orders/refunded-quantity/**'
+  - 'test/spec/settlement/credit-refund-baseline/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/refunded-quantity/**'
+  - 'test/spec/settlement/credit-refund-baseline/**'
+status: todo
