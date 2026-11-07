@@ -11,7 +11,7 @@ refs_hash:
   BR-CALC-15: e18291194b6e
   BR-FUND-01: ee0d91aebb13
   BR-FUND-05: 972b05594c07
-deps: [B2-04zi]
+deps: [B2-04zi, B1-08zit]
 paths:
   - 'apps/api/src/modules/union/domain/types.ts'
   - 'apps/api/src/modules/union/infra/jd/orders.ts'
@@ -23,8 +23,7 @@ paths:
   - 'apps/api/src/modules/settlement/credit/credit-order.ts'
   - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
   - 'apps/api/src/modules/growth/application/invite-reward.ts'
-  - 'apps/api/src/modules/content/domain/config-registry.ts'
-  - 'db/seeds/0006_orders-jd-r9-switch.sql' # D10-854 ①：照 0005 先例种 false，不动冻结 [AC-F1-10e#1]；号落地前核主干，被占顺延
+  - 'apps/api/src/modules/settlement/credit/credit-store.test.ts' # D10-876：casCreditOrder SQL 串随 at_credit 更新
 test_paths:
   - 'test/spec/orders/refunded-quantity/**'
   - 'test/spec/settlement/credit-refund-baseline/**'

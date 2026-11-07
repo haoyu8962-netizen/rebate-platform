@@ -326,6 +326,11 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
       ? businessEnum(`shop.entry.source.${platform}`, ['dataoke'])
       : businessEnum(`shop.entry.source.${platform}`, [], false),
   ),
+  // B1-08zi (D10-814 ⑥): the switch of the fund handling driven by JD's refunded quantity (the R9
+  // clawback and voiding the invite reward), config.business, editable. No seed row; unset = off,
+  // the reader's default, until operations turn it on after CAP-JD-08 is measured. Registration
+  // only.
+  spec('orders.jd.refunded_quantity_r9_enabled', 'boolean', 'config.business'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

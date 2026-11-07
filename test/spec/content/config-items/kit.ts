@@ -425,6 +425,13 @@ export const SHOP_SOURCE_UNSEEDED: readonly string[] = [
   'shop.entry.source.jd',
   'shop.entry.source.pdd',
 ];
+// B1-08zi (D10-814 ⑥): the JD refunded quantity fund handling switch, registered right after
+// SHOP_SOURCE: an editable config.business boolean, options null. Not part of expectedNow() either.
+export const ORDERS_JD: readonly Expected[] = [
+  row('orders.jd.refunded_quantity_r9_enabled', 'boolean', 'config.business'),
+];
+/** B1-08zi (D10-814 ⑥): off until CAP-JD-08 is measured, hence no seed row (unset = off). */
+export const ORDERS_JD_UNSEEDED: readonly string[] = ['orders.jd.refunded_quantity_r9_enabled'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -449,6 +456,7 @@ export const expectedOf = (key: string): Expected => {
     ...FEEDBACK,
     ...BAD_DEBT,
     ...SHOP_SOURCE,
+    ...ORDERS_JD,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

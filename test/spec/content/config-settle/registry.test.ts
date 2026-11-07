@@ -43,6 +43,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // B1-28q (D10-698): then feedback.enabled and feedback.daily_limit_per_device, in this order;
   // B2-12e (D10-590): then ledger.bad_debt_days and ledger.bad_debt_min_fen, in this order;
   // B1-05zi (D10-736): then shop.entry.source.taobao / jd / pdd, in this order;
+  // B1-08zi (D10-814 ⑥): then orders.jd.refunded_quantity_r9_enabled;
   // nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
@@ -128,6 +129,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'shop.entry.source.taobao',
     'shop.entry.source.jd',
     'shop.entry.source.pdd',
+    'orders.jd.refunded_quantity_r9_enabled',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),

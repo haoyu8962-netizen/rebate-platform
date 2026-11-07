@@ -217,7 +217,8 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
   // the six legal.labor_agreement.* / legal.operator_entity.* keys in this order, and B1-28q
   // (D10-698) then feedback.enabled and feedback.daily_limit_per_device in this order, and B2-12e
   // (D10-590) then ledger.bad_debt_days and ledger.bad_debt_min_fen in this order, and B1-05zi
-  // (D10-736) then shop.entry.source.taobao / jd / pdd in this order.
+  // (D10-736) then shop.entry.source.taobao / jd / pdd in this order, and B1-08zi (D10-814 ⑥)
+  // then orders.jd.refunded_quantity_r9_enabled.
   const keys = items.map((item) => item.key);
   const tail = [
     ...inviteNow().map((entry) => entry.key),
@@ -299,6 +300,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'shop.entry.source.taobao',
     'shop.entry.source.jd',
     'shop.entry.source.pdd',
+    'orders.jd.refunded_quantity_r9_enabled',
   ];
   const settleEnd = keys.length - tail.length;
   const settleStart = settleEnd - 16;

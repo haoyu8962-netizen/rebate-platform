@@ -45,7 +45,8 @@ it('[AC-F1-02zx#1] 资格天数是唯一的可改业务配置，整数范围 1�
 // legal.operator_entity.* keys follow it in this order. B1-28q (D10-698): feedback.enabled and
 // feedback.daily_limit_per_device follow them in this order. B2-12e (D10-590):
 // ledger.bad_debt_days and ledger.bad_debt_min_fen follow them in this order. B1-05zi (D10-736):
-// shop.entry.source.taobao / jd / pdd follow them in this order, ending the tail.
+// shop.entry.source.taobao / jd / pdd follow them in this order. B1-08zi (D10-814 ⑥):
+// orders.jd.refunded_quantity_r9_enabled follows them, ending the tail.
 const PAYOUT_KEYS = [
   'payout.single_cap_fen',
   'payout.daily_cap_fen',
@@ -138,6 +139,7 @@ const SHOP_SOURCE_KEYS = [
   'shop.entry.source.jd',
   'shop.entry.source.pdd',
 ];
+const ORDERS_JD_KEYS = ['orders.jd.refunded_quantity_r9_enabled'];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -168,6 +170,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...FEEDBACK_KEYS,
     ...BAD_DEBT_KEYS,
     ...SHOP_SOURCE_KEYS,
+    ...ORDERS_JD_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);

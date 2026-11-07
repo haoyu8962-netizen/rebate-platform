@@ -1,0 +1,25 @@
+id: B1-08zit
+repo: rebate-platform
+title: test-change B1-08zi 前置：config-registry 末尾登记 orders.jd.refunded_quantity_r9_enabled（默认关、无种子），冻结注册表用例只追加 ORDERS_JD_UNSEEDED（D10-873 / D10-876，同 B2-12e）
+type: test-change
+# 2026-11-07 funds 入账。kit.ts 是支持文件，任务分支上改会让引用它的冻结文件整份判定、red_exempt 超上限，照 B2-12e（c08d00b9a）把加键与冻结用例放同一张前置 PR 单独先合；主干上加键与测试同到，改前改后都绿。改动由新鲜 Claude 写、另一位只读复核，按 #24 加标签。B1-08zi 合并前不用这个键做任何资金处置（读它的代码在 B1-08zi）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'ops/tasks/B1-08zit.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

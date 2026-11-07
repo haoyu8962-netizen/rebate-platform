@@ -40,6 +40,8 @@
 // BAD_DEBT), both seeded.
 // B1-05zi (D10-736): shop.entry.source.taobao / jd / pdd follow them (kit SHOP_SOURCE), enums
 // whose only option is dataoke; only taobao is seeded (SHOP_SOURCE_UNSEEDED).
+// B1-08zi (D10-814 ⑥): orders.jd.refunded_quantity_r9_enabled follows them (kit ORDERS_JD), unset
+// (off) by default with no seed row (ORDERS_JD_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -69,6 +71,8 @@ import {
   INVITE_ELIG,
   LABOR,
   LABOR_UNSEEDED,
+  ORDERS_JD,
+  ORDERS_JD_UNSEEDED,
   ORDER_RESCAN,
   ORDER_RESCAN_UNSEEDED,
   PAYOUT,
@@ -133,6 +137,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...AVATAR_UNSEEDED,
         ...LABOR_UNSEEDED,
         ...SHOP_SOURCE_UNSEEDED,
+        ...ORDERS_JD_UNSEEDED,
       ]),
     ]),
   );
@@ -148,6 +153,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...AVATAR_UNSEEDED,
     ...LABOR_UNSEEDED,
     ...SHOP_SOURCE_UNSEEDED,
+    ...ORDERS_JD_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -183,6 +189,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...FEEDBACK,
         ...BAD_DEBT,
         ...SHOP_SOURCE,
+        ...ORDERS_JD,
       ].map((entry) => entry.key),
     ),
   );
@@ -229,7 +236,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       BRIDGE_UNSEEDED.length -
       AVATAR_UNSEEDED.length -
       LABOR_UNSEEDED.length -
-      SHOP_SOURCE_UNSEEDED.length,
+      SHOP_SOURCE_UNSEEDED.length -
+      ORDERS_JD_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -376,6 +384,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...FEEDBACK,
     ...BAD_DEBT,
     ...SHOP_SOURCE,
+    ...ORDERS_JD,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -437,6 +446,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...FEEDBACK,
     ...BAD_DEBT,
     ...SHOP_SOURCE,
+    ...ORDERS_JD,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -506,6 +516,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...FEEDBACK,
       ...BAD_DEBT,
       ...SHOP_SOURCE,
+      ...ORDERS_JD,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -527,6 +538,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...LABOR,
     ...FEEDBACK,
     ...BAD_DEBT,
+    ...ORDERS_JD,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({
