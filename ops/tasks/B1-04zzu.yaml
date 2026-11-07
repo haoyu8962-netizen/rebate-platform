@@ -1,0 +1,42 @@
+id: B1-04zzu
+repo: rebate-platform
+title: 淘宝维权单号归档只存凑狸已入库订单的行（别家维权原文不入库）
+type: impl
+# 2026-11-07 be 入账（D10-796 ② 选甲；D10-809 改号；FU-TB-ARCHIVE-FOREIGN-RIGHTS 的维权半边，上线前必做，淘宝 PID 登记前要合）。依据同 B1-04zzc：变更记录 20261031 §1 第 24 行「不入库别家订单」。大淘客 get-order-refund 记录没有推广位字段，归档存整页原文，别家维权单号入档。
+# 做法（甲）：union 加可选端口「自家淘宝订单查询」（入参 appId 与一页的 tb_trade_id 去重列表，返回其中已入库为凑狸淘宝订单的集合：app.orders 同 app_id、platform taobao，sub_order_id 或 parent_order_id 原样相等）；orders 在 index.ts 导出只读实现（不加锁、不写），app.module 经 UnionModuleOptions 注入（同 B1-22q 的 config 先例，union 不 import orders）。listRefunds 给大淘客请求传 archiveBody：从 data.result 删掉「tb_trade_id 可读且查询结果不含它」的行；读不出 tb_trade_id 的行照存；外层字段与 JSON 数字原文不动；没有可删的行原样返回。改写函数可返回 Promise（archive.ts 本就在插入前 await），查询在其内进行；查询失败时照存原文、记新的 error_code（与「正文不是 JSON → 存空串、archive_body_rewrite_failed」区分），不放弃插入、不影响调用结果。端口未注入时维权归档不变（照存原文）。listRefunds 返回的条目与 nextCursor 不变（匹配仍归 orders / funds）。维权早于订单入库时该条原文不入档、条目照常返回（D10-796 接受，规则测试钉住）。不动金额。
+# Codex 额度用尽（D10-775），规则测试与评审为新鲜独立 Claude。冻结 [AC-B1-04zzc#11]（维权归档仍是原文）若与新行为冲突，照 D10-327 只改该条期望。
+refs: []
+refs_hash: {}
+deps: [B1-04zzp]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/refunds{.ts,.test.ts}'
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
+  - 'apps/api/src/modules/union/infra/archive{.ts,.test.ts}'
+  - 'apps/api/src/modules/union/infra/replay.ts'
+  - 'apps/api/src/modules/union/infra/registry.ts'
+  - 'apps/api/src/modules/union/union.module.ts'
+  - 'apps/api/src/modules/union/index.ts'
+  - 'apps/api/src/modules/orders/infra/own-taobao-orders{.ts,.test.ts}'
+  - 'apps/api/src/modules/orders/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'test/spec/union/taobao-refund-archive/**'
+  - 'test/spec/union/taobao-order-archive/others.test.ts'
+test_paths:
+  - 'test/spec/union/taobao-refund-archive/**'
+  - 'test/spec/union/taobao-order-archive/others.test.ts'
+red_exempt:
+  - file: test/spec/union/taobao-order-archive/others.test.ts
+    test: '[AC-B1-04zzc#12] 违规 get-foul-order-list 的归档已去掉别家推广位的违规行（只剩自家行，外层字段不变；B1-04zzp），同一适配器的订单详情归档已去掉别家行'
+    reason: 违规归档用例体未改（B1-04zzp 已定），维权以外行为不变
+  - file: test/spec/union/taobao-order-archive/others.test.ts
+    test: '[AC-B1-04zzc#13] 大淘客搜索的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行'
+    reason: 搜索归档用例体未改，行为不变
+  - file: test/spec/union/taobao-order-archive/others.test.ts
+    test: '[AC-B1-04zzc#14] 大淘客转链的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行'
+    reason: 转链归档用例体未改，行为不变
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
