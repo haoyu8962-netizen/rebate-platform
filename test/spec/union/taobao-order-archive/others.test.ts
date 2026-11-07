@@ -1,6 +1,6 @@
-// B1-04zzc（D10-776 方案 A）：本单只改订单详情——同一个适配器、同一个归档传输上，大淘客的维权、违规、搜索、
-// 转链请求的归档不变（仍存收到的原文，连夹带的订单形状、别家推广位的违规行也不动），而订单详情的归档已去掉
-// 别家行。每个用例先走一页订单详情作对照。报文全部合成。
+// B1-04zzc（D10-776 方案 A）：本单只改订单详情——同一个适配器、同一个归档传输上，大淘客的维权、搜索、
+// 转链请求的归档不变（仍存收到的原文，连夹带的订单形状也不动），违规请求的归档自 B1-04zzp 起同样去掉别家
+// 推广位的行，而订单详情的归档已去掉别家行。每个用例先走一页订单详情作对照。报文全部合成。
 import { expect, it } from 'vitest';
 import { DATAOKE_SEARCH_PATH } from '../../../../apps/api/src/modules/union/infra/taobao/dataoke-search.ts';
 import {
@@ -78,7 +78,7 @@ it('[AC-B1-04zzc#11] 维权 get-order-refund 的归档仍是收到的原文（�
   expect(payloadText(row)).toContain(DECOY_TRADE_ID);
 });
 
-it('[AC-B1-04zzc#12] 违规 get-foul-order-list 的归档仍是收到的原文（别家推广位的违规行也在），同一适配器的订单详情归档已去掉别家行', async () => {
+it('[AC-B1-04zzc#12] 违规 get-foul-order-list 的归档已去掉别家推广位的违规行（只剩自家行，外层字段不变；B1-04zzp），同一适配器的订单详情归档已去掉别家行', async () => {
   const rows = [punishOf(1), punishOf(2, FOREIGN_ADZONE), punishOf(3, OTHER_FOREIGN_ADZONE)];
   const body = afterSalesReply(punishData(rows, rows.length)).body;
   const h = wiredWith(PUNISH_PATH, body);
@@ -88,8 +88,9 @@ it('[AC-B1-04zzc#12] 违规 get-foul-order-list 的归档仍是收到的原文�
 
   const row = onlyArchiveOf(h.database, PUNISH_PATH);
   expect(row.values['kind']).toBe('order');
-  expect(payloadText(row)).toBe(body);
-  expect(payloadText(row)).toContain(FOREIGN_ADZONE);
+  expectArchivedAs(row, afterSalesReply(punishData([punishOf(1)], rows.length)).body);
+  expect(payloadText(row)).not.toContain(FOREIGN_ADZONE);
+  expect(payloadText(row)).not.toContain(OTHER_FOREIGN_ADZONE);
 });
 
 it('[AC-B1-04zzc#13] 大淘客搜索的归档仍是收到的原文，同一适配器的订单详情归档已去掉别家行', async () => {

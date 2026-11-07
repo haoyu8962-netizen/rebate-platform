@@ -1,0 +1,113 @@
+{
+  "risk_note": "RV2 (union; order ownership path). D10-793 ① (FU-TB-ARCHIVE-FOREIGN-RIGHTS, punishment half): the archive (union_raw_payloads) of 大淘客 get-foul-order-list requests stores the page with other companies' promotion-slot rows removed, same as B1-04zzc plan A (D10-778). listPunishments now passes taobaoPunishArchiveBody as archiveBody: rows of data.results whose tk_adzone_id is readable (same punishAdzone reading as ourPunishRows) and not among our slots are dropped; unreadable rows, our rows (retired included), every outer member (total_count unchanged) and JSON number literals are kept; nothing to drop or a non-list results returns the body unchanged; a body that is not JSON throws and the existing archive wrapper stores an empty payload with error_code. Refunds (no slot field) are untouched and wait for the orchestrator's ruling (B1-04zzq). Items, nextCursor and the per-page taobao_punish_foreign_slot warning are unchanged. Frozen [AC-B1-04zzc#12] (punishment archive was the raw body) changed per D10-327 to the new expectation only. No amount change.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage exhausted until 11-11 (D10-775): money review by a fresh independent Claude via tools/agent/claude-run.sh, round 1 pass with no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests (test/spec/union/taobao-punish-archive/, 6 files) and the single frozen edit [AC-B1-04zzc#12] by a fresh independent Claude; 19 tests in 7 files red at the base. Round 1 pass, one S2 (a property callback has no trailing return true). The reviewer confirmed others.test.ts changes only header comment lines 1-3 and the title and body of #12; #11, #13, #14 are character-for-character unchanged (the ledger's red_exempt)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#12] 违规 get-foul-order-list 的归档已去掉别家推广位的违规行（只剩自家行，外层字段不变；B1-04zzp），同一适配器的订单详情归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/failure.test.ts > [AC-B1-04zzp#6] 200 纯文本：违规归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 是 archive_body_rewrite_failed；listPunishments 仍以 UnionError 失败",
+    "test/spec/union/taobao-punish-archive/failure.test.ts > [AC-B1-04zzp#6] 200 截断的 JSON（夹着别家行）：违规归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 是 archive_body_rewrite_failed；listPunishments 仍以 UnionError 失败",
+    "test/spec/union/taobao-punish-archive/failure.test.ts > [AC-B1-04zzp#6] 502 纯文本（上游有码）：违规归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 是 http_502；listPunishments 仍以 UnionError 失败",
+    "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#1] 混合页的违规归档只剩自家推广位（在用与已停用）的行、按上游顺序；别家行（tk_adzone_id 是 JSON 整数或十进制串）在 gunzip 后的报文里一个字也没有",
+    "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#2] 读不出 tk_adzone_id 的行（缺失、非法值、JSON null、空串、整行不是对象）照样在违规归档里，不当别家行删",
+    "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#3] 外层字段与 JSON 数字原文原样：顶层其余键、page_no / page_size、total_count（不随删行改）、data 下其余键都在；长整型与小数的原文不失真",
+    "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#4] 一整页全是别家行：违规归档里 results 为空数组，其余字段保留；listPunishments 照常给空页，别家计数仍是这一页一条",
+    "test/spec/union/taobao-punish-archive/property.test.ts > [AC-B1-04zzp#10] 任意顺序的自家 / 别家 / 读不出推广位的行混合页：违规归档恰好一行，等于去掉别家行后的原序列，total_count 不变",
+    "test/spec/union/taobao-punish-archive/scope.test.ts > [AC-B1-04zzp#9] 维权的归档仍是收到的原文（夹带的别家违规形状行也在），同一适配器的违规归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] 只有自家行（在用与已停用），报文带多余空白：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] 只有自家行与读不出推广位的行：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] 空页：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data.results 缺失：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data.results 是 null：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data.results 是对象（里面夹着别家推广位的行）：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data 不是对象（数组里夹着别家推广位的行）：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/warnings.test.ts > [AC-B1-04zzp#7] taobao_punish_foreign_slot 这一页恰好一条（count 3），归档侧不另发 warn / error；告警与日志里没有单号与 PID；归档已去掉别家行",
+    "test/spec/union/taobao-punish-archive/warnings.test.ts > [AC-B1-04zzp#8] 连续两页：nextCursor 照常翻到第 2 页再结束，每页恰好一条归档行、都没有别家行（page_no / total_count 各自原样），别家计数每页一条"
+  ],
+  "task": "B1-04zzp",
+  "spec_commit": "59de59607851f22b0d8f7fe73bcf0299a203678d",
+  "spec_ref": "3f2b91dfa359fcbce54dc59c4b43c7763885cf58",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "59de59607851f22b0d8f7fe73bcf0299a203678d",
+      "tree": "0b6233f809ab0ec48f8fea4458f683add45f6a0e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T03:39:46Z",
+      "finished_at": "2026-11-07T03:40:13Z",
+      "red_tests": [
+        "test/spec/union/taobao-order-archive/others.test.ts > [AC-B1-04zzc#12] 违规 get-foul-order-list 的归档已去掉别家推广位的违规行（只剩自家行，外层字段不变；B1-04zzp），同一适配器的订单详情归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/failure.test.ts > [AC-B1-04zzp#6] 200 纯文本：违规归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 是 archive_body_rewrite_failed；listPunishments 仍以 UnionError 失败",
+        "test/spec/union/taobao-punish-archive/failure.test.ts > [AC-B1-04zzp#6] 200 截断的 JSON（夹着别家行）：违规归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 是 archive_body_rewrite_failed；listPunishments 仍以 UnionError 失败",
+        "test/spec/union/taobao-punish-archive/failure.test.ts > [AC-B1-04zzp#6] 502 纯文本（上游有码）：违规归档照样插入一行，payload 是空串的 gzip（content_hash 对得上），error_code 是 http_502；listPunishments 仍以 UnionError 失败",
+        "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#1] 混合页的违规归档只剩自家推广位（在用与已停用）的行、按上游顺序；别家行（tk_adzone_id 是 JSON 整数或十进制串）在 gunzip 后的报文里一个字也没有",
+        "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#2] 读不出 tk_adzone_id 的行（缺失、非法值、JSON null、空串、整行不是对象）照样在违规归档里，不当别家行删",
+        "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#3] 外层字段与 JSON 数字原文原样：顶层其余键、page_no / page_size、total_count（不随删行改）、data 下其余键都在；长整型与小数的原文不失真",
+        "test/spec/union/taobao-punish-archive/filter.test.ts > [AC-B1-04zzp#4] 一整页全是别家行：违规归档里 results 为空数组，其余字段保留；listPunishments 照常给空页，别家计数仍是这一页一条",
+        "test/spec/union/taobao-punish-archive/property.test.ts > [AC-B1-04zzp#10] 任意顺序的自家 / 别家 / 读不出推广位的行混合页：违规归档恰好一行，等于去掉别家行后的原序列，total_count 不变",
+        "test/spec/union/taobao-punish-archive/scope.test.ts > [AC-B1-04zzp#9] 维权的归档仍是收到的原文（夹带的别家违规形状行也在），同一适配器的违规归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] 只有自家行（在用与已停用），报文带多余空白：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] 只有自家行与读不出推广位的行：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] 空页：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data.results 缺失：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data.results 是 null：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data.results 是对象（里面夹着别家推广位的行）：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts > [AC-B1-04zzp#5] data 不是对象（数组里夹着别家推广位的行）：违规归档逐字节就是收到的原文、error_code 为空；同一适配器接着取的混合页归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/warnings.test.ts > [AC-B1-04zzp#7] taobao_punish_foreign_slot 这一页恰好一条（count 3），归档侧不另发 warn / error；告警与日志里没有单号与 PID；归档已去掉别家行",
+        "test/spec/union/taobao-punish-archive/warnings.test.ts > [AC-B1-04zzp#8] 连续两页：nextCursor 照常翻到第 2 页再结束，每页恰好一条归档行、都没有别家行（page_no / total_count 各自原样），别家计数每页一条"
+      ],
+      "expected": [
+        "test/spec/union/taobao-order-archive/others.test.ts",
+        "test/spec/union/taobao-punish-archive/failure.test.ts",
+        "test/spec/union/taobao-punish-archive/filter.test.ts",
+        "test/spec/union/taobao-punish-archive/property.test.ts",
+        "test/spec/union/taobao-punish-archive/scope.test.ts",
+        "test/spec/union/taobao-punish-archive/unchanged.test.ts",
+        "test/spec/union/taobao-punish-archive/warnings.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7415634eeac77342a82b8958c5a72256ab89435a23061065d21c3ecbb4a68784"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "889162fbdc7db32a80336558053626b1cae68453",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}

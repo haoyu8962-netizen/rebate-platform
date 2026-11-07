@@ -155,6 +155,7 @@ import {
   parseTaobaoPunishBody,
   planTaobaoPunishments,
   taobaoPunishParameters,
+  taobaoPunishArchiveBody,
   TAOBAO_PUNISH_PATH,
   TAOBAO_PUNISH_VERSION,
   type TaobaoPunishWarning,
@@ -922,7 +923,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_ORDER_VERSION,
       taobaoOrderParameters(plan),
       ctx,
-      // B1-04zzc：订单详情的归档只存去掉别家推广位行的报文（维权、违规、搜索、转链不改写）。
+      // B1-04zzc：订单详情的归档只存去掉别家推广位行的报文（违规见 listPunishments；维权、搜索、转链不改写）。
       (body) => taobaoOrderArchiveBody(body, adzones),
     );
     const page = parseTaobaoOrderBody(response.body);
@@ -1026,6 +1027,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_PUNISH_VERSION,
       taobaoPunishParameters(plan),
       ctx,
+      // B1-04zzp：违规的归档同样只存去掉别家推广位行的报文（维权不改写）。
+      (body) => taobaoPunishArchiveBody(body, adzones),
     );
     const page = parseTaobaoPunishBody(response.body);
     const items: UnionPunish[] = [];

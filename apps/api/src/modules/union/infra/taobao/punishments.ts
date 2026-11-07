@@ -13,6 +13,8 @@
 // - 推广位过滤：只留 tk_adzone_id 属于 orderSlots 给出的推广位（PID 最后一段，含 retired，与 orders.ts
 //   同口径）的记录；别家每页计数告警一次；清单为空 → 不发请求、返回空页并告警一次；订单源或推广位
 //   端口未注入 → adapter_unimplemented。
+// - 归档（B1-04zzp，D10-793 ①）：违规请求的归档只存 taobaoPunishArchiveBody 改写后的报文——data.results
+//   里 tk_adzone_id 可读且不在推广位清单的行去掉，其余（含读不出推广位的行与外层字段）与数字原文照旧。
 // TODO(规划/11 §4.5): 明细字段按文档写（录制窗口内 0 条），待大淘客违规录制复核 — blocked on 大淘客录制
 import type {
   PunishmentQueryOpt,
@@ -24,6 +26,7 @@ import {
   beijingText,
   isRecord,
   parseTaobaoRawData,
+  TaobaoRawNumber,
   taobaoAbsent,
   taobaoDecimalId,
   taobaoInvalid,
@@ -199,12 +202,57 @@ export function ourPunishRows(
   warn: Warn,
 ): readonly unknown[] {
   const kept = rows.filter((row) => {
-    const adzone = isRecord(row) ? taobaoDecimalId(row.tk_adzone_id) : null;
+    const adzone = punishAdzone(row);
     return adzone !== null && adzones.has(adzone);
   });
   const foreign = rows.length - kept.length;
   if (foreign > 0) warn?.({ event: 'taobao_punish_foreign_slot', count: foreign });
   return kept;
+}
+
+/** tk_adzone_id of a record as ourPunishRows reads it (decimal text), else null (unreadable). */
+function punishAdzone(row: unknown): string | null {
+  return isRecord(row) ? taobaoDecimalId(row.tk_adzone_id) : null;
+}
+
+/** JSON text of a parsed tree, every TaobaoRawNumber written as its literal. */
+function literalJson(value: unknown): string {
+  if (value instanceof TaobaoRawNumber) return value.text;
+  if (Array.isArray(value)) return `[${value.map(literalJson).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    const members = Object.entries(value).map(
+      ([name, member]) => `${JSON.stringify(name)}:${literalJson(member)}`,
+    );
+    return `{${members.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * B1-04zzp（D10-793 ①，同 B1-04zzc 方案 A）: the get-foul-order-list body as the archive stores
+ * it. Rows of other companies' promotion slots (tk_adzone_id readable as ourPunishRows reads it,
+ * and not in `adzones`) are dropped from data.results; our rows (retired included) and rows whose
+ * slot cannot be read stay, in upstream order. Every other member (total_count included) is kept
+ * and JSON number literals are written as received. A body with nothing to drop (or whose
+ * data.results is not a list) is returned unchanged. Throws when the body is not JSON. Pure: no
+ * warning here (the foreign count comes from ourPunishRows only).
+ */
+export function taobaoPunishArchiveBody(body: string, adzones: ReadonlySet<string>): string {
+  // 先确认正文是一个完整的 JSON 值（不是就抛），再借 parseTaobaoRawData（数字保原文）取整棵树。
+  const plain: unknown = JSON.parse(body);
+  if (!isRecord(plain)) return body;
+  const tree = parseTaobaoRawData(`{"data":${body}}`, OPERATION);
+  const data = tree.data;
+  if (!isRecord(data) || data instanceof TaobaoRawNumber) return body;
+  const list = data.results;
+  if (!Array.isArray(list)) return body;
+  const kept = list.filter((row) => {
+    const adzone = punishAdzone(row);
+    return adzone === null || adzones.has(adzone);
+  });
+  if (kept.length === list.length) return body;
+  data.results = kept;
+  return literalJson(tree);
 }
 
 /** Text of a required key part: a non-blank string (not "--") or a JSON integer literal. */
