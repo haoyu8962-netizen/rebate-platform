@@ -1,0 +1,32 @@
+id: B2-04zze
+repo: rebate-platform
+title: 订单子原因 reason_sub 自动映射（淘宝违规 violation_type、淘宝维权、退款按收货 / 结算时点；对不上落 PUNISH_ORDER 并告警）
+type: impl
+# 2026-11-07 be 入账（D10-818 ② / D10-862；08 BR-TEXT-05「子原因 reason_sub」细则「写入来源 ①」；方案 couli-runs/FU-ORDER-REASON-SUB-AUTO/plan.md）。
+# 写者：orders.reason 唯一写者是 settlement（入账前 rebate.ts voidReasonOf、入账后 clawback-order.ts r8Reason），reason_sub 在同一处同事务写；reason_sub_manual 为真时不覆盖（B1-09u 迁移）；后续同步得到更具体的可覆盖 PUNISH_ORDER。只改展示用子原因，不改金额、父编码、状态迁移与流水。
+# 映射（D10-862）：① 淘宝 / 大淘客违规：violation_type 文本按 08 desc 逐字匹配（「订单虚假交易」→ FAKE_TRADE 等，表放 specs/reason-sub-map/taobao.csv，照 specs/order-status-map 写法），对不上（含编码形态 1 / 2）→ PUNISH_ORDER + warn alert order_reason_sub_unmapped（带平台与原值、不带单号）；原值不加列（FU-REASON-SUB-RAW-BACKFILL）。② 淘宝维权（父编码 RIGHTS 不动）→ AFTER_SALE。③ 订单同步 PLATFORM_INVALID 落 REFUND 的单：确认收货前 → IN_SALE，已结算 → AFTER_SETTLE，收货后结算前不写（08 那档父编码是 RIGHTS，D10-862 ② 父编码不动）。④ 京东不写子原因（D10-862 ①，改走 PUNISH 待负责人）。⑤ 拼多多：处罚码 4 / 10 不在 pdd.csv、父编码到不了 PUNISH，本单不写，fail_reason 映射待 pdd.csv 补处罚码后另开。原值经 RightsSyncItem / RightsRecordInput 透传到 settlement 的入参，不落库。
+# 依赖：CT-24zw（契约 order_reason_sub 15 码，#2645）、B1-09u（迁移 0131 reason_sub_manual）。Codex 能用（D10-823）：规则测试新鲜独立 Claude，spec-test 评审新鲜独立 Claude（D10-848），money 评审 Codex。
+refs: []
+refs_hash: {}
+deps: [CT-24zw, B1-09u]
+paths:
+  - 'apps/api/src/modules/orders/jobs/rights-sync.ts'
+  - 'apps/api/src/modules/orders/application/rights-sync.ts'
+  - 'apps/api/src/modules/orders/application/rights-ports.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+  - 'apps/api/src/modules/orders/domain/reason-sub{.ts,.test.ts}'
+  - 'apps/api/src/modules/orders/worker-runtime.ts'
+  - 'apps/api/src/modules/orders/index.ts'
+  - 'apps/api/src/modules/settlement/rights/**'
+  - 'apps/api/src/modules/settlement/rebate/**'
+  - 'apps/api/src/modules/settlement/clawback/**'
+  - 'specs/reason-sub-map/**'
+  - 'test/spec/settlement/order-reason-sub/**'
+test_paths:
+  - 'test/spec/settlement/order-reason-sub/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
