@@ -70,6 +70,7 @@ import {
 } from '../domain/source-shop.ts';
 import type { PlatformStatusEvent } from '../domain/status-map.ts';
 import {
+  planOrderQuantities,
   planOrderSyncColumns,
   planOrderUpdate,
   reportedSettleFen,
@@ -397,6 +398,14 @@ export function createOrderUpdateStep(
     // BR-FUND-04 ①：不进 planOrderSyncColumns（B1-08i 冻结的同步列集合），空值不覆盖。
     const unionSettledAt = incoming.settled_at ?? null;
     if (unionSettledAt !== null) Object.assign(set, { union_settled_at: unionSettledAt });
+
+    // B1-08zi（D10-814 ② ③）：件数与已退件数不进 OrderSyncColumns，同一条 CAS 写入；没给沿用、变小不写并告警；
+    // 不影响 commission_version。refunded_quantity_at_credit 不由同步写（只在入账 CAS 定格）。
+    const quantities = planOrderQuantities(current, incoming);
+    Object.assign(set, {
+      quantity: quantities.quantity,
+      refunded_quantity: quantities.refunded_quantity,
+    });
 
     // 归属参数（BR-ATTR-01）：已归属不覆盖四项参数，变化只告警；未归因写入参并重跑 ②（BR-ATTR-06 / 07）。
     const params = incoming.attr_params ?? NO_PARAMS;
@@ -875,6 +884,12 @@ export function createOrderUpdateStep(
       log?.error(
         { ...base, alert: ALERT_SYNC, event: 'attr_binding_conflict', outcome: 'unattributed' },
         'taobao binding conflict',
+      );
+    }
+    for (const reason of quantities.alerts) {
+      log?.warn(
+        { ...base, alert: ALERT_SYNC, event: 'order_quantity_decreased', reason, outcome: 'kept' },
+        'reported quantity below the stored value; stored value kept',
       );
     }
     if (pidSceneMissing) {

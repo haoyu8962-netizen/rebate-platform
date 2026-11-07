@@ -264,5 +264,36 @@ export function mapJdOrder(
     // 结算额只由联盟结算明细导入写 order_settlements（source=STATEMENT）。
     settle_commission_fen: null,
     raw_payload_id: page.rawPayloadId,
+    ...jdQuantityFields(input),
   });
+}
+
+/**
+ * B1-08zi（FU-REFUNDED-QUANTITY-WRITER，D10-814 ①）：一条订单行（内层数字是 JdRawNumber）的件数与已退件数，
+ * mapJdOrder 把结果并进 DTO。skuNum → quantity、skuReturnNum → refunded_quantity：缺键或 JSON null 为 null；
+ * 有值必须是十进制非负整数原文且不超过 int4 上限（orders 列是 integer），否则 invalid_dto（错误信息只带字段名）。
+ * 不由 validCode、金额或其他字段推算。
+ */
+export function jdQuantityFields(row: Readonly<Record<string, unknown>>): {
+  readonly quantity: number | null;
+  readonly refunded_quantity: number | null;
+} {
+  return {
+    quantity: optionalCount(row, 'skuNum'),
+    refunded_quantity: optionalCount(row, 'skuReturnNum'),
+  };
+}
+
+/** orders.quantity / refunded_quantity 是 integer（int4）。 */
+const INT4_MAX = 2_147_483_647n;
+
+/** 缺键与 JSON null 是 null；有值必须是十进制非负整数原文且不超过 int4 上限。 */
+function optionalCount(row: Readonly<Record<string, unknown>>, name: string): number | null {
+  const value = row[name];
+  if (value === undefined || value === null) return null;
+  const text = scalarText(value);
+  if (text === undefined || !DECIMAL_ID.test(text) || BigInt(text) > INT4_MAX) {
+    throw invalid(`${name} must be a non-negative integer`);
+  }
+  return Number(text);
 }

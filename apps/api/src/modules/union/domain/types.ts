@@ -441,8 +441,24 @@ export interface UnionOrderNeutralFields {
   readonly raw_payload_id: string | null;
 }
 
+/**
+ * B1-08zi（FU-REFUNDED-QUANTITY-WRITER，D10-814）：子订单的件数与已退件数，非负整数（≤ int4 上限）。
+ * 只有京东映射给出（skuNum → quantity、skuReturnNum → refunded_quantity，同一行即同一 skuId）；
+ * 京东本行缺字段或 JSON null 为 null。淘宝 / 拼多多不给（缺键），也不由 refund_tag / item_num /
+ * return_status 推算。null 与缺键都表示「平台这次没给」：orders 沿用库内值。
+ */
+export interface UnionOrderQuantityFields {
+  readonly quantity?: number | null;
+  readonly refunded_quantity?: number | null;
+}
+
 export interface UnionOrder
-  extends ItemRef, PddOrderFields, TaobaoOrderFields, Partial<UnionOrderNeutralFields> {
+  extends
+    ItemRef,
+    PddOrderFields,
+    TaobaoOrderFields,
+    UnionOrderQuantityFields,
+    Partial<UnionOrderNeutralFields> {
   /** B1-08p：undefined = 平台无店铺字段；null = 本条缺失 / 非法；字符串 = 店铺标识。
    * 拼多多来源：pdd.ddk.order.list.increment.get / list.range.get / detail.get 的 mall_id。
    * 字段资料：docs-mirror/pdd/api/<接口名>.md；不以 mall_name / seller_nick 替代 ID。

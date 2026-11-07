@@ -56,6 +56,29 @@ export interface InviteRewardOrder {
   refunded_quantity_at_credit: number | null;
   rights_pending: boolean;
   has_rights: boolean;
+  /**
+   * B1-08zi：订单平台（orders.platform）。只有 jd 的已退件数比较挂开关 orders.jd.refunded_quantity_r9_enabled；
+   * 缺失按非京东处理（照旧比较）。
+   */
+  platform?: string | null;
+}
+
+/**
+ * B1-08zi（D10-814 ⑥，BR-INV-24 细则 判定顺序 3 ⑥）：触发订单是否已不再可发奖。rebate_status 不是 CREDITED
+ * → true；否则看已退件数 (refunded_quantity ?? 0) > (refunded_quantity_at_credit ?? 0)：platform jd 只在
+ * jdR9Enabled 时据此为 true（开关关不据此作废未发奖励），其他平台与缺失平台照旧据此为 true。
+ */
+export function inviteRewardOrderClawedBack(
+  order: InviteRewardOrder,
+  jdR9Enabled: boolean,
+): boolean {
+  if (order.rebate_status !== 'CREDITED') return true;
+  if (!refundedAfterCredit(order)) return false;
+  return order.platform !== 'jd' || jdR9Enabled;
+}
+
+function refundedAfterCredit(order: InviteRewardOrder): boolean {
+  return (order.refunded_quantity ?? 0) > (order.refunded_quantity_at_credit ?? 0);
 }
 
 export interface InviteRewardOrderFacts {
@@ -115,6 +138,8 @@ const KEY_DAILY = 'growth.invite_reward.daily_budget_fen';
 const KEY_MIN_PAID = 'growth.invite_reward.min_paid_fen';
 const KEY_IP_WINDOW = 'growth.invite_reward.ip_window_hours';
 const KEY_PAUSED = 'growth.invite_reward.payout_paused';
+/** B1-08zi（D10-814 ⑥）：京东已退件数是否算「入账后退款」，与 settlement R9 同一开关（默认关）。 */
+const JD_REFUND_R9_SWITCH = 'orders.jd.refunded_quantity_r9_enabled';
 
 /** BR-INV-24 细则 默认值. */
 const DEFAULT_AMOUNT = 1000;
@@ -634,10 +659,21 @@ function awaitingPayout(row: RewardRow): boolean {
   return (row.status === 'qualified' && row.trigger_order_id !== null) || row.status === 'deferred';
 }
 
-/** Step 3 ⑥: no longer CREDITED, clawed back, or refunded after crediting. */
-function clawedBack(order: InviteRewardOrder): boolean {
-  if (order.rebate_status !== 'CREDITED') return true;
-  return (order.refunded_quantity ?? 0) > (order.refunded_quantity_at_credit ?? 0);
+/**
+ * Step 3 ⑥: no longer CREDITED, clawed back, or refunded after crediting (B1-08zi: a jd refund
+ * counts only with orders.jd.refunded_quantity_r9_enabled, read only when it decides).
+ */
+async function clawedBack(
+  deps: Pick<InviteRewardBaseDeps, 'config'>,
+  trx: Transaction<DB>,
+  order: InviteRewardOrder,
+): Promise<boolean> {
+  const decides =
+    order.rebate_status === 'CREDITED' && order.platform === 'jd' && refundedAfterCredit(order);
+  const enabled = decides
+    ? (await deps.config.configValue(order.app_id, JD_REFUND_R9_SWITCH, trx))?.value === true
+    : false;
+  return inviteRewardOrderClawedBack(order, enabled);
 }
 
 /** The columns of one party's result (skipped with its reason, or granted with its voucher). */
@@ -845,7 +881,8 @@ export function createInviteRewardPayout(deps: InviteRewardPayoutDeps): InviteRe
     // 3. the trigger order is still CREDITED, not clawed back, not in rights.
     const order = await deps.orders.read(trx, { app_id: appId, order_id: row.trigger_order_id });
     if (order === null) throw new Error('growth: invite reward trigger order not found');
-    if (clawedBack(order)) return voidRow(trx, row, pending, 'order_clawed_back', at);
+    if (await clawedBack(deps, trx, order))
+      return voidRow(trx, row, pending, 'order_clawed_back', at);
     if (order.rights_pending || order.has_rights) {
       return voidRow(trx, row, pending, 'order_rights', at);
     }
@@ -1033,13 +1070,15 @@ export function createInviteRewardExpiry(
     const min = await minPaid(deps, trx, appId, fields);
     // A malformed min_paid_fen cannot tell a triggering order: judge again on a later day.
     if (min === null) return;
-    const late = orders
-      .filter((order) => triggering(order, min) && !clawedBack(order))
-      .sort(
-        (a, b) =>
-          (a.credited_at?.getTime() ?? 0) - (b.credited_at?.getTime() ?? 0) ||
-          a.attr_at.getTime() - b.attr_at.getTime(),
-      )[0];
+    const candidates: InviteRewardOrder[] = [];
+    for (const order of orders) {
+      if (triggering(order, min) && !(await clawedBack(deps, trx, order))) candidates.push(order);
+    }
+    const late = candidates.sort(
+      (a, b) =>
+        (a.credited_at?.getTime() ?? 0) - (b.credited_at?.getTime() ?? 0) ||
+        a.attr_at.getTime() - b.attr_at.getTime(),
+    )[0];
     if (late !== undefined) {
       // A CREDITED eligible order placed in the window that never triggered: trigger it now, so
       // the payout scan pays it; the reservation stays.

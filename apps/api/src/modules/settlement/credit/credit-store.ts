@@ -78,6 +78,8 @@ export async function casCreditOrder(trx: Transaction<DB>, cas: CreditCas): Prom
       booked_base_fen: cas.booked_base_fen,
       booked_n_fen: cas.booked_n_fen,
       credited_at: cas.at,
+      // B1-08zi（D10-814 ④）：入账时已退件数的定格，取同一行当时的 refunded_quantity 列本身；之后不推进。
+      refunded_quantity_at_credit: (eb) => eb.ref('refunded_quantity'),
       row_version: cas.row_version + 1,
       updated_at: cas.at,
     })

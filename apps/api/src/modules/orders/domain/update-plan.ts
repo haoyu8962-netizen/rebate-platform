@@ -177,6 +177,51 @@ export type OrderSyncColumns = Pick<
 >;
 
 /**
+ * B1-08zi（D10-814）：orders 的件数两列。不并进 OrderSyncColumns（B1-08i 冻结的同步列集合，[AC-B1-08i#14]），
+ * 另经 planOrderQuantities 计划，与同步 upsert 同一事务、同一条写入。
+ */
+export interface OrderQuantityColumns {
+  readonly quantity: number | null;
+  readonly refunded_quantity: number | null;
+}
+
+/** 本次报文的数量小于库内值（不写、保留旧值）时的告警原因。 */
+export type OrderQuantityAlert = 'quantity_decreased' | 'refunded_quantity_decreased';
+
+export interface OrderQuantityPlan extends OrderQuantityColumns {
+  /** 本次被拒写的变小，按 quantity、refunded_quantity 的顺序；没有为空数组。 */
+  readonly alerts: readonly OrderQuantityAlert[];
+}
+
+/**
+ * B1-08zi（D10-814 ② ③）：两列各自独立：本次报文没给（缺键或 null）→ 沿用库内值；给了且不小于库内值（或库内为空）
+ * → 写新值；小于库内值 → 不写、保留库内值并给出告警。只看 quantity / refunded_quantity 两个字段，不看平台、
+ * 不用 refund_tag / item_num / return_status 推算；不影响 commission_version（BR-CALC-15 / D10-578）。
+ * 首次入库 current 两列都是 null。
+ */
+export function planOrderQuantities(
+  current: OrderQuantityColumns,
+  incoming: Pick<UnionOrder, 'quantity' | 'refunded_quantity'>,
+): OrderQuantityPlan {
+  const quantity = planCount(current.quantity, incoming.quantity);
+  const refunded = planCount(current.refunded_quantity, incoming.refunded_quantity);
+  const alerts: OrderQuantityAlert[] = [];
+  if (quantity.decreased) alerts.push('quantity_decreased');
+  if (refunded.decreased) alerts.push('refunded_quantity_decreased');
+  return { quantity: quantity.value, refunded_quantity: refunded.value, alerts };
+}
+
+/** 一列：没给沿用库内值；给了且不小于库内值（或库内为空）取新值；变小保留库内值并标记。 */
+function planCount(
+  stored: number | null,
+  reported: number | null | undefined,
+): { readonly value: number | null; readonly decreased: boolean } {
+  if (reported === undefined || reported === null) return { value: stored, decreased: false };
+  if (stored !== null && reported < stored) return { value: stored, decreased: true };
+  return { value: reported, decreased: false };
+}
+
+/**
  * BR-FUND-02：本次报文给出且算数的结算额：只在（迁移后）平台明确已结算时才算；否则 null。
  * 同时决定列与结算记录（BR-FUND-09），两者不会各走一条判定。
  */

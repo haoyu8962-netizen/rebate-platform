@@ -35,6 +35,12 @@ export type OrderUpdateSet = OrderSyncColumns &
     readonly agent_session_id?: string | null;
     /** paid_at 来源（B1-08k，BR-CALC-11）：只在本次跨入快照资格、且库内为空时随同写入，已有值不覆盖。 */
     readonly paid_at_source?: 'platform' | 'platform_modified' | 'observed';
+    /**
+     * 件数与已退件数（B1-08zi，domain planOrderQuantities）：与同步列同一条 CAS UPDATE；不放进 OrderSyncColumns。
+     * refunded_quantity_at_credit 不在可写集合里（只由 settlement 入账 CAS 定格）。
+     */
+    readonly quantity?: number | null;
+    readonly refunded_quantity?: number | null;
   };
 
 export interface CasGuards {

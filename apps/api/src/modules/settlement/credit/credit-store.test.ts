@@ -48,7 +48,7 @@ it('[AC-B2-04m] casCreditOrder writes credited_at = the injected now in the same
   const updates = queries.filter((q) => q.sql.startsWith('update'));
   expect(updates).toHaveLength(1);
   expect(updates[0]!.sql).toBe(
-    'update "app"."orders" set "rebate_status" = $1, "booked_base_fen" = $2, "booked_n_fen" = $3, "credited_at" = $4, "row_version" = $5, "updated_at" = $6 where "app_id" = $7 and "order_id" = $8 and "attr_at" = $9 and "rebate_status" = $10 and "row_version" = $11',
+    'update "app"."orders" set "rebate_status" = $1, "booked_base_fen" = $2, "booked_n_fen" = $3, "credited_at" = $4, "refunded_quantity_at_credit" = "refunded_quantity", "row_version" = $5, "updated_at" = $6 where "app_id" = $7 and "order_id" = $8 and "attr_at" = $9 and "rebate_status" = $10 and "row_version" = $11',
   );
   expect(updates[0]!.parameters).toEqual([
     'CREDITED',
