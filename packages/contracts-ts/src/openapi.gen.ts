@@ -2437,10 +2437,18 @@ export interface paths {
          *     the current user's attribution parameters) and returns `jump` (same shape as open, 04 §8.4).
          *     There is no scene (exception to BR-ATTR-08), no link is registered and no quote snapshot is
          *     written. shop.entry.enabled.<platform> off, or no shop entry source configured for the
-         *     platform → 30146 with data.reason=shop_entry_disabled. A conversion that does not produce
-         *     a promotion link carrying the user's attribution fails like a purchase conversion (50303
-         *     and the other purchase-link codes, not 30146); the server never answers with a shop address
-         *     without promotion parameters. A request stopped by 30101, 30102 or 30111 and sent again
+         *     platform → 30146 with data.reason=shop_entry_disabled. At tap time the product has no shop
+         *     identifier (shop_ref) or no shop name → 30146 with data.reason=shop_unavailable. A
+         *     conversion that does not produce a promotion link carrying the user's attribution fails
+         *     like a purchase conversion (50303 and the other purchase-link codes, not 30146); the server
+         *     never answers with a shop address without promotion parameters. Exception to the 50303
+         *     action for this endpoint: the client only shows a notice (text taken from error.30146
+         *     「暂时不能进入这家店铺」), offers no 「仍去购买（无返利）」 secondary button, does not jump out
+         *     and does not fall back to a shop page without promotion parameters. `jump.expire_at`: the
+         *     Dataoke shop conversion returns no validity field (规划/09 2_TB §2.11, measured), so the
+         *     server sets the technical value now + `link.convert_cache_ttl_sec`. Native clients open the
+         *     shop link through Baichuan by URL with an H5 link as fallback (whether the long shop link
+         *     opens there is still to be measured); the JumpPlan schema is unchanged. A request stopped by 30101, 30102 or 30111 and sent again
          *     after the user authorized is a new request with a new Idempotency-Key (BR-ID-10 细则).
          *     Version gate: applied.
          */

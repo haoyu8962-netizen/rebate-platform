@@ -1,0 +1,37 @@
+{
+  "task": "CT-26zb",
+  "spec_ref": "3f2b91dfa359fcbce54dc59c4b43c7763885cf58",
+  "spec_commit": "a6d4a28921d9f98d93e1c2c6f4b4f61d549358fa",
+  "red_tests": [],
+  "risk_note": "RV1 (contract), additions only. 50303 gains a shop-entry exception for POST /v1/products/{product_key}/shop/open (prompt only with error.30146, no no-rebate secondary button, no redirect to an untracked shop page); 30146 data.reason adds shop_unavailable (no shop identifier or shop name); shop/open describes jump.expire_at = now + link.convert_cache_ttl_sec because the Dataoke shop conversion returns no validity (measured 2026-11-07, being registered in 规划/09 2_TB §2.11). JumpPlan schema and the planned marker unchanged. Generated files regenerated (error-codes.gen.ts, openapi.gen.ts).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "contract r1 pass; two S2 recorded: shop_entry must also require a shop name (D10-806 ⑤, done in S17-c1); the 09 §2.11 citation lands with the couli 09 registration and the next SPEC_REF bump (couli-runs/CT-26zb/review-c1.json)"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a4a41d4ef0afeff466931aa61a6b9a8e506d193b",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

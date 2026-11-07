@@ -7,6 +7,7 @@ type: contract
 # ② 30146 data.reason 枚举加 shop_unavailable：点击进店时商品没有店铺标识（shop_ref）或店名；原 shop_entry_disabled（开关关 / 来源未配）不变。
 # ③ shop/open 的 JumpPlan.expire_at：大淘客店铺转链无有效期字段（09 2_TB §2.11 实测），服务端取 now + link.convert_cache_ttl_sec 的技术值；百川按链接打开、H5 链接降级（能否打开店铺长链待实测）。
 # planned 标记由 S17-l1（w1）实现时去掉，本单不动。实现顺序：本单 → B1-04zzq → B1-04zzs → B1-04zzt（union）→ c1（be）/ l1（w1）→ 三端 U6。
+# 完成 2026-11-07（#2621）：50303 进店例外、30146 reason shop_unavailable、shop/open expire_at 口径；契约评审 S2 两条（c1 须要求店名、09 §2.11 待 SPEC_REF）记后续。
 refs: []
 refs_hash: {}
 deps: [CT-26r]
@@ -24,4 +25,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 2621
