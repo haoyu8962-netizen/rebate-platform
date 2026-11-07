@@ -6,6 +6,7 @@ type: test-change
 # 现状：test/spec/agent/stream-assembly-orders/registry.int.test.ts 中 [AC-B3-08g#1] 标题写「精确相等（6 个）……不含 search_rules」、[AC-B3-08g#3] 写「游客与未绑手机只见 handoff_to_human 与商品两工具，已绑手机见全部 6 个」，B3-08m 后期望已是 7 个、游客与未绑手机也见 search_rules，标题与事实不符。
 # 做法：同文件新增两条新标题用例，正文与对应旧用例逐字相同（只换标题）；旧标题两条在新用例合并后的第二步删除（编排定在本单同 PR 还是另一提交）。不改其他用例与 kit / scan。
 # 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；全新上下文 Claude 修改、另一全新上下文 Claude 只读复审，按 approvals #24 由编排加 owner-approved 标签。
+# 2026-11-08 两步都已合并：第一步新增同体新标题用例 #2711，第二步删旧标题用例并去掉「标题已过时」注释 #2736。
 refs: [BR-AI-02]
 refs_hash:
   BR-AI-02: 40bc4f6f4109
@@ -16,5 +17,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
-pr: null
+status: done
+pr: 2736
