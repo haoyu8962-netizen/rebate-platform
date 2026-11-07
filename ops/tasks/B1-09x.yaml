@@ -1,0 +1,26 @@
+id: B1-09x
+repo: rebate-platform
+title: 按单号查订单改走 order_keys 与父单号索引（FU-ORDERS-OWN-LOOKUP-INDEX，D10-853）——淘宝 / 京东子单号等值查经 order_keys 唯一键取 (order_id, attr_at) 再读 orders；后台订单搜索与 readOwnTaobaoOrderNos 的 sub OR parent 拆两路；找回、维权定位、快照重试同改；H5 订单搜索不动；结果与改写前一致
+type: impl
+# 2026-11-07 入账（admin-backend，编排 D10-851 ①、D10-853；方案 couli-runs/FU-ORDERS-OWN-LOOKUP-INDEX/plan.md 路径 #2–#7）。排 #2632（B1-04zzu，readOwnTaobaoOrderNos）合并后开工；照 pipeline-store 的 readOrderKey → readOrder 写法。拼多多去横线兜底照旧（不加索引，FU-PDD-ORDERNO-NORMALIZED-INDEX）。RV2，规则测试新鲜独立 Claude，money / 代码评审 Codex（D10-848）。
+refs: []
+refs_hash: {}
+deps: [B1-09w, B1-04zzu]
+paths:
+  - 'apps/api/src/modules/orders/infra/claim-store.ts'
+  - 'apps/api/src/modules/orders/infra/rights-order-lookup.ts'
+  - 'apps/api/src/modules/orders/infra/rights-order-lookup.test.ts'
+  - 'apps/api/src/modules/orders/infra/snapshot-retry-store.ts'
+  - 'apps/api/src/modules/orders/infra/admin-order-reads.ts'
+  - 'apps/api/src/modules/orders/infra/own-taobao-orders.ts'
+  - 'apps/api/src/modules/orders/infra/own-taobao-orders.test.ts'
+  - 'apps/api/src/modules/orders/infra/pipeline-store.ts'
+  - 'apps/api/src/modules/orders/infra/*.test.ts'
+test_paths:
+  - 'test/spec/orders/own-lookup-index/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/own-lookup-index/**'
+status: todo
