@@ -1,0 +1,36 @@
+id: B3-08l
+repo: rebate-platform
+title: search_rules 生产接线：agent worker 装 content 已发布文章读取器并按 app 定时跑 syncRuleChunks；流装配注册 createSearchRulesHandler（activeChunks 读 app.agent_rule_chunks 的 active 块、agent.rag.min_score 经 content 配置读）；specs/agent-tools.allowlist 加 search_rules；删两处陈旧 TODO（上线缺口第 4 项 FU-AGENT-SEARCH-RULES-WIRING）
+type: impl
+# 2026-11-07 agent 线入账（编排 D10-805 ③；现状见 couli-runs/B3-lane/prod-wiring-gaps-status-20261107.md 第 4 项）。
+# 现状：syncRuleChunks（B3-08i #1716）与 createSearchRulesHandler（B3-08b #1305）都已合并但无人调用；sync.ts:11-13 的 TODO 仍写 blocked on B3-08g（已 done）；assembly.ts 的 handlers 不含 search_rules；allowlist 只有 6 个工具。
+# 同步：worker 入口按 app 定时调用 syncRuleChunks（content reader 由 app.module 组合根构造注入，agent 不直接查 articles，D10-294 / B3-08k）；周期沿用 B3-08i 台账的默认 300 秒（08 未登记 agent.rag.sync_interval_seconds，本单写成代码常量、不新增配置键，另报编排）；启动后先跑一轮；按 entry.ts 既有定时器写法：停机先停、正在跑的一轮等完、无 provider 不起定时器不报错。各 app 一轮内逐个跑，单个 app 失败只记日志不影响其他 app。
+# 检索：assembly 注册 createSearchRulesHandler；activeChunks(appId) 只读本 app status=active 的块（BR-AI-03：app 只来自服务端上下文）；min_score 经 content 配置读（08 BR-AI-07：默认 0.2，取值 0–1，做成配置可调），读不到时 handler 已回落默认。
+# 冻结用例：test/spec/agent/stream-assembly-orders/** 的 [AC-B3-08g#1/#2/#3] 钉了「6 个、不含 search_rules」，须按 D10-327 由新鲜独立 Claude 改期望、另一位只读复审；实际改到的用例逐条列在实现 PR 正文，同文件未改用例登 red_exempt。#1、#3 标题本身写「6 个」「不含 search_rules」「游客只见 handoff_to_human 与商品两工具」，标题能否随之改已报编排定。
+# 风险 RV2（app.module.ts / entry.ts 不在白名单）。分工：新鲜独立 Claude 写规则测试（D10-775，Codex 额度用尽至 11-11），Opus 实现，独立 Claude 评审。
+refs: [BR-AI-02, BR-AI-07]
+refs_hash:
+  BR-AI-02: 40bc4f6f4109
+  BR-AI-07: 0da3ace82049
+deps: [B3-08b, B3-08g, B3-08i]
+paths:
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/entry.ts'
+  - 'apps/api/src/modules/agent/agent.module.ts'
+  - 'apps/api/src/modules/agent/index.ts'
+  - 'apps/api/src/modules/agent/rag/chunks/**'
+  - 'apps/api/src/modules/agent/tools/rules/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'specs/agent-tools.allowlist'
+test_paths:
+  - 'test/spec/agent/rule-search-wiring/**'
+  - 'test/spec/agent/stream-assembly-orders/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/rule-search-wiring/**'
+  - 'test/spec/agent/stream-assembly-orders/**'
+status: todo
+pr: null
