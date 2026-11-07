@@ -8,6 +8,7 @@ import {
   createGovernedAdapter,
   makeUnionItem,
   UnionError,
+  UnionIdentity,
   type CallCtx,
   type UnionAdapter,
   type UnionEndpoint,
@@ -272,3 +273,57 @@ it('[AC-B1-04z-UNIT#2] 未声明逐请求计量的维权端口整体按幂等读
   expect(seen).toEqual([[{ cursor: 'c-3' }]]);
   expect(take).toHaveBeenCalledTimes(1);
 });
+
+class ShopIdentity extends UnionIdentity {
+  constructor() {
+    super({
+      appId: 'app-a',
+      userId: 'user-a',
+      platform: 'taobao',
+      promotionSlot: 'mm_1_2_3',
+      relationId: 'rel-a',
+    });
+  }
+}
+
+const taobaoEndpoint: UnionEndpoint = {
+  platform: 'taobao',
+  mode: 'replay',
+  baseUrl: 'http://wiremock:8080/taobao',
+  quotaKey: 'account:taobao',
+};
+
+it.each(['upstream_unavailable', 'rate_limited'] as const)(
+  '[AC-B1-04zzt-UNIT#10] convertShop 按写操作：%s 只调一次；调用方 purpose 非 online 也只取 online 令牌',
+  async (code) => {
+    const take = vi.fn<QuotaLimiter['tryAcquire']>(() => true);
+    const purposes: string[] = [];
+    let attempts = 0;
+    const port = createGovernedAdapter(
+      {
+        platform: 'taobao',
+        searchItems: async () => ({ items: [], nextCursor: null }),
+        getItem: async () => item,
+        resolveLink: async () => ({ item: { platform: 'taobao', item_id: 'x' } }),
+        convert: async () => ({ kind: 'url', url: 'https://s.click.taobao.com/x' }),
+        listOrders: async () => ({ items: [], nextCursor: null }),
+        shopConvertSources: ['dataoke'],
+        convertShop: async (_req, _who, call) => {
+          attempts += 1;
+          purposes.push(call.purpose);
+          throw new UnionError(code, 'synthetic', 'taobao');
+        },
+      },
+      {
+        endpoint: taobaoEndpoint,
+        scheduler,
+        quota: { bucketKey: taobaoEndpoint.quotaKey, tryAcquire: take },
+      },
+    );
+    const req = { shopRef: '1', shopName: 'shop' };
+    await expect(port.convertShop!(req, new ShopIdentity(), sync)).rejects.toMatchObject({ code });
+    expect(attempts).toBe(1);
+    expect(purposes).toEqual(['online']);
+    expect(take.mock.calls).toEqual([['online']]);
+  },
+);

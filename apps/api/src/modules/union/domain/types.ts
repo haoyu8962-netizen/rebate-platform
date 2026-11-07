@@ -663,6 +663,30 @@ export interface TaobaoShareCode {
   readonly password_simple: string;
   readonly model: string;
 }
+/**
+ * B1-04zzt (S-17 S17-u2, D10-806): one shop to convert into a promotion link. shopRef is the
+ * product side's UnionItem.shop_ref (a positive decimal integer string), shopName the item's
+ * shop_name; both come from the item the user is looking at.
+ */
+export interface ShopConvertReq {
+  readonly shopRef: string;
+  readonly shopName: string;
+}
+
+/**
+ * B1-04zzt: a shop promotion link of the identity's promotion slot and relation id. `url` is the
+ * union's promoted shop link (Taobao: 大淘客 shop convert `shopLinks`); tpwd / longTpwd are the share
+ * code and long share text as given, absent when the union gave none. No expiry, no short link.
+ */
+export interface ShopConvertResult {
+  readonly url: string;
+  readonly tpwd?: string;
+  readonly longTpwd?: string;
+}
+
+/** B1-04zzt: where an adapter converts shops (UnionAdapter.shopConvertSources). */
+export type ShopConvertSources = readonly ['dataoke'];
+
 export interface BindReq {
   readonly authorizationCode: string;
 }
@@ -783,10 +807,28 @@ export interface UnionAdapter {
    * presence is the answer. The governed wrapper passes it through.
    */
   readonly orderSources?: boolean;
+  /**
+   * B1-04zzt (S-17 S17-u2, D10-806): declared only by an adapter that can convert shops as
+   * configured (live Taobao with its 大淘客 client); absent everywhere else. The governed wrapper
+   * passes it through.
+   */
+  readonly shopConvertSources?: ShopConvertSources;
   searchItems(q: SearchQuery, ctx: CallCtx): Promise<Page<UnionItem>>;
   getItem(ref: ItemRef, ctx: CallCtx): Promise<UnionItemDetail>;
   resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink>;
   convert(req: ConvertReq, identity: UnionIdentity, ctx: CallCtx): Promise<ConvertResult>;
+  /**
+   * B1-04zzt (S-17 S17-u2, D10-806): the shop promotion link of the server-built identity's
+   * promotion slot and relation id. A write (governed online, never retried). There is no
+   * no-rebate path: an identity without relation id is refused before any request, and no shop
+   * address without promotion parameters is ever returned. Live Taobao only (大淘客 shop convert);
+   * jd, pdd and demo leave it absent.
+   */
+  convertShop?(
+    req: ShopConvertReq,
+    identity: UnionIdentity,
+    ctx: CallCtx,
+  ): Promise<ShopConvertResult>;
   bindPublisher?(req: BindReq, ctx: CallCtx): Promise<BindResult>;
   listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage>;
   /** PDD detail, including optional after-sales status; an idempotent read. */

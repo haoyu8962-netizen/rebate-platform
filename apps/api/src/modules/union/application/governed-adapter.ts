@@ -2,8 +2,8 @@
 // platform/http Governor with the union policy. Online calls (3 s) and offline calls (order
 // sync, pool refresh, reminders: 10 s) use two governors because the time limit is per
 // governor; each keeps its own breaker, shared by every method of that class. Idempotent reads
-// retry; writes (convert, bindPublisher, createTaolijin) never do — the client replays the
-// same idempotency key instead. The quota limiter is shared and takes one token per attempt
+// retry; writes (convert, convertShop, bindPublisher, createTaolijin) never do — the client
+// replays the same idempotency key instead. The quota limiter is shared and takes one token per attempt
 // for the call's purpose; its bucket key comes from configuration (CAP-*-12 decide the unit).
 // B1-22v: the limiter may answer with a promise (app.module's shared Redis bucket); the governor
 // awaits it before each attempt, here and for every gated request of B1-04w, and a refusal or a
@@ -44,6 +44,7 @@ import {
   isServerIdentity,
   UnionError,
   type CallCtx,
+  type ShopConvertReq,
   type UnionAdapter,
   type UnionEndpoint,
   type UnionIdentity,
@@ -167,7 +168,10 @@ export function governAdapter(
     pddAuthorityUrl,
     taobaoShareCode,
     shortenTaobaoUrl,
+    convertShop,
   } = adapter;
+  // B1-04zzt: the adapter's configured shop convert source, read once here.
+  const shopConvertSources = adapter.shopConvertSources;
   const rightsSources =
     adapter.rightsSources === undefined
       ? undefined
@@ -205,6 +209,18 @@ export function governAdapter(
       assertIdentity(identity, ctx, 'convert');
       return await run('write', ctx, (c) => adapter.convert(req, identity, c));
     },
+    // B1-04zzt (S-17 S17-u2, D10-806): a shop promotion link is a write of a server-built identity
+    // of this app and platform, always on the online governor (quota purpose online), never retried.
+    ...(convertShop === undefined
+      ? {}
+      : {
+          async convertShop(req: ShopConvertReq, identity: UnionIdentity, ctx: CallCtx) {
+            assertIdentity(identity, ctx, 'convertShop');
+            const online: CallCtx = { ...ctx, purpose: 'online' };
+            return await run('write', online, (c) => convertShop.call(adapter, req, identity, c));
+          },
+        }),
+    ...(shopConvertSources === undefined ? {} : { shopConvertSources }),
     ...(bindPublisher === undefined
       ? {}
       : {

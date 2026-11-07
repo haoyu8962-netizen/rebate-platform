@@ -8,6 +8,7 @@ type: impl
 # 治理：governed-adapter 显式包 convertShop（online、按写操作不重试、配额 purpose online）；原始报文归档照商品转链口径（不存令牌 / 密钥）；registry 只在 taobaoLive.orderSource（大淘客）注入时声明 shopConvertSources=['dataoke']；京东 / 拼多多不实现（D10-806 ⑥）。demo 适配器不实现。
 # 归因（relationId 与 pid 校验、店内非推广品计佣）文档未写、实测未下单——代码合入后淘宝进店开关保持关，负责人真实下单测试时核（D10-806 ⑧）。规则测试只用合成报文，不伪造平台事实。
 # 风险：union 适配器、资金与归属路径 → RV2；新鲜独立 Claude 写规则测试，资金评审。governed-adapter / registry 若有枚举被治理方法集合的冻结用例，开工实测后按 D10-327 补台账。
+# 完成 2026-11-08（#2653）：链接白名单仅 s.click.taobao.com（主机全等，须 https、带路径 / 查询）；身份与入参不合格不发请求；governed 强制 online、写不重试；registry 未改；合入后淘宝进店开关保持关。
 refs: []
 refs_hash: {}
 deps: [B1-04zzs, CT-26zb]
@@ -28,4 +29,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/taobao-shop-convert/**'
-status: todo
+status: done
+pr: 2653
