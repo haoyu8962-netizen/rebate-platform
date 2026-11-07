@@ -1,0 +1,26 @@
+id: B2-04zzc
+repo: rebate-platform
+title: 入账事务内触发邀请奖励（FU-INVITE-REWARD-ON-CREDITED，上线缺口第 2 项）：settlement credit-order 在 R5 写库后、发布 order.credited 前经可选注入端口调用 growth 的 InviteRewardTrigger.onCredited，app.module 装配
+type: impl
+# 2026-11-07 identity 入账（编排 D10-805 ②、D10-810；方案 couli-runs/FU-INVITE-REWARD-ON-CREDITED/plan.md）。现状：createInviteRewardTrigger.onCredited 无调用方、order.credited 无订阅，入账不触发邀请奖励。
+# 选 A：入账事务内经注入端口调用（B1-35 任务书原意；冻结 [AC-B1-35#24] 触发随外层事务回滚、#25 端口错误只回滚保存点不阻塞入账）；端口可选，settlement 不 import growth（照 appendBeneficiaryEvent 注入写法）。
+# D10-810：R13（CLAWED_BACK → CREDITED 后台恢复）不触发；BR-INV-24 ② 的「B > 0」取入账基数 booked_base_fen，预估 > 0、入账 = 0 不触发、不作废资格，后续合格单再触发。
+# 与 admin 的 B2-16c（FU-INVITE-REWARD-WIRING，第 1 + 10 项）并行、不设依赖，后合者变基；#2575 合并后 B2-04zza 优先。不改冻结用例（端口可选，test/spec/settlement/worker/credit-kit.ts 字面量照编）。RV2。
+refs: [BR-INV-24]
+refs_hash:
+  BR-INV-24: be947be8fb22
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/credit/credit-order.ts'
+  - 'apps/api/src/modules/settlement/credit/credit-order.test.ts'
+  - 'apps/api/src/modules/settlement/worker/ports.ts'
+  - 'apps/api/src/modules/settlement/worker/assemble.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/settlement/credit-invite-trigger/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/credit-invite-trigger/**'
+status: todo
