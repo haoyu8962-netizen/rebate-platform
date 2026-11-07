@@ -1,0 +1,26 @@
+id: B1-12zd
+repo: rebate-platform
+title: SETTLE_ADJUSTED 邀请变体用词改「推广收益」——inbox.title.SETTLE_ADJUSTED.invite「推广收益已调整」、正文「一笔推广收益已按结算金额调整，减少 {amount}」（契约文案键 + 消费端正文 + 冻结 render 用例只改邀请行期望，合一张 RV2）
+type: impl
+# 2026-11-07 入账（content，编排 D10-803、D10-809、D10-816 ①、D10-820 ④）。CT-26za / B1-12zc 用的「邀请奖励」违反 08 BR-TEXT-01 收益术语唯一含义（邀请分佣叫「推广收益」，「邀请奖励」是 BR-INV 邀请双方活动）；08 BR-TEXT-09 已随 couli #291 改。其余变量与句式不变，仍标代理补全的默认；不带原因（J7）、跳余额流水不变。
+# 冻结改动（D10-327）：新鲜独立 Claude 只改邀请行期望——test/spec/contracts/settle-adjusted-template/kit.ts 的 invite 值、test/spec/notification/clawback-message/kit.ts 的 SETTLE_ADJUSTED.invite 标题与 settleBody.invite、settle-adjusted-message/render.test.ts 的 #32 / #33 / 第 144、158-159 行邀请期望；另一位独立 Claude 只读复审「只改邀请行」。新规则测试目录钉新措辞与「正文不含『邀请奖励』」。未改而受 kit 改动牵连的用例开工后实测，按 red_exempt 补台账报核。
+refs: []
+refs_hash: {}
+deps: [B1-12zc]
+paths:
+  - 'contracts/texts.default.json'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/notification/application/clawback-message.ts'
+  - 'apps/api/src/modules/notification/application/clawback-message.test.ts'
+test_paths:
+  - 'test/spec/notification/settle-adjusted-invite-wording/**'
+  - 'test/spec/contracts/settle-adjusted-template/kit.ts'
+  - 'test/spec/notification/clawback-message/kit.ts'
+  - 'test/spec/notification/settle-adjusted-message/render.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+  - 'test/spec/notification/settle-adjusted-invite-wording/**'
+status: todo

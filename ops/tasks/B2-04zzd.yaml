@@ -1,0 +1,23 @@
+id: B2-04zzd
+repo: rebate-platform
+title: 发布端：入账后结算负差（R10）同事务发布 order.settle_adjusted（填 B2-04zi 留的 TODO），并让 R9 扣回的 order.clawed_back 带实际原因（cause RIGHTS → RIGHTS、PARTIAL_REFUND → PART_REFUND）；上线前必做
+type: impl
+# 2026-11-07 入账（content，编排 D10-773 方案 B、D10-816 ②、D10-817、D10-820 ④；FU-SETTLE-ADJ-NOTIFY 发布端）。消费端 B1-12zc 已合并（#2617）：按载荷 reason 渲染，R9 缺 reason 时兜底「部分退款」只留作旧事件防御。
+# order.settle_adjusted 载荷照 B1-12zc 约定：order_id、order_key、settle_seq、sub_type（SETTLE_DIFF / PRICE_PROTECT / PRICE_COMPARE，照 BR-TEXT-05 与 R10 写入的 SETTLE_ADJUST 凭证 sub_type）、beneficiaries[{user_id, role, adjust_fen(负), bucket}]（bucket 照本次负差实际记到的去向：user_available / 坏账 / 平台；消费端只发 user_available）。与 SETTLE_ADJUST 凭证同事务，入队失败整体回滚（照 order.clawed_back）。正差（FU-SETTLE-ADJ-POSITIVE）本单不发。
+# BR-TEXT-09 / BR-TEXT-05 原文过长，不进 refs，摘录放任务书第 9 节（B1-12u 先例）。R9：clawback-order.ts 第 10 步发布 order.clawed_back 时 R9 也带 reason（cause RIGHTS → RIGHTS，cause PARTIAL_REFUND → PART_REFUND，与文件头映射表同口径，D10-817）。
+# 与 withdraw 的 B2-04zk、identity 的 B2-04zza 同改 clawback-order.ts，后合者变基（D10-779 / 07:36 先例）。冻结 settlement 测试里钉 order.clawed_back 载荷或「只许发 order.clawed_back」的假总线（forfeited-state/kit.ts、admin-recon-restore/after-restore.int.test.ts 等）开工后实测列全，照 D10-327 / red_exempt 报核再补 test_paths。
+refs: [BR-FUND-09]
+refs_hash:
+  BR-FUND-09: 6b72b55621fb
+deps: [B2-04zi, B1-12zc]
+paths:
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
+test_paths:
+  - 'test/spec/settlement/settle-adjusted-event/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/settle-adjusted-event/**'
+status: todo
