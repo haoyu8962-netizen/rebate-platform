@@ -1,0 +1,29 @@
+id: B1-05zm
+repo: rebate-platform
+title: S17-c1：catalog 进店判据 shop_entry、product_refs.shop_id 写入与 linking 只读端口 shopOf
+type: impl
+# 2026-11-07 be 入账（D10-891 ①；方案 couli-runs/UNION-lane/s17-shop-entry-plan-20261107.md §二-3、§三 S17-c1；08 BR-PRICE-21 细则「进店」、D10-736 ②「只用不发请求的判据」）。union 四单已在主干：UnionItem / UnionItemDetail.shop_ref、UnionAdapter.shopConvertSources / convertShop。
+# ① 搜索、热榜（与详情）写 product_refs.shop_id = 联盟给的 shop_ref；upsert 冲突改 COALESCE(excluded.shop_id, product_refs.shop_id)，null 不冲掉已有值。② shopEntry() 四条件全满足才为 true：shop.entry.enabled.<platform> 严格 true；shop.entry.source.<platform> 已配；该平台适配器的 shopConvertSources 含该来源；商品同时有 shop_ref 与 shop_name（CT-26zb 评审 S2：必须要求店名）。只读配置与适配器声明，不调联盟。③ 给 linking 只读端口 shopOf(appId, productKey, itemRef?) → { shopRef, shopName } | null：先详情缓存、再 product_refs，不调联盟，取不到 → null（l1 映 30146 shop_unavailable）。京东 / 拼多多来源未登记即 false。不动金额。
+# 冻结用例：detail-extras 夹具的商品无 shop_name、测试适配器不声明 shopConvertSources，[AC-B1-05zk#1] / [#7] / [#19] 实现后仍 false，不改（kit 注释「false until S-17」过时，留 FU）；规则测试新目录。若实测发现须改冻结，停下照 D10-327 / D10-876 另报。D10-823：spec-test 评审新鲜独立 Claude（D10-848），代码评审 Codex。w1 的 S17-l1（B1-06zg #2691）deps 本单。
+refs: []
+refs_hash: {}
+deps: [B1-04zzs, B1-04zzt]
+paths:
+  - 'apps/api/src/modules/catalog/domain/detail-extras{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/detail.ts'
+  - 'apps/api/src/modules/catalog/infra/search-wiring.ts'
+  - 'apps/api/src/modules/catalog/infra/hot-rank-wiring.ts'
+  - 'apps/api/src/modules/catalog/infra/kysely-catalog-store{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/application/shop-of{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/ports.ts'
+  - 'apps/api/src/modules/catalog/index.ts'
+  - 'apps/api/src/modules/catalog/catalog.module.ts'
+  - 'test/spec/catalog/shop-entry/**'
+test_paths:
+  - 'test/spec/catalog/shop-entry/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
