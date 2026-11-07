@@ -1,0 +1,84 @@
+{
+  "risk_note": "RV2 (app.module, growth). FU-INVITE-REWARD-WIRING, launch gaps 1 + 10 (D10-805 ①). The worker's invite reward payout now gets ledger's createInviteRewardGrantWriter (B2-16b had only built the writer), so qualified rewards post real REWARD vouchers instead of being deferred with invite_reward_writer_unavailable; the amount is the per-party value locked on the qualification row, replays return the stored voucher through the (app_id, uniq_key) uniqueness, and a missing voucher id rolls the payout back. The deletion port moves from users.status to identity's createDeletionStageReader, and cooling joins processing / done as deleting for that party only (08 BR-INV-24 ③); app isolation comes from the stage reader's app_id filter. grantWriter stays optional, so the frozen [AC-B1-35#61] is unchanged. Two stale TODOs removed. No migration, no contract. Integration spec/growth 469/469 pass.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota (D10-775, approvals 36): fresh independent Claude via claude-run.sh review --review-type money, round 1 pass with no findings; checklist rounding ok, sign ok, idempotency ok, concurrency ok, partial_refund na, clock ok, app_id ok. A second fresh independent Claude re-checked the whole diff read-only (D10-775): pass, no findings, same checklist. couli-runs/B2-16c/review-money-r1.json, review-money-r1b.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36, D10-775), through the real worker entry (AppModule worker, no hand-built growth deps). Spec-test round 1 fail (one S1: the voucher assertion read every voucher of the app, so a correct implementation failed [AC-B2-16c#4]); round 2 only narrowed it to the pair's vouchers, pass. couli-runs/B2-16c/review-spec-r1.json and the round 2 output."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-16c",
+  "spec_commit": "e8410abb69e0d0ddd345720b17ced6c4578b99df",
+  "spec_ref": "3f2b91dfa359fcbce54dc59c4b43c7763885cf58",
+  "red_tests": [
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#1] worker 入口装配的发放写出 REWARD 凭证：记录 processed，双方各一张（INVITE_REWARD:{invitee}:{side}，金额取资格锁定值），无 invite_reward_writer_unavailable",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#2] inviter 处于注销冷静期（cooling）：该方 deleting 不发、另一方照发；撤回注销后下一轮不补发",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#2] invitee 处于注销冷静期（cooling）：该方 deleting 不发、另一方照发；撤回注销后下一轮不补发",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] inviter 处于注销 processing（users.status deleting）：仍按 deleting 只该方不发、另一方照发",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] invitee 处于注销 processing（users.status deleting）：仍按 deleting 只该方不发、另一方照发",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] inviter 处于注销 done（users.status deleted）：仍按 deleting 只该方不发、另一方照发",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] invitee 处于注销 done（users.status deleted）：仍按 deleting 只该方不发、另一方照发",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#4] 注销阶段读 identity 的注销单：users.status 仍为 normal、只有 cooling 注销单的被邀请人判 deleting；只有已撤回注销单的照发",
+    "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#5] app 隔离：另一 app 同手机号用户的 cooling 注销单不影响本 app，各 app 只按自己的注销单判定"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e8410abb69e0d0ddd345720b17ced6c4578b99df",
+      "tree": "01b8f1d80811e71f62109415015a4ddd258aba9c",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T04:52:41Z",
+      "finished_at": "2026-11-07T04:53:08Z",
+      "red_tests": [
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#1] worker 入口装配的发放写出 REWARD 凭证：记录 processed，双方各一张（INVITE_REWARD:{invitee}:{side}，金额取资格锁定值），无 invite_reward_writer_unavailable",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#2] inviter 处于注销冷静期（cooling）：该方 deleting 不发、另一方照发；撤回注销后下一轮不补发",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#2] invitee 处于注销冷静期（cooling）：该方 deleting 不发、另一方照发；撤回注销后下一轮不补发",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] inviter 处于注销 processing（users.status deleting）：仍按 deleting 只该方不发、另一方照发",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] invitee 处于注销 processing（users.status deleting）：仍按 deleting 只该方不发、另一方照发",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] inviter 处于注销 done（users.status deleted）：仍按 deleting 只该方不发、另一方照发",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#3] invitee 处于注销 done（users.status deleted）：仍按 deleting 只该方不发、另一方照发",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#4] 注销阶段读 identity 的注销单：users.status 仍为 normal、只有 cooling 注销单的被邀请人判 deleting；只有已撤回注销单的照发",
+        "test/spec/growth/invite-reward-wiring/wiring.int.test.ts > [AC-B2-16c#5] app 隔离：另一 app 同手机号用户的 cooling 注销单不影响本 app，各 app 只按自己的注销单判定"
+      ],
+      "expected": ["test/spec/growth/invite-reward-wiring/wiring.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "6e3ad56e96d97bb52d3eac29134da82c168202501ffe2721e4e0f3ab8be71515"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bcc114eb0f525a64606ea9e0ed5c4fe00bdd1f71",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}

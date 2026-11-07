@@ -599,12 +599,12 @@ export interface InviteRewardPayoutDeps extends InviteRewardBaseDeps {
   loginDevices: InviteBinderDeps['loginDevices'];
   loginIps: InviteRewardLoginIps;
   deletedPhone: InviteRewardDeletedPhone;
-  // TODO(规划/11 §2.3): cooling — blocked on B1-15
+  /** The account-deletion stage (BR-INV-24 ③: cooling / processing / done → deleting); absent → none. */
   deletionStatus: {
     read(
       trx: Kysely<DB>,
       input: { app_id: string; user_ids: readonly string[] },
-    ): Promise<ReadonlyMap<string, 'none' | 'processing' | 'done'>>;
+    ): Promise<ReadonlyMap<string, 'none' | 'cooling' | 'processing' | 'done'>>;
   };
   readRisk: InviteBinderDeps['readRisk'];
   verifiedBirthDate?: InviteBinderDeps['verifiedBirthDate'];
@@ -796,7 +796,8 @@ export function createInviteRewardPayout(deps: InviteRewardPayoutDeps): InviteRe
       user_ids: [subject.user_id],
     });
     const stage = deletion.get(subject.user_id) ?? 'none';
-    if (stage === 'processing' || stage === 'done') return 'deleting';
+    // BR-INV-24 ③: in the deletion flow (cooling, processing or done) this party is not paid.
+    if (stage === 'cooling' || stage === 'processing' || stage === 'done') return 'deleting';
 
     const risk = await deps.readRisk(trx, subject);
     if (RESTRICTED_RISK.has(risk.state)) return 'risk_restricted';
@@ -896,7 +897,7 @@ export function createInviteRewardPayout(deps: InviteRewardPayoutDeps): InviteRe
     }
     const writer = deps.grantWriter;
     if (writer === undefined) {
-      // TODO(规划/11 §2.3): REWARD 凭证写入 — blocked on B2-16b（资金线注入 InviteRewardGrantWriter）
+      // An assembly without ledger's writer: defer, never pay without a voucher.
       logger.warn(fields, 'invite_reward_writer_unavailable');
       return defer(trx, row, decided, 'deferred_writer', at);
     }

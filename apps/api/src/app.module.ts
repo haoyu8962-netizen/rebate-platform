@@ -131,6 +131,8 @@ import {
   type InviteBinder,
   type InviteBinderDeps,
   type MyInviteReader,
+  type InviteRewardGrantWriter,
+  type InviteRewardPayoutDeps,
   type InviteRewardQualifier,
   type InviteRewardScanner,
 } from './modules/growth/index.ts';
@@ -234,6 +236,7 @@ import {
   WalletLedgerModule,
   WalletSummaryModule,
   closingAdjustmentGate,
+  createInviteRewardGrantWriter,
   createLedger,
   getAssetSnapshotStatus,
   getOrderNets,
@@ -1547,13 +1550,57 @@ function transactionConfig(clock: Clock): InviteBinderDeps['config'] {
 class InviteRewardWorkerModule {}
 
 /**
+ * B2-16c (BR-INV-24 ③): growth's deletion port over identity's deletion-stage reader on the
+ * payout's transaction. App isolation is the reader's own: it selects users by users.app_id =
+ * appId and joins deletion_requests on (app_id, user_id), so another app's user (or request) never
+ * enters the map; absent → none on growth's side.
+ */
+function inviteRewardDeletionStage(): InviteRewardPayoutDeps['deletionStatus'] {
+  return {
+    read: (trx, input) =>
+      createDeletionStageReader({ db: trx }).read(trx, {
+        appId: input.app_id,
+        userIds: input.user_ids,
+      }),
+  };
+}
+
+/**
+ * B2-16c: growth's InviteRewardGrantWriter over ledger's writer (B2-16b, REWARD:INVITE, uniq_key
+ * INVITE_REWARD:{invitee}:{side}) on the payout's transaction. The ledger publishes
+ * account.went_negative and runs the balance-recovered hook as the other credit paths do (D10-587).
+ * growth never asks for a zero amount (no qualification is written for 0), so a voucherless
+ * outcome is an assembly fault and fails the transaction rather than recording a grant without a
+ * voucher.
+ */
+function inviteRewardGrantWriter(clock: Clock, events: EventBus): InviteRewardGrantWriter {
+  const writer = createInviteRewardGrantWriter({
+    ledger: createLedger({
+      clock,
+      eventBus: events,
+      balanceRecoveredHook: createBalanceRecoveredHook({ clock }),
+    }),
+  });
+  return {
+    async grant(trx, input) {
+      const outcome = await writer.grant(trx, input);
+      if (outcome.voucher_id === null) {
+        throw new Error('invite reward: ledger wrote no voucher for a nonzero grant');
+      }
+      return { voucher_id: outcome.voucher_id };
+    },
+  };
+}
+
+/**
  * The worker's invite reward scanner (B1-35 §9.2 第 9 条; BR-INV-24 ④ and 「有效期」): growth's
  * payout over orders' fact port, identity's login-device / login-IP / retained-phone / deletion
  * readers, risk's fresh state read and BR-ID-37 check (configuration through content's reader on
  * the judging transaction), and growth's daily expiry. Without a database, the field cipher or the
  * event bus the provider is null and entry.ts starts no loop.
- * TODO(规划/11 §2.3): grantWriter（REWARD 凭证写入） — blocked on B2-16b; until then every payout
- * is deferred with a warn (invite_reward_writer_unavailable), nothing is released or paid.
+ * B2-16c: the REWARD vouchers through ledger's createInviteRewardGrantWriter (B2-16b) on the
+ * payout's transaction, and the deletion stage (BR-INV-24 ③: cooling / processing / done) through
+ * identity's createDeletionStageReader, not users.status alone.
  */
 function inviteRewardWorkerModule(): DynamicModule {
   return {
@@ -1597,7 +1644,7 @@ function inviteRewardWorkerModule(): DynamicModule {
             loginDevices: createInviteLoginDevicesReader(),
             loginIps: createInviteRewardLoginIpsReader(),
             deletedPhone: createInviteRewardDeletedPhoneReader(),
-            deletionStatus: createUserDeletionStatusReader({ db }),
+            deletionStatus: inviteRewardDeletionStage(),
             readRisk: reads.readRisk,
             verifiedBirthDate: reads.verifiedBirthDate,
             multiAccount: createSameDeviceAccountsCheck({
@@ -1606,6 +1653,7 @@ function inviteRewardWorkerModule(): DynamicModule {
               logins: createSameDeviceLoginReader(),
               config: (handle) => createContentReader({ db: handle, clock }),
             }),
+            grantWriter: inviteRewardGrantWriter(clock, events),
           });
           return createInviteRewardScanner({
             db,
