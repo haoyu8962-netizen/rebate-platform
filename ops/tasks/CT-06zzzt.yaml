@@ -1,0 +1,17 @@
+id: CT-06zzzt
+repo: rebate-platform
+title: CT-06zzzt：AGENTS.md 第 90 行 Codex 评审推理档位默认值由 low 改为 medium，与 approvals 第 52 条及 codex-run.sh 对齐（FU-AGENTS-MD-REVIEW-EFFORT）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-920、#2696 合并后开；approvals 第 52 条 / D10-884 已把 codex-run.sh review 默认档位改为 medium，tools/agent/README.md 已同步）。
+# 只改 AGENTS.md 一处措辞，不改任何代码与门禁逻辑；CLAUDE.md 只是 @AGENTS.md，不动。按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'AGENTS.md'
+  - 'ops/tasks/CT-06zzzt.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

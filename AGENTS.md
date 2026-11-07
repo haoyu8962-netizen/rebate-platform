@@ -87,7 +87,7 @@
 
 <!-- risk-table:end -->
 
-默认分工（负责人 2026-10-05，`ops/approvals.yaml` 第 19 条；规划/11 §1.1）：主实现一律是 Claude Opus 5.5 子代理（模型 `claude-opus-5-5`，在任务 worktree 里，不提交）；Codex 在实现前写规则 / 验收测试和只抛 `NotImplemented` 的骨架（经 `tools/agent/codex-run.sh impl`），先红由编排者在隔离容器里核对，再以新只读会话做对抗评审（模型 gpt-6-astra，推理档位默认 low）；2026-10-09 起（`ops/approvals.yaml` 第 27 条）各风险级的代码评审都只跑 Codex 这一家，RV2 不再另派 Claude 新子代理评审；Codex 写的规则测试仍由 Claude 新子代理过审。2026-10-21 起（`ops/approvals.yaml` 第 36 条）Codex 不可用或额度不足时，写规则测试与对抗评审（含 money / contract / general / spec-test）改由无上下文的独立 Claude 子代理经 `tools/agent/claude-run.sh` 承担（每次 `claude -p` 新会话，与写实现的不是同一上下文；写测试前台账 `tester` 先改为 `claude-independent`），证据如实记为 `claude-independent`、不得记成 `codex`；Codex 能用时仍优先 Codex。Codex 沙箱里只做不执行测试的静态检查，Codex 生成的任何可执行内容都不在宿主运行；实现子代理只经 `tools/ops/verify-container.sh <编号> --fast` 在容器里跑 `verify:fast`。派工细节见 `tools/agent/README.md`。
+默认分工（负责人 2026-10-05，`ops/approvals.yaml` 第 19 条；规划/11 §1.1）：主实现一律是 Claude Opus 5.5 子代理（模型 `claude-opus-5-5`，在任务 worktree 里，不提交）；Codex 在实现前写规则 / 验收测试和只抛 `NotImplemented` 的骨架（经 `tools/agent/codex-run.sh impl`），先红由编排者在隔离容器里核对，再以新只读会话做对抗评审（模型 gpt-6-astra，推理档位默认 medium，`ops/approvals.yaml` 第 52 条）；2026-10-09 起（`ops/approvals.yaml` 第 27 条）各风险级的代码评审都只跑 Codex 这一家，RV2 不再另派 Claude 新子代理评审；Codex 写的规则测试仍由 Claude 新子代理过审。2026-10-21 起（`ops/approvals.yaml` 第 36 条）Codex 不可用或额度不足时，写规则测试与对抗评审（含 money / contract / general / spec-test）改由无上下文的独立 Claude 子代理经 `tools/agent/claude-run.sh` 承担（每次 `claude -p` 新会话，与写实现的不是同一上下文；写测试前台账 `tester` 先改为 `claude-independent`），证据如实记为 `claude-independent`、不得记成 `codex`；Codex 能用时仍优先 Codex。Codex 沙箱里只做不执行测试的静态检查，Codex 生成的任何可执行内容都不在宿主运行；实现子代理只经 `tools/ops/verify-container.sh <编号> --fast` 在容器里跑 `verify:fast`。派工细节见 `tools/agent/README.md`。
 
 ## 4. 硬规则
 
