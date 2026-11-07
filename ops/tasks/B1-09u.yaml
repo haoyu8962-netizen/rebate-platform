@@ -12,6 +12,7 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/db/orders/reason-sub/**'
+  - 'test/spec/orders/rights-port/kit.ts' # D10-839：orders 新增 NOT NULL 列，order() 字面量补一行 reason_sub_manual: false
 impl: claude
 tester: claude-independent
 accept:
