@@ -6,6 +6,7 @@ type: impl
 # union/infra/pdd/goods.ts：pdd.ddk.goods.search / goods.detail / goods.recommend.get 的 cat_ids[0] → category_l1_id（十进制字符串原样；非正整数 / 空数组 / 缺失 → 缺省）。详情与物料流文档写「一~四级类目ID列表」，搜索只写「商品类目id」，**首项为一级系按文档顺序推定、文档未明说**——规则测试钉住「取首项」，下次拼多多实测时核对与类目接口的一级是否吻合。不用 cat_id（层级不明、物料流为字符串、录制未见）。拼多多无一级名称字段，category_l1_name 不出（不另调 pdd.goods.cats.get）。录制 cat_ids 10/10 出现（各 3 个 int）。
 # 拼多多无冻结用例钉「不出类目」。可复用 B1-04zzv 抽出的归一函数（若已合并），否则内联。
 # 风险：union 适配器 → RV2；新鲜独立 Claude 写规则测试，资金评审。
+# 完成 2026-11-08（#2646）：pddCategoryL1 内联于 pdd/goods.ts，未抽共享函数；只取 cat_ids[0]、拒前导零、不用 cat_id、无名称。
 refs: []
 refs_hash: {}
 deps: []
@@ -20,4 +21,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/pdd-category/**'
-status: todo
+status: done
+pr: 2646

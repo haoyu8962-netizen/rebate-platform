@@ -39,6 +39,8 @@ const MAX_FEED_OFFSET = 1_000_000;
 const MAX_CUSTOM_PARAMETERS_BYTES = 64;
 /** promotion_rate 是千分比整数；100 % = 1000。 */
 const MAX_PROMOTION_RATE = 1000;
+/** B1-04zzw：一级类目 ID 只收正整数、无前导零的十进制字符串（与京东 B1-04zzv 同口径）。 */
+const CATEGORY_L1_ID = /^[1-9][0-9]{0,18}$/;
 
 export type PddGoodsSource = 'search' | 'detail' | 'feed';
 
@@ -290,6 +292,23 @@ function pddDetailExtras(
 }
 
 /**
+ * B1-04zzw（FU-CATEGORY-BLOCKLIST 第一步，D10-805 ⑤）：cat_ids[0] → category_l1_id（十进制字符串）。
+ * 只取首项、不回退；首项为一级系按文档顺序推定。number 须为安全整数，字符串按同一正则；
+ * cat_ids 缺失 / 非数组 / 空 / 首项不合格 → 不带，不跳行、不告警。不用 cat_id；拼多多无一级名称。
+ */
+function pddCategoryL1(row: Record<string, unknown>): Pick<UnionItemDetail, 'category_l1_id'> {
+  const cats = field(row, 'cat_ids');
+  const first: unknown = Array.isArray(cats) ? cats[0] : undefined;
+  const id =
+    typeof first === 'number' && Number.isSafeInteger(first)
+      ? String(first)
+      : typeof first === 'string'
+        ? first
+        : undefined;
+  return id !== undefined && CATEGORY_L1_ID.test(id) ? { category_l1_id: id } : {};
+}
+
+/**
  * 一行商品 → 统一 DTO。身份、标题、佣金比例不合格整行 invalid_dto；价格不合格出
  * price_status='anomaly'（金额置 0 占位，不显示；出不出卡由 catalog 决定）并回调 onAnomaly。
  */
@@ -321,6 +340,7 @@ export function mapPddGoods(
     quoted_at: now.toISOString(),
     ...(typeof description === 'string' ? { description } : {}),
     ...images,
+    ...pddCategoryL1(row),
     ...(source === 'detail' ? pddDetailExtras(row) : {}),
   };
   const price = pddPrice(row, now.getTime());

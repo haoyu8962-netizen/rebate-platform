@@ -132,3 +132,44 @@ it('[AC-B1-04zzm-UNIT#2] 券不计入（门槛不够）时不出结束时刻；�
   ]);
   expect(Object.hasOwn(mapped, 'shop_ref')).toBe(false);
 });
+
+it('[AC-B1-04zzw-UNIT#1] 搜索 / 详情 / 物料流：cat_ids[0] → category_l1_id 十进制字符串，不出一级名称，不用 cat_id', () => {
+  for (const source of ['search', 'detail', 'feed'] as const) {
+    const mapped = mapPddGoods(
+      detailRow({ cat_ids: [8569, 8439, 8581], cat_id: 1234 }),
+      source,
+      unitNow,
+      () => undefined,
+    );
+    expect(mapped.category_l1_id, source).toBe('8569');
+    expect(Object.hasOwn(mapped, 'category_l1_name'), source).toBe(false);
+  }
+});
+
+it('[AC-B1-04zzw-UNIT#2] cat_ids 缺失、非数组、空、首项不合格 → 不出 category_l1_id，不回退、不告警', () => {
+  const bad: readonly unknown[] = [
+    undefined,
+    null,
+    [],
+    '8569',
+    8569,
+    [0, 8439],
+    [-1, 8439],
+    [1.5, 8439],
+    [2 ** 53, 8439],
+    ['08569', 8439],
+    ['\u00A08569', 8439],
+    ['8569\u3000', 8439],
+    ['+8569', 8439],
+    [null, 8439],
+  ];
+  for (const cats of bad) {
+    const anomalies: unknown[] = [];
+    const mapped = mapPddGoods(detailRow({ cat_ids: cats, cat_id: 1234 }), 'search', unitNow, (r) =>
+      anomalies.push(r),
+    );
+    expect(Object.hasOwn(mapped, 'category_l1_id'), String(cats)).toBe(false);
+    expect(mapped.price_status).toBe('ok');
+    expect(anomalies).toEqual([]);
+  }
+});
