@@ -7,7 +7,13 @@
 //   bill job itself answers not_due. Every outcome completes the delivery, deferred included (the
 //   asset snapshot of the run day is not ready, B2-04zg / D10-476): a deferred bill is not a
 //   failure and uses no queue retry; the catch-up (catch-up.ts) sends the same period again on a
-//   later tick of the module's timer until the bill month is generated.
+//   later tick of the module's timer until the bill month is generated. The run that generates
+//   (app, platform, D) sends that key's `settle_adjust` job in its own transaction (B2-09zb;
+//   bill/job.ts onGenerated, wired in assemble.ts), so it is queued exactly when the run is done.
+// - `settle_adjust` (settle_jobs.job): payload { app_id, platform, accounting_date: D },
+//   singletonKey `settle_adjust:<app_id>:<platform>:<D>`; runs the positive-difference candidate
+//   generation (adjust/run-job.ts, BR-FUND-09 R1) for (app, platform) once. Also sent by finance's
+//   manual trigger (adminRunSettleAdjust); a job of the key still queued absorbs it.
 // - `batch_execute` (not in settle_jobs): payload { app_id, batch_id }, singletonKey
 //   `batch_execute:<app_id>:<batch_id>`; runs the batch executor (batch/executor) once. Sent by the
 //   scan for every batch that is CONFIRMED and due (IMMEDIATE, or SCHEDULED with scheduled_at ≤
@@ -23,13 +29,14 @@ import { accountingDate, chinaDayRange } from '@couli/domain';
 import type { Kysely, Transaction } from 'kysely';
 import type { Clock, JobHandler, JobPayload, JobQueue } from '../../platform/index.ts';
 import type { BatchExecutor } from '../batch/executor/executor.ts';
+import type { SettleAdjustJob } from '../adjust/run-job.ts';
 import type { BillJob } from '../bill/job.ts';
 
 /** The queue of the bill and the batch execution (platform/queue catalog, exclusive). */
 export type SettleQueueName = 'settle';
 
 /** The jobs of that queue. */
-export type SettleJobName = 'bill' | 'batch_execute';
+export type SettleJobName = 'bill' | 'batch_execute' | 'settle_adjust';
 
 /** Payload of a `bill` job. */
 export interface SettleBillJobPayload {
@@ -38,6 +45,9 @@ export interface SettleBillJobPayload {
   /** The +08:00 day D the bill job is seeded for (YYYY-MM-DD). */
   readonly accounting_date: string;
 }
+
+/** Payload of a `settle_adjust` job (the bill day D of the run). */
+export type SettleAdjustJobPayload = SettleBillJobPayload;
 
 /** Payload of a `batch_execute` job. */
 export interface SettleBatchExecuteJobPayload {
@@ -66,6 +76,7 @@ export interface SettleScheduleLogger {
 const QUEUE: SettleQueueName = 'settle';
 const BILL_JOB: SettleJobName = 'bill';
 const EXECUTE_JOB: SettleJobName = 'batch_execute';
+const ADJUST_JOB: SettleJobName = 'settle_adjust';
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
@@ -79,16 +90,16 @@ function nonEmptyText(payload: JobPayload, field: string, job: string): string {
   return value;
 }
 
-/** The (app, platform, D) of a bill payload and D's nominal run_at; anything else is refused. */
-function billPayload(payload: JobPayload) {
-  const appId = nonEmptyText(payload, 'app_id', BILL_JOB);
-  const platform = nonEmptyText(payload, 'platform', BILL_JOB);
-  const day = nonEmptyText(payload, 'accounting_date', BILL_JOB);
+/** The (app, platform, D) of a bill / settle_adjust payload and D's nominal run_at. */
+function dayPayload(payload: JobPayload, job: string) {
+  const appId = nonEmptyText(payload, 'app_id', job);
+  const platform = nonEmptyText(payload, 'platform', job);
+  const day = nonEmptyText(payload, 'accounting_date', job);
   let runAt: Date;
   try {
     runAt = settleBillRunAt(day);
   } catch {
-    throw new Error('settle bill: payload field accounting_date is not a date (YYYY-MM-DD)');
+    throw new Error(`settle ${job}: payload field accounting_date is not a date (YYYY-MM-DD)`);
   }
   return { appId, platform, accountingDate: day, runAt };
 }
@@ -103,6 +114,15 @@ function executePayload(payload: JobPayload) {
 /** One queued or active bill run per (app, platform, D): `bill:<app_id>:<platform>:<D>`. */
 export function settleBillJobKey(appId: string, platform: string, accountingDate: string): string {
   return `${BILL_JOB}:${appId}:${platform}:${accountingDate}`;
+}
+
+/** One queued or active candidate run per (app, platform, D): `settle_adjust:<app>:<platform>:<D>`. */
+export function settleAdjustJobKey(
+  appId: string,
+  platform: string,
+  accountingDate: string,
+): string {
+  return `${ADJUST_JOB}:${appId}:${platform}:${accountingDate}`;
 }
 
 /** The nominal run_at of D's bill run: D 00:00 +08:00. A malformed or nonexistent D throws. */
@@ -140,6 +160,28 @@ export function scheduleSettleBill(
   );
 }
 
+/** Sends the `settle_adjust` job of (app, platform, D) on `trx` (null: outside a transaction), at once. */
+export function scheduleSettleAdjust(
+  queue: JobQueue,
+  trx: Transaction<DB> | null,
+  input: SettleBillJobInput,
+): Promise<string | null> {
+  const payload: SettleAdjustJobPayload = {
+    app_id: input.appId,
+    platform: input.platform,
+    accounting_date: input.accountingDate,
+  };
+  return queue.send(
+    QUEUE,
+    ADJUST_JOB,
+    { ...payload },
+    {
+      trx,
+      singletonKey: settleAdjustJobKey(input.appId, input.platform, input.accountingDate),
+    },
+  );
+}
+
 /** Sends the `batch_execute` job of the batch on `trx` (null: outside a transaction), at once. */
 export function scheduleBatchExecute(
   queue: JobQueue,
@@ -163,6 +205,8 @@ export interface SettleJobHandlerDependencies {
   readonly logger: SettleScheduleLogger;
   readonly bill: Pick<BillJob, 'run'>;
   readonly executor: Pick<BatchExecutor, 'run'>;
+  /** The candidate run (B2-09zb); absent in pieces that never receive `settle_adjust`. */
+  readonly adjust?: Pick<SettleAdjustJob, 'run'>;
 }
 
 /**
@@ -170,10 +214,10 @@ export interface SettleJobHandlerDependencies {
  * port is called.
  */
 export function createSettleJobHandler(dependencies: SettleJobHandlerDependencies): JobHandler {
-  const { db, logger, bill, executor } = dependencies;
+  const { db, logger, bill, executor, adjust } = dependencies;
   return async (job) => {
     if (job.name === BILL_JOB) {
-      const { appId, platform, accountingDate, runAt } = billPayload(job.payload);
+      const { appId, platform, accountingDate, runAt } = dayPayload(job.payload, BILL_JOB);
       const result = await bill.run(db, { appId, platform, runAt });
       logger.info(
         {
@@ -187,6 +231,27 @@ export function createSettleJobHandler(dependencies: SettleJobHandlerDependencie
       );
       // deferred (the asset snapshot of the run day is not complete) completes the delivery as well:
       // no queue retry is used; the catch-up sends the period again on a later tick.
+      return;
+    }
+    if (job.name === ADJUST_JOB) {
+      const { appId, platform, accountingDate, runAt } = dayPayload(job.payload, ADJUST_JOB);
+      if (adjust === undefined)
+        throw new Error('settle settle_adjust: the candidate run is not wired');
+      const result = await adjust.run({ appId, platform, accountingDate, runAt });
+      logger.info(
+        {
+          job: ADJUST_JOB,
+          app_id: appId,
+          platform,
+          accounting_date: accountingDate,
+          outcome: result.outcome,
+          batch_id: result.run.batchId,
+          orders: result.run.orders,
+          candidates: result.run.candidates,
+          superseded: result.run.superseded,
+        },
+        'settle_adjust_run',
+      );
       return;
     }
     if (job.name === EXECUTE_JOB) {

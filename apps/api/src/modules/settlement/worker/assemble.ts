@@ -8,6 +8,7 @@
 //   tick within 60 s, then every 60 s, unref); stop() clears it and waits for a tick in flight, so
 //   nothing is sent afterwards.
 import type { DB } from '@couli/db';
+import { accountingDate } from '@couli/domain';
 import type { Kysely, Transaction } from 'kysely';
 import type {
   Clock,
@@ -23,6 +24,8 @@ import {
   type BeneficiaryItemInput,
   type BeneficiaryItemResult,
 } from '../batch/executor/executor.ts';
+import { createSettleAdjustGenerator, type SettleAdjustAudit } from '../adjust/generate.ts';
+import { createSettleAdjustJob } from '../adjust/run-job.ts';
 import { createBillSourceReader } from '../bill/infra/bill-source.ts';
 import { saveBillValidations } from '../bill/infra/bill-validations.ts';
 import { createBillJob } from '../bill/job.ts';
@@ -38,6 +41,7 @@ import { createSettleRunStore } from './run-store.ts';
 import {
   createSettleJobHandler,
   scanDueBatches,
+  scheduleSettleAdjust,
   seedSettleBills,
   type SettleScheduleLogger,
 } from './schedule.ts';
@@ -104,12 +108,19 @@ function itemCredit(credit: BeneficiaryCredit): BeneficiaryItemCredit {
   };
 }
 
+/** Without app.module's audit writer a superseding order fails (and rolls back) rather than lose it. */
+const MISSING_SYSTEM_AUDIT: SettleAdjustAudit = {
+  appendAction() {
+    return Promise.reject(new Error('settlement worker: systemAudit port is not wired'));
+  },
+};
+
 /** The handler of queue settle over the real bill job, executor and credits. */
 export function createSettleWorkerHandler(
   ports: SettlementWorkerPorts,
   runtime: SettleWorkerHandlerRuntime,
 ): JobHandler {
-  const { db, clock, crypto, events, logger } = runtime;
+  const { db, clock, crypto, events, logger, queue } = runtime;
   const config = ports.config(db, clock);
   const ledger = ports.ledger(clock, events);
   const gate = createBeneficiaryGate({
@@ -167,8 +178,27 @@ export function createSettleWorkerHandler(
     snapshotStatus: ports.snapshotStatus,
     registerDiff: ports.registerDiff,
     saveValidations: saveBillValidations,
+    // B2-09zb: the positive-difference run follows a generated bill run, queued in its transaction.
+    onGenerated: async (trx, input) => {
+      await scheduleSettleAdjust(queue, trx, {
+        appId: input.appId,
+        platform: input.platform,
+        accountingDate: accountingDate(input.runAt),
+      });
+    },
   });
-  return createSettleJobHandler({ db, logger, bill, executor });
+  const generator = createSettleAdjustGenerator({
+    db,
+    clock,
+    logger,
+    gate,
+    readSnapshot: ports.readSnapshot,
+    readOrderNets: ports.readOrderNets,
+    config,
+    audit: ports.systemAudit?.(clock) ?? MISSING_SYSTEM_AUDIT,
+  });
+  const adjust = createSettleAdjustJob({ db, clock, generator });
+  return createSettleJobHandler({ db, logger, bill, executor, adjust });
 }
 
 export interface SettleWorkerTimer {

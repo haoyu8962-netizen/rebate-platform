@@ -207,6 +207,11 @@ const RULES: readonly ActionRule[] = Object.freeze([
   ),
   ...rules(['adjustment_denied'], 'admin_adjustment', null, fixed('fund.adjust')),
   ...rules(['adjustment_prefill'], 'admin_adjustment', null, NONE),
+  // settlement (B2-09zb): finance's manual trigger of the positive-difference run, target
+  // `<platform>:<bill_date>`; the system's supersession of an older commission_version's pending
+  // candidates (system:settlement, no point), target `orders:<order_id>` (D10-780).
+  ...rules(['settle_adjust_run_request'], 'settle_adjust_run', null, fixed('fund.settle_adjust')),
+  ...rules(['settle_adjust_candidate_superseded'], 'order', 'orders:', NONE),
 ]);
 
 const BY_ACTION: ReadonlyMap<string, ActionRule> = new Map(

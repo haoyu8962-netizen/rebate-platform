@@ -46,7 +46,12 @@ import {
   ADMIN_SETTLE_COMMANDS,
   AdminSettleCommandsController,
 } from './http/admin/settle-commands.controller.ts';
+import type { AdminSettleAdjustRunDeps } from './adjust/admin-run.ts';
 import { createBeneficiaryGate } from './credit/beneficiary-gate.ts';
+import {
+  ADMIN_SETTLE_ADJUST_RUNS,
+  AdminSettleAdjustRunsController,
+} from './http/admin/settle-adjust-runs.controller.ts';
 import {
   createRebatePort,
   type RebateDependencies,
@@ -173,6 +178,9 @@ export class SettlementModule {
  * fail closed.
  * B2-04zr: the union collection records (fund.cash_entry, step-up totp; fund.view for the list),
  * with the same fail-closed rule.
+ * B2-09zb: POST /admin/v1/settle-adjust-runs (fund.settle_adjust, step-up totp): finance's manual
+ * trigger of the positive-difference candidate run (queues the settle_adjust job, one audit record);
+ * without a database, idempotency or the job queue it registers and fails closed.
  */
 export class SettlementAdminModule {
   static forAdmin(
@@ -185,6 +193,7 @@ export class SettlementAdminModule {
         AdminSettleCommandsController,
         AdminReconRestoreController,
         AdminUnionReceiptsController,
+        AdminSettleAdjustRunsController,
       ],
       providers: [
         {
@@ -271,6 +280,29 @@ export class SettlementAdminModule {
             db === undefined || idempotency === undefined || eventBus === undefined
               ? null
               : { db, clock, idempotency, eventBus, ports },
+        },
+        {
+          provide: ADMIN_SETTLE_ADJUST_RUNS,
+          inject: [
+            CLOCK,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: JOB_QUEUE, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            queue?: QueueRuntime,
+          ): AdminSettleAdjustRunDeps | null =>
+            db === undefined || idempotency === undefined || queue === undefined
+              ? null
+              : {
+                  clock,
+                  idempotency,
+                  queue,
+                  auditOn: (trx) => ports.auditWriter(trx, clock),
+                },
         },
       ],
     };

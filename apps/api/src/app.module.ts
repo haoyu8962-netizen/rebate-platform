@@ -3897,6 +3897,8 @@ function settlementWorkerModule(): DynamicModule {
         config: transactionConfig(clock),
         orders: bookedBaseOrderFacts(createInviteRewardOrderFacts()),
       }),
+    // B2-09zb (D10-780): the audit of candidates superseded by a newer commission_version.
+    systemAudit: (clock) => createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
   });
 }
 

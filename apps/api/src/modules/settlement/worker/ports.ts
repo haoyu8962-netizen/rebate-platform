@@ -23,6 +23,9 @@
 //   handles below, orders' createInviteRewardOrderFacts and content's configuration reader on the
 //   caller's transaction (optional for SettlementModule, always given by app.module on the worker);
 //   the order facts it reads carry the credit's booked base as base_fen (D10-810).
+// - systemAudit = admin's system audit writer (B2-09zb: the audit of a candidate superseded by a
+//   newer commission_version, in the generating transaction). Optional for the worker pieces that
+//   never supersede; a run that has to supersede without it fails that order (nothing written).
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
 import type { Ledger, OrderNetSelection, OrderNets } from '../../ledger/index.ts';
@@ -36,6 +39,7 @@ import type {
   RealnameStatusBatchReader,
   UserDeletionStatusReader,
 } from '../credit/beneficiary-gate.ts';
+import type { SettleAdjustAudit } from '../adjust/generate.ts';
 import type {
   BeneficiaryEventInput,
   CreditInviteTrigger,
@@ -105,4 +109,6 @@ export interface SettlementWorkerPorts {
    * Optional: without it the credit triggers nothing.
    */
   readonly inviteRewardTrigger?: (runtime: SettlementInviteTriggerRuntime) => CreditInviteTrigger;
+  /** admin's createSystemAuditWriter over the worker's clock (optional, see the header). */
+  readonly systemAudit?: (clock: Clock) => SettleAdjustAudit;
 }

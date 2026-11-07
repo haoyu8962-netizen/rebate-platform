@@ -17130,6 +17130,65 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       "properties": {}
     }
   },
+  "adminRunSettleAdjust": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "bill_date"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "Platform (contracts/enums/platform.yaml platform).",
+          "enum": [
+            "taobao",
+            "jd",
+            "pdd",
+            "meituan",
+            "vip",
+            "douyin",
+            "eleme",
+            "kuaishou",
+            "suning"
+          ]
+        },
+        "bill_date": {
+          "type": "string",
+          "format": "date",
+          "description": "The monthly bill day (+08:00)."
+        }
+      }
+    }
+  },
   "listAdminWithdrawals": {
     "headers": {
       "type": "object",

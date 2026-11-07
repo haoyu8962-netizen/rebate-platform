@@ -176,12 +176,14 @@ export async function withPools(
 /** settle_jobs of the app as plain values (run_at in ISO form). */
 export async function billRunsOf(db: Kysely<DB>, appId: string) {
   const rows = await settleJobsOf(db, appId);
-  return rows.map((row) => ({
-    job: row.job,
-    platform: row.platform,
-    run_at: row.run_at.toISOString(),
-    status: row.status,
-  }));
+  return rows
+    .filter((row) => row.job === 'bill')
+    .map((row) => ({
+      job: row.job,
+      platform: row.platform,
+      run_at: row.run_at.toISOString(),
+      status: row.status,
+    }));
 }
 
 /** settle_bills of the app (generated_at in ISO form or null). */

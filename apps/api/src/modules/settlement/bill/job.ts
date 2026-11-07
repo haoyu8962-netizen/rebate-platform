@@ -140,6 +140,12 @@ export interface BillJobDependencies {
     input: BillSourceSelection,
     rows: readonly BillValidation[],
   ): Promise<void>;
+  /**
+   * B2-09zb: called in the generating transaction just before it commits, only on `generated` (the
+   * worker sends the positive-difference run's `settle_adjust` job there, so it is queued exactly
+   * when the bill run is done). Absent: nothing.
+   */
+  onGenerated?(trx: Transaction<DB>, input: BillJobInput): Promise<void>;
 }
 
 export interface BillJobResult {
@@ -715,6 +721,7 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
       })),
       now,
     });
+    if (deps.onGenerated !== undefined) await deps.onGenerated(trx, input);
     return { outcome: 'generated', billId, status };
   }
 

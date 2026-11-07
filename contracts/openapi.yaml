@@ -25082,7 +25082,6 @@ paths:
   /admin/v1/settle-adjust-runs:
     post:
       operationId: adminRunSettleAdjust
-      x-implementation: planned
       tags:
         - admin-adjustments
       summary: Queue the positive-difference candidate run of one platform and bill day now
