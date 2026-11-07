@@ -121,8 +121,11 @@ it.each(['taobao', 'synthetic-unlisted'])(
       expect(PLATFORM_RULES.taobao.syncWindowCapMs).toBe(20 * 60_000);
       expect(rescanDefaults('taobao')).toEqual({ enabled: true, days: 30 });
       expect(f.read).toHaveBeenCalled();
-      expect(f.sent()).toHaveLength(1);
-      expect(f.sent()[0]).toMatchObject({ platform: 'taobao', union_account_id: TAOBAO_ACCOUNT });
+      // B1-04zzr（D10-798）：淘宝分三档，小时档（rescan_hour）默认开、同一轮会多发窗，这里不数它；
+      // 周档默认关，所以「只发一个窗、不混入别的窗」对其余窗照旧成立。
+      const nonHour = f.sent().filter((win) => win['query_kind'] !== 'rescan_hour');
+      expect(nonHour).toHaveLength(1);
+      expect(nonHour[0]).toMatchObject({ platform: 'taobao', union_account_id: TAOBAO_ACCOUNT });
     } else {
       expect(f.read).not.toHaveBeenCalled();
       expect(f.send).not.toHaveBeenCalled();
