@@ -1,0 +1,30 @@
+id: B2-09ze
+repo: rebate-platform
+title: FU-PAYOUT-W-ALERT-KEY：W 未录 / 过期的告警——worker 指标 couli_payout_water_stale{app_id} 与 couli-fund.yaml 规则 CouliPayoutWaterStale，顺手删第 19 行过时 TODO（上线缺口第 30 项，D10-805 ④）
+type: impl
+# 2026-11-07 ops 入账（D10-678 原派 pay，D10-805 ④ 改归 ops）。现状：CouliPayoutWaterLow 只在有新鲜 W 时出样本，W 未录或超过 2 小时（BR-WDR-18 ②）时没有样本、告警不响，
+#   而这时 EXECUTE 会整批拒绝。口径（ops 提议，报编排核）：某 app 有待执行的提现（APPROVED）且该通道没有 2 小时内的 W（从未录入或 t_W 距今 > 2 小时）→ 1，
+#   否则 0；没有待执行单就不报（夜里财务不录 W 属正常，不让它每晚响）。只 worker 导出，照 water-low 的采集做法（payout 只读端口经 entry.ts 接线、5 分钟缓存、读失败即抓取失败）。
+# 规则 fund: 'true'、severity warning、for 15m；couli-fund.yaml 第 19 行「W < 1.5P blocked on B2-06fz」TODO 已由 B2-09j 落地，删掉。
+# 冻结 [AC-B1-01zzi#6] 指标白名单要加新指标名，照 B2-09j 先例只增不减，用 modify_existing（tighten_only 之外的「加名」由编排按 #24 核）登记，具体用例标题等测试作者定后补台账。
+# RV2（payout 指标与资金告警）。规则测试新鲜独立 Claude（D10-775），Opus 实现，Codex money 评审。
+refs: [BR-WDR-18]
+refs_hash:
+  BR-WDR-18: 9247640dde57
+deps: [B2-09j]
+paths:
+  - 'apps/api/src/modules/payout/application/**'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/platform/metrics/**'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/entry.ts'
+  - 'infra/monitoring/rules/couli-fund.yaml'
+test_paths:
+  - 'test/spec/platform/metrics/water-stale/**'
+  - 'test/spec/platform/fund-metrics/rules.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/metrics/water-stale/**'
+status: todo
