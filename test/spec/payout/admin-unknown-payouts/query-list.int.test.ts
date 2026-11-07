@@ -137,7 +137,7 @@ it('[AC-B2-09s#13] W9退回单查询fail写成真实尝试后，W3守卫可读�
   });
 });
 
-it('[AC-B2-09s#14] 查询同键同体只入队一次、异键再次入队；payout_query_request审计恰一次每请求且无个人资料，按target_id可查', async () => {
+it('[AC-B2-09s#14] 查询同键同体只入队一次、异键在途不再入队；payout_query_request审计恰一次每请求且无个人资料，按target_id可查', async () => {
   const f = fixture(s);
   await withUnknownAdmin(f, async (h) => {
     const who = await payee(f, h);
@@ -163,8 +163,8 @@ it('[AC-B2-09s#14] 查询同键同体只入队一次、异键再次入队；payo
       ],
       total: 1,
     });
-    await answer(await h.query(w.id), 0);
-    expect(await queuedQueries(f)).toHaveLength(2);
+    await answer(await h.query(w.id), 0, { withdrawal_id: w.id, result: 'submitted' });
+    expect(await queuedQueries(f)).toHaveLength(1);
     expect(await audits(f, 'payout_query_request')).toHaveLength(2);
   });
 });

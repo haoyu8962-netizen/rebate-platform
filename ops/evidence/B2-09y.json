@@ -1,0 +1,88 @@
+{
+  "task": "B2-09y",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "4c375b79d33bf8c519248b5ce0175897fa8d3be0",
+  "red_tests": [
+    "test/spec/payout/admin-unknown-payouts/edges.int.test.ts > [AC-B2-09s#39] 首条在途时异键再点不再入队；首条真正完成后异键再点才入队新的一条，manual_request_id不同，各查一次；各自重投后仍恰两条query",
+    "test/spec/payout/admin-unknown-payouts/query-list.int.test.ts > [AC-B2-09s#14] 查询同键同体只入队一次、异键在途不再入队；payout_query_request审计恰一次每请求且无个人资料，按target_id可查",
+    "test/spec/payout/manual-query-dedupe/in-flight.int.test.ts > [AC-B2-09y#1] 首条人工查询仍在队列里时换幂等键再点：应答submitted、不入第二条（队列里仍是首条及其manual_request_id）、审计记两条；两个键各自同键重放应答逐字相同、不增任务与审计",
+    "test/spec/payout/manual-query-dedupe/in-flight.int.test.ts > [AC-B2-09y#2] 两位处置人各用自己的幂等键同时点同一张单：两人都得submitted，队列只有一条人工查询任务，两人各记一条payout_query_request审计",
+    "test/spec/payout/manual-query-dedupe/in-flight.int.test.ts > [AC-B2-09y#3] 被去重的那次点击只留审计与幂等记录：不入队、不另查通道、不另记query尝试；在途首条执行后通道只调一次、仅一条query，提现单状态余额凭证不变，latest_query即首条结果",
+    "test/spec/payout/manual-query-dedupe/release.int.test.ts > [AC-B2-09y#4] 上一条在途时再点不入队；它执行完、队列记为completed后再点才入队新的一条，manual_request_id不同；两条各查通道一次共两条query尝试，不重提转账，新一条在途时再点仍不入队",
+    "test/spec/payout/manual-query-dedupe/release.int.test.ts > [AC-B2-09y#5] 上一条失败等重试（retry）及重试执行中（active）时再点均不入队、审计照记、应答submitted；重试耗尽记为failed后再点才入队新的一条",
+    "test/spec/payout/manual-query-dedupe/release.int.test.ts > [AC-B2-09y#6] 在途去重只按同一提现单同一execute_seq：另一张单、同单下一个execute_seq各自能入队一条且各自在途时再点不再入队；另一app的同状态单各自独立"
+  ],
+  "risk_note": "RV2 by path (payout), no migration, no contract change, no money moves, one behavioural line (withdraw lane, model Claude Fable 5.1; orchestrator rulings D10-702 ③, D10-707 ②, D10-775, D10-777). The admin 【立即查询】 on a withdrawal waiting for a person (or returned by W9) enqueued its query job under a key carrying a random request id, so every click with another idempotency key, or by another admin, got a job of its own: one out_biz_no was queried concurrently and each job recorded an attempt (B2-09s review S2). The key is now `{withdrawal_id}:{execute_seq}:manual`; queue `payout` is exclusive, so while a job of that key is created / retry / active another send is dropped silently by the queue's unique index (the request transaction is not aborted), and once the job is completed or failed for good the next click enqueues again. Unchanged: the answer submitted, one payout_query_request audit per click, replay of the same idempotency key, only-query-never-resend (BR-WDR-14), the query result as evidence without a transition or a voucher (BR-WDR-15), the consumer's claim per manual_request_id. Real risks: a key that never frees (covered: completed and failed-for-good release it, retry and active hold it — states moved on pgboss.job and proven by the next send), a wider dedupe than intended (covered: another withdrawal and the next execute_seq enqueue their own), a lost audit for the dropped click (covered). Two frozen B2-09s tests pinned the old behaviour (one job per request) and change under D10-777 per D10-327, nothing else in their files: [AC-B2-09s#14] queue 2 → 1 for another key while the first job is queued (audits stay 2); [AC-B2-09s#39] two coexisting jobs → the second click is enqueued only after the first job is completed. The premise was run before the ledger change: with the one line applied, 74 of the 76 tests of the four frozen directories using the endpoint stayed green and exactly these two went red. Not covered by a rule test (spec-test S2s): the W9-returned branch (same key in the code), and a lock-harness proof that the two concurrent clicks of [AC-B2-09y#2] overlap. Codex is out of quota until 2026-11-11 (approvals 36, D10-775): rule tests and reviews are a fresh independent Claude's and recorded as such. Test-machine full verify not run (AWS runners disabled, D10-555; CI verify-int is the full verification, approvals 21); the red run and the implementation's runs were made in the local Docker container / host slot (implementation tree: manual-query-dedupe 6, admin-unknown-payouts 42, unknown-list-row 6, w10-late-paid 12, w10-voucher-crosscheck 16 — 82 green).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "4c375b79d33bf8c519248b5ce0175897fa8d3be0",
+      "tree": "262a3bb4e0dd085bfba4478366b4eecf45c083f8",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-06T20:30:44Z",
+      "finished_at": "2026-11-06T20:31:11Z",
+      "red_tests": [
+        "test/spec/payout/admin-unknown-payouts/edges.int.test.ts > [AC-B2-09s#39] 首条在途时异键再点不再入队；首条真正完成后异键再点才入队新的一条，manual_request_id不同，各查一次；各自重投后仍恰两条query",
+        "test/spec/payout/admin-unknown-payouts/query-list.int.test.ts > [AC-B2-09s#14] 查询同键同体只入队一次、异键在途不再入队；payout_query_request审计恰一次每请求且无个人资料，按target_id可查",
+        "test/spec/payout/manual-query-dedupe/in-flight.int.test.ts > [AC-B2-09y#1] 首条人工查询仍在队列里时换幂等键再点：应答submitted、不入第二条（队列里仍是首条及其manual_request_id）、审计记两条；两个键各自同键重放应答逐字相同、不增任务与审计",
+        "test/spec/payout/manual-query-dedupe/in-flight.int.test.ts > [AC-B2-09y#2] 两位处置人各用自己的幂等键同时点同一张单：两人都得submitted，队列只有一条人工查询任务，两人各记一条payout_query_request审计",
+        "test/spec/payout/manual-query-dedupe/in-flight.int.test.ts > [AC-B2-09y#3] 被去重的那次点击只留审计与幂等记录：不入队、不另查通道、不另记query尝试；在途首条执行后通道只调一次、仅一条query，提现单状态余额凭证不变，latest_query即首条结果",
+        "test/spec/payout/manual-query-dedupe/release.int.test.ts > [AC-B2-09y#4] 上一条在途时再点不入队；它执行完、队列记为completed后再点才入队新的一条，manual_request_id不同；两条各查通道一次共两条query尝试，不重提转账，新一条在途时再点仍不入队",
+        "test/spec/payout/manual-query-dedupe/release.int.test.ts > [AC-B2-09y#5] 上一条失败等重试（retry）及重试执行中（active）时再点均不入队、审计照记、应答submitted；重试耗尽记为failed后再点才入队新的一条",
+        "test/spec/payout/manual-query-dedupe/release.int.test.ts > [AC-B2-09y#6] 在途去重只按同一提现单同一execute_seq：另一张单、同单下一个execute_seq各自能入队一条且各自在途时再点不再入队；另一app的同状态单各自独立"
+      ],
+      "expected": [
+        "test/spec/payout/admin-unknown-payouts/edges.int.test.ts",
+        "test/spec/payout/admin-unknown-payouts/query-list.int.test.ts",
+        "test/spec/payout/manual-query-dedupe/in-flight.int.test.ts",
+        "test/spec/payout/manual-query-dedupe/release.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "428f860ab1ad76f0f2b86b67240913be2bfb9e3cf9f172fad510bfc7d6014098"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 2,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex is out of quota until 2026-11-11, so the money review is two fresh independent Claude contexts (approvals 36; D10-775 ②: a reviewer plus a second one re-checking its conclusion, both must pass), each through claude-run.sh, static, read-only, base = the fork point 55b24c1ffa05, reviewed at ece007988. Reviewer 1 (code 1/3): pass, no findings; checklist rounding n/a, sign n/a (no amount, no ledger entry on this path), idempotency ok (the dedupe ends in pg-boss's exclusive partial unique index on (name, singleton_key) for created / retry / active, not in a prior read; the same idempotency key still replays; the consumer still claims each manual_request_id), concurrency ok (the send runs in the request transaction after SELECT … FOR UPDATE on the withdrawal row; a dropped send returns null without aborting the transaction, so the audit still commits), partial_refund n/a, clock ok, app_id ok; the new key collides with no other key of queue payout. Reviewer 2 (counted as code 2/3 by the lane's most conservative reading of D10-775 ③, reported to the orchestrator; an empty increment, so it re-read the change and reviewer 1's output): pass, no new S0 / S1, same checklist. couli-runs/B2-09y/review-money-r1.json, review-money-r2.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "A fresh independent Claude wrote the rule tests in 1 attempt (ledger tester claude-independent, approvals 36 / D10-775): test/spec/payout/manual-query-dedupe (in-flight, release + kit; [AC-B2-09y#1]–[#6]) and the two frozen B2-09s blocks D10-777 allowed to change ([AC-B2-09s#14], [AC-B2-09s#39]). Another fresh independent Claude reviewed, static, r1 pass: every new or changed test is red on main through an assertion (main enqueues the second job), the diff of the two frozen files touches only those two blocks (no top-level change; the other 19 tests are declared red_exempt and the red run applied all 19 exemptions), job states are moved through pgboss.job and proven by expectHeld / the next accepted send. One S2, non-blocking, open: [AC-B2-09y#2] fires its two concurrent clicks with Promise.all without a lock-harness proof that they overlap (the dedupe is the queue's unique index, so the outcome does not depend on timing). One out-of-scope S2: no dedupe case on a W9-returned withdrawal. Old → new expectations of the two frozen tests are listed in the PR body. red_exempt confirmation (CT-06r): the reviewer's Part 4 reads「red_exempt lists the other 19 tests of those files. I checked in the diff that only the #14 and #39 blocks changed」— the 19 exempt tests are verbatim equal to the base and stay green on old code; the red run applied all 19 (problems 0).",
+    "red_exempt_confirmed": true
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "79faf0e253bb3beebd8c7a2d3e516c8d9c42881c",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

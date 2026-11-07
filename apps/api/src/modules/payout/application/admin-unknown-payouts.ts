@@ -361,6 +361,19 @@ export async function listAdminUnknownPayouts(
   return { items, page, page_size: pageSize, total: Number(counted?.total ?? 0) };
 }
 
+/**
+ * B2-09y (FU-W10-QUERY-DEDUPE; BR-WDR-14 只查不重发, BR-WDR-15 查询结果只作凭证; D10-702 ③, D10-707 ②):
+ * the queue key of a manual query, one per withdrawal and execute_seq. Queue `payout` is exclusive
+ * (platform/queue §4): while a job of this key is queued, waiting for its retry or active, another
+ * send is dropped silently, so a second click — another idempotency key, another admin — enqueues
+ * no second job and the channel is not queried twice for one out_biz_no; once that job is
+ * completed or failed for good the next click enqueues again. No request id in the key: with one
+ * every click got a job of its own.
+ */
+export function manualQueryJobKey(withdrawalId: string, executeSeq: number): string {
+  return `${withdrawalId}:${String(executeSeq)}:manual`;
+}
+
 /** Queues one query of a withdrawal waiting for a person, or returned by W9. */
 export function queryAdminPayoutResult(
   deps: AdminUnknownPayoutWriteDeps,
@@ -396,7 +409,8 @@ export function queryAdminPayoutResult(
       const waiting = row.status === PAYING && row.needs_manual;
       const returned = row.status === APPROVED && row.hold_reason === PAYER_SIDE_HOLD;
       if (!waiting && !returned) return conflictRefusal(traceId);
-      // Stable across redeliveries of this job: the job records one attempt per request.
+      // Stable across redeliveries of this job: the job records one attempt per request. A click
+      // the queue drops (manualQueryJobKey) never uses its id: no job, no attempt carries it.
       const manualRequestId = randomUUID();
       await deps.queue.send(
         'payout',
@@ -409,7 +423,7 @@ export function queryAdminPayoutResult(
           source: PAYOUT_MANUAL_QUERY_SOURCE,
           manual_request_id: manualRequestId,
         },
-        { trx, singletonKey: `${id}:${row.execute_seq}:manual:${manualRequestId}` },
+        { trx, singletonKey: manualQueryJobKey(id, row.execute_seq) },
       );
       await deps.auditOn(trx).append({
         appId,

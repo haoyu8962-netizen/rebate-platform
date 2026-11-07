@@ -471,25 +471,36 @@ it('[AC-B2-09s#38] 手动任务确认前重投按manual_request_id去重：首�
   });
 });
 
-it('[AC-B2-09s#39] 两个异键请求产生不同manual_request_id，各查一次；各自重投后仍恰两条query', async () => {
+it('[AC-B2-09s#39] 首条在途时异键再点不再入队；首条真正完成后异键再点才入队新的一条，manual_request_id不同，各查一次；各自重投后仍恰两条query', async () => {
   const f = fixture(s);
   await withUnknownAdmin(f, async (h) => {
     const w = await unknownWithdrawal(f, h, await payee(f, h));
     const first = await submit(f, h, w);
-    const second = await submit(f, h, w);
-    expect(manualRequestId(second)).not.toBe(manualRequestId(first));
+    await answer(await h.query(w.id, { key: randomUUID() }), 0, {
+      withdrawal_id: w.id,
+      result: 'submitted',
+    });
+    expect((await queuedQueries(f)).map((job) => job.id)).toEqual([first.id]);
     const worker = channelWorker(f, h);
     const before = await state(f);
     await expect(worker.handler(first)).resolves.toBeUndefined();
+    expect({ ...(await state(f)), attempts: [] }).toEqual({ ...before, attempts: [] });
+    // The payout process's queue completes the job once its handler resolved (B2-09y kit.ts).
+    const completed = await sql`UPDATE pgboss.job SET state = 'completed', completed_on = now()
+      WHERE name = 'payout' AND id = ${first.id}::uuid AND state = 'created'`.execute(f.db);
+    expect(completed.numAffectedRows).toBe(1n);
     f.clock.advanceMs(1);
+    const second = await submit(f, h, w);
+    expect(manualRequestId(second)).not.toBe(manualRequestId(first));
+    const beforeSecond = await state(f);
     await expect(worker.handler(second)).resolves.toBeUndefined();
+    expect({ ...(await state(f)), attempts: [] }).toEqual({ ...beforeSecond, attempts: [] });
     expect(worker.channels.alipay.query).toHaveBeenCalledTimes(2);
     expect(worker.channels.alipay.query.mock.calls.map((call) => call[0])).toEqual([
       w.out_biz_no,
       w.out_biz_no,
     ]);
     const after = await state(f);
-    expect({ ...after, attempts: [] }).toEqual({ ...before, attempts: [] });
     expect((await attemptsOf(f, w)).filter((a) => a.kind === 'query')).toHaveLength(2);
     for (const job of [first, second]) {
       await expect(worker.handler({ ...job, attempt: job.attempt + 1 })).resolves.toBeUndefined();
