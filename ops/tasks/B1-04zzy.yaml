@@ -1,0 +1,23 @@
+id: B1-04zzy
+repo: rebate-platform
+title: agent + 装配：Agent 搜索的禁售类目判定换成真实判定（FU-CATEGORY-BLOCKLIST 第三步 单 B，D10-860）——production.ts categoryAllowed 经 catalog filterCategories；app.module 取 item.category_l1_id
+type: impl
+# 2026-11-08 union 入账（编排 D10-858 ① / D10-860；方案 couli-runs/UNION-lane/category-blocklist-step3-plan-20261108.md §3）。依赖单 A B1-04zzx（CategoryCandidate 允许空类目与无类目规则）。
+# ① agent/stream/mount 的 ports 加可选 categories（catalog 的 filterCategories 端口，经 app.module 由 agentStreamPortsToken 递入；agent 不引 catalog provider，守 .dependency-cruiser.cjs）。② production.ts:176-177 categoryAllowed 由恒 true 改为：ports.categories 存在时用 filterCategories(appId, [候选]) 判定、长度为 1 即放行；**读名单失败从严视为被禁并另记 warn**（D10-860 ③，pipeline 现有 fail-closed 口径）；缺省（未装配）保持放行，规则测试钉住生产装配一定提供。③ app.module.ts:3384-3389 searchProducts 的 categoryId 由写死 '' 改为 candidate.item.category_l1_id（无则 ''）；AGENT_STREAM_PORTS 装配处传 categories。categoryAllowed 签名与 pipeline 不动；名单不加缓存。无类目行为随单 A 规则（放行并告警、照常过关键词）。
+# 风险：agent/** → RV1，app.module.ts 不在白名单按「其他」RV2 → 整单 RV2；新鲜独立 Claude 写规则测试，spec-test 用 Claude（D10-848），代码评审 Codex。
+refs: []
+refs_hash: {}
+deps: [B1-04zzx]
+paths:
+  - 'apps/api/src/modules/agent/stream/mount/production.ts'
+  - 'apps/api/src/modules/agent/stream/mount/assembly.ts'
+  - 'apps/api/src/modules/agent/stream/mount/*.test.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/agent/category-blocklist/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/category-blocklist/**'
+status: todo

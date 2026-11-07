@@ -1,0 +1,29 @@
+id: B1-04zzx
+repo: rebate-platform
+title: catalog：禁售类目过滤接入搜索 Tab（FU-CATEGORY-BLOCKLIST 第三步 单 A，D10-860）——搜索主结果与无结果兜底物料都过 filterCategories；无类目放行并告警、照常过关键词
+type: impl
+# 2026-11-08 union 入账（编排 D10-858 ① / D10-860；方案 couli-runs/UNION-lane/category-blocklist-step3-plan-20261108.md）。黑名单 category_blocklist 按应用 + 平台、字符串全等；后台名单只录一级 ID（D10-835 ⑤）。
+# ① catalog/domain/types.ts：CategoryCandidate 允许空类目（无类目商品的表示）；rules.ts filterByRules：有类目照旧（同平台 + 类目全等 + 关键词为空或标题字面包含）；**无类目 → 不按类目判，但同平台所有带关键词的行按标题字面匹配，命中即滤**（纯类目行不适用，D10-860 ①）。
+# ② catalog/search.ts：搜索主结果 take()（约 555 行，每页批量调一次 filterCategories，在缓存之后，名单改下次请求即生效，不动 filter_cfg_version）与无结果兜底物料（约 727 行，04:428「检索与物料流过滤」）都过滤；条数不足由现有补页兜底，has_more 与会话去重不受影响。
+# ③ 告警：无类目商品按平台计数 catalog_category_missing；被滤商品按平台计数 catalog_category_blocked（只在有被滤时记）。只带事件码、平台与计数。
+# ④ 端口可选（冻结夹具手写端口类型，见方案 §2）；catalog.module.ts 传端口。名单本步不加缓存（D10-860 ④）。契约不动。首页物料流 / 热销榜另开 FU-CATEGORY-BLOCKLIST-HOME，搜索查询词禁词另开 FU-SEARCH-QUERY-BLOCKWORDS（D10-860 ⑥⑦）。
+# 风险：catalog → RV1；新鲜独立 Claude 写规则测试，spec-test 用 Claude（D10-848），代码评审 Codex。
+refs: []
+refs_hash: {}
+deps: [B1-04zzv, B1-04zzw]
+paths:
+  - 'apps/api/src/modules/catalog/domain/types.ts'
+  - 'apps/api/src/modules/catalog/domain/rules.ts'
+  - 'apps/api/src/modules/catalog/domain/rules.test.ts'
+  - 'apps/api/src/modules/catalog/application/catalog.ts'
+  - 'apps/api/src/modules/catalog/search.ts'
+  - 'apps/api/src/modules/catalog/search.test.ts'
+  - 'apps/api/src/modules/catalog/catalog.module.ts'
+test_paths:
+  - 'test/spec/catalog/category-blocklist-search/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/category-blocklist-search/**'
+status: todo
