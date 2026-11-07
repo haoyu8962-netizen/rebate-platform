@@ -1,0 +1,20 @@
+id: B1-09u
+repo: rebate-platform
+title: 迁移：订单子原因人工选择列（D10-819 ①）——rights_imports.reason_sub、order_rights.reason_sub + reason_sub_manual、orders.reason_sub_manual（人工选过的不被自动覆盖）；取值 CHECK 跟随 order_reason_sub 枚举（含 none 仅限 rights_imports / order_rights）
+type: migration
+# 2026-11-07 入账（admin-backend，编排 D10-818 ③、D10-819 ①、D10-820 ①；方案 couli-runs/FU-ORDER-REASON-SUB-ADMIN/plan.md）。迁移号落地时取主干最大 +1（当前主干 0130），开工前在 notices 报拟用号；授权写在建对象的迁移里（couli_app 对新列有 UPDATE，couli_readonly 只 SELECT）。orders 为分区表，加列照现有 orders 加列迁移的做法。RV2。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/db/orders/reason-sub/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/db/orders/reason-sub/**'
+status: todo

@@ -1,0 +1,30 @@
+id: B1-09v
+repo: rebate-platform
+title: 订单子原因人工选择实现（D10-819 ①③）——违规单导入 adminCreateRightsImport 接收可选 reason_sub（不传 / none / PUNISH 允许集合）并经 order_rights 携带，落订单时人工优先并置 reason_sub_manual；后台订单详情「改子原因」（只许当前父编码允许的子原因或无，order.claim，写审计前后值）；导入审计 detail 加 reason_sub；去 planned
+type: impl
+# 2026-11-07 入账（admin-backend，编排 D10-819、D10-820 ①；方案 couli-runs/FU-ORDER-REASON-SUB-ADMIN/plan.md）。维权单不给人工选（D10-819 ②）。另依赖 agent2 的子原因契约单（D10-820 ②）与 be 的自动映射单（D10-818 ②），号定后补进 deps；开工前三者都要已合并。不改金额与状态迁移。RV2，测试与评审新鲜独立 Claude + 只读复核（D10-775）。
+refs: []
+refs_hash: {}
+deps: [B1-09u]
+paths:
+  - 'apps/api/src/modules/orders/http/admin/**'
+  - 'apps/api/src/modules/orders/application/**'
+  - 'apps/api/src/modules/orders/domain/rights-import*.ts'
+  - 'apps/api/src/modules/orders/infra/**'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-store.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/*.gen.ts'
+  - 'apps/api/src/modules/platform/**/*.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/orders/reason-sub-manual/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/reason-sub-manual/**'
+status: todo

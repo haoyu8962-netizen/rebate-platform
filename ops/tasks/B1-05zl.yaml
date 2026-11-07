@@ -1,0 +1,19 @@
+id: B1-05zl
+repo: rebate-platform
+title: 测试修改：进店来源选项按平台取值（FU-SHOP-SOURCE-OPTIONS，D10-812）——shop.entry.source.jd / .pdd 改 options 空、adminEditable false（控制台只读「未配置」，写 dataoke 回 20001 [key]），淘宝不变；冻结 [AC-F1-10e#75] 与 kit SHOP_SOURCE 两处京东 / 拼多多期望同步，键清单不动
+type: test-change
+# 2026-11-07 入账（admin-backend，编排 D10-806 ⑥、D10-811 ②、D10-812；方案 couli-runs/FU-SHOP-SOURCE-OPTIONS/plan.md）。08 BR-PRICE-21 细则「进店」：京东、拼多多的来源在 09 登记时定；定出后另单打开。契约不改、无迁移、后台页面不改代码。冻结用例由新鲜独立 Claude 改、另一位只读复审（D10-327）；test-change 分支 + 负责人标签（照 B2-12e）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'ops/tasks/B1-05zl.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
