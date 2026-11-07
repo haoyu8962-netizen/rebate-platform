@@ -9,20 +9,23 @@ import {
   expectWarned,
   HIDDEN_MARKERS,
   instant,
+  itemNumber,
   mainPicOf,
   one,
   rowWithout,
   search,
   searchData,
   searchRows,
+  SELLER_MARKER,
   setup,
   titleOf,
   visible,
+  withoutShopRef,
   type Row,
 } from './kit.ts';
 
 // UnionItem 映射：逐个挑字段；不映射不外露 estimateAmount / couponLink / itemLink / 大淘客 id /
-// goodsSign / sellerId；缺必需字段（goodsId / 标题 / 主图）或佣金比例非法的条目跳过并告警，不整页失败。
+// goodsSign；sellerId 只可作 shop_ref 原样出现；缺必需字段（goodsId / 标题 / 主图）或佣金比例非法的条目跳过并告警，不整页失败。
 
 it('[AC-B1-04zh#23] 一条完整映射：凑狸 item_id、title、三价（BR-PRICE-01）、佣金 bp、quoted_at、主图；只含允许的键、不填一级类目', async () => {
   const item = await one(dtkRow(1));
@@ -56,13 +59,22 @@ it('[AC-B1-04zh#24] quoted_at = 收到搜索响应时的注入时钟（不是请
   expect(page.items[0]!.quoted_at).toBe(received);
 });
 
-it('[AC-B1-04zh#25] estimateAmount / couponLink / itemLink / 大淘客 id / goodsSign / sellerId 不映射不外露（任何字段、序列化与打印都看不到）', async () => {
+it('[AC-B1-04zh#25] estimateAmount / couponLink / itemLink / 大淘客 id / goodsSign 不映射不外露；sellerId 只可作 shop_ref 原样出现（其余任何字段、序列化与打印都看不到）', async () => {
   const { page } = await searchRows([dtkRow(1), dtkRow(2)]);
   expect(page.items).toHaveLength(2);
   const shown = visible(page);
-  for (const marker of HIDDEN_MARKERS) expect(shown, marker).not.toContain(marker);
+  const shownWithoutShopRef = visible(withoutShopRef(page));
+  for (const marker of HIDDEN_MARKERS) {
+    if (marker !== SELLER_MARKER) expect(shown, marker).not.toContain(marker);
+    expect(shownWithoutShopRef, marker).not.toContain(marker);
+  }
   for (const item of page.items) {
     for (const key of Object.keys(item)) expect(ALLOWED_ITEM_KEYS.has(key), key).toBe(true);
+    if (Object.hasOwn(item, 'shop_ref')) {
+      const n = itemNumber(item);
+      expect(n, 'shop_ref item has a 凑狸 id').toBeDefined();
+      expect((item as { readonly shop_ref?: unknown }).shop_ref).toBe(dtkRow(n!)['sellerId']);
+    }
   }
 });
 

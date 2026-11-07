@@ -112,6 +112,8 @@ export const HIDDEN_MARKERS = [
   '87654',
   '3100000',
 ] as const;
+/** The sellerId marker: may show only as an item's `shop_ref` value (sellerId 原样), nowhere else. */
+export const SELLER_MARKER: (typeof HIDDEN_MARKERS)[number] = 'synthetic-seller';
 
 export type Row = Record<string, unknown>;
 
@@ -465,7 +467,20 @@ export const ALLOWED_ITEM_KEYS: ReadonlySet<string> = new Set([
   'main_image_url',
   'image_urls',
   'shop_name',
+  'shop_ref',
 ]);
+
+/** The page with every item's `shop_ref` key removed (all other keys kept as returned). */
+export function withoutShopRef(page: Page<UnionItem>): Page<UnionItem> {
+  return {
+    ...page,
+    items: page.items.map((item) => {
+      const rest: Record<string, unknown> = { ...item };
+      delete rest['shop_ref'];
+      return rest as unknown as UnionItem;
+    }),
+  };
+}
 
 /** The synthetic number behind a returned item: from its 凑狸 item_id. */
 export function itemNumber(item: UnionItem): number | undefined {
