@@ -20,4 +20,4 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/rights-audit-port/**'
-status: todo
+status: done

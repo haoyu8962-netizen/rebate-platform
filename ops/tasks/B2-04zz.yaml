@@ -16,4 +16,4 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/rights-audit-actor/**'
-status: todo
+status: done
