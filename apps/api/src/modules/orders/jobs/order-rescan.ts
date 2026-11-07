@@ -8,8 +8,17 @@
 // A row seen again is settled by the pipeline's content_hash short-circuit; no branch here.
 // B1-04zt: application/fetch-window.ts takes a window the upstream calls too large apart inside this
 // job; the counts stay one set for the job's window, and the cursor moves once, by that window.
+// B1-04zzr (D10-798 ④): Taobao's tiers also take query_kind 'rescan_hour' / 'rescan_week' (only for
+// a platform whose rescanTiers lists them); the payload's timeBasis ('pay' / 'update') goes to every
+// listOrders call as OrderQueryOpt.timeBasis. A payload without it (older jobs, jd, pdd) asks
+// without one, which the adapters take as update; any other value fails the job.
 import type { ReceivedJob } from '../../platform/index.ts';
-import type { RegisteredPlatform } from '../../union/index.ts';
+import type { RegisteredPlatform, UnionAdapter } from '../../union/index.ts';
+import {
+  rescanTiers,
+  type RescanQueryKind,
+  type RescanTimeBasis,
+} from '../domain/platform-rules/rescan.ts';
 import { parseInstantMs } from '../domain/sync-window.ts';
 import { fetchWindow } from '../application/fetch-window.ts';
 import type { OrderPipelineContext, OrderPipelinePort } from '../application/pipeline-types.ts';
@@ -53,7 +62,15 @@ function parseOrderRescanWindow(
   if (!(platforms as readonly string[]).includes(platform)) {
     throw new OrderSyncPayloadError('invalid platform');
   }
-  if (str('query_kind') !== 'rescan') throw new OrderSyncPayloadError('invalid query_kind');
+  const queryKind = str('query_kind');
+  const kinds: readonly string[] = rescanTiers(platform)?.map((tier) => tier.queryKind) ?? [
+    'rescan',
+  ];
+  if (!kinds.includes(queryKind)) throw new OrderSyncPayloadError('invalid query_kind');
+  const basis = payload['timeBasis'];
+  if (basis !== undefined && basis !== 'pay' && basis !== 'update') {
+    throw new OrderSyncPayloadError('invalid timeBasis');
+  }
   if (str('scene') !== '-') throw new OrderSyncPayloadError('invalid scene');
   const windowStart = str('window_start');
   const windowEnd = str('window_end');
@@ -70,10 +87,11 @@ function parseOrderRescanWindow(
     app_id: str('app_id'),
     platform: platform as RegisteredPlatform,
     union_account_id: str('union_account_id'),
-    query_kind: 'rescan',
+    query_kind: queryKind as RescanQueryKind,
     scene: '-',
     window_start: windowStart,
     window_end: windowEnd,
+    ...(basis === undefined ? {} : { timeBasis: basis satisfies RescanTimeBasis }),
   };
 }
 
@@ -84,7 +102,16 @@ async function processPages(
   deps: OrderRescanHandlerDeps,
   counts: WindowCounts,
 ): Promise<void> {
-  const adapter = deps.registry.get(win.platform);
+  const registered = deps.registry.get(win.platform);
+  const timeBasis = win.timeBasis;
+  // fetchWindow asks every page (and every half) through this adapter, so each call carries it.
+  const adapter: Pick<UnionAdapter, 'listOrders'> =
+    timeBasis === undefined
+      ? registered
+      : {
+          listOrders: (range, opt, call) =>
+            registered.listOrders(range, { ...opt, timeBasis }, call),
+        };
   const requestId = `order-sync:${job.id}:${job.attempt}`;
   const range = { from: win.window_start, to: win.window_end };
   // OrderPipelineContext's query_kind is the literal 'increment', and the pipeline does not read

@@ -48,6 +48,8 @@
 // - B1-04zm: job name 'rescan.window' is routed to jobs/order-rescan.ts on both branches, and
 //   scheduledPlatforms() are the platforms it accepts. With ports.rescanConfig given, start() also
 //   arms the rescan loops of those platforms and stop() stops them; absent → no rescan timer.
+//   B1-04zzr: a tiered platform (Taobao) has one loop per tier (day / hour / week, the week tier's
+//   loop runs while it is off), and 'rescan.window' takes their query_kind and timeBasis.
 // - B1-04zza: with ports.rightsSync given and answering a port (settlement's rights.record), the
 //   handler routes 'rights.window' / 'punish.window' to jobs/rights-sync.ts (writes only through
 //   that port), and start() also arms the refund / punishment loops (application/rights-sync.ts)
@@ -221,8 +223,9 @@ export interface OrderSyncReadPorts {
    */
   readonly rightsImports?: (assembly: OrderRebateAssembly) => OrderRightsImportPorts | undefined;
   /**
-   * B1-04zm: reads order_sync.rescan.<platform>.enabled / .days, called once at assembly and
-   * reading nothing until used. Absent → no rescan timer; 'rescan.window' jobs are routed either way.
+   * B1-04zm: reads order_sync.rescan.<platform>.enabled / .days (B1-04zzr: and Taobao's
+   * .hour.enabled / .week.enabled / .window_minutes, and order_sync.promo_mode), called once at
+   * assembly and reading nothing until used. Absent → no rescan timer; 'rescan.window' jobs are routed either way.
    */
   readonly rescanConfig?: (db: Kysely<DB>, clock: Clock) => SyncIntervalConfig;
   /**

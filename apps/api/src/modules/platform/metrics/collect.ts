@@ -1,13 +1,14 @@
 // Whole-database worker metrics (B1-01zzh; 规划/02 §11, §13; ADR-0001 §4.2 #14). Read-only SQL over
 // pgboss.queue, pgboss.job and app.sync_cursors; "now" is the injected Clock only (never the
 // database's now()). Only the worker exports them. B1-01zzr: the watermark lag leaves out the
-// streams of the exclusion table (rescan / rights / manual); the rescan positions come with the
+// streams of the exclusion table (rescan / rights / manual, and B1-04zzr every rescan_* tier); the rescan positions come with the
 // same collect.
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import type { Clock } from '../clock/index.ts';
 import {
   NON_SYNC_QUERY_KINDS,
+  RESCAN_QUERY_KIND_SQL,
   collectRescanPositions,
   type RescanPositionSnapshot,
 } from './rescan-position.ts';
@@ -95,7 +96,7 @@ export async function collectWorkerMetrics(
       platform,
       GREATEST(0, floor(extract(epoch FROM (${now}::timestamptz - min(cursor_at)))))::integer AS lag
     FROM app.sync_cursors
-    WHERE query_kind NOT IN (${sql.join([...NON_SYNC_QUERY_KINDS])})
+    WHERE query_kind NOT IN (${sql.join([...NON_SYNC_QUERY_KINDS])}) AND NOT ${RESCAN_QUERY_KIND_SQL}
     GROUP BY platform
     ORDER BY platform
   `.execute(db);

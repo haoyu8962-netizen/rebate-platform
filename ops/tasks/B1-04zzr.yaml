@@ -132,4 +132,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/orders/taobao-rescan-tiers/**'
-status: todo
+status: done
+pr: 2641

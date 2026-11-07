@@ -173,7 +173,11 @@ it('[AC-B1-04zzb#17] 手动同步：limits 列出淘宝（90 天、按单号 0�
 it('[AC-B1-04zzb#18] 回扫：键未设时淘宝开、回扫 30 天，窗长取规则表 20 分钟；开关与天数按淘宝的键读', async () => {
   const { f } = gatedFixture({ accounts: [taobaoAccount] });
   await scheduleOrderRescan(f.ruleTableCaps, ['taobao']);
-  expect(f.sent()).toEqual([taobaoRescanWindow(roundStart(30))]);
+  // B1-04zzr（D10-798）：淘宝分三档，除小时档（rescan_hour，默认开）外只该有天档一个窗（周档默认关）；
+  // 天档窗长改读 window_minutes（默认 180）、带 timeBasis update。
+  expect(f.sent().filter((win) => win['query_kind'] !== 'rescan_hour')).toEqual([
+    { ...taobaoRescanWindow(roundStart(30), 180 * MINUTE_MS), timeBasis: 'update' },
+  ]);
   expect(f.config.get).toHaveBeenCalledWith(TAOBAO_ENABLED);
   expect(f.config.get).toHaveBeenCalledWith(TAOBAO_DAYS);
   expect(f.logger.warn).not.toHaveBeenCalled();
@@ -183,9 +187,12 @@ it('[AC-B1-04zzb#19] 回扫：淘宝开关显式关闭后不回扫；天数在 1
   const off = gatedFixture({ accounts: [taobaoAccount], config: { [TAOBAO_ENABLED]: false } });
   await scheduleOrderRescan(off.f.ruleTableCaps, ['taobao']);
   expect(off.f.config.get).toHaveBeenCalledWith(TAOBAO_ENABLED);
-  expect(off.f.send).not.toHaveBeenCalled();
+  // B1-04zzr（D10-798）：这个开关只管天档（rescan），小时档（rescan_hour）另有开关、默认照发；周档默认关。
+  expect(off.f.sent().filter((win) => win['query_kind'] !== 'rescan_hour')).toEqual([]);
 
   const days = gatedFixture({ accounts: [taobaoAccount], config: { [TAOBAO_DAYS]: 45 } });
   await scheduleOrderRescan(days.f.ruleTableCaps, ['taobao']);
-  expect(days.f.sent()).toEqual([taobaoRescanWindow(roundStart(45))]);
+  expect(days.f.sent().filter((win) => win['query_kind'] !== 'rescan_hour')).toEqual([
+    { ...taobaoRescanWindow(roundStart(45), 180 * MINUTE_MS), timeBasis: 'update' },
+  ]);
 });

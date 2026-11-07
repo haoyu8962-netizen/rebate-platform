@@ -1,5 +1,6 @@
 import type { Clock, JobPayload, JobQueue, RootLogger } from '../../platform/index.ts';
 import type { RegisteredPlatform, UnionAdapter } from '../../union/index.ts';
+import type { RescanQueryKind, RescanTimeBasis } from '../domain/platform-rules/rescan.ts';
 
 export interface SyncStream {
   readonly app_id: string;
@@ -16,15 +17,20 @@ export interface OrderSyncWindow extends SyncStream, JobPayload {
   readonly window_end: string;
 }
 
-/** B1-04zm: one account's rescan stream; its cursor is independent of the increment stream's. */
+/**
+ * B1-04zm: one account's rescan stream; its cursor is independent of the increment stream's.
+ * B1-04zzr: one stream per tier ('rescan', and Taobao's 'rescan_hour' / 'rescan_week').
+ */
 export interface RescanStream extends SyncStream {
-  readonly query_kind: 'rescan';
+  readonly query_kind: RescanQueryKind;
   readonly scene: '-';
 }
 
 export interface OrderRescanWindow extends RescanStream, JobPayload {
   readonly window_start: string;
   readonly window_end: string;
+  /** B1-04zzr: the tier's time basis, passed to listOrders; absent (older payloads) → update. */
+  readonly timeBasis?: RescanTimeBasis;
 }
 
 /** B1-04zza: any stream's window as the cursor store sees it (rights streams included). */

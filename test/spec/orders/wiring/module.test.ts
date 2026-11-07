@@ -77,7 +77,8 @@ it('[AC-B1-08n#1] worker 装配只注册一次 order-sync，零查询、零投�
       // B1-04zr: one rescan loop each for jd and pdd. pdd's switch is off by default: its loop runs,
       // reads the switch on time and sends nothing, so turning it on needs no restart.
       // B1-04zzo：收紧为单态（B1-04zzb 已合并）；淘宝多一条 taobao 回扫循环（默认开、30 天）。
-      const rescans = 3;
+      // B1-04zzr（D10-798）：淘宝三档各一条回扫循环（周档默认关也照样起，打开不用重启）。
+      const rescans = 5;
       expect(t.count()).toBe(scheduledPlatforms().length + rescans + scans);
       await vi.advanceTimersByTimeAsync(59_999);
       expect(work()).toEqual([]);

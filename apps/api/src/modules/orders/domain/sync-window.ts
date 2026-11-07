@@ -168,7 +168,24 @@ export function rescanStep(
   capMs: number,
   ceilingMs?: number,
 ): RescanStep {
-  const roundStartMs = nowMs - days * DAY_MS + RESCAN_START_MARGIN_MS;
+  return rescanRangeStep(cursorMs, nowMs, days * DAY_MS, RESCAN_START_MARGIN_MS, capMs, ceilingMs);
+}
+
+/**
+ * B1-04zzr (D10-798 ②): rescanStep over any depth and start margin: a round starts at
+ * now − depthMs + marginMs, the rest as rescanStep (cursor tolerance, full windows only, end at
+ * min(now, ceilingMs)). rescanStep is this with days × 1 day and RESCAN_START_MARGIN_MS; Taobao's
+ * hour tier passes no margin.
+ */
+export function rescanRangeStep(
+  cursorMs: number | null,
+  nowMs: number,
+  depthMs: number,
+  marginMs: number,
+  capMs: number,
+  ceilingMs?: number,
+): RescanStep {
+  const roundStartMs = nowMs - depthMs + marginMs;
   const roundEndMs = Math.min(nowMs, ceilingMs ?? nowMs);
   const startMs =
     cursorMs === null || cursorMs < roundStartMs - RESCAN_CURSOR_TOLERANCE_MS
@@ -186,4 +203,41 @@ export function rescanIntervalSeconds(days: number, capMs: number): number {
   // 86400 s ÷ (days × 86400000 ms ÷ capMs) reduces to capMs ÷ (days × 1000). Floored, so a round
   // never takes longer than a day because of rounding.
   return Math.max(RESCAN_MIN_INTERVAL_SECONDS, Math.floor(capMs / (days * 1000)));
+}
+
+/** B1-04zzr: the default of order_sync.rescan.taobao.window_minutes. */
+export const DEFAULT_RESCAN_WINDOW_MINUTES = 180;
+
+/** B1-04zzr (D10-804): the most a tiered rescan window spans with order_sync.promo_mode on. */
+const RESCAN_PROMO_WINDOW_MINUTES = 20;
+
+/**
+ * B1-04zzr (D10-798): seconds between rounds of a rescan tier whose round over depthMs should take
+ * periodMs: max(60, floor(period ÷ (depth ÷ cap))) in seconds. With a period of one day it is
+ * rescanIntervalSeconds(days, capMs).
+ */
+export function rescanTierIntervalSeconds(
+  periodMs: number,
+  depthMs: number,
+  capMs: number,
+): number {
+  // P ÷ (D ÷ cap) ms = P × cap ÷ D ms; ÷ 1000 for seconds, floored.
+  return Math.max(RESCAN_MIN_INTERVAL_SECONDS, Math.floor((periodMs * capMs) / (depthMs * 1000)));
+}
+
+/**
+ * B1-04zzr: an order_sync.rescan.taobao.window_minutes value: a positive integer number of minutes
+ * (anything else takes the default 180 and warns, as days does).
+ */
+export function isRescanWindowMinutes(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+}
+
+/**
+ * B1-04zzr (D10-804): a tiered rescan's window cap in ms from a valid window_minutes; with
+ * order_sync.promo_mode on it is min(window_minutes, 20) minutes. The increment cap is untouched.
+ */
+export function rescanWindowCapMs(windowMinutes: number, promoMode: boolean): number {
+  const minutes = promoMode ? Math.min(windowMinutes, RESCAN_PROMO_WINDOW_MINUTES) : windowMinutes;
+  return minutes * 60_000;
 }
