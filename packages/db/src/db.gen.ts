@@ -1058,6 +1058,8 @@ export interface OrderRights {
   occurred_at: Timestamp;
   order_id: string;
   platform_rights_no: string | null;
+  reason_sub: string | null;
+  reason_sub_manual: Generated<boolean>;
   row_version: Generated<number>;
   source: string;
   status: string;
@@ -1113,6 +1115,7 @@ export interface Orders {
   raw_payload_id: ColumnType<bigint, bigint, bigint> | null;
   reason: string | null;
   reason_sub: string | null;
+  reason_sub_manual: Generated<boolean>;
   rebate_status: Generated<string>;
   received_at: Timestamp | null;
   received_synced_at: Timestamp | null;
@@ -1820,6 +1823,7 @@ export interface RightsImports {
   id: string;
   kind: string;
   platform: string;
+  reason_sub: string | null;
   skipped_rows: Generated<number>;
   status: string;
   succeeded_rows: Generated<number>;

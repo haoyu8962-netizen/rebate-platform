@@ -3866,6 +3866,8 @@ CREATE TABLE app.order_rights (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     answered_at timestamp with time zone,
+    reason_sub text,
+    reason_sub_manual boolean DEFAULT false NOT NULL,
     CONSTRAINT order_rights_status_check CHECK ((status = ANY (ARRAY['PROCESSING'::text, 'WAIT_COMMISSION'::text, 'SUCCEEDED'::text, 'FAILED'::text]))),
     CONSTRAINT order_rights_type_check CHECK ((type = ANY (ARRAY['RIGHTS'::text, 'PUNISH'::text, 'INVALID_AFTER_SETTLE'::text, 'REFUND_AFTER_SETTLE'::text])))
 );
@@ -4188,6 +4190,7 @@ CREATE TABLE app.orders (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     service_fee_fen bigint,
+    reason_sub_manual boolean DEFAULT false NOT NULL,
     CONSTRAINT orders_buy_type_check CHECK ((buy_type = ANY (ARRAY['self'::text, 'share'::text]))),
     CONSTRAINT orders_diff_reason_check CHECK ((diff_reason_code = ANY (ARRAY['PART_REFUND'::text, 'PRICE_COMPARE'::text, 'PRICE_PROTECT'::text, 'SETTLE_DIFF'::text]))),
     CONSTRAINT orders_hold_reason_check CHECK ((hold_reason = ANY (ARRAY['RISK'::text, 'CS'::text, 'UNMAPPED_STATUS'::text]))),
@@ -4279,6 +4282,7 @@ CREATE TABLE app.orders_default (
     created_at timestamp with time zone DEFAULT now() CONSTRAINT orders_created_at_not_null NOT NULL,
     updated_at timestamp with time zone DEFAULT now() CONSTRAINT orders_updated_at_not_null NOT NULL,
     service_fee_fen bigint,
+    reason_sub_manual boolean DEFAULT false CONSTRAINT orders_reason_sub_manual_not_null NOT NULL,
     CONSTRAINT orders_buy_type_check CHECK ((buy_type = ANY (ARRAY['self'::text, 'share'::text]))),
     CONSTRAINT orders_diff_reason_check CHECK ((diff_reason_code = ANY (ARRAY['PART_REFUND'::text, 'PRICE_COMPARE'::text, 'PRICE_PROTECT'::text, 'SETTLE_DIFF'::text]))),
     CONSTRAINT orders_hold_reason_check CHECK ((hold_reason = ANY (ARRAY['RISK'::text, 'CS'::text, 'UNMAPPED_STATUS'::text]))),
@@ -5315,12 +5319,14 @@ CREATE TABLE app.rights_imports (
     created_by uuid NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
+    reason_sub text,
     CONSTRAINT rights_imports_channel_check CHECK (((kind <> 'channel'::text) OR ((union_account_id IS NOT NULL) AND (time_basis IS NULL) AND ("from" IS NULL) AND ("to" IS NULL)))),
     CONSTRAINT rights_imports_counts_check CHECK (((total_rows >= 0) AND (succeeded_rows >= 0) AND (failed_rows >= 0) AND (skipped_rows >= 0) AND (duplicate_rows >= 0))),
     CONSTRAINT rights_imports_file_path_check CHECK ((file_path <> ''::text)),
     CONSTRAINT rights_imports_finished_check CHECK (((status = ANY (ARRAY['done'::text, 'failed'::text])) = (finished_at IS NOT NULL))),
     CONSTRAINT rights_imports_kind_check CHECK ((kind = ANY (ARRAY['rights'::text, 'punish'::text, 'channel'::text]))),
     CONSTRAINT rights_imports_platform_check CHECK ((platform = ANY (ARRAY['taobao'::text, 'jd'::text, 'pdd'::text, 'meituan'::text, 'vip'::text, 'douyin'::text, 'eleme'::text, 'kuaishou'::text, 'suning'::text]))),
+    CONSTRAINT rights_imports_reason_sub_check CHECK (((reason_sub IS NULL) OR (reason_sub = ANY (ARRAY['VIOLATION_PROMO'::text, 'SHOP_TK'::text, 'INSITE_PROMO'::text, 'PROXY_BUY'::text, 'FAKE_TRADE'::text, 'INSITE_RESALE'::text, 'OVER_LIMIT'::text, 'MARKET_DISRUPT'::text, 'MULTI_TRADE_ABNORMAL'::text, 'SINGLE_TRADE_ABNORMAL'::text, 'RISK_ORDER'::text, 'PUNISH_ORDER'::text, 'IN_SALE'::text, 'AFTER_SETTLE'::text, 'AFTER_SALE'::text, 'none'::text])))),
     CONSTRAINT rights_imports_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT rights_imports_time_basis_check CHECK (((time_basis IS NULL) OR (time_basis = ANY (ARRAY['paid'::text, 'received'::text])))),
     CONSTRAINT rights_imports_window_check CHECK ((((time_basis IS NULL) AND ("from" IS NULL) AND ("to" IS NULL)) OR ((time_basis IS NOT NULL) AND ("from" IS NOT NULL) AND ("to" IS NOT NULL) AND ("from" < "to"))))
@@ -7407,6 +7413,22 @@ ALTER TABLE ONLY app.order_keys
 
 ALTER TABLE ONLY app.order_rights
     ADD CONSTRAINT order_rights_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: order_rights order_rights_reason_sub_check; Type: CHECK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE app.order_rights
+    ADD CONSTRAINT order_rights_reason_sub_check CHECK (((reason_sub IS NULL) OR (reason_sub = ANY (ARRAY['VIOLATION_PROMO'::text, 'SHOP_TK'::text, 'INSITE_PROMO'::text, 'PROXY_BUY'::text, 'FAKE_TRADE'::text, 'INSITE_RESALE'::text, 'OVER_LIMIT'::text, 'MARKET_DISRUPT'::text, 'MULTI_TRADE_ABNORMAL'::text, 'SINGLE_TRADE_ABNORMAL'::text, 'RISK_ORDER'::text, 'PUNISH_ORDER'::text, 'IN_SALE'::text, 'AFTER_SETTLE'::text, 'AFTER_SALE'::text, 'none'::text])))) NOT VALID;
+
+
+--
+-- Name: order_rights order_rights_reason_sub_manual_check; Type: CHECK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE app.order_rights
+    ADD CONSTRAINT order_rights_reason_sub_manual_check CHECK ((reason_sub_manual OR (reason_sub IS NULL))) NOT VALID;
 
 
 --
@@ -16386,6 +16408,13 @@ GRANT UPDATE(duplicate_rows) ON TABLE app.rights_imports TO couli_app;
 --
 
 GRANT UPDATE(finished_at) ON TABLE app.rights_imports TO couli_app;
+
+
+--
+-- Name: COLUMN rights_imports.reason_sub; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reason_sub) ON TABLE app.rights_imports TO couli_app;
 
 
 --

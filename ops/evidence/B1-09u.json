@@ -1,0 +1,97 @@
+{
+  "risk_note": "RV2 migration 0131 (orchestrator rulings D10-819 ①, D10-821 ③ slot 0131, D10-839). Adds app.rights_imports.reason_sub (NULL, one of the 15 BR-TEXT-05 sub reasons or none, CHECK, plus the column-level UPDATE grant to couli_app since that table grants UPDATE column by column), app.order_rights.reason_sub and reason_sub_manual boolean NOT NULL DEFAULT false (CHECK: not manual means no sub reason; NOT VALID because order_rights is a funds table, new and updated rows are still checked and the historical NULL / false rows satisfy it), and app.orders.reason_sub_manual boolean NOT NULL DEFAULT false on the partitioned parent (catalog-only, default partition and new partitions inherit it). Additive only: no backfill, no ALTER COLUMN / SET DEFAULT / UPDATE / DROP, no down migration; lock and statement timeouts as 0063. Snapshot files regenerated with pnpm db:snapshot. Two frozen fixtures gain fields only, no assertion changed: test/spec/orders/rights-port/kit.ts order() gains reason_sub_manual: false (ledger #2634, D10-839), and test/spec/settlement/rights-answered-schema/kit.ts SHAPE gains reason_sub and reason_sub_manual (ledgers #2658, #2669, D10-863); [AC-B2-04lb#28] / [#29] in shape.int.test.ts are red_exempt (bodies unchanged, judged as a whole only because the file reads the changed kit). Integration spec/db/orders, lint-migrations and the rights import directories 238/238 pass.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (D10-823, Codex back): round 1 pass with no findings; checklist rounding na, sign na, idempotency na, concurrency ok, partial_refund na, clock na, app_id ok. Static, nothing executed by Codex. couli-runs/B1-09u/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 6,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36). Gate review per D10-848 ③: a fresh independent Claude spec-test over the whole scope (base = the main fork point, rounds 1-5 of the rule tests) passed with no findings and confirmed both red_exempt entries ([AC-B2-04lb#28], [#29]: bodies byte-identical to main, judged as a whole only because shape.int.test.ts reads the changed kit, nothing this task should turn red is let through); round 5 (SHAPE two lines) was also reviewed by a fresh independent Claude, pass. For reference only (not counted for the gate, D10-848): Codex spec-test r1 fail (S1: the historical-row default checked only atthasmissing), r2 fail (S1: attmissingval is denied to the business roles), r3 pass (catalog atthasmissing plus a static check of the migration source, precedent [AC-B1-02w#15]), r4 pass (one-line rights-port fixture). The modify_existing entry D10-863 first asked for was removed (#2669) because red-check judged it redundant: shape.int.test.ts itself is unchanged. couli-runs/B1-09u/review-spec-claude-full.json, review-spec-r5.json, review-spec-r1..r4.json."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-09u",
+  "spec_commit": "7c6307e5401e921e7ec1a48345d009bee26234a0",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "red_tests": [
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#1] rights_imports.reason_sub and order_rights.reason_sub are nullable text without default",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#2] order_rights.reason_sub_manual and orders.reason_sub_manual are boolean NOT NULL DEFAULT false",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#3] rights_imports.reason_sub stores each of the 15 codes, none, and NULL as written",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#4] rights_imports.reason_sub rejects any other string by CHECK (OTHER, lower-case, empty, NONE, padded)",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#5] order_rights without a manual choice (reason_sub_manual = false) cannot carry a reason_sub",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#6] order_rights written without the new columns reads reason_sub NULL, reason_sub_manual false",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#7] order_rights with reason_sub_manual = true stores each of the 15 codes and none",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#8] order_rights accepts reason_sub_manual = true with reason_sub NULL (pinned: the CHECK only forbids a sub-reason without the manual flag; 「无」may be none or NULL)",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#9] order_rights.reason_sub rejects any other string by CHECK even with the manual flag",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#10] order_rights.reason_sub_manual is NOT NULL",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#11] rows stored before the migration read reason_sub_manual = false (fast default, no backfill) on order_rights and orders_default",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#12] an order inserted without reason_sub_manual reads false; true is stored; NULL is rejected",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#13] the DEFAULT partition and a month partition created after the migration both carry reason_sub_manual",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#14] couli_app can insert and update every new column",
+    "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#15] couli_readonly reads the new columns and cannot insert or update them"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7c6307e5401e921e7ec1a48345d009bee26234a0",
+      "tree": "77dec62a779ac623d88fdae2ea4f343cdac92c49",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T13:31:37Z",
+      "finished_at": "2026-11-07T13:31:45Z",
+      "red_tests": [
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#1] rights_imports.reason_sub and order_rights.reason_sub are nullable text without default",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#2] order_rights.reason_sub_manual and orders.reason_sub_manual are boolean NOT NULL DEFAULT false",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#3] rights_imports.reason_sub stores each of the 15 codes, none, and NULL as written",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#4] rights_imports.reason_sub rejects any other string by CHECK (OTHER, lower-case, empty, NONE, padded)",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#5] order_rights without a manual choice (reason_sub_manual = false) cannot carry a reason_sub",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#6] order_rights written without the new columns reads reason_sub NULL, reason_sub_manual false",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#7] order_rights with reason_sub_manual = true stores each of the 15 codes and none",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#8] order_rights accepts reason_sub_manual = true with reason_sub NULL (pinned: the CHECK only forbids a sub-reason without the manual flag; 「无」may be none or NULL)",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#9] order_rights.reason_sub rejects any other string by CHECK even with the manual flag",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#10] order_rights.reason_sub_manual is NOT NULL",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#11] rows stored before the migration read reason_sub_manual = false (fast default, no backfill) on order_rights and orders_default",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#12] an order inserted without reason_sub_manual reads false; true is stored; NULL is rejected",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#13] the DEFAULT partition and a month partition created after the migration both carry reason_sub_manual",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#14] couli_app can insert and update every new column",
+        "test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts > [AC-B1-09u#15] couli_readonly reads the new columns and cannot insert or update them"
+      ],
+      "expected": ["test/spec/db/orders/reason-sub/reason-sub-columns.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e7b464c6f49761e772e1a7bbd32bc7135b275016bfec3de333e6cde00ea0c462"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d1a7d60461f87fed5910926751728edcdd6c3401",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}

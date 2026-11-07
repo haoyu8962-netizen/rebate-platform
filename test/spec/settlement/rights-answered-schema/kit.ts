@@ -47,6 +47,8 @@ export const SHAPE: Record<string, readonly [string, boolean, string | null]> = 
   created_at: ['timestamptz', false, 'now()'],
   updated_at: ['timestamptz', false, 'now()'],
   answered_at: ['timestamptz', true, null],
+  reason_sub: ['text', true, null],
+  reason_sub_manual: ['bool', false, 'false'],
 };
 
 export async function open(create: () => Promise<Database>): Promise<Harness> {
