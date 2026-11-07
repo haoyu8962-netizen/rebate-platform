@@ -227,6 +227,20 @@ export interface ClawbackDependencies {
     get(appId: string, key: string): Promise<unknown>;
   };
   readonly events: Pick<EventBus, 'publish'>;
+  /**
+   * B2-04zk (BR-CALC-15, BR-CALC-27; FU-CREDITED-AMOUNT-ROWS): commission's estimates port. After
+   * an R9 whose N_new came from a rights deduction (no order column moved, so the sync never moved
+   * the version), refresh writes the rows of the version this CAS just moved, valued on N_new.
+   * Optional like pending.resolve: the production assembly always injects it; without it the
+   * version and the rows stay where they were (the behaviour before B2-04zk).
+   */
+  readonly estimates?: {
+    refresh(
+      trx: Transaction<DB>,
+      input: { readonly appId: string; readonly orderId: string; readonly attrAt: Date },
+      value?: { readonly commissionFen: bigint },
+    ): Promise<void>;
+  };
 }
 
 export type ClawbackSkipReason = 'not_credited' | 'not_reverse';
@@ -896,14 +910,33 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     if (plan.void_pending_candidates) await voidCandidates(trx, order, now);
 
     // 9. booked pair + rebate_status in one CAS, then history.
+    // B2-04zk (BR-CALC-15): an R9 valued on a rights deduction moves no order column, so the sync
+    // never moved the version: move it here with the booked pair, then write its rows on N_new.
+    const estimates = deps.estimates;
+    const repriced = estimates !== undefined && transition === 'R9' && selected.source === 'rights';
     const written = await casClawbackOrder(trx, order, {
       to: step.to,
       booked_base_fen: plan.booked_after.booked_base_fen,
       booked_n_fen: plan.booked_after.booked_n_fen,
       ...(transition === 'R8' ? { reason: rules.r8Reason } : { diff_reason_code: 'PART_REFUND' }),
+      ...(repriced
+        ? {
+            commission_version: {
+              from: order.commission_version,
+              to: order.commission_version + 1,
+            },
+          }
+        : {}),
       at: now,
     });
     if (!written) throw new Error('settlement clawback: order CAS matched no row');
+    if (repriced) {
+      await estimates.refresh(
+        trx,
+        { appId, orderId, attrAt: order.attr_at },
+        { commissionFen: nNew },
+      );
+    }
     await insertRebateHistory(
       trx,
       { app_id: appId, order_id: orderId },

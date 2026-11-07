@@ -1,0 +1,94 @@
+{
+  "task": "B2-04zk",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "37b05a131d49185cea093f17331c4df1ad9f8084",
+  "red_tests": [
+    "test/spec/settlement/credited-amount-rows/atomicity.int.test.ts > [AC-B2-04zk#7][BR-CALC-15][BR-CALC-27][BR-FUND-08] 同事务发布 order.clawed_back 失败：版本、v2 行、扣回凭证、booked、余额、维权记录随行事务一起回滚，任务仍 running；重投后版本只推一次到 v2，行与凭证各一份，事件一条",
+    "test/spec/settlement/credited-amount-rows/atomicity.int.test.ts > [AC-B2-04zk#8][BR-CALC-15][BR-CALC-27] 另一 app 的同状态已入账单不受影响：本 app 维权应扣 4.00 元推到 v2（540 / 270），另一 app 的单仍是 v1、只有 v1 行、booked 900 / 1000、余额 450、无扣回无维权记录，一行不变",
+    "test/spec/settlement/credited-amount-rows/base-zero.int.test.ts > [AC-B2-04zk#9][BR-CALC-15][BR-CALC-27][BR-FUND-08] 基数为 0 的已入账单（快照预留 10000 bp，N 1000、B 0、booked 0 / 1000）维权部分成功（应扣 4.00 元 → N_new 600、B_new 0）：仍是 R9、保持 CREDITED，commission_version 1 → 2 与 booked 0 / 600 同一条带 commission_version = 1 乐观锁的 UPDATE；v2 会员行 0 / 0，四段 600 / 600 / 0 / 0 / 0 / 600；只有平台扣回 400，会员无凭证；v1 行不动",
+    "test/spec/settlement/credited-amount-rows/base-zero.int.test.ts > [AC-B2-04zk#10][BR-FUND-08][BR-CALC-15][BR-FUND-01] 0 < N_new 而 B_new = 0 的维权（R8 BASE_ZERO，转 CLAWED_BACK、booked 0 / 1）不推版本、不写行：先应扣 4.00 元推到 v2 的单再应扣 5.99 元，版本停在 2、没有 v3、没有写版本的语句，扣回 270 / 329；直接从入账应扣 9.99 元的单版本仍 1、只有 v1，扣回 450 / 549；两单的已有版本行都不动",
+    "test/spec/settlement/credited-amount-rows/cas-miss.int.test.ts > [AC-B2-04zk#11][BR-CALC-15][BR-CALC-27][BR-FUND-08] 维权应扣 4.00 元时扣回那条带 commission_version 守卫的 orders CAS 落空一次：要么重读后重算、恰好推一次到 v2，要么整体干净回滚（版本、行、凭证、booked、维权记录都不留）且重投后恰好推一次；最后都是 v2（540 / 270，四段 600 / 60 / 540 / 270 / 0 / 330）一套行、扣回 180 / 220 各一份、booked 540 / 600、事件一条",
+    "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#1][BR-FUND-08][BR-CALC-15][BR-CALC-27] 已入账单维权部分成功（应扣 4.00 元）：commission_version 1 → 2，与 booked 成对值同一条带 commission_version = 1 乐观锁的 UPDATE；v2 按 N_new 600 与快照预留 1000（不是入账后新规则的 5000）重拆：会员 540 / 270，四段 600 / 60 / 540 / 270 / 0 / 330；扣回 180 / 220、booked 540 / 600、RIGHTS_PARTIAL 照旧；v1 行与快照不动",
+    "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#2][BR-FUND-08][BR-FUND-06][BR-CALC-15] 维权先成功而无应扣（WAIT_COMMISSION，不扣、不推版本），同一记录后来带回应扣 4.00 元：这次 R9 才推到 v2，行按 N_new 600 重拆（会员 270，四段 600 / 60 / 540 / 270 / 0 / 330），扣回键是同一 R{order_rights.id}",
+    "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#3][BR-CALC-15][BR-FUND-08][BR-FUND-06] 同一维权记录重投不再推版本、不再写行（与凭证幂等一致）：已完成的作业重投两次、同一文件重新上传（duplicate_rows 1）都一行不动；之后应扣 0.00 元的新记录规划无变化：版本仍 2，没有 v3，也没有写版本的语句",
+    "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#4][BR-FUND-08][BR-CALC-15][BR-FUND-01] 部分维权推到 v2 之后，再来一条全额维权（应扣 12.00 元不低于 booked_n 600）：R8 RIGHTS_FULL 转 CLAWED_BACK、原因 RIGHTS、booked 0 / 0，扣回 270 / 330；版本停在 2，没有 v3、没有 0 行，v1 / v2 行不动",
+    "test/spec/settlement/credited-amount-rows/sync-paths.int.test.ts > [AC-B2-04zk#5][BR-FUND-09][BR-CALC-15][BR-CALC-27][BR-FUND-08] R10（新结算 800）只由 orders 推到 v2 一次，v2 = 720 / 360、四段 800 / 80 / 720 / 360 / 0 / 440；之后维权应扣 2.00 元（N_new = 800 − 200 = 600）由 apply 推到 v3 一次，v3 = 540 / 270、四段 600 / 60 / 540 / 270 / 0 / 330；扣回 90 / 110，booked 540 / 600；v1、v2 不动",
+    "test/spec/settlement/credited-amount-rows/sync-paths.int.test.ts > [AC-B2-04zk#6][BR-FUND-01][BR-FUND-08][BR-CALC-15][BR-CALC-27] 维权应扣 4.00 元由 apply 推到 v2（540 / 270）之后，退款数量增加并同步新结算 500（R9，N_new 取新结算额）：版本只由 orders 推一次到 v3，apply 不再推；v3 = 450 / 225、四段 500 / 50 / 450 / 225 / 0 / 275；扣回 45 / 55 键 C3，booked 450 / 500；v1、v2 不动"
+  ],
+  "risk_note": "RV2, settlement clawback + app.module wiring, no migration, no contract change, no money moves (withdraw lane, model Claude Fable 5.1; orchestrator rulings D10-583, D10-753 ④, D10-792, D10-844). An R9 valued on a rights deduction (settlement's rights.record → clawback apply with ref rights; N_new = booked_n − deduction, BR-FUND-08 ②) moved no order column, so the sync never moved commission_version and the latest amount rows and four amounts stayed at the pre-clawback entitlement (gross-profit reports and risk labels reading the rows were too high; wallet and order pages read ledger nets and were right). Now apply moves the version in the same CAS as the booked pair (optimistic guard commission_version = the value read under the lock, BR-CALC-15) and asks commission's estimates.refresh to write that version's rows valued on N_new — the R7 entry of B2-03r, once per version, no balance touched. R8 writes no rows; a replayed R9 with no change moves nothing; the R9 / R10 brought by the sync are still moved once by orders. estimates is an optional dependency of the clawback because three frozen kits build it without one (the production assembly always injects the same commission port as the rebate port's), so no frozen kit or test changed. Real risks: a double version move for the sync-driven R9 / R10 (covered: [AC-B2-04zk#5] / [#6]), a move on redelivery (covered: #3), rows for a terminal R8 (covered: #4), a partial write on a downstream failure (covered: #7), cross-app leakage (covered: #8). The premise ran before the ledger change: with the change applied on top of B2-04zi, spec/settlement + spec/commission (1371 tests) and spec/orders + invite-reward + risk-flags (1824 tests) showed no new frozen conflict. The rule-test kit needed one mechanical type fix (D10-844: the versionWrites parameter typed structurally, the then-unused CompiledQuery type import dropped), made by the lane in its own commit, outside the test-round count. Test-machine full verify not run (AWS runners disabled, D10-555; CI verify-int is the full verification, approvals 21); the red run and the implementation's runs were made in the local Docker container / host slot.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "37b05a131d49185cea093f17331c4df1ad9f8084",
+      "tree": "d88a5b1d3b3b0cd9fe9830154567ab260673b2a0",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T11:48:54Z",
+      "finished_at": "2026-11-07T11:49:21Z",
+      "red_tests": [
+        "test/spec/settlement/credited-amount-rows/atomicity.int.test.ts > [AC-B2-04zk#7][BR-CALC-15][BR-CALC-27][BR-FUND-08] 同事务发布 order.clawed_back 失败：版本、v2 行、扣回凭证、booked、余额、维权记录随行事务一起回滚，任务仍 running；重投后版本只推一次到 v2，行与凭证各一份，事件一条",
+        "test/spec/settlement/credited-amount-rows/atomicity.int.test.ts > [AC-B2-04zk#8][BR-CALC-15][BR-CALC-27] 另一 app 的同状态已入账单不受影响：本 app 维权应扣 4.00 元推到 v2（540 / 270），另一 app 的单仍是 v1、只有 v1 行、booked 900 / 1000、余额 450、无扣回无维权记录，一行不变",
+        "test/spec/settlement/credited-amount-rows/base-zero.int.test.ts > [AC-B2-04zk#9][BR-CALC-15][BR-CALC-27][BR-FUND-08] 基数为 0 的已入账单（快照预留 10000 bp，N 1000、B 0、booked 0 / 1000）维权部分成功（应扣 4.00 元 → N_new 600、B_new 0）：仍是 R9、保持 CREDITED，commission_version 1 → 2 与 booked 0 / 600 同一条带 commission_version = 1 乐观锁的 UPDATE；v2 会员行 0 / 0，四段 600 / 600 / 0 / 0 / 0 / 600；只有平台扣回 400，会员无凭证；v1 行不动",
+        "test/spec/settlement/credited-amount-rows/base-zero.int.test.ts > [AC-B2-04zk#10][BR-FUND-08][BR-CALC-15][BR-FUND-01] 0 < N_new 而 B_new = 0 的维权（R8 BASE_ZERO，转 CLAWED_BACK、booked 0 / 1）不推版本、不写行：先应扣 4.00 元推到 v2 的单再应扣 5.99 元，版本停在 2、没有 v3、没有写版本的语句，扣回 270 / 329；直接从入账应扣 9.99 元的单版本仍 1、只有 v1，扣回 450 / 549；两单的已有版本行都不动",
+        "test/spec/settlement/credited-amount-rows/cas-miss.int.test.ts > [AC-B2-04zk#11][BR-CALC-15][BR-CALC-27][BR-FUND-08] 维权应扣 4.00 元时扣回那条带 commission_version 守卫的 orders CAS 落空一次：要么重读后重算、恰好推一次到 v2，要么整体干净回滚（版本、行、凭证、booked、维权记录都不留）且重投后恰好推一次；最后都是 v2（540 / 270，四段 600 / 60 / 540 / 270 / 0 / 330）一套行、扣回 180 / 220 各一份、booked 540 / 600、事件一条",
+        "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#1][BR-FUND-08][BR-CALC-15][BR-CALC-27] 已入账单维权部分成功（应扣 4.00 元）：commission_version 1 → 2，与 booked 成对值同一条带 commission_version = 1 乐观锁的 UPDATE；v2 按 N_new 600 与快照预留 1000（不是入账后新规则的 5000）重拆：会员 540 / 270，四段 600 / 60 / 540 / 270 / 0 / 330；扣回 180 / 220、booked 540 / 600、RIGHTS_PARTIAL 照旧；v1 行与快照不动",
+        "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#2][BR-FUND-08][BR-FUND-06][BR-CALC-15] 维权先成功而无应扣（WAIT_COMMISSION，不扣、不推版本），同一记录后来带回应扣 4.00 元：这次 R9 才推到 v2，行按 N_new 600 重拆（会员 270，四段 600 / 60 / 540 / 270 / 0 / 330），扣回键是同一 R{order_rights.id}",
+        "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#3][BR-CALC-15][BR-FUND-08][BR-FUND-06] 同一维权记录重投不再推版本、不再写行（与凭证幂等一致）：已完成的作业重投两次、同一文件重新上传（duplicate_rows 1）都一行不动；之后应扣 0.00 元的新记录规划无变化：版本仍 2，没有 v3，也没有写版本的语句",
+        "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts > [AC-B2-04zk#4][BR-FUND-08][BR-CALC-15][BR-FUND-01] 部分维权推到 v2 之后，再来一条全额维权（应扣 12.00 元不低于 booked_n 600）：R8 RIGHTS_FULL 转 CLAWED_BACK、原因 RIGHTS、booked 0 / 0，扣回 270 / 330；版本停在 2，没有 v3、没有 0 行，v1 / v2 行不动",
+        "test/spec/settlement/credited-amount-rows/sync-paths.int.test.ts > [AC-B2-04zk#5][BR-FUND-09][BR-CALC-15][BR-CALC-27][BR-FUND-08] R10（新结算 800）只由 orders 推到 v2 一次，v2 = 720 / 360、四段 800 / 80 / 720 / 360 / 0 / 440；之后维权应扣 2.00 元（N_new = 800 − 200 = 600）由 apply 推到 v3 一次，v3 = 540 / 270、四段 600 / 60 / 540 / 270 / 0 / 330；扣回 90 / 110，booked 540 / 600；v1、v2 不动",
+        "test/spec/settlement/credited-amount-rows/sync-paths.int.test.ts > [AC-B2-04zk#6][BR-FUND-01][BR-FUND-08][BR-CALC-15][BR-CALC-27] 维权应扣 4.00 元由 apply 推到 v2（540 / 270）之后，退款数量增加并同步新结算 500（R9，N_new 取新结算额）：版本只由 orders 推一次到 v3，apply 不再推；v3 = 450 / 225、四段 500 / 50 / 450 / 225 / 0 / 275；扣回 45 / 55 键 C3，booked 450 / 500；v1、v2 不动"
+      ],
+      "expected": [
+        "test/spec/settlement/credited-amount-rows/atomicity.int.test.ts",
+        "test/spec/settlement/credited-amount-rows/base-zero.int.test.ts",
+        "test/spec/settlement/credited-amount-rows/cas-miss.int.test.ts",
+        "test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts",
+        "test/spec/settlement/credited-amount-rows/sync-paths.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "94582e527f07e5d70051e88831ce8653bd45e09688a7cd1e876d82ca1314bcf7"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex via codex-run.sh (D10-823: adversarial reviews back on Codex), static, read-only; one call (code 1/3), base = the fork point 7d36794bf51c, reviewed at 78492ceb2. Pass, no findings, no out-of-scope: the production wiring, the version CAS and the amount-row refresh checked against BR-FUND-08, BR-CALC-15 and BR-CALC-27; the rights R9's version move, rows and clawback share one transaction. Checklist rounding ok, sign ok, idempotency ok, concurrency ok, partial_refund ok, clock ok, app_id ok. D10-823 makes the second independent-Claude re-check optional; not run. couli-runs/B2-04zk/review-money-r1.json. The implementation is unchanged after the review (landing rebase only)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "A fresh independent Claude wrote the rule tests in 2 attempts (ledger tester claude-independent; Codex quota was reported exhausted when the task started, D10-775; writers stay with independent Claude under D10-823): test/spec/settlement/credited-amount-rows — round 1 kit + rights-partial / sync-paths / atomicity ([AC-B2-04zk#1]–[#8]), round 2 base-zero / cas-miss ([#9]–[#11]). Two mechanical corrections by the lane, each its own commit, each ruled outside the test-round count: 45c0432a9 (D10-844: the kit's versionWrites parameter typed structurally and the then-unused CompiledQuery type import dropped, root tsc TS2345 against the frozen credit/kit.ts tracing()) and 3bebe1d59 (D10-866: [#10]'s two expected R8 event literals BASE_ZERO → RIGHTS_FULL, the value 08 BR-FUND-01 R8「全额维权」/ BR-FUND-08 细则「先按来源」 and the clawback mapping table determine). Another fresh independent Claude reviewed, static (D10-848): r1 fail on one S1 — no case for the rights R9 on a zero base (BR-CALC-15 keeps it R9 and moves the version) — plus two S2; r2 pass, S1 closed by [#9] and the S2s by [#10] / [#11], every amount recomputed by hand, each new test red on main; r3 (uncounted, D10-866) pass: only the two literals changed, RIGHTS_FULL checked against 08, specs/state-machines/order-rebate.yaml and the mapping table. Open, non-blocking: an out-of-scope S2 on commission's revalue for held / forfeited shares after a rights R9 (commission paths, not this task's). Red runs: r1 8 red, r2 11 red, r3 11 red, problems 0, no exemption declared. couli-runs/B2-04zk/review-spectest-r1.json and attempts/*/review-claude-independent.json."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4414e7656ff2a9e4206ff0f7257a1d56591c1e14",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

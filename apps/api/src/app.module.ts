@@ -2312,6 +2312,8 @@ function orderClawback(assembly: OrderRebateAssembly, crypto: FieldCrypto): Claw
       get: async (appId, key) =>
         (await createContentReader({ db, clock }).configValue(appId, key))?.value,
     },
+    // B2-04zk: the same commission port as the rebate port's (rows of the version, no balances).
+    estimates: createCommissionEstimates({ clock, ...orderEstimateSource }),
   });
 }
 

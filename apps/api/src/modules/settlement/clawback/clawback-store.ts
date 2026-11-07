@@ -223,6 +223,11 @@ export interface ClawbackCas {
   readonly reason?: string;
   /** R9: PART_REFUND; R8: unchanged (undefined). */
   readonly diff_reason_code?: string;
+  /**
+   * B2-04zk (BR-CALC-15): the R9 whose N_new came from a rights deduction moves the version in
+   * this same CAS, with the optimistic guard commission_version = the version read under the lock.
+   */
+  readonly commission_version?: { readonly from: number; readonly to: number };
   readonly at: Date;
 }
 
@@ -241,6 +246,9 @@ export async function casClawbackOrder(
       booked_n_fen: cas.booked_n_fen,
       ...(cas.reason === undefined ? {} : { reason: cas.reason }),
       ...(cas.diff_reason_code === undefined ? {} : { diff_reason_code: cas.diff_reason_code }),
+      ...(cas.commission_version === undefined
+        ? {}
+        : { commission_version: cas.commission_version.to }),
       row_version: key.row_version + 1,
       updated_at: cas.at,
     })
@@ -249,6 +257,9 @@ export async function casClawbackOrder(
     .where('attr_at', '=', key.attr_at)
     .where('rebate_status', '=', key.rebate_status)
     .where('row_version', '=', key.row_version)
+    .$if(cas.commission_version !== undefined, (qb) =>
+      qb.where('commission_version', '=', cas.commission_version?.from ?? -1),
+    )
     .executeTakeFirst();
   return (result.numUpdatedRows ?? 0n) === 1n;
 }
