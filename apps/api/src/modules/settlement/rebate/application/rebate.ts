@@ -488,6 +488,9 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     const reverse = reverseEventOf(source.event, row.platform_status);
     if (reverse !== null) {
       advance(d, reverse);
+      // BR-CALC-15（B2-03q，同 BASE_ZERO）：无效 / 处罚报文若也让 orders 推了佣金版本，该版本仍要有金额行；
+      // advance 到带原因的 VOID 会清掉 refresh，所以补在其后。R6 照样不记账。
+      if (change.commission_moved === true) d.refresh = true;
       return finish(d, row.rebate_status);
     }
     // B2-04zzg：京东单本次同步后剩余数量 ≤ 0（两列由 orders 在同一事务写入，这里读锁内重读的行）。
