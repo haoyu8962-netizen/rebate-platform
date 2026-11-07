@@ -1,0 +1,20 @@
+id: B1-09y
+repo: rebate-platform
+title: 用户侧订单列表 / 详情回填 reason_sub（D10-850 ②）
+type: impl
+# 2026-11-08 be 入账（D10-850 ②；契约 CT-24zx #2668 已合并：OrderSummary / OrderDetail 各加可选可空 reason_sub，取 order_reason_sub 枚举，只读由服务端写；08 BR-TEXT-05：App 显示「{title}：{sub.desc}」）。orders 的用户侧读（apps/api/src/modules/orders/application/order-queries.ts 的列表与详情组装）从 orders.reason_sub 读出回填；值为 null（「无」）或订单 reason 不是 PUNISH / REFUND / RIGHTS 时不输出该键（契约可选），值必须属当前父编码（不属则不输出并 warn，不带单号）。不写任何表、不改 reason / reason_action / display_status 与金额。后台读（admin-order-reads）不在本单。
+# 冻结用例：用户侧订单读的既有规则测试多以 toEqual 比对整条响应；reason_sub 为 null 时不出键，这些用例不受影响，不改冻结；规则测试新目录。D10-823 / D10-848：规则测试与 spec-test 评审新鲜独立 Claude，代码评审 Codex。
+refs: []
+refs_hash: {}
+deps: [CT-24zx, B2-04zze]
+paths:
+  - 'apps/api/src/modules/orders/application/order-queries{.ts,.test.ts}'
+  - 'test/spec/orders/reason-sub-read/**'
+test_paths:
+  - 'test/spec/orders/reason-sub-read/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
