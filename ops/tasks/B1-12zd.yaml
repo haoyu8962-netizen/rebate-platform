@@ -23,7 +23,8 @@ accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
   - 'test/spec/notification/settle-adjusted-invite-wording/**'
-status: todo
+status: done
+pr: 2663
 red_exempt_rows:
   - file: test/spec/notification/settle-adjusted-message/render.test.ts
     test: '[AC-B1-12zc#36] 标题与正文分别覆盖、分别回退：self 只覆盖标题'
