@@ -1,0 +1,20 @@
+id: F1-01wt
+repo: rebate-platform
+title: 过渡测试改动（DSX-47 前置）：冻结 lint-style-web/pill.test.ts [AC-F1-01w-PILL#1]–[#3] 接受「选中胶囊类名与邀请页 LINK 常量在页面里」或「页面已迁到基础件、这些类名在 components/base 里」二选一，对比度与 text-link 口径不变
+type: test-change
+# 2026-11-07 入账（前端线 f1-frontend-7；DSX-47 实现 r1 交回时停下报的冻结冲突；先例 F1-09ut / F1-02zzu 两态过渡）。
+# 现状：DSX-47（D10-837 ②）把 H5 页面的按钮 / 胶囊迁到 base 组件，h5-base-migration SRC#2 要求页面私有类名常量清零；但冻结 test/spec/frontend/lint-style-web/pill.test.ts
+#   [AC-F1-01w-PILL#1] / [#2] 要求 earnings-page.tsx ≥2、claim-form.tsx ≥1、invite-page.tsx ≥1 处页面内 bg-couli-brand-subtle 选中类名（且只扫 apps/h5/src 的 .tsx，不扫 base/styles.ts），[#3] 要求 invite-page.tsx 保留顶层 const LINK。
+# 做法：按页面现状选分支——旧支（页面仍有这些类名 / LINK）断言逐一不变；新支（页面已迁）严格：页面不再有 brand-subtle 选中类名与 LINK 常量，apps/h5/src/components/base/** 里（含 .ts）承载选中态的类名串存在且每一串在浅 / 深两主题对比度 ≥ 4.5:1，文字链接样式（Button text 变体或其他 base 链接件）用 text-couli-text-link、不用 text-couli-brand-primary。标题与测试数不变。DSX-47 合并后另开收紧为单态。
+# 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；全新上下文 Claude 修改，Codex 只读评审（D10-823），按 approvals #24 由编排加 owner-approved 标签。
+refs: []
+refs_hash: {}
+deps: [F1-01w]
+paths:
+  - 'test/spec/frontend/lint-style-web/pill.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

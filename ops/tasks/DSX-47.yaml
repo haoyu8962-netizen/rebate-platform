@@ -7,7 +7,7 @@ type: impl
 # 可能分批（按页面），批次由实现前的规则测试定；非资金。规则测试新鲜独立 Claude，评审 Codex（D10-823）。
 refs: []
 refs_hash: {}
-deps: [DSX-46]
+deps: [DSX-46, F1-01wt]
 paths:
   - 'apps/h5/src/entries/app/**'
   - 'apps/h5/src/components/**'
