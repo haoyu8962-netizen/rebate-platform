@@ -1,0 +1,32 @@
+id: CT-24zw
+repo: rebate-platform
+title: 契约：订单子原因 order_reason_sub 补齐 15 编码与 desc 原文、后台提示语；违规单导入可选 reason_sub；后台订单详情「改子原因」接口（D10-818 ①、D10-819）
+type: contract
+# 2026-11-07 入账（agent2-acct4），D10-820 ② 从 content 移来。依据 08 BR-TEXT-05「子原因 reason_sub」表（couli #293 b79958d）：PUNISH 12 项、REFUND 2 项（IN_SALE、AFTER_SETTLE）、RIGHTS 1 项（AFTER_SALE）；「无」= 不写，「其他原因」= OTHER。
+# ① enums order_reason_sub 补齐 15 个编码；texts order_reason_sub.<SUB>.desc 为 App 显示原文（「{title}：{sub.desc}」），后台选项旁提示语「App 端会展示给用户」。
+# ② adminCreateRightsImport（kind=punish）加可选部件 reason_sub：不传 = 自动映射、none = 明确不写、其余须属该 kind 允许集合，否则 20001 [reason_sub]；导入列表 / 详情回显。kind=rights 不给人工选（D10-819 ②）。
+# ③ 后台订单详情「改子原因」接口：只改 reason_sub，只许当前父编码（PUNISH / REFUND / RIGHTS）允许的子原因或 none，父编码不是这三类拒绝；权限 order.claim；写审计（前后值）、置 reason_sub_manual；不改金额与状态；实现前 x-implementation planned。
+# 参考 couli-runs/FU-ORDER-REASON-SUB-ADMIN/plan.md。**前提**：SPEC_REF 须升到含 couli #293（b79958d）的提交后再写测试 / 契约（当前 3f2b91d 不含新子原因表），refs_hash 随升级刷新。RV1。
+refs: [BR-TEXT-05]
+refs_hash:
+  BR-TEXT-05: 095147f1c98a
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
