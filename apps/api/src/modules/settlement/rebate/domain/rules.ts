@@ -153,3 +153,22 @@ export function periodBasisSupported(value: unknown): boolean {
 export function unmappedHoldEnabled(value: unknown): boolean {
   return !(value === false || value === 'false' || value === 'off');
 }
+
+/** B2-04zzg：入账前判定读到的件数事实（同步事务里锁内重读的 orders 行；两列由 orders 写，B1-08zi）。 */
+export interface RemainingQuantityFacts {
+  readonly platform: string;
+  readonly quantity: number | null;
+  readonly refunded_quantity: number | null;
+}
+
+/**
+ * B2-04zzg（BR-CALC-15「剩余数量为 0 …按整单失效处理（入账前 R6 → VOID）」，D10-864 ②、D10-875、D10-878）：
+ * 京东单两列都已知且 quantity − refunded_quantity ≤ 0 → 剩余为 0。只看 platform jd（淘宝、拼多多两列保持 null，
+ * B1-08zi）；任一列为空不判定；quantity 为 0 的单也不判定（没有件数就没有「剩余」）。
+ */
+export function jdRemainingZero(order: RemainingQuantityFacts): boolean {
+  if (order.platform !== 'jd') return false;
+  if (order.quantity === null || order.refunded_quantity === null) return false;
+  if (order.quantity <= 0) return false;
+  return order.quantity - order.refunded_quantity <= 0;
+}

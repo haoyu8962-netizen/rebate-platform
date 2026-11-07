@@ -20,6 +20,7 @@ import {
   isHoldable,
   isLocked,
   isPrecredit,
+  jdRemainingZero,
   isReceivedOrSettled,
   isRebateState,
   periodBasisSupported,
@@ -38,6 +39,7 @@ import {
   type RebateCasGuards,
   type RebateSet,
 } from '../infra/rebate-store.ts';
+import { jdRefundR9Enabled } from '../../clawback/clawback-order.ts';
 import { casRightsPending, computeRightsPending } from '../../clawback/clawback-store.ts';
 import {
   closeAnsweredWaitingRights,
@@ -48,6 +50,11 @@ import {
 } from '../../rights/rights-store.ts';
 import { createSettlementRecords } from '../../settlements/index.ts';
 import { IllegalTransition, RebateError } from './errors.ts';
+
+/** B2-04zzg：京东剩余数量为 0 但开关关，只告警。 */
+const ALERT_JD_REMAINING_ZERO_OFF = 'jd_remaining_zero_r6_disabled';
+/** B1-08zi / D10-864 ②：京东已退件数驱动一切资金处置的开关（content 配置项，默认关）。 */
+const JD_REFUND_R9_SWITCH = 'orders.jd.refunded_quantity_r9_enabled';
 
 export interface RebateOrderRef {
   readonly appId: string;
@@ -324,6 +331,33 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     if (row.received_synced_at === null) d.set.received_synced_at = now;
   }
 
+  /**
+   * B2-04zzg（BR-CALC-15「剩余数量为 0 …入账前 R6 → VOID」；D10-864 ②、D10-878）：京东单 quantity −
+   * refunded_quantity ≤ 0 时，同一个开关 orders.jd.refunded_quantity_r9_enabled 管京东已退件数驱动的一切
+   * 处置：开 → 返回 true，调用方按整单失效走 R6（事件 PLATFORM_INVALID、orders.reason REFUND、不写分录、
+   * 同事务 order.invalidated）；关 → 只写一条 warn（alert jd_remaining_zero_r6_disabled）、返回 false、
+   * 状态不变。首次入库（decideImport）与同步更新（decideUpdate）共用。
+   */
+  async function jdRemainingZeroVoids(
+    row: OrderRow,
+    base: Record<string, unknown>,
+  ): Promise<boolean> {
+    if (!jdRemainingZero(row)) return false;
+    if (jdRefundR9Enabled(await deps.config.get(row.app_id, JD_REFUND_R9_SWITCH))) return true;
+    logger.warn(
+      {
+        ...base,
+        order_id: row.order_id,
+        alert: ALERT_JD_REMAINING_ZERO_OFF,
+        quantity: row.quantity,
+        refunded_quantity: row.refunded_quantity,
+        outcome: 'status_kept',
+      },
+      'jd remaining quantity is zero before credit; R9 switch off, not voided',
+    );
+    return false;
+  }
+
   async function decideImport(row: OrderRow, now: Date): Promise<Plan | null> {
     const attributed = row.user_id !== null;
     const event = attributed ? 'IMPORT_ATTRIBUTED' : 'IMPORT_UNATTRIBUTED';
@@ -333,6 +367,15 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     advance(d, event);
     if (row.platform_status === 'INVALID') {
       // P13：R1 / R2 后同事务按 R6 置 VOID，不生成预估。
+      advance(d, 'PLATFORM_INVALID');
+    } else if (
+      await jdRemainingZeroVoids(row, {
+        app_id: row.app_id,
+        platform: row.platform,
+        rebate_status: d.state,
+      })
+    ) {
+      // B2-04zzg：首次入库的京东报文已退完（剩余数量 ≤ 0）：同 P13，R1 / R2 后同事务 R6 → VOID，不生成预估。
       advance(d, 'PLATFORM_INVALID');
     } else if (attributed) {
       if (hasEstimate(row.platform_status)) d.refresh = true;
@@ -390,6 +433,13 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     const reverse = reverseEventOf(source.event, row.platform_status);
     if (reverse !== null) {
       advance(d, reverse);
+      return finish(d, row.rebate_status);
+    }
+    // B2-04zzg：京东单本次同步后剩余数量 ≤ 0（两列由 orders 在同一事务写入，这里读锁内重读的行）。
+    if (await jdRemainingZeroVoids(row, base)) {
+      advance(d, 'PLATFORM_INVALID');
+      // BR-CALC-15（同 BASE_ZERO）：同一报文若也让 orders 推了佣金版本，该版本仍要有金额行；R6 照样不记账。
+      if (change.commission_moved === true) d.refresh = true;
       return finish(d, row.rebate_status);
     }
     // BR-FUND-03 / 07：有效基数 = 有结算佣金用结算佣金、否则用预估。本次报文后有结算佣金就一律经估值端口

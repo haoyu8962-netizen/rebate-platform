@@ -1,0 +1,137 @@
+{
+  "task": "B2-04zzg",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "9d41654e8737b623c493ba53a0352ceba01cfbdd",
+  "red_tests": [
+    "test/spec/settlement/jd-remaining-zero/atomicity.int.test.ts > [AC-B2-04zzg#15] 开关开、WAITING 京东单退完，order.invalidated 入队失败：订单行逐列不变、无作废历史、无 order.invalidated；恢复后重投作废一次，重放不再入队",
+    "test/spec/settlement/jd-remaining-zero/atomicity.int.test.ts > [AC-B2-04zzg#15] 开关开、WAITING 京东单退完，order.updated 入队失败：订单行逐列不变、无作废历史、无 order.invalidated；恢复后重投作废一次，重放不再入队",
+    "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#16] 开关开：已归因京东单首个报文就 2 件退 2 → 同一事务 R1 后 R6 → VOID，reason REFUND，历史两行，恰一条 order.invalidated，不生成预估、无分录、余额不变",
+    "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#17] 开关开：未归因京东单首个报文就 2 件退 2 → 同一事务 R2 后 R6 → VOID，reason REFUND，历史两行，恰一条 order.invalidated，不生成预估、无分录、余额不变",
+    "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关未配置：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 ESTIMATED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关false：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 ESTIMATED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关未配置：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 UNATTRIBUTED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关false：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 UNATTRIBUTED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#11] 开关开：拼多多 ESTIMATED 单同步写进件数 2、已退 2 也不作废、不入队、不告警；同 app 的京东单同样报文作废",
+    "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#11] 开关开：拼多多 WAITING 单同步写进件数 2、已退 2 也不作废、不入队、不告警；同 app 的京东单同样报文作废",
+    "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#12] 开关关时退完而照常入账的京东单：开关打开后再同步（数量不变）仍是 CREDITED，booked 不变，不作废、不入队、不告警；同 app 未入账京东单作废",
+    "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#13] 开关开：平台已判无效而 VOID 的京东单之后退完：仍是 VOID（原因不改），不写第二条 order.invalidated；同 app 未入账京东单作废",
+    "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#14] app 隔离：只有 app A 开了开关；A、B 各一张京东单同样退完 → A 作废、B 不变且只在 B 告警；A 不告警，事件只进 A",
+    "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关未配置：ESTIMATED 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关false：WAITING 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关字符串 \"true\"：ESTIMATED 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关数字 1：WAITING 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+    "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#9] 开关关：同一报文确认收货且退完 → 其余判定照常（R4 到 WAITING），只多一条告警，不作废",
+    "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#10] 开关关：剩余数量 > 0（3 件退 2）不告警；退到 3 件才告警一次",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#1] 开关开：ESTIMATED 京东单 skuNum 2、skuReturnNum 0 → 2：R6 → VOID，reason REFUND，无分录、余额不变，恰一条 order.invalidated，历史一行 PLATFORM_INVALID",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#1] 开关开：WAITING 京东单 skuNum 2、skuReturnNum 0 → 2：R6 → VOID，reason REFUND，无分录、余额不变，恰一条 order.invalidated，历史一行 PLATFORM_INVALID",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#2] 开关开：UNATTRIBUTED 京东单剩余数量归 0 同样 R6 → VOID（BR-FUND-07 的来源含 UNATTRIBUTED）",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#3] 开关开：同一报文既确认收货又退完：ESTIMATED 直接 R6 → VOID，不先走 R4 到 WAITING",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#4] 开关开：已退件数超过件数（2 件退 3）同样按剩余 ≤ 0 作废",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#5] 开关开：同一报文预估归 0 且退完：按剩余数量走 R6，reason 是 REFUND 而不是 COMMISSION_ZERO（数量判定先于佣金判定）",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#6] 开关开：剩余数量 > 0（2 件退 1）不作废、不入队、不告警，预估不变；之后退完（2 件退 2）才作废",
+    "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#7] 开关开：件数为空（报文没给 skuNum）的京东单已退件数再多也不作废；同 app 件数齐全的京东单照常作废"
+  ],
+  "risk_note": "RV2, settlement rebate port only, no migration, no contract change, no money moves (withdraw lane, model Claude Fable 5.1; orchestrator rulings D10-864 ②, D10-875, D10-878). Before this task a jd order fully refunded before credit (quantity − refunded_quantity = 0, B1-08zi's columns) stayed ESTIMATED / WAITING unless the union reported an invalidation or the commission went to 0, so a monthly bill could still credit it. Now the rebate port's pre-credit decision reads the quantities orders wrote in the same sync transaction (the row re-read under the order lock) and, when orders.jd.refunded_quantity_r9_enabled is on, voids the order as a whole-order invalidation — event PLATFORM_INVALID through the generated transition (R6 → VOID, reason REFUND), no entries, order.invalidated on the same transaction; with the switch off (the default, as in production) it only writes one warn alert and the other rules run as before. The check is jd-only (other platforms keep null quantities), runs after the platform signals and before the commission check, and never reaches CREDITED or terminal orders. The same check runs on the first import (decideImport, after P13): a jd order whose first report is already fully refunded goes R1 / R2 then R6 → VOID in the same transaction (covered: #16, #17; switch off: #18). Real risks: voiding a credited order (covered: #12), a second invalidation of an already VOID order (covered: #13), voiding on a partial refund or a missing quantity (covered: #6, #7, #10), a partial write when the publish fails (covered: #15), cross-app switch leakage (covered: #14). Test-machine full verify not run (AWS runners disabled, D10-555; CI verify-int is the full verification, approvals 21); the red run and the implementation's runs were made in the local Docker container / host slot.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9d41654e8737b623c493ba53a0352ceba01cfbdd",
+      "tree": "713cc4927617064b303adc28069931d14a851256",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T17:49:53Z",
+      "finished_at": "2026-11-07T17:50:22Z",
+      "red_tests": [
+        "test/spec/settlement/jd-remaining-zero/atomicity.int.test.ts > [AC-B2-04zzg#15] 开关开、WAITING 京东单退完，order.invalidated 入队失败：订单行逐列不变、无作废历史、无 order.invalidated；恢复后重投作废一次，重放不再入队",
+        "test/spec/settlement/jd-remaining-zero/atomicity.int.test.ts > [AC-B2-04zzg#15] 开关开、WAITING 京东单退完，order.updated 入队失败：订单行逐列不变、无作废历史、无 order.invalidated；恢复后重投作废一次，重放不再入队",
+        "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#16] 开关开：已归因京东单首个报文就 2 件退 2 → 同一事务 R1 后 R6 → VOID，reason REFUND，历史两行，恰一条 order.invalidated，不生成预估、无分录、余额不变",
+        "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#17] 开关开：未归因京东单首个报文就 2 件退 2 → 同一事务 R2 后 R6 → VOID，reason REFUND，历史两行，恰一条 order.invalidated，不生成预估、无分录、余额不变",
+        "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关未配置：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 ESTIMATED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关false：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 ESTIMATED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关未配置：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 UNATTRIBUTED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts > [AC-B2-04zzg#18] 开关false：京东单首个报文就 2 件退 2 → 按 R1 / R2 留在 UNATTRIBUTED、不作废、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#11] 开关开：拼多多 ESTIMATED 单同步写进件数 2、已退 2 也不作废、不入队、不告警；同 app 的京东单同样报文作废",
+        "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#11] 开关开：拼多多 WAITING 单同步写进件数 2、已退 2 也不作废、不入队、不告警；同 app 的京东单同样报文作废",
+        "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#12] 开关关时退完而照常入账的京东单：开关打开后再同步（数量不变）仍是 CREDITED，booked 不变，不作废、不入队、不告警；同 app 未入账京东单作废",
+        "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#13] 开关开：平台已判无效而 VOID 的京东单之后退完：仍是 VOID（原因不改），不写第二条 order.invalidated；同 app 未入账京东单作废",
+        "test/spec/settlement/jd-remaining-zero/scope.int.test.ts > [AC-B2-04zzg#14] app 隔离：只有 app A 开了开关；A、B 各一张京东单同样退完 → A 作废、B 不变且只在 B 告警；A 不告警，事件只进 A",
+        "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关未配置：ESTIMATED 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关false：WAITING 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关字符串 \"true\"：ESTIMATED 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#8] 开关数字 1：WAITING 京东单 2 件退 2 → 状态与原因不变、无分录、无 order.invalidated，恰一条 warn 告警；之后开关置 true、同样数量再同步一次 → R6 → VOID",
+        "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#9] 开关关：同一报文确认收货且退完 → 其余判定照常（R4 到 WAITING），只多一条告警，不作废",
+        "test/spec/settlement/jd-remaining-zero/switch.int.test.ts > [AC-B2-04zzg#10] 开关关：剩余数量 > 0（3 件退 2）不告警；退到 3 件才告警一次",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#1] 开关开：ESTIMATED 京东单 skuNum 2、skuReturnNum 0 → 2：R6 → VOID，reason REFUND，无分录、余额不变，恰一条 order.invalidated，历史一行 PLATFORM_INVALID",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#1] 开关开：WAITING 京东单 skuNum 2、skuReturnNum 0 → 2：R6 → VOID，reason REFUND，无分录、余额不变，恰一条 order.invalidated，历史一行 PLATFORM_INVALID",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#2] 开关开：UNATTRIBUTED 京东单剩余数量归 0 同样 R6 → VOID（BR-FUND-07 的来源含 UNATTRIBUTED）",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#3] 开关开：同一报文既确认收货又退完：ESTIMATED 直接 R6 → VOID，不先走 R4 到 WAITING",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#4] 开关开：已退件数超过件数（2 件退 3）同样按剩余 ≤ 0 作废",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#5] 开关开：同一报文预估归 0 且退完：按剩余数量走 R6，reason 是 REFUND 而不是 COMMISSION_ZERO（数量判定先于佣金判定）",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#6] 开关开：剩余数量 > 0（2 件退 1）不作废、不入队、不告警，预估不变；之后退完（2 件退 2）才作废",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts > [AC-B2-04zzg#7] 开关开：件数为空（报文没给 skuNum）的京东单已退件数再多也不作废；同 app 件数齐全的京东单照常作废"
+      ],
+      "expected": [
+        "test/spec/settlement/jd-remaining-zero/atomicity.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero/first-report.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero/scope.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero/switch.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero/void.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "51d0ddf525970747dd2b46a628820a192f77b651ed5a5ed5c8f765fba2616210"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 3,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex money review, base = fork point aa86e61f6d70, full diff. r1 fail, two S1: (a) an identical report after the switch is turned on never reaches the rebate hook (orders' content_hash short circuit) — ruled out of this task by D10-923, follow-up FU-JD-REMAINING-ZERO-SWITCH-ON (pre-credit remaining-quantity guard + one-off re-evaluation; the switch stays off in production until it lands), limitation stated in the PR; (b) a report that refunds every item and moves the commission version left the new version without rows — fixed in 6e74a00c8 (refresh when commission_moved, as BASE_ZERO), verified with a scratch test (versions [1] before, [1, 2] after). r2 fail only on (a), the reviewer not seeing the ruling; D10-924: the ruling recorded verbatim in brief §9.7, r3 (code 3/3) pass, no open S0/S1, checklist complete, switch off unless JSON true."
+    },
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 3,
+      "review_type": "spec-test",
+      "checklist_complete": true,
+      "note": "One-off incremental spec-test r3, orchestrator exception D10-922 (Codex, reasoning effort medium, not counted: spec-test 2/2 was used up), on 3ec9b04b73ca..ba9d5a4bc8f2: only first-report.int.test.ts:73 and two comments changed. Verdict pass, no S0/S1: the version-list assertion still fails on a v2, an extra row or a missing v1; every other assertion unchanged."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 3/3); spec-test by fresh independent Claude (D10-848). r1 fail: one S1, no test covered a jd order whose first report is already fully refunded (onImported → decideImport). r2 pass on 3ec9b04b73ca: #16–#18 added (first report fully refunded: attributed, unattributed, switch off), S1 closed; the kit's eventsOf() now unwraps event_log.payload.data (the bus stores { v, data }), no assertion of #1–#15 changed. Test round 3 (D10-922) changed only #16's totals assertion to the version list ([1] attributed: only orders' commission snapshot; [] unattributed), reviewed by the one-off incremental spec-test r3 below (Codex, medium, D10-922)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "269e523e0a7ddaa81a2ca211d1e786ae68614285",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
