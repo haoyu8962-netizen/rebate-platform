@@ -1,0 +1,21 @@
+id: B2-16c
+repo: rebate-platform
+title: 邀请奖励发放装配（FU-INVITE-REWARD-WIRING，上线缺口第 1 + 10 项，D10-805 ①）——app.module 给 createInviteRewardPayout 传 ledger 的 createInviteRewardGrantWriter；deletionStatus 换 identity 的 createDeletionStageReader，端口类型加 cooling（BR-INV-24 ③ 注销流程 cooling / processing / done 该方不发），删两处陈旧 TODO
+type: impl
+# 2026-11-07 入账（admin-backend，编排 D10-805 ①；现状见 couli-runs/B3-lane/prod-wiring-gaps-status-20261107.md 第 1、10 行）。B2-16b（写入端口）已 done，只差装配；grantWriter 端口保持可选（冻结 [AC-B1-35#61] 未注入时顺延告警不变）。无迁移、不改契约。B2-04zzb 在 B2-04zza 合并后优先。RV2，测试新鲜独立 Claude + 只读复核（D10-775）。
+refs: [BR-INV-24]
+refs_hash:
+  BR-INV-24: be947be8fb22
+deps: []
+paths:
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/growth/application/invite-reward.ts'
+  - 'apps/api/src/modules/growth/application/invite-reward*.test.ts'
+test_paths:
+  - 'test/spec/growth/invite-reward-wiring/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/growth/invite-reward-wiring/**'
+status: todo
