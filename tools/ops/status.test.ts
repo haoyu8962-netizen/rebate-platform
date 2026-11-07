@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -5,10 +6,11 @@ import { listTaskIds, loadTask } from '../lib/task-file.ts';
 import { acquireOrchestratorLock, releaseOrchestratorLock } from './lock.ts';
 import { globsMayOverlap, literalDir, pathSetsMayOverlap } from './overlap.ts';
 import { claimTask, updateState } from './state.ts';
-import { collectBoard, renderBoard, workingHoursBetween } from './status.ts';
+import { boardJson, collectBoard, renderBoard, workingHoursBetween } from './status.ts';
 import {
   CLI_TIMEOUT,
   fixedRisk,
+  OPS_DIR,
   fixtureGit,
   removeDir,
   runCli,
@@ -275,6 +277,105 @@ it(
     expect(text).toContain('已作废 1 个（不列出、不派工）。');
     expect(text).not.toContain('| V1-02 |');
     expect(text).toContain('| V1-03 |');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  'the JSON board leaves out done rows by default and keeps every other field as computed from the whole ledger',
+  () => {
+    const scopeRoot = join(base, 'repo-scope');
+    writeFiles(scopeRoot, {
+      'README.md': 'fixture\n',
+      'ops/tasks/J1-01.yaml': task('J1-01', { status: 'done', pr: '7' }),
+      'ops/tasks/J1-02.yaml': task('J1-02', { status: 'void' }),
+      'ops/tasks/J1-03.yaml': task('J1-03', {
+        deps: '[J1-01]',
+        paths: "\n  - 'apps/api/src/modules/j/**'",
+      }),
+    });
+    fixtureGit(scopeRoot, ['init', '-q', '-b', 'main']);
+    fixtureGit(scopeRoot, ['add', '-A']);
+    fixtureGit(scopeRoot, ['commit', '-q', '-m', 'fixture']);
+    const board = collectBoard({ root: scopeRoot, now: NOW, risk: fixedRisk('RV1') });
+    const open = boardJson(board, 'open');
+    const all = boardJson(board, 'all');
+    expect(open.rows_scope).toBe('open');
+    expect(open.rows.map((r) => r.id)).toEqual(['J1-02', 'J1-03']);
+    expect(all.rows_scope).toBe('all');
+    expect(all.rows.map((r) => r.id).sort()).toEqual(['J1-01', 'J1-02', 'J1-03']);
+    // The cut is on the output only: counts, ready and dependency flags still see the done task.
+    expect(open.done_count).toBe(1);
+    expect(open.void_count).toBe(1);
+    expect(open.ready).toEqual(['J1-03']);
+    expect(open.rows.find((r) => r.id === 'J1-03')?.deps).toEqual([{ id: 'J1-01', done: true }]);
+    const { rows: openRows, rows_scope: openScope, ...openRest } = open;
+    const { rows: allRows, rows_scope: allScope, ...allRest } = all;
+    expect([openRows.length, openScope, allRows.length, allScope]).toEqual([2, 'open', 3, 'all']);
+    expect(openRest).toEqual(allRest);
+    // The board itself is not cut.
+    expect(board.rows).toHaveLength(3);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  'prints the real board as JSON: open rows by default, every row with --all, the same summary either way',
+  () => {
+    const ids = listTaskIds();
+    const notDone = ids.filter((id) => loadTask(id).status !== 'done');
+    const env = { COULI_RUNS: join(base, 'cli-runs-scope') };
+    const def = runCli('status.ts', ['--json'], env);
+    expect(def.status).toBe(0);
+    // Size sentinel (FU-STATUS-JSON-SIZE): the default output holds only the rows that are not
+    // done, so it should stay far below spawnSync's 1 MiB default buffer. On 2026-11-07 it was
+    // about 32 KB here (empty run directory; 44 open rows) against 1.05 MB with --all. If this
+    // fails, first check whether the open backlog really grew that large (an operations
+    // problem) before raising the limit.
+    expect(Buffer.byteLength(def.stdout, 'utf8')).toBeLessThan(512 * 1024);
+    type Json = {
+      rows_scope: string;
+      done_count: number;
+      void_count: number;
+      ready: string[];
+      rows: { id: string; status: string }[];
+    };
+    const open = JSON.parse(def.stdout) as Json;
+    expect(open.rows_scope).toBe('open');
+    expect(open.rows.filter((r) => r.status === 'done')).toEqual([]);
+    expect(open.rows.map((r) => r.id).sort()).toEqual([...notDone].sort());
+
+    // The full output is over 1 MiB already: read it with a large buffer.
+    const res = spawnSync(process.execPath, [join(OPS_DIR, 'status.ts'), '--json', '--all'], {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(res.status).toBe(0);
+    const all = JSON.parse(res.stdout) as Json;
+    expect(all.rows_scope).toBe('all');
+    expect(all.rows.filter((r) => r.status === 'done')).toHaveLength(all.done_count);
+    expect(all.rows.map((r) => r.id).sort()).toEqual([...ids].sort());
+    expect([open.done_count, open.void_count, open.ready]).toEqual([
+      all.done_count,
+      all.void_count,
+      all.ready,
+    ]);
+  },
+  CLI_TIMEOUT * 2,
+);
+
+it(
+  'refuses --all without --json and unknown options',
+  () => {
+    const env = { COULI_RUNS: join(base, 'cli-runs-scope') };
+    const alone = runCli('status.ts', ['--all'], env);
+    expect(alone.status).toBe(2);
+    expect(alone.stderr).toContain('--all only applies to --json');
+    expect(alone.stdout).toBe('');
+    const unknown = runCli('status.ts', ['--json', '--everything'], env);
+    expect(unknown.status).toBe(2);
+    expect(unknown.stdout).toBe('');
   },
   CLI_TIMEOUT,
 );

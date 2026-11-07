@@ -2,13 +2,18 @@
 // Nothing here is stored: every run recomputes the board from the ledger, the
 // state files and run directories, git and the usage ledger (token accounting only).
 //
-//   node tools/ops/status.ts [--json]
+//   node tools/ops/status.ts [--json [--all]]
+//
+// `--json` prints only the rows that are not done (rows_scope "open"); `--all`
+// adds the done rows back (rows_scope "all"). Every other field is the same
+// either way: counts, ready, warnings and the rest are computed from the whole
+// ledger before the rows are cut (FU-STATUS-JSON-SIZE, CT-06zzzn).
 import { parseArgs } from 'node:util';
 import { git } from '../lib/git.ts';
 import { repoRoot, specRef } from '../lib/paths.ts';
 import { listTaskIds } from '../lib/task-file.ts';
 import type { TaskFile } from '../lib/task-file.ts';
-import { formatBeijing, runMain } from './cli.ts';
+import { formatBeijing, runMain, UsageError } from './cli.ts';
 import { orchestratorLockStatus } from './lock.ts';
 import type { LockStatus } from './lock.ts';
 import { pathSetsMayOverlap } from './overlap.ts';
@@ -388,13 +393,38 @@ export function renderBoard(b: Board): string {
   return `${out.join('\n')}\n`;
 }
 
+/** Which rows `--json` prints: "open" leaves out done rows, "all" keeps every row. */
+export type RowsScope = 'open' | 'all';
+
+export type BoardJson = Board & { rows_scope: RowsScope };
+
+/**
+ * The `--json` output. Only `rows` depends on the scope; every other field is
+ * the board as computed from the whole ledger (done_count, ready, warnings, …).
+ * The done rows are left out by default because they make up most of the output
+ * and only grow (FU-STATUS-JSON-SIZE).
+ */
+export function boardJson(board: Board, scope: RowsScope): BoardJson {
+  const rows = scope === 'all' ? board.rows : board.rows.filter((r) => r.status !== 'done');
+  return { ...board, rows_scope: scope, rows };
+}
+
 function main(argv: string[]): number {
   const { values } = parseArgs({
     args: argv,
-    options: { json: { type: 'boolean', default: false } },
+    options: {
+      json: { type: 'boolean', default: false },
+      all: { type: 'boolean', default: false },
+    },
   });
+  if (values.all && !values.json) {
+    throw new UsageError(
+      '--all only applies to --json (the Markdown board never lists done tasks)',
+    );
+  }
   const board = collectBoard();
-  if (values.json) console.log(JSON.stringify(board, null, 2));
+  if (values.json)
+    console.log(JSON.stringify(boardJson(board, values.all ? 'all' : 'open'), null, 2));
   else process.stdout.write(renderBoard(board));
   return 0;
 }

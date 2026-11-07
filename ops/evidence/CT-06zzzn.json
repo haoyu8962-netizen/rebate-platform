@@ -1,0 +1,37 @@
+{
+  "task": "CT-06zzzn",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "e5b0709d6060f37e06a1919a7f52b6797dbb67e9",
+  "red_tests": [],
+  "risk_note": "RV2 guard-change (tools/ops, class 3): status.ts --json lists only rows whose status is not done by default (todo and void kept), --all lists every row, the output names rows_scope ('open' / 'all'); filtering only at the output layer — collectBoard, the Markdown board and every summary (done_count, ready, deps, warnings) stay over the whole ledger; --all without --json is a usage error (exit 2). status.test.ts only gains cases (default scope, --all, summaries unchanged, size sentinel 512 KiB); no existing assertion changed. Measured: default 32 KB, --all 1.05 MB (empty runs dir). Plan couli-runs/FU-STATUS-JSON-SIZE/plan.md, ruling D10-872 ①. Codex money (RV2 checklist) r1 pass, no findings. Full verification is the required CI checks (approvals #21).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex money r1 pass, no findings (couli-runs/CT-06zzzn/review-codex.json)"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f2454b885d953df965c1e2d62715e5bff7454423",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
