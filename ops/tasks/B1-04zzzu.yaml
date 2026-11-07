@@ -1,0 +1,16 @@
+id: B1-04zzzu
+repo: rebate-platform
+title: test-change B1-04zzz 拆出：淘宝回扫配置生产装配用例（promo_mode → 20 分钟、改 window_minutes 下一轮生效、week / hour 开关、非法值回默认、别的 App 不影响），主干上已绿、只新增（D10-903 / D10-927）
+type: test-change
+# 2026-11-08 w1 入账（D10-927 ②）。B1-04zzz 规则测试 r2（新鲜独立 Claude）写的 15 例在主干实跑 14 绿 1 红；14 例本就成立、照 D10-903 (A) 另开本单只新增，新目录 test/spec/orders/rescan-config-wiring-main/**（含共用 kit），新鲜独立 Claude 只删越上限那一行、标题改 [AC-B1-04zzzu#n]，另一位只读复核。越上限（181 及更大）那条留在 B1-04zzz 走 impl，引用本目录 kit，所以本单先合。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/orders/rescan-config-wiring-main/**'
+  - 'ops/tasks/B1-04zzzu.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
