@@ -29,6 +29,7 @@ import {
   agentCallerReaderToken,
   agentConsentReaderToken,
   agentContentReaderToken,
+  agentRuleArticlesToken,
   agentStreamPortsToken,
   agentTraceRetentionDays,
   agentTraceRetentionKey,
@@ -38,6 +39,7 @@ import {
   type AgentConsentReaderFactory,
   type AgentContentReader,
   type AgentStreamProvidedPorts,
+  type RuleSyncArticles,
   type StreamReviewOptions,
 } from './modules/agent/index.ts';
 import {
@@ -98,6 +100,8 @@ import {
   combineConfigItemSaveChecks,
   configRegistry,
   createContentReader,
+  createPublishedArticleAppsReader,
+  createPublishedArticlesReader,
   createSystemSwitchWriter,
   switchSpecOf,
   type ContentAdminOptions,
@@ -3491,6 +3495,10 @@ function agentStreamPorts(union: DynamicModule, source: UnionQuotaSource): Dynam
  *   schema (the AGENT_CALLER provider's reader).
  * - agentConsentReaderToken() (stream): identity's createAiConsentReader bound to the handle;
  *   agent hands it the consent version source only.
+ * - agentRuleArticlesToken() (worker; B3-08m, D10-386): the rule chunk sync's published help /
+ *   rule articles, both halves from content's read-only entry: list is
+ *   createPublishedArticlesReader's, apps is createPublishedArticleAppsReader's (this file never
+ *   queries app.articles itself).
  */
 @Module({})
 class AgentReadersModule {}
@@ -3528,7 +3536,17 @@ function agentReaders(
       return ({ currentVersion }) => createAiConsentReader({ db: handle, currentVersion });
     },
   };
-  const providers = entry === 'stream' ? [content, caller, consent] : [content];
+  const ruleArticles = {
+    provide: agentRuleArticlesToken(),
+    inject: [CLOCK, { token: DB, optional: true }],
+    useFactory: (clock: Clock, db?: Kysely<Database>): RuleSyncArticles | null => {
+      if (db === undefined) return null;
+      const reader = createPublishedArticlesReader({ db, clock });
+      const apps = createPublishedArticleAppsReader({ db, clock });
+      return { list: (appId) => reader.list(appId), apps: () => apps.apps() };
+    },
+  };
+  const providers = entry === 'stream' ? [content, caller, consent] : [content, ruleArticles];
   return {
     module: AgentReadersModule,
     global: true,

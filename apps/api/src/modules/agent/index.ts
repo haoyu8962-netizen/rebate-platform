@@ -17,5 +17,22 @@ export type {
   PurgeAgentDataInput,
   PurgeAgentDataResult,
 } from './deletion/index.ts';
+// B3-08l: the worker's rule chunk sync (AgentModule.forWorker provides agentRuleSyncToken();
+// app.module provides agentRuleArticlesToken(); entry.ts starts it). Contract: rag/chunks/worker.ts.
+export {
+  agentRuleArticlesToken,
+  agentRuleSyncToken,
+  createAgentRuleSyncRuntime,
+} from './rag/chunks/index.ts';
+export type {
+  AgentRuleSyncRuntime,
+  AgentRuleSyncRuntimeDeps,
+  RuleSyncArticles,
+  RuleSyncLoop,
+  RuleSyncRound,
+  RuleSyncSchedule,
+  RuleSyncStartOptions,
+  RuleSyncTimer,
+} from './rag/chunks/index.ts';
 // B1-27f: the Agent conversations section of a personal information copy (read only; app.module).
 export * from './application/personal-data-copy-read.ts';

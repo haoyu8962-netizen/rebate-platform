@@ -17,7 +17,10 @@ export const APP_MODULE = join(ROOT, 'apps/api/src/app.module.ts');
 export const DENYLIST =
   /withdraw|payout|balance|ledger|payee|payout_account|inviter|bind_parent|change_phone|reward|prize|taolijin.*(create|issue|claim)/iu;
 
-/** B3-08g 之后注册表（= allowlist）的精确集合；search_rules 与 get_my_earnings 不在本段。 */
+/**
+ * 注册表（= allowlist）的精确集合。B3-08l（D10-327 / D10-808）：加 search_rules，6 → 7；
+ * get_my_earnings 仍不在。
+ */
 export const EXPECTED_TOOLS = [
   'search_products',
   'get_rebate_quote',
@@ -25,14 +28,14 @@ export const EXPECTED_TOOLS = [
   'explain_order',
   'prefill_claim',
   'handoff_to_human',
+  'search_rules',
 ] as const;
 
 /** 本段新注册的四个工具（开关种子也是这四个）。 */
 export const NEW_TOOLS = ['handoff_to_human', 'prefill_claim', 'list_my_orders', 'explain_order'];
 
-/** 不得出现在下发定义里的名字：本段不注册的工具、内部步骤与意图。 */
+/** 不得出现在下发定义里的名字：本段不注册的工具、内部步骤与意图（B3-08l 起 search_rules 已注册，移出）。 */
 export const NEVER_OFFERED = [
-  'search_rules',
   'get_my_earnings',
   'parse_input',
   'resolve_link',

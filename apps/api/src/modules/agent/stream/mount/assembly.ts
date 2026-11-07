@@ -3,6 +3,10 @@
 // with references/clarification/refinement, and binds parsing.parseUrl AND parsing.parseToken.
 // Token candidates reach the same quote runner as URLs (the deterministic path passes them, B3-04g).
 // Card entry creation is per call: linking receives scene=agent and the authenticated session.
+// B3-08m: with ports.rules, search_rules is registered as well (BR-AI-07 T6). The reply templates
+// of a run that called search_rules or an order tool are decided by orchestrator/core
+// (core/reply-templates.ts) from that run's own tool outcomes, so the intent port is never asked
+// for them (its trace.calls stays empty by design).
 import { randomUUID } from 'node:crypto';
 import type { StreamReviewOptions, StreamReviewPorts } from './review.ts';
 import type { DB } from '@couli/db';
@@ -54,6 +58,7 @@ import {
   type ToolHandler,
   type ToolSwitches,
 } from '../../tools/registry/index.ts';
+import { createSearchRulesHandler, type RulesDeps } from '../../tools/rules/index.ts';
 import {
   createKeywordSearch,
   createSearchProductsHandler,
@@ -117,6 +122,11 @@ export interface AgentStreamBusinessPorts {
    * Absent: only the two product tools are registered (B3-03j / B3-03n assemblies).
    */
   readonly orders?: AgentOrderToolPorts;
+  /**
+   * B3-08m: search_rules' data (the app's active rule chunks, agent.rag.min_score). Absent:
+   * search_rules is not registered.
+   */
+  readonly rules?: Pick<RulesDeps, 'activeChunks' | 'config'>;
 }
 
 /** B3-08g: orders' read queries, linking's link_logs reader, card_id refs, by-number budget. */
@@ -249,10 +259,11 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
     createSearchProductsHandler(searchDeps),
     createRebateQuoteHandler(quoteDeps),
   ];
+  // Identity reaches every port only from the server-built call context (BR-AI-03).
+  const dictionary = (appId: string, key: string) => texts.text(appId, key);
   if (ports.orders !== undefined) {
-    // B3-08g: registered = specs/agent-tools.allowlist (search_rules waits for its data source).
-    // Identity reaches every port only from the server-built call context (BR-AI-03).
-    const dictionary = (appId: string, key: string) => texts.text(appId, key);
+    // B3-08g: the order tools and handoff; with ports.rules (B3-08m) registered =
+    // specs/agent-tools.allowlist.
     const readConfig = (appId: string, key: string) => switchValue(config, appId, key);
     const handoff: HandoffDeps = { texts: dictionary, cardReference };
     const claim: ClaimDraftDeps = {
@@ -279,6 +290,17 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
       createPrefillClaimHandler(claim),
       createListMyOrdersHandler(orderDeps),
       createExplainOrderHandler(orderDeps),
+    );
+  }
+  if (ports.rules !== undefined) {
+    // B3-08m · BR-AI-07 T6: the app's active chunks and agent.rag.min_score are read per call.
+    handlers.push(
+      createSearchRulesHandler({
+        activeChunks: ports.rules.activeChunks,
+        config: ports.rules.config,
+        texts: dictionary,
+        cardReference,
+      }),
     );
   }
   const names = registeredToolNames(handlers);
@@ -328,8 +350,10 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
     tools: { registered: (name) => names.includes(name) },
     texts,
     trace: {
-      // TODO(规划/11 §2.3): 本轮实际工具调用摘要（模板文案）与意图 trace 落库 — blocked on followups 第 31 条（生产没有 RunTraceSink）
+      // B3-08m: no template call reaches the intent port: the core writes those runs' templates
+      // itself (core/reply-templates.ts) and does not consult this port for them.
       calls: async () => [],
+      // TODO(规划/11 §2.3): 意图 trace 落库 — blocked on followups 第 31 条（生产没有 RunTraceSink）
       record: () => undefined,
     },
     clarification: createClarification(continuation),

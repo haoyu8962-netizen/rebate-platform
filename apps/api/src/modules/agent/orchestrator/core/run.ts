@@ -1,6 +1,12 @@
 // B3-05b: one Agent run (contract in factories.ts). Every piece of state lives in AgentRun, one
 // instance per run: model clock, OutputGuard, counters, delivered flag and trace never leak
 // between runs of the same factory.
+// B3-08m · BR-AI-07 (contract: ./reply-templates.ts): when this run's offered tools include a
+// template tool, the OutputGuard's emits of model text are held in the run (`held`) instead of
+// being written; every end of the run settles them in one place (settleHeld / finishText): a run
+// with a template call drops them and writes the template keys instead, any other run writes them
+// in guard order before it ends exactly as before. Once a template call was made no later model
+// text reaches the guard at all.
 import { platform as platformEnum } from '@couli/contracts-ts';
 import type { Platform } from '@couli/contracts-ts';
 import type { RunBodyInput } from '../../http/index.ts';
@@ -14,6 +20,7 @@ import { StreamProtocolError } from '../../stream/writer/index.ts';
 import { openCardCall } from './card-references.ts';
 import type { CardCall } from './card-references.ts';
 import { RunOutput } from './output.ts';
+import { ReplyTemplateCalls, isReplyTemplateTool } from './reply-templates.ts';
 import type { CardWrite } from './output.ts';
 import type {
   AgentRunBodyDeps,
@@ -86,6 +93,11 @@ export function intentOf(text: string): { readonly name: string | null } | undef
 }
 
 const CARD_ID = /^c([1-9][0-9]*)$/u;
+
+/** The guard's replacement for a blocked sentence: the run ends with safety. */
+function isBlocked(emit: GuardEmit): boolean {
+  return emit.kind === 'fixed' && emit.key === 'agent.refuse.output_blocked';
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -220,6 +232,14 @@ class AgentRun {
   private readonly linkRegistrations: LinkRegistration[] = [];
   /** Set once the trace is recorded: later path output never changes it. */
   private traced = false;
+  /** B3-08m: this run offers a template tool, so model text is held until the run's end. */
+  private holding = false;
+  /** Guard emits of model text not written yet (holding runs only), in guard order. */
+  private held: GuardEmit[] = [];
+  /** This run's template calls (BR-AI-07); never shared with another run. */
+  private readonly templateCalls = new ReplyTemplateCalls();
+  /** Template text replaced the model's reply (trace text_replaced_by_template). */
+  private replaced = false;
 
   constructor(deps: AgentRunBodyDeps, input: RunBodyInput, ctx: RunContext) {
     this.deps = deps;
@@ -426,6 +446,8 @@ class AgentRun {
     const tools = await this.wait(this.deps.tools.definitions(this.appId, this.input.caller));
     if (tools === ABORTED) return done('stop');
     const known = new Set(tools.map((tool) => tool.name));
+    // B3-08m: a template tool on offer may be called in any later round (reply-templates.ts).
+    this.holding = tools.some((tool) => isReplyTemplateTool(tool.name));
     const clock = this.deps.modelClock();
     // B3-03p · BR-AI-18: this run's app's sentence review (its own budget), when wired.
     const review = this.deps.outputReview?.forRun(this.appId, this.signal) ?? this.deps.review;
@@ -447,8 +469,12 @@ class AgentRun {
         return done('safety');
       }
       if (outcome.kind === 'degraded') {
+        // B3-08m: held model text is settled first (written, or dropped for a template run).
+        const settled = await this.settleHeld();
+        if (settled !== null) return settled;
         // U-11: degrade only before any model / tool content; otherwise end with what was sent.
-        if (!this.delivered) return this.degrade(proceed, outcome.reason);
+        // B3-08m (gate review S1-1): a template run never degrades; it ends with its templates.
+        if (!this.templated && !this.delivered) return this.degrade(proceed, outcome.reason);
         return this.finishText('stop');
       }
       this.model = outcome.model;
@@ -462,8 +488,11 @@ class AgentRun {
       if (calls.length === 0) return this.finalRound(proceed, deltas, roundText);
       // Same format check as the final round, before any of this text reaches the guard.
       if (isStructuredText(roundText)) return this.invalidFormat(proceed);
-      const pushed = await this.pushText(deltas);
-      if (pushed !== null) return pushed;
+      // B3-08m: after a template call no model text is delivered; it never reaches the guard.
+      if (!this.templated) {
+        const pushed = await this.pushText(deltas);
+        if (pushed !== null) return pushed;
+      }
       // The last allowed round still asks for tools: its calls are not run (U-10).
       if (round >= this.deps.limits.modelRounds) return this.finishText('limit');
       messages.push({ role: 'assistant', content: roundText || null, tool_calls: calls });
@@ -485,6 +514,15 @@ class AgentRun {
     const blank = text.trim() === '';
     const intent = blank ? undefined : intentOf(text);
     if (intent !== undefined) this.intent = intent.name;
+    if (this.templated) {
+      // B3-08m · BR-AI-07: ordinary, blank, intent or structured text alike: only the templates;
+      // the IntentPort is not consulted.
+      if (intent === undefined && !blank && isStructuredText(text)) this.formatInvalid = true;
+      return this.finishText('stop');
+    }
+    // Earlier rounds' held text goes out first, as it did when it was written at once.
+    const settled = await this.settleHeld();
+    if (settled !== null) return settled;
     const intents = this.deps.intents;
     if (intents !== undefined && !blank) {
       const handled = await this.wait(
@@ -512,8 +550,16 @@ class AgentRun {
    */
   private async invalidFormat(proceed: InputProceed): Promise<RunBodyResult> {
     this.formatInvalid = true;
-    if (!this.delivered) return this.degrade(proceed, INVALID_FORMAT_REASON);
+    const settled = await this.settleHeld();
+    if (settled !== null) return settled;
+    // B3-08m (gate review S1-1): a template run never degrades; it ends with its templates.
+    if (!this.templated && !this.delivered) return this.degrade(proceed, INVALID_FORMAT_REASON);
     return this.finishText('stop');
+  }
+
+  /** B3-08m: a template call was made in this run (reply-templates.ts). */
+  private get templated(): boolean {
+    return this.templateCalls.any;
   }
 
   /** Model text through the OutputGuard; a result means the run ends here. */
@@ -523,14 +569,61 @@ class AgentRun {
     for (const delta of deltas) {
       const emits = await this.wait(guard.push(delta));
       if (emits === ABORTED) return done('stop');
+      if (this.holding) {
+        // B3-08m: held until the run knows whether it calls a template tool.
+        this.held.push(...emits);
+        // A guard that stopped ends the run here, as before: the held text goes out with it.
+        if (guard.stopped || emits.some(isBlocked))
+          return (await this.flushHeld()) ?? done('safety');
+        continue;
+      }
       const stop = await this.writeEmits(emits, guard);
       if (stop !== null) return stop;
     }
     return null;
   }
 
+  /** Writes the held emits in guard order; a result means the run ends here. */
+  private async flushHeld(): Promise<RunBodyResult | null> {
+    const guard = this.guard;
+    const emits = this.held;
+    this.held = [];
+    if (guard === null || emits.length === 0) return null;
+    return this.writeEmits(emits, guard);
+  }
+
+  /** Held model text at an end of the run: dropped in a template run, else written. */
+  private async settleHeld(): Promise<RunBodyResult | null> {
+    if (this.templated) {
+      this.held = [];
+      return null;
+    }
+    return this.flushHeld();
+  }
+
+  /**
+   * B3-08m · BR-AI-07: the template texts in place of all model text (no guard flush), through
+   * the run's caps; then the end the run has (`reason`, or limit / stop as final() decides).
+   */
+  private async writeTemplates(reason: Done['finishReason']): Promise<RunBodyResult> {
+    this.held = [];
+    this.replaced = true;
+    for (const template of this.templateCalls.texts()) {
+      if (this.out.limitHit) break;
+      const text = await this.wait(this.deps.texts.text(this.appId, template.key));
+      if (text === ABORTED) return done('stop');
+      const filled =
+        template.count === undefined ? text : text.replaceAll('{n}', String(template.count));
+      if (this.out.text(filled)) this.delivered = true;
+    }
+    return this.final(done(reason));
+  }
+
   /** Flushes the guard (end of run) and ends with `reason` unless the flush decides otherwise. */
   private async finishText(reason: Done['finishReason']): Promise<RunBodyResult> {
+    if (this.templated) return this.writeTemplates(reason);
+    const settled = await this.flushHeld();
+    if (settled !== null) return settled;
     const guard = this.guard;
     if (guard !== null && !this.out.limitHit) {
       const emits = await this.wait(guard.end());
@@ -587,6 +680,13 @@ class AgentRun {
       this.traceCall(name, parsed.args, 'rejected');
       return { view: INVALID_ARGS };
     }
+    // B3-08m · BR-AI-07: an offered template tool's call counts whatever its outcome; from here
+    // on held and later model text is never delivered.
+    const template = isReplyTemplateTool(name) ? name : null;
+    if (template !== null) {
+      this.templateCalls.called(template);
+      this.held = [];
+    }
     const platform = platformOf(parsed.args);
     const texts = this.deps.texts;
     const start = await this.wait(texts.toolDisplay(this.appId, name, 'start', platform));
@@ -617,6 +717,9 @@ class AgentRun {
       if (display === ABORTED) return done('stop');
       this.out.status(name, phase, display);
       this.traceCall(name, parsed.args, outcome.kind);
+      if (template !== null && outcome.kind === 'ok') {
+        this.templateCalls.succeeded(template, outcome.trace);
+      }
       if (outcome.kind === 'ok') {
         const stop = await this.toolOutput(outcome, refs);
         if (stop !== null) return stop;
@@ -723,6 +826,7 @@ class AgentRun {
       filter_hits: summary?.filterHits ?? [],
       output_truncated: summary?.outputTruncated ?? false,
       model_format_invalid: this.formatInvalid,
+      ...(this.replaced ? { text_replaced_by_template: true } : {}),
       ...(this.cardSources.length > 0 ? { card_sources: [...this.cardSources] } : {}),
       ...(this.linkRegistrations.length > 0
         ? { link_registrations: [...this.linkRegistrations] }

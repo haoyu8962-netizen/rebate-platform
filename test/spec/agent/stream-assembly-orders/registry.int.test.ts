@@ -60,7 +60,7 @@ it('[AC-B3-08g#1][BR-AI-02] 生产装配注册的工具集合与 specs/agent-too
 }, 120_000);
 
 it('[AC-B3-08g#2][BR-AI-02] denylist 两处扫描均不命中：(a) tools/registry/** 全部源码与 allowlist 文件；(b) 全开关、已绑手机主体下发的全部定义（名称、description、递归 schema）', async () => {
-  // (a) Source: every file of the registry directory and the allowlist file (which lists the six).
+  // (a) Source: every file of the registry directory and the allowlist file (which lists the seven).
   expect([...allowlistNames()].sort()).toEqual([...EXPECTED_TOOLS].sort());
   const sources = filesUnder(REGISTRY_DIR);
   expect(sources.length).toBeGreaterThan(0);
@@ -107,8 +107,10 @@ it('[AC-B3-08g#3][BR-AI-01][BR-AI-02] 下发 = 注册 ∩ 开启 ∩ 主体：�
 
   expect((await definitionNames(assembly, f.caller)).sort()).toEqual([...EXPECTED_TOOLS].sort());
   for (const subject of [guest, unbound]) {
+    // B3-08l (D10-327 / D10-808 (b)): search_rules is audience all, so guests and unbound users see
+    // it too; the title above is kept word for word and is outdated on this point.
     expect((await definitionNames(assembly, subject)).sort()).toEqual(
-      [...PRODUCT_TOOLS, 'handoff_to_human'].sort(),
+      [...PRODUCT_TOOLS, 'handoff_to_human', 'search_rules'].sort(),
     );
   }
 

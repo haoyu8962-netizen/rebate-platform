@@ -103,8 +103,9 @@ export function failConfigRead(key: string): void {
 
 /**
  * B3-03j's fixture for `caller` (agent open, consent, product switches and synthetic product ports),
- * every switch of NEW_TOOLS and of NEVER_OFFERED set to true for the caller's app unless `switches`
- * says otherwise, and the production assembly over stand-in order ports.
+ * every switch of NEW_TOOLS, of search_rules and of NEVER_OFFERED set to true for the caller's app
+ * unless `switches` says otherwise, and the production assembly over stand-in order ports.
+ * B3-08l: search_rules left NEVER_OFFERED (now registered); its switch is still seeded as before.
  */
 export async function ordersFixture(
   db: Kysely<DB>,
@@ -115,7 +116,7 @@ export async function ordersFixture(
 ) {
   const f = await fixture(db, options.caller);
   const appId = f.caller.appId;
-  for (const name of [...NEW_TOOLS, ...NEVER_OFFERED]) {
+  for (const name of [...NEW_TOOLS, 'search_rules', ...NEVER_OFFERED]) {
     const state = options.switches?.[name] ?? 'on';
     const key = switchKey(name);
     if (state === 'on') await setConfig(db, appId, key, true);

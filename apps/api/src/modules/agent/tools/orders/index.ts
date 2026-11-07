@@ -243,12 +243,25 @@ async function moreOrdersNotice(deps: OrderToolsDeps, appId: string): Promise<Un
   };
 }
 
-function trace(entries: readonly AgentOrderItem[]): ToolTraceFragment {
-  const fragment: ToolTraceFragment & { readonly orders: readonly OrderTraceEntry[] } = {
+/**
+ * B3-08m (orchestrator/core/reply-templates.ts): explain_order by order_no marks a miss
+ * ('not_tracked', the claim draft) and an over-limit call ('rate_limited', no lookup).
+ */
+type OrderLookup = 'not_tracked' | 'rate_limited';
+
+function trace(entries: readonly AgentOrderItem[], lookup?: OrderLookup): ToolTraceFragment {
+  const fragment: ToolTraceFragment & {
+    readonly orders: readonly OrderTraceEntry[];
+    readonly order_ids: readonly string[];
+    readonly lookup?: OrderLookup;
+  } = {
     orders: entries.map((entry) => ({
       reason_code: entry.reason,
       display_status: entry.display_status,
     })),
+    // B3-08m: the same orders' ids, position for position (the core counts an order once per run).
+    order_ids: entries.map((entry) => entry.order_id),
+    ...(lookup === undefined ? {} : { lookup }),
   };
   return fragment;
 }
@@ -296,8 +309,8 @@ async function orderListOutcome(
   };
 }
 
-function emptyOutcome(modelView: { readonly error: string }): ToolOutcome {
-  return { kind: 'ok', modelView, cards: [], trace: trace([]) };
+function emptyOutcome(modelView: { readonly error: string }, lookup?: OrderLookup): ToolOutcome {
+  return { kind: 'ok', modelView, cards: [], trace: trace([], lookup) };
 }
 
 async function readMaxSpanDays(deps: OrderToolsDeps, appId: string): Promise<number> {
@@ -446,7 +459,7 @@ export function createExplainOrderHandler(deps: OrderToolsDeps): ToolHandler {
     try {
       // BR-AI-07 判定 4: counted before the lookup; over the limit the lookup does not run.
       if (!(await deps.quota.take(ctx.appId, userId))) {
-        return emptyOutcome({ error: 'rate_limited' });
+        return emptyOutcome({ error: 'rate_limited' }, 'rate_limited');
       }
       const query: OwnOrderNumberQuery = {
         order_no: orderNo,
@@ -487,7 +500,7 @@ export function createExplainOrderHandler(deps: OrderToolsDeps): ToolHandler {
       kind: 'ok',
       modelView: reference === undefined ? {} : { card_id: reference(ctx, 0) },
       cards,
-      trace: trace([]),
+      trace: trace([], 'not_tracked'),
     };
   }
 

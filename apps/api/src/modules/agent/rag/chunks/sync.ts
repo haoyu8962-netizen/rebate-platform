@@ -6,11 +6,9 @@
 // counts as already written. Syncs of one app are serialised: one transaction takes the app's
 // advisory lock first, then lists the articles and reads, inserts and retires the chunks, so no sync
 // acts on an article snapshot older than another sync's writes (money review r1 S1).
-// `db` is used for app.agent_rule_chunks only. Called by the agent worker
-// on agent.rag.sync_interval_seconds (wiring with B3-08g).
-// TODO(规划/11 §2.3): build the content reader in app.module and schedule syncRuleChunks per app on
-// the agent worker every agent.rag.sync_interval_seconds — blocked on B3-08g (the wiring is outside
-// B3-08i's paths).
+// `db` is used for app.agent_rule_chunks only. Called by the agent worker's rule sync runtime
+// (./worker.ts, B3-08m) for each app, one round at start and then every 300 s; app.module builds
+// the content reader it reads through.
 import { randomUUID } from 'node:crypto';
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';

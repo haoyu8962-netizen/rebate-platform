@@ -55,6 +55,10 @@
 //   options.callerReader, and the stream runtime's provider injects agentContentReaderToken() and
 //   agentConsentReaderToken() instead of options.consentReader (review r1); forStream's options
 //   keep assembly and safety only.
+// B3-08m (contract: ./rag/chunks/worker.ts): forWorker() also provides and exports
+//   agentRuleSyncToken(), the worker's rule chunk sync runtime, over the published-articles reader
+//   app.module provides as agentRuleArticlesToken() (optional: an isolated worker context without
+//   it, or without a DB handle, gets null and one info line 'agent_rule_sync_disabled').
 //
 // Also compiled by the `test` project: a class decorator only (no parameter decorators or
 // parameter properties; dependencies are injected through factories); erasable syntax only,
@@ -74,6 +78,13 @@ import {
 import type { RunTexts } from './stream/run/index.ts';
 import { agentContentReaderToken, type AgentContentReader } from './stream/mount/config.ts';
 import { agentDefaultTexts } from './stream/mount/texts.ts';
+import {
+  agentRuleArticlesToken,
+  agentRuleSyncToken,
+  createAgentRuleSyncRuntime,
+  type AgentRuleSyncRuntime,
+  type RuleSyncArticles,
+} from './rag/chunks/worker.ts';
 import { agentCallerProvider } from './stream/mount/caller.ts';
 import { agentStreamController } from './stream/mount/controller.ts';
 import {
@@ -228,8 +239,29 @@ export class AgentModule {
             return createAgentSweeperRuntime({ db, clock, logger, contentReader });
           },
         },
+        {
+          provide: agentRuleSyncToken(),
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            { token: DB, optional: true },
+            { token: agentRuleArticlesToken(), optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db: Kysely<Database> | undefined,
+            articles: RuleSyncArticles | null | undefined,
+          ): AgentRuleSyncRuntime | null => {
+            if (db == null || articles == null) {
+              logger.info('agent_rule_sync_disabled');
+              return null;
+            }
+            return createAgentRuleSyncRuntime({ db, clock, logger, articles });
+          },
+        },
       ],
-      exports: [agentSweeperToken()],
+      exports: [agentSweeperToken(), agentRuleSyncToken()],
     };
   }
 }

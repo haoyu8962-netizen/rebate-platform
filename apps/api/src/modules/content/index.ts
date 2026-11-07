@@ -54,9 +54,14 @@ export type {
 } from './application/published-platform-icons.ts';
 // B3-08i: the published help / rule articles reader app.module builds for the agent's rule chunk
 // sync (read-only; D10-386).
-export { createPublishedArticlesReader } from './application/published-articles.ts';
+// B3-08l: the apps that have such articles, the list the worker's rule sync visits (read-only).
+export {
+  createPublishedArticleAppsReader,
+  createPublishedArticlesReader,
+} from './application/published-articles.ts';
 export type {
   PublishedArticle,
+  PublishedArticleApps,
   PublishedArticlesReader,
   PublishedArticlesReaderOptions,
 } from './application/published-articles.ts';

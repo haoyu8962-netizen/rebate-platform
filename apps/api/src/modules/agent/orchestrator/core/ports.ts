@@ -187,6 +187,9 @@ export interface OrchestratorTrace extends ToolTraceFragment {
   readonly output_truncated: boolean;
   /** A model round answered with structured text (card JSON etc.) that was not delivered. */
   readonly model_format_invalid: boolean;
+  /** B3-08m · BR-AI-07: true when template text replaced the model's reply (reply-templates.ts);
+   * false or absent otherwise. */
+  readonly text_replaced_by_template?: boolean;
 }
 
 export interface RunTraceSink {

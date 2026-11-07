@@ -1,6 +1,11 @@
 // Shared runner behind the five `main.<entry>.ts` files.
 import { createHttpApp, createWorkerContext } from './bootstrap.ts';
-import { agentSweeperToken, type AgentSweeperRuntime } from './modules/agent/index.ts';
+import {
+  agentRuleSyncToken,
+  agentSweeperToken,
+  type AgentRuleSyncRuntime,
+  type AgentSweeperRuntime,
+} from './modules/agent/index.ts';
 import {
   inviteRewardScannerToken,
   startInviteRewardWorker,
@@ -601,6 +606,26 @@ async function start(
         typeof runtime?.start === 'function'
           ? runtime.start()
           : undefined;
+      // The agent's rule chunk sync (B3-08m; contract: modules/agent/rag/chunks/worker.ts): one
+      // round now, then every 300 s. Optional like the sweeper: a throw, null, undefined, a value
+      // without a start function or a stop already requested → no loop, no crash.
+      let ruleSyncRuntime: Partial<AgentRuleSyncRuntime> | null | undefined;
+      if (!signals.stopping()) {
+        try {
+          ruleSyncRuntime = context.get<Partial<AgentRuleSyncRuntime> | null | undefined>(
+            agentRuleSyncToken(),
+            { strict: false },
+          );
+        } catch {
+          // Older or isolated worker contexts may not provide the optional runtime.
+        }
+      }
+      const ruleSync =
+        !signals.stopping() &&
+        ruleSyncRuntime !== (queue as unknown) &&
+        typeof ruleSyncRuntime?.start === 'function'
+          ? ruleSyncRuntime.start()
+          : undefined;
       // Order sync (B1-08n): the scheduler's timer loops, started once the queue runs (nothing is
       // dispatched at start). Optional like the agent runtime: a throw, null, a value without a
       // start function, a failing start or a stop already requested → no loops, no crash, no log.
@@ -642,7 +667,11 @@ async function start(
                 try {
                   await sync?.stop();
                 } finally {
-                  await loop?.stop();
+                  try {
+                    await loop?.stop();
+                  } finally {
+                    await ruleSync?.stop();
+                  }
                 }
               } finally {
                 await services.stop();
