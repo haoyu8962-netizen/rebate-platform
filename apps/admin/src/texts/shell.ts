@@ -5,6 +5,9 @@ export const shellTexts = {
   brandLogo: '凑',
   mainNavigation: '主导航',
   breadcrumb: '面包屑',
+  // The one sidebar toggle in the top bar; both names say what it acts on (侧栏).
+  collapseSidebar: '收起侧栏',
+  expandSidebar: '展开侧栏',
   nonProductionEnvironment: '测试环境',
   logout: '退出',
   welcomeCrumb: '欢迎',

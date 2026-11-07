@@ -1,8 +1,11 @@
-import { Breadcrumb, Button, Flex, Layout, Tag, Typography } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { Breadcrumb, Button, Flex, Layout, Tag, Typography, theme } from 'antd';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { AdminSearch } from '../components/search/index.ts';
 import type { AdminEnvironment } from '../shell-options.ts';
 import { shellTexts } from '../texts/shell.ts';
+import { SIDEBAR_ID, setSidebarOpen, sidebarOpen, useSidebarState } from './sidebar-state.ts';
+import { useAdminTier } from './viewport.ts';
 
 export interface TopBarProps {
   readonly crumbs: readonly string[];
@@ -15,14 +18,26 @@ export interface TopBarProps {
 }
 
 /**
- * Breadcrumb on the left; search, environment tag, account and logout on the right (antd
- * Layout.Header).
+ * Sidebar toggle and breadcrumb on the left; search, environment tag, account and logout on the
+ * right (antd Layout.Header).
  */
 export function TopBar({ crumbs, environment, displayName, onLogout, onOpenUser }: TopBarProps) {
   const [loggingOut, setLoggingOut] = useState(false);
   // The click handler reads this, so a second click in the same frame is ignored too.
   const inFlight = useRef(false);
   const mounted = useRef(true);
+  const tier = useAdminTier();
+  const sidebar = useSidebarState();
+  const open = sidebarOpen(sidebar, tier);
+  const narrow = tier === 'narrow';
+  const { token } = theme.useToken();
+  // Narrow tier: the bar grows instead of pushing its controls off screen (both groups may wrap).
+  const narrowHeader: CSSProperties = {
+    height: 'auto',
+    lineHeight: 'normal',
+    paddingBlock: token.paddingSM,
+    paddingInline: token.padding,
+  };
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -44,13 +59,29 @@ export function TopBar({ crumbs, environment, displayName, onLogout, onOpenUser 
   }
 
   return (
-    <Layout.Header role="banner" className="admin-header">
-      <Flex align="center" justify="space-between" style={{ height: '100%' }}>
-        <Breadcrumb
-          aria-label={shellTexts.breadcrumb}
-          items={crumbs.map((crumb, index) => ({ key: index, title: crumb }))}
-        />
-        <Flex align="center" gap="small">
+    <Layout.Header role="banner" className="admin-header" style={narrow ? narrowHeader : undefined}>
+      <Flex
+        align="center"
+        justify="space-between"
+        gap="small"
+        wrap={narrow}
+        style={narrow ? undefined : { height: '100%' }}
+      >
+        <Flex align="center" gap="small" style={{ minWidth: 0 }}>
+          <Button
+            type="text"
+            icon={open ? <MenuFoldOutlined aria-hidden /> : <MenuUnfoldOutlined aria-hidden />}
+            aria-label={open ? shellTexts.collapseSidebar : shellTexts.expandSidebar}
+            aria-expanded={open}
+            aria-controls={SIDEBAR_ID}
+            onClick={() => setSidebarOpen(tier, !open)}
+          />
+          <Breadcrumb
+            aria-label={shellTexts.breadcrumb}
+            items={crumbs.map((crumb, index) => ({ key: index, title: crumb }))}
+          />
+        </Flex>
+        <Flex align="center" gap="small" wrap={narrow}>
           {onOpenUser === undefined ? null : <AdminSearch onOpenUser={onOpenUser} />}
           {environment === 'production' ? null : (
             <Tag color="warning" bordered={false}>

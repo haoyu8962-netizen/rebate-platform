@@ -1,5 +1,6 @@
-/* Workbench layout (design-hifi AdmDashboard*, spec §6): 4 columns, 3 at ≤1280, 2 at ≤1100; equal
-   card heights; colours only from @couli/ui-tokens variables. */
+/* Workbench layout (design-hifi AdmDashboard*, spec §6): 4 columns at the wide tier, 3 at the
+   standard tier, 2 at the compact tier, 1 at the narrow tier; equal card heights; colours only
+   from @couli/ui-tokens variables. */
 
 /* The workbench is a single menu above the groups (boards): its one-item group shows no title. */
 .admin-nav-menu > li:first-child:has(a[href$='/dashboard']) > div:first-child {
@@ -31,16 +32,15 @@
 .dashboard-grid-status {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-@media (max-width: 1280px) {
-  .dashboard-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+/* Viewport tiers come from the shell (layout/viewport.ts, html[data-admin-tier]). */
+html[data-admin-tier='standard'] .dashboard-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-@media (max-width: 1100px) {
-  .dashboard-grid,
-  .dashboard-grid-status {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+html[data-admin-tier='compact'] .dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+html[data-admin-tier='narrow'] .dashboard-grid {
+  grid-template-columns: minmax(0, 1fr);
 }
 .dashboard-page .dashboard-card {
   height: 100%;

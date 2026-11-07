@@ -1,0 +1,112 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-responsive/breakpoints.test.ts > [AC-DSX-51-SOURCE#1] 页面代码（apps/admin/src/pages/**）不写断点：没有视口宽度的媒体查询、容器查询、matchMedia 宽度串、视口宽度读取或与分档数字的比较",
+    "test/spec/frontend/admin-responsive/breakpoints.test.ts > [AC-DSX-51-SOURCE#2] 分档断点集中在外壳：layout/** 与 shell*.ts 里恰好一个文件定义 1440、1280、960 三个分档界",
+    "test/spec/frontend/admin-responsive/breakpoints.test.ts > [AC-DSX-51-SOURCE#3] 外壳以外的后台源码（组件、样式、App）不另写视口断点：断点只在外壳定义一处",
+    "test/spec/frontend/admin-responsive/filters.browser.test.ts > [AC-DSX-51-FILTERS#1] 960 订单查询：筛选控件占的行数严格多于 1440 宽时，且不出视口与主区、表格外无横向滚动；侧栏收起与展开两种状态下都如此",
+    "test/spec/frontend/admin-responsive/filters.browser.test.ts > [AC-DSX-51-FILTERS#2] 800 订单查询：筛选控件占的行数严格多于 1440 宽时，且不出视口与主区、表格外无横向滚动；侧栏收起与展开两种状态下都如此",
+    "test/spec/frontend/admin-responsive/filters.browser.test.ts > [AC-DSX-51-FILTERS#3] 1280 宽 200% 缩放（640 CSS 像素）订单查询：筛选控件占的行数严格多于 1440 宽时，且不出视口与主区、表格外无横向滚动；侧栏收起与展开两种状态下都如此",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#1] 1440 侧栏照旧展开在内容旁；1280 工作台无页面级横向滚动，侧栏可经按钮收起（主区占满宽）与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#2] 1280 订单查询：表格外无横向滚动、筛选不出界、宽表详情列固定可见，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#3] 1280 订单详情：无页面级横向滚动，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#4] 960 工作台：无页面级横向滚动，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#5] 960 订单查询：筛选换行、表格外无横向滚动、宽表详情列固定可见，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#6] 960 订单详情：无页面级横向滚动，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#7] 800 工作台：无页面级横向滚动，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#8] 800 订单查询：筛选换行、宽表只在表格内横向滚动且详情列固定可见，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#9] 800 订单详情：无页面级横向滚动，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#10] 1280 宽 200% 缩放（640 CSS 像素）工作台：无页面级横向滚动，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#11] 1280 宽 200% 缩放（640 CSS 像素）订单查询：筛选换行、宽表只在表格内横向滚动且详情列固定可见，侧栏可收起与展开",
+    "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#12] 1280 宽 200% 缩放（640 CSS 像素）订单详情：无页面级横向滚动，侧栏可收起与展开"
+  ],
+  "risk_note": "DSX-51 admin viewport reflow (规划/05 §3.11.3, D10-724 ②). Tier breakpoints (≥1440 / 1280–1439 / 960–1279 / <960) are defined once in apps/admin/src/layout/viewport.ts (matchMedia ranges) and exposed as html[data-admin-tier]; components/search/search.css and pages/dashboard/dashboard.css (added to paths by #2577) select on the tier instead of writing breakpoint numbers (dashboard 4 / 3 / 2 / 1 columns). A single 收起侧栏 / 展开侧栏 toggle in the top bar collapses or expands the sidebar at every tier (state in layout/sidebar-state.ts, reset to expanded on a new shell); the sidebar stays expanded by default because a frozen admin-risk-rules browser case without a viewport expects the sidebar link; the narrow top bar wraps. No overflow:hidden masking. Non-funds; RV2 only because components/** is shared with the money pages. Rule tests written by an independent Claude in two rounds (round 2: filter wrap compared between 1440 and narrow viewports); Claude spec-test review r1 fail (S1 dashboard.css outside paths, fixed by #2577; S2 filter wrap), r2 pass; red on the local container. Implementation by Opus 5.5; local container verify-fast and browser green on the same tree. Independent Claude money review r1 pass (no findings). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "round 1 pass, no findings (layout only; RV2 because components/** is shared with money pages); independent Claude (approvals #36)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "fresh Claude subagents: round 1 fail (S1 dashboard.css breakpoints outside paths, resolved by ledger #2577; S2 filter wrap check had no effect), round 2 pass with no findings; tests written by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-51",
+  "spec_ref": "18f0015e505a1ef435182d43b22ec0412401f7a7",
+  "spec_commit": "c0b54aeff7d89522d4249006b302d012c249182a",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c0b54aeff7d89522d4249006b302d012c249182a",
+      "tree": "f49ccbac476ae3a7b47a03ff62e2391fe00fad2b",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-06T20:46:11Z",
+      "finished_at": "2026-11-06T20:47:45Z",
+      "red_tests": [
+        "test/spec/frontend/admin-responsive/breakpoints.test.ts > [AC-DSX-51-SOURCE#1] 页面代码（apps/admin/src/pages/**）不写断点：没有视口宽度的媒体查询、容器查询、matchMedia 宽度串、视口宽度读取或与分档数字的比较",
+        "test/spec/frontend/admin-responsive/breakpoints.test.ts > [AC-DSX-51-SOURCE#2] 分档断点集中在外壳：layout/** 与 shell*.ts 里恰好一个文件定义 1440、1280、960 三个分档界",
+        "test/spec/frontend/admin-responsive/breakpoints.test.ts > [AC-DSX-51-SOURCE#3] 外壳以外的后台源码（组件、样式、App）不另写视口断点：断点只在外壳定义一处",
+        "test/spec/frontend/admin-responsive/filters.browser.test.ts > [AC-DSX-51-FILTERS#1] 960 订单查询：筛选控件占的行数严格多于 1440 宽时，且不出视口与主区、表格外无横向滚动；侧栏收起与展开两种状态下都如此",
+        "test/spec/frontend/admin-responsive/filters.browser.test.ts > [AC-DSX-51-FILTERS#2] 800 订单查询：筛选控件占的行数严格多于 1440 宽时，且不出视口与主区、表格外无横向滚动；侧栏收起与展开两种状态下都如此",
+        "test/spec/frontend/admin-responsive/filters.browser.test.ts > [AC-DSX-51-FILTERS#3] 1280 宽 200% 缩放（640 CSS 像素）订单查询：筛选控件占的行数严格多于 1440 宽时，且不出视口与主区、表格外无横向滚动；侧栏收起与展开两种状态下都如此",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#1] 1440 侧栏照旧展开在内容旁；1280 工作台无页面级横向滚动，侧栏可经按钮收起（主区占满宽）与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#2] 1280 订单查询：表格外无横向滚动、筛选不出界、宽表详情列固定可见，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#3] 1280 订单详情：无页面级横向滚动，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#4] 960 工作台：无页面级横向滚动，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#5] 960 订单查询：筛选换行、表格外无横向滚动、宽表详情列固定可见，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#6] 960 订单详情：无页面级横向滚动，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#7] 800 工作台：无页面级横向滚动，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#8] 800 订单查询：筛选换行、宽表只在表格内横向滚动且详情列固定可见，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#9] 800 订单详情：无页面级横向滚动，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#10] 1280 宽 200% 缩放（640 CSS 像素）工作台：无页面级横向滚动，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#11] 1280 宽 200% 缩放（640 CSS 像素）订单查询：筛选换行、宽表只在表格内横向滚动且详情列固定可见，侧栏可收起与展开",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts > [AC-DSX-51-BROWSER#12] 1280 宽 200% 缩放（640 CSS 像素）订单详情：无页面级横向滚动，侧栏可收起与展开"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-responsive/breakpoints.test.ts",
+        "test/spec/frontend/admin-responsive/filters.browser.test.ts",
+        "test/spec/frontend/admin-responsive/layout.browser.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "56bfbea8697becb58fc652cba403b99fde5718bc92245703e00d8cc72291ae07"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1951f3559c6e4b12cee9a993b921c56291166bbcab8d7ec3b61c574418ca6bcd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "96aa8c3c5f2d36ad5b0996766a7ea6df14c21584",
+    "specs": "26acff98b5404c7e2cdbb29deeb812e3d7433cbd"
+  }
+}

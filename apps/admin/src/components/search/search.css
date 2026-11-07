@@ -3,10 +3,13 @@
 .admin-search .admin-search-input {
   width: 280px;
 }
-@media (max-width: 1280px) {
-  .admin-search .admin-search-input {
-    width: 220px;
-  }
+/* Viewport tiers come from the shell (layout/viewport.ts, html[data-admin-tier]). */
+html[data-admin-tier='standard'] .admin-search .admin-search-input,
+html[data-admin-tier='compact'] .admin-search .admin-search-input {
+  width: 220px;
+}
+html[data-admin-tier='narrow'] .admin-search .admin-search-input {
+  width: 160px;
 }
 .admin-search-panel {
   width: min(560px, calc(100vw - 32px));
