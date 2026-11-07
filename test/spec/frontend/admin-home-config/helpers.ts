@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, vi } from 'vitest';
@@ -15,7 +17,7 @@ import {
   mainElement,
   versionRow,
 } from '../admin-config-center/helpers.ts';
-import { BASE_URL, createServer, type Server } from './fixtures.ts';
+import { BASE_URL, TOKEN, createServer, type Server } from './fixtures.ts';
 
 export { button, click, enabled, expectText, input, mainElement, versionRow };
 configure({ asyncUtilTimeout: 10_000 });
@@ -120,4 +122,41 @@ export function noStepUp(server: Server): void {
   expect(server.requests('POST').some((entry) => entry.path.includes('/auth/step-up'))).toBe(false);
   for (const request of server.log) expect(request.headers.has('X-Step-Up-Token')).toBe(false);
   expect(screen.queryByRole('textbox', { name: /动态码/ })).toBeNull();
+}
+
+// Two-state transition for F1-09u: the dictionary placeholder picks the branch, and the page must agree.
+export const QR_PLACEHOLDER = '二维码待深链定稿';
+const moduleUrl = import.meta.url;
+export const HOME_CONFIG_TEXTS = fileURLToPath(
+  new URL('../../../../apps/admin/src/texts/home-config.ts', moduleUrl),
+);
+/** True while the dictionary still carries the "QR pending deep link" placeholder (old branch). */
+export function qrPlaceholderPending(): boolean {
+  return readFileSync(HOME_CONFIG_TEXTS, 'utf8').includes(QR_PLACEHOLDER);
+}
+/** Remove only `couli://r/HomePreview` prefixes followed by a query, a quote or the end of the text. */
+export function withoutPreviewLinkPrefix(text: string): string {
+  return text.replace(/couli:\/\/r\/HomePreview(?=[?'"`\s]|$)/gm, '');
+}
+/** The only deep link the preview page text may show: the fixture page key and token. */
+export const PREVIEW_LINK = `couli://r/HomePreview?page_key=home&token=${TOKEN}`;
+/** QR roots: antd QRCode container, or a bare canvas / svg / QR image outside it; icons excluded. */
+export function qrCodes(scope: ParentNode): Element[] {
+  return [...scope.querySelectorAll('.ant-qrcode, canvas, svg, img[alt*="二维码"]')].filter(
+    (node) => !node.closest('.anticon, .ant-empty') && !node.parentElement?.closest('.ant-qrcode'),
+  );
+}
+/** Expect exactly one QR on the page, rendered in the region that shows the preview token. */
+export function expectSinglePreviewQr(): void {
+  const roots = [...document.querySelectorAll('.ant-qrcode, canvas, img[alt*="二维码"]')].filter(
+    (node) => !node.parentElement?.closest('.ant-qrcode'),
+  );
+  expect(roots, 'exactly one QR container / canvas on the page').toHaveLength(1);
+  const qr = roots[0]!;
+  let region = qr.parentElement;
+  while (region && !(region.textContent ?? '').includes(TOKEN)) region = region.parentElement;
+  expect(region, 'QR shares a region with the preview token').not.toBeNull();
+  expect(region!.matches('body, main, [role="dialog"]')).toBe(false);
+  expect(region!.closest('main, [role="dialog"]')).not.toBeNull();
+  expect(qrCodes(region!), 'exactly one QR in the preview result region').toHaveLength(1);
 }

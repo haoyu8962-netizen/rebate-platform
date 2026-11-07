@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
+import { QR_PLACEHOLDER, withoutPreviewLinkPrefix } from './helpers.ts';
 
 const moduleUrl = import.meta.url;
 const root = fileURLToPath(new URL('../../../../apps/admin/src/', moduleUrl));
@@ -160,10 +161,15 @@ it('[AC-F1-09l-SOURCE#2] 文案在 texts/home-config.ts；请求经现有层，�
   expect(identifiers).not.toContain('StepUpModal');
   expect(identifiers).not.toContain('location');
   expect(identifiers).not.toContain('hostname');
-  expect([...identifiers, ...literals].join('\n')).not.toMatch(
+  const copy = readFileSync(dictionary, 'utf8');
+  // Transition (F1-09ut): while the placeholder stays, no `://` at all; once withdrawn, `://` may
+  // only appear as the couli://r/HomePreview deep-link prefix.
+  const pending = copy.includes(QR_PLACEHOLDER);
+  const allow = (text: string): string => (pending ? text : withoutPreviewLinkPrefix(text));
+  expect(allow([...identifiers, ...literals].join('\n'))).not.toMatch(
     /union_host|material-channels|:\/\/|window\.location|location\.origin|hostname/,
   );
-  const copy = readFileSync(dictionary, 'utf8');
-  expect(copy).toContain('二维码待深链定稿');
-  expect(copy).not.toMatch(/:\/\//);
+  if (pending) expect(copy).toContain('二维码待深链定稿');
+  else expect(copy).not.toContain(QR_PLACEHOLDER);
+  expect(allow(copy)).not.toMatch(/:\/\//);
 });

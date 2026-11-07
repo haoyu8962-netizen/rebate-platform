@@ -7,7 +7,7 @@ type: impl
 # 二维码用 antd 5.29.3 自带的 QRCode 组件（不新增依赖）。非资金；评审 general 口径。Codex 恢复则 Codex 写测试与评审，否则独立 Claude（approvals #36）。
 refs: []
 refs_hash: {}
-deps: []
+deps: [F1-09ut]
 paths:
   - 'apps/admin/src/pages/home-config/**'
   - 'apps/admin/src/texts/home-config.ts'
