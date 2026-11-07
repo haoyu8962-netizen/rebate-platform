@@ -1,0 +1,31 @@
+id: B1-04zzt
+repo: rebate-platform
+title: union：UnionAdapter 加可选 convertShop? 与 shopConvertSources，淘宝经大淘客店铺转链 /api/dels/shop/convert 实现（S-17 S17-u2，D10-806）——在线治理、写操作不重试、需用户归因
+type: impl
+# 2026-11-07 union 入账（编排 D10-806；方案 couli-runs/UNION-lane/s17-shop-entry-plan-20261107.md 二-1、S17-u2；实测 规划/09 2_TB §2.11：GET /api/dels/shop/convert v1.0.0 code 0，返回 shopLinks（s.click 长链）/ tpwd（小写）/ longTpwd，无有效期、无短链，PID 明文不可见）。
+# 端口（union/domain/types.ts 的 UnionAdapter）：convertShop?(req: { shopRef, shopName }, identity, ctx) → { url（shopLinks）, tpwd?, longTpwd? }；readonly shopConvertSources?: readonly ['dataoke']（catalog 判 shop_entry 用，不发请求）。不往商品 convert 加 kind。
+# 淘宝实现（taobao-adapter.ts + 新 infra/taobao/shop-convert.ts）：经已注入的大淘客客户端 GET /api/dels/shop/convert v1.0.0；sellerId = shopRef、pid = identity 的推广位（空 → invalid_identity 不发请求）、shopName 必填、relationId = identity 的 relation_id（**null 时拒绝不发请求**——进店无「无返利」路径）；返回缺 shopLinks / 非 https / 主机非淘宝联盟 → upstream_unavailable，不返回无推广参数的地址；响应字段名以实测为准（tpwd 小写，兼容 Tpwd）。
+# 治理：governed-adapter 显式包 convertShop（online、按写操作不重试、配额 purpose online）；原始报文归档照商品转链口径（不存令牌 / 密钥）；registry 只在 taobaoLive.orderSource（大淘客）注入时声明 shopConvertSources=['dataoke']；京东 / 拼多多不实现（D10-806 ⑥）。demo 适配器不实现。
+# 归因（relationId 与 pid 校验、店内非推广品计佣）文档未写、实测未下单——代码合入后淘宝进店开关保持关，负责人真实下单测试时核（D10-806 ⑧）。规则测试只用合成报文，不伪造平台事实。
+# 风险：union 适配器、资金与归属路径 → RV2；新鲜独立 Claude 写规则测试，资金评审。governed-adapter / registry 若有枚举被治理方法集合的冻结用例，开工实测后按 D10-327 补台账。
+refs: []
+refs_hash: {}
+deps: [B1-04zzs, CT-26zb]
+paths:
+  - 'apps/api/src/modules/union/application/governed-adapter.ts'
+  - 'apps/api/src/modules/union/application/governed-adapter.test.ts'
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/infra/taobao/shop-convert.ts'
+  - 'apps/api/src/modules/union/infra/taobao/shop-convert.test.ts'
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.test.ts'
+  - 'apps/api/src/modules/union/infra/registry.ts'
+  - 'apps/api/src/modules/union/infra/registry.test.ts'
+test_paths:
+  - 'test/spec/union/taobao-shop-convert/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/taobao-shop-convert/**'
+status: todo

@@ -1,0 +1,24 @@
+id: B1-04zzs
+repo: rebate-platform
+title: union：大淘客搜索把 sellerId 映射为 UnionItem.shop_ref（S-17 S17-u1，D10-806 ①）——淘宝 sellerId 本期只取大淘客搜索；UnionItem 加可选 shop_ref
+type: impl
+# 2026-11-07 union 入账（编排 D10-806 ①；方案 couli-runs/UNION-lane/s17-shop-entry-plan-20261107.md S17-u1）。依赖 B1-04zzq（冻结 [AC-B1-04zh#25] 已放宽为「sellerId 只可作 shop_ref 原样出现」）。
+# union/infra/taobao/dataoke-search.ts：大淘客搜索行 sellerId → shop_ref，口径同 domain/types.ts 的 shopRefField（只收正整数十进制字符串原样，非法 → 缺省）；UnionItem（不只 UnionItemDetail）加可选 shop_ref。官方搜索、TOP 详情、粘贴 / 收藏商品本期不出（D10-806 ①；TOP 详情 seller_id 随 09 §2.10 复录另开）。
+# 规则测试须用纯数字合成 sellerId 覆盖正向分支（kit 默认 synthetic-seller-NNNN 过不了 shopRefField，只覆盖缺省分支）。不改 B1-04zzq 已放宽的冻结文件。
+# 风险：union 适配器 → RV2；新鲜独立 Claude 写规则测试，资金评审。
+refs: []
+refs_hash: {}
+deps: [B1-04zzq, B1-04zzm]
+paths:
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/domain/*.test.ts'
+  - 'apps/api/src/modules/union/infra/taobao/dataoke-search.ts'
+  - 'apps/api/src/modules/union/infra/taobao/dataoke-search.test.ts'
+test_paths:
+  - 'test/spec/union/taobao-seller-shop-ref/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/taobao-seller-shop-ref/**'
+status: todo
