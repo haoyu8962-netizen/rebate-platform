@@ -36,5 +36,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/agent/rule-search-wiring/**'
   - 'test/spec/agent/core-reply-templates/**'
-status: todo
-pr: null
+status: done
+pr: 2679

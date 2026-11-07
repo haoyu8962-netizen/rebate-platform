@@ -1,0 +1,29 @@
+id: B3-08p
+repo: rebate-platform
+title: Agent core 缓存文本在 run 即将结束的确定点放行（FU-AGENT-RUN-CACHED-TEXT）——撞输出上限前、后续轮被供应商拒答前写出未调模板工具 run 的缓存开场白；某轮请求了模板工具但因次数用尽或卡片上限未执行也算调用过，改出模板兜底句
+type: impl
+# 2026-11-07 agent 线入账（编排 D10-888；方案 couli-runs/FU-AGENT-RUN-CACHED-TEXT/plan.md，基于 B3-08m #2679）。
+# 现状：B3-08m 在提供了模板工具（search_rules / list_my_orders / explain_order）的 run 里先缓存工具轮模型文本；未调模板工具时，撞输出上限（output.ts 关闭输出 → run.ts 直接返回）或后续轮被供应商拒答（run.ts 拒答支）会丢掉缓存的开场白，与 B3-08m 契约「未调模板工具照旧下发、拒答结局不变」相矛盾。
+# 做法（b2）：只改 core，在 run 即将结束的确定点（撞上限前、拒答前）按原顺序写出缓存；body 抛异常仍只出 50001 不变。请求即算：某轮请求了模板工具、因工具调用次数用尽（run.ts 次数用尽支）或卡片上限没执行，也算调用过，该轮缓存的开场白不发，改出对应模板兜底句（规则类 agent.rule.not_found、订单类 agent.order.lookup_limited 等，按 B3-08m 同一套选键）。
+# 取消 / 超时接受现状（BR-AI-14「缓冲中未下发的模型文本丢弃」），只在方案登记，不改 RunManager。
+# 风险 RV1（orchestrator/core）。新鲜独立 Claude 写规则测试，Opus 实现，Codex 评审（medium）。
+refs: [BR-AI-07, BR-AI-06, BR-AI-14]
+refs_hash:
+  BR-AI-07: 0da3ace82049
+  BR-AI-06: 3912ea460436
+  BR-AI-14: e8ed6052e898
+deps: [B3-08m]
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/core/run.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/output.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/reply-templates.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/*.test.ts'
+test_paths:
+  - 'test/spec/agent/core-held-text/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/core-held-text/**'
+status: todo
+pr: null
