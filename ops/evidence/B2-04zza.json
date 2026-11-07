@@ -1,0 +1,107 @@
+{
+  "red_tests": [
+    "test/spec/settlement/rights-wait-adj-obligation/atomic.int.test.ts > [AC-B2-04zza#13] 封禁受益人义务没收 + R10 记账 + 关闭维权记录同一事务：同步事务后续失败 → 凭证、余额、booked、义务、forfeited 事件、维权记录、rights_pending、待处理行全部回滚；重投这次同步只处置一次（ADJ:3 一组、义务 forfeited 一次、forfeited 事件一条），再重放同一变更什么都不变",
+    "test/spec/settlement/rights-wait-adj-obligation/concurrency.int.test.ts > [AC-B2-04zza#19] 并发（R10 先）：受益人 U 是等佣金维权单 X 的直推、又是待入账单 Y 的本人；X 的同步事务（联盟新结算记录 600 负差）锁住 users 行并读完状态后暂停，Y 的入账在 U 的 users 行锁上等待（pg_blocking_pids 观察）；放行后两单都完成、无死锁：X 按 R10 记账（直推 −34、间推 −17、平台 +76）、本人义务 forfeited 并关闭维权记录，Y 正常入账，U 余额 476，与串行结果一致",
+    "test/spec/settlement/rights-wait-adj-obligation/concurrency.int.test.ts > [AC-B2-04zza#20] 并发（入账先）：Y 的入账锁住 U 的 users 行并读完状态后暂停，X 的同步事务（联盟新结算记录 600 负差回应等佣金维权）在 U 的 users 行锁上等待（pg_blocking_pids 观察）；放行后两单都完成、无死锁：Y 正常入账，X 按 R10 记账、本人义务 forfeited 并关闭维权记录，U 余额 476，余额、分录与义务都与串行结果一致",
+    "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#5] 本人净额已由历史扣回降到 0、无义务、现frozen；维权等佣金中联盟新结算记录 600（seq 3）负差 → R10 记账（直推 −34、间推 −17、平台 −604，键 ADJ:3），本人正差 255 留作待补记：新开 deferred 义务（opened_by R10、来源 SETTLE_ADJUST / SETTLE_DIFF），不补给、不进候选；同事务关闭维权记录，应收 345、booked 510 / 600",
+    "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#6] 本人净额已由历史扣回降到 0、无义务、现appealing；维权等佣金中联盟新结算记录 600（seq 3）负差 → R10 记账（直推 −34、间推 −17、平台 −604，键 ADJ:3），本人正差 255 留作待补记：新开 deferred 义务（opened_by R10、来源 SETTLE_ADJUST / SETTLE_DIFF），不补给、不进候选；同事务关闭维权记录，应收 345、booked 510 / 600",
+    "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#7] 入账时本人frozen（first_credit 义务、待补记 425）且仍frozen；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 −179），义务保持未完成（同一行不变），待补记额按新 booked 510 重算为 255（应收 575 → 345）；同事务关闭维权记录，booked 510 / 600、仍 CREDITED",
+    "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#8] 入账时本人appealing（first_credit 义务、待补记 425）且仍appealing；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 −179），义务保持未完成（同一行不变），待补记额按新 booked 510 重算为 255（应收 575 → 345）；同事务关闭维权记录，booked 510 / 600、仍 CREDITED",
+    "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#18] 入账时本人冻结（first_credit 义务、待补记 425），之后恢复 normal 但补记尚未执行；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 −179），本人不写凭证、余额仍 0，义务保持未完成（同一行不变），待补记额按新 booked 510 重算为 255（应收 575 → 345）；不进候选、无 forfeited 事件；同事务关闭维权记录，booked 510 / 600、仍 CREDITED",
+    "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#1] 入账时本人冻结（first_credit 义务、待补记 425），之后banned；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → 按 R10 SETTLE_ADJUST 记账（直推 −34、间推 −17、平台 +76，键 ADJ:3，无 CLAWBACK），本人份额 255 归平台、义务 forfeited / closed_by R10 并追加 forfeited 事件（原因 banned），同一同步事务关闭维权记录；应收 600、booked 510 / 600、仍 CREDITED、无告警",
+    "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#2] 入账时本人冻结（first_credit 义务、待补记 425），之后deleting；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → 按 R10 SETTLE_ADJUST 记账（直推 −34、间推 −17、平台 +76，键 ADJ:3，无 CLAWBACK），本人份额 255 归平台、义务 forfeited / closed_by R10 并追加 forfeited 事件（原因 deleted），同一同步事务关闭维权记录；应收 600、booked 510 / 600、仍 CREDITED、无告警",
+    "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#3] 入账时本人冻结（first_credit 义务、待补记 425），之后deleted；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → 按 R10 SETTLE_ADJUST 记账（直推 −34、间推 −17、平台 +76，键 ADJ:3，无 CLAWBACK），本人份额 255 归平台、义务 forfeited / closed_by R10 并追加 forfeited 事件（原因 deleted），同一同步事务关闭维权记录；应收 600、booked 510 / 600、仍 CREDITED、无告警",
+    "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#4] 本人此前已有延后差额义务（deferred，净额 0、待补记 425），现封禁；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 +76），延后义务 forfeited / closed_by R10，不追加 forfeited 事件；维权记录同事务关闭，应收 600、booked 510 / 600",
+    "test/spec/settlement/rights-wait-adj-obligation/isolation.int.test.ts > [AC-B2-04zza#14] 两个 App 各有一单同形订单（本人入账时冻结后封禁、维权等佣金）：联盟新结算记录 600 只回应 App A → A 按 R10 记账、义务没收、维权记录关闭；App B 的凭证、余额、订单、义务、forfeited 事件、维权记录、待处理行一律不变",
+    "test/spec/settlement/rights-wait-adj-obligation/mixed.int.test.ts > [AC-B2-04zza#15] 同一单三位受益人：本人正常、直推入账时冻结后封禁、间推入账时冻结仍冻结；维权等佣金中联盟新结算记录 600 负差 → 同一事务 R10 记账（本人 −170、平台 −128，直推与间推不写凭证）：直推义务 forfeited / R10 并追加 forfeited 事件，间推义务保持未完成、待补记 42 → 25；维权记录关闭，应收 575、booked 510 / 600",
+    "test/spec/settlement/rights-wait-adj-obligation/mixed.int.test.ts > [AC-B2-04zza#16] 同一单三位受益人：本人正常、直推有 first_credit 义务且封禁、间推净额已为 0 无义务且冻结；联盟新结算记录 600 负差回应等佣金维权 → R10 记账（本人 −170、平台 −170）：直推义务 forfeited 并追加事件，间推新开 deferred 义务（opened_by R10、待补记 25）；维权记录关闭，应收 575",
+    "test/spec/settlement/rights-wait-adj-obligation/refund-r10.int.test.ts > [AC-B2-04zza#17] 同一次同步里退款数量 0 → 1 且带来联盟新结算记录 600，订单有等佣金的维权（本人入账时冻结、仍冻结）→ 走 R10 而非 R9：只写 ADJ:3 调整（直推 −34、间推 −17、平台 −179），无 CLAWBACK 凭证、不写 PART_REFUND、不发 order.clawed_back，历史为 SETTLE_NEGATIVE_DIFF；义务保持、待补记 255（应收 345），维权记录同事务关闭"
+  ],
+  "risk_note": "RV2 (settlement clawback, money path). FU-RIGHTS-WAIT-ADJ-OBLIGATION (D10-779 / D10-781 / D10-792): for an order already credited with a WAIT_COMMISSION rights record, a new settlement record with a negative difference was held and alerted rights_settle_adjust_unsupported whenever a beneficiary obligation had to be forfeited, newly deferred or kept with a recomputed pending amount. 08 06_FUND:604 (D10-474 ②) sets R10 SETTLE_ADJUST with the rights record closed on the same transaction, no waiting exception. clawback-order.ts now holds only the positive difference (route approval, left for FU-SETTLE-ADJ-POSITIVE) and sends every negative case through the existing settleObligations, posting and rights closing on one transaction. The plan for this path is only null / R8 / R10 (packages/domain settlement adjust.ts:483-512), so the R9 + new obligation throw is unreachable. No migration, no contract, lock order unchanged (users row → balance rows). No frozen test changed. Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, 0 findings (couli-runs/B2-04zza/review-money-r1.json); D10-823"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "rule tests by a fresh independent Claude through claude-run.sh (attempts 1–3; the attempt-1 skeleton edit inside createClawbackOrder failed the author path guard and was dropped, tests untouched). positive-wait.int.test.ts ([AC-B2-04zza#9]–#12, positive-difference regressions green before the change) removed by the orchestrator's ruling D10-865 (a new file does not take red exemptions; the behaviour is pinned by the frozen settle-diff-sync/routing [AC-B2-04zi#2] / [#8] and the unit test [AC-B2-04zza#U4]); mechanical deletion, not a test attempt. Gate spec-test review by a fresh independent Claude per D10-848 ③: pass, and a second pass after the deletion confirming only that file was removed (couli-runs/B2-04zza/review-spec-gate.json, review-spec-gate2.json). Codex spec-test r1–r3 for reference: r1 3 S1 → fixed, r2 1 S1 → fixed, r3 1 S1 (concurrency lock mutant) accepted as an equivalent mutant (D10-855). Red at the spec commit: 16 rule tests in 7 files red for the right reason; on the implementation the local container ran the rule tests green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8d2bc96feba9821fd6d21e427744d21db58a6736",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  },
+  "task": "B2-04zza",
+  "spec_commit": "846561b1d8914ffcb471689f2e3e475534983f70",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "846561b1d8914ffcb471689f2e3e475534983f70",
+      "tree": "246daae8fb0a7ca9c0310b763a485968de579ad1",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T10:32:15Z",
+      "finished_at": "2026-11-07T10:32:46Z",
+      "red_tests": [
+        "test/spec/settlement/rights-wait-adj-obligation/atomic.int.test.ts > [AC-B2-04zza#13] 封禁受益人义务没收 + R10 记账 + 关闭维权记录同一事务：同步事务后续失败 → 凭证、余额、booked、义务、forfeited 事件、维权记录、rights_pending、待处理行全部回滚；重投这次同步只处置一次（ADJ:3 一组、义务 forfeited 一次、forfeited 事件一条），再重放同一变更什么都不变",
+        "test/spec/settlement/rights-wait-adj-obligation/concurrency.int.test.ts > [AC-B2-04zza#19] 并发（R10 先）：受益人 U 是等佣金维权单 X 的直推、又是待入账单 Y 的本人；X 的同步事务（联盟新结算记录 600 负差）锁住 users 行并读完状态后暂停，Y 的入账在 U 的 users 行锁上等待（pg_blocking_pids 观察）；放行后两单都完成、无死锁：X 按 R10 记账（直推 −34、间推 −17、平台 +76）、本人义务 forfeited 并关闭维权记录，Y 正常入账，U 余额 476，与串行结果一致",
+        "test/spec/settlement/rights-wait-adj-obligation/concurrency.int.test.ts > [AC-B2-04zza#20] 并发（入账先）：Y 的入账锁住 U 的 users 行并读完状态后暂停，X 的同步事务（联盟新结算记录 600 负差回应等佣金维权）在 U 的 users 行锁上等待（pg_blocking_pids 观察）；放行后两单都完成、无死锁：Y 正常入账，X 按 R10 记账、本人义务 forfeited 并关闭维权记录，U 余额 476，余额、分录与义务都与串行结果一致",
+        "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#5] 本人净额已由历史扣回降到 0、无义务、现frozen；维权等佣金中联盟新结算记录 600（seq 3）负差 → R10 记账（直推 −34、间推 −17、平台 −604，键 ADJ:3），本人正差 255 留作待补记：新开 deferred 义务（opened_by R10、来源 SETTLE_ADJUST / SETTLE_DIFF），不补给、不进候选；同事务关闭维权记录，应收 345、booked 510 / 600",
+        "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#6] 本人净额已由历史扣回降到 0、无义务、现appealing；维权等佣金中联盟新结算记录 600（seq 3）负差 → R10 记账（直推 −34、间推 −17、平台 −604，键 ADJ:3），本人正差 255 留作待补记：新开 deferred 义务（opened_by R10、来源 SETTLE_ADJUST / SETTLE_DIFF），不补给、不进候选；同事务关闭维权记录，应收 345、booked 510 / 600",
+        "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#7] 入账时本人frozen（first_credit 义务、待补记 425）且仍frozen；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 −179），义务保持未完成（同一行不变），待补记额按新 booked 510 重算为 255（应收 575 → 345）；同事务关闭维权记录，booked 510 / 600、仍 CREDITED",
+        "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#8] 入账时本人appealing（first_credit 义务、待补记 425）且仍appealing；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 −179），义务保持未完成（同一行不变），待补记额按新 booked 510 重算为 255（应收 575 → 345）；同事务关闭维权记录，booked 510 / 600、仍 CREDITED",
+        "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts > [AC-B2-04zza#18] 入账时本人冻结（first_credit 义务、待补记 425），之后恢复 normal 但补记尚未执行；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 −179），本人不写凭证、余额仍 0，义务保持未完成（同一行不变），待补记额按新 booked 510 重算为 255（应收 575 → 345）；不进候选、无 forfeited 事件；同事务关闭维权记录，booked 510 / 600、仍 CREDITED",
+        "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#1] 入账时本人冻结（first_credit 义务、待补记 425），之后banned；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → 按 R10 SETTLE_ADJUST 记账（直推 −34、间推 −17、平台 +76，键 ADJ:3，无 CLAWBACK），本人份额 255 归平台、义务 forfeited / closed_by R10 并追加 forfeited 事件（原因 banned），同一同步事务关闭维权记录；应收 600、booked 510 / 600、仍 CREDITED、无告警",
+        "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#2] 入账时本人冻结（first_credit 义务、待补记 425），之后deleting；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → 按 R10 SETTLE_ADJUST 记账（直推 −34、间推 −17、平台 +76，键 ADJ:3，无 CLAWBACK），本人份额 255 归平台、义务 forfeited / closed_by R10 并追加 forfeited 事件（原因 deleted），同一同步事务关闭维权记录；应收 600、booked 510 / 600、仍 CREDITED、无告警",
+        "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#3] 入账时本人冻结（first_credit 义务、待补记 425），之后deleted；维权成功等佣金中，联盟新结算记录 600（seq 3）负差 → 按 R10 SETTLE_ADJUST 记账（直推 −34、间推 −17、平台 +76，键 ADJ:3，无 CLAWBACK），本人份额 255 归平台、义务 forfeited / closed_by R10 并追加 forfeited 事件（原因 deleted），同一同步事务关闭维权记录；应收 600、booked 510 / 600、仍 CREDITED、无告警",
+        "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts > [AC-B2-04zza#4] 本人此前已有延后差额义务（deferred，净额 0、待补记 425），现封禁；维权等佣金中联盟新结算记录 600 负差 → R10 记账（直推 −34、间推 −17、平台 +76），延后义务 forfeited / closed_by R10，不追加 forfeited 事件；维权记录同事务关闭，应收 600、booked 510 / 600",
+        "test/spec/settlement/rights-wait-adj-obligation/isolation.int.test.ts > [AC-B2-04zza#14] 两个 App 各有一单同形订单（本人入账时冻结后封禁、维权等佣金）：联盟新结算记录 600 只回应 App A → A 按 R10 记账、义务没收、维权记录关闭；App B 的凭证、余额、订单、义务、forfeited 事件、维权记录、待处理行一律不变",
+        "test/spec/settlement/rights-wait-adj-obligation/mixed.int.test.ts > [AC-B2-04zza#15] 同一单三位受益人：本人正常、直推入账时冻结后封禁、间推入账时冻结仍冻结；维权等佣金中联盟新结算记录 600 负差 → 同一事务 R10 记账（本人 −170、平台 −128，直推与间推不写凭证）：直推义务 forfeited / R10 并追加 forfeited 事件，间推义务保持未完成、待补记 42 → 25；维权记录关闭，应收 575、booked 510 / 600",
+        "test/spec/settlement/rights-wait-adj-obligation/mixed.int.test.ts > [AC-B2-04zza#16] 同一单三位受益人：本人正常、直推有 first_credit 义务且封禁、间推净额已为 0 无义务且冻结；联盟新结算记录 600 负差回应等佣金维权 → R10 记账（本人 −170、平台 −170）：直推义务 forfeited 并追加事件，间推新开 deferred 义务（opened_by R10、待补记 25）；维权记录关闭，应收 575",
+        "test/spec/settlement/rights-wait-adj-obligation/refund-r10.int.test.ts > [AC-B2-04zza#17] 同一次同步里退款数量 0 → 1 且带来联盟新结算记录 600，订单有等佣金的维权（本人入账时冻结、仍冻结）→ 走 R10 而非 R9：只写 ADJ:3 调整（直推 −34、间推 −17、平台 −179），无 CLAWBACK 凭证、不写 PART_REFUND、不发 order.clawed_back，历史为 SETTLE_NEGATIVE_DIFF；义务保持、待补记 255（应收 345），维权记录同事务关闭"
+      ],
+      "expected": [
+        "test/spec/settlement/rights-wait-adj-obligation/atomic.int.test.ts",
+        "test/spec/settlement/rights-wait-adj-obligation/concurrency.int.test.ts",
+        "test/spec/settlement/rights-wait-adj-obligation/defer.int.test.ts",
+        "test/spec/settlement/rights-wait-adj-obligation/forfeit.int.test.ts",
+        "test/spec/settlement/rights-wait-adj-obligation/isolation.int.test.ts",
+        "test/spec/settlement/rights-wait-adj-obligation/mixed.int.test.ts",
+        "test/spec/settlement/rights-wait-adj-obligation/refund-r10.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "01b45227652cf392aae8f1d2d3820811a8ec6761611ba2199de2ca10444ac385"
+        }
+      ]
+    }
+  ]
+}

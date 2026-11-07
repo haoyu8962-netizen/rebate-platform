@@ -268,6 +268,16 @@ export type ClawbackResult =
     }
   | { readonly outcome: 'skipped'; readonly reason: ClawbackSkipReason };
 
+/**
+ * B2-04zza (BR-FUND-08 细则 D10-474 ②, D10-781): whether a settlement plan answering a
+ * WAIT_COMMISSION rights record leaves it waiting. Only the positive route does (its candidate is
+ * FU-SETTLE-ADJ-POSITIVE); a negative route — obligations forfeited, opened as deferred, or kept
+ * with a recomputed pending amount included — is R10 SETTLE_ADJUST and closes the record.
+ */
+export function answeredRightsWaits(plan: Pick<AdjustmentPlan, 'route'>): boolean {
+  return plan.route === 'approval';
+}
+
 export interface ClawbackOrder {
   apply(trx: Transaction<DB>, command: ClawbackCommand): Promise<ClawbackResult>;
   onUpdated(
@@ -1041,10 +1051,13 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
    * (settle_adjust_positive_pending); an equal pair is no action.
    *
    * answersRights true — B2-04lb (D10-474 ②; BR-FUND-06「等联盟回传新佣金后按 R7/R9 处理并关闭」): the
-   * order's rights success waits for the union (WAIT_COMMISSION). Behaviour as before B2-04zi: only
-   * the plain negative route is written, and with it the WAIT_COMMISSION rows close, rights_pending
-   * is recomputed and the CLAWBACK_NO_COMMISSION pending rows resolve; a positive difference or an
-   * obligation to open / close leaves the rows waiting with an alert.
+   * order's rights success waits for the union (WAIT_COMMISSION). The negative route is R10
+   * SETTLE_ADJUST exactly as on the ordinary path (BR-FUND-08 细则「…按结算调整（R10 SETTLE_ADJUST）处理，
+   * 并在同一事务关闭该待佣金维权记录」), obligations included (B2-04zza, D10-781): forfeited / a new
+   * deferred one opened_by R10 / kept with its pending amount recomputed from the new booked pair;
+   * in the same transaction the WAIT_COMMISSION rows close, rights_pending is recomputed and the
+   * CLAWBACK_NO_COMMISSION pending rows resolve. Only a positive difference still leaves the rows
+   * waiting with an alert (FU-SETTLE-ADJ-POSITIVE).
    */
   async function settleDiff(
     trx: Transaction<DB>,
@@ -1106,19 +1119,11 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       warnPositive(order, key, seq);
       return { outcome: 'skipped', reason: 'not_reverse' };
     }
-    const unsupported =
-      answersRights &&
-      (plan.route === 'approval' ||
-        (plan.transition !== null && plan.transition !== 'R10') ||
-        plan.beneficiaries.some(
-          (b) =>
-            b.delta_fen > 0n ||
-            b.forfeit_fen !== 0n ||
-            b.pending_after_fen !== b.pending_before_fen ||
-            (b.obligation_action !== null && b.obligation_action !== 'keep'),
-        ));
+    // A settlement-event plan is null / R8 / R10 only (never R9); R8 left through apply above and an
+    // unexpected one throws below. Every negative-route outcome is written as R10 (D10-781).
+    const unsupported = answersRights && answeredRightsWaits(plan);
     if (unsupported) {
-      // TODO(规划/11 §4.2): 入账后维权等待中的正差候选与义务处置 — blocked on FU-SETTLE-ADJ-POSITIVE / FU-RIGHTS-WAIT-ADJ-OBLIGATION（D10-474 ② 只裁定负差 R10；D10-760 ② 维持不变）
+      // TODO(规划/11 §4.2): 入账后维权等待中的结算正差候选 — blocked on FU-SETTLE-ADJ-POSITIVE（D10-474 ② 只裁定负差 R10；D10-760 ② 维持不变）
       logger.warn(
         {
           alert: ALERT_ADJUST_HELD,
@@ -1181,8 +1186,8 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       }
     }
 
-    // BR-FUND-04 ⑫: obligations whose share this adjustment disposed of, same transaction. With
-    // answersRights every action here is keep / none (anything else was left waiting above).
+    // BR-FUND-04 ⑫: obligations whose share this adjustment disposed of, same transaction, in both
+    // modes (forfeited / opened as deferred by R10 / kept, its pending amount following booked).
     await settleObligations(trx, order, 'R10', rightsEventId, plan.beneficiaries, obligations, now);
 
     const written = await casClawbackOrder(trx, order, {
