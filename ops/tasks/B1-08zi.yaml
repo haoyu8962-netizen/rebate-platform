@@ -33,4 +33,4 @@ accept:
   - 'pnpm verify'
   - 'test/spec/orders/refunded-quantity/**'
   - 'test/spec/settlement/credit-refund-baseline/**'
-status: todo
+status: done
