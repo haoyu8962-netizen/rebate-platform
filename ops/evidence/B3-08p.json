@@ -1,0 +1,108 @@
+{
+  "task": "B3-08p",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "2043e505c22e5a1af9addced991997f9b420b184",
+  "red_tests": [
+    "test/spec/agent/core-held-text/card-cap-guarded.test.ts > [AC-B3-08p#1][AC-B3-08p#5][BR-AI-07][BR-AI-06] 撞卡片上限前放行的缓存文本经 OutputGuard：第 1 轮文本 [「券后29元。」, 「稍等」]（金额句 + 未完成残句），只调 search_products 的 run 撞上限（写不下 / 恰好 12 张）→ 实际下发文本与不提供模板工具的同一场景逐字一致：金额按现有守卫替换，残句不出，done limit",
+    "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#1][AC-B3-08p#5][BR-AI-07] 提供了 search_rules、只调 search_products 的 run，卡片超上限（8 件列表 + 3 件列表，第二张写不下）→ 缓存的工具轮文本「我先看看。」「再看看别的。」在撞上限前放行，done limit，卡片与帧不超上限；不提供模板工具的同一场景逐帧不变",
+    "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#1][AC-B3-08p#5][BR-AI-07] 提供了 search_rules、只调 search_products 的 run，卡片恰好到上限 12 张（8 件列表 + 2 件列表）→ 缓存的「我先看看。」在撞上限前放行，两张列表照发，done limit；不提供模板工具的同一场景逐帧不变",
+    "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#2][AC-B3-08p#1][BR-AI-07] 同样撞卡片上限，但前一轮已调 search_rules，或本轮 explain_order 排在触界调用之前 → 没有任何模型文本，text_replaced_by_template 与是否写出模板文本一致；对照：同一上限场景只调 search_products 的 run 放行缓存文本",
+    "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#3][BR-AI-07] 请求即算（卡片上限支）：同一轮请求了 [search_products, explain_order]，search_products 的列表写不下（撞卡片上限），explain_order 没执行 → 该轮与前一轮缓存的模型文本都不下发，出订单类兜底句 order_list.empty，done limit",
+    "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#3][BR-AI-07] 请求即算（卡片恰好到上限）：同一轮请求了 [search_products, search_products, search_rules]，第二张列表使卡片恰好到 12 张，search_rules 没执行 → 「我先看看。」不下发，出 agent.rule.not_found，两张列表照发，done limit",
+    "test/spec/agent/core-held-text/last-round.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（最后一轮仍要工具支，U-10）：模型轮上限 1，唯一一轮文本「这笔订单已返利到账。」并请求 explain_order / list_my_orders（或 [search_products, explain_order]），调用都不执行 → 模型文本不下发，出 order_list.empty，done limit；对照：该轮只请求 search_products 时开场白照发、done limit，与不提供模板工具的同一场景逐帧一致",
+    "test/spec/agent/core-held-text/last-round.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（最后一轮仍要工具支，U-10）：模型轮上限 2，第一轮「我先看看。」+ search_products，第二轮（最后一轮）「再看看别的。」+ search_rules 不执行 → 两轮缓存文本都不下发，出 agent.rule.not_found，商品卡照发，done limit；对照：第二轮只请求 search_products 时两轮文本照发，文本与卡片和不提供模板工具的同一场景一致",
+    "test/spec/agent/core-held-text/refused.test.ts > [AC-B3-08p#4][AC-B3-08p#5][BR-AI-07][BR-AI-14] 提供了模板工具、没调用，第二轮供应商拒答 → 先出第一轮已成句的「我先看看。」，再出 agent.refuse.unsafe，done safety；文本顺序与卡片和不提供模板工具的同一场景完全相同（缓冲中的残句「稍等」两边都不出），后者逐帧不变",
+    "test/spec/agent/core-held-text/refused.test.ts > [AC-B3-08p#4][BR-AI-07] 拒答对照：前一轮已调 search_rules 的 run 被拒答 → 仍只出 agent.refuse.unsafe（不放行缓存文本、不加模板句），rule_ref 卡照发，done safety；未调模板工具的同一脚本放行开场白",
+    "test/spec/agent/core-held-text/refused.test.ts > [AC-B3-08p#6][BR-AI-14] 取消 / 超时接受现状：提供了模板工具、没调用的 run 在工具执行中被取消或到运行时限（signal 中止）→ 缓存的开场白不下发，此后不再写任何文本或卡片，done stop；对照：同一开场白在第二轮拒答时于拒答前放行",
+    "test/spec/agent/core-held-text/requested-later.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支，模板工具与被拦下的调用隔一个普通调用）：工具调用上限 1，本轮请求 [search_products, search_products, search_rules / list_my_orders]，第二个 search_products 因次数用尽被拦下、模板工具排在它后面 → 该轮及之前缓存的模型文本不下发，出对应模板兜底句，done limit；对照：只请求 search_products 的同一场景照发开场白",
+    "test/spec/agent/core-held-text/requested-later.test.ts > [AC-B3-08p#3][BR-AI-07] 请求即算（卡片上限支，模板工具与触界调用隔一个普通调用）：本轮请求 [search_products, search_products, explain_order / search_rules]，第一张列表就触到卡片上限（恰好 12 张或写不下）、本轮后面的 search_products 与模板工具都没执行 → 该轮及之前缓存的模型文本不下发，出对应模板兜底句，done limit，卡片不超上限",
+    "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支）：工具调用上限 1，同一轮请求 [search_products, search_rules]，search_rules 因次数用尽未执行 → 缓存的「我先看看。」不下发，出 agent.rule.not_found，商品卡照发，done limit；对照：同样次数用尽、只请求 search_products 的 run 照发开场白",
+    "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支）：第一轮「我先看看。」+ search_products 用完 1 次额度，第二轮「再看看别的。」+ search_rules 未执行 → 两轮缓存文本都不下发，出 agent.rule.not_found，done limit",
+    "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支，订单类）：工具调用上限 1，同一轮请求 [search_products, list_my_orders] 或 [search_products, explain_order]，订单工具未执行 → 「我先看看。」不下发，按 B3-08m 选键出 order_list.empty，done limit",
+    "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算与已执行的模板调用合并选键：工具调用上限 2，第一轮 search_rules 命中，第二轮请求 [search_products, explain_order]、explain_order 因次数用尽未执行 → 先 order_list.empty 再 agent.rule.found，模型文本不下发，done limit"
+  ],
+  "risk_note": "RV1 agent orchestrator/core：未调模板工具的 holding run 在即将结束的确定点（撞卡片 / 内容帧上限前、后续轮供应商拒答前）放行已过 OutputGuard 的缓存文本；模板工具请求即算（本轮最早计入，含次数用尽、卡片上限后剩余、末轮 U-10 未执行与格式不合规），之后模型文本不下发、出 B3-08m 同一套兜底模板；输出审核拦截只出拦截提示。取消 / 超时与 body 异常不变（BR-AI-14，D10-888）。",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "2043e505c22e5a1af9addced991997f9b420b184",
+      "tree": "ecd1af2191e9cf62b023576da3eb1c523167f52e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T18:58:26Z",
+      "finished_at": "2026-11-07T18:58:38Z",
+      "red_tests": [
+        "test/spec/agent/core-held-text/card-cap-guarded.test.ts > [AC-B3-08p#1][AC-B3-08p#5][BR-AI-07][BR-AI-06] 撞卡片上限前放行的缓存文本经 OutputGuard：第 1 轮文本 [「券后29元。」, 「稍等」]（金额句 + 未完成残句），只调 search_products 的 run 撞上限（写不下 / 恰好 12 张）→ 实际下发文本与不提供模板工具的同一场景逐字一致：金额按现有守卫替换，残句不出，done limit",
+        "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#1][AC-B3-08p#5][BR-AI-07] 提供了 search_rules、只调 search_products 的 run，卡片超上限（8 件列表 + 3 件列表，第二张写不下）→ 缓存的工具轮文本「我先看看。」「再看看别的。」在撞上限前放行，done limit，卡片与帧不超上限；不提供模板工具的同一场景逐帧不变",
+        "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#1][AC-B3-08p#5][BR-AI-07] 提供了 search_rules、只调 search_products 的 run，卡片恰好到上限 12 张（8 件列表 + 2 件列表）→ 缓存的「我先看看。」在撞上限前放行，两张列表照发，done limit；不提供模板工具的同一场景逐帧不变",
+        "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#2][AC-B3-08p#1][BR-AI-07] 同样撞卡片上限，但前一轮已调 search_rules，或本轮 explain_order 排在触界调用之前 → 没有任何模型文本，text_replaced_by_template 与是否写出模板文本一致；对照：同一上限场景只调 search_products 的 run 放行缓存文本",
+        "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#3][BR-AI-07] 请求即算（卡片上限支）：同一轮请求了 [search_products, explain_order]，search_products 的列表写不下（撞卡片上限），explain_order 没执行 → 该轮与前一轮缓存的模型文本都不下发，出订单类兜底句 order_list.empty，done limit",
+        "test/spec/agent/core-held-text/card-cap.test.ts > [AC-B3-08p#3][BR-AI-07] 请求即算（卡片恰好到上限）：同一轮请求了 [search_products, search_products, search_rules]，第二张列表使卡片恰好到 12 张，search_rules 没执行 → 「我先看看。」不下发，出 agent.rule.not_found，两张列表照发，done limit",
+        "test/spec/agent/core-held-text/last-round.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（最后一轮仍要工具支，U-10）：模型轮上限 1，唯一一轮文本「这笔订单已返利到账。」并请求 explain_order / list_my_orders（或 [search_products, explain_order]），调用都不执行 → 模型文本不下发，出 order_list.empty，done limit；对照：该轮只请求 search_products 时开场白照发、done limit，与不提供模板工具的同一场景逐帧一致",
+        "test/spec/agent/core-held-text/last-round.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（最后一轮仍要工具支，U-10）：模型轮上限 2，第一轮「我先看看。」+ search_products，第二轮（最后一轮）「再看看别的。」+ search_rules 不执行 → 两轮缓存文本都不下发，出 agent.rule.not_found，商品卡照发，done limit；对照：第二轮只请求 search_products 时两轮文本照发，文本与卡片和不提供模板工具的同一场景一致",
+        "test/spec/agent/core-held-text/refused.test.ts > [AC-B3-08p#4][AC-B3-08p#5][BR-AI-07][BR-AI-14] 提供了模板工具、没调用，第二轮供应商拒答 → 先出第一轮已成句的「我先看看。」，再出 agent.refuse.unsafe，done safety；文本顺序与卡片和不提供模板工具的同一场景完全相同（缓冲中的残句「稍等」两边都不出），后者逐帧不变",
+        "test/spec/agent/core-held-text/refused.test.ts > [AC-B3-08p#4][BR-AI-07] 拒答对照：前一轮已调 search_rules 的 run 被拒答 → 仍只出 agent.refuse.unsafe（不放行缓存文本、不加模板句），rule_ref 卡照发，done safety；未调模板工具的同一脚本放行开场白",
+        "test/spec/agent/core-held-text/refused.test.ts > [AC-B3-08p#6][BR-AI-14] 取消 / 超时接受现状：提供了模板工具、没调用的 run 在工具执行中被取消或到运行时限（signal 中止）→ 缓存的开场白不下发，此后不再写任何文本或卡片，done stop；对照：同一开场白在第二轮拒答时于拒答前放行",
+        "test/spec/agent/core-held-text/requested-later.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支，模板工具与被拦下的调用隔一个普通调用）：工具调用上限 1，本轮请求 [search_products, search_products, search_rules / list_my_orders]，第二个 search_products 因次数用尽被拦下、模板工具排在它后面 → 该轮及之前缓存的模型文本不下发，出对应模板兜底句，done limit；对照：只请求 search_products 的同一场景照发开场白",
+        "test/spec/agent/core-held-text/requested-later.test.ts > [AC-B3-08p#3][BR-AI-07] 请求即算（卡片上限支，模板工具与触界调用隔一个普通调用）：本轮请求 [search_products, search_products, explain_order / search_rules]，第一张列表就触到卡片上限（恰好 12 张或写不下）、本轮后面的 search_products 与模板工具都没执行 → 该轮及之前缓存的模型文本不下发，出对应模板兜底句，done limit，卡片不超上限",
+        "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支）：工具调用上限 1，同一轮请求 [search_products, search_rules]，search_rules 因次数用尽未执行 → 缓存的「我先看看。」不下发，出 agent.rule.not_found，商品卡照发，done limit；对照：同样次数用尽、只请求 search_products 的 run 照发开场白",
+        "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支）：第一轮「我先看看。」+ search_products 用完 1 次额度，第二轮「再看看别的。」+ search_rules 未执行 → 两轮缓存文本都不下发，出 agent.rule.not_found，done limit",
+        "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算（次数用尽支，订单类）：工具调用上限 1，同一轮请求 [search_products, list_my_orders] 或 [search_products, explain_order]，订单工具未执行 → 「我先看看。」不下发，按 B3-08m 选键出 order_list.empty，done limit",
+        "test/spec/agent/core-held-text/tool-budget.test.ts > [AC-B3-08p#7][BR-AI-07] 请求即算与已执行的模板调用合并选键：工具调用上限 2，第一轮 search_rules 命中，第二轮请求 [search_products, explain_order]、explain_order 因次数用尽未执行 → 先 order_list.empty 再 agent.rule.found，模型文本不下发，done limit"
+      ],
+      "expected": [
+        "test/spec/agent/core-held-text/card-cap-guarded.test.ts",
+        "test/spec/agent/core-held-text/card-cap.test.ts",
+        "test/spec/agent/core-held-text/last-round.test.ts",
+        "test/spec/agent/core-held-text/refused.test.ts",
+        "test/spec/agent/core-held-text/requested-later.test.ts",
+        "test/spec/agent/core-held-text/tool-budget.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "85ed091bcbe56bbbdece38267c7d6a31aa76022cb53d95e5e834dfa0a7d5708a"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "effort medium (D10-888). Money review because the PR carries test/** (RV2 for the whole PR); checklist 7/7 (review-money-r1.json). Before it, two general rounds: r1 fail (S1: last round requests explain_order, first sentence passes the guard, second is blocked -> flushHeld delivered the model's order conclusion before the request was counted; review-general-r1.json), fixed in the request-counting-first commit; r2 pass (review-general-r2.json). Code review attempts used: 3/3."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Gate spec-test (D10-848) by fresh independent Claude: r1 full review (no earlier round in the RUN dir) fail -> S1 template tool separated from the stopped call by an ordinary call; S2 last-round U-10 branch; S2 pre-cap release must go through OutputGuard (review-st1.json); test attempt 2 added requested-later / last-round / card-cap-guarded; r2 (incremental against the same reviewer's r1) pass (review-st2.json). Test attempt 1 first ran into a position-assertion stop (exit 12, branches changed in the same clone by the orchestrator side); its output was archived (couli-runs/B3-08p/rejected-attempt1/) and the attempt re-run unchanged, not counted. Mechanical fix folded into the rule-test commit after the first push (D10-206 kind, as #2548 retry->takerOffset): two case names in core-held-text/requested-later.test.ts said 'does not fit (' which test-guard [no-skip-only] reads as a focused `fit(`; reworded to 'overflows the cap (', assertions and bodies unchanged; spec_commit aa3164b33."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6dbc7a16c14955e32800fe0964fd9582d85854ae",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

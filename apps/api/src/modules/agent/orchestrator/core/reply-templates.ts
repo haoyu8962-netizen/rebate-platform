@@ -10,6 +10,18 @@
 //   definitions (tools.definitions of this run), whatever its outcome: ok, failed, rejected by the
 //   handler, or rejected by the core for unparseable arguments. A name that was not offered (core
 //   rejection without execute) is not a template call.
+//   B3-08p 请求即算 (D10-888): a model round asking for an offered template tool counts it as
+//   called when the round's calls start, at any position in the round, also when the run never
+//   executes it (tool call budget spent, an earlier call of the round reaching the card cap, the
+//   last allowed round still asking for tools). Such a call adds no order entry and no rule hit
+//   (orders → order_list.empty unless other entries; rules → agent.rule.not_found unless a hit).
+//   The count happens before anything of that round is settled or released (format check, the
+//   guard's stop, U-10, budget, card cap): no model text of that round or earlier rounds goes out.
+//   The requesting round's text still passes the OutputGuard (review and trace as before); when
+//   the guard stops on it (agent.refuse.output_blocked) the run ends as a safety ending: the
+//   guard's fixed text only, no model text and no template text (safety endings unchanged).
+//   A tool round in structured format that asks for a template tool counts too: templates, done
+//   stop (a template run never degrades).
 //
 // Template keys of a run, over all its template calls (the IntentPort's templateKeys rule):
 //   - orders (any list_my_orders / explain_order call): the `orders` of every ok order call's
@@ -46,14 +58,24 @@
 //       (implementation, gate review S1-1: in a run with a template call these two never take the
 //       degraded path, delivered or not: templates, done stop)
 //     · the last allowed round still asking for tools, the tool call budget spent → done limit.
+//     · B3-08p: a tool's card or suggestions frame that ends the output at a cap (does not fit,
+//       or reaches the cap exactly) → the templates are written right before that frame; done
+//       limit.
 //   The IntentPort is not consulted for the final text of such a run. Cards and suggestions the
 //   tools returned are delivered as today. Cancellation writes nothing; a reached output cap writes
-//   nothing more (as today). Refused / safety endings are unchanged.
+//   nothing more (as today). Refused / safety endings are unchanged (only agent.refuse.unsafe).
 //   A run without a template call delivers its model text exactly as today: every delta through
 //   the OutputGuard, in round and delta order, nothing added or dropped. Since a template call may
 //   come in a later round, a run whose offered definitions include a template tool has to hold its
 //   model text until it is known (e.g. until its final round or other end); when and whether to
 //   hold in runs without template tools offered is the implementation's choice.
+//   B3-08p (D10-888 (b2)): a holding run without a template call releases its held text, as the
+//   OutputGuard emitted it (never raw deltas, no guard.end() flush), at the points where the run
+//   is certain to end without another model round: right before a tool's card or suggestions
+//   frame that ends the output at a cap, and before a later round's provider refusal
+//   (agent.refuse.unsafe, done safety). Cancellation and the run time limit stay as they are: the
+//   held text is dropped (BR-AI-14「缓冲中未下发的模型文本丢弃」); a thrown body still ends with
+//   the RunManager's error only.
 //
 // Isolation: what a run has called lives in that run's own state (AgentRun), never in the factory,
 //   the deps, a module-level table or anything keyed by runId that outlives the run. Runs of one

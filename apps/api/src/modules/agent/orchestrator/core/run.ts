@@ -7,6 +7,12 @@
 // with a template call drops them and writes the template keys instead, any other run writes them
 // in guard order before it ends exactly as before. Once a template call was made no later model
 // text reaches the guard at all.
+// B3-08p · FU-AGENT-RUN-CACHED-TEXT (D10-888 (b2), contract: ./reply-templates.ts): held text is
+// also settled where the run is certain to end without another model round: before a tool's card
+// or suggestions frame that ends the output at a cap (settleAtCap), and before a later round's
+// provider refusal. Only the OutputGuard's emits are released (never raw deltas, no guard.end()).
+// 请求即算: a round asking for an offered template tool counts it as called before any of the
+// round's calls runs (countRequested), so a call the run never reaches still counts.
 import { platform as platformEnum } from '@couli/contracts-ts';
 import type { Platform } from '@couli/contracts-ts';
 import type { RunBodyInput } from '../../http/index.ts';
@@ -240,6 +246,10 @@ class AgentRun {
   private readonly templateCalls = new ReplyTemplateCalls();
   /** Template text replaced the model's reply (trace text_replaced_by_template). */
   private replaced = false;
+  /** B3-08p: the template texts were written (once per run). */
+  private templatesWritten = false;
+  /** B3-08p: held text or templates were settled before a capping write; the run ends there. */
+  private capSettled = false;
 
   constructor(deps: AgentRunBodyDeps, input: RunBodyInput, ctx: RunContext) {
     this.deps = deps;
@@ -465,6 +475,9 @@ class AgentRun {
       this.attempts.push(...outcome.attempts);
       if (outcome.kind === 'aborted') return done('stop');
       if (outcome.kind === 'refused') {
+        // B3-08p: held text goes out before the refusal (dropped in a template run).
+        const settled = await this.settleHeld();
+        if (settled !== null) return settled;
         if (!(await this.fixed('agent.refuse.unsafe')) && this.signal.aborted) return done('stop');
         return done('safety');
       }
@@ -486,10 +499,17 @@ class AgentRun {
       }
       const roundText = deltas.join('');
       if (calls.length === 0) return this.finalRound(proceed, deltas, roundText);
+      // B3-08m: after a template call no model text is delivered; it never reaches the guard.
+      const templatedBefore = this.templated;
+      // B3-08p 请求即算 (gate review r1 S1): counted before anything of this round can be settled
+      // or released (format check, guard stop, U-10, tool call budget, card cap); from here on
+      // held text of this and earlier rounds is never delivered (flushHeld writes no model text).
+      this.countRequested(calls, known);
       // Same format check as the final round, before any of this text reaches the guard.
       if (isStructuredText(roundText)) return this.invalidFormat(proceed);
-      // B3-08m: after a template call no model text is delivered; it never reaches the guard.
-      if (!this.templated) {
+      // The round asking for its first template tool still passes the guard (review, trace,
+      // safety ending, as in B3-08m); its text is held and never delivered.
+      if (!templatedBefore) {
         const pushed = await this.pushText(deltas);
         if (pushed !== null) return pushed;
       }
@@ -557,6 +577,36 @@ class AgentRun {
     return this.finishText('stop');
   }
 
+  /**
+   * B3-08p 请求即算: every offered template tool this round asks for counts as called now, at any
+   * position, whether or not the run gets to execute it; held text is never delivered after it.
+   */
+  private countRequested(calls: readonly AssembledToolCall[], known: ReadonlySet<string>): void {
+    for (const call of calls) {
+      const name = call.function.name;
+      if (known.has(name) && isReplyTemplateTool(name)) {
+        this.templateCalls.called(name);
+        this.held = [];
+      }
+    }
+  }
+
+  /**
+   * B3-08p: right before a write that ends the output at a cap (the run ends with limit, no model
+   * round follows): a template run writes its templates, any other holding run its held guard
+   * emits. A result means the run ends here. Sets capSettled when something was settled.
+   */
+  private async settleAtCap(): Promise<RunBodyResult | null> {
+    if (!this.holding) return null;
+    if (this.templated) {
+      this.capSettled = true;
+      return this.writeTemplateTexts();
+    }
+    if (this.held.length === 0) return null;
+    this.capSettled = true;
+    return this.flushHeld();
+  }
+
   /** B3-08m: a template call was made in this run (reply-templates.ts). */
   private get templated(): boolean {
     return this.templateCalls.any;
@@ -586,7 +636,9 @@ class AgentRun {
   /** Writes the held emits in guard order; a result means the run ends here. */
   private async flushHeld(): Promise<RunBodyResult | null> {
     const guard = this.guard;
-    const emits = this.held;
+    // B3-08p (gate review r1 S1): in a template run only the guard's fixed safety texts go out
+    // (e.g. agent.refuse.output_blocked when the guard stops); model text never does.
+    const emits = this.templated ? this.held.filter((emit) => emit.kind === 'fixed') : this.held;
     this.held = [];
     if (guard === null || emits.length === 0) return null;
     return this.writeEmits(emits, guard);
@@ -606,8 +658,17 @@ class AgentRun {
    * the run's caps; then the end the run has (`reason`, or limit / stop as final() decides).
    */
   private async writeTemplates(reason: Done['finishReason']): Promise<RunBodyResult> {
+    const stop = await this.writeTemplateTexts();
+    if (stop !== null) return stop;
+    return this.final(done(reason));
+  }
+
+  /** The template texts, once per run (B3-08p: possibly before a capping card); stop on abort. */
+  private async writeTemplateTexts(): Promise<RunBodyResult | null> {
     this.held = [];
     this.replaced = true;
+    if (this.templatesWritten) return null;
+    this.templatesWritten = true;
     for (const template of this.templateCalls.texts()) {
       if (this.out.limitHit) break;
       const text = await this.wait(this.deps.texts.text(this.appId, template.key));
@@ -616,7 +677,7 @@ class AgentRun {
         template.count === undefined ? text : text.replaceAll('{n}', String(template.count));
       if (this.out.text(filled)) this.delivered = true;
     }
-    return this.final(done(reason));
+    return null;
   }
 
   /** Flushes the guard (end of run) and ends with `reason` unless the flush decides otherwise. */
@@ -741,6 +802,10 @@ class AgentRun {
   ): Promise<RunBodyResult | null> {
     try {
       for (const card of outcome.cards) {
+        if (this.out.closesWith(card)) {
+          const settled = await this.settleAtCap();
+          if (settled !== null) return settled;
+        }
         const written = await this.deliver(card);
         if (written === ABORTED) return done('stop');
         refs.delivered(written.cardId);
@@ -748,12 +813,17 @@ class AgentRun {
         if (written.cardId !== null && (await this.receipt(card, written.cardId)) === ABORTED) {
           return done('stop');
         }
-        if (this.out.limitHit) return done('limit');
+        // B3-08p: settled for a cap, the run ends here even if the card was dropped as invalid.
+        if (this.out.limitHit || this.capSettled) return done('limit');
       }
       const suggestions = outcome.suggestions ?? [];
       if (suggestions.length > 0) {
+        if (this.out.closesWithSuggestions(suggestions)) {
+          const settled = await this.settleAtCap();
+          if (settled !== null) return settled;
+        }
         if (this.out.suggestions(suggestions)) this.delivered = true;
-        if (this.out.limitHit) return done('limit');
+        if (this.out.limitHit || this.capSettled) return done('limit');
       }
       return null;
     } finally {

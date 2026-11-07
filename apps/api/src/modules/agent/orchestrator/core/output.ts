@@ -93,6 +93,22 @@ export class RunOutput {
     }
   }
 
+  /**
+   * B3-08p (read only): writing this card ends the run's output, because it does not fit (cards
+   * or content frames) or reaches a cap exactly. False once output is closed (nothing is written).
+   */
+  closesWith(card: UnnumberedCard): boolean {
+    if (this.closed) return false;
+    if (this.frames + 1 >= this.limits.contentFrames) return true;
+    return this.cards + 1 + embeddedCards(card) >= this.limits.cards;
+  }
+
+  /** B3-08p (read only): as closesWith, for a suggestions frame (none written → false). */
+  closesWithSuggestions(items: SuggestionsData['items']): boolean {
+    if (this.closed || items.length === 0 || this.suggestionsSent >= MAX_SUGGESTIONS) return false;
+    return this.frames + 1 >= this.limits.contentFrames;
+  }
+
   /** True when (a prefix of) the delta was written. */
   text(delta: string): boolean {
     if (this.closed || delta === '' || !this.frameRoom()) return false;
