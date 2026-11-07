@@ -6,6 +6,7 @@ type: impl
 # 逐受益人 diff = 按 B_settle 与快照重拆的应得 − 已入账净额（同 BR-FUND-08）；冻结受益人照常生成（批准时转待补记）；封禁、注销中 / 已注销并入平台行。一次运行一个 settle_adjust_batches，同事务写行，不动账、不改 booked。
 # D10-780：同单同 seq 已有旧 commission_version 的 pending 时，同事务先把旧的置 voided_stale_seq（表无新状态，reason 写 superseded_by_version，decided_at 记 Clock，审计照记）再生成；同版本重复由既有 candidate_key 挡。已批准 / 已拒绝的不动。
 # RV2。规则测试由新鲜独立 Claude 写（Codex 额度用尽至 11-11，D10-775）；money 评审独立 Claude + 另一位只读复核。B2-09za 已写的有用场景并进本单规则测试。
+# 2026-11-07 补 paths：settlement 的 worker 端口没有审计端口，D10-780 的换版本作废审计要由 app.module 注入 admin createSystemAuditWriter（同 B2-09p 给 payout 接系统审计）；端口设可选，worker 夹具不受影响。
 refs: [BR-FUND-09, BR-FUND-04, BR-CALC-02, BR-CALC-09]
 refs_hash:
   BR-FUND-09: 6b72b55621fb
@@ -20,6 +21,7 @@ paths:
   - 'apps/api/src/modules/settlement/http/admin/**'
   - 'apps/api/src/modules/settlement/settlement.module.ts'
   - 'apps/api/src/modules/settlement/index.ts'
+  - 'apps/api/src/app.module.ts'
   - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/src/openapi.gen.ts'
