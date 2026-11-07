@@ -7,7 +7,11 @@ import {
 import { readStatusCsv } from '../status-map/fixtures.ts';
 
 // D10-529 定表。全部 source=doc、verified=false；不标已结算码。
-const INVALID_CODES = '2 3 4 5 6 7 8 9 11 14 19 20 21 22 23 29 30 31 34 35'.split(' ');
+// D10-867：13、25–28、36–43 改进表。
+const INVALID_CODES = [
+  ...'2 3 4 5 6 7 8 9 11 14 19 20 21 22 23 29 30 31 34 35'.split(' '),
+  ...'13 25 26 27 28 36 37 38 39 40 41 42 43'.split(' '),
+];
 
 export const MAPPED: readonly (readonly [string, PlatformStatusEvent])[] = [
   ['16', 'PLATFORM_PAID'],
@@ -17,7 +21,7 @@ export const MAPPED: readonly (readonly [string, PlatformStatusEvent])[] = [
 ];
 
 // 不进表，走表外码：含 15 待付款与官方不存在的 18。
-export const UNMAPPED = '-1 13 25 26 27 28 33 36 37 38 39 40 41 42 43 44 15 18'.split(' ');
+export const UNMAPPED = '-1 33 44 15 18'.split(' ');
 
 export function requiredJdCsv(): string {
   const text = readStatusCsv('jd');
