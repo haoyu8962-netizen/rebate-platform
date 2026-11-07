@@ -15,7 +15,11 @@ export type InviteRewardOrderFact = Pick<
   | 'refunded_quantity'
   | 'refunded_quantity_at_credit'
   | 'rights_pending'
-> & { has_rights: boolean };
+> & {
+  has_rights: boolean;
+  /** Always selected (o.platform); optional in the type to match growth's InviteRewardOrder.platform. */
+  platform?: string | null;
+};
 
 export interface InviteRewardOrderFactsReader {
   read(
@@ -41,6 +45,7 @@ const FACT_COLUMNS = [
   'o.refunded_quantity',
   'o.refunded_quantity_at_credit',
   'o.rights_pending',
+  'o.platform',
 ] as const;
 
 /**
@@ -48,6 +53,9 @@ const FACT_COLUMNS = [
  * (task B1-35 §9.2 第 10 条; 08 BR-INV-24 ②「有效期」). Read-only, no row locks, no logging.
  * attr_at is the order's normalised placing instant (BR-ATTR-25), never paid_at or created_at.
  * has_rights: any order_rights row of the sub-order, whatever its status.
+ * platform: orders.platform as stored (jd / taobao / pdd …), handed to growth unchanged; growth's
+ * clawback judgement gates only jd's refunded_quantity comparison on orders.jd.refunded_quantity_r9_enabled
+ * (B1-08zj, FU-INVITE-REWARD-ORDER-PLATFORM; a missing platform would be judged as non-jd).
  */
 export function createInviteRewardOrderFacts(): InviteRewardOrderFactsReader {
   function base(trx: Transaction<DB>) {

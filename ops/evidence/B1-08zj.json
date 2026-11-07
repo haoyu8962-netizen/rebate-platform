@@ -1,0 +1,78 @@
+{
+  "red_tests": [
+    "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#1] 京东触发订单入账后已退件数增加（1 > 0）、开关 orders.jd.refunded_quantity_r9_enabled 未配置：不作废，照常发放（processed、双方 REWARD 凭证、锁定金额转已发放）",
+    "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#1] 京东触发订单入账后已退件数增加（1 > 0）、开关 orders.jd.refunded_quantity_r9_enabled false：不作废，照常发放（processed、双方 REWARD 凭证、锁定金额转已发放）",
+    "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#2] 暂停发放时：京东开关关 → 顺延不作废（trigger 与占用不变）；开关打开后下一轮 → 作废 order_clawed_back、释放占用，与淘宝一致",
+    "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#3] 开关 未配置、同一轮：淘宝、拼多多触发订单入账后已退件数增加照旧作废；同 app 的京东订单不作废",
+    "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#3] 开关 false、同一轮：淘宝、拼多多触发订单入账后已退件数增加照旧作废；同 app 的京东订单不作废",
+    "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#4] 生产装配的订单事实读口（orders 导出与 app.module 的 bookedBaseOrderFacts）返回 platform，等于订单的平台"
+  ],
+  "risk_note": "RV2 (invite reward void decision input). FU-INVITE-REWARD-ORDER-PLATFORM (D10-854 ② / D10-868 ①): B1-08zi made growth's invite-reward void check platform-aware (only platform jd is gated by orders.jd.refunded_quantity_r9_enabled, default off), but the orders fact reader (orders/ports/invite-reward.ts FACT_COLUMNS) did not select o.platform, so a JD order looked non-JD and a returned unit still voided the unpaid reward with the switch off. The reader now selects o.platform and passes it through; growth is untouched. platform stays optional in the port type (same as growth's InviteRewardOrder) so no out-of-paths test fixture changes; [AC-B1-08zj#4] pins that the production reader returns it. No production impact today (JD settlement import not built, invite reward master switch off). Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, 0 findings (couli-runs/B1-08zj/review-money-r1.json); D10-823"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude through claude-run.sh (attempt 1; hand-assembled brief because brief.ts was over 24KB); red PASS 6 tests in 1 file; gate spec-test review by a fresh independent Claude (D10-848) r1 pass (couli-runs/B1-08zj/review-spec-r1.json); on the implementation the local container ran all 6 green"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "cb895a10ecfe191af8e497c491175df555c90062",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  },
+  "task": "B1-08zj",
+  "spec_commit": "19ff558ca8f605c094ebe2152d5f10cb6d209809",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "19ff558ca8f605c094ebe2152d5f10cb6d209809",
+      "tree": "256d5a094deedcd74fefef2a854ef9df84f8f11e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T17:28:39Z",
+      "finished_at": "2026-11-07T17:28:59Z",
+      "red_tests": [
+        "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#1] 京东触发订单入账后已退件数增加（1 > 0）、开关 orders.jd.refunded_quantity_r9_enabled 未配置：不作废，照常发放（processed、双方 REWARD 凭证、锁定金额转已发放）",
+        "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#1] 京东触发订单入账后已退件数增加（1 > 0）、开关 orders.jd.refunded_quantity_r9_enabled false：不作废，照常发放（processed、双方 REWARD 凭证、锁定金额转已发放）",
+        "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#2] 暂停发放时：京东开关关 → 顺延不作废（trigger 与占用不变）；开关打开后下一轮 → 作废 order_clawed_back、释放占用，与淘宝一致",
+        "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#3] 开关 未配置、同一轮：淘宝、拼多多触发订单入账后已退件数增加照旧作废；同 app 的京东订单不作废",
+        "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#3] 开关 false、同一轮：淘宝、拼多多触发订单入账后已退件数增加照旧作废；同 app 的京东订单不作废",
+        "test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts > [AC-B1-08zj#4] 生产装配的订单事实读口（orders 导出与 app.module 的 bookedBaseOrderFacts）返回 platform，等于订单的平台"
+      ],
+      "expected": ["test/spec/growth/invite-reward-jd-platform/jd-platform.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e743f55cbb790426da44a6c10c7a99616d3eccb81808221efed4317354499c2f"
+        }
+      ]
+    }
+  ]
+}
