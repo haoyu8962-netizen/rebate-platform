@@ -32,6 +32,9 @@ red_exempt:
   - file: test/spec/commission/version-rule/credited.int.test.ts
     test: '[AC-B2-03s#16][BR-CALC-15][BR-CALC-23] 已入账单结算记录没变、只有预估变：不推版本，没有新行，est 存档，booked、分录、余额不动'
     reason: '冻结 B2-03s 用例，测试体与基线逐字相同；本单照 approvals 50 / D10-784 只改同一文件里的 [AC-B2-03s#14] 800n 行与 [AC-B2-03s#15]，本条不动，在旧代码上照常为绿'
+red_exempt_outside:
+  - file: test/spec/commission/version-rule/credited.int.test.ts
+    reason: 块外只新增两个文件内 helper（ledgerSince：同步后账本 = 同步前的行逐条不变 + 新增行逐张比对；adjustment：一组负向 SETTLE_ADJUST 的凭证与分录字面量），只供按 approvals 50 / D10-784 改期望的 [AC-B2-03s#14] 800n 用例与 [AC-B2-03s#15] 用；导入、const p、#16 与 #14 其余两行的块与基线相同
 red_exempt_rows:
   - file: test/spec/commission/version-rule/credited.int.test.ts
     test: '[AC-B2-03s#14][BR-CALC-23][BR-CALC-15] R10：已入账单结算额变成 1200n：版本 +1，新行等于新应得 600n，不是复制；booked、分录、余额不动'
