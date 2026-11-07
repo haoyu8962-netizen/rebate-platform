@@ -83,22 +83,29 @@ export function effectiveCapabilities(
 }
 
 /**
- * Category filter: an item is dropped when an active rule of its platform and category has no
- * keyword, or has a keyword that occurs in the title as a literal substring (no regex, no case
- * folding). Order and the item objects are preserved; the input is not modified.
+ * Category filter (D10-860 ①). An item with a category is dropped when an active rule of its
+ * platform and category has no keyword, or has a keyword that occurs in the title as a literal
+ * substring (no regex, no case folding). An item without a category (categoryId null or '') is not
+ * judged by category: every rule of its platform that carries a keyword applies by literal title
+ * substring; rules without a keyword do not apply. Order and the item objects are preserved; the
+ * input is not modified.
  */
 export function filterByRules<T extends CategoryCandidate>(
   items: readonly T[],
   rules: readonly CategoryRule[],
 ): T[] {
   if (rules.length === 0) return [...items];
-  return items.filter(
-    (item) =>
-      !rules.some(
-        (rule) =>
-          rule.platform === item.platform &&
-          rule.categoryId === item.categoryId &&
-          (rule.keyword === null || item.title.includes(rule.keyword)),
-      ),
-  );
+  return items.filter((item) => !rules.some((rule) => ruleBlocks(rule, item)));
+}
+
+/** True when the item has no level-one category (absent, null or ''). */
+export function categoryMissing(categoryId: string | null | undefined): boolean {
+  return categoryId === null || categoryId === undefined || categoryId === '';
+}
+
+function ruleBlocks(rule: CategoryRule, item: CategoryCandidate): boolean {
+  if (rule.platform !== item.platform) return false;
+  const keyword = rule.keyword === null || rule.keyword === '' ? null : rule.keyword;
+  if (categoryMissing(item.categoryId)) return keyword !== null && item.title.includes(keyword);
+  return rule.categoryId === item.categoryId && (keyword === null || item.title.includes(keyword));
 }

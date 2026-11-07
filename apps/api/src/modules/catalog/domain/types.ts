@@ -69,9 +69,14 @@ export interface RawItemResult {
   readonly source: 'item_ref' | 'link' | 'product_refs' | 'reparse';
 }
 
+/**
+ * B1-04zzx (D10-860 ①): categoryId null or '' is an item without a level-one category. Such an item
+ * is not judged by category; only its platform's rows that carry a keyword apply, by literal title
+ * substring.
+ */
 export interface CategoryCandidate {
   readonly platform: Platform;
-  readonly categoryId: string;
+  readonly categoryId: string | null;
   readonly title: string;
 }
 

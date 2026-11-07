@@ -592,6 +592,12 @@ export class CatalogModule {
               newSessionId: randomUUID,
               logger,
               ...(priceHistory === undefined ? {} : { priceHistory }),
+              // B1-04zzx: the search tab applies the category blocklist (read every request). The
+              // production Catalog always has filterCategories; a CATALOG override that does not
+              // implement it (frozen wiring fixtures hand a partial catalog) leaves search unfiltered.
+              ...(typeof (catalog as Partial<Catalog>).filterCategories === 'function'
+                ? { categoryFilter: catalog }
+                : {}),
             }),
         },
         {

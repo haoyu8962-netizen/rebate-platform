@@ -1,0 +1,108 @@
+{
+  "task": "B1-04zzx",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "01ed4e4c37fbf52025bb7eb2e7d0e9dea8107ce0",
+  "red_tests": [
+    "test/spec/catalog/category-blocklist-search/alerts.test.ts > [AC-B1-04zzx#8] 无类目商品计 catalog_category_missing、被滤商品计 catalog_category_blocked，按平台计数，只带事件码、平台与计数",
+    "test/spec/catalog/category-blocklist-search/alerts.test.ts > [AC-B1-04zzx#9] 没有被滤商品时不记 catalog_category_blocked；类目齐全时无类目计数为 0；名单一生效即记",
+    "test/spec/catalog/category-blocklist-search/alerts.test.ts > [AC-B1-04zzx#10] 兜底物料的无类目与被滤商品同样按平台计数（平台取搜索平台）",
+    "test/spec/catalog/category-blocklist-search/catalog.int.test.ts > [AC-B1-04zzx#12] 无类目商品（null 或空串）：同平台启用且带关键词的行按标题字面包含命中即滤；纯类目行、禁用行、他平台与他应用的行不适用；有类目照旧；顺序与对象不变",
+    "test/spec/catalog/category-blocklist-search/fallback.test.ts > [AC-B1-04zzx#6] 无结果兜底物料同样过滤：有类目按类目（含关键词），无类目只按同平台带关键词的行，顺序不变，被滤商品不登记链接",
+    "test/spec/catalog/category-blocklist-search/fallback.test.ts > [AC-B1-04zzx#7] 首页主结果全被滤掉即视为无结果：给出兜底物料（兜底同样过滤），has_more 照上游",
+    "test/spec/catalog/category-blocklist-search/property.test.ts > [AC-B1-04zzx#11] 任意商品与名单：主结果恰为规则放行的商品且保持上游顺序，无类目与被滤两类告警计数与该页一致",
+    "test/spec/catalog/category-blocklist-search/search.int.test.ts > [AC-B1-04zzx#13] 搜索接真实名单：启用行下次请求即滤（含无类目按关键词），改为禁用后下次请求即放行，他应用的行不生效",
+    "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#1] 有类目商品：同平台且类目 ID 字符串全等，规则无关键词或标题字面包含关键词即滤掉，顺序不变，被滤商品不登记链接",
+    "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#2] 无类目商品（category_l1_id 缺失或空串）：不按类目判，同平台带关键词的行按标题字面包含命中即滤；纯类目行与他平台的行不适用，放行",
+    "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#3] 名单按请求的应用与搜索平台取：他应用的行、他平台的行都不生效",
+    "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#4] 被滤后不足 limit 由现有补页兜底（至多一页），has_more=true 与游标照末次上游页",
+    "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#4] 被滤后不足 limit 由现有补页兜底（至多一页），has_more=false 与游标照末次上游页",
+    "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#5] 过滤在缓存之后：缓存页（stale）同样过滤，名单改动在下一次同参请求即生效",
+    "test/spec/catalog/category-blocklist-search/wiring.int.test.ts > [AC-B1-04zzx#14] 生产装配：真实 AppModule 搜索 Tab 经 catalog 自身名单过滤——启用行下次请求即滤掉该类目商品，他应用的行不生效，行改为禁用后下次请求即恢复"
+  ],
+  "risk_note": "RV1 (catalog): the search tab (main results and empty-result fallback) applies the category blocklist after the cache; items without a level-one category are checked only against same-platform keyword rows; per-platform catalog_category_missing / catalog_category_blocked warnings; CatalogModule wires categoryFilter when the catalog provides filterCategories (always in production). Independent Claude (approvals #36) wrote test/spec/catalog/category-blocklist-search/** in 2 attempts (r1 spec-test S1: production wiring untested -> [#14] through AppModule; 15 tests, red/2). Implementation model: Claude Opus 5.5 (1 round). Locally tsc -b test apps/api 0 and the non-int rule / catalog suites pass; the three DB-backed rule files run in CI verify-int. Property [#11] runs max(50, PROP_RUNS/100) (local PROP_RUNS=100000: 1000 runs, ~400 MB RSS).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "01ed4e4c37fbf52025bb7eb2e7d0e9dea8107ce0",
+      "tree": "3f8c1872783a146480dd526b3ec7e6a30fd434b9",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T16:08:57Z",
+      "finished_at": "2026-11-07T16:09:37Z",
+      "red_tests": [
+        "test/spec/catalog/category-blocklist-search/alerts.test.ts > [AC-B1-04zzx#8] 无类目商品计 catalog_category_missing、被滤商品计 catalog_category_blocked，按平台计数，只带事件码、平台与计数",
+        "test/spec/catalog/category-blocklist-search/alerts.test.ts > [AC-B1-04zzx#9] 没有被滤商品时不记 catalog_category_blocked；类目齐全时无类目计数为 0；名单一生效即记",
+        "test/spec/catalog/category-blocklist-search/alerts.test.ts > [AC-B1-04zzx#10] 兜底物料的无类目与被滤商品同样按平台计数（平台取搜索平台）",
+        "test/spec/catalog/category-blocklist-search/catalog.int.test.ts > [AC-B1-04zzx#12] 无类目商品（null 或空串）：同平台启用且带关键词的行按标题字面包含命中即滤；纯类目行、禁用行、他平台与他应用的行不适用；有类目照旧；顺序与对象不变",
+        "test/spec/catalog/category-blocklist-search/fallback.test.ts > [AC-B1-04zzx#6] 无结果兜底物料同样过滤：有类目按类目（含关键词），无类目只按同平台带关键词的行，顺序不变，被滤商品不登记链接",
+        "test/spec/catalog/category-blocklist-search/fallback.test.ts > [AC-B1-04zzx#7] 首页主结果全被滤掉即视为无结果：给出兜底物料（兜底同样过滤），has_more 照上游",
+        "test/spec/catalog/category-blocklist-search/property.test.ts > [AC-B1-04zzx#11] 任意商品与名单：主结果恰为规则放行的商品且保持上游顺序，无类目与被滤两类告警计数与该页一致",
+        "test/spec/catalog/category-blocklist-search/search.int.test.ts > [AC-B1-04zzx#13] 搜索接真实名单：启用行下次请求即滤（含无类目按关键词），改为禁用后下次请求即放行，他应用的行不生效",
+        "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#1] 有类目商品：同平台且类目 ID 字符串全等，规则无关键词或标题字面包含关键词即滤掉，顺序不变，被滤商品不登记链接",
+        "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#2] 无类目商品（category_l1_id 缺失或空串）：不按类目判，同平台带关键词的行按标题字面包含命中即滤；纯类目行与他平台的行不适用，放行",
+        "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#3] 名单按请求的应用与搜索平台取：他应用的行、他平台的行都不生效",
+        "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#4] 被滤后不足 limit 由现有补页兜底（至多一页），has_more=true 与游标照末次上游页",
+        "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#4] 被滤后不足 limit 由现有补页兜底（至多一页），has_more=false 与游标照末次上游页",
+        "test/spec/catalog/category-blocklist-search/search.test.ts > [AC-B1-04zzx#5] 过滤在缓存之后：缓存页（stale）同样过滤，名单改动在下一次同参请求即生效",
+        "test/spec/catalog/category-blocklist-search/wiring.int.test.ts > [AC-B1-04zzx#14] 生产装配：真实 AppModule 搜索 Tab 经 catalog 自身名单过滤——启用行下次请求即滤掉该类目商品，他应用的行不生效，行改为禁用后下次请求即恢复"
+      ],
+      "expected": [
+        "test/spec/catalog/category-blocklist-search/alerts.test.ts",
+        "test/spec/catalog/category-blocklist-search/catalog.int.test.ts",
+        "test/spec/catalog/category-blocklist-search/fallback.test.ts",
+        "test/spec/catalog/category-blocklist-search/property.test.ts",
+        "test/spec/catalog/category-blocklist-search/search.int.test.ts",
+        "test/spec/catalog/category-blocklist-search/search.test.ts",
+        "test/spec/catalog/category-blocklist-search/wiring.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a133eab9a2373429c2f58a24ec092197b968b470f6a0d510dbc2985aad0e5438"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "e3f2b8c2f421a199cc2800b4f6f452ce9f4b0336d8f23b5b0252973cb82b6c88"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "general r1 pass, no findings (couli-runs/B1-04zzx/review-codex.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "r1 fail (S1: no test pinned the CatalogModule wiring) -> attempt 2 added [AC-B1-04zzx#14] through the real AppModule; r2 pass, no findings; attempt 3 (D10-902 ②, after two CI OOMs) changed only the [#11] run count to max(50, PROP_RUNS/100) — each sample kept ~120 KB, so PROP_RUNS 100 000 exhausted the heap; assertions, generators and examples unchanged (spec-test rounds exhausted, orchestrator #24 checks this change)"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4777ed98b2c3e6b21d36dad7433a6b359a7a58b2",
+    "specs": "4ed684d48b9a16156bea7c57691d6de4311737a4"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

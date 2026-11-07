@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import {
   RAW_ID_MAX_AGE_MS,
+  categoryMissing,
   effectiveCapabilities,
   filterByRules,
   isFresh,
@@ -59,4 +60,35 @@ it('[AC-B1-05c] category rules match platform and category, keyword as a literal
     items[2],
   ]);
   expect(filterByRules(items, [])).toEqual(items);
+});
+
+it('[AC-B1-04zzx] an item without a category is judged only by keyword rows of its platform', () => {
+  const items = [
+    { platform: 'taobao', categoryId: null, title: 'unit-banned' },
+    { platform: 'taobao', categoryId: '', title: 'unit-banned' },
+    { platform: 'taobao', categoryId: null, title: 'unit-plain' },
+    { platform: 'jd', categoryId: '', title: 'unit-banned' },
+    { platform: 'taobao', categoryId: '9', title: 'unit-banned' },
+  ] as const;
+  const keywordRow = { platform: 'taobao', categoryId: '1', keyword: 'banned' };
+  const categoryRow = { platform: 'taobao', categoryId: '1', keyword: null };
+  // The keyword row applies to items without a category whatever its own category is.
+  expect(filterByRules(items, [keywordRow])).toEqual([items[2], items[3], items[4]]);
+  // A pure category row (no keyword, or an empty one) never applies to them.
+  expect(filterByRules(items, [categoryRow, { ...keywordRow, keyword: '' }])).toEqual(items);
+});
+
+it('[AC-B1-04zzx] an empty rule keyword counts as no keyword for items with a category', () => {
+  const items = [{ platform: 'taobao', categoryId: '1', title: 'unit' }] as const;
+  expect(filterByRules(items, [{ platform: 'taobao', categoryId: '1', keyword: '' }])).toEqual([]);
+});
+
+it('[AC-B1-04zzx] a category is missing when absent, null or empty', () => {
+  expect([undefined, null, '', '0', ' '].map(categoryMissing)).toEqual([
+    true,
+    true,
+    true,
+    false,
+    false,
+  ]);
 });

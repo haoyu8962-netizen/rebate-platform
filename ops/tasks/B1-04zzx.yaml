@@ -8,6 +8,7 @@ type: impl
 # ③ 告警：无类目商品按平台计数 catalog_category_missing；被滤商品按平台计数 catalog_category_blocked（只在有被滤时记）。只带事件码、平台与计数。
 # ④ 端口可选（冻结夹具手写端口类型，见方案 §2）；catalog.module.ts 传端口。名单本步不加缓存（D10-860 ④）。契约不动。首页物料流 / 热销榜另开 FU-CATEGORY-BLOCKLIST-HOME，搜索查询词禁词另开 FU-SEARCH-QUERY-BLOCKWORDS（D10-860 ⑥⑦）。
 # 风险：catalog → RV1；新鲜独立 Claude 写规则测试，spec-test 用 Claude（D10-848），代码评审 Codex。
+# 完成 2026-11-08（#2682）：无类目只按同平台关键词行；主结果与兜底都过滤（缓存之后）；告警 missing / blocked；CatalogModule 在 catalog 实现 filterCategories 时装配 categoryFilter（4 条冻结装配用例用无该方法的替身）。
 refs: []
 refs_hash: {}
 deps: [B1-04zzv, B1-04zzw]
@@ -26,4 +27,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/catalog/category-blocklist-search/**'
-status: todo
+status: done
+pr: 2682
