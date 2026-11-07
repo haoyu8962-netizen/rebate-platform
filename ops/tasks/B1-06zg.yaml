@@ -1,0 +1,38 @@
+id: B1-06zg
+repo: rebate-platform
+title: linking：进店 POST /v1/products/{product_key}/shop/open 实现（S-17 S17-l1，D10-806 / D10-891）——ShopOpenService + controller，签名 / 幂等 / 版本门禁照 open，身份复用淘宝 open，30146 / 50301 / 50303，jump 组装，去 planned
+type: impl
+# 2026-11-07 W1 入账（D10-891 ②，方案 couli-runs/UNION-lane/s17-shop-entry-plan-20261107.md 二-3 / 二-4 / 二-6、D10-806 八处）。链路：登录 → 开关 / 来源（30146 shop_entry_disabled）→ convert.enabled（50301）→ 淘宝授权（同 open：30101 / 30102 / 30111 / 30153）→ 账号 active self_buy 推广位（无 → 50301）→ catalog shopOf 取 (shop_ref, shop_name)（无 → 30146 shop_unavailable）→ union convertShop → jump（百川 open_by=url primary + h5 fallback，expire_at = now + link.convert_cache_ttl_sec）。
+# 身份构造复用淘宝 open 的 relation_id + 账号推广位（抽共用函数，不复制）；上游失败 50303 不带任何无推广参数地址；不写 links / link_logs / quote、不出 link_jump；同 (app, 账号, pid, relation_id, sellerId) 短 TTL 缓存抗连点、不跨用户。开关 shop.entry.enabled.* 保持默认关（D10-806 ⑧）。依赖 be 的 S17-c1（shopOf 端口、product_refs.shop_id）：台账与规则测试先做，实现等 c1 合并（c1 入主干后补 deps）。RV2（MONEY_PATHS），规则测试新鲜独立 Claude，评审 Codex money（额度不足时新鲜独立 Claude，D10-775）。
+refs: [BR-PRICE-21, BR-ATTR-05, BR-ATTR-08, BR-ID-18]
+refs_hash:
+  BR-PRICE-21: 877056f01e26
+  BR-ATTR-05: 655fe77b6d9b
+  BR-ATTR-08: 4fdb1d3c8906
+  BR-ID-18: 5a360d356c3f
+deps: []
+paths:
+  - 'apps/api/src/modules/linking/application/shop-open.ts'
+  - 'apps/api/src/modules/linking/application/shop-open.test.ts'
+  - 'apps/api/src/modules/linking/application/link-open-taobao.ts'
+  - 'apps/api/src/modules/linking/application/link-open-taobao.test.ts'
+  - 'apps/api/src/modules/linking/http/public/shop-open.controller.ts'
+  - 'apps/api/src/modules/linking/http/public/shop-open.controller.test.ts'
+  - 'apps/api/src/modules/linking/linking.module.ts'
+  - 'apps/api/src/modules/linking/ports.ts'
+  - 'apps/api/src/modules/linking/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/linking/shop-open/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/shop-open/**'
+status: todo
