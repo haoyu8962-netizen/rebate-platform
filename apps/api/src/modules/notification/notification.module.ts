@@ -52,6 +52,10 @@ import {
   WITHDRAWAL_RESULT_MESSAGE_CONSUMER,
   createWithdrawalResultMessageConsumer,
 } from './application/withdrawal-result-message.ts';
+import {
+  ORDER_DEDUCTION_MESSAGE_CONSUMER,
+  createOrderDeductionMessageConsumer,
+} from './application/clawback-message.ts';
 import type { PushSendCore } from './application/push-send.ts';
 
 /** Nest token of the worker's registration of the risk state message consumer (B1-12g). */
@@ -67,6 +71,9 @@ export const CLAIM_RESULT_MESSAGE_CONSUMER_TOKEN = Symbol('CLAIM_RESULT_MESSAGE_
 export const WITHDRAWAL_RESULT_MESSAGE_CONSUMER_TOKEN = Symbol(
   'WITHDRAWAL_RESULT_MESSAGE_CONSUMER',
 );
+
+/** Nest token of the worker's registration of the clawback / settle adjusted consumer (B1-12zc). */
+export const ORDER_DEDUCTION_MESSAGE_CONSUMER_TOKEN = Symbol('ORDER_DEDUCTION_MESSAGE_CONSUMER');
 
 /**
  * B1-12u: the event job as registerEventConsumer received it (it has already checked the job and
@@ -203,6 +210,9 @@ export class NotificationModule {
    * transaction (processed_events + inbox + logs) and, once that resolved, the push dispatch on the
    * root handle (B1-12o); a dispatch error fails the job, whose retry skips the processed event and
    * dispatches again (the push core never resends an attempted push).
+   * B1-12zc: likewise the order.clawed_back / order.settle_adjusted consumer on queue
+   * `evt.notification-clawback` (CLAWBACK / SETTLE_ADJUSTED, BR-TEXT-09, D10-773), the same event
+   * transaction then push dispatch; disabled line `order_deduction_message_disabled`.
    */
   static forWorker(ports: {
     /** linking's read-only Taobao binding port, assembled by app.module (dependency inversion). */
@@ -342,6 +352,53 @@ export class NotificationModule {
               },
               {
                 consumer: WITHDRAWAL_RESULT_MESSAGE_CONSUMER,
+                db,
+                logger,
+                handler: consumer.handle,
+              },
+            );
+            return true;
+          },
+        },
+        {
+          provide: ORDER_DEDUCTION_MESSAGE_CONSUMER_TOKEN,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            { token: DB, optional: true },
+            { token: JOB_QUEUE, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<Database>,
+            queue?: QueueRuntime,
+          ): boolean => {
+            if (db === undefined || queue === undefined) {
+              logger.info(
+                { consumer: ORDER_DEDUCTION_MESSAGE_CONSUMER },
+                'order_deduction_message_disabled',
+              );
+              return false;
+            }
+            const consumer = createOrderDeductionMessageConsumer({
+              clock,
+              logger,
+              push: ports.pushSendCore(clock),
+            });
+            registerEventConsumer(
+              {
+                register: (name, handler) =>
+                  queue.register(name, async (job) => {
+                    await handler(job);
+                    await consumer.dispatch(
+                      db,
+                      receivedEventOf(ORDER_DEDUCTION_MESSAGE_CONSUMER, job),
+                    );
+                  }),
+              },
+              {
+                consumer: ORDER_DEDUCTION_MESSAGE_CONSUMER,
                 db,
                 logger,
                 handler: consumer.handle,

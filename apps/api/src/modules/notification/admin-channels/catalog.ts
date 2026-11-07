@@ -67,6 +67,11 @@ const CATALOG: Readonly<Record<string, TemplateCodeDefinition>> = {
     defaultChannels: PUSH_INBOX,
     variables: { self: ['amount', 'reason'], share: ['amount', 'reason'], invite: ['amount'] },
   },
+  // B1-12zc (D10-773 ⑥): the settle negative adjustment, the same shape as CLAWBACK.
+  SETTLE_ADJUSTED: {
+    defaultChannels: PUSH_INBOX,
+    variables: { self: ['amount', 'reason'], share: ['amount', 'reason'], invite: ['amount'] },
+  },
   WD_SUCCESS: {
     defaultChannels: PUSH_INBOX,
     variables: { default: ['net', 'payout_channel_name'] },

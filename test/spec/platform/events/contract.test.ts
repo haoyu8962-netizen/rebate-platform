@@ -122,6 +122,12 @@ it('[规划/02 §11 事件清单] EVENT_NAMES 正好是 02 §11 的 18 个事件
     { consumer: 'notification-claim-result', events: ['claim.resolved'] },
     // B1-12u（BR-TEXT-09、BR-WDR-26）：notification 的提现结果通知，只订阅 wallet.withdrawal_changed。
     { consumer: 'notification-withdrawal-result', events: ['wallet.withdrawal_changed'] },
+    // B1-12zc（BR-TEXT-09，D10-773 ①）：notification 的扣回与结算负差调减通知，一个消费者同时订阅
+    // order.clawed_back 与 order.settle_adjusted，紧跟 notification-withdrawal-result。
+    {
+      consumer: 'notification-clawback',
+      events: ['order.clawed_back', 'order.settle_adjusted'],
+    },
     // B1-03z（BR-FUND-22、BR-CALC-13 细则「申诉恢复」）：risk 的申诉恢复差错单生产者，只订阅 appeal.resolved。
     { consumer: 'risk-appeal-restore', events: ['appeal.resolved'] },
     ...(EVENT_SUBSCRIPTIONS.some((s) => s.consumer === 'payout-went-negative')

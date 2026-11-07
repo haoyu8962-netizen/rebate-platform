@@ -83,6 +83,8 @@ export interface EventSubscription {
  * inbox message of notification (B1-12p, BR-TEXT-23 / BR-ID-36). notification-claim-result: the
  * CLAIM_RESULT inbox message of notification (B1-12r, BR-TEXT-09). notification-withdrawal-result:
  * the WD_SUCCESS / WD_REJECTED / WD_FAILED messages of notification (B1-12u, BR-TEXT-09, BR-WDR-26).
+ * notification-clawback: the CLAWBACK / SETTLE_ADJUSTED messages of notification on order.clawed_back
+ * and order.settle_adjusted (B1-12zc, BR-TEXT-09, D10-773 ①).
  * risk-appeal-restore: risk's appeal restore differences of revoked ban appeals (B1-03z,
  * BR-FUND-22 / BR-CALC-13 细则「申诉恢复」).
  * payout-went-negative: the negative balance handling of withdrawals (B2-05e, BR-WDR-05 (a)).
@@ -105,6 +107,12 @@ export const EVENT_SUBSCRIPTIONS: readonly EventSubscription[] = Object.freeze([
   Object.freeze({
     consumer: 'notification-withdrawal-result',
     events: Object.freeze(['wallet.withdrawal_changed']),
+  }),
+  // notification-clawback: the CLAWBACK and SETTLE_ADJUSTED messages, one consumer for both
+  // events (B1-12zc, BR-TEXT-09, D10-773 ①).
+  Object.freeze({
+    consumer: 'notification-clawback',
+    events: Object.freeze(['order.clawed_back', 'order.settle_adjusted']),
   }),
   // risk-appeal-restore: appeal_restore differences of revoked ban appeals (B1-03z, BR-FUND-22).
   Object.freeze({

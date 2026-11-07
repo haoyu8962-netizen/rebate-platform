@@ -48,6 +48,9 @@ const BUSINESS_QUEUES = [
   'evt.notification-claim-result',
   // Event queue of notification's wallet.withdrawal_changed consumer (B1-12u); events/types.ts.
   'evt.notification-withdrawal-result',
+  // Event queue of notification's order.clawed_back / order.settle_adjusted consumer (B1-12zc);
+  // events/types.ts.
+  'evt.notification-clawback',
   // Event queue of risk's appeal.resolved consumer (B1-03z, BR-FUND-22); events/types.ts.
   'evt.risk-appeal-restore',
   // Event queue of payout's withdrawal.created consumer (B2-11c, BR-WDR-30); events/types.ts.

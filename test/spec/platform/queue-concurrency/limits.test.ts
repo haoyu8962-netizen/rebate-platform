@@ -33,8 +33,9 @@ it('[B1-01zzk 冻结结构不变] ENTRY_PLAN 与 QUEUE_CATALOG 与主干逐字�
   ).toBe(true);
   // B1-03z: evt.risk-appeal-restore adds one slot (43 → 44 after B2-02q's ledger-check); B1-12u:
   // evt.notification-withdrawal-result adds five (44 → 49); B2-05n (D10-475 ②): payout-overdue
-  // adds one (49 → 50). The title keeps its frozen wording.
-  expect(TRUNK_WORKER_PLAN.reduce((sum, item) => sum + item.concurrency, 0)).toBe(50);
+  // adds one (49 → 50); B1-12zc (D10-773 ①): evt.notification-clawback adds five (50 → 55). The
+  // title keeps its frozen wording.
+  expect(TRUNK_WORKER_PLAN.reduce((sum, item) => sum + item.concurrency, 0)).toBe(55);
   expect(TRUNK_ENTRY_PLAN.payout.reduce((sum, item) => sum + item.concurrency, 0)).toBe(2);
   expect(DEFAULT_DB_BUDGET).toBe(Math.floor(POOL_SIZES.worker.db * 0.7));
   expect(POOL_SIZES.worker.db - DEFAULT_DB_BUDGET).toBeGreaterThanOrEqual(RESERVED_CONNECTIONS);

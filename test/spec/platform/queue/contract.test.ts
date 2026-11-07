@@ -268,6 +268,13 @@ it('[规划/02 §11 队列拆分; ADR-0001 §4.2 #19] 生产队列目录逐项�
       ...DEFAULT,
       deadLetter: 'evt.notification-withdrawal-result.dead',
     },
+    // B1-12zc（BR-TEXT-09，D10-773 ①）：notification 的 order.clawed_back / order.settle_adjusted
+    // 消费者队列，目录默认值，紧跟 evt.notification-withdrawal-result。
+    {
+      name: 'evt.notification-clawback',
+      ...DEFAULT,
+      deadLetter: 'evt.notification-clawback.dead',
+    },
     // B1-03z（BR-FUND-22、BR-CALC-13 细则「申诉恢复」）：risk 的 appeal.resolved 消费者队列，目录默认值，
     // 紧跟 evt.notification-claim-result。
     {
@@ -423,6 +430,8 @@ it('[规划/02 §3.1 转账队列 concurrency=1; ADR-0001 §3 海报轮询 0.5 �
       w('evt.notification-claim-result', 5),
       // B1-12u：提现结果通知只由 worker 消费，并发 5，紧跟 evt.notification-claim-result。
       w('evt.notification-withdrawal-result', 5),
+      // B1-12zc：扣回与结算负差调减通知只由 worker 消费，并发 5，紧跟 evt.notification-withdrawal-result。
+      w('evt.notification-clawback', 5),
       // B1-03z：申诉恢复差错单只由 worker 消费，并发 1，紧跟 evt.notification-claim-result。
       w('evt.risk-appeal-restore', 1),
       // B2-11c（BR-WDR-30）：自动到账判定只由 worker 消费，并发 1，紧跟 evt.notification-claim-result
