@@ -47,4 +47,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/settle-diff-sync/**'
-status: todo
+status: done
+pr: 2575

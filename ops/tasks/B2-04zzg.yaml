@@ -1,0 +1,26 @@
+id: B2-04zzg
+repo: rebate-platform
+title: 京东入账前剩余数量为 0 按 R6 作废（FU-JD-REMAINING-ZERO-VOID，D10-864 ②、D10-875）——开关 orders.jd.refunded_quantity_r9_enabled 开时 quantity − refunded_quantity = 0 的未入账京东单经生成的 transition() 走 R6 → VOID、不写分录、同事务入队 order.invalidated；关时只告警不作废
+type: impl
+# 2026-11-07 withdraw 入账（编排 D10-875，从 funds 挪来；来由 B1-08zi money r1 S1、D10-864 ②）。前置 B1-08zi（#2660）：orders.quantity / refunded_quantity 两列与开关 orders.jd.refunded_quantity_r9_enabled（content 配置项，默认关）由它写；本单不改 orders、不改 OrderUpdateChange（冻结字段集），rebate 端口在同步事务里锁内重读的 orders 行上判定。
+# 做法：settlement/rebate/application/rebate.ts 的入账前判定（UNATTRIBUTED / ESTIMATED / WAITING，platform=jd，两列都非空且 quantity − refunded_quantity ≤ 0）：开关开 → advance R6（BR-CALC-15「剩余数量为 0 按整单失效处理（入账前 R6 → VOID）」；事件与 orders.reason 取法照 BR-FUND-07 的 void 类编码，由编排定：建议走现有 PLATFORM_INVALID → REFUND，不新增状态机事件）、不写分录、同事务 order.invalidated；开关关 → 只写告警（alert jd_remaining_zero_r6_disabled）、状态不变。非京东不受开关影响（本单不改它们的判定）；已入账的不走本路（归 R9 / B1-08zi 开关）。
+# 规则测试钉：开：剩余 0 → VOID、无分录、order.invalidated 一条、reason 编码；关：只告警、状态与钱不变；非京东同样数量不受开关影响；已入账单不走本路；重放不重复；下游失败回滚；app 隔离。tester 新鲜独立 Claude；money 评审 Codex（D10-823）。与 identity 的 B2-04zzf（clawback）文件不同，不互等。
+refs: [BR-CALC-15, BR-FUND-07, BR-FUND-01]
+refs_hash:
+  BR-CALC-15: e18291194b6e
+  BR-FUND-07: 3d63741c52d9
+  BR-FUND-01: ee0d91aebb13
+deps: [B1-08zi]
+paths:
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.test.ts'
+  - 'apps/api/src/modules/settlement/rebate/domain/**'
+test_paths:
+  - 'test/spec/settlement/jd-remaining-zero/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/jd-remaining-zero/**'
+status: todo
+pr: null
