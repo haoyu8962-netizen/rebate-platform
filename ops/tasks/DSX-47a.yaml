@@ -1,0 +1,22 @@
+id: DSX-47a
+repo: rebate-platform
+title: FU-H5-RETRY-BUNDLE：找回订单路由包压到 150 KiB 上限以下留出余量，components/retry/retry-page.tsx 改用基础件 Button，couli-style no-raw-pressable 基线归零（DSX-47 跟进，编排 18:49 登记，低优先）
+type: impl
+# 2026-11-07 入账（前端线 f1-frontend-7）。DSX-47（#2673）把 H5 页面可点件迁到 components/base，但 retry-page 在入口包里，改用 Button 会把 styles 并入入口、使找回订单（claim-form）路由包超过冻结 h5-shell/entries.test.ts 的 150 KiB 上限（DSX-47 时约 149.5 KiB），故进 no-raw-pressable 基线计数 1。
+# 本单：先只读分析入口与 claim-form 路由包的组成（构建产物分析），找出可拆分 / 延迟加载 / 去重的部分把包压下去（不放宽上限、不改冻结测试），再迁 retry-page 并把 lint/style/baseline.json 里该条清零。非资金；规则测试新鲜独立 Claude，评审 Codex（D10-823）。
+refs: []
+refs_hash: {}
+deps: [DSX-47]
+paths:
+  - 'apps/h5/src/**'
+  - 'apps/h5/vite.config.ts'
+  - 'lint/style/baseline.json'
+test_paths:
+  - 'test/spec/frontend/h5-retry-bundle/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-retry-bundle/**'
+status: todo
+pr: null

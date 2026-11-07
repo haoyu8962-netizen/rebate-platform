@@ -19,5 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/h5-base-migration/**'
-status: todo
-pr: null
+status: done
+pr: 2673
