@@ -5,6 +5,16 @@
 @import '@couli/ui-tokens/tailwind.css';
 
 @layer base {
+  /*
+   * WebView tap highlight off everywhere: clickable components draw their own pressed look
+   * (components/base, ui-rules §3.1), and the grey flash would stack on top of it.
+   */
+  *,
+  ::before,
+  ::after {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   /* viewport-fit=cover: keep content clear of notches and the home indicator. */
   body {
     padding-top: env(safe-area-inset-top, 0px);

@@ -1,0 +1,107 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-base-press/base-press.browser.test.ts > [AC-DSX-46-PRESS#1] 每个可点基础件按下（:active）时背景、透明度或缩放与常态不同，且无 WebView 点按高亮",
+    "test/spec/frontend/h5-base-press/base-press.browser.test.ts > [AC-DSX-46-FOCUS#1] 每个可点基础件 :focus-visible 时显示统一焦点框（焦点色、宽度、偏移令牌）",
+    "test/spec/frontend/h5-base-press/base-press.browser.test.ts > [AC-DSX-46-LOADING#1] Button 进入加载态时按钮内显示加载指示，宽高不跳",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-EXPORTS#1] base/index.ts 导出 Button、Chip、Segmented、Card、ListRow，styles.ts 旧导出保留",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#1] Button 四种变体都是原生 button，默认 type=\"button\"，点击回调一次",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#2] Button 在表单里默认不提交，type=\"submit\" 时提交",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#3] Button loading：按钮内加载指示、aria-busy，连点不回调也不提交，结束后恢复",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#4] Button disabled 时标为禁用且不回调",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-CHIP#1] Chip 选中态用 aria-pressed，点击、Enter、空格切换并回调，禁用时不回调",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-SEGMENTED#1] Segmented 是命名的 radiogroup，选中项 aria-checked，点击回调新值",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-SEGMENTED#2] Segmented 只有选中项可 Tab 到，左右方向键循环切换并移动焦点",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-CARD#1] Card 不传 onClick 时是普通容器，没有按钮、链接或 tab 停靠点",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-CARD#2] Card 传 onClick 时整卡是一个有名字的按钮，点击、Enter、空格都触发",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-LISTROW#1] ListRow 依次显示标题、副标题、右侧附件，不可点时没有交互元素",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-LISTROW#2] ListRow 传 onClick 时整行是一个有名字的按钮，点击、Enter、空格都触发",
+    "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-TAP#1] H5 全局样式把 -webkit-tap-highlight-color 设为透明"
+  ],
+  "risk_note": "DSX-46 H5 base pressables (规划/05 §3.11.3 DSX-46, D10-837 ①): Button (primary / secondary / text / icon, in-button loading with aria-busy that blocks clicks), Chip (aria-pressed), Segmented (radiogroup, roving focus, arrow keys), Card and ListRow (whole-area button / link with accessible name and description). Every pressable has a visible :active change (pressed token, muted background or opacity) and the shared focus ring; shared/styles/index.css declares -webkit-tap-highlight-color: transparent explicitly. Components only, no page migration (DSX-47); styles.ts exports unchanged. Rule tests by an independent Claude in two rounds (round 2: pressed look judged by screenshot pixels inside the component box with an unpainted-change counter-example self-check, after Codex spec-test r1 S1); Codex spec-test review r2 pass; red on the local container (16 tests, right reason). Implementation by Opus 5.5: local container browser run 195/195; container verify-fast OOM-killed at tsc twice (local Docker memory), host jsdom H5 rule tests 722/722, lint-style-web and h5 unit tests stand in, CI runs full verification. Non-funds. Codex general review r1 pass (no findings). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "round 1 pass, no findings (H5 base components only); Codex per D10-823"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test review: round 1 fail (S1 pressed-look check could count an unpainted pseudo element), round 2 pass; tests written by an independent Claude (claude-run.sh, D10-823 ②)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-46",
+  "spec_ref": "b79958df5e5555f5efe34af75a5e5d29ec35f8e5",
+  "spec_commit": "fe340ef54e75c91a4a4eaa61bbad75ae688318ff",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "fe340ef54e75c91a4a4eaa61bbad75ae688318ff",
+      "tree": "bf156cbce1e1e6a1366083759d6d1f85ad801e24",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-07T08:21:54Z",
+      "finished_at": "2026-11-07T08:22:06Z",
+      "red_tests": [
+        "test/spec/frontend/h5-base-press/base-press.browser.test.ts > [AC-DSX-46-PRESS#1] 每个可点基础件按下（:active）时背景、透明度或缩放与常态不同，且无 WebView 点按高亮",
+        "test/spec/frontend/h5-base-press/base-press.browser.test.ts > [AC-DSX-46-FOCUS#1] 每个可点基础件 :focus-visible 时显示统一焦点框（焦点色、宽度、偏移令牌）",
+        "test/spec/frontend/h5-base-press/base-press.browser.test.ts > [AC-DSX-46-LOADING#1] Button 进入加载态时按钮内显示加载指示，宽高不跳",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-EXPORTS#1] base/index.ts 导出 Button、Chip、Segmented、Card、ListRow，styles.ts 旧导出保留",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#1] Button 四种变体都是原生 button，默认 type=\"button\"，点击回调一次",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#2] Button 在表单里默认不提交，type=\"submit\" 时提交",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#3] Button loading：按钮内加载指示、aria-busy，连点不回调也不提交，结束后恢复",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-BUTTON#4] Button disabled 时标为禁用且不回调",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-CHIP#1] Chip 选中态用 aria-pressed，点击、Enter、空格切换并回调，禁用时不回调",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-SEGMENTED#1] Segmented 是命名的 radiogroup，选中项 aria-checked，点击回调新值",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-SEGMENTED#2] Segmented 只有选中项可 Tab 到，左右方向键循环切换并移动焦点",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-CARD#1] Card 不传 onClick 时是普通容器，没有按钮、链接或 tab 停靠点",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-CARD#2] Card 传 onClick 时整卡是一个有名字的按钮，点击、Enter、空格都触发",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-LISTROW#1] ListRow 依次显示标题、副标题、右侧附件，不可点时没有交互元素",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-LISTROW#2] ListRow 传 onClick 时整行是一个有名字的按钮，点击、Enter、空格都触发",
+        "test/spec/frontend/h5-base-press/base-press.test.ts > [AC-DSX-46-TAP#1] H5 全局样式把 -webkit-tap-highlight-color 设为透明"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-base-press/base-press.browser.test.ts",
+        "test/spec/frontend/h5-base-press/base-press.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "a9fc2184f4dc222109e39f5eab10417529be7b0b6571fc063bc028a94c7a762a"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "fd812f7a5f4a2bcd13005411d722c9ff78451752280687aae41e7801b4ba8634"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3d678b9a17c7ecf9f3e80694799483b7370331bd",
+    "specs": "8c9140c255a3d95f15353edb282a0f1a15027d88"
+  }
+}
