@@ -22,6 +22,7 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/settlement/refund-r9-baseline/**'
+  - 'test/spec/orders/rights-port/kit.ts' # 同 D10-839：orders 新增可空列，order() 字面量补一行 refunded_quantity_r9_baseline: null
 impl: claude
 tester: claude-independent
 accept:
