@@ -5,7 +5,7 @@ type: impl
 # 2026-11-07 入账（funds，D10-769 队列第一件）。deps CT-26z（枚举先进契约）、B2-04zx（审计只经端口）。规则测试钉「API 源 FAILED 后联盟报成功」的审计行 actor = system:settlement，其余审计字段不变。RV2，独立 Claude 写测试、Codex money。
 refs: [BR-FUND-06]
 refs_hash:
-  BR-FUND-06: 9f92492d273a
+  BR-FUND-06: f903ec00076a
 deps: [CT-26z, B2-04zx]
 paths:
   - 'apps/api/src/modules/settlement/rights/rights-command.ts'

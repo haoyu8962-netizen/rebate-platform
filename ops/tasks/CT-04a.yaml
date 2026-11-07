@@ -8,7 +8,7 @@ type: contract
 # 生成物放 packages/domain/src/state-machines/*.gen.ts，生成脚本 packages/domain/scripts/（不改 package.json scripts，用 node 直接运行；一致性由 packages/domain 测试比对）。契约槽 ④（B3-lane/notices.md）。
 refs: [BR-FUND-01]
 refs_hash:
-  BR-FUND-01: b541996f8582
+  BR-FUND-01: ee0d91aebb13
 deps: []
 paths:
   - 'specs/state-machines/**'

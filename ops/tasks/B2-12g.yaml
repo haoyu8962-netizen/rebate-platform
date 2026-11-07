@@ -9,7 +9,7 @@ type: impl
 #   同收款账号取 payout_accounts 当前绑定 HMAC。只留痕：不改提现判定、不发通知、无后台接口；有效期、申诉、展示另记 FU。要影响提现须先回写 BR-WDR-29。RV2。
 refs: [BR-FUND-12]
 refs_hash:
-  BR-FUND-12: d1b1d1e718f6
+  BR-FUND-12: 8d69aa9c2ca9
 deps: [B2-12f]
 paths:
   - 'apps/api/src/modules/risk/application/bad-debt-linked*.ts'

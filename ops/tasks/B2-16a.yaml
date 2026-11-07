@@ -9,7 +9,7 @@ type: impl
 # 先例 B2-01l：Codex 在 test(spec) 提交里同步 B2-01i expected.csv（只增 REWARD 行），Claude 过审；Opus 改 specs 并重生成，Codex money 评审；改冻结测试属收紧型，编排按 #24 核对后加标签。
 refs: [BR-FUND-01, BR-FUND-13, BR-FUND-15, BR-FUND-16, BR-INV-24]
 refs_hash:
-  BR-FUND-01: b541996f8582
+  BR-FUND-01: ee0d91aebb13
   BR-FUND-13: ad7aad8f8846
   BR-FUND-15: 849cd1eab9f2
   BR-FUND-16: 077f6d412d5a

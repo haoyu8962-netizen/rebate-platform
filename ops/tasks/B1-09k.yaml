@@ -8,7 +8,7 @@ type: impl
 #   违规单 status=SUCCEEDED、维权单状态按表头映射（J-13；表头待验证，方案 K-3）；端口返回 duplicate 计 duplicate_rows、不报错；失败明细只插入；端口未注入时任务记 failed 并告警、不写 order_rights（J-22）。
 refs: [BR-FUND-06]
 refs_hash:
-  BR-FUND-06: 9f92492d273a
+  BR-FUND-06: f903ec00076a
 deps: [B1-09g, B1-09c]
 paths:
   - 'apps/api/src/modules/orders/**'

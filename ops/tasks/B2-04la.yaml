@@ -5,7 +5,7 @@ type: impl
 # 2026-10-30 funds 线（编排 23:xx ③；D10-169 K-1 指派 funds，从未预占编号）：orders/application/claim-review.ts:122、admin-assign.ts:156 TODO blocked on settlement R3 端口任务；admin-assign.ts:3 J-1 规定真实实现前不挂载。RV2，独立 Claude 写测试与 money 评审。端口形状以 orders 现有声明为准；挂载随 orders 找回挂载任务。
 refs: [BR-FUND-01]
 refs_hash:
-  BR-FUND-01: b541996f8582
+  BR-FUND-01: ee0d91aebb13
 deps: [B1-10f, B1-10k]
 paths:
   - 'apps/api/src/modules/settlement/attribution/**'

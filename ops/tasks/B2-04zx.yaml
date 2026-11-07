@@ -6,7 +6,7 @@ type: impl
 # 冻结 success-after-closed.int.test.ts（B1-04zza #45 / #46）改为注入审计端口，走 modify_existing（tighten_only，D10-701 / D10-721）；D10-739 改为前置 test-change #2519 先合，本单不再改该文件，modify_existing 已撤（红检判多余）。
 refs: [BR-FUND-06, BR-FUND-08]
 refs_hash:
-  BR-FUND-06: 9f92492d273a
+  BR-FUND-06: f903ec00076a
   BR-FUND-08: 4fad67b21a32
 deps: [B1-04zza]
 paths:

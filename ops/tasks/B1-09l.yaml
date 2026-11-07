@@ -9,7 +9,7 @@ type: impl
 #   响应复用 B1-10i 的订单详情读取；端口未注入时路由不挂载、契约 planned 不动（J-1），挂载在 B1-09n。
 refs: [BR-FUND-06]
 refs_hash:
-  BR-FUND-06: 9f92492d273a
+  BR-FUND-06: f903ec00076a
 deps: [CT-24n, B1-09c, B1-10i]
 paths:
   - 'apps/api/src/modules/orders/**'

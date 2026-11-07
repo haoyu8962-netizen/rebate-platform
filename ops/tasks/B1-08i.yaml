@@ -8,7 +8,7 @@ type: impl
 # 04 §4.1、02 §18「状态迁移」「领域事件」；rebate_status 的写者是 settlement（12 §9 S-10），本任务不写。
 refs: [BR-FUND-01]
 refs_hash:
-  BR-FUND-01: b541996f8582
+  BR-FUND-01: ee0d91aebb13
 deps: [B1-08h]
 paths:
   - 'apps/api/src/modules/orders/**'

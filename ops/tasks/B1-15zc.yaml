@@ -7,7 +7,7 @@ type: impl
 # 2026-10-31 补（标题不得改故记于此）：冻结 maintenance/contract.test.ts 钉死 DROPPABLE_TABLES 恰为 ['event_log']，所以不加进它、也不改 drop_expired_month_partitions；新建独立函数 app.drop_expired_union_raw_payload_partitions(p_now, p_days)（SECURITY DEFINER，只授 couli_maint，函数内守下限 180）和 maintenance 里单独的常量，配置经 app.read_retention_settings 读。
 refs: [BR-ID-30]
 refs_hash:
-  BR-ID-30: ebedec89359f
+  BR-ID-30: c355f7bb09d0
 deps: [B1-15zb]
 paths:
   - 'db/migrations/**'

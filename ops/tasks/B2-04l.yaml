@@ -7,10 +7,10 @@ type: impl
 # BR-FUND-06 状态「待验证」（平台有无「处理中」信号）：规则原文已写无信号时只在结果回传时处理，按原文做、任务书注明，不臆造平台信号。端口形状以 orders 现有声明为准（RightsCommandPort / RebateAdminCommandPort）。生产装配（orders worker 注入）随 B2-04ze 或另开装配任务。
 refs: [BR-FUND-06, BR-FUND-07, BR-FUND-08, BR-FUND-01]
 refs_hash:
-  BR-FUND-06: 9f92492d273a
+  BR-FUND-06: f903ec00076a
   BR-FUND-07: 3d63741c52d9
   BR-FUND-08: 4fad67b21a32
-  BR-FUND-01: b541996f8582
+  BR-FUND-01: ee0d91aebb13
 deps: [B1-09c, B1-09e, B1-09l, B2-04s]
 paths:
   # D10-470：单一写者——order_sync_pending.status 由 orders 写；orders 导出 clawback 待处理行 open / resolve 端口（同 pending.open 口径），settlement 只经它关闭 CLAWBACK_NO_COMMISSION 行；orders 部分由 content 线评审。

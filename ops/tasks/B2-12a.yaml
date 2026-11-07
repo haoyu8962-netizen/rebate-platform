@@ -6,7 +6,7 @@ type: impl
 refs: [BR-FUND-24, BR-FUND-12, BR-FUND-16]
 refs_hash:
   BR-FUND-24: 0f1a6ecb3334
-  BR-FUND-12: d1b1d1e718f6
+  BR-FUND-12: 8d69aa9c2ca9
   BR-FUND-16: 077f6d412d5a
 deps: [B2-04zh]
 paths:

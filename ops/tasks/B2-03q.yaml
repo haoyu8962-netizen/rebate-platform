@@ -8,7 +8,7 @@ type: impl
 # 2026-11-02 D10-565、D10-568（W1 改派，D10-564）：不变量是订单 commission_version ≥ 1 时该版本的金额行与 totals 一定存在。快照生成时同事务：orders 版本 0 → 置 1（乐观锁 WHERE commission_version = 0）；已 ≥ 1 → 写当前版本的行（refresh 同一函数）。三个调用方都经 runCommissionSnapshot，只改这一处。CREDITED 在扣回前把上一版本复制到当前版本；R9 / R10 后金额行等于新应得归 FU-CREDITED-AMOUNT-ROWS。refresh 的 N 与快照同口径（pdd 减 service_fee_fen，缺失时 pending 不写）；其余读者归 FU-PDD-NET-N。
 refs: [BR-FUND-01, BR-CALC-02, BR-CALC-15]
 refs_hash:
-  BR-FUND-01: b541996f8582
+  BR-FUND-01: ee0d91aebb13
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-15: e18291194b6e
 deps: [B2-04j]

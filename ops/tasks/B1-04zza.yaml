@@ -8,9 +8,9 @@ type: impl
 # 冻结 refund-mapping（钉旧减法）与两个定时器计数用例按 D10-327 列入 test_paths，由新鲜独立 Claude 改、按 #24 核；实测后如还有别的冻结用例，再补台账。
 refs: [BR-FUND-01, BR-FUND-02, BR-FUND-06, BR-FUND-08]
 refs_hash:
-  BR-FUND-01: b541996f8582
+  BR-FUND-01: ee0d91aebb13
   BR-FUND-02: bffd22853853
-  BR-FUND-06: 9f92492d273a
+  BR-FUND-06: f903ec00076a
   BR-FUND-08: 4fad67b21a32
 deps: [B1-04zz]
 paths:

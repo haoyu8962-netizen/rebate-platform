@@ -7,7 +7,7 @@ type: impl
 # 口径以 08 为准；08 未写清处（例如「未回传新佣金前保守扣减」的具体取值、多次部分维权的累计口径）由实现方列出报编排，不臆造。状态只经生成的 transition()；金额只经 @couli/money；入账计划若在 packages/domain 内改，须保持纯函数并补属性测试。
 refs: [BR-FUND-06, BR-FUND-07, BR-FUND-08, BR-CALC-15]
 refs_hash:
-  BR-FUND-06: 9f92492d273a
+  BR-FUND-06: f903ec00076a
   BR-FUND-07: 3d63741c52d9
   BR-FUND-08: 4fad67b21a32
   BR-CALC-15: e18291194b6e

@@ -5,7 +5,7 @@ type: impl
 # 2026-11-03 入账（admin-backend，编排 D10-587、D10-590；FU-ADMIN-ADJUSTMENTS-API，方案 couli-runs/B3-lane/admin-adjustments-plan-20261103.md）。赶在首笔真实入账 +90 天前。⑪ 候选单列表兼任清单。
 refs: [BR-FUND-12, BR-FUND-10, BR-FUND-16]
 refs_hash:
-  BR-FUND-12: d1b1d1e718f6
+  BR-FUND-12: 8d69aa9c2ca9
   BR-FUND-10: 3ed330a761d1
   BR-FUND-16: 077f6d412d5a
 deps: [B2-12a, B2-12e]

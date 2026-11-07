@@ -7,7 +7,7 @@ type: impl
 # 2026-10-31 补（编排 D10-454 / D10-457，标题不得改故记于此）：范围另含 sms_send_attempts 190 天（⑥ 短信发送记录）；保留天数读 retention.<表>_days（缺省 08 现值，函数内再守下限），总开关 retention.purge.enabled 关时不跑；日志只记表名与删除行数；不碰 order_sync_drop_keys（D10-457）与 blocklist（D10-454）。
 refs: [BR-ID-30]
 refs_hash:
-  BR-ID-30: ebedec89359f
+  BR-ID-30: c355f7bb09d0
 deps: [B1-15za, B1-15zd]
 paths:
   - 'db/migrations/**'
