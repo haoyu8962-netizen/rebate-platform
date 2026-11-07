@@ -24,3 +24,10 @@ accept:
   - 'pnpm contracts:check'
   - 'test/spec/notification/settle-adjusted-invite-wording/**'
 status: todo
+red_exempt_rows:
+  - file: test/spec/notification/settle-adjusted-message/render.test.ts
+    test: '[AC-B1-12zc#36] 标题与正文分别覆盖、分别回退：self 只覆盖标题'
+    reason: 'it.each 表拆分（照 D10-657 / D10-737）：只拆出须随 D10-803 改邀请行期望的两行（invite 覆盖正文、两项覆盖都为空回退）到新表；本行字面量与回调体同基线，自购行措辞不变，在旧代码上照常为绿'
+  - file: test/spec/notification/settle-adjusted-message/render.test.ts
+    test: '[AC-B1-12zc#36] 标题与正文分别覆盖、分别回退：share 两项都覆盖'
+    reason: 'it.each 表拆分（照 D10-657 / D10-737）：只拆出须随 D10-803 改邀请行期望的两行到新表；本行字面量与回调体同基线，分享行措辞不变，在旧代码上照常为绿'
