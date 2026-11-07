@@ -1,0 +1,30 @@
+id: CT-24zy
+repo: rebate-platform
+title: 契约：texts.default.json 补 order_reason.NOT_TRACKED.summary「未找到这笔订单的返利记录，详情见卡片」（08 BR-AI-07 默认句）
+type: contract
+# 2026-11-07 入账（agent2-acct4），编排 18:42（B3-08m 范围外归 agent2）、D10-871（选 A，不开 ProductCta.description 改动）。
+# 08 BR-AI-07 细则「summary 键」：order_reason.<CODE>.summary 是 T5 唯一文本来源；NOT_TRACKED = 「未找到这笔订单的返利记录，详情见卡片」。主干字典缺此键，B3-08m 运行时回落默认句。
+# 只加这一个键（值逐字），fund-term-keys / 文案规则测试照常过；不改其他键。RV1，Codex contract 评审。
+refs: [BR-AI-07]
+refs_hash:
+  BR-AI-07: 0da3ace82049
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

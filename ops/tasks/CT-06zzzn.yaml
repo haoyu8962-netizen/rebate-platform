@@ -1,0 +1,21 @@
+id: CT-06zzzn
+repo: rebate-platform
+title: CT-06zzzn：status.ts --json 默认只出未完成行、--all 出全量、加 rows_scope（看板 JSON 已超 1 MiB；FU-STATUS-JSON-SIZE，D10-872 ①）
+type: guard-change
+# 2026-11-07 入账（agent2-acct4），D10-872 ①（低优先，排在 CT-24zy 之后）。方案 couli-runs/FU-STATUS-JSON-SIZE/plan.md：status.ts --json 实测 1.16 MB（done 行占 82%，每周约 +200 KB），程序消费方只有 status.test.ts（只看 todo 行），kanban.py 不调用。
+# 改法：--json 默认只输出未完成行，新增 --all 输出全量，输出带 rows_scope（"open" / "all"）标口径；过滤只在输出层，collectBoard 不动；Markdown 看板不变。#2662 的 maxBuffer 保留作兜底。
+# status.test.ts 只新增用例（默认口径、--all、rows_scope、体积哨兵），不改已有断言；README 写明新口径。第三类保护路径，RV2；Opus 实现，Codex 对抗评审，按 #24 由编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/status.ts'
+  - 'tools/ops/status.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzn.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
