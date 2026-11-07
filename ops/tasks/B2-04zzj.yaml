@@ -1,0 +1,18 @@
+id: B2-04zzj
+repo: rebate-platform
+title: test-change 收紧 B2-04zzg：同一京东报文退完又改佣金（[AC-B2-04zzg#5] 情形）时「推了版本必有金额行」——新增用例钉 VOID 后 commission_version=2 且 v2 有金额行与四段金额、R6 不记账（FU-B204ZZG-VERSION-ROW-TIGHTEN）
+type: test-change
+# 2026-11-08 入账（content，编排 D10-931 ②；FU-B204ZZG-VERSION-ROW-TIGHTEN，从 withdraw 挪来）。B2-04zzg（#2708）money r1 S1-b 已在实现里修（剩余为 0 早返回分支 commission_moved 时 refresh，6e74a00c8），但测试次数用满，#5 没钉版本行，照 D10-922 / D10-828 记收紧单。
+# 只新增用例（新文件，不改 jd-remaining-zero 里已有用例与 kit），在 #2708 合并后的主干上应直接为绿（实现已在）；新鲜独立 Claude 写、另一位只读复核「只收紧、断言有牙」，按 #24 加标签。deps B2-04zzg。
+refs: []
+refs_hash: {}
+deps: [B2-04zzg]
+paths:
+  - 'test/spec/settlement/jd-remaining-zero/version-row.int.test.ts'
+  - 'ops/tasks/B2-04zzj.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/jd-remaining-zero/version-row.int.test.ts'
+status: todo

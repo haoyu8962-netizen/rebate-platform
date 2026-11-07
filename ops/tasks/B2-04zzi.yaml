@@ -1,0 +1,22 @@
+id: B2-04zzi
+repo: rebate-platform
+title: 未入账单同一报文转无效（R6 作废）且有效佣金变化时，commission_version 推进后也按新 N 写金额行（reverse 分支补 refresh，R6 仍不记账；FU-R6-VERSION-ROW）
+type: impl
+# 2026-11-08 入账（content，编排 D10-931 ①、D10-932；FU-R6-VERSION-ROW，从 withdraw 挪来）。主干 782fdcd54 临时用例复现：京东未入账单（ESTIMATED / WAITING，v1 有行）来一条映射 PLATFORM_INVALID 的报文、同时预估 1000→0 或 →600 → VOID、commission_version=2，但金额行与四段金额只有 v1，违反 B2-03q / BR-CALC-15「版本 ≥ 1 必有金额行」。
+# 根因：settlement/rebate/application/rebate.ts decideUpdate 的 reverse 分支 advance(d, reverse) 后直接 finish，没像 BASE_ZERO 分支那样在 commission_moved 时 refresh；advance 到 VOID 会清 refresh，所以补在 advance 之后。PUNISH 走同一分支一并修（现有状态映射表无码映射到 PLATFORM_PUNISH，测试注明不可达）。
+# 不在本单：导入即无效、从未有预估的单 v1 无行（P13，冻结 flow.int.test.ts 有意钉 amounts()==[]），编排按「从未生成预估的单不适用该不变式」在规划补例外。deps B2-04zzg（#2708 同改 rebate.ts），在它之后变基。临时复现用例与回归日志：couli-runs/FU-R6-VERSION-ROW/。
+refs: [BR-CALC-15]
+refs_hash:
+  BR-CALC-15: e18291194b6e
+deps: [B2-04zzg]
+paths:
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.test.ts'
+test_paths:
+  - 'test/spec/settlement/rebate-reverse-version-row/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/rebate-reverse-version-row/**'
+status: todo
