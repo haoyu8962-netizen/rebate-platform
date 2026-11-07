@@ -1,0 +1,27 @@
+id: CT-26zb
+repo: rebate-platform
+title: 契约：进店（POST /v1/products/{product_key}/shop/open）失败与码细节（S-17，D10-806 ②③④）——50303 补进店例外（只提示、不给无返利次按钮）；30146 加 data.reason=shop_unavailable（商品无店铺标识或店名）；进店 jump.expire_at 口径
+type: contract
+# 2026-11-07 union 入账（编排 D10-806 ②③④；方案 couli-runs/UNION-lane/s17-shop-entry-plan-20261107.md §三、§五）。只增不改，CT-26r（#2425）的形状不动。
+# ① contracts/error-codes.yaml 50303：action 补「进店（shop/open）转链失败：只提示（文案取 error.30146「暂时不能进入这家店铺」），不给『仍去购买（无返利）』次按钮，不外跳、不改跳无推广参数的店铺页」；shop/open 描述同步。
+# ② 30146 data.reason 枚举加 shop_unavailable：点击进店时商品没有店铺标识（shop_ref）或店名；原 shop_entry_disabled（开关关 / 来源未配）不变。
+# ③ shop/open 的 JumpPlan.expire_at：大淘客店铺转链无有效期字段（09 2_TB §2.11 实测），服务端取 now + link.convert_cache_ttl_sec 的技术值；百川按链接打开、H5 链接降级（能否打开店铺长链待实测）。
+# planned 标记由 S17-l1（w1）实现时去掉，本单不动。实现顺序：本单 → B1-04zzq → B1-04zzs → B1-04zzt（union）→ c1（be）/ l1（w1）→ 三端 U6。
+refs: []
+refs_hash: {}
+deps: [CT-26r]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

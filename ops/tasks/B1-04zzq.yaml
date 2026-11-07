@@ -1,0 +1,19 @@
+id: B1-04zzq
+repo: rebate-platform
+title: 测试改动（S-17 S17-0，D10-806 ①）：冻结 [AC-B1-04zh#25] 允许大淘客搜索的 sellerId 以 shop_ref 出现（其余 estimateAmount / couponLink / itemLink / 大淘客 id / goodsSign 照旧不映射不外露，sellerId 不得以其他键或原样外露）
+type: test-change
+# 2026-11-07 union 入账（编排 D10-806 ①：淘宝 sellerId 本期只取大淘客搜索；方案 couli-runs/UNION-lane/s17-shop-entry-plan-20261107.md S17-0）。B1-04zzs 把 dataoke-search.ts 的 sellerId 映射成 UnionItem.shop_ref（shopRefField 口径）后，[AC-B1-04zh#25]「sellerId 不映射不外露」与允许键表必红。
+# 照 B1-04zzl 先例走前置：非 task 分支、台账同 PR；新口径在现行实现上仍绿（现行不出 shop_ref），先合进主干，B1-04zzs 再开工，免红检对冻结文件顶层表变化整文件判定（#2465 / #2476 教训）。
+# 只放宽「sellerId 可作为 shop_ref 的值出现」这一处，并加严：shop_ref 若出现必须等于该行 sellerId 的原样字符串；sellerId 不得出现在任何其他键、序列化或打印中。其余断言一字不动。
+# 改既有规则测试属第一类保护路径：全新上下文 Claude 修改、另一全新上下文 Claude 只读复审「不削弱」，按 approvals #24 由编排加 owner-approved 标签。
+refs: []
+refs_hash: {}
+deps: [B1-04zh, B1-04zzm]
+paths:
+  - 'test/spec/union/taobao-search/mapping.test.ts'
+  - 'test/spec/union/taobao-search/kit.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
