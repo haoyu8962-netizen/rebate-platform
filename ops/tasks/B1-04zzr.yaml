@@ -27,6 +27,106 @@ test_paths:
   - 'test/spec/orders/taobao-sync/**'
   - 'test/spec/orders/wiring/**'
   - 'test/spec/platform/metrics-sync-streams/**'
+red_exempt:
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#7] 键未设时 jd 开、回扫 30 天，开关与天数都按平台的键读'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#8] 键未设时 pdd 关：不读游标、不发窗口'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#9] pdd 打开后默认回扫 90 天，窗口长度取规则表的 syncWindowCapMs'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#10] jd 开关显式关闭后不回扫'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#11] days=1 在 1～90 内：按配置起算，不告警'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#11] days=45 在 1～90 内：按配置起算，不告警'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#11] days=90 在 1～90 内：按配置起算，不告警'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#12] days=0 不合法：回默认 30 天，warn 一次且只含键名'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#12] days=-1 不合法：回默认 30 天，warn 一次且只含键名'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#12] days=1.5 不合法：回默认 30 天，warn 一次且只含键名'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#12] days=91 不合法：回默认 30 天，warn 一次且只含键名'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#12] days="45" 不合法：回默认 30 天，warn 一次且只含键名'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#12] days="abc" 不合法：回默认 30 天，warn 一次且只含键名'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#13] 同平台多个账号一轮只告警一次'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#14] 读 order_sync.rescan.jd.enabled 失败：本轮跳过该平台并 warn，不当默认值'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#14] 读 order_sync.rescan.jd.days 失败：本轮跳过该平台并 warn，不当默认值'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/rescan/config.test.ts
+    test: '[AC-B1-04zm#15] 一个平台读配置失败不影响另一个平台'
+    reason: 冻结 B1-04zm 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zm#16] 的计数（只数天档窗）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#11] 规则表淘宝窗口上限 20 分钟（去 TODO），进增量上限与调度；京东 60、拼多多 30 分钟不变'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#12] CAP-TB-07：淘宝订单查询回看 90 天，京东照旧 90 天，拼多多仍无此限'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#13] 回扫先单档：淘宝默认开、30 天（rescanDefaults），不登记 order_sync.rescan.taobao.* 配置键；jd / pdd 不变'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#14] 增量调度：淘宝落后 3 小时只发 20 分钟一窗，真实淘宝适配器按这一窗取数'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#27] order-sync 处理器收下淘宝 20 分钟增量窗：经真实淘宝适配器取单、交归因流水线、推进水位'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#15] 落后 50 分钟逐轮追赶：20 / 20 / 10 分钟首尾相接，追平后不再发'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#16] 回看 90 天：淘宝游标早于 90 天先挪到 now − 90 天 + 余量，再从那里发窗'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/taobao-sync/schedule.test.ts
+    test: '[AC-B1-04zzb#17] 手动同步：limits 列出淘宝（90 天、按单号 0），按单号仍只开拼多多；时间窗按 20 分钟切'
+    reason: 冻结 B1-04zzb 用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-04zzb#18] [#19] 的期望（天档窗长 180 分钟、带 timeBasis）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#2] 缺 DB 或队列（onlyQueueMissing=false）提供 null 并恰一条 info'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#2] 缺 DB 或队列（onlyQueueMissing=true）提供 null 并恰一条 info'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#3] api 不装配订单同步'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#3] stream 不装配订单同步'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#3] admin 不装配订单同步'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#3] payout 不装配订单同步'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#4] 归因与更新装配共享真实 EVENT_BUS，updateStep 必须注入，mtimeOrdering 默认关闭'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
+  - file: test/spec/orders/wiring/module.test.ts
+    test: '[AC-B1-08n#21] worker 的处理器 registry 与 access 熔断读取使用同一套治理包装'
+    reason: 冻结 B1-08n 等用例，测试体未改；同文件只按 D10-327 改了 [AC-B1-08n#1] 的回扫循环数（3 → 5）
 impl: claude
 tester: claude-independent
 accept:
