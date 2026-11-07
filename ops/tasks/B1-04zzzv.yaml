@@ -1,0 +1,23 @@
+id: B1-04zzzv
+repo: rebate-platform
+title: agent：Agent 搜索的禁售类目判定改为一批候选一次调 filterCategories（FU-AGENT-CATEGORY-BATCH，D10-946）——语义不变
+type: impl
+# 2026-11-08 union 入账（编排 D10-946；FU-AGENT-CATEGORY-BATCH 由编排 02:42 核 #2713 时登记）。依赖 B1-04zzy（#2713，已合并）。
+# 现状：production.ts createCategoryAllowed 每个候选调一次 catalog filterCategories(appId, [候选])；pipeline.ts 在同一轮里对整批候选 Promise.all 调 categoryAllowed。
+# 做法：只在 agent/stream/mount 内改——categoryAllowed 签名与 pipeline 不动；同一轮（同一微任务内）发起的判定按 appId 合成一批，一次 filterCategories(appId, [一批候选])，按端口返回的对象逐一对回各候选。
+# 语义不变：① 批内按候选逐一判定，结果与逐个调用一致；② 端口失败整批从严判禁，每批只记一条 warn（事件 agent_category_blocklist_failed + 平台，不带商品 ID / 键 / 标题；批内多平台时平台去重排序后以逗号连接）；③ 未装配 categories 端口时全放行、不调端口；④ 传给端口的每项仍只有 platform / categoryId / title；名单不加缓存，依次发起的判定各自一批。
+# 风险：agent/** → RV1；新鲜独立 Claude 写规则测试（tester claude-independent），spec-test 用 Claude（D10-848），代码评审 Codex。
+refs: []
+refs_hash: {}
+deps: [B1-04zzy]
+paths:
+  - 'apps/api/src/modules/agent/stream/mount/production.ts'
+  - 'apps/api/src/modules/agent/stream/mount/*.test.ts'
+test_paths:
+  - 'test/spec/agent/category-batch/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/category-batch/**'
+status: todo
