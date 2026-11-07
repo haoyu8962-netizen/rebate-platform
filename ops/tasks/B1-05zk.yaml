@@ -7,7 +7,7 @@ type: impl
 refs: [BR-PRICE-04, BR-PRICE-21, BR-TEXT-13]
 refs_hash:
   BR-PRICE-04: 4848c2b9346d
-  BR-PRICE-21: c05f612fa872
+  BR-PRICE-21: 877056f01e26
   BR-TEXT-13: 81791b1bb9dd
 deps: []
 paths:

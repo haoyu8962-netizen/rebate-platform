@@ -6,7 +6,7 @@ type: impl
 # 冻结 [AC-B1-05f#1]、[AC-B1-05f#8]（catalog/card/assembly.test.ts）钉旧键，照 D10-327 进 test_paths 由新鲜独立 Claude 改、按 #24 报核。规则测试新目录 catalog/card-cta（走真实 assembler，搜索 / 详情 / 识别 / 收藏 / 热销榜）、agent/tools-search-cta（遮罩后 rebate_login_to_view、amount_unknown、查返利卡）。RV1。
 refs: [BR-TEXT-12, BR-TEXT-15, BR-AI-11]
 refs_hash:
-  BR-TEXT-12: 0cd095533ce6
+  BR-TEXT-12: c76df8c4f66d
   BR-TEXT-15: de8d5a3a0b48
   BR-AI-11: 0ce4651ba7c3
 deps: []

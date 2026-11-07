@@ -9,7 +9,7 @@ type: contract
 # 参考 couli-runs/FU-ORDER-REASON-SUB-ADMIN/plan.md。**前提**：SPEC_REF 须升到含 couli #293（b79958d）的提交后再写测试 / 契约（当前 3f2b91d 不含新子原因表），refs_hash 随升级刷新。RV1。
 refs: [BR-TEXT-05]
 refs_hash:
-  BR-TEXT-05: 095147f1c98a
+  BR-TEXT-05: 5ef1a436fc26
 deps: []
 paths:
   - 'contracts/openapi.yaml'

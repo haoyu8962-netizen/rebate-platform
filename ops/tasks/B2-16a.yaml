@@ -13,7 +13,7 @@ refs_hash:
   BR-FUND-13: ad7aad8f8846
   BR-FUND-15: 849cd1eab9f2
   BR-FUND-16: 077f6d412d5a
-  BR-INV-24: be947be8fb22
+  BR-INV-24: 8c11043a392c
 deps: [B2-01l]
 paths:
   - 'specs/ledger-templates.csv'

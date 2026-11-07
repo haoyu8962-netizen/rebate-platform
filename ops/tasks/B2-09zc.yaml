@@ -6,7 +6,7 @@ type: impl
 # 拒绝：reason，不动账。每次调用一条审计（settle_adjust_batch_approve / reject / settle_adjust_run_request 进 audit-log-view RULES）。RV2；规则测试新鲜独立 Claude（D10-775），money 评审独立 Claude + 只读复核。
 refs: [BR-FUND-09, BR-CALC-02, BR-CALC-09, BR-FUND-15]
 refs_hash:
-  BR-FUND-09: 6b72b55621fb
+  BR-FUND-09: 3162bdea830e
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-09: 2414ed15d885
   BR-FUND-15: 849cd1eab9f2

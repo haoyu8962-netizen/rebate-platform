@@ -6,7 +6,7 @@ type: impl
 # 只做 ledger 写入端口与导出；growth 侧接线（把端口注入 invite-reward）若需改 growth 或 app.module，另开装配任务报编排。
 refs: [BR-INV-24, BR-FUND-15, BR-FUND-16]
 refs_hash:
-  BR-INV-24: be947be8fb22
+  BR-INV-24: 8c11043a392c
   BR-FUND-15: 849cd1eab9f2
   BR-FUND-16: 077f6d412d5a
 deps: [B2-16a]

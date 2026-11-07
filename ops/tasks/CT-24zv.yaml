@@ -6,7 +6,7 @@ type: contract
 # 冻结受益人照常生成、批准时转待补记义务；注销中 / 已注销按 08 走平台或坏账；等待联盟的维权 + 正差照常生成由批准人把关（08 E-32）。只 /admin/v1/**，后台同发；新 20001 / 20902 子原因注册 error-codes。实现：生成 B2-09zb、批准 B2-09zc（后入账）。
 refs: [BR-FUND-09]
 refs_hash:
-  BR-FUND-09: 6b72b55621fb
+  BR-FUND-09: 3162bdea830e
 deps: []
 paths:
   - 'contracts/openapi.yaml'

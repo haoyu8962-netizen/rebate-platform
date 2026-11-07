@@ -8,7 +8,7 @@ type: impl
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
   BR-FUND-04: 497806f6f068
-  BR-TEXT-09: fd7184fa4d2c
+  BR-TEXT-09: 992029dd30ff
 deps: [B2-04p]
 paths:
   - 'db/migrations/**'

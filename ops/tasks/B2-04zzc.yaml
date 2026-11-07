@@ -8,7 +8,7 @@ type: impl
 # 与 admin 的 B2-16c（FU-INVITE-REWARD-WIRING，第 1 + 10 项）并行、不设依赖，后合者变基；#2575 合并后 B2-04zza 优先。不改冻结用例（端口可选，test/spec/settlement/worker/credit-kit.ts 字面量照编）。RV2。
 refs: [BR-INV-24]
 refs_hash:
-  BR-INV-24: be947be8fb22
+  BR-INV-24: 8c11043a392c
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/credit/credit-order.ts'

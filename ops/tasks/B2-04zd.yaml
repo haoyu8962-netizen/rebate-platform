@@ -7,7 +7,7 @@ type: impl
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
   BR-FUND-04: 497806f6f068
-  BR-FUND-09: 6b72b55621fb
+  BR-FUND-09: 3162bdea830e
 deps: [B2-04n, B2-04m]
 paths:
   - 'apps/api/src/modules/settlement/bill/infra/**'

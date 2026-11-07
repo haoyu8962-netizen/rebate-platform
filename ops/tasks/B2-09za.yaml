@@ -8,7 +8,7 @@ type: migration
 # 2026-11-07 void（D10-780）：表上已有 settle_adjustments_candidate_key（UNIQUE NULLS NOT DISTINCT，含 commission_version）挡住同版本的一切重复；剩下的「同 seq 换了 commission_version、旧 pending 还在」交 B2-09zb 在同一事务里先作废旧的再生成。迁移号 0131 释放。
 refs: [BR-FUND-09]
 refs_hash:
-  BR-FUND-09: 6b72b55621fb
+  BR-FUND-09: 3162bdea830e
 deps: []
 paths:
   - 'db/migrations/**'

@@ -9,7 +9,7 @@ type: impl
 # 2026-11-07 补 paths：settlement 的 worker 端口没有审计端口，D10-780 的换版本作废审计要由 app.module 注入 admin createSystemAuditWriter（同 B2-09p 给 payout 接系统审计）；端口设可选，worker 夹具不受影响。 2026-11-07 D10-787：test_paths 补 worker-catchup（新鲜独立 Claude 只给 kit.ts 的 billRunsOf 加 job = 'bill' 过滤，期望不变；另一位只读复审只加过滤），引用 kit.ts 的 12 条冻结用例登 red_exempt；去掉未用的 settlement/index.ts。
 refs: [BR-FUND-09, BR-FUND-04, BR-CALC-02, BR-CALC-09]
 refs_hash:
-  BR-FUND-09: 6b72b55621fb
+  BR-FUND-09: 3162bdea830e
   BR-FUND-04: 497806f6f068
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-09: 2414ed15d885

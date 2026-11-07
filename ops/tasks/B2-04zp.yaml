@@ -5,7 +5,7 @@ type: impl
 # 2026-11-03 be 入账（D10-588 ⑤，方案 couli-runs/B3-lane/settle-source-plan-20261103.md）。账单 chooseSettlement 取截点内任意来源最大 seq，R5 读列（STATEMENT 优先）：STATEMENT seq 2 金额 900、API seq 3 金额 1000 都在截点前时，账单按 1000 比对入批，seq 校验过，R5 按 900 入账。settlements/ 加纯函数 decidingSettlement（截点内最大 seq 的 STATEMENT，否则最大 seq 的 API），bill/job.ts 与 bill/supplement/command.ts 共用，clawback-order 同类一起改。settleSeq 保持整单最大 seq，否则 R5 校验会跳过。现在没有明细行，触发不了，先修。与 B2-04zn 只在 bill/job.ts 注释重叠，后落地者变基。RV2。
 refs: [BR-FUND-09]
 refs_hash:
-  BR-FUND-09: 6b72b55621fb
+  BR-FUND-09: 3162bdea830e
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/settlements/**'
