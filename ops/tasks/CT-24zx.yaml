@@ -1,0 +1,30 @@
+id: CT-24zx
+repo: rebate-platform
+title: 契约：用户侧订单详情与列表加可空 reason_sub（编码取 order_reason_sub），App 显示「{title}：{sub.desc}」（D10-850 ①）
+type: contract
+# 2026-11-07 入账（agent2-acct4），D10-850 ①。CT-24zw（#2645）已加 order_reason_sub 枚举与 desc 文案、后台订单详情 reason_sub；用户侧 getOrder（OrderDetail）与 listOrders（OrderSummary）目前只有 reason，无 reason_sub。
+# 本单：OrderDetail、OrderSummary 各加可选可空 reason_sub（$ref OrderReasonSub），描述写 App 显示「{title}：{order_reason_sub.<SUB>.desc}」，null 只显示父标题；只读、只增不改。实现（订单读接口回填）归 be（D10-850 ②），三端渲染归 D10-850 ③。
+# 依据 08 BR-TEXT-05 子原因表（SPEC_REF b79958d）。只读准备见 couli-runs/AGENT2-lane/d10-850-prep.md。RV1，Codex contract 评审（D10-823）。
+refs: [BR-TEXT-05]
+refs_hash:
+  BR-TEXT-05: 5ef1a436fc26
+deps: [CT-24zw]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
