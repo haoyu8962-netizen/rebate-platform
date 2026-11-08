@@ -131,17 +131,23 @@ export function testGuardStatic(root: string, tree: TreeListing): Finding[] {
   return scanTree(root, tree.files);
 }
 
+/**
+ * test-guard: the static rules on the whole tree; with `base`, also the add-only rule of class 1
+ * and prop-timeout on what the branch changed. Both judge the changes since the fork point
+ * (forkPoint(), CT-06zzzzg, FU-GUARDGIT-MERGEBASE), as protectedPathsCheck does.
+ */
 export function testGuardCheck(
   root: string,
   tree: TreeListing,
   base?: string,
 ): CheckResult & { findings: Finding[]; add_only_violations: ProtectedHit[] } {
   const findings = testGuardStatic(root, tree);
-  const changes = base === undefined ? [] : changedFiles(base, { cwd: root });
+  const fork = base === undefined ? undefined : forkPoint(root, base);
+  const changes = fork === undefined ? [] : changedFiles(fork.ref, { cwd: root });
   const addOnly =
-    base === undefined ? [] : addOnlyViolations(changes, loadProtected(trustedRoot()));
+    fork === undefined ? [] : addOnlyViolations(changes, loadProtected(trustedRoot()));
   // CT-06zzzm (D10-750): explicit timeouts of property tests, in git mode only (test-guard.ts).
-  if (base !== undefined) {
+  if (fork !== undefined) {
     const readOr = (read: () => string): string | null => {
       try {
         return read();
@@ -152,13 +158,14 @@ export function testGuardCheck(
     findings.push(
       ...propTimeoutChecks(
         changes,
-        (p) => readOr(() => showFile(root, base, p)),
+        (p) => readOr(() => showFile(root, fork.ref, p)),
         (p) => readOr(() => readFileSync(join(root, p), 'utf8')),
       ),
     );
   }
   const problems = [...findings.map(formatFinding), ...addOnly.map(addOnlyProblem)];
-  return { ...result('test-guard', problems), findings, add_only_violations: addOnly };
+  const notices = fork === undefined || fork.notice === null ? [] : [fork.notice];
+  return { ...result('test-guard', problems, notices), findings, add_only_violations: addOnly };
 }
 
 /** The test-guard problem line for a changed class 1 (add-only) test asset. */
@@ -605,21 +612,32 @@ export function migrationSequenceCheck(root: string, base: string): CheckResult 
 
 export type ProtectedOutcome = { check: CheckResult; hits: ProtectedHit[] };
 
+/**
+ * protected-paths (规划/11 §4.4): what the branch changed since its fork point (forkPoint()),
+ * with the contents before the change (fragment rules such as the `scripts` of package.json)
+ * also read at the fork point. CT-06zzzzg (FU-GUARDGIT-MERGEBASE): comparing the work tree with the base
+ * tip counted what the base added, changed or removed after the fork as the branch's own
+ * changes (#2831, #2832), so a branch behind the base failed until it was rebased. A fork point
+ * other than the base is reported as a notice, as ledger-overwrite does; migration-sequence
+ * still compares with the base tip.
+ */
 export function protectedPathsCheck(
   root: string,
   base: string,
   taskType: string | undefined,
 ): ProtectedOutcome {
+  const fork = forkPoint(root, base);
   const hits = findProtectedHits(
-    changedFiles(base, { cwd: root }),
+    changedFiles(fork.ref, { cwd: root }),
     loadProtected(trustedRoot()),
-    gitReaders(root, base),
+    gitReaders(root, fork.ref),
     { taskType },
   );
   return {
     check: result(
       'protected-paths',
       hits.map((h) => `${h.path}: class ${h.class} (${h.rule}) ${h.change}`),
+      fork.notice === null ? [] : [fork.notice],
     ),
     hits,
   };

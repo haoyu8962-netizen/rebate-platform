@@ -1,0 +1,26 @@
+id: CT-06zzzzg
+repo: rebate-platform
+title: CT-06zzzzg：guard-git 的 protected-paths / test-guard 按分叉点（merge-base）判本 PR 的改动，主干后来新增的文件不再误报为删除（FU-GUARDGIT-MERGEBASE）
+type: guard-change
+# 2026-11-08 ops 入账（编排 17:03 ④；#2831 / #2832 同因）。基于主干。
+# 根因：tools/guard/lib/checks.ts 的 protectedPathsCheck、testGuardCheck 用 changedFiles(base)（base 为 PR 事件时 base 分支的头、与工作树两点比），
+#   分支落后主干时，主干在分叉之后新增的文件被算成本 PR 删除，冻结路径「只增不改」误报，白跑一整轮 CI 再变基。
+# 改法：这两个检查改用已有的 forkPoint(root, base)（ledger-overwrite 已在用）取分叉点比改动，分叉点不等于 base 时照 ledger-overwrite 打 notice；
+#   需要基线内容的地方（例如第一类文件改前内容）同样取分叉点。migration-sequence 等本来就要和 base 头比的检查不动（新迁移号仍须大于主干现有最大号）。
+# 工具测试钉：分支落后主干时不误报删除 / 改动；PR 真删、真改冻结文件照样报；分叉点等于 base 时行为不变。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/checks.ts'
+  - 'tools/guard/lib/checks.test.ts'
+  - 'tools/guard/guard-cli.test.ts'
+  - 'tools/guard/testing/**'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzg.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

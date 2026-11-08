@@ -1298,6 +1298,52 @@ describe('run.ts git --pr-number: owner approval (规划/11 §4.4, owner decisio
     );
   });
 
+  it('[CT-06zzzzg] a branch behind the base: the label waives only its own protected-path and add-only problems', () => {
+    const { root, base: fork } = makeRepo({
+      'turbo.json': '{}\n',
+      'test/spec/ledger/post.test.ts': "it('posts', () => {});\n",
+      'docs/notes.md': '# notes\n',
+    });
+    writeFiles(root, {
+      'turbo.json': '{ "x": 1 }\n',
+      'test/spec/ledger/post.test.ts': "it('posts, rewritten', () => {});\n",
+    });
+    fixtureGit(root, ['add', '-A']);
+    fixtureGit(root, ['commit', '-q', '-m', 'test-change']);
+    const head = fixtureGit(root, ['rev-parse', 'HEAD']);
+    // The base moved on after the fork: frozen and gate files the branch has never seen.
+    fixtureGit(root, ['checkout', '-q', '-b', 'base', fork]);
+    writeFiles(root, {
+      'test/spec/x/new.test.ts': "it('new', () => {});\n",
+      '.github/workflows/ci.yml': 'name: ci\n',
+    });
+    fixtureGit(root, ['add', '-A']);
+    fixtureGit(root, ['commit', '-q', '-m', 'base moves']);
+    const tip = fixtureGit(root, ['rev-parse', 'HEAD']);
+    fixtureGit(root, ['checkout', '-q', 'main']);
+    const res = guardWithPr(root, ['--base', tip, '--pr-number', '7'], {
+      head,
+      labels: [label(head)],
+    });
+    expect(res.status, res.stderr).toBe(0);
+    expect(res.stdout).toBe(
+      [
+        'PASS ledger-overwrite',
+        'PASS migration-sequence',
+        'PASS protected-paths (2 warnings, owner-approved)',
+        'PASS test-guard (1 warning, owner-approved)',
+        'guard git: 4 passed, 0 failed, 0 skipped',
+        '',
+      ].join('\n'),
+    );
+    expect(res.stderr).toContain('protected-paths: warning: turbo.json: class 2');
+    expect(res.stderr).toContain(
+      'protected-paths: warning: test/spec/ledger/post.test.ts: class 1',
+    );
+    expect(res.stderr).not.toContain('test/spec/x/new.test.ts');
+    expect(res.stderr).not.toContain('.github/workflows/ci.yml');
+  });
+
   it('an approval binds to a clean commit only, and the PR number is validated', () => {
     const { root, base, head } = approvedChange();
     writeFiles(root, { 'docs/notes.md': '# uncommitted\n' });
@@ -1973,8 +2019,9 @@ describe('run.ts git: ledger-overwrite and migration-sequence (CT-06q, 2026-10-1
     const tip = commitAll(root, 'base moves');
     fixtureGit(root, ['checkout', '-q', 'main']);
     expect(fixtureGit(root, ['rev-parse', 'HEAD'])).toBe(head);
-    // (protected-paths and test-guard see the base's new migration as deleted: --base is the
-    // fork point for them, as before; only the two checks of this block are read here.)
+    // (protected-paths and test-guard also compare with the fork point since CT-06zzzzg, so the
+    // base's new migration is not the branch's for them either; only the two checks of this
+    // block are read here.)
     const res = runGit(root, tip);
     expect(lines(res.stdout, 2)).toEqual(['PASS ledger-overwrite', 'PASS migration-sequence']);
     expect(res.stderr).toContain(
@@ -2088,5 +2135,267 @@ describe('run.ts git: ledger-overwrite and migration-sequence (CT-06q, 2026-10-1
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('ledger-overwrite: internal error:');
     expect(res.stderr).toContain('migration-sequence: cannot list db/migrations at no-such-ref');
+  });
+});
+
+describe('run.ts git: protected-paths and test-guard judge the changes since the fork point (CT-06zzzzg, FU-GUARDGIT-MERGEBASE)', () => {
+  const UP = '-- Up Migration\n';
+  const PKG = (scripts: Record<string, string>, extra: Record<string, unknown> = {}): string =>
+    `${JSON.stringify({ name: 'x', scripts, ...extra }, null, 2)}\n`;
+  /** A property test of the base from before D10-750 (no explicit timeout; not retroactive). */
+  const LEGACY_PROP = fx.propFile(fx.propBlock('[AC-1] legacy', ''));
+
+  function commitAll(root: string, message: string): string {
+    fixtureGit(root, ['add', '-A']);
+    fixtureGit(root, ['commit', '-q', '-m', message]);
+    return fixtureGit(root, ['rev-parse', 'HEAD']);
+  }
+
+  /**
+   * A branch behind its base, the shape of #2831 / #2832: the branch forked at `fork`, committed
+   * an unrelated change (`head`), and the base then gained, changed and removed frozen files
+   * (class 1), verification config (class 2) and gate files (class 3) the branch never saw.
+   * HEAD is the branch, with a clean working tree.
+   */
+  function behind(): { root: string; fork: string; head: string; tip: string } {
+    const { root, base: fork } = makeRepo({
+      'apps/api/src/modules/ledger/post.ts': 'export const post = 1;\n',
+      'test/spec/ledger/post.test.ts': "it('posts', () => {});\n",
+      'test/spec/ledger/keep.test.ts': "it('keeps', () => {});\n",
+      'test/spec/demo/prop.test.ts': LEGACY_PROP,
+      'db/migrations/0001_init.sql': `${UP}select 1;\n`,
+      'package.json': PKG({ test: 'vitest run' }),
+      'pnpm-lock.yaml': 'lockfileVersion: 9\n',
+      'turbo.json': '{}\n',
+      'tools/guard/x.ts': 'export const x = 1;\n',
+      'tools/old.ts': 'export const old = 1;\n',
+      'docs/notes.md': '# notes\n',
+    });
+    // The branch: changes outside every protected class, plus a package.json edit that leaves
+    // `scripts` as it was at the fork point.
+    writeFiles(root, {
+      'docs/notes.md': '# branch\n',
+      'apps/api/src/modules/ledger/post.ts': 'export const post = 2;\n',
+      'package.json': PKG({ test: 'vitest run' }, { dependencies: { zod: '4.6.5' } }),
+    });
+    const head = commitAll(root, 'branch');
+    // The base moves on (other pull requests land).
+    fixtureGit(root, ['checkout', '-q', '-b', 'base', fork]);
+    writeFiles(root, {
+      // class 1: added, and existing ones modified (a legacy property test given its timeout)
+      'test/spec/x/new.test.ts': "it('new', () => {});\n",
+      'test/spec/ledger/post.test.ts': "it('posts, as merged on the base', () => {});\n",
+      'test/spec/demo/prop.test.ts': fx.propFile(fx.propBlock('[AC-1] legacy', ', 900_000')),
+      'db/migrations/0002_second.sql': `${UP}select 2;\n`,
+      // class 2
+      'turbo.json': '{ "tasks": {} }\n',
+      'apps/api/vitest.config.ts': 'export default {};\n',
+      'package.json': PKG({ test: 'vitest run --changed' }),
+      // class 3
+      '.github/workflows/ci.yml': 'name: ci\n',
+      'packages/money/AGENTS.md': '# rules\n',
+    });
+    rmSync(join(root, 'tools/old.ts'));
+    const tip = commitAll(root, 'base moves');
+    fixtureGit(root, ['checkout', '-q', 'main']);
+    expect(fixtureGit(root, ['rev-parse', 'HEAD'])).toBe(head);
+    return { root, fork, head, tip };
+  }
+
+  const runGit = (root: string, base: string) =>
+    guard('run.ts', ['git', '--base', base, '--cwd', root]);
+  const forkNotice = (check: string, fork: string, tip: string): string =>
+    `${check}: notice: the branch forked from ${fork.slice(0, 12)}, behind ${tip.slice(0, 12)}: compared with the fork point`;
+
+  it('[CT-06zzzzg] a branch behind the base: what the base added, changed or removed since the fork is not reported by protected-paths', () => {
+    const { root, fork, tip } = behind();
+    const res = runGit(root, tip);
+    expect(res.status, res.stderr).toBe(0);
+    expect(res.stdout).toBe(
+      [
+        'PASS ledger-overwrite',
+        'PASS migration-sequence',
+        'PASS protected-paths',
+        'PASS test-guard',
+        'guard git: 4 passed, 0 failed, 0 skipped',
+        '',
+      ].join('\n'),
+    );
+    expect(res.stderr).toContain(forkNotice('protected-paths', fork, tip));
+    for (const path of [
+      'test/spec/x/new.test.ts',
+      'test/spec/ledger/post.test.ts',
+      'db/migrations/0002_second.sql',
+      'turbo.json',
+      'apps/api/vitest.config.ts',
+      'package.json',
+      '.github/workflows/ci.yml',
+      'packages/money/AGENTS.md',
+      'tools/old.ts',
+    ]) {
+      expect(res.stderr, path).not.toContain(`protected-paths: ${path}`);
+    }
+    // The standalone guard reads the same check.
+    const alone = guard('protected-paths.ts', ['--base', tip, '--cwd', root, '--json']);
+    expect(alone.status, alone.stderr).toBe(0);
+    expect(json<{ ok: boolean }>(alone.stdout).ok).toBe(true);
+  });
+
+  it('[CT-06zzzzg] a branch behind the base: test files the base added or changed since the fork are not the branch’s for test-guard', () => {
+    const { root, fork, tip } = behind();
+    const res = runGit(root, tip);
+    expect(res.stdout.split('\n')[3]).toBe('PASS test-guard');
+    expect(res.stderr).toContain(forkNotice('test-guard', fork, tip));
+    expect(res.stderr).not.toContain('[add-only]');
+    expect(res.stderr).not.toContain('[prop-timeout]');
+    const alone = guard('test-guard.ts', ['--base', tip, '--cwd', root, '--json']);
+    expect(alone.status, alone.stderr).toBe(0);
+    expect(
+      json<{ ok: boolean; findings: unknown[]; add_only_violations: unknown[] }>(alone.stdout),
+    ).toMatchObject({ ok: true, findings: [], add_only_violations: [] });
+    // The branch's own new property test is still held to D10-750 (against the fork point).
+    writeFiles(root, { 'test/spec/demo/mine.test.ts': fx.propFile(fx.propBlock('[AC-2] p', '')) });
+    const own = runGit(root, tip);
+    expect(own.status).toBe(1);
+    expect(own.stdout.split('\n')[3]).toBe('FAIL test-guard (1 problem)');
+    expect(own.stderr).toContain('test-guard: test/spec/demo/mine.test.ts:4: [prop-timeout]');
+  });
+
+  it('[CT-06zzzzg] a branch behind the base that deletes a class 1 file of the fork point is still reported', () => {
+    const { root, tip } = behind();
+    fixtureGit(root, ['rm', '-q', 'test/spec/ledger/keep.test.ts']);
+    commitAll(root, 'delete a frozen test');
+    const res = runGit(root, tip);
+    expect(res.status).toBe(1);
+    expect(res.stdout.split('\n').slice(2, 4)).toEqual([
+      'FAIL protected-paths (1 problem)',
+      'FAIL test-guard (1 problem)',
+    ]);
+    expect(res.stderr).toContain(
+      'protected-paths: test/spec/ledger/keep.test.ts: class 1 (test/spec/**) deleted',
+    );
+    expect(res.stderr).toContain(
+      'test-guard: test/spec/ledger/keep.test.ts: [add-only] existing test asset deleted (matches test/spec/**)',
+    );
+  });
+
+  it('[CT-06zzzzg] a branch behind the base that modifies a class 1 file of the fork point is still reported', () => {
+    const { root, tip } = behind();
+    writeFiles(root, { 'test/spec/ledger/keep.test.ts': "it('keeps, rewritten', () => {});\n" });
+    commitAll(root, 'modify a frozen test');
+    const res = runGit(root, tip);
+    expect(res.status).toBe(1);
+    expect(res.stdout.split('\n').slice(2, 4)).toEqual([
+      'FAIL protected-paths (1 problem)',
+      'FAIL test-guard (1 problem)',
+    ]);
+    expect(res.stderr).toContain(
+      'protected-paths: test/spec/ledger/keep.test.ts: class 1 (test/spec/**) modified',
+    );
+    expect(res.stderr).toContain(
+      'test-guard: test/spec/ledger/keep.test.ts: [add-only] existing test asset modified (matches test/spec/**)',
+    );
+    // A file the base changed too is judged by what the branch did to it since the fork.
+    const { root: both, tip: bothTip } = behind();
+    writeFiles(both, {
+      'test/spec/ledger/post.test.ts': "it('posts, by the branch', () => {});\n",
+    });
+    commitAll(both, 'modify a frozen test the base changed too');
+    const res2 = runGit(both, bothTip);
+    expect(res2.status).toBe(1);
+    expect(res2.stdout.split('\n')[2]).toBe('FAIL protected-paths (1 problem)');
+    expect(res2.stderr).toContain(
+      'protected-paths: test/spec/ledger/post.test.ts: class 1 (test/spec/**) modified',
+    );
+  });
+
+  it('[CT-06zzzzg] a branch behind the base that changes a class 2 or class 3 file is still reported', () => {
+    const { root, tip } = behind();
+    writeFiles(root, {
+      'pnpm-lock.yaml': 'lockfileVersion: 9\npackages: {}\n',
+      'tools/guard/x.ts': 'export const x = 2;\n',
+    });
+    commitAll(root, 'touch config and a gate');
+    const res = runGit(root, tip);
+    expect(res.status).toBe(1);
+    expect(res.stdout.split('\n')[2]).toBe('FAIL protected-paths (2 problems)');
+    expect(res.stderr).toContain(
+      'protected-paths: pnpm-lock.yaml: class 2 (pnpm-lock.yaml) modified',
+    );
+    expect(res.stderr).toContain('protected-paths: tools/guard/x.ts: class 3 (tools/**) modified');
+    // `scripts` changed by the branch itself (against the fork point's scripts) is a hit too.
+    const { root: pkg, tip: pkgTip } = behind();
+    writeFiles(pkg, {
+      'package.json': PKG({ test: 'true' }, { dependencies: { zod: '4.6.5' } }),
+    });
+    commitAll(pkg, 'change scripts');
+    const res2 = runGit(pkg, pkgTip);
+    expect(res2.status).toBe(1);
+    expect(res2.stdout.split('\n')[2]).toBe('FAIL protected-paths (1 problem)');
+    expect(res2.stderr).toContain('protected-paths: package.json: class 2');
+    // Uncommitted changes of the working tree count as the branch's as well.
+    const { root: wt, tip: wtTip } = behind();
+    writeFiles(wt, { 'turbo.json': '{ "mine": true }\n' });
+    const res3 = runGit(wt, wtTip);
+    expect(res3.status).toBe(1);
+    expect(res3.stdout.split('\n')[2]).toBe('FAIL protected-paths (1 problem)');
+    expect(res3.stderr).toContain('protected-paths: turbo.json: class 2 (turbo.json) modified');
+  });
+
+  it('[CT-06zzzzg] the fork point is the base: same results as before and no fork-point notice', () => {
+    // Committed on top of the base (the base is an ancestor of HEAD).
+    const { root, base } = workRepo();
+    writeFiles(root, {
+      'turbo.json': '{ "x": 1 }\n',
+      'test/spec/ledger/post.test.ts': "it('posts, rewritten', () => {});\n",
+    });
+    commitAll(root, 'on top of the base');
+    const res = runGit(root, base);
+    expect(res.status).toBe(1);
+    expect(res.stdout).toBe(
+      [
+        'PASS ledger-overwrite',
+        'PASS migration-sequence',
+        'FAIL protected-paths (2 problems)',
+        'FAIL test-guard (1 problem)',
+        'guard git: 2 passed, 2 failed, 0 skipped',
+        '',
+      ].join('\n'),
+    );
+    expect(res.stderr).toContain('protected-paths: turbo.json: class 2 (turbo.json) modified');
+    expect(res.stderr).toContain(
+      'protected-paths: test/spec/ledger/post.test.ts: class 1 (test/spec/**) modified',
+    );
+    expect(res.stderr).not.toContain('fork point');
+    expect(res.stderr).not.toContain('forked from');
+    // HEAD is the base, changes in the working tree only.
+    const { root: wt, base: wtBase } = workRepo();
+    writeFiles(wt, { 'docs/notes.md': '# changed\n' });
+    const clean = runGit(wt, wtBase);
+    expect(clean.status, clean.stderr).toBe(0);
+    expect(clean.stderr).not.toContain('fork point');
+    expect(clean.stderr).not.toContain('forked from');
+  });
+
+  it('[CT-06zzzzg] migration-sequence still compares with the base tip on a branch behind it', () => {
+    const { root, tip } = behind();
+    // 0002 is free at the fork point but taken on the base: the branch must use 0003.
+    writeFiles(root, { 'db/migrations/0002_mine.sql': `${UP}select 22;\n` });
+    commitAll(root, 'add a migration');
+    const res = runGit(root, tip);
+    expect(res.status).toBe(1);
+    expect(res.stdout).toBe(
+      [
+        'PASS ledger-overwrite',
+        'FAIL migration-sequence (1 problem)',
+        'PASS protected-paths',
+        'PASS test-guard',
+        'guard git: 3 passed, 1 failed, 0 skipped',
+        '',
+      ].join('\n'),
+    );
+    expect(res.stderr).toContain(
+      'migration-sequence: db/migrations/0002_mine.sql: 0002 已被 0002_second.sql 占用，请改为 0003',
+    );
   });
 });
