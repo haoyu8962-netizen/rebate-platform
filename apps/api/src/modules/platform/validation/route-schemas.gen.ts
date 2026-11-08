@@ -17578,6 +17578,19 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         "withdrawal_id"
       ],
       "additionalProperties": false
+    },
+    "querystring": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [],
+      "additionalProperties": false
     }
   },
   "adminBatchApproveWithdrawals": {

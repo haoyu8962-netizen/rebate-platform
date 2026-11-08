@@ -1,0 +1,38 @@
+{
+  "risk_note": "RV1 (contract text and generated comments only). 04 §11.1 gives user.lookup sight of a looked-up user's withdrawals; listAdminWithdrawals and getAdminWithdrawal accepted only withdraw.review / fund.view, so customer service got 10403 (CT-24y review S2). Now any of withdraw.review, fund.view, user.lookup. An account holding user.lookup but neither of the other two must pass user_id (else 10403 admin_permission_denied); on the detail, user_id of another user is 20001 [withdrawal_id] as an unknown id (the adminGetClaim precedent). For such an account reject_note and auto_decision are null, risk_flags is [] and holds[].source_ref is null (ruling D10-1042: BR-TEXT-08 internal note, BR-WDR-29 / 30 reviewer material), and passing risk_flag is 10403 since the filter would reveal the blanked flags. Those four fields were already nullable or arrays, so the response shape is unchanged; the detail gains one optional query parameter. No write operation gains user.lookup. Implementation is B2-09zg.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex quota exhausted until 2026-11-15 (D10-823 ④): contract review by a fresh independent Claude via claude-run.sh each round. Round 1 pass with no S0/S1; its one out_of_scope S2 (a user.lookup account would see reject_note, risk_flags, auto_decision and holds[].source_ref) went to the orchestrator and was ruled D10-1042 (blank them). Round 2 over that increment pass with no findings; it judged the coarse fields still visible (review_mode, risk_flags_at, hold_reason, blocked_reason, needs_manual, holds[].reason) not to leak the blanked content. Reviewers cannot run tools; the orchestrator ran codegen, the four route generators (no drift), tsc 0, contracts:check 0 and contracts-ts 392/392. couli-runs/CT-24zzb/review-contract-r1.keep.json, review-contract-r2.json. Rebased onto main after #2745 took the contract slot (D10-1047): the contract change was re-applied as a patch and every generated file regenerated, not merged; contracts:check 0, tsc 0."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "not re-run for this task: test/properties is unchanged from main; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "legacy_no_red": true,
+  "task": "CT-24zzb",
+  "spec_commit": "76f6860031b1249ae9baf1955a213641dc7312da",
+  "spec_ref": "39756e36debb7660e6b113b9e4392e7339ab687c",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "22568a7ee654ea526a8dacf00e94bb37aa744c02",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}

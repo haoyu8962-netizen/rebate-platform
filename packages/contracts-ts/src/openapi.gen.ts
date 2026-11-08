@@ -8989,8 +8989,12 @@ export interface paths {
          * Withdrawals of the app, page by page, newest applied first
          * @description The review list of the withdrawal console (01 F-ADM-07; 04 §3.2 withdrawals;
          *     design/specs/admin-withdrawals.md §1, §2, §4). Read only, no step-up. Permission point:
-         *     any of `withdraw.review` or `fund.view` (04 §11.1, §11.2); a super admin holds every
-         *     point. Each row is one withdrawal of the console's app with its `withdrawal_id` for the
+         *     any of `withdraw.review`, `fund.view` or `user.lookup` (04 §11.1, §11.2). An account
+         *     holding only `user.lookup` (04 §11.1: it may see the withdrawals of a user it looks up)
+         *     may read the list only together with `user_id`, the user detail page's withdrawals tab
+         *     (design/specs/admin-user-detail.md); without `user_id` that account gets 10403 with
+         *     `data.reason=admin_permission_denied`, the same as an account holding none of the three
+         *     points. A super admin holds every point. Each row is one withdrawal of the console's app with its `withdrawal_id` for the
          *     detail route, its withdrawal number `out_biz_no`, the user (`user_id` and the phone number
          *     masked 3 + 4, BR-ID-33; never the full number), `status`, `display_status` (enum
          *     admin_withdrawal_display_status, derived from status + review_mode + hold_reason as the
@@ -9001,6 +9005,17 @@ export interface paths {
          *     `reject_reason_code` with the internal `reject_note`), the review (`reviewer_id`,
          *     `reviewed_at`), `batch_id`, the W1 `risk_flags` snapshot with `risk_flags_at`
          *     (BR-WDR-29), `created_at` and `paid_at`. No payee account or payee name is in a row.
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; BR-WDR-29 and BR-WDR-30 are for
+         *     the reviewer; D10-1042): for an account holding `user.lookup` but neither
+         *     `withdraw.review` nor `fund.view` (the same test as the `user_id` requirement above; a
+         *     super admin holds every point and is not such an account), every row carries
+         *     `reject_note` = null, `auto_decision` = null and `risk_flags` = []. The amounts, the
+         *     statuses, `reject_reason_code` and every other field are as usual, and the shape of the
+         *     row does not change. Such an account may not filter by `risk_flag` either, since the
+         *     filter would reveal the blanked flags: passing `risk_flag` gets 10403 with
+         *     `data.reason=admin_permission_denied`. An account holding `withdraw.review` or
+         *     `fund.view` is not affected by any of this.
          *
          *     Filters combine with AND: `status`, `display_status` (the quick filters 待审 / 驳回 / 手动
          *     / 自动 of BR-WDR-08 细则 are pending_review, rejected, paid_manual and paid_auto_system or
@@ -9023,8 +9038,8 @@ export interface paths {
          *     statuses, condition codes and risk flags come from the console dictionary (BR-TEXT-25
          *     admin_dict), not from this contract. Writes (approve, reject, batch approve, batch and
          *     single manual payout, automatic payout settings, cancelling a WeChat transfer), the export
-         *     and the risk flag recalculation are not part of this operation. Reading does not write an
-         *     audit record.
+         *     and the risk flag recalculation are not part of this operation; `user.lookup` opens none
+         *     of them, each keeps its own permission point. Reading does not write an audit record.
          */
         get: operations["listAdminWithdrawals"];
         put?: never;
@@ -9046,8 +9061,16 @@ export interface paths {
          * One withdrawal with its amounts, batch, transfer attempts, holds, decision and risk flags
          * @description The withdrawal detail of the console (01 F-ADM-07; 04 §3.2 withdrawals, payout_batches,
          *     payout_batch_items, payout_attempts, withdraw_holds; design/specs/admin-withdrawal-detail.md
-         *     §1, §2, §4). Read only, no step-up. Permission point: any of `withdraw.review` or
-         *     `fund.view` (04 §11.1, §11.2). The fields of a list row, plus:
+         *     §1, §2, §4). Read only, no step-up. Permission point: any of `withdraw.review`,
+         *     `fund.view` or `user.lookup` (04 §11.1, §11.2); a super admin holds every point. An
+         *     account holding only `user.lookup` (04 §11.1) must pass `user_id` (the user it is looking
+         *     at); without it the account gets 10403 with `data.reason=admin_permission_denied`, the
+         *     same as an account holding none of the three points. When `user_id` is given (by any
+         *     account) and the withdrawal belongs to another user, the answer is 20001 with
+         *     `data.fields=[withdrawal_id]`, the same as an unknown withdrawal_id or a withdrawal of
+         *     another app (no probing). A `user_id` that is not UUID-shaped is 20001 with
+         *     `data.fields=[user_id]`. The writes on a withdrawal keep their own permission points;
+         *     `user.lookup` opens none of them. The fields of a list row, plus:
          *     - the remaining columns of the withdrawal: `payout_method`, `review_deadline` (BR-WDR-26),
          *       `fail_code`, `executor_id`, `executed_at`, `execute_seq`, `manual_resolution`,
          *       `resolver_ids`, `manual_entry_by`, `manual_confirm_by`, `hold_at`, `channel_state`,
@@ -9074,6 +9097,15 @@ export interface paths {
          *     the audit log (GET /admin/v1/audit-logs). An unknown `withdrawal_id` or a withdrawal of
          *     another app is 20001 with `data.fields=[withdrawal_id]` (no 404). Reading does not write
          *     an audit record.
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; BR-WDR-29 and BR-WDR-30 are for
+         *     the reviewer; D10-1042): for an account holding `user.lookup` but neither
+         *     `withdraw.review` nor `fund.view` (the same test as the `user_id` requirement above; a
+         *     super admin holds every point and is not such an account), the response carries
+         *     `reject_note` = null, `auto_decision` = null, `risk_flags` = [] and `source_ref` = null
+         *     on every row of `holds`. The amounts, the statuses, `reject_reason_code` and every other
+         *     field are as usual, and the shape of the response does not change. An account holding
+         *     `withdraw.review` or `fund.view` is not affected by any of this.
          */
         get: operations["getAdminWithdrawal"];
         put?: never;
@@ -20145,7 +20177,7 @@ export interface components {
         AdminWithdrawalHold: {
             hold_id: components["schemas"]["Id"];
             reason: components["schemas"]["AdminWithdrawHoldKind"];
-            /** @description What caused the hold, such as a recon_diffs id; null when none. */
+            /** @description What caused the hold, such as a recon_diffs id; null when none, and always null for an account holding user.lookup but neither withdraw.review nor fund.view (D10-1042). */
             source_ref: string | null;
             /** Format: date-time */
             created_at: string;
@@ -20169,7 +20201,7 @@ export interface components {
             fee_fen: components["schemas"]["Fen"];
             tax_fen: components["schemas"]["Fen"];
             net_fen: components["schemas"]["Fen"];
-            /** @description withdrawals.auto_decision; null while no decision is stored. */
+            /** @description withdrawals.auto_decision; null while no decision is stored, and always null for an account holding user.lookup but neither withdraw.review nor fund.view (BR-WDR-30, D10-1042). */
             auto_decision: components["schemas"]["AdminWithdrawalAutoDecision"] | null;
             /** @description Why W9 returned the withdrawal to APPROVED (BR-WDR-13, BR-WDR-17); null otherwise. */
             hold_reason: components["schemas"]["AdminWithdrawalHoldReason"] | null;
@@ -20179,7 +20211,7 @@ export interface components {
             needs_manual: boolean;
             /** @description Set on a REJECTED withdrawal (BR-WDR-10), otherwise null. */
             reject_reason_code: components["schemas"]["AdminWithdrawalRejectReason"] | null;
-            /** @description Internal note of the rejection, admin only (BR-WDR-10); null when none. */
+            /** @description Internal note of the rejection, admin only (BR-WDR-10); null when none, and always null for an account holding user.lookup but neither withdraw.review nor fund.view (BR-TEXT-08, D10-1042). */
             reject_note: string | null;
             /** @description admin_users.id of the reviewer; null before review and for a system review (review_mode auto). */
             reviewer_id: string | null;
@@ -20187,7 +20219,7 @@ export interface components {
             reviewed_at: string | null;
             /** @description The payout batch the withdrawal is in now (payout_batches.id); null when none. */
             batch_id: string | null;
-            /** @description The risk flag snapshot written with W1 and never recalculated here (BR-WDR-29); [] when nothing hit. */
+            /** @description The risk flag snapshot written with W1 and never recalculated here (BR-WDR-29); [] when nothing hit, and always [] for an account holding user.lookup but neither withdraw.review nor fund.view (D10-1042). */
             risk_flags: components["schemas"]["AdminWithdrawalRiskFlag"][];
             /**
              * Format: date-time
@@ -20239,7 +20271,7 @@ export interface components {
             fee_fen: components["schemas"]["Fen"];
             tax_fen: components["schemas"]["Fen"];
             net_fen: components["schemas"]["Fen"];
-            /** @description withdrawals.auto_decision; null while no decision is stored. */
+            /** @description withdrawals.auto_decision; null while no decision is stored, and always null for an account holding user.lookup but neither withdraw.review nor fund.view (BR-WDR-30, D10-1042). */
             auto_decision: components["schemas"]["AdminWithdrawalAutoDecision"] | null;
             /** @description Why W9 returned the withdrawal to APPROVED (BR-WDR-13, BR-WDR-17); null otherwise. */
             hold_reason: components["schemas"]["AdminWithdrawalHoldReason"] | null;
@@ -20249,7 +20281,7 @@ export interface components {
             needs_manual: boolean;
             /** @description Set on a REJECTED withdrawal (BR-WDR-10), otherwise null. */
             reject_reason_code: components["schemas"]["AdminWithdrawalRejectReason"] | null;
-            /** @description Internal note of the rejection, admin only (BR-WDR-10); null when none. */
+            /** @description Internal note of the rejection, admin only (BR-WDR-10); null when none, and always null for an account holding user.lookup but neither withdraw.review nor fund.view (BR-TEXT-08, D10-1042). */
             reject_note: string | null;
             /** @description admin_users.id of the reviewer; null before review and for a system review (review_mode auto). */
             reviewer_id: string | null;
@@ -20257,7 +20289,7 @@ export interface components {
             reviewed_at: string | null;
             /** @description The payout batch the withdrawal is in now (payout_batches.id); null when none. */
             batch_id: string | null;
-            /** @description The risk flag snapshot written with W1 and never recalculated here (BR-WDR-29); [] when nothing hit. */
+            /** @description The risk flag snapshot written with W1 and never recalculated here (BR-WDR-29); [] when nothing hit, and always [] for an account holding user.lookup but neither withdraw.review nor fund.view (D10-1042). */
             risk_flags: components["schemas"]["AdminWithdrawalRiskFlag"][];
             /**
              * Format: date-time
@@ -21494,7 +21526,14 @@ export interface components {
         AdminWithdrawalReviewModeFilter: components["schemas"]["WithdrawalReviewMode"];
         /** @description Only withdrawals of this payout channel (withdrawals.payout_channel, enum payout_method); absent = all. */
         AdminWithdrawalChannelFilter: components["schemas"]["AdminPayoutChannelCode"];
-        /** @description Only withdrawals of this user (the user_id; UID and phone lookups go through the top-bar search); one of no user of the app → empty page. */
+        /**
+         * @description Only withdrawals of this user (the user_id; UID and phone lookups go through the top-bar
+         *     search). Required for an account holding user.lookup but neither withdraw.review nor
+         *     fund.view (else 10403 with data.reason=admin_permission_denied). On the list, one of no
+         *     user of the app → empty page; on the detail, a withdrawal of another user → 20001 with
+         *     data.fields=[withdrawal_id], and a value that is not UUID-shaped → 20001 with
+         *     data.fields=[user_id].
+         */
         AdminWithdrawalUserFilter: components["schemas"]["Id"];
         /** @description Only the withdrawal with this full withdrawal number (withdrawals.out_biz_no, exact match); absent = all. */
         AdminWithdrawalOutBizNoFilter: components["schemas"]["AdminWithdrawalOutBizNo"];
@@ -21510,7 +21549,12 @@ export interface components {
         AdminWithdrawalHoldReasonFilter: components["schemas"]["AdminWithdrawalHoldReason"];
         /** @description true = only withdrawals with a blocked_reason (the「暂停」mark, BR-WDR-05); false = only those without; absent = all. */
         AdminWithdrawalBlockedFilter: boolean;
-        /** @description Only withdrawals whose risk_flags snapshot (BR-WDR-29) holds this code; absent = all. */
+        /**
+         * @description Only withdrawals whose risk_flags snapshot (BR-WDR-29) holds this code; absent = all. Not
+         *     open to an account holding user.lookup but neither withdraw.review nor fund.view, for
+         *     which risk_flags is blanked (D10-1042); such an account passing it gets 10403 with
+         *     data.reason=admin_permission_denied.
+         */
         AdminWithdrawalRiskFlagFilter: components["schemas"]["AdminWithdrawalRiskFlagCode"];
         /** @description The withdrawal (withdrawals.id) as a list row carries it; unknown or of another app → 20001 with data.fields=[withdrawal_id]. */
         AdminWithdrawalIdPath: components["schemas"]["Id"];
@@ -40665,7 +40709,14 @@ export interface operations {
                 review_mode?: components["parameters"]["AdminWithdrawalReviewModeFilter"];
                 /** @description Only withdrawals of this payout channel (withdrawals.payout_channel, enum payout_method); absent = all. */
                 payout_channel?: components["parameters"]["AdminWithdrawalChannelFilter"];
-                /** @description Only withdrawals of this user (the user_id; UID and phone lookups go through the top-bar search); one of no user of the app → empty page. */
+                /**
+                 * @description Only withdrawals of this user (the user_id; UID and phone lookups go through the top-bar
+                 *     search). Required for an account holding user.lookup but neither withdraw.review nor
+                 *     fund.view (else 10403 with data.reason=admin_permission_denied). On the list, one of no
+                 *     user of the app → empty page; on the detail, a withdrawal of another user → 20001 with
+                 *     data.fields=[withdrawal_id], and a value that is not UUID-shaped → 20001 with
+                 *     data.fields=[user_id].
+                 */
                 user_id?: components["parameters"]["AdminWithdrawalUserFilter"];
                 /** @description Only the withdrawal with this full withdrawal number (withdrawals.out_biz_no, exact match); absent = all. */
                 out_biz_no?: components["parameters"]["AdminWithdrawalOutBizNoFilter"];
@@ -40681,7 +40732,12 @@ export interface operations {
                 hold_reason?: components["parameters"]["AdminWithdrawalHoldReasonFilter"];
                 /** @description true = only withdrawals with a blocked_reason (the「暂停」mark, BR-WDR-05); false = only those without; absent = all. */
                 blocked?: components["parameters"]["AdminWithdrawalBlockedFilter"];
-                /** @description Only withdrawals whose risk_flags snapshot (BR-WDR-29) holds this code; absent = all. */
+                /**
+                 * @description Only withdrawals whose risk_flags snapshot (BR-WDR-29) holds this code; absent = all. Not
+                 *     open to an account holding user.lookup but neither withdraw.review nor fund.view, for
+                 *     which risk_flags is blanked (D10-1042); such an account passing it gets 10403 with
+                 *     data.reason=admin_permission_denied.
+                 */
                 risk_flag?: components["parameters"]["AdminWithdrawalRiskFlagFilter"];
             };
             header?: {
@@ -40822,7 +40878,17 @@ export interface operations {
     };
     getAdminWithdrawal: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description Only withdrawals of this user (the user_id; UID and phone lookups go through the top-bar
+                 *     search). Required for an account holding user.lookup but neither withdraw.review nor
+                 *     fund.view (else 10403 with data.reason=admin_permission_denied). On the list, one of no
+                 *     user of the app → empty page; on the detail, a withdrawal of another user → 20001 with
+                 *     data.fields=[withdrawal_id], and a value that is not UUID-shaped → 20001 with
+                 *     data.fields=[user_id].
+                 */
+                user_id?: components["parameters"]["AdminWithdrawalUserFilter"];
+            };
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
