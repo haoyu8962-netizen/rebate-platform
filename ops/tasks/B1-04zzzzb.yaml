@@ -1,0 +1,23 @@
+id: B1-04zzzzb
+repo: rebate-platform
+title: catalog：后台保存搜索热词 / 关键词直达时校验禁词（FU-ADMIN-HOTWORDS-PROHIBITED-CHECK，D10-1064 / D10-1070）——search.hot_words 的 text、search.keyword_routes 的 keyword 命中禁词即拒绝保存，复用 20001 fields=[配置键]，不新增错误码、不动契约与迁移，只拦新保存
+type: impl
+# 2026-11-08 withdraw 入账（编排 D10-1068 ②、D10-1070 ②，从 admin 挪来）。方案 couli-runs/FU-ADMIN-HOTWORDS-PROHIBITED-CHECK/plan.md。
+# RV0 记录（代理补全默认，编排事后报负责人，照 D10-1064）：规划只有方向（01 F-PROD-08「搜索和 Agent 共用后台黑名单」），后台保存热词 / 关键词直达要不要校验禁词 08 / 04 / 契约都未写。取的默认：命中拒绝保存；复用配置中心已有的 20001 data.fields=[配置键]，只回配置键、不指出具体词（要指出得改契约，属新需求）；只拦新保存、不清存量（种子为空，线上未开放）。
+# 做法：只改 catalog/hot-words/check.ts 的 searchConfigSaveCheck().refusals：该键形状通过后再判禁词，命中把键放进 refused。词表与匹配用 B1-04zzzza 的 catalog/domain/query-blockwords.ts isProhibitedQuery（NFKC、转小写、去空白后子串比对，紧接「非」之后不算；catalog 不能依赖 agent），不抄第三份。**禁词判定不进 searchHotWordsFit / searchKeywordRoutesFit**：read.ts:66 读取时也用 searchHotWordsFit，加进去后已存旧值含禁词会被读接口整表置空。
+# 规则测试钉：热词命中 → 20001 fields=[search.hot_words]，整键不保存；关键词直达命中 → fields=[search.keyword_routes]；全角 / 大小写 / 夹空白也拦；「非处方药」放行；无禁词照常保存；只写别的配置键不受影响；已存旧值含禁词时读接口行为不变。RV1；tester 新鲜独立 Claude，评审独立 Claude（Codex 额度用尽至 11-15）。
+refs: []
+refs_hash: {}
+deps: [B1-04zzzza]
+paths:
+  - 'apps/api/src/modules/catalog/hot-words/check.ts'
+  - 'apps/api/src/modules/catalog/hot-words/check-prohibited.test.ts'
+test_paths:
+  - 'test/spec/catalog/hot-words-prohibited/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/hot-words-prohibited/**'
+status: todo
+pr: null
