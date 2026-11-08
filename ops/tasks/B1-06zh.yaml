@@ -17,6 +17,7 @@ paths:
   - 'db/migrations/0135_union-pdd-pid-filings.sql'
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
+  - 'tools/ci/lint-migrations.test.ts' # union_ 前缀被 lint-migrations 判为资金表：classifies 用例的资金表期望集合追加 union_pdd_pid_filings，只加值、不改分类器（同 B2-04zh #2293、B2-12a；tools/** 由编排核标签）
 test_paths:
   - 'test/spec/db/union-pdd-pid-filings/**'
 impl: claude
