@@ -19,4 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/identity/realname-min-age-config/**'
-status: todo
+status: done
+pr: 2886
