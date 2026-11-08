@@ -1,0 +1,21 @@
+id: B1-01zzs
+repo: rebate-platform
+title: 平台幂等「存档体覆写」——executeInTransaction 允许调用方给出存档用的响应体（与返回给客户端的响应分开），供 POST /v1/auth/merge 把 tokens 置空后存档，明文 access / refresh 令牌不进 idempotency_keys；不传时行为不变
+type: impl
+# 2026-11-09 入账（identity，编排 D10-1099 Q-6 选 B，小单先行，B1-20c 依赖）。来源 B1-20c 方案 §8.1 Q-6（couli-runs/B1-20c/plan.md）：
+# executeInTransaction 会把 code 0 的完整响应体存进 idempotency_keys.response 保留 30 天（platform/idempotency/index.ts:108-115），merge 成功响应含目标账号令牌，
+# 而存档永远不会被回放（源会话已吊销，同键重试在 ② 就 10002），与「token 只存哈希」（04 §3.2 sessions）相悖。
+# 只加可选项：调用方传 archive（或同义）时存档用它，返回客户端仍是原响应；不传时存档与回放完全不变；回放读到的是存档体（对 merge 不会发生）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/idempotency/**'
+test_paths:
+  - 'test/spec/platform/idempotency-archive-override/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/idempotency-archive-override/**'
+status: todo

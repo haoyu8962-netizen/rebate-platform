@@ -1,0 +1,39 @@
+id: B1-20c
+repo: rebate-platform
+title: 并号执行端 POST /v1/auth/merge（BR-ID-06）——第三方空号并入手机号账号：锁后重读条件、迁 user_oauth、源联盟绑定 released 不冷却、源置墓碑（deleted_reason=merged）并吊销会话、目标建会话；去掉 mergeAccount 的 planned
+type: impl
+# 2026-11-09 入账（identity，编排 D10-1099 认可方案 couli-runs/B1-20c/plan.md；规划/05 B1-20 主路径；含 B1-02zp 的 FU-MERGE-REVERIFY）。
+# 口径（D10-1099）：Q-1 并号后到的源订单按现状归墓碑、份额记平台（转负责人）；Q-2 墓碑订单不可认领；Q-3 源有任何 admin_adjustments 行即非空号、Q-4 源有 blocked(admin_disable) 绑定即不可并（均 30411，判定与 bind-phone 都加）；
+# Q-5 目标冻结放行；Q-6 存档 tokens 置空（依赖 B1-01zzs）；T-1～T-9 认可，T-7（linking 写者锁后拒 status='deleted'）并入。union_pdd_pid_filings 留墓碑（D10-1097）。无迁移。规划回写由编排随下一批 SPEC_REF 做。
+refs: [BR-ID-06, BR-ID-05, BR-ID-07, BR-ID-37, BR-WDR-01]
+refs_hash:
+  BR-ID-06: 1b8572f798d4
+  BR-ID-05: 0737ee3b67e2
+  BR-ID-07: 4f2a4bdf0a2a
+  BR-ID-37: b93e6a37d3dc
+  BR-WDR-01: 6f61aa67b7fb
+deps: [B1-01zzs, B1-20a, B1-20e, B1-02zp]
+paths:
+  - 'apps/api/src/modules/identity/**'
+  - 'apps/api/src/modules/linking/application/merge-release*.ts'
+  - 'apps/api/src/modules/linking/application/binding-lock*.ts'
+  - 'apps/api/src/modules/linking/application/union-bindings*.ts'
+  - 'apps/api/src/modules/linking/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/identity/merge-account/**'
+  - 'test/spec/linking/merge-release/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/merge-account/**'
+  - 'test/spec/linking/merge-release/**'
+status: todo
