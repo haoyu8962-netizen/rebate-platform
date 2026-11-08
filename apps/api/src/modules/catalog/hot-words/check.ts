@@ -7,6 +7,7 @@
 // stored lists as configured, so they also keep SearchHotWordsData's limits.
 import { getLinkPatterns, type LinkPatternsSpec } from '../../platform/index.ts';
 import { isUnionHost, normalisedHttpsHost } from '../../content/index.ts';
+import { isProhibitedQuery } from '../domain/query-blockwords.ts';
 import { routeTable } from './route-table.ts';
 
 /** What the keyword route check reads besides the value. */
@@ -97,6 +98,21 @@ export function searchKeywordRoutesFit(value: unknown, context: SearchConfigChec
 }
 
 /**
+ * B1-04zzzzb (D10-1064 / D10-1070; 01 F-PROD-08, agent's default until 08 writes it): whether a
+ * value that already fits holds a prohibited word in `field`. Only saving is refused here: the
+ * read path keeps using the *Fit functions, so a stored value is never blanked by this rule.
+ */
+function holdsProhibitedWord(value: unknown, field: 'text' | 'keyword'): boolean {
+  return (
+    Array.isArray(value) &&
+    value.some(
+      (item) =>
+        isPlainObject(item) && typeof item[field] === 'string' && isProhibitedQuery(item[field]),
+    )
+  );
+}
+
+/**
  * The configuration center's save check of the two keys (content ConfigItemAdminChecks.save,
  * wired by app.module): `keys` the rows it reads (the switch included, no row = on),
  * `refusals(stored, written)` the written search keys whose values do not fit. A write that sets
@@ -112,7 +128,8 @@ export function searchConfigSaveCheck(linkPatterns: () => LinkPatternsSpec = get
       const refused: string[] = [];
       if (
         written.has(SEARCH_HOT_WORDS_KEY) &&
-        !searchHotWordsFit(written.get(SEARCH_HOT_WORDS_KEY))
+        (!searchHotWordsFit(written.get(SEARCH_HOT_WORDS_KEY)) ||
+          holdsProhibitedWord(written.get(SEARCH_HOT_WORDS_KEY), 'text'))
       ) {
         refused.push(SEARCH_HOT_WORDS_KEY);
       }
@@ -121,7 +138,10 @@ export function searchConfigSaveCheck(linkPatterns: () => LinkPatternsSpec = get
           ? written.get(UNION_HOST_BLOCK)
           : stored.get(UNION_HOST_BLOCK);
         const context = { unionHostBlock: block !== false, linkPatterns: linkPatterns() };
-        if (!searchKeywordRoutesFit(written.get(SEARCH_KEYWORD_ROUTES_KEY), context)) {
+        if (
+          !searchKeywordRoutesFit(written.get(SEARCH_KEYWORD_ROUTES_KEY), context) ||
+          holdsProhibitedWord(written.get(SEARCH_KEYWORD_ROUTES_KEY), 'keyword')
+        ) {
           refused.push(SEARCH_KEYWORD_ROUTES_KEY);
         }
       }

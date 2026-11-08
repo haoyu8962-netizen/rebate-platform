@@ -1,0 +1,142 @@
+{
+  "task": "B1-04zzzzb",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "ea5e1678ef842bd2a46d6ff315dec0b0c007a596",
+  "red_tests": [
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#8] yaml prohibited 组的每个词，原样、在词中间、夹空白、大写、全角，在热词与直达里都被拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"彩 票\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"彩\\t票\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"ＵＳＤＴ\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"UsDt\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"买彩票送券\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"厨房刀具\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"刀具架\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"Ⅱ类医疗器械\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"ⅱ类医疗器械\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"II类医疗器械\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"ii类医疗器械\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"非处方药彩票\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"处方药非处方药\" 命中禁词，两个键都拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#10] 「非处方药」两个键都放行，同样的写法去掉「非」即拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#11] 无禁词的列表不被拒，同一列表加一个禁词即拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#12] 禁词判定不进 Fit：保存被拒的值，searchHotWordsFit / searchKeywordRoutesFit 仍为真（读接口靠它，存量不被置空）",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#13] 形状不合法的值不进禁词判定（text 非字符串不抛错），只报一次该键",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#14] 联盟域开关关闭时，禁词 keyword 照样拒",
+    "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#15] 只看本次写入的值：stored 里的禁词不让无关写入被拒，写入禁词才拒",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#1] search.hot_words 含禁词 text → 批量 20001 fields=[search.hot_words]、单条 20001 [value]，旧值不变、无成功审计；库里已有含禁词的旧值读接口仍原样返回",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#2] search.keyword_routes 含禁词 keyword → 批量 20001 fields=[search.keyword_routes]、单条 20001 [value]，旧值不变、无成功审计；库里已有含禁词的直达读接口仍原样返回",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#3] 夹空白、全角、大小写混写、禁词在词中间，两个键都拦，都不写入",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#4] 「处方药」被拒，「非处方药」放行、能保存（「非」后的命中不算）",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#5] 混了禁词的列表被拒；去掉禁词后同一列表照常保存",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#6] 一次写入混合（热词有禁词，直达与别的键合法）：20001，禁词键在 fields 里且没保存",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#6] 一次写入混合（直达有禁词，热词与别的键合法）：20001，禁词键在 fields 里且没保存",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#6] 一次写入混合（两个键都有禁词）：20001，禁词键在 fields 里且没保存",
+    "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#7] 只拦新保存：原样重存旧的禁词被拒；旧值含禁词时写别的键、换成干净列表都照常成功"
+  ],
+  "risk_note": "RV1, catalog only (catalog/hot-words/check.ts); no contract, error-code or migration change (withdraw lane, model Claude Opus 5.5; orchestrator rulings D10-1064, D10-1068, D10-1070; FU-ADMIN-HOTWORDS-PROHIBITED-CHECK). RV0 record: 01 F-PROD-08 only gives the direction (搜索和 Agent 共用后台黑名单); whether saving hot words or keyword routes checks prohibited terms is not in 08 / 04 / the contract. Default taken, recorded in the ledger, reported to the owner by the orchestrator: a prohibited text / keyword refuses the save with the existing 20001; no specific word is named; only saves are refused, stored values are not cleaned (seeds are empty). Matching is B1-04zzzza's isProhibitedQuery (no third copy of the list). The check stays out of searchHotWordsFit / searchKeywordRoutesFit, which the read path also uses, so a stored value is never blanked. fields follow the configuration center's existing behaviour: [value] on the single PUT, the config key on the batch, [to_version] on a rollback to a version holding a prohibited term. Test-machine full verify not run (AWS runners disabled, D10-555; CI is the full verification).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ea5e1678ef842bd2a46d6ff315dec0b0c007a596",
+      "tree": "051460fdd6dfdc7ac57b4e249f225e7d236faaa4",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T19:03:02Z",
+      "finished_at": "2026-11-08T19:03:56Z",
+      "red_tests": [
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#8] yaml prohibited 组的每个词，原样、在词中间、夹空白、大写、全角，在热词与直达里都被拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"彩 票\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"彩\\t票\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"ＵＳＤＴ\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"UsDt\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"买彩票送券\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"厨房刀具\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"刀具架\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"Ⅱ类医疗器械\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"ⅱ类医疗器械\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"II类医疗器械\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"ii类医疗器械\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"非处方药彩票\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#9] \"处方药非处方药\" 命中禁词，两个键都拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#10] 「非处方药」两个键都放行，同样的写法去掉「非」即拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#11] 无禁词的列表不被拒，同一列表加一个禁词即拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#12] 禁词判定不进 Fit：保存被拒的值，searchHotWordsFit / searchKeywordRoutesFit 仍为真（读接口靠它，存量不被置空）",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#13] 形状不合法的值不进禁词判定（text 非字符串不抛错），只报一次该键",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#14] 联盟域开关关闭时，禁词 keyword 照样拒",
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts > [AC-B1-04zzzzb#15] 只看本次写入的值：stored 里的禁词不让无关写入被拒，写入禁词才拒",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#1] search.hot_words 含禁词 text → 批量 20001 fields=[search.hot_words]、单条 20001 [value]，旧值不变、无成功审计；库里已有含禁词的旧值读接口仍原样返回",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#2] search.keyword_routes 含禁词 keyword → 批量 20001 fields=[search.keyword_routes]、单条 20001 [value]，旧值不变、无成功审计；库里已有含禁词的直达读接口仍原样返回",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#3] 夹空白、全角、大小写混写、禁词在词中间，两个键都拦，都不写入",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#4] 「处方药」被拒，「非处方药」放行、能保存（「非」后的命中不算）",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#5] 混了禁词的列表被拒；去掉禁词后同一列表照常保存",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#6] 一次写入混合（热词有禁词，直达与别的键合法）：20001，禁词键在 fields 里且没保存",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#6] 一次写入混合（直达有禁词，热词与别的键合法）：20001，禁词键在 fields 里且没保存",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#6] 一次写入混合（两个键都有禁词）：20001，禁词键在 fields 里且没保存",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts > [AC-B1-04zzzzb#7] 只拦新保存：原样重存旧的禁词被拒；旧值含禁词时写别的键、换成干净列表都照常成功"
+      ],
+      "expected": [
+        "test/spec/catalog/hot-words-prohibited/refusals.test.ts",
+        "test/spec/catalog/hot-words-prohibited/save.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a8ae1da9fbd2f311f37a7b5ee05a48d0a8bf6aed9b88e37e11a126cbf9c48773"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "0f456f2cf8b654984963a405b9680484658f1be80b5ae88d9e9feeec98bfc7d6"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "Code review (general, RV1) by a fresh independent Claude (claude-run.sh review --review-type general), D10-1070. Base = the dependency's head cebb703a60b9, diff of this task only. Verdict pass, no findings: the check runs only on written values and stays out of the Fit functions; shape-invalid items, full-width, case and whitespace spellings, 非 negation, the union-host switch off, legacy stored rows, mixed batches and the console's batch were tried; no conflict with the frozen hot-words tests."
+    },
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 2,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "Code review (general, full diff, codex-run.sh --full) by Codex per D10-1075 and the orchestrator's 21:59 reply: engine switched from the independent Claude r1, so not baselined on it. Base cebb703a60b9 (the dependency head), task head d81b93f91; static read-only review, tests are in the run results. Verdict pass, 0 findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 1/3); spec-test r1 by a fresh independent Claude: pass on 7985c39780, no findings; every test starts with a refusal assertion that fails on main; no fixture a correct implementation would fail."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bf7e6600ffd935027b0683450058d19328bb2ff6",
+    "specs": "fb3470055042136c0a5f959c092261acff2a7f7f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
