@@ -42,7 +42,7 @@ it('[AC-B1-04g-UNIT#6] error_response 分类且错误信息不带 error_msg / su
       warn,
     ),
   );
-  expect(error).toMatchObject({ code: 'upstream_rejected', platform: 'pdd' });
+  expect(error).toMatchObject({ code: 'upstream_misconfigured', platform: 'pdd' });
   expect(error.message).toContain('20005');
   expect(error.message).toContain('S1');
   expect(error.message).not.toContain('m-x');

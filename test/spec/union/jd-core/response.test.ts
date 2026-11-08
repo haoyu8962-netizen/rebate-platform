@@ -366,7 +366,7 @@ it('[AC-B1-04za#38] outer code "0" with inner 403 is a failure, warned once, and
   let returned: unknown;
   const error = await unionFailure(() => {
     returned = unwrapJdResponse(method, keys, wire, warn);
-  }, 'upstream_rejected');
+  }, 'upstream_misconfigured');
   expect(returned).toBeUndefined();
   expect(warn.mock.calls).toEqual([[{ method, code: '403' }]]);
   expectRedacted([error, warn.mock.calls], [...markers, 'inner-data-marker']);
@@ -375,7 +375,7 @@ it('[AC-B1-04za#38] outer code "0" with inner 403 is a failure, warned once, and
   transport.mockResolvedValue(wire);
   const viaAdapter = await unionFailure(
     () => adapter.request(method, { q: requestMarker }, keys),
-    'upstream_rejected',
+    'upstream_misconfigured',
   );
   expect(adapterWarn.mock.calls).toEqual([[{ method, code: '403' }]]);
   expectRedacted([viaAdapter, adapterWarn.mock.calls], [...markers, 'inner-data-marker']);
@@ -402,7 +402,12 @@ it('[AC-B1-04za#39] under outer code "0" no inner code but 200 ever returns', ()
             // the visible cause, since a bare false is no valid red (tools/guard/lib/red-check.ts).
             if (!(error instanceof UnionError)) throw error;
             return (
-              error.code === (value === 429 ? 'rate_limited' : 'upstream_rejected') &&
+              error.code ===
+                (value === 429
+                  ? 'rate_limited'
+                  : value === 403
+                    ? 'upstream_misconfigured'
+                    : 'upstream_rejected') &&
               error.platform === 'jd' &&
               isDeepStrictEqual(events, value === 403 ? [{ method, code: '403' }] : [])
             );
@@ -489,7 +494,7 @@ it('[AC-B1-04za#44] the per-method table never applies to the gateway or the out
   await failsBothWays(wrapped(innerOk, '2001707'), 'upstream_rejected', [], detail);
   await failsBothWays(
     wrapped('{"code":403}'),
-    'upstream_rejected',
+    'upstream_misconfigured',
     [{ method, code: '403' }],
     detail,
   );

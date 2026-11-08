@@ -52,12 +52,17 @@ export type UnionErrorCode =
   /**
    * B1-04zzzx (D10-967): our own app credentials, signature or API permission were refused
    * (大淘客 10009 / 10010 / 10015 / 10016 / 10018 / 10020 / 10021 / 401, Taobao TOP code 11).
+   * B1-04zzzzc (D10-1073) adds JD inner 403 / 2001403 / 2001602 / 2002403 (docs-mirror/jd/api/
+   * jd.union.open.goods.query.md, …promotion.common.get.md, …order.row.query.md error tables) and
+   * PDD 20031 / 20004 / 20005 (docs-mirror/pdd/guides/common-params-and-errors.md).
    * A business refusal: not retried, not a breaker failure; the adapter still warns once.
    */
   | 'upstream_misconfigured'
   /**
    * B1-04zzzx (D10-967): the site owner's (站长) authorization is invalid (大淘客 10072 / 10210 /
-   * 10211). A business refusal: not retried, not a breaker failure; the adapter still warns once.
+   * 10211). JD and PDD main paths use no site-owner OAuth (CAP-JD-12, CAP-PDD-12; docs-mirror/pdd/
+   * INDEX.md), so neither produces this code. A business refusal: not retried, not a breaker
+   * failure; the adapter still warns once.
    */
   | 'site_auth_invalid'
   | 'upstream_unavailable'

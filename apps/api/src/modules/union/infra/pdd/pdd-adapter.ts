@@ -380,7 +380,9 @@ export class PddUnionAdapter implements UnionAdapter {
    * 链接识别：先以原链接作 goods.search keyword（probe：商品链接与进宝短链都能识别）；无结果且是
    * http(s) 链接时，用 url.short.parse 展开一次（参数 original_url，与 probe 一致；不带查询身份），
    * 展开结果非空且不同于原链接才再搜一次。最多 3 次请求。身份只取响应的 goods_id + goods_sign，
-   * 不从 URL 数字补出。网关错误原样上抛；只有短链展开被平台拒绝（upstream_rejected）时视为识别不了。
+   * 不从 URL 数字补出。网关错误原样上抛；只有短链展开被平台拒绝（upstream_rejected，如 70032）时视为
+   * 识别不了。我方配置类拒绝（20031 / 20004 / 20005 → upstream_misconfigured，B1-04zzzzc）照样上抛，
+   * 缺权限不等于链接不认。
    */
   async resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink> {
     if (typeof raw !== 'string' || raw.trim() === '') {
@@ -409,6 +411,7 @@ export class PddUnionAdapter implements UnionAdapter {
             : undefined;
         expanded = typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
       } catch (error) {
+        // 只吞 upstream_rejected；upstream_misconfigured 等其他码一律上抛。
         if (!(error instanceof UnionError) || error.code !== 'upstream_rejected') throw error;
       }
       if (expanded !== null && expanded !== link) {

@@ -13,7 +13,7 @@ import {
   type UnionOrderNeutralFields,
 } from '../../domain/types.ts';
 import type { OrderRowIdentity } from '../order-row.ts';
-import { JdRawNumber, type JdInner, type JdResponseKeys } from './response.ts';
+import { JdRawNumber, type JdInner, type JdInnerCodeMap, type JdResponseKeys } from './response.ts';
 import { jdTimestamp } from './sign.ts';
 
 export const JD_ORDER_ROW_QUERY = 'jd.union.open.order.row.query';
@@ -27,6 +27,14 @@ export const JD_ORDER_PAGE_SIZE = 200;
 export const JD_ORDER_QUERY_BY_UPDATE_TIME = 3;
 /** 窗口内订单量超接口上限（规划/02 §7.1）。缩窗归 order-sync，这里只带 windowTooLarge。 */
 export const JD_ORDER_WINDOW_TOO_LARGE_CODES: ReadonlySet<string> = new Set(['2002452']);
+/**
+ * 订单接口的内层 code 细分（B1-04zzzzc / D10-1073）：2002403「无访问权限｜请联系客服」是我方接口权限
+ * 问题 → upstream_misconfigured（出处 docs-mirror/jd/api/jd.union.open.order.row.query.md 错误代码示例）。
+ * 403 由底座换码；其余按底座。
+ */
+export const JD_ORDER_INNER_CODES: JdInnerCodeMap = { '2002403': 'upstream_misconfigured' };
+/** 告警一次的订单内层 code（403 由底座告警）。 */
+export const JD_ORDER_WARN_CODES: ReadonlySet<string> = new Set(['2002403']);
 
 /** 单窗不超过 1 小时，起点不早于注入时钟的 90 天前。 */
 const MAX_SPAN_SECONDS = 3_600;

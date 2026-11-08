@@ -11,6 +11,7 @@
 - 业务参数只有 `orderReq`：`pageIndex`（从 1）、`pageSize` 200、`type` 3（按更新时间）、`startTime`、`endTime`（GMT+8 的 `yyyy-MM-dd HH:mm:ss`）。
 - 不带 `positionId`：它不是过滤参数。不带 `fields`：只影响商品与类目附加信息，这里不映射。
 - 时间窗按毫秒原值判：from < to、跨度 ≤ 1 小时、from ≥ 当前时刻 − 90 天，不合格 `invalid_dto`、不发请求；拆窗归 order-sync。
+- 内层 403、2002403（无访问权限）→ `upstream_misconfigured` 并告警一次（B1-04zzzzc，D10-1073）。
 - 内层 2002452（窗口内订单量超接口上限）仍是 `upstream_rejected`，适配器不重试、不缩窗，只在错误上带 `windowTooLarge`。订单侧在同一任务内把窗口对半切开、从第 1 页重查，跨度 ≤ 60 秒不再切，抛原错误；水位只在原窗全部完成后按原窗推进一次（B1-04zt，`orders/application/fetch-window.ts`）。
 - 增量起点早于「当前时刻 − 90 天 + 1 小时」超过 30 分钟时，调度先把水位收到这个时刻（无水位行就插入）再发窗，打 warn `order_sync_start_clamped`；CAS 落空本轮不发（B1-04zt）。
 
@@ -85,7 +86,7 @@
 
 接口 `jd.union.open.goods.query`，外层键 `jd_union_open_goods_query_responce`，结果键 `queryResult`，实现在 `apps/api/src/modules/union/infra/jd/goods.ts`。依据 BR-PRICE-01 / 02、BR-PROD-03 / 05、BR-CALC-26、CAP-JD-01、D10-525。
 
-**这一节没有实测依据**：接口现在内层 403，权限批下前只按文档，规则测试的报文都是合成的。标题字段 `skuName` 与空结果形状都待实测核对。
+**这一节没有实测依据**：接口现在内层 403，权限批下前只按文档，规则测试的报文都是合成的。标题字段 `skuName` 与空结果形状都待实测核对。内层 403（无访问权限）自 B1-04zzzzc（D10-1073）起归 `upstream_misconfigured` 并告警一次：权限批下前京东商品详情回 50401（暂时查不到，池里有该商品时用池里的旧卡兜底），商品池入库 / 复核不因此下架；网关层 403、外层 code 403 仍是 `upstream_rejected`。
 
 ## 请求
 
@@ -183,7 +184,8 @@
 | 202 已达到分页上限 | 空页，翻页结束 | `upstream_rejected` | `upstream_rejected` |
 | 410、411 sceneId 无权限或格式不匹配 | `link_unrecognized` | `link_unrecognized` | `link_unrecognized` |
 | 429 | `rate_limited` | `rate_limited` | `rate_limited` |
-| 403 与其余 | 按底座，403 告警一次 | 同左 | 同左 |
+| 403 无访问权限 | `upstream_misconfigured`（底座），告警一次 | 同左 | 同左 |
+| 其余 | 按底座 | 同左 | 同左 |
 
 ## getItem
 
@@ -269,7 +271,8 @@
 | 2001104 商品不在推广中 | `item_unavailable` | 否 |
 | 2001101、2001102、2001703、2001706、2001707 链接或场景不支持 | `link_unrecognized` | 否 |
 | 2001701 本单不用 `couponUrl`，只可能是 `siteId` 类型不符（CAP-JD-06） | `upstream_rejected` | 一次 |
-| 403、2001403、2001602、2001603 无权限 | `upstream_rejected` | 一次 |
+| 403、2001403 无权限，2001602 无母账号权限或未签协议 | `upstream_misconfigured` | 一次 |
+| 2001603 子联盟未签法律协议 | `upstream_rejected` | 一次 |
 | 2001208 `subUnionId` 格式 | `upstream_rejected` | 否 |
 | 2001609 服务降级 | `upstream_unavailable` | 否 |
 | 其余 | `upstream_rejected`（底座） | 否 |

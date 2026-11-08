@@ -105,7 +105,7 @@ it.each(innerCases)('[AC-B1-04zc#3] %s 内层 %s → %s，只发一次', async (
 
 it.each(ports)('[AC-B1-04zc#4] %s 内层 403 按底座告警一次（没有商品权限）', async (port) => {
   const { adapter, warn } = wire(() => reply(failure('403')));
-  await unionFailure(() => invoke(adapter, port), 'upstream_rejected');
+  await unionFailure(() => invoke(adapter, port), 'upstream_misconfigured');
   expect(warn.mock.calls).toEqual([[{ method, code: '403' }]]);
 });
 

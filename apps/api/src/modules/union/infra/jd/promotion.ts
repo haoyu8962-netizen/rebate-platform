@@ -23,7 +23,13 @@ export const JD_PROMOTION_KEYS: JdResponseKeys = {
 /** promotionCodeReq.sceneId 固定 1。 */
 export const JD_PROMOTION_SCENE = 1;
 
-/** 其余内层 code 按底座 upstream_rejected；429 由底座先判限流。 */
+/**
+ * 其余内层 code 按底座（403 → upstream_misconfigured，其他 upstream_rejected）；429 由底座先判限流。
+ * 2001403「无调用权限，请联系联盟运营申请」与 2001602「无母账号权限或未签署协议」是我方账号 / 接口
+ * 权限问题 → upstream_misconfigured（B1-04zzzzc / D10-1073；出处
+ * docs-mirror/jd/api/jd.union.open.promotion.common.get.md 错误代码示例、guides/108188.md）。
+ * 2001603（子联盟法律协议）原文不足以判定我方是否用子联盟，留 upstream_rejected。
+ */
 export const JD_PROMOTION_INNER_CODES: JdInnerCodeMap = {
   '2001104': 'item_unavailable',
   '2001101': 'link_unrecognized',
@@ -33,10 +39,13 @@ export const JD_PROMOTION_INNER_CODES: JdInnerCodeMap = {
   '2001707': 'link_unrecognized',
   '2001208': 'upstream_rejected',
   '2001609': 'upstream_unavailable',
+  '2001403': 'upstream_misconfigured',
+  '2001602': 'upstream_misconfigured',
 };
 /**
- * upstream_rejected 且告警一次（403 由底座告警）。2001701 本单不用 couponUrl，只可能是 siteId 类型不符
- * （CAP-JD-06）；其余三个是无权限。
+ * 告警一次的内层 code（403 由底座告警）。2001701 本单不用 couponUrl，只可能是 siteId 类型不符
+ * （CAP-JD-06），upstream_rejected；2001403 / 2001602 是 upstream_misconfigured（见上表）；2001603 是
+ * upstream_rejected。后三个都是权限或协议问题，要人去处理。
  */
 export const JD_PROMOTION_WARN_CODES: ReadonlySet<string> = new Set([
   '2001701',

@@ -137,7 +137,10 @@ it('[AC-B1-04zd#47] 无权限告警经模块写一条 warn 日志，只带方法
   const registry = await startUnion(config, endpoints(), logs);
   answering(reply(failure(num('2001403'))).body);
   const before = logs.length;
-  await unionFailure(() => registry.get('jd').convert(req, identity, ctx), 'upstream_rejected');
+  await unionFailure(
+    () => registry.get('jd').convert(req, identity, ctx),
+    'upstream_misconfigured',
+  );
   const added = logs.slice(before);
   expect(added).toHaveLength(1);
   expect(added[0]!.level).toBe('warn');

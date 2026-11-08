@@ -5,8 +5,13 @@
 // upstream_rejected 并告警一次；其他 → upstream_rejected。数字 code 与同值字符串同等处理。
 // 外层键缺失 / 非对象 → upstream_unavailable；外层 code 不是 0 → upstream_rejected（先于看结果键）。
 // 结果键的值必须是 JSON 字符串，否则 upstream_unavailable。内层 code：200 成功，返回内层对象；
-// 403 → upstream_rejected 并告警一次（无权限）；429 → rate_limited；其他 → upstream_rejected；
-// 缺失或不是短的普通标量 → upstream_unavailable。成败只看 code，绝不看 message。
+// 429 → rate_limited（先判）；403 → upstream_misconfigured 并告警一次（我方无接口权限，B1-04zzzzc /
+// D10-1073）；其他 → upstream_rejected；缺失或不是短的普通标量 → upstream_unavailable。
+// 只有内层 403 换码：网关层 error_response 403 与外层 code 403 仍是 upstream_rejected。
+// 成败只看 code，绝不看 message。
+// 403 出处：docs-mirror/jd/api/jd.union.open.goods.query.md、jd.union.open.goods.bigfield.query.md、
+// jd.union.open.promotion.common.get.md、jd.union.open.promotion.bysubunionid.get.md 的错误代码示例
+// 「403｜无访问权限，如有疑问请联系联盟客服」；实测见 docs-mirror/jd/DEV-NOTES.md（【申请】类接口未批）。
 // 可按接口给内层 code 细分表，只对内层生效，限流判断在先；也可再登记要告警一次的内层 code（B1-04zd）。
 // 也可登记表示时间窗过大的内层 code（B1-04zt）：错误码不变，只在 UnionError 上带 windowTooLarge。
 // 错误与告警只带方法名和 code，不带 message、requestId、请求内容与凭据；这里不做字段映射。
@@ -52,6 +57,7 @@ const GATEWAY_RETIRED_CODE = '28';
 const OUTER_SUCCESS_CODE = '0';
 /** 内层与网关层的 code 含义不同，互不通用（内层 2 / 28 只是普通失败）。 */
 const INNER_SUCCESS_CODE = '200';
+/** 内层「无访问权限」（出处见文件头）：我方账号 / 应用缺接口权限，不是商品或链接的问题。 */
 const INNER_PERMISSION_CODE = '403';
 const INNER_RATE_LIMIT_CODE = '429';
 
@@ -100,6 +106,7 @@ function gatewayFailure(
 function classifyInner(code: string, innerCodes: JdInnerCodeMap | undefined): UnionErrorCode {
   if (code === INNER_RATE_LIMIT_CODE) return 'rate_limited';
   if (innerCodes !== undefined && Object.hasOwn(innerCodes, code)) return innerCodes[code]!;
+  if (code === INNER_PERMISSION_CODE) return 'upstream_misconfigured';
   return 'upstream_rejected';
 }
 

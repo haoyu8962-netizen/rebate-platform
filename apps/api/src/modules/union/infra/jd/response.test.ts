@@ -38,7 +38,7 @@ it('[AC-B1-04za-UNIT#2] 成败只看 code：message 写失败、code 200 仍是�
 });
 
 it.each([
-  ['{"code":403,"message":"success"}', 'upstream_rejected'],
+  ['{"code":403,"message":"success"}', 'upstream_misconfigured'],
   ['{"code":429,"message":"success"}', 'rate_limited'],
   ['{"code":0,"message":"success"}', 'upstream_rejected'],
 ] as const)('[AC-B1-04za-UNIT#3] 内层 %s 不因 message 改判，判 %s', (text, expected) => {

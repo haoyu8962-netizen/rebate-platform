@@ -144,7 +144,10 @@ it('[AC-B1-04g-REQUEST#6] gateway errors use the shared classifier and restricte
       },
     }),
   );
-  const error = await unionFailure(() => adapter.request(method, { page: 1 }), 'upstream_rejected');
+  const error = await unionFailure(
+    () => adapter.request(method, { page: 1 }),
+    'upstream_misconfigured',
+  );
   expect(error.message).toContain(method);
   expect(error.message).toContain('20004');
   expect(warn.mock.calls).toEqual([[{ error_code: '20004', type: method }]]);

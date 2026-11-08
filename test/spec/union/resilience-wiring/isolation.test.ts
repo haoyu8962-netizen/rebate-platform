@@ -119,7 +119,7 @@ it('[AC-B1-14d#13] 业务拒绝不重试、不打开熔断；窗口过期后真�
     const refusal = r.search();
     await r.advance(0);
     expect(refusal.settled).toBe('rejected');
-    expect(refusal.error).toMatchObject({ code: 'upstream_rejected' });
+    expect(refusal.error).toMatchObject({ code: 'upstream_misconfigured' });
     expect(r.transport).toHaveBeenCalledTimes(i + 1);
   }
   r.upstream.reply = success();

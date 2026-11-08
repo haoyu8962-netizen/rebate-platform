@@ -1,6 +1,10 @@
 // 拼多多网关响应外层解包与 error_response 分类（4_PDD_附 §3.4）。外层键不能由接口名推导，
 // 只认下表逐个登记的接口；商品接口的外层键按 probe 实测登记（B1-04u）。这里只取外层，
 // 不做任何商品 / 订单 / 转链字段映射。错误信息只带接口名与 error_code / sub_code。
+// B1-04zzzzc / D10-1073：20031（应用不含此接口的权限包）、20004（签名校验失败）、20005（出口 IP 未登记
+// 白名单）是我方应用配置问题 → upstream_misconfigured 并告警一次；HTTP 5xx 照旧先判 upstream_unavailable。
+// 出处：docs-mirror/pdd/guides/common-params-and-errors.md 通用错误码表（20004 / 20005 / 20031 三行）、
+// docs-mirror/pdd/DEV-NOTES.md；规划 09 4_PDD_附_开放平台接入.md §3.4。
 import { UnionError, type UnionErrorCode } from '../../domain/types.ts';
 import type { UnionTransportResponse } from '../replay.ts';
 
@@ -35,9 +39,9 @@ const ENVELOPES: ReadonlyMap<string, string> = new Map([
 ]);
 
 const CLASSIFICATION: ReadonlyMap<string, UnionErrorCode> = new Map<string, UnionErrorCode>([
-  ['20004', 'upstream_rejected'],
-  ['20005', 'upstream_rejected'],
-  ['20031', 'upstream_rejected'],
+  ['20004', 'upstream_misconfigured'],
+  ['20005', 'upstream_misconfigured'],
+  ['20031', 'upstream_misconfigured'],
   ['10019', 'upstream_rejected'],
   ['70032', 'upstream_rejected'],
   ['70034', 'upstream_rejected'],
@@ -64,8 +68,11 @@ const SUB_CLASSIFICATION: ReadonlyMap<string, UnionErrorCode> = new Map<string, 
   ['50001/60001', 'upstream_rejected'],
 ]);
 
-/** 签名失败、IP 未登记、应用风险：除分类外另发一条只含 error_code 与接口名的告警事件。 */
-const WARN_CODES: ReadonlySet<string> = new Set(['20004', '20005', '70035']);
+/**
+ * 签名失败、IP 未登记、缺接口权限包、应用风险：除分类外另发一条只含 error_code 与接口名的告警事件
+ * （20031 自 B1-04zzzzc 起告警：缺权限包要人去申请）。
+ */
+const WARN_CODES: ReadonlySet<string> = new Set(['20004', '20005', '20031', '70035']);
 
 const MAX_CODE_LENGTH = 64;
 

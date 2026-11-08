@@ -56,7 +56,9 @@ import {
   JD_ORDER_KEYS,
   JD_ORDER_PAGE_SIZE,
   JD_ORDER_QUERY_BY_UPDATE_TIME,
+  JD_ORDER_INNER_CODES,
   JD_ORDER_ROW_QUERY,
+  JD_ORDER_WARN_CODES,
   JD_ORDER_WINDOW_TOO_LARGE_CODES,
   jdOrderCursor,
   jdOrderRows,
@@ -255,8 +257,8 @@ export class JdUnionAdapter implements UnionAdapter {
       JD_ORDER_KEYS,
       response,
       this.#warn,
-      undefined,
-      undefined,
+      JD_ORDER_INNER_CODES,
+      JD_ORDER_WARN_CODES,
       JD_ORDER_WINDOW_TOO_LARGE_CODES,
     );
     const id: unknown = Reflect.get(response, 'raw_payload_id');
