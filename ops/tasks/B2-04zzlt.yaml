@@ -3,6 +3,7 @@ repo: rebate-platform
 title: test-change（B2-04zzl 前置）：事件消费者 settlement-blacklist-after-credit 与队列 evt.settlement-blacklist-after-credit 登记、配置键 order.blacklist_clawback.enabled（默认关，无种子行），冻结清单只追加
 type: test-change
 # 2026-11-08 funds 入账（D10-1095）。先例 B2-02ta / B2-02tb / B1-12zc。开关未设置即关（读 value === true），打开要负责人确认（D10-1095 ③，R8 写「默认处理，待财务确认」）。权限点 order.blacklist_clawback（totp）一并登记（specs/permissions.yaml、enums、生成物、冻结 expected.ts，先例 CT-26x），CT-24zzf 契约直接引用。只登记，消费者与读取由 B2-04zzl 做。非 task 分支，编排按 #24 核后加标签。
+# 2026-11-09 D10-1101：D10-1120：#2933 已按旧头合并，本批走 task/B2-04zzlt（迁移属资金路径，要证据）：迁移 0136 / 0137（recon_diffs_type_check 只放宽，加 blacklist_after_credit）与冻结 RECON_TYPES；[AC-B2-15i#3] 钉的是 0081 字面清单，改取 RECON_TYPES.slice(0, 11)；CT-24zzf r1 S2：admin-recon 夹具 TYPE_NAME 改 as 断言，放宽枚举前后都能编译。
 refs: []
 refs_hash: {}
 deps: []
@@ -26,6 +27,11 @@ paths:
   - 'test/spec/content/config-settle/**'
   - 'test/spec/content/invite-reward-config/**'
   - 'test/spec/content/invite-reward-eligibility/**'
+  - 'db/migrations/0136_recon-diff-type-blacklist.sql'
+  - 'db/migrations/0137_recon-diff-type-blacklist-validate.sql'
+  - 'db/schema.sql'
+  - 'test/spec/db/ledger/pay-types/**'
+  - 'test/spec/frontend/admin-recon/fixtures.ts'
   - 'ops/tasks/B2-04zzlt.yaml'
 impl: claude
 tester: none
