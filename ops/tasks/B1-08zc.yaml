@@ -7,7 +7,7 @@ type: impl
 # 02 §4.1：orders 不依赖 ledger → orders 声明差错单登记端口，app.module 以 ledger 的 registerReconDiffOnce 注入（先例 payment.module pay_mismatch）。只读 orders 自有表的 rebate_status / reason / order_status_history 判定，不写 rebate_status。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 27d181deaeeb
+  BR-FUND-22: 03bb77e84436
 deps: []
 paths:
   - 'apps/api/src/modules/orders/**'

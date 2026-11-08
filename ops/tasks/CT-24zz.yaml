@@ -13,7 +13,7 @@ type: contract
 # 实现另起 B2-09gb（settlement，RV2，deps CT-24zz、B2-04zzf；规则测试独立 Claude，资金评审照 D10-823 ④ 独立 Claude money）。不改分录规则本身，金额只按 08 现算。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 27d181deaeeb
+  BR-FUND-22: 03bb77e84436
 contract_sections: ['11.1']
 deps: []
 paths:

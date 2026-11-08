@@ -8,7 +8,7 @@ type: impl
 # 不含 platform_restore 与订单申诉的 R12 / R13（改 rebate_status，下一段）；不含自动处理。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 27d181deaeeb
+  BR-FUND-22: 03bb77e84436
 deps: [CT-24ze]
 paths:
   - 'apps/api/src/modules/settlement/application/admin-recon-restore*.ts'
