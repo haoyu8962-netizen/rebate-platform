@@ -1,0 +1,24 @@
+id: DSX-48c
+repo: rebate-platform
+title: H5 图片件：占位、渐显、懒加载、失败态（时长取 --motion-* 令牌，减弱动态时不渐显），正文图与邀请海报接入；各 App 路由包增量 ≤ 3 KiB（手感方案 ④，编排 D10-1032）
+type: impl
+# 2026-11-08 入账（前端线 f1-frontend-7，编排 D10-1032 ①；方案 couli-runs/F1-frontend/feel-plan-h5-admin.md §2 ④）。依据：design/ui-rules/README.md §3.6「图片有占位 + 渐显 + 缓存 + 失败态」、规划/03 §10.6（渐显取 normal、减弱动态改为不渐显或 instant）、整改计划 DSX-118 口径（商品图四态：加载中 / 已加载 / 失败 / 无图，图框、渐显、读屏键）。
+# 现状（审计）：apps/h5/src/components/article-body/article-body.tsx 正文图只有 loading="lazy" 与 decoding="async"，无占位、渐显、失败态；邀请海报（entries/app/pages/invite/invite-page.tsx）容器底色、失败即整块隐藏、不渐显；PlatformBadge 已有失败回退（不在本单）。
+# 包体约束（D10-1032）：各 App 路由「入口 + 路由」gzip 仍须 ≤ 冻结 150 KiB（现最大 141.82 KiB），本单每条路由增量 ≤ 3 KiB，PR 描述贴构建实测前后数字；不改冻结测试与预算。重的本机命令先过 ~/couli-orch/wait-load.sh（D10-1031）。非资金；规则测试新鲜独立 Claude，评审 Codex（额度用尽期间独立 Claude，D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: [DSX-48]
+paths:
+  - 'apps/h5/src/components/base/**'
+  - 'apps/h5/src/components/article-body/**'
+  - 'apps/h5/src/entries/app/pages/invite/**'
+  - 'apps/h5/src/shared/**'
+test_paths:
+  - 'test/spec/frontend/h5-image/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-image/**'
+status: todo
+pr: null

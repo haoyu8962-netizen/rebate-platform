@@ -1,0 +1,23 @@
+id: DSX-48d
+repo: rebate-platform
+title: H5 过渡：弹层（Dialog / Sheet / Toast / ModalFrame）进出、加载到内容、Tab 内容切换不硬切，时长与缓动取 --motion-* 令牌，减弱动态改为淡入淡出；各 App 路由包增量 ≤ 3 KiB（手感方案 ⑦，编排 D10-1032）
+type: impl
+# 2026-11-08 入账（前端线 f1-frontend-7，编排 D10-1032 ②，排在 DSX-48c 之后）。依据：规划/03 §10.6 用法 1–5、8（状态切换不硬切；按尺度选时长；进入 enter / 退出 exit / 大面积 emphasized-*；只动 opacity 与 transform；底部弹层从下滑入、对话框淡入加轻微放大；App 内 H5 不做整页转场；减弱动态改为只淡入淡出、时长 motion.reduced.fade）、design/ui-rules/README.md §3.3。
+# 现状（审计）：H5 除骨架外全部硬切——Dialog、Sheet、Toast、ModalFrame 出入场、find-order 的 Tab 内容、加载到内容。
+# 包体约束同 DSX-48c（每条路由增量 ≤ 3 KiB、≤ 150 KiB 冻结预算，PR 贴实测）；visual-baseline 截图关动画、只报告。冻结测试若钉住「弹层立即出现 / 立即消失」而与过渡冲突，规则测试作者列出，按 #24 另开 test-change。非资金；规则测试新鲜独立 Claude，评审 Codex（额度用尽期间独立 Claude）。
+refs: []
+refs_hash: {}
+deps: [DSX-48c]
+paths:
+  - 'apps/h5/src/components/base/**'
+  - 'apps/h5/src/shared/**'
+  - 'apps/h5/src/entries/app/pages/find-order/**'
+test_paths:
+  - 'test/spec/frontend/h5-transitions/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-transitions/**'
+status: todo
+pr: null
