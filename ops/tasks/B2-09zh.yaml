@@ -1,0 +1,22 @@
+id: B2-09zh
+repo: rebate-platform
+title: W8 打款时间早于审核时间打标告警（FU-W8-PAID-BEFORE-REVIEW，BR-WDR-16，D10-678）——paid_at 早于 reviewed_at 时不拒绝，审计 after 打标 paid_before_review 并记告警日志
+type: impl
+# 2026-11-08 pay 入账（D10-1029 空档）。裁定 D10-678 ①：线下打款的真实时间可能早于系统里点「通过」的时刻，硬拒会挡住正常补录，所以不拒绝：paid_at 早于该提现单 reviewed_at 时，withdrawal_manual_paid 审计 after 加 paid_before_review: true，并 warn 日志 payout_manual_paid_before_review（app_id、withdrawal_id，无个人数据），由运营复核；不早于（含相等）时审计不带该字段、不告警。金额、状态迁移、凭证都不变。先例 B2-09x 的 paid_at_differs_from_query。
+# RV2（payout 路径）；规则测试新鲜独立 Claude，money 评审 Codex（D10-823，档位 medium）。
+refs: [BR-WDR-16]
+refs_hash:
+  BR-WDR-16: c5899cc85558
+deps: [B2-09m]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-manual-paid.ts'
+  - 'apps/api/src/modules/payout/application/withdrawal-manual-paid.ts'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+test_paths:
+  - 'test/spec/payout/manual-paid-before-review/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/manual-paid-before-review/**'
+status: todo
