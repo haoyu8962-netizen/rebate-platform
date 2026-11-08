@@ -79,6 +79,17 @@
 #   Unset, the pure property tests keep the 10000 of @couli/testing (规划/11 §4.2) and the integration
 #   tests take the 2000 of their test:int scripts (D10-210, D10-499).
 #
+# Verify slot (CT-06zzzx, FU-COLIMA-VERIFY-SLOT, D10-950: several verify:fast runs at once in the
+# Colima VM ran its root `tsc -b` out of memory, exit 137). --fast and the default pnpm verify run
+# one at a time per slot directory; --red, --browser and --dry-run never take or check the slot.
+#   COULI_VERIFY_SLOT_DIR          default <runs>/verify-slot (created when missing)
+#   COULI_VERIFY_SLOT_WAIT_SECS    the longest wait for the slot, default 1800 (a positive integer);
+#                                  past it exit 2 naming the holder, before any docker call
+#   COULI_VERIFY_SLOT_REPORT_SECS  while waiting, the holder and the time waited are printed at the
+#                                  start and every so many seconds, default 60 (a positive integer)
+# The slot is taken before the run directory, the snapshot and the first docker call and released
+# however the script ends (see slot_acquire / slot_release below; tools/ops/README.md).
+#
 # Host services (owner 2026-10-08/09: no Docker on the orchestrating Mac; runs go to the AWS test
 # machine, and the test database does not run in Docker there — plan A of 2026-10-09). With
 # COULI_VERIFY_HOST_SERVICES=1 every run that needs databases (pnpm verify, the integration groups
@@ -296,6 +307,17 @@ if [ -n "${PROP_RUNS:-}" ] && ! [[ "$PROP_RUNS" =~ ^[1-9][0-9]*$ ]]; then die "P
 PREFIX="${COULI_VERIFY_PREFIX:-couli-verify}"
 if ! [[ "$PREFIX" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then die "COULI_VERIFY_PREFIX must match [a-z0-9][a-z0-9-]*"; fi
 
+# The verify slot (header: CT-06zzzx): only the two modes that run verify:fast in the container
+# take it, and only for a real run; their settings are checked here, before anything else runs.
+SLOT_NEEDED=0
+if [ "$DRY_RUN" = 0 ] && { [ "$SCRIPT" = verify ] || [ "$SCRIPT" = 'verify:fast' ]; }; then SLOT_NEEDED=1; fi
+if [ "$SLOT_NEEDED" = 1 ]; then
+  SLOT_WAIT_SECS="${COULI_VERIFY_SLOT_WAIT_SECS:-1800}"
+  SLOT_REPORT_SECS="${COULI_VERIFY_SLOT_REPORT_SECS:-60}"
+  if ! [[ "$SLOT_WAIT_SECS" =~ ^[1-9][0-9]*$ ]]; then die "COULI_VERIFY_SLOT_WAIT_SECS must be a positive integer"; fi
+  if ! [[ "$SLOT_REPORT_SECS" =~ ^[1-9][0-9]*$ ]]; then die "COULI_VERIFY_SLOT_REPORT_SECS must be a positive integer"; fi
+fi
+
 # Host services (see the header): checked here, used by start_host_services.
 HOST_SVC=0
 if [ -n "${COULI_VERIFY_HOST_SERVICES:-}" ]; then
@@ -410,6 +432,159 @@ if [ "$DRY_RUN" = 1 ]; then
   exit 0
 fi
 
+# --- the verify slot (CT-06zzzx, FU-COLIMA-VERIFY-SLOT, D10-950) -------------------------------
+# One verify:fast at a time on the machine: --fast and the default pnpm verify take the slot here,
+# before the run directory, the snapshot and the first docker call, and hold it until the script
+# ends. The slot is the directory <slot dir>/slot.lock (mkdir is atomic) with the file `owner`
+# (key=value lines: pid, task, mode, started_at, token). A holder whose pid is alive is never
+# moved; one whose pid is gone is stale and is removed only under the takeover gate
+# <slot dir>/slot.lock.takeover (mkdir, exclusive), and only while its token is still the one
+# found stale. Release, too, happens under the gate and only while the token is still this run's.
+SLOT_STATE=0 # 0 nothing held, 1 slot.lock created (owner not written yet), 2 owner written
+SLOT_GATE_HELD=0
+SLOT_DIR=''
+SLOT_LOCK=''
+SLOT_GATE=''
+SLOT_TOKEN=''
+slot_owner() { # prints the owner file of $1 (a lock or gate directory), nothing when it is gone
+  cat "$1/owner" 2>/dev/null || true
+}
+slot_field() { # <owner text> <key>: the value, or nothing
+  local line
+  while IFS= read -r line; do
+    case "$line" in "$2="*)
+      printf '%s' "${line#*=}"
+      return 0
+      ;;
+    esac
+  done <<<"$1"
+  return 0
+}
+slot_who() { # <owner text> [<its directory>, default the lock]: the holder, for the log
+  local pid task
+  pid="$(slot_field "$1" pid)"
+  task="$(slot_field "$1" task)"
+  if [ -z "$pid" ] && [ -z "$task" ]; then
+    printf 'an unknown holder (no owner file in %s)' "${2:-$SLOT_LOCK}"
+    return 0
+  fi
+  printf 'task %s (pid %s, %s, since %s)' "${task:-?}" "${pid:-?}" "$(slot_field "$1" mode)" "$(slot_field "$1" started_at)"
+}
+slot_pid_gone() { # <pid>: true only when that process certainly no longer exists
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || return 1 # no pid (yet): treated as alive
+  kill -0 "$1" 2>/dev/null && return 1
+  # kill -0 also fails for a live process of another user (EPERM): ps still lists that one.
+  ps -p "$1" >/dev/null 2>&1 && return 1
+  return 0
+}
+slot_owner_text() {
+  printf 'pid=%s\ntask=%s\nmode=%s\nstarted_at=%s\ntoken=%s\n' "$$" "$ID" "$SCRIPT" "$(now_utc)" "$SLOT_TOKEN"
+}
+slot_gate_take() { # mkdir the takeover gate (exclusive); true when this run now holds it
+  mkdir "$SLOT_GATE" 2>/dev/null || return 1
+  SLOT_GATE_HELD=1
+  slot_owner_text >"$SLOT_GATE/owner" 2>/dev/null || true
+  return 0
+}
+slot_gate_drop() { # removes the gate, only when this run made it
+  [ "$SLOT_GATE_HELD" = 1 ] || return 0
+  rm -rf "$SLOT_GATE" 2>/dev/null || true
+  SLOT_GATE_HELD=0
+}
+# Never fails (it runs from the EXIT trap): the exit code stays the run's.
+slot_release() {
+  if [ "$SLOT_STATE" = 0 ]; then
+    slot_gate_drop
+    return 0
+  fi
+  local tries=0 owner tok
+  until slot_gate_take; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 50 ]; then
+      log "verify-container: the verify slot $SLOT_LOCK is left as it is: the takeover gate $SLOT_GATE stayed held for 5 s by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE"); it counts as stale once this process has ended"
+      SLOT_STATE=0
+      return 0
+    fi
+    sleep 0.1
+  done
+  owner="$(slot_owner "$SLOT_LOCK")"
+  tok="$(slot_field "$owner" token)"
+  if [ -n "$tok" ] && [ "$tok" = "$SLOT_TOKEN" ]; then
+    rm -rf "$SLOT_LOCK" 2>/dev/null || log "verify-container: cannot remove the verify slot $SLOT_LOCK"
+  elif [ "$SLOT_STATE" = 1 ] && [ -d "$SLOT_LOCK" ] && [ -z "$owner" ]; then
+    # Interrupted between the mkdir and the owner file: the directory is still this run's.
+    rm -rf "$SLOT_LOCK" 2>/dev/null || true
+  elif [ -d "$SLOT_LOCK" ]; then
+    log "verify-container: the verify slot is no longer this run's (now $(slot_who "$owner")): left to its holder"
+  fi
+  SLOT_STATE=0
+  slot_gate_drop
+  return 0
+}
+slot_acquire() {
+  SLOT_DIR="${COULI_VERIFY_SLOT_DIR:-$RUNS/verify-slot}"
+  mkdir -p "$SLOT_DIR" || die "cannot create the verify slot directory $SLOT_DIR"
+  SLOT_DIR="$(cd "$SLOT_DIR" && pwd -P)"
+  SLOT_LOCK="$SLOT_DIR/slot.lock"
+  SLOT_GATE="$SLOT_LOCK.takeover"
+  SLOT_TOKEN="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || true)"
+  if ! [[ "$SLOT_TOKEN" =~ ^[0-9a-f]{32}$ ]]; then SLOT_TOKEN="$(date +%s)$$${RANDOM}${RANDOM}${RANDOM}"; fi
+  # From here on every ending (exit, failure, INT / TERM / HUP) releases what this run holds;
+  # the run's own traps below keep calling slot_release.
+  trap slot_release EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+  local began="$SECONDS" waited=0 next=0 owner pid tok said_gate=''
+  while :; do
+    if mkdir "$SLOT_LOCK" 2>/dev/null; then
+      SLOT_STATE=1
+      # Written aside and renamed: a reader never sees half an owner file.
+      slot_owner_text >"$SLOT_LOCK/owner.tmp.$$" && mv "$SLOT_LOCK/owner.tmp.$$" "$SLOT_LOCK/owner" ||
+        die "cannot write the owner of the verify slot $SLOT_LOCK"
+      SLOT_STATE=2
+      if [ "$waited" -gt 0 ]; then log "verify-container: took the verify slot after ${waited}s"; fi
+      return 0
+    fi
+    owner="$(slot_owner "$SLOT_LOCK")"
+    pid="$(slot_field "$owner" pid)"
+    if [ -n "$owner" ] && slot_pid_gone "$pid"; then
+      tok="$(slot_field "$owner" token)"
+      if [ -n "$tok" ] && slot_gate_take; then
+        # Under the gate: only the lock that was found stale goes, never one taken meanwhile.
+        if [ "$(slot_field "$(slot_owner "$SLOT_LOCK")" token)" = "$tok" ]; then
+          log "verify-container: taking over the stale verify slot of $(slot_who "$owner"): pid $pid no longer exists"
+          rm -rf "$SLOT_LOCK" 2>/dev/null || true
+        fi
+        slot_gate_drop
+        [ -d "$SLOT_LOCK" ] || continue
+      elif [ -z "$said_gate" ]; then
+        said_gate=1
+        if [ -n "$tok" ]; then
+          log "verify-container: stale verify slot of $(slot_who "$owner"): the takeover gate $SLOT_GATE is held by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE"); waiting"
+        else
+          log "verify-container: stale verify slot of $(slot_who "$owner") without a token: it is not taken over (see tools/ops/README.md); waiting"
+        fi
+      fi
+    fi
+    waited=$((SECONDS - began))
+    if [ "$waited" -ge "$SLOT_WAIT_SECS" ]; then
+      owner="$(slot_owner "$SLOT_LOCK")"
+      if [ -d "$SLOT_GATE" ]; then
+        die "gave up waiting for the verify slot after ${waited}s (COULI_VERIFY_SLOT_WAIT_SECS=$SLOT_WAIT_SECS): $SLOT_LOCK is held by $(slot_who "$owner"); the takeover gate $SLOT_GATE is held by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE")"
+      fi
+      die "gave up waiting for the verify slot after ${waited}s (COULI_VERIFY_SLOT_WAIT_SECS=$SLOT_WAIT_SECS): $SLOT_LOCK is held by $(slot_who "$owner")"
+    fi
+    # A lock whose owner file is not written yet is reported only once that lasts.
+    if [ "$waited" -ge "$next" ] && { [ -n "$owner" ] || [ "$waited" -ge 2 ]; }; then
+      log "verify-container: waiting for the verify slot held by $(slot_who "$owner"): ${waited}s of ${SLOT_WAIT_SECS}s"
+      next=$((waited + SLOT_REPORT_SECS))
+    fi
+    sleep 0.2
+  done
+}
+if [ "$SLOT_NEEDED" = 1 ]; then slot_acquire; fi
+
 # Next free run number; mkdir makes the choice atomic.
 case "$SCRIPT" in
   verify) VBASE="$RUN/verify" ;;
@@ -442,8 +617,8 @@ TREE='null'
 SRC="$VDIR/src"
 mkdir -p "$SRC"
 # The snapshot is removed however the script ends (container mode replaces this trap with
-# cleanup(), which removes it as well).
-trap 'rm -rf "$SRC"' EXIT
+# cleanup(), which removes it as well); the verify slot, if this run holds it, is released.
+trap 'rm -rf "$SRC"; slot_release' EXIT
 if [ "$IS_TOP" = 1 ]; then
   [ -z "$head" ] || COMMIT="\"$head\""
   # A throwaway index: the real index (the orchestrator's staging area) is not touched.
@@ -610,6 +785,8 @@ cleanup() {
     svc_redact || log "verify-container: could not remove the one-shot password from $VDIR"
   fi
   rm -rf "$SRC"
+  # Last: the containers of this run are gone before the next run may start (CT-06zzzx).
+  slot_release
 }
 trap cleanup EXIT
 trap 'exit 130' INT

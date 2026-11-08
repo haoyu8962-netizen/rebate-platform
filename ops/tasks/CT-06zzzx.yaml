@@ -1,0 +1,25 @@
+id: CT-06zzzx
+repo: rebate-platform
+title: CT-06zzzx：容器 verify:fast 全机并发闸门——verify-container.sh 同一时刻最多 1 个，排队有上限、超时报错（FU-COLIMA-VERIFY-SLOT，D10-950）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-950：Colima 6 核 / 8 GiB，多线同时在容器里跑 verify:fast 的 root tsc -b 被 OOM，exit 137）。基于主干。
+# 改法：tools/ops/verify-container.sh 对跑 verify:fast 的两种模式（--fast 与默认的完整 verify）在启动容器前取全机槽，--red / --browser / --dry-run 不取。
+#   槽是 $RUNS/verify-slot/ 下 mkdir 原子创建的锁目录（COULI_VERIFY_SLOT_DIR 可覆盖），内含持有者 pid、任务号、模式、开始时间与唯一 token；
+#   排队有上限地等（COULI_VERIFY_SLOT_WAIT_SECS，默认 1800 秒），等待时定期打印持有者与已等时长；超时 exit 2 并写明持有者，不静默；
+#   持有者 pid 已死的陈旧槽只能经接管闸门（verify-slot/<lock>.takeover，mkdir 排他）按 token 核对后删除，从不移走活的持有者；
+#   本次运行结束（正常、失败、被信号中断）都按 token 释放；退出码与 result.json 语义不变。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现；Codex 额度用尽期间按 approvals 36 由独立 Claude 评审；按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/verify-container-slot.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzx.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
