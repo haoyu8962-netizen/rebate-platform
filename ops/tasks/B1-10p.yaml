@@ -1,0 +1,20 @@
+id: B1-10p
+repo: rebate-platform
+title: 后台写接口回读详情按权限置空内部字段（FU-ADMIN-WRITE-READBACK-BLANK，编排 2026-11-09 01:23）——hold / unhold、指派、改子原因、编辑会员信息的响应复用 B1-10o 的置空，放行不变
+type: impl
+# 2026-11-09 admin 入账（B1-10o Codex money 范围外 S1）。权限组合已逐个核实：adminHoldOrder / adminUnholdOrder（order.hold）、指派（order.assign）、adminSetOrderReasonSub（order.claim）回读订单详情，账号可无 order.view → last_hold_note、commission_rate_bp、commission_split.reserve_bp 要置空；adminEditUserProfile（user.phone_change）回读用户详情，账号可无 risk.* → risk.reason 要置空。adminApproveClaimItem / adminRejectClaimItem 只认 order.claim，回读的找回详情判定点也是 order.claim，无缺口，不改。
+# 只改控制器：guard 传 withPermissions、响应复用 blankAdminOrderDetail / blankAdminUserDetail；放行判定不动。契约文字并进 CT-24zzd。RV2；规则测试写手与 spec-test 新鲜独立 Claude（D10-823 ②、D10-1080），money 先跑 Codex（D10-1075）。
+refs: []
+refs_hash: {}
+deps: [B1-10o]
+paths:
+  - 'apps/api/src/modules/orders/http/admin/order-actions.controller*.ts'
+  - 'apps/api/src/modules/identity/http/admin/user-profile.controller*.ts'
+test_paths:
+  - 'test/spec/admin/lookup-blank-write-readback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/lookup-blank-write-readback/**'
+status: todo
