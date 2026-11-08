@@ -360,7 +360,8 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
         let limits: AdmissionLimits;
         try {
           limits = await deps.limits.current(caller.appId);
-        } catch {
+        } catch (error) {
+          failed('send_message', 'limits', error);
           refuse(caller, reply, 50401);
           return;
         }
