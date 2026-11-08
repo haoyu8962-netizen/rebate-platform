@@ -1,0 +1,29 @@
+id: B1-06zi
+repo: rebate-platform
+title: linking：拼多多 open 按本场景推广位看备案（union_pdd_pid_filings）——active 绑定缺本 pid 备案就查 authority，答已备案插一行、未备案 30111；查询答已备案处一律补写备案行（FU-PDD-BINDING-PID 第二单，BR-ID-22）
+type: impl
+# 2026-11-09 w1 入账（D10-1061 ② / D10-1063 / D10-1097 (B)；方案 couli-runs/FU-PDD-BINDING-PID/plan.md；冻结影响 couli-runs/B1-06zi/frozen-impact.md）。排在 B1-06zj（前置 test-change，补种子）合并之后开工。
+# 行为：自己的拼多多 open 先照现在判 union_bindings（banned 10001、blocked 30153、站长授权过期 50301、no_rebate 路径、推广位 / attr_code 缺失与读失败的映射都不变）；绑定 active 时再按 (app_id, user_id, 本次 open 的当前推广位 getActivePid 所得 pid) 查 union_pdd_pid_filings：有 → 照常放行、不查上游；没有 → queryPddAuthority（同现身份构造）：答已备案 → 插备案行后放行；未备案 → 30111（auth_jump 照现形状，该 pid 的备案链接）；端口失败 → 50303、不写。非 active 路径答已备案时照现激活绑定，并同时插本 pid 的备案行。GET /v1/unions/bindings 刷新与其他调用 queryPddAuthority 得已备案处都补写本 pid 备案行。别人的分享 link 不变（只看分享者的绑定、不查）。
+# 约束（防冻结用例翻红）：先过推广位检查再查备案；读失败映射照旧（active 分支不照搬非 active 对 no_attr_code 的处理）；备案行插入 ON CONFLICT DO NOTHING、走本次 open / 刷新的事务执行器（不另借连接）；激活时补的备案行 pid 与下次查找用的一致。备案行不越过绑定状态；用户数据口径见 B1-06zh 注释（注销保留、副本不纳入、并号不改记）；deletion-cleanup.ts 只补注释。
+# 规则测试新目录 test/spec/linking/pdd-pid-filings/**，新鲜独立 Claude 写（D10-823 ②），spec-test 新鲜独立 Claude（D10-1080），money 评审先 Codex（D10-1075）。RV2。
+refs: [BR-ID-22]
+refs_hash:
+  BR-ID-22: 07f1349bf0ac
+deps: [B1-06zh]
+paths:
+  - 'apps/api/src/modules/linking/application/link-open-pdd-auth.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.test.ts'
+  - 'apps/api/src/modules/linking/application/union-bindings-pdd.ts'
+  - 'apps/api/src/modules/linking/application/shares.ts'
+  - 'apps/api/src/modules/linking/application/deletion-cleanup.ts'
+  - 'apps/api/src/modules/linking/infra/pdd-pid-filings.ts'
+  - 'apps/api/src/modules/linking/infra/pdd-pid-filings.test.ts'
+test_paths:
+  - 'test/spec/linking/pdd-pid-filings/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/pdd-pid-filings/**'
+status: todo

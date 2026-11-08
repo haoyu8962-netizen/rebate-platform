@@ -1,0 +1,20 @@
+id: B1-06zj
+repo: rebate-platform
+title: test-change B1-06zi 前置：冻结拼多多 open 夹具为 active 绑定补种 union_pdd_pid_filings 备案行（open-pdd-auth kit、pids-by-account [AC-B1-19d#7]），现行代码不读该表、主干上照绿
+type: test-change
+# 2026-11-09 w1 入账（FU-PDD-BINDING-PID 第二单的前置，照 D10-876 / D10-526「改 kit 拆前置」；影响面分析 couli-runs/B1-06zi/frozen-impact.md）。
+# B1-06zi 起，自己的拼多多 open 在绑定 active 时还要看本场景当前推广位有没有备案行（union_pdd_pid_filings，B1-06zh），没有就查 authority。冻结用例里 active + 「不查上游」的 5 例会因此变红：open-pdd-auth/activation.int.test.ts [AC-B1-06v#1]、pdd-auth-read-failure/clock-open-pdd.int.test.ts [B1-22u] detail/a、union/pids-by-account/pdd.int.test.ts [AC-B1-19d#7] ×3。
+# 本单只补种子、不改断言：① test/spec/linking/open-pdd-auth/kit.ts 的 fixture() 在 setup.binding === 'active' 时为该用户插入本 kit 当前推广位（current-pdd-{self_buy,agent,share}）的备案行（union_account_id = 该 fixture 账户）；② test/spec/union/pids-by-account/pdd.int.test.ts [AC-B1-19d#7] 在 accountSlots() 之后为所选推广位补备案行。现行代码不读这张表，所以主干照绿（须在 B1-06zh 合并后跑，表才存在）。
+# 第一类保护路径（改冻结 kit / 用例只加种子）：非 task 分支、台账同 PR；新鲜独立 Claude 改、另一位只读复核，按 #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: [B1-06zh]
+paths:
+  - 'test/spec/linking/open-pdd-auth/kit.ts'
+  - 'test/spec/union/pids-by-account/pdd.int.test.ts'
+  - 'ops/tasks/B1-06zj.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
