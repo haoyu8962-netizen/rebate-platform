@@ -361,6 +361,11 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // editable. No seed row; unset = on, the reader's default (`value !== false`), which is 08's value.
   // Registration only; B2-02t reads it.
   spec('ledger.credit_postcheck.enabled', 'boolean', 'config.business'),
+  // B1-02zzf (D10-1034 ①, BR-ID-26 细则「配置」): the least age in whole years for realname
+  // verification (younger is refused 30407), config.risk, editable; the lower bound 14 is the 08
+  // value (the console may not lower the realname age line), the upper bound 18 (higher would
+  // refuse adults), seeded 14. Registration only; B1-02zzg's realname age check reads it.
+  riskInteger('minor.min_realname_age', 14, 18),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

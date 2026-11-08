@@ -481,6 +481,10 @@ export const CREDIT_POSTCHECK: readonly Expected[] = [
 ];
 /** B2-02t: on by default through the reader (unset = on), hence no seed row. */
 export const CREDIT_POSTCHECK_UNSEEDED: readonly string[] = ['ledger.credit_postcheck.enabled'];
+// B1-02zzf (D10-1034 ①, BR-ID-26 细则「配置」): the least realname age in whole years, registered
+// right after CREDIT_POSTCHECK: editable config.risk, options null, range 14..18, seeded 14. Not part of
+// expectedNow() either.
+export const MINOR: readonly Expected[] = [row('minor.min_realname_age', 'number', 'config.risk')];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -510,6 +514,7 @@ export const expectedOf = (key: string): Expected => {
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
+    ...MINOR,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

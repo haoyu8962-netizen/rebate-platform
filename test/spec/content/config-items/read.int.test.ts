@@ -18,6 +18,7 @@ import {
   FEEDBACK,
   KEYS,
   LABOR,
+  MINOR,
   ORDER_RESCAN,
   ORDER_RESCAN_TAOBAO,
   ORDERS_JD,
@@ -73,6 +74,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // orders.jd.refunded_quantity_r9_enabled; B1-04zzz: + the five order_sync.rescan.taobao.* keys.
   // B1-22x: + the five price.taobao.* keys.
   // B3-08st: + agent.trace.retention_days.
+  // B1-02zzf: + minor.min_realname_age.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -100,6 +102,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
+    ...MINOR,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

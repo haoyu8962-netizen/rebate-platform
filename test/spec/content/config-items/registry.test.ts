@@ -50,6 +50,8 @@
 // AGENT_TRACE), config.risk, seeded 190.
 // B2-02t (D10-1035 / D10-1038, BR-FUND-19): ledger.credit_postcheck.enabled follows it (kit
 // CREDIT_POSTCHECK), unset (on) by default with no seed row (CREDIT_POSTCHECK_UNSEEDED).
+// B1-02zzf (D10-1034 ①, BR-ID-26 细则「配置」): minor.min_realname_age follows it (kit MINOR),
+// config.risk, range 14..18, seeded 14.
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -82,6 +84,7 @@ import {
   INVITE_ELIG,
   LABOR,
   LABOR_UNSEEDED,
+  MINOR,
   ORDERS_JD,
   ORDERS_JD_UNSEEDED,
   ORDER_RESCAN,
@@ -215,6 +218,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...PRICE_TAOBAO,
         ...AGENT_TRACE,
         ...CREDIT_POSTCHECK,
+        ...MINOR,
       ].map((entry) => entry.key),
     ),
   );
@@ -417,6 +421,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
+    ...MINOR,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -483,6 +488,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
+    ...MINOR,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -557,6 +563,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...PRICE_TAOBAO,
       ...AGENT_TRACE,
       ...CREDIT_POSTCHECK,
+      ...MINOR,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -582,6 +589,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...ORDER_RESCAN_TAOBAO,
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
+    ...MINOR,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({
@@ -1084,4 +1092,43 @@ it('[AC-F1-10e#75] shop.entry.source.<platform> 只登记 taobao / jd / pdd，co
   for (const key of [...SHOP_SOURCE_UNSEEDED, 'shop.entry.source.meituan']) {
     expect(seeds.has(key), key).toBe(false);
   }
+});
+
+// B1-02zzf (D10-1034 ①, 08 BR-ID-26 细则「配置」): the type, permission and editable flag are checked
+// in #58; here the values the least realname age accepts: a whole number of years in 14..18. The
+// lower bound 14 is the 08 value (the console may not lower the realname age line), the upper bound
+// 18 (higher would refuse adults). Seeded 14, the 08 value. Not an emergency switch.
+it('[AC-F1-10e#76] minor.min_realname_age 是可改的 config.risk 整数，闭区间 14..18，拒绝调低、浮点与隐式转换；种子 14（B1-02zzf，BR-ID-26）', () => {
+  const spec = registered('minor.min_realname_age');
+  expect(spec).toMatchObject({
+    valueType: 'number',
+    options: null,
+    permission: 'config.risk',
+    adminEditable: true,
+  });
+  expect(spec.range).toStrictEqual({ integer: true, min: 14, max: 18 });
+  expect(configItemSpecOf('minor.min_realname_age')).toBe(spec);
+  expect(switchSpecOf('minor.min_realname_age')).toBeNull();
+  for (const value of [14, 15, 16, 17, 18]) {
+    expect(configValueFits(spec, value), String(value)).toBe(true);
+  }
+  const refused = [
+    13,
+    0,
+    -1,
+    -14,
+    19,
+    2147483647,
+    14.5,
+    13.9,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    '14',
+    true,
+    null,
+    [],
+    {},
+  ];
+  for (const value of refused) expect(configValueFits(spec, value), String(value)).toBe(false);
+  expect(seedRows().get('minor.min_realname_age')).toBe(14);
 });

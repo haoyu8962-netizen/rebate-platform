@@ -42,6 +42,8 @@ const ELIGIBILITY = { key: `${PREFIX}eligibility_days`, value: 30 };
 // dataoke; shop.entry.source.jd and shop.entry.source.pdd have no seed rows (unset).
 // B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): the agent.trace.retention_days row follows it, under
 // the same checks, seeded 190 (the 08 value; the console may not set less than 184).
+// B1-02zzf (D10-1034 ①, BR-ID-26): the minor.min_realname_age row follows it, under the same
+// checks, seeded 14 (the 08 value; the console may only set 14..18).
 const PAYOUT_KEYS = [
   'payout.single_cap_fen',
   'payout.daily_cap_fen',
@@ -124,6 +126,8 @@ const SHOP_SOURCE_KEYS = SHOP_SOURCE_SEEDS.map((row) => row.key);
 const SHOP_SOURCE_UNSEEDED_KEYS = ['shop.entry.source.jd', 'shop.entry.source.pdd'];
 const AGENT_TRACE_SEEDS = [{ key: 'agent.trace.retention_days', value: 190 }];
 const AGENT_TRACE_KEYS = AGENT_TRACE_SEEDS.map((row) => row.key);
+const MINOR_SEEDS = [{ key: 'minor.min_realname_age', value: 14 }];
+const MINOR_KEYS = MINOR_SEEDS.map((row) => row.key);
 const PROMO_LINK_KEYS = [
   'share.taobao_enabled',
   'convert.taobao_prefetch.enabled',
@@ -172,6 +176,7 @@ it('[AC-F1-02zn#6] BR-INV-24 种子为 1000/0/0/0/24，开关缺行默认 off；
     ...BAD_DEBT_KEYS,
     ...SHOP_SOURCE_KEYS,
     ...AGENT_TRACE_KEYS,
+    ...MINOR_KEYS,
   ]);
   for (const key of SEARCH_KEYS) {
     expect(
@@ -187,6 +192,7 @@ it('[AC-F1-02zn#6] BR-INV-24 种子为 1000/0/0/0/24，开关缺行默认 off；
   expect(rows.filter((row) => BAD_DEBT_KEYS.includes(row.key))).toStrictEqual(BAD_DEBT_SEEDS);
   expect(rows.filter((row) => SHOP_SOURCE_KEYS.includes(row.key))).toStrictEqual(SHOP_SOURCE_SEEDS);
   expect(rows.filter((row) => AGENT_TRACE_KEYS.includes(row.key))).toStrictEqual(AGENT_TRACE_SEEDS);
+  expect(rows.filter((row) => MINOR_KEYS.includes(row.key))).toStrictEqual(MINOR_SEEDS);
   for (const key of SHOP_SOURCE_UNSEEDED_KEYS) {
     expect(
       rows.some((row) => row.key === key),
