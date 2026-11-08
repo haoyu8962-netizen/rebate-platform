@@ -1,0 +1,25 @@
+id: CT-06zzzzj
+repo: rebate-platform
+title: CT-06zzzzj：标签轮 verify-reuse 等完同提交那一轮后先核 PR 当前头，头已变就提前结束，不在旧提交上整轮重跑（FU-CI-LABEL-RUN-STALE-HEAD，D10-1046 ②）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-1027 ④ / D10-1046 ②；#2826 实现者提出的已知代价）。叠在 CT-06zzzzf（#2840，B2）上，#2840 合并后变基到主干。
+# 问题：标签事件那一轮在 verify-reuse 里等同提交的代码轮时，PR 若又推了新头（变基），代码轮被取消、标签轮等不到复用，就在旧头上把 11 个重作业整轮跑完——
+#   旧头的必需检查对新头不起作用，纯属浪费。
+# 改法：verify-reuse 的标签分支在等待结束后（以及每轮等待之间）用 gh api 查 PR 当前头（pulls/{number} 的 head.sha）；与本事件的 head.sha 不同 → 本作业以失败结束
+#   （日志写明「PR 头已变」），重作业因 needs 不跑，ci-gate 照旧判红，红的只是旧头的检查，不影响新头。查询失败时照旧按原规则走（不因查询失败而放过或拦下）。
+#   主干推送分支（B2）与代码事件不受影响。测试用的假 gh 补 pulls 接口。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzf]
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ci/ci-concurrency-workflow.test.ts'
+  - 'tools/ci/ci-label-stale-head-workflow.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzj.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

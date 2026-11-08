@@ -34,7 +34,8 @@ permissions:
 #   A: labeled / unlabeled events get a group of their own, ci-<ref>-label, so a label event no
 #      longer cancels the code run of the same ref (opened / synchronize / reopened, ci-<ref>);
 #      its verify-reuse waits, with a limit, for that run to finish and then reuses its pass (see
-#      verify-reuse). A newer label event still cancels an older label run.
+#      verify-reuse). A newer label event still cancels an older label run. A label run whose PR
+#      head moves meanwhile ends early, red on the old head only (D10-1046 ②, CT-06zzzzj).
 #   B1: a push to main is never cancelled (cancel-in-progress false): the running pass finishes,
 #      GitHub keeps only the latest pending push. Pull request events still cancel the older run.
 concurrency:
@@ -83,9 +84,21 @@ jobs:
     # `gh api ... --jq` is used (gh's built-in jq, no separate jq binary; not `gh run watch`, which
     # has no limit of its own). timeout-minutes 70 leaves ten minutes beyond the wait for checkout
     # and the API calls; a timeout or API error leaves reuse unset, so everything runs as before.
-    # Known cost: a push to the PR no longer cancels a label run (different group). That push
-    # cancels the code run of the old head, so the label run finds no pass there and runs in full
-    # for the old head; the run of the new head is on another head and is not waited for.
+    # A push to the PR does not cancel a label run (different group); it cancels the code run of
+    # the old head, so the label run would find no pass there and run in full for the old head,
+    # whose checks do nothing for the new head. D10-1046 ② (CT-06zzzzj,
+    # FU-CI-LABEL-RUN-STALE-HEAD): on a label event the find step therefore also reads the PR's
+    # current head (`pulls/<github.event.pull_request.number>`, head.sha) in every round of the
+    # wait, right after the run-list query: so once more when nothing is left unfinished (before
+    # deciding) and before giving up at the limit. When it answers a head other than this event's
+    # head.sha, the step logs "PR #<n> head moved from <old> to <new>", writes moved=true and
+    # exits 1 at once (no further sleep or query, never reuse=true). verify-static and the eleven
+    # heavy jobs then skip by `needs.verify-reuse.outputs.moved != 'true'` in their `if` (GitHub
+    # keeps the outputs a step wrote before it failed, and passes a failed job's outputs on), and
+    # ci-gate is red, on the old head only; the new head has a run of its own. A failed query (gh
+    # exits non-zero) or an answer that is not a 40-hex sha counts as "not moved": the old rule
+    # goes on, and the next round asks again. A verify-reuse that fails any other way writes no
+    # moved, so every job still runs. The push path (B2) and the code events never read it.
     # D10-1024 B2 (CT-06zzzzf; ci-load-plan §2 B2): since B1 every push to main runs to the end,
     # about 200 more job minutes per merge. On a push to main this job therefore also looks for
     # the passes of the pull request that produced the pushed commit, and reuses them only when
@@ -118,6 +131,7 @@ jobs:
       pull-requests: read
     outputs:
       reuse: ${{ steps.find.outputs.reuse }}
+      moved: ${{ steps.find.outputs.moved }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -195,11 +209,29 @@ jobs:
             exit 0
           fi
           echo "tree of this event: $tree (head $HEAD_SHA)"
+          # D10-1046 ② (CT-06zzzzj, FU-CI-LABEL-RUN-STALE-HEAD): has the pull request moved on to
+          # another head? Only a full 40-hex head.sha other than this event's counts; a failed or
+          # malformed query counts as "not moved" (the old rule goes on), and the next round asks
+          # again. On a moved head: write moved=true, then fail this step (see the job comment).
+          check_head() {
+            now=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha) || now=''
+            case "$now" in
+              *[!0-9a-f]*) return 0 ;;
+            esac
+            [ "${#now}" -eq 40 ] || return 0
+            [ "$now" != "$HEAD_SHA" ] || return 0
+            echo "::error::PR #$PR_NUMBER head moved from $HEAD_SHA to $now: this label run of the old head ends early, the run of the new head decides"
+            echo "moved=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          }
           # D10-1024 A: wait, with a limit, for the other ci.yml runs on this head to finish.
           started=$SECONDS
           while :; do
             unfinished=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
               --jq "[.workflow_runs[] | select(.id != $RUN_ID and .status != \"completed\") | .id | tostring] | join(\" \")")
+            # D10-1046 ②: every round, so also after the wait is over (before deciding) and before
+            # giving up at the wait limit.
+            check_head
             [ -n "$unfinished" ] || break
             elapsed=$((SECONDS - started))
             if [ "$elapsed" -ge "$REUSE_WAIT_SECONDS" ]; then
@@ -241,6 +273,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PUSH_SHA: ${{ github.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ID: ${{ github.run_id }}
           REUSE_WAIT_SECONDS: 3600
           REUSE_POLL_SECONDS: 60
@@ -316,8 +349,9 @@ jobs:
   # (vitest BaseSequencer.shard). Each job installs from the setup-node pnpm store cache (keyed
   # by pnpm-lock.yaml; `pnpm install --frozen-lockfile` still checks every package against the
   # lockfile's integrity hashes). Each job is skipped only when verify-reuse found a success of
-  # that very job on the same tested tree (D10-242, CT-06zm); every other event, and any failure
-  # of verify-reuse, runs it in full. timeout-minutes 30 each (D10-298); after a day of runs:
+  # that very job on the same tested tree (D10-242, CT-06zm), or when verify-reuse ended a label
+  # run early because the PR head moved (moved=true, D10-1046 ②, CT-06zzzzj); every other
+  # event, and any other failure of verify-reuse, runs it in full. timeout-minutes 30 each (D10-298); after a day of runs:
   # if the p90 is still above 20 minutes or verify-unit becomes the critical path, tools and the
   # spec tests are split further.
   # D10-935 (CT-06zzzv): verify-unit, verify-spec-1 / -2 and the other heavy jobs below are also
@@ -326,7 +360,7 @@ jobs:
   # is empty, and `!cancelled()` lets every job run as before.
   verify-static:
     needs: [verify-reuse]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -400,7 +434,7 @@ jobs:
 
   verify-unit:
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -457,7 +491,7 @@ jobs:
     # nor the planning repository is needed here. PROP_RUNS / PROP_SEED stay unset, as in
     # verify:fast.
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -491,7 +525,7 @@ jobs:
   verify-spec-2:
     # Same as verify-spec-1, other shard.
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -530,8 +564,8 @@ jobs:
     # tests resolve workspace packages from source (vitest.shared.ts `couli-src`) and read no
     # planning text, so neither `pnpm build` nor the planning repository is needed here.
     # D10-242 (CT-06zm): skipped only when verify-reuse found a success of this very job on the
-    # same tested tree (see verify-reuse); every other event, and any failure of verify-reuse,
-    # runs it in full.
+    # same tested tree (see verify-reuse), or when the PR head moved (moved=true, D10-1046 ②);
+    # every other event, and any other failure of verify-reuse, runs it in full.
     # D10-902 (CT-06zzzr, FU-CI-PROPS-HEADROOM): the two passes are separate jobs, each on a third
     # of the spec-test files (vitest --shard=i/3): verify-props-1 / -2 / -3 run the fixed-seed pass,
     # verify-props-sha-1 / -2 / -3 the commit-SHA-seed pass; runs, seeds and commands unchanged,
@@ -545,7 +579,7 @@ jobs:
     # D10-935 (CT-06zzzv): also skipped when ledger-only-detect says only=true (see that job); so
     # are the other heavy jobs, each with the same condition.
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -581,7 +615,7 @@ jobs:
   verify-props-2:
     # Same as verify-props-1, shard 2/3 (fixed seed).
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -617,7 +651,7 @@ jobs:
   verify-props-3:
     # Same as verify-props-1, shard 3/3 (fixed seed).
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -653,7 +687,7 @@ jobs:
   verify-props-sha-1:
     # The commit-SHA-seed pass of verify-props-1 (D10-902, CT-06zzzr), shard 1/3.
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -694,7 +728,7 @@ jobs:
   verify-props-sha-2:
     # The commit-SHA-seed pass of verify-props-2 (D10-902, CT-06zzzr), shard 2/3.
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -735,7 +769,7 @@ jobs:
   verify-props-sha-3:
     # The commit-SHA-seed pass of verify-props-3 (D10-902, CT-06zzzr), shard 3/3.
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -788,10 +822,10 @@ jobs:
     # The one-shot Redis of the integration tests (TEST_REDIS_URL) is a service container with
     # the image of infra/local/compose.yaml and tools/ops/verify-container.sh, data on tmpfs only.
     # D10-242 (CT-06zm): skipped only when verify-reuse found a success of this very job on the
-    # same tested tree (see verify-reuse); every other event, and any failure of verify-reuse,
-    # runs it in full.
+    # same tested tree (see verify-reuse), or when the PR head moved (moved=true, D10-1046 ②);
+    # every other event, and any other failure of verify-reuse, runs it in full.
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     # 30 → 45 (2026-10-19, CT-06z): green in the 30 latest ci runs 17m05s–29m16s, p90 29m05s
     # (97% of the cap); 45 is the maximum with a 1.5× margin, rounded up to a multiple of 5.
@@ -1072,7 +1106,7 @@ jobs:
     # browser tests, the build smoke and db:check stay in verify-int-1. Skipped only when
     # verify-reuse found a success of this very job on the same tested tree (D10-242).
     needs: [verify-reuse, ledger-only-detect]
-    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     services:

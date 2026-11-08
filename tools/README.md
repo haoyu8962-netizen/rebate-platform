@@ -33,6 +33,8 @@
 
 `ci.yml` 的作业 `verify-reuse`（D10-242，CT-06zm；标签事件的等待见 D10-1024 A，CT-06zzzze）在主干推送轮也运行（D10-1024 B2，CT-06zzzzf），复用合并前那张 PR 的验证产物，权限只读（`contents`、`actions`、`pull-requests`）。只在以下全部成立时输出 `reuse=true`，12 个重作业跳过：① `commits/<推送提交>/pulls` 里恰好一张 PR 已合并（`merged_at` 非空）、base 为本仓库的 `main`、`head.repo.full_name` 等于本仓库（按名字比，不靠 `fork` 标志；头仓库为空不算）；② 该 PR 最终头上 `ci.yml` 的 `pull_request` 运行、`head_repository.full_name` 为本仓库，该作业最新一次尝试为 success（同一个头上的每轮都看，不只看最新那轮）；③ 同一轮有未过期的产物 `verified-<作业>-<树>`，`<树>` 与本次主干检出的树完全相等。12 个作业缺一个就 `reuse=false`、整轮照跑；fork、树不等、产物过期或缺失、PR 不止一张或没有、任何 API 出错，一律 `reuse=false` 并退出 0。推送路径不等待、不调用 sleep（等待只用于标签事件）。`ci-gate` 的判定与必需检查名不变：推送轮与标签事件一样，只在 `verify-reuse` 成功且输出恰为 `true` 时把重作业的 skipped 当通过。已知影响：复用的 `verify-props-sha-*` 用的是 PR 最终头的提交号种子，不是主干提交的。
 
+标签轮遇到 PR 头已变就提前结束（D10-1046 ②，CT-06zzzzj，FU-CI-LABEL-RUN-STALE-HEAD）：`labeled` / `unlabeled` 事件下，`verify-reuse` 的 find 步骤在等待的每一轮（紧跟本轮运行列表查询之后，所以没有要等的时候、等待结束开始判定之前、到达等待上限放弃之前也都各查一次）用 `gh api repos/<仓库>/pulls/<github.event.pull_request.number> --jq .head.sha` 查 PR 当前头。答回的是 40 位十六进制、且不等于本事件 `pull_request.head.sha` 时，在日志里写一行 `PR #<号> head moved from <旧头> to <新头>`，往 `$GITHUB_OUTPUT` 写 `moved=true`（作业输出 `moved`），随即以退出码 1 结束这一步：不再 sleep、不再查别的接口，也不输出 `reuse=true`。`verify-static` 与 11 个重作业的 `if` 都带 `needs.verify-reuse.outputs.moved != 'true'`，于是全部跳过，`ci-gate` 判红，红的只是旧头的检查，新头有自己那一轮。查询失败（gh 非零退出，如 HTTP 502 / 404）或答回的不是完整提交号，都按「头没变」照原规则往下走，下一轮再查。`verify-reuse` 因别的原因失败（超时、运行列表查询出错）时不写 `moved`，各作业照旧都跑。主干推送轮（B2）与代码事件不读 `pulls/<号>`；权限仍是三项只读；`ci-gate` 的判定与必需检查名不变。
+
 ## guard/ 各守卫
 
 | 命令 | 检查什么 | 出处 |
