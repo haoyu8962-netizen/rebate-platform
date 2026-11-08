@@ -485,6 +485,14 @@ export const CREDIT_POSTCHECK_UNSEEDED: readonly string[] = ['ledger.credit_post
 // right after CREDIT_POSTCHECK: editable config.risk, options null, range 14..18, seeded 14. Not part of
 // expectedNow() either.
 export const MINOR: readonly Expected[] = [row('minor.min_realname_age', 'number', 'config.risk')];
+// B1-02zzh (D10-1034 ②, BR-ID-09 细则「设备标识的无效值」): the invalid device_hash list, registered
+// right after MINOR: editable config.risk object, options null. Not part of expectedNow() either.
+export const DEVICE: readonly Expected[] = [row('device.invalid_hashes', 'object', 'config.risk')];
+/**
+ * B1-02zzh: no seed row (D-7 / D-8, [AC-F1-02a#42]); the initial values live only in
+ * specs/device-hash.vectors.json (invalid_hash_seeds) and B1-02zzi's reader takes the union.
+ */
+export const DEVICE_UNSEEDED: readonly string[] = ['device.invalid_hashes'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -515,6 +523,7 @@ export const expectedOf = (key: string): Expected => {
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
     ...MINOR,
+    ...DEVICE,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

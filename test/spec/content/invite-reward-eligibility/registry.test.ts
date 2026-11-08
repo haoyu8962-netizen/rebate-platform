@@ -163,6 +163,8 @@ const AGENT_TRACE_KEYS = ['agent.trace.retention_days'];
 const CREDIT_POSTCHECK_KEYS = ['ledger.credit_postcheck.enabled'];
 // B1-02zzf (D10-1034 ①, BR-ID-26): minor.min_realname_age follows it, now ending the tail.
 const MINOR_KEYS = ['minor.min_realname_age'];
+// B1-02zzh (D10-1034 ②, BR-ID-09): device.invalid_hashes follows it, now ending the tail.
+const DEVICE_KEYS = ['device.invalid_hashes'];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -199,6 +201,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...AGENT_TRACE_KEYS,
     ...CREDIT_POSTCHECK_KEYS,
     ...MINOR_KEYS,
+    ...DEVICE_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);

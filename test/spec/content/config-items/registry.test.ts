@@ -52,6 +52,8 @@
 // CREDIT_POSTCHECK), unset (on) by default with no seed row (CREDIT_POSTCHECK_UNSEEDED).
 // B1-02zzf (D10-1034 ①, BR-ID-26 细则「配置」): minor.min_realname_age follows it (kit MINOR),
 // config.risk, range 14..18, seeded 14.
+// B1-02zzh (D10-1034 ②, BR-ID-09 细则「设备标识的无效值」): device.invalid_hashes follows it (kit
+// DEVICE), config.risk object, with no seed row (DEVICE_UNSEEDED; D-7 / D-8, [AC-F1-02a#42]).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -77,6 +79,8 @@ import {
   BAD_DEBT,
   BRIDGE,
   BRIDGE_UNSEEDED,
+  DEVICE,
+  DEVICE_UNSEEDED,
   EXPECTED,
   FEEDBACK,
   FUND_FLAGS,
@@ -159,6 +163,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...ORDER_RESCAN_TAOBAO_UNSEEDED,
         ...PRICE_TAOBAO_UNSEEDED,
         ...CREDIT_POSTCHECK_UNSEEDED,
+        ...DEVICE_UNSEEDED,
       ]),
     ]),
   );
@@ -178,6 +183,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...ORDER_RESCAN_TAOBAO_UNSEEDED,
     ...PRICE_TAOBAO_UNSEEDED,
     ...CREDIT_POSTCHECK_UNSEEDED,
+    ...DEVICE_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -219,6 +225,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...AGENT_TRACE,
         ...CREDIT_POSTCHECK,
         ...MINOR,
+        ...DEVICE,
       ].map((entry) => entry.key),
     ),
   );
@@ -269,7 +276,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       ORDERS_JD_UNSEEDED.length -
       ORDER_RESCAN_TAOBAO_UNSEEDED.length -
       PRICE_TAOBAO_UNSEEDED.length -
-      CREDIT_POSTCHECK_UNSEEDED.length,
+      CREDIT_POSTCHECK_UNSEEDED.length -
+      DEVICE_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -422,6 +430,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
     ...MINOR,
+    ...DEVICE,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -489,6 +498,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
     ...MINOR,
+    ...DEVICE,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -564,6 +574,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...AGENT_TRACE,
       ...CREDIT_POSTCHECK,
       ...MINOR,
+      ...DEVICE,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -590,6 +601,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
     ...MINOR,
+    ...DEVICE,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({
@@ -1131,4 +1143,26 @@ it('[AC-F1-10e#76] minor.min_realname_age 是可改的 config.risk 整数，闭�
   ];
   for (const value of refused) expect(configValueFits(spec, value), String(value)).toBe(false);
   expect(seedRows().get('minor.min_realname_age')).toBe(14);
+});
+
+// B1-02zzh (D10-1034 ②, 08 BR-ID-09 细则「设备标识的无效值」): the type, permission and editable flag
+// are checked in #58; here the item is a config.risk object without enum options or number range
+// (the object type only checks for a JSON array / object; B1-02zzi's reader keeps well-formed
+// hashes and takes the union with invalid_hash_seeds of specs/device-hash.vectors.json), not an
+// emergency switch, and it has no seed row (D-7 / D-8, [AC-F1-02a#42]).
+it('[AC-F1-10e#77] device.invalid_hashes 是可改的 config.risk object，无种子行（初值只在 specs 的 invalid_hash_seeds，B1-02zzh，BR-ID-09）', () => {
+  const spec = registered('device.invalid_hashes');
+  expect(spec).toMatchObject({
+    valueType: 'object',
+    options: null,
+    permission: 'config.risk',
+    adminEditable: true,
+  });
+  expect(spec.range).toBeUndefined();
+  expect(configItemSpecOf('device.invalid_hashes')).toBe(spec);
+  expect(switchSpecOf('device.invalid_hashes')).toBeNull();
+  for (const value of ['', '0', 0, true, null]) {
+    expect(configValueFits(spec, value), String(value)).toBe(false);
+  }
+  expect(seedRows().has('device.invalid_hashes')).toBe(false);
 });

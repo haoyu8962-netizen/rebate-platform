@@ -366,6 +366,13 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // value (the console may not lower the realname age line), the upper bound 18 (higher would
   // refuse adults), seeded 14. Registration only; B1-02zzg's realname age check reads it.
   riskInteger('minor.min_realname_age', 14, 18),
+  // B1-02zzh (D10-1034 ②, BR-ID-09 细则「设备标识的无效值」): the device_hash values refused as
+  // invalid (a JSON array of 64-character lower-case hex SHA-256 hashes), config.risk, editable.
+  // Initial values live only in specs/device-hash.vectors.json (invalid_hash_seeds); per D-7 / D-8
+  // there is no seed row ([AC-F1-02a#42]). The object type checks only for a JSON array / object
+  // here; B1-02zzi's reader takes the union with the specs seeds, so operations can only add to
+  // the list. Registration only.
+  spec('device.invalid_hashes', 'object', 'config.risk'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

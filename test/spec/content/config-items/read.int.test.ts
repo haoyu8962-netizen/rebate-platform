@@ -15,6 +15,7 @@ import {
   BAD_DEBT,
   BRIDGE,
   EXPECTED,
+  DEVICE,
   FEEDBACK,
   KEYS,
   LABOR,
@@ -75,6 +76,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // B1-22x: + the five price.taobao.* keys.
   // B3-08st: + agent.trace.retention_days.
   // B1-02zzf: + minor.min_realname_age.
+  // B1-02zzh: + device.invalid_hashes.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -103,6 +105,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...AGENT_TRACE,
     ...CREDIT_POSTCHECK,
     ...MINOR,
+    ...DEVICE,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(
