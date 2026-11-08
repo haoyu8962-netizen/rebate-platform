@@ -470,6 +470,13 @@ codes:
       platform: ~
       reason: [shop_entry_disabled, shop_unavailable]
     sources: [BR-PRICE-21, BR-TEXT-14]
+  - code: 30147
+    http: 422
+    meaning: 商品所在类目已被禁售，不能加入商品池（category_blocked；只出现在 /admin/v1 的 POST product-pools/{pool_id}/items 与 PATCH product-pools/{pool_id}/items/{product_key}，后者只在 offline→online 复核时；只用本次调用拿到的联盟答复里的类目判定、不读已存数据，且禁售类目先于价格判定：联盟答复带商品详情（可用商品，含 price_status=anomaly）时先按本应用启用中的禁售类目名单 category_blocklist（与搜索结果过滤同一份名单，01 F-PROD-08）判，命中即返回本码，什么都不写（不新增、不覆盖、不下架本条或其他条目），不再走 50401 或覆盖下架；可用但没有类目时只按带关键词的规则匹配标题，不命中放行；不命中再照该接口既有口径（含 anomaly → 新键 50401、已在池覆盖下架）；联盟答复不带商品详情（下架、失效、无法确认）时照既有口径（30141、50401、offline 带 invalid_reason），不用本码；不带 data。码值按 08 §13.11 301 段顺序取号，编排裁定 D10-1059，CT-26zf）
+    action: 后台只提示，不入池、不改条目；运营可换商品或先在禁售类目名单里调整
+    retry: 否
+    retry_kind: never
+    sources: [D10-1059, 01 F-PROD-08, BR-PROD-08]
   - code: 30151
     http: 422
     meaning: 该淘宝账号已绑定本 App 其他用户

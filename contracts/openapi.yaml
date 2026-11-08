@@ -19019,6 +19019,23 @@ paths:
         changed, retry (编排者默认). A repeat is therefore safe to retry, and the unique key decides between
         two concurrent adds of the same product.
 
+        Category blocklist (编排裁定 D10-1059), checked before any price outcome and only on the union
+        answer of this call, never on stored data. When that answer carries product details (a live
+        product, `price_status=anomaly` included), the category is checked first, for a new key and for a
+        key already in the pool alike: on this app's active category blocklist (the same
+        `category_blocklist` that filters search results) → 30147 and nothing is written: no insert, no
+        overwrite of `sort` / `start_at` / `end_at`, the row not taken offline, no other item taken
+        offline, and none of the price outcomes above (an anomaly → 50401 for a new key, the overwrite
+        going offline for a key in the pool) is reached. A live product with no category is matched
+        only by the rules that carry a keyword, against its title; no match lets it through. Not on the
+        blocklist → the paths above as written: passed → inserted or overwritten online; anomaly → 50401
+        for a new key, or the overwrite stands offline with `invalid_reason` for a key in the pool. When
+        the answer carries no product details (off shelf, a dead reference, cannot be confirmed) 30147
+        plays no part: off shelf on a new key → 30141 and other items holding the key go offline; a dead
+        reference on a key in the pool → the overwrite stands offline with `invalid_reason`; the union
+        cannot answer now → 50401. 20001, 30701, 30131, 30132 and 30143 are decided before any union
+        answer and come first.
+
         Items may be added to a disabled pool. An unknown `pool_id` → 30701. Written to the audit log in
         the same transaction (action pool_item_add: the new row, or before and after on an overwrite).
       x-auth: admin
@@ -19030,6 +19047,7 @@ paths:
         - 30132
         - 30141
         - 30143
+        - 30147
         - 30701
         - 50401
       security:
@@ -19125,13 +19143,26 @@ paths:
         分类 ①, BR-PROD-08 ③): passed → online, `invalid_reason` cleared and the price fields refreshed;
         not passed → 200 with the item still offline and `invalid_reason` set, and a dead reference or
         `price_status=anomaly` touches this row only and takes no pool-wide action; the union cannot answer
-        now → 50401, nothing changed, retry. An unknown `pool_id` or a `product_key` not in the pool → 30701.
+        now → 50401, nothing changed, retry. Category blocklist (编排裁定 D10-1059): only on that
+        offline→online re-check, checked before any price outcome and only on the union answer of this
+        call (never on stored data). When that answer carries product details (a live product,
+        `price_status=anomaly` included): a category on this app's active category blocklist → 30147,
+        nothing changed (no field of the body applied, the item stays offline, `invalid_reason` not
+        rewritten), and neither the passed path nor the anomaly path is reached; a live product with no
+        category is matched only by the rules that carry a keyword, against its title, and no match lets
+        it through; not on the blocklist → passed → online, anomaly → 200 offline with `invalid_reason`,
+        as above. When the answer carries no product details (off shelf, a dead reference) → 200
+        offline with `invalid_reason`, and the union cannot answer now → 50401; 30147 plays no part.
+        Changes without that re-check (`sort`, `start_at`, `end_at`, `status=offline`, or `status=online`
+        on an item already online) never return 30147. An unknown `pool_id` or a `product_key` not in
+        the pool → 30701.
         Written to the audit log in the same transaction (action pool_item_update, before and after).
       x-auth: admin
       x-error-codes:
         - 10001
         - 10403
         - 20001
+        - 30147
         - 30701
         - 50401
       security:

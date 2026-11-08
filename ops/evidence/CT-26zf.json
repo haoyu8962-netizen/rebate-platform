@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV1 contract (additive only). FU-POOL-CATEGORY-BLOCK contract (D10-1058 / D10-1059 ①): error-codes.yaml adds 30147 (http 422, category_blocked, retry never, admin-only); adminAddPoolItem and adminUpdatePoolItem x-error-codes each add 30147, and their descriptions state the order: 20001 / 30701 / 30131 / 30132 / 30143 are decided before the union answer; the category check uses only this call's union answer (never stored data) and runs only when that answer carries product details (live, incl. price_status=anomaly) — a blocked category → 30147 and nothing is written (no overwrite, no other pool item taken offline), ahead of the price checks; no details (off shelf / dead / cannot be confirmed) → the existing outcomes (30141, 50401, offline + invalid_reason), 30147 not involved; live without a category → only keyword rules on the title. PATCH changes that do not re-check never return 30147. packages/contracts-ts lists 30147 among the admin-only codes (no App text). No field, enum or other code changed; oasdiff has nothing to accept (x-error-codes / descriptions are not compared).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 3,
+      "note": "Codex usage limit until 11-15 (D10-823 ④): contract review by fresh independent Claude via tools/agent/claude-run.sh. r1 pass with one S2 (30147 precedence vs the dead / offline paths), r2 incremental pass with one S2 (30147 vs price_status=anomaly), both fixed in the descriptions; r3 incremental pass with no findings."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-26zf",
+  "spec_commit": "a95f1063119421f038a373aa58f1d899458fab8e",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "96f71181748a1098de5fda0f5aef5aafc0601a12",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}

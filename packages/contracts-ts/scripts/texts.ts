@@ -33,11 +33,12 @@ export const SILENT_CODES: readonly number[] = [10002, 10402, 30505, 44003];
  * enable, risk-state), CT-02j. 30417 appears only in the admin export tasks (download, retry),
  * CT-24k. 30155 appears only in the admin PID activation (union-pids/{pid_id}/activate), CT-24h.
  * 30156 appears only in the admin manual order sync (POST /admin/v1/order-syncs), CT-24n.
+ * 30147 appears only in the admin pool item add and update (product-pools/{pool_id}/items), CT-26zf.
  * 30417 also covers the WeCom-delivered personal information copy download, and 30419 appears
  * only in the admin real-name correction and copy registration (users/{user_id}/...), CT-24q.
  */
 export const ADMIN_ONLY_CODES: readonly number[] = [
-  10008, 10009, 30154, 30155, 30156, 30417, 30419, 44004,
+  10008, 10009, 30147, 30154, 30155, 30156, 30417, 30419, 44004,
 ];
 
 /**

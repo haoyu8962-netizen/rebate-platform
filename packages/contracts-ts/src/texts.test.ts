@@ -34,9 +34,10 @@ const SILENT = [10002, 10402, 30505, 44003];
  * 13 §13.11: returned only by the admin login (CT-02f), the admin user operations (30154,
  * 44004, CT-02j), the admin export tasks (30417, CT-24k), the admin PID activation (30155,
  * CT-24h), the admin manual order sync (30156, CT-24n) or the admin real-name correction and
- * personal information copy registration (30419, CT-24q); admin copy stays in apps/admin (03 §9).
+ * personal information copy registration (30419, CT-24q) or the admin pool item add and update
+ * (30147, CT-26zf); admin copy stays in apps/admin (03 §9).
  */
-const ADMIN_ONLY = [10008, 10009, 30154, 30155, 30156, 30417, 30419, 44004];
+const ADMIN_ONLY = [10008, 10009, 30147, 30154, 30155, 30156, 30417, 30419, 44004];
 
 /**
  * BR-TEXT-14 table B 场景子键 (08 12_TEXT l.835; rows l.853, l.855, l.875): picked by the client on
