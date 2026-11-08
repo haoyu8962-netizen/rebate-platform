@@ -1,0 +1,28 @@
+id: CT-24zza
+repo: rebate-platform
+title: 契约文字同步：restoreAdminReconDiff 的 R13 平台负差改为「不写分录、记告警并写进本次恢复的审计」（照 08 BR-FUND-22 细则「处理时再核」couli #310、D10-994），取代 CT-24zz 描述里的「平台负差反向记账」
+type: contract
+# 2026-11-08 funds 入账。B2-09gb 规则测试第 1 次（独立 Claude）指出：CT-24zz（#2772）openapi.yaml 约 23859 行写「A negative platform difference is posted the other way round (debit COMMISSION_REVENUE, credit UNION_RECEIVABLE) as in BR-FUND-08」，
+#   而 08 BR-FUND-22 细则（couli #310，D10-994）定「平台的负差同样只告警不写」，B2-09gb 台账也照 08。业务取值以 08 为准，本单只改这一句与相应 resolution.restore / 审计字段的说明（平台负差记进 resolution.restore 与审计，同受益人负差），不改检查顺序、错误码、响应形状与 appeal_restore。
+#   oasdiff 预期无变化（只改 description）；生成物随 codegen。B2-09gb 实现与之同步（台账已照 08），deps 不变。
+refs: [BR-FUND-22]
+refs_hash:
+  BR-FUND-22: 27d181deaeeb
+contract_sections: ['11.1']
+deps: [CT-24zz]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
