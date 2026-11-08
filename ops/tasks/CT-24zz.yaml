@@ -1,0 +1,34 @@
+id: CT-24zz
+repo: rebate-platform
+title: 契约：差错单恢复处理放开平台恢复（BR-FUND-22 R12 / R13）——restoreAdminReconDiff 收 type=platform_restore，服务端按订单当前 rebate_status 分流 VOID → R12（回 ESTIMATED / WAITING / UNATTRIBUTED，不写分录）、CLAWED_BACK → R13（按当前有效联盟佣金重算，差额写 ADMIN_ADJUST RESTORE）；响应带恢复后的 rebate_status；订单申诉的 R12 / R13 留下一段
+type: contract
+# 2026-11-08 funds 入账（编排 D10-973；清单 couli-runs/FUNDS-quote/open-followups-20261108.md 表一首条）。现状：orders 已在产出 platform_restore 差错单（B1-08zc / zd，platform-restore-step.ts），
+#   restoreAdminReconDiff（CT-24ze / B2-09g）只收 appeal_restore，别的 type 一律 20001 restore_not_supported；主干无任何代码把 VOID / CLAWED_BACK 写回，平台恢复差错单只能 close。
+# 本段写：① 收 type=platform_restore（resolution 照 orders 现产出的形状，不改生产方）；检查顺序与权限点 order.restore、totp step-up、Idempotency-Key、审计 recon_diff_restore 沿用 CT-24ze，
+#   appeal_restore 的现有语义一字不改。② 服务端锁单读当前 rebate_status：VOID → R12（按 platform_status 回 ESTIMATED / WAITING，WAITING 时 settle_period 按 received_at；user_id 为空回 UNATTRIBUTED；不写分录）；
+#   CLAWED_BACK → R13（BR-CALC-02 当前有效联盟佣金换算新基数与快照重算各方应得，与当前净额之差写 ADMIN_ADJUST sub_type RESTORE，键受益人 {order_key}:{user_id}:{role}:RESTORE:{recon_diff_id}、
+#   平台 {order_key}:PLATFORM:RESTORE:{recon_diff_id}，受益人去向按 BR-CALC-09；同事务 booked_base_fen / booked_n_fen 与 refunded_quantity_r9_baseline = 当时 refunded_quantity，D10-937）；
+#   订单已不是 VOID / CLAWED_BACK → 20902（data.resource=order，新子原因登 error-codes）。③ 响应在 restored_fen 外加 rebate_status_after（appeal_restore 恒为 null 或不出现，取兼容写法，oasdiff 只增）。
+#   ④ 描述写明：订单申诉撤销的 R12 / R13（BR-FUND-22 申诉恢复 ①②）生产方未建（risk 注明归 settlement，主干无 BLACKLIST_CONFIRMED 扣回入口），仍 restore_not_supported，留下一段。
+# 实现另起 B2-09gb（settlement，RV2，deps CT-24zz、B2-04zzf；规则测试独立 Claude，资金评审照 D10-823 ④ 独立 Claude money）。不改分录规则本身，金额只按 08 现算。
+refs: [BR-FUND-22]
+refs_hash:
+  BR-FUND-22: 27d181deaeeb
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
