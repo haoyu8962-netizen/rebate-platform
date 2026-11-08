@@ -5,7 +5,7 @@
 // masked by the runtime's traceMask, BR-AI-14) go to app.agent_tool_calls (seq 1..n in call order),
 // both through agent/store/results createPgAgentTraceWriter.
 //
-// createRunTraceRecorder({writer, logger}):
+// createRunTraceRecorder({queue}):
 //   cardWritten(runId, card) — RunManagerDeps.onCardWritten: the written frame's card, kept for its
 //     run while that run's body is in progress (a card of no open run is ignored).
 //   sink — the core's RunTraceSink (AgentRunBodyDeps.trace): the run's tool calls, kept likewise.
@@ -13,28 +13,27 @@
 //     server-side run context only (app = input.caller.appId, session / run = the RunContext's;
 //     never a model argument, BR-AI-03), runs `inner`, and when it settles (done, error, thrown, or
 //     returned after the run was cancelled / timed out: the core returns at once on abort and the
-//     manager writes no card after the ending) hands the record to the writer WITHOUT waiting: the
-//     reply, its frames and its finish reason never depend on the trace. Both writes are asked for
-//     (tool calls and cards, each only when there is something); any failure, whatever its number,
-//     is one warn line `agent_trace_write_failed` with the flat run_id and error_name only (no card,
-//     argument or user text); nothing is rethrown, so no rejection is left unhandled. Repeated
-//     writes stay one row through the writer's unique keys (ON CONFLICT DO NOTHING).
+//     manager writes no card after the ending) hands the record (when it has a card or a tool call)
+//     to queue.persist WITHOUT waiting: the reply, its frames and its finish reason never depend on
+//     the trace. B3-08y: the queue (./trace-retry.ts createTraceRedoQueue) writes both halves, logs
+//     the first failure as one warn line `agent_trace_write_failed` {run_id, error_name}, writes a
+//     failed half again for up to 24 hours and logs agent.trace_lost when it gives up; it never
+//     rejects. Repeated writes stay one row through the writer's unique keys (ON CONFLICT DO
+//     NOTHING).
 // An earnings_summary card is stored without its amounts (storedCard, D32).
-// Out of scope (BR-AI-19, other tasks): the 24-hour local retry queue and agent.trace_lost; run-level
-// fields of agent_runs (model snapshot, tokens, cost, intent); retention (BR-ID-30 ①).
+// Out of scope (BR-AI-19, other tasks): run-level fields of agent_runs (model snapshot, tokens,
+// cost, intent); retention (BR-ID-30 ①); the trace-missing alert (FU-AGENT-TRACE-ALERT).
 import type { RunBodyInput } from '../../http/index.ts';
 import type { OrchestratorTrace, RunTraceSink } from '../../orchestrator/core/ports.ts';
-import type { AgentTraceWriter, ToolCallRecord } from '../../store/results/index.ts';
+import type { ToolCallRecord } from '../../store/results/index.ts';
 import type { RunBody } from '../run/index.ts';
 import type { CardInput } from '../writer/index.ts';
-import type { RootLogger } from '../../../platform/index.ts';
+import type { RunTraceRecord, TraceRedoQueue } from './trace-retry.ts';
 
-/** The one warn line of a run whose trace could not be written. */
-export const TRACE_WRITE_FAILED = 'agent_trace_write_failed';
+export { TRACE_WRITE_FAILED } from './trace-retry.ts';
 
 export interface RunTraceRecorderDeps {
-  readonly writer: AgentTraceWriter;
-  readonly logger: Pick<RootLogger, 'warn'>;
+  readonly queue: Pick<TraceRedoQueue, 'persist'>;
 }
 
 export interface RunTraceRecorder {
@@ -86,36 +85,19 @@ export function toolCallRecords(calls: OrchestratorTrace['tool_calls']): ToolCal
 export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceRecorder {
   const open = new Map<string, AgentRunTrace>();
 
-  async function persist(run: AgentRunTrace): Promise<void> {
-    const writes: Promise<void>[] = [];
-    // A writer that throws synchronously counts as a failed write like a rejection.
-    const attempt = (call: () => Promise<void>): void => {
-      writes.push(Promise.resolve().then(call));
-    };
-    if (run.toolCalls.length > 0) {
-      const records = toolCallRecords(run.toolCalls);
-      attempt(() => deps.writer.recordToolCalls(run.appId, run.runId, records));
-    }
-    if (run.cards.length > 0) {
-      const cards = [...run.cards];
-      attempt(() => deps.writer.recordCards(run.appId, run.sessionId, run.runId, cards));
-    }
-    const results = await Promise.allSettled(writes);
-    const failed = results.find(
-      (result): result is PromiseRejectedResult => result.status === 'rejected',
-    );
-    if (failed === undefined) return;
-    const error: unknown = failed.reason;
-    deps.logger.warn(
-      { run_id: run.runId, error_name: error instanceof Error ? error.name : typeof error },
-      TRACE_WRITE_FAILED,
-    );
-  }
-
   function flush(run: AgentRunTrace): void {
     open.delete(run.runId);
+    if (run.cards.length === 0 && run.toolCalls.length === 0) return;
+    const record: RunTraceRecord = {
+      appId: run.appId,
+      sessionId: run.sessionId,
+      runId: run.runId,
+      cards: [...run.cards],
+      toolCalls: toolCallRecords(run.toolCalls),
+    };
     // Apart from the stream: never awaited by the run; never a rejection left unhandled.
-    void persist(run).catch(() => undefined);
+    // The record's cards are this process's pending cards from here on (S2, withPendingCards).
+    void deps.queue.persist(record).catch(() => undefined);
   }
 
   return {

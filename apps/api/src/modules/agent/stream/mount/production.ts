@@ -15,6 +15,8 @@
 // list_my_orders and explain_order, each behind agent.tools.<name>.enabled through the same content
 // reader; card_id references read agent_cards (createOrderCardRefs over context.db) and the
 // by-number budget is createOrderNoQuota over ports.dailyCounter (./orders.ts).
+// B3-08y (B3-08q S2): those card references first read this process's order cards delivered but not
+// yet stored (withPendingCards over processPendingCards(), ./trace-retry.ts), then agent_cards.
 // B3-08k (D10-294; rule tests: test/spec/agent/foreign-db-handoff/**): "the content configuration
 // reader" above is context.contentReader (app.module's, through the runtime): the search platform
 // switches, the page_guide routes, the tool switches, the review budget and the order budget are
@@ -45,6 +47,7 @@ import {
   type AgentStreamProvidedPorts,
 } from './assembly.ts';
 import { createOrderCardRefs, createOrderNoQuota } from './orders.ts';
+import { processPendingCards, withPendingCards } from './trace-retry.ts';
 import { agentDefaultTexts, agentText, agentTextIfPresent, platformDisplayName } from './texts.ts';
 import { createStreamReview } from './review.ts';
 import { createToolStatusDisplay, type ToolStatusTextsDeps } from './tool-status.ts';
@@ -186,7 +189,7 @@ function orderToolPorts(
   return {
     orders,
     claimEntries,
-    refs: createOrderCardRefs(context.db),
+    refs: withPendingCards(createOrderCardRefs(context.db), processPendingCards()),
     quota: createOrderNoQuota({
       counter: dailyCounter,
       clock: context.clock,

@@ -1,15 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentCaller, RunBodyInput } from '../../http/index.ts';
 import type { OrchestratorTrace } from '../../orchestrator/core/ports.ts';
-import type { AgentTraceWriter } from '../../store/results/index.ts';
 import type { RunBodyResult, RunContext } from '../run/index.ts';
 import type { CardInput } from '../writer/index.ts';
-import {
-  TRACE_WRITE_FAILED,
-  createRunTraceRecorder,
-  storedCard,
-  toolCallRecords,
-} from './trace.ts';
+import { createRunTraceRecorder, storedCard, toolCallRecords } from './trace.ts';
+import type { TraceRedoQueue } from './trace-retry.ts';
 
 const APP = 'synthetic-app';
 const SESSION = '0192f3a1-7c00-7000-8000-00000000a001';
@@ -48,13 +43,8 @@ function trace(calls: OrchestratorTrace['tool_calls']): OrchestratorTrace {
   };
 }
 
-function writer(impl?: Partial<AgentTraceWriter>) {
-  return {
-    recordCards: vi.fn<AgentTraceWriter['recordCards']>(impl?.recordCards ?? (async () => {})),
-    recordToolCalls: vi.fn<AgentTraceWriter['recordToolCalls']>(
-      impl?.recordToolCalls ?? (async () => {}),
-    ),
-  };
+function queue(impl?: TraceRedoQueue['persist']) {
+  return { persist: vi.fn<TraceRedoQueue['persist']>(impl ?? (async () => {})) };
 }
 
 function flushed(): Promise<void> {
@@ -64,10 +54,9 @@ function flushed(): Promise<void> {
 const DONE: RunBodyResult = { kind: 'done', finishReason: 'stop' };
 
 describe('createRunTraceRecorder', () => {
-  it('[AC-B3-08q#1] 体结束后写出本 run 的卡与工具调用（seq 1..n，app / session / run 来自服务端上下文）', async () => {
-    const w = writer();
-    const logger = { warn: vi.fn() };
-    const recorder = createRunTraceRecorder({ writer: w, logger });
+  it('[AC-B3-08q#1] 体结束后把本 run 的卡与工具调用（seq 1..n，app / session / run 来自服务端上下文）交给队列', async () => {
+    const q = queue();
+    const recorder = createRunTraceRecorder({ queue: q });
     const body = recorder.body(input(), async () => {
       recorder.cardWritten(RUN, card('c1'));
       recorder.cardWritten(RUN, card('c2'));
@@ -82,65 +71,57 @@ describe('createRunTraceRecorder', () => {
     });
     expect(await body(context())).toEqual(DONE);
     await flushed();
-    expect(w.recordCards).toHaveBeenCalledWith(APP, SESSION, RUN, [card('c1'), card('c2')]);
-    expect(w.recordToolCalls).toHaveBeenCalledWith(APP, RUN, [
-      {
-        seq: 1,
-        name: 'search_products',
-        args: { q: '合成' },
-        result_digest: null,
-        status: 'ok',
-        latency_ms: null,
-      },
-      {
-        seq: 2,
-        name: 'explain_order',
-        args: null,
-        result_digest: null,
-        status: 'rejected',
-        latency_ms: null,
-      },
-    ]);
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(q.persist).toHaveBeenCalledTimes(1);
+    expect(q.persist).toHaveBeenCalledWith({
+      appId: APP,
+      sessionId: SESSION,
+      runId: RUN,
+      cards: [card('c1'), card('c2')],
+      toolCalls: [
+        {
+          seq: 1,
+          name: 'search_products',
+          args: { q: '合成' },
+          result_digest: null,
+          status: 'ok',
+          latency_ms: null,
+        },
+        {
+          seq: 2,
+          name: 'explain_order',
+          args: null,
+          result_digest: null,
+          status: 'rejected',
+          latency_ms: null,
+        },
+      ],
+    });
   });
 
-  it('[AC-B3-08q#5] 写者挂起不拖住体的结果；两路写者都失败只记一条 warn（run_id），体结果不变', async () => {
+  it('[AC-B3-08q#5][AC-B3-08y#8] 队列挂起或拒绝都不拖住、不改变体的结果', async () => {
     let open!: () => void;
     const held = new Promise<void>((resolve) => {
       open = resolve;
     });
-    const w = writer({
-      recordCards: async () => {
-        await held;
-        throw new Error('合成失败');
-      },
-      recordToolCalls: () => {
-        throw new Error('同步抛错');
-      },
+    const q = queue(async () => {
+      await held;
+      throw new Error('合成失败');
     });
-    const logger = { warn: vi.fn() };
-    const recorder = createRunTraceRecorder({ writer: w, logger });
+    const recorder = createRunTraceRecorder({ queue: q });
     const body = recorder.body(input(), async () => {
       recorder.cardWritten(RUN, card('c1'));
-      recorder.sink.record(RUN, trace([{ name: 'search_rules', args: {}, status: 'ok' }]));
       return DONE;
     });
     expect(await body(context())).toEqual(DONE);
-    await flushed();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(q.persist).toHaveBeenCalledTimes(1);
     open();
     await flushed();
-    await flushed();
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      { run_id: RUN, error_name: 'Error' },
-      TRACE_WRITE_FAILED,
-    );
+    expect(q.persist).toHaveBeenCalledTimes(1);
   });
 
-  it('[AC-B3-08q#3] 体抛错也写已下发的卡；体结束后到达的卡与别的 run 的卡不记', async () => {
-    const w = writer();
-    const recorder = createRunTraceRecorder({ writer: w, logger: { warn: vi.fn() } });
+  it('[AC-B3-08q#3] 体抛错也交出已下发的卡；体结束后到达的卡与别的 run 的卡不记', async () => {
+    const q = queue();
+    const recorder = createRunTraceRecorder({ queue: q });
     const body = recorder.body(input(), async () => {
       recorder.cardWritten(RUN, card('c1'));
       recorder.cardWritten('0192f3a1-7c00-7000-8000-00000000b999', card('c2'));
@@ -149,18 +130,16 @@ describe('createRunTraceRecorder', () => {
     await expect(body(context())).rejects.toThrow('合成体错误');
     recorder.cardWritten(RUN, card('c3'));
     await flushed();
-    expect(w.recordCards).toHaveBeenCalledTimes(1);
-    expect(w.recordCards).toHaveBeenCalledWith(APP, SESSION, RUN, [card('c1')]);
-    expect(w.recordToolCalls).not.toHaveBeenCalled();
+    expect(q.persist).toHaveBeenCalledTimes(1);
+    expect(q.persist.mock.calls[0]?.[0]).toMatchObject({ cards: [card('c1')], toolCalls: [] });
   });
 
-  it('[AC-B3-08q#5] 无卡无调用的 run 不调写者', async () => {
-    const w = writer();
-    const recorder = createRunTraceRecorder({ writer: w, logger: { warn: vi.fn() } });
+  it('[AC-B3-08q#5] 无卡无调用的 run 不交给队列', async () => {
+    const q = queue();
+    const recorder = createRunTraceRecorder({ queue: q });
     await recorder.body(input(), async () => DONE)(context());
     await flushed();
-    expect(w.recordCards).not.toHaveBeenCalled();
-    expect(w.recordToolCalls).not.toHaveBeenCalled();
+    expect(q.persist).not.toHaveBeenCalled();
   });
 });
 

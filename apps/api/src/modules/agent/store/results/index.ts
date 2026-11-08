@@ -26,9 +26,16 @@
 //     max(seq) + 1 under an advisory lock per session so concurrent appends get 1..N. Invalid
 //     chains are rejected by chainProblem first (the table CHECKs are the backstop).
 // createPgAgentTraceWriter — agent_cards / agent_tool_calls records (idempotent by their unique
-// keys; a run outside the given app / session rejects and writes nothing).
+// keys; a run outside the given app / session rejects with AgentTraceRejected and writes nothing).
+// B3-08y (BR-AI-22, 04 §3.2「防止异步 trace 回填」): each write is ONE transaction that first locks
+// the run's session row FOR SHARE (exclusive with the deletion purge's FOR NO KEY UPDATE), then
+// checks the run and inserts, holding the lock until the insert commits. A session detached from
+// its user (user_id NULL with user_hash set) makes the write resolve 'skipped' and write nothing
+// (AgentTraceWriter keeps its B3-08q Promise<void> type; read the value with isTraceSkipped). A
+// guest session (no user_hash) and a member session are written as before.
 //
-// couli_app only has SELECT and INSERT on these tables; no UPDATE, no FOR UPDATE.
+// couli_app only has SELECT and INSERT on these tables; no UPDATE, no FOR UPDATE. The trace writer's
+// FOR SHARE is on agent_sessions only (couli_app holds column UPDATE grants there).
 import type { DB } from '@couli/db';
 import { fenToJsonNumber, parseFen } from '@couli/money';
 import type { Kysely, RawBuilder } from 'kysely';
@@ -55,6 +62,10 @@ export interface ToolCallRecord {
   readonly latency_ms: number | null;
 }
 
+/**
+ * Both methods resolve undefined once written and the string TRACE_SKIPPED when the session is
+ * detached from its user (B3-08y, BR-AI-22): typed void so the B3-08q callers stay unchanged.
+ */
 export interface AgentTraceWriter {
   recordCards(
     appId: string,
@@ -63,6 +74,22 @@ export interface AgentTraceWriter {
     cards: readonly CardInput[],
   ): Promise<void>;
   recordToolCalls(appId: string, runId: string, calls: readonly ToolCallRecord[]): Promise<void>;
+}
+
+/** What a trace write resolves when its session is detached from its user (BR-AI-22). */
+export const TRACE_SKIPPED = 'skipped';
+
+/** True for the value a trace write resolves when it skipped a detached session. */
+export function isTraceSkipped(outcome: unknown): boolean {
+  return outcome === TRACE_SKIPPED;
+}
+
+/**
+ * A trace write the writer refuses on its own checks (run not in this app / session, invalid
+ * card_id): writing it again cannot succeed.
+ */
+export class AgentTraceRejected extends Error {
+  override readonly name = 'AgentTraceRejected';
 }
 
 interface DeliveryRow {
@@ -379,6 +406,20 @@ export function cardLinkId(data: Readonly<Record<string, unknown>>): string | nu
   return typeof value === 'string' ? value : null;
 }
 
+/** The trace writer's session lock (B3-08y): who the session belongs to now. */
+interface SessionOwner {
+  readonly user_id: string | null;
+  readonly user_hash: string | null;
+}
+
+/** Detached by the account deletion's purge: no user any more, the user hash kept (BR-AI-22). */
+function detached(owner: SessionOwner): boolean {
+  return owner.user_id === null && owner.user_hash !== null;
+}
+
+/** TRACE_SKIPPED as AgentTraceWriter resolves it (typed void, see the interface). */
+const SKIPPED_WRITE = TRACE_SKIPPED as unknown as undefined;
+
 export function createPgAgentTraceWriter(deps: {
   db: Kysely<DB>;
   newId: () => string;
@@ -387,69 +428,90 @@ export function createPgAgentTraceWriter(deps: {
   return {
     async recordCards(appId, sessionId, runId, cards) {
       for (const card of cards) {
-        if (!isCardId(card.card_id)) throw new Error('recordCards: invalid card_id');
+        if (!isCardId(card.card_id)) throw new AgentTraceRejected('recordCards: invalid card_id');
       }
-      const run =
-        isUuid(sessionId) && isUuid(runId)
-          ? await db
-              .selectFrom('agent_runs')
-              .select('id')
-              .where('app_id', '=', appId)
-              .where('session_id', '=', sessionId)
-              .where('id', '=', runId)
-              .executeTakeFirst()
-          : undefined;
-      if (run === undefined) throw new Error('recordCards: run not found in this app and session');
-      if (cards.length === 0) return;
-      // One statement: either every new card is written or none (the run FK is the backstop).
-      await db
-        .insertInto('agent_cards')
-        .values(
-          cards.map((card) => ({
-            id: deps.newId(),
-            app_id: appId,
-            session_id: sessionId,
-            run_id: runId,
-            card_id: card.card_id,
-            type: card.type,
-            data: JSON.stringify(card.data),
-            link_id: cardLinkId(card.data),
-            schema_version: card.schema_version,
-            fallback_text: card.fallback_text,
-          })),
-        )
-        .onConflict((oc) => oc.columns(['app_id', 'session_id', 'card_id']).doNothing())
-        .execute();
+      if (!isUuid(sessionId) || !isUuid(runId)) {
+        throw new AgentTraceRejected('recordCards: run not found in this app and session');
+      }
+      return db.transaction().execute(async (tx) => {
+        // Held until this transaction commits: the purge cannot clear the session in between.
+        const owner = await sql<SessionOwner>`SELECT user_id::text AS user_id, user_hash
+          FROM app.agent_sessions WHERE app_id = ${appId} AND id = ${sessionId}
+          FOR SHARE`.execute(tx);
+        const session = owner.rows[0];
+        const run =
+          session === undefined
+            ? undefined
+            : await tx
+                .selectFrom('agent_runs')
+                .select('id')
+                .where('app_id', '=', appId)
+                .where('session_id', '=', sessionId)
+                .where('id', '=', runId)
+                .executeTakeFirst();
+        if (session === undefined || run === undefined) {
+          throw new AgentTraceRejected('recordCards: run not found in this app and session');
+        }
+        if (detached(session)) return SKIPPED_WRITE;
+        if (cards.length === 0) return undefined;
+        // One statement: either every new card is written or none (the run FK is the backstop).
+        await tx
+          .insertInto('agent_cards')
+          .values(
+            cards.map((card) => ({
+              id: deps.newId(),
+              app_id: appId,
+              session_id: sessionId,
+              run_id: runId,
+              card_id: card.card_id,
+              type: card.type,
+              data: JSON.stringify(card.data),
+              link_id: cardLinkId(card.data),
+              schema_version: card.schema_version,
+              fallback_text: card.fallback_text,
+            })),
+          )
+          .onConflict((oc) => oc.columns(['app_id', 'session_id', 'card_id']).doNothing())
+          .execute();
+        return undefined;
+      });
     },
 
     async recordToolCalls(appId, runId, calls) {
-      const run = isUuid(runId)
-        ? await db
-            .selectFrom('agent_runs')
-            .select('id')
-            .where('app_id', '=', appId)
-            .where('id', '=', runId)
-            .executeTakeFirst()
-        : undefined;
-      if (run === undefined) throw new Error('recordToolCalls: run not found in this app');
-      if (calls.length === 0) return;
-      await db
-        .insertInto('agent_tool_calls')
-        .values(
-          calls.map((call) => ({
-            id: deps.newId(),
-            app_id: appId,
-            run_id: runId,
-            seq: call.seq,
-            name: call.name,
-            args: call.args === null ? null : JSON.stringify(call.args),
-            result_digest: call.result_digest,
-            status: call.status,
-            latency_ms: call.latency_ms,
-          })),
-        )
-        .onConflict((oc) => oc.columns(['app_id', 'run_id', 'seq']).doNothing())
-        .execute();
+      if (!isUuid(runId))
+        throw new AgentTraceRejected('recordToolCalls: run not found in this app');
+      return db.transaction().execute(async (tx) => {
+        // The run's session row, locked in this transaction until the insert commits.
+        const owner = await sql<SessionOwner>`SELECT s.user_id::text AS user_id, s.user_hash
+          FROM app.agent_runs r
+          JOIN app.agent_sessions s ON s.app_id = r.app_id AND s.id = r.session_id
+          WHERE r.app_id = ${appId} AND r.id = ${runId}
+          FOR SHARE OF s`.execute(tx);
+        const session = owner.rows[0];
+        if (session === undefined) {
+          throw new AgentTraceRejected('recordToolCalls: run not found in this app');
+        }
+        if (detached(session)) return SKIPPED_WRITE;
+        if (calls.length === 0) return undefined;
+        await tx
+          .insertInto('agent_tool_calls')
+          .values(
+            calls.map((call) => ({
+              id: deps.newId(),
+              app_id: appId,
+              run_id: runId,
+              seq: call.seq,
+              name: call.name,
+              args: call.args === null ? null : JSON.stringify(call.args),
+              result_digest: call.result_digest,
+              status: call.status,
+              latency_ms: call.latency_ms,
+            })),
+          )
+          .onConflict((oc) => oc.columns(['app_id', 'run_id', 'seq']).doNothing())
+          .execute();
+        return undefined;
+      });
     },
   };
 }

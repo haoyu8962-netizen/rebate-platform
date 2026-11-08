@@ -61,10 +61,17 @@
 //   createPgAgentTraceWriter (obtained at build), after the run's body settled and apart from the
 //   stream (./trace.ts): a slow or failing writer changes no frame and no finish reason; a failure
 //   is one warn line agent_trace_write_failed with run_id.
+//   B3-08y (BR-AI-19 / BR-AI-22; rule tests test/spec/agent/trace-retry/**): the records go through
+//   ONE createTraceRedoQueue (./trace-retry.ts) built here over that writer, on the runtime's Clock
+//   and scheduler (seams.schedule; without it an unref'd system scheduler) with traceRedoDefaults():
+//   a failed write is written again for up to 24 hours, agent.trace_lost when given up. The queue
+//   is shared with processPendingCards() (sharePendingCards) so the order tools' OrderCardRefs of
+//   createProductionStreamAssembly resolve this process's not-yet-stored order cards first.
 //   close(): stops accepting (a message after close() started is refused and opens no run), waits
 //   for the runs in progress to end (at most timings.runMaxMs plus a margin; a run still live after
-//   that is left to the worker's sweeper), then resolves. It never closes the database. The
-//   runtime is a plain (not frozen) object; whoever stops it calls runtime.close() through it.
+//   that is left to the worker's sweeper), then closes the trace queue within timings.lockGraceMs
+//   (one last write; what is left is lost 'shutdown') and resolves. It never closes the database.
+//   The runtime is a plain (not frozen) object; whoever stops it calls runtime.close() through it.
 // B3-08k (D10-294; rule tests: test/spec/agent/foreign-db-handoff/**): content's reader is
 //   deps.contentReader (app.module's, never built here): limits and the consent version over its
 //   configValue, the switches over createAgentConfigReader({clock, content: deps.contentReader}),
@@ -146,6 +153,7 @@ import { agentStreamPortsToken } from './production.ts';
 import type { StreamReviewOptions } from './review.ts';
 import { createAgentBodyAssembly } from './body.ts';
 import { createRunTraceRecorder } from './trace.ts';
+import { createTraceRedoQueue, sharePendingCards, unrefScheduler } from './trace-retry.ts';
 export { createAgentStreamAssembly } from './assembly.ts';
 export type {
   AgentStreamAssembly,
@@ -369,10 +377,15 @@ export function createAgentStreamRuntime(
   const limits = createQuotaLimitsSource({ reader: contentReader, logger });
   // B3-08q · BR-AI-19: every run's written cards and tool calls go to PG apart from the stream
   // (./trace.ts), through agent/store/results' trace writer obtained here, at build time.
-  const trace = createRunTraceRecorder({
+  // B3-08y: a failed write goes to the runtime's local queue (24 hours, agent.trace_lost).
+  const traceQueue = createTraceRedoQueue({
     writer: createPgAgentTraceWriter({ db: deps.db, newId: () => newUuidV7(clock.now()) }),
+    clock,
+    scheduler: seams?.schedule ?? unrefScheduler(),
     logger,
   });
+  const unshareCards = sharePendingCards(traceQueue);
+  const trace = createRunTraceRecorder({ queue: traceQueue });
   const pg = createPgRunPorts({
     db,
     clock,
@@ -518,15 +531,22 @@ export function createAgentStreamRuntime(
     close() {
       stopping = true;
       closing ??= (async () => {
-        if (active.size === 0) return;
-        const wait = new AbortController();
+        if (active.size > 0) {
+          const wait = new AbortController();
+          try {
+            await Promise.race([
+              Promise.allSettled([...active]),
+              scheduler.sleep(timings.runMaxMs + timings.lockGraceMs, wait.signal),
+            ]);
+          } finally {
+            wait.abort();
+          }
+        }
+        // The runs' traces: one bounded last write, the rest lost 'shutdown' (never waits longer).
         try {
-          await Promise.race([
-            Promise.allSettled([...active]),
-            scheduler.sleep(timings.runMaxMs + timings.lockGraceMs, wait.signal),
-          ]);
+          await traceQueue.close(timings.lockGraceMs);
         } finally {
-          wait.abort();
+          unshareCards();
         }
       })();
       return closing;
