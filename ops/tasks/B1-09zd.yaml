@@ -1,0 +1,19 @@
+id: B1-09zd
+repo: rebate-platform
+title: B1-09zd：订单尾号作废开关非布尔值按关、运行中改开关下一单生效（FU-SUFFIX-VOID-WIRING-R2，补测试缺口）
+type: test-change
+# 2026-11-08 be 入账（本线 FU；B1-09z #2779 复审两条 S2）。生产接线 app.module.ts 约 :2047 每次判定经 content 读 attr.blacklist.order_suffix_void_enabled 并以 `=== true` 判定、不缓存（worker-runtime.ts :364）。缺两条测试：① 配置值为非布尔（字符串 "true" / "false"、数字 1 / 0、对象）时一律按关（只记录待复核、不作废）；② 同一 worker 运行中把开关从 false 改 true（或反过来），下一单按新值判定。
+# 只新增 test/spec/orders/suffix-void-wiring-r2/**，不改已有文件、不动实现：走生产装配（照 B1-09z 的 suffix-void-wiring/kit.ts，只读复用），主干上须绿；变异实跑（判定改 Boolean(value)、或在装配处按 app 缓存开关值）应红。
+# 分工：新鲜独立 Claude 写，另一位新鲜独立 Claude 只读复审（Codex 尽至 11-15，D10-823 ④）；非 task 分支、不带证据文件，标签由编排核对后加（先例 B1-09z / B2-09zd）。RV2。
+refs: [BR-ATTR-26]
+refs_hash:
+  BR-ATTR-26: 7070dbe36696
+deps: [B1-09z]
+paths:
+  - 'test/spec/orders/suffix-void-wiring-r2/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
