@@ -18,4 +18,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/db/orders/parent-order-index/**'
-status: todo
+status: done
+pr: 2703
