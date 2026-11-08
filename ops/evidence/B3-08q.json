@@ -1,0 +1,121 @@
+{
+  "task": "B3-08q",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "spec_commit": "507c73fc0be37c7f7a7badea4e1a917a214785c9",
+  "red_tests": [
+    "test/spec/agent/trace-persist/async-model.int.test.ts > [AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products 出卡的 run，写者的 recordToolCalls 与 recordCards 都被调用且都失败；帧序列与 finish stop 与正常 run 一致，run 不变成 error；只记一条 warn agent_trace_write_failed（带 run_id），无未处理的拒绝，之后的 run 照常落库",
+    "test/spec/agent/trace-persist/async-model.int.test.ts > [AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者变慢（写入挂起）：search_products 出卡的 run，回复照常结束（done stop 不等写入完成），帧序列与正常 run 一致；写者的 recordToolCalls 与 recordCards 都在挂起中、此时该 run 无卡无调用行；放行后卡与调用（seq 1、search_products、ok、traceMask 参数）落库，不记 warn",
+    "test/spec/agent/trace-persist/async.int.test.ts > [AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；只记一条 warn（agent_trace_write_failed，带 run_id，不含卡片与用户文本），该 run 不落卡",
+    "test/spec/agent/trace-persist/async.int.test.ts > [AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；写入放行后该 run 的卡才落库",
+    "test/spec/agent/trace-persist/async.int.test.ts > [AC-B3-08q#5][BR-AI-19] 同一卡 / 同一调用重复投递（写者每次都写两遍）：按唯一键幂等，agent_cards 每个 card_id 一行、agent_tool_calls 每个 seq 一行，不记 warn",
+    "test/spec/agent/trace-persist/card-refs.int.test.ts > [AC-B3-08q#2][BR-AI-19][BR-AI-07] 同一会话先 list_my_orders 出订单卡（落库），后一 run 用该 card_id 调 explain_order → 生产 createOrderCardRefs 解析到该订单：orders.get 收到 order_id，出 order_status 卡，不扣按单号次数",
+    "test/spec/agent/trace-persist/card-refs.int.test.ts > [AC-B3-08q#2][BR-AI-03][BR-AI-19] 别的会话引用这张已落库订单卡的 card_id → explain_order 被拒（invalid_args），orders.get 不被调用；卡只落在出卡的会话下",
+    "test/spec/agent/trace-persist/intents.int.test.ts > [AC-B3-08q#4][BR-AI-19] 意图端口·页面引导：模型终轮 {agent_intent: page_guide, guide_route: Wallet} → 意图端口写出的 page_guide 卡落 agent_cards（card_id、数据与帧一致，app / session / run 正确）",
+    "test/spec/agent/trace-persist/intents.int.test.ts > [AC-B3-08q#4][BR-AI-19] 意图端口·换一批：上一 run 模型搜索出过一批，本 run 终轮 {agent_intent: refine, next_batch} → 续翻写出的商品卡落在本 run 下，卡内商品 link_id 随数据落库；上一 run 的卡仍只在上一 run 下",
+    "test/spec/agent/trace-persist/interrupted.int.test.ts > [AC-B3-08q#3][AC-B3-08q#2][BR-AI-19] 出订单卡后 run 超时（夹具时钟越过 run 时限 → done timeout）：已下发的卡与 list_my_orders 调用仍落 agent_cards / agent_tool_calls（该 run 名下）；同会话后一 run 用该 card_id 调 explain_order 能解析到该订单",
+    "test/spec/agent/trace-persist/interrupted.int.test.ts > [AC-B3-08q#3][AC-B3-08q#2][BR-AI-19] 出订单卡后用户取消 run（cancelRun → done cancelled）：已下发的卡与 list_my_orders 调用仍落 agent_cards / agent_tool_calls（该 run 名下）；同会话后一 run 用该 card_id 调 explain_order 能解析到该订单",
+    "test/spec/agent/trace-persist/isolation.int.test.ts > [AC-B3-08q#6][BR-AI-19][BR-AI-03] 同一生产 runtime 上 A、B 两个 app 各跑一个 search_rules run：卡与工具调用各落在本 app / 本会话 / 本 run 下，A 的 run 不写到 B，B 的也不写到 A",
+    "test/spec/agent/trace-persist/isolation.int.test.ts > [AC-B3-08q#6][BR-AI-03][BR-AI-19] 模型参数里带 app_id = B：调用被拒（rejected），该调用记在调用者自己的 app 与 run 下，参数为 traceMask 结果；B app 名下没有任何卡或工具调用行",
+    "test/spec/agent/trace-persist/model.int.test.ts > [AC-B3-08q#1][BR-AI-19] 生产流装配·模型路径：一个 run 调 search_products 出 product_list，run 结束后 agent_cards 有该卡（card_id 与下发帧一致，app / session / run 正确），agent_tool_calls 有该调用（seq 1、search_products、ok、参数为 traceMask 结果）",
+    "test/spec/agent/trace-persist/model.int.test.ts > [AC-B3-08q#1][BR-AI-19] 生产流装配·模型路径：一个 run 调 search_rules（命中）出 rule_ref，agent_cards 有该卡、agent_tool_calls 有 search_rules / ok；模板替换后的文本不影响落库",
+    "test/spec/agent/trace-persist/model.int.test.ts > [AC-B3-08q#1][BR-AI-14][BR-AI-19] 工具参数落库前脱敏：explain_order 的单号、list_my_orders 关键词里的手机号不以明文进 agent_tool_calls.args；args 恰为运行时 traceMask 的结果，seq 按调用顺序 1、2",
+    "test/spec/agent/trace-persist/paths.int.test.ts > [AC-B3-08q#3][BR-AI-19] 降级路径（模型不可用走关键词搜索）：done fallback 的 run 写出的 product_list 落 agent_cards（card_id、数据与帧一致，app / session / run 正确），卡内各商品的 link_id 随卡数据落库",
+    "test/spec/agent/trace-persist/paths.int.test.ts > [AC-B3-08q#3][BR-AI-19] 确定性路径（报价 runner，消息里是商品链接）：写出的 rebate_quote 落 agent_cards（card_id、数据与帧一致，app / session / run 正确），转链的 link_id 随卡数据落库",
+    "test/spec/agent/trace-persist/paths.int.test.ts > [AC-B3-08q#3][BR-AI-19] 同一会话先降级搜索、再发链接：两个 run 的卡各落在自己的 run 下，card_id 按会话递增不重号",
+    "test/spec/agent/trace-persist/source.test.ts > [AC-B3-08q#7][BR-AI-19] stream/mount/assembly.ts 不再含「blocked on followups 第 31 条」的两处 TODO（确定性路径 onTrace、意图 trace 落库）"
+  ],
+  "risk_note": "RV2 agent stream/mount + stream/run：生产流装配为每个 run 提供 RunTraceSink，并经 RunManager 写帧回执收集真正下发的卡片，用 createPgAgentTraceWriter 把模型 / 降级 / 确定性 / 意图四条路径的 agent_cards 与 agent_tool_calls（参数经 traceMask 脱敏，BR-AI-14）异步落库：run 结束（含超时 / 取消）后发起、不阻塞 done 帧与 finish reason、失败只记 agent_trace_write_failed、按唯一键幂等；收益卡只存 as_of / actions 不存金额（D32）。不含 24 小时重试队列 / agent.trace_lost / run 级模型快照字段 / 留存清理（另开）。",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "507c73fc0be37c7f7a7badea4e1a917a214785c9",
+      "tree": "e37bf6354c472195859be348c8e3f918a08f340f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T05:08:20Z",
+      "finished_at": "2026-11-08T05:11:26Z",
+      "red_tests": [
+        "test/spec/agent/trace-persist/async-model.int.test.ts > [AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products 出卡的 run，写者的 recordToolCalls 与 recordCards 都被调用且都失败；帧序列与 finish stop 与正常 run 一致，run 不变成 error；只记一条 warn agent_trace_write_failed（带 run_id），无未处理的拒绝，之后的 run 照常落库",
+        "test/spec/agent/trace-persist/async-model.int.test.ts > [AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者变慢（写入挂起）：search_products 出卡的 run，回复照常结束（done stop 不等写入完成），帧序列与正常 run 一致；写者的 recordToolCalls 与 recordCards 都在挂起中、此时该 run 无卡无调用行；放行后卡与调用（seq 1、search_products、ok、traceMask 参数）落库，不记 warn",
+        "test/spec/agent/trace-persist/async.int.test.ts > [AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；只记一条 warn（agent_trace_write_failed，带 run_id，不含卡片与用户文本），该 run 不落卡",
+        "test/spec/agent/trace-persist/async.int.test.ts > [AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；写入放行后该 run 的卡才落库",
+        "test/spec/agent/trace-persist/async.int.test.ts > [AC-B3-08q#5][BR-AI-19] 同一卡 / 同一调用重复投递（写者每次都写两遍）：按唯一键幂等，agent_cards 每个 card_id 一行、agent_tool_calls 每个 seq 一行，不记 warn",
+        "test/spec/agent/trace-persist/card-refs.int.test.ts > [AC-B3-08q#2][BR-AI-19][BR-AI-07] 同一会话先 list_my_orders 出订单卡（落库），后一 run 用该 card_id 调 explain_order → 生产 createOrderCardRefs 解析到该订单：orders.get 收到 order_id，出 order_status 卡，不扣按单号次数",
+        "test/spec/agent/trace-persist/card-refs.int.test.ts > [AC-B3-08q#2][BR-AI-03][BR-AI-19] 别的会话引用这张已落库订单卡的 card_id → explain_order 被拒（invalid_args），orders.get 不被调用；卡只落在出卡的会话下",
+        "test/spec/agent/trace-persist/intents.int.test.ts > [AC-B3-08q#4][BR-AI-19] 意图端口·页面引导：模型终轮 {agent_intent: page_guide, guide_route: Wallet} → 意图端口写出的 page_guide 卡落 agent_cards（card_id、数据与帧一致，app / session / run 正确）",
+        "test/spec/agent/trace-persist/intents.int.test.ts > [AC-B3-08q#4][BR-AI-19] 意图端口·换一批：上一 run 模型搜索出过一批，本 run 终轮 {agent_intent: refine, next_batch} → 续翻写出的商品卡落在本 run 下，卡内商品 link_id 随数据落库；上一 run 的卡仍只在上一 run 下",
+        "test/spec/agent/trace-persist/interrupted.int.test.ts > [AC-B3-08q#3][AC-B3-08q#2][BR-AI-19] 出订单卡后 run 超时（夹具时钟越过 run 时限 → done timeout）：已下发的卡与 list_my_orders 调用仍落 agent_cards / agent_tool_calls（该 run 名下）；同会话后一 run 用该 card_id 调 explain_order 能解析到该订单",
+        "test/spec/agent/trace-persist/interrupted.int.test.ts > [AC-B3-08q#3][AC-B3-08q#2][BR-AI-19] 出订单卡后用户取消 run（cancelRun → done cancelled）：已下发的卡与 list_my_orders 调用仍落 agent_cards / agent_tool_calls（该 run 名下）；同会话后一 run 用该 card_id 调 explain_order 能解析到该订单",
+        "test/spec/agent/trace-persist/isolation.int.test.ts > [AC-B3-08q#6][BR-AI-19][BR-AI-03] 同一生产 runtime 上 A、B 两个 app 各跑一个 search_rules run：卡与工具调用各落在本 app / 本会话 / 本 run 下，A 的 run 不写到 B，B 的也不写到 A",
+        "test/spec/agent/trace-persist/isolation.int.test.ts > [AC-B3-08q#6][BR-AI-03][BR-AI-19] 模型参数里带 app_id = B：调用被拒（rejected），该调用记在调用者自己的 app 与 run 下，参数为 traceMask 结果；B app 名下没有任何卡或工具调用行",
+        "test/spec/agent/trace-persist/model.int.test.ts > [AC-B3-08q#1][BR-AI-19] 生产流装配·模型路径：一个 run 调 search_products 出 product_list，run 结束后 agent_cards 有该卡（card_id 与下发帧一致，app / session / run 正确），agent_tool_calls 有该调用（seq 1、search_products、ok、参数为 traceMask 结果）",
+        "test/spec/agent/trace-persist/model.int.test.ts > [AC-B3-08q#1][BR-AI-19] 生产流装配·模型路径：一个 run 调 search_rules（命中）出 rule_ref，agent_cards 有该卡、agent_tool_calls 有 search_rules / ok；模板替换后的文本不影响落库",
+        "test/spec/agent/trace-persist/model.int.test.ts > [AC-B3-08q#1][BR-AI-14][BR-AI-19] 工具参数落库前脱敏：explain_order 的单号、list_my_orders 关键词里的手机号不以明文进 agent_tool_calls.args；args 恰为运行时 traceMask 的结果，seq 按调用顺序 1、2",
+        "test/spec/agent/trace-persist/paths.int.test.ts > [AC-B3-08q#3][BR-AI-19] 降级路径（模型不可用走关键词搜索）：done fallback 的 run 写出的 product_list 落 agent_cards（card_id、数据与帧一致，app / session / run 正确），卡内各商品的 link_id 随卡数据落库",
+        "test/spec/agent/trace-persist/paths.int.test.ts > [AC-B3-08q#3][BR-AI-19] 确定性路径（报价 runner，消息里是商品链接）：写出的 rebate_quote 落 agent_cards（card_id、数据与帧一致，app / session / run 正确），转链的 link_id 随卡数据落库",
+        "test/spec/agent/trace-persist/paths.int.test.ts > [AC-B3-08q#3][BR-AI-19] 同一会话先降级搜索、再发链接：两个 run 的卡各落在自己的 run 下，card_id 按会话递增不重号",
+        "test/spec/agent/trace-persist/source.test.ts > [AC-B3-08q#7][BR-AI-19] stream/mount/assembly.ts 不再含「blocked on followups 第 31 条」的两处 TODO（确定性路径 onTrace、意图 trace 落库）"
+      ],
+      "expected": [
+        "test/spec/agent/trace-persist/async-model.int.test.ts",
+        "test/spec/agent/trace-persist/async.int.test.ts",
+        "test/spec/agent/trace-persist/card-refs.int.test.ts",
+        "test/spec/agent/trace-persist/intents.int.test.ts",
+        "test/spec/agent/trace-persist/interrupted.int.test.ts",
+        "test/spec/agent/trace-persist/isolation.int.test.ts",
+        "test/spec/agent/trace-persist/model.int.test.ts",
+        "test/spec/agent/trace-persist/paths.int.test.ts",
+        "test/spec/agent/trace-persist/source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "631d6b4d4b8b7e1e767b461d3b0c12c17901c3ce2c3b62033c0be0179e451a05"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "0e4f7c50d8836b740848cdff4c646bc767e011e59f7fe35c3a27b1fe051184cf"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex usage limit until 2026-11-15 00:24 (three attempts exit 10, review-events.jsonl 'usage limit', no output); per approvals #36 a fresh independent Claude ran the money review via claude-run.sh: full review round 1, pass, checklist 7/7, one S2 left open (trace.ts:144: under PG load the next run's explain_order may read agent_cards before the previous run's async INSERT commits -> invalid card; rare race, follow-up) — review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Gate spec-test (D10-848) by fresh independent Claude: r1 full review fail -> S1 slow / failing writer only on degraded runs (no tool calls); S1 card delivered then timeout / cancel not covered (review-st1.json); test attempt 2 added async-model.int / interrupted.int; r2 (incremental against the same reviewer's r1) pass (review-st2.json). red/2 PASS 20 rule tests in 9 files."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3d76cdada570e3503858a9e30b631a43ddf80aee",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

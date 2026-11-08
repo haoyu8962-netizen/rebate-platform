@@ -185,6 +185,12 @@ export interface RunManagerDeps {
   readonly validator?: FrameValidator;
   /** Inject ROOT_LOGGER (or a child) when wiring the stream entry. */
   readonly logger?: Pick<RootLogger, 'error'>;
+  /**
+   * B3-08q (only added; BR-AI-19): told of every card frame actually written, with the run id and
+   * the numbered card exactly as written, synchronously after the write and before ctx.card
+   * resolves; never for a card that was not written. A throw is ignored (the run goes on).
+   */
+  readonly onCardWritten?: (runId: string, card: CardInput) => void;
 }
 
 export function runConfigDefaults(): RunConfig {

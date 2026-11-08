@@ -181,6 +181,12 @@ async function run(
         if (!write('card', numbered.card)) return;
         // Notices are delivered as card frames but do not count toward quota refund eligibility.
         if (numbered.card.type !== 'notice') cardsDelivered += 1;
+        // B3-08q: the run trace's copy of the written frame (best effort, never ends the run).
+        try {
+          deps.onCardWritten?.(runId, numbered.card);
+        } catch {
+          // The trace never changes the run.
+        }
         // B3-05i: the receipt, only for a frame actually written.
         delivered?.(numbered.card.card_id);
         const facts = { ending: null, cardsDelivered };

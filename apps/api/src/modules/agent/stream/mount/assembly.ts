@@ -217,7 +217,9 @@ function linkPath(runner: LinkQuoteRunner, texts: AgentRunTexts): DeterministicP
   return createDeterministicPath({
     quotes: runner,
     texts,
-    // TODO(规划/11 §2.3): 确定性路径的登记 trace（onTrace）进运行 trace — blocked on followups 第 31 条（生产没有 RunTraceSink）
+    // B3-08q: no onTrace. The run trace (./trace.ts) stores the cards this path wrote as their
+    // frames (the registered link ids inside the card data, agent_cards.link_id) and the core's
+    // get_rebate_quote calls; the fragment's link_registrations have no column of their own.
   });
 }
 
@@ -360,12 +362,13 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
       // B3-08m: no template call reaches the intent port: the core writes those runs' templates
       // itself (core/reply-templates.ts) and does not consult this port for them.
       calls: async () => [],
-      // TODO(规划/11 §2.3): 意图 trace 落库 — blocked on followups 第 31 条（生产没有 RunTraceSink）
+      // B3-08q: the cards this port writes reach the run trace (./trace.ts) as written frames.
+      // TODO(规划/11 §2.3): 意图 trace 的 intent / page_guide_reject_reason 写入 agent_runs — blocked on agent_runs 的 run 级 trace 字段写者（stream/pg，另单）
       record: () => undefined,
     },
     clarification: createClarification(continuation),
     continuation: {
-      // TODO(规划/11 §2.3): 上一轮意图（「那返了吗」承接订单 / 收益） — blocked on 会话意图记录（订单与收益工具未进注册表）
+      // TODO(规划/11 §2.3): 上一轮意图（「那返了吗」承接订单 / 收益） — blocked on 会话意图记录（agent_runs.intent 尚无写者）
       previousIntent: async () => null,
       run: createRefinement(continuation).run,
     },

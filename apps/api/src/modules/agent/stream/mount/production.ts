@@ -135,7 +135,6 @@ function templateFallback(key: string): string | undefined {
  * message (errorMsg); any other missing key shows the key itself, as the search card's
  * fallback_text does. Tool status texts never show a key (tool-status.ts, D10-151). The local
  * evaluation (B3-05m) uses the same copy over its tool catalog's search platforms.
- * TODO(规划/11 §2.3): Agent 草稿键与多平台工具状态文案（agent.suggest.clarify.*、agent.notice.platform_unrecognized、agent.guest_login_to_view.*、agent.tool_status.search_products.<阶段>.multi）进字典 — blocked on content 文案线 B3-13（D10-135）
  */
 export function productionRunTexts(
   searchPlatforms: ToolStatusTextsDeps['searchPlatforms'],

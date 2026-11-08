@@ -6,7 +6,8 @@
 // file owns the factories and fixed parts: createAgentRunBody over B3-05c createDegradedPath on the
 // same tools and texts, orchestratorLimitsDefaults(), traceMask = maskForTrace∘restorePlaceholders
 // (followup 22), and the run labels over the same route and prompt (createRunLabels).
-// Production passes no onTrace (followup 31); the evaluation wires its toolTrace there.
+// Production passes no onTrace: its run trace is the core's RunTraceSink (AgentRunBodyDeps.trace)
+// plus the written card frames (./trace.ts, B3-08q); the evaluation wires its toolTrace there.
 import type { AgentRunLabels, RunBodyInput } from '../../http/index.ts';
 import {
   createAgentRunBody,

@@ -45,9 +45,9 @@
 //   the local evaluation uses the same one): body = B3-05b createAgentRunBody({tools: seams.tools
 //   ?? emptyOrchestratorTools(), inputCheck:
 //   seams.inputCheck ?? failClosedInputCheck(), degraded: B3-05c createDegradedPath over the same
-//   tools and texts, without onTrace (followup 31); no intents, no deterministic; review always
-//   answers timeout (B3-03j: with deps.assembly, its tools / texts / deterministic / intents
-//   replace the minimal ones; seams.tools still wins); the route is fixed to no_model; prompt
+//   tools and texts, without onTrace (its cards reach the run trace as written frames, B3-08q);
+//   no intents, no deterministic; review always answers timeout (B3-03j: with deps.assembly, its
+//   tools / texts / deterministic / intents replace the minimal ones; seams.tools still wins); the route is fixed to no_model; prompt
 //   always null; limits: orchestratorLimitsDefaults(); traceMask}). B3-03m: an assembly's safety
 //   ports (createStreamReview, ./review.ts) replace the fail-closed input check (seams.inputCheck
 //   still wins) and the always-timeout review; labels = createRunLabels over the same route and
@@ -55,6 +55,12 @@
 //   results store is also the body's delivery receipt port (core recordDelivered of written
 //   product cards); failures are logged and never end the run. No model transport is ever
 //   called. seams are test seams only (production passes none).
+//   B3-08q (BR-AI-19; rule tests test/spec/agent/trace-persist/**): every run's written card frames
+//   (RunManagerDeps.onCardWritten) and the core's tool calls (AgentRunBodyDeps.trace, the
+//   RunTraceSink) are written to app.agent_cards / app.agent_tool_calls by agent/store/results
+//   createPgAgentTraceWriter (obtained at build), after the run's body settled and apart from the
+//   stream (./trace.ts): a slow or failing writer changes no frame and no finish reason; a failure
+//   is one warn line agent_trace_write_failed with run_id.
 //   close(): stops accepting (a message after close() started is refused and opens no run), waits
 //   for the runs in progress to end (at most timings.runMaxMs plus a margin; a run still live after
 //   that is left to the worker's sweeper), then resolves. It never closes the database. The
@@ -105,6 +111,7 @@ import { keepsQuoted, type ResultSetStore } from '../../orchestrator/results/ind
 import { createRunModelClock, type ResolvedRoute } from '../../model-gateway/routing/index.ts';
 import { createAgentRedactor } from '../../preprocess/redact/index.ts';
 import { agentSessionDefaults, createPgAgentSessionStore } from '../../store/index.ts';
+import { createPgAgentTraceWriter } from '../../store/results/index.ts';
 import {
   createAgentAccessPort,
   createAgentIdentityPort,
@@ -138,6 +145,7 @@ import type { AgentStreamAssemblyFactory, AgentStreamProvidedPorts } from './ass
 import { agentStreamPortsToken } from './production.ts';
 import type { StreamReviewOptions } from './review.ts';
 import { createAgentBodyAssembly } from './body.ts';
+import { createRunTraceRecorder } from './trace.ts';
 export { createAgentStreamAssembly } from './assembly.ts';
 export type {
   AgentStreamAssembly,
@@ -359,6 +367,12 @@ export function createAgentStreamRuntime(
   // B3-08k: identity's reader is bound to app.module's handle; agent hands it the version only.
   const consent = deps.consentReader({ currentVersion: version });
   const limits = createQuotaLimitsSource({ reader: contentReader, logger });
+  // B3-08q · BR-AI-19: every run's written cards and tool calls go to PG apart from the stream
+  // (./trace.ts), through agent/store/results' trace writer obtained here, at build time.
+  const trace = createRunTraceRecorder({
+    writer: createPgAgentTraceWriter({ db: deps.db, newId: () => newUuidV7(clock.now()) }),
+    logger,
+  });
   const pg = createPgRunPorts({
     db,
     clock,
@@ -378,6 +392,7 @@ export function createAgentStreamRuntime(
     texts: { ...texts, text: agentText },
     guard: { check: async () => ({ code: 30501 }) },
     guardFor: createRunGuardFactory({ reader: switches, consent, version }),
+    onCardWritten: (runId, card) => trace.cardWritten(runId, card),
     cards: {
       async reserve(sessionId, count) {
         if (!Number.isSafeInteger(count) || count < 1) throw new RangeError('Invalid card count');
@@ -426,6 +441,7 @@ export function createAgentStreamRuntime(
       },
     },
     modelClock: () => createRunModelClock(timings.runMaxMs),
+    trace: trace.sink,
     review: business?.safety?.review ?? { review: async () => 'timeout' },
     // B3-03p: the per-app output review, when the assembly's safety ports carry one.
     ...(business?.safety?.outputReview === undefined
@@ -454,7 +470,7 @@ export function createAgentStreamRuntime(
     runs,
     cancel: pg.cancel,
     limits,
-    body,
+    body: (input) => trace.body(input, body(input)),
     redactor: createAgentRedactor(),
     labels,
     settings: agentHttpDefaults(),

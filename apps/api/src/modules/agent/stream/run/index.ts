@@ -57,7 +57,9 @@
 //      settles server_error. The draft contains complete error data or done.finish_reason; recovery
 //      reads registry.draft(runId) and adds quota_left only after settlement, before finish.
 //   ctx.card reserves numbers with cards.reserve(sessionId, used) and writes the numbered card; an
-//   invalid card rejects with StreamProtocolError('invalid_frame') and the run goes on.
+//   invalid card rejects with StreamProtocolError('invalid_frame') and the run goes on. B3-08q:
+//   deps.onCardWritten, when given, gets (runId, the written card) right after each card frame
+//   write that succeeded (the stream mount's run trace, BR-AI-19); a throw there is ignored.
 // cancel(runId, ownerKey) → registry.requestCancel (not owner, unknown or finished: 'not_found').
 //
 // createRedisRunRegistry: uses only RedisNamespace.get and set (no eval), every set with
