@@ -1,0 +1,31 @@
+id: B1-02zzd
+repo: rebate-platform
+title: 注销中 / 已注销账号的 Apple 登录与 Apple 加验——换码所得 refresh_token 不落库时入队撤销（apple_unbind_revoke），不留下 Apple 侧仍有效的授权（BR-ID-27、BR-ID-28）；上线前必做
+type: impl
+# 2026-11-08 入账（identity，D10-966 空档派工，FU-APPLE-TOKEN-AFTER-DELETE，notices 6515–6516 编排记「上线前核」）。
+# 主干缺口两处：① oauth-login signIn 遇 deleting / deleted 抛 LoginAbort 回滚，换码得到的 Apple refresh_token 既不保存也不撤销；
+# ② reverify byOauth 的 settlePassed 因账号已进入 processing / 已注销返回 false 时 alongside 不执行，令牌同样丢弃。
+# 口径（本线按 BR-ID-27「Sign in with Apple 用户必须调用 Apple 撤销接口」与 BR-ID-28「user_oauth 先撤销 Apple 授权」的本意取，编排核台账时可改）：
+# 这两种情况把令牌加密后另开短事务入队现成作业 apple_unbind_revoke（B1-02zw），不写 user_oauth；失败重试与告警照该作业。
+# BR-ID-04 细则受限登录「查不到账号」不保存令牌的既有口径不变（不在本单）。生产 Apple revoker 未配置与注销主流程同为既有状态，不在本单。
+refs: [BR-ID-27, BR-ID-28]
+refs_hash:
+  BR-ID-27: ae0901d32567
+  BR-ID-28: 205ab4bdd1d4
+deps: [B1-02zw, B1-02zy]
+paths:
+  - 'apps/api/src/modules/identity/application/oauth-login.ts'
+  - 'apps/api/src/modules/identity/application/oauth-login.test.ts'
+  - 'apps/api/src/modules/identity/application/reverify.ts'
+  - 'apps/api/src/modules/identity/application/reverify.test.ts'
+  - 'apps/api/src/modules/identity/application/apple-unbind-revocation.ts'
+  - 'apps/api/src/modules/identity/application/apple-unbind-revocation.test.ts'
+  - 'apps/api/src/modules/identity/identity.module.ts'
+test_paths:
+  - 'test/spec/identity/apple-token-after-deletion/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/apple-token-after-deletion/**'
+status: todo
