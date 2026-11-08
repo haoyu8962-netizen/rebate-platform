@@ -39,7 +39,8 @@
 // re-reads and re-classifies under it; a task whose lock another writer holds is skipped.
 //
 // State lock (CT-06zzzq r1 S1): every read-modify-write of a state file in this module
-// (updateState and so claim / release / set, bump-attempt, settle, opus-run, migrate, reconcile)
+// (updateState and so claim / release / set, bump-attempt, settle, opus-run, migrate, reconcile,
+// and the release of a round, releaseRound, CT-06zzzy)
 // runs under <runs>/state-locks/<id>.lock (open 'wx', {pid, acquired_at, token}). A held lock is
 // waited for up to STATE_LOCK_WAIT_MS (COULI_STATE_LOCK_WAIT_MS overrides it), then the writer
 // fails with exit 1 and writes nothing. A lock whose holder is gone or older than
@@ -101,7 +102,11 @@
 //   records `call`, and when a refused bump of the same kind and engine already records that call,
 //   nothing is written either (exit 0, "nothing to release"), instead of giving back an older
 //   pending bump. Without `--call` it behaves as before. `release <id>` without a kind still drops
-//   the claim (below); `--call` is a usage error there.
+//   the claim (below); `--call` is a usage error there. The release of a round shares the task's
+//   state lock with the other writers (CT-06zzzy, FU-STATE-RELEASE-LOCK, D10-947): the whole
+//   read-modify-write, the `--call` check included, runs under it, also when nothing is written
+//   (no state file, nothing to release); a held lock is waited for like any writer (exit 1,
+//   nothing written, when it cannot be had), and the write checks the token under the gate.
 //
 // Opus failure breaker (RO2-03; default split of 2026-10-05, ops/approvals.yaml id 19): the
 // Opus implementation subagent is no Codex call and leaves no meta.json, so its runs are
@@ -935,7 +940,9 @@ export type ReleaseResult = {
  * such a bump, or without a state file, nothing is written, and a bump that settle or opus-run
  * consumed is never given back. With `call` (CT-06zzzu) the released bump records it, and a call
  * that already gave back a bump of this kind and engine gives back nothing more: one release per
- * refused call, however often it is repeated.
+ * refused call, however often it is repeated. The whole read-modify-write, the `call` check
+ * included, runs under the task's state lock (withStateLock, CT-06zzzy), as do the paths that
+ * write nothing (no state file, nothing to release): a held lock is waited for, then CheckError.
  */
 export function releaseRound(
   id: string,
@@ -945,39 +952,41 @@ export function releaseRound(
   now: Date = new Date(),
   call: string | null = null,
 ): ReleaseResult {
-  const prev = readState(id);
-  if (prev === null) return { state: null, released: false };
-  const bumps = prev.pending_bumps ?? [];
-  if (
-    call !== null &&
-    bumps.some(
-      (b) => b.outcome === 'refused' && b.kind === kind && b.engine === engine && b.call === call,
-    )
-  ) {
-    return { state: prev, released: false, repeated: true };
-  }
-  const pick = latestPendingBump(bumps, kind, engine, now.getTime(), BUMP_MATCH_WINDOW_MS);
-  if (pick < 0) return { state: prev, released: false };
-  const at = now.toISOString();
-  const next: TaskState = {
-    ...prev,
-    attempts: { ...prev.attempts, [kind]: Math.max(0, prev.attempts[kind] - 1) },
-    pending_bumps: bumps.map((b, i) =>
-      i === pick
-        ? {
-            ...b,
-            consumed_by: `release:${at}`,
-            outcome: 'refused',
-            reason,
-            released_at: at,
-            ...(call === null ? {} : { call }),
-          }
-        : b,
-    ),
-    updated_at: at,
-  };
-  writeState(next);
-  return { state: next, released: true };
+  return withStateLock(id, (): ReleaseResult => {
+    const prev = readState(id);
+    if (prev === null) return { state: null, released: false };
+    const bumps = prev.pending_bumps ?? [];
+    if (
+      call !== null &&
+      bumps.some(
+        (b) => b.outcome === 'refused' && b.kind === kind && b.engine === engine && b.call === call,
+      )
+    ) {
+      return { state: prev, released: false, repeated: true };
+    }
+    const pick = latestPendingBump(bumps, kind, engine, now.getTime(), BUMP_MATCH_WINDOW_MS);
+    if (pick < 0) return { state: prev, released: false };
+    const at = now.toISOString();
+    const next: TaskState = {
+      ...prev,
+      attempts: { ...prev.attempts, [kind]: Math.max(0, prev.attempts[kind] - 1) },
+      pending_bumps: bumps.map((b, i) =>
+        i === pick
+          ? {
+              ...b,
+              consumed_by: `release:${at}`,
+              outcome: 'refused',
+              reason,
+              released_at: at,
+              ...(call === null ? {} : { call }),
+            }
+          : b,
+      ),
+      updated_at: at,
+    };
+    writeStateLocked(next);
+    return { state: next, released: true };
+  });
 }
 
 export type OpusRunResult = {

@@ -1,0 +1,22 @@
+id: CT-06zzzy
+repo: rebate-platform
+title: CT-06zzzy：state.ts releaseRound 放进逐任务状态锁、落盘走闸门内核对 token 的写入（FU-STATE-RELEASE-LOCK，D10-947）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-947：#2709 的 releaseRound 用普通 writeState、不在 CT-06zzzq 的逐任务锁里，与 bumpAttempt / settle 并发会互相覆盖；
+#   排在 #2719 与 #2727 都合并之后，基于主干做，加锁与 --call 两边都保留）。基于主干（含 #2709、#2719、#2727）。
+# 改法：releaseRound 整段读改写放进 withStateLock，落盘改用 writeStateLocked（闸门内核对 token、经 beforeWrite 钩子）；遇锁有上限地等、等不到报错含 lock、不写；
+#   --call 的幂等判断在锁内做；不带 kind 的 release（释放领用）照旧。行为不变之外只多了互斥。
+# 工具测试由新鲜独立 Claude 上下文先写并发测试（先红）、Opus（high）再实现；Codex 额度用尽期间按 approvals 36 由独立 Claude 评审；按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/state.ts'
+  - 'tools/ops/state.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzy.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

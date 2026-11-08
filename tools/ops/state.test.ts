@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -27,6 +27,7 @@ import {
   parseCallMeta,
   readState,
   recordOpusRun,
+  releaseRound,
   releaseTask,
   reviewKind,
   settleCall,
@@ -39,6 +40,8 @@ import {
 } from './state.ts';
 import {
   CLI_TIMEOUT,
+  type CliResult,
+  OPS_DIR,
   removeDir,
   runCli,
   scratchDir,
@@ -2688,3 +2691,418 @@ it('[CT-06zzzq] a write whose takeover gate another process holds waits, fails n
     fx.remove();
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// CT-06zzzy (FU-STATE-RELEASE-LOCK, D10-947): releaseRound (`state.ts release <id> <kind> --reason
+// … [--call …]`) is a read-modify-write of the state file like bump-attempt and settle. It runs
+// as a whole under the per-task state lock (withStateLock): the read, the --call check (a call
+// that already gave back its round), the choice of the bump and the write. A held lock is waited
+// for up to COULI_STATE_LOCK_WAIT_MS, then it fails (exit 1, the message names the lock) and
+// writes nothing, not even a new state file; its write goes through the takeover gate with the
+// token checked (beforeWrite). Every path reads under the lock, also "nothing to release" and a
+// task without a state file, and none leaves a lock or a gate behind. `release <id>` without a
+// kind (dropping the claim) is unchanged and covered by the older tests.
+
+/** A round of `kind` bumped at `at` (a minute ago), for a call that the runner then refused. */
+function bumpForRefusal(
+  fx: ReconcileFixture,
+  id: string,
+  kind: 'code' | 'test' = 'code',
+  at: Date = new Date(Date.now() - 60_000),
+): TaskState {
+  return fx.within(() => bumpAttempt(id, kind, at));
+}
+
+/** The pending bumps of a fixture's state file as plain records. */
+function fixtureBumps(fx: ReconcileFixture, id: string): Record<string, unknown>[] {
+  return (fx.read(id).pending_bumps ?? []) as unknown as Record<string, unknown>[];
+}
+
+/** `state.ts <args>` started in the background, for writers that run at the same time. */
+type BackgroundCli = { done: Promise<CliResult>; exited: () => boolean };
+
+function startCli(args: string[], env: Record<string, string>): BackgroundCli {
+  const child = spawn(process.execPath, [join(OPS_DIR, 'state.ts'), ...args], {
+    env: { ...process.env, ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  let exited = false;
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (d: string) => (stdout += d));
+  child.stderr.on('data', (d: string) => (stderr += d));
+  const done = new Promise<CliResult>((resolve) => {
+    child.on('close', (code) => {
+      exited = true;
+      resolve({ status: code ?? -1, stdout, stderr });
+    });
+  });
+  return { done, exited: () => exited };
+}
+
+const pause = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Waits until every child has exited or `ms` have passed; true when all of them exited. */
+async function untilExited(children: BackgroundCli[], ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (children.every((c) => c.exited())) return true;
+    await pause(20);
+  }
+  return children.every((c) => c.exited());
+}
+
+it(
+  '[CT-06zzzy] releasing a round waits a bounded time for a held state lock, fails naming the lock and writes nothing; once free it gives the round back',
+  () => {
+    lockConstant('STATE_LOCK_WAIT_MS');
+    const fx = reconcileFixture();
+    try {
+      expect(bumpForRefusal(fx, 'R1-04').attempts.code).toBe(3);
+      const before = fx.snapshot();
+      const held = holdLock(fx.runs, 'R1-04');
+      const heldText = readFileSync(held, 'utf8');
+      withLockWait(300, () =>
+        fx.within(() => {
+          for (const call of [null, 'C9']) {
+            const t0 = Date.now();
+            expect(
+              () => releaseRound('R1-04', 'code', 'codex', 'refused', new Date(), call),
+              `releaseRound --call ${String(call)}`,
+            ).toThrow(/lock/i);
+            const waited = Date.now() - t0;
+            expect(waited).toBeGreaterThanOrEqual(250);
+            expect(waited).toBeLessThan(10_000);
+          }
+          // Without a state file it reads under the lock as well: it fails, and creates none.
+          holdLock(fx.runs, 'R1-77');
+          expect(() => releaseRound('R1-77', 'code', 'codex', 'refused')).toThrow(/lock/i);
+          expect(existsSync(join(fx.runs, 'state', 'R1-77.json'))).toBe(false);
+        }),
+      );
+      expect(fx.snapshot()).toEqual(before);
+      expect(readFileSync(held, 'utf8')).toBe(heldText);
+      // On the command line, with and without --call: exit 1, the lock named, nothing written.
+      const env = { COULI_RUNS: fx.runs, COULI_STATE_LOCK_WAIT_MS: '300' };
+      const money = ['release', 'R1-04', 'review', '--review-type', 'money', '--reason', 'refused'];
+      for (const args of [money, [...money, '--call', 'C9']]) {
+        const cli = runCli('state.ts', args, env);
+        expect(cli.status, args.join(' ')).toBe(1);
+        expect(cli.stderr, args.join(' ')).toMatch(/lock/i);
+        expect(cli.stdout, args.join(' ')).not.toContain('released');
+        expect(fx.snapshot(), args.join(' ')).toEqual(before);
+      }
+      expect(readFileSync(held, 'utf8')).toBe(heldText);
+      // The holder lets go: the round is given back, in process and on the command line.
+      removeDir(held);
+      const res = fx.within(() => releaseRound('R1-04', 'code', 'codex', 'refused', new Date()));
+      expect(res.released).toBe(true);
+      expect(fx.read('R1-04').attempts.code).toBe(2);
+      expect(fixtureBumps(fx, 'R1-04').at(-1)).toMatchObject({ kind: 'code', outcome: 'refused' });
+      expect(bumpForRefusal(fx, 'R1-04').attempts.code).toBe(3);
+      const again = runCli('state.ts', [...money, '--call', 'C9'], env);
+      expect(again.status, again.stderr).toBe(0);
+      expect(JSON.parse(again.stdout)).toMatchObject({ task: 'R1-04', released: true });
+      expect(fx.read('R1-04').attempts.code).toBe(2);
+      expect(fixtureBumps(fx, 'R1-04').at(-1)).toMatchObject({ outcome: 'refused', call: 'C9' });
+      expect(leftLocks(fx.runs)).toEqual(['R1-77.lock']);
+    } finally {
+      fx.remove();
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it('[CT-06zzzy] the write of a released round goes through beforeWrite: the gate held, the lock its own, the file not written yet', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const id = 'R1-06';
+    bumpForRefusal(fx, id);
+    const pre = fx.snapshot();
+    const acquired: string[] = [];
+    const seen: { id: string; token: string; gate: boolean; own: boolean; unwritten: boolean }[] =
+      [];
+    const hooks: StateLockHooks = {
+      afterAcquire: ({ token }) => acquired.push(token),
+      beforeWrite: ({ id: wid, token }) => {
+        seen.push({
+          id: wid,
+          token,
+          gate: existsSync(gateFile(fx.runs, wid)),
+          own: lockToken(fx.runs, wid) === token,
+          unwritten: readFileSync(join(fx.runs, 'state', `${wid}.json`), 'utf8') === pre[wid],
+        });
+      },
+    };
+    const res = fx.within(() =>
+      withHooks(api, hooks, () => releaseRound(id, 'code', 'codex', 'refused', new Date(), 'C1')),
+    );
+    expect(res.released).toBe(true);
+    // One lock, one write under it, with that lock's token.
+    expect(acquired).toHaveLength(1);
+    expect(seen).toEqual([{ id, token: acquired[0], gate: true, own: true, unwritten: true }]);
+    expect(fx.snapshot()[id]).not.toBe(pre[id]);
+    expect(fx.read(id).attempts.code).toBe(2);
+    expect(fixtureBumps(fx, id).at(-1)).toMatchObject({ outcome: 'refused', call: 'C1' });
+    // Nothing to release (the same call again): read under a lock, but no write.
+    const after = fx.snapshot();
+    seen.length = 0;
+    acquired.length = 0;
+    const repeated = fx.within(() =>
+      withHooks(api, hooks, () => releaseRound(id, 'code', 'codex', 'again', new Date(), 'C1')),
+    );
+    expect(repeated).toMatchObject({ released: false, repeated: true });
+    expect(acquired).toHaveLength(1);
+    expect(seen).toEqual([]);
+    expect(fx.snapshot()).toEqual(after);
+    expect(leftLocks(fx.runs)).toEqual([]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it('[CT-06zzzy] while releaseRound holds the lock another writer is kept out; it gets in afterwards and neither update is lost', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const id = 'R1-07';
+    bumpForRefusal(fx, id);
+    const pre = fx.read(id);
+    expect(pre.attempts).toMatchObject({ code: 3, test: 1 });
+    const blocked: string[] = [];
+    const tryBump = (at: string): void => {
+      const file = readFileSync(stateFile(id), 'utf8');
+      // dispatch counts a test round of the same task meanwhile: it waits, then gives up.
+      withLockWait(100, () => {
+        expect(() => bumpAttempt(id, 'test', new Date()), `bump-attempt at ${at}`).toThrow(/lock/i);
+      });
+      expect(readFileSync(stateFile(id), 'utf8'), `bump-attempt at ${at}`).toBe(file);
+      blocked.push(at);
+    };
+    let inside = false;
+    const hooks: StateLockHooks = {
+      afterAcquire: () => {
+        if (inside) return;
+        inside = true;
+        tryBump('afterAcquire');
+      },
+      beforeWrite: () => tryBump('beforeWrite'),
+    };
+    const res = fx.within(() =>
+      withHooks(api, hooks, () => releaseRound(id, 'code', 'codex', 'refused', new Date())),
+    );
+    expect(res.released).toBe(true);
+    expect(blocked).toEqual(['afterAcquire', 'beforeWrite']);
+    // Outside the lock the same writer goes through, on top of the release.
+    expect(fx.within(() => bumpAttempt(id, 'test', new Date())).attempts.test).toBe(2);
+    const final = fx.read(id);
+    expect(final.attempts).toMatchObject({ code: 2, test: 2 });
+    const bumps = fixtureBumps(fx, id);
+    expect(bumps).toHaveLength((pre.pending_bumps ?? []).length + 1);
+    expect(bumps.at(-2)).toMatchObject({ kind: 'code', outcome: 'refused' });
+    expect(bumps.at(-1)).toMatchObject({ kind: 'test', outcome: null, consumed_by: null });
+    expect(leftLocks(fx.runs)).toEqual([]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it(
+  '[CT-06zzzy] a release started while another writer holds the lock waits, then reads that writer’s bump: both updates land',
+  async () => {
+    const fx = reconcileFixture();
+    try {
+      const api = lockApi();
+      const id = 'R1-04';
+      bumpForRefusal(fx, id);
+      const preText = fx.snapshot()[id];
+      // Another writer (bump-attempt of a test round) holds the lock and has read the state.
+      const token = fx.within(() => api.tryStateLock(id));
+      expect(token).not.toBeNull();
+      const prev = fx.read(id);
+      const release = startCli(
+        ['release', id, 'review', '--review-type', 'money', '--reason', 'refused', '--call', 'C1'],
+        { COULI_RUNS: fx.runs, COULI_STATE_LOCK_WAIT_MS: '15000' },
+      );
+      // Under the held lock the release neither finishes nor writes.
+      const finishedEarly = await untilExited([release], 3000);
+      expect(finishedEarly, 'release returned while the lock was held').toBe(false);
+      expect(fx.snapshot()[id]).toBe(preText);
+      // The holder writes what it read plus its bump, then lets go.
+      const at = new Date().toISOString();
+      fx.within(() => {
+        writeState({
+          ...prev,
+          attempts: { ...prev.attempts, test: prev.attempts.test + 1 },
+          pending_bumps: [
+            ...(prev.pending_bumps ?? []),
+            { kind: 'test', engine: 'codex', bumped_at: at, consumed_by: null, outcome: null },
+          ],
+          updated_at: at,
+        });
+        api.releaseStateLock(id, token ?? '');
+      });
+      const res = await release.done;
+      expect(res.status, res.stderr).toBe(0);
+      expect(JSON.parse(res.stdout)).toMatchObject({ task: id, released: true });
+      // Both: the round given back and the other writer's bump.
+      const final = fx.read(id);
+      expect(final.attempts).toMatchObject({ code: 2, test: prev.attempts.test + 1 });
+      const bumps = fixtureBumps(fx, id);
+      expect(bumps).toHaveLength((prev.pending_bumps ?? []).length + 1);
+      expect(bumps.at(-2)).toMatchObject({ kind: 'code', outcome: 'refused', call: 'C1' });
+      expect(bumps.at(-1)).toMatchObject({ kind: 'test', bumped_at: at, outcome: null });
+      expect(leftLocks(fx.runs)).toEqual([]);
+    } finally {
+      fx.remove();
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it('[CT-06zzzy] the --call check is made under the lock: a release of the same call that landed first leaves nothing to give back', () => {
+  const fx = reconcileFixture();
+  try {
+    const api = lockApi();
+    const id = 'R1-08';
+    const now = Date.now();
+    bumpForRefusal(fx, id, 'test', new Date(now - 120_000));
+    bumpForRefusal(fx, id, 'test', new Date(now - 60_000));
+    expect(fx.read(id).attempts.test).toBe(3);
+    const preText = fx.snapshot()[id];
+    // What the first release of C1 writes: the latest test bump refused, one round given back.
+    expect(
+      fx.within(() => releaseRound(id, 'test', 'codex', 'first', new Date(), 'C1')),
+    ).toMatchObject({ released: true });
+    const firstText = fx.snapshot()[id];
+    expect(firstText).not.toBe(preText);
+    // Back to before it; the second release of C1 starts and only then does the first land:
+    // between the start of the second and its lock (afterAcquire is right after the lock).
+    writeFileSync(join(fx.runs, 'state', `${id}.json`), preText ?? '');
+    let landed = 0;
+    let writes = 0;
+    const hooks: StateLockHooks = {
+      afterAcquire: () => {
+        landed += 1;
+        writeFileSync(join(fx.runs, 'state', `${id}.json`), firstText ?? '');
+      },
+      beforeWrite: () => (writes += 1),
+    };
+    const second = fx.within(() =>
+      withHooks(api, hooks, () => releaseRound(id, 'test', 'codex', 'second', new Date(), 'C1')),
+    );
+    expect(landed).toBe(1);
+    expect(second).toMatchObject({ released: false, repeated: true });
+    expect(writes).toBe(0);
+    // Byte for byte what the first release wrote: the older bump still pending, one round back.
+    expect(fx.snapshot()[id]).toBe(firstText);
+    expect(fx.read(id).attempts.test).toBe(2);
+    expect(fixtureBumps(fx, id).slice(-2)).toMatchObject([
+      { bumped_at: new Date(now - 120_000).toISOString(), consumed_by: null, outcome: null },
+      { bumped_at: new Date(now - 60_000).toISOString(), outcome: 'refused', call: 'C1' },
+    ]);
+    expect(leftLocks(fx.runs)).toEqual([]);
+  } finally {
+    fx.remove();
+  }
+});
+
+it(
+  '[CT-06zzzy] two releases of the same --call at once: both wait for the lock, exactly one gives back a round, the other finds nothing',
+  async () => {
+    const fx = reconcileFixture();
+    try {
+      const api = lockApi();
+      const id = 'R1-06';
+      const now = Date.now();
+      bumpForRefusal(fx, id, 'test', new Date(now - 120_000));
+      bumpForRefusal(fx, id, 'test', new Date(now - 60_000));
+      expect(fx.read(id).attempts.test).toBe(3);
+      const preText = fx.snapshot()[id];
+      const token = fx.within(() => api.tryStateLock(id));
+      expect(token).not.toBeNull();
+      const env = { COULI_RUNS: fx.runs, COULI_STATE_LOCK_WAIT_MS: '15000' };
+      const args = ['release', id, 'test', '--reason', 'refused', '--call', 'C1'];
+      const both = [startCli(args, env), startCli(args, env)];
+      const finishedEarly = await untilExited(both, 3000);
+      expect(finishedEarly, 'a release returned while the lock was held').toBe(false);
+      expect(
+        both.some((c) => c.exited()),
+        'a release returned while the lock was held',
+      ).toBe(false);
+      expect(fx.snapshot()[id]).toBe(preText);
+      fx.within(() => api.releaseStateLock(id, token ?? ''));
+      const results = await Promise.all(both.map((c) => c.done));
+      for (const r of results) expect(r.status, r.stderr).toBe(0);
+      const released = results.filter((r) => r.stdout.includes('"released":true'));
+      const nothing = results.filter((r) => r.stdout.includes('nothing to release'));
+      expect(released).toHaveLength(1);
+      expect(nothing).toHaveLength(1);
+      expect(fx.read(id).attempts.test).toBe(2);
+      expect(fixtureBumps(fx, id).slice(-2)).toMatchObject([
+        { bumped_at: new Date(now - 120_000).toISOString(), consumed_by: null, outcome: null },
+        { bumped_at: new Date(now - 60_000).toISOString(), outcome: 'refused', call: 'C1' },
+      ]);
+      expect(leftLocks(fx.runs)).toEqual([]);
+    } finally {
+      fx.remove();
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzy] every release path takes the lock once and leaves no lock and no gate behind',
+  () => {
+    const fx = reconcileFixture();
+    try {
+      const api = lockApi();
+      bumpForRefusal(fx, 'R1-03');
+      bumpForRefusal(fx, 'R1-05', 'test');
+      const acquired: string[] = [];
+      const hooks: StateLockHooks = { afterAcquire: ({ id }) => acquired.push(id) };
+      const paths: [string, string, () => unknown][] = [
+        ['released', 'R1-03', () => releaseRound('R1-03', 'code', 'codex', 'r', new Date(), 'C1')],
+        [
+          'repeated --call',
+          'R1-03',
+          () => releaseRound('R1-03', 'code', 'codex', 'r', new Date(), 'C1'),
+        ],
+        ['nothing pending', 'R1-03', () => releaseRound('R1-03', 'code', 'codex', 'r', new Date())],
+        ['other kind', 'R1-02', () => releaseRound('R1-02', 'spec-test', 'codex', 'r', new Date())],
+        ['no state file', 'R1-78', () => releaseRound('R1-78', 'code', 'codex', 'r', new Date())],
+      ];
+      fx.within(() =>
+        withHooks(api, hooks, () => {
+          for (const [name, id, run] of paths) {
+            acquired.length = 0;
+            const res = run() as { released: boolean };
+            expect(res.released, name).toBe(name === 'released');
+            expect(acquired, `${name}: the lock of ${id} taken once`).toEqual([id]);
+            expect(leftLocks(fx.runs), name).toEqual([]);
+          }
+        }),
+      );
+      expect(existsSync(join(fx.runs, 'state', 'R1-78.json'))).toBe(false);
+      expect(fx.read('R1-03').attempts.code).toBe(2);
+      // On the command line too: a release and a repeated one leave nothing behind.
+      const env = { COULI_RUNS: fx.runs };
+      const args = ['release', 'R1-05', 'test', '--reason', 'refused', '--call', 'C2'];
+      const first = runCli('state.ts', args, env);
+      expect(first.status, first.stderr).toBe(0);
+      expect(JSON.parse(first.stdout)).toMatchObject({ released: true });
+      expect(leftLocks(fx.runs)).toEqual([]);
+      const second = runCli('state.ts', args, env);
+      expect(second.status, second.stderr).toBe(0);
+      expect(second.stdout).toContain('nothing to release');
+      expect(leftLocks(fx.runs)).toEqual([]);
+      expect(fx.read('R1-05').attempts.test).toBe(1);
+    } finally {
+      fx.remove();
+    }
+  },
+  CLI_TIMEOUT,
+);
