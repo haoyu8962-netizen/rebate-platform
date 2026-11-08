@@ -29,6 +29,7 @@ export const TOTP = [
   'user.data_export',
   'order.assign',
   'order.restore',
+  'order.blacklist_clawback',
   'withdraw.review',
   'payout.execute',
   'pay.resolve',

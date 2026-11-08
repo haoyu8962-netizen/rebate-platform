@@ -114,6 +114,12 @@ export const EVENT_SUBSCRIPTIONS: readonly EventSubscription[] = Object.freeze([
     consumer: 'notification-clawback',
     events: Object.freeze(['order.clawed_back', 'order.settle_adjusted']),
   }),
+  // settlement-blacklist-after-credit: a credited order hit by the blacklist becomes a manual review difference
+  // (B2-04zzl, BR-ATTR-26, D10-1095).
+  Object.freeze({
+    consumer: 'settlement-blacklist-after-credit',
+    events: Object.freeze(['order.blacklist_hit_after_credit']),
+  }),
   // risk-appeal-restore: appeal_restore differences of revoked ban appeals (B1-03z, BR-FUND-22).
   Object.freeze({
     consumer: 'risk-appeal-restore',

@@ -128,6 +128,8 @@ it('[规划/02 §11 事件清单] EVENT_NAMES 正好是 02 §11 的 18 个事件
       consumer: 'notification-clawback',
       events: ['order.clawed_back', 'order.settle_adjusted'],
     },
+    // B2-04zzlt（B2-04zzl 前置，BR-ATTR-26，D10-1095）：已入账订单命中黑名单登记差错单，紧跟 notification-clawback。
+    { consumer: 'settlement-blacklist-after-credit', events: ['order.blacklist_hit_after_credit'] },
     // B1-03z（BR-FUND-22、BR-CALC-13 细则「申诉恢复」）：risk 的申诉恢复差错单生产者，只订阅 appeal.resolved。
     { consumer: 'risk-appeal-restore', events: ['appeal.resolved'] },
     ...(EVENT_SUBSCRIPTIONS.some((s) => s.consumer === 'payout-went-negative')

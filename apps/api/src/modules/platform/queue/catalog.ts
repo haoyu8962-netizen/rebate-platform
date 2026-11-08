@@ -55,6 +55,9 @@ const BUSINESS_QUEUES = [
   // Event queue of notification's order.clawed_back / order.settle_adjusted consumer (B1-12zc);
   // events/types.ts.
   'evt.notification-clawback',
+  // Event queue of settlement's order.blacklist_hit_after_credit consumer (B2-04zzl, D10-1095);
+  // events/types.ts.
+  'evt.settlement-blacklist-after-credit',
   // Event queue of risk's appeal.resolved consumer (B1-03z, BR-FUND-22); events/types.ts.
   'evt.risk-appeal-restore',
   // Event queue of payout's withdrawal.created consumer (B2-11c, BR-WDR-30); events/types.ts.

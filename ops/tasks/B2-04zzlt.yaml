@@ -2,12 +2,18 @@ id: B2-04zzlt
 repo: rebate-platform
 title: test-change（B2-04zzl 前置）：事件消费者 settlement-blacklist-after-credit 与队列 evt.settlement-blacklist-after-credit 登记、配置键 order.blacklist_clawback.enabled（默认关，无种子行），冻结清单只追加
 type: test-change
-# 2026-11-08 funds 入账（D10-1095）。先例 B2-02ta / B2-02tb / B1-12zc。开关未设置即关（读 value === true），打开要负责人确认（D10-1095 ③，R8 写「默认处理，待财务确认」）。只登记，消费者与读取由 B2-04zzl 做。非 task 分支，编排按 #24 核后加标签。
+# 2026-11-08 funds 入账（D10-1095）。先例 B2-02ta / B2-02tb / B1-12zc。开关未设置即关（读 value === true），打开要负责人确认（D10-1095 ③，R8 写「默认处理，待财务确认」）。权限点 order.blacklist_clawback（totp）一并登记（specs/permissions.yaml、enums、生成物、冻结 expected.ts，先例 CT-26x），CT-24zzf 契约直接引用。只登记，消费者与读取由 B2-04zzl 做。非 task 分支，编排按 #24 核后加标签。
 refs: []
 refs_hash: {}
 deps: []
 paths:
   - 'apps/api/src/modules/platform/events/types.ts'
+  - 'specs/permissions.yaml'
+  - 'contracts/enums/admin.yaml'
+  - 'packages/contracts-ts/src/enums.gen.ts'
+  - 'packages/contracts-ts/src/catalog.test.ts'
+  - 'apps/api/src/modules/admin/domain/permissions.gen.ts'
+  - 'test/spec/admin/permissions/**'
   - 'apps/api/src/modules/platform/queue/catalog.ts'
   - 'apps/api/src/modules/platform/queue/worker-plan.ts'
   - 'apps/api/src/modules/content/domain/config-registry.ts'

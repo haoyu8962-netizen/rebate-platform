@@ -165,6 +165,8 @@ const CREDIT_POSTCHECK_KEYS = ['ledger.credit_postcheck.enabled'];
 const MINOR_KEYS = ['minor.min_realname_age'];
 // B1-02zzh (D10-1034 ②, BR-ID-09): device.invalid_hashes follows it, now ending the tail.
 const DEVICE_KEYS = ['device.invalid_hashes'];
+// B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095): order.blacklist_clawback.enabled follows it, now ending the tail.
+const BLACKLIST_CLAWBACK_KEYS = ['order.blacklist_clawback.enabled'];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -202,6 +204,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...CREDIT_POSTCHECK_KEYS,
     ...MINOR_KEYS,
     ...DEVICE_KEYS,
+    ...BLACKLIST_CLAWBACK_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);

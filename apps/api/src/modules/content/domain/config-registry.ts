@@ -373,6 +373,10 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // here; B1-02zzi's reader takes the union with the specs seeds, so operations can only add to
   // the list. Registration only.
   spec('device.invalid_hashes', 'object', 'config.risk'),
+  // B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095): the switch of the manual
+  // blacklist clawback, config.business, editable. No seed row; unset = off (`value === true`): BR-FUND-01 R8
+  // reads 「默认处理，待财务确认」, so turning it on takes the owner's confirmation. Registration only.
+  spec('order.blacklist_clawback.enabled', 'boolean', 'config.business'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

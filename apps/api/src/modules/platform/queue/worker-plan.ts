@@ -29,6 +29,8 @@ export const WORKER_LANES: readonly (readonly [string, number, number])[] = Obje
   Object.freeze(['evt.notification-withdrawal-result', 5, 2] as const),
   // B1-12zc: CLAWBACK / SETTLE_ADJUSTED messages (D10-773 ①), five slots.
   Object.freeze(['evt.notification-clawback', 5, 2] as const),
+  // B2-04zzl: registers the manual review difference of a credited blacklist hit, one slot.
+  Object.freeze(['evt.settlement-blacklist-after-credit', 1, 2] as const),
   // B1-03z: appeal_restore differences of revoked ban appeals, one slot, serially.
   Object.freeze(['evt.risk-appeal-restore', 1, 2] as const),
   // B2-11c: one decision per withdrawal under the users / balance / daily-total locks, serially.

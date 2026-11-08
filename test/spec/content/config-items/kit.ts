@@ -493,6 +493,13 @@ export const DEVICE: readonly Expected[] = [row('device.invalid_hashes', 'object
  * specs/device-hash.vectors.json (invalid_hash_seeds) and B1-02zzi's reader takes the union.
  */
 export const DEVICE_UNSEEDED: readonly string[] = ['device.invalid_hashes'];
+// B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095): the manual blacklist clawback switch, an
+// editable config.business boolean right after DEVICE, options null. Not part of expectedNow() either.
+export const BLACKLIST_CLAWBACK: readonly Expected[] = [
+  row('order.blacklist_clawback.enabled', 'boolean', 'config.business'),
+];
+/** B2-04zzlt: off by default through the reader (unset = off), hence no seed row. */
+export const BLACKLIST_CLAWBACK_UNSEEDED: readonly string[] = ['order.blacklist_clawback.enabled'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -524,6 +531,7 @@ export const expectedOf = (key: string): Expected => {
     ...CREDIT_POSTCHECK,
     ...MINOR,
     ...DEVICE,
+    ...BLACKLIST_CLAWBACK,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

@@ -49,6 +49,7 @@ export const admin_permission = [
   "order.assign", // 订单归属变更（step-up）
   "order.hold", // 订单 hold / unhold
   "order.restore", // 订单平台恢复、申诉恢复差错单（step-up）
+  "order.blacklist_clawback", // 已入账订单黑名单复核确认扣回（step-up）
   "withdraw.review", // 提现审核、驳回（step-up）
   "payout.execute", // 执行打款、needs_manual 处置、W11 凭通道成功证据核销原单（可为本单审核人）（step-up）
   "pay.view", // 支付单、退款单、收款对账明细

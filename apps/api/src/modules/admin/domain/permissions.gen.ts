@@ -1,7 +1,7 @@
 // Generated from specs/permissions.yaml by admin/scripts/generate-permissions.ts.
 // Do not edit by hand. Regenerate after changing the specification.
 export const ADMIN_PERMISSIONS = {
-  "version": "5",
+  "version": "6",
   "permissions": [
     {
       "key": "dashboard.view",
@@ -215,6 +215,11 @@ export const ADMIN_PERMISSIONS = {
     },
     {
       "key": "order.restore",
+      "step_up_tier": "totp",
+      "operations": []
+    },
+    {
+      "key": "order.blacklist_clawback",
       "step_up_tier": "totp",
       "operations": []
     },
