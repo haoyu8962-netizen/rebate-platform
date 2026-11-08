@@ -34,5 +34,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/admin-ledger-read/**'
-status: todo
-pr: null
+status: done
+pr: 2934
