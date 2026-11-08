@@ -1,5 +1,6 @@
 // Ledger-only pull requests (CT-06zzzv, FU-CI-LEDGER-ONLY-FAST, D10-935): does a pull request
-// change nothing but task ledgers, ops/tasks/<id>.yaml? When it does, ci.yml skips the heavy
+// change nothing but task ledgers, ops/tasks/<id>.yaml, or (D10-1024 E, CT-06zzzze) docs, any
+// path under the top-level docs/ directory? When it does, ci.yml skips the heavy
 // verify jobs (verify-unit, verify-spec-*, verify-props-*, verify-props-sha-*, verify-int-*);
 // verify-static (which runs `node tools/ops/task.ts check`) and guard-git still run.
 //
@@ -12,11 +13,15 @@
 //
 // The decision: every path of `git diff --raw -M base...head` (the merge-base diff, so a main
 // that moved on, or main merged into the PR, does not count as the PR's change) — both sides of
-// a rename, deleted paths too — matches ops/tasks/<one path segment>.yaml and is a regular file
-// (or absent on one side), and at least one path changed. Anything else is only=false: another
-// path (ops/evidence, any other ops/ file, a sub-directory of ops/tasks, .yml, tools, test, apps,
-// .github, ...), no change at all, a symbolic link or submodule, an argument that is not a full
-// commit sha, a --repo that is not the top of a git repository, or any git error.
+// a rename, deleted paths too — matches ops/tasks/<one path segment>.yaml or docs/<anything> (a
+// rename between the two counts too) and is a regular file (or absent on one side), and at least
+// one path changed. Anything else is only=false: another path (ops/evidence, any other ops/ file,
+// a sub-directory of ops/tasks, .yml, tools, test, apps, .github, a docs/ below another
+// directory such as apps/docs/, docs.md, README.md, `docs` itself as a file, ...), no change at
+// all, a symbolic link or submodule, an argument that is not a full commit sha, a --repo that is
+// not the top of a git repository, or any git error. test/, tools/, packages/ and apps/ do not read
+// the real docs/ (checked for D10-1024); docs/research is untrusted and may not be imported, and
+// that depcruise rule is checked by verify-static, which always runs.
 //
 // Output: stdout carries exactly one line `only=true` or `only=false`; the reason and the changed
 // paths go to stderr. With GITHUB_OUTPUT set, `only=<value>` is appended to that file. The exit
@@ -27,17 +32,19 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 export type LedgerOnlyResult = {
-  /** True only when at least one path changed and every changed path is a task ledger. */
+  /** True only when at least one path changed and every changed path is a task ledger or a doc. */
   ledgerOnly: boolean;
   /** Every changed path of base...head, both sides of a rename; [] when none or on an error. */
   paths: string[];
-  /** Why; names the first paths that are not task ledgers. Never empty. */
+  /** Why; names the first paths that are neither task ledgers nor docs. Never empty. */
   reason: string;
 };
 
 const LEDGER = /^ops\/tasks\/[^/]+\.yaml$/;
+/** Anything below the top-level docs/ directory (D10-1024 E). */
+const DOCS = /^docs\/./;
 const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-/** Modes of a side of a change that may be a ledger: a regular file, or absent. */
+/** Modes of a side of a change that may be a ledger or a doc: a regular file, or absent. */
 const FILE_MODES = new Set(['100644', '100755']);
 const ABSENT_MODE = '000000';
 const MAX_BUFFER = 256 * 1024 * 1024;
@@ -57,6 +64,16 @@ const LOCATION_VARS = [
 /** True for exactly ops/tasks/<id>.yaml: one path segment below ops/tasks, ending in .yaml. */
 export function isLedgerPath(path: string): boolean {
   return LEDGER.test(path);
+}
+
+/** True for a path below the top-level docs/ directory: docs/<at least one character>. */
+export function isDocsPath(path: string): boolean {
+  return DOCS.test(path);
+}
+
+/** A path the fast path may skip the heavy jobs for: a task ledger or a doc. */
+function isFastPath(path: string): boolean {
+  return isLedgerPath(path) || isDocsPath(path);
 }
 
 function gitEnv(): NodeJS.ProcessEnv {
@@ -152,7 +169,7 @@ function diffPaths(input: { repo: string; base: string; head: string }): Change[
   return parseRaw(out);
 }
 
-/** Decides whether base...head in `repo` changes task ledgers and nothing else; never throws. */
+/** Decides whether base...head in `repo` changes task ledgers or docs and nothing else; never throws. */
 export function detectLedgerOnly(input: {
   repo: string;
   base: string;
@@ -173,12 +190,12 @@ export function detectLedgerOnly(input: {
   if (paths.length === 0) {
     return { ledgerOnly: false, paths, reason: 'base...head changes no path' };
   }
-  const others = paths.filter((p) => !isLedgerPath(p));
+  const others = paths.filter((p) => !isFastPath(p));
   if (others.length > 0) {
     return {
       ledgerOnly: false,
       paths,
-      reason: `changes paths that are not task ledgers (ops/tasks/<id>.yaml): ${listed(others)}`,
+      reason: `changes paths that are neither task ledgers (ops/tasks/<id>.yaml) nor docs (docs/**): ${listed(others)}`,
     };
   }
   const notFiles = changes.filter((c) => !c.modes.every(sideOk)).flatMap((c) => c.paths);
@@ -186,13 +203,13 @@ export function detectLedgerOnly(input: {
     return {
       ledgerOnly: false,
       paths,
-      reason: `a ledger path is not a regular file on one side: ${listed([...new Set(notFiles)])}`,
+      reason: `a ledger or docs path is not a regular file on one side: ${listed([...new Set(notFiles)])}`,
     };
   }
   return {
     ledgerOnly: true,
     paths,
-    reason: `changes ${paths.length} task ledger path(s) and nothing else`,
+    reason: `changes ${paths.length} task ledger or docs path(s) and nothing else`,
   };
 }
 

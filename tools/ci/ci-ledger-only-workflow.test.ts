@@ -8,8 +8,8 @@
 // YAML and executed with bash, with every `${{ <expression> }}` of their env replaced by a value
 // chosen per scenario. The parser is line-based (no YAML dependency), like check-workflows.ts.
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
 import { checkWorkflows } from './check-workflows.ts';
 
@@ -381,6 +381,169 @@ it('[CT-06zzzv] ledger-only-detect without the base script outputs only=false an
   expect(r.status, r.out).toBe(0);
   expect(r.prRan, 'the PR copy of the script never runs').toBe(false);
   expect(outputOnly(r.output)).toEqual(['only=false']);
+});
+
+// CT-06zzzze (D10-1024 E): docs/** joins the fast path. The decision stays in the base copy of
+// tools/ci/ledger-only.ts: here the detect step runs the real script of this checkout as the base
+// copy against a PR repository whose base...head changes docs/** (with or without ledgers).
+
+function fixtureGit(cwd: string, args: string[]): string {
+  const res = spawnSync(
+    'git',
+    [
+      '-c',
+      'user.name=t',
+      '-c',
+      'user.email=t@example.invalid',
+      '-c',
+      'commit.gpgsign=false',
+      ...args,
+    ],
+    {
+      cwd,
+      encoding: 'utf8',
+      env: {
+        PATH: process.env['PATH'] ?? '',
+        HOME: SCRATCH,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1',
+      },
+    },
+  );
+  if (res.status !== 0) throw new Error(`git ${args.join(' ')}: ${res.stderr}`);
+  return res.stdout.trim();
+}
+
+/** Runs the run steps of ledger-only-detect with the real script as base/tools/ci/ledger-only.ts. */
+function runDetectReal(change: Record<string, string>): {
+  status: number | null;
+  out: string;
+  output: string;
+} {
+  const workspace = join(SCRATCH, `detect-real-${++detectCount}`);
+  const all = steps(DETECT);
+  const prStep = all.find(
+    (s) => expressionOf(s.with['ref'] ?? '') === 'github.event.pull_request.head.sha',
+  );
+  const prPath = prStep?.with['path'] ?? 'pr';
+  mkdirSync(join(workspace, 'base/tools/ci'), { recursive: true });
+  writeFileSync(join(workspace, 'base/package.json'), '{ "type": "module" }\n');
+  copyFileSync(
+    join(REPO, 'tools/ci/ledger-only.ts'),
+    join(workspace, 'base/tools/ci/ledger-only.ts'),
+  );
+  const pr = join(workspace, prPath);
+  mkdirSync(pr, { recursive: true });
+  const put = (files: Record<string, string>): void => {
+    for (const [rel, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(pr, rel)), { recursive: true });
+      writeFileSync(join(pr, rel), text);
+    }
+  };
+  fixtureGit(pr, ['init', '-q', '-b', 'main']);
+  put({
+    'README.md': '# fixture\n',
+    'docs/guide.md': '# guide\n',
+    'ops/tasks/A1-01.yaml': 'id: A1-01\nstatus: todo\n',
+    'tools/ci/x.ts': 'export const x = 1;\n',
+  });
+  fixtureGit(pr, ['add', '-A']);
+  fixtureGit(pr, ['commit', '-q', '-m', 'base']);
+  const baseSha = fixtureGit(pr, ['rev-parse', 'HEAD']);
+  put(change);
+  fixtureGit(pr, ['add', '-A']);
+  fixtureGit(pr, ['commit', '-q', '-m', 'head']);
+  const headSha = fixtureGit(pr, ['rev-parse', 'HEAD']);
+  const output = join(workspace, 'github-output');
+  writeFileSync(output, '');
+  const values: Record<string, string> = {
+    'github.event.pull_request.base.sha': baseSha,
+    'github.event.pull_request.head.sha': headSha,
+    'github.event.pull_request.number': '7',
+    'github.event.pull_request.head.ref': 'chore/x',
+    'github.event_name': 'pull_request',
+    'github.workspace': workspace,
+    'github.token': 'not-a-real-token',
+    'github.repository': 'o/r',
+  };
+  let status: number | null = 0;
+  let out = '';
+  for (const s of all) {
+    if (s.run === null) continue;
+    const res = spawnSync(
+      'bash',
+      ['--noprofile', '--norc', '-eo', 'pipefail', '-c', expand(s.run, values)],
+      {
+        cwd: s.workingDirectory === null ? workspace : join(workspace, s.workingDirectory),
+        encoding: 'utf8',
+        env: {
+          PATH: process.env['PATH'] ?? '',
+          HOME: workspace,
+          GIT_CONFIG_GLOBAL: '/dev/null',
+          GIT_CONFIG_NOSYSTEM: '1',
+          GITHUB_WORKSPACE: workspace,
+          GITHUB_OUTPUT: output,
+          GITHUB_EVENT_NAME: 'pull_request',
+          ...stepEnv(s, values),
+        },
+      },
+    );
+    out += `${res.stdout}\n${res.stderr}`;
+    status = res.status;
+    if (status !== 0) break;
+  }
+  return { status, out, output: readFileSync(output, 'utf8') };
+}
+
+const DOCS_DETECT: [string, Record<string, string>, string][] = [
+  [
+    'a pull request that changes only task ledgers',
+    { 'ops/tasks/A1-01.yaml': 'id: A1-01\nstatus: done\n' },
+    'only=true',
+  ],
+  [
+    'a pull request that changes only docs/**',
+    { 'docs/guide.md': '# guide, edited\n', 'docs/new/page.md': '# new\n' },
+    'only=true',
+  ],
+  [
+    'a pull request that changes docs/** and task ledgers',
+    { 'docs/guide.md': '# guide, edited\n', 'ops/tasks/A1-01.yaml': 'id: A1-01\nstatus: done\n' },
+    'only=true',
+  ],
+  [
+    'a pull request that changes docs/** and README.md',
+    { 'docs/guide.md': '# guide, edited\n', 'README.md': '# edited\n' },
+    'only=false',
+  ],
+  [
+    'a pull request that changes docs/** and tools/',
+    { 'docs/guide.md': '# guide, edited\n', 'tools/ci/x.ts': 'export const x = 2;\n' },
+    'only=false',
+  ],
+];
+
+it.each(DOCS_DETECT.map(([name, change, only]) => ({ name, change, only })))(
+  '[CT-06zzzze] ledger-only-detect with the real base script: $name -> $only',
+  ({ change, only }) => {
+    const r = runDetectReal(change);
+    expect(r.status, r.out).toBe(0);
+    expect(outputOnly(r.output), r.out).toEqual([only]);
+  },
+);
+
+it('[CT-06zzzze] no job decides docs/** by path in ci.yml; verify-static and guard-git still run for docs', () => {
+  const jobsAt = LINES.findIndex((l) => l === 'jobs:');
+  const ids = LINES.slice(jobsAt + 1).flatMap((l) => {
+    const m = /^ {2}([A-Za-z0-9_-]+):\s*(#.*)?$/.exec(l);
+    return m ? [m[1] ?? ''] : [];
+  });
+  expect(ids.length).toBeGreaterThan(0);
+  for (const id of ids) expect(jobIf(id), id).not.toMatch(/docs/);
+  for (const id of ['verify-static', 'guard-git']) {
+    expect(jobIf(id), id).not.toContain('ledger-only');
+    expect(jobIf(id), id).not.toContain(SKIP_IF_ONLY);
+  }
 });
 
 // --- 2. the eleven heavy jobs ------------------------------------------------------------------

@@ -9,11 +9,12 @@
 #     equals the job id;
 #   - every action is pinned to a full commit SHA with a version comment.
 #
-# Ledger-only fast path (D10-935, CT-06zzzv): on a pull request whose base...head changes nothing
-# but task ledgers (ops/tasks/<id>.yaml), as decided by ledger-only-detect from the base copy of
-# tools/ci/ledger-only.ts, the eleven heavy verify jobs are skipped; verify-static (with the task
-# ledger check) and guard-git still run, and ci-gate accepts those skips only when the detection
-# itself succeeded and said only=true.
+# Ledger-only fast path (D10-935, CT-06zzzv; docs/** too since D10-1024 E, CT-06zzzze): on a pull
+# request whose base...head changes nothing but task ledgers (ops/tasks/<id>.yaml) or docs
+# (docs/**), as decided by ledger-only-detect from the base copy of tools/ci/ledger-only.ts, the
+# eleven heavy verify jobs are skipped; verify-static (with the task ledger check) and guard-git
+# still run, and ci-gate accepts those skips only when the detection itself succeeded and said
+# only=true.
 name: ci
 
 on:
@@ -28,9 +29,17 @@ on:
 permissions:
   contents: read
 
+# Concurrency (D10-1024, CT-06zzzze; ci-load-plan §2 A / B1). Sampled 2026-11-08: 42 of 50 runs
+# were cancelled, about 90% of the job minutes.
+#   A: labeled / unlabeled events get a group of their own, ci-<ref>-label, so a label event no
+#      longer cancels the code run of the same ref (opened / synchronize / reopened, ci-<ref>);
+#      its verify-reuse waits, with a limit, for that run to finish and then reuses its pass (see
+#      verify-reuse). A newer label event still cancels an older label run.
+#   B1: a push to main is never cancelled (cancel-in-progress false): the running pass finishes,
+#      GitHub keeps only the latest pending push. Pull request events still cancel the older run.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && '-label' || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # 2026-11-01 (CT-06zzv): `tsc -b` (verify-static typecheck) and `pnpm build` (verify-unit and
 # verify-int, now verify-int-1 / -2) ran out of the default Node heap (about 4 GB): #2109 logged
@@ -61,11 +70,27 @@ jobs:
     # `verified-<job>-<tree>` record of them and reuse is false on its label events: the heavy jobs
     # are skipped again by ledger-only-detect, but verify-static may run a second time. That is the
     # known cost of the fast path.
+    # D10-1024 A (CT-06zzzze): label events have a concurrency group of their own and no longer
+    # cancel the code run of the same ref, so that run is often still going (or queued) when the
+    # label run starts. Before deciding, this job waits for every OTHER ci.yml run on the same PR
+    # head SHA whose status is not `completed` (other workflows and other heads are not waited
+    # for), polling every REUSE_POLL_SECONDS (60) up to REUSE_WAIT_SECONDS (3600, the ledger's 60
+    # minutes, by the shell's wall clock). Once none is unfinished it decides by the rule above,
+    # unchanged;
+    # with nothing unfinished it decides at once, without sleeping. When the limit is reached
+    # first, reuse=false (even if an earlier pass exists): every job runs in full. A run that
+    # finished failed or cancelled simply does not count, so that also means a full run. Only
+    # `gh api ... --jq` is used (gh's built-in jq, no separate jq binary; not `gh run watch`, which
+    # has no limit of its own). timeout-minutes 70 leaves ten minutes beyond the wait for checkout
+    # and the API calls; a timeout or API error leaves reuse unset, so everything runs as before.
+    # Known cost: a push to the PR no longer cancels a label run (different group). That push
+    # cancels the code run of the old head, so the label run finds no pass there and runs in full
+    # for the old head; the run of the new head is on another head and is not waited for.
     if: >-
       github.event_name == 'pull_request' &&
       (github.event.action == 'labeled' || github.event.action == 'unlabeled')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 70
     permissions:
       contents: read
       actions: read
@@ -80,6 +105,23 @@ jobs:
           set -euo pipefail
           tree=$(git rev-parse 'HEAD^{tree}')
           echo "tree of this event: $tree (head $HEAD_SHA)"
+          # D10-1024 A: wait, with a limit, for the other ci.yml runs on this head to finish.
+          started=$SECONDS
+          while :; do
+            unfinished=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
+              --jq "[.workflow_runs[] | select(.id != $RUN_ID and .status != \"completed\") | .id | tostring] | join(\" \")")
+            [ -n "$unfinished" ] || break
+            elapsed=$((SECONDS - started))
+            if [ "$elapsed" -ge "$REUSE_WAIT_SECONDS" ]; then
+              echo "wait limit of ${REUSE_WAIT_SECONDS}s reached, ci.yml run(s) $unfinished on this head still unfinished: every job runs in full"
+              echo "reuse=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "waiting for ci.yml run(s) $unfinished on this head to finish (${elapsed}s of ${REUSE_WAIT_SECONDS}s)"
+            nap=$((REUSE_WAIT_SECONDS - elapsed))
+            [ "$nap" -le "$REUSE_POLL_SECONDS" ] || nap=$REUSE_POLL_SECONDS
+            sleep "$nap"
+          done
           runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
             --jq ".workflow_runs[] | select(.id != $RUN_ID) | .id")
           reuse=true
@@ -108,16 +150,21 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ID: ${{ github.run_id }}
+          REUSE_WAIT_SECONDS: 3600
+          REUSE_POLL_SECONDS: 60
 
   ledger-only-detect:
     # D10-935 (CT-06zzzv, FU-CI-LEDGER-ONLY-FAST): about half of the pull requests change nothing
     # but task ledgers, and twenty of them open at once queued behind the heavy jobs of each other
     # for one to two hours. This job decides whether base...head (the merge-base diff) changes only
-    # ops/tasks/<id>.yaml (both sides of a rename, deletions too, at least one path); the eleven
+    # ops/tasks/<id>.yaml, or since D10-1024 E (CT-06zzzze) also docs/** (only task ledgers or docs;
+    # both sides of a rename, deletions too, regular files only, at least one path); the eleven
     # heavy jobs (verify-unit, verify-spec-1 / -2, verify-props-1 / -2 / -3, verify-props-sha-1 /
     # -2 / -3, verify-int-1 / -2) are then skipped, while verify-static (which runs
     # `node tools/ops/task.ts check`) and guard-git run as always. ops/evidence, any other ops/ file,
-    # tools, test, apps or .github is never ledger-only.
+    # tools, test, apps, .github, a docs/ outside the top level, or a top-level file such as
+    # README.md is never ledger-only. Which paths count is decided only in that script, never by a
+    # path condition in this file.
     # The decision runs from the BASE copy of tools/ci/ledger-only.ts against the PR checkout (the
     # way guard-git and evidence-check do), so a branch cannot change the rule that lets it skip
     # its own tests; Node built-ins only, nothing is installed, nothing of the PR is executed. A
@@ -146,7 +193,7 @@ jobs:
         with:
           node-version-file: base/.nvmrc
           package-manager-cache: false
-      - name: Decide from the base copy of tools/ci whether only task ledgers change
+      - name: Decide from the base copy of tools/ci whether only task ledgers or docs change
         id: detect
         run: |
           if [ ! -f base/tools/ci/ledger-only.ts ]; then
@@ -183,7 +230,7 @@ jobs:
   # spec tests are split further.
   # D10-935 (CT-06zzzv): verify-unit, verify-spec-1 / -2 and the other heavy jobs below are also
   # skipped when ledger-only-detect says only=true (the pull request changes nothing but
-  # ops/tasks/<id>.yaml); verify-static never is. On push ledger-only-detect is skipped, its output
+  # ops/tasks/<id>.yaml or docs/**, D10-1024 E); verify-static never is. On push ledger-only-detect is skipped, its output
   # is empty, and `!cancelled()` lets every job run as before.
   verify-static:
     needs: [verify-reuse]
@@ -1076,7 +1123,7 @@ jobs:
     # and verify-int-1 and verify-int-2 (CT-06zzb).
     # D10-935 (CT-06zzzv): a skipped heavy job (all eleven but verify-static) also passes when
     # ledger-only-detect itself succeeded on a pull_request event and said exactly only=true: the
-    # pull request changes nothing but task ledgers. A failed, cancelled or skipped detection, or
+    # pull request changes nothing but task ledgers or docs (docs/**, D10-1024 E). A failed, cancelled or skipped detection, or
     # any other output, never lets a skip pass; verify-static and guard-git are not covered by it.
     # The reuse rule and the push rule are unchanged.
     if: always()
@@ -1106,8 +1153,8 @@ jobs:
           # itself succeeded and found its success on the same tested tree, so it was skipped.
           reused() { [ "$REUSE_RESULT" = success ] && [ "$REUSE" = true ] && [ "$1" = skipped ]; }
           # A heavy job (not verify-static) also passes when it was skipped because the pull
-          # request changes only task ledgers: ledger-only-detect succeeded and said only=true
-          # (D10-935, CT-06zzzv).
+          # request changes only task ledgers or docs: ledger-only-detect succeeded and said
+          # only=true (D10-935, CT-06zzzv; docs/** since D10-1024 E, CT-06zzzze).
           ledger_only() {
             [ "$EVENT" = pull_request ] && [ "$LEDGER_RESULT" = success ] &&
               [ "$LEDGER_ONLY" = true ] && [ "$1" = skipped ]

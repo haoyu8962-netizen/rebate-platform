@@ -1,0 +1,26 @@
+id: CT-06zzzze
+repo: rebate-platform
+title: CT-06zzzze：CI 减负 A + B1 + E——标签事件不再取消代码那一轮（单独并发组、有上限地等同提交那一轮再复用）、主干推送跑完不取消、纯文档改动走快速通道（D10-1023 / D10-1024）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-1024；方案 couli-runs/OPS-lane/ci-load-plan.md）。实测：50 轮里 42 轮被取消，耗掉约 90% 作业分钟。基于主干。
+# A：labeled / unlabeled 事件用单独并发组（ci-<ref>-label），不取消同一 ref 上代码事件那一轮；verify-reuse 先有上限地等（同一 head 上其他 ci.yml 运行跑完，
+#   上限 60 分钟、每分钟查一次），再按现有规则复用（同树、逐作业 success、有 verified 产物）；等不到或复用不了就照跑。作业超时随之放宽。
+# B1：主干推送 cancel-in-progress 改为 false（在跑的一轮跑完，新推送排队、只留最新一个）；PR 的代码事件照旧取消旧轮。
+# E：ledger-only 判定（base 副本的 tools/ci/ledger-only.ts）把 docs/** 也算进可跳重作业的路径；verify-static、guard-git 照跑，判定仍在 base 副本里执行。
+# 必需检查的名字与判定不变。工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现；独立 Claude 评审（Codex 额度用尽）；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ci/ledger-only.ts'
+  - 'tools/ci/ledger-only.test.ts'
+  - 'tools/ci/ci-ledger-only-workflow.test.ts'
+  - 'tools/ci/ci-concurrency-workflow.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzze.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
