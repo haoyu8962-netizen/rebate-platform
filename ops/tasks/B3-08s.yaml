@@ -1,0 +1,30 @@
+id: B3-08s
+repo: rebate-platform
+title: Agent trace 到期清理（FU-AGENT-TRACE-PURGE，BR-ID-30 ①）：新迁移建 SECURITY DEFINER 函数 app.delete_expired_agent_traces（9 张 agent_* 表先子后父分批硬删、下限 184 天写死、跳过被锁行）与 created_at 索引，maintenance 新增第 M 节在 +08:00 03:00 起按 agent.trace.retention_days（默认 190）清理，受 retention.purge.enabled 总开关管
+type: impl
+# 2026-11-08 agent 线入账（编排 D10-971 ②、D10-999；方案 couli-runs/B3-08s/plan.md；前置 B3-08st 登记配置键）。
+# 08 口径：9 张 agent_* 表按各自 created_at，删「+08:00 当日 00:00 − agent.trace.retention_days」之前的行，硬删，每天 03:00 起；agent_rule_chunks 不是个人数据不清；无举报 / badcase 保留例外，注销已清文本的行到期照删（BR-AI-22）。
+# 做法：外键不连带删除，须先子后父、父行无更新子行才删；函数属主 couli_migrator、search_path 固定、lock_timeout 5s、EXECUTE 只给 couli_maint，不给任何角色新增 agent_* 的 DELETE；现有读配置函数原样重定义纳入该键（每轮只读一次，不红 [AC-B1-15zc#18]）；门「+08:00 03:00 起」，当天没删完由之后轮次续删，与 04:00 任务重叠可接受（D10-999 ③）；retention.purge.enabled=false 时不删（D10-999 ①）；没删没失败不写日志、报告形状不变。
+# 与 B3-08q 并发：其写入时间为当前，碰不到 184 天前的行；外键锁 + 跳过已锁行亦安全。
+# 风险 RV2（db/**、迁移、platform/**），需迁移槽。新鲜独立 Claude 写规则测试（Codex 额度用尽至 11-15，approvals #36），Opus 实现，独立 Claude money 评审。
+refs: [BR-ID-30, BR-AI-19, BR-AI-22]
+refs_hash:
+  BR-ID-30: c355f7bb09d0
+  BR-AI-19: f2aa4c7770c8
+  BR-AI-22: d412bc8a631a
+deps: [B3-08q, B3-08st]
+paths:
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/**'
+  - 'apps/api/src/modules/platform/maintenance/index.ts'
+  - 'apps/api/src/modules/platform/maintenance/index.test.ts'
+test_paths:
+  - 'test/spec/platform/agent-trace-retention/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/agent-trace-retention/**'
+status: todo
+pr: null
