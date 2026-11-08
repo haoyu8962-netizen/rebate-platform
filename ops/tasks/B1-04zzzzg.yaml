@@ -14,6 +14,7 @@ paths:
   - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
   - 'apps/api/src/modules/union/infra/taobao/official-search.ts'
   - 'apps/api/src/modules/union/infra/taobao/response.ts'
+  - 'apps/api/src/modules/union/infra/registry.ts'
   - 'apps/api/src/modules/union/union.module.ts'
   - 'apps/api/src/modules/union/union.module.test.ts'
 test_paths:
