@@ -35,6 +35,7 @@ import {
   type ResultSetStore,
   type ResultsDeps,
 } from '../../orchestrator/results/index.ts';
+import { createPgPreviousIntentReader } from '../../store/runs/index.ts';
 import { createPrefillClaimHandler, type ClaimDraftDeps } from '../../tools/claim/index.ts';
 import { createHandoffHandler, type HandoffDeps } from '../../tools/handoff/index.ts';
 import type { MatchDeps } from '../../tools/match/index.ts';
@@ -344,6 +345,7 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
   const resultsDeps: ResultsDeps = { store, texts, limits, match, chains: keywordResults };
   const results = createResultsTools(inner, resultsDeps);
   const continuation = { ...resultsDeps, tools: results };
+  const previousIntents = createPgPreviousIntentReader({ db: deps.db });
 
   const intents = createIntentPort({
     routes: deps.routes,
@@ -368,8 +370,23 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
     },
     clarification: createClarification(continuation),
     continuation: {
-      // TODO(规划/11 §2.3): 上一轮意图（「那返了吗」承接订单 / 收益） — blocked on 会话意图记录（agent_runs.intent 尚无写者）
-      previousIntent: async () => null,
+      // B3-08w · BR-AI-01 判定顺序②: the intent of this session's run just before this one; a
+      // failed read is one warn line and null (拿不准按查收益).
+      async previousIntent(request) {
+        const { caller, sessionId, runId } = request.input;
+        try {
+          return await previousIntents.previousIntent({ appId: caller.appId, sessionId, runId });
+        } catch (error) {
+          deps.logger.warn(
+            {
+              run_id: runId,
+              error_name: error instanceof Error ? error.name : typeof error,
+            },
+            'agent_previous_intent_failed',
+          );
+          return null;
+        }
+      },
       run: createRefinement(continuation).run,
     },
   });

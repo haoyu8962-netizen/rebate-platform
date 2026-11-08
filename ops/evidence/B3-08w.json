@@ -1,0 +1,129 @@
+{
+  "task": "B3-08w",
+  "spec_ref": "39756e36debb7660e6b113b9e4392e7339ab687c",
+  "spec_commit": "5ca2bb7caa680d61b98739ff5641e8d6fc228cd8",
+  "red_tests": [
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#12][BR-AI-01] 游客：上一轮 intent=order_query，本轮「那返了吗」（模型给 earnings_query）→ 承接订单：auth_required(login)，文案 agent.need_login；读取以本 run 的 app / 会话 / run 问一次，答 order_query",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#13][BR-AI-01] 游客：上一轮 intent=earnings_query → 本轮「那返了吗」仍按查收益：auth_required(login)，文案 agent.earnings.need_login；读取答 earnings_query",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=search（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=page_guide（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=rule_qa（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=null（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#15][BR-AI-01] 不往前跳：order_query 之后隔了一轮 search，第三轮「那返了吗」→ 读取答 null，按查收益：agent.earnings.need_login",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#16][BR-AI-20] 别的会话不算：会话 A 上一轮 order_query，同一游客新会话 B 的第一句「那返了吗」→ 读取以会话 B 问、答 null，按查收益：agent.earnings.need_login",
+    "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#17][BR-AI-19] 读取出错：上一轮 order_query 但读取拒绝 → 只记一条 warn（run_id，不含用户原文），本轮照常完成并按查收益：auth_required(login)，agent.earnings.need_login",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#1][BR-AI-01] 同 app 同会话紧挨的上一 run 的 intent=order_query → 原样返回",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#1][BR-AI-01] 同 app 同会话紧挨的上一 run 的 intent=earnings_query → 原样返回",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=find_by_link（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=search（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=refine（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=rule_qa（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=handoff（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=clarify（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=out_of_scope（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=page_guide（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=null（不是 order_query / earnings_query，含 NULL）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#3][BR-AI-01] 本轮自己不算上一轮：会话里只有本 run（受理时已插入，intent 不论是什么）→ null",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#4][BR-AI-01] 只看紧挨的上一 run、不往前跳：order_query 之后隔了一轮 search 或 intent 为 NULL 的 run → null；更早的 search 之后紧挨 order_query → order_query",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#5][BR-AI-01] 「上一轮」按本 run 的 accepted_at 往前取：本 run 之后受理的 run 不算（即使是 order_query），本 run 自己的 intent 也不算",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#18][BR-AI-01] 「早于本轮」是严格的：同会话另一 run 与本 run 的 accepted_at 相同（即使是 order_query）不算——只有它 → null；更早还有一轮 earnings_query → earnings_query",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#6][BR-AI-01] 不设时间窗：上一 run 在 30 天前受理，紧挨本 run 且为 order_query → order_query",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#7][BR-AI-20] 别的会话不算：另一会话里更晚受理的 order_query 不承接（本会话无上一轮 → null；本会话上一轮是 search → null）",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#8][BR-AI-20] 别的 app 不算：以另一 app 的 appId 问本会话（上一轮 order_query）→ null；以本 app 问 → order_query",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#9][BR-AI-20] sessionId 不是 uuid → null，且不发任何查询",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#10][BR-AI-19] 读库出错 → previousIntent 以该数据库错误拒绝（由装配层记 warn 并按 null 处理）",
+    "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#11][BR-AI-19] 只读：previousIntent 不改任何 agent_runs 行"
+  ],
+  "risk_note": "RV1 (agent module, D10-1022; agent follow-ups item 12). continuation.previousIntent no longer answers null: agent/store/runs createPgPreviousIntentReader reads, in one parameterised Kysely query on app.agent_runs, the run of the same app and session accepted strictly before the asking run (correlated subquery on its own accepted_at), id different from it, accepted_at desc, id desc, limit 1; order_query / earnings_query are returned as is, any other intent or NULL is null; no time window, no skipping back (D10-1022 ④). A sessionId or runId that is not a uuid answers null without a query. assembly.ts builds the reader from deps.db; a rejected read logs one warn agent_previous_intent_failed (run_id, error_name, no user text) and answers null, so the run continues as an earnings question (BR-AI-01 判定顺序② / ③). Read only. Writing agent_runs.intent belongs to B3-08t (D10-1022 ①): the rule tests set intent directly as a fixture, and the production effect follows B3-08t. No contract, migration, classifier or intent-port change. Built on B3-08q (#2785). The brief was written by hand because BR-AI-01 alone exceeds 24 KB (only its 判定顺序 detail excerpted, precedent B3-06a). Full verification is the required CI checks (approvals #21); host: tsc -b apps/api 0, eslint / prettier 0, unit tests 31 passed.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5ca2bb7caa680d61b98739ff5641e8d6fc228cd8",
+      "tree": "d872cd6ad6c95ae7bb432e8deab972996b0fcc26",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T10:23:11Z",
+      "finished_at": "2026-11-08T10:24:46Z",
+      "red_tests": [
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#12][BR-AI-01] 游客：上一轮 intent=order_query，本轮「那返了吗」（模型给 earnings_query）→ 承接订单：auth_required(login)，文案 agent.need_login；读取以本 run 的 app / 会话 / run 问一次，答 order_query",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#13][BR-AI-01] 游客：上一轮 intent=earnings_query → 本轮「那返了吗」仍按查收益：auth_required(login)，文案 agent.earnings.need_login；读取答 earnings_query",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=search（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=page_guide（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=rule_qa（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#14][BR-AI-01] 游客：上一轮 intent=null（不是本人查询）→ 读取答 null，本轮「那返了吗」按查收益：agent.earnings.need_login",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#15][BR-AI-01] 不往前跳：order_query 之后隔了一轮 search，第三轮「那返了吗」→ 读取答 null，按查收益：agent.earnings.need_login",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#16][BR-AI-20] 别的会话不算：会话 A 上一轮 order_query，同一游客新会话 B 的第一句「那返了吗」→ 读取以会话 B 问、答 null，按查收益：agent.earnings.need_login",
+        "test/spec/agent/previous-intent/continuation.int.test.ts > [AC-B3-08w#17][BR-AI-19] 读取出错：上一轮 order_query 但读取拒绝 → 只记一条 warn（run_id，不含用户原文），本轮照常完成并按查收益：auth_required(login)，agent.earnings.need_login",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#1][BR-AI-01] 同 app 同会话紧挨的上一 run 的 intent=order_query → 原样返回",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#1][BR-AI-01] 同 app 同会话紧挨的上一 run 的 intent=earnings_query → 原样返回",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=find_by_link（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=search（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=refine（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=rule_qa（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=handoff（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=clarify（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=out_of_scope（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=page_guide（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#2][BR-AI-01] 紧挨的上一 run 的 intent=null（不是 order_query / earnings_query，含 NULL）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#3][BR-AI-01] 本轮自己不算上一轮：会话里只有本 run（受理时已插入，intent 不论是什么）→ null",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#4][BR-AI-01] 只看紧挨的上一 run、不往前跳：order_query 之后隔了一轮 search 或 intent 为 NULL 的 run → null；更早的 search 之后紧挨 order_query → order_query",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#5][BR-AI-01] 「上一轮」按本 run 的 accepted_at 往前取：本 run 之后受理的 run 不算（即使是 order_query），本 run 自己的 intent 也不算",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#18][BR-AI-01] 「早于本轮」是严格的：同会话另一 run 与本 run 的 accepted_at 相同（即使是 order_query）不算——只有它 → null；更早还有一轮 earnings_query → earnings_query",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#6][BR-AI-01] 不设时间窗：上一 run 在 30 天前受理，紧挨本 run 且为 order_query → order_query",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#7][BR-AI-20] 别的会话不算：另一会话里更晚受理的 order_query 不承接（本会话无上一轮 → null；本会话上一轮是 search → null）",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#8][BR-AI-20] 别的 app 不算：以另一 app 的 appId 问本会话（上一轮 order_query）→ null；以本 app 问 → order_query",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#9][BR-AI-20] sessionId 不是 uuid → null，且不发任何查询",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#10][BR-AI-19] 读库出错 → previousIntent 以该数据库错误拒绝（由装配层记 warn 并按 null 处理）",
+        "test/spec/agent/previous-intent/reader.int.test.ts > [AC-B3-08w#11][BR-AI-19] 只读：previousIntent 不改任何 agent_runs 行"
+      ],
+      "expected": [
+        "test/spec/agent/previous-intent/continuation.int.test.ts",
+        "test/spec/agent/previous-intent/reader.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "de2059579c59572120abe96edabc6ee0df91249858a9fca811fcb8a4ac90c5e1"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "Codex hit its usage limit (until 2026-11-15), so per approvals #36 the code review was a fresh independent Claude context via tools/agent/claude-run.sh: general r1 pass, no findings (couli-runs/B3-08w/review-general-r1.json)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "52cff6a80125d796e1daa556ccc2bde5cf4f0157",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claude contexts in 2 attempts; spec-test reviews by other fresh independent Claude contexts (Codex usage limit, approvals #36): r1 fail (S1 the manual clock gave two turns the same accepted_at; S2 no strict-earlier tie case) → attempt 2 advances the clock between turns and adds [AC-B3-08w#18] → r2 pass (couli-runs/B3-08w/review-spectest-r1.json, spectest2.out)."
+  }
+}
