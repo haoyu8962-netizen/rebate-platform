@@ -1,5 +1,12 @@
 import { expect, it } from 'vitest';
-import { intervalSeconds, nextWindow, parseInstantMs, windowSingletonKey } from './sync-window.ts';
+import {
+  intervalSeconds,
+  isRescanWindowMinutes,
+  nextWindow,
+  parseInstantMs,
+  RESCAN_MAX_WINDOW_MINUTES,
+  windowSingletonKey,
+} from './sync-window.ts';
 
 const NOW = new Date('2026-10-17T02:00:00.000Z');
 const CAP = 30 * 60_000;
@@ -42,4 +49,18 @@ it('[AC-B1-08g#u4] singletonKey 带全部流维度与窗口起点', () => {
       window_start: '2026-10-17T00:00:00.000Z',
     }),
   ).toBe('pdd:acc:increment:-:2026-10-17T00:00:00.000Z');
+});
+
+it('[AC-B1-04zzz#u1] 回扫窗口分钟只接受 1～180 的整数，181 及以上与其它非法值一样不合格', () => {
+  expect(RESCAN_MAX_WINDOW_MINUTES).toBe(180);
+  expect(isRescanWindowMinutes(1)).toBe(true);
+  expect(isRescanWindowMinutes(60)).toBe(true);
+  expect(isRescanWindowMinutes(180)).toBe(true);
+  expect(isRescanWindowMinutes(181)).toBe(false);
+  expect(isRescanWindowMinutes(10_000)).toBe(false);
+  expect(isRescanWindowMinutes(0)).toBe(false);
+  expect(isRescanWindowMinutes(-5)).toBe(false);
+  expect(isRescanWindowMinutes(1.5)).toBe(false);
+  expect(isRescanWindowMinutes('60')).toBe(false);
+  expect(isRescanWindowMinutes(null)).toBe(false);
 });

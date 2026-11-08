@@ -226,11 +226,23 @@ export function rescanTierIntervalSeconds(
 }
 
 /**
- * B1-04zzr: an order_sync.rescan.taobao.window_minutes value: a positive integer number of minutes
- * (anything else takes the default 180 and warns, as days does).
+ * B1-04zzz: the most order_sync.rescan.taobao.window_minutes may be, as content's config-registry
+ * registers it (an integer in 1～180, B1-04zzzt).
+ */
+export const RESCAN_MAX_WINDOW_MINUTES = 180;
+
+/**
+ * B1-04zzr / B1-04zzz: an order_sync.rescan.taobao.window_minutes value: an integer number of
+ * minutes in 1～RESCAN_MAX_WINDOW_MINUTES (anything else takes the default 180 and warns, as days
+ * does).
  */
 export function isRescanWindowMinutes(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= RESCAN_MAX_WINDOW_MINUTES
+  );
 }
 
 /**

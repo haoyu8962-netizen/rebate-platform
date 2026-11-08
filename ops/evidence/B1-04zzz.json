@@ -1,0 +1,73 @@
+{
+  "task": "B1-04zzz",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "56b55ba7f35c24f1dbc728b04ac6b43e48411b1b",
+  "red_tests": [
+    "test/spec/orders/rescan-config-wiring/wiring.int.test.ts > [AC-B1-04zzz#1][D10-845] window_minutes 超过登记上限 180（181）：下一轮天档按默认 180 分钟、小时档 20 分钟，并只带 key 告警一次",
+    "test/spec/orders/rescan-config-wiring/wiring.int.test.ts > [AC-B1-04zzz#1][D10-845] window_minutes 超过登记上限 180（240）：下一轮天档按默认 180 分钟、小时档 20 分钟，并只带 key 告警一次",
+    "test/spec/orders/rescan-config-wiring/wiring.int.test.ts > [AC-B1-04zzz#1][D10-845] window_minutes 超过登记上限 180（1440）：下一轮天档按默认 180 分钟、小时档 20 分钟，并只带 key 告警一次"
+  ],
+  "risk_note": "RV2 by path (orders). isRescanWindowMinutes gains the upper bound RESCAN_MAX_WINDOW_MINUTES = 180, matching content's config-registry businessInteger('order_sync.rescan.taobao.window_minutes', 1, 180) (B1-04zzzt): 181 and above now fall back to the default 180 and warn once like any other invalid value. No other behaviour, no money, ledger, contract or migration change. The 14 wiring cases already green on main went in first as the test-change B1-04zzzu (#2718, D10-927 ②); this branch keeps only the over-the-bound case and imports that kit.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "56b55ba7f35c24f1dbc728b04ac6b43e48411b1b",
+      "tree": "a3731550b0fe65c830ff1a26d3b773aa2ec98953",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-07T22:56:51Z",
+      "finished_at": "2026-11-07T22:57:04Z",
+      "red_tests": [
+        "test/spec/orders/rescan-config-wiring/wiring.int.test.ts > [AC-B1-04zzz#1][D10-845] window_minutes 超过登记上限 180（181）：下一轮天档按默认 180 分钟、小时档 20 分钟，并只带 key 告警一次",
+        "test/spec/orders/rescan-config-wiring/wiring.int.test.ts > [AC-B1-04zzz#1][D10-845] window_minutes 超过登记上限 180（240）：下一轮天档按默认 180 分钟、小时档 20 分钟，并只带 key 告警一次",
+        "test/spec/orders/rescan-config-wiring/wiring.int.test.ts > [AC-B1-04zzz#1][D10-845] window_minutes 超过登记上限 180（1440）：下一轮天档按默认 180 分钟、小时档 20 分钟，并只带 key 告警一次"
+      ],
+      "expected": ["test/spec/orders/rescan-config-wiring/wiring.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a22db907c145a9792d653372b079bedcd18fd0ca3784d33242d7d2d17f0559ef"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money hit its usage limit at 2026-11-07T22:49:09Z (until 2026-11-15 00:25, couli-runs/B1-04zzz/codex-quota-error-20261107T224909Z.jsonl), so a fresh independent Claude ran it: round 1 pass with no findings; static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude in 3 attempts (r2's 14 main-green cases split into B1-04zzzu per D10-903 (A) / D10-927); red run 3/3 red on main; Codex spec-test hit its usage limit at 2026-11-07T22:31:55Z (couli-runs/B1-04zzz/codex-quota-error-20261107T223155Z.jsonl), so a fresh independent Claude reviewed: pass."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ebbe27ff5c5b13c55d61650f008f737c797ee341",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
