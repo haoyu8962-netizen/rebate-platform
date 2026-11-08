@@ -774,7 +774,10 @@ export function parseTestFile(source: string): ParsedTestFile {
 export type ComparedBlock = {
   pattern: RegExp;
   title: string;
-  /** False only when the block is the same as at the base (see the header). */
+  /**
+   * False only when the block is the same as at the base (see the header; CT-06zzzzi: with the
+   * same rows of a table imported from a same-directory kit, compareOutsideChanged only).
+   */
   changed: boolean;
   /**
    * CT-06zzzd (D10-630, Codex review r1 S1; compareOutsideChanged only): the exact full names
@@ -783,8 +786,9 @@ export type ComparedBlock = {
    * `.each([…])` / `.for([…])` array whose rows are literals or arrays of literals
    * (formatEachTitle) or object literals whose fields named by `$name` are literals
    * (formatObjectTitle; other fields may be any code) — or null when they cannot be told for
-   * certain (a title or describe title that is not a static literal, a table by name, a row with a
-   * name, member, call, spread, `${…}` template or function where it reaches the title, a
+   * certain (a title or describe title that is not a static literal, a table by name — except
+   * CT-06zzzzi's table imported from a same-directory kit, named as the same inline array — a row
+   * with a name, member, call, spread, `${…}` template or function where it reaches the title, a
    * placeholder the formatters do not know, a modifier such as `.skip` / `.only` / `.skipIf`, a loop, a
    * branch, a function or a parameterised describe around it). Absent from compareTestFile's.
    */
@@ -895,6 +899,25 @@ export function compareTestFile(base: string, head: string): FileComparison {
 //   the unchanged blocks keep their relative order. Everything else counts as changed.
 // - What the changed code outside means for the unchanged tests (an import, a table row group, a
 //   fixture value) the comparison cannot tell: the rule-test reviewer confirms the listed lines.
+// - A table imported from a same-directory kit (CT-06zzzzi, FU-REDCHECK-IMPORTED-EACH;
+//   orchestrator rulings D10-840 (B) / D10-1046 ①, after B2-09ze's alerting-eval/metrics.test.ts
+//   and its `it.each(RULE_FILES)`): given ImportedModules, an `.each(NAME)` / `.for(NAME)` table is
+//   named as the same inline array (ComparedBlock.names) only in this narrow case: NAME is a plain
+//   specifier of a top-level `import { …, NAME, … } from './<name>.ts'` of this file (same
+//   directory, `.ts`; no `as`, default or namespace import), occurs in this file nowhere but there
+//   and in the table call (a string or a template naming it counts), and the kit, read at the same
+//   side (base or head) from the file's directory, declares exactly `export const NAME = [ … ]`
+//   (`as const` or not, then `;` or the end) at its top level with literal rows (as an inline
+//   `.each([…])`), NAME occurring nowhere else in it. Only that kit is read. The rows of that table
+//   (each normalised by its tokens: line breaks between rows, a trailing comma and the outer
+//   `as const` do not count) are part of the block: rows that differ between the sides, or a table
+//   read on one side only, make it changed; other changes of the kit do not (it stays a
+//   test-support file, as before). Anything else — a function's value, a spread or a
+//   concatenation, another directory, a re-export, an export list, `let` / `var`, a type
+//   annotation, an element that is no literal, an import under another name, a shadowing local, a
+//   push or any other mention, a kit missing or unreadable — is not named (null), as before. A kit
+//   is test code of the ordinary kind: another module that changes the array at run time is not
+//   seen (the threat model of CT-06w; the rule-test review stops it).
 
 /** A literal value of an `.each` row (CT-06zzzd; a bigint only in compareEachRows, CT-06zzzf). */
 type Value = string | number | bigint | boolean | null | undefined;
@@ -1099,134 +1122,134 @@ export type EachExpansion =
       table: string;
     };
 
-function outsideView(source: string): OutsideView {
-  const { tokens, match, sep, suites, tests } = scanTests(source);
-  const inBlock = new Array<boolean>(tokens.length).fill(false);
-  for (const c of tests) for (let k = c.start; k <= c.end; k += 1) inBlock[k] = true;
-  const breaks: number[] = [];
-  for (const m of source.matchAll(/\r\n|[\n\r\u2028\u2029]/g)) breaks.push(m.index ?? 0);
-  const lineOf = (offset: number): number => {
-    let lo = 0;
-    let hi = breaks.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if ((breaks[mid] as number) < offset) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo + 1;
-  };
-  const units: string[] = [];
-  const span: [number, number][] = [];
-  const anchor = new Array<number>(tokens.length).fill(0);
-  let pendingNl = false;
-  tokens.forEach((t, k) => {
-    anchor[k] = units.length;
-    if (inBlock[k]) {
-      pendingNl ||= t.nl;
-      return;
-    }
-    const before =
-      units.length === 0 ? '' : pendingNl || t.nl ? '\n' : inBlock[k - 1] === true ? ' ' : sep(k);
-    units.push(`${before}${t.text}`);
-    const start = t.start ?? 0;
-    span.push([lineOf(start), lineOf(start + Math.max(t.text.length - 1, 0))]);
-    pendingNl = false;
-  });
-  // The code back to the start of the statement before token `to` (exclusive): over bracketed
-  // groups, up to `;`, `{`, `}`, an enclosing `(` / `[`, a test block or the start of the file.
-  const lead = (to: number): string => {
-    let k = to - 1;
-    while (k >= 0) {
-      const t = tokens[k] as Token;
-      if (inBlock[k]) break;
-      if (t.kind === 'punct') {
-        if (t.text === ')' || t.text === ']') {
-          k = (match[k] as number) - 1;
-          continue;
-        }
-        if ([';', '{', '}', '(', '['].includes(t.text)) break;
+/**
+ * Where `name` occurs in `tokens` (CT-06zzzk namedTable; CT-06zzzzi reads a kit by the same
+ * rule): `uses` its occurrences as a name (not after `.`), `hidden` how many times it stands inside
+ * a template's `${…}` (Token.inner, at any depth; Codex r1 S2) or is named by a string or a
+ * template part (a computed access, an eval).
+ */
+function nameMentions(
+  tokens: readonly Token[],
+  name: string,
+): { uses: (readonly [Token, number])[]; hidden: number } {
+  const uses = tokens
+    .map((t, k) => [t, k] as const)
+    .filter(([t, k]) => t.kind === 'id' && t.text === name && tokens[k - 1]?.text !== '.');
+  const word = new RegExp(
+    `(?:^|[^$\\p{ID_Continue}])${escapeRegex(name)}(?:$|[^$\\p{ID_Continue}])`,
+    'u',
+  );
+  const nested = (list: readonly Token[]): number =>
+    list.reduce((n, t) => {
+      let here = 0;
+      if (t.kind === 'str' && word.test(t.value ?? t.text)) here += 1;
+      if (t.kind === 'tpl') {
+        if ((t.parts ?? [t.text]).some((part) => word.test(part ?? t.text))) here += 1;
+        const inner = t.inner ?? [];
+        here += inner.filter(
+          (u, k) => u.kind === 'id' && u.text === name && inner[k - 1]?.text !== '.',
+        ).length;
+        here += nested(inner);
       }
-      k -= 1;
-    }
-    return k + 1 <= to - 1 ? joinTokens(tokens, k + 1, to - 1, sep) : '';
-  };
-  // The code after the closing bracket `close` up to the end of its statement (CT-06zzzc, Codex
-  // review r1 S2): over bracketed groups (their content, test blocks included), up to and with a
-  // `;`, or up to an enclosing closing bracket, a test block or the end of the file. The body of
-  // a block statement (`{` after `)`, `do`, `else`, `try`, `finally`) ends its statement at a line
-  // break, unless `while`, `else`, `catch` or `finally` follows. Otherwise, without a `;` (ASI),
-  // it runs on into the next statements: more blocks count as changed, never fewer.
-  const BLOCK_HEAD = new Set([')', 'do', 'else', 'try', 'finally']);
-  const CONTINUES = new Set(['while', 'else', 'catch', 'finally']);
-  const trail = (close: number): string => {
-    const t0 = tokens[close] as Token;
-    const blockBody =
-      t0.text === '}' && BLOCK_HEAD.has(tokens[(match[close] as number) - 1]?.text ?? '');
-    let k = close + 1;
-    let end = close; // last token of the trail
-    while (k < tokens.length) {
-      const t = tokens[k] as Token;
-      if (inBlock[k]) break;
-      if (k === close + 1 && blockBody && t.nl && !CONTINUES.has(t.text)) break;
-      if (t.kind === 'punct') {
-        if (t.text === '(' || t.text === '[' || t.text === '{') {
-          end = match[k] as number;
-          k = end + 1;
-          continue;
-        }
-        if (t.text === ')' || t.text === ']' || t.text === '}') break;
-        if (t.text === ';') {
-          end = k;
-          break;
-        }
-      }
-      end = k;
-      k += 1;
-    }
-    return end > close ? joinTokens(tokens, close + 1, end, sep) : '';
-  };
-  const stack: number[] = [];
-  const enclosing = new Map<number, number[]>();
-  const starts = new Set(tests.map((c) => c.start));
-  tokens.forEach((t, k) => {
-    if (starts.has(k)) enclosing.set(k, [...stack]);
-    if (inBlock[k] || t.kind !== 'punct') return;
-    if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(k);
-    else if (t.text === ')' || t.text === ']' || t.text === '}') stack.pop();
-  });
-  // CT-06zzzd (D10-630; Codex review r1 S1): the exact full names a call certainly produces
-  // (ComparedBlock.names), or null.
-  const UNSURE = new Set(['skip', 'todo', 'only', 'fails', 'skipIf', 'runIf']);
-  const plainChain = (from: number, open: number): boolean => {
-    for (let k = from; k < open; k += 1) {
-      const t = tokens[k] as Token;
-      if (t.kind === 'id' && UNSURE.has(t.text)) return false;
-    }
-    return true;
-  };
-  // The title argument: one string literal, or a template without `${…}`, then `,` or `)`.
-  const staticTitle = (c: Call): string | null => {
-    const t = tokens[c.open + 1];
-    const after = tokens[c.open + 2]?.text;
-    if (t === undefined || (after !== ',' && c.open + 2 !== c.close)) return null;
-    if (t.kind === 'str' && typeof t.value === 'string') return t.value;
-    if (t.kind === 'tpl' && t.parts?.length === 1 && typeof t.parts[0] === 'string') {
-      return t.parts[0];
-    }
-    return null;
-  };
-  // `.each(` / `.for(` at p: exactly one inline array whose rows are literal values, arrays of
-  // them (literalList) or object literals (objectRow). With `eachRows` (compareEachRows only;
-  // CT-06zzzf, D10-670) the array may be followed by `as const` (outerAsConst); whether it is,
-  // compareEachRows asks the base and the head to agree on (EachShape.outer).
-  const rows = (p: number, eachRows = false): Row[] | null => {
-    if (tokens[p]?.text !== '(' || tokens[p + 1]?.text !== '[') return null;
-    const close = match[p + 1] as number;
-    if (close + 1 !== match[p] && !(eachRows && outerAsConst(close, match[p] as number))) {
-      return null;
-    }
-    return rowsIn(p + 1, close, eachRows);
-  };
+      return n + here;
+    }, 0);
+  return { uses, hidden: nested(tokens) };
+}
+
+/**
+ * CT-06zzzzi (FU-REDCHECK-IMPORTED-EACH; orchestrator rulings D10-840 (B), D10-1046 ①): what
+ * compareOutsideChanged may read for an `.each` / `.for` table imported from a same-directory kit
+ * (see the comment above OUTSIDE_EDITS_MAX): `file` the repository path of the compared rule-test
+ * file (its directory resolves `./<name>.ts`), `base` / `head` the content of a repository path at
+ * the base / at the head, null when it does not exist there.
+ */
+export type ImportedModules = {
+  file: string;
+  base: (path: string) => string | null;
+  head: (path: string) => string | null;
+};
+
+/** One side of ImportedModules: the rule-test file and that side's reader. */
+type KitReader = { file: string; read: (path: string) => string | null };
+
+/** The only module specifier a table is read through (CT-06zzzzi): `./<name>.ts`, same directory. */
+const SAME_DIR_KIT = /^\.\/([^/\\]+)\.ts$/;
+
+/** A kit's table (CT-06zzzzi): its literal rows and the normalised text of each, or why not. */
+type KitTable = { rows: Row[]; texts: string[] } | { reason: string };
+
+/**
+ * The table `name` of a kit's source (CT-06zzzzi): exactly `export const <name> = [ … ]`, then
+ * `as const` or not, then `;` or the end of the file, at the top level, with rows CT-06zzzd reads
+ * as literal (rowsIn, as an inline `.each([…])`), and the name occurring nowhere else in the kit —
+ * not as a name (a push, an alias, an export list), not in a string or a template — or why not.
+ */
+function exportedTable(source: string, name: string): KitTable {
+  let tokens: Token[];
+  let match: number[];
+  try {
+    tokens = tokenize(source);
+    match = matchBrackets(tokens);
+  } catch (err) {
+    return { reason: `the kit cannot be read as code (${String(err)})` };
+  }
+  const sep = separators(source, tokens);
+  const { uses, hidden } = nameMentions(tokens, name);
+  if (uses.length !== 1 || hidden > 0) {
+    return {
+      reason: `${name} occurs in the kit other than once as a name (${uses.length} time(s), ${hidden} inside a template or a string)`,
+    };
+  }
+  const d = (uses[0] as readonly [Token, number])[1];
+  let depth = 0;
+  for (let k = 0; k < d; k += 1) {
+    const t = tokens[k] as Token;
+    if (t.kind !== 'punct') continue;
+    if (t.text === '(' || t.text === '[' || t.text === '{') depth += 1;
+    else if (t.text === ')' || t.text === ']' || t.text === '}') depth -= 1;
+  }
+  const at = (k: number, text: string, kind: Token['kind']): boolean =>
+    tokens[k]?.text === text && tokens[k]?.kind === kind;
+  if (
+    depth !== 0 ||
+    !at(d - 2, 'export', 'id') ||
+    !at(d - 1, 'const', 'id') ||
+    !at(d + 1, '=', 'punct') ||
+    !at(d + 2, '[', 'punct')
+  ) {
+    return { reason: `the kit does not declare it as \`export const ${name} = [ … ]\`` };
+  }
+  const open = d + 2;
+  const close = match[open] as number;
+  let last = close;
+  if (at(close + 1, 'as', 'id') && at(close + 2, 'const', 'id')) last = close + 2;
+  const next = tokens[last + 1];
+  if (next !== undefined && next.text !== ';') {
+    return { reason: `${name} is more than an array literal: \`${next.text}\` follows it` };
+  }
+  const { rowsIn, valueEnd } = literalReader(tokens, match);
+  const rows = rowsIn(open, close, false);
+  if (rows === null) return { reason: `the rows of ${name} are not literal` };
+  const texts: string[] = [];
+  let j = open + 1;
+  while (j < close) {
+    const end = valueEnd(j, close);
+    texts.push(joinTokens(tokens, j, end - 1, sep));
+    j = end;
+    if (j === close) break;
+    j += 1;
+  }
+  return texts.length === rows.length
+    ? { rows, texts }
+    : { reason: `the rows of ${name} were not read alike` };
+}
+
+/**
+ * The readers of literal `.each` / `.for` rows over `tokens` (CT-06zzzd; moved out of outsideView
+ * by CT-06zzzzi so that a same-directory kit is read by the same rules): rowsIn, outerAsConst,
+ * valueEnd and the literal readers they use.
+ */
+function literalReader(tokens: readonly Token[], match: readonly number[]) {
   // The rows of the array literal whose `[` is at `open` and `]` at `close` (see rows).
   const rowsIn = (open: number, close: number, eachRows: boolean): Row[] | null => {
     const out: Row[] = [];
@@ -1377,6 +1400,200 @@ function outsideView(source: string): OutsideView {
     }
     return null;
   };
+  return { rowsIn, outerAsConst, valueEnd };
+}
+
+function outsideView(source: string, kit?: KitReader): OutsideView {
+  const { tokens, match, sep, suites, tests } = scanTests(source);
+  const inBlock = new Array<boolean>(tokens.length).fill(false);
+  for (const c of tests) for (let k = c.start; k <= c.end; k += 1) inBlock[k] = true;
+  const breaks: number[] = [];
+  for (const m of source.matchAll(/\r\n|[\n\r\u2028\u2029]/g)) breaks.push(m.index ?? 0);
+  const lineOf = (offset: number): number => {
+    let lo = 0;
+    let hi = breaks.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((breaks[mid] as number) < offset) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo + 1;
+  };
+  const units: string[] = [];
+  const span: [number, number][] = [];
+  const anchor = new Array<number>(tokens.length).fill(0);
+  let pendingNl = false;
+  tokens.forEach((t, k) => {
+    anchor[k] = units.length;
+    if (inBlock[k]) {
+      pendingNl ||= t.nl;
+      return;
+    }
+    const before =
+      units.length === 0 ? '' : pendingNl || t.nl ? '\n' : inBlock[k - 1] === true ? ' ' : sep(k);
+    units.push(`${before}${t.text}`);
+    const start = t.start ?? 0;
+    span.push([lineOf(start), lineOf(start + Math.max(t.text.length - 1, 0))]);
+    pendingNl = false;
+  });
+  // The code back to the start of the statement before token `to` (exclusive): over bracketed
+  // groups, up to `;`, `{`, `}`, an enclosing `(` / `[`, a test block or the start of the file.
+  const lead = (to: number): string => {
+    let k = to - 1;
+    while (k >= 0) {
+      const t = tokens[k] as Token;
+      if (inBlock[k]) break;
+      if (t.kind === 'punct') {
+        if (t.text === ')' || t.text === ']') {
+          k = (match[k] as number) - 1;
+          continue;
+        }
+        if ([';', '{', '}', '(', '['].includes(t.text)) break;
+      }
+      k -= 1;
+    }
+    return k + 1 <= to - 1 ? joinTokens(tokens, k + 1, to - 1, sep) : '';
+  };
+  // The code after the closing bracket `close` up to the end of its statement (CT-06zzzc, Codex
+  // review r1 S2): over bracketed groups (their content, test blocks included), up to and with a
+  // `;`, or up to an enclosing closing bracket, a test block or the end of the file. The body of
+  // a block statement (`{` after `)`, `do`, `else`, `try`, `finally`) ends its statement at a line
+  // break, unless `while`, `else`, `catch` or `finally` follows. Otherwise, without a `;` (ASI),
+  // it runs on into the next statements: more blocks count as changed, never fewer.
+  const BLOCK_HEAD = new Set([')', 'do', 'else', 'try', 'finally']);
+  const CONTINUES = new Set(['while', 'else', 'catch', 'finally']);
+  const trail = (close: number): string => {
+    const t0 = tokens[close] as Token;
+    const blockBody =
+      t0.text === '}' && BLOCK_HEAD.has(tokens[(match[close] as number) - 1]?.text ?? '');
+    let k = close + 1;
+    let end = close; // last token of the trail
+    while (k < tokens.length) {
+      const t = tokens[k] as Token;
+      if (inBlock[k]) break;
+      if (k === close + 1 && blockBody && t.nl && !CONTINUES.has(t.text)) break;
+      if (t.kind === 'punct') {
+        if (t.text === '(' || t.text === '[' || t.text === '{') {
+          end = match[k] as number;
+          k = end + 1;
+          continue;
+        }
+        if (t.text === ')' || t.text === ']' || t.text === '}') break;
+        if (t.text === ';') {
+          end = k;
+          break;
+        }
+      }
+      end = k;
+      k += 1;
+    }
+    return end > close ? joinTokens(tokens, close + 1, end, sep) : '';
+  };
+  const stack: number[] = [];
+  const enclosing = new Map<number, number[]>();
+  const starts = new Set(tests.map((c) => c.start));
+  tokens.forEach((t, k) => {
+    if (starts.has(k)) enclosing.set(k, [...stack]);
+    if (inBlock[k] || t.kind !== 'punct') return;
+    if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(k);
+    else if (t.text === ')' || t.text === ']' || t.text === '}') stack.pop();
+  });
+  // CT-06zzzd (D10-630; Codex review r1 S1): the exact full names a call certainly produces
+  // (ComparedBlock.names), or null.
+  const UNSURE = new Set(['skip', 'todo', 'only', 'fails', 'skipIf', 'runIf']);
+  const plainChain = (from: number, open: number): boolean => {
+    for (let k = from; k < open; k += 1) {
+      const t = tokens[k] as Token;
+      if (t.kind === 'id' && UNSURE.has(t.text)) return false;
+    }
+    return true;
+  };
+  // The title argument: one string literal, or a template without `${…}`, then `,` or `)`.
+  const staticTitle = (c: Call): string | null => {
+    const t = tokens[c.open + 1];
+    const after = tokens[c.open + 2]?.text;
+    if (t === undefined || (after !== ',' && c.open + 2 !== c.close)) return null;
+    if (t.kind === 'str' && typeof t.value === 'string') return t.value;
+    if (t.kind === 'tpl' && t.parts?.length === 1 && typeof t.parts[0] === 'string') {
+      return t.parts[0];
+    }
+    return null;
+  };
+  const { rowsIn, outerAsConst, valueEnd } = literalReader(tokens, match);
+  // `.each(` / `.for(` at p: exactly one inline array whose rows are literal values, arrays of
+  // them (literalList) or object literals (objectRow). With `eachRows` (compareEachRows only;
+  // CT-06zzzf, D10-670) the array may be followed by `as const` (outerAsConst); whether it is,
+  // compareEachRows asks the base and the head to agree on (EachShape.outer).
+  const rows = (p: number, eachRows = false): Row[] | null => {
+    if (tokens[p]?.text !== '(' || tokens[p + 1]?.text !== '[') return null;
+    const close = match[p + 1] as number;
+    if (close + 1 !== match[p] && !(eachRows && outerAsConst(close, match[p] as number))) {
+      return null;
+    }
+    return rowsIn(p + 1, close, eachRows);
+  };
+  // CT-06zzzzi (D10-840 (B), D10-1046 ①; see the comment above OUTSIDE_EDITS_MAX): the table of
+  // the table call at `p` when it is one name imported from a same-directory kit — null when it is
+  // not (no kit reader, not one name, not a named import from `./<name>.ts`), the kit's table
+  // (exportedTable) when the name occurs in this file only in that import and at `p`, else why not.
+  const kitSources = new Map<string, string | null>();
+  const importedTable = (p: number): KitTable | null => {
+    if (kit === undefined || tokens[p]?.text !== '(' || match[p] !== p + 2) return null;
+    const id = tokens[p + 1] as Token;
+    if (id.kind !== 'id') return null;
+    // The innermost bracket around token k (-1: the top level).
+    const around = (k: number): number => {
+      for (let j = k - 1; j >= 0; j -= 1) {
+        const t = tokens[j] as Token;
+        if (t.kind !== 'punct') continue;
+        if (t.text === ')' || t.text === ']' || t.text === '}') j = match[j] as number;
+        else if (t.text === '(' || t.text === '[' || t.text === '{') return j;
+      }
+      return -1;
+    };
+    // `import { …, NAME, … } from './<kit>.ts'` at the top level: NAME a plain specifier (not
+    // `type NAME`, `X as NAME`, `NAME as X`), no default or namespace import, no attributes.
+    const specOf = (k: number): string | null => {
+      if (!['{', ','].includes(tokens[k - 1]?.text ?? '')) return null;
+      if (![',', '}'].includes(tokens[k + 1]?.text ?? '')) return null;
+      const o = around(k);
+      if (o < 0 || tokens[o]?.text !== '{' || around(o) !== -1) return null;
+      const importWord = tokens[o - 1];
+      if (importWord?.kind !== 'id' || importWord.text !== 'import') return null;
+      const c = match[o] as number;
+      const from = tokens[c + 1];
+      const spec = tokens[c + 2];
+      const end = tokens[c + 3];
+      if (from?.kind !== 'id' || from.text !== 'from') return null;
+      if (spec?.kind !== 'str' || typeof spec.value !== 'string') return null;
+      if (end !== undefined && end.text !== ';' && !end.nl) return null;
+      return spec.value;
+    };
+    const { uses, hidden } = nameMentions(tokens, id.text);
+    const specs = uses.map(([, k]) => (k === p + 1 ? null : specOf(k)));
+    const spec = specs.find((x) => x !== null) ?? null;
+    const kitName = spec === null ? null : (SAME_DIR_KIT.exec(spec)?.[1] ?? null);
+    if (kitName === null || kitName === '.' || kitName === '..') return null;
+    if (uses.length !== 2 || hidden > 0) {
+      return {
+        reason: `${id.text} occurs in the file other than in its import and this table (${uses.length} time(s), ${hidden} inside a template or a string)`,
+      };
+    }
+    const dir = dirOf(kit.file);
+    const path = dir === '' ? `${kitName}.ts` : `${dir}/${kitName}.ts`;
+    if (!kitSources.has(path)) {
+      let text: string | null;
+      try {
+        text = kit.read(path);
+      } catch {
+        text = null;
+      }
+      kitSources.set(path, text);
+    }
+    const text = kitSources.get(path) ?? null;
+    if (text === null) return { reason: `the kit ${path} cannot be read` };
+    return exportedTable(text, id.text);
+  };
   const namesOf = (c: Call, prefix: string): string[] | null => {
     if (!plainChain(c.start, c.open)) return null;
     const title = staticTitle(c);
@@ -1385,8 +1602,13 @@ function outsideView(source: string): OutsideView {
       const t = tokens[k] as Token;
       if (t.kind !== 'id' || (t.text !== 'each' && t.text !== 'for')) continue;
       if (tokens[k - 1]?.text !== '.') continue;
-      const table = rows(k + 1);
-      if (table === null) return null;
+      let table = rows(k + 1);
+      if (table === null) {
+        // CT-06zzzzi: a table imported from a same-directory kit, read as the inline array.
+        const imported = importedTable(k + 1);
+        if (imported === null || 'reason' in imported) return null;
+        table = imported.rows;
+      }
       const names: string[] = [];
       for (const [idx, row] of table.entries()) {
         const name =
@@ -1464,33 +1686,10 @@ function outsideView(source: string): OutsideView {
     at: number,
   ): { open: number; close: number; decl: string } | { reason: string } => {
     const name = (tokens[at] as Token).text;
-    const uses = tokens
-      .map((t, k) => [t, k] as const)
-      .filter(([t, k]) => t.kind === 'id' && t.text === name && tokens[k - 1]?.text !== '.');
+    const { uses, hidden } = nameMentions(tokens, name);
     const decls = uses.filter(
       ([, k]) => tokens[k - 1]?.text === 'const' && depth[k] === 0 && !inBlock[k],
     );
-    // Codex r1 S2: the name inside a template's `${…}` (Token.inner, at any depth) counts too, and
-    // so does a string or a template part naming it (a computed access, an eval).
-    const word = new RegExp(
-      `(?:^|[^$\\p{ID_Continue}])${escapeRegex(name)}(?:$|[^$\\p{ID_Continue}])`,
-      'u',
-    );
-    const nested = (list: readonly Token[]): number =>
-      list.reduce((n, t) => {
-        let here = 0;
-        if (t.kind === 'str' && word.test(t.value ?? t.text)) here += 1;
-        if (t.kind === 'tpl') {
-          if ((t.parts ?? [t.text]).some((part) => word.test(part ?? t.text))) here += 1;
-          const inner = t.inner ?? [];
-          here += inner.filter(
-            (u, k) => u.kind === 'id' && u.text === name && inner[k - 1]?.text !== '.',
-          ).length;
-          here += nested(inner);
-        }
-        return n + here;
-      }, 0);
-    const hidden = nested(tokens);
     if (decls.length !== 1 || uses.length !== 2 || hidden > 0) {
       return {
         reason: `the table ${name} is not one top-level const used only by this block (${decls.length} declaration(s), ${uses.length} occurrence(s), ${hidden} inside a template or a string)`,
@@ -1648,6 +1847,19 @@ function outsideView(source: string): OutsideView {
             }),
     };
   };
+  // CT-06zzzzi: what the block's key says of a table imported from a same-directory kit — nothing
+  // when there is none, its rows' normalised text, or one mark for a table that cannot be read.
+  const kitTableOf = (c: Call): string[] => {
+    for (let k = c.start; k < c.open; k += 1) {
+      const t = tokens[k] as Token;
+      if (t.kind !== 'id' || (t.text !== 'each' && t.text !== 'for')) continue;
+      if (tokens[k - 1]?.text !== '.') continue;
+      const imported = importedTable(k + 1);
+      if (imported === null) return [];
+      return ['reason' in imported ? '\u0003' : `\u0003${imported.texts.join('\u0001')}`];
+    }
+    return [];
+  };
   const blocks = tests.map((c) => {
     const around = suites.filter((s) => s.open < c.start && c.start < s.close);
     const show = (segments: readonly Segment[]): string =>
@@ -1673,6 +1885,9 @@ function outsideView(source: string): OutsideView {
         joinTokens(tokens, c.start, c.end, sep),
         // A block that does not end its statement (`do it(…) while (c)`): the rest of it.
         (tokens[c.end] as Token).text === ';' ? '' : trail(c.end),
+        // CT-06zzzzi: the rows of a table imported from a same-directory kit, as read on this
+        // side (a table that cannot be read: one mark, as before; none: nothing added).
+        ...kitTableOf(c),
       ].join('\u0000'),
       anchor: anchor[c.start] as number,
       names:
@@ -1765,18 +1980,29 @@ function lineRanges(lines: ReadonlySet<number>): string {
 /**
  * Compares a rule-test file whose code outside the tests may have changed (CT-06zzzc, D10-623;
  * see the comment above OUTSIDE_EDITS_MAX): each head block says whether it is the same block as
- * at the base, and `lines` lists the head lines of the changes outside the tests.
+ * at the base, and `lines` lists the head lines of the changes outside the tests. With `modules`
+ * (CT-06zzzzi), a table imported from a same-directory kit is read from the kit of each side.
  */
-export function compareOutsideChanged(base: string, head: string): OutsideComparison {
+export function compareOutsideChanged(
+  base: string,
+  head: string,
+  modules?: ImportedModules,
+): OutsideComparison {
   let before: OutsideView;
   let after: OutsideView;
   try {
-    before = outsideView(base);
+    before = outsideView(
+      base,
+      modules === undefined ? undefined : { file: modules.file, read: modules.base },
+    );
   } catch (err) {
     return { whole: true, reason: `the file at the base cannot be read as tests (${String(err)})` };
   }
   try {
-    after = outsideView(head);
+    after = outsideView(
+      head,
+      modules === undefined ? undefined : { file: modules.file, read: modules.head },
+    );
   } catch (err) {
     return { whole: true, reason: `the file cannot be read as tests (${String(err)})` };
   }

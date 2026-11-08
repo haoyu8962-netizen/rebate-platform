@@ -206,8 +206,22 @@
 // as a whole, a report not from the red reporter — is judged exactly as before: it must be red.
 // red_exempt_outside and red_exempt keep their own rules; a row declaration never makes a test of
 // an unchanged block, or any other test, exempt. A file whose every test is unchanged or a
-// declared kept row still fails (nothing would be shown red). The table being an imported constant
-// (`it.each(PLATFORMS)`) is not covered: ② fails.
+// declared kept row still fails (nothing would be shown red). A table that is an imported constant
+// (`it.each(PLATFORMS)`) is not covered here: ② fails (CT-06zzzzi changes only the names below).
+//
+// Tables imported from a same-directory kit (CT-06zzzzi, FU-REDCHECK-IMPORTED-EACH; orchestrator
+// rulings D10-840 (B) / D10-1046 ①, after B2-09ze's alerting-eval/metrics.test.ts, whose only
+// block is `it.each(RULE_FILES)` with RULE_FILES from ./kit.ts): the lenient comparison of
+// red_exempt_outside (compareOutsideChanged) reads such a table through the same BaselineReader,
+// the kit at the base for the base, at the head for the head. Only one narrow case is recognised:
+// the name is imported by a plain specifier from `./<name>.ts` (same directory) and used by this
+// table only, and the kit exports it directly as `export const NAME = [literals…]` (`as const`
+// or not) and mentions it nowhere else; its rows are then named as the same inline array
+// (ComparedBlock.names, so outsideOnlyFiles can leave the file out when every row is declared),
+// and rows that differ between the kit at the base and at the head make the block changed. Any
+// other table by name — a function's value, a spread or a concatenation, another directory, a
+// re-export, `let`, an element that is no literal, an alias, a shadowing local, a kit missing —
+// is not recognised, as before. The exemption rules are unchanged: an undeclared test must be red.
 //
 // Declared changes of frozen tests (CT-06zzzg; orchestrator ruling D10-701, after B2-09v, whose
 // frozen [AC-B2-09t#35] went from red by timeout to red by assertion, and FU-B209R-FLAKE, a flaky
@@ -617,7 +631,7 @@ export type OutsideOnly = { file: string; lines: string; reason: string; tests: 
  *   calling a registered changed helper counts as changed);
  * - the exact full names of every block's tests are certain (ComparedBlock.names: static titles,
  *   inline `.each([…])` / `.for([…])` arrays of literals formatted as Vitest does; Codex review r1
- *   S1), distinct, and the file's red_exempt declarations are exactly those names (none missing,
+ *   S1; CT-06zzzzi: also such an array exported by a same-directory kit, see the header), distinct, and the file's red_exempt declarations are exactly those names (none missing,
  *   none extra), each with a reason of RED_EXEMPT_REASON_MIN characters.
  * Anything else stays expected and is judged as before (CT-06zzzc). Test-support files are not
  * consulted: whether the file may read one does not change the outcome (its tests are declared).
@@ -837,7 +851,13 @@ export function ruleTestBaselines(
     if (compared.whole && compared.outside === true && listed !== undefined) {
       const withValues = ev !== undefined && ev.applied.length > 0;
       const lenientBase = withValues ? registered.text : before;
-      const lenient = compareOutsideChanged(lenientBase, after);
+      // CT-06zzzzi (D10-1046 ①): an `.each` table imported from a same-directory kit is read
+      // from the kit at the base and at the head.
+      const lenient = compareOutsideChanged(lenientBase, after, {
+        file,
+        base: (p) => read.base(p),
+        head: (p) => read.head(p),
+      });
       if (lenient.whole) {
         outsideVoid(lenient.reason);
       } else if (withValues && ev !== undefined) {

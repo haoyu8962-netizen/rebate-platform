@@ -1,0 +1,27 @@
+import { expect, it } from 'vitest';
+import { ENTRIES, RULE_FILES, rules, scrapeJobs, type Entry } from './kit.ts';
+
+// couli.yaml sources these series from the existing redis_exporter, outside the application jobs.
+const REDIS_EXPORTS = new Set(['redis_up', 'redis_memory_used_bytes']);
+
+function referencedMetrics(expression: string): string[] {
+  expect(expression, 'rules use explicit metric names').not.toMatch(/\b__name__\b/);
+  return [...new Set(expression.match(/[a-zA-Z_:][a-zA-Z0-9_:]*/g) ?? [])];
+}
+
+it.each(RULE_FILES)(
+  '[AC-B1-25b#8] %s 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源',
+  async (file) => {
+    const jobs = scrapeJobs();
+    const available = new Set<string>(REDIS_EXPORTS);
+    for (const entry of ENTRIES) {
+      expect(jobs.map((job) => job['job_name'])).toContain(`couli-${entry}`);
+      available.add(`couli_${entry satisfies Entry}_up`);
+    }
+    for (const rule of rules(file)) {
+      for (const name of referencedMetrics(String(rule['expr']))) {
+        expect(available, `${file}: ${name}`).toContain(name);
+      }
+    }
+  },
+);

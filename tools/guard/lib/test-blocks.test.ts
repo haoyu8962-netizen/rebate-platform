@@ -3344,3 +3344,397 @@ it('[CT-06zzzk] Codex r1 S2: the table name inside a template interpolation (at 
     true,
   ]);
 });
+
+// CT-06zzzzi (FU-REDCHECK-IMPORTED-EACH; orchestrator rulings D10-840 (B), D10-1046 ①, after
+// B2-09ze's alerting-eval/metrics.test.ts, whose `it.each(RULE_FILES)` reads
+// `export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'] as const` from ./kit.ts): an
+// `.each` / `.for` table named by a constant imported from a same-directory module that exports
+// it directly as an array of literals (`as const` or not) is named as the same inline array.
+// compareOutsideChanged takes a third, optional argument for it (ImportedModules: the repository
+// path of the compared rule-test file, and the content of a repository path at the base and at
+// the head); without it nothing changes. The cast keeps this file compiling against the
+// two-argument signature until the implementation exports the type.
+type ImportedModules = {
+  file: string;
+  base: (path: string) => string | null;
+  head: (path: string) => string | null;
+};
+const compareImported = compareOutsideChanged as (
+  base: string,
+  head: string,
+  modules?: ImportedModules,
+) => ReturnType<typeof compareOutsideChanged>;
+const IMP_FILE = 'test/spec/zzimp/metrics.test.ts';
+const IMP_KIT = 'test/spec/zzimp/kit.ts';
+const IMP_DECL = "export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'] as const;";
+const impKit = (decl = IMP_DECL, extra = ''): string =>
+  [
+    "import { expect } from 'vitest';",
+    "export const ENTRIES = ['api', 'worker', 'admin'] as const;",
+    decl,
+    'export type Entry = (typeof ENTRIES)[number];',
+    extra,
+    'export function rules(file: string): string[] {',
+    '  expect(file).toMatch(/\\.yaml$/);',
+    '  return [file];',
+    '}',
+    '',
+  ].join('\n');
+const IMP_IMPORT = "import { ENTRIES, RULE_FILES, rules, type Entry } from './kit.ts';";
+const IMP_TITLE = '[AC-2] %s 的规则都有来源';
+const IMP_NAMES = ['[AC-2] couli.yaml 的规则都有来源', '[AC-2] couli-fund.yaml 的规则都有来源'];
+/** A rule-test file: a plain test, then `<chain>(<table>)(<title>, callback)`. */
+const impFile = (
+  table = 'RULE_FILES',
+  importLine = IMP_IMPORT,
+  extra = '',
+  title = IMP_TITLE,
+): string =>
+  src(
+    importLine,
+    extra,
+    test('[AC-1] plain', 'expect(ENTRIES).toHaveLength(3);'),
+    '',
+    `it.each(${table})('${title}', (file: Entry | string) => {`,
+    '  expect(rules(String(file)).length).toBeGreaterThan(0);',
+    '});',
+  );
+/** A reader of repository paths at the base and the head that records what it was asked. */
+const modulesOf = (
+  base: Record<string, string>,
+  head: Record<string, string> = base,
+  file = IMP_FILE,
+): { modules: ImportedModules; reads: { base: string[]; head: string[] } } => {
+  const reads = { base: [] as string[], head: [] as string[] };
+  return {
+    reads,
+    modules: {
+      file,
+      base: (p) => {
+        reads.base.push(p);
+        return base[p] ?? null;
+      },
+      head: (p) => {
+        reads.head.push(p);
+        return head[p] ?? null;
+      },
+    },
+  };
+};
+const kitOnly = (base = impKit(), head = base): ImportedModules =>
+  modulesOf({ [IMP_KIT]: base }, { [IMP_KIT]: head }).modules;
+/** ComparedBlock.names of the block at `at` (null too when the file is judged as a whole). */
+const namesAt = (
+  base: string,
+  head: string,
+  modules?: ImportedModules,
+  at = 1,
+): string[] | null | undefined => {
+  const c = compareImported(base, head, modules);
+  return c.whole ? null : c.blocks[at]?.names;
+};
+const changedNames = (
+  base: string,
+  head: string,
+  modules?: ImportedModules,
+): [boolean, string[] | null | undefined][] | string => {
+  const c = compareImported(base, head, modules);
+  return c.whole ? `whole: ${c.reason}` : c.blocks.map((b) => [b.changed, b.names]);
+};
+
+it('[CT-06zzzzi] compareOutsideChanged: it.each(NAME) of `export const NAME = [literals]` (with or without as const) in ./kit.ts gives exactly the names of the same inline array', () => {
+  const file = impFile();
+  // The inline array, as CT-06zzzd names it: the reference.
+  const inline = impFile("['couli.yaml', 'couli-fund.yaml']");
+  expect(namesAt(inline, inline)).toEqual(IMP_NAMES);
+  // Imported from ./kit.ts, with and without `as const`.
+  expect(namesAt(file, file, kitOnly())).toEqual(IMP_NAMES);
+  const bare = impKit("export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'];");
+  expect(namesAt(file, file, kitOnly(bare))).toEqual(IMP_NAMES);
+  // The plain test keeps its name; nothing changed.
+  expect(changedNames(file, file, kitOnly())).toEqual([
+    [false, ['[AC-1] plain']],
+    [false, IMP_NAMES],
+  ]);
+  // The outsideOnlyFiles shape: code outside the tests changed at the head, the kit the same.
+  const head = file.replace(
+    IMP_IMPORT,
+    `${IMP_IMPORT}\nimport { string } from '../../infra/staging/kit.ts';`,
+  );
+  expect(changedNames(file, head, kitOnly())).toEqual([
+    [false, ['[AC-1] plain']],
+    [false, IMP_NAMES],
+  ]);
+  // Without the third argument, as before: a table by name is not certain.
+  expect(namesAt(file, file)).toBeNull();
+  expect(namesAt(file, head)).toBeNull();
+});
+
+it('[CT-06zzzzi] compareOutsideChanged: imported rows, object rows and other literals under test.each, it.for and a describe are named exactly as the same inline array (Vitest formatting)', () => {
+  const fileWith = (table: string, chain: string, title: string, wrap: boolean): string =>
+    [
+      "import { describe, expect, it, test } from 'vitest';",
+      "import { CASES } from './kit.ts';",
+      '',
+      ...(wrap ? ["describe('kit', () => {"] : []),
+      `${chain}(${table})('${title}', (...args: unknown[]) => {`,
+      '  expect(args.length).toBeGreaterThan(0);',
+      '});',
+      ...(wrap ? ['});'] : []),
+      '',
+    ].join('\n');
+  const named = (array: string, title: string, chain = 'it.each', wrap = false) => {
+    const inline = fileWith(array, chain, title, wrap);
+    const imported = fileWith('CASES', chain, title, wrap);
+    const kit = `export const CASES = ${array} as const;\n`;
+    const want = namesAt(inline, inline, undefined, 0);
+    expect(want, array).not.toBeNull();
+    const got = namesAt(imported, imported, modulesOf({ [IMP_KIT]: kit }).modules, 0);
+    expect(got, array).toEqual(want);
+    return got;
+  };
+  expect(named("['a', 'b']", '[AC-3] %s', 'test.each')).toEqual(['[AC-3] a', '[AC-3] b']);
+  expect(named("[['x', 1], ['y', 2]]", '[AC-4] %s=%d %# %$')).toEqual([
+    '[AC-4] x=1 0 1',
+    '[AC-4] y=2 1 2',
+  ]);
+  expect(named('[true, null, -1.5, 7, `t`]', '[AC-5] %s', 'it.for')).toEqual([
+    '[AC-5] true',
+    '[AC-5] null',
+    '[AC-5] -1.5',
+    '[AC-5] 7',
+    '[AC-5] t',
+  ]);
+  expect(
+    named(
+      "[{ label: '精确', hit: true }, { label: '弱', hit: false }]",
+      '[AC-6] $label：结果 $hit',
+      'it.each',
+      true,
+    ),
+  ).toEqual(['kit > [AC-6] 精确：结果 true', 'kit > [AC-6] 弱：结果 false']);
+});
+
+it('[CT-06zzzzi] compareOutsideChanged: the base reads the base kit and the head the head kit; a table that differs makes the block changed, other kit changes and layout do not', () => {
+  const file = impFile();
+  const grownKit = impKit(
+    "export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml', 'couli-extra.yaml'] as const;",
+  );
+  const { modules, reads } = modulesOf({ [IMP_KIT]: impKit() }, { [IMP_KIT]: grownKit });
+  // A row added to the kit's table: the block is changed, named from the head's table.
+  expect(changedNames(file, file, modules)).toEqual([
+    [false, ['[AC-1] plain']],
+    [true, [...IMP_NAMES, '[AC-2] couli-extra.yaml 的规则都有来源']],
+  ]);
+  // Each side read the same-directory kit at its own revision, and nothing else.
+  expect([...new Set(reads.base)]).toEqual([IMP_KIT]);
+  expect([...new Set(reads.head)]).toEqual([IMP_KIT]);
+  // A row removed, renamed or moved at the head: changed, named from the head's table.
+  for (const [table, names] of [
+    ["['couli.yaml']", IMP_NAMES.slice(0, 1)],
+    [
+      "['couli.yaml', 'couli-funds.yaml']",
+      [IMP_NAMES[0] as string, '[AC-2] couli-funds.yaml 的规则都有来源'],
+    ],
+    ["['couli-fund.yaml', 'couli.yaml']", [...IMP_NAMES].reverse()],
+  ] as const) {
+    const head = impKit(`export const RULE_FILES = ${table} as const;`);
+    expect(changedNames(file, file, kitOnly(impKit(), head)), table).toEqual([
+      [false, ['[AC-1] plain']],
+      [true, names],
+    ]);
+  }
+  // The table's tokens the same (written over lines, a trailing comma), other exports and
+  // helpers of the kit changed: unchanged, as before (a kit is a test-support file).
+  const other = impKit(
+    "export const RULE_FILES = [\n  'couli.yaml',\n  'couli-fund.yaml',\n] as const;",
+    'export const EXTRA = 1;',
+  ).replace("'admin'] as const", "'admin', 'cron'] as const");
+  expect(changedNames(file, file, kitOnly(impKit(), other))).toEqual([
+    [false, ['[AC-1] plain']],
+    [false, IMP_NAMES],
+  ]);
+});
+
+it('[CT-06zzzzi] not expanded: a table that is the value a function returns', () => {
+  const file = impFile();
+  expect(namesAt(file, file, kitOnly())).toEqual(IMP_NAMES);
+  for (const decl of [
+    "export const RULE_FILES = make();\nfunction make() {\n  return ['couli.yaml', 'couli-fund.yaml'];\n}",
+    "export const RULE_FILES = (() => ['couli.yaml', 'couli-fund.yaml'])();",
+    "export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'].map((f) => f);",
+  ]) {
+    expect(namesAt(file, file, kitOnly(impKit(decl))), decl).toBeNull();
+  }
+});
+
+it('[CT-06zzzzi] not expanded: a table made by a spread or a concatenation (also across a line break)', () => {
+  const file = impFile();
+  expect(namesAt(file, file, kitOnly())).toEqual(IMP_NAMES);
+  for (const decl of [
+    "const BASE_FILES = ['couli.yaml'] as const;\nexport const RULE_FILES = [...BASE_FILES, 'couli-fund.yaml'] as const;",
+    "export const RULE_FILES = [...['couli.yaml'], 'couli-fund.yaml'];",
+    "const A = ['couli.yaml'];\nconst B = ['couli-fund.yaml'];\nexport const RULE_FILES = A.concat(B);",
+    "export const RULE_FILES = ['couli.yaml'].concat(['couli-fund.yaml']);",
+    "export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml']\n  .concat(['couli-extra.yaml']);",
+  ]) {
+    expect(namesAt(file, file, kitOnly(impKit(decl))), decl).toBeNull();
+  }
+});
+
+it('[CT-06zzzzi] not expanded: a module outside the directory (../, ../../, a subdirectory, a package or a bare name), even when it holds the literal', () => {
+  const kit = impKit();
+  // Any path reads as the literal kit: only the specifier can refuse.
+  const everywhere: ImportedModules = { file: IMP_FILE, base: () => kit, head: () => kit };
+  const file = impFile();
+  expect(namesAt(file, file, everywhere)).toEqual(IMP_NAMES);
+  for (const spec of [
+    '../other/kit.ts',
+    '../../x.ts',
+    './sub/kit.ts',
+    '@couli/testing',
+    'kit.ts',
+  ]) {
+    const other = impFile('RULE_FILES', IMP_IMPORT.replace("'./kit.ts'", `'${spec}'`));
+    expect(other).not.toBe(file);
+    expect(namesAt(other, other, everywhere), spec).toBeNull();
+  }
+});
+
+it('[CT-06zzzzi] not expanded: a re-export (export … from, export *), an export list or an imported-then-exported name in the kit', () => {
+  const file = impFile();
+  const Y = 'test/spec/zzimp/y.ts';
+  const y = `${IMP_DECL}\n`;
+  const run = (decl: string) => {
+    const kit = impKit(decl);
+    return namesAt(file, file, modulesOf({ [IMP_KIT]: kit, [Y]: y }).modules);
+  };
+  expect(run(IMP_DECL)).toEqual(IMP_NAMES);
+  for (const decl of [
+    "export { RULE_FILES } from './y.ts';",
+    "export * from './y.ts';",
+    "const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'] as const;\nexport { RULE_FILES };",
+    "import { RULE_FILES } from './y.ts';\nexport { RULE_FILES };",
+  ]) {
+    expect(run(decl), decl).toBeNull();
+  }
+});
+
+it('[CT-06zzzzi] not expanded: a table declared with let or var', () => {
+  const file = impFile();
+  expect(namesAt(file, file, kitOnly())).toEqual(IMP_NAMES);
+  for (const decl of [
+    "export let RULE_FILES = ['couli.yaml', 'couli-fund.yaml'];",
+    "export var RULE_FILES = ['couli.yaml', 'couli-fund.yaml'];",
+  ]) {
+    expect(namesAt(file, file, kitOnly(impKit(decl))), decl).toBeNull();
+  }
+});
+
+it('[CT-06zzzzi] not expanded: an element that is no literal (a name, a template with ${…}, a call, a hole, a deeper array, an object field named in the title that is code)', () => {
+  const file = impFile();
+  expect(namesAt(file, file, kitOnly())).toEqual(IMP_NAMES);
+  for (const decl of [
+    "const ONE = 'couli.yaml';\nexport const RULE_FILES = [ONE, 'couli-fund.yaml'] as const;",
+    "const env = 'prod';\nexport const RULE_FILES = [`couli-${env}.yaml`, 'couli-fund.yaml'] as const;",
+    "export const RULE_FILES = ['couli.yaml', String('couli-fund.yaml')] as const;",
+    "export const RULE_FILES = ['couli.yaml', , 'couli-fund.yaml'];",
+    "export const RULE_FILES = [['couli.yaml', ['x']], ['couli-fund.yaml', ['y']]];",
+  ]) {
+    expect(namesAt(file, file, kitOnly(impKit(decl))), decl).toBeNull();
+  }
+  // Object rows: a literal field named by $label expands; the same field as code does not.
+  const labelled = impFile('RULE_FILES', IMP_IMPORT, '', '[AC-2] $label 的规则都有来源');
+  const objects = (label: string) =>
+    impKit(
+      `const L = 'b';\nexport const RULE_FILES = [{ label: 'a' }, { label: ${label} }] as const;`,
+    );
+  expect(namesAt(labelled, labelled, kitOnly(objects("'b'")))).toEqual([
+    '[AC-2] a 的规则都有来源',
+    '[AC-2] b 的规则都有来源',
+  ]);
+  expect(namesAt(labelled, labelled, kitOnly(objects('L')))).toBeNull();
+});
+
+it('[CT-06zzzzi] not expanded: an import under another name, a default import or a namespace import (kept to the ledger’s narrow case; the B2-09ze shape needs none)', () => {
+  const file = impFile();
+  const kit = impKit(IMP_DECL, "export default ['couli.yaml', 'couli-fund.yaml'];");
+  expect(namesAt(file, file, kitOnly(kit))).toEqual(IMP_NAMES);
+  const renamed = impFile(
+    'FILES',
+    "import { ENTRIES, RULE_FILES as FILES, rules, type Entry } from './kit.ts';",
+  );
+  expect(namesAt(renamed, renamed, kitOnly(kit))).toBeNull();
+  const byDefault = impFile(
+    'FILES',
+    "import FILES, { ENTRIES, rules, type Entry } from './kit.ts';",
+  );
+  expect(namesAt(byDefault, byDefault, kitOnly(kit))).toBeNull();
+  const namespace = impFile(
+    'kit.RULE_FILES',
+    "import * as kit from './kit.ts';\nimport { ENTRIES, rules, type Entry } from './kit.ts';",
+  );
+  expect(namesAt(namespace, namespace, kitOnly(kit))).toBeNull();
+});
+
+it('[CT-06zzzzi] not expanded: the imported name shadowed by a local of the same name around the block', () => {
+  const shadowed = (local: string): string =>
+    src(
+      IMP_IMPORT,
+      '',
+      "describe('d', () => {",
+      `  ${local}`,
+      `  it.each(RULE_FILES)('${IMP_TITLE}', (file: Entry | string) => {`,
+      '    expect(rules(String(file)).length).toBeGreaterThan(0);',
+      '  });',
+      '});',
+    );
+  const plain = shadowed('');
+  expect(namesAt(plain, plain, kitOnly(), 0)).toEqual(IMP_NAMES.map((n) => `d > ${n}`));
+  for (const local of [
+    "const RULE_FILES = ['local.yaml'];",
+    "const { RULE_FILES } = { RULE_FILES: ['local.yaml'] };",
+  ]) {
+    const file = shadowed(local);
+    expect(namesAt(file, file, kitOnly(), 0), local).toBeNull();
+  }
+});
+
+it('[CT-06zzzzi] not expanded: the array changed after its declaration (a push in the kit or in the rule-test file)', () => {
+  const file = impFile();
+  expect(namesAt(file, file, kitOnly())).toEqual(IMP_NAMES);
+  const push = "(RULE_FILES as unknown as string[]).push('couli-extra.yaml');";
+  expect(namesAt(file, file, kitOnly(impKit(IMP_DECL, push)))).toBeNull();
+  const pushed = impFile('RULE_FILES', IMP_IMPORT, push);
+  expect(namesAt(pushed, pushed, kitOnly())).toBeNull();
+});
+
+it('[CT-06zzzzi] not expanded: the module missing, unreadable as code, or without that export (no throw); missing at the base only, the block cannot count as unchanged and certain', () => {
+  const file = impFile();
+  expect(namesAt(file, file, kitOnly())).toEqual(IMP_NAMES);
+  // Missing on both sides, or at the head.
+  expect(namesAt(file, file, modulesOf({}).modules)).toBeNull();
+  expect(namesAt(file, file, modulesOf({ [IMP_KIT]: impKit() }, {}).modules)).toBeNull();
+  // Not tokenizable (an unterminated string), or exporting another name: no throw, no names.
+  const broken = `${impKit()}const s = 'open\n`;
+  expect(() => compareImported(file, file, kitOnly(broken))).not.toThrow();
+  expect(namesAt(file, file, kitOnly(broken))).toBeNull();
+  const unterminated = impKit("export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'");
+  expect(() => compareImported(file, file, kitOnly(unterminated))).not.toThrow();
+  expect(namesAt(file, file, kitOnly(unterminated))).toBeNull();
+  const other = impKit("export const RULE_FILE = ['couli.yaml', 'couli-fund.yaml'] as const;");
+  expect(namesAt(file, file, kitOnly(other))).toBeNull();
+  // Missing at the base only (a new kit): never an unchanged block with certain names.
+  const c = compareImported(file, file, modulesOf({}, { [IMP_KIT]: impKit() }).modules);
+  const block = c.whole ? undefined : c.blocks[1];
+  expect(block === undefined || block.changed || block.names === null).toBe(true);
+});
+
+it('[CT-06zzzzi] compareEachRows unchanged: an imported table still refuses ② (red_exempt_rows keeps not covering a table by name; imported tables there are out of scope)', () => {
+  const base = impFile();
+  const head = base.replace(IMP_IMPORT, `${IMP_IMPORT}\nconst EXTRA = 1;`);
+  expect(compareEachRows(base, head)).toEqual([
+    null,
+    { ok: false, reason: '② the base table is not an inline array of literal rows' },
+  ]);
+});

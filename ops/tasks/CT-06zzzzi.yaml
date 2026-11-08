@@ -1,0 +1,27 @@
+id: CT-06zzzzi
+repo: rebate-platform
+title: CT-06zzzzi：red-check 的 .each 展开认「从同目录 kit 导入、以字面量数组导出的常量」作表，全豁免文件能排出 expected 清单（FU-REDCHECK-IMPORTED-EACH，D10-840 (B) / D10-1046 ①）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-1046 ①，解 B2-09ze：test/spec/platform/alerting-eval/metrics.test.ts 的 it.each(RULE_FILES)，RULE_FILES 从 ./kit.ts 导入、
+#   kit 里是 export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'] as const；现有展开只认内联字面量数组，名字不确定，outsideOnlyFiles 排不掉该文件）。
+# 改法：tools/guard/lib/test-blocks.ts 计算 .each / .for 的确切名字时，表是标识符且同时满足：本文件 import 自同目录的相对模块（'./kit.ts' 一类、无 ../）、
+#   该模块以 export const NAME = [字面量…]（可带 as const）直接导出、读的是与本文件同一基线 / 头的那份内容——就按与内联字面量相同的规则展开；
+#   函数返回值、展开 / 拼接、跨目录导入、re-export、let / 非字面量元素、重名遮蔽，一律照旧展不开（names 为 null）。red-check 的 outsideOnlyFiles 与
+#   CT-06zzzk 的 .each 逐行比较随之受益；未声明豁免的测试照旧要红，豁免口径不变。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'tools/guard/lib/red-check.ts'
+  - 'tools/guard/lib/red-check.test.ts'
+  - 'tools/guard/lib/red-check-fixtures/**'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzi.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

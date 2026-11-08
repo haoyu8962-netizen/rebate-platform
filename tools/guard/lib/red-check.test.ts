@@ -7,6 +7,7 @@ import type { Change } from '../../lib/git.ts';
 import {
   type BaselineReader,
   type RenamedOnly,
+  type RuleTestBaseline,
   applyExpectedValues,
   applyRenames,
   browserCauseVerdict,
@@ -3581,4 +3582,186 @@ it('[CT-06zzzk] only some rows declared: a problem, and the undeclared row must 
   expect(
     modifiedOnlyFiles([EACH], reader({ [EACH]: EACH_BASE }, { [EACH]: EACH_HEAD }), one),
   ).toEqual([]);
+});
+
+// CT-06zzzzi (FU-REDCHECK-IMPORTED-EACH; orchestrator rulings D10-840 (B), D10-1046 ①): the
+// B2-09ze shape — alerting-eval/metrics.test.ts, listed in red_exempt_outside, whose only block
+// is `it.each(RULE_FILES)` with RULE_FILES imported from ./kit.ts as
+// `export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'] as const`, both rows declared by
+// their exact names. red-check reads the kit through the same BaselineReader (base / head).
+const ALERT = 'test/spec/platform/zzalert/metrics.test.ts';
+const ALERT_KIT = 'test/spec/platform/zzalert/kit.ts';
+const ALERT_SCOPE = ['test/spec/platform/zzalert/**'];
+const ALERT_BASE = readFileSync(join(FIXTURES, 'ct06zzzzi-metrics-base.test.ts.txt'), 'utf8');
+const ALERT_KIT_BASE = readFileSync(join(FIXTURES, 'ct06zzzzi-kit.ts.txt'), 'utf8');
+/** The B2-09ze change outside the tests: one more name in a top-level allowlist (head L5). */
+const ALERT_HEAD = ALERT_BASE.replace(
+  "'redis_memory_used_bytes'",
+  "'redis_memory_used_bytes', 'redis_errors_total'",
+);
+const ALERT_TITLE = '的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源';
+const alertName = (file: string): string => `[AC-B1-25b#8] ${file} ${ALERT_TITLE}`;
+const ALERT_TESTS = ['couli.yaml', 'couli-fund.yaml'].map(alertName);
+const ALERT_REASON = 'B2-09ze adds one name to the redis allowlist; both rows are unchanged';
+const ALERT_OUTSIDE = [{ file: ALERT, reason: ALERT_REASON }];
+const alertDeclared = (tests: string[] = ALERT_TESTS) =>
+  tests.map((test) => ({ file: ALERT, test, reason: REASON }));
+const alertRead = (
+  o: {
+    head?: string;
+    kitBase?: string | null;
+    kitHead?: string | null;
+    extra?: Record<string, string>;
+  } = {},
+): BaselineReader => {
+  const kitBase = o.kitBase === undefined ? ALERT_KIT_BASE : o.kitBase;
+  const kitHead = o.kitHead === undefined ? ALERT_KIT_BASE : o.kitHead;
+  return reader(
+    { [ALERT]: ALERT_BASE, ...(kitBase === null ? {} : { [ALERT_KIT]: kitBase }), ...o.extra },
+    {
+      [ALERT]: o.head ?? ALERT_HEAD,
+      ...(kitHead === null ? {} : { [ALERT_KIT]: kitHead }),
+      ...o.extra,
+    },
+  );
+};
+const alertBaselines = (
+  read: BaselineReader = alertRead(),
+  outside = ALERT_OUTSIDE,
+  changes: Change[] = [{ path: ALERT, status: 'M' }],
+) => ruleTestBaselines([ALERT], changes, ALERT_SCOPE, read, [], [], outside);
+/** Each block's [changed, names] of a baseline compared test by test, or why it is not. */
+const alertBlocks = (b: RuleTestBaseline | undefined) =>
+  b === undefined || b.kind === 'whole'
+    ? `whole: ${b?.reason ?? 'no baseline'}`
+    : b.blocks.map((x) => [x.changed, x.names]);
+const alertReport = (green: string[] = ALERT_TESTS, tests: string[] = ALERT_TESTS) =>
+  redReport(
+    ALERT,
+    tests.map((n) => (green.includes(n) ? [n, 'passed'] : [n, 'failed', 'AssertionError: x'])),
+  );
+
+it('[CT-06zzzzi] B2-09ze shape: listed, it.each(RULE_FILES) from ./kit.ts, every row declared by its exact name: left out of the expected list', () => {
+  const left = outsideOnlyFiles([ALERT], alertRead(), [], [], ALERT_OUTSIDE, alertDeclared());
+  expect(left).toEqual([{ file: ALERT, lines: 'L5', reason: ALERT_REASON, tests: 2 }]);
+  // The same comparison in ruleTestBaselines: one unchanged block, both rows named.
+  const b = alertBaselines().get(ALERT);
+  expect(b?.kind).toBe('support');
+  expect(alertBlocks(b)).toEqual([[false, ALERT_TESTS]]);
+  // The kit without `as const`, or changed elsewhere (a helper, another export): left out too.
+  const bare = ALERT_KIT_BASE.replace("'couli-fund.yaml'] as const", "'couli-fund.yaml']");
+  expect(bare).not.toBe(ALERT_KIT_BASE);
+  expect(
+    outsideOnlyFiles(
+      [ALERT],
+      alertRead({ kitBase: bare, kitHead: bare }),
+      [],
+      [],
+      ALERT_OUTSIDE,
+      alertDeclared(),
+    ),
+  ).toHaveLength(1);
+  const helper = `${ALERT_KIT_BASE}\nexport const EXTRA = 1;\n`.replace(
+    "'admin'",
+    "'admin', 'cron'",
+  );
+  expect(
+    outsideOnlyFiles(
+      [ALERT],
+      alertRead({ kitHead: helper }),
+      [],
+      [],
+      ALERT_OUTSIDE,
+      alertDeclared(),
+    ),
+  ).toHaveLength(1);
+  // Without the listing nothing is left out.
+  expect(outsideOnlyFiles([ALERT], alertRead(), [], [], [], alertDeclared())).toEqual([]);
+});
+
+it('[CT-06zzzzi] B2-09ze shape: a row not declared, an extra or a wrong name, the kit missing at the base or outside the directory: stays expected and judged as before', () => {
+  const left = (read: BaselineReader, declared = alertDeclared()) =>
+    outsideOnlyFiles([ALERT], read, [], [], ALERT_OUTSIDE, declared);
+  expect(left(alertRead())).toHaveLength(1);
+  // One row missing, one extra, a name as the title template (not the formatted one).
+  expect(left(alertRead(), alertDeclared(ALERT_TESTS.slice(0, 1)))).toEqual([]);
+  expect(left(alertRead(), alertDeclared([...ALERT_TESTS, alertName('couli-extra.yaml')]))).toEqual(
+    [],
+  );
+  expect(left(alertRead(), alertDeclared([ALERT_TESTS[0] as string, alertName('%s')]))).toEqual([]);
+  // The kit missing at the base (new at the head) or at the head.
+  expect(left(alertRead({ kitBase: null }))).toEqual([]);
+  expect(left(alertRead({ kitHead: null }))).toEqual([]);
+  // The table imported from another directory, though that module holds the same literal.
+  const SHARED = 'test/spec/platform/zzshared/kit.ts';
+  const across = (s: string) => s.replace("from './kit.ts'", "from '../zzshared/kit.ts'");
+  expect(across(ALERT_BASE)).not.toBe(ALERT_BASE);
+  const acrossRead = reader(
+    { [ALERT]: across(ALERT_BASE), [SHARED]: ALERT_KIT_BASE },
+    { [ALERT]: across(ALERT_HEAD), [SHARED]: ALERT_KIT_BASE },
+  );
+  expect(left(acrossRead)).toEqual([]);
+  // Judged as before: the undeclared row must be red; the declared one may pass.
+  const one = alertDeclared(ALERT_TESTS.slice(0, 1));
+  const green = checkRedReports([alertReport()], [ALERT], ROOT, alertBaselines(), one);
+  expect(green.problems.map((p) => p.test)).toEqual([ALERT_TESTS[1]]);
+  expect(
+    checkRedReports([alertReport(ALERT_TESTS.slice(0, 1))], [ALERT], ROOT, alertBaselines(), one)
+      .ok,
+  ).toBe(true);
+});
+
+it('[CT-06zzzzi] B2-09ze shape: the kit table has one more row at the head: the block counts as changed, the file stays expected and every row must be red', () => {
+  const grown = ALERT_KIT_BASE.replace(
+    "['couli.yaml', 'couli-fund.yaml']",
+    "['couli.yaml', 'couli-fund.yaml', 'couli-extra.yaml']",
+  );
+  expect(grown).not.toBe(ALERT_KIT_BASE);
+  const all = [...ALERT_TESTS, alertName('couli-extra.yaml')];
+  const read = alertRead({ kitHead: grown });
+  // Declared by the head's names or by the base's: not left out.
+  expect(outsideOnlyFiles([ALERT], read, [], [], ALERT_OUTSIDE, alertDeclared(all))).toEqual([]);
+  expect(outsideOnlyFiles([ALERT], read, [], [], ALERT_OUTSIDE, alertDeclared())).toEqual([]);
+  // The block is changed (named from the head's table).
+  const changes: Change[] = [
+    { path: ALERT, status: 'M' },
+    { path: ALERT_KIT, status: 'M' },
+  ];
+  const baselines = alertBaselines(read, ALERT_OUTSIDE, changes);
+  expect(alertBlocks(baselines.get(ALERT))).toEqual([[true, all]]);
+  // Green rows of a changed block are problems, declared or not; red, the file passes.
+  const green = checkRedReports(
+    [alertReport(all, all)],
+    [ALERT],
+    ROOT,
+    baselines,
+    alertDeclared(all),
+  );
+  expect(green.ok).toBe(false);
+  expect(green.problems.map((p) => p.test)).toEqual(all);
+  expect(
+    checkRedReports([alertReport([], all)], [ALERT], ROOT, baselines, alertDeclared(all)).ok,
+  ).toBe(true);
+});
+
+it('[CT-06zzzzi] B2-09ze shape without declarations: held to the red rule exactly as before (listed but nothing declared, or declared but not listed)', () => {
+  // Listed, nothing declared: stays expected; every green row is a problem, all red passes.
+  expect(outsideOnlyFiles([ALERT], alertRead(), [], [], ALERT_OUTSIDE, [])).toEqual([]);
+  const listed = checkRedReports([alertReport()], [ALERT], ROOT, alertBaselines(), []);
+  expect(listed.problems.map((p) => p.test)).toEqual(ALERT_TESTS);
+  expect(checkRedReports([alertReport([])], [ALERT], ROOT, alertBaselines(), []).ok).toBe(true);
+  // Declared, not listed: stays expected; the declarations do not apply (code outside changed).
+  expect(outsideOnlyFiles([ALERT], alertRead(), [], [], [], alertDeclared())).toEqual([]);
+  const notListed = checkRedReports(
+    [alertReport()],
+    [ALERT],
+    ROOT,
+    alertBaselines(alertRead(), []),
+    alertDeclared(),
+  );
+  expect(notListed.problems.map((p) => p.test)).toEqual(ALERT_TESTS);
+  // Only the declarations and the listing together leave it out.
+  expect(
+    outsideOnlyFiles([ALERT], alertRead(), [], [], ALERT_OUTSIDE, alertDeclared()),
+  ).toHaveLength(1);
 });

@@ -1,0 +1,16 @@
+import { expect } from 'vitest';
+import { asset, list, record } from '../../infra/staging/kit.ts';
+
+// Read repository assets only; never open env files, spawn a command or start a listener.
+export const ENTRIES = ['api', 'worker', 'admin'] as const;
+export const RULE_FILES = ['couli.yaml', 'couli-fund.yaml'] as const;
+export type Entry = (typeof ENTRIES)[number];
+
+export function scrapeJobs(): Record<string, unknown>[] {
+  return list(record(asset('infra/monitoring/scrape/couli.yml'))['scrape_configs']).map(record);
+}
+
+export function rules(file: string): Record<string, unknown>[] {
+  expect(file).toMatch(/\.yaml$/);
+  return list(record(asset(`infra/monitoring/vmalert/rules/${file}`))['groups']).map(record);
+}
