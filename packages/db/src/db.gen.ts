@@ -1121,6 +1121,7 @@ export interface Orders {
   received_synced_at: Timestamp | null;
   refunded_quantity: number | null;
   refunded_quantity_at_credit: number | null;
+  refunded_quantity_r9_baseline: number | null;
   relation_id: string | null;
   rights_pending: Generated<boolean>;
   row_version: Generated<number>;

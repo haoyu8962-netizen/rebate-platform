@@ -1,7 +1,7 @@
 // B2-04s: the rows the clawback reads and writes itself, all on the caller's transaction (the
 // order_key advisory lock is already held). settlement owns the rebate columns of orders
-// (rebate_status, booked pair, reason, diff_reason_code, rights_pending, row_version / updated_at;
-// BR-FUND-01), order_rights (written only through settlement, BR-FUND-01), beneficiary_credits
+// (rebate_status, booked pair, reason, diff_reason_code, rights_pending,
+// refunded_quantity_r9_baseline, row_version / updated_at; BR-FUND-01), order_rights (written only through settlement, BR-FUND-01), beneficiary_credits
 // (BR-FUND-04 ⑫) and settle_adjustments (BR-FUND-09 ②).
 import type { OrderReasonSub } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
@@ -248,7 +248,10 @@ export interface ClawbackCas {
   readonly at: Date;
 }
 
-/** R8 / R9 in one statement: rebate_status and the booked pair together (BR-FUND-08). */
+/**
+ * R8 / R9 / R10 in one statement: rebate_status and the booked pair together (BR-FUND-08), plus
+ * B2-04zzf (D10-870): the R9 refund baseline moves to the locked row's own refunded_quantity.
+ */
 export async function casClawbackOrder(
   trx: Transaction<DB>,
   key: OrderCasKey,
@@ -267,6 +270,8 @@ export async function casClawbackOrder(
       ...(cas.commission_version === undefined
         ? {}
         : { commission_version: cas.commission_version.to }),
+      // B2-04zzf（D10-870）：本次资金处置所针对的已退件数，取同一行当时的 refunded_quantity 列本身。
+      refunded_quantity_r9_baseline: (eb) => eb.ref('refunded_quantity'),
       row_version: key.row_version + 1,
       updated_at: cas.at,
     })
@@ -278,6 +283,33 @@ export async function casClawbackOrder(
     .$if(cas.commission_version !== undefined, (qb) =>
       qb.where('commission_version', '=', cas.commission_version?.from ?? -1),
     )
+    .executeTakeFirst();
+  return (result.numUpdatedRows ?? 0n) === 1n;
+}
+
+/**
+ * B2-04zzf (D10-870): the R9 refund baseline alone, for the exits that judged a refund increase but
+ * wrote no voucher (R9 positive skip, no change; jd switch off). Same transaction as the sync, CAS on
+ * (rebate_status CREDITED, row_version); the value is the locked row's own refunded_quantity.
+ */
+export async function casRefundBaseline(
+  trx: Transaction<DB>,
+  key: OrderCasKey,
+  at: Date,
+): Promise<boolean> {
+  const result = await trx
+    .withSchema('app')
+    .updateTable('orders')
+    .set({
+      refunded_quantity_r9_baseline: (eb) => eb.ref('refunded_quantity'),
+      row_version: key.row_version + 1,
+      updated_at: at,
+    })
+    .where('app_id', '=', key.app_id)
+    .where('order_id', '=', key.order_id)
+    .where('attr_at', '=', key.attr_at)
+    .where('rebate_status', '=', key.rebate_status)
+    .where('row_version', '=', key.row_version)
     .executeTakeFirst();
   return (result.numUpdatedRows ?? 0n) === 1n;
 }

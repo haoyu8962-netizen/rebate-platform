@@ -98,8 +98,15 @@
 // platform jd whose effective commission goes from > 0 to 0 (BR-FUND-08, 口径待 规划/09): R8 full
 // clawback as for any platform, plus one open recon diff naming the order_key for manual review
 // (编排裁定 D10-313: type union_mismatch, resolution.reason_code = 'COMMISSION_ZERO').
-// 待编排裁定 (implementation): a refunded_quantity increase is read as orders.refunded_quantity >
-// COALESCE(refunded_quantity_at_credit, 0) under the lock; R9b writes no rebate history row.
+// B2-04zzf (D10-870, replaces the B2-04s reading): a refunded_quantity increase is read under the
+// lock as orders.refunded_quantity > COALESCE(refunded_quantity_r9_baseline,
+// refunded_quantity_at_credit, 0). The baseline is the refunded_quantity of the last funds decision
+// on the refund count; settlement clawback is its only writer: every casClawbackOrder (R8 / R9 /
+// R10) moves it in the same statement, and when this sync judged an increase but wrote no voucher
+// (R9 positive skip, no change, jd switch off → whatever route followed) one baseline-only CAS on
+// the sync transaction moves it. Waiting for the union commission (BR-FUND-08 ③) does not move it,
+// so the next settlement record still goes to R9 and closes the pending row. refunded_quantity_at_credit
+// stays the credit-time snapshot (growth invite reward, BR-TEXT-03). R9b writes no rebate history row.
 // Amounts only through @couli/money; time only from the injected Clock.
 import { randomUUID } from 'node:crypto';
 import type { DB } from '@couli/db';
@@ -166,6 +173,7 @@ import {
 import { defaultReasonSubMaps } from '../rebate/infra/reason-sub-table.ts';
 import {
   casClawbackOrder,
+  casRefundBaseline,
   casRightsPending,
   closeObligation,
   computeRightsPending,
@@ -1427,6 +1435,34 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
       return { outcome: 'skipped', reason: 'not_reverse' };
     }
 
+    // B2-04zzf (D10-870): an increase over the baseline that this sync answered without a voucher
+    // (positive skip, no change, jd alert_only, R9b, …) moves the baseline alone, on this same
+    // transaction, so a rollback downstream takes it back with the sync. A clawback / R10 write moved
+    // it in its own CAS; waiting for the union commission leaves it.
+    const result = await routeSync(trx, change, order, key);
+    if (refundQuantityIncreased(order) && baselineOnlyAfter(result)) {
+      const fresh = await readRebateOrder(trx, { appId, orderId, attrAt: order.attr_at });
+      if (fresh === undefined) throw new Error('settlement clawback: order not found for app');
+      const ok = await casRefundBaseline(
+        trx,
+        { ...fresh, rebate_status: FROM_STATUS },
+        clock.now(),
+      );
+      if (!ok) throw new Error('settlement clawback: refund baseline CAS matched no row');
+    }
+    return result;
+  }
+
+  /** onUpdated after the status signals: rights answer, R9 / R10 / R9b (lock held, CREDITED). */
+  async function routeSync(
+    trx: Transaction<DB>,
+    change: OrderUpdateChange,
+    order: OrderRow,
+    key: string,
+  ): Promise<ClawbackResult> {
+    const { app_id: appId, order_id: orderId } = order;
+    const base = { appId, orderId, newCommissionFen: null, rightsDeductFen: null } as const;
+
     // B2-04lb (D10-474 ②): a new settlement record answering a WAIT_COMMISSION rights record.
     // B2-04zp (BR-FUND-09): only the record that decides the amount answers it. A later API record
     // beside a STATEMENT leaves orders.settle_commission_fen where it was: the union's new commission
@@ -1452,8 +1488,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     // 关时不作为 R9 触发、不动钱，只写告警，其余判定照常（如同未增加）。其他平台照旧。
     const refundRoute = refundQuantityRoute(
       order,
-      order.platform === 'jd' &&
-        (order.refunded_quantity ?? 0) > (order.refunded_quantity_at_credit ?? 0)
+      order.platform === 'jd' && refundQuantityIncreased(order)
         ? jdRefundR9Enabled(await deps.config.get(order.app_id, JD_REFUND_R9_SWITCH))
         : false,
     );
@@ -1467,8 +1502,9 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
           platform: order.platform,
           refunded_quantity: order.refunded_quantity,
           refunded_quantity_at_credit: order.refunded_quantity_at_credit,
+          refunded_quantity_r9_baseline: order.refunded_quantity_r9_baseline,
         },
-        'jd refunded quantity above the credit baseline; R9 switch off, no clawback',
+        'jd refunded quantity above the R9 baseline; R9 switch off, no clawback',
       );
     }
     const refundIncreased = refundRoute === 'r9';
@@ -1495,12 +1531,19 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
           return { outcome: 'skipped', reason: 'not_reverse' };
         }
       }
-      return apply(trx, {
+      const result = await apply(trx, {
         ...base,
         cause: 'PARTIAL_REFUND',
         ref: { kind: 'commission' },
         newCommissionFen: newSettleFen ?? (settled ? null : change.est_after),
       });
+      // B2-04zzf（money r1 S2，编排 D10-918 ②）：联盟的新结算记录到了、R9 结果无变化时，等联盟佣金这一状态
+      // 已被回应：同一事务按 R9 扣回出口的口径关闭（WAIT_COMMISSION 维权、rights_pending、
+      // CLAWBACK_NO_COMMISSION 待处理），基线由 onUpdated 照旧推进。没有新结算记录的无变化不关。
+      if (closesWaitOnNoChange(result, newSeq)) {
+        await closeAnsweredRights(trx, { kind: 'commission' }, order, clock.now());
+      }
+      return result;
     }
     // R10 (BR-FUND-09): no refund increase, no rights record, a new settlement record. An estimate
     // changed by the same sync is only archived by orders: no R9b diff.
@@ -1527,6 +1570,45 @@ export interface RefundQuantityFacts {
   readonly platform: string;
   readonly refunded_quantity: number | null;
   readonly refunded_quantity_at_credit: number | null;
+  /** B2-04zzf（D10-870）：最近一次对已退件数作出资金处置时的已退件数；缺失或空时回退到 at_credit。 */
+  readonly refunded_quantity_r9_baseline?: number | null;
+}
+
+/** B2-04zzf（D10-870）：「已退件数增加」的比较基准 = COALESCE(r9_baseline, at_credit, 0)。 */
+export function refundQuantityBaseline(order: Omit<RefundQuantityFacts, 'platform'>): number {
+  return order.refunded_quantity_r9_baseline ?? order.refunded_quantity_at_credit ?? 0;
+}
+
+/** B2-04zzf（D10-870）：(refunded_quantity ?? 0) > 基准。 */
+export function refundQuantityIncreased(order: Omit<RefundQuantityFacts, 'platform'>): boolean {
+  return (order.refunded_quantity ?? 0) > refundQuantityBaseline(order);
+}
+
+/**
+ * B2-04zzf（money r1 S2，编排 D10-918 ②）：R9 判定一路的结果是无变化，且本次同步带来了决定金额的新结算记录
+ * （newSeq 非空）时，关闭等联盟佣金的待处理（同 R9 扣回出口的 closeAnsweredRights）；没有新结算记录的无变化
+ * （如重放）不关，其他结果各自处理。
+ */
+export function closesWaitOnNoChange(result: ClawbackResult, newSeq: number | null): boolean {
+  return result.outcome === 'no_change' && newSeq !== null;
+}
+
+/**
+ * B2-04zzf（D10-870）：本次同步判出已退件数增加时，按结果决定是否另写一条只推基线的 CAS。扣回（R8 / R9）
+ * 与 R10 已在自己的 casClawbackOrder 里推进（false）；等联盟佣金（BR-FUND-08 ③）不推进（false），下一条
+ * 新结算记录仍走 R9；其余不写凭证的出口（R9 正差跳过、无变化、京东开关关后的 R9b / 跳过）只推基线（true）。
+ */
+export function baselineOnlyAfter(result: ClawbackResult): boolean {
+  switch (result.outcome) {
+    case 'no_change':
+    case 'skipped':
+    case 'estimate_archived':
+      return true;
+    case 'clawed_back':
+    case 'settle_adjusted':
+    case 'wait_commission':
+      return false;
+  }
 }
 
 /**
@@ -1536,14 +1618,14 @@ export interface RefundQuantityFacts {
 export type RefundQuantityRoute = 'r9' | 'alert_only' | 'none';
 
 /**
- * B1-08zi（D10-814 ⑥）：增加 = (refunded_quantity ?? 0) > (refunded_quantity_at_credit ?? 0)。只有 platform
+ * B1-08zi（D10-814 ⑥）：增加 = refundQuantityIncreased（B2-04zzf 起比 COALESCE(基线, at_credit, 0)）。只有 platform
  * jd 挂开关 orders.jd.refunded_quantity_r9_enabled：开 → r9，关 → alert_only；其他平台的增加照旧 r9。
  */
 export function refundQuantityRoute(
   order: RefundQuantityFacts,
   jdR9Enabled: boolean,
 ): RefundQuantityRoute {
-  if ((order.refunded_quantity ?? 0) <= (order.refunded_quantity_at_credit ?? 0)) return 'none';
+  if (!refundQuantityIncreased(order)) return 'none';
   if (order.platform !== 'jd') return 'r9';
   return jdR9Enabled ? 'r9' : 'alert_only';
 }

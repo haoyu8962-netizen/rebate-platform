@@ -1,0 +1,110 @@
+{
+  "red_tests": [
+    "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#2] 已退 0 → 1 且新结算 600：R9 按 600 扣回 200 / 200，同一次写库把基线推到 1，at_credit 仍为 0；邀请奖励仍比 at_credit（已退 1 > 0 → 作废）",
+    "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#3] R9（已退 1、600）之后新结算 500、已退件数不变：走 R10 SETTLE_ADJUST（ADJ:3 各扣 50），不再记 CLAWBACK / PART_REFUND，order.clawed_back 仍只有 R9 那一条，基线仍为 1",
+    "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#3b] R9（已退 1、600）之后两次只有内容变化的同步（无新结算记录、已退件数不变）：不扣、不等联盟佣金，不开 CLAWBACK_NO_COMMISSION 待处理、不告警，钱与历史都不变",
+    "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#4] R9（已退 1、600）之后再退一件（1 → 2）且新结算 400：比基线 1 仍是增加 → 再走 R9 按 400 各扣 100（新的 C{版本} 键），基线推到 2，at_credit 仍为 0",
+    "test/spec/settlement/refund-r9-baseline/atomic.int.test.ts > [AC-B2-04zzf#10] 已退 0 → 1 且新结算 600 的同步事务里 R9 已推基线到 1，下游失败回滚后基线仍为空、钱与已退件数都不变；重投同一次同步 R9 扣回 170 / 34 / 17，基线 1",
+    "test/spec/settlement/refund-r9-baseline/atomic.int.test.ts > [AC-B2-04zzf#10] 两个 app 各有一笔已入账订单：只同步 A 的已退 0 → 1 且新结算 600，A 走 R9、基线 1；B 的订单基线仍为空、钱与件数不变",
+    "test/spec/settlement/refund-r9-baseline/exits.int.test.ts > [AC-B2-04zzf#5] 已退 0 → 1 且新结算 1200（正差）：R9 跳过只告警、钱不动，但基线推到 1；随后新结算 800、已退件数不变 → R10 ADJ:3 各扣 100，没有 CLAWBACK",
+    "test/spec/settlement/refund-r9-baseline/exits.int.test.ts > [AC-B2-04zzf#6] 已退 0 → 1 且同额新结算记录（1000、结算时间变）：R9 无变化、钱不动，但基线推到 1；随后新结算 800、已退件数不变 → R10 ADJ:3 各扣 100，没有 CLAWBACK",
+    "test/spec/settlement/refund-r9-baseline/exits.int.test.ts > [AC-B2-04zzf#7] 已退 0 → 1 而没有新结算记录：等联盟佣金（CLAWBACK_NO_COMMISSION 待处理、告警），基线不推仍为空；随后新结算 600 → 仍按已退件数增加走 R9 各扣 200，此时基线推到 1、待处理关闭",
+    "test/spec/settlement/refund-r9-baseline/jd-switch.int.test.ts > [AC-B2-04zzf#9] 京东 CREDITED（入账已退 1）、开关未配置、同步已退 1 → 2：只告警不扣，基线推到 2；开关打开后再同步（已退件数不变）不按 R9 补扣、不等联盟佣金、不开待处理",
+    "test/spec/settlement/refund-r9-baseline/jd-switch.int.test.ts > [AC-B2-04zzf#9] 京东 CREDITED（入账已退 1）、开关false、同步已退 1 → 2：只告警不扣，基线推到 2；开关打开后再同步（已退件数不变）不按 R9 补扣、不等联盟佣金、不开待处理",
+    "test/spec/settlement/refund-r9-baseline/jd-switch.int.test.ts > [AC-B2-04zzf#9] 京东 CREDITED（入账已退 1）、开关 false、同一次同步已退 1 → 2 且新结算 600：已退件数不触发 R9，照常 R10 SETTLE_ADJUST，基线推到 2；开关打开后再同步（已退件数不变）不按 R9 补扣",
+    "test/spec/settlement/refund-r9-baseline/pending-close.int.test.ts > [AC-B2-04zzf#11] 已退 0 → 1 而无新结算记录 → 等联盟佣金、开 CLAWBACK_NO_COMMISSION 待处理；随后同额新结算记录（1000、结算时间变）→ R9 无变化、钱不动，同一次同步关闭待处理、基线推到 1；之后新结算 800 → R10 ADJ:3 各扣 100，不再有待处理",
+    "test/spec/settlement/refund-r9-baseline/pending-close.int.test.ts > [AC-B2-04zzf#12] 等佣金的维权 + 同一次同步已退 0 → 1 且同额新结算记录：无变化，维权按现有口径关闭（SUCCEEDED、rights_pending 解除、待处理关闭）、基线推到 1，之后无内容变化的同步不走 R9；再退一件（1 → 2）而无新结算 → 等联盟佣金、开待处理、基线仍 1；同额新结算记录来时 R9 无变化 → 待处理关闭、基线推到 2，钱始终不动",
+    "test/spec/settlement/refund-r9-baseline/schema.int.test.ts > [AC-B2-04zzf#1] orders.refunded_quantity_r9_baseline 是可空 integer、无默认值；入账时已退 1 件只定格 at_credit = 1，基线仍为空，之后不触发扣回的同步也不写它",
+    "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8a] 已退 0 → 2（全退）且新结算 0：R8 整单扣回（CLAWED_BACK，本人与平台各扣 500），同一次写库基线推到 2，at_credit 仍为 0",
+    "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8b] 等佣金的维权 + 同一次同步已退 0 → 1 且新结算 600：R10 回应维权（不扣 CLAWBACK），基线推到 1；之后一次没有新内容的同步：不按 R9 再等联盟佣金，不开待处理、钱不动",
+    "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8c] 入账时已退 1（at_credit 1）、新结算 800 且已退件数不变：R10 ADJ:2 各扣 100，基线推到 1；再退一件（1 → 2）且新结算 600 → R9 各扣 100，基线推到 2"
+  ],
+  "risk_note": "RV2 (settlement clawback + new orders column). FU-R9-REFUND-BASELINE (D10-814 ⑤ / D10-868 ② / D10-870 / D10-918): the clawback sync compared refunded_quantity with the credit-time refunded_quantity_at_credit, so after one return every later changed sync went to R9 again (a later negative settlement was posted as CLAWBACK / PART_REFUND with order.clawed_back instead of R10 SETTLE_ADJUST, and a content-only change reopened CLAWBACK_NO_COMMISSION pending rows). New nullable column orders.refunded_quantity_r9_baseline (no backfill; not live, staging rows take the old route once — migration comment); the increase now compares with COALESCE(baseline, at_credit, 0). settlement clawback is the only writer: casClawbackOrder (R8 / R9 / R10) advances it in the same statement; the positive-skip / no_change exits advance it with casRefundBaseline on the sync's own transaction (row_version CAS, CREDITED); waiting for the union commission does not advance it; the JD switch off (alert_only) still advances it. D10-918 ②: an R9 no_change that brought a new settlement record also closes the order's open CLAWBACK_NO_COMMISSION pending row on the same transaction (basis: 06_FUND BR-FUND-01 detail 「已处置退件数」, D10-870 — 「…下一条新结算记录仍按 R9 处理并关闭那张待处理」; an R9 with zero recomputed difference is still handled as R9, D10-919). growth invite reward and BR-TEXT-03 keep comparing at_credit. Migration number = main max + 1 at landing. No frozen test changed. Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 pass with one S2 (an equal new settlement left the CLAWBACK_NO_COMMISSION pending row open) fixed in this task per D10-918 ② with rule tests attempt 2 (#11 #12) and implementation r2; money r2 pass, 0 findings (couli-runs/B2-04zzf/review-money-r1.saved.json, review-money-r2.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude through claude-run.sh (attempts 1–2; written before the ledger reached main, with a temporary trusted root = main + the orchestrator-checked ledger, as allowed in D10-870 / 23:21; hand-assembled brief, brief.ts over 24KB). Gate spec-test reviews by a fresh independent Claude (D10-848): r1 pass (S2: the baseline-only write must be on the sync transaction — implemented), r2 after attempt 2 (couli-runs/B2-04zzf/review-spec-r1.json, review-spec-r2.json). Red: 16 → 18 rule tests in 7 files red for the right reason; on the implementation the local container ran all 18 green. Both gate reviews carried the same S2 (no rule test fails if the baseline-only write or the pending close went through the pool instead of the sync transaction); the implementation writes both on the sync transaction (casRefundBaseline takes the sync trx; checked by Codex money r1 / r2)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "38dfc6409f3009234bd1eca770df79f28b560528",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "task": "B2-04zzf",
+  "spec_commit": "9824dcdeae72f8d1fbef7495842e44f8b7e2eab1",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9824dcdeae72f8d1fbef7495842e44f8b7e2eab1",
+      "tree": "5f8ec5f25e47e0cfe4fbbc877076a0201b127d99",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T22:34:16Z",
+      "finished_at": "2026-11-07T22:34:35Z",
+      "red_tests": [
+        "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#2] 已退 0 → 1 且新结算 600：R9 按 600 扣回 200 / 200，同一次写库把基线推到 1，at_credit 仍为 0；邀请奖励仍比 at_credit（已退 1 > 0 → 作废）",
+        "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#3] R9（已退 1、600）之后新结算 500、已退件数不变：走 R10 SETTLE_ADJUST（ADJ:3 各扣 50），不再记 CLAWBACK / PART_REFUND，order.clawed_back 仍只有 R9 那一条，基线仍为 1",
+        "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#3b] R9（已退 1、600）之后两次只有内容变化的同步（无新结算记录、已退件数不变）：不扣、不等联盟佣金，不开 CLAWBACK_NO_COMMISSION 待处理、不告警，钱与历史都不变",
+        "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts > [AC-B2-04zzf#4] R9（已退 1、600）之后再退一件（1 → 2）且新结算 400：比基线 1 仍是增加 → 再走 R9 按 400 各扣 100（新的 C{版本} 键），基线推到 2，at_credit 仍为 0",
+        "test/spec/settlement/refund-r9-baseline/atomic.int.test.ts > [AC-B2-04zzf#10] 已退 0 → 1 且新结算 600 的同步事务里 R9 已推基线到 1，下游失败回滚后基线仍为空、钱与已退件数都不变；重投同一次同步 R9 扣回 170 / 34 / 17，基线 1",
+        "test/spec/settlement/refund-r9-baseline/atomic.int.test.ts > [AC-B2-04zzf#10] 两个 app 各有一笔已入账订单：只同步 A 的已退 0 → 1 且新结算 600，A 走 R9、基线 1；B 的订单基线仍为空、钱与件数不变",
+        "test/spec/settlement/refund-r9-baseline/exits.int.test.ts > [AC-B2-04zzf#5] 已退 0 → 1 且新结算 1200（正差）：R9 跳过只告警、钱不动，但基线推到 1；随后新结算 800、已退件数不变 → R10 ADJ:3 各扣 100，没有 CLAWBACK",
+        "test/spec/settlement/refund-r9-baseline/exits.int.test.ts > [AC-B2-04zzf#6] 已退 0 → 1 且同额新结算记录（1000、结算时间变）：R9 无变化、钱不动，但基线推到 1；随后新结算 800、已退件数不变 → R10 ADJ:3 各扣 100，没有 CLAWBACK",
+        "test/spec/settlement/refund-r9-baseline/exits.int.test.ts > [AC-B2-04zzf#7] 已退 0 → 1 而没有新结算记录：等联盟佣金（CLAWBACK_NO_COMMISSION 待处理、告警），基线不推仍为空；随后新结算 600 → 仍按已退件数增加走 R9 各扣 200，此时基线推到 1、待处理关闭",
+        "test/spec/settlement/refund-r9-baseline/jd-switch.int.test.ts > [AC-B2-04zzf#9] 京东 CREDITED（入账已退 1）、开关未配置、同步已退 1 → 2：只告警不扣，基线推到 2；开关打开后再同步（已退件数不变）不按 R9 补扣、不等联盟佣金、不开待处理",
+        "test/spec/settlement/refund-r9-baseline/jd-switch.int.test.ts > [AC-B2-04zzf#9] 京东 CREDITED（入账已退 1）、开关false、同步已退 1 → 2：只告警不扣，基线推到 2；开关打开后再同步（已退件数不变）不按 R9 补扣、不等联盟佣金、不开待处理",
+        "test/spec/settlement/refund-r9-baseline/jd-switch.int.test.ts > [AC-B2-04zzf#9] 京东 CREDITED（入账已退 1）、开关 false、同一次同步已退 1 → 2 且新结算 600：已退件数不触发 R9，照常 R10 SETTLE_ADJUST，基线推到 2；开关打开后再同步（已退件数不变）不按 R9 补扣",
+        "test/spec/settlement/refund-r9-baseline/pending-close.int.test.ts > [AC-B2-04zzf#11] 已退 0 → 1 而无新结算记录 → 等联盟佣金、开 CLAWBACK_NO_COMMISSION 待处理；随后同额新结算记录（1000、结算时间变）→ R9 无变化、钱不动，同一次同步关闭待处理、基线推到 1；之后新结算 800 → R10 ADJ:3 各扣 100，不再有待处理",
+        "test/spec/settlement/refund-r9-baseline/pending-close.int.test.ts > [AC-B2-04zzf#12] 等佣金的维权 + 同一次同步已退 0 → 1 且同额新结算记录：无变化，维权按现有口径关闭（SUCCEEDED、rights_pending 解除、待处理关闭）、基线推到 1，之后无内容变化的同步不走 R9；再退一件（1 → 2）而无新结算 → 等联盟佣金、开待处理、基线仍 1；同额新结算记录来时 R9 无变化 → 待处理关闭、基线推到 2，钱始终不动",
+        "test/spec/settlement/refund-r9-baseline/schema.int.test.ts > [AC-B2-04zzf#1] orders.refunded_quantity_r9_baseline 是可空 integer、无默认值；入账时已退 1 件只定格 at_credit = 1，基线仍为空，之后不触发扣回的同步也不写它",
+        "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8a] 已退 0 → 2（全退）且新结算 0：R8 整单扣回（CLAWED_BACK，本人与平台各扣 500），同一次写库基线推到 2，at_credit 仍为 0",
+        "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8b] 等佣金的维权 + 同一次同步已退 0 → 1 且新结算 600：R10 回应维权（不扣 CLAWBACK），基线推到 1；之后一次没有新内容的同步：不按 R9 再等联盟佣金，不开待处理、钱不动",
+        "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8c] 入账时已退 1（at_credit 1）、新结算 800 且已退件数不变：R10 ADJ:2 各扣 100，基线推到 1；再退一件（1 → 2）且新结算 600 → R9 各扣 100，基线推到 2"
+      ],
+      "expected": [
+        "test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts",
+        "test/spec/settlement/refund-r9-baseline/atomic.int.test.ts",
+        "test/spec/settlement/refund-r9-baseline/exits.int.test.ts",
+        "test/spec/settlement/refund-r9-baseline/jd-switch.int.test.ts",
+        "test/spec/settlement/refund-r9-baseline/pending-close.int.test.ts",
+        "test/spec/settlement/refund-r9-baseline/schema.int.test.ts",
+        "test/spec/settlement/refund-r9-baseline/writers.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "6fd9d13dd44b422efc6112e430bf6557dab9c96a726ae10e88e5e4e3c0e6207d"
+        }
+      ]
+    }
+  ]
+}

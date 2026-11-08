@@ -85,6 +85,7 @@ export function order(patch: Partial<Selectable<DB['orders']>> = {}): Selectable
     received_synced_at: null,
     refunded_quantity: null,
     refunded_quantity_at_credit: null,
+    refunded_quantity_r9_baseline: null,
     relation_id: null,
     scene_basis: null,
     service_fee_fen: null,
