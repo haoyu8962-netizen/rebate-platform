@@ -1,0 +1,34 @@
+id: B3-08q
+repo: rebate-platform
+title: Agent 生产 trace 落库：装配 RunTraceSink，用 createPgAgentTraceWriter 把模型、降级、确定性、意图各路径的卡片（agent_cards）、工具调用（agent_tool_calls）、卡片来源与转链登记异步写入 PG，不阻塞流；接通后按 card_id 问订单可在生产解析
+type: impl
+# 2026-11-08 agent 线入账（编排 D10-960 空档派工；清单 couli-runs/AGENT-lane/open-followups-20261108.md 第 11 条，最高优先、无外部前提）。
+# 现状：store/results/index.ts:382 createPgAgentTraceWriter 只有定义无调用方；core/ports.ts RunTraceSink 生产未装配；stream/mount/orders.ts:59 createOrderCardRefs 读 agent_cards 解析 card_id，生产无人写 → 启用模型后按卡片问订单一律 invalid；降级 / 确定性路径的 onTrace 与意图 trace 未接（assembly.ts:220、:363 的 TODO 写 blocked on followups 第 31 条）。
+# 做法：生产流装配为每个 run 提供 RunTraceSink（PG 写者），模型路径、降级路径（DegradedPathDeps.onTrace）、确定性路径（onTrace）、意图端口产生的卡片 / 工具调用 / card_sources / link_registrations 都经它落库；写入异步、不阻塞 SSE（BR-AI-19「每个 run 都必须异步落 PG，不阻塞 SSE」），失败只记 warn、不影响 run 结局；按唯一键幂等（重复投递不重复写）；工具参数落库前按 BR-AI-14 脱敏（若写者已做则只核对）；app 只取服务端上下文（BR-AI-03）。删两处陈旧 TODO。
+# 不在本单：BR-AI-19 的本地重试队列（最多 24 小时）与 agent.trace_lost 告警、留存清理（FU-AGENT-TRACE-PURGE，BR-ID-30 ①）——另开单；会话 / 消息 / 运行表的既有写入不改。
+# 风险 RV2（app.module.ts 在白名单外）。新鲜独立 Claude 写规则测试，Opus 实现，Codex 评审（额度不足时新鲜独立 Claude）。
+refs: [BR-AI-19, BR-AI-14]
+refs_hash:
+  BR-AI-19: f2aa4c7770c8
+  BR-AI-14: e8ed6052e898
+deps: [B3-08m]
+paths:
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/agent/agent.module.ts'
+  - 'apps/api/src/modules/agent/index.ts'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/stream/run/**'
+  - 'apps/api/src/modules/agent/store/results/**'
+  - 'apps/api/src/modules/agent/orchestrator/core/**'
+  - 'apps/api/src/modules/agent/orchestrator/degraded/**'
+  - 'apps/api/src/modules/agent/orchestrator/deterministic/**'
+  - 'apps/api/src/modules/agent/orchestrator/intents/**'
+test_paths:
+  - 'test/spec/agent/trace-persist/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/trace-persist/**'
+status: todo
+pr: null
