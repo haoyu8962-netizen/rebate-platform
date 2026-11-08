@@ -1335,6 +1335,7 @@ export class IdentityModule {
             CLOCK,
             ROOT_LOGGER,
             REALNAME_VERIFIER,
+            IDENTITY_CONFIG,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
             { token: REDIS, optional: true },
@@ -1343,6 +1344,8 @@ export class IdentityModule {
             clock: Clock,
             logger: RootLogger,
             verifier: RealnameVerifierPort | null,
+            // BR-ID-26: minor.min_realname_age through content's reader (its own connection).
+            config: SmsConfigReader | null,
             db?: Kysely<Database>,
             crypto?: FieldCrypto,
             redis?: RedisHandle,
@@ -1357,6 +1360,7 @@ export class IdentityModule {
                   verifier,
                   logger,
                   reverify: createReverifyGate({ clock }),
+                  config,
                 }),
         },
         {

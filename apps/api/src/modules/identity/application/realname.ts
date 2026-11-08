@@ -13,7 +13,8 @@
 //   3. 20001 data.fields — the name is empty after normalizePersonName, and/or the ID number fails
 //      parseResidentIdNo (18 characters, date, check digit; trim and trailing x → X).
 //   4. 30407 — under minor.min_realname_age at the Clock instant (BR-ID-26: the birthday's next day
-//      00:00 +08:00, 29 February → 1 March in common years).
+//      00:00 +08:00, 29 February → 1 March in common years). The line is the app's configured
+//      integer 14..18, read per request; missing, unreadable or invalid → 14, never lower.
 //   5. 30410 — the user's attempts of the +08:00 day are used up (realname-attempts.ts: reserved
 //      atomically before anything below, so concurrent requests cannot exceed the limit). One count
 //      per request (Idempotency-Key + submitted values) and its definite outcome kept with it: a
@@ -57,6 +58,7 @@ import {
 } from '../../platform/index.ts';
 import { maskName } from '../domain/mask-name.ts';
 import type { ReverifyGate, ReverifyRefusal } from './reverify-gate.ts';
+import type { SmsConfigReader } from './sms-codes.ts';
 import {
   createRealnameAttempts,
   type AttemptOutcome,
@@ -69,11 +71,15 @@ import type {
   RealnameVerifierPort,
 } from '../ports/realname-verifier.ts';
 
+/** BR-ID-26 细则「配置」: the app's real-name age line (registered config.risk integer 14..18). */
+export const MIN_REALNAME_AGE_KEY = 'minor.min_realname_age';
 /**
- * BR-ID-26 配置 minor.min_realname_age (default 14).
- * TODO(规划/11 §2.3): 从配置中心读取 minor.min_realname_age — blocked on 该配置项尚未登记（内容配置注册表不在本任务路径内）
+ * BR-ID-26's default age line (08: minor.min_realname_age=14), and the floor of the configured
+ * one: a missing, unreadable or invalid value is this line, never lower (D10-1034 ①).
  */
 export const MIN_REALNAME_AGE = 14;
+/** The registered upper bound of minor.min_realname_age (B1-02zzf); above it the value is invalid. */
+const MAX_REALNAME_AGE_LINE = 18;
 /** FieldCrypto context of the attempt mark's request digest (keyed; no plaintext in Redis). */
 const ATTEMPT_DIGEST_CONTEXT = 'realname.attempt';
 /** The partial unique index (app_id, id_no_hmac) WHERE status = 'verified' of migration 0041. */
@@ -120,6 +126,51 @@ export interface RealnameServiceOptions {
   readonly verifier: RealnameVerifierPort | null;
   readonly logger: Pick<RootLogger, 'info' | 'warn'>;
   readonly reverify: ReverifyGate;
+  /**
+   * content's reader of minor.min_realname_age (IDENTITY_CONFIG; its own connection). Absent or
+   * null (no database): the line is MIN_REALNAME_AGE.
+   */
+  readonly config?: SmsConfigReader | null;
+}
+
+/**
+ * The app's real-name age line (BR-ID-26 细则「配置」): the configured integer within 14..18, else
+ * MIN_REALNAME_AGE — no row, a failing read and any other value (fraction, string, out of range,
+ * null, …) never lower the line. A failing read or an invalid value logs one flat line with the app
+ * and the key only (nothing of the user or the submitted values); a missing row is silent.
+ */
+export async function readMinRealnameAge(
+  config: SmsConfigReader | null | undefined,
+  appId: string,
+  logger: Pick<RootLogger, 'warn'>,
+): Promise<number> {
+  if (config === null || config === undefined) return MIN_REALNAME_AGE;
+  let entry: Awaited<ReturnType<SmsConfigReader['configValue']>>;
+  try {
+    entry = await config.configValue(appId, MIN_REALNAME_AGE_KEY);
+  } catch {
+    // Never the error itself: one flat line.
+    logger.warn(
+      { app_id: appId, key: MIN_REALNAME_AGE_KEY, reason: 'read_failed' },
+      'identity_realname_age_config_fallback',
+    );
+    return MIN_REALNAME_AGE;
+  }
+  if (entry === null || entry === undefined) return MIN_REALNAME_AGE;
+  const value: unknown = entry.value;
+  if (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= MIN_REALNAME_AGE &&
+    value <= MAX_REALNAME_AGE_LINE
+  ) {
+    return value;
+  }
+  logger.warn(
+    { app_id: appId, key: MIN_REALNAME_AGE_KEY, reason: 'invalid' },
+    'identity_realname_age_config_fallback',
+  );
+  return MIN_REALNAME_AGE;
 }
 
 export interface RealnameService {
@@ -359,8 +410,11 @@ export function createRealnameService(options: RealnameServiceOptions): Realname
       if (!parsed.ok) fields.push('id_no');
       if (!parsed.ok || fields.length > 0) return { code: 20001, data: { fields } };
 
+      // Read before any statement below; no transaction is open here (content uses its own
+      // connection, so no second pool connection is borrowed while one is held).
+      const ageLine = await readMinRealnameAge(options.config, command.appId, logger);
       const now = clock.now();
-      if (!isAtLeastAge(parsed.birth_date, MIN_REALNAME_AGE, now)) return { code: 30407 };
+      if (!isAtLeastAge(parsed.birth_date, ageLine, now)) return { code: 30407 };
 
       const idNoHmac = crypto.blindIndex(parsed.id_no, REALNAME_CONTEXT.idNo);
       const values: VerifiedValues = {

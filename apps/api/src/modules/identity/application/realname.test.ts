@@ -32,6 +32,7 @@ import {
 } from './realname-attempts.ts';
 import { createRealnameService } from './realname.ts';
 import type { ReverifyGate } from './reverify-gate.ts';
+import type { SmsConfigReader } from './sms-codes.ts';
 
 const NOW = '2026-09-29T10:00:00.000Z';
 const APP = 'couli';
@@ -171,24 +172,36 @@ const crypto: FieldCrypto = {
   blindIndex: (value, context) => createHash('sha256').update(`${context}|${value}`).digest('hex'),
 };
 
-function setup() {
+function setup(config?: SmsConfigReader | null) {
   const state: { row: Row | undefined; failWrites: number } = { row: undefined, failWrites: 0 };
   const redis = scriptedRedis();
   const verify = vi.fn<() => Promise<RealnameVerificationResult>>();
   const clock = new FixedClock(NOW);
   const gate = vi.fn<ReverifyGate['check']>(() => Promise.resolve(null));
+  const logs: { level: string; fields: unknown; msg: unknown }[] = [];
   const service = createRealnameService({
     db: scriptedDb(state),
     clock,
     crypto,
     redis: redis.handle,
     verifier: { verify },
-    logger: { info: () => undefined, warn: () => undefined },
+    logger: {
+      info: (fields: unknown, msg?: unknown) => void logs.push({ level: 'info', fields, msg }),
+      warn: (fields: unknown, msg?: unknown) => void logs.push({ level: 'warn', fields, msg }),
+    } as Parameters<typeof createRealnameService>[0]['logger'],
     reverify: { check: gate },
+    ...(config === undefined ? {} : { config }),
   });
-  const submit = (idempotencyKey: string, name: string = BODY.name) =>
-    service.submit({ appId: APP, userId: USER, deviceId: DEVICE, ...BODY, name, idempotencyKey });
-  return { state, redis, verify, clock, submit, gate };
+  const submit = (idempotencyKey: string, name: string = BODY.name, idNo: string = BODY.idNo) =>
+    service.submit({
+      appId: APP,
+      userId: USER,
+      deviceId: DEVICE,
+      name,
+      idNo,
+      idempotencyKey,
+    });
+  return { state, redis, verify, clock, submit, gate, logs };
 }
 
 /** Redis keys and values must carry neither the raw key nor the submitted values. */
@@ -415,3 +428,159 @@ it('[AC-B1-02zq#24] 已实名：不判加验，回存好的掩码姓名', async 
   await expect(t.submit('key-ffffffff')).resolves.toMatchObject({ code: 0 });
   expect(t.gate).not.toHaveBeenCalled();
 });
+
+// ---- BR-ID-26 细则「配置」: the age line read from minor.min_realname_age (B1-02zzg) ----------
+
+const AGE_KEY = 'minor.min_realname_age';
+
+/** A synthetic resident ID (Beijing area code, serial 001) born on `birth` (YYYY-MM-DD). */
+function residentIdBorn(birth: string): string {
+  const body = `110105${birth.replaceAll('-', '')}001`;
+  const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+  const sum = [...body].reduce((acc, digit, i) => acc + Number(digit) * weights[i]!, 0);
+  return body + '10X98765432'[sum % 11]!;
+}
+
+/** A reader answering `value` for the key (NO_ROW: null), recording each call. */
+function ageConfig(value: unknown): SmsConfigReader & { calls: unknown[][] } {
+  const calls: unknown[][] = [];
+  return {
+    calls,
+    configValue: (appId: string, key: string) => {
+      calls.push([appId, key]);
+      if (key !== AGE_KEY || value === NO_ROW) return Promise.resolve(null);
+      return Promise.resolve({ value, version: 1 });
+    },
+  };
+}
+const NO_ROW = Symbol('no row');
+
+/** One submission at NOW (2026-09-29 18:00 +08:00) of an ID born on `birth`; vendor answers match. */
+async function submitBorn(config: SmsConfigReader | null | undefined, birth: string) {
+  const t = setup(config);
+  t.verify.mockResolvedValue({ outcome: 'match', provider: 'unit' });
+  const idNo = residentIdBorn(birth);
+  const result = await t.submit('key-age00001', BODY.name, idNo);
+  return { ...t, result, idNo };
+}
+
+/** The log lines carry neither the ID number (nor any 6+ digit piece of it) nor the name. */
+function expectLogsWithoutIdentity(logs: readonly unknown[], idNo: string) {
+  const text = JSON.stringify(logs);
+  expect(text).not.toContain(BODY.name);
+  expect(text).not.toContain(idNo);
+  for (let i = 0; i + 6 <= idNo.length; i++) expect(text).not.toContain(idNo.slice(i, i + 6));
+}
+
+it('[AC-B1-02zzg#1][BR-ID-26] 配置 16：16 周岁生日当天 30407、不调供应商；满 16（生日次日 00:00）通过；按 app 读该键', async () => {
+  // Born 2010-09-29: the 16th birthday is today, reached 2026-09-30 00:00 +08:00.
+  const under = await submitBorn(ageConfig(16), '2010-09-29');
+  expect(under.result).toEqual({ code: 30407 });
+  expect(under.verify).not.toHaveBeenCalled();
+  expect(under.state.row).toBeUndefined();
+  expect(under.redis.store.size).toBe(0);
+  // Born 2010-09-28: 16 since 2026-09-29 00:00 +08:00.
+  const config = ageConfig(16);
+  const reached = await submitBorn(config, '2010-09-28');
+  expect(reached.result).toMatchObject({ code: 0 });
+  expect(config.calls).toEqual([[APP, AGE_KEY]]);
+  // A 15-year-old that 14 would let through is refused under 16.
+  await expect(submitBorn(ageConfig(16), '2011-01-01')).resolves.toMatchObject({
+    result: { code: 30407 },
+  });
+});
+
+it.each([
+  ['无配置行（null）', ageConfig(NO_ROW)],
+  ['没有读取口（null）', null],
+  ['未装配读取口（undefined）', undefined],
+] as const)(
+  '[AC-B1-02zzg#2][BR-ID-26] 配置缺省（%s）按 14：13 岁末 30407，满 14 通过',
+  async (_label, config) => {
+    const under = await submitBorn(config, '2012-09-29');
+    expect(under.result).toEqual({ code: 30407 });
+    expect(under.verify).not.toHaveBeenCalled();
+    const reached = await submitBorn(config, '2012-09-28');
+    expect(reached.result).toMatchObject({ code: 0 });
+    // A missing row is not a fault: no fallback line.
+    expect(reached.logs.filter((l) => l.msg === 'identity_realname_age_config_fallback')).toEqual(
+      [],
+    );
+  },
+);
+
+it('[AC-B1-02zzg#6][BR-ID-26] 读配置失败按 14、不回 50001；兜底日志只带 app_id 与键名，不含身份证号与姓名', async () => {
+  const failing: SmsConfigReader = {
+    configValue: () => Promise.reject(new Error(`read failed for ${BODY.name}`)),
+  };
+  const twelve = await submitBorn(failing, '2014-01-01');
+  expect(twelve.result).toEqual({ code: 30407 });
+  const under = await submitBorn(failing, '2012-09-29');
+  expect(under.result).toEqual({ code: 30407 });
+  expect(under.verify).not.toHaveBeenCalled();
+  expect(under.logs).toEqual([
+    {
+      level: 'warn',
+      fields: { app_id: APP, key: AGE_KEY, reason: 'read_failed' },
+      msg: 'identity_realname_age_config_fallback',
+    },
+  ]);
+  expectLogsWithoutIdentity(under.logs, under.idNo);
+  const reached = await submitBorn(failing, '2012-09-28');
+  expect(reached.result).toMatchObject({ code: 0 });
+  expectLogsWithoutIdentity(reached.logs, reached.idNo);
+});
+
+it.each([
+  ['低于下限 10', 10],
+  ['低于下限 13', 13],
+  ['零', 0],
+  ['负数 -16', -16],
+  ['高于上限 19', 19],
+  ['高于上限 100', 100],
+] as const)(
+  '[AC-B1-02zzg#3][BR-ID-26] 配置越界（%s）按 14、不放宽：12 岁与 13 岁末 30407，满 14 与 15 岁通过',
+  async (_label, value) => {
+    for (const birth of ['2014-01-01', '2012-09-29']) {
+      const under = await submitBorn(ageConfig(value), birth);
+      expect(under.result, `born ${birth}`).toEqual({ code: 30407 });
+      expect(under.logs).toEqual([
+        {
+          level: 'warn',
+          fields: { app_id: APP, key: AGE_KEY, reason: 'invalid' },
+          msg: 'identity_realname_age_config_fallback',
+        },
+      ]);
+      expectLogsWithoutIdentity(under.logs, under.idNo);
+    }
+    for (const birth of ['2012-09-28', '2011-01-01']) {
+      const reached = await submitBorn(ageConfig(value), birth);
+      expect(reached.result, `born ${birth}`).toMatchObject({ code: 0 });
+      expectLogsWithoutIdentity(reached.logs, reached.idNo);
+    }
+  },
+);
+
+it.each([
+  ['非整数 16.5', 16.5],
+  ['非整数 13.5', 13.5],
+  ['字符串 "16"', '16'],
+  ['字符串 "10"', '10'],
+  ['JSON null', null],
+  ['布尔 true', true],
+  ['数组 [16]', [16]],
+  ['对象 {"value":16}', { value: 16 }],
+] as const)(
+  '[AC-B1-02zzg#3][BR-ID-26] 配置非整数（%s）按 14：13 岁末 30407，15 岁通过（不当 16 用）',
+  async (_label, value) => {
+    const under = await submitBorn(ageConfig(value), '2012-09-29');
+    expect(under.result).toEqual({ code: 30407 });
+    expect(under.logs.map((l) => l.fields)).toEqual([
+      { app_id: APP, key: AGE_KEY, reason: 'invalid' },
+    ]);
+    expectLogsWithoutIdentity(under.logs, under.idNo);
+    const fifteen = await submitBorn(ageConfig(value), '2011-01-01');
+    expect(fifteen.result).toMatchObject({ code: 0 });
+    expectLogsWithoutIdentity(fifteen.logs, fifteen.idNo);
+  },
+);
