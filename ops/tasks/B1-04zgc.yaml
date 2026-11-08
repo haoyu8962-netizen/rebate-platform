@@ -2,7 +2,7 @@ id: B1-04zgc
 repo: rebate-platform
 title: 拼多多 order_status 4（审核失败）、10（已处罚）补进 pdd.csv 按订单失效处理（FU-PDD-INVALID-CODES-MAP）
 type: impl
-# 2026-11-08 be 入账（D10-1069：负责人「只要联盟返回没有佣金 全部算失效」；08 BR-FUND-02 / BR-TEXT-05 已回写 couli #314；照 B1-04zga 京东先例）。specs/order-status-map/pdd.csv 补 4（审核失败，不可提现）、10（已处罚）→ PLATFORM_INVALID，source doc、verified false：未入账整单作废（R6 VOID）、已入账按现有失效口径整单扣回（R8 FULL）、首次入库即该码照 P13 建行作废；不再挂 UNMAPPED_STATUS、不再拒收。不写子原因（FU-PDD-REASON-SUB 结案）。拼多多适配器（union/infra/pdd/orders.ts，平台差异止于适配器）对状态 4 / 10 的订单：fail_reason 原值打 warn（alert order_reason_sub_unmapped，platform pdd，带原值、不带单号 / 金额 / 用户）；状态 4 / 10 而佣金 > 0 的照样按失效，另打一条 warn（alert pdd_invalid_with_commission，待录制核对）。不改状态机、扣回规则与金额。
+# 2026-11-08 be 入账（D10-1069：负责人「只要联盟返回没有佣金 全部算失效」；08 BR-FUND-02 / BR-TEXT-05 已回写 couli #314；照 B1-04zga 京东先例）。specs/order-status-map/pdd.csv 补 4（审核失败，不可提现）、10（已处罚）→ PLATFORM_INVALID，source doc、verified false：未入账整单作废（R6 VOID）、已入账按现有失效口径整单扣回（R8 FULL）、首次入库即该码照 P13 建行作废；不再挂 UNMAPPED_STATUS、不再拒收。不写子原因（FU-PDD-REASON-SUB 结案）。拼多多适配器（union/infra/pdd/**，平台差异止于适配器；告警经适配器既有的 warn 出口；生产日志字段（union.module.ts logPddWarning）拆给 B1-04zgd（D10-1096，spec-test r3 S1 归 zgd））对状态 4 / 10 的订单：fail_reason 原值打 warn（alert order_reason_sub_unmapped，platform pdd，带原值、不带单号 / 金额 / 用户）；状态 4 / 10 而佣金 > 0 的照样按失效，另打一条 warn（alert pdd_invalid_with_commission，待录制核对）。不改状态机、扣回规则与金额。
 # 冻结：test/spec/orders/status-map/pdd.test.ts 的 [AC-B1-08f#1] / #2（顶层 EXPECTED 表）/ #3 / #4 钉「4、10 不进表」，照 D10-327 由新鲜独立 Claude 只改这几处期望（EXPECTED 加 4、10 → PLATFORM_INVALID；#3 改为按失效；#4 表外码清单去掉 4、10），另一位只读复审「只改这几处」；未改的行 / 用例按先红报告补 red_exempt / red_exempt_rows。规则测试新目录钉生产流水线按失效处理。Codex 额度尽至 11-15：测试、spec-test、money 评审都由新鲜独立 Claude（D10-823 ④）。
 refs: [BR-FUND-02]
 refs_hash:
@@ -10,12 +10,62 @@ refs_hash:
 deps: [B1-08f]
 paths:
   - 'specs/order-status-map/pdd.csv'
-  - 'apps/api/src/modules/union/infra/pdd/orders{.ts,.test.ts}'
+  - 'apps/api/src/modules/union/infra/pdd/**'
   - 'test/spec/orders/pdd-invalid-codes/**'
   - 'test/spec/orders/status-map/pdd.test.ts'
 test_paths:
   - 'test/spec/orders/pdd-invalid-codes/**'
   - 'test/spec/orders/status-map/pdd.test.ts'
+red_exempt_outside:
+  - file: test/spec/orders/status-map/pdd.test.ts
+    reason: '用例外只给顶层 EXPECTED 表追加 4、10 两行（D10-1069）与改文件头注释；[AC-B1-08f#2] 块的标题模板与回调体与基线逐字相同，原有五个码的行新旧实现下都成立'
+red_exempt:
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#2] BR-FUND-02 / D10-31：拼多多原始码 0 → PLATFORM_PAID，保留未验证标记'
+    reason: 'EXPECTED 表原有行，[AC-B1-08f#2] 块体未改；本单只追加 4、10 两行（新行须红），本行在新旧实现下都成立'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#2] BR-FUND-02 / D10-31：拼多多原始码 1 → PLATFORM_PAID，保留未验证标记'
+    reason: 'EXPECTED 表原有行，[AC-B1-08f#2] 块体未改；本单只追加 4、10 两行（新行须红），本行在新旧实现下都成立'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#2] BR-FUND-02 / D10-31：拼多多原始码 2 → PLATFORM_RECEIVED，保留未验证标记'
+    reason: 'EXPECTED 表原有行，[AC-B1-08f#2] 块体未改；本单只追加 4、10 两行（新行须红），本行在新旧实现下都成立'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#2] BR-FUND-02 / D10-31：拼多多原始码 3 → PLATFORM_RECEIVED，保留未验证标记'
+    reason: 'EXPECTED 表原有行，[AC-B1-08f#2] 块体未改；本单只追加 4、10 两行（新行须红），本行在新旧实现下都成立'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#2] BR-FUND-02 / D10-31：拼多多原始码 5 → PLATFORM_SETTLED，保留未验证标记'
+    reason: 'EXPECTED 表原有行，[AC-B1-08f#2] 块体未改；本单只追加 4、10 两行（新行须红），本行在新旧实现下都成立'
+red_exempt_rows:
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 6 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 9 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 11 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 99 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 05 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 5.0 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码  5  保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码  保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 PLATFORM_SETTLED 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
+  - file: test/spec/orders/status-map/pdd.test.ts
+    test: '[AC-B1-08f#4] BR-FUND-02：拼多多表外码 null 保留原码交调用方处理 UNMAPPED_STATUS'
+    reason: 'it.each 表只删了 4、10 两行（D10-1069 改为按失效），所在块的标题模板与回调体与基线逐字相同，本行字面量同基线、新旧实现下都表外'
 impl: claude
 tester: claude-independent
 accept:

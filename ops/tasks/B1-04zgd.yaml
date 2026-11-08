@@ -1,0 +1,21 @@
+id: B1-04zgd
+repo: rebate-platform
+title: union：拼多多订单告警 order_reason_sub_unmapped / pdd_invalid_with_commission 在生产日志按平铺字段记录（logPddWarning，从 B1-04zgc 拆出）
+type: impl
+# 2026-11-09 be 入账（D10-1096：B1-04zgc spec-test 三轮未过，照负责人 10-19「三轮不过就拆小」拆出；r3 的 S1 归本单）。union.module.ts 的 logPddWarning（约 :177）现在对任何带 event 的 PddWarning 都记成「pinduoduo goods price anomaly」只带 event + method，会把拼多多 order_status 4 / 10 的两条新告警的 alert / platform / fail_reason 全丢。本单：PddWarning 类型扩展（event 增 order_reason_sub_unmapped、pdd_invalid_with_commission，加 alert、platform、fail_reason 字段，放 union/infra/pdd/response.ts，B1-04zgc 在其上变基）；logPddWarning 对这两个 event 按平铺字段记 event、alert、platform、method、fail_reason（仅 order_reason_sub_unmapped），消息分别如实描述，不带单号 / 金额 / 用户；PRICE_ANOMALY 与未知错误码两条既有输出不变。先合（D10-1096 ③），避免 zgc 合并后有一段把两条记成 price anomaly。
+# 规则测试新目录，照 test/spec/union/ 下 wiring 测试 [AC-B1-04x-LOG#1] 的写法装 union 模块 + spy logger，调构造好的 PddUnionAdapter 的 warn 钩子（或经适配器拉一单），断言 pino warn 的字段集合与值。Codex 先试（D10-1096），额度不足退回新鲜独立 Claude（D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: [B1-08f]
+paths:
+  - 'apps/api/src/modules/union/infra/pdd/response.ts'
+  - 'apps/api/src/modules/union/union.module.ts'
+  - 'test/spec/union/pdd-warning-log/**'
+test_paths:
+  - 'test/spec/union/pdd-warning-log/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
