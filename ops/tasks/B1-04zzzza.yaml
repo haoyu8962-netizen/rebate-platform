@@ -1,0 +1,24 @@
+id: B1-04zzzza
+repo: rebate-platform
+title: catalog：搜索 Tab 查询词命中禁词即返回空结果（FU-SEARCH-QUERY-BLOCKWORDS，D10-860 ⑥ / D10-1064 口径 A）——200、items 与 fallback_items 皆空、不调联盟与物料流，日志只记事件与平台
+type: impl
+# 2026-11-08 union 入账（D10-1064 选 A）。方案 couli-runs/UNION-lane/search-query-blockwords-plan-20261108.md。规划只有方向（01 F-PROD-08「搜索和 Agent 共用后台黑名单」），搜索 Tab 查询词命中的口径 08 / 04 / 契约都未写——A 为代理补全默认（RV0 记录：本注释与方案；编排事后报负责人，负责人要提示文案再走 B：先改 08 与契约）。
+# 口径：search.ts 搜索开关之后、解游标之前判定（20001 / 30131 / 50304 优先级不变；会话、推广位、缓存、联盟之前拦）；命中 → 200、items 与 fallback_items 皆空、不调联盟与物料流、响应形状与契约不变；日志只记 {event: search_query_prohibited, platform}，不记 q 原文、不计风控。词表只用 specs/agent-input-keywords.yaml 的 prohibited 组（catalog 不能导入 agent：catalog/domain 自带一份，规则测试钉与 yaml 逐项一致）；归一化照 Agent 的 normalizeForKeywords（去全部空白、「非」后不算），不用缓存键的 normalizeKeyword。端口可选、生产装配默认接上；「搜相似」用标题当查询词被同样拦属 yaml 整词口径。后台热词 / 关键词直达不校验 → FU-ADMIN-HOTWORDS-PROHIBITED-CHECK（admin）。
+# 风险：catalog/** RV1；新鲜独立 Claude 写规则测试（支撑文件 harness.ts，勿名 kit.ts），spec-test Claude（D10-848），代码评审 Codex。不碰 agent / content / app.module / contracts。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/catalog/domain/query-blockwords*.ts'
+  - 'apps/api/src/modules/catalog/search.ts'
+  - 'apps/api/src/modules/catalog/search.test.ts'
+  - 'apps/api/src/modules/catalog/catalog.module.ts'
+  - 'apps/api/src/modules/catalog/index.ts'
+test_paths:
+  - 'test/spec/catalog/search-query-blockwords/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/search-query-blockwords/**'
+status: todo
