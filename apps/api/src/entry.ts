@@ -3,6 +3,7 @@ import { createHttpApp, createWorkerContext } from './bootstrap.ts';
 import {
   agentRuleSyncToken,
   agentSweeperToken,
+  createPgAgentTraceMissingPort,
   type AgentRuleSyncRuntime,
   type AgentSweeperRuntime,
 } from './modules/agent/index.ts';
@@ -73,6 +74,8 @@ import {
   cacheReviewOverdueCollector,
   cacheWaterLowCollector,
   collectAutoPayoutDaily,
+  createAgentTraceMissingCollector,
+  type AgentTraceMissingSnapshot,
   type AutoPayoutCapFenOf,
   type AutoPayoutDailySnapshot,
   type FundMetricsSnapshot,
@@ -304,8 +307,9 @@ function startGenerationRenewal(
  * `cacheFundCollector`, B1-01zzo) and, since B1-01zzp, `collectAutoPayout` (today's automatic
  * total against the cap, cached per +08:00 day) and, since B2-05o, `collectReviewOverdue` (the
  * withdrawals judged review-overdue still waiting, payout's read-only port) and, since B2-09j,
- * `collectWaterLow` (W against 1.5 P per app, payout's read-only port). Since B1-04zy only
- * the api passes `collectTaobaoSearch` (union's in-process search counter, read at scrape time).
+ * `collectWaterLow` (W against 1.5 P per app, payout's read-only port) and, since B3-08z,
+ * `collectAgentTraceMissing` (runs missing their card trace, agent's read-only port). Since B1-04zy
+ * only the api passes `collectTaobaoSearch` (union's in-process search counter, read at scrape time).
  * Not on the Nest application, not in the OAS.
  */
 async function openMetrics(
@@ -319,6 +323,7 @@ async function openMetrics(
         readonly collectAutoPayout: () => Promise<AutoPayoutDailySnapshot>;
         readonly collectReviewOverdue: () => Promise<ReviewOverdueSnapshot>;
         readonly collectWaterLow: () => Promise<WaterLowSnapshot>;
+        readonly collectAgentTraceMissing: () => Promise<AgentTraceMissingSnapshot>;
       }
     | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot },
 ): Promise<MetricsServer | undefined> {
@@ -530,6 +535,12 @@ async function start(
           // a failed read fails the scrape (no 0 in its place) and is read again next time.
           collectWaterLow: cacheWaterLowCollector(
             () => readPayoutWaterLow(dbHandles.db, clock),
+            clock,
+          ),
+          // The agent trace missing gauge (B3-08z; BR-AI-19): agent's read-only port over the
+          // worker's own handle, read at every scrape; a failed read fails the scrape (no 0).
+          collectAgentTraceMissing: createAgentTraceMissingCollector(
+            createPgAgentTraceMissingPort({ db: dbHandles.db }),
             clock,
           ),
         });

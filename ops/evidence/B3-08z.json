@@ -1,0 +1,99 @@
+{
+  "task": "B3-08z",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "28980b2fac28b20b8939f2a1f2a345c3d9967c70",
+  "red_tests": [
+    "test/spec/platform/agent-trace-missing/entry.test.ts > [AC-B3-08z#10] worker 的 /metrics 在 scrape 时经本入口库、经 agent 只读端口读 agent_runs / agent_cards，正常渲染 couli_agent_trace_missing_runs（gauge、只带 app_id、值为端口结果），其余指标照常、不写、不加行锁、不读库时钟；其余四个入口没有该指标、不做该读",
+    "test/spec/platform/agent-trace-missing/entry.test.ts > [AC-B3-08z#11] worker 上该端口读失败时整次 scrape 失败（render 拒绝），不以 0 代替、不只是少这一项；读恢复后下一次 scrape 导出端口结果",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#1] 只计「结束超过 24 小时、已出卡、没有卡片行」的 run：结束不足 24 小时、有卡片行、没出卡、没结束的都不计",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#2] 24 小时的边界按注入时钟：恰好结束 24 小时不计、多 1 毫秒计；时钟再走 1 毫秒，前者也计",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#3] 卡片行按 run 认：同一会话里别的 run 有卡片行，不替缺卡片行的 run 兜底；一个 run 有几张卡都只算有",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#4] 已注销的会话不算缺 trace：卡片行骨架还在（data 已清空）不计，注销后卡片没写入也不计；同一 app 的游客会话照计",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#5] 真实注销清理（BR-AI-22）之后不误报：清理前会员缺卡片行的 run 计 1，清理后（会话脱离用户、卡片行骨架还在）不计、该 app 不出现",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#6] 按 app_id 分组、互不影响：每个 app 一个元素、各数各的；只有不计的 run 的 app 不出现",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#7] 只读、只用注入时钟：只读会话可跑、三张表的行前后不变；没有计入的 run 时结果为空；worker registry 以该端口渲染出同样的值",
+    "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#12] 结束原因不影响判定：收卡后取消（cancelled、disconnected）、超时（timeout）、服务端出错（server_error）结束超过 24 小时、会话未注销又没有卡片行的 run 照计；同样结束原因但有卡片行、没出卡、不足 24 小时、会话已注销的不计",
+    "test/spec/platform/agent-trace-missing/port.test.ts > [AC-B3-08z#8] 端口只读：只有读 agent_runs、agent_cards（及 agent_sessions）的语句，不写、不加行锁、不读库时钟；库里没有行时结果为空数组",
+    "test/spec/platform/agent-trace-missing/port.test.ts > [AC-B3-08z#9] 读失败时端口原样拒绝，不给空结果、不编 0"
+  ],
+  "risk_note": "RV2（platform/metrics、entry.ts、agent/store 不在白名单；只读监控，不碰资金）：agent 新增只读端口 createPgAgentTraceMissingPort，在 READ ONLY 事务里只发一条 SELECT（agent_runs 联 agent_sessions，NOT EXISTS agent_cards），统计结束超过 24 小时（取调用方 Clock 的 now，正好 24 小时不算）、card_delivered 为真、无卡片行、会话未因注销脱离用户（BR-AI-22）的 run，按 app_id 分组，无计数的 app 不出元素，读失败原样 reject。entry.ts 只给 worker 经 createAgentTraceMissingCollector 注入真实端口（worker 自己的库句柄），其他四个入口不传；registry 冻结语义不改（编排 11-09 03:19 (a)：任一 collector 出错整次 scrape 失败，不以 0 代替）。告警 CouliAgentTraceMissing 与 collector 登记已由 B3-08za（#2946）合并。",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "28980b2fac28b20b8939f2a1f2a345c3d9967c70",
+      "tree": "30a4917c119e634bd02a0aa06c9b05acf4cb8386",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T22:29:23Z",
+      "finished_at": "2026-11-08T22:30:09Z",
+      "red_tests": [
+        "test/spec/platform/agent-trace-missing/entry.test.ts > [AC-B3-08z#10] worker 的 /metrics 在 scrape 时经本入口库、经 agent 只读端口读 agent_runs / agent_cards，正常渲染 couli_agent_trace_missing_runs（gauge、只带 app_id、值为端口结果），其余指标照常、不写、不加行锁、不读库时钟；其余四个入口没有该指标、不做该读",
+        "test/spec/platform/agent-trace-missing/entry.test.ts > [AC-B3-08z#11] worker 上该端口读失败时整次 scrape 失败（render 拒绝），不以 0 代替、不只是少这一项；读恢复后下一次 scrape 导出端口结果",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#1] 只计「结束超过 24 小时、已出卡、没有卡片行」的 run：结束不足 24 小时、有卡片行、没出卡、没结束的都不计",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#2] 24 小时的边界按注入时钟：恰好结束 24 小时不计、多 1 毫秒计；时钟再走 1 毫秒，前者也计",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#3] 卡片行按 run 认：同一会话里别的 run 有卡片行，不替缺卡片行的 run 兜底；一个 run 有几张卡都只算有",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#4] 已注销的会话不算缺 trace：卡片行骨架还在（data 已清空）不计，注销后卡片没写入也不计；同一 app 的游客会话照计",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#5] 真实注销清理（BR-AI-22）之后不误报：清理前会员缺卡片行的 run 计 1，清理后（会话脱离用户、卡片行骨架还在）不计、该 app 不出现",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#6] 按 app_id 分组、互不影响：每个 app 一个元素、各数各的；只有不计的 run 的 app 不出现",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#7] 只读、只用注入时钟：只读会话可跑、三张表的行前后不变；没有计入的 run 时结果为空；worker registry 以该端口渲染出同样的值",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts > [AC-B3-08z#12] 结束原因不影响判定：收卡后取消（cancelled、disconnected）、超时（timeout）、服务端出错（server_error）结束超过 24 小时、会话未注销又没有卡片行的 run 照计；同样结束原因但有卡片行、没出卡、不足 24 小时、会话已注销的不计",
+        "test/spec/platform/agent-trace-missing/port.test.ts > [AC-B3-08z#8] 端口只读：只有读 agent_runs、agent_cards（及 agent_sessions）的语句，不写、不加行锁、不读库时钟；库里没有行时结果为空数组",
+        "test/spec/platform/agent-trace-missing/port.test.ts > [AC-B3-08z#9] 读失败时端口原样拒绝，不给空结果、不编 0"
+      ],
+      "expected": [
+        "test/spec/platform/agent-trace-missing/entry.test.ts",
+        "test/spec/platform/agent-trace-missing/port.int.test.ts",
+        "test/spec/platform/agent-trace-missing/port.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "5324cd859483062da0fc85b3a6da36a149f26c3631f99b02aae3fd3cf49a6555"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f42c356eee216d4566121becc3d6030f27689de43b7f995696705547c1860a8e"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex money --full, effort medium, at the implementation head fc4c76ea0 after rebasing onto main (B3-08za #2946 dropped from the branch): pass, no findings (review-codex-money1.json). Codex was run first this round and succeeded; no fallback to independent Claude."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests written by fresh independent Claude (tester claude-independent per the ledger); spec-test reviewed by Codex first (03:03 rule, D10-848 void). r1 full fail, S1: the fixture hard-coded every run's end reason to stop, so an implementation counting only stopped runs would pass (review-codex-st1.json) -> test attempt 2 (fresh independent Claude) let kit.insertRun take the end reason and added [AC-B3-08z#12] over cancelled / disconnected / timeout / server_error. red/2 failed only because entry.test.ts #10 / #11 timed out under the 05:2x host load (file unchanged, red/1 had them red by assertion); red/3 PASS 12 rule tests in 3 files. r2 at the second rule-test commit: pass, no findings (review-codex-st2.json). After the rebase the rule-test commits are d7c7aed81 and d95a984fc."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a0caf5af15abf3980adb6fa8a07b1e0dd33b68e7",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

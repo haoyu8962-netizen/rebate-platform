@@ -36,3 +36,10 @@ export type {
 } from './rag/chunks/index.ts';
 // B1-27f: the Agent conversations section of a personal information copy (read only; app.module).
 export * from './application/personal-data-copy-read.ts';
+// B3-08z: the read-only port of the worker's couli_agent_trace_missing_runs (entry.ts injects it).
+export { createPgAgentTraceMissingPort } from './store/trace-missing/index.ts';
+export type {
+  AgentTraceMissingReadPort,
+  AgentTraceMissingRow,
+  PgAgentTraceMissingPortDeps,
+} from './store/trace-missing/index.ts';

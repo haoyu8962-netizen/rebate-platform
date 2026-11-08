@@ -7,11 +7,9 @@
 //
 // Error handling is the registry's frozen one (as for every other worker collector): a rejected
 // or throwing collection rejects render(), so the scrape fails visibly and no 0 is made up. A
-// collector built without its port rejects every call. Until B3-08z wires it, entry.ts does not
-// pass collectAgentTraceMissing at all, so the worker's /metrics has no such series and every other
-// metric renders as before.
-// TODO(规划/11 §2.3): agent's read-only countMissing query and its wiring in entry.ts — blocked on
-// B3-08z (entry.ts and agent/store are outside B3-08za's paths).
+// collector built without its port rejects every call. Since B3-08z, entry.ts passes the worker
+// collectAgentTraceMissing over agent's createPgAgentTraceMissingPort on the worker's own database
+// handle (read at every scrape, not cached); the other four entries pass none and have no series.
 import type { Clock } from '../clock/index.ts';
 
 /** One app_id's count from agent's read-only port. */
