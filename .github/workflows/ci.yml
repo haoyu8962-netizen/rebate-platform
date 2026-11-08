@@ -86,14 +86,36 @@ jobs:
     # Known cost: a push to the PR no longer cancels a label run (different group). That push
     # cancels the code run of the old head, so the label run finds no pass there and runs in full
     # for the old head; the run of the new head is on another head and is not waited for.
+    # D10-1024 B2 (CT-06zzzzf; ci-load-plan §2 B2): since B1 every push to main runs to the end,
+    # about 200 more job minutes per merge. On a push to main this job therefore also looks for
+    # the passes of the pull request that produced the pushed commit, and reuses them only when
+    # ALL of the following hold: (1) `commits/<pushed sha>/pulls` lists exactly one pull request
+    # that is merged (merged_at set), has base main in this repository, and whose head repository
+    # is this repository by full_name (head.repo.full_name == github.repository; a null head
+    # repository does not count); (2) on that pull request's final head H, a ci.yml run with event
+    # pull_request whose head_repository.full_name is this repository has the job's latest attempt
+    # concluded `success`; (3) that same run carries an unexpired artifact
+    # `verified-<job>-<tree>` whose <tree> is exactly (string equality, no prefix) the tree of the
+    # pushed commit's checkout. All twelve jobs must be found, or reuse=false and every job runs.
+    # Every run on H is looked at, not only the newest (a label run on H has its verify jobs
+    # skipped and no artifacts). A fork, a different tree, an expired or missing artifact, a job
+    # whose latest attempt did not pass, zero or several matching pull requests, or any API error:
+    # reuse=false (exit 0), the whole round runs in full. The push path never takes the wait above
+    # (it is for label events only) and never sleeps. ci-gate, its decision and the required
+    # check names are unchanged: on a push it accepts a skipped job only when this job succeeded
+    # with reuse=true, as on a label event. pull-requests: read is for the commit-to-PR lookup.
+    # Known effect: a reused verify-props-sha-* pass ran with the seed of H, not of the pushed
+    # commit.
     if: >-
-      github.event_name == 'pull_request' &&
-      (github.event.action == 'labeled' || github.event.action == 'unlabeled')
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' &&
+      (github.event.action == 'labeled' || github.event.action == 'unlabeled'))
     runs-on: ubuntu-latest
     timeout-minutes: 70
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     outputs:
       reuse: ${{ steps.find.outputs.reuse }}
     steps:
@@ -104,6 +126,74 @@ jobs:
         run: |
           set -euo pipefail
           tree=$(git rev-parse 'HEAD^{tree}')
+          if [ "$EVENT_NAME" = push ]; then
+            # D10-1024 B2: a push to main reuses the passes of the merged pull request it came
+            # from (see the comment of this job). One pass, no waiting; anything else runs in full.
+            echo "push to main: commit $PUSH_SHA, tree $tree"
+            full() {
+              echo "$1: every job runs in full"
+              echo "reuse=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+            jobs='verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2'
+            # (1) exactly one merged pull request into main of this repository, from this repository.
+            prs=$(gh api "repos/$REPO/commits/$PUSH_SHA/pulls?per_page=100" \
+              --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .base.repo.full_name == \"$REPO\" and .head.repo != null and .head.repo.full_name == \"$REPO\") | \"\(.number) \(.head.sha)\"") ||
+              full "the pull request of $PUSH_SHA could not be read"
+            # shellcheck disable=SC2086 # one "<number> <head sha>" line per matching pull request
+            set -- $prs
+            [ "$#" -eq 2 ] || full "not exactly one merged pull request of this repository into main for $PUSH_SHA"
+            pr=$1
+            head=$2
+            echo "pull request #$pr, final head $head"
+            # (2) the ci.yml pull_request runs on that head whose head repository is this one.
+            runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$head&event=pull_request&per_page=100" \
+              --jq ".workflow_runs[] | select(.event == \"pull_request\" and .head_sha == \"$head\" and .head_repository != null and .head_repository.full_name == \"$REPO\") | .id") ||
+              full "the ci.yml runs of PR #$pr could not be read"
+            # (2) + (3) per job: a run whose latest attempt of the job succeeded and that carries
+            # an unexpired verified-<job>-<tree> for exactly this tree.
+            missing=$jobs
+            for run in $runs; do
+              [ -n "$missing" ] || break
+              passed=$(gh api "repos/$REPO/actions/runs/$run/jobs?filter=latest&per_page=100" \
+                --jq "[.jobs[] | select(.conclusion == \"success\" and .head_sha == \"$head\") | .name] | join(\" \")") ||
+                full "the jobs of run $run could not be read"
+              want=''
+              for job in $missing; do
+                case " $passed " in *" $job "*) want="$want $job" ;; esac
+              done
+              [ -n "$want" ] || continue
+              # The unexpired artifact names of this run, joined by "/" (never part of a name), so
+              # a match below is an exact match of the whole name.
+              arts=$(gh api "repos/$REPO/actions/runs/$run/artifacts?per_page=100" \
+                --jq "[.artifacts[] | select(.expired == false) | .name] | join(\"/\")") ||
+                full "the artifacts of run $run could not be read"
+              left=''
+              for job in $missing; do
+                case " $want " in
+                  *" $job "*)
+                    case "/$arts/" in
+                      *"/verified-$job-$tree/"*)
+                        echo "$job: passed on this tree in run $run of PR #$pr, reused"
+                        continue
+                        ;;
+                    esac
+                    ;;
+                esac
+                left="$left $job"
+              done
+              missing=$left
+            done
+            if [ -n "$missing" ]; then
+              for job in $missing; do
+                echo "$job: no passing run of PR #$pr on this tree"
+              done
+              full "push to main"
+            fi
+            echo "all twelve jobs passed on this tree in PR #$pr: reused"
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "tree of this event: $tree (head $HEAD_SHA)"
           # D10-1024 A: wait, with a limit, for the other ci.yml runs on this head to finish.
           started=$SECONDS
@@ -148,6 +238,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_SHA: ${{ github.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ID: ${{ github.run_id }}
           REUSE_WAIT_SECONDS: 3600
@@ -1149,8 +1241,9 @@ jobs:
       - name: Summarise
         run: |
           echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE} ledger-only-detect=${LEDGER_RESULT}/${LEDGER_ONLY}"
-          # A verify job passes when it succeeded, or (label event, D10-242) when verify-reuse
-          # itself succeeded and found its success on the same tested tree, so it was skipped.
+          # A verify job passes when it succeeded, or (label event, D10-242; push to main,
+          # D10-1024 B2) when verify-reuse itself succeeded and found its success on the same
+          # tested tree, so it was skipped.
           reused() { [ "$REUSE_RESULT" = success ] && [ "$REUSE" = true ] && [ "$1" = skipped ]; }
           # A heavy job (not verify-static) also passes when it was skipped because the pull
           # request changes only task ledgers or docs: ledger-only-detect succeeded and said

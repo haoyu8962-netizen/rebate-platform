@@ -607,14 +607,14 @@ it.each(CANCELS.map(([ev, cancel]) => ({ name: ev.name, ctx: ev.ctx, cancel })))
 
 // --- 3. verify-reuse: runs on label events only, waits with a bound ----------------------------
 
-it('[CT-06zzzze] verify-reuse still runs only on labeled / unlabeled pull_request events', () => {
+it('[CT-06zzzze][CT-06zzzzf] verify-reuse runs on labeled / unlabeled pull_request events and on pushes to main, not on code events', () => {
   const cond = jobIf('verify-reuse');
   expect(cond).toMatch(/\S/);
   const truth = (ev: Ev): boolean => ghTruthy(ghEvaluate(cond, ev.ctx));
   expect(truth(prEvent('labeled'))).toBe(true);
   expect(truth(prEvent('unlabeled'))).toBe(true);
   for (const a of ['opened', 'synchronize', 'reopened']) expect(truth(prEvent(a)), a).toBe(false);
-  expect(truth(pushEvent())).toBe(false);
+  expect(truth(pushEvent())).toBe(true);
 });
 
 /** The env value `name` set on verify-reuse: on the job, or on one of its steps. */

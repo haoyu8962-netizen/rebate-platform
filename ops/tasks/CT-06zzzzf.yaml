@@ -1,0 +1,24 @@
+id: CT-06zzzzf
+repo: rebate-platform
+title: CT-06zzzzf：CI 减负 B2——主干推送轮复用合并前那张本仓库 PR 的验证产物（树完全相等才复用，fork / 过期 / 找不到一律照跑）（D10-1024）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-1024 B2；方案 couli-runs/OPS-lane/ci-load-plan.md §2 B2）。叠在 CT-06zzzze（#2826，B1 主干推送跑完不取消）上，#2826 合并后变基到主干。
+# B1 之后主干每轮都跑完，多占托管机约 200 作业分钟 / 次合并；B2 抵掉：主干推送轮的 verify-reuse 对每个重作业，只在以下全部成立时复用：
+#   ① commits/{sha}/pulls 查到恰好一张已合并、base 为 main、head 仓库就是本仓库的 PR；② 取该 PR 最终头上的 ci.yml 运行（event pull_request、
+#   head_repository 为本仓库），该作业最新尝试 success；③ 有未过期的产物 verified-<作业>-<树>，<树> 与本次主干提交的树完全相等。
+#   任一不满足（含 fork 产物、树不等、产物过期或缺失、API 出错）→ reuse=false，整轮照跑。ci-gate 的判定与必需检查名字不变。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzze]
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ci/ci-reuse-push-workflow.test.ts'
+  - 'tools/ci/ci-concurrency-workflow.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzf.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
