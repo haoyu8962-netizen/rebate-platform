@@ -1,0 +1,23 @@
+id: B3-08x
+repo: rebate-platform
+title: Agent HTTP 读额度上限失败的 catch 也记日志——agent/http/index.ts sendMessage 里 limits.current() 失败回 50401，这处 catch 不在 B3-08v 的五处之内，仍不留任何记录（FU-AGENT-HTTP-LIMIT-CATCH-LOG）；补一行 agent_http_failed（op send_message、stage limits、error_name），响应不变
+type: impl
+# 2026-11-08 withdraw 入账（编排 D10-1029 ②；FU-AGENT-HTTP-LIMIT-CATCH-LOG，编排 13:26 登记；来由 B3-08v #2821 代码评审 S2）。配置刷新失败时每条消息都回 50401，limits.ts 也不记，日志里查不到原因。
+# 做法：index.ts 里 limits.current() 的 catch 取到 error，回包前调 B3-08v 已有的 failed('send_message', 'limits', error)；回包码、文案、时机不变。只改 index.ts 与旁边的单测。
+# 规则测试钉：limits.current() 抛错（错误信息带合成用户文本与令牌样式串）→ 响应与主干一致（JSON 50401）；注入的 logger 恰一行 error，带 send_message、limits 与错误名，不含那段文本；未注入 logger 不抛、响应一致。新目录，不改 http-catch-log 与 stream-http。tester 新鲜独立 Claude；评审独立 Claude（Codex 额度用尽至 11-15）。
+refs: [BR-AI-23]
+refs_hash:
+  BR-AI-23: 5ebdbaff580d
+deps: [B3-08v]
+paths:
+  - 'apps/api/src/modules/agent/http/index.ts'
+  - 'apps/api/src/modules/agent/http/index.test.ts'
+test_paths:
+  - 'test/spec/agent/http-limits-catch-log/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/http-limits-catch-log/**'
+status: todo
+pr: null
