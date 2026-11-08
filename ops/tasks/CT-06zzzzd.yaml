@@ -1,0 +1,19 @@
+id: CT-06zzzzd
+repo: rebate-platform
+title: CT-06zzzzd：ledger 模块 AGENTS.md 第 3 行与现状同步——已有用户侧只读与后台 HTTP 入口（FU-LEDGER-AGENTS-MD，D10-590 ⑫）
+type: guard-change
+# 2026-11-08 ops 入账（编排 13:31 把 admin 清单里的 FU-LEDGER-AGENTS-MD 转给 ops；admin open-followups-20261108.md 第 65 行）。基于主干。
+# 主干 apps/api/src/modules/ledger/AGENTS.md:3 仍写「无 HTTP 入口；只读出口另由任务加入」，而模块已有 http/public（钱包汇总、钱包流水、收益汇总，只读）
+#   与 http/admin（调账、坏账核销、对账差异、资产快照、资金流水）共 10 个控制器。只改这一行的事实描述：指出两类入口在哪、路径权限错误码以 contracts/ 为准、
+#   入口只调本模块 application/；不写数值和公式，不改其他行与硬规则；CLAUDE.md 不动。各级 AGENTS.md 属第三类保护路径，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/ledger/AGENTS.md'
+  - 'ops/tasks/CT-06zzzzd.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
