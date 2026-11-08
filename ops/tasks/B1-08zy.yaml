@@ -18,6 +18,7 @@ paths:
   - 'infra/monitoring/rules/couli.yaml'
 test_paths:
   - 'test/spec/orders/service-fee-missing-metric/**'
+  - 'test/spec/platform/metrics-followups/rules.test.ts' # D10-1003 ②：[AC-B1-01zzo#10] 期望表只在 CouliPddServiceFeeMissing 后追加 CouliServiceFeeMissing（B1-04zy 先例），新鲜独立 Claude 改、另一位只读复核
 impl: claude
 tester: claude-independent
 accept:
