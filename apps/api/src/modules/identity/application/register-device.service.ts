@@ -1,6 +1,9 @@
 // Use case POST /v1/devices (BR-ID-09; 04 §6.1). The request schema has already checked the
 // headers, the hash format and id_source; this service applies the invalid-hash list, issues
 // device_id and install_secret and stores the row. It sends no job and publishes no event.
+// B1-02zzi (D10-1034 ②): the invalid-hash list is read for the request's app on every
+// registration (specs seeds ∪ the app's device.invalid_hashes), before any transaction, so an
+// operator's change applies to the next registration; a failed read means the seeds alone.
 // B1-03f (BR-ID-05 device.ip_register_per_hour, BR-ID-09 hot-hash monitoring): after the
 // invalid-hash list and before anything is issued, risk's per-IP slot is reserved (refused: 42901,
 // nothing issued or stored). An explicit insert failure releases the slot; an unknown outcome
@@ -16,11 +19,19 @@ import {
   type FieldCrypto,
 } from '../../platform/index.ts';
 import type { DeviceRegistrationRisk } from '../../risk/index.ts';
-import { installSecretContext, isRegistrableDeviceHash } from '../domain/device.ts';
+import {
+  installSecretContext,
+  isRegistrableDeviceHash,
+  isWellFormedDeviceHash,
+} from '../domain/device.ts';
 import { DevicesRepository } from '../infra/devices.repository.ts';
+import type { InvalidDeviceHashes } from '../infra/invalid-device-hashes.ts';
 import { newInstallSecret } from '../infra/issue.ts';
 
-/** Token of the invalid-hash list (config device.invalid_hashes), a ReadonlySet of hashes. */
+/**
+ * Token of the invalid-hash list (config device.invalid_hashes) by app: InvalidDeviceHashes
+ * (createInvalidDeviceHashes), read for every registration.
+ */
 export const INVALID_DEVICE_HASHES = Symbol('INVALID_DEVICE_HASHES');
 
 /** Token of risk's device registration ports (DeviceRegistrationRisk), assembled by app.module. */
@@ -75,7 +86,7 @@ export function isDefiniteInsertFailure(error: unknown): boolean {
 export class RegisterDeviceService {
   constructor(
     @Inject(CLOCK) private readonly clock: Clock,
-    @Inject(INVALID_DEVICE_HASHES) private readonly invalidHashes: ReadonlySet<string>,
+    @Inject(INVALID_DEVICE_HASHES) private readonly invalidHashes: InvalidDeviceHashes,
     @Inject(DevicesRepository) private readonly devices: DevicesRepository,
     // Absent when the process has no keyring (local / test without FIELD_KEY_PROVIDER).
     @Optional() @Inject(FIELD_CRYPTO) private readonly fieldCrypto: FieldCrypto | undefined,
@@ -83,7 +94,11 @@ export class RegisterDeviceService {
   ) {}
 
   async register(command: RegisterDeviceCommand): Promise<RegisterDeviceResult> {
-    if (!isRegistrableDeviceHash(command.deviceHash, this.invalidHashes)) {
+    // A malformed hash is refused without reading the configuration.
+    if (!isWellFormedDeviceHash(command.deviceHash)) return { kind: 'invalid_device_hash' };
+    // Read on the pool before anything else (no transaction is held yet); never rejects.
+    const invalidHashes = await this.invalidHashes.forApp(command.appId);
+    if (!isRegistrableDeviceHash(command.deviceHash, invalidHashes)) {
       return { kind: 'invalid_device_hash' };
     }
     if (this.fieldCrypto === undefined) {

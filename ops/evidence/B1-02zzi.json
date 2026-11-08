@@ -1,0 +1,105 @@
+{
+  "red_tests": [
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#9][BR-ID-09 细则；D10-1034 ②] 没有配置行时清单恰为种子；传入的种子集合不被改动",
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#10][BR-ID-09 细则「运营可追加」；D10-1034 ②] 追加取并集、删不掉种子：种子加 H、只写 [H]、空数组、只写部分种子，结果都含全部种子",
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#11][BR-ID-09 细则；D10-1034 ②] 数组里的非法项被忽略、不被改写后使用，合法项照用",
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#12][BR-ID-09 细则；D10-1034 ②] 整体非法的配置值（对象、字符串、数字、布尔、JSON null）只用种子",
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#13][BR-ID-09 细则；D10-1034 ②] 任意配置值：结果恰为种子并上数组顶层的合法哈希，种子永远在内（性质测试）",
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#14][BR-ID-09 细则] 按请求的 app 读 device.invalid_hashes：A 追加的 H 只进 A 的清单，没有配置行的 B 只用种子",
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#15][BR-ID-09 细则；D10-1034 ②] 读取口拒绝或直接抛错时不报错，只用种子判定",
+    "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#16][BR-ID-09 细则「运营可追加」] 两次调用之间改了配置行：下一次调用即按新值，不沿用旧值",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#1][BR-ID-09 细则「设备标识的无效值」] 运营在种子之后追加哈希 H：用 H 注册 20001 [device_hash] 不签发不落库，种子各项照样 20001，清单外的合法哈希照常签发",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#2][BR-ID-09 细则；D10-1034 ②] 删不掉种子：配置只写 [H] 时种子各项与 H 都 20001（并集，不是替换）；配置写成空数组时种子照样 20001",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#3][BR-ID-09 细则；D10-1034 ②] 本 app 没有配置行时只用种子（种子 20001、H 照常签发）；运营补上 [H] 后下一次注册 H 即 20001",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#4][BR-ID-09 细则；D10-1034 ②] 数组里混有非法项（非字符串、对象、嵌套数组、大写 hex、带空白、长度不符、非 hex）：非法项忽略且不被改写后使用，合法项 H 照用，种子照用",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#5][BR-ID-09 细则；D10-1034 ②] 整体非法的配置值（对象、字符串、数字、布尔、JSON null）只用种子、不放宽；同一进程里配置合法的 app 照常按配置生效",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#6][BR-ID-09 细则] 按 app 隔离：A app 追加 H 只影响 A；没有配置行的 B app 与配置了别的哈希的 C app 用 H 照常签发，种子在各 app 都 20001",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#7][BR-ID-09 细则「运营可追加」] 运营改了配置行后下一次注册即生效、不需重启：[H1] → [H2] → []，每一步之后的第一次注册按新值判定，种子始终 20001",
+    "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#8][BR-ID-09 细则；D10-1034 ②] 读取 device.invalid_hashes 失败时只用种子判定：种子各项仍 20001（不是 50001、不放过），清单外的合法哈希照常签发；读取恢复后下一次注册按配置判定"
+  ],
+  "risk_note": "RV1 (identity; no migration, no contract change). D10-1034 ②: device registration checked a device.invalid_hashes set loaded once at startup from the specs seeds (TODO waiting for config reading); B1-02zzh registered device.invalid_hashes (config.risk, object, seeded with specs/device-hash.vectors.json invalid_hash_seeds). invalid-device-hashes.ts invalidDeviceHashesOf / createInvalidDeviceHashes: the set is the seeds ∪ the configured items that are 64-char lowercase hex strings (other items ignored one by one); no row, a wholly invalid value or a read failure leave only the seeds — the seeds always apply and cannot be removed (never looser). register-device.service.ts: a malformed hash is still 20001 without reading config; otherwise the list is read per app before any transaction (no pool connection borrowed while one is held), uncached per call so the next registration sees a changed row (rule tests #3 / #7) — one primary-key read per device registration, acceptable for that endpoint. identity.module.ts reads through LANDING_CONFIG's pool-bound reader (the dedicated per-call reader would be wired in app.module.ts, outside the paths). The warn carries only {app_id, key}. 20001 data.fields=[device_hash] unchanged. Full verification is the required CI checks (approvals 21).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "general r1 by a fresh independent Claude via claude-run.sh, run before D10-1075; Codex was not attempted for this round (an earlier 'Codex quota exhausted' assumption, not a measured failure — corrected per D10-1075). pass, 0 findings (couli-runs/B1-02zzi/review-code-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude via claude-run.sh (attempt 1, 16 tests; written on top of the B1-02zzh branch before it merged). Gate spec-test review by a fresh independent Claude (D10-848; Codex not attempted, see D10-1075): r1 pass with one S2 — list.test.ts [AC-B1-02zzi#13] property runs without propParams (fast-check defaults, not scaled by PROP_RUNS nor replayable by PROP_SEED); the deterministic tests #9–#12 pin the same behaviour; a test-change can wire propParams later (couli-runs/B1-02zzi/review-spec-r1.json). Red: 16 rule tests red for the right reason, 0 problems, 0 exemptions; on the implementation the local container ran all 16 green. After B1-02zzh was changed to register the key without a seed row (D10-1085, [AC-F1-02a#42]), this branch was rebased onto it and the local container ran all 16 rule tests green again (no row → specs seeds only, unchanged behaviour)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b7e8cc97b326189a357c21234e56263952167a56",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  },
+  "task": "B1-02zzi",
+  "spec_commit": "3e988df8238ecea6e0efd3648ad371976d1b41f3",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "3e988df8238ecea6e0efd3648ad371976d1b41f3",
+      "tree": "bd2ae319233536fa5b3846c0616fb79431629e8f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T17:42:41Z",
+      "finished_at": "2026-11-08T17:43:03Z",
+      "red_tests": [
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#9][BR-ID-09 细则；D10-1034 ②] 没有配置行时清单恰为种子；传入的种子集合不被改动",
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#10][BR-ID-09 细则「运营可追加」；D10-1034 ②] 追加取并集、删不掉种子：种子加 H、只写 [H]、空数组、只写部分种子，结果都含全部种子",
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#11][BR-ID-09 细则；D10-1034 ②] 数组里的非法项被忽略、不被改写后使用，合法项照用",
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#12][BR-ID-09 细则；D10-1034 ②] 整体非法的配置值（对象、字符串、数字、布尔、JSON null）只用种子",
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#13][BR-ID-09 细则；D10-1034 ②] 任意配置值：结果恰为种子并上数组顶层的合法哈希，种子永远在内（性质测试）",
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#14][BR-ID-09 细则] 按请求的 app 读 device.invalid_hashes：A 追加的 H 只进 A 的清单，没有配置行的 B 只用种子",
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#15][BR-ID-09 细则；D10-1034 ②] 读取口拒绝或直接抛错时不报错，只用种子判定",
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts > [AC-B1-02zzi#16][BR-ID-09 细则「运营可追加」] 两次调用之间改了配置行：下一次调用即按新值，不沿用旧值",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#1][BR-ID-09 细则「设备标识的无效值」] 运营在种子之后追加哈希 H：用 H 注册 20001 [device_hash] 不签发不落库，种子各项照样 20001，清单外的合法哈希照常签发",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#2][BR-ID-09 细则；D10-1034 ②] 删不掉种子：配置只写 [H] 时种子各项与 H 都 20001（并集，不是替换）；配置写成空数组时种子照样 20001",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#3][BR-ID-09 细则；D10-1034 ②] 本 app 没有配置行时只用种子（种子 20001、H 照常签发）；运营补上 [H] 后下一次注册 H 即 20001",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#4][BR-ID-09 细则；D10-1034 ②] 数组里混有非法项（非字符串、对象、嵌套数组、大写 hex、带空白、长度不符、非 hex）：非法项忽略且不被改写后使用，合法项 H 照用，种子照用",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#5][BR-ID-09 细则；D10-1034 ②] 整体非法的配置值（对象、字符串、数字、布尔、JSON null）只用种子、不放宽；同一进程里配置合法的 app 照常按配置生效",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#6][BR-ID-09 细则] 按 app 隔离：A app 追加 H 只影响 A；没有配置行的 B app 与配置了别的哈希的 C app 用 H 照常签发，种子在各 app 都 20001",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#7][BR-ID-09 细则「运营可追加」] 运营改了配置行后下一次注册即生效、不需重启：[H1] → [H2] → []，每一步之后的第一次注册按新值判定，种子始终 20001",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts > [AC-B1-02zzi#8][BR-ID-09 细则；D10-1034 ②] 读取 device.invalid_hashes 失败时只用种子判定：种子各项仍 20001（不是 50001、不放过），清单外的合法哈希照常签发；读取恢复后下一次注册按配置判定"
+      ],
+      "expected": [
+        "test/spec/identity/invalid-device-hashes-config/list.test.ts",
+        "test/spec/identity/invalid-device-hashes-config/register.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "6ce2e005ef542e25eefe7c6a111d2eaf22b9af1fe625a8878d0b2eb8a2d452ce"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "147582530cecaf2e223ce17045a1ce53cb15c5566a9a7c199b3f105939ee51ee"
+        }
+      ]
+    }
+  ]
+}

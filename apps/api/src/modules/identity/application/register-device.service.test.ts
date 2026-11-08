@@ -13,6 +13,7 @@ import {
 import { expect, it } from 'vitest';
 import { FixedClock, type FieldCrypto } from '../../platform/index.ts';
 import { DEVICE_CHECK_LOCK_TIMEOUT, DevicesRepository } from '../infra/devices.repository.ts';
+import type { InvalidDeviceHashes } from '../infra/invalid-device-hashes.ts';
 import {
   RegisterDeviceService,
   isDefiniteInsertFailure,
@@ -154,14 +155,27 @@ function fakeRisk(refuse?: number) {
   return { risk, calls };
 }
 
+/** The invalid-hash list by app: `[zeros]` for every app; `apps` records each read. */
+function fakeList(list: ReadonlySet<string> = new Set([zeros])) {
+  const apps: string[] = [];
+  const hashes: InvalidDeviceHashes = {
+    forApp(appId) {
+      apps.push(appId);
+      return Promise.resolve(list);
+    },
+  };
+  return { hashes, apps };
+}
+
 function service(options: {
   db?: Kysely<DB> | undefined;
   crypto?: FieldCrypto | undefined;
   risk?: DeviceRegistrationPorts;
+  invalid?: InvalidDeviceHashes;
 }) {
   return new RegisterDeviceService(
     new FixedClock(NOW),
-    new Set([zeros]),
+    options.invalid ?? fakeList().hashes,
     new DevicesRepository(options.db),
     options.crypto,
     options.risk ?? fakeRisk().risk,
@@ -426,4 +440,56 @@ it('[AC-B1-03f#20] classifies insert failures: SQLSTATE answers are definite, co
   expect(isDefiniteInsertFailure({ code: 'ECONNRESET' })).toBe(false);
   expect(isDefiniteInsertFailure(new Error('no code'))).toBe(false);
   expect(isDefiniteInsertFailure(null)).toBe(false);
+});
+
+it("[AC-B1-02zzi#14][AC-B1-02zzi#16] reads the list of the request's app on every registration, before any statement", async () => {
+  const { db, statements } = fakeDb();
+  const list = fakeList();
+  const registration = service({ db, crypto: fakeCrypto().crypto, invalid: list.hashes });
+  const order: string[] = [];
+  const recording: InvalidDeviceHashes = {
+    async forApp(appId) {
+      order.push(`read:${String(statements.length)}`);
+      return list.hashes.forApp(appId);
+    },
+  };
+  const tracked = service({ db, crypto: fakeCrypto().crypto, invalid: recording });
+  expect((await registration.register(command)).kind).toBe('registered');
+  expect((await registration.register({ ...command, appId: 'other' })).kind).toBe('registered');
+  expect(list.apps).toEqual(['couli', 'other']);
+  const before = statements.length;
+  expect((await tracked.register(command)).kind).toBe('registered');
+  // The list is read before the registration's first statement (no transaction is held).
+  expect(order).toEqual([`read:${String(before)}`]);
+});
+
+it("[AC-B1-02zzi#1] a hash on the app's list is refused; the same hash off the list is registered", async () => {
+  const listed = createHash('sha256').update('added-by-operations').digest('hex');
+  const { db, inserts } = fakeDb();
+  const byApp: InvalidDeviceHashes = {
+    forApp: (appId) => Promise.resolve(new Set(appId === 'couli' ? [zeros, listed] : [zeros])),
+  };
+  const registration = service({ db, crypto: fakeCrypto().crypto, invalid: byApp });
+  expect(await registration.register({ ...command, deviceHash: listed })).toEqual({
+    kind: 'invalid_device_hash',
+  });
+  expect(inserts).toEqual([]);
+  const other = await registration.register({ ...command, appId: 'other', deviceHash: listed });
+  expect(other.kind).toBe('registered');
+  expect(inserts.map(({ row }) => row['device_hash'])).toEqual([listed]);
+});
+
+it('[AC-B1-02c#4] a malformed hash is refused without reading the list', async () => {
+  const list = fakeList();
+  const registration = service({
+    db: fakeDb().db,
+    crypto: fakeCrypto().crypto,
+    invalid: list.hashes,
+  });
+  for (const deviceHash of [hash.toUpperCase(), hash.slice(1), `${hash} `, '']) {
+    expect(await registration.register({ ...command, deviceHash })).toEqual({
+      kind: 'invalid_device_hash',
+    });
+  }
+  expect(list.apps).toEqual([]);
 });

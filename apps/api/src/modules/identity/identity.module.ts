@@ -222,7 +222,12 @@ import { DeletionController } from './http/public/deletion.controller.ts';
 import { DevicesRepository } from './infra/devices.repository.ts';
 import { deviceHashOf } from './infra/login-accounts.ts';
 import { createSmsSender, smsSenderToken } from './infra/fake-sms.ts';
-import { loadInvalidDeviceHashSeeds } from './infra/invalid-device-hashes.ts';
+import {
+  createInvalidDeviceHashes,
+  loadInvalidDeviceHashSeeds,
+  type InvalidDeviceHashConfigReader,
+  type InvalidDeviceHashes,
+} from './infra/invalid-device-hashes.ts';
 import { createSessionLookup } from './infra/session-lookup.ts';
 import { createSmsHmac } from './infra/sms-hmac.ts';
 
@@ -643,8 +648,31 @@ export class IdentityModule {
               ? null
               : createBindPhoneService({ clock, sms, blocklist, assets, risk, crypto, redis }),
         },
-        // Read once while the entry starts; a missing or malformed list stops the entry.
-        { provide: INVALID_DEVICE_HASHES, useFactory: () => loadInvalidDeviceHashSeeds() },
+        {
+          // B1-02zzi (BR-ID-09 细则, D10-1034 ②): the specs seeds are read once while the entry
+          // starts (a missing or malformed seed list stops the entry); device.invalid_hashes of the
+          // request's app is read for every registration through content's uncached reader on
+          // the pool (LANDING_CONFIG: a fresh reader per read, as the landing registration's), so
+          // an operator's change applies to the next registration. Without that reader or a
+          // database the seeds alone apply (never a looser list).
+          provide: INVALID_DEVICE_HASHES,
+          inject: [ROOT_LOGGER, LANDING_CONFIG, { token: DB, optional: true }],
+          useFactory: async (
+            logger: RootLogger,
+            reader: LandingRegisterConfigReader | null,
+            db?: Kysely<Database>,
+          ): Promise<InvalidDeviceHashes> => {
+            const config: InvalidDeviceHashConfigReader =
+              reader === null || db === undefined
+                ? { configValue: () => Promise.resolve(null) }
+                : { configValue: (appId, key) => reader.configValue(appId, key, db) };
+            return createInvalidDeviceHashes({
+              seeds: await loadInvalidDeviceHashSeeds(),
+              config,
+              logger,
+            });
+          },
+        },
         DevicesRepository,
         options.deviceRegistration === undefined
           ? { provide: DEVICE_REGISTRATION_RISK, useValue: REFUSING_DEVICE_REGISTRATION }
