@@ -25,7 +25,8 @@
 //   that the idempotency module commits never commits the account with it):
 //   ⓗ an account of (app_id, phone_hmac) with status ≠ deleted → already_registered, nothing
 //     written; only status = deleted accounts (deletion done, merge tombstones) leave the phone
-//     free. TODO(规划/11 §4.5): 注销中账号按注销单（deletion_status）判定 — blocked on B1-15;
+//     free. A pending / cooling-period deletion still holds the phone, as BR-ID-27 treats the
+//     same phone as a new user only after the deletion is done;
 //   ⓘ 44001 (§9.3): first the phone blocklist (risk's matchRegistration, read on the transaction,
 //     before the IP lock; the hit is recorded by risk after the transaction rolled back and released
 //     its connection, never through a second pooled connection while it is held), then the IP

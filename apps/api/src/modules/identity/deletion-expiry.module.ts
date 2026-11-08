@@ -5,8 +5,8 @@
 // database deletionExpiryToken() provides null and one info line is logged.
 // The module and the option factories app.module passes depend only on the platform tokens CLOCK,
 // ROOT_LOGGER, APP_CONFIG and (optional) DB, like IdentityWorkerModule.
-// The withdrawal port is app.module's truthful "no withdrawal" implementation until B2-05
-// (hasNonTerminal answers false; TODO(规划/11 §2.3) there — blocked on B2-05); the balance port is
+// The withdrawal port is payout's reader that app.module injects (createWithdrawalInFlightReader,
+// B2-05e; hasNonTerminal counts ban-frozen withdrawals too); the balance port is
 // the one app.module assembles for B1-15d over the ledger's getBalances, on the caller's transaction.
 //
 // B1-15g: the same token's runner also does the processing round (cleanup, Apple revocation, done)

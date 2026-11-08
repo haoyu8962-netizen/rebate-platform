@@ -8,8 +8,8 @@
 // reads or judges withdrawal states itself. Reads on the caller's transaction (`trx`), no writes,
 // no logging.
 //
-// Until the payout module exists (B2-05), app.module injects an implementation that truthfully
-// answers false (TODO blocked on B2-05 there).
+// app.module injects payout's reader (createWithdrawalInFlightReader, B2-05e) for this port and
+// for WithdrawalNonTerminalReader below.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports,
 // relative imports with `.ts`.

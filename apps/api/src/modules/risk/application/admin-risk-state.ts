@@ -180,7 +180,7 @@ function check(body: unknown, now: Date): Checked {
 }
 
 export class AdminRiskState {
-  // TODO(规划/11 §4.5): 由通知线订阅 risk.state_changed 发送 RISK_STATE_CHANGED — blocked on 通知线订阅跟进任务
+  // RISK_STATE_CHANGED 站内信由通知线消费 risk.state_changed 发送（notification/application/risk-state-message.ts，B1-12g）。
   readonly #db: Kysely<DB>;
   readonly #clock: Clock;
   readonly #riskState: RiskStateService;
