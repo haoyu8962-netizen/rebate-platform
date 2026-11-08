@@ -7,6 +7,7 @@ type: test-change
 # 冻结用例把键的字面量写死，实现一改必红，必须同 PR 随改：8 个文件里只把 `biz:${BIZ}:…` 字面量换成带 app_id 的新键，不增删用例、不改其余断言。新鲜独立 Claude 改，另一位新鲜 Claude 只读复核「不削弱」，按 approvals #24 报核（编排加 owner-approved）。
 # 门禁口径：payment 属 MONEY_PATHS，非 task 分支的证据豁免（approvals 12）不适用，故走 task/B2-15x 带 ops/evidence/B2-15x.json（money 评审 Codex medium）；tester none（无新规则测试，red 不要求），land 用 NO_SPEC=1。
 # 上线前改键，pay.enabled 仍关，无存量任务跨键问题。
+# 2026-11-09 台账补丁（D10-1078、D10-1083）：NO_SPEC 形态被 evidence-check 拒（spec_commit 取主干尖，冻结文件改动都算其后）。改 tester claude-independent + test_paths，测试提交在前先红；字面量用 renames（CT-06zzzzl 放宽后接受反引号串里的占位）：替换后与基线逐字相同的 7 个文件不进红检，result/concurrency 多一处 prettier 重排，按用例判，须红。
 refs: [BR-PAY-01]
 refs_hash:
   BR-PAY-01: 15ea5ac62c34
@@ -16,6 +17,8 @@ paths:
   - 'apps/api/src/modules/payment/application/pay-settlement.ts'
   - 'apps/api/src/modules/payment/application/pay-refund-result.ts'
   - 'apps/api/src/modules/payment/domain/types.ts'
+  - 'ops/evidence/B2-15x.json'
+test_paths:
   - 'test/spec/payment/admin/concurrency.int.test.ts'
   - 'test/spec/payment/admin/resolve.int.test.ts'
   - 'test/spec/payment/close/flow.int.test.ts'
@@ -24,10 +27,12 @@ paths:
   - 'test/spec/payment/result/notify.int.test.ts'
   - 'test/spec/payment/result/query.int.test.ts'
   - 'test/spec/payment/result/rollback.int.test.ts'
-  - 'ops/evidence/B2-15x.json'
 impl: claude
-tester: none
+tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payment/**'
 status: todo
+renames:
+  - from: '`biz:${BIZ}:${order.biz_ref}`'
+    to: '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`'

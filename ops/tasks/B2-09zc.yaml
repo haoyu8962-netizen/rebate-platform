@@ -32,4 +32,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/settle-adjust-approve/**'
-status: todo
+status: done
+pr: 2903
