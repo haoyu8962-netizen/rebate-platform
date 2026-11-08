@@ -38,6 +38,11 @@ import {
   AdminFundLedgerController,
 } from './http/admin/fund-ledger.controller.ts';
 import type { AdminFundLedgerDeps } from './application/admin-fund-ledger.ts';
+import type { AdminLedgerReadDeps, AdminLedgerReadPorts } from './application/admin-ledger-read.ts';
+import {
+  ADMIN_LEDGER_READ_DEPS,
+  AdminUserFundController,
+} from './http/admin/user-fund.controller.ts';
 import {
   AdminReconDiffCloseController,
   RECON_DIFF_CLOSE_DEPS,
@@ -120,6 +125,11 @@ export interface LedgerAdminOptions {
   /** B2-04zs: admin's createAdminDisplayNameReader. */
   readonly adminNames: AdminFundLedgerDeps['adminNames'];
   /**
+   * B2-02u: one user's balance card and ledger (fund.view or user.lookup, read only): identity's
+   * user check and payout's withdrawn total and holds in effect, on the read transaction.
+   */
+  readonly userFund: AdminLedgerReadPorts;
+  /**
    * B2-12c: the manual adjustments' ledger (the entry's event bus and payout's recovery hook,
    * D10-587) and the other modules' ports (identity, payout, orders, notification).
    */
@@ -135,8 +145,9 @@ export interface LedgerAdminOptions {
  * (POST /admin/v1/recon-diffs/{recon_diff_id}/close, fund.recon) under platform idempotency, with
  * payout's hold release and admin's audit writer on the closing transaction. B2-09e: the daily
  * asset snapshot list (GET /admin/v1/asset-snapshots, fund.view, read only). B2-04zs: the fund
- * ledger overview (GET /admin/v1/fund-ledger, fund.view, read only). Without the database
- * the routes still register and fail closed (50001).
+ * ledger overview (GET /admin/v1/fund-ledger, fund.view, read only). B2-02u: one user's balance
+ * card and ledger (GET /admin/v1/users/{user_id}/fund-summary, GET /admin/v1/ledger, fund.view or
+ * user.lookup, read only). Without the database the routes still register and fail closed (50001).
  */
 export class LedgerAdminModule {
   static forAdmin(options: LedgerAdminOptions): DynamicModule {
@@ -149,6 +160,7 @@ export class LedgerAdminModule {
         AdminReconDiffWriteOffController,
         AdminFundLedgerController,
         AdminAdjustmentsController,
+        AdminUserFundController,
       ],
       providers: [
         // B2-12c: the adjustment reads (fund.adjust or fund.view, read only) on the primary
@@ -207,6 +219,14 @@ export class LedgerAdminModule {
             db === undefined
               ? null
               : { db, clock, waterLevel: options.waterLevel, adminNames: options.adminNames },
+        },
+        // B2-02u: the user fund reads on the primary handle (one read-only REPEATABLE READ
+        // transaction per answer).
+        {
+          provide: ADMIN_LEDGER_READ_DEPS,
+          inject: [CLOCK, { token: DB, optional: true }],
+          useFactory: (clock: Clock, db?: Kysely<Database>): AdminLedgerReadDeps | null =>
+            db === undefined ? null : { db, clock, ports: options.userFund },
         },
         {
           provide: ASSET_SNAPSHOT_READ_DB,

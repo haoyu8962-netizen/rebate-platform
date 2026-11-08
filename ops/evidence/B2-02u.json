@@ -1,0 +1,113 @@
+{
+  "task": "B2-02u",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "641db190ae773cedad2feed830451661ee0c1488",
+  "red_tests": [
+    "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#1] 权限：只持 fund.view、只持 user.lookup、两者都持、超管都能读两个接口（不要 step-up）；只持 fund.recon、只持 fund.adjust、没有权限点 → 10403；不带令牌 → 10001",
+    "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#2] 两种权限同形同值：只持 user.lookup 与只持 fund.view（及超管）对同一用户的余额卡与每一页流水，data 逐字相同",
+    "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#3] 不含内部备注：凭证 memo / operator、提现驳回备注、冻结记录 source_ref / created_by 有值时，两个接口在两种权限下的响应任意层级都没有 memo、operator、note、reject_note、source_ref、created_by 键，也不出现这些内部文本",
+    "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#4] 只读：两种权限读余额卡与流水（含筛选与翻页）前后，凭证、分录、账户、余额缓存、冻结记录、提现单与审计行都不变，也不写审计",
+    "test/spec/ledger/admin-ledger-read/contract.test.ts > [AC-B2-02u#18] adminGetUserFundSummary 去掉 x-implementation: planned（生成的 planned 清单与运行时请求 schema 表同步），x-auth admin、x-error-codes [10001, 10403, 20001] 不变；admin 入口恰好挂一次对应 GET 并带契约请求 schema，api 入口不挂",
+    "test/spec/ledger/admin-ledger-read/contract.test.ts > [AC-B2-02u#18] adminListLedgerEntries 去掉 x-implementation: planned（生成的 planned 清单与运行时请求 schema 表同步），x-auth admin、x-error-codes [10001, 10403, 20001] 不变；admin 入口恰好挂一次对应 GET 并带契约请求 schema，api 入口不挂",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#9] 流水：只含该用户余额账户 available 与 frozen 两子户的分录（不含平台科目、同 app 别的用户），booked_at 倒序、同一时刻 entry_id 倒序、同一凭证的分录相邻；金额按用户视角带符号，balance_after_fen 原值，voucher 四字段取凭证，link 按 biz_type 映射",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#10] 流水符号与用户侧一致：available 子户上的每条分录，后台 amount_fen 与 balance_after_fen 与 GET /v1/wallet/ledger 的查询对同一分录给出的相同",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#11] 筛选：ledger_type、sub_type、sub_account、accounting_date_from / to（闭区间，按凭证会计日）、ref（凭证 biz_id 精确匹配）各自生效且可组合，total 随筛选",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#12] 分页：page / page_size 切片按同一顺序不重不漏，total 是全部条数，超出末页 items 为空；不带时 page=1、page_size=20；page_size=200 可用",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#13] 流水的拒绝：缺 user_id、不是 UUID、不存在、别的 app 的用户 → 20001 [user_id]；page_size 超过 200 → [page_size]；accounting_date_from 晚于 to → [accounting_date_from, accounting_date_to]；sub_account / ledger_type 不在枚举 → 指名该参数",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#14] 流水覆盖用户余额账户上的全部 13 种 ledger_type（含 SHARE_CREDIT、REFERRAL_CREDIT/INDIRECT、REWARD/invite、SETTLE_ADJUST、WITHDRAW_PAID、WITHDRAW_RETURN、WITHDRAW_FEE、TAX_WITHHOLD、BAD_DEBT_WRITEOFF）：每条分录原样出现、一条不丢，金额按用户视角带符号；按每一种 ledger_type 筛选只得该类型的全部分录",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#15] link 按凭证 biz_type 映射：ORDER_CREDIT、ORDER_CLAWBACK、ORDER_SETTLE_ADJUST → order（该订单），withdrawal → withdrawal，admin_adjustment → adjustment，bad_debt_writeoff → writeoff（id 为凭证 biz_id）；映射不到的（INVITE_REWARD 等）→ null",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#16] 排序先按 booked_at 倒序、同一时刻再按 entry_id 倒序：后写入但 booked_at 较早的分录（entry_id 更大）排在先写入、booked_at 较晚的分录之后；同一凭证的分录相邻；分页按同一顺序切片",
+    "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#17] 会计日筛选按凭证 accounting_date（+08:00 日切）闭区间：UTC 仍是 10-28、北京时间已是 10-29 00:30 的凭证算 10-29，北京时间 10-28 23:59:59 的算 10-28",
+    "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#5] 余额卡：available_fen / frozen_fen / negative_since 取 account_balances 缓存行原值（缓存与分录不一致时仍取缓存）；withdrawn_fen 只计本人 PAID_API 与 PAID_MANUAL 提现单的 amount_fen",
+    "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#6] 余额卡：有账户且缓存与分录一致时照缓存给出（正余额 negative_since=null）；还没有账本账户的用户 → 0 / 0 / null，withdrawn_fen=0，未冻结",
+    "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#7] 提现冻结：生效的冻结记录（未释放且未过 hold_until）按 withdraw_hold_kind 枚举顺序去重列出、blocked=true；已释放、已过期、别的用户的不算；只剩已释放 / 已过期的 → {blocked:false, hold_kinds:[]}",
+    "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#8] 余额卡的拒绝：不存在的 user_id、别的 app 的用户、不是 UUID 的 user_id → 20001 data.fields=[user_id]"
+  ],
+  "risk_note": "RV2 (ledger module, read only; D10-1049 ③, D10-1050 ②, D10-1057, D10-1079). Implements the CT-24zzc operations: ledger/http/admin/user-fund.controller.ts (permission fund.view or user.lookup, readOnly, no-store, contract route schemas), application / infra admin-ledger-read (one read-only REPEATABLE READ transaction per answer). Summary: available_fen / frozen_fen / negative_since from the account_balances cache row (no account row → 0 / 0 / null), withdrawn_fen through payout's paid-withdrawal total (amount_fen of PAID_API / PAID_MANUAL, BR-FUND-18), withdraw_block from active withdraw_holds judged on the injected Clock (kinds only). Ledger: the user's USER_BALANCE entries of both sub-accounts joined to their vouchers, booked_at desc, id desc, amount in the user's sign (subFen(0n, x), as listWalletLedger), link mapped from biz_type, six filters and page / page_size / total. Neither answer reads or carries memo / operator / note / reject_note / source_ref / created_by (D10-1057 ①), so both permissions get the same answer. Per D10-1079 the two operations drop x-implementation: planned (openapi.yaml and regenerated files in this task's paths). Built on CT-24zzc. The brief was written by hand because BR-FUND-13/15/16/18 exceed 24 KB (BR-FUND-15 / 16 main rows only). Host: tsc 0, apps/api unit tests 88, non-integration rule tests 24; integration rule tests 17 / 17 on the host in the local container slot; full verification is the required CI checks (approvals #21).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "641db190ae773cedad2feed830451661ee0c1488",
+      "tree": "12a88fc15c5c3b009a46a378efa15f2ca22e1f09",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T18:19:54Z",
+      "finished_at": "2026-11-08T18:20:26Z",
+      "red_tests": [
+        "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#1] 权限：只持 fund.view、只持 user.lookup、两者都持、超管都能读两个接口（不要 step-up）；只持 fund.recon、只持 fund.adjust、没有权限点 → 10403；不带令牌 → 10001",
+        "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#2] 两种权限同形同值：只持 user.lookup 与只持 fund.view（及超管）对同一用户的余额卡与每一页流水，data 逐字相同",
+        "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#3] 不含内部备注：凭证 memo / operator、提现驳回备注、冻结记录 source_ref / created_by 有值时，两个接口在两种权限下的响应任意层级都没有 memo、operator、note、reject_note、source_ref、created_by 键，也不出现这些内部文本",
+        "test/spec/ledger/admin-ledger-read/access.int.test.ts > [AC-B2-02u#4] 只读：两种权限读余额卡与流水（含筛选与翻页）前后，凭证、分录、账户、余额缓存、冻结记录、提现单与审计行都不变，也不写审计",
+        "test/spec/ledger/admin-ledger-read/contract.test.ts > [AC-B2-02u#18] adminGetUserFundSummary 去掉 x-implementation: planned（生成的 planned 清单与运行时请求 schema 表同步），x-auth admin、x-error-codes [10001, 10403, 20001] 不变；admin 入口恰好挂一次对应 GET 并带契约请求 schema，api 入口不挂",
+        "test/spec/ledger/admin-ledger-read/contract.test.ts > [AC-B2-02u#18] adminListLedgerEntries 去掉 x-implementation: planned（生成的 planned 清单与运行时请求 schema 表同步），x-auth admin、x-error-codes [10001, 10403, 20001] 不变；admin 入口恰好挂一次对应 GET 并带契约请求 schema，api 入口不挂",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#9] 流水：只含该用户余额账户 available 与 frozen 两子户的分录（不含平台科目、同 app 别的用户），booked_at 倒序、同一时刻 entry_id 倒序、同一凭证的分录相邻；金额按用户视角带符号，balance_after_fen 原值，voucher 四字段取凭证，link 按 biz_type 映射",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#10] 流水符号与用户侧一致：available 子户上的每条分录，后台 amount_fen 与 balance_after_fen 与 GET /v1/wallet/ledger 的查询对同一分录给出的相同",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#11] 筛选：ledger_type、sub_type、sub_account、accounting_date_from / to（闭区间，按凭证会计日）、ref（凭证 biz_id 精确匹配）各自生效且可组合，total 随筛选",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#12] 分页：page / page_size 切片按同一顺序不重不漏，total 是全部条数，超出末页 items 为空；不带时 page=1、page_size=20；page_size=200 可用",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#13] 流水的拒绝：缺 user_id、不是 UUID、不存在、别的 app 的用户 → 20001 [user_id]；page_size 超过 200 → [page_size]；accounting_date_from 晚于 to → [accounting_date_from, accounting_date_to]；sub_account / ledger_type 不在枚举 → 指名该参数",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#14] 流水覆盖用户余额账户上的全部 13 种 ledger_type（含 SHARE_CREDIT、REFERRAL_CREDIT/INDIRECT、REWARD/invite、SETTLE_ADJUST、WITHDRAW_PAID、WITHDRAW_RETURN、WITHDRAW_FEE、TAX_WITHHOLD、BAD_DEBT_WRITEOFF）：每条分录原样出现、一条不丢，金额按用户视角带符号；按每一种 ledger_type 筛选只得该类型的全部分录",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#15] link 按凭证 biz_type 映射：ORDER_CREDIT、ORDER_CLAWBACK、ORDER_SETTLE_ADJUST → order（该订单），withdrawal → withdrawal，admin_adjustment → adjustment，bad_debt_writeoff → writeoff（id 为凭证 biz_id）；映射不到的（INVITE_REWARD 等）→ null",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#16] 排序先按 booked_at 倒序、同一时刻再按 entry_id 倒序：后写入但 booked_at 较早的分录（entry_id 更大）排在先写入、booked_at 较晚的分录之后；同一凭证的分录相邻；分页按同一顺序切片",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts > [AC-B2-02u#17] 会计日筛选按凭证 accounting_date（+08:00 日切）闭区间：UTC 仍是 10-28、北京时间已是 10-29 00:30 的凭证算 10-29，北京时间 10-28 23:59:59 的算 10-28",
+        "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#5] 余额卡：available_fen / frozen_fen / negative_since 取 account_balances 缓存行原值（缓存与分录不一致时仍取缓存）；withdrawn_fen 只计本人 PAID_API 与 PAID_MANUAL 提现单的 amount_fen",
+        "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#6] 余额卡：有账户且缓存与分录一致时照缓存给出（正余额 negative_since=null）；还没有账本账户的用户 → 0 / 0 / null，withdrawn_fen=0，未冻结",
+        "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#7] 提现冻结：生效的冻结记录（未释放且未过 hold_until）按 withdraw_hold_kind 枚举顺序去重列出、blocked=true；已释放、已过期、别的用户的不算；只剩已释放 / 已过期的 → {blocked:false, hold_kinds:[]}",
+        "test/spec/ledger/admin-ledger-read/summary.int.test.ts > [AC-B2-02u#8] 余额卡的拒绝：不存在的 user_id、别的 app 的用户、不是 UUID 的 user_id → 20001 data.fields=[user_id]"
+      ],
+      "expected": [
+        "test/spec/ledger/admin-ledger-read/access.int.test.ts",
+        "test/spec/ledger/admin-ledger-read/contract.test.ts",
+        "test/spec/ledger/admin-ledger-read/ledger.int.test.ts",
+        "test/spec/ledger/admin-ledger-read/summary.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a16c109004aed85c72ecb1564be297d4963290c3e01e7a62ab574378d172f4f2"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4f63d6fbb6c289a27be02c32272d75b8c64f64fe14254312488f67e617a0dbca"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex money (medium, D10-1025 / D10-1057) via tools/agent/codex-run.sh round 1 pass, no findings (couli-runs/B2-02u/review-codex-money-r1.json)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4c482038111802cde262f593cd083524037e68e4",
+    "specs": "fb3470055042136c0a5f959c092261acff2a7f7f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claude contexts in 3 attempts. Codex spec-test r1 fail (5 S1; the first commit was also stopped by a gitleaks false positive on a constant named SECRET, renamed) → attempt 2 → Codex r2 pass; D10-1079 ③ attempt 3 added contract.test.ts (both operations implemented) → Codex r3 pass on that file (not counted). Per D10-848 ③ / D10-1080 the review that counts is a fresh independent Claude: full r4 pass, no findings (couli-runs/B2-02u/review-claude-spectest-r4.json). Codex rounds kept for reference (review-codex-spectest-r1.json, codex-spectest2.out, codex-spectest3.out)."
+  }
+}

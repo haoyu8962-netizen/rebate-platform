@@ -5004,6 +5004,29 @@ export class AppModule {
                     message: (trx, input) => recordBalanceAdjustedMessage(trx, input),
                   },
                 },
+                // B2-02u: one user's balance card and ledger: identity's users of the app,
+                // payout's withdrawn total (BR-FUND-18) and its holds in effect on the injected
+                // Clock (holdActive, BR-WDR-05), all on the read's transaction.
+                userFund: {
+                  userExists: async (handle, input) =>
+                    (
+                      await createUserDeletionStatusReader({ db: handle }).read(handle, {
+                        app_id: input.appId,
+                        user_ids: [input.userId],
+                      })
+                    ).has(input.userId),
+                  withdrawnFen: (handle, input) => readPaidWithdrawalTotal(handle, input),
+                  holdKindsInEffect: async (handle, input) =>
+                    (
+                      await createWithdrawHoldsReader().read(handle, {
+                        appId: input.appId,
+                        userId: input.userId,
+                        deviceId: '',
+                      })
+                    )
+                      .filter((hold) => holdActive(hold, input.now))
+                      .map((hold) => hold.reason),
+                },
                 // B2-04zs: the fund ledger overview reads payout's W and P and admin's names.
                 waterLevel: readAlipayWaterLevel,
                 adminNames: createAdminDisplayNameReader,
