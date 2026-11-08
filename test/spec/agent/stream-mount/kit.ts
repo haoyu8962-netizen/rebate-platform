@@ -407,7 +407,58 @@ export async function agentTablesText(db: Kysely<DB>): Promise<string> {
   return parts.join('\n');
 }
 
-/** Advances the manual time in steps, letting database work in flight finish between steps. */
+// B3-03fa (D10-980, FU-FLAKY-B3-03F-10): settleWork alone (5 x SELECT 1 and a microtask flush)
+// let the manual time outrun real database work. [AC-B3-03f#10] went red on a loaded CI runner
+// with 10 s of scheduler time used up in 282 ms of real time: the run's guard reads and its
+// closing transaction had not finished while every step had already moved the clock on. Each
+// step therefore also waits, with a bound, until the test's own database is quiet.
+
+/** Real-time bound of the wait for a quiet database after one step (D10-980 (b)). */
+const QUIET_WAIT_MS = 2_000;
+/** Real-time pause between two looks while the database is still busy. */
+const QUIET_POLL_MS = 10;
+/** Consecutive quiet looks that count as quiet (a chain of statements may be between two). */
+const QUIET_LOOKS = 2;
+
+/**
+ * Sessions of this test's database that are inside a statement or a transaction. Only this
+ * test's database counts (datname = current_database(): every test has its own database, so
+ * test files running in parallel never count, D10-980 (a)), and the session asking is left out.
+ */
+async function busySessions(db: Kysely<DB>): Promise<number> {
+  const result = await sql<{ busy: number }>`SELECT count(*)::int AS busy
+    FROM pg_stat_activity
+    WHERE datname = current_database()
+      AND pid <> pg_backend_pid()
+      AND backend_type = 'client backend'
+      AND state IN ('active', 'idle in transaction', 'idle in transaction (aborted)')`.execute(db);
+  return result.rows[0]?.busy ?? 0;
+}
+
+/**
+ * Waits until this test's database is quiet, at most QUIET_WAIT_MS of real time; at the bound
+ * it returns as if quiet (no error, no retry: the step goes on and the assertions decide).
+ */
+async function quietDatabase(db: Kysely<DB>): Promise<void> {
+  const bound = performance.now() + QUIET_WAIT_MS;
+  let quietLooks = 0;
+  while (quietLooks < QUIET_LOOKS && performance.now() < bound) {
+    if ((await busySessions(db)) === 0) {
+      quietLooks += 1;
+      // Let a statement the runtime is about to send reach the server before the next look.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    } else {
+      quietLooks = 0;
+      await new Promise<void>((resolve) => setTimeout(resolve, QUIET_POLL_MS));
+    }
+  }
+}
+
+/**
+ * Advances the manual time in steps, letting database work in flight finish between steps:
+ * after each step settleWork flushes the microtasks, then the test's database must be quiet
+ * (bounded, see quietDatabase) before the clock moves again.
+ */
 export async function stepUntil(
   r: Rig,
   db: Kysely<DB>,
@@ -416,9 +467,11 @@ export async function stepUntil(
   stepMs = 250,
 ): Promise<boolean> {
   await settleWork(db);
+  await quietDatabase(db);
   while (!done() && r.time.t < limitMs) {
     await r.time.to(Math.min(limitMs, r.time.t + stepMs));
     await settleWork(db);
+    await quietDatabase(db);
   }
   return done();
 }

@@ -1,0 +1,21 @@
+id: B3-03fa
+repo: rebate-platform
+title: B3-03fa：冻结 stream-mount 测试工具 stepUntil 每步等被测库静止再推假时钟，修 [AC-B3-03f#10] 偶发红（FU-FLAKY-B3-03F-10，D10-980；断言与期限不改）
+type: test-change
+# 2026-11-08 ops 入账（编排 D10-976 / D10-980；诊断见 couli-runs/FU-FLAKY-B3-03F-10/plan.md）。[AC-B3-03f#10] 在 CI 偶发红（11-04 #2322、11-07 #2744）：
+#   switch.int.test.ts:106 stepUntil 返回 false，整条 282ms 真实时间走完 10 s 调度器时间——kit.ts:411 每步推 250ms、步间只 5 次 SELECT 1，
+#   CI 高负载下 run 侧 guard 读与收尾事务的真实耗时超过它；是测试工具让假时钟跑在真实库操作前面，不是撤回同意路径的竞态。
+# 改法：stepUntil 每步之后改为有上限地等被测库没有进行中的语句（pg_stat_activity，只看本测试自己的库或 kit 设的 application_name，排除自身连接），
+#   到上限照常推时钟、不报错不重试；断言、期限与用例零改动。modify_existing 口径：flake_fix（D10-980），改的是冻结的测试工具而非用例块。
+# 改既有规则测试属第一类保护路径：非 task 分支、不带证据文件；新鲜独立 Claude 改、另一新鲜独立 Claude 只读复审（spec-test）；改前改后各跑 stream-mount 全目录报用时；标签由编排按 #24 核后加。
+refs: []
+refs_hash: {}
+deps: [B3-03f]
+paths:
+  - 'test/spec/agent/stream-mount/kit.ts'
+  - 'ops/tasks/B3-03fa.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
