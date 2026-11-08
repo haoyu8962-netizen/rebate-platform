@@ -159,6 +159,44 @@ it('[规划/02 §11 队列拆分; ADR-0001 §4.2 #19] 生产队列目录逐项�
     expect(QUEUE_CATALOG[pageScheduleAt - 1]?.name).toBe('pool-refresh');
     expect(QUEUE_CATALOG[pageScheduleAt + 1]?.name).toBe('poster');
   }
+  // B2-09gc（B2-09gd 前置）：evt.settlement-order-appeal-restore 有则钉死，B2-09gd 合并后收紧。Exactly one
+  // standard entry with the defaults, right after evt.risk-appeal-restore and right before
+  // evt.payout-auto-payout; its dead letter queue exactly once, right after evt.risk-appeal-restore.dead.
+  const orderAppealRestoreAt = QUEUE_CATALOG.findIndex(
+    (queue) => queue.name === 'evt.settlement-order-appeal-restore',
+  );
+  if (orderAppealRestoreAt !== -1) {
+    expect(
+      QUEUE_CATALOG.filter((queue) => queue.name === 'evt.settlement-order-appeal-restore'),
+    ).toHaveLength(1);
+    expect(QUEUE_CATALOG[orderAppealRestoreAt]).toStrictEqual({
+      name: 'evt.settlement-order-appeal-restore',
+      ...DEFAULT,
+      deadLetter: 'evt.settlement-order-appeal-restore.dead',
+    });
+    expect(QUEUE_CATALOG[orderAppealRestoreAt - 1]?.name).toBe('evt.risk-appeal-restore');
+    expect(QUEUE_CATALOG[orderAppealRestoreAt + 1]?.name).toBe('evt.payout-auto-payout');
+    expect(
+      QUEUE_CATALOG.filter((queue) => queue.name === 'evt.settlement-order-appeal-restore.dead'),
+    ).toStrictEqual([
+      {
+        name: 'evt.settlement-order-appeal-restore.dead',
+        policy: 'standard',
+        retryLimit: 0,
+        retryDelaySeconds: 1,
+        retryBackoff: false,
+        retryDelayMaxSeconds: null,
+        expireInSeconds: 900,
+        retentionSeconds: 2_592_000,
+        deleteAfterSeconds: 2_592_000,
+        deadLetter: null,
+      },
+    ]);
+    const deadAt = QUEUE_CATALOG.findIndex(
+      (queue) => queue.name === 'evt.settlement-order-appeal-restore.dead',
+    );
+    expect(QUEUE_CATALOG[deadAt - 1]?.name).toBe('evt.risk-appeal-restore.dead');
+  }
   // B2-05h 两态过渡（D10-208）：B2-05e 合并后由收紧任务 B2-05j 改回单态。Without
   // evt.payout-went-negative the list below is exactly the original one; with it, the entry sits
   // right after evt.notification-appeal-result with the defaults.
@@ -215,6 +253,7 @@ it('[规划/02 §11 队列拆分; ADR-0001 §4.2 #19] 生产队列目录逐项�
         queue.name !== 'union-auth' &&
         queue.name !== 'pay' &&
         queue.name !== 'page-schedule' &&
+        queue.name !== 'evt.settlement-order-appeal-restore' &&
         // B1-27h（个人信息副本作业，BR-ID-40）的队列，属性由 test/spec/identity/data-copies-worker 钉住。
         queue.name !== 'data-copy' &&
         queue.name !== 'dead-letter' &&
@@ -376,6 +415,27 @@ it('[规划/02 §3.1 转账队列 concurrency=1; ADR-0001 §3 海报轮询 0.5 �
       ENTRY_PLAN[entry].filter((work) => work.queue === 'page-schedule').map(() => entry),
     ),
   ).toStrictEqual([]);
+  // B2-09gc（B2-09gd 前置）：evt.settlement-order-appeal-restore 有则钉死，B2-09gd 合并后收紧。When
+  // planned, it is worker-only with concurrency 1 and the default polling, right after
+  // evt.risk-appeal-restore and right before evt.payout-auto-payout.
+  const orderAppealRestores = ENTRY_PLAN.worker.filter(
+    (work) => work.queue === 'evt.settlement-order-appeal-restore',
+  );
+  if (orderAppealRestores.length > 0) {
+    expect(orderAppealRestores).toStrictEqual([w('evt.settlement-order-appeal-restore', 1)]);
+    const at = ENTRY_PLAN.worker.findIndex(
+      (work) => work.queue === 'evt.settlement-order-appeal-restore',
+    );
+    expect(ENTRY_PLAN.worker[at - 1]).toStrictEqual(w('evt.risk-appeal-restore', 1));
+    expect(ENTRY_PLAN.worker[at + 1]).toStrictEqual(w('evt.payout-auto-payout', 1));
+  }
+  expect(
+    (['api', 'stream', 'admin', 'payout'] as const).flatMap((entry) =>
+      ENTRY_PLAN[entry]
+        .filter((work) => work.queue === 'evt.settlement-order-appeal-restore')
+        .map(() => entry),
+    ),
+  ).toStrictEqual([]);
   // B2-05h 两态过渡（D10-208）：B2-05e 合并后由收紧任务 B2-05j 改回单态。Without
   // evt.payout-went-negative the plan below is exactly the original one; with it, the worker runs it
   // with concurrency 1 right after evt.notification-appeal-result.
@@ -419,6 +479,7 @@ it('[规划/02 §3.1 转账队列 concurrency=1; ADR-0001 §3 海报轮询 0.5 �
         work.queue !== 'union-auth' &&
         work.queue !== 'pay' &&
         work.queue !== 'page-schedule' &&
+        work.queue !== 'evt.settlement-order-appeal-restore' &&
         // B1-27h（个人信息副本作业，BR-ID-40）的队列，属性由 test/spec/identity/data-copies-worker 钉住。
         work.queue !== 'data-copy',
     ),

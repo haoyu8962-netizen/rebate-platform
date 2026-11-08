@@ -15,6 +15,7 @@ import {
 import { queueErrorProblems, thrown } from '../queue/kit.ts';
 import {
   DEFAULT_DB_BUDGET,
+  HAS_ORDER_APPEAL_RESTORE,
   LIMIT_PLAN,
   RESERVED_CONNECTIONS,
   TRUNK_CATALOG,
@@ -36,7 +37,10 @@ it('[B1-01zzk 冻结结构不变] ENTRY_PLAN 与 QUEUE_CATALOG 与主干逐字�
   // adds one (49 → 50); B1-12zc (D10-773 ①): evt.notification-clawback adds five (50 → 55); B2-02tb
   // (D10-1038): ledger-credit-postcheck adds two (55 → 57); B2-04zzlt
   // (D10-1095): evt.settlement-blacklist-after-credit adds one (57 → 58). The title keeps its frozen wording.
-  expect(TRUNK_WORKER_PLAN.reduce((sum, item) => sum + item.concurrency, 0)).toBe(58);
+  // B2-09gc: evt.settlement-order-appeal-restore, when present, adds one (58 → 59).
+  expect(TRUNK_WORKER_PLAN.reduce((sum, item) => sum + item.concurrency, 0)).toBe(
+    HAS_ORDER_APPEAL_RESTORE ? 59 : 58,
+  );
   expect(TRUNK_ENTRY_PLAN.payout.reduce((sum, item) => sum + item.concurrency, 0)).toBe(2);
   expect(DEFAULT_DB_BUDGET).toBe(Math.floor(POOL_SIZES.worker.db * 0.7));
   expect(POOL_SIZES.worker.db - DEFAULT_DB_BUDGET).toBeGreaterThanOrEqual(RESERVED_CONNECTIONS);

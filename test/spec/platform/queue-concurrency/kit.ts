@@ -2,16 +2,28 @@
 // apps/api/src/modules/platform/queue/index.ts, apps/api/src/modules/platform/config/queue-concurrency.ts).
 // Every expected value is written out by hand from the task brief and the trunk, never read from
 // the implementation. Nothing here imports the test-database base (`@couli/db/testing`).
-import type {
-  EntryPlan,
-  QueueSpec,
-  WorkSpec,
+import {
+  ENTRY_PLAN,
+  QUEUE_CATALOG,
+  type EntryPlan,
+  type QueueSpec,
+  type WorkSpec,
 } from '../../../../apps/api/src/modules/platform/queue/index.ts';
 import { TEST_DEAD, spec } from '../queue/kit.ts';
 
 export function w(queue: string, concurrency: number, pollingIntervalSeconds = 2): WorkSpec {
   return { queue, concurrency, pollingIntervalSeconds };
 }
+
+/**
+ * B2-09gc (B2-09gd prerequisite; tightened after B2-09gd lands): whether the trunk already has
+ * evt.settlement-order-appeal-restore. Only its presence is read from the implementation, in either
+ * the catalog or the worker plan, so a half-landed queue fails the exact comparisons below; every
+ * expected value stays written out by hand. Without it the trunk values below are the original ones.
+ */
+export const HAS_ORDER_APPEAL_RESTORE: boolean =
+  QUEUE_CATALOG.some((queue) => queue.name === 'evt.settlement-order-appeal-restore') ||
+  ENTRY_PLAN.worker.some((work) => work.queue === 'evt.settlement-order-appeal-restore');
 
 /**
  * ENTRY_PLAN.worker of the trunk (task brief, 现状), in order: 28 queues, 58 slots together (B2-06f
@@ -51,6 +63,8 @@ export const TRUNK_WORKER_PLAN: readonly WorkSpec[] = [
   // B1-03z (BR-FUND-22, BR-CALC-13 细则「申诉恢复」): risk's appeal.resolved consumer, one slot,
   // right after evt.notification-claim-result.
   w('evt.risk-appeal-restore', 1),
+  // B2-09gc: settlement's appeal.resolved consumer, when present: one slot, right after risk's.
+  ...(HAS_ORDER_APPEAL_RESTORE ? [w('evt.settlement-order-appeal-restore', 1)] : []),
   // B2-11c (BR-WDR-30): payout's withdrawal.created consumer, one slot, before went-negative.
   w('evt.payout-auto-payout', 1),
   w('evt.payout-went-negative', 1),
@@ -105,6 +119,8 @@ const TRUNK_BUSINESS_QUEUES = [
   // B2-04zzlt (D10-1095): settlement's blacklist-after-credit consumer, right after it.
   'evt.settlement-blacklist-after-credit',
   'evt.risk-appeal-restore',
+  // B2-09gc: settlement's appeal.resolved consumer, when present, right after risk's.
+  ...(HAS_ORDER_APPEAL_RESTORE ? ['evt.settlement-order-appeal-restore'] : []),
   'evt.payout-auto-payout',
   'evt.payout-went-negative',
   'pay',
@@ -190,6 +206,13 @@ export const ENV_NAME_OF: Readonly<Record<string, string>> = {
   'evt.settlement-blacklist-after-credit':
     'QUEUE_CONCURRENCY_EVT_SETTLEMENT_BLACKLIST_AFTER_CREDIT',
   'evt.risk-appeal-restore': 'QUEUE_CONCURRENCY_EVT_RISK_APPEAL_RESTORE',
+  // B2-09gc: when present, keyed in worker plan order (config.test.ts compares the key order).
+  ...(HAS_ORDER_APPEAL_RESTORE
+    ? {
+        'evt.settlement-order-appeal-restore':
+          'QUEUE_CONCURRENCY_EVT_SETTLEMENT_ORDER_APPEAL_RESTORE',
+      }
+    : {}),
   'evt.payout-auto-payout': 'QUEUE_CONCURRENCY_EVT_PAYOUT_AUTO_PAYOUT',
   'evt.payout-went-negative': 'QUEUE_CONCURRENCY_EVT_PAYOUT_WENT_NEGATIVE',
   pay: 'QUEUE_CONCURRENCY_PAY',

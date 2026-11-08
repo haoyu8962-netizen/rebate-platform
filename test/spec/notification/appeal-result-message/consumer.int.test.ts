@@ -1,6 +1,9 @@
 import { createTestDatabase } from '@couli/db/testing';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { createEventBus } from '../../../../apps/api/src/modules/platform/events/index.ts';
+import {
+  EVENT_SUBSCRIPTIONS,
+  createEventBus,
+} from '../../../../apps/api/src/modules/platform/events/index.ts';
 import type {
   JobQueue,
   ReceivedEvent,
@@ -79,12 +82,20 @@ it('[AC-B1-12p#28] 直接发布结案与 appealing→normal 事件，生产路�
     expect(send.mock.calls.map(([queue, name]) => ({ queue, name }))).toEqual([
       { queue: QUEUE, name: 'appeal.resolved' },
       { queue: 'evt.risk-appeal-restore', name: 'appeal.resolved' },
+      // B2-09gc（B2-09gd 前置）：settlement 的申诉恢复消费者有则钉死，紧跟 risk-appeal-restore；无则清单原样。
+      ...(EVENT_SUBSCRIPTIONS.some(
+        (subscription) => subscription.consumer === 'settlement-order-appeal-restore',
+      )
+        ? [{ queue: 'evt.settlement-order-appeal-restore', name: 'appeal.resolved' }]
+        : []),
       { queue: 'evt.notification-risk-state', name: 'risk.state_changed' },
     ]);
     // Risk's restore handler looks up the app.appeals row, which this notification fixture never
     // writes, so delivering that job would fail; only the two notification jobs are delivered.
+    // B2-09gc: settlement's restore consumer, when present, is left undelivered for the same reason.
     const notificationCalls = send.mock.calls.filter(
-      ([queue]) => queue !== 'evt.risk-appeal-restore',
+      ([queue]) =>
+        queue !== 'evt.risk-appeal-restore' && queue !== 'evt.settlement-order-appeal-restore',
     );
     // Deliver in reverse order, then repeat both jobs: neither ordering nor retries may double-notify.
     for (const attempt of [1, 2]) {

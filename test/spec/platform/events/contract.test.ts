@@ -132,6 +132,11 @@ it('[规划/02 §11 事件清单] EVENT_NAMES 正好是 02 §11 的 18 个事件
     { consumer: 'settlement-blacklist-after-credit', events: ['order.blacklist_hit_after_credit'] },
     // B1-03z（BR-FUND-22、BR-CALC-13 细则「申诉恢复」）：risk 的申诉恢复差错单生产者，只订阅 appeal.resolved。
     { consumer: 'risk-appeal-restore', events: ['appeal.resolved'] },
+    // B2-09gc（B2-09gd 前置）：settlement 的申诉恢复消费者有则钉死，紧跟 risk-appeal-restore，只订阅
+    // appeal.resolved；B2-09gd 合并后收紧。Without it the list stays exactly the original one.
+    ...(EVENT_SUBSCRIPTIONS.some((s) => s.consumer === 'settlement-order-appeal-restore')
+      ? [{ consumer: 'settlement-order-appeal-restore', events: ['appeal.resolved'] }]
+      : []),
     ...(EVENT_SUBSCRIPTIONS.some((s) => s.consumer === 'payout-went-negative')
       ? [{ consumer: 'payout-went-negative', events: ['account.went_negative'] }]
       : []),
