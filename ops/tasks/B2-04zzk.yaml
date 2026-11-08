@@ -1,0 +1,19 @@
+id: B2-04zzk
+repo: rebate-platform
+title: test-change 收紧 B2-04zzh：一次性重评 CLI 锁内重读时确实持有订单键锁——新增用例在逐单事务重读之后，经另一条连接 pg_try_advisory_xact_lock 同一订单键应得 false（FU-B204ZZH-LOCK-TEST，D10-956 / D10-972）
+type: test-change
+# 2026-11-08 withdraw 入账（编排 D10-972 ②；FU-B204ZZH-LOCK-TEST）。来由：B2-04zzh（#2748）spec-test r2 留的非阻断 S2——[AC-B2-04zzh#12] 的并发改动发生在候选读出之后、逐单事务开始之前，一个「事务内重读但不取 orders.lockOrderKey」的 apply 同样能过；实现（rebate.ts createJdRemainingZeroReevaluation：lockOrderKey 后 voidRemainingZeroLocked 重读）已持锁。
+# 只新增用例（新文件，不改 jd-remaining-zero-switch-on 里已有用例与 kit / reevaluate-kit）：服务的 db 换成带插件的句柄，插件在逐单事务里读到该候选 orders 行之后，经另一条连接对同一订单键（orders orderLockKeyText('jd', sub_order_id) 的 hashtextextended）调 pg_try_advisory_xact_lock，断言为 false（锁被持有），随后该单照常作废。在 #2748 合并后的主干上应直接为绿（实现已在）。新鲜独立 Claude 写、另一位只读复核「只收紧、断言能抓住不取锁的写法」（可用临时变异：去掉 lockOrderKey 时该用例红）。
+refs: []
+refs_hash: {}
+deps: [B2-04zzh]
+paths:
+  - 'test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock-held.int.test.ts'
+  - 'ops/tasks/B2-04zzk.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock-held.int.test.ts'
+status: todo
+pr: null
