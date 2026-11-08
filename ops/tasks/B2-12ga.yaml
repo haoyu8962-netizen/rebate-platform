@@ -1,0 +1,19 @@
+id: B2-12ga
+repo: rebate-platform
+title: test-change B2-12g 补测：同一成员同时命中设备与收款账号两维时恰好两行标记（device、payout_account），主干上已绿、只新增
+type: test-change
+# 2026-11-08 identity 入账（编排 10:01 ②，D10-968 排在 B1-02zze 之后）。来源 B2-12g spec-test r3 S2（couli-runs/B2-12g/review-spec-r3.json）：
+# 没有用例让同一成员同时满足两维，实现若把同一用户折成一行（如 DISTINCT ON (user_id)）规则测试照样全过。
+# 只新增新目录 test/spec/risk/bad-debt-linked-two-dims/**，可 import 冻结目录 test/spec/risk/bad-debt-linked/kit.ts 等现成夹具，不改它们。
+# 新鲜独立 Claude 写、另一位只读复核；主干已绿（同 B1-04zzzu / B1-04zzzw 先例），台账同 PR，tester none。
+refs: []
+refs_hash: {}
+deps: [B2-12g]
+paths:
+  - 'test/spec/risk/bad-debt-linked-two-dims/**'
+  - 'ops/tasks/B2-12ga.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
