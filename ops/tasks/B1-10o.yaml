@@ -1,0 +1,26 @@
+id: B1-10o
+repo: rebate-platform
+title: 后台用户 / 订单 / 找回详情按权限置空内部字段（CT-24zzd，D10-1048 ①②）——沿用 AdminActor.permissions，拿不到权限点按无权限置空；不改放行判定
+type: impl
+# 2026-11-08 admin 入账。deps B2-09zg（AdminActor.permissions 与 withPermissions，编排 18:53：permissions 只读、不参与放行，缺省按收紧处理）。写入路径一律不动，只改读视图。前端 OrderDetailPage 对 reserve_bp 为 null 的展示另由 fe 跟（D10-1049 ④ 同一张前端小单）。RV2；规则测试与评审新鲜独立 Claude（Codex 额度尽，D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: [CT-24zzd, B2-09zg]
+paths:
+  - 'apps/api/src/modules/identity/http/admin/users.controller*.ts'
+  - 'apps/api/src/modules/identity/application/admin-users*.ts'
+  - 'apps/api/src/modules/identity/application/admin-user-view*.ts'
+  - 'apps/api/src/modules/orders/http/admin/orders.controller*.ts'
+  - 'apps/api/src/modules/orders/http/admin/claims.controller*.ts'
+  - 'apps/api/src/modules/orders/application/admin-orders*.ts'
+  - 'apps/api/src/modules/orders/application/admin-claims*.ts'
+  - 'apps/api/src/modules/orders/domain/admin-order-view*.ts'
+  - 'apps/api/src/modules/orders/domain/admin-claim-view*.ts'
+test_paths:
+  - 'test/spec/admin/lookup-blank-fields/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/lookup-blank-fields/**'
+status: todo

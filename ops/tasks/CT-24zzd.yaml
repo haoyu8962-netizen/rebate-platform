@@ -1,0 +1,22 @@
+id: CT-24zzd
+repo: rebate-platform
+title: 契约：只持 user.lookup 的账号在用户详情、订单详情、找回详情上内部字段按权限置空（D10-1048 ①②）——risk.reason、last_hold_note、claims.reason、commission_rate_bp、commission_split.reserve_bp
+type: contract
+# 2026-11-08 admin 入账（FU-ADMIN-LOOKUP-FIELD-AUDIT，编排 D10-1042、D10-1048 ①②）。adminGetUser / adminLookupUser：账号无任何 risk.* 权限点（risk.freeze、risk.ban、risk.blocklist、risk.appeal）时 risk.reason 为 null，reason_category 与状态保留；user.list 只浏览非敏感字段（04 §11.1），同口径。adminGetOrder：无 order.view（经 user.lookup 进来）时 last_hold_note、commission_rate_bp、commission_split.reserve_bp 为 null。adminGetClaim：无 order.claim 时 reason 为 null。
+# reserve_bp 现为非空整数，须放宽为可空（响应类型放宽，按 oasdiff 要求登记）；其余字段已可空。枚举类原因、比对证据、脱敏值不动。RV1。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
