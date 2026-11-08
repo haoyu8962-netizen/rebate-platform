@@ -25,6 +25,7 @@
 // context.db) and agent.rag.min_score through the same content reader (code default 0.2 when unset
 // or invalid, tools/rules), behind agent.tools.search_rules.enabled.
 import { bridge, display_status as displayStatusEnum } from '@couli/contracts-ts';
+import type { CategoryCandidate } from '../../../catalog/index.ts';
 import type { ContentReader } from '../../../content/index.ts';
 import { systemScheduler } from '../../../platform/index.ts';
 import type { AgentRunTexts } from '../../orchestrator/index.ts';
@@ -201,31 +202,67 @@ function orderToolPorts(
  * title}; kept means allowed. A failing port is fail closed: not allowed, with one warn line that
  * names only the event and the platform (never the product). Without the port every candidate is
  * allowed (fixtures without it; app.module always provides it).
+ * B1-04zzzv (D10-946, FU-AGENT-CATEGORY-BATCH; rule tests: test/spec/agent/category-batch/**): the
+ * judgements started in one synchronous run (the search pipeline's Promise.all over a round) are
+ * gathered per app and flushed in a microtask as one filterCategories call holding every item in
+ * the order started, never split however large; the batch is taken off the pending table before
+ * the call, so a judgement started meanwhile goes into the next batch. Each candidate's verdict is
+ * whether its own item object comes back (by reference). A port that rejects or throws
+ * synchronously blocks that app's whole batch with one warn line (the event, the batch's platforms
+ * distinct, sorted and comma-joined, the error name). Judgements awaited one by one stay one call
+ * each; different apps never share a batch; nothing is cached between batches.
  */
 export function createCategoryAllowed(
   categories: AgentStreamProvidedPorts['categories'],
   logger: AgentStreamAssemblyContext['logger'],
 ): AgentStreamBusinessPorts['search']['categoryAllowed'] {
   if (categories === undefined) return async () => true;
-  return async (appId, candidate) => {
-    const platform = candidate.item.platform;
+  const port = categories;
+  interface Pending {
+    readonly item: CategoryCandidate;
+    readonly resolve: (allowed: boolean) => void;
+  }
+  const pending = new Map<string, Pending[]>();
+
+  async function flush(appId: string, batch: readonly Pending[]): Promise<void> {
+    const items = batch.map((entry) => entry.item);
+    let kept: ReadonlySet<unknown>;
     try {
-      const kept = await categories.filterCategories(appId, [
-        { platform, categoryId: candidate.categoryId, title: candidate.item.title },
-      ]);
-      return kept.length === 1;
+      kept = new Set<unknown>(await port.filterCategories(appId, items));
     } catch (error) {
       logger.warn(
         {
           event: 'agent_category_blocklist_failed',
-          platform,
+          platform: [...new Set(items.map((item) => item.platform))].sort().join(','),
           error_name: error instanceof Error ? error.name : typeof error,
         },
-        'agent category blocklist unavailable; candidate blocked',
+        'agent category blocklist unavailable; batch blocked',
       );
-      return false;
+      for (const entry of batch) entry.resolve(false);
+      return;
     }
-  };
+    for (const entry of batch) entry.resolve(kept.has(entry.item));
+  }
+
+  return (appId, candidate) =>
+    new Promise<boolean>((resolve) => {
+      const item = {
+        platform: candidate.item.platform,
+        categoryId: candidate.categoryId,
+        title: candidate.item.title,
+      };
+      const batch = pending.get(appId);
+      if (batch !== undefined) {
+        batch.push({ item, resolve });
+        return;
+      }
+      pending.set(appId, [{ item, resolve }]);
+      queueMicrotask(() => {
+        const current = pending.get(appId) ?? [];
+        pending.delete(appId);
+        void flush(appId, current);
+      });
+    });
 }
 
 export function createProductionStreamAssembly(

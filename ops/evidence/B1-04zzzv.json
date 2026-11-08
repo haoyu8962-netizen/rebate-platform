@@ -1,0 +1,81 @@
+{
+  "task": "B1-04zzzv",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "63e321b8bfe9bc1c79b9fdd834a4fa5f42295835",
+  "red_tests": [
+    "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#1] 同一轮并发判定合成一次端口调用（端口每项只有平台、类目、标题，依发起顺序），结果逐一等于依次 await 逐个判定的结果；逐个判定仍各自一次调用",
+    "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#2] 端口拒绝或同步抛错：该批全部候选判禁，每批恰好一条 warn，只含事件、批内平台（去重、字典序、逗号连接）与错误名，不带任何商品信息；端口恢复后下一批照常判",
+    "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#3] 未装 categories 端口：一批并发候选全部放行、无 warn；装了端口时同一批只调用端口一次",
+    "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#4] 不同应用在同一轮发起：各自一批、按各自名单判、互不混批；一个应用的端口失败只禁该应用的那一批",
+    "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#5] 名单不加缓存：两批之间改名单，下一批按新名单判，每批各调用端口一次",
+    "test/spec/agent/category-batch/property.test.ts > [AC-B1-04zzzv#6] 任意一轮并发候选、任意名单与端口成败：每个应用恰一次端口调用且项依发起顺序；端口正常时结果逐一等于逐个判定与单独按规则判的结果，失败时该应用整批判禁且每批恰一条只含事件、平台、错误名的 warn"
+  ],
+  "risk_note": "RV1 (agent/stream/mount only): createCategoryAllowed gathers the judgements started in one synchronous run per app and flushes them in a microtask as one filterCategories call (never split); a failing port blocks the whole batch with one warn (event, platforms, error name); no port allows all; categoryAllowed signature and the search pipeline unchanged. Independent Claude (approvals #36) wrote test/spec/agent/category-batch/** in 1 attempt (red/1). Implementation model: Claude Opus 5.5 (1 round). Local container verify:fast was killed with 137 (Colima OOM, D10-950), so full verification is the required CI checks; on the host the rule and mount unit suites pass (33), PROP_RUNS=100000 property run passes, tsc -b apps/api test 0, eslint and prettier clean.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "63e321b8bfe9bc1c79b9fdd834a4fa5f42295835",
+      "tree": "157767f11063171b04d29c6d048861b626e1f9af",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T23:20:10Z",
+      "finished_at": "2026-11-07T23:20:19Z",
+      "red_tests": [
+        "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#1] 同一轮并发判定合成一次端口调用（端口每项只有平台、类目、标题，依发起顺序），结果逐一等于依次 await 逐个判定的结果；逐个判定仍各自一次调用",
+        "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#2] 端口拒绝或同步抛错：该批全部候选判禁，每批恰好一条 warn，只含事件、批内平台（去重、字典序、逗号连接）与错误名，不带任何商品信息；端口恢复后下一批照常判",
+        "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#3] 未装 categories 端口：一批并发候选全部放行、无 warn；装了端口时同一批只调用端口一次",
+        "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#4] 不同应用在同一轮发起：各自一批、按各自名单判、互不混批；一个应用的端口失败只禁该应用的那一批",
+        "test/spec/agent/category-batch/batch.test.ts > [AC-B1-04zzzv#5] 名单不加缓存：两批之间改名单，下一批按新名单判，每批各调用端口一次",
+        "test/spec/agent/category-batch/property.test.ts > [AC-B1-04zzzv#6] 任意一轮并发候选、任意名单与端口成败：每个应用恰一次端口调用且项依发起顺序；端口正常时结果逐一等于逐个判定与单独按规则判的结果，失败时该应用整批判禁且每批恰一条只含事件、平台、错误名的 warn"
+      ],
+      "expected": [
+        "test/spec/agent/category-batch/batch.test.ts",
+        "test/spec/agent/category-batch/property.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a92f148c8fb2fa9dd9d509513bc9bd666559b5ceee22a360b1b57e52543e267f"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "general r1 pass, no findings (couli-runs/B1-04zzzv/review-cr1.json). Codex first: codex-run.sh review at 2026-11-08 06:18 (+08:00) failed on the spot with 'You've hit your usage limit ... try again at Nov 15th, 2026 12:24 AM' (not counted), so per approvals #36 / D10-775 / D10-913 a fresh independent Claude reviewed"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "r1 pass with one S2 (largest batch in the rule tests is 10, so a split-into-16 implementation would pass; covered by the source-side unit test [B1-04zzzv#unit-1] with 48 candidates and one call)"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5a24702e6ef18264f97a97cd6927e26ee4e8d408",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

@@ -94,3 +94,39 @@ it('[B1-04zzy#unit-4] 未装配端口时放行', async () => {
   expect(await allowed('unit-app', row('16'))).toBe(true);
   expect(warn).not.toHaveBeenCalled();
 });
+
+it('[B1-04zzzv#unit-1] 同一轮并发 48 个候选只调一次端口，不分段，按对象引用对回各候选', async () => {
+  const p = port(async (_appId, items) => items.filter((_, index) => index % 3 !== 0));
+  const { warn, logger: log } = logger();
+  const allowed = createCategoryAllowed(p, log);
+  const rows = Array.from({ length: 48 }, (_, index) => row(`c${index}`));
+  const verdicts = await Promise.all(rows.map((candidate) => allowed('unit-app', candidate)));
+  expect(p.calls).toHaveLength(1);
+  expect(p.calls[0]?.[1]).toEqual(
+    rows.map((candidate) => ({
+      platform: 'jd',
+      categoryId: candidate.categoryId,
+      title: '单测商品',
+    })),
+  );
+  expect(verdicts).toEqual(rows.map((_, index) => index % 3 !== 0));
+  expect(warn).not.toHaveBeenCalled();
+});
+
+it('[B1-04zzzv#unit-2] 端口同步抛错：整批判禁，只记一条 warn', async () => {
+  const p: Port = {
+    filterCategories: (() => {
+      throw new Error('unit sync failure');
+    }) as Port['filterCategories'],
+  };
+  const { warn, logger: log } = logger();
+  const allowed = createCategoryAllowed(p, log);
+  const verdicts = await Promise.all([row('1'), row('2')].map((r) => allowed('unit-app', r)));
+  expect(verdicts).toEqual([false, false]);
+  expect(warn).toHaveBeenCalledTimes(1);
+  expect(warn.mock.calls[0]?.[0]).toEqual({
+    event: 'agent_category_blocklist_failed',
+    platform: 'jd',
+    error_name: 'Error',
+  });
+});
