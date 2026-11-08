@@ -6,7 +6,7 @@ type: impl
 # promo_mode 不用改读法：开关与配置同读 config_items（content-reader.configValue），只登记。规则测试走生产装配（worker 的 rescanConfig = content 读 ORDER_SYNC_APP_ID 的 config_items）：order_sync.promo_mode 行为 true 时三档都按 20 分钟切；改 window_minutes 行后下一轮按新值切；登记表含五键且类型 / 权限 / 范围如上。不改 app.module 与 orders。
 refs: []
 refs_hash: {}
-deps: [B1-04zzr, B1-04zzzt]
+deps: [B1-04zzr, B1-04zzzt, B1-04zzzu]
 paths:
   - 'apps/api/src/app.module.ts'
   - 'apps/api/src/modules/orders/domain/sync-window.ts' # D10-903 (B) 实跑：window_minutes 无上限，isRescanWindowMinutes 补上限 180（与注册表一致）
