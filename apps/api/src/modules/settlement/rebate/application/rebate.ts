@@ -48,6 +48,7 @@ import {
   hasWaitingRightsBefore,
   markRightsAnswered,
   readLatestSettlementAt,
+  type ManualReasonSub,
 } from '../../rights/rights-store.ts';
 import { createSettlementRecords } from '../../settlements/index.ts';
 import { IllegalTransition, RebateError } from './errors.ts';
@@ -100,17 +101,26 @@ export interface RebateHoldAudit extends RebateOrderRef {
  * CREDITED updates only log, plus a refresh when the version moved. No ledger calls. Imports arrive with DB default UNATTRIBUTED.
  * R1/R2 history starts at null, not that storage default. R2/R3a may chain R4 or R6.
  */
+/**
+ * B1-09v (08 BR-TEXT-05 子原因 写入来源 ②): `manual` is a sub-reason chosen by hand that the record
+ * behind the event carries (a punish import's reason_sub; value null is 「无」). When the CAS writes
+ * reason PUNISH it replaces the automatic mapping and sets orders.reason_sub_manual in the same
+ * CAS; under any other reason it is ignored (a PUNISH sub-reason never goes with another parent).
+ */
+export type ReasonSubWrite = ReasonSubContext & { readonly manual?: ManualReasonSub | undefined };
+
 export type RebatePort = OrderPipelineDeps['rebate'] &
   OrderUpdateDeps['rebate'] & {
     /**
      * B2-04zze: `subContext` (optional) is what the caller knows of the cause, for the reason_sub
-     * written with the reason (the rights command passes the record type and violation text).
+     * written with the reason (the rights command passes the record type and violation text, and
+     * B1-09v the record's choice made by hand).
      */
     apply(
       trx: Transaction<DB>,
       order: RebateChangeInput,
       event: PrecreditEvent,
-      subContext?: ReasonSubContext,
+      subContext?: ReasonSubWrite,
     ): Promise<void>;
   };
 
@@ -179,11 +189,17 @@ interface Draft {
 
 type EstimateRefreshValue = NonNullable<Parameters<RebateDependencies['estimates']['refresh']>[2]>;
 
+/**
+ * B1-09v: the CAS set plus orders.reason_sub_manual, written only with reason PUNISH and a sub-reason
+ * chosen by hand. casUpdateRebate writes every key of the set it is given (`...set`).
+ */
+type RebateWrite = RebateSet & { readonly reason_sub_manual?: true };
+
 interface Plan {
   readonly steps: readonly RebateStep[];
   /** false：库内值不变（只有 R1 历史，或只重算预估）。 */
   readonly write: boolean;
-  readonly set: RebateSet;
+  readonly set: RebateWrite;
   readonly guards: RebateCasGuards;
   readonly refresh: boolean;
   readonly refreshValue: EstimateRefreshValue | null;
@@ -249,14 +265,21 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
   /**
    * B2-04zze: a plan that writes orders.reason also writes orders.reason_sub in the same CAS
    * (domain/reason-sub.ts); returns the plan to run and the raw text to alert on (unmapped).
+   * B1-09v: a choice made by hand under reason PUNISH is written as is, with reason_sub_manual,
+   * instead of the automatic mapping (no table lookup, no unmapped alert).
    */
   function withReasonSub(
     row: OrderRow,
     plan: Plan,
-    context: ReasonSubContext,
+    context: ReasonSubWrite,
   ): { readonly plan: Plan; readonly unmapped: { readonly raw: string | null } | null } {
     const reason = plan.set.reason;
     if (!plan.write || reason === undefined) return { plan, unmapped: null };
+    const manual = context.manual;
+    if (manual !== undefined && reason === 'PUNISH') {
+      const set: RebateWrite = { ...plan.set, reason_sub: manual.value, reason_sub_manual: true };
+      return { plan: { ...plan, set }, unmapped: null };
+    }
     const decision = reasonSubWithReason(row, reason, context, reasonSubMaps);
     if (!decision.write) return { plan, unmapped: null };
     return {
@@ -274,7 +297,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     ref: RebateOrderRef,
     source: 'sync' | 'system',
     decide: (row: OrderRow, now: Date) => Promise<Plan | null>,
-    subContext: ReasonSubContext = {},
+    subContext: ReasonSubWrite = {},
   ): Promise<void> {
     const now = deps.clock.now();
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -769,7 +792,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       trx: Transaction<DB>,
       order: RebateChangeInput,
       event: PrecreditEvent,
-      subContext?: ReasonSubContext,
+      subContext?: ReasonSubWrite,
     ): Promise<void> {
       const ref: RebateOrderRef = {
         appId: order.appId,

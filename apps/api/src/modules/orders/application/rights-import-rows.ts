@@ -29,15 +29,27 @@
 //   - with the job's transaction (rights-import-ports.ts) every statement runs on it and nothing is
 //     committed here, so a redelivered row counts once; without one each row is its own transaction;
 //   - rights.record not injected: no processor is returned for rights / punish, so the job ends the
-//     task failed and logs it at error (J-22); no order_rights is written.
+//     task failed and logs it at error (J-22); no order_rights is written;
+//   - B1-09v (08 BR-TEXT-05 子原因 写入来源 ②, D10-819 ①): a punish task created with a reason_sub
+//     part (rights_imports.reason_sub, read on the row's transaction) hands it to rights.record as
+//     manual_reason_sub (`none` → null: no sub-reason, still chosen by hand); without one the input
+//     carries no manual_reason_sub and the automatic mapping decides, as before. Rights tasks never
+//     carry one (D10-819 ②). The choice carries its origin (the task's import_id and created_by)
+//     for settlement's audit when it replaces an ended PUNISH order's sub-reason (D10-957).
+import type { OrderReasonSub } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely, Selectable, Transaction } from 'kysely';
 import type { Clock } from '../../platform/index.ts';
 import { isRegisteredPlatform } from '../../union/index.ts';
 import { checkRightsRow, type RightsRowKind } from '../domain/rights-row.ts';
-import type { RightsImportRowOutcome } from '../domain/rights-import.ts';
+import {
+  REASON_SUB_NONE,
+  isPunishImportReasonSub,
+  type RightsImportRowOutcome,
+} from '../domain/rights-import.ts';
 import { rereadOrderForUpdate } from '../infra/admin-hold-store.ts';
 import { lockOrderKey } from '../infra/order-lock.ts';
+import { readRightsImportReasonSub } from '../infra/rights-import-store.ts';
 import { findOrderForRights } from '../infra/rights-order-lookup.ts';
 import type {
   RightsImportProcessors,
@@ -63,6 +75,35 @@ export interface RightsImportRowDeps {
 const failed = (reason: Extract<RightsImportRowOutcome, { kind: 'failed' }>['reason']) =>
   ({ kind: 'failed', reason }) as const satisfies RightsImportRowOutcome;
 const SKIPPED: RightsImportRowOutcome = { kind: 'skipped' };
+
+/**
+ * B1-09v: the manual sub-reason of a punish task as rights.record takes it (`none` → value null),
+ * from the task's stored rights_imports.reason_sub; undefined for a rights / channel task, or when
+ * the task was created without one (or holds a value outside PUNISH's set). D10-957: the choice
+ * names its import and the admin who created it, for settlement's audit when it replaces the
+ * sub-reason of an order already ended PUNISH.
+ */
+export function manualChoiceOf(
+  task: Pick<RightsImportTaskInfo, 'kind' | 'import_id' | 'created_by'>,
+  stored: string | null | undefined,
+): RightsRecordInput['manual_reason_sub'] {
+  if (task.kind !== 'punish') return undefined;
+  const value = stored ?? undefined;
+  if (!isPunishImportReasonSub(value)) return undefined;
+  return {
+    value: value === REASON_SUB_NONE ? null : (value satisfies OrderReasonSub),
+    origin: { import_id: task.import_id, admin_id: task.created_by },
+  };
+}
+
+/** manualChoiceOf on the task's stored part, read on the row's transaction (punish tasks only). */
+async function manualReasonSubOf(
+  trx: Transaction<DB>,
+  task: RightsImportTaskInfo,
+): Promise<RightsRecordInput['manual_reason_sub']> {
+  if (task.kind !== 'punish') return undefined;
+  return manualChoiceOf(task, await readRightsImportReasonSub(trx, task.app_id, task.import_id));
+}
 
 /** The window check of the locked order; null: inside the window, or no window. */
 function windowOutcome(
@@ -108,6 +149,7 @@ function createProcessor(
     if (before === undefined) return failed('order_not_found');
     const outside = windowOutcome(task, before);
     if (outside !== null) return outside;
+    const manual = await manualReasonSubOf(trx, task);
     const input: RightsRecordInput = {
       before,
       order_id: before.order_id,
@@ -119,6 +161,7 @@ function createProcessor(
       occurred_at: cells.occurred_at,
       platform_rights_no: cells.rights_no,
       now: clock.now(),
+      ...(manual === undefined ? {} : { manual_reason_sub: manual }),
     };
     const result = await recordOrderRights(trx, ports, input);
     if (result.kind === 'applied') return { kind: 'succeeded' };

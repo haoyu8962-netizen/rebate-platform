@@ -11420,6 +11420,86 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "adminSetOrderReasonSub": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "order_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "description": "Body of POST /admin/v1/orders/{order_id}/reason-sub. `reason_sub` must belong to the\norder's current reason (PUNISH, REFUND or RIGHTS) or be `none`.\n",
+      "additionalProperties": false,
+      "required": [
+        "reason_sub",
+        "expected_row_version"
+      ],
+      "properties": {
+        "reason_sub": {
+          "description": "A sub-reason of enum order_reason_sub, or `none` (「无」).",
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Order sub-reason (enum order_reason_sub; 08 BR-TEXT-05 子原因 reason_sub, D10-818). Each value\nbelongs to one parent reason: PUNISH has VIOLATION_PROMO to PUNISH_ORDER (12), REFUND has\nIN_SALE and AFTER_SETTLE, RIGHTS has AFTER_SALE; no other reason has a sub-reason. It only\nrefines what the user reads (「{title}：{sub.desc}」, text key order_reason_sub.<value>.desc\nfrom /v1/dict); it never changes an amount, the reason's kind or a status. No sub-reason\n(「无」) is null; 「其他原因」 is the reason OTHER, not a sub-reason.\n",
+              "enum": [
+                "VIOLATION_PROMO",
+                "SHOP_TK",
+                "INSITE_PROMO",
+                "PROXY_BUY",
+                "FAKE_TRADE",
+                "INSITE_RESALE",
+                "OVER_LIMIT",
+                "MARKET_DISRUPT",
+                "MULTI_TRADE_ABNORMAL",
+                "SINGLE_TRADE_ABNORMAL",
+                "RISK_ORDER",
+                "PUNISH_ORDER",
+                "IN_SALE",
+                "AFTER_SETTLE",
+                "AFTER_SALE"
+              ]
+            },
+            {
+              "type": "string",
+              "description": "The 「无」 choice of the console's sub-reason picker (08 BR-TEXT-05): no sub-reason is written\n(orders.reason_sub becomes null) and the choice still counts as made by hand. Not a value\nof enum order_reason_sub and never stored as one.\n",
+              "enum": [
+                "none"
+              ]
+            }
+          ]
+        },
+        "expected_row_version": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0,
+          "description": "The order's row_version from GET /admin/v1/orders/{order_id}."
+        }
+      }
+    }
+  },
   "adminReassignOrder": {
     "headers": {
       "type": "object",

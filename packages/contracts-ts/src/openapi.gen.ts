@@ -4954,10 +4954,9 @@ export interface paths {
          *     后台人工; D10-818 / D10-819): an operator corrects the sub-reason the automatic mapping
          *     wrote (for instance PUNISH_ORDER, the fallback when nothing matched) with a single choice
          *     from the sub-reasons of the order's reason plus 「无」; the console notes next to the choice
-         *     that the App shows it to the user (App 端会展示给用户). Planned: no route yet (CT-24zw
-         *     declares it; the implementation task removes the marker). Permission point `order.claim`
-         *     (04 §11.2); lacking it is 10403 with `data.reason=admin_permission_denied`. No step-up, no
-         *     Idempotency-Key.
+         *     that the App shows it to the user (App 端会展示给用户). Declared by CT-24zw, served on the
+         *     admin entry since B1-09v. Permission point `order.claim` (04 §11.2); lacking it is 10403
+         *     with `data.reason=admin_permission_denied`. No step-up, no Idempotency-Key.
          *
          *     `reason_sub` is a value of enum order_reason_sub that belongs to the order's current
          *     `reason` (PUNISH: the 12 PUNISH sub-reasons; REFUND: IN_SALE or AFTER_SETTLE; RIGHTS:

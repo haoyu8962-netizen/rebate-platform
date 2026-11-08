@@ -151,6 +151,8 @@ const RULES: readonly ActionRule[] = Object.freeze([
   ),
   // settlement's rebate port through infra/system-audit.ts (B1-34p): a system row, no point.
   ...rules([ORDER_AUTO_HOLD_ACTION], 'order', 'orders:', NONE),
+  // orders (admin-reason-sub.ts, B1-09v 改子原因; contract adminSetOrderReasonSub): order.claim.
+  ...rules(['order_reason_sub_set'], 'order', 'orders:', fixed('order.claim')),
   // Registered ahead of their writers (B1-10k claim review; B1-34e / B1-34f exports).
   ...rules(
     ['claim_item_approve', 'claim_item_reject'],

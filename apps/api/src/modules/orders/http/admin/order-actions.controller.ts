@@ -1,6 +1,7 @@
 // B1-10m: POST /admin/v1/orders/{order_id}/hold, /unhold and /reassign (contract adminHoldOrder,
 // adminUnholdOrder, adminReassignOrder; BR-FUND-06, BR-ATTR-31). Only authorisation, the parameters
-// and the call into the use cases live here.
+// and the call into the use cases live here. B1-09v: POST …/reason-sub (adminSetOrderReasonSub,
+// 改子原因; 08 BR-TEXT-05), permission order.claim, step-up tier null, over the hold use case's deps.
 //
 // Mounted only by OrdersAdminModule on the admin entry. The admin request check has verified the
 // admin_token and the route schema the body before this runs; AdminOperationGuard re-reads the
@@ -13,6 +14,7 @@ import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
 import { AdminOperationGuard, contractRouteSchema } from '../../../platform/index.ts';
 import { holdOrder, unholdOrder } from '../../application/admin-hold.ts';
+import { setOrderReasonSub } from '../../application/admin-reason-sub.ts';
 import { AdminOrderAssignHttp, type AdminAssignBody } from './order-assign.http.ts';
 import {
   ADMIN_WRITE_DEPS,
@@ -71,6 +73,35 @@ export class AdminOrderActionsController {
     return http.reassign(request, orderId, body);
   }
 
+  async reasonSub(
+    request: AdminWriteRequest,
+    orderId: string,
+    body: Schema<'AdminOrderReasonSubSetRequest'>,
+    reply: HeaderReply,
+  ): Promise<Detail> {
+    reply.header('Cache-Control', 'no-store');
+    const deps = this.#deps;
+    if (deps === null) return this.unavailable(request, 'order.claim');
+    let response: Detail | undefined;
+    await this.#guard.run({ request, permission: 'order.claim' }, async (actor) => {
+      const outcome = await setOrderReasonSub(
+        deps.hold,
+        { appId: actor.appId, adminId: actor.adminId, ip: request.ip ?? null },
+        {
+          orderId,
+          reason_sub: body.reason_sub,
+          expected_row_version: body.expected_row_version,
+        },
+      );
+      if (outcome.code === 20001) throw fieldsRefusal(outcome.data.fields, request.id);
+      if (outcome.code === 20902) throw conflictRefusal(outcome.data.resource, request.id);
+      response = { code: 0, msg: '', data: outcome.data, trace_id: request.id };
+      return { statusCode: 200, body: response };
+    });
+    if (response === undefined) throw new Error('orders: admin guard returned without an answer');
+    return response;
+  }
+
   private async setHold(
     mode: 'hold' | 'unhold',
     request: AdminWriteRequest,
@@ -121,17 +152,18 @@ export class AdminOrderActionsController {
   const prototype = AdminOrderActionsController.prototype;
   Inject(AdminOperationGuard)(AdminOrderActionsController, undefined, 0);
   Inject(ADMIN_WRITE_DEPS)(AdminOrderActionsController, undefined, 1);
-  for (const [name, operationId] of [
-    ['hold', 'adminHoldOrder'],
-    ['unhold', 'adminUnholdOrder'],
-    ['reassign', 'adminReassignOrder'],
+  for (const [name, operationId, path] of [
+    ['hold', 'adminHoldOrder', 'hold'],
+    ['unhold', 'adminUnholdOrder', 'unhold'],
+    ['reassign', 'adminReassignOrder', 'reassign'],
+    ['reasonSub', 'adminSetOrderReasonSub', 'reason-sub'],
   ] as const) {
     const handler = Object.getOwnPropertyDescriptor(prototype, name)!;
     Req()(prototype, name, 0);
     Param('order_id')(prototype, name, 1);
     Body()(prototype, name, 2);
     Res({ passthrough: true })(prototype, name, 3);
-    Post(`:order_id/${name}`)(prototype, name, handler);
+    Post(`:order_id/${path}`)(prototype, name, handler);
     HttpCode(200)(prototype, name, handler);
     RouteSchema(contractRouteSchema(operationId))(prototype, name, handler);
   }

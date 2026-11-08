@@ -41,7 +41,9 @@
 //   9. booked_base_fen = B_new and booked_n_fen = N_new positive part together, rebate_status
 //      through the generated order-rebate transition() with a CAS on (rebate_status, row_version);
 //      a rebate history row; R8 also writes orders.reason, R9 writes diff_reason_code PART_REFUND
-//      and leaves orders.reason unchanged. B2-04zze: R8 writes orders.reason_sub in the same CAS
+//      and leaves orders.reason unchanged. B1-09v: a record's sub-reason chosen by hand (reasonSub
+//      .manual) is written instead of the mapping, with reason_sub_manual, when R8's reason is
+//      PUNISH. B2-04zze: R8 writes orders.reason_sub in the same CAS
 //      (rebate/domain/reason-sub.ts; an unmapped Taobao violation text → PUNISH_ORDER and one warn
 //      order_reason_sub_unmapped with platform and raw text only).
 //  10. R8 and R9 publish order.clawed_back on the same transaction (B2-04lb, D10-474 ③): order_id,
@@ -162,6 +164,7 @@ import {
   closeWaitingRights,
   hasWaitingRights,
   hasWaitingRightsBefore,
+  type ManualReasonSub,
 } from '../rights/rights-store.ts';
 import { createSettlementRecords } from '../settlements/index.ts';
 import {
@@ -214,8 +217,11 @@ export interface ClawbackCommand {
   /**
    * B2-04zze: what the caller knows of the cause for the reason_sub written with the R8 reason
    * (violation text, platform status before the sync); the record type follows from the cause.
+   * B1-09v: `manual`, the sub-reason chosen by hand that the record carries (value null is 「无」):
+   * written as is with orders.reason_sub_manual when R8's reason is PUNISH, instead of the
+   * automatic mapping; ignored under any other reason.
    */
-  readonly reasonSub?: ReasonSubContext;
+  readonly reasonSub?: ReasonSubContext & { readonly manual?: ManualReasonSub | undefined };
 }
 
 /** One order_sync_pending entry (orders owns the table; written only through deps.pending). */
@@ -1005,16 +1011,22 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     const estimates = deps.estimates;
     const repriced = estimates !== undefined && transition === 'R9' && selected.source === 'rights';
     // B2-04zze: R8 writes the display sub-reason with its reason (R9 leaves both unchanged).
+    // B1-09v: a choice made by hand under reason PUNISH replaces the mapping and sets the flag.
+    const manual =
+      transition === 'R8' && rules.r8Reason === 'PUNISH' ? command.reasonSub?.manual : undefined;
     const sub =
-      transition === 'R8'
-        ? reasonSubWithReason(order, rules.r8Reason, subContextOf(command), reasonSubMaps)
-        : ({ write: false } as const);
+      manual !== undefined
+        ? ({ write: true, value: manual.value, unmapped: null } as const)
+        : transition === 'R8'
+          ? reasonSubWithReason(order, rules.r8Reason, subContextOf(command), reasonSubMaps)
+          : ({ write: false } as const);
     const written = await casClawbackOrder(trx, order, {
       to: step.to,
       booked_base_fen: plan.booked_after.booked_base_fen,
       booked_n_fen: plan.booked_after.booked_n_fen,
       ...(transition === 'R8' ? { reason: rules.r8Reason } : { diff_reason_code: 'PART_REFUND' }),
       ...(sub.write ? { reason_sub: { value: sub.value } } : {}),
+      ...(manual === undefined ? {} : { reason_sub_manual: true as const }),
       ...(repriced
         ? {
             commission_version: {

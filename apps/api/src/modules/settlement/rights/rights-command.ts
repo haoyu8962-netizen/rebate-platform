@@ -53,21 +53,46 @@
 // union's violation_type of a punishment (passed through, never stored). A successful punishment
 // on a terminal VOID / CLAWED_BACK order whose parent stays PUNISH only refines PUNISH_ORDER (or
 // an empty sub-reason) to a mapped sub-reason; status, reason, history and ledger are unchanged.
+// B1-09v (08 BR-TEXT-05 子原因 写入来源 ②; D10-819 ①③): a record carrying a sub-reason chosen by
+// hand (input.manual_reason_sub, a punish import's reason_sub; value null is 「无」) stores it on
+// its new order_rights row (reason_sub, reason_sub_manual true). Only an order this record leaves
+// with reason PUNISH gets it: R6 (rebate port) and R8 (clawback) write it instead of the automatic
+// mapping with orders.reason_sub_manual in their own CAS; a terminal VOID / CLAWED_BACK order whose
+// reason is already PUNISH gets it in its own CAS (casManualReasonSub; the choice by hand replaces
+// an automatic value). An order ended for another reason (REFUND, RIGHTS, …) keeps reason,
+// reason_sub and the flag. A replayed key (duplicate) writes nothing. Amounts, status, reason and
+// history never follow the sub-reason. A stored record resolved by a later input (money r1 S2,
+// manualOnResolve) keeps the choice: the row's when the input has none (the order is marked with
+// it), else the input's, written onto the row with the result.
+// D10-957: a duplicate punishment (stored SUCCEEDED, incoming SUCCEEDED, order VOID / CLAWED_BACK)
+// that carries an explicit choice by hand writes it onto the stored row and, when the order's
+// reason is PUNISH, onto orders.reason_sub with reason_sub_manual (the latest choice by hand wins,
+// over an automatic value or an earlier choice); without a choice only the automatic refine of
+// B2-04zze runs (never over a choice by hand). Still a duplicate: no second row, R6 or clawback.
+// Whenever an import's choice replaces the sub-reason of an order already ended PUNISH (this
+// duplicate, or a new record on such an order), one audit order_reason_sub_set is written on the
+// same transaction through deps.manualAudit: actor the import's creator, target orders:<id>,
+// before / after reason, reason_sub (none as null), reason_sub_manual, source rights_import and
+// the import id; no personal information. Without the writer it throws before writing (D10-723's
+// fail-closed). Unchanged (already that value by hand): no write, no audit.
+// createReasonSubAdminCommandPort: orders' 改子原因 (adminSetOrderReasonSub) — only orders.reason_sub
+// and reason_sub_manual, CAS on rebate_status, reason and the expected row_version.
 // BR-FUND-06 is 待验证 (which platforms send a「处理中」signal): no platform signal is invented
 // here; a platform without one only reaches record with the result.
 // Time only from input.now / the injected Clock; amounts only through @couli/money.
+import type { OrderReasonSub } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { subFen } from '@couli/money';
-import type { Transaction } from 'kysely';
+import type { Selectable, Transaction } from 'kysely';
 import type {
   RightsCommandPort,
   RightsRecordInput,
   RightsRecordResult,
 } from '../../orders/index.ts';
-import type { Clock, EventBus, RootLogger } from '../../platform/index.ts';
+import type { AuditPort, Clock, EventBus, RootLogger } from '../../platform/index.ts';
 import type { ClawbackCause, ClawbackOrder } from '../clawback/index.ts';
 import { computeRightsPending, casRightsPending } from '../clawback/clawback-store.ts';
-import type { PrecreditEvent, RebatePort } from '../rebate/application/rebate.ts';
+import type { PrecreditEvent, RebatePort, ReasonSubWrite } from '../rebate/application/rebate.ts';
 import { isPrecredit } from '../rebate/domain/rules.ts';
 import {
   REASON_SUB_UNMAPPED_ALERT,
@@ -78,10 +103,12 @@ import {
 import { casReasonSub, readRebateOrder } from '../rebate/infra/rebate-store.ts';
 import { defaultReasonSubMaps } from '../rebate/infra/reason-sub-table.ts';
 import {
+  casManualReasonSub,
   findRights,
   insertRights,
   readOpenDeductionTotal,
   updateRightsResult,
+  writeRightsManual,
   type OrderRightsRow,
   type RightsSystemAuditInput,
 } from './rights-store.ts';
@@ -122,7 +149,21 @@ export interface RightsCommandDependencies {
    * once when the port is built.
    */
   readonly reasonSubMaps?: ReasonSubMaps;
+  /**
+   * B1-09v (D10-957): admin's audit writer on the caller's transaction (production:
+   * createAuditWriter on trx), for an import's choice by hand that replaces the sub-reason of an
+   * order already ended PUNISH. Absent: such a replacement throws before anything is written.
+   */
+  readonly manualAudit?: (trx: Transaction<DB>) => Pick<AuditPort, 'append'>;
 }
+
+/** B1-09v: the audit action of a sub-reason chosen by hand (orders' 改子原因 uses the same). */
+export const REASON_SUB_SET_AUDIT_ACTION = 'order_reason_sub_set';
+/** D10-957: the audit's source of a choice made in a punish import. */
+export const REASON_SUB_SOURCE_IMPORT = 'rights_import';
+
+/** B1-09v: a choice made by hand as the record carries it (value null is 「无」). */
+type ManualChoice = NonNullable<RightsRecordInput['manual_reason_sub']>;
 
 type StoredStatus = 'PROCESSING' | 'WAIT_COMMISSION' | 'SUCCEEDED' | 'FAILED';
 
@@ -197,12 +238,147 @@ function reopensAsSucceeded(
   );
 }
 
-/** B2-04zze: what the record tells the sub-reason written with the reason. */
-function subContextOf(input: RightsRecordInput): ReasonSubContext {
-  return {
+/**
+ * B2-04zze: what the record tells the sub-reason written with the reason. B1-09v: a punishment's
+ * choice made by hand rides along (the rebate port and the clawback write it under PUNISH only).
+ */
+function subContextOf(input: RightsRecordInput): ReasonSubWrite {
+  const manual = manualOf(input);
+  const context: ReasonSubContext = {
     rightsType: input.type,
     ...(input.type === 'PUNISH' ? { violationType: input.violation_type ?? null } : {}),
   };
+  return manual === undefined ? context : { ...context, manual };
+}
+
+/** B1-09v: the record's sub-reason chosen by hand; only a punishment carries one. */
+function manualOf(input: RightsRecordInput): ManualChoice | undefined {
+  return input.type === 'PUNISH' ? input.manual_reason_sub : undefined;
+}
+
+/**
+ * B1-09v (D10-957): what an explicit choice by hand does on an order already ended (VOID /
+ * CLAWED_BACK): the order's sub-reason is replaced only under reason PUNISH and only when it is
+ * not already that value by hand; the stored row (a duplicate's) is written back unless it already
+ * holds that value by hand. The audit follows the order's replacement.
+ */
+export function manualOnEnded(
+  order: {
+    readonly reason: string | null;
+    readonly reason_sub: string | null;
+    readonly reason_sub_manual: boolean;
+  },
+  stored: Pick<OrderRightsRow, 'reason_sub' | 'reason_sub_manual'> | undefined,
+  manual: Pick<ManualChoice, 'value'>,
+): { readonly order: boolean; readonly row: boolean } {
+  const replaces =
+    order.reason === 'PUNISH' && !(order.reason_sub_manual && order.reason_sub === manual.value);
+  const row =
+    order.reason === 'PUNISH' &&
+    stored !== undefined &&
+    !(stored.reason_sub_manual && stored.reason_sub === manual.value);
+  return { order: replaces, row };
+}
+
+/**
+ * B1-09v (money r1 S2, 08 BR-TEXT-05「人工选过的不被自动覆盖」): the choice made by hand that holds
+ * when an incoming input resolves a stored record (PROCESSING / WAIT_COMMISSION → result, or a
+ * reopen). The incoming input's own choice wins and goes onto the row unless the row already holds
+ * exactly it (`writeRow`); without one, the row's stored choice (reason_sub_manual true) is used to
+ * mark the order, so a later sync does not drop it; neither: no choice. Only a punishment carries a
+ * choice (the K-2 key includes the type, so the stored row is of the same type). A stored value
+ * outside the PUNISH sub-reasons is a broken row and throws before anything is written.
+ */
+export function manualOnResolve(
+  stored: Pick<OrderRightsRow, 'type' | 'reason_sub' | 'reason_sub_manual'>,
+  input: Pick<RightsRecordInput, 'type' | 'manual_reason_sub'>,
+): {
+  readonly manual: ManualChoice | undefined;
+  readonly writeRow: boolean;
+} {
+  if (input.type !== 'PUNISH' || stored.type !== 'PUNISH')
+    return { manual: undefined, writeRow: false };
+  const incoming = input.manual_reason_sub;
+  if (incoming !== undefined) {
+    const same = stored.reason_sub_manual && stored.reason_sub === incoming.value;
+    return { manual: incoming, writeRow: !same };
+  }
+  if (!stored.reason_sub_manual) return { manual: undefined, writeRow: false };
+  const value = stored.reason_sub;
+  if (value !== null && !isPunishSub(value)) {
+    throw new TypeError('settlement rights: stored reason_sub is not a PUNISH sub-reason');
+  }
+  return { manual: { value }, writeRow: false };
+}
+
+function isPunishSub(value: string): value is OrderReasonSub {
+  return (SUBS_OF_REASON.PUNISH as readonly string[]).includes(value);
+}
+
+/** The sub-reasons of each parent reason that has some (08 BR-TEXT-05; enum order_reason_sub). */
+const SUBS_OF_REASON: Readonly<Record<string, readonly OrderReasonSub[]>> = Object.freeze({
+  PUNISH: [
+    'VIOLATION_PROMO',
+    'SHOP_TK',
+    'INSITE_PROMO',
+    'PROXY_BUY',
+    'FAKE_TRADE',
+    'INSITE_RESALE',
+    'OVER_LIMIT',
+    'MARKET_DISRUPT',
+    'MULTI_TRADE_ABNORMAL',
+    'SINGLE_TRADE_ABNORMAL',
+    'RISK_ORDER',
+    'PUNISH_ORDER',
+  ],
+  REFUND: ['IN_SALE', 'AFTER_SETTLE'],
+  RIGHTS: ['AFTER_SALE'],
+});
+
+/** B1-09v: orders' 改子原因 input (orders' AdminReasonSubInput, by shape). */
+export interface ReasonSubAdminInput {
+  /** The caller holds lockOrderKey and re-read this row FOR UPDATE in trx. */
+  readonly before: Selectable<DB['orders']>;
+  readonly expected_row_version: number;
+  /** null: 「无」. */
+  readonly reason_sub: OrderReasonSub | null;
+  readonly now: Date;
+}
+
+export interface ReasonSubAdminCommandPort {
+  adminSetReasonSub(
+    trx: Transaction<DB>,
+    input: ReasonSubAdminInput,
+  ): Promise<{ readonly kind: 'applied' | 'cas_conflict' }>;
+}
+
+/**
+ * B1-09v: 改子原因 on the caller's transaction (orders holds the order key lock and re-read the row
+ * FOR UPDATE; orders answered the choice's 20001 and writes the audit). Only orders.reason_sub (none
+ * → null) and reason_sub_manual = true change, with row_version + 1 and updated_at; CAS on
+ * rebate_status, reason and the expected row_version. No status transition, history or event. A
+ * value that does not belong to the order's reason is a caller error and throws before writing.
+ */
+export function createReasonSubAdminCommandPort(deps: {
+  readonly logger: Pick<RootLogger, 'info'>;
+}): ReasonSubAdminCommandPort {
+  const { logger } = deps;
+  async function adminSetReasonSub(trx: Transaction<DB>, input: ReasonSubAdminInput) {
+    const order = input.before;
+    const subs = order.reason === null ? undefined : SUBS_OF_REASON[order.reason];
+    if (subs === undefined || (input.reason_sub !== null && !subs.includes(input.reason_sub))) {
+      throw new TypeError('settlement rights: reason_sub does not belong to the order reason');
+    }
+    if (order.row_version !== input.expected_row_version) return { kind: 'cas_conflict' } as const;
+    const ok = await casManualReasonSub(trx, order, input.reason_sub, input.now);
+    if (!ok) return { kind: 'cas_conflict' } as const;
+    logger.info(
+      { app_id: order.app_id, platform: order.platform, reason: order.reason, outcome: 'applied' },
+      'order sub-reason set by hand',
+    );
+    return { kind: 'applied' } as const;
+  }
+  return Object.freeze({ adminSetReasonSub });
 }
 
 export function createRightsCommandPort(deps: RightsCommandDependencies): RightsCommandPort {
@@ -227,6 +403,14 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
     const order = await readRebateOrder(trx, ref);
     if (order === undefined) throw new Error('settlement rights: order not found for app');
     if (!isTerminal(order.rebate_status)) return;
+    const manual = mappedOnly ? undefined : manualOf(input);
+    if (manual !== undefined) {
+      // B1-09v: the choice made by hand reaches only an order whose parent is PUNISH, and
+      // replaces whatever the automatic mapping wrote; another parent keeps its sub-reason.
+      if (!manualOnEnded(order, undefined, manual).order) return;
+      await replaceEndedSub(trx, order, manual, input.now);
+      return;
+    }
     const decision = reasonSubOnLaterPunish(order, input.violation_type, reasonSubMaps, {
       mappedOnly,
     });
@@ -245,6 +429,84 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
         'violation text outside the sub-reason table; fallback sub-reason written',
       );
     }
+  }
+
+  /** D10-957: the audit writer an import's replacement needs; checked before anything is written. */
+  function auditFor(trx: Transaction<DB>, manual: ManualChoice): Pick<AuditPort, 'append'> | null {
+    if (manual.origin === undefined) return null;
+    const writer = deps.manualAudit?.(trx);
+    if (writer === undefined) {
+      throw new Error('settlement rights: an import replacing a sub-reason needs the audit writer');
+    }
+    return writer;
+  }
+
+  /**
+   * B1-09v / D10-957: the order (already ended PUNISH, read under the lock) gets the choice by hand
+   * in its own CAS, then the audit of the import that chose it (same transaction).
+   */
+  async function replaceEndedSub(
+    trx: Transaction<DB>,
+    order: NonNullable<Awaited<ReturnType<typeof readRebateOrder>>>,
+    manual: ManualChoice,
+    now: Date,
+    writer: Pick<AuditPort, 'append'> | null = auditFor(trx, manual),
+  ): Promise<void> {
+    const ok = await casManualReasonSub(trx, order, manual.value, now);
+    if (!ok) throw new Error('settlement rights: manual reason_sub CAS matched no row');
+    const origin = manual.origin;
+    if (writer !== null && origin !== undefined) {
+      const side = {
+        reason: order.reason,
+        source: REASON_SUB_SOURCE_IMPORT,
+        import_id: origin.import_id,
+      };
+      await writer.append({
+        appId: order.app_id,
+        actor: origin.admin_id,
+        action: REASON_SUB_SET_AUDIT_ACTION,
+        target: `orders:${order.order_id}`,
+        before: {
+          ...side,
+          reason_sub: order.reason_sub,
+          reason_sub_manual: order.reason_sub_manual,
+        },
+        after: { ...side, reason_sub: manual.value, reason_sub_manual: true },
+        ip: null,
+      });
+    }
+    logger.info(
+      { app_id: order.app_id, platform: order.platform, reason: order.reason, outcome: 'manual' },
+      'ended order sub-reason replaced by a choice made by hand',
+    );
+  }
+
+  /**
+   * D10-957: a duplicate punishment on an ended order carrying an explicit choice by hand: the
+   * stored row and (reason PUNISH) the order take it; the latest choice by hand wins. The writer
+   * is checked before the first write; status, amounts, reason and ledger never change.
+   */
+  async function manualOnDuplicate(
+    trx: Transaction<DB>,
+    input: RightsRecordInput,
+    stored: OrderRightsRow,
+    manual: ManualChoice,
+  ): Promise<void> {
+    const ref = {
+      appId: input.before.app_id,
+      orderId: input.order_id,
+      attrAt: input.before.attr_at,
+    };
+    const order = await readRebateOrder(trx, ref);
+    if (order === undefined) throw new Error('settlement rights: order not found for app');
+    if (!isTerminal(order.rebate_status)) return;
+    const plan = manualOnEnded(order, stored, manual);
+    const writer = plan.order ? auditFor(trx, manual) : null;
+    if (plan.row) {
+      const ok = await writeRightsManual(trx, stored, manual, input.now);
+      if (!ok) throw new Error('settlement rights: order_rights manual CAS matched no row');
+    }
+    if (plan.order) await replaceEndedSub(trx, order, manual, input.now, writer);
   }
 
   /** BR-FUND-06 / 07 before credit: R6 / R7 through the rebate port (generated transition()). */
@@ -377,9 +639,16 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
     };
     let rightsId: string;
     let reopened: OrderRightsRow | undefined;
+    // B1-09v (money r1 S2): what marks the order below; a resolved stored record may change it.
+    let effective = input;
     const stored = await findRights(trx, key);
     if (stored === undefined) {
-      const id = await insertRights(trx, { ...key, ...result, source: input.source });
+      const id = await insertRights(trx, {
+        ...key,
+        ...result,
+        source: input.source,
+        manualReasonSub: manualOf(input),
+      });
       if (id === null) {
         // The unique index already holds this key (never under the order lock; kept safe).
         logger.info({ ...base, outcome: 'duplicate' }, 'rights record key already stored');
@@ -401,8 +670,11 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
         ) {
           // B2-04zze (money r1 S1): the same punishment replayed with a violation text the first
           // delivery lacked refines PUNISH_ORDER / an empty sub-reason; the record, status,
-          // amounts and history stay; still a duplicate.
-          await refineTerminalSub(trx, input, true);
+          // amounts and history stay; still a duplicate. D10-957: with an explicit choice by
+          // hand (an import's reason_sub) the choice replaces the sub-reason instead.
+          const manual = manualOf(input);
+          if (manual === undefined) await refineTerminalSub(trx, input, true);
+          else await manualOnDuplicate(trx, input, stored, manual);
         }
         logger.info({ ...base, outcome: 'duplicate' }, 'rights record replayed');
         return { kind: 'duplicate' };
@@ -411,7 +683,14 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
         // D10-723: no audit port, no reopen — refused before any write (fail-closed).
         throw new Error('settlement rights: reopening a closed record needs the audit port');
       }
-      const ok = await updateRightsResult(trx, stored, result);
+      // B1-09v (money r1 S2): a choice made by hand survives the resolve — the row's own when
+      // the input has none, else the input's, written onto the row so row and order agree.
+      const choice = manualOnResolve(stored, input);
+      effective = { ...input, manual_reason_sub: choice.manual };
+      const ok = await updateRightsResult(trx, stored, {
+        ...result,
+        ...(choice.writeRow ? { manualReasonSub: choice.manual } : {}),
+      });
       if (!ok) throw new Error('settlement rights: order_rights CAS matched no row');
       rightsId = stored.id;
       if (reopens) reopened = stored;
@@ -444,12 +723,13 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
       );
     }
 
-    if (isPrecredit(order.rebate_status)) await precredit(trx, input, status);
-    else if (order.rebate_status === 'CREDITED') await credited(trx, input, status, rightsId);
-    else if (isTerminal(order.rebate_status) && status === 'SUCCEEDED') {
+    if (isPrecredit(order.rebate_status)) await precredit(trx, effective, status);
+    else if (order.rebate_status === 'CREDITED') {
+      await credited(trx, effective, status, rightsId);
+    } else if (isTerminal(order.rebate_status) && status === 'SUCCEEDED') {
       // VOID / CLAWED_BACK: recorded only (BR-FUND-01 细则「订单锁定」); B2-04zze refines the
       // display sub-reason of a PUNISH order only.
-      await refineTerminalSub(trx, input);
+      await refineTerminalSub(trx, effective);
     }
 
     await syncRightsPending(trx, input);

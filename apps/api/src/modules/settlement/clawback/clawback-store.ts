@@ -241,6 +241,11 @@ export interface ClawbackCas {
   /** B2-04zze: R8's display sub-reason, written with the reason; undefined → unchanged. */
   readonly reason_sub?: { readonly value: OrderReasonSub | null };
   /**
+   * B1-09v: true when reason_sub is a value chosen by hand (orders.reason_sub_manual set in this
+   * same CAS); undefined → the flag is unchanged.
+   */
+  readonly reason_sub_manual?: true;
+  /**
    * B2-04zk (BR-CALC-15): the R9 whose N_new came from a rights deduction moves the version in
    * this same CAS, with the optimistic guard commission_version = the version read under the lock.
    */
@@ -267,6 +272,7 @@ export async function casClawbackOrder(
       ...(cas.reason === undefined ? {} : { reason: cas.reason }),
       ...(cas.diff_reason_code === undefined ? {} : { diff_reason_code: cas.diff_reason_code }),
       ...(cas.reason_sub === undefined ? {} : { reason_sub: cas.reason_sub.value }),
+      ...(cas.reason_sub_manual === undefined ? {} : { reason_sub_manual: true }),
       ...(cas.commission_version === undefined
         ? {}
         : { commission_version: cas.commission_version.to }),

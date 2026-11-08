@@ -1,4 +1,9 @@
-import type { OrderHoldReason, OrderRightsStatus, OrderRightsType } from '@couli/contracts-ts';
+import type {
+  OrderHoldReason,
+  OrderReasonSub,
+  OrderRightsStatus,
+  OrderRightsType,
+} from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Selectable, Transaction } from 'kysely';
 
@@ -11,6 +16,8 @@ export type RightsRecordResult = { readonly kind: 'applied' | 'duplicate' | 'not
 export type AdminHoldResult = {
   readonly kind: 'applied' | 'not_applicable' | 'same_state' | 'cas_conflict';
 };
+/** B1-09v: the answer of settlement's 改子原因 (adminSetReasonSub). */
+export type AdminReasonSubResult = { readonly kind: 'applied' | 'cas_conflict' };
 
 export interface RightsRecordInput {
   /** Caller holds lockOrderKey and has reread this row FOR UPDATE in trx. */
@@ -31,6 +38,34 @@ export interface RightsRecordInput {
    * (FU-REASON-SUB-RAW-BACKFILL). Absent or null: no text.
    */
   readonly violation_type?: string | null | undefined;
+  /**
+   * B1-09v (08 BR-TEXT-05 子原因 写入来源 ②, D10-819 ①): the sub-reason a punish import was created
+   * with, chosen by hand; value null is 「无」 (no sub-reason, still chosen by hand). Stored on the
+   * order_rights row (reason_sub_manual true) and, when this record marks the order PUNISH, written
+   * to orders.reason_sub with orders.reason_sub_manual instead of the automatic mapping. Absent:
+   * not chosen (the row's reason_sub_manual false), the automatic mapping decides.
+   * D10-957: `origin` is the import that carries the choice and the admin who created it; when the
+   * choice replaces the sub-reason of an order already ended for PUNISH, settlement writes the
+   * audit order_reason_sub_set with them (source rights_import).
+   */
+  readonly manual_reason_sub?: ManualReasonSubInput | undefined;
+}
+
+/** B1-09v: a sub-reason chosen by hand (value null is 「无」) and where it came from. */
+export interface ManualReasonSubInput {
+  readonly value: OrderReasonSub | null;
+  /** D10-957: the punish import of the choice; absent only outside an import. */
+  readonly origin?: { readonly import_id: string; readonly admin_id: string } | undefined;
+}
+
+/** B1-09v: adminSetOrderReasonSub's write (only orders.reason_sub and reason_sub_manual change). */
+export interface AdminReasonSubInput {
+  /** Caller holds lockOrderKey and has reread this row FOR UPDATE in trx. */
+  readonly before: Selectable<DB['orders']>;
+  readonly expected_row_version: number;
+  /** null: 「无」 (no sub-reason). Belongs to before.reason (checked by the caller). */
+  readonly reason_sub: OrderReasonSub | null;
+  readonly now: Date;
 }
 
 export interface AdminHoldInput {
@@ -56,9 +91,19 @@ export interface RebateAdminCommandPort {
   adminUnhold(trx: Transaction<DB>, input: AdminHoldInput): Promise<AdminHoldResult>;
 }
 
+/** B1-09v: settlement, the writer of orders.reason / reason_sub, implements 改子原因. */
+export interface ReasonSubAdminCommandPort {
+  adminSetReasonSub(
+    trx: Transaction<DB>,
+    input: AdminReasonSubInput,
+  ): Promise<AdminReasonSubResult>;
+}
+
 export interface OrderRightsPorts {
   readonly rights?: RightsCommandPort;
   readonly rebate?: Partial<RebateAdminCommandPort>;
+  /** B1-09v: settlement's 改子原因; absent → ORDERS_RIGHTS_PORT_UNAVAILABLE. */
+  readonly reasonSub?: Partial<ReasonSubAdminCommandPort>;
 }
 
 function unavailable(port: string): Error {
@@ -105,4 +150,17 @@ export async function adminUnholdOrder(
     throw unavailable('rebate.adminUnhold');
   }
   return await rebate.adminUnhold(trx, input);
+}
+
+/** B1-09v: settlement's 改子原因 (orders never writes orders.reason_sub itself). */
+export async function adminSetOrderReasonSub(
+  trx: Transaction<DB>,
+  ports: OrderRightsPorts | undefined,
+  input: AdminReasonSubInput,
+): Promise<AdminReasonSubResult> {
+  const port = ports?.reasonSub;
+  if (port === undefined || typeof port.adminSetReasonSub !== 'function') {
+    throw unavailable('reasonSub.adminSetReasonSub');
+  }
+  return await port.adminSetReasonSub(trx, input);
 }

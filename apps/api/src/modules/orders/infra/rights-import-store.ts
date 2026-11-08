@@ -3,6 +3,8 @@
 //   queued → running (CAS on status), one checkpoint per row (CAS on status running and the
 //   committed total_rows), running → done / failed with finished_at;
 // - rights_import_failures is insert-only (trigger), one row per (import_id, row_no).
+// - reason_sub (B1-09v, migration 0131): the punish import's manual sub-reason as sent (`none`
+//   included), written once with the row and never changed; NULL when not sent.
 // The list / detail read admin_users.display_name / login_name for created_by_name: the use case's
 // deps are the database only (the rule tests' signature), the read is display-only and writes
 // nothing of admin's.
@@ -21,6 +23,8 @@ export interface NewRightsImport {
   readonly time_basis: string | null;
   readonly from: string | null;
   readonly to: string | null;
+  /** B1-09v: one of the 12 PUNISH sub-reasons or `none`; null when the part was not sent. */
+  readonly reason_sub: string | null;
   readonly file_path: string;
   readonly created_by: string;
   readonly created_at: Date;
@@ -49,6 +53,25 @@ export async function findRightsImport(
     .where('app_id', '=', appId)
     .where('id', '=', importId)
     .executeTakeFirst();
+}
+
+/**
+ * B1-09v: the manual sub-reason the task was created with (rights_imports.reason_sub, `none` as
+ * sent), on the row's transaction; null when none was sent or the task is not stored.
+ */
+export async function readRightsImportReasonSub(
+  trx: Transaction<DB>,
+  appId: string,
+  importId: string,
+): Promise<string | null> {
+  const row = await trx
+    .withSchema('app')
+    .selectFrom('rights_imports')
+    .select('reason_sub')
+    .where('app_id', '=', appId)
+    .where('id', '=', importId)
+    .executeTakeFirst();
+  return row?.reason_sub ?? null;
 }
 
 /** queued → running; false when the row was not queued any more. */

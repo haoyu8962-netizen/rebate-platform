@@ -132,6 +132,19 @@ function fen(value: bigint | null): number | null {
   return value === null ? null : fenToJsonNumber(value);
 }
 
+/**
+ * B1-09v: reason_sub when the order has one, or when 「无」 was chosen by hand (null); otherwise the
+ * key is left out (the contract's「absent is the same as null」).
+ */
+function reasonSubOf(row: {
+  readonly reason_sub?: string | null;
+  readonly reason_sub_manual?: boolean;
+}): Pick<Detail, 'reason_sub'> {
+  const value = row.reason_sub ?? null;
+  if (value === null && row.reason_sub_manual !== true) return {};
+  return { reason_sub: value as NonNullable<Detail['reason_sub']> | null };
+}
+
 /** hold_reason is set only while hold is true (contract AdminOrderListItem.hold_reason). */
 function holdReasonOf(row: AdminOrderRow): string | null {
   return row.hold ? row.hold_reason : null;
@@ -237,6 +250,7 @@ export class AdminOrders {
       refunded_quantity: row.refunded_quantity,
       display_status: displayStatus(row, creditEnabled, figures.get(row.order_id)),
       reason: row.reason as Detail['reason'],
+      ...reasonSubOf(row),
       buy_type: row.buy_type as Detail['buy_type'],
       scene_basis: row.scene_basis as Detail['scene_basis'],
       user_basis: row.user_basis as Detail['user_basis'],

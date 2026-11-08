@@ -490,6 +490,9 @@ import {
   type RebatePort,
   readOrderIdsByKey,
 } from './modules/settlement/index.ts';
+// B1-09v: settlement's 改子原因 port. settlement/index.ts (and rights/index.ts) were outside the
+// task's paths, so it is taken from its own file until an index re-export lands.
+import { createReasonSubAdminCommandPort } from './modules/settlement/rights/rights-command.ts';
 import {
   REGISTERED_PLATFORMS,
   UNION_ENDPOINTS,
@@ -2117,6 +2120,9 @@ function orderSyncWorker(
         clawback,
         rebate: port,
         audit: createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
+        // B1-09v (D10-957): an import's choice by hand replacing an ended PUNISH order's
+        // sub-reason is audited on the row's transaction, as 改子原因 is.
+        manualAudit: (trx) => createAuditWriter({ db: trx, clock, sensitiveKeys: SENSITIVE_KEYS }),
       }),
     };
   };
@@ -2131,6 +2137,7 @@ function orderSyncWorker(
       clawback,
       rebate: port,
       audit: createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
+      manualAudit: (trx) => createAuditWriter({ db: trx, clock, sensitiveKeys: SENSITIVE_KEYS }),
     });
   };
   const keyring = (): FieldCrypto | undefined => {
@@ -2543,8 +2550,8 @@ function adminOrderPorts(
 }
 /**
  * B1-10m: the real ports of the console's order and claim writes — admin's audit writer on the
- * write's transaction and its permission keys, settlement's attribution (R3 / R3b) and hold (R11)
- * commands, risk's state and identity's deletion stage of an assignment's target on the write's
+ * write's transaction and its permission keys, settlement's attribution (R3 / R3b), hold (R11) and
+ * (B1-09v) 改子原因 commands, risk's state and identity's deletion stage of an assignment's target on the write's
  * transaction, and the snapshot and source ports the sync uses. pidSceneOn reads union_pids by
  * (app_id, platform, pid), unique across the app (orders carry no union_account_id; union exports
  * no reader without it) and with every status counted, the pipeline's rule (BR-ATTR-02): a retired
@@ -2573,7 +2580,11 @@ function adminOrderWritePorts(
       onClaimApproved: (trx, input) => attributionOn(trx).onClaimApproved(trx, input),
       onAdminAssigned: (trx, input) => attributionOn(trx).onAdminAssigned(trx, input),
     },
-    hold: { rebate: createRebateAdminCommandPort({ clock, logger }) },
+    hold: {
+      rebate: createRebateAdminCommandPort({ clock, logger }),
+      // B1-09v: 改子原因 (adminSetOrderReasonSub) over settlement, the writer of orders.reason_sub.
+      reasonSub: createReasonSubAdminCommandPort({ logger }),
+    },
     targets: {
       risk: {
         read: (executor, input) =>

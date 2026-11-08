@@ -1,6 +1,6 @@
 // B1-09g: reading the multipart/form-data body of POST /admin/v1/rights-imports (contract
-// adminCreateRightsImport: text parts kind, platform, time_basis, from, to, union_account_id and
-// the file `file`, in any order). Called by the handler inside the guard's business callback only,
+// adminCreateRightsImport: text parts kind, platform, time_basis, from, to, union_account_id,
+// reason_sub (B1-09v, CT-24zw) and the file `file`, in any order). Called by the handler inside the guard's business callback only,
 // so a refused account never consumes the body (as platform readSingleUpload).
 //   - a body above the route's bodyLimit (Content-Length up front, or the bytes counted while
 //     streaming): RightsImportPartsRejection 413 / data.fields [body]; on overflow it stops
@@ -34,10 +34,18 @@ export class RightsImportPartsRejection extends Error {
   }
 }
 
-const FIELDS = ['kind', 'platform', 'time_basis', 'from', 'to', 'union_account_id'] as const;
+const FIELDS = [
+  'kind',
+  'platform',
+  'time_basis',
+  'from',
+  'to',
+  'union_account_id',
+  'reason_sub',
+] as const;
 type FieldName = (typeof FIELDS)[number];
-/** Six text parts and one file, one spare of each so a repeat is reported, not cut off. */
-export const RIGHTS_IMPORT_LIMITS = Object.freeze({ files: 2, fields: 12, parts: 14 });
+/** Seven text parts and one file, one spare of each so a repeat is reported, not cut off. */
+export const RIGHTS_IMPORT_LIMITS = Object.freeze({ files: 2, fields: 14, parts: 16 });
 
 export interface RightsImportParts {
   readonly fields: RightsImportFormFields;

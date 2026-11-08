@@ -15,7 +15,9 @@
 //      `<app_id>/<import_id>.xlsx` (rights_imports.file_path), then one transaction: the
 //      rights_imports row (status queued, created_by the actor, created_at the injected Clock), one
 //      audit record for the whole file (action rights_import_create, target
-//      `rights_imports:<import_id>`, after: kind, platform, filename, total_rows) and the job, sent
+//      `rights_imports:<import_id>`, after: kind, platform, filename, total_rows, reason_sub —
+//      B1-09v: the punish import's manual sub-reason as sent, `none` as is, null when not sent or
+//      for rights / channel; rights_imports.reason_sub keeps the same value) and the job, sent
 //      on that transaction: queue `order-sync` (orders' own queue, exclusive: singletonKey
 //      `rights_import:<import_id>`), job name `rights_import`, payload { app_id, import_id } (never
 //      the file, its name or its cells);
@@ -23,7 +25,9 @@
 // Logs carry ids and counts only, never the filename or any cell.
 //
 // listRightsImports / getRightsImport: rows of the app only, created_at descending (then id), the
-// five tallies, created_by and created_by_name (display_name, else login_name); the detail adds every
+// five tallies, created_by and created_by_name (display_name, else login_name), reason_sub as stored
+// (B1-09v: `none` as sent; the key is left out when nothing was sent — the contract's「absent is
+// the same as null」— and the HTTP layer writes it as null); the detail adds every
 // row failure ordered by row_no. An import_id that is not a UUID, unknown, or of another app is
 // 20001 [import_id]. Reading writes no audit.
 import type { Schema } from '@couli/contracts-ts';
@@ -39,6 +43,7 @@ import {
 } from '../../platform/index.ts';
 import {
   checkRightsImportForm,
+  isPunishImportReasonSub,
   type RightsImportFormFields,
   type RightsImportStatus,
 } from '../domain/rights-import.ts';
@@ -153,6 +158,7 @@ export async function createRightsImport(
     return fieldsError('file');
   }
 
+  const reasonSub = form.kind === 'punish' ? (form.reason_sub ?? null) : null;
   const now = deps.clock.now();
   const importId = newUuidV7(now);
   const key = `${actor.appId}/${importId}.xlsx`;
@@ -169,6 +175,7 @@ export async function createRightsImport(
           time_basis: form.kind === 'channel' ? null : (form.window?.time_basis ?? null),
           from: form.kind === 'channel' ? null : (form.window?.from ?? null),
           to: form.kind === 'channel' ? null : (form.window?.to ?? null),
+          reason_sub: reasonSub,
           file_path: key,
           created_by: actor.adminId,
           created_at: now,
@@ -189,6 +196,7 @@ export async function createRightsImport(
           platform: form.platform,
           filename: file.filename,
           total_rows: totalRows,
+          reason_sub: reasonSub,
         },
         ip: actor.ip,
       });
@@ -218,6 +226,12 @@ export async function createRightsImport(
 
 type Summary = Schema<'AdminRightsImportSummary'>;
 
+/** B1-09v: the stored manual sub-reason; no key when none was sent (absent = null, CT-24zw). */
+function reasonSubOf(row: RightsImportListRow): Pick<Summary, 'reason_sub'> {
+  const value = row.reason_sub ?? undefined;
+  return isPunishImportReasonSub(value) ? { reason_sub: value } : {};
+}
+
 const iso = (value: Date | string | null): string | null =>
   value === null ? null : typeof value === 'string' ? value : value.toISOString();
 
@@ -233,6 +247,7 @@ function summaryOf(row: RightsImportListRow): Summary {
     skipped_rows: row.skipped_rows,
     duplicate_rows: row.duplicate_rows,
     created_by: row.created_by,
+    ...reasonSubOf(row),
     created_by_name: row.created_by_name,
     created_at: iso(row.created_at)!,
     finished_at: iso(row.finished_at),

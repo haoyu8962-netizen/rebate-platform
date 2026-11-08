@@ -16,6 +16,10 @@
 //     → [union_account_id];
 //   - channel: union_account_id required (a UUID) → [union_account_id]; any of time_basis, from,
 //     to → that field.
+//   - reason_sub (B1-09v; 08 BR-TEXT-05 子原因 写入来源 ②, D10-819 ①②, CT-24zw): punish only, one
+//     of the 12 PUNISH sub-reasons of enum order_reason_sub or `none` (「无」), exact spelling;
+//     anything else, or the part sent with kind=rights / channel (维权单 has no manual choice) →
+//     [reason_sub]. Not sent: null (the automatic mapping decides).
 // The file part is judged by the use case (application/rights-imports.ts), not here.
 // TODO(规划/11 §4.5): Excel column templates per (kind, platform) — blocked on the owner's samples
 // (K-3); until registered, rights / punish rows are invalid_row (application/rights-import-ports.ts).
@@ -40,7 +44,31 @@ export interface RightsImportFormFields {
   readonly from?: string | undefined;
   readonly to?: string | undefined;
   readonly union_account_id?: string | undefined;
+  /** B1-09v: punish only; one of PUNISH_REASON_SUBS or `none`. */
+  readonly reason_sub?: string | undefined;
 }
+
+/** The sub-reasons of the parent reason PUNISH (contract AdminOrderPunishReasonSub, BR-TEXT-05). */
+export const PUNISH_REASON_SUBS = [
+  'VIOLATION_PROMO',
+  'SHOP_TK',
+  'INSITE_PROMO',
+  'PROXY_BUY',
+  'FAKE_TRADE',
+  'INSITE_RESALE',
+  'OVER_LIMIT',
+  'MARKET_DISRUPT',
+  'MULTI_TRADE_ABNORMAL',
+  'SINGLE_TRADE_ABNORMAL',
+  'RISK_ORDER',
+  'PUNISH_ORDER',
+] as const satisfies readonly Schema<'AdminOrderPunishReasonSub'>[];
+
+/** 「无」: the choice made by hand that writes no sub-reason (contract AdminOrderReasonSubNone). */
+export const REASON_SUB_NONE = 'none' satisfies Schema<'AdminOrderReasonSubNone'>;
+
+/** The reason_sub part of a punish import as stored in rights_imports (`none` as sent). */
+export type RightsImportReasonSub = Schema<'AdminRightsImportReasonSub'>;
 
 /** A filtering window: rows whose paid / received time lies in [from, to). */
 export interface RightsImportWindow {
@@ -57,6 +85,11 @@ export type CheckedRightsImportForm =
       readonly platform: RightsImportPlatform;
       /** null: no window, no row is filtered (time_basis sent alone is dropped). */
       readonly window: RightsImportWindow | null;
+      /**
+       * B1-09v: the manual sub-reason of a punish import; the key is absent when the part was not
+       * sent (always for rights), so a form without it reads as before.
+       */
+      readonly reason_sub?: RightsImportReasonSub;
     }
   | {
       readonly kind: 'channel';
@@ -114,6 +147,11 @@ function instantMs(value: string): number | null {
 
 const refuse = (field: string): RightsImportFormCheck => ({ ok: false, fields: [field] });
 
+/** The reason_sub part as sent: PUNISH's twelve or `none`, exact spelling (no trim, no case fold). */
+export function isPunishImportReasonSub(value: string | undefined): value is RightsImportReasonSub {
+  return value === REASON_SUB_NONE || includes(PUNISH_REASON_SUBS, value);
+}
+
 export function checkRightsImportForm(fields: RightsImportFormFields): RightsImportFormCheck {
   const { kind, platform } = fields;
   if (!includes(rights_import_kind, kind)) return refuse('kind');
@@ -122,19 +160,24 @@ export function checkRightsImportForm(fields: RightsImportFormFields): RightsImp
   if (kind === 'channel') {
     const account = fields.union_account_id;
     if (account === undefined || !UUID.test(account)) return refuse('union_account_id');
-    for (const field of ['time_basis', 'from', 'to'] as const) {
+    for (const field of ['time_basis', 'from', 'to', 'reason_sub'] as const) {
       if (fields[field] !== undefined) return refuse(field);
     }
     return { ok: true, form: { kind, platform: code, union_account_id: account } };
   }
   const byOrder = kind as 'rights' | 'punish';
   if (fields.union_account_id !== undefined) return refuse('union_account_id');
+  const sent = fields.reason_sub;
+  if (sent !== undefined && (byOrder !== 'punish' || !isPunishImportReasonSub(sent))) {
+    return refuse('reason_sub');
+  }
+  const manual = sent === undefined ? {} : { reason_sub: sent };
   const { time_basis: basis, from, to } = fields;
   if (basis !== undefined && !includes(rights_import_time_basis, basis))
     return refuse('time_basis');
   if (from === undefined && to === undefined) {
     // time_basis alone: accepted and dropped (no window, no filtering).
-    return { ok: true, form: { kind: byOrder, platform: code, window: null } };
+    return { ok: true, form: { kind: byOrder, platform: code, window: null, ...manual } };
   }
   if (basis === undefined) return refuse('time_basis');
   if (from === undefined) return refuse('from');
@@ -150,6 +193,7 @@ export function checkRightsImportForm(fields: RightsImportFormFields): RightsImp
       kind: byOrder,
       platform: code,
       window: { time_basis: basis as RightsImportTimeBasis, from, to },
+      ...manual,
     },
   };
 }

@@ -16,7 +16,8 @@
 // stored; rights and punish need neither. The use case (application/rights-imports.ts) answers the
 // rest; 20001 is HTTP 400 with data.fields. Success: HTTP 200 { code 0, data { import_id, status
 // queued } }.
-// list / detail: read-only guard on order.claim (no step-up); the app is the actor's.
+// list / detail: read-only guard on order.claim (no step-up); the app is the actor's. B1-09v: every
+// answered row carries reason_sub, null when the import was created without one (CT-24zw).
 import { HttpException } from '@nestjs/common';
 import type { Schema } from '@couli/contracts-ts';
 import {
@@ -103,7 +104,10 @@ export class AdminRightsImportsHttp {
     request: RightsImportReadRequest,
     query: RightsImportPageQuery,
   ): Promise<Schema<'AdminRightsImportPageResponse'>> {
-    return this.#read(request, (appId) => listRightsImports(this.#imports, appId, query));
+    return this.#read(request, async (appId) => {
+      const page = await listRightsImports(this.#imports, appId, query);
+      return { ...page, items: page.items.map(withReasonSub) };
+    });
   }
 
   detail(
@@ -113,7 +117,7 @@ export class AdminRightsImportsHttp {
     return this.#read(request, async (appId) => {
       const outcome = await getRightsImport(this.#imports, appId, importId);
       if (outcome.code !== 0) throw fieldsRefusal(outcome.data.fields, request.id);
-      return outcome.data;
+      return withReasonSub(outcome.data);
     });
   }
 
@@ -129,6 +133,11 @@ export class AdminRightsImportsHttp {
     if (response === undefined) throw new Error('orders: admin guard returned without an answer');
     return response;
   }
+}
+
+/** B1-09v: reason_sub written out, null when the import was created without one. */
+function withReasonSub<T extends { readonly reason_sub?: unknown }>(row: T): T {
+  return { ...row, reason_sub: row.reason_sub ?? null };
 }
 
 /** The parts, a refused body turned into its 20001 envelope (400 / 413, data.fields [body]). */

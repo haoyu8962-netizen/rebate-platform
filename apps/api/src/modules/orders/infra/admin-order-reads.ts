@@ -48,6 +48,9 @@ export interface AdminOrderDetailRow extends AdminOrderRow {
   readonly quantity: number | null;
   readonly refunded_quantity: number | null;
   readonly reason: string | null;
+  /** B1-09v: orders.reason_sub and whether it was chosen by hand (08 BR-TEXT-05); always read. */
+  readonly reason_sub?: string | null;
+  readonly reason_sub_manual?: boolean;
   readonly buy_type: string | null;
   readonly scene_basis: string | null;
   readonly user_basis: string | null;
@@ -117,6 +120,8 @@ const DETAIL_COLUMNS = [
   'quantity',
   'refunded_quantity',
   'reason',
+  'reason_sub',
+  'reason_sub_manual',
   'buy_type',
   'scene_basis',
   'user_basis',

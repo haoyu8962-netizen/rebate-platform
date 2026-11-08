@@ -2,12 +2,22 @@
 // caller's transaction (the order_key advisory lock is already held). settlement owns order_rights
 // and the rebate columns of orders (hold, hold_reason, rights_pending, row_version / updated_at;
 // BR-FUND-01). Always scoped by app_id, naming schema app.
+// B1-09v (08 BR-TEXT-05 子原因 写入来源 ②, migration 0131): order_rights.reason_sub /
+// reason_sub_manual carry a punish import's choice made by hand (reason_sub NULL while manual is
+// false, CHECK order_rights_reason_sub_manual_check); casManualReasonSub writes a value chosen by
+// hand to orders.reason_sub and sets orders.reason_sub_manual (settlement writes the reason columns).
 import { randomUUID } from 'node:crypto';
+import type { OrderReasonSub } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { addFen } from '@couli/money';
 import { sql, type Selectable, type Transaction } from 'kysely';
 
 export type OrderRightsRow = Selectable<DB['order_rights']>;
+
+/** B1-09v: a sub-reason chosen by hand (08 BR-TEXT-05 写入来源 ②); value null is 「无」. */
+export interface ManualReasonSub {
+  readonly value: OrderReasonSub | null;
+}
 
 export interface RightsKey {
   readonly appId: string;
@@ -43,6 +53,11 @@ export interface RightsInsert extends RightsKey {
   readonly deductionFen: bigint | null;
   readonly occurredAt: Date;
   readonly now: Date;
+  /**
+   * B1-09v: the choice made by hand the record carries; value null is 「无」. Absent: not chosen
+   * (reason_sub NULL, reason_sub_manual false).
+   */
+  readonly manualReasonSub?: ManualReasonSub | undefined;
 }
 
 /**
@@ -68,6 +83,8 @@ export async function insertRights(
       deduction_commission_fen: row.deductionFen,
       occurred_at: row.occurredAt,
       platform_rights_no: row.platformRightsNo,
+      reason_sub: row.manualReasonSub?.value ?? null,
+      reason_sub_manual: row.manualReasonSub !== undefined,
       created_at: row.now,
       updated_at: row.now,
     })
@@ -83,6 +100,13 @@ export interface RightsResult {
   readonly deductionFen: bigint | null;
   readonly occurredAt: Date;
   readonly now: Date;
+  /**
+   * B1-09v (money r1 S2): a choice made by hand that the resolving input carries and the stored row
+   * lacks (or holds another value of); written with the result (reason_sub = value, null 「无」;
+   * reason_sub_manual = true, CHECK order_rights_reason_sub_manual_check). Absent: both columns
+   * stay as stored (a choice already on the row is kept).
+   */
+  readonly manualReasonSub?: ManualReasonSub | undefined;
 }
 
 /** The result of a stored record, in place (same id), CAS on (status, row_version). */
@@ -99,8 +123,40 @@ export async function updateRightsResult(
       amount_fen: result.amountFen,
       deduction_commission_fen: result.deductionFen,
       occurred_at: result.occurredAt,
+      ...(result.manualReasonSub === undefined
+        ? {}
+        : { reason_sub: result.manualReasonSub.value, reason_sub_manual: true }),
       row_version: stored.row_version + 1,
       updated_at: result.now,
+    })
+    .where('app_id', '=', stored.app_id)
+    .where('id', '=', stored.id)
+    .where('status', '=', stored.status)
+    .where('row_version', '=', stored.row_version)
+    .executeTakeFirst();
+  return (updated.numUpdatedRows ?? 0n) === 1n;
+}
+
+/**
+ * B1-09v (D10-957): a choice made by hand written back onto a stored row the incoming record
+ * repeats (a duplicate: status, amounts and occurred_at stay): reason_sub = value (null 「无」),
+ * reason_sub_manual = true (CHECK order_rights_reason_sub_manual_check), row_version + 1. CAS on
+ * (status, row_version); false when it matched no row.
+ */
+export async function writeRightsManual(
+  trx: Transaction<DB>,
+  stored: OrderRightsRow,
+  manual: ManualReasonSub,
+  now: Date,
+): Promise<boolean> {
+  const updated = await trx
+    .withSchema('app')
+    .updateTable('order_rights')
+    .set({
+      reason_sub: manual.value,
+      reason_sub_manual: true,
+      row_version: stored.row_version + 1,
+      updated_at: now,
     })
     .where('app_id', '=', stored.app_id)
     .where('id', '=', stored.id)
@@ -161,6 +217,38 @@ export interface OrderCasKey {
   readonly attr_at: Date;
   readonly rebate_status: string;
   readonly row_version: number;
+}
+
+/**
+ * B1-09v: a sub-reason chosen by hand (改子原因, or a punish import's choice on an order already
+ * ended PUNISH): orders.reason_sub = value (null: 「无」), reason_sub_manual = true, row_version + 1,
+ * updated_at; CAS on (rebate_status, reason, row_version) as read under the lock. Nothing else of
+ * the order changes. Returns whether one row was hit.
+ */
+export async function casManualReasonSub(
+  trx: Transaction<DB>,
+  key: OrderCasKey & { readonly reason: string | null },
+  value: OrderReasonSub | null,
+  at: Date,
+): Promise<boolean> {
+  if (key.reason === null) return false;
+  const result = await trx
+    .withSchema('app')
+    .updateTable('orders')
+    .set({
+      reason_sub: value,
+      reason_sub_manual: true,
+      row_version: key.row_version + 1,
+      updated_at: at,
+    })
+    .where('app_id', '=', key.app_id)
+    .where('order_id', '=', key.order_id)
+    .where('attr_at', '=', key.attr_at)
+    .where('rebate_status', '=', key.rebate_status)
+    .where('reason', '=', key.reason)
+    .where('row_version', '=', key.row_version)
+    .executeTakeFirst();
+  return (result.numUpdatedRows ?? 0n) === 1n;
 }
 
 /** R11: hold / hold_reason, CAS on (rebate_status, row_version, hold); rebate_status unchanged. */
