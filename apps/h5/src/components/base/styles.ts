@@ -4,7 +4,13 @@
 export const FOCUS_RING =
   'focus-visible:outline-solid focus-visible:outline-[length:var(--focus-width)] focus-visible:outline-offset-[var(--focus-offset)] focus-visible:outline-couli-focus-ring';
 
-const BUTTON_BASE = `min-h-couli-component-button-min-height cursor-pointer rounded-couli-button px-couli-component-button-padding-inline py-couli-component-button-padding-block text-couli-body leading-couli-body ${FOCUS_RING}`;
+/**
+ * Marker of a component whose edge is a fill or a shadow only: under forced colours it gets a
+ * system-colour border instead (shared/styles/index.css, DSX-108).
+ */
+export const FORCED_EDGE = 'h5-forced-edge';
+
+const BUTTON_BASE = `${FORCED_EDGE} min-h-couli-component-button-min-height cursor-pointer rounded-couli-button px-couli-component-button-padding-inline py-couli-component-button-padding-block text-couli-body leading-couli-body ${FOCUS_RING}`;
 
 /** Main button: brand fill, inverse text 17/600 (GUIDE §3). */
 export const PRIMARY_BUTTON = `${BUTTON_BASE} bg-couli-button-primary-default-background font-couli-semibold text-couli-button-primary-default-text active:bg-couli-button-primary-pressed-background active:text-couli-button-primary-pressed-text`;
@@ -75,8 +81,7 @@ export const SEGMENT = {
 } as const;
 
 /** Card: surface panel; clickable cards add the pressed fill and the focus ring. */
-export const CARD_SURFACE =
-  'w-full rounded-couli-card bg-couli-background-surface text-start text-couli-text-primary shadow-couli-card';
+export const CARD_SURFACE = `${FORCED_EDGE} w-full rounded-couli-card bg-couli-background-surface text-start text-couli-text-primary shadow-couli-card`;
 /** Inner padding of a card: 16 all round (default), 16 left and right only, or none. */
 export const CARD_PADDING = { default: 'p-couli-4', inline: 'px-couli-4', none: '' } as const;
 export const CARD_PRESSABLE = `cursor-pointer active:bg-couli-background-muted ${FOCUS_RING}`;
@@ -84,7 +89,7 @@ export const CARD = `${CARD_SURFACE} ${CARD_PADDING.default}`;
 export const CARD_CLICKABLE = `${CARD} ${CARD_PRESSABLE}`;
 
 /** List row: title / subtitle column and a trailing accessory. */
-export const LIST_ROW = `flex w-full min-h-couli-interaction-target-minimum items-center gap-couli-3 bg-couli-background-surface px-couli-4 py-couli-3 text-start text-couli-text-primary`;
+export const LIST_ROW = `${FORCED_EDGE} flex w-full min-h-couli-interaction-target-minimum items-center gap-couli-3 bg-couli-background-surface px-couli-4 py-couli-3 text-start text-couli-text-primary`;
 export const LIST_ROW_CLICKABLE = `${LIST_ROW} cursor-pointer active:bg-couli-background-muted ${FOCUS_RING}`;
 export const LIST_ROW_TEXT = 'flex min-w-0 flex-1 flex-col';
 export const LIST_ROW_TITLE = 'text-couli-body leading-couli-body text-couli-text-primary';
@@ -100,6 +105,12 @@ export const TAB = {
   unselected: `${TAB_BASE} font-couli-regular text-couli-text-secondary active:bg-couli-background-surface active:opacity-70`,
   selected: `${TAB_BASE} bg-couli-background-surface font-couli-semibold text-couli-text-primary shadow-couli-card active:opacity-70`,
 } as const;
+
+/**
+ * Skeleton block: placeholder fill with a shimmer (shared/styles/index.css `h5-skeleton`: a
+ * gradient sweep every motion.skeleton.shimmer, still under reduced motion).
+ */
+export const SKELETON_BLOCK = `${FORCED_EDGE} h5-skeleton rounded-couli-small bg-couli-background-placeholder`;
 
 /** Button that fills its container's width (block-level actions, "load more"). */
 export const BUTTON_FULL_WIDTH = 'w-full';

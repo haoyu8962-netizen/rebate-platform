@@ -13,6 +13,12 @@
 // tokens that have a `dark` field (even when it equals `value`), spelled with the same cssValue
 // rules; a token without `dark` is not overridden, i.e. it falls back to `value`. Only color and
 // shadow tokens may have `dark`.
+//
+// Motion (v0.5.2, DSX-48): `duration` tokens are non-negative milliseconds with `unit: "ms"`
+// (CSS `250ms`); `cubicBezier` tokens are [x1, y1, x2, y2] with x1 and x2 within 0..1 (CSS
+// `cubic-bezier(0.2, 0, 0, 1)`), as in sync-brand.py. Neither takes `dark`. The reduced-motion and
+// forced-colors fallbacks live in a separate generated file (a11y.gen.css, generateA11yCss), so
+// tokens.gen.css keeps only its three token blocks.
 
 /** Input is the complete contracts/design-tokens.json document, including metadata. */
 export interface DesignTokens {
@@ -205,6 +211,23 @@ function cssValue(leaf: TokenLeaf, fontBase: number, mode: TokenMode = 'light'):
         })
         .join(', ');
     }
+    case 'duration': {
+      if (leaf.unit !== 'ms') fail(`${label}: expected unit "ms"`);
+      const ms = finite(value, label);
+      if (ms < 0) fail(`${label}: must be >= 0`);
+      return `${numericText(ms)}ms`;
+    }
+    case 'cubicBezier': {
+      if (!Array.isArray(value) || value.length !== 4) {
+        fail(`${label}: expected [x1, y1, x2, y2]`);
+      }
+      const points = value.map((point: unknown, index) => finite(point, `${label}[${index}]`));
+      for (const index of [0, 2]) {
+        const x = points[index]!;
+        if (x < 0 || x > 1) fail(`${label}[${index}]: x must be within 0..1`);
+      }
+      return `cubic-bezier(${points.map(numericText).join(', ')})`;
+    }
     case 'shadow': {
       if (!Array.isArray(value)) fail(`${label}: expected a shadow list`);
       if (value.length === 0) return 'none';
@@ -277,6 +300,51 @@ export function generateTokensCss(tokens: DesignTokens): string {
   ].join('\n');
 }
 
+/** Tokens the accessibility fallbacks reference; a document without them is rejected. */
+const A11Y_REFERENCES = ['motion.duration.instant', 'focus.width', 'focus.offset'];
+
+/**
+ * Accessibility fallbacks shared by every front end (规划/03 §10.6 item 8, DSX-108), in their own
+ * file so tokens.gen.css keeps only the token blocks:
+ * - prefers-reduced-motion: reduce: every CSS animation collapses to motion.duration.instant and
+ *   runs once (an endless loop such as the skeleton shimmer stops); smooth scrolling is off.
+ * - forced-colors: active: keyboard focus keeps a focus-width outline in the system Highlight
+ *   colour, for elements whose own ring is a shadow (forced colours drop shadows).
+ * Import it into a cascade layer below the utilities (`@import … layer(base)`), so component
+ * classes still win; the reduced-motion declarations are !important and win regardless.
+ */
+export function generateA11yCss(tokens: DesignTokens): string {
+  const known = new Map(leaves(tokens).map((leaf) => [leaf.path.join('.'), leaf]));
+  const ref = (path: string): string => {
+    const leaf = known.get(path);
+    if (leaf === undefined) fail(`${path}: needed by the accessibility fallbacks`);
+    return `var(${leaf.variable})`;
+  };
+  for (const path of A11Y_REFERENCES) ref(path);
+  return [
+    `/* ${HEADER} */`,
+    `/* ${REGENERATE} */`,
+    '/* Needs @couli/ui-tokens/tokens.css for the referenced variables. */',
+    '@media (prefers-reduced-motion: reduce) {',
+    '  *,',
+    '  ::before,',
+    '  ::after {',
+    `    animation-duration: ${ref('motion.duration.instant')} !important;`,
+    '    animation-iteration-count: 1 !important;',
+    '    scroll-behavior: auto !important;',
+    '  }',
+    '}',
+    '',
+    '@media (forced-colors: active) {',
+    '  :focus-visible {',
+    `    outline: ${ref('focus.width')} solid Highlight;`,
+    `    outline-offset: ${ref('focus.offset')};`,
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+}
+
 /** Tailwind 4 namespace and the token path prefix it already implies. */
 function tailwindNamespace(leaf: TokenLeaf): { namespace: string; implied: string[] } {
   switch (leaf.type) {
@@ -295,6 +363,11 @@ function tailwindNamespace(leaf: TokenLeaf): { namespace: string; implied: strin
     case 'number':
       // Tailwind 4 has no namespace for plain numbers; the alias is only a theme variable.
       return { namespace: 'number', implied: [] };
+    case 'duration':
+      // Neither: duration-* takes plain numbers, so the alias is only a theme variable.
+      return { namespace: 'duration', implied: ['motion'] };
+    case 'cubicBezier':
+      return { namespace: 'ease', implied: ['motion', 'easing'] };
     case 'dimension':
       return leaf.path[0] === 'radius'
         ? { namespace: 'radius', implied: ['radius'] }
@@ -417,6 +490,51 @@ export function generateThemeTs(tokens: DesignTokens): string {
     '  dark: {',
     ...serialize(themeValuesFromTokens(tokens, 'dark'), '    '),
     '  },',
+    '} as const;',
+    '',
+  ].join('\n');
+}
+
+interface DurationTree {
+  [key: string]: number | DurationTree;
+}
+
+function serializeDurations(tree: DurationTree, indent: string): string[] {
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(tree)) {
+    const name = IDENTIFIER.test(key) ? key : `'${key}'`;
+    if (typeof value === 'number') lines.push(`${indent}${name}: ${numericText(value)},`);
+    else
+      lines.push(`${indent}${name}: {`, ...serializeDurations(value, `${indent}  `), `${indent}},`);
+  }
+  return lines;
+}
+
+/**
+ * Duration tokens as plain millisecond numbers, keyed by path (motion.skeleton.show-delay ->
+ * motionMs.motion.skeleton['show-delay']), for script timers. A small module of its own, so a
+ * page that needs a timer does not bundle the whole theme.
+ */
+export function generateMotionTs(tokens: DesignTokens): string {
+  const base = fontBase(tokens);
+  const tree: DurationTree = {};
+  for (const leaf of leaves(tokens)) {
+    if (leaf.type !== 'duration') continue;
+    cssValue(leaf, base);
+    let node = tree;
+    for (const segment of leaf.path.slice(0, -1)) {
+      const child = Object.hasOwn(node, segment) ? node[segment] : undefined;
+      if (typeof child === 'number') fail(`${leaf.path.join('.')}: token nested under a token`);
+      node = child ?? (node[segment] = {});
+    }
+    node[leaf.path.at(-1)!] = leaf.value as number;
+  }
+  return [
+    `// ${HEADER}`,
+    `// ${REGENERATE}`,
+    '// motionMs: duration tokens in milliseconds, for timers in script code.',
+    'export const motionMs = {',
+    ...serializeDurations(tree, '  '),
     '} as const;',
     '',
   ].join('\n');

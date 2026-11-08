@@ -1,0 +1,107 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#1] 加载在 show-delay 之内结束：骨架从头到尾都不出现，直接显示内容",
+    "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#2] 加载超过 show-delay：此前不出骨架，到 show-delay 时出现并在加载期间一直保留",
+    "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#3] 骨架出现后至少保留 min-visible 才换成内容；已满 min-visible 时加载一结束立即换",
+    "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#4] 规则页首屏接入防闪：列表在途 show-delay 前无骨架、到点出骨架，返回后骨架仍保留到 min-visible 才显示正文",
+    "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-SHIMMER#1] 骨架块是渐变微光：线性、无限循环、周期取 --motion-skeleton-shimmer（不再是 pulse 呼吸）",
+    "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-SHIMMER#2] prefers-reduced-motion: reduce 时微光停播、骨架静止仍可见，页面上没有持续动画",
+    "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-FORCED#1] forced-colors: active 下 Button / Chip / Card / ListRow / Skeleton 仍有可见边界（≥1px 边框或轮廓），可点件焦点框可见",
+    "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-TOAST#1] App 内（有 __REBATE_BRIDGE__）轻提示在页顶居中；站外（无桥）保留底部居中",
+    "test/spec/frontend/h5-state-motion/source.test.ts > [AC-DSX-48-A11Y-CSS#1] apps/h5 全局样式与 ui-tokens 生成的 CSS 都有 prefers-reduced-motion: reduce 与 forced-colors: active 规则（后者用系统色），且 H5 引入了该生成文件",
+    "test/spec/frontend/h5-state-motion/source.test.ts > [AC-DSX-48-NO-HARDCODE#1] apps/h5/src 的页面与组件不写死毫秒数、贝塞尔值与 Tailwind 时长类，骨架不再用 animate-pulse，共用代码不写死骨架时长",
+    "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#1] 契约令牌整份升到 0.5.2：metadata 其余字段不变，motion 组 15 个令牌的类型与取值正确",
+    "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#2] contracts/README 的 design-tokens.json 行改记 0.5.2 与来源提交 c98ae93f…",
+    "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#3] tokens.gen.css 的 :root 含 15 个 --motion-* 且写法为 250ms / cubic-bezier(…)，深色块不覆盖，文件仍只有三块且与契约重新生成一致",
+    "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#4] 生成器认 duration / cubicBezier 两种类型，非法值（负数、非 ms、非四元、x 越界、非数）一律报错并指出令牌路径",
+    "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#5] 入库 tailwind.gen.css 与 theme.gen.ts 含全部 motion 令牌（var 引用与浅深解析值），且与契约重新生成一致"
+  ],
+  "risk_note": "DSX-48 (规划/05 §3.11.3 DSX-48 + DSX-108, D10-837 ③ / D10-838): contracts/design-tokens.json replaced verbatim by the planning repo snapshot 0.5.2 (c98ae93f, couli #296) with the contracts/README line updated; the ui-tokens generator accepts duration (ms, non-negative) and cubicBezier (four numbers, x in [0,1]) and regenerates tokens.gen.css / tailwind.gen.css / theme.gen.ts plus a11y.gen.css (reduced-motion and forced-colors rules, exported as ./a11y.css) and motion.gen.ts (millisecond values; the full token object would push the app entry past the 150 KiB gate). H5: skeleton shimmer on --motion-skeleton-shimmer that stops under reduced motion, useDelayedVisible (shows only after show-delay, stays at least min-visible) wired into the rules page first screen, system-colour 1px edges on base pressables and the skeleton under forced colours, toast at the top inside the App (bridge present at mount) and at the bottom off-site (fix program L370). The frozen ui-tokens tests were made two-state by the prior test-change CT-11bt (#2758, D10-965 after D10-964 could not land under the gates), which also took the .prettierignore line for the verbatim c98ae93 fixtures; this branch no longer touches test/spec/frontend/ui-tokens/** or .prettierignore and declares no red_exempt. Rule tests by an independent Claude in two rounds; Codex spec-test review r1 pass; red on the local container. Implementation by Opus 5.5: local container browser run green; container verify-fast OOM-killed at tsc twice, host jsdom h5-* / ui-tokens / lint-style-web rule tests, ui-tokens and h5 unit tests, eslint and prettier stand in, CI runs full verification. Non-funds. The branch was rebuilt on main after CT-11bt (rule tests = h5-state-motion only; implementation identical to the reviewed commit minus the .prettierignore line). Codex money review hit the Codex usage limit (until 11-15), so per D10-823 ④ an independent Claude did the money review: round 1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage limit reached (until 2026-11-15), fallback to an independent Claude per D10-823 ④; round 1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test review round 1 pass on the round-2 tests; tests written by an independent Claude (claude-run.sh, D10-823 ②)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-48",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "d3123d580d03c846008bd61024ff9fff0433901d",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d3123d580d03c846008bd61024ff9fff0433901d",
+      "tree": "c5d991dd18f511ed9c7e01d016f52ad0733b7378",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-08T01:20:25Z",
+      "finished_at": "2026-11-08T01:20:39Z",
+      "red_tests": [
+        "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#1] 加载在 show-delay 之内结束：骨架从头到尾都不出现，直接显示内容",
+        "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#2] 加载超过 show-delay：此前不出骨架，到 show-delay 时出现并在加载期间一直保留",
+        "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#3] 骨架出现后至少保留 min-visible 才换成内容；已满 min-visible 时加载一结束立即换",
+        "test/spec/frontend/h5-state-motion/delay.test.ts > [AC-DSX-48-DELAY#4] 规则页首屏接入防闪：列表在途 show-delay 前无骨架、到点出骨架，返回后骨架仍保留到 min-visible 才显示正文",
+        "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-SHIMMER#1] 骨架块是渐变微光：线性、无限循环、周期取 --motion-skeleton-shimmer（不再是 pulse 呼吸）",
+        "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-SHIMMER#2] prefers-reduced-motion: reduce 时微光停播、骨架静止仍可见，页面上没有持续动画",
+        "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-FORCED#1] forced-colors: active 下 Button / Chip / Card / ListRow / Skeleton 仍有可见边界（≥1px 边框或轮廓），可点件焦点框可见",
+        "test/spec/frontend/h5-state-motion/motion.browser.test.ts > [AC-DSX-48-TOAST#1] App 内（有 __REBATE_BRIDGE__）轻提示在页顶居中；站外（无桥）保留底部居中",
+        "test/spec/frontend/h5-state-motion/source.test.ts > [AC-DSX-48-A11Y-CSS#1] apps/h5 全局样式与 ui-tokens 生成的 CSS 都有 prefers-reduced-motion: reduce 与 forced-colors: active 规则（后者用系统色），且 H5 引入了该生成文件",
+        "test/spec/frontend/h5-state-motion/source.test.ts > [AC-DSX-48-NO-HARDCODE#1] apps/h5/src 的页面与组件不写死毫秒数、贝塞尔值与 Tailwind 时长类，骨架不再用 animate-pulse，共用代码不写死骨架时长",
+        "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#1] 契约令牌整份升到 0.5.2：metadata 其余字段不变，motion 组 15 个令牌的类型与取值正确",
+        "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#2] contracts/README 的 design-tokens.json 行改记 0.5.2 与来源提交 c98ae93f…",
+        "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#3] tokens.gen.css 的 :root 含 15 个 --motion-* 且写法为 250ms / cubic-bezier(…)，深色块不覆盖，文件仍只有三块且与契约重新生成一致",
+        "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#4] 生成器认 duration / cubicBezier 两种类型，非法值（负数、非 ms、非四元、x 越界、非数）一律报错并指出令牌路径",
+        "test/spec/frontend/h5-state-motion/tokens.test.ts > [AC-DSX-48-TOKENS#5] 入库 tailwind.gen.css 与 theme.gen.ts 含全部 motion 令牌（var 引用与浅深解析值），且与契约重新生成一致"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-state-motion/delay.test.ts",
+        "test/spec/frontend/h5-state-motion/motion.browser.test.ts",
+        "test/spec/frontend/h5-state-motion/source.test.ts",
+        "test/spec/frontend/h5-state-motion/tokens.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "9cfb60928a2936c57659b904f19e03b025d2d697dd44b87a44e996e11747c880"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1c13341f3a749801c0fd553d036a2b61b630f1a5bf0c9bacf72dd10a3d4e4627"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "21cee779fee343cf1cb50a64c19e3728e89c73e1",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  }
+}

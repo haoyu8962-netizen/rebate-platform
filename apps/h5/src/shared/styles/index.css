@@ -3,6 +3,8 @@
 @import 'tailwindcss' source('../../');
 @import '@couli/ui-tokens/tokens.css';
 @import '@couli/ui-tokens/tailwind.css';
+/* Reduced-motion and forced-colors fallbacks of every front end; below the utilities. */
+@import '@couli/ui-tokens/a11y.css' layer(base);
 
 @layer base {
   /*
@@ -42,5 +44,57 @@
 
   :root[data-theme='dark'] .h5-placeholder-icon {
     filter: invert(1);
+  }
+}
+
+/*
+ * Skeleton shimmer (规划/03 §10.6 item 7): a soft highlight sweeps across the placeholder fill,
+ * linear and endless, once per motion.skeleton.shimmer. The gradient is three times the block
+ * wide so the highlight starts and ends outside it.
+ */
+@layer components {
+  .h5-skeleton {
+    background-image: linear-gradient(
+      90deg,
+      transparent 40%,
+      var(--color-background-surface) 50%,
+      transparent 60%
+    );
+    background-size: 300% 100%;
+    background-repeat: no-repeat;
+    animation: h5-skeleton-shimmer var(--motion-skeleton-shimmer) linear infinite;
+  }
+
+  @keyframes h5-skeleton-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: 0% 0;
+    }
+  }
+
+  /* Reduced motion (item 8): the skeleton stands still, without the highlight. */
+  @media (prefers-reduced-motion: reduce) {
+    .h5-skeleton {
+      animation: none;
+      background-image: none;
+    }
+  }
+
+  /*
+   * Forced colours (DSX-108): fills and shadows are replaced by the system palette, so components
+   * whose edge is a fill or a shadow (base/styles.ts FORCED_EDGE) draw a system-colour border.
+   * The focus ring is an outline and stays (a11y.css adds one where a component has none).
+   */
+  @media (forced-colors: active) {
+    .h5-forced-edge {
+      border: var(--component-control-border-width) solid CanvasText;
+    }
+
+    button.h5-forced-edge,
+    [role='button'].h5-forced-edge {
+      border-color: ButtonText;
+    }
   }
 }

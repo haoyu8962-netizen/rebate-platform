@@ -2,12 +2,20 @@
 //   src/tokens.gen.css    CSS variables (generateTokensCss)
 //   src/tailwind.gen.css  Tailwind 4 @theme aliases (generateTailwindCss)
 //   src/theme.gen.ts      TS theme object (generateThemeTs)
+//   src/a11y.gen.css      reduced-motion / forced-colors fallbacks (generateA11yCss)
+//   src/motion.gen.ts     duration tokens in milliseconds (generateMotionTs)
 //   node packages/ui-tokens/scripts/generate.ts           write the files
 //   node packages/ui-tokens/scripts/generate.ts --verify  exit 1 when a committed file differs
 // The generators are pure; the drift tests in test/spec/frontend/ui-tokens compare the same output.
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { DesignTokens } from '../src/generate.ts';
-import { generateTailwindCss, generateThemeTs, generateTokensCss } from '../src/generate.ts';
+import {
+  generateA11yCss,
+  generateMotionTs,
+  generateTailwindCss,
+  generateThemeTs,
+  generateTokensCss,
+} from '../src/generate.ts';
 
 const root = new URL('../../../', import.meta.url);
 const args = process.argv.slice(2);
@@ -25,6 +33,8 @@ const outputs: [string, string][] = [
   ['packages/ui-tokens/src/tokens.gen.css', generateTokensCss(tokens)],
   ['packages/ui-tokens/src/tailwind.gen.css', generateTailwindCss(tokens)],
   ['packages/ui-tokens/src/theme.gen.ts', generateThemeTs(tokens)],
+  ['packages/ui-tokens/src/a11y.gen.css', generateA11yCss(tokens)],
+  ['packages/ui-tokens/src/motion.gen.ts', generateMotionTs(tokens)],
 ];
 
 let stale = 0;

@@ -169,6 +169,33 @@ export const tokenTheme = {
       harmony: 'var(--interaction-target-harmony)',
     },
   },
+  motion: {
+    duration: {
+      instant: 'var(--motion-duration-instant)',
+      fast: 'var(--motion-duration-fast)',
+      normal: 'var(--motion-duration-normal)',
+      emphasized: 'var(--motion-duration-emphasized)',
+      slow: 'var(--motion-duration-slow)',
+    },
+    easing: {
+      standard: 'var(--motion-easing-standard)',
+      enter: 'var(--motion-easing-enter)',
+      exit: 'var(--motion-easing-exit)',
+      'emphasized-enter': 'var(--motion-easing-emphasized-enter)',
+      'emphasized-exit': 'var(--motion-easing-emphasized-exit)',
+    },
+    toast: {
+      display: 'var(--motion-toast-display)',
+    },
+    skeleton: {
+      shimmer: 'var(--motion-skeleton-shimmer)',
+      'show-delay': 'var(--motion-skeleton-show-delay)',
+      'min-visible': 'var(--motion-skeleton-min-visible)',
+    },
+    reduced: {
+      fade: 'var(--motion-reduced-fade)',
+    },
+  },
   component: {
     button: {
       'min-height': 'var(--component-button-min-height)',
@@ -396,6 +423,33 @@ export const tokenValues = {
         harmony: '48px',
       },
     },
+    motion: {
+      duration: {
+        instant: '0ms',
+        fast: '150ms',
+        normal: '250ms',
+        emphasized: '350ms',
+        slow: '500ms',
+      },
+      easing: {
+        standard: 'cubic-bezier(0.2, 0, 0, 1)',
+        enter: 'cubic-bezier(0, 0, 0, 1)',
+        exit: 'cubic-bezier(0.3, 0, 1, 1)',
+        'emphasized-enter': 'cubic-bezier(0.05, 0.7, 0.1, 1)',
+        'emphasized-exit': 'cubic-bezier(0.3, 0, 0.8, 0.15)',
+      },
+      toast: {
+        display: '2000ms',
+      },
+      skeleton: {
+        shimmer: '1500ms',
+        'show-delay': '300ms',
+        'min-visible': '300ms',
+      },
+      reduced: {
+        fade: '150ms',
+      },
+    },
     component: {
       button: {
         'min-height': '48px',
@@ -617,6 +671,33 @@ export const tokenValues = {
         ios: '44px',
         android: '48px',
         harmony: '48px',
+      },
+    },
+    motion: {
+      duration: {
+        instant: '0ms',
+        fast: '150ms',
+        normal: '250ms',
+        emphasized: '350ms',
+        slow: '500ms',
+      },
+      easing: {
+        standard: 'cubic-bezier(0.2, 0, 0, 1)',
+        enter: 'cubic-bezier(0, 0, 0, 1)',
+        exit: 'cubic-bezier(0.3, 0, 1, 1)',
+        'emphasized-enter': 'cubic-bezier(0.05, 0.7, 0.1, 1)',
+        'emphasized-exit': 'cubic-bezier(0.3, 0, 0.8, 0.15)',
+      },
+      toast: {
+        display: '2000ms',
+      },
+      skeleton: {
+        shimmer: '1500ms',
+        'show-delay': '300ms',
+        'min-visible': '300ms',
+      },
+      reduced: {
+        fade: '150ms',
       },
     },
     component: {

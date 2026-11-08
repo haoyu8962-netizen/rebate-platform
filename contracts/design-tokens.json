@@ -2,8 +2,8 @@
   "schemaVersion": "couli.tokens.v1",
   "metadata": {
     "name": "凑狸",
-    "version": "0.5.1",
-    "date": "2026-11-05",
+    "version": "0.5.2",
+    "date": "2026-11-07",
     "status": "project baseline",
     "theme": "light",
     "modes": [
@@ -12,12 +12,14 @@
     ],
     "darkThemePhase": "MVP",
     "colorSpace": "sRGB",
-    "description": "当前项目使用的品牌与界面基线；2026-10-04 按设计方向第三轮调整 App 页面底、返利强调、平台来源标签与图片占位（docs/changes/20261004-设计方向第三轮.md）；2026-10-18 v0.4.0 按 00 D35 给每个颜色与阴影令牌补深色取值（dark 字段，value 仍为浅色）并新增组件令牌 T1–T12（docs/changes/20261018-深色令牌进唯一源.md）；2026-11-05 v0.5.0 按商品详情 v3 新增标题前平台文字标签的四个实底色 color.platform.tag.*（淘宝、天猫、京东、拼多多）与主图浮层控件底 color.overlay.on-image（docs/changes/20261105-商品详情v3定稿.md）；同日 v0.5.1 补平台文字标签圆角 radius.tag 与店铺头像圆角 radius.avatar（只加键，不改已有值）。已应用于根目录品牌配置、交付素材与品牌预览，不代表原生接入、Icon Composer 或真机验收完成。App 图标外观变体独立于 UI 主题。",
+    "description": "当前项目使用的品牌与界面基线；2026-10-04 按设计方向第三轮调整 App 页面底、返利强调、平台来源标签与图片占位（docs/changes/20261004-设计方向第三轮.md）；2026-10-18 v0.4.0 按 00 D35 给每个颜色与阴影令牌补深色取值（dark 字段，value 仍为浅色）并新增组件令牌 T1–T12（docs/changes/20261018-深色令牌进唯一源.md）；2026-11-05 v0.5.0 按商品详情 v3 新增标题前平台文字标签的四个实底色 color.platform.tag.*（淘宝、天猫、京东、拼多多）与主图浮层控件底 color.overlay.on-image（docs/changes/20261105-商品详情v3定稿.md）；同日 v0.5.1 补平台文字标签圆角 radius.tag 与店铺头像圆角 radius.avatar（只加键，不改已有值）。已应用于根目录品牌配置、交付素材与品牌预览，不代表原生接入、Icon Composer 或真机验收完成。App 图标外观变体独立于 UI 主题。；2026-11-07 v0.5.2 新增 Web 动效令牌 motion.*（时长、缓动、轻提示停留、骨架微光与防闪、减弱动态替代；只供 H5 与管理后台，原生三端按平台默认动效、不读这些数，00 D37、编排裁定 D10-837；docs/changes/20261107-Web动效令牌.md）（只加键，不改已有值）",
     "cssFontBase": 16,
     "sources": [
       "https://developer.apple.com/design/human-interface-guidelines/color",
       "https://developer.apple.com/design/human-interface-guidelines/accessibility",
-      "https://www.w3.org/TR/WCAG22/#contrast-minimum"
+      "https://www.w3.org/TR/WCAG22/#contrast-minimum",
+      "https://m3.material.io/styles/motion/easing-and-duration/tokens-specs",
+      "https://www.w3.org/TR/WCAG22/#animation-from-interactions"
     ]
   },
   "tokens": {
@@ -682,6 +684,128 @@
           "value": 48,
           "description": "团队采用的鸿蒙触控目标，按 vp",
           "unit": "logical"
+        }
+      }
+    },
+    "motion": {
+      "duration": {
+        "instant": {
+          "type": "duration",
+          "value": 0,
+          "unit": "ms",
+          "description": "立即生效、不做过渡；减弱动态下无法改为淡入的动画取本值。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "fast": {
+          "type": "duration",
+          "value": 150,
+          "unit": "ms",
+          "description": "微交互：按压态、颜色 / 透明度变化、开关与勾选、选中态（对应 Material 3 short3）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "normal": {
+          "type": "duration",
+          "value": 250,
+          "unit": "ms",
+          "description": "常规状态切换与小元素进出：展开收起、内容替换、轻提示进出（对应 Material 3 medium1；与常见系统默认 0.25 s 一致）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "emphasized": {
+          "type": "duration",
+          "value": 350,
+          "unit": "ms",
+          "description": "较大面积的进出：底部弹层、对话框、整块内容切换；退出取进入的约 2/3（对应 Material 3 medium3）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "slow": {
+          "type": "duration",
+          "value": 500,
+          "unit": "ms",
+          "description": "少用：整屏或大幅度的强调过渡；装饰动效不超过本值（对应 Material 3 long2）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        }
+      },
+      "easing": {
+        "standard": {
+          "type": "cubicBezier",
+          "value": [
+            0.2,
+            0,
+            0,
+            1
+          ],
+          "description": "屏内移动与状态变化，起止都在屏内（Material 3 standard）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "enter": {
+          "type": "cubicBezier",
+          "value": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "description": "进入：元素出现、展开、弹层滑入，减速停下（Material 3 standard-decelerate）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "exit": {
+          "type": "cubicBezier",
+          "value": [
+            0.3,
+            0,
+            1,
+            1
+          ],
+          "description": "退出：元素消失、收起、弹层滑出，加速离开（Material 3 standard-accelerate）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "emphasized-enter": {
+          "type": "cubicBezier",
+          "value": [
+            0.05,
+            0.7,
+            0.1,
+            1
+          ],
+          "description": "大面积进入的强调曲线：底部弹层、对话框、整页内容（Material 3 emphasized-decelerate）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "emphasized-exit": {
+          "type": "cubicBezier",
+          "value": [
+            0.3,
+            0,
+            0.8,
+            0.15
+          ],
+          "description": "大面积退出的强调曲线（Material 3 emphasized-accelerate）。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        }
+      },
+      "toast": {
+        "display": {
+          "type": "duration",
+          "value": 2000,
+          "unit": "ms",
+          "description": "轻提示停留时长（不含进出过渡），与现有 H5 一致；原生用各平台系统轻提示 / Snackbar 的时长。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        }
+      },
+      "skeleton": {
+        "shimmer": {
+          "type": "duration",
+          "value": 1500,
+          "unit": "ms",
+          "description": "骨架微光扫过一次的周期，线性循环；减弱动态下停播、骨架静止。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "show-delay": {
+          "type": "duration",
+          "value": 300,
+          "unit": "ms",
+          "description": "加载开始后超过本值仍未返回才显示骨架，避免一闪而过。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        },
+        "min-visible": {
+          "type": "duration",
+          "value": 300,
+          "unit": "ms",
+          "description": "骨架一旦显示至少保留本值再换成内容，避免闪烁。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
+        }
+      },
+      "reduced": {
+        "fade": {
+          "type": "duration",
+          "value": 150,
+          "unit": "ms",
+          "description": "系统开启减弱动态（prefers-reduced-motion: reduce）时，位移、缩放、视差改为只淡入淡出，时长取本值；无法改成淡入的动画取 motion.duration.instant。仅 Web（H5 与管理后台）；原生三端按平台默认动效、不读本值（00 D37）。"
         }
       }
     },

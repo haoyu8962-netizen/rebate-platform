@@ -13,7 +13,8 @@
       "default": "./dist/index.js"
     },
     "./tokens.css": "./src/tokens.gen.css",
-    "./tailwind.css": "./src/tailwind.gen.css"
+    "./tailwind.css": "./src/tailwind.gen.css",
+    "./a11y.css": "./src/a11y.gen.css"
   },
   "scripts": {
     "build": "tsc -b",

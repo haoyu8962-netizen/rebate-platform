@@ -8,6 +8,7 @@ import {
   ErrorState,
   ListRow,
   Skeleton,
+  useDelayedVisible,
 } from '../../../../components/base/index.ts';
 import { AlertIcon, ChevronIcon, DocumentIcon } from '../../../../components/icons/index.tsx';
 import { useApi } from '../../../../shared/api/app-api.ts';
@@ -152,6 +153,21 @@ function RulesContent({
     titleRef.current?.focus({ preventScroll: true });
   }, [articleId]);
 
+  // First screen with the anti-flash delay (DSX-48): no skeleton for a quick list, and once shown
+  // it stays motion.skeleton.min-visible; meanwhile an empty busy region.
+  const listPending = list.data === undefined && !(list.isError && !list.isFetching);
+  const firstSkeleton = useDelayedVisible(listPending);
+  if (firstSkeleton) {
+    return (
+      <Page>
+        <Card as="article" className="flex flex-col gap-couli-4">
+          <Skeleton width="40%" height="1.375rem" />
+          <ArticleSkeleton />
+        </Card>
+      </Page>
+    );
+  }
+
   // While a retry is in flight the skeleton shows again.
   if (list.data === undefined && list.isError && !list.isFetching) {
     return (
@@ -171,10 +187,7 @@ function RulesContent({
   if (list.data === undefined) {
     return (
       <Page>
-        <Card as="article" className="flex flex-col gap-couli-4">
-          <Skeleton width="40%" height="1.375rem" />
-          <ArticleSkeleton />
-        </Card>
+        <div aria-busy="true" className="flex-1" />
       </Page>
     );
   }
