@@ -204,12 +204,30 @@ export function agentHttpDefaults(): AgentHttpSettings {
   return { textMaxCodePoints: 500 };
 }
 
+/** The operation named in an agent_http_failed line (B3-08v). */
+type AgentHttpOperation = 'create_session' | 'current_session' | 'cancel_run' | 'send_message';
+
 export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
   if (
     !Number.isSafeInteger(deps.settings.textMaxCodePoints) ||
     deps.settings.textMaxCodePoints < 1
   ) {
     throw new RangeError('Invalid agent text limit');
+  }
+  /**
+   * B3-08v: one error line per fallback catch (the answer itself is unchanged). Only the operation,
+   * the catch site and the error's name: an error message, the user's text, tokens and trace or
+   * device identifiers never go into the line. A logger that throws cannot change the answer.
+   */
+  function failed(op: AgentHttpOperation, stage: string, error: unknown): void {
+    try {
+      deps.logger?.error(
+        { op, stage, error_name: error instanceof Error ? error.name : 'unknown' },
+        'agent_http_failed',
+      );
+    } catch {
+      /* Logging must never turn into a different answer. */
+    }
   }
   // Reuse the validator compiled at module load; instance creation performs no contract I/O.
   const validate = messageValidator();
@@ -260,7 +278,8 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
           trace_id: caller.traceId,
         };
         reply.json(200, JSON_HEADERS, body);
-      } catch {
+      } catch (error) {
+        failed('create_session', 'create', error);
         refuse(caller, reply, 50001);
       }
     },
@@ -275,7 +294,8 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
           trace_id: caller.traceId,
         };
         reply.json(200, JSON_HEADERS, body);
-      } catch {
+      } catch (error) {
+        failed('current_session', 'current', error);
         refuse(caller, reply, 50001);
       }
     },
@@ -297,7 +317,8 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
           trace_id: caller.traceId,
         };
         reply.json(200, JSON_HEADERS, body);
-      } catch {
+      } catch (error) {
+        failed('cancel_run', 'cancel', error);
         refuse(caller, reply, 50001);
         return;
       }
@@ -375,6 +396,7 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
             limits,
           );
         } catch (error) {
+          failed('send_message', 'admit', error);
           refuse(caller, reply, error instanceof AdmissionUnavailableError ? 50401 : 50001);
           return;
         }
@@ -467,7 +489,8 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
           },
           async (ctx) => deps.body(runInput)(ctx),
         );
-      } catch {
+      } catch (error) {
+        failed('send_message', streaming ? 'stream' : 'prepare', error);
         // Once SSE starts, never send JSON or invent an unpersisted terminal frame.
         if (!streaming) refuse(caller, reply, 50001);
       } finally {
