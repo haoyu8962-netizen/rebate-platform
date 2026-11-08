@@ -6,8 +6,10 @@
 //   detail.sales.enabled.<platform>       off → sales_text null
 //   detail.shop_scores.enabled.<platform> off → shop_scores []
 //   shop_logo follows the union (null when it gave none), no switch;
-//   shop_entry is false until S-17 (shop link conversion), whatever shop.entry.enabled.<platform>,
-//   shop.entry.source.<platform> and the product's shop_ref say.
+//   shop_entry (B1-05zm on) true only if shop.entry.enabled.<platform> is `true`,
+//   shop.entry.source.<platform> is set, the adapter's shopConvertSources holds it, and the
+//   product has shop_ref and shop_name; always false here (no shop_name on products, no
+//   shopAdapters passed).
 // The existing detail / cache / search kits are reused read only. Synthetic values only.
 import { vi } from 'vitest';
 import type { PoolReader } from '../../../../apps/api/src/modules/catalog/application/pool-read.ts';
