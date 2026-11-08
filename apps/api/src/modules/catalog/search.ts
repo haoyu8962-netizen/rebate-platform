@@ -19,6 +19,7 @@ import {
 import type { ProductCard, UnlinkedCard } from './application/card-assembler.ts';
 import type { CatalogCardEntry } from './application/card-entry.ts';
 import { blockedByCategory } from './application/category-block.ts';
+import type { QueryBlockwords } from './domain/query-blockwords.ts';
 import { CatalogError } from './domain/rules.ts';
 import type { Catalog, ProductRef } from './domain/types.ts';
 import type { CatalogConfigReader, Viewer, ViewerContext } from './ports.ts';
@@ -143,6 +144,12 @@ export interface SearchProductsOptions {
    * catalog_category_missing / catalog_category_blocked alerts.
    */
   readonly categoryFilter?: Pick<Catalog, 'filterCategories'>;
+  /**
+   * B1-04zzzza (FU-SEARCH-QUERY-BLOCKWORDS, D10-1064 口径 A): the prohibited query words of the
+   * search tab. Optional because frozen fixtures hand-write these options; CatalogModule passes the
+   * catalog's own list (domain/query-blockwords.ts). Absent, search behaves exactly as before.
+   */
+  readonly queryBlockwords?: QueryBlockwords;
 }
 
 /** BR-PRICE-15: price bounds in fen, both ends inclusive. */
@@ -383,8 +390,9 @@ function sortPage(issued: Issued[], sort: SortCode): Issued[] {
  * plus an alert, as the task's replaceable policy pending owner confirmation specifies.
  *
  * Order: query validation (20001) → platform capability (30131) → search switch (50304
- * search_disabled, re-read every request) → cursor (20001) → session → query PID → upstream page,
- * at most one refill page → per-candidate filtering through the single card entry → same-page
+ * search_disabled, re-read every request) → prohibited query word (B1-04zzzza: an empty page,
+ * only when the queryBlockwords port is installed) → cursor (20001) → session → query PID →
+ * upstream page, at most one refill page → per-candidate filtering through the single card entry → same-page
  * dedupe → page sort → slice → session write → fallback feed on an empty first page.
  */
 export async function searchProducts(
@@ -406,6 +414,16 @@ export async function searchProducts(
       platform,
       reason: 'search_disabled',
     });
+  }
+
+  // B1-04zzzza (D10-1064 口径 A): a prohibited query word answers an empty page before the cursor,
+  // the session, the query PID, the union and the fallback feed. The log never carries the query.
+  if (options.queryBlockwords?.isProhibited(normalized.q) === true) {
+    options.logger.warn(
+      { event: 'search_query_prohibited', platform },
+      'search: query hits a prohibited word',
+    );
+    return { items: [], next_cursor: null, has_more: false, fallback_items: [] };
   }
 
   const claims = query.cursor === undefined ? null : parseCursor(cursors.decode(query.cursor));

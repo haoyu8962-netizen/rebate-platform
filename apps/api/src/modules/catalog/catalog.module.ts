@@ -27,6 +27,7 @@ import type { PoolReader } from './application/pool-read.ts';
 import { CatalogSearchService } from './application/search-service.ts';
 import { CatalogSectionItemsService } from './application/section-items-service.ts';
 import { markFreshDetail, type ProductDetailUpstream } from './detail.ts';
+import { isProhibitedQuery } from './domain/query-blockwords.ts';
 import type { Catalog, CatalogWarning } from './domain/types.ts';
 import {
   PRICE_TREND,
@@ -598,6 +599,9 @@ export class CatalogModule {
               ...(typeof (catalog as Partial<Catalog>).filterCategories === 'function'
                 ? { categoryFilter: catalog }
                 : {}),
+              // B1-04zzzza (D10-1064 口径 A): the search tab answers a prohibited query word with an
+              // empty page. Only this C-side search; the admin pool candidate search stays unwired.
+              queryBlockwords: { isProhibited: isProhibitedQuery },
             }),
         },
         {

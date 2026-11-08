@@ -1,8 +1,10 @@
 // B1-04zzx: unit tests of the search tab's category blocklist hook (no database, fake ports).
+// B1-04zzzza: unit tests of the optional prohibited query word port (D10-1064 口径 A).
 import { describe, expect, it, vi } from 'vitest';
 import { FixedClock } from '../platform/index.ts';
 import type { Platform, UnionItem } from '../union/index.ts';
 import { createCatalogCardEntry } from './application/card-entry.ts';
+import { isProhibitedQuery } from './domain/query-blockwords.ts';
 import { filterByRules } from './domain/rules.ts';
 import type { Catalog, CategoryCandidate, CategoryRule } from './domain/types.ts';
 import {
@@ -132,6 +134,7 @@ function setup(page: SearchUpstreamPage, rules: readonly CategoryRule[] | null) 
   return {
     warn,
     filterCalls,
+    options,
     run: () => searchProducts({ platform: 'taobao' as Platform, q: 'unit', limit: 10 }, options),
   };
 }
@@ -194,5 +197,43 @@ describe('[AC-B1-04zzx] search tab category blocklist', () => {
     expect(f.filterCalls).toEqual([]);
     expect(alertsOf(f.warn, 'catalog_category_missing')).toEqual([]);
     expect(alertsOf(f.warn, 'catalog_category_blocked')).toEqual([]);
+  });
+});
+
+describe('[AC-B1-04zzzza] search tab prohibited query words', () => {
+  const query = { platform: 'taobao' as Platform, q: '正品电子烟', limit: 10 };
+
+  it('without the queryBlockwords port a prohibited query still reaches the union as before', async () => {
+    const f = setup({ items: [goods('a', 'unit-cat')], hasMore: false }, null);
+    expect(f.options.queryBlockwords).toBeUndefined();
+    const data = await searchProducts(query, f.options);
+    expect(data.items).toHaveLength(1);
+    expect(f.options.upstream.search).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ keyword: '正品电子烟', pageNo: 1 }),
+    );
+    expect(alertsOf(f.warn, 'search_query_prohibited')).toEqual([]);
+  });
+
+  it('with the port a prohibited query answers an empty page with one warn and no upstream call', async () => {
+    const f = setup({ items: [goods('a', 'unit-cat')], hasMore: false }, null);
+    const options: SearchProductsOptions = {
+      ...f.options,
+      queryBlockwords: { isProhibited: isProhibitedQuery },
+    };
+    const data = await searchProducts(query, options);
+    expect(data).toStrictEqual({
+      items: [],
+      next_cursor: null,
+      has_more: false,
+      fallback_items: [],
+    });
+    expect(options.upstream.search).not.toHaveBeenCalled();
+    expect(options.upstream.materialFeed).not.toHaveBeenCalled();
+    expect(options.sessions.write).not.toHaveBeenCalled();
+    expect(f.warn).toHaveBeenCalledExactlyOnceWith(
+      { event: 'search_query_prohibited', platform: 'taobao' },
+      expect.any(String),
+    );
+    expect(JSON.stringify(f.warn.mock.calls)).not.toContain('电子烟');
   });
 });
