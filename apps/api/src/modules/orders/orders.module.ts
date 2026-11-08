@@ -144,13 +144,14 @@ export class OrdersModule {
         },
         {
           provide: OrderQueries,
-          inject: [CLOCK, { token: DB, optional: true }],
-          useFactory: (clock: Clock, db?: Kysely<Database>): OrderQueries =>
+          inject: [CLOCK, ROOT_LOGGER, { token: DB, optional: true }],
+          useFactory: (clock: Clock, logger: RootLogger, db?: Kysely<Database>): OrderQueries =>
             db === undefined
               ? new OrderQueries()
               : createOrderQueries({
                   db,
                   clock,
+                  logger,
                   config: options.config(db, clock),
                   links: options.links(db),
                   ...(options.figures === undefined ? {} : { figures: options.figures(db, clock) }),

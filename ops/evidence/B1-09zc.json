@@ -1,0 +1,72 @@
+{
+  "risk_note": "RV2 by path (orders module wiring only). FU-ORDERS-QUERY-LOGGER (B1-09y #2752 money S2): OrdersModule's OrderQueries factory (orders.module.ts) now injects ROOT_LOGGER and passes it to createOrderQueries, so the user order read's existing warn for an invalid stored reason_sub (alert order_reason_sub_invalid; reason, reason_sub only) is emitted in production; the no-DB branch is unchanged. No read behaviour, table, amount or contract change.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage limit until 11-15 (D10-823 ④): money review by a fresh independent Claude via tools/agent/claude-run.sh, round 1 pass with no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests (test/spec/orders/reason-sub-read-wiring/http.int.test.ts, 3 tests through the AppModule api entry on a real database) by a fresh independent Claude; red at the base (production did not warn); spec-test review by a fresh independent Claude round 1 pass with no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/orders/reason-sub-read-wiring/http.int.test.ts > [AC-B1-09zc#1] 生产 GET /v1/orders?scope=self：不合法子原因不出键且根 logger 每单一条 warn（order_reason_sub_invalid、reason、reason_sub，不含单号 / 用户 / 金额）；合法值出键、null 不出键，都不告警",
+    "test/spec/orders/reason-sub-read-wiring/http.int.test.ts > [AC-B1-09zc#2] 生产 GET /v1/orders/{order_id}：不合法子原因的详情不出键且根 logger 收到一条 warn；合法值与 null 的详情不告警",
+    "test/spec/orders/reason-sub-read-wiring/http.int.test.ts > [AC-B1-09zc#3] 生产分享单（scope=share 列表与详情）：父编码外与枚举外的子原因不出键、经根 logger 告警且不带单号 / 用户 / 金额；合法分享单出键、不告警"
+  ],
+  "task": "B1-09zc",
+  "spec_commit": "bf71f554309e541d8c3021a20fd01b9bdaee2f43",
+  "spec_ref": "39756e36debb7660e6b113b9e4392e7339ab687c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "bf71f554309e541d8c3021a20fd01b9bdaee2f43",
+      "tree": "4aa79c8fc31823733853fb59a6c152fca017d0de",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T10:52:33Z",
+      "finished_at": "2026-11-08T10:52:47Z",
+      "red_tests": [
+        "test/spec/orders/reason-sub-read-wiring/http.int.test.ts > [AC-B1-09zc#1] 生产 GET /v1/orders?scope=self：不合法子原因不出键且根 logger 每单一条 warn（order_reason_sub_invalid、reason、reason_sub，不含单号 / 用户 / 金额）；合法值出键、null 不出键，都不告警",
+        "test/spec/orders/reason-sub-read-wiring/http.int.test.ts > [AC-B1-09zc#2] 生产 GET /v1/orders/{order_id}：不合法子原因的详情不出键且根 logger 收到一条 warn；合法值与 null 的详情不告警",
+        "test/spec/orders/reason-sub-read-wiring/http.int.test.ts > [AC-B1-09zc#3] 生产分享单（scope=share 列表与详情）：父编码外与枚举外的子原因不出键、经根 logger 告警且不带单号 / 用户 / 金额；合法分享单出键、不告警"
+      ],
+      "expected": ["test/spec/orders/reason-sub-read-wiring/http.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "1d4051f7b28f80246eff4cc8868350b6ba867aa1c8f140aebddfa7b9211060f1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c4ca48169ceeb227d475fc31b211844a621ce905",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}
