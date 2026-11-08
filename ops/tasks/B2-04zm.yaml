@@ -8,7 +8,7 @@ refs: [BR-CALC-02, BR-CALC-10, BR-FUND-02]
 refs_hash:
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-10: 1848b1fb0a51
-  BR-FUND-02: 9e5f85009b0e
+  BR-FUND-02: 382c4075d2cb
 deps: [B2-03s, B2-04zj]
 paths:
   - 'apps/api/src/modules/orders/application/pipeline-port.ts'

@@ -9,7 +9,7 @@ type: contract
 # 依据 08 BR-TEXT-05 子原因表（SPEC_REF b79958d）。只读准备见 couli-runs/AGENT2-lane/d10-850-prep.md。RV1，Codex contract 评审（D10-823）。
 refs: [BR-TEXT-05]
 refs_hash:
-  BR-TEXT-05: 6f9004fb1ca7
+  BR-TEXT-05: e22ebfe2491e
 deps: [CT-24zw]
 paths:
   - 'test/spec/contracts/orders-quantity/**'

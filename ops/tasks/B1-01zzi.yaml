@@ -8,7 +8,7 @@ type: impl
 # BR-WDR-24 本任务只做 needs_manual（PAYING）一条；W6 比率、连续 W6、企业支付宝水位 W<1.5P 需转账尝试与状态迁移时间（B2-06a / B2-06fz）未落地写 TODO blocked；未识别业务码、queue_paused、EXECUTE 因水位被拒、W9、W10 判 FAILED、审核超时、R2 差异、改 withdraw.* / payout.* 配置为 payout / 资金线的事件告警（B2-06d、B2-06fz、B2-11c 等），不在本任务。Codex 额度至 10-30，tester 按 approvals #36 改独立 Claude（GT-23bgn 六条 S2 已落进本注释）。
 refs: [BR-FUND-02, BR-FUND-04, BR-CALC-13, BR-WDR-14, BR-WDR-18, BR-WDR-24]
 refs_hash:
-  BR-FUND-02: 9e5f85009b0e
+  BR-FUND-02: 382c4075d2cb
   BR-FUND-04: 497806f6f068
   BR-CALC-13: 54c06125032c
   BR-WDR-14: 6328f3cda2e6
