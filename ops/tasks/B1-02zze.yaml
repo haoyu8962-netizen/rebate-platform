@@ -21,4 +21,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/identity/admin-user-devices-snapshot/**'
-status: todo
+status: done
+pr: 2792
