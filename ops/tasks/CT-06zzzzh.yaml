@@ -1,0 +1,22 @@
+id: CT-06zzzzh
+repo: rebate-platform
+title: CT-06zzzzh：gitleaks 工作流的二进制下载加带退避的重试与按版本 + sha256 的缓存，下载或校验失败照样红、不跳过扫描（FU-GITLEAKS-DOWNLOAD-RETRY，D10-1044 ④）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-1044 ④：一小时内两次 gitleaks 下载 curl 504 白红，主干 ef87b4c25 run 42466630515、#2834）。基于主干。
+# 改法：.github/workflows/gitleaks.yml 安装步骤前加 actions/cache（与 ci.yml 同一 SHA 钉住），键含 gitleaks 版本与 sha256；命中则不下载，未命中再下载，
+#   curl 改为更多次带退避的重试（含 5xx / 超时 / 连接错误，总时长有上限）；无论来自缓存还是下载，一律先 sha256sum -c 校验，不符即失败。
+# 不放宽：扫描范围（PR 区间 / 主干全历史）、规则（.gitleaks.toml）、--redact、失败即红都不变；Scan 步骤无条件执行，下载失败时作业红、不跳过扫描。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/gitleaks.yml'
+  - 'tools/ci/gitleaks-workflow.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzh.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
