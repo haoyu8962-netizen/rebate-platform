@@ -13,6 +13,7 @@ paths:
   - 'apps/api/src/modules/catalog/application/pool-category{.ts,.test.ts}'
   - 'apps/api/src/modules/catalog/http/admin/product-pools.controller.ts'
   - 'apps/api/src/modules/catalog/catalog.module.ts'
+  - 'apps/api/src/modules/catalog/catalog-admin.module.ts'
   - 'test/spec/catalog/pool-category-block/**'
 test_paths:
   - 'test/spec/catalog/pool-category-block/**'
