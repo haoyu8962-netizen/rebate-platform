@@ -15,14 +15,18 @@
 // clock reading of the request); scope=share and an assembly without the reader leave it out.
 // The reader's facts cover [now − 72 hours, now], since an older latest jump-out is never pinned;
 // read errors propagate like any other list read (never a silent false, nothing cached).
-import type { Schema } from '@couli/contracts-ts';
+// B1-09y (D10-850 ②): every list item and the detail carry reason_sub = orders.reason_sub (08
+// BR-TEXT-05 子原因, read only) when it is a sub-reason of the order's current reason; null, a parent
+// without sub-reasons (or null) and a stored value of another parent or outside the enum leave the
+// key out, the last two kinds warning once per item or detail returned (see userReasonSub).
+import { order_reason_sub, type OrderReasonSub, type Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { chinaDayRange, chinaMonthRange } from '@couli/domain';
 import { fenToJsonNumber } from '@couli/money';
 import { sql, type Kysely } from 'kysely';
 import type { ContentReader } from '../../content/index.ts';
 import type { ClaimEntryReader } from '../../linking/index.ts';
-import type { Clock } from '../../platform/index.ts';
+import type { Clock, RootLogger } from '../../platform/index.ts';
 import { CLAIM_ENTRY_PIN_UNTIL_MS, claimEntryPinned } from '../domain/claim-entry.ts';
 import {
   buildTimeline,
@@ -122,6 +126,12 @@ export interface OrderQueryDeps {
   config: ContentReader;
   figures?: OrderFiguresReader;
   links: OrderLinkReader;
+  /**
+   * B1-09y: warns (once per order read, flat fields: alert code, reason, reason_sub; never the
+   * order number, user or amounts) when a stored orders.reason_sub is not a sub-reason of the
+   * order's current reason or is outside enum order_reason_sub. Optional for legacy direct callers.
+   */
+  logger?: Pick<RootLogger, 'warn'>;
 }
 
 /** A list query outside the contract (cursor, limit or paid_month): the HTTP layer answers 20001. */
@@ -213,6 +223,7 @@ const ORDER_COLUMNS = [
   'received_at',
   'credited_at',
   'reason',
+  'reason_sub',
   'is_price_compare',
 ] as const;
 
@@ -239,6 +250,7 @@ interface OrderRow {
   readonly received_at: Date | null;
   readonly credited_at: Date | null;
   readonly reason: string | null;
+  readonly reason_sub: string | null;
   readonly is_price_compare: boolean | null;
   /** pay_time as UTC text with microseconds (cursor precision). */
   readonly pay_key: string;
@@ -329,6 +341,52 @@ function absoluteHttpUrl(value: string | null): string | null {
     : null;
 }
 
+/** The alert of a stored orders.reason_sub the user side cannot show (B1-09y). */
+export const REASON_SUB_INVALID_ALERT = 'order_reason_sub_invalid';
+
+/**
+ * contracts/enums/order.yaml order_reason_sub: REFUND has IN_SALE / AFTER_SETTLE, RIGHTS has
+ * AFTER_SALE, PUNISH has every other value of the enum (12); no other parent has a sub-reason.
+ */
+const REFUND_SUBS = ['IN_SALE', 'AFTER_SETTLE'] as const satisfies readonly OrderReasonSub[];
+const RIGHTS_SUBS = ['AFTER_SALE'] as const satisfies readonly OrderReasonSub[];
+const NOT_PUNISH: ReadonlySet<string> = new Set<string>([...REFUND_SUBS, ...RIGHTS_SUBS]);
+const SUBS_OF: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['PUNISH', new Set<string>(order_reason_sub.filter((sub) => !NOT_PUNISH.has(sub)))],
+  ['REFUND', new Set<string>(REFUND_SUBS)],
+  ['RIGHTS', new Set<string>(RIGHTS_SUBS)],
+]);
+
+/**
+ * The reason_sub the user side shows for one order, or undefined (key left out). null, or a parent
+ * code without sub-reasons (including null), is quiet. A stored value that is not a sub-reason of
+ * the parent (another parent's or outside the enum) is left out and warned once, with the alert code,
+ * the parent code and the stored value only (no order number, user or amount).
+ */
+export function userReasonSub(
+  reason: string | null,
+  reasonSub: string | null,
+  logger: Pick<RootLogger, 'warn'> | undefined,
+): OrderReasonSub | undefined {
+  if (reasonSub === null || reason === null) return undefined;
+  const subs = SUBS_OF.get(reason);
+  if (subs === undefined) return undefined;
+  if (subs.has(reasonSub)) return reasonSub as OrderReasonSub;
+  logger?.warn(
+    { alert: REASON_SUB_INVALID_ALERT, reason, reason_sub: reasonSub },
+    'orders: stored reason_sub is not a sub-reason of the order reason',
+  );
+  return undefined;
+}
+
+function reasonSubField(
+  row: OrderRow,
+  logger: Pick<RootLogger, 'warn'> | undefined,
+): { reason_sub?: OrderReasonSub } {
+  const sub = userReasonSub(row.reason, row.reason_sub, logger);
+  return sub === undefined ? {} : { reason_sub: sub };
+}
+
 type SummaryBase = Omit<Schema<'OrderSummary'>, 'order_no' | 'masked_order_no'>;
 type OrderNumber = { order_no: string } | { masked_order_no: string };
 
@@ -361,9 +419,12 @@ function summaryFields(view: OrderView): { base: SummaryBase; number: OrderNumbe
   };
 }
 
-function toSummary(view: OrderView): Schema<'OrderSummary'> {
+function toSummary(
+  view: OrderView,
+  logger: Pick<RootLogger, 'warn'> | undefined,
+): Schema<'OrderSummary'> {
   const { base, number } = summaryFields(view);
-  return { ...base, ...number } as Schema<'OrderSummary'>;
+  return { ...base, ...number, ...reasonSubField(view.row, logger) } as Schema<'OrderSummary'>;
 }
 
 /** The card_order_status fields cut from the same projection (no order number, image or date). */
@@ -553,7 +614,7 @@ class DbOrderQueries extends OrderQueries {
         examined += 1;
         last = row;
         const view = views[index];
-        if (view !== undefined && accepts(view)) items.push(toSummary(view));
+        if (view !== undefined && accepts(view)) items.push(toSummary(view, deps.logger));
         if (items.length === limit) break;
       }
       if (rows.length < batch && examined === rows.length) {
@@ -629,6 +690,7 @@ class DbOrderQueries extends OrderQueries {
       clawback_fen: fen(figures.clawback_fen),
       appeal_pending: figures.appeal_pending,
       is_price_compare: row.is_price_compare,
+      ...reasonSubField(row, deps.logger),
     } as Schema<'OrderDetail'>;
   }
 

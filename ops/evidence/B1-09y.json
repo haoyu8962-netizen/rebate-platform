@@ -1,0 +1,118 @@
+{
+  "risk_note": "RV2 by path (orders read only). D10-850 ② (contract CT-24zx #2668): the user order list (GET /v1/orders) and detail (GET /v1/orders/{order_id}) fill reason_sub from orders.reason_sub. The key is left out when the value is null, or when the order's reason is not PUNISH / REFUND / RIGHTS (incl. null); a stored value that is not a sub of the current reason or not in enum order_reason_sub is left out too and warned once (alert order_reason_sub_invalid, reason, reason_sub; no order number, user or amount). Only items actually returned warn; the agent order card and search probe do not output reason_sub. No write, no change to reason / reason_action / display_status / amounts. The logger stays optional: OrdersModule's production wiring (orders.module.ts, outside the task paths) does not pass it yet, so production leaves invalid values out without the warning (FU-ORDERS-QUERY-LOGGER).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex hit its usage limit (codex-run exit 10, turn.failed: try again at Nov 15th, 2026 12:24 AM); per D10-823 ④ this review fell back to a fresh independent Claude via tools/agent/claude-run.sh and is recorded as claude-independent. Round 1 pass with one S2: production wiring does not pass the logger, so invalid stored sub-reasons are hidden without the warning (FU-ORDERS-QUERY-LOGGER)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests (test/spec/orders/reason-sub-read/, 3 *.int.test.ts files) by a fresh independent Claude; 24 tests red at the base; spec-test review by a fresh independent Claude (D10-848) round 1 pass with no findings. Test attempt 2 (PR #2752 tsc TS2322 ×12): a fresh independent Claude changed only two lines of kit.ts (the redaction helper accepts user_id null and skips that check when null); assertions, titles and values unchanged; red/2 PASS."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#9] 详情：15 个合法 (父编码, 子原因) 每单回填 reason_sub，与列表项一致，reason / reason_action 不变，过契约",
+    "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#10] 详情：reason_sub 为 null、父编码无子原因（含 null）时不输出该键；同一 App 的合法单照常带",
+    "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#11] 详情：值不属于当前父编码或不在枚举内时不输出，每次详情读 warn 恰一次（alert 码 + 父编码 / 子原因编码），不带订单号 / 用户 / 金额",
+    "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#12] 详情只回填：其余字段（金额、display_status、reason_action、时间线节点）与 reason_sub=null 的孪生单相同",
+    "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#13] 详情可见性不变：他人、别的 App、未归因、超出可查月份的单带子原因也是 null；本人可见单照常回填",
+    "test/spec/orders/reason-sub-read/http.int.test.ts > [AC-B1-09y#14] HTTP 列表与详情：合法子原因原样回填并过契约；null、父编码无子原因、不合法存量值都不输出该键；data 与直调一致",
+    "test/spec/orders/reason-sub-read/http.int.test.ts > [AC-B1-09y#15] 无子原因的单响应键集与改动前相同（不出现 reason_sub 键）；带子原因的孪生单只多 reason_sub 一个键",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#1] 自购列表：子原因表的 15 个 (父编码, 子原因) 每单原样回填 reason_sub，reason 不变，过契约，不告警",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#2] reason_sub 为 null 时列表项不输出该键（父编码 PUNISH / REFUND / RIGHTS / OTHER / null 都一样），同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PRESALE_UNPAID 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 COMMISSION_ZERO 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 OTHER 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 BLACKLIST 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PART_REFUND 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PRICE_COMPARE 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PRICE_PROTECT 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 SETTLE_DIFF 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 null 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#4] 库里的值不属于当前父编码或不在枚举内：不输出，每单 warn 恰一次（alert 码 + 父编码 / 子原因编码），不带订单号 / 用户 / 金额",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#5] 分享列表（same 商品）同样回填 reason_sub；脱敏单号与他商品裁剪不变，null 不输出",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#5] 分享列表（other 商品）同样回填 reason_sub；脱敏单号与他商品裁剪不变，null 不输出",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#6] 只回填：其余字段与 reason_sub=null 的孪生单逐字段相同；列表与详情读不写任何列、不加状态历史",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#7] 筛选、搜索、按月与翻页的每一页都回填；列值改了下一次读跟着变（不缓存首读）",
+    "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#8] 可见性不变：他人、别的 App、未归因单带子原因也不进列表；本人合法单照常回填"
+  ],
+  "task": "B1-09y",
+  "spec_commit": "ca8d402a70fd557d60e2b5e1cbfd3d21057fbe3a",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ca8d402a70fd557d60e2b5e1cbfd3d21057fbe3a",
+      "tree": "3950e5fcce5a5726560490dcc5f18ff6aa15f89c",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T23:53:51Z",
+      "finished_at": "2026-11-07T23:54:06Z",
+      "red_tests": [
+        "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#9] 详情：15 个合法 (父编码, 子原因) 每单回填 reason_sub，与列表项一致，reason / reason_action 不变，过契约",
+        "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#10] 详情：reason_sub 为 null、父编码无子原因（含 null）时不输出该键；同一 App 的合法单照常带",
+        "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#11] 详情：值不属于当前父编码或不在枚举内时不输出，每次详情读 warn 恰一次（alert 码 + 父编码 / 子原因编码），不带订单号 / 用户 / 金额",
+        "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#12] 详情只回填：其余字段（金额、display_status、reason_action、时间线节点）与 reason_sub=null 的孪生单相同",
+        "test/spec/orders/reason-sub-read/detail.int.test.ts > [AC-B1-09y#13] 详情可见性不变：他人、别的 App、未归因、超出可查月份的单带子原因也是 null；本人可见单照常回填",
+        "test/spec/orders/reason-sub-read/http.int.test.ts > [AC-B1-09y#14] HTTP 列表与详情：合法子原因原样回填并过契约；null、父编码无子原因、不合法存量值都不输出该键；data 与直调一致",
+        "test/spec/orders/reason-sub-read/http.int.test.ts > [AC-B1-09y#15] 无子原因的单响应键集与改动前相同（不出现 reason_sub 键）；带子原因的孪生单只多 reason_sub 一个键",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#1] 自购列表：子原因表的 15 个 (父编码, 子原因) 每单原样回填 reason_sub，reason 不变，过契约，不告警",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#2] reason_sub 为 null 时列表项不输出该键（父编码 PUNISH / REFUND / RIGHTS / OTHER / null 都一样），同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PRESALE_UNPAID 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 COMMISSION_ZERO 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 OTHER 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 BLACKLIST 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PART_REFUND 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PRICE_COMPARE 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 PRICE_PROTECT 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 SETTLE_DIFF 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#3] 父编码 null 不是 PUNISH / REFUND / RIGHTS：库里有子原因也不输出，同页合法单照常带",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#4] 库里的值不属于当前父编码或不在枚举内：不输出，每单 warn 恰一次（alert 码 + 父编码 / 子原因编码），不带订单号 / 用户 / 金额",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#5] 分享列表（same 商品）同样回填 reason_sub；脱敏单号与他商品裁剪不变，null 不输出",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#5] 分享列表（other 商品）同样回填 reason_sub；脱敏单号与他商品裁剪不变，null 不输出",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#6] 只回填：其余字段与 reason_sub=null 的孪生单逐字段相同；列表与详情读不写任何列、不加状态历史",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#7] 筛选、搜索、按月与翻页的每一页都回填；列值改了下一次读跟着变（不缓存首读）",
+        "test/spec/orders/reason-sub-read/list.int.test.ts > [AC-B1-09y#8] 可见性不变：他人、别的 App、未归因单带子原因也不进列表；本人合法单照常回填"
+      ],
+      "expected": [
+        "test/spec/orders/reason-sub-read/detail.int.test.ts",
+        "test/spec/orders/reason-sub-read/http.int.test.ts",
+        "test/spec/orders/reason-sub-read/list.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "4581f91a3ef9399d3c07b425ad21afb88c13927b65b3cb92c20b53caed6b069a"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "66bd18a149065990f28f69f5e60a2629c544251b",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  }
+}
