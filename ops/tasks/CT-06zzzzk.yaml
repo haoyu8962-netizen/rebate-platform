@@ -1,0 +1,23 @@
+id: CT-06zzzzk
+repo: rebate-platform
+title: CT-06zzzzk：contracts 工作流的 oasdiff 二进制下载加带退避的重试与按版本 + sha256 的缓存，下载或校验失败照样红、契约比对不放宽（FU-CONTRACTS-DOWNLOAD-RETRY）
+type: guard-change
+# 2026-11-08 ops 入账（编排 19:20：#2849 的 contracts-check / contracts-gate 红在 oasdiff 下载 curl 连续 504、exit 22，与 #2847 gitleaks 同一类）。基于主干。
+# 改法照 CT-06zzzzh（#2847）：contracts.yml 的 contracts-check 作业在安装 oasdiff 前加 actions/cache（与 ci.yml 同一 SHA），缓存发布压缩包本身、键含版本与 sha256、
+#   不设 restore-keys；缓存未命中才下载，curl 用更多次带退避的重试、单次与总时长有上限；不论缓存还是下载都先 sha256sum -c，不符即失败、不重下。
+# 不放宽：contracts-detect 的判定、契约比对（oasdiff 范围、base 取法、planned 操作的排除）与 contracts-gate 的判定一律不变；没有 continue-on-error、没有能跳过比对的 if。
+# 顺带查过其他工作流：只剩 contracts.yml 这一处裸 curl 下载发布包（ci.yml 的 apt 下载已自带换镜像、限速、sha256 核对；gitleaks 已由 #2847 修）。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/contracts.yml'
+  - 'tools/ci/contracts-download-workflow.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzk.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

@@ -3,6 +3,16 @@
 # the required summary check and always reports.
 # Written on 2026-10-01 without a GitHub remote: nothing in this file has run on GitHub yet.
 # The npm package `oasdiff` is a placeholder (ADR-0001 §2): the official release binary is used.
+#
+# CT-06zzzzk (FU-CONTRACTS-DOWNLOAD-RETRY): #2849 went red on a curl 504 (exit 22) while downloading
+# the oasdiff release, not on a contract finding. The release archive is now cached (actions/cache,
+# keyed by the pinned version and its sha256) and the download is retried harder, with a bounded
+# total time, as gitleaks.yml does (CT-06zzzzh). The contract comparison is not relaxed: whether the
+# archive comes from the cache or from the download it is checked with `sha256sum -c` against
+# OASDIFF_SHA256 first, and a mismatch fails the job (no re-download); a download that keeps
+# failing fails the job; contracts-detect, the comparison (oasdiff range, how the base is taken,
+# leaving out planned operations, --fail-on ERR) and contracts-gate are unchanged, and no `if:` or
+# `continue-on-error` lets the comparison be skipped while the job stays green.
 name: contracts
 
 on:
@@ -62,6 +72,9 @@ jobs:
     if: needs.contracts-detect.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      OASDIFF_VERSION: 1.32.1
+      OASDIFF_SHA256: 7c8939fc49b75ee11fec66a5b83b37a2fca6aee109fed85013b1ba2ac2a1ee7f
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -74,18 +87,37 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm contracts:check
+      # The release archive itself is cached (not the unpacked binary), so the install checks it
+      # with the same sha256 whatever its source. No restore-keys: only this exact release matches.
+      - name: Cache the oasdiff release archive
+        id: oasdiff-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/oasdiff-release/oasdiff_${{ env.OASDIFF_VERSION }}_linux_amd64.tar.gz
+          key: oasdiff-${{ env.OASDIFF_VERSION }}-linux-amd64-${{ env.OASDIFF_SHA256 }}
       - name: Install oasdiff (official release binary, checksum verified)
         run: |
           set -euo pipefail
-          url="https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/oasdiff.tar.gz" "$url"
-          echo "${OASDIFF_SHA256}  $RUNNER_TEMP/oasdiff.tar.gz" | sha256sum -c -
+          if [ "$CACHE_HIT" = true ]; then
+            echo "using the cached release archive"
+          else
+            url="https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+            mkdir -p "$(dirname "$ARCHIVE")"
+            # 5xx, timeouts and connection errors are all retried, every attempt is bounded and
+            # retrying stops after --retry-max-time; a download that never succeeds fails here.
+            curl --fail --silent --show-error --location \
+              --connect-timeout 20 --max-time 120 \
+              --retry 8 --retry-all-errors --retry-delay 5 --retry-max-time 240 \
+              --output "$ARCHIVE" "$url"
+          fi
+          # Cached or downloaded, the archive is verified before it is unpacked; a mismatch fails.
+          echo "${OASDIFF_SHA256}  $ARCHIVE" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/oasdiff"
-          tar -xzf "$RUNNER_TEMP/oasdiff.tar.gz" -C "$RUNNER_TEMP/oasdiff" oasdiff
+          tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP/oasdiff" oasdiff
           "$RUNNER_TEMP/oasdiff/oasdiff" --version
         env:
-          OASDIFF_VERSION: 1.32.1
-          OASDIFF_SHA256: 7c8939fc49b75ee11fec66a5b83b37a2fca6aee109fed85013b1ba2ac2a1ee7f
+          ARCHIVE: ${{ runner.temp }}/oasdiff-release/oasdiff_${{ env.OASDIFF_VERSION }}_linux_amd64.tar.gz
+          CACHE_HIT: ${{ steps.oasdiff-cache.outputs.cache-hit }}
       - name: Breaking changes against the base contract
         run: |
           set -euo pipefail
