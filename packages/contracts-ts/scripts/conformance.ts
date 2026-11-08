@@ -175,6 +175,10 @@ export const ENUM_BINDINGS: Readonly<Record<string, string>> = {
   // CT-24zj: the system identity on an audit row (D10-552).
   AdminAuditActorKind: 'audit_actor_kind',
   AdminAuditSystemActor: 'audit_system_actor',
+  // CT-24zzc: one user's balance card and ledger, read only (01 F-ADM-04; BR-FUND-13, BR-FUND-15).
+  // AdminLedgerLinkType (order / withdrawal / adjustment / writeoff) has no catalog enum.
+  AdminLedgerType: 'ledger_type',
+  AdminLedgerSubAccount: 'ledger_sub_account',
 };
 
 /**

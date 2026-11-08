@@ -707,6 +707,16 @@ export const CONTRACT_SIGNING_ROUTES = [
     "signed": false
   },
   {
+    "method": "GET",
+    "path": "/admin/v1/users/:user_id/fund-summary",
+    "signed": false
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/ledger",
+    "signed": false
+  },
+  {
     "method": "POST",
     "path": "/admin/v1/users/:user_id/reverified-devices",
     "signed": false

@@ -4508,6 +4508,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/users/{user_id}/fund-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One user's balance card — available, frozen, negative since, withdrawn and withdraw holds
+         * @description The balance card of the user detail page (01 F-ADM-04; BR-FUND-13, BR-FUND-18;
+         *     design/specs/admin-user-detail.md §2). Permission point `fund.view` or `user.lookup`
+         *     (either one is enough; 04 §11.1); lacking both is 10403 with
+         *     `data.reason=admin_permission_denied`. Read only: no step-up, and reading does not write an
+         *     audit record. An unknown `user_id`, or one of another app, is 20001 with
+         *     `data.fields=[user_id]`. `available_fen` and `frozen_fen` are the user's single balance
+         *     and its frozen part (BR-FUND-13; 0 when the user has no ledger account yet);
+         *     `available_fen` may be negative, and `negative_since` is the day it went negative
+         *     (BR-FUND-12) or null. `withdrawn_fen` follows BR-FUND-18: the sum of `amount_fen` of the
+         *     user's withdrawals in PAID_API or PAID_MANUAL, the same figure as the app's wallet.
+         *     `withdraw_block` lists the distinct kinds of the withdraw holds in effect (enum
+         *     withdraw_hold_kind, in enum order); `blocked` is true when there is at least one.
+         *     No internal notes: 不含内部备注（no voucher memo or operator, adjustment note or reject
+         *     note, hold source_ref or created_by), so the two permission points get the same shape and
+         *     the same values（两种权限同形同值）. The response carries `Cache-Control: no-store`.
+         */
+        get: operations["adminGetUserFundSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One user's ledger entries, page by page, with filters
+         * @description The ledger of one user (01 F-ADM-04; BR-FUND-13, BR-FUND-15, BR-FUND-16;
+         *     design/specs/admin-ledger.md §2). Permission point `fund.view` or `user.lookup` (either
+         *     one is enough; 04 §11.1); lacking both is 10403 with
+         *     `data.reason=admin_permission_denied`. Read only: no step-up, and reading does not write an
+         *     audit record. `user_id` is required; missing, malformed, unknown, or of another app is
+         *     20001 with `data.fields=[user_id]`. Lists the entries of the user's balance account, both
+         *     sub-accounts (`available`, `frozen`; enum ledger_sub_account), one row per ledger entry
+         *     (all 13 ledger_type values, BR-FUND-15; withdrawal entries are not merged as in the app),
+         *     latest `booked_at` first (then `entry_id` descending, so the entries of one voucher stay
+         *     together), page by page (`page`, `page_size` ≤ 200, above that 20001). Optional filters:
+         *     `ledger_type`, `sub_type`, `sub_account`, the voucher's accounting dates
+         *     (`accounting_date_from` to `accounting_date_to`, both inclusive; from later than to →
+         *     20001 with `data.fields=[accounting_date_from, accounting_date_to]`) and `ref` (exact
+         *     voucher `biz_id`). `amount_fen` is signed from the user's view (credit positive, debit
+         *     negative); `balance_after_fen` is the sub-account balance after the entry, null when not
+         *     recorded. `voucher.uniq_key` is the voucher number (BR-FUND-16); `link` points to the
+         *     related order, withdrawal, adjustment or write-off, null when there is none.
+         *     No internal notes: 不含内部备注（no voucher memo or operator, adjustment note or reject
+         *     note, hold source_ref or created_by), so the two permission points get the same shape and
+         *     the same values（两种权限同形同值）. The response carries `Cache-Control: no-store`.
+         */
+        get: operations["adminListLedgerEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/users/{user_id}/reverified-devices": {
         parameters: {
             query?: never;
@@ -17402,6 +17475,120 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["AdminUserDevicePage"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description One user's balance card (BR-FUND-13, BR-FUND-18). No internal notes or internal references
+         *     (voucher memo or operator, adjustment notes, hold source_ref or created_by).
+         */
+        AdminUserFundSummary: {
+            user_id: components["schemas"]["Id"];
+            /**
+             * Format: int64
+             * @description The single available balance in fen (BR-FUND-13); may be negative; 0 without a ledger account.
+             */
+            available_fen: number;
+            /**
+             * Format: int64
+             * @description The frozen part in fen (withdrawals under way, BR-FUND-13); 0 without a ledger account.
+             */
+            frozen_fen: number;
+            /**
+             * Format: date
+             * @description The day the available balance went negative (BR-FUND-12), null when it is not negative.
+             */
+            negative_since: string | null;
+            /**
+             * Format: int64
+             * @description BR-FUND-18 — the sum of `amount_fen` of the user's withdrawals in PAID_API or PAID_MANUAL.
+             */
+            withdrawn_fen: number;
+            withdraw_block: components["schemas"]["AdminUserWithdrawBlock"];
+        };
+        /** @description The withdraw holds in effect, as kinds only (no source_ref or created_by). */
+        AdminUserWithdrawBlock: {
+            /** @description True when at least one withdraw hold is in effect. */
+            blocked: boolean;
+            /** @description The distinct kinds of the holds in effect, in enum order; empty when none. */
+            hold_kinds: components["schemas"]["AdminWithdrawHoldKind"][];
+        };
+        AdminUserFundSummaryResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminUserFundSummary"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description contracts/enums/fund.yaml ledger_type (BR-FUND-15, all 13 values).
+         * @enum {string}
+         */
+        AdminLedgerType: "REBATE_CREDIT" | "SHARE_CREDIT" | "REFERRAL_CREDIT" | "CLAWBACK" | "SETTLE_ADJUST" | "WITHDRAW_FREEZE" | "WITHDRAW_PAID" | "WITHDRAW_RETURN" | "WITHDRAW_FEE" | "TAX_WITHHOLD" | "REWARD" | "ADMIN_ADJUST" | "BAD_DEBT_WRITEOFF";
+        /**
+         * @description contracts/enums/fund.yaml ledger_sub_account (BR-FUND-13).
+         * @enum {string}
+         */
+        AdminLedgerSubAccount: "available" | "frozen";
+        /**
+         * @description Kind of the related document a ledger entry links to.
+         * @enum {string}
+         */
+        AdminLedgerLinkType: "order" | "withdrawal" | "adjustment" | "writeoff";
+        /** @description The voucher of a ledger entry (BR-FUND-16); no memo or operator. */
+        AdminLedgerVoucher: {
+            voucher_id: string;
+            /** @description The voucher number (BR-FUND-16). */
+            uniq_key: string;
+            biz_type: string;
+            biz_id: string;
+        };
+        /** @description The related order, withdrawal, adjustment or write-off of a ledger entry. */
+        AdminLedgerLink: {
+            type: components["schemas"]["AdminLedgerLinkType"];
+            id: string;
+        };
+        /**
+         * @description One ledger entry of the user's balance account (BR-FUND-15, BR-FUND-16). No internal notes
+         *     or internal references (voucher memo or operator, adjustment notes).
+         */
+        AdminLedgerEntry: {
+            entry_id: string;
+            /** Format: date-time */
+            booked_at: string;
+            /**
+             * Format: date
+             * @description The accounting date of the voucher.
+             */
+            accounting_date: string;
+            ledger_type: components["schemas"]["AdminLedgerType"];
+            /** @description The sub_type of the entry (BR-FUND-15), null when the type has none. */
+            sub_type: string | null;
+            sub_account: components["schemas"]["AdminLedgerSubAccount"];
+            /**
+             * Format: int64
+             * @description Signed from the user's view — credit positive, debit negative.
+             */
+            amount_fen: number;
+            /**
+             * Format: int64
+             * @description The sub-account balance after this entry, null when not recorded.
+             */
+            balance_after_fen: number | null;
+            voucher: components["schemas"]["AdminLedgerVoucher"];
+            link: components["schemas"]["AdminLedgerLink"] | null;
+        };
+        AdminLedgerEntryPage: {
+            items: components["schemas"]["AdminLedgerEntry"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int32 */
+            total: number;
+        };
+        AdminLedgerEntryPageResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminLedgerEntryPage"];
             trace_id: components["schemas"]["TraceId"];
         };
         /** @description Body of POST /admin/v1/users/{user_id}/reverified-devices (BR-WDR-01 细则, 清除标记只走人工). */
@@ -31285,6 +31472,175 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["AdminUserDevicePageResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminGetUserFundSummary: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path: {
+                /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
+                user_id: components["parameters"]["AdminUserIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The user's balance card. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    /** @description Always no-store; balances are not cached by any proxy or the browser. */
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserFundSummaryResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminListLedgerEntries: {
+        parameters: {
+            query: {
+                /** @description The app user whose ledger is listed; missing, unknown or of another app → 20001 with data.fields=[user_id]. */
+                user_id: components["schemas"]["Id"];
+                /** @description Only entries of this ledger_type (enum ledger_type, BR-FUND-15); absent = all. */
+                ledger_type?: components["schemas"]["AdminLedgerType"];
+                /** @description Only entries with this sub_type (BR-FUND-15); absent = all. */
+                sub_type?: string;
+                /** @description Only entries of this sub-account (enum ledger_sub_account); absent = both. */
+                sub_account?: components["schemas"]["AdminLedgerSubAccount"];
+                /** @description First accounting date of the voucher, inclusive. */
+                accounting_date_from?: string;
+                /** @description Last accounting date of the voucher, inclusive. */
+                accounting_date_to?: string;
+                /** @description Only entries whose voucher biz_id equals this value exactly; absent = all. */
+                ref?: string;
+                /** @description Page number of an admin list, from 1 (04 §5 后台分页). */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Page size of an admin list, at most 200 (04 §5 后台分页); above that → 20001. */
+                page_size?: components["parameters"]["AdminPageSize"];
+            };
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of the user's ledger entries, latest first. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    /** @description Always no-store; ledger entries are not cached by any proxy or the browser. */
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "entry_id": "1002",
+                     *             "booked_at": "2026-11-05T10:00:00+08:00",
+                     *             "accounting_date": "2026-11-05",
+                     *             "ledger_type": "WITHDRAW_FREEZE",
+                     *             "sub_type": null,
+                     *             "sub_account": "frozen",
+                     *             "amount_fen": 5000,
+                     *             "balance_after_fen": 5000,
+                     *             "voucher": {
+                     *               "voucher_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02",
+                     *               "uniq_key": "WITHDRAW_FREEZE:0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02",
+                     *               "biz_type": "withdrawal",
+                     *               "biz_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02"
+                     *             },
+                     *             "link": {
+                     *               "type": "withdrawal",
+                     *               "id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02"
+                     *             }
+                     *           },
+                     *           {
+                     *             "entry_id": "1001",
+                     *             "booked_at": "2026-11-05T10:00:00+08:00",
+                     *             "accounting_date": "2026-11-05",
+                     *             "ledger_type": "WITHDRAW_FREEZE",
+                     *             "sub_type": null,
+                     *             "sub_account": "available",
+                     *             "amount_fen": -5000,
+                     *             "balance_after_fen": 1200,
+                     *             "voucher": {
+                     *               "voucher_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02",
+                     *               "uniq_key": "WITHDRAW_FREEZE:0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02",
+                     *               "biz_type": "withdrawal",
+                     *               "biz_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02"
+                     *             },
+                     *             "link": {
+                     *               "type": "withdrawal",
+                     *               "id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02"
+                     *             }
+                     *           },
+                     *           {
+                     *             "entry_id": "998",
+                     *             "booked_at": "2026-11-01T09:00:00+08:00",
+                     *             "accounting_date": "2026-11-01",
+                     *             "ledger_type": "REWARD",
+                     *             "sub_type": "invite",
+                     *             "sub_account": "available",
+                     *             "amount_fen": 800,
+                     *             "balance_after_fen": null,
+                     *             "voucher": {
+                     *               "voucher_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b05",
+                     *               "uniq_key": "REWARD:invite:0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c05",
+                     *               "biz_type": "reward",
+                     *               "biz_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c05"
+                     *             },
+                     *             "link": null
+                     *           }
+                     *         ],
+                     *         "page": 1,
+                     *         "page_size": 20,
+                     *         "total": 3
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminLedgerEntryPageResponse"];
                 };
             };
             429: components["responses"]["TooManyRequests"];

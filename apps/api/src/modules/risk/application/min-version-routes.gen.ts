@@ -1435,6 +1435,26 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": false
   },
   {
+    "operationId": "adminGetUserFundSummary",
+    "method": "GET",
+    "path": "/admin/v1/users/:user_id/fund-summary",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
+    "operationId": "adminListLedgerEntries",
+    "method": "GET",
+    "path": "/admin/v1/ledger",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "adminAddUserReverifiedDevice",
     "method": "POST",
     "path": "/admin/v1/users/:user_id/reverified-devices",

@@ -17,6 +17,12 @@ enums:
       REWARD: 活动奖励（+；invite 随邀请奖励活动启用（BR-INV-24，2026-10-19），newbie、checkin 仍 P1）
       ADMIN_ADJUST: 人工调账（±）
       BAD_DEBT_WRITEOFF: 负余额核销（+）
+  ledger_sub_account:
+    source: 规划/04 §3.2 ledger_entries.sub_account；BR-FUND-13
+    description: 用户余额账户的子户（ledger_entries / daily_balances 的 sub_account）
+    values:
+      available: 可用
+      frozen: 冻结
   referral_credit_sub_type:
     source: 规划/04 §2.4；BR-CALC-05
     description: REFERRAL_CREDIT 的 sub_type；INDIRECT 只在间推开关开启的规则版本下产生

@@ -429,6 +429,16 @@ export const ledger_type = [
 export type LedgerType = (typeof ledger_type)[number];
 
 /**
+ * 用户余额账户的子户（ledger_entries / daily_balances 的 sub_account）
+ * Source: 规划/04 §3.2 ledger_entries.sub_account；BR-FUND-13 (contracts/enums/fund.yaml).
+ */
+export const ledger_sub_account = [
+  "available", // 可用
+  "frozen", // 冻结
+] as const;
+export type LedgerSubAccount = (typeof ledger_sub_account)[number];
+
+/**
  * REFERRAL_CREDIT 的 sub_type；INDIRECT 只在间推开关开启的规则版本下产生
  * Source: 规划/04 §2.4；BR-CALC-05 (contracts/enums/fund.yaml).
  */
@@ -2222,6 +2232,7 @@ export const enums = {
   admin_recon_diff_outcome,
   admin_settle_bill_status,
   ledger_type,
+  ledger_sub_account,
   referral_credit_sub_type,
   clawback_sub_type,
   settle_adjust_sub_type,

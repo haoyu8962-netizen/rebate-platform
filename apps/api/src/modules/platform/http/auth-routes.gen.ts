@@ -707,6 +707,16 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "admin"
   },
   {
+    "method": "GET",
+    "path": "/admin/v1/users/:user_id/fund-summary",
+    "auth": "admin"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/ledger",
+    "auth": "admin"
+  },
+  {
     "method": "POST",
     "path": "/admin/v1/users/:user_id/reverified-devices",
     "auth": "admin"

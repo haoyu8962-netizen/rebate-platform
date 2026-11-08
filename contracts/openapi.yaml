@@ -85,7 +85,7 @@ tags:
   - name: admin-exports
     description: Admin export tasks — create from a list's filters (asynchronous CSV, masked by default), list (own tasks, or everyone's with audit.view_all), creator-only short-lived download link and retry of a failed task (permission point export; 01 F-ADM-03, 04 §6.6 exports, §11.1, BR-ID-34).
   - name: admin-users
-    description: App users in the admin console — list, lookup, detail, direct invitees, audited reveal, level and inviter changes, ban / freeze and union binding reset / disable / enable (permission points user.*, pii.*, risk.*, union.binding_*; 04 §6.6, §11; F1-07).
+    description: App users in the admin console — list, lookup, detail, direct invitees, audited reveal, level and inviter changes, ban / freeze and union binding reset / disable / enable (permission points user.*, pii.*, risk.*, union.binding_*; 04 §6.6, §11; F1-07); one user's balance card and ledger entries, read only (fund.view or user.lookup; F-ADM-04).
   - name: admin-search
     description: Admin console top-bar search — one box for an order number, withdrawal number, full phone number or UID, trimmed to the account's permission points (order.view, user.lookup, fund.view; 01 F-ADM-04, 04 §6.6 search, BR-ID-34).
   - name: admin-orders
@@ -12263,6 +12263,290 @@ paths:
                   page: 1
                   page_size: 20
                   total: 2
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                unknownUser:
+                  $ref: '#/components/examples/AdminUnknownUser'
+                pageSizeTooLarge:
+                  $ref: '#/components/examples/AdminPageSizeInvalid'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /admin/v1/users/{user_id}/fund-summary:
+    get:
+      operationId: adminGetUserFundSummary
+      tags:
+        - admin-users
+      summary: One user's balance card — available, frozen, negative since, withdrawn and withdraw holds
+      description: |
+        The balance card of the user detail page (01 F-ADM-04; BR-FUND-13, BR-FUND-18;
+        design/specs/admin-user-detail.md §2). Permission point `fund.view` or `user.lookup`
+        (either one is enough; 04 §11.1); lacking both is 10403 with
+        `data.reason=admin_permission_denied`. Read only: no step-up, and reading does not write an
+        audit record. An unknown `user_id`, or one of another app, is 20001 with
+        `data.fields=[user_id]`. `available_fen` and `frozen_fen` are the user's single balance
+        and its frozen part (BR-FUND-13; 0 when the user has no ledger account yet);
+        `available_fen` may be negative, and `negative_since` is the day it went negative
+        (BR-FUND-12) or null. `withdrawn_fen` follows BR-FUND-18: the sum of `amount_fen` of the
+        user's withdrawals in PAID_API or PAID_MANUAL, the same figure as the app's wallet.
+        `withdraw_block` lists the distinct kinds of the withdraw holds in effect (enum
+        withdraw_hold_kind, in enum order); `blocked` is true when there is at least one.
+        No internal notes: 不含内部备注（no voucher memo or operator, adjustment note or reject
+        note, hold source_ref or created_by), so the two permission points get the same shape and
+        the same values（两种权限同形同值）. The response carries `Cache-Control: no-store`.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminUserIdPath'
+      responses:
+        '200':
+          description: The user's balance card.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+            Cache-Control:
+              required: true
+              description: Always no-store; balances are not cached by any proxy or the browser.
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserFundSummaryResponse'
+              examples:
+                negative:
+                  summary: Negative balance with two holds in effect
+                  value:
+                    code: 0
+                    msg: ''
+                    data:
+                      user_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04
+                      available_fen: -1200
+                      frozen_fen: 5000
+                      negative_since: '2026-10-30'
+                      withdrawn_fen: 30000
+                      withdraw_block:
+                        blocked: true
+                        hold_kinds:
+                          - manual
+                          - recon_diff
+                    trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+                plain:
+                  summary: Positive balance, nothing withdrawn, no hold
+                  value:
+                    code: 0
+                    msg: ''
+                    data:
+                      user_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04
+                      available_fen: 1200
+                      frozen_fen: 0
+                      negative_since: null
+                      withdrawn_fen: 0
+                      withdraw_block:
+                        blocked: false
+                        hold_kinds: []
+                    trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                unknownUser:
+                  $ref: '#/components/examples/AdminUnknownUser'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /admin/v1/ledger:
+    get:
+      operationId: adminListLedgerEntries
+      tags:
+        - admin-users
+      summary: One user's ledger entries, page by page, with filters
+      description: |
+        The ledger of one user (01 F-ADM-04; BR-FUND-13, BR-FUND-15, BR-FUND-16;
+        design/specs/admin-ledger.md §2). Permission point `fund.view` or `user.lookup` (either
+        one is enough; 04 §11.1); lacking both is 10403 with
+        `data.reason=admin_permission_denied`. Read only: no step-up, and reading does not write an
+        audit record. `user_id` is required; missing, malformed, unknown, or of another app is
+        20001 with `data.fields=[user_id]`. Lists the entries of the user's balance account, both
+        sub-accounts (`available`, `frozen`; enum ledger_sub_account), one row per ledger entry
+        (all 13 ledger_type values, BR-FUND-15; withdrawal entries are not merged as in the app),
+        latest `booked_at` first (then `entry_id` descending, so the entries of one voucher stay
+        together), page by page (`page`, `page_size` ≤ 200, above that 20001). Optional filters:
+        `ledger_type`, `sub_type`, `sub_account`, the voucher's accounting dates
+        (`accounting_date_from` to `accounting_date_to`, both inclusive; from later than to →
+        20001 with `data.fields=[accounting_date_from, accounting_date_to]`) and `ref` (exact
+        voucher `biz_id`). `amount_fen` is signed from the user's view (credit positive, debit
+        negative); `balance_after_fen` is the sub-account balance after the entry, null when not
+        recorded. `voucher.uniq_key` is the voucher number (BR-FUND-16); `link` points to the
+        related order, withdrawal, adjustment or write-off, null when there is none.
+        No internal notes: 不含内部备注（no voucher memo or operator, adjustment note or reject
+        note, hold source_ref or created_by), so the two permission points get the same shape and
+        the same values（两种权限同形同值）. The response carries `Cache-Control: no-store`.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: user_id
+          in: query
+          required: true
+          description: The app user whose ledger is listed; missing, unknown or of another app → 20001 with data.fields=[user_id].
+          schema:
+            $ref: '#/components/schemas/Id'
+        - name: ledger_type
+          in: query
+          required: false
+          description: Only entries of this ledger_type (enum ledger_type, BR-FUND-15); absent = all.
+          schema:
+            $ref: '#/components/schemas/AdminLedgerType'
+        - name: sub_type
+          in: query
+          required: false
+          description: Only entries with this sub_type (BR-FUND-15); absent = all.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: sub_account
+          in: query
+          required: false
+          description: Only entries of this sub-account (enum ledger_sub_account); absent = both.
+          schema:
+            $ref: '#/components/schemas/AdminLedgerSubAccount'
+        - name: accounting_date_from
+          in: query
+          required: false
+          description: First accounting date of the voucher, inclusive.
+          schema:
+            type: string
+            format: date
+        - name: accounting_date_to
+          in: query
+          required: false
+          description: Last accounting date of the voucher, inclusive.
+          schema:
+            type: string
+            format: date
+        - name: ref
+          in: query
+          required: false
+          description: Only entries whose voucher biz_id equals this value exactly; absent = all.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminPageSize'
+      responses:
+        '200':
+          description: One page of the user's ledger entries, latest first.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+            Cache-Control:
+              required: true
+              description: Always no-store; ledger entries are not cached by any proxy or the browser.
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLedgerEntryPageResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  items:
+                    - entry_id: '1002'
+                      booked_at: '2026-11-05T10:00:00+08:00'
+                      accounting_date: '2026-11-05'
+                      ledger_type: WITHDRAW_FREEZE
+                      sub_type: null
+                      sub_account: frozen
+                      amount_fen: 5000
+                      balance_after_fen: 5000
+                      voucher:
+                        voucher_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02
+                        uniq_key: WITHDRAW_FREEZE:0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                        biz_type: withdrawal
+                        biz_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                      link:
+                        type: withdrawal
+                        id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                    - entry_id: '1001'
+                      booked_at: '2026-11-05T10:00:00+08:00'
+                      accounting_date: '2026-11-05'
+                      ledger_type: WITHDRAW_FREEZE
+                      sub_type: null
+                      sub_account: available
+                      amount_fen: -5000
+                      balance_after_fen: 1200
+                      voucher:
+                        voucher_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02
+                        uniq_key: WITHDRAW_FREEZE:0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                        biz_type: withdrawal
+                        biz_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                      link:
+                        type: withdrawal
+                        id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                    - entry_id: '998'
+                      booked_at: '2026-11-01T09:00:00+08:00'
+                      accounting_date: '2026-11-01'
+                      ledger_type: REWARD
+                      sub_type: invite
+                      sub_account: available
+                      amount_fen: 800
+                      balance_after_fen: null
+                      voucher:
+                        voucher_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b05
+                        uniq_key: REWARD:invite:0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c05
+                        biz_type: reward
+                        biz_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c05
+                      link: null
+                  page: 1
+                  page_size: 20
+                  total: 3
                 trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
         '429':
           $ref: '#/components/responses/TooManyRequests'
@@ -47937,6 +48221,244 @@ components:
           type: string
         data:
           $ref: '#/components/schemas/AdminUserDevicePage'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminUserFundSummary:
+      type: object
+      description: |
+        One user's balance card (BR-FUND-13, BR-FUND-18). No internal notes or internal references
+        (voucher memo or operator, adjustment notes, hold source_ref or created_by).
+      additionalProperties: false
+      required:
+        - user_id
+        - available_fen
+        - frozen_fen
+        - negative_since
+        - withdrawn_fen
+        - withdraw_block
+      properties:
+        user_id:
+          $ref: '#/components/schemas/Id'
+        available_fen:
+          type: integer
+          format: int64
+          description: The single available balance in fen (BR-FUND-13); may be negative; 0 without a ledger account.
+        frozen_fen:
+          type: integer
+          format: int64
+          description: The frozen part in fen (withdrawals under way, BR-FUND-13); 0 without a ledger account.
+        negative_since:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: The day the available balance went negative (BR-FUND-12), null when it is not negative.
+        withdrawn_fen:
+          type: integer
+          format: int64
+          description: BR-FUND-18 — the sum of `amount_fen` of the user's withdrawals in PAID_API or PAID_MANUAL.
+        withdraw_block:
+          $ref: '#/components/schemas/AdminUserWithdrawBlock'
+    AdminUserWithdrawBlock:
+      type: object
+      description: The withdraw holds in effect, as kinds only (no source_ref or created_by).
+      additionalProperties: false
+      required:
+        - blocked
+        - hold_kinds
+      properties:
+        blocked:
+          type: boolean
+          description: True when at least one withdraw hold is in effect.
+        hold_kinds:
+          type: array
+          description: The distinct kinds of the holds in effect, in enum order; empty when none.
+          items:
+            $ref: '#/components/schemas/AdminWithdrawHoldKind'
+    AdminUserFundSummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminUserFundSummary'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminLedgerType:
+      type: string
+      description: contracts/enums/fund.yaml ledger_type (BR-FUND-15, all 13 values).
+      enum:
+        - REBATE_CREDIT
+        - SHARE_CREDIT
+        - REFERRAL_CREDIT
+        - CLAWBACK
+        - SETTLE_ADJUST
+        - WITHDRAW_FREEZE
+        - WITHDRAW_PAID
+        - WITHDRAW_RETURN
+        - WITHDRAW_FEE
+        - TAX_WITHHOLD
+        - REWARD
+        - ADMIN_ADJUST
+        - BAD_DEBT_WRITEOFF
+    AdminLedgerSubAccount:
+      type: string
+      description: contracts/enums/fund.yaml ledger_sub_account (BR-FUND-13).
+      enum:
+        - available
+        - frozen
+    AdminLedgerLinkType:
+      type: string
+      description: Kind of the related document a ledger entry links to.
+      enum:
+        - order
+        - withdrawal
+        - adjustment
+        - writeoff
+    AdminLedgerVoucher:
+      type: object
+      description: The voucher of a ledger entry (BR-FUND-16); no memo or operator.
+      additionalProperties: false
+      required:
+        - voucher_id
+        - uniq_key
+        - biz_type
+        - biz_id
+      properties:
+        voucher_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        uniq_key:
+          type: string
+          description: The voucher number (BR-FUND-16).
+          minLength: 1
+          maxLength: 256
+        biz_type:
+          type: string
+          minLength: 1
+          maxLength: 64
+        biz_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    AdminLedgerLink:
+      type: object
+      description: The related order, withdrawal, adjustment or write-off of a ledger entry.
+      additionalProperties: false
+      required:
+        - type
+        - id
+      properties:
+        type:
+          $ref: '#/components/schemas/AdminLedgerLinkType'
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    AdminLedgerEntry:
+      type: object
+      description: |
+        One ledger entry of the user's balance account (BR-FUND-15, BR-FUND-16). No internal notes
+        or internal references (voucher memo or operator, adjustment notes).
+      additionalProperties: false
+      required:
+        - entry_id
+        - booked_at
+        - accounting_date
+        - ledger_type
+        - sub_type
+        - sub_account
+        - amount_fen
+        - balance_after_fen
+        - voucher
+        - link
+      properties:
+        entry_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        booked_at:
+          type: string
+          format: date-time
+        accounting_date:
+          type: string
+          format: date
+          description: The accounting date of the voucher.
+        ledger_type:
+          $ref: '#/components/schemas/AdminLedgerType'
+        sub_type:
+          type:
+            - string
+            - 'null'
+          description: The sub_type of the entry (BR-FUND-15), null when the type has none.
+        sub_account:
+          $ref: '#/components/schemas/AdminLedgerSubAccount'
+        amount_fen:
+          type: integer
+          format: int64
+          description: Signed from the user's view — credit positive, debit negative.
+        balance_after_fen:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          description: The sub-account balance after this entry, null when not recorded.
+        voucher:
+          $ref: '#/components/schemas/AdminLedgerVoucher'
+        link:
+          anyOf:
+            - $ref: '#/components/schemas/AdminLedgerLink'
+            - type: 'null'
+    AdminLedgerEntryPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminLedgerEntry'
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+        page_size:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+    AdminLedgerEntryPageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminLedgerEntryPage'
         trace_id:
           $ref: '#/components/schemas/TraceId'
     AdminReverifiedDeviceRequest:

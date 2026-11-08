@@ -1,0 +1,119 @@
+{
+  "task": "CT-24zzc",
+  "spec_ref": "865361d5ec4637aef928bbbe3823621bc9b098fc",
+  "spec_commit": "d264ca31391ff9ef5a41fd938c0cb2cce5cf12cf",
+  "red_tests": [
+    "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#8] 参数恰为 X-Trace-Id 与路径 user_id，分别引用 TraceId、AdminUserIdPath",
+    "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#9] 200 是后台信封 code/msg/data/trace_id；data（AdminUserFundSummary）封闭且恰为 6 个必填字段",
+    "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#10] 字段取值：available_fen 可为负，frozen_fen / withdrawn_fen 为整数分，negative_since 为日期或 null",
+    "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#11] withdraw_block 封闭且恰为 blocked、hold_kinds；hold_kinds 元素 $ref withdraw_hold_kind 枚举",
+    "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#12] withdrawn_fen 按 BR-FUND-18 口径：写明只计 PAID_API、PAID_MANUAL 提现单的 amount_fen",
+    "test/spec/contracts/admin-ledger-read/generated.test.ts > [AC-CT-24zzc#20] contracts-ts 的 enums.gen.ts 生成 ledger_sub_account = [available, frozen]",
+    "test/spec/contracts/admin-ledger-read/generated.test.ts > [AC-CT-24zzc#21] contracts-ts 的 openapi.gen.ts 生成两个路径的 GET 与 operation 类型、AdminUserFundSummary 与 AdminLedgerEntry",
+    "test/spec/contracts/admin-ledger-read/generated.test.ts > [AC-CT-24zzc#22] 后台鉴权路由表恰好各登记一次 GET（auth admin）；planned 与运行时 schema、planned 清单一致",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#13] 参数恰为 X-Trace-Id、user_id（必填）、六个可选筛选与 page、page_size；分页引用 AdminPage / AdminPageSize（≤ 200）",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#14] 筛选取值：ledger_type 取 13 种 ledger_type，sub_account 取 ledger_sub_account，sub_type / ref 为字符串，记账日期区间为 date",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#15] 200 是后台分页信封：data 封闭且恰为 items、page、page_size、total，items 元素为 AdminLedgerEntry",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#16] 流水项封闭且恰为 10 个必填字段",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#17] 流水项取值：booked_at 为 date-time，accounting_date 为 date，amount_fen 带符号整数，balance_after_fen 整数或 null，sub_type 字符串或 null",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#18] ledger_type 与 sub_account 是对 ledger_type、ledger_sub_account 枚举组件的 $ref",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#19] voucher 封闭且恰为 voucher_id、uniq_key、biz_type、biz_id（字符串）；link 为对象或 null，对象恰为 type、id",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#23] amount_fen 的描述写明用户视角：入账为正、扣减为负（不是存储符号）",
+    "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#24] 流水示例按用户视角记符号（至少一正一负），同一子户相邻两行余额与金额衔接，frozen 余额不为负",
+    "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#1] contracts/enums/fund.yaml 新增枚举 ledger_sub_account，取值恰为 available、frozen",
+    "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#2] 两个接口都登记为 GET：operationId、后台鉴权、无请求体与 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#3] 描述写明权限点 fund.view 或 user.lookup 持其一即可、不需二次验证、缺权限 10403",
+    "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#4] 描述写明不含内部备注，两种权限同形同值；未知用户 20001",
+    "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#5] 每个响应声明 X-Trace-Id；200 响应声明必填 Cache-Control: no-store",
+    "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#6] 两个接口的响应在任意层级都不含 memo / operator / note / reject_note / source_ref / created_by",
+    "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#7] 200 响应至少有一个示例，示例都过 schema"
+  ],
+  "risk_note": "RV1 contract (D10-1049 ③, D10-1050 ②, D10-1057, D10-1079). Two admin read-only operations, both x-implementation: planned (implemented by B2-02u): adminGetUserFundSummary GET /admin/v1/users/{user_id}/fund-summary (user_id, available_fen, frozen_fen, negative_since, withdrawn_fen per BR-FUND-18, withdraw_block {blocked, hold_kinds[]} of withdraw_hold_kind) and adminListLedgerEntries GET /admin/v1/ledger?user_id= (filters ledger_type / sub_type / sub_account / accounting_date_from|to / ref, AdminPage + AdminPageSize, {items, page, page_size, total}; rows entry_id, booked_at, accounting_date, ledger_type, sub_type, sub_account, amount_fen in the user's sign, balance_after_fen, voucher {voucher_id, uniq_key, biz_type, biz_id}, link {type, id} | null); new enum ledger_sub_account {available, frozen}. Permission fund.view or user.lookup (04 §11.1); per D10-1057 ① neither operation carries memo / operator / note / reject_note / source_ref / created_by at any level, so both permissions get the same shape and values; unknown user 20001 (AdminUserIdPath); no-store. Generated files regenerated (pnpm codegen and the route generators); conformance.ts registers the new enum components. Host: contract:lint 0, codegen:check 0, tsc 0, rule tests 22 / 22, spec/contracts 561 / 561, contracts-ts unit tests 392. Full verification is the required CI checks (approvals #21).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d264ca31391ff9ef5a41fd938c0cb2cce5cf12cf",
+      "tree": "fc3dc7c64b0a06e8ed3bd0bbafe2c217684849b2",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T17:07:17Z",
+      "finished_at": "2026-11-08T17:07:26Z",
+      "red_tests": [
+        "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#8] 参数恰为 X-Trace-Id 与路径 user_id，分别引用 TraceId、AdminUserIdPath",
+        "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#9] 200 是后台信封 code/msg/data/trace_id；data（AdminUserFundSummary）封闭且恰为 6 个必填字段",
+        "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#10] 字段取值：available_fen 可为负，frozen_fen / withdrawn_fen 为整数分，negative_since 为日期或 null",
+        "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#11] withdraw_block 封闭且恰为 blocked、hold_kinds；hold_kinds 元素 $ref withdraw_hold_kind 枚举",
+        "test/spec/contracts/admin-ledger-read/fund-summary.test.ts > [AC-CT-24zzc#12] withdrawn_fen 按 BR-FUND-18 口径：写明只计 PAID_API、PAID_MANUAL 提现单的 amount_fen",
+        "test/spec/contracts/admin-ledger-read/generated.test.ts > [AC-CT-24zzc#20] contracts-ts 的 enums.gen.ts 生成 ledger_sub_account = [available, frozen]",
+        "test/spec/contracts/admin-ledger-read/generated.test.ts > [AC-CT-24zzc#21] contracts-ts 的 openapi.gen.ts 生成两个路径的 GET 与 operation 类型、AdminUserFundSummary 与 AdminLedgerEntry",
+        "test/spec/contracts/admin-ledger-read/generated.test.ts > [AC-CT-24zzc#22] 后台鉴权路由表恰好各登记一次 GET（auth admin）；planned 与运行时 schema、planned 清单一致",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#13] 参数恰为 X-Trace-Id、user_id（必填）、六个可选筛选与 page、page_size；分页引用 AdminPage / AdminPageSize（≤ 200）",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#14] 筛选取值：ledger_type 取 13 种 ledger_type，sub_account 取 ledger_sub_account，sub_type / ref 为字符串，记账日期区间为 date",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#15] 200 是后台分页信封：data 封闭且恰为 items、page、page_size、total，items 元素为 AdminLedgerEntry",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#16] 流水项封闭且恰为 10 个必填字段",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#17] 流水项取值：booked_at 为 date-time，accounting_date 为 date，amount_fen 带符号整数，balance_after_fen 整数或 null，sub_type 字符串或 null",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#18] ledger_type 与 sub_account 是对 ledger_type、ledger_sub_account 枚举组件的 $ref",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#19] voucher 封闭且恰为 voucher_id、uniq_key、biz_type、biz_id（字符串）；link 为对象或 null，对象恰为 type、id",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#23] amount_fen 的描述写明用户视角：入账为正、扣减为负（不是存储符号）",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts > [AC-CT-24zzc#24] 流水示例按用户视角记符号（至少一正一负），同一子户相邻两行余额与金额衔接，frozen 余额不为负",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#1] contracts/enums/fund.yaml 新增枚举 ledger_sub_account，取值恰为 available、frozen",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#2] 两个接口都登记为 GET：operationId、后台鉴权、无请求体与 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#3] 描述写明权限点 fund.view 或 user.lookup 持其一即可、不需二次验证、缺权限 10403",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#4] 描述写明不含内部备注，两种权限同形同值；未知用户 20001",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#5] 每个响应声明 X-Trace-Id；200 响应声明必填 Cache-Control: no-store",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#6] 两个接口的响应在任意层级都不含 memo / operator / note / reject_note / source_ref / created_by",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts > [AC-CT-24zzc#7] 200 响应至少有一个示例，示例都过 schema"
+      ],
+      "expected": [
+        "test/spec/contracts/admin-ledger-read/fund-summary.test.ts",
+        "test/spec/contracts/admin-ledger-read/generated.test.ts",
+        "test/spec/contracts/admin-ledger-read/ledger.test.ts",
+        "test/spec/contracts/admin-ledger-read/operations.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "84fbc181618b64329aca4f0828ff438e94cfb6e99d2bcb953d2a665b40486d9f"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "contract",
+      "checklist_complete": true,
+      "note": "Codex contract (medium) via tools/agent/codex-run.sh round 1 pass, no findings (couli-runs/CT-24zzc/codex-contract1.out). Reviewed on the implementation commit before the D10-1079 reorder; the implementation was then cherry-picked unchanged after the attempt-3 rule-test commit (same tree for every file it touches)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "494596dd4cf984980d0409772ea7404f74746872",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 5,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claude contexts in 4 attempts (the 4th per D10-1086, approvals 57). Spec-test reviews: Codex r1 fail (3 S1) → attempt 2 → Codex r2 pass; D10-1079 attempt 3 rewrote only [AC-CT-24zzc#22] (direction-free planned consistency) → Codex r3 pass (not counted); per D10-848 ③ / D10-1080 the review that counts is a fresh independent Claude: full r4 fail (1 S1: amount_fen user's sign not pinned; the contract itself already said so) → attempt 4 adds [AC-CT-24zzc#23] / #24 in ledger.test.ts only → independent Claude r5 on that increment pass (D10-1086, approvals 57: not counted against the limit). Codex rounds kept for reference (couli-runs/CT-24zzc/review-codex-spectest-r1.json, codex-spectest2.out, review-codex-spectest-r3.json, review-claude-spectest-r4.json, review-claude-spectest-r5.json)."
+  }
+}
