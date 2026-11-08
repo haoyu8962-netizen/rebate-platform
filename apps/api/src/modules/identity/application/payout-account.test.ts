@@ -1,8 +1,18 @@
 import type { DB } from '@couli/db';
-import type { Kysely, Transaction } from 'kysely';
-import { expect, it } from 'vitest';
+import {
+  DummyDriver,
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+  type CompiledQuery,
+  type QueryResult,
+  type Transaction,
+} from 'kysely';
+import { afterEach, expect, it } from 'vitest';
 import { FixedClock, createRootLogger, type FieldCrypto } from '../../platform/index.ts';
 import {
+  ATTEMPT_PREDATES_CORRECTION,
   createPayoutAccountService,
   project,
   type CurrentAccount,
@@ -160,4 +170,109 @@ it('[AC-CT-26c] project: a bank-card row carries payout_account_id = the current
     change_remaining_this_month: 0,
   });
   expect(projected.masked_account).not.toContain('6222000000000009');
+});
+
+// B1-27l: saveBankCard against a scripted database (every statement recorded, in order).
+const CORRECTED_AT = new Date('2026-10-18T03:00:00.000Z');
+const BEFORE_CORRECTED_AT = new Date('2026-10-18T02:59:59.999Z');
+const scriptedHandles: Kysely<DB>[] = [];
+afterEach(async () => {
+  await Promise.all(scriptedHandles.splice(0).map((db) => db.destroy()));
+});
+
+async function bankCardHarness(realname: { verified_at: Date; row_version: number }) {
+  const statements: string[] = [];
+  const driver = new DummyDriver();
+  const connection = await driver.acquireConnection();
+  connection.executeQuery = async <R>(query: CompiledQuery): Promise<QueryResult<R>> => {
+    statements.push(query.sql);
+    const text = query.sql;
+    let rows: unknown[] = [];
+    if (text.includes('from "app"."users"')) rows = [{ phone_cipher: null }];
+    else if (text.includes('from "app"."realname"')) {
+      rows = [
+        {
+          name_cipher: Buffer.from('张三'),
+          birth_date_cipher: Buffer.from('1990-01-01'),
+          provider: 'demo',
+          ...realname,
+        },
+      ];
+    } else if (text.includes('from "app"."payout_account_changes"')) rows = [{ n: '0' }];
+    return { rows, numAffectedRows: text.startsWith('insert') ? 1n : undefined } as QueryResult<R>;
+  };
+  driver.acquireConnection = async () => connection;
+  const db = new Kysely<DB>({
+    dialect: {
+      createDriver: () => driver,
+      createAdapter: () => new PostgresAdapter(),
+      createIntrospector: (handle) => new PostgresIntrospector(handle),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+  });
+  scriptedHandles.push(db);
+  const service = createPayoutAccountService({
+    db,
+    clock: new FixedClock('2026-10-18T04:00:00.000Z'),
+    crypto: {
+      blindIndex: (value: string) => `hmac:${value}`,
+      encrypt: (plain: string) => plain,
+      decrypt: (cipher: string) => cipher,
+    } as unknown as FieldCrypto,
+    logger: createRootLogger(
+      { level: 'silent', entry: 'api', appEnv: 'test' },
+      { write: () => undefined },
+    ),
+    blocklist: { check: () => Promise.resolve(null) },
+    config: { configValue: () => Promise.resolve(null) },
+  });
+  const save = (attemptReservedAt?: Date) =>
+    db.transaction().execute((trx) =>
+      service.saveBankCard(trx, {
+        appId: 'app_a',
+        userId: '00000000-0000-7000-8000-000000000001',
+        cardNo: '9900010000000019',
+        payeeName: '张三',
+        bankName: '示例银行',
+        cardBin: '990001',
+        ...(attemptReservedAt === undefined ? {} : { attemptReservedAt }),
+      }),
+    );
+  const accountWrites = () =>
+    statements.filter((text) => /^(insert into|update) "app"\."payout_account/.test(text));
+  return { save, statements, accountWrites };
+}
+
+it('[AC-B1-27l] saveBankCard: a record reserved before the correction writes nothing, and the comparison reads after the users lock', async () => {
+  const f = await bankCardHarness({ verified_at: CORRECTED_AT, row_version: 1 });
+  expect(await f.save(BEFORE_CORRECTED_AT)).toEqual(ATTEMPT_PREDATES_CORRECTION);
+  expect(f.accountWrites()).toEqual([]);
+  expect(f.statements.some((text) => text.startsWith('savepoint'))).toBe(false);
+  const lock = f.statements.findIndex((text) => text.endsWith('for no key update'));
+  const compare = f.statements.findIndex(
+    (text) => text.includes('"row_version"') && text.includes('from "app"."realname"'),
+  );
+  expect(lock).toBeGreaterThan(-1);
+  expect(compare).toBeGreaterThan(lock);
+});
+
+it.each([
+  ['reserved at the very instant of the correction', CORRECTED_AT, 1],
+  ['reserved after the correction', new Date('2026-10-18T03:00:00.001Z'), 1],
+  ['on a realname row never rewritten (row_version 0)', BEFORE_CORRECTED_AT, 0],
+] as const)('[AC-B1-27l] saveBankCard: %s binds', async (_name, reservedAt, rowVersion) => {
+  const f = await bankCardHarness({ verified_at: CORRECTED_AT, row_version: rowVersion });
+  expect(await f.save(reservedAt)).toMatchObject({ code: 0 });
+  expect(f.accountWrites()).toHaveLength(1);
+});
+
+it('[AC-B1-27l] saveBankCard: without a record instant nothing is compared and the card binds', async () => {
+  const f = await bankCardHarness({ verified_at: CORRECTED_AT, row_version: 1 });
+  expect(await f.save()).toMatchObject({ code: 0 });
+  expect(f.accountWrites()).toHaveLength(1);
+  expect(
+    f.statements.some(
+      (text) => text.includes('"row_version"') && text.includes('from "app"."realname"'),
+    ),
+  ).toBe(false);
 });

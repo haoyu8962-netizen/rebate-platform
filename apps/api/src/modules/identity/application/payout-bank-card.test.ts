@@ -18,10 +18,11 @@ import {
   type BankCardBindingOptions,
   type BankCardSubmitCommand,
 } from './payout-bank-card.ts';
-import type {
-  PayoutAccountConfigPort,
-  PayoutAccountService,
-  SaveBankCardResult,
+import {
+  ATTEMPT_PREDATES_CORRECTION,
+  type PayoutAccountConfigPort,
+  type PayoutAccountService,
+  type SaveBankCardResult,
 } from './payout-account.ts';
 
 const NOW = '2026-10-18T04:00:00.000Z';
@@ -359,6 +360,7 @@ it('[AC-B1-13f] new verification: reserve in a committed pool transaction, then 
     payeeName: NAME,
     bankName: '示例银行',
     cardBin: '990001',
+    attemptReservedAt: new Date(NOW),
   });
   const text = JSON.stringify(f.lines);
   for (const secret of [CARD, ID_NO, NAME]) expect(text).not.toContain(secret);
@@ -779,4 +781,40 @@ it('[AC-B1-27a] a realname row never rewritten after its insert (row_version 0) 
     realname: { verified_at: new Date('2026-10-18T03:00:00Z'), row_version: 0 },
   });
   expect(await f.submit()).toEqual(SAVED);
+});
+
+/** saveBankCard's internal answer; the harness option is typed for the public results only. */
+const PREDATES = ATTEMPT_PREDATES_CORRECTION as unknown as SaveBankCardResult;
+
+it('[AC-B1-27l] verify path: the save is told the reserved_at and a record predating a correction is matched alone, 40901', async () => {
+  const f = await harness({}, { save: PREDATES });
+  expect(await f.submit()).toEqual({ code: 40901 });
+  expect(f.saveBankCard.mock.calls[0]![1].attemptReservedAt).toEqual(new Date(NOW));
+  expect(f.writes('pool').filter((q) => q.sql.startsWith('update'))[0]!.parameters[0]).toBe(
+    'matched',
+  );
+  expect(f.writes('claim')).toEqual([]);
+});
+
+it('[AC-B1-27l] recheck path: a record predating a correction is matched alone, 40901, no new verification', async () => {
+  const reservedAt = new Date('2026-10-18T03:59:50Z');
+  const f = await harness(
+    { latest: [attemptRow('unknown', { reserved_at: reservedAt })] },
+    { save: PREDATES, query: async () => 'match' },
+  );
+  expect(await f.submit()).toEqual({ code: 40901 });
+  expect(f.saveBankCard.mock.calls[0]![1].attemptReservedAt).toEqual(reservedAt);
+  expect(f.query).toHaveBeenCalledTimes(1);
+  expect(f.verify).not.toHaveBeenCalled();
+  expect(f.writes('pool').filter((q) => q.sql.startsWith('update'))[0]!.parameters[0]).toBe(
+    'matched',
+  );
+  expect(f.writes('claim')).toEqual([]);
+});
+
+it('[AC-B1-27l] a reused matched record predating a later correction is 40901 and is not settled again', async () => {
+  const f = await harness({ latest: [attemptRow('matched')] }, { save: PREDATES });
+  expect(await f.submit()).toEqual({ code: 40901 });
+  expect(f.writes('pool')).toEqual([]);
+  expect(f.writes('claim')).toEqual([]);
 });

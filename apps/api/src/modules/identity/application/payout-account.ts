@@ -57,6 +57,14 @@
 // so what changed while the vendor answered is judged here. bank_name and card_bin come from the
 // card BIN (the caller's lookup), never from the request body. A unique violation of
 // payout_accounts_current_bank_card_key answers 30308 as for Alipay.
+// A real-name correction during the vendor call (B1-27l; BR-ID-25 细则「实名更正」): the correction
+// takes this same users row lock, so only a read after the lock can see it. With the record's
+// attemptReservedAt, once every check has passed and just before the writes, a realname row rewritten
+// after its insert (row_version > 0) whose verified_at is later than that instant means the answer
+// was about the old identity: nothing is written and ATTEMPT_PREDATES_CORRECTION is returned, an
+// internal result the caller turns into its own answer. A record reserved at the very instant of
+// the correction is the new identity's. Callers without a record (attemptReservedAt absent) are
+// not compared.
 // payoutAccountChecks / lockPayoutUser are the lock-phase checks themselves (⓪ ① ② same ④, no
 // write): the verification reservation (payout-bank-card.ts) runs them in its own short
 // transaction before it reserves the day's quota (BR-WDR-02 细则「顺序」).
@@ -118,6 +126,8 @@ export interface SaveBankCardCommand extends PayoutAccountSubject {
   /** The opening bank of the card BIN (CardBinPort), never the request body's bank_name. */
   readonly bankName: string;
   readonly cardBin: string;
+  /** reserved_at of the verification record this save rests on (file header: B1-27l). */
+  readonly attemptReservedAt?: Date;
 }
 
 /** The refusals of the lock phase, shared by both methods and the verification reservation. */
@@ -130,6 +140,12 @@ export type SaveBankCardResult =
   | { readonly code: 0; readonly data: components['schemas']['PayoutAccountBankCard'] }
   | { readonly code: 20001; readonly data: { readonly fields: readonly string[] } }
   | PayoutAccountRefusal;
+
+/** The record predates a real-name correction (file header); internal, never a response code. */
+export const ATTEMPT_PREDATES_CORRECTION = Object.freeze({
+  code: 'attempt_predates_correction',
+} as const);
+export type AttemptPredatesCorrection = typeof ATTEMPT_PREDATES_CORRECTION;
 
 /** Business configuration of one app, read on the caller's handle (content's reader). */
 export interface PayoutAccountConfigPort {
@@ -163,7 +179,10 @@ export interface PayoutAccountService {
    * B1-13f: the bank-card save after a matched verification, in the caller's transaction; the
    * same lock and order as save (see the file header). Never verifies or reserves anything.
    */
-  saveBankCard(trx: Transaction<DB>, command: SaveBankCardCommand): Promise<SaveBankCardResult>;
+  saveBankCard(
+    trx: Transaction<DB>,
+    command: SaveBankCardCommand,
+  ): Promise<SaveBankCardResult | AttemptPredatesCorrection>;
 }
 
 /** GET /v1/me/payout-account data: the masked current account, or {} when nothing is bound. */
@@ -586,6 +605,30 @@ async function writeAccount(
   return { id };
 }
 
+/**
+ * Whether a record reserved at `reservedAt` predates a real-name correction (file header). `handle`
+ * must already hold lockPayoutUser's lock: the correction commits under that same lock.
+ */
+async function predatesCorrection(
+  handle: Kysely<DB>,
+  subject: PayoutAccountSubject,
+  reservedAt: Date,
+): Promise<boolean> {
+  const row = await handle
+    .withSchema('app')
+    .selectFrom('realname')
+    .select(['verified_at', 'row_version'])
+    .where('app_id', '=', subject.appId)
+    .where('user_id', '=', subject.userId)
+    .where('status', '=', 'verified')
+    .executeTakeFirst();
+  // The lock phase has just read this verified row, and its writers need the same lock.
+  if (row === undefined || !(row.verified_at instanceof Date)) {
+    throw new Error('identity: verified realname record missing under the user lock');
+  }
+  return row.row_version > 0 && reservedAt.getTime() < row.verified_at.getTime();
+}
+
 /** The masked projection of a stored bank-card row. */
 function projectBankCard(
   row: CurrentAccount,
@@ -669,7 +712,7 @@ export function createPayoutAccountService(
     async saveBankCard(
       transaction: Transaction<DB>,
       command: SaveBankCardCommand,
-    ): Promise<SaveBankCardResult> {
+    ): Promise<SaveBankCardResult | AttemptPredatesCorrection> {
       const trx = transaction.withSchema('app');
       const subject: PayoutAccountSubject = { appId: command.appId, userId: command.userId };
 
@@ -698,6 +741,12 @@ export function createPayoutAccountService(
       if (checks.kind === 'refused') return checks.result;
       if (checks.kind === 'same') {
         return { code: 0, data: projectBankCard(checks.current, crypto, checks.remaining) };
+      }
+      if (
+        command.attemptReservedAt !== undefined &&
+        (await predatesCorrection(trx, subject, command.attemptReservedAt))
+      ) {
+        return ATTEMPT_PREDATES_CORRECTION;
       }
 
       const written = await writeAccount(trx, subject, target, checks, {

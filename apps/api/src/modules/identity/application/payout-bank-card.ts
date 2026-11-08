@@ -54,6 +54,10 @@
 // and never rewritten has had one identity only, so every record of its id is that identity's.
 // The key's own older record is another request (20901); an older latest record is as if there
 // were none (a new paid verification of the new identity).
+// Those checks run in the reservation, so a correction landing after it (typically during the
+// vendor call, outside every lock) is judged by saveBankCard under the users row lock, against the
+// record's reserved_at (B1-27l): such a record stays what the vendor answered (matched, written
+// alone: the 40901 is not stored and the claim rolls back), nothing is bound, and the answer is 40901.
 //
 // Re-verification (B1-02zq; BR-WDR-01 细则「位置与返回码」): createPayoutAccountChange judges the gate
 // of reverify-gate.ts first, for both methods: the claim's post-miss checks judged the step-up token
@@ -82,6 +86,7 @@ import { REALNAME_CONTEXT } from '../infra/realname-reader.ts';
 import type { BankCardVerifierPort, CardBinPort } from '../ports/bank-card-verifier.ts';
 import type { ReverifyGate, ReverifyRefusal } from './reverify-gate.ts';
 import {
+  ATTEMPT_PREDATES_CORRECTION,
   BANK_CARD_CONTEXT,
   CHANGE_LIMIT_KEY,
   PAYOUT_METHODS_KEY,
@@ -95,6 +100,7 @@ import {
   type PayoutAccountConfigPort,
   type PayoutAccountRefusal,
   type PayoutAccountService,
+  type AttemptPredatesCorrection,
   type PayoutAccountSubject,
   type SaveAlipayCommand,
   type SaveAlipayResult,
@@ -399,7 +405,7 @@ export function createBankCardBinding(options: BankCardBindingOptions): BankCard
   ): Promise<BankCardSubmitResult> {
     assertOwnCard(attempt, fingerprint);
     const settle = attempt.status !== 'matched';
-    let result: SaveBankCardResult;
+    let result: SaveBankCardResult | AttemptPredatesCorrection;
     try {
       result = await accounts.saveBankCard(trx, {
         appId: request.subject.appId,
@@ -408,11 +414,17 @@ export function createBankCardBinding(options: BankCardBindingOptions): BankCard
         payeeName: request.command.payeeName,
         bankName: request.bank.bank_name,
         cardBin: request.bank.bin,
+        attemptReservedAt: attempt.reserved_at,
       });
     } catch (error) {
       // trx rolls back: the vendor's answer is still recorded.
       if (settle) await settleAlone(attempt, 'matched');
       throw error;
+    }
+    if (result.code === ATTEMPT_PREDATES_CORRECTION.code) {
+      // The vendor did answer (for the old identity); 40901 is not stored, so the record goes alone.
+      if (settle) await settleAlone(attempt, 'matched');
+      return BUSY;
     }
     if (!settle) return result;
     if (stored(result.code)) {

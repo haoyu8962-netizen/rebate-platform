@@ -1,0 +1,79 @@
+{
+  "risk_note": "RV2 identity payout account binding (B1-27a money r1 S2; ruling D10-1077 ③; no money moves). During the vendor call of a bank-card verification, outside every lock, customer service could complete a real-name correction (same name, new ID number); the vendor's match for the old identity was then bound under the new one. saveBankCard now compares, under the users row lock that the correction also takes and after every existing check, the verification record's reserved_at with the realname row's verified_at (row_version > 0 and strictly earlier): nothing is written, the record is settled matched on its own write, and the answer is 40901, not stored. Retrying with a new Idempotency-Key costs one more paid verification (accepted by D10-1077 ③, the interleaving is rare); the same key gets 20901 as before. Callers without a verification record (Alipay) are unchanged. No migration, no contract change. Integration bank-card-correction-race plus the frozen payout-account, payout-bank-card, payout-verify-recheck, admin-realname and realname-payout-invalidate directories 290/290; tsc 0.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (D10-1075, medium) over the whole implementation from the last rule-test commit: pass with no findings. Checklist rounding na, sign na, idempotency ok, concurrency ok, partial_refund na, clock ok, app_id ok. Static, nothing executed by Codex. couli-runs/B1-27l/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude each round (D10-848, D10-1080). Round 1 fail: one S1 (nothing proved the comparison happens inside the users row lock; every case had the correction committed before the bind). Round 2 adds correction-lock.int.test.ts, a deterministic interleaving with an independent transaction holding the row and pg_blocking_pids: pass. Red: red/1 ok, problems 0, exempt 0, 5 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-27l",
+  "spec_commit": "6c9d3482f305924b7f908ec3262f526697eadae0",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "red_tests": [
+    "test/spec/identity/bank-card-correction-race/correction-lock.int.test.ts > [AC-B1-27l#5] 供应商答一致后实名更正持 users 行锁、绑卡请求已被它阻塞，更正提交后不绑卡（首绑与换绑）、40901、无变更记录、记录照实 matched",
+    "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#1] 核验期间实名更正：不绑卡、40901、记录照实 matched、无绑卡写入，同键重试 20901；未更正、更正早于或等于预留时刻照常绑卡",
+    "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#2] 核验期间实名更正后换新键重试：不复用旧记录，第二次供应商调用按新身份核验，一致后绑卡成功",
+    "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#3] 换绑路径：已有支付宝时核验期间实名更正，原账号仍是当前账号，不写变更记录、不占当月次数，记录 matched",
+    "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#4] 请求内复核拿到一致同样比较：复核期间实名更正不绑卡、40901，旧记录落 matched，本次不再发付费核验"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6c9d3482f305924b7f908ec3262f526697eadae0",
+      "tree": "e716e4a181631a398078e2d232aea717f19b5c88",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T19:53:07Z",
+      "finished_at": "2026-11-08T19:53:31Z",
+      "red_tests": [
+        "test/spec/identity/bank-card-correction-race/correction-lock.int.test.ts > [AC-B1-27l#5] 供应商答一致后实名更正持 users 行锁、绑卡请求已被它阻塞，更正提交后不绑卡（首绑与换绑）、40901、无变更记录、记录照实 matched",
+        "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#1] 核验期间实名更正：不绑卡、40901、记录照实 matched、无绑卡写入，同键重试 20901；未更正、更正早于或等于预留时刻照常绑卡",
+        "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#2] 核验期间实名更正后换新键重试：不复用旧记录，第二次供应商调用按新身份核验，一致后绑卡成功",
+        "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#3] 换绑路径：已有支付宝时核验期间实名更正，原账号仍是当前账号，不写变更记录、不占当月次数，记录 matched",
+        "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#4] 请求内复核拿到一致同样比较：复核期间实名更正不绑卡、40901，旧记录落 matched，本次不再发付费核验"
+      ],
+      "expected": [
+        "test/spec/identity/bank-card-correction-race/correction-lock.int.test.ts",
+        "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "1edb6cb5b77d6ef4bb109a9dd232a268810835b0bb8c05376e4bbcc2f01759c2"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "dd40923afa5a19e30ee80dc9d15048aa4f53f4c9",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}
