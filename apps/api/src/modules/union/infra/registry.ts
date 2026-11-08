@@ -56,6 +56,7 @@ import {
   type TaobaoOrderSlotReader,
   type TaobaoOrderWarning,
   type TaobaoOwnOrderReader,
+  type TaobaoPriceWarningEvent,
   type TaobaoSearchSlotReader,
   type TaobaoSearchSource,
   type TaobaoSearchWarning,
@@ -78,6 +79,8 @@ export interface TaobaoLiveOptions {
   readonly credentials: () => Promise<TaobaoCredentials>;
   readonly transport: UnionTransport;
   readonly warn?: (event: TaobaoWarning) => void;
+  /** B1-04zzzzg: handed to TaobaoUnionAdapter as `priceWarn` (detail / official search prices). */
+  readonly priceWarn?: (event: TaobaoPriceWarningEvent) => void;
   /**
    * B1-04e (D10-486 ①): the 大淘客 order source. When given, the registry constructs one
    * DataokeClient from it (plus the registry clock) and hands it to TaobaoUnionAdapter as
@@ -239,6 +242,8 @@ export function createUnionRegistry(options?: UnionRegistryOptions): UnionRegist
           clock: options.clock,
           endpoint,
           ...(live.warn === undefined ? {} : { warn: live.warn }),
+          // B1-04zzzzg: the price warning hook as it is.
+          ...(live.priceWarn === undefined ? {} : { priceWarn: live.priceWarn }),
           // B1-04l (D10-479): the same BR-PRICE-02 settings port the demo adapter gets.
           ...(options.taobaoPriceSettings === undefined
             ? {}

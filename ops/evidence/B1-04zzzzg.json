@@ -1,0 +1,104 @@
+{
+  "task": "B1-04zzzzg",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "72e3905ae288966c973cf6004b56419faa1c0e50",
+  "red_tests": [
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#1] 详情 calc_diff → priceWarn 恰好一次 { method: taobao.tbk.item.info.upgrade.get, code: PRICE_CALC_DIFF }，不多带字段，warn 不调用；返回结果不变（anomaly、三价 0）；价格合格的详情不告警；没装 priceWarn 照常返回、不报错",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#2] 详情 zk_final_price 非数字（missing_field）：mapTaobaoPrice 给出一条 PRICE_CALC_DIFF → priceWarn 恰好一次 { method, code }，warn 不调用；返回结果不变",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#2] 详情 商品券已过期（expired_item）：mapTaobaoPrice 给出一条 PRICE_CALC_DIFF → priceWarn 恰好一次 { method, code }，warn 不调用；返回结果不变",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#2] 详情 到手价不大于 0（invalid_price）：mapTaobaoPrice 给出一条 PRICE_CALC_DIFF → priceWarn 恰好一次 { method, code }，warn 不调用；返回结果不变",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#3] 详情未知优惠名（缺省 unavailable）→ priceWarn 恰好一次 PRICE_PROMO_UNKNOWN：方法名、码与归一化（NFKC + trim）后的优惠名 promotion_title，共三个字段；warn 不调用；返回 anomaly / unknown_promo 不变",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#4] price.taobao.unknown_promo = add_back：价格照常合格（59.90 / 10.00 / 49.90），未知优惠名照样经 priceWarn 发一次，warn 不调用",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#5] 一个详情多条告警（两个未知优惠名 + calc_diff）→ priceWarn 每条各一次，共三次，warn 不调用；返回 calc_diff 不变",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#6] 价格告警不含商品信息：没有商品 ID、商品标题、金额、图片 / 推广链接、券 ID、卖家、request_id 与调用方标识；字段值都是字符串",
+    "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#7] 性质：任意优惠明细（已知 / 未知名、全角与空白写法）与对得上 / 对不上的价格 → priceWarn 收到的恰是 mapTaobaoPrice 的告警（每条一次，方法名 + 码，未知优惠另带归一化优惠名），warn 不调用，返回三价与它一致",
+    "test/spec/union/taobao-price-warnings/official-search.test.ts > [AC-B1-04zzzzg#8] 官方搜索：每行的价格告警经 priceWarn 各发一次（方法名为物料搜索、码，未知优惠另带归一化优惠名），合格行不告警；warn 与跳行事件都不调用；整页照常返回、三价不变；没装 priceWarn 同样返回、不报错",
+    "test/spec/union/taobao-price-warnings/official-search.test.ts > [AC-B1-04zzzzg#9] 官方搜索的价格告警不含取值：没有搜索 / 详情口径商品 ID、商品标题、金额、图片与推广链接、券 ID、推广位与调用方标识；字段值都是字符串",
+    "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#10] 端到端：淘宝详情 calc_diff 经 priceWarn 记一条自己的 warn 事件（不是 TAOBAO_API_PERMISSION_DENIED），字段只有 event / method / code，不含商品信息，返回结果不变；真正的 code 11 仍记权限告警，字段照旧",
+    "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#11] 端到端：淘宝详情未知优惠名经 priceWarn 记一条自己的 warn 事件：event / method / code 之外只带归一化优惠名，不是权限事件，不含商品信息；返回 unknown_promo 不变",
+    "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#12] 端到端：官方搜索价格不合格的行经 priceWarn 记自己的 warn 事件（方法名为物料搜索），不是权限事件，不含取值；整页照常返回",
+    "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#13] 端到端：大淘客搜索的 PRICE_ANOMALY / invalid_commission / invalid_item 各记一条自己的 warn 事件（不是 TAOBAO_API_PERMISSION_DENIED），字段只有 event / method / code，不含商品信息；图片主机仍记 DATAOKE_IMAGE_HOST_DROPPED；结果不变",
+    "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#14] 模块装配的淘宝 warn 钩子按码分事件：价格类与行校验类（任一方法名）都不记成权限事件、字段只有 event / method / code；code 11（有无 sub_code）仍记 TAOBAO_API_PERMISSION_DENIED、字段照旧；图片主机仍 DATAOKE_IMAGE_HOST_DROPPED",
+    "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#15] 模块给淘宝适配器装了 priceWarn：详情与官方搜索方法名下，PRICE_CALC_DIFF 记一条自己的 warn 事件、字段只有 event / method / code；PRICE_PROMO_UNKNOWN 另只带归一化优惠名；都不是权限 / 图片主机事件，一条告警只记一条"
+  ],
+  "risk_note": "RV2 (union): mapTaobaoPrice warnings that mapTaobaoDetail used to drop now reach the log: the 淘宝 detail (getItem) and official search rows emit each PRICE_CALC_DIFF / PRICE_PROMO_UNKNOWN once through a new optional priceWarn hook (method, code, plus the promotion name for an unknown promotion; never an item id, item title, amount or link), handed to the adapter through the registry and logged by union.module as TAOBAO_PRICE_WARNING; the existing warn hook is still not called for price anomalies (frozen [AC-B1-04zx#36]). logTaobaoWarning now routes by code: only code 11 is TAOBAO_API_PERMISSION_DENIED (unchanged fields), the 大淘客 image-host tally stays DATAOKE_IMAGE_HOST_DROPPED, the 大淘客 search price codes go to TAOBAO_PRICE_WARNING, invalid_item / invalid_commission to TAOBAO_SEARCH_ROW_INVALID, others to TAOBAO_WARNING_UNKNOWN (they were all mislabelled as a permission denial). Price computation unchanged. Followup of B1-04l. Rule tests by independent Claude (approvals #36) in 2 attempts (r1 spec-test S1: the warn-hook route conflicted with frozen #36, moved to priceWarn; \\u3000 escapes), container red/2 PASS (17 tests in 3 files). Implementation Claude Opus 5.5 (1 round; registry.ts added to paths by a ledger patch). Host: union rule suite 4845 / 4845 (one unrelated taobao-price-config wiring timeout in a first run), api union 379 / 379, tsc -b apps/api test 0, eslint / prettier / depcruise clean; full verification is the required CI checks.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "72e3905ae288966c973cf6004b56419faa1c0e50",
+      "tree": "a89ee6c81cb058ba67ade4221ad3e1ca812a5f6f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T18:53:46Z",
+      "finished_at": "2026-11-08T18:53:57Z",
+      "red_tests": [
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#1] 详情 calc_diff → priceWarn 恰好一次 { method: taobao.tbk.item.info.upgrade.get, code: PRICE_CALC_DIFF }，不多带字段，warn 不调用；返回结果不变（anomaly、三价 0）；价格合格的详情不告警；没装 priceWarn 照常返回、不报错",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#2] 详情 zk_final_price 非数字（missing_field）：mapTaobaoPrice 给出一条 PRICE_CALC_DIFF → priceWarn 恰好一次 { method, code }，warn 不调用；返回结果不变",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#2] 详情 商品券已过期（expired_item）：mapTaobaoPrice 给出一条 PRICE_CALC_DIFF → priceWarn 恰好一次 { method, code }，warn 不调用；返回结果不变",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#2] 详情 到手价不大于 0（invalid_price）：mapTaobaoPrice 给出一条 PRICE_CALC_DIFF → priceWarn 恰好一次 { method, code }，warn 不调用；返回结果不变",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#3] 详情未知优惠名（缺省 unavailable）→ priceWarn 恰好一次 PRICE_PROMO_UNKNOWN：方法名、码与归一化（NFKC + trim）后的优惠名 promotion_title，共三个字段；warn 不调用；返回 anomaly / unknown_promo 不变",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#4] price.taobao.unknown_promo = add_back：价格照常合格（59.90 / 10.00 / 49.90），未知优惠名照样经 priceWarn 发一次，warn 不调用",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#5] 一个详情多条告警（两个未知优惠名 + calc_diff）→ priceWarn 每条各一次，共三次，warn 不调用；返回 calc_diff 不变",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#6] 价格告警不含商品信息：没有商品 ID、商品标题、金额、图片 / 推广链接、券 ID、卖家、request_id 与调用方标识；字段值都是字符串",
+        "test/spec/union/taobao-price-warnings/detail.test.ts > [AC-B1-04zzzzg#7] 性质：任意优惠明细（已知 / 未知名、全角与空白写法）与对得上 / 对不上的价格 → priceWarn 收到的恰是 mapTaobaoPrice 的告警（每条一次，方法名 + 码，未知优惠另带归一化优惠名），warn 不调用，返回三价与它一致",
+        "test/spec/union/taobao-price-warnings/official-search.test.ts > [AC-B1-04zzzzg#8] 官方搜索：每行的价格告警经 priceWarn 各发一次（方法名为物料搜索、码，未知优惠另带归一化优惠名），合格行不告警；warn 与跳行事件都不调用；整页照常返回、三价不变；没装 priceWarn 同样返回、不报错",
+        "test/spec/union/taobao-price-warnings/official-search.test.ts > [AC-B1-04zzzzg#9] 官方搜索的价格告警不含取值：没有搜索 / 详情口径商品 ID、商品标题、金额、图片与推广链接、券 ID、推广位与调用方标识；字段值都是字符串",
+        "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#10] 端到端：淘宝详情 calc_diff 经 priceWarn 记一条自己的 warn 事件（不是 TAOBAO_API_PERMISSION_DENIED），字段只有 event / method / code，不含商品信息，返回结果不变；真正的 code 11 仍记权限告警，字段照旧",
+        "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#11] 端到端：淘宝详情未知优惠名经 priceWarn 记一条自己的 warn 事件：event / method / code 之外只带归一化优惠名，不是权限事件，不含商品信息；返回 unknown_promo 不变",
+        "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#12] 端到端：官方搜索价格不合格的行经 priceWarn 记自己的 warn 事件（方法名为物料搜索），不是权限事件，不含取值；整页照常返回",
+        "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#13] 端到端：大淘客搜索的 PRICE_ANOMALY / invalid_commission / invalid_item 各记一条自己的 warn 事件（不是 TAOBAO_API_PERMISSION_DENIED），字段只有 event / method / code，不含商品信息；图片主机仍记 DATAOKE_IMAGE_HOST_DROPPED；结果不变",
+        "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#14] 模块装配的淘宝 warn 钩子按码分事件：价格类与行校验类（任一方法名）都不记成权限事件、字段只有 event / method / code；code 11（有无 sub_code）仍记 TAOBAO_API_PERMISSION_DENIED、字段照旧；图片主机仍 DATAOKE_IMAGE_HOST_DROPPED",
+        "test/spec/union/taobao-price-warnings/wiring.test.ts > [AC-B1-04zzzzg#15] 模块给淘宝适配器装了 priceWarn：详情与官方搜索方法名下，PRICE_CALC_DIFF 记一条自己的 warn 事件、字段只有 event / method / code；PRICE_PROMO_UNKNOWN 另只带归一化优惠名；都不是权限 / 图片主机事件，一条告警只记一条"
+      ],
+      "expected": [
+        "test/spec/union/taobao-price-warnings/detail.test.ts",
+        "test/spec/union/taobao-price-warnings/official-search.test.ts",
+        "test/spec/union/taobao-price-warnings/wiring.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "8d078cc30ce6c586434fda1989a75d994d207a14225cf9521e21b9ebebb88b50"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "money r1 pass, no findings (couli-runs/B1-04zzzzg/review-codex.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "r1 fail (S1 conflict with frozen [AC-B1-04zx#36]; S2 literal U+3000) → round-2 tests route price warnings through priceWarn and escape \\u3000; r2 pass"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d7c8d6ab01d1c1863391637018ea8600b8f3a43f",
+    "specs": "fb3470055042136c0a5f959c092261acff2a7f7f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

@@ -47,6 +47,7 @@ import type {
   TaobaoOrderSlotReader,
   TaobaoOwnOrderReader,
   TaobaoOrderWarning,
+  TaobaoPriceWarningEvent,
   TaobaoSearchSlotReader,
   TaobaoSearchWarning,
 } from './infra/taobao/taobao-adapter.ts';
@@ -217,13 +218,48 @@ function isImageHostWarning(warning: TaobaoWarning): warning is DataokeImageHost
   );
 }
 
+/** B1-04zzzzg: the price codes on the Taobao warn hook (大淘客 search warnOf). */
+const TAOBAO_PRICE_CODES: ReadonlySet<string> = new Set([
+  'PRICE_ANOMALY',
+  'PRICE_CALC_DIFF',
+  'PRICE_PROMO_UNKNOWN',
+]);
+/** B1-04zzzzg: the row validation codes on the Taobao warn hook (大淘客 search warnOf). */
+const TAOBAO_ROW_CODES: ReadonlySet<string> = new Set(['invalid_item', 'invalid_commission']);
+/** B1-04j: the TOP code of an API permission refusal (response.ts). */
+const TAOBAO_PERMISSION_CODE = '11';
+
 /**
- * The Taobao warn hook (B1-04j: an API permission refusal) as flat pino fields: only the method
- * name and code / sub_code; no message text, request id or request content.
- * B1-04zzj: the 大淘客 image host tally is its own event with only the host name and the count
- * (no address, no item id), not an API permission warning.
+ * B1-04zzzzg (D10-1072 ①): the Taobao adapter's priceWarn hook (detail / official search price
+ * warnings) as its own event: only the method name and code, plus the normalized promotion name
+ * for PRICE_PROMO_UNKNOWN; no item id, title, amount or link.
  */
-function logTaobaoWarning(logger: RootLogger, warning: TaobaoWarning): void {
+export function logTaobaoPriceWarning(logger: RootLogger, warning: TaobaoPriceWarningEvent): void {
+  logger.warn(
+    {
+      event: 'TAOBAO_PRICE_WARNING',
+      method: warning.method,
+      code: warning.code,
+      ...(warning.code === 'PRICE_PROMO_UNKNOWN'
+        ? { promotion_title: warning.promotion_title }
+        : {}),
+    },
+    'taobao price warning',
+  );
+}
+
+/**
+ * The Taobao warn hook as flat pino fields, one event per kind of code; no message text, request
+ * id, request content or item data.
+ * - B1-04j: code 11 (an API permission refusal) → TAOBAO_API_PERMISSION_DENIED with the method
+ *   name and code / sub_code.
+ * - B1-04zzj: the 大淘客 image host tally is its own event with only the host name and the count
+ *   (no address, no item id), not an API permission warning.
+ * - B1-04zzzzg: the 大淘客 search's price codes → TAOBAO_PRICE_WARNING, its row validation codes →
+ *   TAOBAO_SEARCH_ROW_INVALID, any other code → TAOBAO_WARNING_UNKNOWN; each only event / method /
+ *   code.
+ */
+export function logTaobaoWarning(logger: RootLogger, warning: TaobaoWarning): void {
   if (isImageHostWarning(warning)) {
     logger.warn(
       {
@@ -234,6 +270,15 @@ function logTaobaoWarning(logger: RootLogger, warning: TaobaoWarning): void {
       },
       'dataoke search images dropped for their host',
     );
+    return;
+  }
+  if (warning.code !== TAOBAO_PERMISSION_CODE) {
+    const [event, message] = TAOBAO_PRICE_CODES.has(warning.code)
+      ? ['TAOBAO_PRICE_WARNING', 'taobao price warning']
+      : TAOBAO_ROW_CODES.has(warning.code)
+        ? ['TAOBAO_SEARCH_ROW_INVALID', 'taobao search row invalid']
+        : ['TAOBAO_WARNING_UNKNOWN', 'unknown taobao warning'];
+    logger.warn({ event, method: warning.method, code: warning.code }, message);
     return;
   }
   logger.warn(
@@ -581,6 +626,8 @@ async function startUnionRegistry(
       credentials,
       transport: archivedTransport(createUnionHttpTransport(), source, clock, logger),
       warn: (warning: TaobaoWarning) => logTaobaoWarning(logger, warning),
+      // B1-04zzzzg: detail / official search price warnings, their own event (not `warn`).
+      priceWarn: (warning: TaobaoPriceWarningEvent) => logTaobaoPriceWarning(logger, warning),
       // B1-04zn (D10-530): the two switches from the passed config (a hand-built config without
       // them counts as the defaults); the adapter only acts on 'dataoke' with an order source.
       convertSource: config.taobaoConvertSource ?? 'baichuan',

@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest';
+import type { TaobaoPriceWarning } from '../../domain/taobao-price.ts';
 import { UnionError } from '../../domain/types.ts';
-import { detailItemId, detailRows, mapTaobaoDetail } from './goods.ts';
+import {
+  detailItemId,
+  detailRows,
+  mapTaobaoDetail,
+  taobaoPriceWarningEvent,
+  TAOBAO_ITEM_DETAIL,
+} from './goods.ts';
 
 function code(run: () => unknown): string {
   try {
@@ -264,3 +271,60 @@ it.each([
     });
   },
 );
+
+it('[AC-B1-04zzzzg-UNIT#1] mapTaobaoDetail 把 mapTaobaoPrice 的每条价格告警按序交回调一次；返回与不给回调时相同', () => {
+  const input = row({
+    price_promotion_info: {
+      zk_final_price: '10.00',
+      final_promotion_price: '7.00',
+      final_promotion_path_list: {
+        final_promotion_path_map_data: [
+          { promotion_title: '单元未知优惠甲', promotion_fee: '1.00' },
+          { promotion_title: '单元未知优惠乙', promotion_fee: '1.00' },
+        ],
+      },
+    },
+  });
+  const seen: TaobaoPriceWarning[] = [];
+  const reported = mapTaobaoDetail(input, 'unit-item', now, { unknown_promo: 'add_back' }, (w) =>
+    seen.push(w),
+  );
+  expect(seen).toEqual([
+    { code: 'PRICE_PROMO_UNKNOWN', title: '单元未知优惠甲' },
+    { code: 'PRICE_PROMO_UNKNOWN', title: '单元未知优惠乙' },
+    { code: 'PRICE_CALC_DIFF' },
+  ]);
+  expect(reported).toEqual(mapTaobaoDetail(input, 'unit-item', now, { unknown_promo: 'add_back' }));
+  expect(reported).toMatchObject({ price_status: 'anomaly', price_anomaly_reason: 'calc_diff' });
+});
+
+it('[AC-B1-04zzzzg-UNIT#2] 价格合格的详情不回调；标题缺失在算价前拒绝，不回调', () => {
+  const seen: TaobaoPriceWarning[] = [];
+  const ok = mapTaobaoDetail(row(), 'unit-item', now, undefined, (w) => seen.push(w));
+  expect(ok).toMatchObject({ price_status: 'ok' });
+  expect(
+    code(() =>
+      mapTaobaoDetail(
+        row({
+          item_basic_info: {},
+          price_promotion_info: { zk_final_price: '10.00', final_promotion_price: '9.00' },
+        }),
+        'unit-item',
+        now,
+        undefined,
+        (w) => seen.push(w),
+      ),
+    ),
+  ).toBe('upstream_unavailable');
+  expect(seen).toEqual([]);
+});
+
+it('[AC-B1-04zzzzg-UNIT#3] taobaoPriceWarningEvent 只带方法名与码，未知优惠另带 promotion_title', () => {
+  expect(taobaoPriceWarningEvent(TAOBAO_ITEM_DETAIL, { code: 'PRICE_CALC_DIFF' })).toEqual({
+    method: TAOBAO_ITEM_DETAIL,
+    code: 'PRICE_CALC_DIFF',
+  });
+  expect(
+    taobaoPriceWarningEvent('unit.method', { code: 'PRICE_PROMO_UNKNOWN', title: '单元优惠' }),
+  ).toEqual({ method: 'unit.method', code: 'PRICE_PROMO_UNKNOWN', promotion_title: '单元优惠' });
+});

@@ -46,7 +46,11 @@
 // GET /api/dels/shop/convert（v1.0.0，见 shop-convert.ts），归档 kind = convert；没有 → 不声明，
 // convertShop 为 adapter_unimplemented（不取凭据、不发请求）。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
-import type { TaobaoPriceOptions, TaobaoPriceSettingsReader } from '../../domain/taobao-price.ts';
+import type {
+  TaobaoPriceOptions,
+  TaobaoPriceSettingsReader,
+  TaobaoPriceWarning,
+} from '../../domain/taobao-price.ts';
 import {
   UnionError,
   type CallCtx,
@@ -120,6 +124,8 @@ import {
   TAOBAO_ITEM_DETAIL,
   TAOBAO_ITEM_DETAIL_ENVELOPE,
   TAOBAO_ITEM_DETAIL_SCENE,
+  taobaoPriceWarningEvent,
+  type TaobaoPriceWarningEvent,
 } from './goods.ts';
 import {
   checkShareLink,
@@ -211,6 +217,7 @@ export type {
 } from './official-search.ts';
 export type { TaobaoSearchFallbackWarning } from './search-fallback.ts';
 export type { TaobaoWarning } from './response.ts';
+export type { TaobaoPriceWarningEvent } from './goods.ts';
 export type {
   TaobaoOrderSlotReader,
   TaobaoOrderWarning,
@@ -240,6 +247,11 @@ export interface TaobaoAdapterOptions {
    * and passed to mapTaobaoPrice. Without it the BR-PRICE-02 defaults apply.
    */
   readonly priceSettings?: TaobaoPriceSettingsReader;
+  /**
+   * B1-04zzzzg (D10-1072 ①): every price warning of getItem and of the official search rows, once
+   * each (see TaobaoPriceWarningEvent); never through `warn`. Without it nothing is reported.
+   */
+  readonly priceWarn?: (event: TaobaoPriceWarningEvent) => void;
   /**
    * B1-04e (D10-486 ①): the 大淘客 client the order / refund / punishment ports will read from
    * (mapping is B1-04f / B1-04z). Assembled by the registry from `taobaoLive.orderSource` only in
@@ -362,6 +374,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   readonly #endpoint: UnionEndpoint;
   readonly #warn: ((event: TaobaoWarning) => void) | undefined;
   readonly #priceSettings: TaobaoPriceSettingsReader | undefined;
+  readonly #priceWarn: ((event: TaobaoPriceWarningEvent) => void) | undefined;
   readonly #orderSource: DataokeClient | undefined;
   readonly #convertSource: TaobaoConvertSource;
   readonly #searchSource: TaobaoSearchSource;
@@ -435,6 +448,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#endpoint = options.endpoint;
     this.#warn = options.warn;
     this.#priceSettings = options.priceSettings;
+    this.#priceWarn = options.priceWarn;
     this.#orderSource = options.orderSource;
     // B1-04zzt：只有注入了大淘客客户端才声明（不发请求）；没有时属性缺省。
     if (options.orderSource !== undefined) this.shopConvertSources = SHOP_CONVERT_SOURCES;
@@ -720,7 +734,15 @@ export class TaobaoUnionAdapter implements UnionAdapter {
         reportSearchSkip(this.#searchWarn, 'item_unconverted');
         continue;
       }
-      items.push(mapTaobaoDetail(candidate.row, itemId, receivedAt, priceOptions));
+      items.push(
+        mapTaobaoDetail(
+          candidate.row,
+          itemId,
+          receivedAt,
+          priceOptions,
+          this.#priceWarningsOf(TAOBAO_OFFICIAL_SEARCH),
+        ),
+      );
     }
     // B1-04zzj (D10-692 S2-4)：同页换回同一个 item_id 的只留首条，顺序不变（official-search.ts ⑨）。
     return { items: firstPerItemId(items), nextCursor };
@@ -877,7 +899,23 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     );
     const rows = detailRows(inner);
     const priceOptions = await this.#priceOptions(ctx);
-    return mapTaobaoDetail(rows[0], itemId, this.#clock.now(), priceOptions);
+    return mapTaobaoDetail(
+      rows[0],
+      itemId,
+      this.#clock.now(),
+      priceOptions,
+      this.#priceWarningsOf(TAOBAO_ITEM_DETAIL),
+    );
+  }
+
+  /**
+   * B1-04zzzzg: mapTaobaoDetail's price warnings under `method` to `priceWarn`, once each; never
+   * through `warn` (frozen [AC-B1-04zx#36]). Without `priceWarn`, nothing.
+   */
+  #priceWarningsOf(method: string): ((warning: TaobaoPriceWarning) => void) | undefined {
+    const priceWarn = this.#priceWarn;
+    if (priceWarn === undefined) return undefined;
+    return (warning) => priceWarn(taobaoPriceWarningEvent(method, warning));
   }
 
   /** B1-04l: taobao.tbk.tpwd.create (see the header). */

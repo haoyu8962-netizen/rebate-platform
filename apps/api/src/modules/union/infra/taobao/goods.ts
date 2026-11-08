@@ -15,6 +15,7 @@ import { normalizeItemImages } from '../../domain/item-images.ts';
 import {
   mapTaobaoPrice,
   type TaobaoPriceOptions,
+  type TaobaoPriceWarning,
   type TaobaoPromotion,
 } from '../../domain/taobao-price.ts';
 import {
@@ -31,6 +32,30 @@ export const TAOBAO_ITEM_DETAIL_ENVELOPE = 'tbk_item_info_upgrade_get_response';
 export const TAOBAO_ITEM_DETAIL_SCENE = 1;
 /** commission_rate 是万分比整数；100 % = 10000。 */
 const MAX_COMMISSION_BP = 10_000n;
+
+/**
+ * B1-04zzzzg (D10-1072 ①): one mapTaobaoPrice warning of a detail or official search row, as the
+ * adapter's `priceWarn` hook gets it: the TOP method name and the code; PRICE_PROMO_UNKNOWN also
+ * the normalized promotion name (the promotion's, not the item title). Never an item id, item
+ * title, amount, link or upstream message.
+ */
+export type TaobaoPriceWarningEvent =
+  | { readonly method: string; readonly code: 'PRICE_CALC_DIFF' }
+  | {
+      readonly method: string;
+      readonly code: 'PRICE_PROMO_UNKNOWN';
+      readonly promotion_title: string;
+    };
+
+/** One mapTaobaoPrice warning under `method` as a TaobaoPriceWarningEvent (no other field). */
+export function taobaoPriceWarningEvent(
+  method: string,
+  warning: TaobaoPriceWarning,
+): TaobaoPriceWarningEvent {
+  return warning.code === 'PRICE_PROMO_UNKNOWN'
+    ? { method, code: warning.code, promotion_title: warning.title }
+    : { method, code: warning.code };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -185,12 +210,14 @@ export function detailRowFault(
 /**
  * 一条 TbkItemDetail → UnionItemDetail。身份取请求的 ItemRef（item_id 原样）；标题缺失、佣金比例
  * 不合格 → upstream_unavailable；价格不合格经 mapTaobaoPrice 出 price_status='anomaly'（三价 0）。
+ * B1-04zzzzg：mapTaobaoPrice 的每条告警按原顺序交 `onPriceWarning` 一次（没给则丢弃）；不影响返回。
  */
 export function mapTaobaoDetail(
   input: unknown,
   itemId: string,
   now: Date,
   priceOptions: TaobaoPriceOptions | undefined,
+  onPriceWarning?: (warning: TaobaoPriceWarning) => void,
 ): UnionItemDetail {
   if (!isRecord(input)) throw unavailable('result is not an object');
   const basic = recordField(input, 'item_basic_info');
@@ -217,6 +244,7 @@ export function mapTaobaoDetail(
     now.getTime(),
     priceOptions,
   );
+  if (onPriceWarning !== undefined) for (const warning of result.warnings) onPriceWarning(warning);
   return Object.freeze({
     platform: 'taobao',
     item_id: itemId,

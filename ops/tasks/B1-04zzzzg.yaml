@@ -5,6 +5,7 @@ type: impl
 # 2026-11-09 union 入账（编排 11-09 02:00 照 union 顺序 ①；followups B1-04l 实现留问）。现状：infra/taobao/goods.ts mapTaobaoDetail 调 domain/taobao-price.ts mapTaobaoPrice，返回的 warnings（PRICE_CALC_DIFF、PRICE_PROMO_UNKNOWN{title}）被丢弃，运营看不到价格口径差异与未知优惠名；另 union.module.ts logTaobaoWarning 除图片主机外一律记 TAOBAO_API_PERMISSION_DENIED，大淘客搜索 warnOf 发的 PRICE_ANOMALY / PRICE_CALC_DIFF / invalid_item / invalid_commission 因此被误记成「接口无权限」。
 # 改：mapTaobaoDetail 把价格告警交给调用方（taobao-adapter getItem、官方搜索）经现有 warn 钩子发出，字段只带方法名与码，PRICE_PROMO_UNKNOWN 另带优惠名（promotion title，不是商品标题；不带商品 ID / 商品标题 / 金额 / 链接）；logTaobaoWarning 按码分事件：code 11 仍 TAOBAO_API_PERMISSION_DENIED，图片主机仍 DATAOKE_IMAGE_HOST_DROPPED，价格类（PRICE_ANOMALY / PRICE_CALC_DIFF / PRICE_PROMO_UNKNOWN）与行校验类（invalid_item / invalid_commission）各记自己的事件名（名由实现定，规则测试钉「不是权限事件」与字段）；冻结 [AC-B1-04zx#70] / [#71] 等照过。不改价格计算本身。
 # 风险：union RV2；新鲜独立 Claude 写规则测试（新目录 test/spec/union/taobao-price-warnings/**，支撑文件勿名 kit.ts，冻结文件不改），spec-test Claude，代码评审 Codex money。
+# 完成 2026-11-09（#2939）：priceWarn 钩子 → TAOBAO_PRICE_WARNING（经注册表转交）；logTaobaoWarning 按码分事件，只 code 11 记权限；Codex money r1 pass。
 refs: []
 refs_hash: {}
 deps: []
@@ -24,4 +25,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/taobao-price-warnings/**'
-status: todo
+status: done
+pr: 2939
