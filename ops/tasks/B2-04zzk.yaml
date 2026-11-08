@@ -15,5 +15,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock-held.int.test.ts'
-status: todo
-pr: null
+status: done
+pr: 2799

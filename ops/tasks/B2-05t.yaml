@@ -1,0 +1,54 @@
+id: B2-05t
+repo: rebate-platform
+title: 提现建单响应的时刻统一为 +08:00（D10-267 ②，D10-1036 ③）——created_at、review_deadline 由 toISOString()（Z）改用 chinaIso，与列表 / 详情及 04 时间约定（ISO 8601 带 +08:00）一致；同一时刻、值不变
+type: impl
+# 2026-11-08 withdraw 入账（编排 D10-1036 ③）。现状：payout/application/withdraw-apply.ts 建单响应 created_at / review_deadline 用 toISOString()，列表 / 详情（withdrawal-reads.ts）用 chinaIso，同一契约两种写法。
+# 做法：响应这两个字段改用 chinaIso，库内值与其余字段不变；三端与 H5 按 ISO 8601 解析，不受影响（PR 描述写明）。
+# 冻结 [AC-B2-05d#1] 钉的是 Z：照 D10-327 / D10-1036，由新鲜独立 Claude 只改该用例里这两个时刻字段的期望，另一位只读复核，落地按 #24 报核；同文件其余用例逐字不动，登 red_exempt。money 评审独立 Claude（Codex 额度用尽至 11-15）。
+refs: [BR-WDR-03]
+refs_hash:
+  BR-WDR-03: 9120874c20b6
+deps: [B2-05d]
+paths:
+  - 'apps/api/src/modules/payout/application/withdraw-apply.ts'
+  - 'apps/api/src/modules/payout/application/withdraw-apply.test.ts'
+test_paths:
+  - 'test/spec/payout/apply/transaction.int.test.ts'
+red_exempt:
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#2] fee/tax 固化与规则版本、净额一致；冻结仍为申请总额'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#3] caller 回滚撤销提现单、凭证、余额及两条事件'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#4] ledger 故障不能留下半笔建单，也不能保存幂等成功结果'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#4] second-event 故障不能留下半笔建单，也不能保存幂等成功结果'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#5] 关闭自动到账，申请时间 2026-10-19T02:00:00.000Z 的人工审核期限为 2026-10-20T02:00:00.000Z'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#5] 关闭自动到账，申请时间 2026-10-23T12:00:00.000Z 的人工审核期限为 2026-10-26T12:00:00.000Z'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#5] 关闭自动到账，申请时间 2026-10-24T07:00:00.000Z 的人工审核期限为 2026-10-26T16:00:00.000Z'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#6] 自动到账开启时 review_mode 与 review_deadline 均未决'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#7] 两条同事务事件的整数金额、状态和租户准确，不含收款隐私'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+  - file: test/spec/payout/apply/transaction.int.test.ts
+    test: '[AC-B2-05d#8] 未注入总线仍可建单并冻结'
+    reason: '冻结 B2-05d 用例，测试体与基线逐字相同；本单照 D10-1036 ③ 只改同一文件里 [AC-B2-05d#1] 的两个时刻期望，本条不动，在旧代码上照常为绿'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/apply/transaction.int.test.ts'
+status: todo
+pr: null

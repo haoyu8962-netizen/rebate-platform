@@ -1,0 +1,19 @@
+id: B2-05s
+repo: rebate-platform
+title: test-change 补 B2-05d 用例：提现开关关闭且用户被封禁时返回 30306（开关先于风控状态，BR-WDR-03 ① 先于 ③）且幂等键已存，同键重放原样返回（D10-214 ②，D10-1036 ②）
+type: test-change
+# 2026-11-08 withdraw 入账（编排 D10-1036 ②）。来由：D10-214 更正要求规则测试里有「开关关 + 封禁 → 30306 且存键」一条，B2-05d 的轮次已尽未补（followups 10-23）。实现已在（RiskModule beforeRiskState 挂点，④a 之后、⑤ 之前）。
+# 只新增用例（新文件，不改 test/spec/payout/apply 已有用例与 kit），在主干上应直接为绿。新鲜独立 Claude 写、另一位只读复核「断言有牙」（可用临时变异：把开关检查移到风控状态之后应红）。
+refs: []
+refs_hash: {}
+deps: [B2-05d]
+paths:
+  - 'test/spec/payout/apply/disabled-banned.int.test.ts'
+  - 'ops/tasks/B2-05s.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/apply/disabled-banned.int.test.ts'
+status: todo
+pr: null
