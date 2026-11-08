@@ -521,6 +521,7 @@ export function createOrderUpdateStep(
             relation_id: set.relation_id !== undefined ? set.relation_id : current.relation_id,
             union_account_id: ctx.union_account_id,
             attr_at: current.attr_at,
+            order_id: current.order_id,
           });
     // 将经 R6 作废：第 ⑥ 步与补偿重试都按作废后的返利状态判资格（BR-ATTR-01 ⑥「未作废」）。
     const rebateAfterBlacklist =

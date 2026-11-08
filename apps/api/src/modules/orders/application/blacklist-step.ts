@@ -25,6 +25,8 @@ export interface OrderBlacklistQuery {
   /** 订单推广位所属的联盟账号。 */
   readonly union_account_id: string | null;
   readonly attr_at: Date;
+  /** B1-03zk：已入库订单的 id；申诉撤销后的再命中豁免按单判定（BR-ATTR-26）。首次入库没有。 */
+  readonly order_id?: string;
 }
 
 export interface OrderBlacklistMatch {

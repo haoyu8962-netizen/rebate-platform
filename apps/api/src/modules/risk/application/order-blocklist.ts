@@ -8,6 +8,10 @@
 //   an active entry of the same union_account_id with start_at <= attr_at and (end_at NULL or
 //   attr_at < end_at), absolute instants; any platform. The executing clock and expire_at play no
 //   part. Both dimensions are returned; the order decision is the caller's.
+//   B1-03zk (BR-ATTR-26「申诉撤销后的再命中」, D10-1093): given order_id, a value that already has
+//   a risk_hits row on this order, of any action, no later than the close of a revoked appeal of
+//   this order no longer matches this order. Later values, other orders and the list stay as they
+//   are; read only, on the caller's handle.
 // recordHit: registers the BLACKLIST_HIT rule row (ON CONFLICT (app_id, rule_id) DO NOTHING, an
 //   existing configured row stays untouched), then appends one risk_hits row (ref_type order,
 //   ref_id = order id, value_hmac = HMAC of the blocklist value under blocklist.<dimension>); a
@@ -40,6 +44,8 @@ export interface OrderBlocklistQuery {
   readonly relation_id: string | null;
   readonly union_account_id: string | null;
   readonly attr_at: Date;
+  /** B1-03zk: the order being judged, when it already exists (none on a first import). */
+  readonly order_id?: string;
 }
 
 export interface OrderBlocklistMatch {
@@ -137,6 +143,45 @@ function lockKey(appId: string, unionAccountId: string, relationId: string): str
   return JSON.stringify(['risk.blocklist.channel', appId, unionAccountId, relationId]);
 }
 
+function hmacOf(crypto: Pick<FieldCrypto, 'blindIndex'>, dimension: string, value: string): string {
+  return crypto.blindIndex(value, `blocklist.${dimension}`);
+}
+
+function hitKey(dimension: string, valueHmac: string): string {
+  return `${dimension}\0${valueHmac}`;
+}
+
+/**
+ * B1-03zk: the (dimension, value) pairs that no longer match this order — every blacklist hit it
+ * has, of any action, no later than the latest close of its revoked order appeals.
+ */
+async function exemptValues(
+  trx: Transaction<DB>,
+  input: { readonly appId: string; readonly orderId: string },
+): Promise<ReadonlySet<string>> {
+  const app = trx.withSchema('app');
+  const revoked = await app
+    .selectFrom('appeals')
+    .select((eb) => eb.fn.max('closed_at').as('closed_at'))
+    .where('app_id', '=', input.appId)
+    .where('target_type', '=', 'order')
+    .where('target_id', '=', input.orderId)
+    .where('status', '=', 'revoked')
+    .executeTakeFirst();
+  const closedAt = revoked?.closed_at ?? null;
+  if (closedAt === null) return new Set();
+  const hits = await app
+    .selectFrom('risk_hits')
+    .select(['dimension', 'value_hmac'])
+    .where('app_id', '=', input.appId)
+    .where('rule_id', '=', RULE_ID)
+    .where('ref_type', '=', REF_TYPE)
+    .where('ref_id', '=', input.orderId)
+    .where('created_at', '<=', closedAt)
+    .execute();
+  return new Set(hits.map((hit) => hitKey(hit.dimension, hit.value_hmac)));
+}
+
 export function createOrderBlocklistPorts(options: OrderBlocklistOptions): OrderBlocklistPorts {
   const { clock, crypto } = options;
   const rules = options.rules ?? createRiskRuleStatusReader({ clock });
@@ -192,7 +237,15 @@ export function createOrderBlocklistPorts(options: OrderBlocklistOptions): Order
           });
         }
       }
-      return result;
+      if (input.order_id === undefined || result.length === 0) return result;
+      const exempt = await exemptValues(trx, {
+        appId,
+        orderId: requireText(input.order_id, 'order_id'),
+      });
+      return result.filter(
+        (match) =>
+          !exempt.has(hitKey(match.dimension, hmacOf(crypto, match.dimension, match.value))),
+      );
     },
 
     async recordHit(trx, input) {
@@ -242,7 +295,7 @@ export function createOrderBlocklistPorts(options: OrderBlocklistOptions): Order
           rule_id: RULE_ID,
           risk_action: input.risk_action,
           dimension: input.dimension,
-          value_hmac: crypto.blindIndex(value, `blocklist.${input.dimension}`),
+          value_hmac: hmacOf(crypto, input.dimension, value),
           ref_type: REF_TYPE,
           ref_id: orderId,
           created_at: now,

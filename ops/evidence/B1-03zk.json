@@ -1,0 +1,125 @@
+{
+  "task": "B1-03zk",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "cd6864bb86306136a7dfacf53bec737a05663042",
+  "red_tests": [
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#1] 渠道维度：订单申诉已撤销且结案前有该值 void_commission 命中，带 order_id 的 match 不再返回该值",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#2] 尾号维度：订单申诉已撤销且结案前有该值命中，带 order_id 的 match 不再返回该值",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#3] 结案前的命中只有 manual_review 也豁免（不限处置），两种维度都如此",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#4] 一单多个已命中值全部豁免；结案后才写命中的值、从未命中的值照常返回",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#5] 边界：命中 created_at 等于 closed_at 豁免，早 1 毫秒豁免，晚 1 毫秒不豁免",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#5] 多次申诉：以某一条撤销申诉的结案时刻为准；撤销之后才命中、后来申诉又维持的不豁免",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：别的订单（同名单值，该单无命中无申诉）（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：申诉结案为维持（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：申诉仍在处理中（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：有命中但没有申诉（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：撤销的申诉属于别的 app（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：结案前的命中属于别的 app（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：撤销的申诉对象不是订单（target_id 同为该订单 id）（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：结案前的命中对象不是订单（ref_id 同为该订单 id）（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：结案前命中的是别的名单值（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：命中行的 dimension 或 value_hmac 与这个名单值错位（同用例内已满足条件的订单仍被豁免）",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 同值不同维度互不豁免：渠道命中不豁免同值尾号，尾号命中不豁免同值渠道",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#7] 不传 order_id 行为同主干：两种维度全部返回；传了 order_id 的同一查询才豁免",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#8] match 只读：调用前后 risk_hits、blocklist、appeals 行数与内容不变，名单条目仍 active",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#9] 调用方未提交事务里写入的申诉结果在事务内可见；事务外看不到，回滚后仍命中",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#9] 调用方未提交事务里写入的命中与申诉都按调用方句柄读到",
+    "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#11] 豁免按名单值：同值多个条目全部不再生效，结案后才进名单的同值条目也不生效，不传 order_id 时照常命中",
+    "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] WAITING 的单 content_hash 变化，名单值仍 active 且已豁免：不作废、仍 WAITING、不新增 risk_hits（结案前处置 void_commission）",
+    "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] WAITING 的单 content_hash 变化，名单值仍 active 且已豁免：不作废、仍 WAITING、不新增 risk_hits（结案前处置 manual_review）",
+    "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] ESTIMATED 的单曾因渠道值进人工复核，申诉撤销后 content_hash 变化：不调 onBlacklistHit、不新增 risk_hits、仍 ESTIMATED",
+    "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] CREDITED 的单已豁免：不发 order.blacklist_hit_after_credit，不新增 risk_hits",
+    "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] 结案后新增的名单值命中时仍作废：已豁免 channel=R8，新增 order_no_suffix 维度",
+    "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] 结案后新增的名单值命中时仍作废：已豁免 order_no_suffix=123456，新增 channel 维度"
+  ],
+  "risk_note": "RV2, risk order-blocklist match plus orders update path (blacklist-step, update-step); no contract, error-code or migration change (withdraw lane, model Claude Opus 5.5; orchestrator rulings D10-1091, D10-1093 with the 23:56 correction; BR-ATTR-26 written back by couli #315). A value with a risk_hits row on the order, of any action, no later than the latest close of a revoked order appeal stops matching that order; values hit later, other orders and the list are unchanged. Read only, on the caller's transaction. Rule status check still comes first. A first import passes no order_id. Real PostgreSQL: new directory and the frozen order-blocklist / blacklist directories 165/165 on the first commit; 28/28 for the new directory after test 2/3. Test-machine full verify not run (AWS runners disabled, D10-555; CI is the full verification).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "cd6864bb86306136a7dfacf53bec737a05663042",
+      "tree": "00a4709de6fd1d2d375134a3c1495c8481ca1632",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T20:16:53Z",
+      "finished_at": "2026-11-08T20:17:05Z",
+      "red_tests": [
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#1] 渠道维度：订单申诉已撤销且结案前有该值 void_commission 命中，带 order_id 的 match 不再返回该值",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#2] 尾号维度：订单申诉已撤销且结案前有该值命中，带 order_id 的 match 不再返回该值",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#3] 结案前的命中只有 manual_review 也豁免（不限处置），两种维度都如此",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#4] 一单多个已命中值全部豁免；结案后才写命中的值、从未命中的值照常返回",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#5] 边界：命中 created_at 等于 closed_at 豁免，早 1 毫秒豁免，晚 1 毫秒不豁免",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#5] 多次申诉：以某一条撤销申诉的结案时刻为准；撤销之后才命中、后来申诉又维持的不豁免",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：别的订单（同名单值，该单无命中无申诉）（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：申诉结案为维持（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：申诉仍在处理中（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：有命中但没有申诉（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：撤销的申诉属于别的 app（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：结案前的命中属于别的 app（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：撤销的申诉对象不是订单（target_id 同为该订单 id）（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：结案前的命中对象不是订单（ref_id 同为该订单 id）（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：结案前命中的是别的名单值（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 不豁免：命中行的 dimension 或 value_hmac 与这个名单值错位（同用例内已满足条件的订单仍被豁免）",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#6] 同值不同维度互不豁免：渠道命中不豁免同值尾号，尾号命中不豁免同值渠道",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#7] 不传 order_id 行为同主干：两种维度全部返回；传了 order_id 的同一查询才豁免",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#8] match 只读：调用前后 risk_hits、blocklist、appeals 行数与内容不变，名单条目仍 active",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#9] 调用方未提交事务里写入的申诉结果在事务内可见；事务外看不到，回滚后仍命中",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#9] 调用方未提交事务里写入的命中与申诉都按调用方句柄读到",
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts > [AC-B1-03zk#11] 豁免按名单值：同值多个条目全部不再生效，结案后才进名单的同值条目也不生效，不传 order_id 时照常命中",
+        "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] WAITING 的单 content_hash 变化，名单值仍 active 且已豁免：不作废、仍 WAITING、不新增 risk_hits（结案前处置 void_commission）",
+        "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] WAITING 的单 content_hash 变化，名单值仍 active 且已豁免：不作废、仍 WAITING、不新增 risk_hits（结案前处置 manual_review）",
+        "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] ESTIMATED 的单曾因渠道值进人工复核，申诉撤销后 content_hash 变化：不调 onBlacklistHit、不新增 risk_hits、仍 ESTIMATED",
+        "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] CREDITED 的单已豁免：不发 order.blacklist_hit_after_credit，不新增 risk_hits",
+        "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] 结案后新增的名单值命中时仍作废：已豁免 channel=R8，新增 order_no_suffix 维度",
+        "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts > [AC-B1-03zk#10] 结案后新增的名单值命中时仍作废：已豁免 order_no_suffix=123456，新增 channel 维度"
+      ],
+      "expected": [
+        "test/spec/risk/order-blocklist-appeal-exempt/match.int.test.ts",
+        "test/spec/risk/order-blocklist-appeal-exempt/update-path.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "31f5eb55ca5143f156a3b8be0394ae26ccfaf21c435cac5e21ba9a9528cf67cb"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Money review (RV2) by Codex, effort medium, per D10-1091 and D10-1075. Base f84f305b1, full diff of the tests and implementation. Verdict pass, no findings: checked the per-order exemption, the time boundary, app isolation and the update path against BR-ATTR-26 and BR-ID-36; static review, the real PostgreSQL results are in the run."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 2/3). No red exemption in the ledger, so spec-test goes to Codex first (D10-823, corrected D10-1080). r1 fail on one S1: the update-path exemption cases covered only WAITING and CREDITED; test 2/3 added ESTIMATED. r2 incremental pass, no findings."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "38f7a718af6b7f214ad2a5e86d90228c662a7423",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
