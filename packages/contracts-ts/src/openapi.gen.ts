@@ -8451,8 +8451,9 @@ export interface paths {
          *     restore does not take the member's money back; a warning is logged and the beneficiary,
          *     role and negative amount are recorded in `resolution.restore` and in the audit record of
          *     this restore (default filled in by the agent, 编排 D10-986 ②). A negative platform
-         *     difference is posted the other way round (debit COMMISSION_REVENUE, credit
-         *     UNION_RECEIVABLE) as in BR-FUND-08 (default filled in by the agent). In the same
+         *     difference likewise posts nothing: a warning is logged and the negative amount is
+         *     recorded as the platform's in `resolution.restore` and in the audit record of this
+         *     restore, as for a beneficiary (编排 D10-994, 08 BR-FUND-22 细则). In the same
          *     transaction `booked_base_fen` becomes the new base,
          *     `booked_n_fen` the positive part of that union commission, and
          *     `refunded_quantity_r9_baseline` the order's `refunded_quantity` at that moment
@@ -8468,7 +8469,7 @@ export interface paths {
          *     `expected_fen` (the union commission after the platform restore, for display only),
          *     `actual_fen` and `diff_fen` stay as registered. Writes an audit record (action
          *     recon_diff_restore, with the `order_key`, the `rebate_status` before and after, the
-         *     amounts, any negative beneficiary difference left unposted (R13), `restored_fen` and,
+         *     amounts, any negative beneficiary or platform difference left unposted (R13), `restored_fen` and,
          *     before and after, the `status` of the difference; no personal data). The response carries `rebate_status_after`, the order's `rebate_status`
          *     after the restore.
          *
