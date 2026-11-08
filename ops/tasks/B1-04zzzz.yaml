@@ -1,0 +1,24 @@
+id: B1-04zzzz
+repo: rebate-platform
+title: catalog：首页物料流与热销榜接禁售类目过滤（FU-CATEGORY-BLOCKLIST-HOME，第四步，D10-860 ⑦ / D10-961 / D10-1045）——union_material 与 getHotRank 在缓存之后过 filterCategories；无类目放行并告警、照常过关键词
+type: impl
+# 2026-11-08 union 入账（D10-1045 三点照推荐）。方案 couli-runs/UNION-lane/category-blocklist-home-plan-20261108.md。链路：首页物料流 listPageSectionItems（section-items.ts）、热销榜 getHotRank（hot-rank.ts），共用 cacheHotRankUpstream；过滤插在缓存之后（名单改动下次请求即生效），口径同搜索 Tab（B1-04zzx）：同应用同平台类目全等 + 关键词，无类目只按同平台带关键词行字面匹配、放行并告警；告警沿用 catalog_category_missing / catalog_category_blocked（字段恰 event / platform / count，入口靠消息前缀区分）。
+# 热销榜在 assemble 之前滤（不登记链接、不报价），被滤名次空缺不重编号；Q3：被滤后补拉照搜索做法（有上限）。物料流被滤项不出卡、不占去重 key，不足一页走现有一轮补取；全被滤不走联盟兜底池。Q2：商品池（product_pool 数据源与兜底池）本步不滤（FU-POOL-CATEGORY-BLOCK 归 admin）。端口 categoryFilter 可选、catalog.module.ts 条件装配（不碰 9 个手写夹具冻结文件）；从 search.ts 抽共用函数 application/category-block.ts、search 行为不变；删 section-items.ts 的 TODO。不碰 app.module / union / contracts / db。生产两条链路现取不到联盟数据（频道白名单空、CAP-*-10），本步提前接好。
+# 风险：catalog/** RV1；新鲜独立 Claude 写规则测试（支撑文件勿名 kit.ts），spec-test 用 Claude（D10-848），代码评审 Codex（额度用尽时照 approvals 36 / D10-913 独立 Claude）。
+refs: []
+refs_hash: {}
+deps: [B1-04zzx]
+paths:
+  - 'apps/api/src/modules/catalog/hot-rank*.ts'
+  - 'apps/api/src/modules/catalog/section-items*.ts'
+  - 'apps/api/src/modules/catalog/application/category-block*.ts'
+  - 'apps/api/src/modules/catalog/search.ts'
+  - 'apps/api/src/modules/catalog/catalog.module.ts'
+test_paths:
+  - 'test/spec/catalog/category-blocklist-home/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/category-blocklist-home/**'
+status: todo
