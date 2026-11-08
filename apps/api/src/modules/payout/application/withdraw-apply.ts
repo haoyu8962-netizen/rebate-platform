@@ -56,6 +56,7 @@ import {
   type WithdrawBlock,
   type WithdrawBlocklistHit,
 } from '../domain/withdraw-rules.ts';
+import { chinaIso } from './withdrawal-reads.ts';
 import type { WithdrawApplyRiskOptions } from './withdraw-risk-flags.ts';
 import {
   readWithdrawInput,
@@ -462,11 +463,11 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
           masked_account: maskPayeeAccount(snapshot.payout_method, snapshot.account),
           reason_code: null,
           fail_action: null,
-          created_at: now.toISOString(),
+          created_at: chinaIso(now),
           // CT-20b (D10-207): a fresh PENDING_REVIEW has no time points yet; the automatic
           // judgement (BR-WDR-30) has not run, so the BR-WDR-25 branch is「处理中」(processing).
           review_deadline:
-            review.review_deadline === null ? null : review.review_deadline.toISOString(),
+            review.review_deadline === null ? null : chinaIso(review.review_deadline),
           executed_at: null,
           first_attempt_at: null,
           paid_at: null,
