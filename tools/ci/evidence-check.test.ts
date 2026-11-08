@@ -1580,7 +1580,12 @@ it("[approvals 36] an independent Claude review is never filed as Codex's: engin
 it('[approvals 36] rule-test reviewers: an independent Claude context confirms red exemptions for any author', () => {
   expect(specTestReviewers('codex')).toEqual(['claude', 'claude-independent']);
   expect(specTestReviewers('claude')).toEqual(['codex', 'claude-independent']);
-  expect(specTestReviewers('claude-independent')).toEqual(['claude', 'claude-independent']);
+  // D10-896 ① / D10-1080 / CT-06zzzzm：独立 Claude 写的规则测试，Codex 的确认也认，跨引擎优先（D10-848 作废）
+  expect(specTestReviewers('claude-independent')).toEqual([
+    'codex',
+    'claude-independent',
+    'claude',
+  ]);
   const head = git(repo, ['rev-parse', 'HEAD']);
   const cfg = loadProtected(REPO);
   const problemsOf = (doc: Evidence, tester: 'codex' | 'claude' | 'claude-independent'): string =>
@@ -1602,23 +1607,251 @@ it('[approvals 36] rule-test reviewers: an independent Claude context confirms r
   for (const tester of ['codex', 'claude', 'claude-independent'] as const) {
     expect(problemsOf(evidence({ spec_test_review: confirmed }), tester), tester).toBe('');
   }
-  // Tests of an independent Claude call: the orchestrator's Claude may confirm, Codex is not listed.
+  // Tests of an independent Claude call: the orchestrator's Claude may confirm.
   expect(
     problemsOf(
       evidence({ spec_test_review: { ...confirmed, reviewer: 'claude', engine: 'claude' } }),
       'claude-independent',
     ),
   ).toBe('');
+  // D10-896 ① / D10-1080 / CT-06zzzzm：独立 Claude 写的规则测试，Codex 的确认也认，跨引擎优先（D10-848 作废）
   expect(
     problemsOf(
-      evidence({ spec_test_review: { ...confirmed, reviewer: 'codex', engine: 'codex' } }),
+      evidence({
+        spec_test_review: {
+          ...confirmed,
+          reviewer: 'codex',
+          engine: 'codex',
+          model: 'gpt-6-astra',
+        },
+      }),
       'claude-independent',
     ),
-  ).toMatch(/spec_test_review.reviewer: .*reviewer \(claude\)/);
+  ).toBe('');
+  // Missing confirmation: the message names the cross-engine side (codex) first.
+  expect(problemsOf(evidence(), 'claude-independent')).toMatch(
+    /^spec_test_review: .*the rule-test reviewer \(codex\) .*\(reviewer codex, /,
+  );
   // The engine of the confirmation must match its reviewer too.
   expect(
     problemsOf(evidence({ spec_test_review: { ...confirmed, reviewer: 'claude' } }), 'codex'),
   ).toMatch(/spec_test_review.engine: engine claude-independent does not match reviewer "claude"/);
+});
+
+// D10-896 ① / D10-1080 / CT-06zzzzm：独立 Claude 写的规则测试，Codex 的确认也认，跨引擎优先（D10-848 作废）。
+// Codex / Claude 写的规则测试评审方不变；engineProblem 与 ENGINE_MODELS 不变。
+const CT06ZZZZM_CODEX = {
+  reviewer: 'codex',
+  engine: 'codex',
+  model: 'gpt-6-astra',
+  rounds: 1,
+  last_verdict: 'pass',
+} as const;
+
+function ct06zzzzmProblems(doc: Evidence, red: RedRequirement): string {
+  const head = git(repo, ['rev-parse', 'HEAD']);
+  const cfg = loadProtected(REPO);
+  return evidenceProblems(doc, { prDir: repo, head, task: 'B2-01a', cfg, red }).join('\n');
+}
+
+it('[CT-06zzzzm] specTestReviewers: independent Claude tests list Codex first, then independent Claude, then Claude; the other testers unchanged', () => {
+  expect(specTestReviewers('claude-independent')).toEqual([
+    'codex',
+    'claude-independent',
+    'claude',
+  ]);
+  expect(specTestReviewers('codex')).toEqual(['claude', 'claude-independent']);
+  expect(specTestReviewers('claude')).toEqual(['codex', 'claude-independent']);
+});
+
+it('[CT-06zzzzm] red_exempt of independent Claude tests: a Codex confirmation passes, and the missing one names codex', () => {
+  const red: RedRequirement = { ...RED, declared: { count: 1, tester: 'claude-independent' } };
+  const confirmed = { ...CT06ZZZZM_CODEX, red_exempt_confirmed: true };
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: confirmed }), red)).toBe('');
+  // With red_exempt_outside as well (CT-06zzzc): the same confirmation.
+  const outside: RedRequirement = {
+    ...RED,
+    declared: { count: 2, tester: 'claude-independent', outside: 1 },
+  };
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: confirmed }), outside)).toBe('');
+  // The independent Claude call and the orchestrator's Claude still confirm too.
+  const independent = {
+    ...confirmed,
+    reviewer: 'claude-independent',
+    engine: 'claude-independent',
+    model: 'claude-opus-5-5',
+  };
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: independent }), red)).toBe('');
+  const claude: Evidence = { ...confirmed, reviewer: 'claude', engine: 'claude' };
+  delete claude['model'];
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: claude }), red)).toBe('');
+  // Missing: the usual side named in the message is codex.
+  const want =
+    'the ledger declares 1 red exemption(s) (red_exempt, CT-06r): the rule-test reviewer (codex) must confirm them in spec_test_review (reviewer codex, last_verdict pass, red_exempt_confirmed true)';
+  expect(ct06zzzzmProblems(evidence(), red)).toBe(`spec_test_review: ${want}`);
+  // A Codex confirmation with one field wrong fails on that field only.
+  expect(
+    ct06zzzzmProblems(evidence({ spec_test_review: { ...confirmed, last_verdict: 'fail' } }), red),
+  ).toBe(`spec_test_review.last_verdict: ${want}`);
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, red_exempt_confirmed: 'yes' } }),
+      red,
+    ),
+  ).toBe(`spec_test_review.red_exempt_confirmed: ${want}`);
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, model: 'claude-opus-5-5' } }),
+      red,
+    ),
+  ).toBe(
+    'spec_test_review.engine: engine codex runs gpt-6-astra: the entry must say model "gpt-6-astra" (got "claude-opus-5-5")',
+  );
+});
+
+it('[CT-06zzzzm] red_exempt_rows of independent Claude tests: a Codex confirmation passes, and the missing one names codex', () => {
+  const red: RedRequirement = { ...RED, rows: { count: 3, tester: 'claude-independent' } };
+  const confirmed = { ...CT06ZZZZM_CODEX, red_exempt_rows_confirmed: true };
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: confirmed }), red)).toBe('');
+  const want =
+    'the ledger declares 3 kept row(s) of split .each tables (red_exempt_rows, CT-06zzze): the rule-test reviewer (codex) must confirm them one by one in spec_test_review (reviewer codex, last_verdict pass, red_exempt_rows_confirmed true)';
+  expect(ct06zzzzmProblems(evidence(), red)).toBe(`spec_test_review: ${want}`);
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, red_exempt_rows_confirmed: undefined } }),
+      red,
+    ),
+  ).toBe(`spec_test_review.red_exempt_rows_confirmed: ${want}`);
+});
+
+it('[CT-06zzzzm] renames of independent Claude tests: a Codex confirmation passes, and the missing one names codex', () => {
+  const pairs = [{ from: "'freeze-expiry'", to: "'freeze_expiry'" }];
+  const LEFT = 'test/spec/money/scheduling.test.ts';
+  const red: RedRequirement = {
+    ...RED,
+    renames: { hit: pairs, left_out: [LEFT], tester: 'claude-independent' },
+  };
+  const confirmed = { ...CT06ZZZZM_CODEX, renames_confirmed: { pairs, left_out: [LEFT] } };
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: confirmed }), red)).toBe('');
+  const want = `the ledger's renames hit 1 pair(s) and leave 1 file(s) out of the expected list (renames, CT-06zxc): the rule-test reviewer (codex) must confirm them in spec_test_review (reviewer codex, last_verdict pass, renames_confirmed { pairs: ${JSON.stringify(pairs)}, left_out: ${JSON.stringify([LEFT])} })`;
+  expect(ct06zzzzmProblems(evidence(), red)).toBe(`spec_test_review: ${want}`);
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, renames_confirmed: true } }),
+      red,
+    ),
+  ).toBe(`spec_test_review.renames_confirmed: ${want}`);
+});
+
+it('[CT-06zzzzm] expected_values of independent Claude tests: a Codex confirmation passes, and the missing one names codex', () => {
+  const entries = [
+    {
+      file: 'test/spec/payment/result/notify.int.test.ts',
+      helper: 'onlyAnomaly',
+      from: '    diff_fen: AMOUNT,',
+      to: '    diff_fen: -AMOUNT,',
+    },
+  ];
+  const red: RedRequirement = {
+    ...RED,
+    expectedValues: { hit: entries, tester: 'claude-independent' },
+  };
+  const confirmed = { ...CT06ZZZZM_CODEX, expected_values_confirmed: { entries } };
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: confirmed }), red)).toBe('');
+  const want = `the ledger's expected_values apply 1 entry (CT-06zxe, D10-371): the rule-test reviewer (codex) must confirm them in spec_test_review (reviewer codex, last_verdict pass, expected_values_confirmed { entries: ${JSON.stringify(entries)} })`;
+  expect(ct06zzzzmProblems(evidence(), red)).toBe(`spec_test_review: ${want}`);
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, expected_values_confirmed: true } }),
+      red,
+    ),
+  ).toBe(`spec_test_review.expected_values_confirmed: ${want}`);
+});
+
+it('[CT-06zzzzm] no loosening: a Codex confirmation of independent Claude tests still needs its engine, model, pass and the confirmation; no author confirms its own tests', () => {
+  const declared = (tester: 'codex' | 'claude' | 'claude-independent'): RedRequirement => ({
+    ...RED,
+    declared: { count: 1, tester },
+  });
+  const confirmed = { ...CT06ZZZZM_CODEX, red_exempt_confirmed: true };
+  const ci = declared('claude-independent');
+  // An independent Claude review filed as Codex's: refused by its engine or by its model.
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, engine: 'claude-independent' } }),
+      ci,
+    ),
+  ).toMatch(/spec_test_review\.engine: engine claude-independent does not match reviewer "codex"/);
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, model: 'claude-opus-5-5' } }),
+      ci,
+    ),
+  ).toMatch(/spec_test_review\.engine: engine codex runs gpt-6-astra/);
+  const noModel: Evidence = { ...confirmed };
+  delete noModel['model'];
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: noModel }), ci)).toMatch(
+    /spec_test_review\.engine: .*must say model "gpt-6-astra"/,
+  );
+  const noEngine: Evidence = { ...confirmed };
+  delete noEngine['engine'];
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: noEngine }), ci)).toMatch(
+    /spec_test_review\.engine: must be "codex"/,
+  );
+  // A verdict other than pass, a confirmation other than true.
+  for (const verdict of ['fail', 'pass_with_notes', undefined]) {
+    expect(
+      ct06zzzzmProblems(
+        evidence({ spec_test_review: { ...confirmed, last_verdict: verdict } }),
+        ci,
+      ),
+      String(verdict),
+    ).toMatch(/spec_test_review\.last_verdict: /);
+  }
+  for (const value of [undefined, false, 'true', 1]) {
+    expect(
+      ct06zzzzmProblems(
+        evidence({ spec_test_review: { ...confirmed, red_exempt_confirmed: value } }),
+        ci,
+      ),
+      String(value),
+    ).toMatch(/spec_test_review\.red_exempt_confirmed: /);
+  }
+  // Codex wrote the rule tests: its own confirmation is refused, the message names claude.
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: confirmed }), declared('codex'))).toBe(
+    'spec_test_review.reviewer: the ledger declares 1 red exemption(s) (red_exempt, CT-06r): the rule-test reviewer (claude) must confirm them in spec_test_review (reviewer claude, last_verdict pass, red_exempt_confirmed true)',
+  );
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...CT06ZZZZM_CODEX, red_exempt_rows_confirmed: true } }),
+      { ...RED, rows: { count: 1, tester: 'codex' } },
+    ),
+  ).toMatch(/^spec_test_review\.reviewer: .*the rule-test reviewer \(claude\)/);
+  // Claude wrote the rule tests: its own confirmation is refused, the message names codex.
+  const claude: Evidence = { ...confirmed, reviewer: 'claude', engine: 'claude' };
+  delete claude['model'];
+  expect(ct06zzzzmProblems(evidence({ spec_test_review: claude }), declared('claude'))).toBe(
+    'spec_test_review.reviewer: the ledger declares 1 red exemption(s) (red_exempt, CT-06r): the rule-test reviewer (codex) must confirm them in spec_test_review (reviewer codex, last_verdict pass, red_exempt_confirmed true)',
+  );
+  expect(
+    ct06zzzzmProblems(
+      evidence({
+        spec_test_review: {
+          ...claude,
+          red_exempt_confirmed: undefined,
+          red_exempt_rows_confirmed: true,
+        },
+      }),
+      { ...RED, rows: { count: 1, tester: 'claude' } },
+    ),
+  ).toMatch(/^spec_test_review\.reviewer: .*the rule-test reviewer \(codex\)/);
+  // A reviewer outside the list is refused for independent Claude tests as well.
+  expect(
+    ct06zzzzmProblems(
+      evidence({ spec_test_review: { ...confirmed, reviewer: 'gpt', engine: 'gpt' } }),
+      ci,
+    ),
+  ).toMatch(/spec_test_review\.reviewer: /);
 });
 
 it('[approvals 36] after a handover an independent Claude review of the handover commit counts as the Claude review', () => {

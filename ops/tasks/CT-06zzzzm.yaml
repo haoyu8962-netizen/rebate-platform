@@ -1,0 +1,22 @@
+id: CT-06zzzzm
+repo: rebate-platform
+title: CT-06zzzzm：evidence-check 对测试作者为独立 Claude 的任务，规则测试评审也认 Codex（CT-06zzzo ① 拆出，D10-1080 / D10-896 ①）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-1080：CT-06zzzo 暂缓不合并，其第 ① 部分单拆）。主干 tools/ci/evidence-check.ts specTestReviewers 对
+#   tester = claude-independent 只返回 [claude, claude-independent]，Codex 的 spec-test 评审（含 red_exempt_confirmed 等四处确认）门禁不认（D10-848）。
+# 改法：tester = claude-independent 时改为 [codex, claude-independent, claude]，跨引擎优先（D10-896 ①）；tester 为 codex / claude 不变；
+#   不带模型 / 强度开关（CT-06zzzo 其余部分不拆入）；engineProblem 与 ENGINE_MODELS 不动。合并后 D10-848 作废。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzm.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

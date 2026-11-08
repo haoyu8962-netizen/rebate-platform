@@ -63,7 +63,9 @@
 //              `red_exempt_confirmed: true`, `reviewer` the side that did not write the rule
 //              tests (ledger tester codex → claude, claude → codex), `last_verdict: pass`; also
 //              "claude-independent" for either (ops/approvals.yaml id 36), and for a ledger tester
-//              claude-independent the reviewer is claude or another claude-independent call.
+//              claude-independent the reviewer is codex (preferred, cross-engine), another
+//              claude-independent call or the orchestrator's claude (CT-06zzzzm, D10-896 ① /
+//              D10-1080; the claude-only rule of D10-848 is void).
 //              Every expected file still needs a red test; MONEY_PATHS are unchanged.
 //              CT-06zzzc (D10-623): a ledger with `red_exempt_outside` (files whose changed code
 //              outside the tests keeps their red_exempt in force; red-check lists the changed
@@ -792,12 +794,14 @@ export function engineProblem(entry: Record<string, unknown>): string | null {
 
 /**
  * Who may review the rule tests of a ledger tester (CT-06r): the other side (codex → claude,
- * claude → codex), or a fresh independent Claude context (ops/approvals.yaml id 36); the tests of
- * an independent Claude call are reviewed by the orchestrator's Claude or another such call.
+ * claude → codex), or a fresh independent Claude context (ops/approvals.yaml id 36). The tests of
+ * an independent Claude call are confirmed by Codex first (cross-engine), and also by another
+ * independent Claude call or the orchestrator's Claude (CT-06zzzzm, D10-896 ① / D10-1080; the
+ * claude-only rule of D10-848 is void). The first entry is the side the messages name.
  */
 export function specTestReviewers(tester: TaskFile['tester']): string[] {
   if (tester === 'claude') return ['codex', 'claude-independent'];
-  if (tester === 'claude-independent') return ['claude', 'claude-independent'];
+  if (tester === 'claude-independent') return ['codex', 'claude-independent', 'claude'];
   return ['claude', 'claude-independent'];
 }
 
