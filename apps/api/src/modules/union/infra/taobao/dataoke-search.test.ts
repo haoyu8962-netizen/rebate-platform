@@ -201,3 +201,38 @@ it('[B1-04zzs unit] the mapped item carries shop_ref from its own row only', () 
   expect(Object.hasOwn(without, 'shop_ref')).toBe(false);
   expect(serialized(without)).not.toContain('7300000000003');
 });
+
+it('[B1-04zzzzf unit] an actualPrice + couponPrice sum beyond int64 maps to a price anomaly (invalid_price), warned once', () => {
+  const base = candidate(2, 'https://img.alicdn.com/syn-main-2.jpg', []);
+  const warn = vi.fn();
+  const item = mapDataokeSearchItem(
+    {
+      ...base,
+      row: {
+        ...base.row,
+        actualPrice: '50000000000000000.00',
+        couponPrice: '50000000000000000.00',
+      },
+    },
+    'syn-item-2',
+    RECEIVED_AT,
+    warn,
+  );
+  expect(item.price_status).toBe('anomaly');
+  expect(item.price_anomaly_reason).toBe('invalid_price');
+  expect(item.price_fen).toBe(0n);
+  expect(item.coupon_fen).toBe(0n);
+  expect(item.final_price_fen).toBe(0n);
+  expect(warn.mock.calls).toEqual([[{ method: DATAOKE_SEARCH_PATH, code: 'PRICE_ANOMALY' }]]);
+
+  warn.mockClear();
+  const atMax = mapDataokeSearchItem(
+    { ...base, row: { ...base.row, actualPrice: '92233720368547758.00', couponPrice: '0.07' } },
+    'syn-item-2',
+    RECEIVED_AT,
+    warn,
+  );
+  expect(atMax.price_status).toBe('ok');
+  expect(atMax.price_fen).toBe(9_223_372_036_854_775_807n);
+  expect(warn).not.toHaveBeenCalled();
+});

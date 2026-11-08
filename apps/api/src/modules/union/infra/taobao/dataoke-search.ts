@@ -42,6 +42,9 @@
 //   actualPrice / couponPrice 缺失 / 非法、或结果触发 isPriceAnomaly 的基本条件（price > 0、
 //   0 ≤ coupon < price、final > 0）→ 照样返回该条，price_status = 'anomaly'，三价都是 0n（不出截断值），
 //   金额缺失 / 非法时 price_anomaly_reason = 'missing_field'，并告警 PRICE_ANOMALY。
+//   B1-04zzzzf（D10-1072 ②）：actualPrice 与 couponPrice 各自合法、相加却超出 int64（addFen 抛
+//   @couli/money InvalidAmount）→ 加和越界视为价格异常，同上照样返回该条、三价 0n，
+//   price_anomaly_reason = 'invalid_price'，告警 PRICE_ANOMALY；同页其余条照常，整页不失败。
 //   commission_rate_bp = @couli/money pctStrToBp(commissionRate)（number 先 String()，超两位小数按十进制
 //   floor：20.556 → 2055、0.019 → 1）；缺失 / 非法 → 跳过该条并告警 invalid_commission。goodsId / 标题（title 与 dtitle 都没有）/ 主图缺失或不合格 →
 //   跳过该条并告警 invalid_item。跳过不整页失败，结果保持搜索顺序。
@@ -58,7 +61,7 @@
 // 告警：经适配器 warn，形如 { method: '/api/goods/get-dtk-search-goods', code: DataokeSearchWarningCode }，
 //   只带路径与固定码，不带商品 ID、标题、金额、链接等原值。
 import { parseYuanToFen } from '@couli/domain';
-import { addFen, pctStrToBp } from '@couli/money';
+import { addFen, InvalidAmount, pctStrToBp } from '@couli/money';
 import type { Clock } from '../../../platform/index.ts';
 import { MAX_ITEM_IMAGES, normalizeItemImages, type ItemImages } from '../../domain/item-images.ts';
 import { isPriceAnomaly, type PriceAnomalyReason } from '../../domain/taobao-price.ts';
@@ -448,14 +451,25 @@ type SearchPrice =
     }
   | { readonly status: 'anomaly'; readonly reason: PriceAnomalyReason };
 
-/** D10-530：price = actualPrice + couponPrice，coupon = couponPrice，final = actualPrice。 */
+/**
+ * D10-530：price = actualPrice + couponPrice，coupon = couponPrice，final = actualPrice。
+ * B1-04zzzzf：加和越界视为价格异常（invalid_price），与 domain/taobao-price.ts 同口径；只接
+ * InvalidAmount，别的异常照旧抛出。
+ */
 function searchPrice(row: Readonly<Record<string, unknown>>): SearchPrice {
   const actual = amountFen(row.actualPrice);
   const coupon = amountFen(row.couponPrice);
   if (actual === undefined || coupon === undefined) {
     return { status: 'anomaly', reason: 'missing_field' };
   }
-  const price = addFen(actual, coupon);
+  let price: bigint;
+  try {
+    price = addFen(actual, coupon);
+  } catch (error) {
+    // 两值各自在 int64 内、和越界（@couli/money InvalidAmount）不可能是真实价格。
+    if (error instanceof InvalidAmount) return { status: 'anomaly', reason: 'invalid_price' };
+    throw error;
+  }
   const final = actual;
   if (isPriceAnomaly({ price_fen: price, coupon_fen: coupon, final_price_fen: final })) {
     return { status: 'anomaly', reason: 'invalid_price' };

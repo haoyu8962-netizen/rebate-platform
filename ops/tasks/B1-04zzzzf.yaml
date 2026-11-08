@@ -4,6 +4,7 @@ title: union：大淘客搜索单条价格加和溢出 int64 只标该条价格�
 type: impl
 # 2026-11-09 union 入账（D10-1072 ② 低优先适配器边角第 2 件；followups B1-04zh money r1 S2）。现状 union/infra/taobao/dataoke-search.ts searchPrice：price = addFen(actualPrice, couponPrice)，两值都在 int64 内但和越界时 @couli/money 抛 InvalidAmount，异常冒出 mapDataokeSearchItem，整页搜索失败。淘宝侧 domain/taobao-price.ts:296 已对 InvalidAmount 判价格异常，这里照同口径：加和越界 → 该条照样返回，price_status 'anomaly'、price_anomaly_reason 'invalid_price'、三价 0n（与现有异常行同形）、告警 PRICE_ANOMALY 一次；同页其余条照常。只接 InvalidAmount，别的异常照旧冒出。大淘客正常不会返回这种值，属防御。
 # 风险：union RV2；新鲜独立 Claude 写规则测试（新目录 test/spec/union/dataoke-search-overflow/**，支撑文件勿名 kit.ts，冻结文件不改），spec-test Claude，代码评审 Codex money。
+# 完成 2026-11-09（#2928）：searchPrice 接 InvalidAmount → anomaly / invalid_price；Codex money r1 pass。
 refs: []
 refs_hash: {}
 deps: []
@@ -17,4 +18,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/dataoke-search-overflow/**'
-status: todo
+status: done
+pr: 2928

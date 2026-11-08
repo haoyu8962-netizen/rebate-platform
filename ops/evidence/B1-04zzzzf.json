@@ -1,0 +1,82 @@
+{
+  "task": "B1-04zzzzf",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "1e5628799ba3fc4e7e193b8b6774bf5f0b904f25",
+  "red_tests": [
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#1] 经 searchItems（大淘客搜索）：一条 actualPrice + couponPrice 越界、一条正常 → 不抛错，两条都返回；越界那条 anomaly / invalid_price / 三价 0，正常那条价格正确；PRICE_ANOMALY 恰好一次",
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] 两个元字符串各取一半以上 → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] JSON number（String() 后合法） → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] 券面额接近上限、售价 1 元 → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] 售价恰为上限、券 0.01 元 → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#3] 边界：和恰为 INT64_MAX 照常 ok（三价精确），和为 INT64_MAX + 1 才算越界；同页两条各自判定",
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#4] mapDataokeSearchItem 直调：越界不抛错，结果与同一行 actualPrice 缺失（missing_field）那一路同形，只差 price_anomaly_reason；告警一次、只带路径与码；行本身不合格的错误照旧抛出",
+    "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#5] 属性：任意合法 actualPrice（≥ 0.01 元）与 couponPrice（≥ 0）→ 和不越界时 ok 且三价精确，越界时 anomaly / invalid_price / 三价 0；从不抛错，PRICE_ANOMALY 只在越界时发、恰好一次"
+  ],
+  "risk_note": "RV2 (union): in the 大淘客 search mapping (dataoke-search.ts searchPrice) an actualPrice + couponPrice sum beyond int64 (InvalidAmount from @couli/money) no longer fails the whole page: that row is returned with price_status anomaly / invalid_price, the three prices 0n, PRICE_ANOMALY warned once, the other rows unchanged; only InvalidAmount is caught, the same rule as taobao-price.ts:296. Followup of B1-04zh (D10-1072 ②). Rule tests by independent Claude (approvals #36) in 1 attempt, container red/1 PASS (8 tests in 1 file). Implementation Claude Opus 5.5 (1 round). Host: union search rule suites 526 / 526, api taobao infra 125 / 125, tsc -b apps/api test 0, eslint / prettier clean; full verification is the required CI checks.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1e5628799ba3fc4e7e193b8b6774bf5f0b904f25",
+      "tree": "8c8c6cdde311079353a1d9c5d1f5e9f1cea185ed",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T17:53:45Z",
+      "finished_at": "2026-11-08T17:53:53Z",
+      "red_tests": [
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#1] 经 searchItems（大淘客搜索）：一条 actualPrice + couponPrice 越界、一条正常 → 不抛错，两条都返回；越界那条 anomaly / invalid_price / 三价 0，正常那条价格正确；PRICE_ANOMALY 恰好一次",
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] 两个元字符串各取一半以上 → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] JSON number（String() 后合法） → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] 券面额接近上限、售价 1 元 → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#2] 售价恰为上限、券 0.01 元 → 越界那条照样返回为价格异常（invalid_price），前后正常条目照常、顺序不变、整页不失败",
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#3] 边界：和恰为 INT64_MAX 照常 ok（三价精确），和为 INT64_MAX + 1 才算越界；同页两条各自判定",
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#4] mapDataokeSearchItem 直调：越界不抛错，结果与同一行 actualPrice 缺失（missing_field）那一路同形，只差 price_anomaly_reason；告警一次、只带路径与码；行本身不合格的错误照旧抛出",
+        "test/spec/union/dataoke-search-overflow/overflow.test.ts > [AC-B1-04zzzzf#5] 属性：任意合法 actualPrice（≥ 0.01 元）与 couponPrice（≥ 0）→ 和不越界时 ok 且三价精确，越界时 anomaly / invalid_price / 三价 0；从不抛错，PRICE_ANOMALY 只在越界时发、恰好一次"
+      ],
+      "expected": ["test/spec/union/dataoke-search-overflow/overflow.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d25484326722caa3e483f89cf167dd57d2c2cc20b667a4db17810cf8762c1858"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "money r1 pass, no findings (couli-runs/B1-04zzzzf/review-codex.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "r1 pass with one S2 (property callback in [AC-B1-04zzzzf#5] does not return true; form only, verdict unaffected)"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "cfa194257be80a1e381de8e944db63af7dbff111",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
