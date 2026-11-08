@@ -1,0 +1,24 @@
+id: B1-02zze
+repo: rebate-platform
+title: 后台会员设备列表的一页与总数取自同一快照（adminListUserDevices）——并发吊销设备时不再出现 items 有行而 total 为 0 之类的不一致；只读、不改形状
+type: impl
+# 2026-11-08 入账（identity，编排 10:01 / D10-968 排在 B1-02zzd 之后，FU-ADMIN-DEVICES-SNAPSHOT，notices 6601，B1-02zz money r1 S2）。
+# 主干 identity/infra/admin-user-device-reads.ts 的 page() 用 Promise.all 分两条语句读一页与 countAll，在两个连接 / 两个快照上执行，
+# 其间设备被吊销（devices.revoked_at）或会话新增时，items 与 total 可互相矛盾。改为同一快照读出（只读事务 REPEATABLE READ 或单条语句，
+# 实现方定）；排序、过滤、分页、字段与权限不变。refs 与原单 B1-02zz 一致为空，依据是契约 adminListUserDevices。
+refs: []
+refs_hash: {}
+deps: [B1-02zz]
+paths:
+  - 'apps/api/src/modules/identity/infra/admin-user-device-reads.ts'
+  - 'apps/api/src/modules/identity/infra/admin-user-device-reads.test.ts'
+  - 'apps/api/src/modules/identity/application/admin-user-devices.ts'
+  - 'apps/api/src/modules/identity/application/admin-user-devices.test.ts'
+test_paths:
+  - 'test/spec/identity/admin-user-devices-snapshot/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/admin-user-devices-snapshot/**'
+status: todo
