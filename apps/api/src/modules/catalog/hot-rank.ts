@@ -7,12 +7,14 @@ import {
   DemoUnionError,
   UnionError,
   isPlatform,
+  isPriceAnomaly,
   type Platform,
   type UnionItem,
 } from '../union/index.ts';
 import type { CatalogCardEntry } from './application/card-entry.ts';
+import { blockedByCategory } from './application/category-block.ts';
 import { CatalogError } from './domain/rules.ts';
-import type { ProductRef } from './domain/types.ts';
+import type { Catalog, ProductRef } from './domain/types.ts';
 import type { ViewerContext } from './ports.ts';
 
 export type HotRankQuery = operations['getHotRank']['parameters']['query'];
@@ -74,6 +76,11 @@ export interface HotRankOptions {
   /** The cached union side (infra/hot-rank-cache.ts in production). */
   readonly upstream: HotRankUpstream;
   readonly logger: Pick<Logger, 'warn'>;
+  /**
+   * B1-04zzzz (FU-CATEGORY-BLOCKLIST-HOME, D10-860 ⑦ / D10-1045): the category blocklist of the hot
+   * list, applied after the cache. Optional because frozen fixtures hand-write these options.
+   */
+  readonly categoryFilter?: Pick<Catalog, 'filterCategories'>;
 }
 
 /**
@@ -220,19 +227,35 @@ function errorFields(error: unknown): Record<string, string> {
 /**
  * Appends the cards of one channel page to `items` until it holds HOT_RANK_PAGE_SIZE, in channel
  * order, each ranked by its own channel position (`positions` when the upstream dropped some).
- * Positions the card entry skips or that come out as no_rebate for the current viewer (BR-PRICE-08)
- * leave their rank unused. Returns how many no_rebate cards were left out.
+ * Positions the card entry skips, that the category blocklist drops (B1-04zzzz, after the cache and
+ * before the card entry, so a dropped item gets no link and no quote) or that come out as no_rebate
+ * for the current viewer (BR-PRICE-08) leave their rank unused. A price anomaly still goes to the
+ * card entry first (PRICE_ANOMALY), as in search. Returns how many cards were left out by no_rebate
+ * or by the blocklist (the refill trigger).
  */
 async function collect(
   page: HotRankUpstreamPage,
   pageNo: number,
   items: HotRankData['items'],
+  appId: string,
   options: HotRankOptions,
 ): Promise<number> {
   const first = (pageNo - 1) * HOT_RANK_PAGE_SIZE;
+  const entries = page.items.slice(0, HOT_RANK_PAGE_SIZE);
+  const blocked = await blockedByCategory(
+    entries,
+    appId,
+    options.categoryFilter,
+    options.logger,
+    'rank',
+  );
   let filtered = 0;
-  for (const [index, entry] of page.items.slice(0, HOT_RANK_PAGE_SIZE).entries()) {
+  for (const [index, entry] of entries.entries()) {
     if (items.length >= HOT_RANK_PAGE_SIZE) break;
+    if (!isPriceAnomaly(entry.item) && blocked.has(entry)) {
+      filtered += 1;
+      continue;
+    }
     const result = await options.cards.assemble({
       item: entry.item,
       ref: entry.ref,
@@ -245,6 +268,8 @@ async function collect(
       filtered += 1;
       continue;
     }
+    // The channel's own position: never the index after filtering, and on a page that lost
+    // positions upstream never the index in `items` either.
     const position = page.positions?.[index] ?? index;
     items.push({
       rank: first + position + 1,
@@ -266,8 +291,9 @@ async function collect(
  * (20001) → channel page → one card per position through the single card entry. A position the
  * card entry skips (price anomaly), the upstream dropped (D10-422 ②, `positions`) or that is
  * no_rebate for the viewer (BR-PRICE-08) leaves its rank number unused: ranks are the channel's own
- * positions, never renumbered. Only a page that lost a no_rebate card is refilled, once, from the
- * next channel page (its items ranked by their own positions); the cursor then points past it.
+ * positions, never renumbered. So does a position the category blocklist drops (B1-04zzzz, after
+ * the cache). Only a page that lost a no_rebate or blocked card is refilled, once, from the next
+ * channel page (its items ranked by their own positions); the cursor then points past it.
  */
 export async function getHotRank(
   query: HotRankQuery,
@@ -337,9 +363,10 @@ export async function getHotRank(
   );
 
   const items: HotRankData['items'] = [];
-  const filtered = await collect(page, pageNo, items, options);
+  const filtered = await collect(page, pageNo, items, appId, options);
 
-  // BR-PRICE-08: a page that lost a no_rebate card is refilled once from the next channel page;
+  // BR-PRICE-08: a page that lost a no_rebate card is refilled once from the next channel page, and
+  // so is one that lost a blocked item (B1-04zzzz, D10-1045 Q3; the refill page is filtered too);
   // a page short only because of upstream gaps or price anomalies is not. The cursor counts
   // upstream pages, never filtered offsets.
   let lastPageNo = pageNo;
@@ -357,7 +384,7 @@ export async function getHotRank(
       }),
     );
     lastPageNo = refillNo;
-    await collect(lastPage, refillNo, items, options);
+    await collect(lastPage, refillNo, items, appId, options);
   }
 
   const more = lastPage.hasMore && lastPageNo < HOT_RANK_MAX_PAGE_NO;

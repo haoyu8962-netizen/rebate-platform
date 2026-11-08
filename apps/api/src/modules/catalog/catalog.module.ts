@@ -658,6 +658,11 @@ export class CatalogModule {
                 },
               ),
               logger,
+              // B1-04zzzz (D10-860 ⑦ / D10-1045): the hot list applies the category blocklist after
+              // the cache, like search; a CATALOG override without filterCategories leaves it off.
+              ...(typeof (catalog as Partial<Catalog>).filterCategories === 'function'
+                ? { categoryFilter: catalog }
+                : {}),
             }),
         },
         {
@@ -723,6 +728,11 @@ export class CatalogModule {
               pages,
               logger,
               ...(poolReader === undefined ? {} : { poolReader }),
+              // B1-04zzzz (D10-860 ⑦ / D10-1045): the feed (union_material) applies the category blocklist after
+              // the cache, like search; a CATALOG override without filterCategories leaves it off.
+              ...(typeof (catalog as Partial<Catalog>).filterCategories === 'function'
+                ? { categoryFilter: catalog }
+                : {}),
             }),
         },
         {

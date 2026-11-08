@@ -1,0 +1,118 @@
+{
+  "task": "B1-04zzzz",
+  "spec_ref": "39756e36debb7660e6b113b9e4392e7339ab687c",
+  "spec_commit": "57ccd0d4765e5a0926e2003eb4f148a6e801ae12",
+  "red_tests": [
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#9] 物料流多频道：被滤项不出卡、不 commit（不登记链接），交错顺序与剩余项相对顺序不变；他应用的行不生效",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#10] 物料流被滤项不占去重 key：同一商品在一个频道被滤（标题含禁售词）、在另一频道未被滤 → 未被滤的那张照常出卡",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#11] 物料流被滤后不足 20 → 走现有一轮补取（至多一次），补取页同样过滤；游标只记各频道上游页码、不记过滤偏移，has_more 照上游（第 2 页 hasMore=true）",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#11] 物料流被滤后不足 20 → 走现有一轮补取（至多一次），补取页同样过滤；游标只记各频道上游页码、不记过滤偏移，has_more 照上游（第 2 页 hasMore=false）",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#12] 物料流全被滤：items 为空；上游有更多带游标、否则 next_cursor 为 null；不走联盟兜底池（第 2 页 hasMore=true）",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#12] 物料流全被滤：items 为空；上游有更多带游标、否则 next_cursor 为 null；不走联盟兜底池（第 2 页 hasMore=false）",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#13] 物料流过滤在缓存之后：缓存命中的同参请求不再取联盟，名单改动即生效；联盟故障答的 stale 旧页同样过滤，名单清空后旧页原样恢复",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#14] 物料流告警：无类目与被滤项按平台分别计数，键恰为 event / platform / count；没有被滤项时不记 catalog_category_blocked",
+    "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#15] 商品池不滤（D10-1045 Q2）：union_material 照滤；product_pool 数据源与联盟故障时的兜底池照常出卡，不交给 filterCategories、不出类目告警",
+    "test/spec/catalog/category-blocklist-home/property.test.ts > [AC-B1-04zzzz#16] 任意商品与名单：热销榜恰为规则放行的位次（名次=频道原位次），无类目与被滤告警计数与该页一致",
+    "test/spec/catalog/category-blocklist-home/property.test.ts > [AC-B1-04zzzz#17] 任意商品与名单：单频道物料流恰为规则放行的商品且保持上游顺序，无类目与被滤告警计数与该页一致",
+    "test/spec/catalog/category-blocklist-home/rank-alerts.test.ts > [AC-B1-04zzzz#6] 热销榜告警：无类目计 catalog_category_missing、被滤计 catalog_category_blocked，按平台计数，键恰为 event / platform / count",
+    "test/spec/catalog/category-blocklist-home/rank-alerts.test.ts > [AC-B1-04zzzz#7] 热销榜告警：没有被滤项时不记 catalog_category_blocked，类目齐全时无类目计数为 0；名单一生效即按该平台（京东）记",
+    "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#1] 热销榜有类目商品：同应用同平台类目全等且关键词空或标题字面包含即滤——不出卡、不组卡、不报价、不登记链接，其余名次照频道原位次（被滤名次空缺不重编号）",
+    "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#2] 热销榜无类目商品（category_l1_id 缺失或空串）：只按同平台带关键词的行字面匹配；纯类目行、他平台行、他应用行都不适用，放行",
+    "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#3] 热销榜过滤在缓存之后：缓存命中的同参请求不再取联盟，名单改动即生效；联盟故障答的 stale 旧页同样过滤，名单清空后旧页原样恢复",
+    "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#4] 热销榜补拉（D10-1045 Q3）：第 1 页被滤 ≥1 且上游有更多 → 只补拉第 2 页一次，补拉页同样过滤、按自身位次排名，游标 page_no=3；没被滤或上游没有更多 → 不补拉",
+    "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#5] 热销榜全被滤：items 为空，频道与类目照常；补拉页也全被滤时 next_cursor 照末次上游页（第 2 页 hasMore=true）",
+    "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#5] 热销榜全被滤：items 为空，频道与类目照常；补拉页也全被滤时 next_cursor 照末次上游页（第 2 页 hasMore=false）",
+    "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#8] 价格异常项仍由卡片入口记 PRICE_ANOMALY（先于名单判定），记录与不接名单时一致；被滤的正常项不出卡、不报价",
+    "test/spec/catalog/category-blocklist-home/wiring.int.test.ts > [AC-B1-04zzzz#18] 生产装配：真实 AppModule 的热销榜与首页物料流都经 catalog 自身名单过滤——启用行下次请求即滤掉该类目商品（缓存之后），他应用的行不生效，行改为禁用后下次请求即恢复"
+  ],
+  "risk_note": "RV1 (catalog only): the home material feed (listPageSectionItems, union_material) and the hot list (getHotRank) pass their candidates through catalog's filterCategories after the cache, the same rule as the search tab (B1-04zzx): same app and platform, level-one id equal plus keyword; items without a category judged by keyword rows only, allowed and warned (catalog_category_missing / catalog_category_blocked, fields event / platform / count, entry told by the message prefix). The hot list filters before assembling (no link registered, no quote), ranks by the upstream positions without renumbering, refetches once when the first page lost items; the feed skips filtered items (no card, no dedup key), refills once, and never falls back to the pool when all are filtered. Product pool not filtered (D10-1045 Q2, FU-POOL-CATEGORY-BLOCK). The shared function moved out of search.ts with search behaviour unchanged; catalog.module wires the optional port conditionally. Independent Claude (approvals #36) wrote test/spec/catalog/category-blocklist-home/** in 1 attempt (red/1, 21 tests in 5 files). Implementation Claude Opus 5.5 (1 round), with source-side hot-rank.test.ts pinning ranks by positions (spec-test S2). Local container verify:fast not run (D10-950); host: test/spec/catalog 1679 / 1679, api catalog 210 / 210, tsc -b apps/api test 0, eslint / prettier / depcruise clean; integration (wiring.int) not run locally, full verification is the required CI checks.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "57ccd0d4765e5a0926e2003eb4f148a6e801ae12",
+      "tree": "1645e286a0879a6a9317a959e8656b85d5e141f0",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T11:38:19Z",
+      "finished_at": "2026-11-08T11:39:39Z",
+      "red_tests": [
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#9] 物料流多频道：被滤项不出卡、不 commit（不登记链接），交错顺序与剩余项相对顺序不变；他应用的行不生效",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#10] 物料流被滤项不占去重 key：同一商品在一个频道被滤（标题含禁售词）、在另一频道未被滤 → 未被滤的那张照常出卡",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#11] 物料流被滤后不足 20 → 走现有一轮补取（至多一次），补取页同样过滤；游标只记各频道上游页码、不记过滤偏移，has_more 照上游（第 2 页 hasMore=true）",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#11] 物料流被滤后不足 20 → 走现有一轮补取（至多一次），补取页同样过滤；游标只记各频道上游页码、不记过滤偏移，has_more 照上游（第 2 页 hasMore=false）",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#12] 物料流全被滤：items 为空；上游有更多带游标、否则 next_cursor 为 null；不走联盟兜底池（第 2 页 hasMore=true）",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#12] 物料流全被滤：items 为空；上游有更多带游标、否则 next_cursor 为 null；不走联盟兜底池（第 2 页 hasMore=false）",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#13] 物料流过滤在缓存之后：缓存命中的同参请求不再取联盟，名单改动即生效；联盟故障答的 stale 旧页同样过滤，名单清空后旧页原样恢复",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#14] 物料流告警：无类目与被滤项按平台分别计数，键恰为 event / platform / count；没有被滤项时不记 catalog_category_blocked",
+        "test/spec/catalog/category-blocklist-home/feed.test.ts > [AC-B1-04zzzz#15] 商品池不滤（D10-1045 Q2）：union_material 照滤；product_pool 数据源与联盟故障时的兜底池照常出卡，不交给 filterCategories、不出类目告警",
+        "test/spec/catalog/category-blocklist-home/property.test.ts > [AC-B1-04zzzz#16] 任意商品与名单：热销榜恰为规则放行的位次（名次=频道原位次），无类目与被滤告警计数与该页一致",
+        "test/spec/catalog/category-blocklist-home/property.test.ts > [AC-B1-04zzzz#17] 任意商品与名单：单频道物料流恰为规则放行的商品且保持上游顺序，无类目与被滤告警计数与该页一致",
+        "test/spec/catalog/category-blocklist-home/rank-alerts.test.ts > [AC-B1-04zzzz#6] 热销榜告警：无类目计 catalog_category_missing、被滤计 catalog_category_blocked，按平台计数，键恰为 event / platform / count",
+        "test/spec/catalog/category-blocklist-home/rank-alerts.test.ts > [AC-B1-04zzzz#7] 热销榜告警：没有被滤项时不记 catalog_category_blocked，类目齐全时无类目计数为 0；名单一生效即按该平台（京东）记",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#1] 热销榜有类目商品：同应用同平台类目全等且关键词空或标题字面包含即滤——不出卡、不组卡、不报价、不登记链接，其余名次照频道原位次（被滤名次空缺不重编号）",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#2] 热销榜无类目商品（category_l1_id 缺失或空串）：只按同平台带关键词的行字面匹配；纯类目行、他平台行、他应用行都不适用，放行",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#3] 热销榜过滤在缓存之后：缓存命中的同参请求不再取联盟，名单改动即生效；联盟故障答的 stale 旧页同样过滤，名单清空后旧页原样恢复",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#4] 热销榜补拉（D10-1045 Q3）：第 1 页被滤 ≥1 且上游有更多 → 只补拉第 2 页一次，补拉页同样过滤、按自身位次排名，游标 page_no=3；没被滤或上游没有更多 → 不补拉",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#5] 热销榜全被滤：items 为空，频道与类目照常；补拉页也全被滤时 next_cursor 照末次上游页（第 2 页 hasMore=true）",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#5] 热销榜全被滤：items 为空，频道与类目照常；补拉页也全被滤时 next_cursor 照末次上游页（第 2 页 hasMore=false）",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts > [AC-B1-04zzzz#8] 价格异常项仍由卡片入口记 PRICE_ANOMALY（先于名单判定），记录与不接名单时一致；被滤的正常项不出卡、不报价",
+        "test/spec/catalog/category-blocklist-home/wiring.int.test.ts > [AC-B1-04zzzz#18] 生产装配：真实 AppModule 的热销榜与首页物料流都经 catalog 自身名单过滤——启用行下次请求即滤掉该类目商品（缓存之后），他应用的行不生效，行改为禁用后下次请求即恢复"
+      ],
+      "expected": [
+        "test/spec/catalog/category-blocklist-home/feed.test.ts",
+        "test/spec/catalog/category-blocklist-home/property.test.ts",
+        "test/spec/catalog/category-blocklist-home/rank-alerts.test.ts",
+        "test/spec/catalog/category-blocklist-home/rank.test.ts",
+        "test/spec/catalog/category-blocklist-home/wiring.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e3a13a2152098352f0a650ed9204034b573b7801f7de00c032367be8644107d6"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4b68e2f3ba6bf5f66dd4557af8e930aa3783de3d8cb2ab42d93fbb95c1e0cb8d"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "general r1 pass, no findings (couli-runs/B1-04zzzz/review-codex.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "r1 pass with one S2 (rule tests never set positions, so an implementation ranking by array index would pass; pinned by the source-side hot-rank.test.ts with positions [0,2,5,9] and a filtered item)"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "50a9add4589f572587a10afcf3ab3ec440fdb415",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

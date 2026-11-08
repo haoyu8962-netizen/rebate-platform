@@ -1,16 +1,17 @@
 // B1-05o public section items use case, GET /v1/pages/{page_key}/sections/{section_id}/items
 // (contract listPageSectionItems, CT-07c; BR-TEXT-17 细则「联盟物料频道」): the union_material and
 // product_pool data sources of a published section. Rule tests: test/spec/catalog/section-items/**,
-// test/spec/catalog/product-pool-read/**.
-// TODO(规划/11 §4.5): 类目黑名单 — blocked on UnionItem 类目字段（CAP-*-03）
+// test/spec/catalog/product-pool-read/**, test/spec/catalog/category-blocklist-home/**.
 import type { components } from '@couli/contracts-ts';
 import type { Logger } from 'pino';
 import type { MaterialChannelsSpec } from '../platform/index.ts';
 import { isPlatform, type Platform } from '../union/index.ts';
 import type { PreparedCard } from './application/card-assembler.ts';
 import type { CatalogCardEntry } from './application/card-entry.ts';
+import { blockedByCategory } from './application/category-block.ts';
 import type { PoolPageRequest, PoolReader } from './application/pool-read.ts';
 import { CatalogError } from './domain/rules.ts';
+import type { Catalog } from './domain/types.ts';
 import {
   HOT_RANK_MAX_PAGE_NO,
   type HotRankCandidate,
@@ -53,6 +54,12 @@ export interface SectionItemsOptions {
   readonly logger: Pick<Logger, 'warn'>;
   /** B1-05r: the product_pool data source and the union fall-back; absent, neither is served. */
   readonly poolReader?: PoolReader;
+  /**
+   * B1-04zzzz (FU-CATEGORY-BLOCKLIST-HOME, D10-860 ⑦ / D10-1045): the category blocklist of the
+   * union_material feed, applied after the cache. Optional because frozen fixtures hand-write these
+   * options.
+   */
+  readonly categoryFilter?: Pick<Catalog, 'filterCategories'>;
 }
 
 /** Server constant of the contract: no limit parameter. */
@@ -283,6 +290,9 @@ async function fallbackPage(
  * programming error propagates. The cursor records upstream pages, so cards cut at 20 are never
  * shown (BR-PRICE-08). Merging reads no price, rebate or commission. Every card carries an explicit
  * ad_label: null, the field BR-TEXT-17 keeps; a page answered from an old copy is marked stale.
+ * B1-04zzzz: each round's merged items pass the category blocklist (when wired) before the card
+ * entry; a page left empty by it stays empty (with a cursor while channels have more) and never
+ * turns to the union fall-back, which is only for union failures.
  * B1-05r: a product_pool section is poolPage. So is a first page all of whose channels failed at
  * the union, and every later page of that list, known by its pool cursor.
  */
@@ -388,8 +398,20 @@ export async function getSectionItems(
       const stale = page.stale === true;
       lists.push(page.items.map((candidate) => ({ candidate, stale })));
     }
-    for (const { candidate, stale } of interleave(lists)) {
+    // B1-04zzzz (D10-860 ⑦ / D10-1045): one blocklist call per round, after the cache. A blocked
+    // item gets no card, no link and no dedup key; the others keep the merged order. The pool
+    // (product_pool source and the union fall-back) is not filtered (D10-1045 Q2).
+    const merged = interleave(lists);
+    const blocked = await blockedByCategory(
+      merged.map(({ candidate }) => candidate),
+      appId,
+      options.categoryFilter,
+      logger,
+      'section',
+    );
+    for (const { candidate, stale } of merged) {
       if (delivered.length >= SECTION_PAGE_SIZE) break;
+      if (blocked.has(candidate)) continue;
       const { item, ref } = candidate;
       const result = await cards.assemble({
         item,

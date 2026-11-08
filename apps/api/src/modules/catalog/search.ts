@@ -18,7 +18,8 @@ import {
 } from '../union/index.ts';
 import type { ProductCard, UnlinkedCard } from './application/card-assembler.ts';
 import type { CatalogCardEntry } from './application/card-entry.ts';
-import { CatalogError, categoryMissing } from './domain/rules.ts';
+import { blockedByCategory } from './application/category-block.ts';
+import { CatalogError } from './domain/rules.ts';
 import type { Catalog, ProductRef } from './domain/types.ts';
 import type { CatalogConfigReader, Viewer, ViewerContext } from './ports.ts';
 import type { PriceSnapshotRecorder } from './price-history/types.ts';
@@ -471,54 +472,6 @@ function recordSearchPage(
   }
 }
 
-/**
- * B1-04zzx (D10-860): the category blocklist over one batch of candidates (one filterCategories
- * call, after the cache, so a changed list applies to the next request). Returns the blocked
- * candidates; without a categoryFilter port nothing is blocked and nothing is logged. Per platform,
- * items without a category are counted under catalog_category_missing (blocked ones included) and
- * blocked items under catalog_category_blocked (only when there are any); the alerts carry the
- * event code, the platform and the count only.
- */
-async function blockedByCategory(
-  candidates: readonly SearchCandidate[],
-  appId: string,
-  options: SearchProductsOptions,
-): Promise<ReadonlySet<SearchCandidate>> {
-  const filter = options.categoryFilter;
-  if (filter === undefined || candidates.length === 0) return new Set();
-  const judged = candidates.map((candidate) => ({
-    platform: candidate.item.platform,
-    categoryId: candidate.item.category_l1_id ?? null,
-    title: candidate.item.title,
-    candidate,
-  }));
-  const kept = new Set(await filter.filterCategories(appId, judged));
-  const blocked = new Set<SearchCandidate>();
-  const missing = new Map<Platform, number>();
-  const blockedCount = new Map<Platform, number>();
-  for (const entry of judged) {
-    if (categoryMissing(entry.categoryId)) {
-      missing.set(entry.platform, (missing.get(entry.platform) ?? 0) + 1);
-    }
-    if (kept.has(entry)) continue;
-    blocked.add(entry.candidate);
-    blockedCount.set(entry.platform, (blockedCount.get(entry.platform) ?? 0) + 1);
-  }
-  for (const [platform, count] of missing) {
-    options.logger.warn(
-      { event: 'catalog_category_missing', platform, count },
-      'search: items without a category, judged by keyword rows only',
-    );
-  }
-  for (const [platform, count] of blockedCount) {
-    options.logger.warn(
-      { event: 'catalog_category_blocked', platform, count },
-      'search: items dropped by the category blocklist',
-    );
-  }
-  return blocked;
-}
-
 /** Session read → upstream page(s) → cards → link registration of delivered cards → session write. */
 async function searchPages(
   normalized: SessionQuery,
@@ -611,7 +564,13 @@ async function searchPages(
   const take = async (candidates: readonly SearchCandidate[], stale: boolean): Promise<void> => {
     // B1-04zzx: one blocklist call per page; blocked items are skipped like price-filtered ones
     // (never issued, never in the session), and the existing refill covers a short page.
-    const blocked = await blockedByCategory(candidates, appId, options);
+    const blocked = await blockedByCategory(
+      candidates,
+      appId,
+      options.categoryFilter,
+      options.logger,
+      'search',
+    );
     for (const candidate of candidates) {
       const { item, ref } = candidate;
       const position = order++;
@@ -825,7 +784,13 @@ async function fallback(
   const cardsOut: ProductCard[] = [];
   recordSearchPage(page, appId, options);
   const keys = new Set<string>();
-  const blocked = await blockedByCategory(page.items, appId, options);
+  const blocked = await blockedByCategory(
+    page.items,
+    appId,
+    options.categoryFilter,
+    options.logger,
+    'search',
+  );
   for (const candidate of page.items) {
     const { item, ref } = candidate;
     if (cardsOut.length >= FALLBACK_LIMIT) break;
