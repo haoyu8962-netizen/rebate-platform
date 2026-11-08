@@ -1,0 +1,37 @@
+{
+  "risk_note": "test-change, one new rule test only (test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock-held.int.test.ts); no source, kit or existing test changed (withdraw lane, model Claude Opus 5.5; orchestrator rulings D10-956, D10-972; FU-B204ZZH-LOCK-TEST). It closes B2-04zzh spec-test r2's non-blocking S2: no test showed the one-off re-evaluation re-reads each candidate under orders.lockOrderKey. Green on main (the implementation locks before re-reading); a scratch mutation dropping lockOrderKey turns it red. tester none: written by a fresh Claude subagent, reviewed read-only by a fresh independent Claude. The first local run hung past the 180 s test timeout once (1083 s in the slot); an instrumented copy passed in 7 s and the file then passed four more times (1–11 s): treated as an environment stall, recorded here; CI verify-int is the full verification.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Read-only review by a fresh independent Claude (claude-run.sh review --review-type money; tester none, so the money type is used as for B2-04zzj / B2-09z), D10-972: Codex usage limit until 11-15 00:24. Base = fork point c44e9573b3d8. Verdict pass, no findings; checklist: concurrency and app_id ok, the rest n/a. The reviewer traced the plugin through apply → transaction → lockOrderKey → readRebateOrder, confirmed the probe fires only on the per-order re-read, runs on a separate connection with the same key, and cannot pass vacuously (three probes required)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "B2-04zzk",
+  "spec_commit": "4228f823d1707ae1f613ec6d145872bc13453c59",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "39e9aad620076d06e8d87788ce4a5749d2cef97c",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  }
+}
