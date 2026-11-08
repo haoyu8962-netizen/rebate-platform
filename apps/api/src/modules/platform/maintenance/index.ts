@@ -401,6 +401,32 @@
 //      section K: each name goes into `dropped` and `partition_dropped` { table, partition }; a
 //      failure logs `partition_drop_failed` { table, sqlstate }, failed += 1, no immediate retry, and
 //      the rest of the run goes on.
+//
+// M. Agent trace retention (task B3-08s, FU-AGENT-TRACE-PURGE). Basis: BR-ID-30 正文, ① (每日 03:00
+//    (+08:00) 的 Agent trace 清理任务, 190 天, agent.trace.retention_days 不得小于 184), BR-AI-19, BR-AI-22;
+//    orchestrator rulings D10-454, D10-971, D10-999. The contract is the header of
+//    test/spec/platform/agent-trace-retention/kit.ts; the SQL function is in
+//    `0134_agent-trace-purge.sql` (`app.delete_expired_agent_traces(p_now, p_days, p_batch_size)
+//    RETURNS TABLE (table_name, deleted)`: one batch per table, children before parents, nine rows in
+//    AGENT_TRACE_TABLES order).
+//    Module — only when `dayPartitions` is true, with the same single `now`, after section K / L and
+//    before C.5:
+//    - Gate: the +08:00 time of day of `now` is 03:00:00.000 or later (its own gate; sections J, K, L
+//      keep 04:00). Later runs of the same day call again; the function is idempotent.
+//    - Configuration: the one read of section K per run (from 04:00 shared with it; between 03:00 and
+//      04:00 this section makes that read itself, at the same place in the run). A failing read is
+//      logged and counted once, as in section K (`retention_purge_failed` { table: 'config_items' }),
+//      and this section then does nothing. retention.purge.enabled exactly false: nothing.
+//      agent.trace.retention_days: an integer ≥ 184 is used (capped at 36500); missing, not an integer
+//      or below 184 falls back to 190, without a failure.
+//    - Calls of AGENT_TRACE_BATCH_SIZE, each its own statement (no explicit transaction), until all nine
+//      counts are 0 or AGENT_TRACE_MAX_BATCHES calls were made in this run.
+//    - Logs per table with rows > 0 after the calls: `agent_trace_purged` (info) { table, rows }, or
+//      `agent_trace_purge_backlog` (warn) { table, rows } when the call limit was reached with that
+//      table's last count still > 0. A failing call: those lines for the rows deleted before it, then
+//      `agent_trace_purge_failed` (error) { sqlstate }, failed += 1, no further call in this run.
+//      Nothing when nothing was deleted and nothing failed. Report and `partition_maintenance_done`
+//      unchanged.
 import {
   MONTH_PARTITIONED_TABLES,
   MONTHS_AHEAD,
@@ -459,6 +485,39 @@ const RAW_PAYLOADS_RETENTION = { table: 'union_raw_payloads', floorDays: 180 } a
 /** The configured retention of one table, or its floor when unusable (section K). */
 function retentionDays(value: unknown, floorDays: number): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < floorDays) return floorDays;
+  return Math.min(value, RETENTION_MAX_DAYS);
+}
+
+/** The nine agent_* tables in the order app.delete_expired_agent_traces returns them (section M). */
+const AGENT_TRACE_TABLES: readonly string[] = [
+  'agent_tool_calls',
+  'agent_cards',
+  'agent_result_deliveries',
+  'agent_messages',
+  'agent_result_sets',
+  'agent_runs',
+  'agent_clarify_asks',
+  'agent_result_chains',
+  'agent_sessions',
+];
+
+/** Rows per table per call of app.delete_expired_agent_traces (section M). */
+const AGENT_TRACE_BATCH_SIZE = 1000;
+
+/** Most calls of app.delete_expired_agent_traces in one run (section M). */
+const AGENT_TRACE_MAX_BATCHES = 100;
+
+const AGENT_TRACE_DAYS_KEY = 'agent.trace.retention_days';
+
+/** BR-ID-30 ①: the configured value may not go below 184; 190 when unusable (section M). */
+const AGENT_TRACE_FLOOR_DAYS = 184;
+const AGENT_TRACE_DEFAULT_DAYS = 190;
+
+/** The configured Agent trace retention, or 190 when unusable (section M). */
+function agentTraceDays(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < AGENT_TRACE_FLOOR_DAYS) {
+    return AGENT_TRACE_DEFAULT_DAYS;
+  }
   return Math.min(value, RETENTION_MAX_DAYS);
 }
 
@@ -691,9 +750,11 @@ export function createPartitionMaintenance(
     }
   }
 
-  /** Sections K and L: the retention cleanup of one run; resolves the number of failures. */
-  async function retentionCleanup(now: Date, dropped: string[]): Promise<number> {
-    let settings: ReadonlyMap<string, unknown>;
+  /**
+   * Section K's configuration read, also used by section M; resolves null when it failed (logged
+   * here, counted by the caller once per run).
+   */
+  async function readRetentionSettings(): Promise<ReadonlyMap<string, unknown> | null> {
     try {
       const result = await db.transaction().execute(async (trx) => {
         await sql`SELECT set_config('lock_timeout', '5s', true)`.execute(trx);
@@ -701,13 +762,22 @@ export function createPartitionMaintenance(
           SELECT key, value FROM app.read_retention_settings(${RETENTION_APP_ID}::text)
         `.execute(trx);
       });
-      settings = new Map(result.rows.map((row) => [row.key, row.value]));
+      return new Map(result.rows.map((row) => [row.key, row.value]));
     } catch (error) {
       // The switch is unknown, so nothing may be deleted in this run.
       logger.error({ table: 'config_items', sqlstate: sqlstate(error) }, 'retention_purge_failed');
-      return 1;
+      return null;
     }
-    if (settings.get(RETENTION_ENABLED_KEY) === false) return 0;
+  }
+
+  /** Sections K and L: the retention cleanup of one run; resolves the number of failures. */
+  async function retentionCleanup(
+    now: Date,
+    dropped: string[],
+    settings: ReadonlyMap<string, unknown> | null,
+  ): Promise<number> {
+    // A failed read was logged and counted where it was made.
+    if (settings === null || settings.get(RETENTION_ENABLED_KEY) === false) return 0;
 
     let failures = 0;
     const rawDays = retentionDays(
@@ -737,6 +807,68 @@ export function createPartitionMaintenance(
     return failures;
   }
 
+  /** Section M: bounded calls, each its own statement; resolves the number of failures (0 or 1). */
+  async function purgeAgentTraces(
+    now: Date,
+    settings: ReadonlyMap<string, unknown> | null,
+  ): Promise<number> {
+    // A failed read was logged and counted where it was made.
+    if (settings === null || settings.get(RETENTION_ENABLED_KEY) === false) return 0;
+    const days = agentTraceDays(settings.get(AGENT_TRACE_DAYS_KEY));
+    const totals = AGENT_TRACE_TABLES.map(() => 0);
+    let last = AGENT_TRACE_TABLES.map(() => 0);
+    const report = (): void => {
+      AGENT_TRACE_TABLES.forEach((table, index) => {
+        const rows = totals[index]!;
+        if (rows === 0) return;
+        if (last[index]! > 0) logger.warn({ table, rows }, 'agent_trace_purge_backlog');
+        else logger.info({ table, rows }, 'agent_trace_purged');
+      });
+    };
+    let calls = 0;
+    try {
+      while (calls < AGENT_TRACE_MAX_BATCHES) {
+        // No explicit transaction: every call commits on its own and needs one connection only.
+        const result = await sql<{ table_name: string; deleted: bigint | number | string }>`
+          SELECT table_name, deleted
+          FROM app.delete_expired_agent_traces(
+            ${now}::timestamptz, ${days}::integer, ${AGENT_TRACE_BATCH_SIZE}::integer
+          )
+        `.execute(db);
+        calls += 1;
+        if (result.rows.length !== AGENT_TRACE_TABLES.length) {
+          throw new RangeError('unexpected agent trace purge result');
+        }
+        const counts = result.rows.map((row, index) => {
+          const deleted = Number(row.deleted);
+          if (
+            row.table_name !== AGENT_TRACE_TABLES[index] ||
+            !Number.isSafeInteger(deleted) ||
+            deleted < 0 ||
+            deleted > AGENT_TRACE_BATCH_SIZE
+          ) {
+            throw new RangeError('unexpected agent trace purge result');
+          }
+          return deleted;
+        });
+        counts.forEach((deleted, index) => {
+          totals[index] = totals[index]! + deleted;
+        });
+        last = counts;
+        if (counts.every((deleted) => deleted === 0)) break;
+      }
+    } catch (error) {
+      // Rows deleted by the calls before the failure stay deleted: report them as purged.
+      last = AGENT_TRACE_TABLES.map(() => 0);
+      report();
+      logger.error({ sqlstate: sqlstate(error) }, 'agent_trace_purge_failed');
+      return 1;
+    }
+    // When the loop stopped on nine zeros, `last` is all zero; otherwise the call limit was reached.
+    report();
+    return 0;
+  }
+
   async function runOnce(): Promise<MaintenanceReport> {
     const role = await sql<{ role: string }>`SELECT current_user AS role`.execute(db);
     if (role.rows[0]?.role !== 'couli_maint') throw new MaintenanceError('wrong_role');
@@ -747,6 +879,17 @@ export function createPartitionMaintenance(
     const dropped: string[] = [];
     const defaultRows: DefaultRows[] = [];
     let failed = 0;
+    // Section K's configuration: read at most once per run, on first use (K from 04:00, M from 03:00).
+    let settings: ReadonlyMap<string, unknown> | null | undefined;
+    const loadSettings = async (): Promise<ReadonlyMap<string, unknown> | null> => {
+      if (settings === undefined) {
+        settings = await readRetentionSettings();
+        if (settings === null) failed += 1;
+      }
+      return settings;
+    };
+    // Fixed +08:00 hour, independent of the host/session timezone.
+    const hour = (now.getUTCHours() + 8) % 24;
 
     // Each short transaction bounds lock waits without changing pooled session settings.
     for (const table of MONTH_PARTITIONED_TABLES) {
@@ -788,8 +931,8 @@ export function createPartitionMaintenance(
       }
     }
 
-    // Fixed +08:00 hour, independent of the host/session timezone. SQL owns retention checks.
-    if ((now.getUTCHours() + 8) % 24 >= 4) {
+    // SQL owns retention checks.
+    if (hour >= 4) {
       for (const table of DROPPABLE_TABLES) {
         try {
           const result = await sql<{ partitions: string[] }>`
@@ -820,8 +963,16 @@ export function createPartitionMaintenance(
           }
         }
         if (!(await deleteExpiredOpenAttempts(now))) failed += 1;
-        failed += await retentionCleanup(now, dropped);
+        // Load first: `failed += await …` would read `failed` before loadSettings counts a failure.
+        const loaded = await loadSettings();
+        failed += await retentionCleanup(now, dropped, loaded);
       }
+    }
+
+    // Section M: its own 03:00 (+08:00) gate; from 04:00 it shares section K's configuration read.
+    if (dayPartitions && hour >= 3) {
+      const loaded = await loadSettings();
+      failed += await purgeAgentTraces(now, loaded);
     }
 
     try {

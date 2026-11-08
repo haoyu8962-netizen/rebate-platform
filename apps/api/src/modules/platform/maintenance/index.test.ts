@@ -28,6 +28,19 @@ const ALL_ENSURED = MONTH_ENSURED + DAY_PARTITIONED_TABLES.length * (DAYS_AHEAD 
 /** The UTC months a run at the default fixture instant (2026-11-20) ensures, as `p_month`. */
 const FIXTURE_MONTHS = ['2026-11-01', '2026-12-01', '2027-01-01', '2027-02-01'];
 
+/** The nine rows of app.delete_expired_agent_traces, in its fixed order (section M). */
+const AGENT_TRACE_TABLES = [
+  'agent_tool_calls',
+  'agent_cards',
+  'agent_result_deliveries',
+  'agent_messages',
+  'agent_result_sets',
+  'agent_runs',
+  'agent_clarify_asks',
+  'agent_result_chains',
+  'agent_sessions',
+] as const;
+
 const instances: PartitionMaintenance[] = [];
 const handles: Kysely<DB>[] = [];
 afterEach(async () => {
@@ -69,6 +82,8 @@ async function fixture(instant = '2026-11-20T03:04:05Z', dayPartitions = false) 
         rows = [{ partition: `${String(query.parameters[0])}:${String(query.parameters[1])}` }];
       } else if (/drop_expired_(month|day|union_raw_payload)_partitions/.test(query.sql)) {
         rows = [{ partitions: [] }];
+      } else if (query.sql.includes('delete_expired_agent_traces')) {
+        rows = AGENT_TRACE_TABLES.map((table_name) => ({ table_name, deleted: 0n }));
       } else if (query.sql.includes('delete_expired_')) rows = [{ deleted: 0n }];
       else if (query.sql.includes('read_retention_settings')) rows = [];
       else if (query.sql.includes('partition_default_rows')) rows = [];
@@ -840,7 +855,7 @@ const RETENTION_ORDER = [
   'sms_send_attempts',
   'deleted_identities',
 ];
-const RETENTION_CALL = /delete_expired_(?!link_open_attempts)([a-z_]+)/;
+const RETENTION_CALL = /delete_expired_(?!link_open_attempts|agent_traces)([a-z_]+)/;
 const SETTINGS = 'read_retention_settings';
 
 function retentionCalls(queries: readonly CompiledQuery[]): CompiledQuery[] {
@@ -867,7 +882,8 @@ it.each([
     const report = await f.maintenance.runOnce();
     const batches = retentionCalls(f.queries);
     expect(batches).toHaveLength(calls);
-    expect(f.queries.some((q) => q.sql.includes(SETTINGS))).toBe(calls > 0);
+    // From 03:00 (+08:00) section M reads the configuration even before section K's gate.
+    expect(f.queries.some((q) => q.sql.includes(SETTINGS))).toBe(enabled);
     expect(f.now).toHaveBeenCalledTimes(1);
     expect(report).toMatchObject({ dropped: [], failed: 0 });
     expect(f.transactions.some((t) => t.queries.some((q) => RETENTION_CALL.test(q.sql)))).toBe(
@@ -1087,7 +1103,8 @@ it.each([
     const f = await fixture(instant, enabled);
     await f.maintenance.runOnce();
     expect(rawDrops(f.queries)).toHaveLength(calls);
-    expect(f.queries.filter((q) => q.sql.includes(SETTINGS))).toHaveLength(calls);
+    // One read per run; from 03:00 (+08:00) section M reads it even before section K's gate.
+    expect(f.queries.filter((q) => q.sql.includes(SETTINGS))).toHaveLength(enabled ? 1 : 0);
     expect(f.now).toHaveBeenCalledTimes(1);
     expect(f.transactions.some((t) => t.queries.some((q) => q.sql.includes(RAW_DROP)))).toBe(false);
     if (calls > 0) {
@@ -1251,4 +1268,184 @@ it('[AC-B1-15zc#23] worker 实例同样丢本表', async () => {
   instances.push(worker);
   await worker.runOnce();
   expect(rawDrops(f.queries)).toHaveLength(1);
+});
+
+// Section M (B3-08s): app.delete_expired_agent_traces from 03:00 (+08:00).
+const AGENT_CALL = 'delete_expired_agent_traces';
+
+function agentTraceCalls(queries: readonly CompiledQuery[]): CompiledQuery[] {
+  return queries.filter((q) => q.sql.includes(AGENT_CALL));
+}
+
+/** The nine rows of one call, `deleted` per table (0 when absent). */
+function agentRows(deleted: Partial<Record<(typeof AGENT_TRACE_TABLES)[number], number>>) {
+  return AGENT_TRACE_TABLES.map((table_name) => ({
+    table_name,
+    deleted: BigInt(deleted[table_name] ?? 0),
+  }));
+}
+
+it.each([
+  ['2026-10-08T18:59:59.999Z', true, 0],
+  ['2026-10-08T19:00:00.000Z', true, 1],
+  ['2026-10-08T20:00:00.000Z', true, 1],
+  ['2026-10-08T15:30:00.000Z', true, 1],
+  ['2026-10-08T19:00:00.000Z', false, 0],
+] as const)(
+  '[AC-B3-08s#21] 第 M 节在 %s（dayPartitions=%s）调用 %i 次：+08:00 03:00 起才调，参数为同一个 now、190 天、批量 1000，不开显式事务',
+  async (instant, enabled, calls) => {
+    const f = await fixture(instant, enabled);
+    const report = await f.maintenance.runOnce();
+    const made = agentTraceCalls(f.queries);
+    expect(made).toHaveLength(calls);
+    expect(report.failed).toBe(0);
+    expect(f.now).toHaveBeenCalledTimes(1);
+    expect(f.transactions.some((t) => t.queries.some((q) => q.sql.includes(AGENT_CALL)))).toBe(
+      false,
+    );
+    for (const query of made) {
+      expect(query.parameters).toEqual([f.now.mock.results[0]!.value, 190, 1000]);
+    }
+    expect(f.queries.filter((q) => q.sql.includes(SETTINGS))).toHaveLength(calls);
+    expect(f.logger.info.mock.calls).toEqual([
+      [
+        { ensured: enabled ? ALL_ENSURED : MONTH_ENSURED, dropped: 0, failed: 0 },
+        'partition_maintenance_done',
+      ],
+    ]);
+  },
+);
+
+it.each([
+  [184, 184],
+  [200, 200],
+  [36500, 36500],
+  [99999, 36500],
+  [183, 190],
+  [0, 190],
+  [-1, 190],
+  [200.5, 190],
+  ['200', 190],
+  [true, 190],
+  [null, 190],
+  [{ days: 200 }, 190],
+  [[200], 190],
+] as const)(
+  '[AC-B3-08s#12] agent.trace.retention_days 为 %j 时按 %i 天：不可用回落 190、过大压到 36500，都不记失败',
+  async (value, days) => {
+    const f = await fixture('2026-10-08T19:00:00.000Z', true);
+    f.control.respond = async (query) =>
+      query.sql.includes(SETTINGS) ? [{ key: 'agent.trace.retention_days', value }] : undefined;
+    const report = await f.maintenance.runOnce();
+    expect(agentTraceCalls(f.queries).map((q) => q.parameters[1])).toEqual([days]);
+    expect(report.failed).toBe(0);
+    expect(f.logger.error).not.toHaveBeenCalled();
+  },
+);
+
+it.each(['2026-10-08T19:30:00.000Z', '2026-10-08T20:00:00.000Z'])(
+  '[AC-B3-08s#24] %s 配置读失败：第 M 节不调，整轮只记一次 retention_purge_failed、failed 为 1，done 行计入',
+  async (instant) => {
+    const f = await fixture(instant, true);
+    f.control.respond = async (query) => {
+      if (query.sql.includes(SETTINGS)) throw { code: '55P03', detail: 'private row data' };
+      return undefined;
+    };
+    const report = await f.maintenance.runOnce();
+    expect(report.failed).toBe(1);
+    expect(agentTraceCalls(f.queries)).toEqual([]);
+    expect(f.queries.filter((q) => q.sql.includes(SETTINGS))).toHaveLength(1);
+    expect(f.logger.error.mock.calls).toEqual([
+      [{ table: 'config_items', sqlstate: '55P03' }, 'retention_purge_failed'],
+    ]);
+    expect(f.logger.info.mock.calls.at(-1)).toEqual([
+      { ensured: ALL_ENSURED, dropped: 0, failed: 1 },
+      'partition_maintenance_done',
+    ]);
+  },
+);
+
+it('[AC-B3-08s#14] retention.purge.enabled 为 false：第 M 节不调，不写日志', async () => {
+  const f = await fixture('2026-10-08T19:00:00.000Z', true);
+  f.control.respond = async (query) =>
+    query.sql.includes(SETTINGS) ? [{ key: 'retention.purge.enabled', value: false }] : undefined;
+  const report = await f.maintenance.runOnce();
+  expect(report.failed).toBe(0);
+  expect(agentTraceCalls(f.queries)).toEqual([]);
+  expect(f.logger.warn).not.toHaveBeenCalled();
+  expect(f.logger.error).not.toHaveBeenCalled();
+});
+
+it('[AC-B3-08s#22] 循环到九个 0 为止，每表一行合计；调满 100 次仍 > 0 的表记 backlog', async () => {
+  const f = await fixture('2026-10-08T19:00:00.000Z', true);
+  let call = 0;
+  f.control.respond = async (query) => {
+    if (!query.sql.includes(AGENT_CALL)) return undefined;
+    call += 1;
+    return agentRows({ agent_runs: 1000, agent_sessions: call <= 2 ? 7 : 0 });
+  };
+  expect(await f.maintenance.runOnce()).toMatchObject({ failed: 0 });
+  expect(agentTraceCalls(f.queries)).toHaveLength(100);
+  expect(f.logger.warn.mock.calls).toEqual([
+    [{ table: 'agent_runs', rows: 100_000 }, 'agent_trace_purge_backlog'],
+  ]);
+  expect(f.logger.info.mock.calls.slice(0, -1)).toEqual([
+    [{ table: 'agent_sessions', rows: 14 }, 'agent_trace_purged'],
+  ]);
+
+  f.queries.length = 0;
+  f.logger.info.mockClear();
+  f.logger.warn.mockClear();
+  f.control.respond = async (query) =>
+    query.sql.includes(AGENT_CALL)
+      ? agentRows(agentTraceCalls(f.queries).length === 1 ? { agent_cards: 3 } : {})
+      : undefined;
+  expect(await f.maintenance.runOnce()).toMatchObject({ failed: 0 });
+  expect(agentTraceCalls(f.queries)).toHaveLength(2);
+  expect(f.logger.warn).not.toHaveBeenCalled();
+  expect(f.logger.info.mock.calls.slice(0, -1)).toEqual([
+    [{ table: 'agent_cards', rows: 3 }, 'agent_trace_purged'],
+  ]);
+});
+
+it.each([
+  ['数据库错误', { code: '57014', detail: 'private row data' }, '57014'],
+  ['行数超出批量', 'oversized', null],
+  ['表名顺序不对', 'misordered', null],
+  ['少一行', 'short', null],
+] as const)(
+  '[AC-B3-08s#23] 第二次调用失败（%s）：先记已删行数，再记 agent_trace_purge_failed，failed 为 1，不再续调，DEFAULT 检查照常，日志不带错误内容',
+  async (_label, failure, sqlstate) => {
+    const f = await fixture('2026-10-08T19:00:00.000Z', true);
+    let call = 0;
+    f.control.respond = async (query) => {
+      if (!query.sql.includes(AGENT_CALL)) return undefined;
+      call += 1;
+      if (call === 1) return agentRows({ agent_messages: 2 });
+      if (failure === 'oversized') return agentRows({ agent_messages: 1001 });
+      if (failure === 'misordered') return agentRows({}).reverse();
+      if (failure === 'short') return agentRows({}).slice(1);
+      throw failure;
+    };
+    const report = await f.maintenance.runOnce();
+    expect(report.failed).toBe(1);
+    expect(agentTraceCalls(f.queries)).toHaveLength(2);
+    expect(f.queries.at(-1)?.sql).toContain('partition_default_rows');
+    expect(f.logger.info.mock.calls).toEqual([
+      [{ table: 'agent_messages', rows: 2 }, 'agent_trace_purged'],
+      [{ ensured: ALL_ENSURED, dropped: 0, failed: 1 }, 'partition_maintenance_done'],
+    ]);
+    expect(f.logger.error.mock.calls).toEqual([[{ sqlstate }, 'agent_trace_purge_failed']]);
+    expect(JSON.stringify(f.logger.error.mock.calls)).not.toContain('private');
+  },
+);
+
+it('[AC-B3-08s#21] 04:00 起第 M 节与第 K 节共用一次配置读取，排在第 K 节之后、DEFAULT 检查之前', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  await f.maintenance.runOnce();
+  const order = f.queries.map((q) => q.sql);
+  expect(order.filter((sql) => sql.includes(SETTINGS))).toHaveLength(1);
+  const agent = order.findIndex((sql) => sql.includes(AGENT_CALL));
+  expect(order.findLastIndex((sql) => RETENTION_CALL.test(sql))).toBeLessThan(agent);
+  expect(agent).toBeLessThan(order.findIndex((sql) => sql.includes('partition_default_rows')));
 });
