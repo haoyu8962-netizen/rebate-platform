@@ -1,0 +1,37 @@
+{
+  "task": "CT-24zz",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "e53537efb921f32dfaaa0ad447410276c5a12829",
+  "red_tests": [],
+  "risk_note": "RV1 (contract only). restoreAdminReconDiff also handles type=platform_restore (BR-FUND-22 R12 / R13; D10-973 / D10-982 / D10-986): the server locks the order by the order_key in ref_id; not VOID / CLAWED_BACK any more, or the entry row is no longer ref_id's entry_id (stale) → 20902 resource=order; platform_status INVALID → 20001 restore_platform_invalid (VOID and CLAWED_BACK); VOID → R12 (back to ESTIMATED / WAITING / UNATTRIBUTED, no vouchers); CLAWED_BACK → R13 (ADMIN_ADJUST RESTORE re-pricing at the current effective union commission, beneficiaries by BR-CALC-09, same transaction booked_* and refunded_quantity_r9_baseline per D10-937; commission not positive → 20001 restore_commission_zero; a beneficiary difference < 0 is not posted, alerted and written into the restore audit, D10-986 ②). Response gains the optional rebate_status_after only; appeal_restore unchanged (its success example moved into components/examples, content unchanged). Order-appeal R12 / R13 stay restore_not_supported (no producer yet). Implementation follows in B2-09gb.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex quota exhausted (D10-823 ④): contract review by a fresh independent Claude via claude-run.sh. Round 1 output was rejected by claude-run's position check because the lane created an unrelated branch during the run (reported to the orchestrator); its content (1 S1: R13 did not refuse platform_status INVALID) was fixed in round 2. Round 2 pass with 2 S2 left for B2-09gb: a VOID order whose commission returned to 0 after registration is still restored by R12 (no money moves); a negative platform difference in R13 has no ledger template in the opposite direction (not reachable in ordinary data)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a65265eb8b5ed89e9ffbce4e8836776ae689663f",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "not re-run for this task: test/properties is unchanged from main; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

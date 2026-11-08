@@ -8340,11 +8340,19 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Handle an account-appeal restore difference by paying the member back (申诉恢复处理, ADMIN_RESTORE)
-         * @description The ADMIN_RESTORE of BR-FUND-22 ③ (拍板第二批 FUND-14; 编排裁定 D10-468 ①): an account (ban)
+         * Handle an account-appeal restore or a platform restore difference (申诉恢复 / 平台恢复处理, ADMIN_RESTORE)
+         * @description The ADMIN_RESTORE of BR-FUND-22 for two kinds of difference. (a) BR-FUND-22 ③ (拍板第二批
+         *     FUND-14; 编排裁定 D10-468 ①): an account (ban)
          *     appeal was revoked, and the shares of the member forfeited for `banned` during the ban
          *     (BR-CALC-13) and kept as platform revenue are paid back. The difference is the
-         *     `appeal_restore` the system registered when the appeal closed; the list and the detail are
+         *     `appeal_restore` the system registered when the appeal closed. (b) R12 / R13 of BR-FUND-22
+         *     (编排裁定 D10-973): a VOID or CLAWED_BACK order that the platform later reported valid again,
+         *     or whose union commission came back above 0; the difference is the `platform_restore` that
+         *     order sync registered (source R1, `ref_type=order`, `ref_id`
+         *     `{order_key}#RESTORE#{entry_id}` where `entry_id` is the rebate-history row by which the
+         *     order entered its current VOID or CLAWED_BACK; `resolution` holds `reason_code`,
+         *     `rebate_status` (VOID or CLAWED_BACK when registered), `trigger` (`status` or `commission`)
+         *     and `platform_status`). The list and the detail are
          *     GET /admin/v1/recon-diffs and GET /admin/v1/recon-diffs/{recon_diff_id}. Permission point
          *     `order.restore` (04 §11.2; one person can complete it, ADD-05). Step-up: totp tier
          *     (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
@@ -8358,16 +8366,37 @@ export interface paths {
          *     step-up (10003) → body (20001) → an unknown `recon_diff_id`, a difference of another app,
          *     or one of source R4 is 20001 with `data.fields=[recon_diff_id]` (no 404) → a difference
          *     already `adjusted`, `written_off` or `closed` is 20902 with `data.resource=recon_diff` →
-         *     a difference that is not an account-appeal restore (its `type` is not `appeal_restore`,
-         *     or its `resolution.reason_code` is not `APPEAL_RESTORE`, or it has no `user_id` or
-         *     `shares` there) is 20001 with `data.fields=[recon_diff_id]` and
-         *     `data.reason=restore_not_supported`. That covers `platform_restore` and the order-appeal
-         *     R12 and R13 of BR-FUND-22, which are not handled by this operation → the member has been
+         *     a difference whose `type` is neither `appeal_restore` nor `platform_restore`, or an
+         *     `appeal_restore` that is not an account-appeal restore (its `resolution.reason_code` is not
+         *     `APPEAL_RESTORE`, or it has no `user_id` or `shares` there), or a `platform_restore` whose
+         *     `ref_id` does not have the form above or names no order of the app, is 20001 with
+         *     `data.fields=[recon_diff_id]` and `data.reason=restore_not_supported`. That covers the
+         *     order-appeal R12 and R13 of BR-FUND-22 (申诉恢复 ① and ②): their producer is not built
+         *     yet, and handling them is left to a later step (D10-973). The checks then go by type.
+         *
+         *     For an `appeal_restore`, the member has been
          *     deleted: 20001 with `data.fields=[recon_diff_id]` and `data.reason=restore_user_deleted`;
          *     the difference is ended with POST .../close instead (D10-469 ①, default filled in by the
          *     agent).
          *
-         *     Effects, in one transaction, for each role listed in `resolution.shares` (BR-FUND-22 ③):
+         *     For a `platform_restore`: the order named by the `order_key` of `ref_id` is locked; its
+         *     current `rebate_status` is not VOID or CLAWED_BACK, or the rebate-history row by which it
+         *     entered that status is no longer the `entry_id` of `ref_id` (the order left the status and
+         *     came back, so the difference is out of date) → 20902 with `data.resource=order`; the
+         *     difference is ended with POST .../close. An order, VOID or CLAWED_BACK, whose current
+         *     `platform_status` is INVALID (the platform reported failure again after the difference was
+         *     registered; the guard `platform_status ≠ INVALID` of both R12 and R13) is not restored:
+         *     20001 with `data.fields=[recon_diff_id]` and `data.reason=restore_platform_invalid`. A
+         *     CLAWED_BACK order whose current effective union commission (BR-CALC-02) has a positive
+         *     part of 0 does not meet the premise of BR-FUND-22 (commission back above 0): 20001 with
+         *     `data.fields=[recon_diff_id]` and `data.reason=restore_commission_zero`. Both checks run
+         *     after the order lock and before anything is written, `restore_platform_invalid` first. In
+         *     both cases the handler can end the difference with POST .../close instead, nothing is
+         *     written, and the difference stays `open` (both reasons: default filled in by the agent,
+         *     D10-973, D10-986).
+         *
+         *     Effects of an `appeal_restore`, in one transaction, for each role listed in
+         *     `resolution.shares` (BR-FUND-22 ③):
          *     an `active` beneficiary event is appended for the member's role, so that later adjustments
          *     of the order count the re-split share as owed (the appeal-restore exception of BR-CALC-09).
          *     The member's entitlement for the role is recalculated from the order's `booked_base_fen`
@@ -8392,12 +8421,62 @@ export interface paths {
          *     for each role, `restored_fen` (0 when nothing was posted) and, before and after, the
          *     `status`; no personal data). `restored_fen` in the response is the total paid by this
          *     call. Nothing else changes: the order's `rebate_status` is not touched, and no withdrawal
-         *     hold is released (an `appeal_restore` difference carries none, BR-FUND-19).
+         *     hold is released (an `appeal_restore` difference carries none, BR-FUND-19). The response
+         *     has no `rebate_status_after`.
+         *
+         *     Effects of a `platform_restore` on a VOID order (R12), in one transaction: the order's
+         *     `rebate_status` returns, by its current `platform_status`, to ESTIMATED (DEPOSIT_PAID or
+         *     PAID) or WAITING (RECEIVED or SETTLED; `settle_period` taken from `received_at`, and when
+         *     that period's batch has already run the order goes into a supplementary batch or the next
+         *     period's batch, BR-FUND-04; without a `received_at` it returns to ESTIMATED and moves on as
+         *     R4 does, default filled in by the agent); an order with no `user_id` (unattributed)
+         *     returns to UNATTRIBUTED (the unattributed pool, BR-ATTR-16). No ledger entry is written,
+         *     and `restored_fen` is 0.
+         *
+         *     Effects of a `platform_restore` on a CLAWED_BACK order (R13), in one transaction: the
+         *     order's `rebate_status` becomes CREDITED. The new base is the current effective union
+         *     commission converted by BR-CALC-02; with it and the commission snapshot each
+         *     beneficiary's and the platform's entitlement is recalculated (the platform's includes the
+         *     reserve, BR-FUND-05), and its difference from the current net (net as in BR-FUND-08) is
+         *     posted as ADMIN_ADJUST (sub_type RESTORE, debit UNION_RECEIVABLE, credit
+         *     USER_BALANCE.available for a beneficiary or COMMISSION_REVENUE for the platform), uniq_key
+         *     `{order_key}:{user_id}:{role}:RESTORE:{recon_diff_id}` for a beneficiary and
+         *     `{order_key}:PLATFORM:RESTORE:{recon_diff_id}` for the platform. Where each beneficiary's
+         *     difference goes follows the beneficiary status rules of BR-CALC-09: a frozen beneficiary or
+         *     one under appeal gets no entry of their own, and a deferred difference obligation is opened
+         *     instead (BR-FUND-04 ⑫, R13 restore while the beneficiary is frozen or under appeal); the
+         *     share of a banned or deleted beneficiary, and the promotion share of a member identified
+         *     as under 18, goes to the platform. A beneficiary difference of 0 posts no zero-amount
+         *     entry. A negative beneficiary difference (not expected to occur) posts nothing either: the
+         *     restore does not take the member's money back; a warning is logged and the beneficiary,
+         *     role and negative amount are recorded in `resolution.restore` and in the audit record of
+         *     this restore (default filled in by the agent, 编排 D10-986 ②). A negative platform
+         *     difference is posted the other way round (debit COMMISSION_REVENUE, credit
+         *     UNION_RECEIVABLE) as in BR-FUND-08 (default filled in by the agent). In the same
+         *     transaction `booked_base_fen` becomes the new base,
+         *     `booked_n_fen` the positive part of that union commission, and
+         *     `refunded_quantity_r9_baseline` the order's `refunded_quantity` at that moment
+         *     (`refunded_quantity_at_credit` is not touched; D10-937). `restored_fen` is the total
+         *     credited to beneficiaries' `available` by this call (the platform's part and deferred
+         *     obligations are not counted).
+         *
+         *     For both R12 and R13 the `status` of the difference becomes `adjusted`, `closed_at` and
+         *     `updated_at` the server's current time, `handler_id` the caller, and `resolution` keeps
+         *     its keys and adds `restore` (`rebate_status_before`, `rebate_status_after`, the amount for
+         *     each beneficiary and role with where it went, the platform's amount, the total
+         *     `restored_fen`, the operator and the time) and the trimmed `note` when given.
+         *     `expected_fen` (the union commission after the platform restore, for display only),
+         *     `actual_fen` and `diff_fen` stay as registered. Writes an audit record (action
+         *     recon_diff_restore, with the `order_key`, the `rebate_status` before and after, the
+         *     amounts, any negative beneficiary difference left unposted (R13), `restored_fen` and,
+         *     before and after, the `status` of the difference; no personal data). The response carries `rebate_status_after`, the order's `rebate_status`
+         *     after the restore.
          *
          *     `Idempotency-Key` is required: same key and body → the first result (the same
          *     `restored_fen`); same key with another body → 20901; same key while still running →
          *     40901. A new key for a difference that is already `adjusted` is 20902. The step-up token
-         *     is a header and not part of the body hash, so a replay after a 10003 keeps its key.
+         *     is a header and not part of the body hash, so a replay after a 10003 keeps its key. The
+         *     same holds for both types.
          */
         post: operations["restoreAdminReconDiff"];
         delete?: never;
@@ -19347,7 +19426,7 @@ export interface components {
         };
         /**
          * @description Body of POST /admin/v1/recon-diffs/{recon_diff_id}/restore. The console sends no amount:
-         *     the amount is calculated by the server (BR-FUND-22 ③); `expected_fen` is for display only.
+         *     the amount is calculated by the server (BR-FUND-22 ③, R13); `expected_fen` is for display only.
          */
         AdminReconDiffRestoreRequest: {
             /** @description Optional operator note, 1–200 characters after trimming (else 20001 with data.fields=[note]); recorded under resolution.note. */
@@ -19357,9 +19436,15 @@ export interface components {
             recon_diff: components["schemas"]["AdminReconDiffDetail"];
             /**
              * Format: int64
-             * @description Total this call paid to the member over all roles; 0 when nothing was posted (D10-469 ③, D10-482). Never `expected_fen` taken as is.
+             * @description For an `appeal_restore`, the total this call paid to the member over all roles; 0 when nothing was posted (D10-469 ③, D10-482). For a `platform_restore`, the total credited to beneficiaries' `available` by this call (R13; the platform's part and deferred obligations are not counted), 0 for R12. Never `expected_fen` taken as is.
              */
             restored_fen: number;
+            /**
+             * @description Only for a `platform_restore` (always present there; absent for an `appeal_restore`):
+             *     the order's `rebate_status` after the restore — ESTIMATED, WAITING or UNATTRIBUTED
+             *     for R12, CREDITED for R13 (BR-FUND-22, D10-973).
+             */
+            rebate_status_after?: components["schemas"]["AdminOrderRebateStatus"];
         };
         AdminReconDiffRestoreResponse: {
             code: components["schemas"]["SuccessCode"];
@@ -39617,59 +39702,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "code": 0,
-                     *       "msg": "",
-                     *       "data": {
-                     *         "recon_diff": {
-                     *           "recon_diff_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8e03",
-                     *           "source": "R3",
-                     *           "type": "appeal_restore",
-                     *           "period": "2026-12",
-                     *           "ref_type": "order",
-                     *           "ref_id": "taobao:5550001",
-                     *           "expected_fen": 123,
-                     *           "actual_fen": 0,
-                     *           "diff_fen": 123,
-                     *           "status": "adjusted",
-                     *           "created_at": "2026-12-01T10:00:00+08:00",
-                     *           "closed_at": "2026-12-02T09:30:00+08:00",
-                     *           "handler_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
-                     *           "updated_at": "2026-12-02T09:30:00+08:00",
-                     *           "resolution": {
-                     *             "reason_code": "APPEAL_RESTORE",
-                     *             "appeal_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f9a01",
-                     *             "order_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f6d01",
-                     *             "order_key": "taobao:5550001",
-                     *             "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c02",
-                     *             "forfeit_reason": "banned",
-                     *             "shares": [
-                     *               {
-                     *                 "role": "direct",
-                     *                 "amount_fen": "123",
-                     *                 "forfeited_at": "2026-11-24T02:00:00+08:00"
-                     *               }
-                     *             ],
-                     *             "restore": {
-                     *               "shares": [
-                     *                 {
-                     *                   "role": "direct",
-                     *                   "restored_fen": "123"
-                     *                 }
-                     *               ],
-                     *               "restored_fen": "123",
-                     *               "operator": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
-                     *               "restored_at": "2026-12-02T09:30:00+08:00"
-                     *             },
-                     *             "note": "封禁申诉已撤销，核对后补发"
-                     *           }
-                     *         },
-                     *         "restored_fen": 123
-                     *       },
-                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
-                     *     }
-                     */
                     "application/json": components["schemas"]["AdminReconDiffRestoreResponse"];
                 };
             };

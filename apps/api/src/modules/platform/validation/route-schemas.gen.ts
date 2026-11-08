@@ -16739,7 +16739,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
     },
     "body": {
       "type": "object",
-      "description": "Body of POST /admin/v1/recon-diffs/{recon_diff_id}/restore. The console sends no amount:\nthe amount is calculated by the server (BR-FUND-22 ③); `expected_fen` is for display only.\n",
+      "description": "Body of POST /admin/v1/recon-diffs/{recon_diff_id}/restore. The console sends no amount:\nthe amount is calculated by the server (BR-FUND-22 ③, R13); `expected_fen` is for display only.\n",
       "additionalProperties": false,
       "properties": {
         "note": {
