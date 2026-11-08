@@ -5113,6 +5113,10 @@ export class AppModule {
                   }),
                 // B2-04zr: the operators' names on the union collection records.
                 adminNames: createAdminDisplayNameReader,
+                // B2-09zc: the 补差 approval's forfeited share event and the candidate list's
+                // members (identity's masked phones, BR-ID-33).
+                appendShareEvent: appendBeneficiaryEvent,
+                maskedPhones: (db, crypto) => createMaskedPhoneReader(db, crypto),
               }),
             ]
           : []),

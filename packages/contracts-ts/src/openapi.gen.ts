@@ -8908,7 +8908,10 @@ export interface paths {
          *
          *     The batch gets `confirmed_by` and `confirmed_at` once no candidate of it is pending. One
          *     audit record per call (action settle_adjust_batch_approve: the `batch_id`, every order's
-         *     outcome and amounts; no personal data). Candidates change by row_version CAS: of two
+         *     outcome and amounts; no personal data). When a share the approval gives the platform has
+         *     no voucher to carry its forfeit reason (the platform's rounding cancels the forfeited amount),
+         *     that order's transaction also writes one audit record settle_adjust_share_forfeited (order,
+         *     role, amount, reason; no personal data). Candidates change by row_version CAS: of two
          *     concurrent approvals of one batch, each order is approved once and its vouchers are
          *     written once.
          *

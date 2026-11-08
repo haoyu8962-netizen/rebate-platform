@@ -17350,6 +17350,167 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       "properties": {}
     }
   },
+  "adminListSettleAdjustments": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "querystring": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "default": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20
+        },
+        "status": {
+          "type": "string",
+          "description": "settle_adjustments.status (contracts/enums/fund.yaml settle_adjustment_status).",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "voided_stale_seq",
+            "voided_by_clawback"
+          ]
+        },
+        "batch_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "adminApproveSettleAdjustBatch": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "batch_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "batch_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "description": "The body of an action that takes no input; the amount is read by the server, never sent by the console.",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "adminRejectSettleAdjustBatch": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "batch_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "batch_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Required free-text reason, kept in the audit record."
+        }
+      }
+    }
+  },
   "adminRunSettleAdjust": {
     "headers": {
       "type": "object",

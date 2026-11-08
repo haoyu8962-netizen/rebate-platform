@@ -214,6 +214,16 @@ const RULES: readonly ActionRule[] = Object.freeze([
   // candidates (system:settlement, no point), target `orders:<order_id>` (D10-780).
   ...rules(['settle_adjust_run_request'], 'settle_adjust_run', null, fixed('fund.settle_adjust')),
   ...rules(['settle_adjust_candidate_superseded'], 'order', 'orders:', NONE),
+  // settlement (B2-09zc): the 补差 batch approval / rejection, target the batch id.
+  ...rules(
+    ['settle_adjust_batch_approve', 'settle_adjust_batch_reject'],
+    'settle_adjust_batch',
+    null,
+    fixed('fund.settle_adjust'),
+  ),
+  // B2-09zc (money r4): a share the approval gave the platform whose reason no voucher carries,
+  // recorded in the order's transaction; target `orders:<order_id>`.
+  ...rules(['settle_adjust_share_forfeited'], 'order', 'orders:', fixed('fund.settle_adjust')),
 ]);
 
 const BY_ACTION: ReadonlyMap<string, ActionRule> = new Map(

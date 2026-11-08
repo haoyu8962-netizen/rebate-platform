@@ -47,11 +47,17 @@ import {
   AdminSettleCommandsController,
 } from './http/admin/settle-commands.controller.ts';
 import type { AdminSettleAdjustRunDeps } from './adjust/admin-run.ts';
+import type { AdminSettleAdjustPorts, SettleAdjustDecisionDeps } from './adjust/approve.ts';
+import { getOrderNets } from '../ledger/index.ts';
 import { createBeneficiaryGate } from './credit/beneficiary-gate.ts';
 import {
   ADMIN_SETTLE_ADJUST_RUNS,
   AdminSettleAdjustRunsController,
 } from './http/admin/settle-adjust-runs.controller.ts';
+import {
+  ADMIN_SETTLE_ADJUSTMENTS,
+  AdminSettleAdjustmentsController,
+} from './http/admin/settle-adjustments.controller.ts';
 import {
   createRebatePort,
   type RebateDependencies,
@@ -181,10 +187,16 @@ export class SettlementModule {
  * B2-09zb: POST /admin/v1/settle-adjust-runs (fund.settle_adjust, step-up totp): finance's manual
  * trigger of the positive-difference candidate run (queues the settle_adjust job, one audit record);
  * without a database, idempotency or the job queue it registers and fails closed.
+ * B2-09zc: the 补差批次 list (fund.settle_adjust or fund.view) and the batch approval / rejection
+ * (fund.settle_adjust, step-up totp); without a database, idempotency, the event bus or the field
+ * cipher they register and fail closed.
  */
 export class SettlementAdminModule {
   static forAdmin(
-    ports: AdminSettleCommandPorts & AdminReconRestorePorts & AdminUnionReceiptPorts,
+    ports: AdminSettleCommandPorts &
+      AdminReconRestorePorts &
+      AdminUnionReceiptPorts &
+      AdminSettleAdjustPorts,
   ): DynamicModule {
     return {
       module: SettlementAdminModule,
@@ -194,6 +206,7 @@ export class SettlementAdminModule {
         AdminReconRestoreController,
         AdminUnionReceiptsController,
         AdminSettleAdjustRunsController,
+        AdminSettleAdjustmentsController,
       ],
       providers: [
         {
@@ -306,6 +319,55 @@ export class SettlementAdminModule {
                   queue,
                   auditOn: (trx) => ports.auditWriter(trx, clock),
                 },
+        },
+        {
+          provide: ADMIN_SETTLE_ADJUSTMENTS,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+            { token: FIELD_CRYPTO, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+            crypto?: FieldCrypto,
+          ): SettleAdjustDecisionDeps | null => {
+            if (
+              db === undefined ||
+              idempotency === undefined ||
+              eventBus === undefined ||
+              crypto === undefined
+            ) {
+              return null;
+            }
+            const phones = ports.maskedPhones(db, crypto);
+            return {
+              db,
+              clock,
+              logger: logger.child({ module: 'settlement' }),
+              idempotency,
+              ledger: ports.ledger({ clock, eventBus }),
+              gate: createBeneficiaryGate({
+                clock,
+                lockUsers: ports.lockUsers,
+                deletionStatus: ports.deletionStatus(db),
+                realnameStatus: ports.realnameStatus(db),
+                riskState: ports.riskState(db),
+                minors: ports.minors(crypto),
+              }),
+              readSnapshot: ports.readSnapshot,
+              readOrderNets: getOrderNets,
+              auditOn: (trx) => ports.auditWriter(trx, clock),
+              appendBeneficiaryEvent: (trx, input) => ports.appendShareEvent(trx, input, { clock }),
+              maskedPhones: (appId, userIds) => phones.maskedPhones(appId, userIds),
+            };
+          },
         },
       ],
     };

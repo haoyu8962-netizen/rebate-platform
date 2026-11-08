@@ -24847,7 +24847,6 @@ paths:
   /admin/v1/settle-adjustments:
     get:
       operationId: adminListSettleAdjustments
-      x-implementation: planned
       tags:
         - admin-adjustments
       summary: Positive settlement-difference candidates (月结正差补差), page by page, newest first
@@ -24938,7 +24937,6 @@ paths:
   /admin/v1/settle-adjust-batches/{batch_id}/approve:
     post:
       operationId: adminApproveSettleAdjustBatch
-      x-implementation: planned
       tags:
         - admin-adjustments
       summary: Approve a batch of positive settlement differences; each order is recomputed now
@@ -24986,7 +24984,10 @@ paths:
 
         The batch gets `confirmed_by` and `confirmed_at` once no candidate of it is pending. One
         audit record per call (action settle_adjust_batch_approve: the `batch_id`, every order's
-        outcome and amounts; no personal data). Candidates change by row_version CAS: of two
+        outcome and amounts; no personal data). When a share the approval gives the platform has
+        no voucher to carry its forfeit reason (the platform's rounding cancels the forfeited amount),
+        that order's transaction also writes one audit record settle_adjust_share_forfeited (order,
+        role, amount, reason; no personal data). Candidates change by row_version CAS: of two
         concurrent approvals of one batch, each order is approved once and its vouchers are
         written once.
 
@@ -25063,7 +25064,6 @@ paths:
   /admin/v1/settle-adjust-batches/{batch_id}/reject:
     post:
       operationId: adminRejectSettleAdjustBatch
-      x-implementation: planned
       tags:
         - admin-adjustments
       summary: Reject the pending candidates of a batch; nothing is written to the ledger
