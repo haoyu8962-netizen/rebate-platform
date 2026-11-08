@@ -1,0 +1,17 @@
+id: B1-04zzzzi
+repo: rebate-platform
+title: test-change 补 R-12 / B1-22l 覆盖空白（编排 11-09 02:00 ③，followups 9）——后台重置清转链缓存失败不影响重置、有效期内 relation_id 变化不命中转链缓存；只新增、主干已绿
+type: test-change
+# 2026-11-09 union 入账（编排 11-09 02:00 照 union 顺序 ③；followups 9 / B1-22l）。两处行为已实现、只有单测或无冻结用例：① linking/application/admin-union-bindings.ts 后台重置绑定提交后清该用户转链缓存，清缓存失败只记日志、重置照样生效（open 先按绑定答 30101，不读缓存外跳）；② BR-ATTR-05 细则「缓存键」（R-12）：有效期内 relation_id 变化 → 转链缓存不命中。新目录 test/spec/linking/r12-coverage-gaps/** 只新增规则用例（经真实服务 / 装配，*.int.test.ts 经 createTestDatabase），主干实现上即绿，不改冻结文件、不改源码。
+# 同 followups 9 的注释指针（admin-union-bindings.ts:26「BR-AI-04 细则『转链缓存』」应为「BR-ATTR-05 细则『缓存键』」，R-12 起）：linking 属资金 / 归属实现路径，chore 分支只改注释过不了 evidence-check（B1-04zzzw 先例），留给下一张本就改 linking 的实现单顺带改。新鲜独立 Claude 写用例、另一位只读复核；落地按 #24 报编排核（非资金测试）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/linking/r12-coverage-gaps/**'
+  - 'ops/tasks/B1-04zzzzi.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
