@@ -1,0 +1,28 @@
+id: B1-04zzzzc
+repo: rebate-platform
+title: union：京东内层 403 / 2001403 / 2001602 / 2002403、拼多多 20031 / 20004 / 20005 收紧为 upstream_misconfigured 并告警（FU-UNION-CRED-CLASS-JD-PDD，D10-1072 / D10-1073）
+type: impl
+# 2026-11-08 union 入账（D10-1073 三点照推荐）。方案 couli-runs/UNION-lane/cred-class-jd-pdd-plan-20261108.md（官方原文出处见 §1：京东「403 无访问权限，如有疑问请联系联盟客服」docs-mirror/jd/api/jd.union.open.goods.query.md:5109-5116 等；拼多多 20031「应用中不包含此接口…权限包」docs-mirror/pdd/guides/common-params-and-errors.md:43；20004 签名、20005 IP 白名单；京东 2001403 / 2001602 / 2002403 无权限）。归 upstream_misconfigured（业务拒绝类：不重试、不计熔断），改码后都加告警（一次 warn，只带接口与码，同大淘客 / 淘宝）。京东网关层签名 / app_key 码与拼多多 10016 / 20032 / 30000 等无实测本次不动（待定）。
+# 接受京东 403 影响（D10-1073 ③）：详情 30143 → 50401（有卡旧卡兜底）、池入库 / 复核不再误下架京东商品、转链 30143 → 50303、分享 30121 → 50303；拼多多短链展开遇 20031 不再吞成 link_unrecognized。治理层不改，catalog / parsing 上单（B1-04zzzx）已映射新码，linking 不跟。
+# 冻结测试照 D10-998 A：.each 表里要改期望的行由前置 test-change B1-04zzzzd 先删（含 jd-convert/kit.ts 数组元素）；本单只就地改 7 个普通 it 块期望码（标题不改，旧实现上为红），新期望补在新目录 test/spec/union/cred-class-jd-pdd/**（尽量不建支撑文件；jd-convert/wiring.test.ts 经计算名导入 kit，确需支撑文件时补 red_exempt 并在证据说明）。风险 union RV2；新鲜独立 Claude 写规则测试，另一位只读核无削弱；spec-test Claude；代码评审 Codex money。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/infra/jd/**'
+  - 'apps/api/src/modules/union/infra/pdd/**'
+  - 'specs/union/jd.md'
+test_paths:
+  - 'test/spec/union/cred-class-jd-pdd/**'
+  - 'test/spec/union/jd-core/response.test.ts'
+  - 'test/spec/union/jd-goods/requests.test.ts'
+  - 'test/spec/union/resilience-wiring/isolation.test.ts'
+  - 'test/spec/union/pdd-core/request.test.ts'
+  - 'test/spec/union/jd-convert/wiring.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/cred-class-jd-pdd/**'
+status: todo
