@@ -66,33 +66,10 @@ it('[AC-B1-04zzb#12] CAP-TB-07：淘宝订单查询回看 90 天，京东照旧 
   expect(orderQueryLookbackMs('pdd')).toBeNull();
 });
 
-it('[AC-B1-04zzb#13] 回扫先单档：淘宝默认开、30 天（rescanDefaults），不登记 order_sync.rescan.taobao.* 配置键；jd / pdd 不变', () => {
-  expect(rescanDefaults('taobao')).toEqual({ enabled: true, days: 30 });
-  expect(rescanDefaults('jd')).toEqual({ enabled: true, days: 30 });
-  expect(rescanDefaults('pdd')).toEqual({ enabled: false, days: 90 });
-  // B1-04zzz（D10-845 / D10-892）起淘宝回扫键已登记；标题沿用旧文，另开 test-change 更正
-  expect(configItemSpecOf(TAOBAO_ENABLED)).toEqual({
-    key: TAOBAO_ENABLED,
-    valueType: 'boolean',
-    options: null,
-    permission: 'config.business',
-    adminEditable: true,
-  });
-  expect(configItemSpecOf(TAOBAO_DAYS)).toEqual({
-    key: TAOBAO_DAYS,
-    valueType: 'number',
-    options: null,
-    permission: 'config.business',
-    adminEditable: true,
-    range: { integer: true, min: 1, max: 90 },
-  });
-});
-
 it('[AC-B1-04zzb#13] 回扫先单档：淘宝默认开、30 天（rescanDefaults），order_sync.rescan.taobao.* 配置键已登记（boolean / 整数 1～90、config.business）；jd / pdd 不变', () => {
   expect(rescanDefaults('taobao')).toEqual({ enabled: true, days: 30 });
   expect(rescanDefaults('jd')).toEqual({ enabled: true, days: 30 });
   expect(rescanDefaults('pdd')).toEqual({ enabled: false, days: 90 });
-  // B1-04zzz（D10-845 / D10-892）起淘宝回扫键已登记；标题沿用旧文，另开 test-change 更正
   expect(configItemSpecOf(TAOBAO_ENABLED)).toEqual({
     key: TAOBAO_ENABLED,
     valueType: 'boolean',
