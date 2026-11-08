@@ -1,0 +1,124 @@
+{
+  "risk_note": "RV2 (orders update step, platform metrics, monitoring rules; no money moved). FU-TB-FEE-MISSING-METRIC (orchestrator D10-741 ⑤, D10-992 ① option (a), D10-1003). The 'order already has an estimate, a later report lacks the service fee' condition now lives in one place (service-fee-alert.ts serviceFeeMissingCounts: serviceFeeDeducted platforms only, so jd never counts; a fee of 0n is present). update-step counts the new labelled counter couli_service_fee_missing_total{platform} for pdd and taobao; for pdd the old couli_pdd_service_fee_missing_total and the pdd_service_fee_missing warn are unchanged (double write), taobao never touches them ([AC-B1-04zz#21] green). Per D10-1003 ① the counter is a standard labelled counter: a platform's series appears only once it has been counted (frozen [AC-B1-01zzh#5] unchanged). couli.yaml adds CouliServiceFeeMissing (sum by (platform) (increase(couli_service_fee_missing_total[1h])) > 0, 5m, warning) after CouliPddServiceFeeMissing, which stays; frozen [AC-B1-01zzo#10] only appends that entry (D10-1003 ②, B1-04zy precedent; test_paths #2801). No new log line. Host: rule + frozen metric specs 70/70, int service-fee-missing-metric 4/4, pdd-net-n 15/15, taobao-net-n 9/9, api unit 942; tsc only in CI. Known S2 from both money reviewers, reported to the orchestrator: with a lazy series the first taobao miss after a worker restart starts the series at 1, so increase()[1h] reads 0 and the new alert does not fire for that event (pdd is still covered by the legacy alert). Round 4 (CI on #2813): frozen alerting-eval [AC-B1-25b#8] needs a sample line for every metric an alert rule uses, which the lazy series could not give at startup, while frozen [AC-B1-01zzh#5] forbids any platform=\"pdd\" series in that render. Orchestrator D10-1051 replaced D10-1003 ①: couli_service_fee_missing_total exports {platform=\"taobao\"} 0 from startup, pdd only after its first count; this also removes the taobao first-sample alert gap, so B1-08zz (FU-SERVICE-FEE-ALERT-FIRST-SAMPLE) is withdrawn. Host round 4: api unit 33/33, rule + frozen specs 82/82 (incl. [AC-B1-25b#8], [AC-B1-01zzh#5], [AC-B1-01zzo#10], [AC-B1-08zy#1]), int 4 / 15 / 9, eslint / prettier / tsc clean.",
+  "reviews": [
+    {
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "reviewer": "claude-independent",
+      "note": "Codex hit its usage limit (until 11-15); fresh independent Claude via claude-run.sh (approvals #36 / D10-775), money r1 pass; one S2: first sample of a lazily created taobao series is not seen by increase()[1h] (consequence of D10-1003 ①)."
+    },
+    {
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "reviewer": "claude-independent",
+      "note": "Second fresh independent Claude per D10-775 ② (first attempt gave no output, exit 10, not counted; retried), pass; same S2 independently."
+    },
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex via codex-run.sh (D10-1055: the independent-Claude per-task call breaker of 10 was reached, remaining reviews go to Codex, restored D10-1025); full static money review of the round-4 implementation, pass, no findings. A general review was asked for by D10-1055 but codex-run refuses general on RV2, so the money type was used."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claude contexts in test/spec/orders/service-fee-missing-metric/** (+ NotImplemented skeletons). r1 pass with two S2 (a re-inlined condition counting jd / fee 0n would pass the pipeline tests; an info-level log with order number and amount would not be caught) — the implementation keeps the condition in serviceFeeMissingCounts and adds no log line. The first implementation hit two frozen tests; per D10-1003 test round 2 changed this task's own [AC-B1-08zy#1] to 'series only after counting' and appended CouliServiceFeeMissing to frozen [AC-B1-01zzo#10] (append only, reviewed read-only in spec-test r2). red/2 PASS (13 red in 5 files, 1 unchanged exempt); spec-test r2 pass. Round 3 (CI verify-static on #2813 after the rebase): main had widened UnionOrder['platform'], so the test's Partial<UnionOrder> patch no longer fit the fixture's taobao / jd / pdd parameter (TS2322 at pipeline.int.test.ts:36); a fresh independent Claude made only the mechanical type fix (Patch = Partial<Omit<UnionOrder, 'platform'>>), no assertion changed; red/4 PASS; spec-test r3 (incremental) pass, the two r1 S2 carried. The implementation commit is unchanged from the one both money reviewers passed. Round 4 (D10-1051, approvals 55): a fresh independent Claude changed only [AC-B1-08zy#1] to 'taobao at 0 from startup, pdd only after counting'; red/6 PASS (13 red, 1 unchanged exempt). The spec-test review of round 4 was a full review by Codex (D10-1055, engine switch after the claude-independent breaker), pass with no S0 / S1; it confirmed the frozen alert-list diff only appends one entry and a comment."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/orders/service-fee-missing-metric/decision.test.ts > [AC-B1-08zy#4][BR-CALC-03] 拼多多已有 est、后续服务费与 est 都缺：新计数记在 pdd 名下，旧的 pdd 计数照记",
+    "test/spec/orders/service-fee-missing-metric/decision.test.ts > [AC-B1-08zy#5][BR-CALC-03] 淘宝已有 est、后续服务费与 est 都缺：新计数记在 taobao 名下，旧的 pdd 计数不记（[AC-B1-04zz#21] 不变）",
+    "test/spec/orders/service-fee-missing-metric/decision.test.ts > [AC-B1-08zy#6][BR-CALC-03] 不计数：有服务费、带了 est、库里原本没有 est（新单缺费走待处理，不在本单）、京东（不扣服务费）",
+    "test/spec/orders/service-fee-missing-metric/metrics.test.ts > [AC-B1-08zy#1] /metrics 的 couli_service_fee_missing_total 是 counter：未计数时只有 platform=\"taobao\" 一条且值 0、没有 platform=\"pdd\" 序列；计 pdd 后出现 pdd=1、taobao 仍 0；再计 taobao 后 taobao=1，只带 platform 一个标签",
+    "test/spec/orders/service-fee-missing-metric/metrics.test.ts > [AC-B1-08zy#2] 按平台计数：计 pdd 只有 pdd 序列 +1，计 taobao 只有 taobao 序列 +1，每次 +1",
+    "test/spec/orders/service-fee-missing-metric/metrics.test.ts > [AC-B1-08zy#3][BR-ID-33] 计数之后标签里仍只有 platform（pdd / taobao）：没有金额、订单号、商品，标签值不是数字",
+    "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#9][BR-CALC-03] 拼多多已有 est 的单后续缺服务费：est、版本不变；新计数 platform=\"pdd\" +1、taobao 不变；旧计数照旧 +1，打一条 pdd_service_fee_missing",
+    "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#10][BR-CALC-03] 淘宝已有 est 的单后续缺服务费：est、版本不变；新计数 platform=\"taobao\" +1、pdd 不变；旧计数不变，不打 pdd_service_fee_missing",
+    "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#11][BR-CALC-03] 不计数：有服务费、带了 est、库里原本没有 est——拼多多与淘宝的新计数都不动，旧计数也不动",
+    "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#12][BR-ID-33] 缺服务费这一路的 warn / error 日志：只有平铺字段，字段名与值里没有金额、平台单号、商品、归因参数",
+    "test/spec/orders/service-fee-missing-metric/rules.test.ts > [AC-B1-08zy#7] couli.yaml 有且只有一条读 couli_service_fee_missing_total 的告警 CouliServiceFeeMissing：sum by (platform) 分组、increase(...[1h]) > 0，for 5m，warning，不带 fund 标签，summary 写出平台",
+    "test/spec/orders/service-fee-missing-metric/rules.test.ts > [AC-B1-08zy#8] 旧告警暂留：CouliPddServiceFeeMissing 仍是唯一读 couli_pdd_service_fee_missing_total 的规则，表达式、for、severity 不变；告警名不重复",
+    "test/spec/platform/metrics-followups/rules.test.ts > [AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名、表达式、for 与标签与 B1-01zzh 一致，只有拒绝写入一条的窗口变成 [10m]，couli-sync 组另加 CouliPddServiceFeeMissing 一条"
+  ],
+  "task": "B1-08zy",
+  "spec_commit": "bd4e27f05da9d87ef4b38196079fcb9e78f67d92",
+  "spec_ref": "39756e36debb7660e6b113b9e4392e7339ab687c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "bd4e27f05da9d87ef4b38196079fcb9e78f67d92",
+      "tree": "cd8a8569db47c0f26659cc9ec5b07ed37c0156a5",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T13:04:08Z",
+      "finished_at": "2026-11-08T13:04:49Z",
+      "red_tests": [
+        "test/spec/orders/service-fee-missing-metric/decision.test.ts > [AC-B1-08zy#4][BR-CALC-03] 拼多多已有 est、后续服务费与 est 都缺：新计数记在 pdd 名下，旧的 pdd 计数照记",
+        "test/spec/orders/service-fee-missing-metric/decision.test.ts > [AC-B1-08zy#5][BR-CALC-03] 淘宝已有 est、后续服务费与 est 都缺：新计数记在 taobao 名下，旧的 pdd 计数不记（[AC-B1-04zz#21] 不变）",
+        "test/spec/orders/service-fee-missing-metric/decision.test.ts > [AC-B1-08zy#6][BR-CALC-03] 不计数：有服务费、带了 est、库里原本没有 est（新单缺费走待处理，不在本单）、京东（不扣服务费）",
+        "test/spec/orders/service-fee-missing-metric/metrics.test.ts > [AC-B1-08zy#1] /metrics 的 couli_service_fee_missing_total 是 counter：未计数时只有 platform=\"taobao\" 一条且值 0、没有 platform=\"pdd\" 序列；计 pdd 后出现 pdd=1、taobao 仍 0；再计 taobao 后 taobao=1，只带 platform 一个标签",
+        "test/spec/orders/service-fee-missing-metric/metrics.test.ts > [AC-B1-08zy#2] 按平台计数：计 pdd 只有 pdd 序列 +1，计 taobao 只有 taobao 序列 +1，每次 +1",
+        "test/spec/orders/service-fee-missing-metric/metrics.test.ts > [AC-B1-08zy#3][BR-ID-33] 计数之后标签里仍只有 platform（pdd / taobao）：没有金额、订单号、商品，标签值不是数字",
+        "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#9][BR-CALC-03] 拼多多已有 est 的单后续缺服务费：est、版本不变；新计数 platform=\"pdd\" +1、taobao 不变；旧计数照旧 +1，打一条 pdd_service_fee_missing",
+        "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#10][BR-CALC-03] 淘宝已有 est 的单后续缺服务费：est、版本不变；新计数 platform=\"taobao\" +1、pdd 不变；旧计数不变，不打 pdd_service_fee_missing",
+        "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#11][BR-CALC-03] 不计数：有服务费、带了 est、库里原本没有 est——拼多多与淘宝的新计数都不动，旧计数也不动",
+        "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts > [AC-B1-08zy#12][BR-ID-33] 缺服务费这一路的 warn / error 日志：只有平铺字段，字段名与值里没有金额、平台单号、商品、归因参数",
+        "test/spec/orders/service-fee-missing-metric/rules.test.ts > [AC-B1-08zy#7] couli.yaml 有且只有一条读 couli_service_fee_missing_total 的告警 CouliServiceFeeMissing：sum by (platform) 分组、increase(...[1h]) > 0，for 5m，warning，不带 fund 标签，summary 写出平台",
+        "test/spec/orders/service-fee-missing-metric/rules.test.ts > [AC-B1-08zy#8] 旧告警暂留：CouliPddServiceFeeMissing 仍是唯一读 couli_pdd_service_fee_missing_total 的规则，表达式、for、severity 不变；告警名不重复",
+        "test/spec/platform/metrics-followups/rules.test.ts > [AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名、表达式、for 与标签与 B1-01zzh 一致，只有拒绝写入一条的窗口变成 [10m]，couli-sync 组另加 CouliPddServiceFeeMissing 一条"
+      ],
+      "expected": [
+        "test/spec/orders/service-fee-missing-metric/decision.test.ts",
+        "test/spec/orders/service-fee-missing-metric/metrics.test.ts",
+        "test/spec/orders/service-fee-missing-metric/pipeline.int.test.ts",
+        "test/spec/orders/service-fee-missing-metric/rules.test.ts",
+        "test/spec/platform/metrics-followups/rules.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "c087d8a1c4fc82a51efddee50b118f48f1100d85b349e374b4dd661523b813f9"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "5845199608f50bdb0b8ee6356cd071825964a1d9f4ea4f4f02680e707f2ece49"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "dc53266091793fba490c4d2410ad2d01edcfb82b",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}

@@ -173,6 +173,14 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
       for: '5m',
       labels: { severity: 'warning' },
     },
+    // B1-08zy（D10-1003）：couli-sync 组在 CouliPddServiceFeeMissing 之后追加按 platform 分组的新告警。
+    {
+      group: 'couli-sync',
+      alert: 'CouliServiceFeeMissing',
+      expr: 'sum by (platform) (increase(couli_service_fee_missing_total[1h])) > 0',
+      for: '5m',
+      labels: { severity: 'warning' },
+    },
     ...EXPECTED.slice(lastSync + 1),
     fallbackAlert,
   ]);

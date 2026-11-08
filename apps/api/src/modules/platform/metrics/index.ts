@@ -8,6 +8,8 @@ export type {
 } from './auto-payout.ts';
 export { cacheFundCollector } from './cache.ts';
 export { countPddServiceFeeMissing } from './pdd-service-fee.ts';
+export { countServiceFeeMissing } from './service-fee-missing.ts';
+export type { ServiceFeeMissingPlatform } from './service-fee-missing.ts';
 export { collectWorkerMetrics } from './collect.ts';
 export type { WorkerCollection, WorkerMetricsSnapshot } from './collect.ts';
 export { collectRescanPositions } from './rescan-position.ts';

@@ -14,6 +14,7 @@ import type { AutoPayoutDailySnapshot } from './auto-payout.ts';
 import type { WorkerCollection, WorkerMetricsSnapshot } from './collect.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
 import { pddServiceFeeMissingTotal } from './pdd-service-fee.ts';
+import { serviceFeeMissingSamples } from './service-fee-missing.ts';
 import { REVIEW_OVERDUE_GAUGE, type ReviewOverdueSnapshot } from './review-overdue.ts';
 import { WATER_LOW_GAUGE, type WaterLowSnapshot } from './water-low.ts';
 
@@ -191,6 +192,19 @@ function pddServiceFeeFamily(): Family {
     help: 'Pinduoduo reports without the service fee on orders that already have an estimate.',
     type: 'counter',
     samples: [{ value: pddServiceFeeMissingTotal() }],
+  };
+}
+
+/** B1-08zy: taobao always present (0 until counted); pdd only after its first count (D10-1051). */
+function serviceFeeMissingFamily(): Family {
+  return {
+    name: 'couli_service_fee_missing_total',
+    help: 'Reports without the service fee on orders that already have an estimate, by platform.',
+    type: 'counter',
+    samples: serviceFeeMissingSamples().map(({ platform, value }) => ({
+      labels: { platform },
+      value,
+    })),
   };
 }
 
@@ -383,6 +397,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...waterLow,
         ...taobaoSearch,
         pddServiceFeeFamily(),
+        serviceFeeMissingFamily(),
         ...processFamilies(),
       ]
         .map(renderFamily)

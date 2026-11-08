@@ -107,6 +107,7 @@ export { TICK_STOP_WAIT_MS, waitForTickStop } from './lifecycle/bounded-stop.ts'
 export {
   collectWorkerMetrics,
   countPddServiceFeeMissing,
+  countServiceFeeMissing,
   createMetricsRegistry,
   startMetricsServer,
 } from './metrics/index.ts';
@@ -115,6 +116,7 @@ export type {
   MetricsRegistryOptions,
   MetricsServer,
   MetricsServerOptions,
+  ServiceFeeMissingPlatform,
   WorkerMetricsSnapshot,
 } from './metrics/index.ts';
 // Inject `REDIS` (api / stream / admin / worker; payout has none) and take a namespace per module.

@@ -60,6 +60,14 @@ groups:
         annotations:
           summary: 'Pinduoduo reports lack the service fee on orders that have an estimate'
           description: 'The estimate stays at its last net value until the fee comes back (BR-CALC-03, B1-08zh).'
+      - alert: CouliServiceFeeMissing
+        expr: 'sum by (platform) (increase(couli_service_fee_missing_total[1h])) > 0'
+        for: '5m'
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Reports of {{ $labels.platform }} lack the service fee on orders that have an estimate'
+          description: 'The estimate stays at its last net value until the fee comes back (BR-CALC-03, B1-08zy).'
   - name: couli-redis
     rules:
       - alert: CouliRedisDown
