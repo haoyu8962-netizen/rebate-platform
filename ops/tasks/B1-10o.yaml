@@ -18,6 +18,13 @@ paths:
   - 'apps/api/src/modules/orders/domain/admin-claim-view*.ts'
 test_paths:
   - 'test/spec/admin/lookup-blank-fields/**'
+  - 'test/spec/identity/admin-users/lookup.int.test.ts'
+modify_existing:
+  - file: 'test/spec/identity/admin-users/lookup.int.test.ts'
+    test: '[AC-F1-07b#23] lookup 返回体与详情接口逐字段相同（含风控与联盟绑定，手机号脱敏）'
+    reason: tighten_only
+    ruling: D10-1084
+    note: '只把只持 user.lookup 账号的期望改成 risk.reason = null（D10-1048 ① 内部文字按权限置空）；其余字段、三处读取、noPlaintext 都不动'
 impl: claude
 tester: claude-independent
 accept:
