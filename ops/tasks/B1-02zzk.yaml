@@ -1,0 +1,23 @@
+id: B1-02zzk
+repo: rebate-platform
+title: 后台实名更正的年龄线也改读 minor.min_realname_age（BR-ID-26）——同 B1-02zzg 读法：缺省 / 读失败 / 非法 / 低于 14 一律 14，只收紧不放宽；与 App 端提交实名同一口径
+type: impl
+# 2026-11-08 入账（identity，FU-ADMIN-REALNAME-CORRECTION-MIN-AGE；编排 19:54 回 identity 19:53：本线做、排在 B1-02zzi 之后、上线前要合）。
+# 主干 identity/application/admin-realname-correction.ts:261 用常量 MIN_REALNAME_AGE=14，不随配置；B1-02zzg 已在 realname.ts 提供 readMinRealnameAge，本单复用。
+# 编排定 RV2 小单：路径按 risk-map 算 RV1（identity），评审照 RV2 对待（Codex 额度用尽期间由新鲜独立 Claude 评审，approvals 36）。
+refs: [BR-ID-26]
+refs_hash:
+  BR-ID-26: 5a5a56cd755e
+deps: [B1-02zzg]
+paths:
+  - 'apps/api/src/modules/identity/application/admin-realname-correction.ts'
+  - 'apps/api/src/modules/identity/application/admin-realname-correction.test.ts'
+  - 'apps/api/src/modules/identity/identity-admin.module.ts'
+test_paths:
+  - 'test/spec/identity/admin-realname-min-age-config/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/admin-realname-min-age-config/**'
+status: todo
