@@ -1,0 +1,100 @@
+{
+  "task": "B1-06zh",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "a55d6b8da5161f62464c7703bea96ac918c92cb1",
+  "red_tests": [
+    "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#12] couli_app gets SELECT and INSERT only, couli_readonly SELECT only, other roles nothing",
+    "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#13] couli_app cannot rewrite any column of a filing (insufficient_privilege)",
+    "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#14] couli_app cannot DELETE or TRUNCATE filings (insufficient_privilege)",
+    "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#15] couli_readonly reads filings but cannot insert, update or delete them",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#1] filings table has the pinned NOT NULL columns, a uuid primary key and no SQL clock on filed_at",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#2] a full, non-partial unique key on exactly (app_id, user_id, pid) rejects a second filing of the same pid",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#3] one user may hold filings for several pids, and several users may file the same pid",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#4] concurrent filings of one (app, user, pid) have exactly one winner",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#5] insert-if-absent on the filing key keeps the first filing unchanged",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#6] every pinned column rejects NULL with not_null_violation",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#7] an empty pid is rejected by a CHECK constraint",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#8] foreign keys keep the tenant-scoped user and account and never cascade",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#9] unknown or other-tenant users and accounts are rejected with foreign_key_violation",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#10] the account behind a filing must be a Pinduoduo union account",
+    "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#11] union_bindings gains no pid column and keeps both of its unique keys"
+  ],
+  "risk_note": "RV2 by path (db). New table app.union_pdd_pid_filings records, per (app_id, user_id, pid), that a Pinduoduo user has filed on that promotion slot (BR-ID-22; D10-1097 (B): union_bindings is left untouched because changing its unique index would need a migration-gate change). Unique (app_id, user_id, pid), pid non-empty, platform fixed to pdd and tied to a Pinduoduo account by (app_id, platform, union_account_id); couli_app SELECT / INSERT only. No reader or writer yet (the linking task follows); no money, ledger or contract change.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a55d6b8da5161f62464c7703bea96ac918c92cb1",
+      "tree": "7f9fd56e690d1ff9eb73da0126ea55791d7b52a6",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-08T19:32:59Z",
+      "finished_at": "2026-11-08T19:33:08Z",
+      "red_tests": [
+        "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#12] couli_app gets SELECT and INSERT only, couli_readonly SELECT only, other roles nothing",
+        "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#13] couli_app cannot rewrite any column of a filing (insufficient_privilege)",
+        "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#14] couli_app cannot DELETE or TRUNCATE filings (insufficient_privilege)",
+        "test/spec/db/union-pdd-pid-filings/access.int.test.ts > [AC-B1-06zh#15] couli_readonly reads filings but cannot insert, update or delete them",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#1] filings table has the pinned NOT NULL columns, a uuid primary key and no SQL clock on filed_at",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#2] a full, non-partial unique key on exactly (app_id, user_id, pid) rejects a second filing of the same pid",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#3] one user may hold filings for several pids, and several users may file the same pid",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#4] concurrent filings of one (app, user, pid) have exactly one winner",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#5] insert-if-absent on the filing key keeps the first filing unchanged",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#6] every pinned column rejects NULL with not_null_violation",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#7] an empty pid is rejected by a CHECK constraint",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#8] foreign keys keep the tenant-scoped user and account and never cascade",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#9] unknown or other-tenant users and accounts are rejected with foreign_key_violation",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#10] the account behind a filing must be a Pinduoduo union account",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts > [AC-B1-06zh#11] union_bindings gains no pid column and keeps both of its unique keys"
+      ],
+      "expected": [
+        "test/spec/db/union-pdd-pid-filings/access.int.test.ts",
+        "test/spec/db/union-pdd-pid-filings/filings.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "4b1f5891484d4d5c1883c2621f264569f8a63532b289f65acaa21cb42297e132"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 at effort medium (D10-1075): pass with no findings; static only. Its out_of_scope note about a deleted post-credit recheck chain came from the worktree lagging main, not from this change."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude (ledger tester claude-independent) in 2 attempts: attempt 1 targeted the voided plan (pid column on union_bindings), r1 pass with one S2, archived in couli-runs/B1-06zh/plan-a-void/; attempt 2 targets the new table, red run 15/15 red for the right reason, spec-test r2 by a fresh independent Claude (D10-1080): pass."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "edd549b4687dfa7cf1a5ea166f2a321c68a4acb5",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

@@ -2133,6 +2133,17 @@ export interface UnionCredentials {
   updated_at: Generated<Timestamp>;
 }
 
+export interface UnionPddPidFilings {
+  app_id: string;
+  created_at: Generated<Timestamp>;
+  filed_at: Timestamp;
+  id: string;
+  pid: string;
+  platform: Generated<string>;
+  union_account_id: string;
+  user_id: string;
+}
+
 export interface UnionPids {
   app_id: string;
   created_at: Generated<Timestamp>;
@@ -2459,6 +2470,7 @@ export interface DB {
   union_binding_conflicts: UnionBindingConflicts;
   union_bindings: UnionBindings;
   union_credentials: UnionCredentials;
+  union_pdd_pid_filings: UnionPddPidFilings;
   union_pids: UnionPids;
   union_raw_payloads: UnionRawPayloads;
   union_receipts: UnionReceipts;

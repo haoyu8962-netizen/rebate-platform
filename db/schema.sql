@@ -6138,6 +6138,24 @@ CREATE TABLE app.union_credentials (
 
 
 --
+-- Name: union_pdd_pid_filings; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.union_pdd_pid_filings (
+    id uuid NOT NULL,
+    app_id text NOT NULL,
+    user_id uuid NOT NULL,
+    pid text NOT NULL,
+    union_account_id uuid NOT NULL,
+    platform text DEFAULT 'pdd'::text NOT NULL,
+    filed_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT union_pdd_pid_filings_pid_check CHECK ((pid <> ''::text)),
+    CONSTRAINT union_pdd_pid_filings_platform_check CHECK ((platform = 'pdd'::text))
+);
+
+
+--
 -- Name: union_pids; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -8560,6 +8578,22 @@ ALTER TABLE ONLY app.union_bindings
 
 ALTER TABLE ONLY app.union_credentials
     ADD CONSTRAINT union_credentials_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: union_pdd_pid_filings union_pdd_pid_filings_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_pdd_pid_filings
+    ADD CONSTRAINT union_pdd_pid_filings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: union_pdd_pid_filings union_pdd_pid_filings_user_pid_key; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_pdd_pid_filings
+    ADD CONSTRAINT union_pdd_pid_filings_user_pid_key UNIQUE (app_id, user_id, pid);
 
 
 --
@@ -12319,6 +12353,22 @@ ALTER TABLE ONLY app.union_bindings
 
 ALTER TABLE ONLY app.union_credentials
     ADD CONSTRAINT union_credentials_account_fkey FOREIGN KEY (app_id, union_account_id) REFERENCES app.union_accounts(app_id, id);
+
+
+--
+-- Name: union_pdd_pid_filings union_pdd_pid_filings_account_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_pdd_pid_filings
+    ADD CONSTRAINT union_pdd_pid_filings_account_fkey FOREIGN KEY (app_id, platform, union_account_id) REFERENCES app.union_accounts(app_id, platform, id);
+
+
+--
+-- Name: union_pdd_pid_filings union_pdd_pid_filings_user_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_pdd_pid_filings
+    ADD CONSTRAINT union_pdd_pid_filings_user_fkey FOREIGN KEY (app_id, user_id) REFERENCES app.users(app_id, id);
 
 
 --
@@ -17527,6 +17577,14 @@ GRANT SELECT(created_at) ON TABLE app.union_credentials TO couli_readonly;
 
 GRANT UPDATE(updated_at) ON TABLE app.union_credentials TO couli_app;
 GRANT SELECT(updated_at) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: TABLE union_pdd_pid_filings; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.union_pdd_pid_filings TO couli_app;
+GRANT SELECT ON TABLE app.union_pdd_pid_filings TO couli_readonly;
 
 
 --
