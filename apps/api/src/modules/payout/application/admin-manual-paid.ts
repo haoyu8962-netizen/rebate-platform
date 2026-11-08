@@ -17,6 +17,7 @@ import {
   type HandlerResult,
   type Idempotency,
   type IdempotentResponse,
+  type RootLogger,
 } from '../../platform/index.ts';
 import { instant } from './payout-landing.ts';
 import { TaxYtdIdentityMissingError } from './tax-ytd.ts';
@@ -34,6 +35,7 @@ export interface AdminManualPaidDeps {
   readonly idempotency: Idempotency;
   readonly manualPaid: WithdrawalManualPaid;
   readonly auditOn: (trx: Transaction<DB>) => AuditPort;
+  readonly logger: Pick<RootLogger, 'warn'>;
 }
 
 /** The guard's verified admin account and the request's address (for the audit row). */
@@ -70,8 +72,9 @@ async function payOne(
   const { appId, adminId } = operator;
   const now = deps.clock.now();
   const paidAt = instant(now, Date.parse(entry.paid_at));
+  let paidBeforeReview = false;
   try {
-    return await deps.db.transaction().execute(async (trx): Promise<Item> => {
+    const item = await deps.db.transaction().execute(async (trx): Promise<Item> => {
       const result = await deps.manualPaid.record(trx, {
         appId,
         withdrawalId: id,
@@ -82,6 +85,7 @@ async function payOne(
         now,
       });
       if (result.kind === 'refused') return skipped(result.reason);
+      paidBeforeReview = result.paidBeforeReview;
       await deps.auditOn(trx).append({
         appId,
         actor: adminId,
@@ -94,11 +98,18 @@ async function payOne(
           channel_order_id: entry.channel_order_id,
           paid_at: paidAt.toISOString(),
           paid_fen: fenToJsonNumber(result.netFen),
+          ...(result.paidBeforeReview ? { paid_before_review: true } : {}),
         },
         ip: operator.ip,
       });
       return { withdrawal_id: rawId, result: 'paid', reason: null };
     });
+    // D10-678 ①: never refused (an offline payment can precede the click on 通过); operations
+    // review it. Logged after the commit, so a rolled-back item never alerts.
+    if (paidBeforeReview) {
+      deps.logger.warn({ app_id: appId, withdrawal_id: id }, 'payout_manual_paid_before_review');
+    }
+    return item;
   } catch (error: unknown) {
     // Both roll this item's transaction back, so nothing of it stays.
     if (isChannelOrderIdCollision(error)) return skipped('channel_order_id_taken');

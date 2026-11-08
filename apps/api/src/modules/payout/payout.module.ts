@@ -1145,6 +1145,7 @@ export class PayoutAdminModule {
                   clock,
                   idempotency,
                   auditOn: (trx) => options.auditWriter(trx, clock),
+                  logger: logger.child({ module: 'payout' }),
                   manualPaid: createWithdrawalManualPaid({
                     ledger: options.ledger({ clock, eventBus }),
                     lockUsersForUpdate: options.lockUsersForUpdate,

@@ -67,7 +67,12 @@ export interface ManualPaidInput {
 }
 
 export type ManualPaidResult =
-  | { readonly kind: 'paid'; readonly netFen: bigint }
+  | {
+      readonly kind: 'paid';
+      readonly netFen: bigint;
+      /** paid_at strictly earlier than reviewed_at (D10-678 ①: not refused, flagged for review). */
+      readonly paidBeforeReview: boolean;
+    }
   | { readonly kind: 'refused'; readonly reason: ManualPaidRefusal };
 
 export interface WithdrawalManualPaid {
@@ -144,6 +149,7 @@ export function createWithdrawalManualPaid(
           'payout_channel',
           'row_version',
           'created_at',
+          'reviewed_at',
         ])
         .where('app_id', '=', appId)
         .where('id', '=', withdrawalId)
@@ -257,7 +263,11 @@ export function createWithdrawalManualPaid(
       if (row.payout_channel === PAYOUT_RECON_CHANNEL) {
         await sendLatePaidCheck(queue, trx, { app_id: appId, withdrawal_id: row.id, round: 0 });
       }
-      return { kind: 'paid', netFen: row.net_fen };
+      return {
+        kind: 'paid',
+        netFen: row.net_fen,
+        paidBeforeReview: row.reviewed_at !== null && paidAtMs < row.reviewed_at.getTime(),
+      };
     },
   };
 }
