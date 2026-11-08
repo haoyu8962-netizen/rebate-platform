@@ -21,6 +21,7 @@ paths:
   - 'apps/api/src/modules/linking/index.ts'
   - 'apps/api/src/app.module.ts'
   - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml' # D10-952：30153 的 action 加进店例外（只给联系客服），与 openProductShop description 一致
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
