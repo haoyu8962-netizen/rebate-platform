@@ -1,0 +1,118 @@
+{
+  "red_tests": [
+    "test/spec/identity/admin-realname-min-age-config/configured.int.test.ts > [AC-B1-02zzk#1] 配置 16：更正为 15 岁、14 岁的身份 → 30407，不调供应商、不覆盖、不留存；满 16 周岁时刻（第 16 个生日次日 00:00 +08:00）前一毫秒仍 30407，恰到该时刻通过",
+    "test/spec/identity/admin-realname-min-age-config/configured.int.test.ts > [AC-B1-02zzk#4] 按 app 隔离：同一后台入口上 A 配 16、C 配 17 不影响无配置的 B（按 14），各 app 按自己的值判定",
+    "test/spec/identity/admin-realname-min-age-config/consistency.int.test.ts > [AC-B1-02zzk#6] 与 App 端一致（配置 16）：同一时刻、同一出生日期，App 端提交与后台更正给出相同的年龄判定",
+    "test/spec/identity/admin-realname-min-age-config/consistency.int.test.ts > [AC-B1-02zzk#6] 与 App 端一致（配置 18）：同一时刻、同一出生日期，App 端提交与后台更正给出相同的年龄判定",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#2] 无配置行按 08 默认 14：12 岁与满 14 时刻前一毫秒 30407，恰到时刻通过；同一入口上配 16 的 app 仍拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（低于下限 10）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（低于下限 13）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（零）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（负数 -16）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（非整数 16.5）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（非整数 13.5）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（字符串 \"16\"）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（字符串 \"10\"）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（字符串 \"abc\"）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（高于上限 19）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（高于上限 100）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（JSON null）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（布尔 true）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（数组 [16]）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（对象 {\"value\":16}）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+    "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#5] 读配置失败按 14：已配 16 但读取抛错时 12 岁、13 岁仍 30407，满 14 与 15 岁通过（不回 50001）",
+    "test/spec/identity/admin-realname-min-age-config/leap-day-consistency.int.test.ts > [AC-B1-02zzk#6] 与 App 端一致（配置 18、2 月 29 日出生）：2026-03-01 23:59:59 与 2026-03-02 00:00（+08:00）App 端提交与后台更正给出相同判定，2008-02-29 同 2008-03-01",
+    "test/spec/identity/admin-realname-min-age-config/leap-day.int.test.ts > [AC-B1-02zzk#1] 配置 18、出生 2008-02-29（非闰年以 3 月 1 日为生日）：2026-03-01 23:59:59（+08:00）仍 30407，2026-03-02 00:00（+08:00）恰好通过"
+  ],
+  "risk_note": "RV1 by path, handled as RV2 (编排 19:54; FU-ADMIN-REALNAME-CORRECTION-MIN-AGE). The admin realname correction judged the age line with the constant MIN_REALNAME_AGE = 14 (admin-realname-correction.ts:261) while App submission reads minor.min_realname_age since B1-02zzg. It now reuses B1-02zzg's readMinRealnameAge: a safe integer 14..18 is used, anything else (no row, read failure, invalid, out of range) is 14 — never looser; a read failure still judges (no 50001); the fallback warn carries only app / key / reason (no ID number, no name). Read after the blocklist check (step 4) and before the duplicate check (step 6), holding no transaction or lock. Wiring: the admin entry does not install IdentityModule and app.module is outside the paths, so identity-admin.module passes the content per-app/per-key config reader already given to the admin module (options.dataCopyCalendar(db, clock), pool-bound); the rule tests through the real admin entry are green on it. A dedicated name in app.module can come later. Full verification is the required CI checks (approvals 21).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex general r1 (D10-1075: Codex first) pass, 0 findings, 0 out_of_scope (couli-runs/B1-02zzk/review-code-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude via claude-run.sh (attempts 1–2). Gate spec-test by Codex (D10-1075): r1 fail with one S1 — no 29 February birth case through the admin entry (an implementation taking 28 February as the non-leap birthday would let a correction through one day early); attempt 2 added leap-day.int.test.ts and leap-day-consistency.int.test.ts (config 18, born 2008-02-29: 2026-03-01 23:59:59.999 +08:00 → 30407, 2026-03-02 00:00 → passes; App and admin agree); r2 pass, 0 findings (couli-runs/B1-02zzk/review-spec-r1.json, review-spec-r2.json). Red: 21 → 23 rule tests red for the right reason, 0 problems, 0 exemptions; on the implementation the local container ran all 23 green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f4397c53ca0dc3e81fe3edf8c9ecc2aa4ff254c0",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  },
+  "task": "B1-02zzk",
+  "spec_commit": "e9cf46a6dc786b5ddef5a97e95abcc098c9801e4",
+  "spec_ref": "865361d5ec4637aef928bbbe3823621bc9b098fc",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e9cf46a6dc786b5ddef5a97e95abcc098c9801e4",
+      "tree": "22340498bd4b4ada02038477a1c8733ae2471cbd",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T15:17:26Z",
+      "finished_at": "2026-11-08T15:18:04Z",
+      "red_tests": [
+        "test/spec/identity/admin-realname-min-age-config/configured.int.test.ts > [AC-B1-02zzk#1] 配置 16：更正为 15 岁、14 岁的身份 → 30407，不调供应商、不覆盖、不留存；满 16 周岁时刻（第 16 个生日次日 00:00 +08:00）前一毫秒仍 30407，恰到该时刻通过",
+        "test/spec/identity/admin-realname-min-age-config/configured.int.test.ts > [AC-B1-02zzk#4] 按 app 隔离：同一后台入口上 A 配 16、C 配 17 不影响无配置的 B（按 14），各 app 按自己的值判定",
+        "test/spec/identity/admin-realname-min-age-config/consistency.int.test.ts > [AC-B1-02zzk#6] 与 App 端一致（配置 16）：同一时刻、同一出生日期，App 端提交与后台更正给出相同的年龄判定",
+        "test/spec/identity/admin-realname-min-age-config/consistency.int.test.ts > [AC-B1-02zzk#6] 与 App 端一致（配置 18）：同一时刻、同一出生日期，App 端提交与后台更正给出相同的年龄判定",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#2] 无配置行按 08 默认 14：12 岁与满 14 时刻前一毫秒 30407，恰到时刻通过；同一入口上配 16 的 app 仍拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（低于下限 10）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（低于下限 13）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（零）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（负数 -16）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（非整数 16.5）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（非整数 13.5）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（字符串 \"16\"）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（字符串 \"10\"）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（字符串 \"abc\"）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（高于上限 19）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（高于上限 100）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（JSON null）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（布尔 true）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（数组 [16]）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#3] 配置非法（对象 {\"value\":16}）按 14、绝不放宽：12 岁与 13 岁仍 30407，满 14 与 15 岁通过；同一入口上配 16 的 app 拒 15 岁",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts > [AC-B1-02zzk#5] 读配置失败按 14：已配 16 但读取抛错时 12 岁、13 岁仍 30407，满 14 与 15 岁通过（不回 50001）",
+        "test/spec/identity/admin-realname-min-age-config/leap-day-consistency.int.test.ts > [AC-B1-02zzk#6] 与 App 端一致（配置 18、2 月 29 日出生）：2026-03-01 23:59:59 与 2026-03-02 00:00（+08:00）App 端提交与后台更正给出相同判定，2008-02-29 同 2008-03-01",
+        "test/spec/identity/admin-realname-min-age-config/leap-day.int.test.ts > [AC-B1-02zzk#1] 配置 18、出生 2008-02-29（非闰年以 3 月 1 日为生日）：2026-03-01 23:59:59（+08:00）仍 30407，2026-03-02 00:00（+08:00）恰好通过"
+      ],
+      "expected": [
+        "test/spec/identity/admin-realname-min-age-config/configured.int.test.ts",
+        "test/spec/identity/admin-realname-min-age-config/consistency.int.test.ts",
+        "test/spec/identity/admin-realname-min-age-config/fallback.int.test.ts",
+        "test/spec/identity/admin-realname-min-age-config/leap-day-consistency.int.test.ts",
+        "test/spec/identity/admin-realname-min-age-config/leap-day.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b6ab3260ce6e71ee50de2d8a17f07de84f84eea84d80aa9bce8e5429dcc7182f"
+        }
+      ]
+    }
+  ]
+}

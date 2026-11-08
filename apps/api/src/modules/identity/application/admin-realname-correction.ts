@@ -15,7 +15,11 @@
 //   3. 20001 data.fields=[id_no] — format (parseResidentIdNo, as realname.ts); [name] when the
 //      name is empty after normalizePersonName.
 //   4. 44001 — the new number is on an active id_no blocklist entry; no risk_hits, no appeal.
-//   5. 30407 — under MIN_REALNAME_AGE at the Clock instant (BR-ID-26).
+//   5. 30407 — under the app's age line at the Clock instant (BR-ID-26 细则「配置」): the line is
+//      read with readMinRealnameAge (./realname.ts, the App-side submission's reading of
+//      minor.min_realname_age: an integer 14..18 as configured; no row, a failing read or any
+//      other value is MIN_REALNAME_AGE, never lower; a failing read is not 50001). The read runs
+//      on the configuration reader's own pooled connection while no transaction or lock is held.
 //   6. 30405 — the new id_no_hmac is verified on another user of this app (the user's own does not
 //      count; the other account is never revealed).
 //   7. vendor (createRealnameVerifier): mismatch 30406, timeout 50401, anything else 50301; nothing
@@ -60,7 +64,8 @@ import type {
   WithdrawalSucceededReader,
 } from '../ports/withdrawal-in-flight.ts';
 import { createPayoutAccountInvalidation } from './payout-account-invalidation.ts';
-import { MIN_REALNAME_AGE } from './realname.ts';
+import { readMinRealnameAge } from './realname.ts';
+import type { SmsConfigReader } from './sms-codes.ts';
 
 /** The audit action of every submission (contract adminCorrectUserRealname). */
 export const ADMIN_REALNAME_CORRECTION_ACTION = 'user_realname_correct';
@@ -117,6 +122,14 @@ export interface IdNoBlocklistPort {
 
 export type CorrectionWithdrawals = WithdrawalNonTerminalReader & WithdrawalSucceededReader;
 
+/**
+ * Business configuration by app and key (content's reader over the entry's pool; identity never
+ * reads config_items): only minor.min_realname_age is read here, and only its value.
+ */
+export interface CorrectionConfigReader {
+  configValue(appId: string, key: string): Promise<{ readonly value: unknown } | null>;
+}
+
 export interface AdminRealnameCorrectionOptions {
   readonly db: Kysely<DB>;
   readonly clock: Clock;
@@ -132,6 +145,11 @@ export interface AdminRealnameCorrectionOptions {
   /** Binds the audit port to a handle (app.module: admin's createAuditWriter). */
   readonly auditOn: (handle: Kysely<DB>) => AuditPort;
   readonly events: Pick<EventBus, 'publish'>;
+  /**
+   * The reader of minor.min_realname_age (BR-ID-26 细则「配置」). Absent or null: the line is
+   * MIN_REALNAME_AGE.
+   */
+  readonly config?: CorrectionConfigReader | null;
 }
 
 /** The verified identity the realname row holds, decrypted in memory only. */
@@ -202,6 +220,20 @@ function outcomeOf(
 
 const cipherText = (value: Uint8Array) => Buffer.from(value).toString('utf8');
 
+/**
+ * readMinRealnameAge's port over a reader that answers the value only (it reads nothing else of
+ * the entry); a synchronous throw of the reader becomes a rejection, so it is a failing read.
+ */
+function ageLineReader(config: CorrectionConfigReader | null | undefined): SmsConfigReader | null {
+  if (config === null || config === undefined) return null;
+  return {
+    configValue: async (appId, key) => {
+      const entry = await config.configValue(appId, key);
+      return entry === null || entry === undefined ? null : { value: entry.value, version: 0 };
+    },
+  };
+}
+
 export class AdminRealnameCorrection {
   readonly #options: AdminRealnameCorrectionOptions;
   readonly #stages: ReturnType<typeof createDeletionStageReader>;
@@ -228,7 +260,7 @@ export class AdminRealnameCorrection {
     name: string,
     parsed: ReturnType<typeof parseResidentIdNo>,
   ): Promise<AdminRealnameCorrectionResult> {
-    const { db, clock, crypto, blocklist } = this.#options;
+    const { db, clock, crypto, blocklist, logger } = this.#options;
     if (!UUID.test(command.userId)) return { code: 20001, data: { fields: ['user_id'] } };
 
     // 1–2: read only, in a short transaction of their own (the withdrawal port reads on one).
@@ -257,8 +289,14 @@ export class AdminRealnameCorrection {
     ) {
       return { code: 44001 };
     }
-    // 5: age at the Clock instant (BR-ID-26).
-    if (!isAtLeastAge(next.birthDate, MIN_REALNAME_AGE, clock.now())) return { code: 30407 };
+    // 5: age at the Clock instant against the app's line (BR-ID-26 细则「配置」); read here, where
+    // no transaction or lock is held (the reader borrows a pooled connection of its own).
+    const ageLine = await readMinRealnameAge(
+      ageLineReader(this.#options.config),
+      command.appId,
+      logger,
+    );
+    if (!isAtLeastAge(next.birthDate, ageLine, clock.now())) return { code: 30407 };
     // 6: verified on another user of this app (the user's own value does not count).
     if (await this.#occupiedElsewhere(db, command, next.idNoHmac)) return { code: 30405 };
 

@@ -13,7 +13,10 @@
 // The real-name correction (B1-27a; BR-ID-25 细则「实名更正」): app.module also hands in payout's
 // withdrawal readers, a read-only id_no blocklist match over risk's digests and the token of the
 // isolated store's own field cipher (PRIOR_IDENTITY_FIELD_CRYPTO); the two-element vendor is
-// createRealnameVerifier of the environment, assembled while the entry starts. Without a database,
+// createRealnameVerifier of the environment, assembled while the entry starts. Its age line reads
+// minor.min_realname_age (BR-ID-26 细则「配置」) through content's configuration reader over the
+// entry's database — the one app.module hands in as dataCopyCalendar (the admin entry assembles no
+// IdentityModule, so IDENTITY_CONFIG is not there); without it the line is 14. Without a database,
 // field cipher, prior identity cipher or event bus the route still registers and every submission
 // fails closed (50001).
 // The personal information copy requests (B1-27c; BR-ID-40): app.module also hands in admin's
@@ -115,7 +118,10 @@ export interface IdentityAdminOptions {
   readonly priorIdentityCrypto: symbol;
   /** admin's reads of the copy requests' registrants (download rights, current names). */
   readonly dataCopyRegistrants: AdminDataCopyRegistrants;
-  /** The working-day calendar over the entry's database (content's configuration reader). */
+  /**
+   * The working-day calendar over the entry's database (content's configuration reader); the
+   * real-name correction also reads minor.min_realname_age through it (B1-02zzk).
+   */
   readonly dataCopyCalendar: (db: Kysely<Database>, clock: Clock) => DeletionCalendarConfigReader;
 }
 
@@ -260,6 +266,8 @@ export class IdentityAdminModule {
                   blocklist: options.idNoBlocklist({ clock, crypto }),
                   auditOn: (handle: Kysely<Database>) => options.auditWriter(handle, clock),
                   events,
+                  // BR-ID-26 细则「配置」: content's reader on its own pooled connection.
+                  config: options.dataCopyCalendar(db, clock),
                 });
           },
         },

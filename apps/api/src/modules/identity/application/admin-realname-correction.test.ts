@@ -24,6 +24,7 @@ import type { RealnameVerificationResult } from '../ports/realname-verifier.ts';
 import {
   AdminRealnameCorrection,
   type AdminRealnameCorrectionCommand,
+  type AdminRealnameCorrectionOptions,
 } from './admin-realname-correction.ts';
 import { payoutAccountChecks } from './payout-account.ts';
 import {
@@ -59,7 +60,11 @@ const OLD = { name: '测试旧名', idNo: checkDigit('11010519491231002') };
 const NEW = { name: '测试新名', idNo: checkDigit('44030519960721028') };
 
 /** Answers the statements of the correction; every statement is kept in `seen`. */
-function scriptedDb(seen: CompiledQuery[], flag: { at: Date | null }): Kysely<DB> {
+function scriptedDb(
+  seen: CompiledQuery[],
+  flag: { at: Date | null },
+  tx: { open: number } = { open: 0 },
+): Kysely<DB> {
   const answer = (query: CompiledQuery): QueryResult<unknown> => {
     seen.push(query);
     const { sql } = query;
@@ -115,9 +120,18 @@ function scriptedDb(seen: CompiledQuery[], flag: { at: Date | null }): Kysely<DB
   const driver: Driver = {
     init: () => Promise.resolve(),
     acquireConnection: () => Promise.resolve(connection),
-    beginTransaction: () => Promise.resolve(),
-    commitTransaction: () => Promise.resolve(),
-    rollbackTransaction: () => Promise.resolve(),
+    beginTransaction: () => {
+      tx.open += 1;
+      return Promise.resolve();
+    },
+    commitTransaction: () => {
+      tx.open -= 1;
+      return Promise.resolve();
+    },
+    rollbackTransaction: () => {
+      tx.open -= 1;
+      return Promise.resolve();
+    },
     releaseConnection: () => Promise.resolve(),
     destroy: () => Promise.resolve(),
   };
@@ -165,16 +179,25 @@ function scriptedRedis() {
   return { handle, store, calls };
 }
 
-function setup() {
+function setup(extra: Pick<AdminRealnameCorrectionOptions, 'config'> = {}) {
   const seen: CompiledQuery[] = [];
   const verify = vi.fn<() => Promise<RealnameVerificationResult>>();
   const audits: AuditInput[] = [];
   const publish = vi.fn(async () => ({ eventId: 'event-1', duplicate: false }));
   const flag: { at: Date | null } = { at: null };
+  const tx = { open: 0 };
+  const logs: unknown[][] = [];
   const service = new AdminRealnameCorrection({
-    db: scriptedDb(seen, flag),
+    db: scriptedDb(seen, flag, tx),
     clock: new FixedClock(NOW),
-    logger: { info: () => undefined, warn: () => undefined },
+    logger: {
+      info: (...args: unknown[]) => {
+        logs.push(['info', ...args]);
+      },
+      warn: (...args: unknown[]) => {
+        logs.push(['warn', ...args]);
+      },
+    },
     crypto,
     priorCrypto: crypto,
     verifier: { verify },
@@ -190,6 +213,7 @@ function setup() {
       },
     }),
     events: { publish },
+    ...extra,
   });
   const command: AdminRealnameCorrectionCommand = {
     appId: APP,
@@ -200,7 +224,7 @@ function setup() {
     idNo: NEW.idNo,
     reason: '企业微信核对后更正',
   };
-  return { seen, verify, audits, publish, service, command, flag };
+  return { seen, verify, audits, publish, service, command, flag, tx, logs };
 }
 
 it('[AC-B1-27a] 后台实名更正（含二要素不一致）不占用户自助实名的每日次数：REALNAME_ATTEMPTS 计数不变，用户当天仍可提交 3 次', async () => {
@@ -373,4 +397,128 @@ it('[AC-B1-02zq#34] 带待加验标记：30419 reverify_pending，不调供应�
   });
   expect(t.verify).not.toHaveBeenCalled();
   expect(t.audits).toHaveLength(1);
+});
+
+// B1-02zzk (BR-ID-26 细则「配置」): the line of step 5 is the app's minor.min_realname_age, read
+// as the App-side submission reads it. At NOW (2026-10-09 10:00 +08:00) someone born 2010-10-08
+// is 16 (since 2026-10-09 00:00), born 2010-10-09 is 15 (16 at 2026-10-10 00:00), born
+// 2013-05-04 is 13.
+const AGE_16 = checkDigit('44030520101008002');
+const AGE_15 = checkDigit('44030520101009002');
+const AGE_13 = checkDigit('44030520130504046');
+
+type ConfigAnswer = { readonly value: unknown } | null | Error;
+
+/** A reader of the configuration: every call kept with the open transactions at that moment. */
+function ageConfig(answer: ConfigAnswer, tx: { open: number } | null = null) {
+  const calls: { appId: string; key: string; openTx: number }[] = [];
+  const holder = { tx };
+  const reader = {
+    configValue: (appId: string, key: string) => {
+      calls.push({ appId, key, openTx: holder.tx?.open ?? 0 });
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+    },
+  };
+  return { reader, calls, holder };
+}
+
+/** The correction of the user to `idNo` under the reader's answer; the line it decided on. */
+async function judgedUnder(answer: ConfigAnswer, idNo: string) {
+  const config = ageConfig(answer);
+  const t = setup({ config: config.reader });
+  config.holder.tx = t.tx;
+  t.verify.mockResolvedValue({ outcome: 'match', provider: 'unit' });
+  const result = await t.service.correct({ ...t.command, idNo });
+  return { result, t, config };
+}
+
+it('[AC-B1-02zzk#1] 配置 16：15 岁的新身份 30407（不调供应商、不覆盖），满 16 周岁的新身份通过；按本 app 读 minor.min_realname_age，读时不持有事务', async () => {
+  const young = await judgedUnder({ value: 16 }, AGE_15);
+  expect(young.result.code).toBe(30407);
+  expect(young.t.verify).not.toHaveBeenCalled();
+  expect(young.t.seen.some((query) => query.sql.startsWith('update'))).toBe(false);
+  expect(young.t.publish).not.toHaveBeenCalled();
+  expect(young.config.calls).toEqual([{ appId: APP, key: 'minor.min_realname_age', openTx: 0 }]);
+
+  const of16 = await judgedUnder({ value: 16 }, AGE_16);
+  expect(of16.result.code).toBe(0);
+  expect(of16.t.verify).toHaveBeenCalledTimes(1);
+  expect(of16.config.calls).toEqual([{ appId: APP, key: 'minor.min_realname_age', openTx: 0 }]);
+  // The configured line is not a fallback: nothing logged about it.
+  expect(JSON.stringify(of16.t.logs)).not.toContain('identity_realname_age_config_fallback');
+});
+
+it('[AC-B1-02zzk#2] 配置缺省（无此行或未接配置读取口）：按 14，15 岁通过、13 岁 30407，不记兜底日志', async () => {
+  const missing = await judgedUnder(null, AGE_15);
+  expect(missing.result.code).toBe(0);
+  expect(missing.config.calls).toHaveLength(1);
+  expect(JSON.stringify(missing.t.logs)).not.toContain('identity_realname_age_config_fallback');
+  expect((await judgedUnder(null, AGE_13)).result.code).toBe(30407);
+
+  for (const config of [undefined, null]) {
+    const t = setup(config === undefined ? {} : { config });
+    t.verify.mockResolvedValue({ outcome: 'match', provider: 'unit' });
+    expect((await t.service.correct({ ...t.command, idNo: AGE_15 })).code).toBe(0);
+    const u = setup(config === undefined ? {} : { config });
+    expect((await u.service.correct({ ...u.command, idNo: AGE_13 })).code).toBe(30407);
+    expect(u.verify).not.toHaveBeenCalled();
+  }
+});
+
+it('[AC-B1-02zzk#3] 读配置失败：按 14 照常判定，不报 50001；兜底日志只带 app_id 与键名，不含身份证号与姓名', async () => {
+  const failing = new Error(`config read failed for ${NEW.name} ${AGE_15}`);
+  const passed = await judgedUnder(failing, AGE_15);
+  expect(passed.result.code).toBe(0);
+  const refused = await judgedUnder(failing, AGE_13);
+  expect(refused.result.code).toBe(30407);
+  expect(refused.t.verify).not.toHaveBeenCalled();
+
+  for (const { t } of [passed, refused]) {
+    const fallbacks = t.logs.filter((log) => log.includes('identity_realname_age_config_fallback'));
+    expect(fallbacks).toEqual([
+      [
+        'warn',
+        { app_id: APP, key: 'minor.min_realname_age', reason: 'read_failed' },
+        'identity_realname_age_config_fallback',
+      ],
+    ]);
+    const text = JSON.stringify(t.logs);
+    for (const secret of [AGE_15, AGE_13, NEW.name, OLD.name, OLD.idNo]) {
+      expect(text).not.toContain(secret);
+    }
+  }
+});
+
+it('[AC-B1-02zzk#4] 配置越界（低于 14、高于 18）：按 14，绝不放宽到 14 以下，也不收紧到 19 以上', async () => {
+  for (const value of [10, 13, 0, -16, 19, 100]) {
+    const loose = await judgedUnder({ value }, AGE_13);
+    expect(loose.result.code, `value ${value}: 13 岁仍拒`).toBe(30407);
+    expect(loose.t.verify).not.toHaveBeenCalled();
+    const line14 = await judgedUnder({ value }, AGE_15);
+    expect(line14.result.code, `value ${value}: 按 14，15 岁通过`).toBe(0);
+    const fallbacks = line14.t.logs.filter((log) =>
+      log.includes('identity_realname_age_config_fallback'),
+    );
+    expect(fallbacks).toEqual([
+      [
+        'warn',
+        { app_id: APP, key: 'minor.min_realname_age', reason: 'invalid' },
+        'identity_realname_age_config_fallback',
+      ],
+    ]);
+    expect(JSON.stringify(line14.t.logs)).not.toContain(AGE_15);
+  }
+  // The bounds themselves are lines: 14 lets 15 through, 18 refuses 16.
+  expect((await judgedUnder({ value: 14 }, AGE_15)).result.code).toBe(0);
+  expect((await judgedUnder({ value: 18 }, AGE_16)).result.code).toBe(30407);
+});
+
+it('[AC-B1-02zzk#5] 配置非整数（小数、字符串、null、布尔、数组、对象）：按 14，13 岁仍拒、15 岁通过', async () => {
+  for (const value of [16.5, 13.5, '16', '10', 'abc', null, true, [16], { value: 16 }]) {
+    const label = JSON.stringify(value);
+    expect((await judgedUnder({ value }, AGE_13)).result.code, `${label}: 13 岁`).toBe(30407);
+    const line14 = await judgedUnder({ value }, AGE_15);
+    expect(line14.result.code, `${label}: 15 岁`).toBe(0);
+    expect(JSON.stringify(line14.t.logs)).toContain('identity_realname_age_config_fallback');
+  }
 });
