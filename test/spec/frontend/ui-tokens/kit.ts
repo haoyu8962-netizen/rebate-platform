@@ -5,25 +5,16 @@ import { expect } from 'vitest';
 const moduleUrl = import.meta.url;
 export const ROOT = new URL('../../../../', moduleUrl);
 
-// CT-11bt transition (D10-965): the pinned planning version follows contracts/design-tokens.json
-// metadata.version. '0.5.1' keeps the f088f04 pins unchanged; '0.5.2' (DSX-48) pins c98ae93.
-// Any other version fails. CT-11bu removes the 0.5.1 branch after DSX-48 lands.
+// CT-11bu (D10-965): contracts/design-tokens.json metadata.version must be '0.5.2' (DSX-48),
+// pinned to planning c98ae93. Any other version fails.
 export interface Pin {
-  version: '0.5.1' | '0.5.2';
+  version: '0.5.2';
   commit: string;
   json: string;
   css: string;
 }
 
 export const PINS: Readonly<Record<Pin['version'], Pin>> = {
-  // 0.5.1: JSON is copied byte for byte from this planning commit, not the implementation
-  // snapshot. CSS preserves the old fixture plus the seven additions derived from the rules.
-  '0.5.1': {
-    version: '0.5.1',
-    commit: 'f088f0473230d1e70232b8a246b92ef53d723929',
-    json: 'design-tokens.f088f04.json',
-    css: 'variables.f088f04.css',
-  },
   // 0.5.2: JSON and CSS are copied byte for byte from this planning commit (design/tokens/).
   '0.5.2': {
     version: '0.5.2',

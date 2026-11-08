@@ -22,7 +22,7 @@ import {
 
 function plannedDark(): Map<string, string> {
   // The planning CSS includes optional classes after the token blocks; this package emits tokens.
-  // CT-11bt: 0.5.1 → variables.f088f04.css, 0.5.2 → variables.c98ae93.css (kit.ts PINS).
+  // CT-11bu: variables.c98ae93.css (kit.ts PINS).
   const css = requiredText(fixturePath(pin().css));
   return darkBlocks(css.split('/* Optional foundations:')[0]!)[0];
 }

@@ -34,7 +34,8 @@ it('[AC-CT-11a#3] CSS 的每个叶子令牌与规划 :root 的变量名、值逐
 
 it('[AC-CT-11a#4] 代表值覆盖新背景、语义颜色、字号、字体、单位、阴影和焦点', () => {
   const actual = rootDeclarations(generateTokensCss(baseline()));
-  // Expected values copied verbatim from planning variables.css at SOURCE_COMMIT.
+  // Expected values copied verbatim from planning variables.css at the pinned source commit
+  // (kit.ts sourceCommit()).
   for (const [name, value] of Object.entries({
     '--color-background-canvas': '#F2EEE6',
     '--color-background-admin-canvas': '#F6F3ED',
@@ -92,19 +93,13 @@ it('[AC-CT-11a#6] Tailwind 4 主题使用有效命名空间并引用全部令牌
       shadow: '--shadow-',
       dimension: source.startsWith('--radius-') ? '--radius-' : '--spacing-',
     };
-    if (branch === '0.5.2') {
-      // v0.5.2 (DSX-48): easings feed Tailwind 4's ease-* utilities.
-      namespace.cubicBezier = '--ease-';
-    }
+    // v0.5.2 (DSX-48): easings feed Tailwind 4's ease-* utilities.
+    namespace.cubicBezier = '--ease-';
     expect(type).toBeDefined();
-    if (branch === '0.5.1') {
-      if (type !== 'number') expect(alias.startsWith(namespace[type!]!), alias).toBe(true);
-    } else {
-      expect(branch).toBe('0.5.2');
-      // Tailwind 4 has no theme namespace for plain numbers or durations (duration-* takes numbers).
-      if (type !== 'number' && type !== 'duration')
-        expect(alias.startsWith(namespace[type!]!), alias).toBe(true);
-    }
+    expect(branch).toBe('0.5.2');
+    // Tailwind 4 has no theme namespace for plain numbers or durations (duration-* takes numbers).
+    if (type !== 'number' && type !== 'duration')
+      expect(alias.startsWith(namespace[type!]!), alias).toBe(true);
   }
 });
 

@@ -24,6 +24,6 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/h5-state-motion/**'
-status: todo
-pr: null
+status: done
+pr: 2740
 # 2026-11-08 06:2x 补 paths：规则测试 [AC-DSX-48-DELAY#4] 要求代表页规则页首屏接入 useDelayedVisible，rules-page.tsx 原不在 paths（实现 r1 停下报）。.prettierignore 随 c98ae93 CSS 夹具移到 CT-11bt（D10-965）。
