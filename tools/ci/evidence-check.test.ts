@@ -12,6 +12,7 @@ import {
   handoverPolicy,
   headTreeWithoutEvidence,
   redRequirement,
+  renamesConfirmed,
   specTestReviewers,
 } from './evidence-check.ts';
 import type { HandoverPolicy, RedRequirement } from './evidence-check.ts';
@@ -2103,6 +2104,49 @@ it("[CT-06zxc] renames that hit need the rule-test reviewer's confirmation, pair
       renames: { hit: pairs, left_out: [LEFT], tester: 'codex' },
     }),
   ).toBe('');
+});
+
+it('[CT-06zzzzl] renames_confirmed: pairs with ${…} placeholders count only character for character', () => {
+  const pairs = [
+    { from: '`biz:${BIZ}:${order.biz_ref}`', to: '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`' },
+  ];
+  const LEFT = 'test/spec/payment/biz-key.test.ts';
+  // The reviewer's record, written out by hand (not the same objects): confirmed.
+  expect(
+    renamesConfirmed(
+      {
+        pairs: [
+          {
+            from: '`biz:${BIZ}:${order.biz_ref}`',
+            to: '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`',
+          },
+        ],
+        left_out: [LEFT],
+      },
+      pairs,
+      [LEFT],
+    ),
+  ).toBe(true);
+  // Anything but the very text: no backticks, another member or spacing, the evaluated key.
+  for (const to of [
+    'biz:${order.app_id}:${BIZ}:${order.biz_ref}',
+    '`biz:${order.appId}:${BIZ}:${order.biz_ref}`',
+    '`biz:${ order.app_id }:${BIZ}:${order.biz_ref}`',
+    '`biz:app1:pay:r1`',
+    "'biz:${order.app_id}:${BIZ}:${order.biz_ref}'",
+  ]) {
+    expect(
+      renamesConfirmed({ pairs: [{ from: pairs[0]?.from, to }], left_out: [LEFT] }, pairs, [LEFT]),
+      to,
+    ).toBe(false);
+  }
+  expect(
+    renamesConfirmed(
+      { pairs: [{ from: '`biz:${BIZ}:${order.bizRef}`', to: pairs[0]?.to }], left_out: [LEFT] },
+      pairs,
+      [LEFT],
+    ),
+  ).toBe(false);
 });
 
 // CT-06zzzg (D10-701, after B2-09v and FU-B209R-FLAKE): a ledger's modify_existing lets a change

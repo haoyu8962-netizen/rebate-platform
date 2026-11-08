@@ -1,0 +1,25 @@
+id: CT-06zzzzl
+repo: rebate-platform
+title: CT-06zzzzl：台账 renames 的 from / to 接受模板串占位 ${标识符}，仍是字面量替换（D10-1083，解 B2-15x）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-1083）。B2-15x 把规则测试里的键 `biz:${BIZ}:${order.biz_ref}` 整批换成带 app_id 的新格式，换完与头逐字相同；
+#   现有 renames 的单个字面量只许 A-Za-z0-9_.:/@-，含 ${ 的反引号串一律拒，只能逐条声明 52 条 red_exempt。
+# 改法：tools/lib/task-file.ts 的 renameLiteralProblem 只放宽字符集——反引号串里允许 ${标识符(.标识符)*} 形式的占位；占位以外的 $ { } 仍拒，
+#   单 / 双引号串照旧不许 $ { }；引号规则、最少 3 字符、至少一个字母、条数上限、from ≠ to、不重复都不变。red-check 照旧 split / join 字面量替换，
+#   每处都换、绝不当模式；替换后与头逐字相同才算没改。evidence-check 的 renames_confirmed 口径不变。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/guard/lib/red-check.test.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzl.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

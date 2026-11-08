@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import type { Change } from '../../lib/git.ts';
+import { parseTaskFile } from '../../lib/task-file.ts';
 import {
   type BaselineReader,
   type RenamedOnly,
@@ -20,6 +21,7 @@ import {
   redCheckRequired,
   renamedOnlyFiles,
   renamedOnlyNote,
+  renamesHit,
   ruleTestBaselines,
   scriptFaultConsoleError,
   unusedExpectedValueNotes,
@@ -1637,6 +1639,153 @@ it('[CT-06zxc] renames are literal, ordered, and leave new files and renames wit
   expect(renamed).toEqual(plain);
   expect([...renamed.keys()]).toEqual([BASE_FILE]);
   expect(renamed.get(BASE_FILE)).not.toHaveProperty('renamed');
+});
+
+// CT-06zzzzl (D10-1083, B2-15x): a rename may hold the ${identifier} placeholders of a backtick
+// literal. red-check still replaces it as literal text: every occurrence, never a pattern, the
+// placeholders and every `$` of the replacement kept as written.
+const BIZ_FROM = '`biz:${BIZ}:${order.biz_ref}`';
+const BIZ_TO = '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`';
+const BIZ_RENAME = { from: BIZ_FROM, to: BIZ_TO };
+const BIZ_FILE = 'test/spec/payment/biz-key.test.ts';
+const BIZ_SCOPE = ['test/spec/payment/**'];
+/** A frozen rule-test file spelling the key three times (k1 in a helper, k2 / k3 in tests). */
+const bizSource = (k1: string, k2: string = k1, k3: string = k1): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    "const BIZ = 'pay';",
+    'type Order = { app_id: string; biz_ref: string };',
+    'const keyOf = (order: Order): string => ' + k1 + ';',
+    '',
+    "it('[AC-1] keys the order', () => {",
+    "  const order = { app_id: 'app1', biz_ref: 'r1' };",
+    '  expect(keyOf(order)).toBe(' + k2 + ');',
+    '});',
+    '',
+    "it('[AC-2] keys it once', () => {",
+    "  const order = { app_id: 'app1', biz_ref: 'r2' };",
+    '  expect(new Set([keyOf(order), ' + k3 + ']).size).toBe(1);',
+    '});',
+    '',
+  ].join('\n');
+const BIZ_APPLIED = `${JSON.stringify(BIZ_FROM)} → ${JSON.stringify(BIZ_TO)} ×3`;
+
+it('[CT-06zzzzl] applyRenames: a rename with ${…} placeholders is literal text, every occurrence, the placeholders kept as written', () => {
+  expect(applyRenames(bizSource(BIZ_FROM), [BIZ_RENAME])).toEqual({
+    text: bizSource(BIZ_TO),
+    applied: [BIZ_APPLIED],
+  });
+  // Never a pattern: what the template would evaluate to, the key without its backticks, a
+  // longer member name and other placeholder names are left alone.
+  const near = [
+    '`biz:pay:r1`',
+    'biz:${BIZ}:${order.biz_ref}',
+    '`biz:${BIZ}:${order.biz_refs}`',
+    '`biz:${biz}:${order.biz_ref}`',
+    '`biz:${BIZ}:${order.bizRef}`',
+  ].join('\n');
+  expect(applyRenames(near, [BIZ_RENAME])).toEqual({ text: near, applied: [] });
+  // `.` in a placeholder is no wildcard.
+  expect(applyRenames('`${aXb}` `${a.b}`', [{ from: '`${a.b}`', to: '`${c.d}`' }])).toEqual({
+    text: '`${aXb}` `${c.d}`',
+    applied: ['"`${a.b}`" → "`${c.d}`" ×1'],
+  });
+  // The replacement's `$` is literal: a placeholder in `to` lands as written.
+  expect(
+    applyRenames('run(`job-${x}`); run(`job-${x}`);', [{ from: '`job-${x}`', to: '`job_${a}`' }]),
+  ).toEqual({
+    text: 'run(`job_${a}`); run(`job_${a}`);',
+    applied: ['"`job-${x}`" → "`job_${a}`" ×2'],
+  });
+  // In ledger order: the second rename sees the first one's output.
+  expect(
+    applyRenames('`${a}-x`', [
+      { from: '`${a}-x`', to: '`${b}-x`' },
+      { from: '`${b}-x`', to: '`${c.d}-x`' },
+    ]),
+  ).toEqual({
+    text: '`${c.d}-x`',
+    applied: ['"`${a}-x`" → "`${b}-x`" ×1', '"`${b}-x`" → "`${c.d}-x`" ×1'],
+  });
+});
+
+it('[CT-06zzzzl] a file whose ${…} keys are all renamed and nothing else is unchanged; a partial rename or another change stays expected', () => {
+  const base = { [BIZ_FILE]: bizSource(BIZ_FROM) };
+  const baselines = (head: string) =>
+    ruleTestBaselines(
+      [BIZ_FILE],
+      [{ path: BIZ_FILE, status: 'M' }],
+      BIZ_SCOPE,
+      reader(base, { [BIZ_FILE]: head }),
+      [BIZ_RENAME],
+    ).get(BIZ_FILE);
+  // Every occurrence renamed, nothing else: left out of the expected list.
+  const read = reader(base, { [BIZ_FILE]: bizSource(BIZ_TO) });
+  expect(renamedOnlyFiles([BIZ_FILE], read, [BIZ_RENAME])).toEqual([
+    { file: BIZ_FILE, applied: [BIZ_APPLIED] },
+  ]);
+  expect(
+    renamesHit([BIZ_FILE], read, [{ from: '`never-${x}`', to: '`ever-${x}`' }, BIZ_RENAME]),
+  ).toEqual([BIZ_RENAME]);
+  expect(baselines(bizSource(BIZ_TO))).toMatchObject({ renamed: { identical: true } });
+  // Without the rename the same head is a change.
+  expect(renamedOnlyFiles([BIZ_FILE], read, [])).toEqual([]);
+  // Only some occurrences renamed at the head: still a change.
+  for (const head of [
+    bizSource(BIZ_TO, BIZ_FROM, BIZ_TO),
+    bizSource(BIZ_TO, BIZ_TO, BIZ_FROM),
+    bizSource(BIZ_FROM, BIZ_TO, BIZ_TO),
+  ]) {
+    expect(renamedOnlyFiles([BIZ_FILE], reader(base, { [BIZ_FILE]: head }), [BIZ_RENAME])).toEqual(
+      [],
+    );
+    expect(baselines(head)).toMatchObject({ renamed: { identical: false } });
+  }
+  // Renamed everywhere, but the head spells the new key otherwise, or changed an assertion too.
+  for (const head of [
+    bizSource('`biz:${order.app_id}:${BIZ}:${order.bizRef}`'),
+    bizSource('`biz:${order.app_id}:${BIZ}:${order.biz_ref}`').replace('toBe(1)', 'toBe(2)'),
+  ]) {
+    expect(renamedOnlyFiles([BIZ_FILE], reader(base, { [BIZ_FILE]: head }), [BIZ_RENAME])).toEqual(
+      [],
+    );
+    expect(baselines(head)).toMatchObject({ renamed: { identical: false } });
+  }
+  // The changed assertion keeps its test changed, compared against the renamed base.
+  const weakened = baselines(bizSource(BIZ_TO).replace('toBe(1)', 'toBe(2)'));
+  expect(weakened).toMatchObject({ kind: 'tests', renamed: { identical: false } });
+});
+
+it('[CT-06zzzzl] the B2-15x ledger pair, read by parseTaskFile, leaves the renamed-only file out of the expected list', () => {
+  const ledger = parseTaskFile(
+    [
+      'id: B2-15x',
+      'repo: rebate-platform',
+      'title: rename the biz keys',
+      'type: impl',
+      'refs: []',
+      'refs_hash: {}',
+      'deps: []',
+      'paths:',
+      '  - "test/spec/payment/**"',
+      'impl: claude',
+      'tester: codex',
+      'renames:',
+      "  - from: '`biz:${BIZ}:${order.biz_ref}`'",
+      "    to: '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`'",
+      'accept:',
+      '  - "pnpm verify"',
+      'status: todo',
+      '',
+    ].join('\n'),
+    'B2-15x.yaml',
+  );
+  expect(ledger.renames).toEqual([BIZ_RENAME]);
+  const read = reader({ [BIZ_FILE]: bizSource(BIZ_FROM) }, { [BIZ_FILE]: bizSource(BIZ_TO) });
+  expect(renamedOnlyFiles([BIZ_FILE], read, ledger.renames)).toEqual([
+    { file: BIZ_FILE, applied: [BIZ_APPLIED] },
+  ]);
+  expect(renamesHit([BIZ_FILE], read, ledger.renames)).toEqual([BIZ_RENAME]);
 });
 
 // CT-06zxe (D10-371): registered expected values in a top-level helper of a frozen test.

@@ -244,16 +244,31 @@ export const RENAME_CONTENT_MIN = 3;
  * One quoted name literal (CT-06zxc reviews r1 / r2 S2-1): the same quote `'`, `"` or a backtick
  * at both ends and between them only name characters (RENAME_NAME_CHARS: letters, digits and
  * `_ . : / @ -`), at least RENAME_CONTENT_MIN of them. Code cannot be written into a rename (no
- * parenthesis, blank, operator, comma, quote, backslash or `${`): `')).toBe('` or `' + '` is
- * refused. What the shape cannot tell is the meaning of a real literal swapped for another
- * (`'foo'` → `'bar'` may change an expected value): that is caught by the rule-test reviewer, who
- * confirms every pair that hits, and every file it leaves out, in `renames_confirmed`
- * (tools/ci/evidence-check.ts). D10-379: the content holds at least one ASCII letter, so a number
- * (`'500'`, `'-500'`, `'1.5'`, a date) is never a rename: renaming `'500'` to `'-500'` in a frozen
- * money test would take it out of red-check; changed expected values go through D10-371 instead.
+ * parenthesis, blank, operator, comma, quote, backslash or line break): `')).toBe('` or `' + '`
+ * is refused. D10-1083 / CT-06zzzzl (B2-15x renames the keys `biz:${BIZ}:${order.biz_ref}` of a
+ * template literal): only the character set is widened, and only between backticks, which may
+ * also hold placeholders `${identifier(.identifier)*}` (RENAME_PLACEHOLDER: identifiers joined by
+ * dots, nothing else; no blank, operator, call, index or nested template inside). Every other
+ * `$`, `{` or `}` is still refused, and single / double quotes still refuse all three. The value
+ * stays literal text: red-check replaces it by split / join, every occurrence, never as a pattern,
+ * so `${order.biz_ref}` matches only those very characters, and the same quote, length and letter
+ * rules count the placeholders as written. What the shape cannot tell is the meaning of a real
+ * literal swapped for another (`'foo'` → `'bar'` may change an expected value, and a placeholder
+ * pair may change what a key is built from): that is caught by the rule-test reviewer, who
+ * confirms every pair that hits, character for character, and every file it leaves out, in
+ * `renames_confirmed` (tools/ci/evidence-check.ts; unchanged by D10-1083). D10-379: the content
+ * holds at least one ASCII letter, so a number (`'500'`, `'-500'`, `'1.5'`, a date) is never a
+ * rename: renaming `'500'` to `'-500'` in a frozen money test would take it out of red-check;
+ * changed expected values go through D10-371 instead.
  */
 export const RENAME_NAME_CHARS = 'A-Za-z0-9_.:/@-';
-const RENAME_LITERAL = new RegExp(`^(['"\`])([${RENAME_NAME_CHARS}]*)\\1$`);
+const RENAME_IDENTIFIER = '[A-Za-z_$][A-Za-z0-9_$]*';
+/** A `${a.b.c}` placeholder of a backtick rename literal (D10-1083 / CT-06zzzzl). */
+const RENAME_PLACEHOLDER = `\\$\\{${RENAME_IDENTIFIER}(?:\\.${RENAME_IDENTIFIER})*\\}`;
+/** Group 2: the content between `'` / `"`; group 3: the content between backticks. */
+const RENAME_LITERAL = new RegExp(
+  `^(?:(['"])([${RENAME_NAME_CHARS}]*)\\1|\`((?:[${RENAME_NAME_CHARS}]|${RENAME_PLACEHOLDER})*)\`)$`,
+);
 
 /** The least a red-exemption reason may say (CT-06r: a non-empty reason of ≥ 10 characters). */
 export const RED_EXEMPT_REASON_MIN = 10;
@@ -572,12 +587,13 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
 function renameLiteralProblem(value: string): string | null {
   const m = RENAME_LITERAL.exec(value);
   if (m === null) {
-    return `must be one quoted name literal (the same quote ', " or \` at both ends; inside only ${RENAME_NAME_CHARS})`;
+    return `must be one quoted name literal (the same quote ', " or \` at both ends; inside only ${RENAME_NAME_CHARS}, between backticks also \${identifier(.identifier)*} placeholders)`;
   }
-  if ((m[2] ?? '').length < RENAME_CONTENT_MIN) {
+  const content = m[2] ?? m[3] ?? '';
+  if (content.length < RENAME_CONTENT_MIN) {
     return `must hold at least ${RENAME_CONTENT_MIN} characters between its quotes`;
   }
-  if (!/[A-Za-z]/.test(m[2] ?? '')) {
+  if (!/[A-Za-z]/.test(content)) {
     return 'must hold at least one ASCII letter between its quotes (D10-379: a number is not a name)';
   }
   return null;
@@ -586,9 +602,10 @@ function renameLiteralProblem(value: string): string | null {
 /**
  * The `renames` list (CT-06zxc, D10-347; review r1 S2-1): a list of mappings with exactly the
  * keys `from` / `to`, each one quoted name literal (RENAME_LITERAL, at least
- * RENAME_CONTENT_MIN characters inside), both with the same quote, `from` ≠ `to`, no `from` named
- * twice, at most RENAMES_MAX entries. The values are literal text: red-check never reads them as
- * a pattern.
+ * RENAME_CONTENT_MIN characters inside; between backticks `${identifier(.identifier)*}`
+ * placeholders too, D10-1083 / CT-06zzzzl), both with the same quote, `from` ≠ `to`, no `from`
+ * named twice, at most RENAMES_MAX entries. The values are literal text, placeholders included:
+ * red-check never reads them as a pattern or evaluates them.
  */
 function renameList(value: unknown, problems: string[]): RenameDeclaration[] {
   if (!Array.isArray(value)) {

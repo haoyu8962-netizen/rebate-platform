@@ -496,7 +496,9 @@ describe('parseTaskFile', () => {
     );
     // Not one quoted name literal: code that closes and reopens the quotes (review r2 S2-1: it
     // would delete an assertion), blanks, parentheses, operators, commas, a bare word, a half
-    // quote, quotes, backslashes, line breaks, a template expression.
+    // quote, quotes, backslashes, line breaks.
+    // D10-1083 / CT-06zzzzl：反引号串里的 ${标识符} 占位改为合法——"'`job-${x}`'" 移出本拒绝清单，
+    // 改在下面作合法用例；占位以外的 $ { } 仍拒（见 [CT-06zzzzl] 各条）。
     const literal = 'must be one quoted name literal';
     for (const bad of [
       `"')).toBe('"`,
@@ -514,7 +516,6 @@ describe('parseTaskFile', () => {
       `"'ab\\"c'"`,
       `"'ab\\\\c'"`,
       `"'ab\\nc'"`,
-      "'`job-${x}`'",
       "' '",
       "'toBe(100)'",
       'freeze-expiry',
@@ -534,6 +535,10 @@ describe('parseTaskFile', () => {
     expect(messageOf(declared(pair(`"'aaa'"`, 'daily_alerts')), 'B2-02a.yaml')).toContain(
       `renames[0].to: "daily_alerts" ${literal}`,
     );
+    // D10-1083 / CT-06zzzzl：反引号串里的 ${标识符} 占位改为合法（原在上面的拒绝清单里）。
+    expect(
+      parseTaskFile(declared(pair("'`job-${x}`'", "'`job_${x}`'")), 'B2-02a.yaml').renames,
+    ).toEqual([{ from: '`job-${x}`', to: '`job_${x}`' }]);
     // Too short inside its quotes.
     expect(messageOf(declared(pair(`"'ab'"`, `"'bbb'"`)), 'B2-02a.yaml')).toContain(
       `renames[0].from: "'ab'" must hold at least ${RENAME_CONTENT_MIN} characters between its quotes`,
@@ -571,6 +576,227 @@ describe('parseTaskFile', () => {
     const many = (n: number): string =>
       declared(Array.from({ length: n }, (_, i) => pair(`"'old${i}'"`, `"'new${i}'"`)).join(''));
     expect(parseTaskFile(many(RENAMES_MAX), 'B2-02a.yaml').renames).toHaveLength(RENAMES_MAX);
+    expect(messageOf(many(RENAMES_MAX + 1), 'B2-02a.yaml')).toContain(
+      `renames: ${RENAMES_MAX + 1} entries, the limit is ${RENAMES_MAX}`,
+    );
+  });
+
+  // CT-06zzzzl (D10-1083, B2-15x): a backtick rename literal may hold ${identifier(.identifier)*}
+  // placeholders; every other `$`, `{` or `}` is still refused, and single / double quotes still
+  // refuse all three. The values stay literal text (red-check: split / join, never a pattern).
+  // A replacer function: the entries hold `$`, which a replacement string would read as $$ / $&.
+  const RENAMES_YAML = (entries: string): string =>
+    EXAMPLE.replace('tester: claude', () => `tester: claude\nrenames:${entries}`);
+  /** One rename entry, each value written as a YAML double-quoted scalar (JSON escapes). */
+  const renamePair = (from: string, to: string): string =>
+    `\n  - from: ${JSON.stringify(from)}\n    to: ${JSON.stringify(to)}`;
+  const NAME_LITERAL = 'must be one quoted name literal';
+
+  it('[CT-06zzzzl] renames: a backtick literal may hold ${identifier(.identifier)*} placeholders, read character for character', () => {
+    // The B2-15x pair, as the ledger writes it (YAML single quotes around the backtick literal).
+    const b215x = RENAMES_YAML(
+      "\n  - from: '`biz:${BIZ}:${order.biz_ref}`'\n    to: '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`'",
+    );
+    expect(parseTaskFile(b215x, 'B2-02a.yaml').renames).toEqual([
+      {
+        from: '`biz:${BIZ}:${order.biz_ref}`',
+        to: '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`',
+      },
+    ]);
+    // The same pair in YAML double quotes reads the same.
+    expect(
+      parseTaskFile(
+        RENAMES_YAML(
+          '\n  - from: "`biz:${BIZ}:${order.biz_ref}`"\n    to: "`biz:${order.app_id}:${BIZ}:${order.biz_ref}`"',
+        ),
+        'B2-02a.yaml',
+      ).renames,
+    ).toEqual(parseTaskFile(b215x, 'B2-02a.yaml').renames);
+    // Placeholder shapes: a dotted chain, `$` and `_` in identifiers, digits after the first
+    // character, placeholders side by side, at either end, alone, next to every name character.
+    for (const ok of [
+      '`job-${x}`',
+      '`${a.b.c}-key`',
+      '`${a}`',
+      '`${a}${b}`',
+      '`${$el}:${_x.$y1}`',
+      '`${A_1.B2.c_3}`',
+      '`key-${a.b}`',
+      '`@scope/${pkg.name}:v1.0_x-y`',
+      '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`',
+    ]) {
+      expect(
+        parseTaskFile(RENAMES_YAML(renamePair(ok, '`renamed-key`')), 'B2-02a.yaml').renames,
+        ok,
+      ).toEqual([{ from: ok, to: '`renamed-key`' }]);
+      expect(
+        parseTaskFile(RENAMES_YAML(renamePair('`old-key`', ok)), 'B2-02a.yaml').renames,
+        ok,
+      ).toEqual([{ from: '`old-key`', to: ok }]);
+    }
+    // Several placeholder pairs in one ledger, in ledger order.
+    expect(
+      parseTaskFile(
+        RENAMES_YAML(
+          renamePair('`job-${x}`', '`job_${x}`') +
+            renamePair('`${a.b.c}-key`', '`${a.b.c}_key`') +
+            renamePair("'freeze-expiry'", "'freeze_expiry'"),
+        ),
+        'B2-02a.yaml',
+      ).renames,
+    ).toEqual([
+      { from: '`job-${x}`', to: '`job_${x}`' },
+      { from: '`${a.b.c}-key`', to: '`${a.b.c}_key`' },
+      { from: "'freeze-expiry'", to: "'freeze_expiry'" },
+    ]);
+  });
+
+  it('[CT-06zzzzl] renames: outside a ${identifier} placeholder, $ { } are refused, in backtick literals too', () => {
+    for (const bad of [
+      '`${}`',
+      '`ab${}cd`',
+      '`ab${a b}`',
+      '`ab${a+b}`',
+      '`ab${a-b}`',
+      '`ab${f()}`',
+      '`ab${a[0]}`',
+      '`ab${a.}`',
+      '`ab${.a}`',
+      '`ab${a..b}`',
+      '`ab${1a}`',
+      '`ab${${a}}`',
+      '`ab${a`',
+      '`ab$a`',
+      '`{abc}`',
+      '`ab$${a}`',
+      '`ab${a}}`',
+      "`ab${'x'}`",
+      '`ab${a,b}`',
+      '`ab${a/b}`',
+      '`ab${a:b}`',
+      '`ab${a@b}`',
+      '`ab${ a}`',
+      '`ab${a }`',
+      '`ab${a.b-c}`',
+      '`abc$`',
+      '`abc{`',
+      '`abc}`',
+      '`a}b{c`',
+      '`${a}-$b`',
+      '`${a}{b}`',
+      '`{${a}}`',
+      '`$ {a}`',
+      '`$\\{a}`',
+    ]) {
+      const asFrom = messageOf(RENAMES_YAML(renamePair(bad, '`bbb-key`')), 'B2-02a.yaml');
+      expect(asFrom, bad).toContain(`renames[0].from: ${JSON.stringify(bad)} ${NAME_LITERAL}`);
+      const asTo = messageOf(RENAMES_YAML(renamePair('`bbb-key`', bad)), 'B2-02a.yaml');
+      expect(asTo, bad).toContain(`renames[0].to: ${JSON.stringify(bad)} ${NAME_LITERAL}`);
+    }
+  });
+
+  it('[CT-06zzzzl] renames: single- and double-quoted literals still refuse $ { } altogether, placeholders included', () => {
+    for (const bad of [
+      "'${x}abc'",
+      "'abc${x.y}'",
+      "'${abc}'",
+      "'$abc'",
+      "'a{b}c'",
+      '"a$bc"',
+      '"${abc}"',
+      '"{abc}"',
+      '"biz:${BIZ}:${order.biz_ref}"',
+    ]) {
+      const partner = bad[0] === "'" ? "'bbb-key'" : '"bbb-key"';
+      expect(messageOf(RENAMES_YAML(renamePair(bad, partner)), 'B2-02a.yaml'), bad).toContain(
+        `renames[0].from: ${JSON.stringify(bad)} ${NAME_LITERAL}`,
+      );
+      expect(messageOf(RENAMES_YAML(renamePair(partner, bad)), 'B2-02a.yaml'), bad).toContain(
+        `renames[0].to: ${JSON.stringify(bad)} ${NAME_LITERAL}`,
+      );
+    }
+  });
+
+  it('[CT-06zzzzl] renames: with placeholders the other rules stand (quotes, blanks, length, a letter, from ≠ to, no from twice, the limit)', () => {
+    const KEY = '`biz:${BIZ}:${order.biz_ref}`';
+    const NEW_KEY = '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`';
+    // Not one quoted literal: blanks, a backslash, a line break, another quote inside, a missing
+    // or extra quote, two literals, a bare placeholder.
+    for (const bad of [
+      '`a ${b}`',
+      '`a\\${b}`',
+      '`a${b}\nc`',
+      '`a\t${b}`',
+      "`a'${b}`",
+      '`a"${b}`',
+      '`ab${c}',
+      'ab${c}`',
+      '`ab${c}`x`',
+      '`${a}` + `${b}`',
+      '${abc}',
+      'biz:${BIZ}',
+    ]) {
+      expect(
+        messageOf(RENAMES_YAML(renamePair(bad, '`bbb-key`')), 'B2-02a.yaml'),
+        JSON.stringify(bad),
+      ).toContain(`renames[0].from: ${JSON.stringify(bad)} ${NAME_LITERAL}`);
+      expect(
+        messageOf(RENAMES_YAML(renamePair('`bbb-key`', bad)), 'B2-02a.yaml'),
+        JSON.stringify(bad),
+      ).toContain(`renames[0].to: ${JSON.stringify(bad)} ${NAME_LITERAL}`);
+    }
+    // The content (placeholders included) needs an ASCII letter: identifiers of `$`, `_` and
+    // digits only are no name.
+    for (const noLetter of ['`${_}`', '`${$}`', '`${_.$}`', '`${_1}`', '`1-${_}`']) {
+      expect(
+        messageOf(RENAMES_YAML(renamePair(noLetter, '`bbb-key`')), 'B2-02a.yaml'),
+        noLetter,
+      ).toContain(
+        `renames[0].from: ${JSON.stringify(noLetter)} must hold at least one ASCII letter`,
+      );
+      expect(
+        messageOf(RENAMES_YAML(renamePair('`bbb-key`', noLetter)), 'B2-02a.yaml'),
+        noLetter,
+      ).toContain(`renames[0].to: ${JSON.stringify(noLetter)} must hold at least one ASCII letter`);
+    }
+    // Too short inside the backticks is refused as before; a lone placeholder is long enough.
+    expect(messageOf(RENAMES_YAML(renamePair('`ab`', '`abc`')), 'B2-02a.yaml')).toContain(
+      `renames[0].from: "\`ab\`" must hold at least ${RENAME_CONTENT_MIN} characters between its quotes`,
+    );
+    expect(
+      parseTaskFile(RENAMES_YAML(renamePair('`${a}`', '`${b}`')), 'B2-02a.yaml').renames,
+    ).toEqual([{ from: '`${a}`', to: '`${b}`' }]);
+    // The same quote at both sides: a placeholder literal is renamed to a backtick literal only.
+    for (const other of ["'biz-key'", '"biz-key"']) {
+      expect(messageOf(RENAMES_YAML(renamePair(KEY, other)), 'B2-02a.yaml'), other).toContain(
+        'renames[0]: from and to must use the same quote',
+      );
+      expect(messageOf(RENAMES_YAML(renamePair(other, KEY)), 'B2-02a.yaml'), other).toContain(
+        'renames[0]: from and to must use the same quote',
+      );
+    }
+    // from = to, the same from twice.
+    expect(messageOf(RENAMES_YAML(renamePair(KEY, KEY)), 'B2-02a.yaml')).toContain(
+      `renames[0]: from and to are the same (${KEY})`,
+    );
+    expect(
+      messageOf(
+        RENAMES_YAML(renamePair(KEY, NEW_KEY) + renamePair(KEY, '`biz:${x}`')),
+        'B2-02a.yaml',
+      ),
+    ).toContain(`renames[1].from: ${KEY} is renamed twice`);
+    // At most RENAMES_MAX entries, placeholders or not.
+    const many = (n: number): string =>
+      RENAMES_YAML(
+        Array.from({ length: n }, (_, i) =>
+          renamePair(`\`old${i}-\${k.v}\``, `\`new${i}-\${k.v}\``),
+        ).join(''),
+      );
+    expect(parseTaskFile(many(RENAMES_MAX), 'B2-02a.yaml').renames).toHaveLength(RENAMES_MAX);
+    expect(parseTaskFile(many(RENAMES_MAX), 'B2-02a.yaml').renames[0]).toEqual({
+      from: '`old0-${k.v}`',
+      to: '`new0-${k.v}`',
+    });
     expect(messageOf(many(RENAMES_MAX + 1), 'B2-02a.yaml')).toContain(
       `renames: ${RENAMES_MAX + 1} entries, the limit is ${RENAMES_MAX}`,
     );
