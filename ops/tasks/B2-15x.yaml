@@ -1,0 +1,33 @@
+id: B2-15x
+repo: rebate-platform
+title: B2-15x：biz.reconcile 履约任务 singletonKey 补 app_id（biz:<app_id>:<biz_type>:<biz_ref>，双品牌多 app_id 下防御性隔离；冻结键的用例随改）
+type: test-change
+# 2026-11-08 收款线入账（编排 D10-1030）。现状 jobs/names.ts bizReconcileKey 只含 biz_type、biz_ref：两个 app_id 下同 biz_type + biz_ref 的对象共用一个单例键，后到的履约 / 回收任务会被吞。
+# 实现：bizReconcileKey(appId, bizType, bizRef)，两个调用点（pay-settlement.ts、pay-refund-result.ts）传该单 app_id，注释同步；任务 payload、队列、业务逻辑不变，不动金额、凭证与状态。
+# 冻结用例把键的字面量写死，实现一改必红，必须同 PR 随改：8 个文件里只把 `biz:${BIZ}:…` 字面量换成带 app_id 的新键，不增删用例、不改其余断言。新鲜独立 Claude 改，另一位新鲜 Claude 只读复核「不削弱」，按 approvals #24 报核（编排加 owner-approved）。
+# 门禁口径：payment 属 MONEY_PATHS，非 task 分支的证据豁免（approvals 12）不适用，故走 task/B2-15x 带 ops/evidence/B2-15x.json（money 评审 Codex medium）；tester none（无新规则测试，red 不要求），land 用 NO_SPEC=1。
+# 上线前改键，pay.enabled 仍关，无存量任务跨键问题。
+refs: [BR-PAY-01]
+refs_hash:
+  BR-PAY-01: 15ea5ac62c34
+deps: [B2-15c, B2-15e]
+paths:
+  - 'apps/api/src/modules/payment/jobs/names.ts'
+  - 'apps/api/src/modules/payment/application/pay-settlement.ts'
+  - 'apps/api/src/modules/payment/application/pay-refund-result.ts'
+  - 'apps/api/src/modules/payment/domain/types.ts'
+  - 'test/spec/payment/admin/concurrency.int.test.ts'
+  - 'test/spec/payment/admin/resolve.int.test.ts'
+  - 'test/spec/payment/close/flow.int.test.ts'
+  - 'test/spec/payment/refund/result.int.test.ts'
+  - 'test/spec/payment/result/concurrency.int.test.ts'
+  - 'test/spec/payment/result/notify.int.test.ts'
+  - 'test/spec/payment/result/query.int.test.ts'
+  - 'test/spec/payment/result/rollback.int.test.ts'
+  - 'ops/evidence/B2-15x.json'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payment/**'
+status: todo
