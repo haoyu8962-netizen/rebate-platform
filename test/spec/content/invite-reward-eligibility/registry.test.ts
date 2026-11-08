@@ -50,6 +50,7 @@ it('[AC-F1-02zx#1] 资格天数是唯一的可改业务配置，整数范围 1�
 // order_sync.rescan.taobao.enabled / days / hour.enabled / week.enabled / window_minutes follow
 // it in this order. B1-22x (D10-963): price.taobao.member_title_keywords / coupon_titles /
 // discount_titles / unknown_promo / basis follow them in this order, ending the tail.
+// B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): agent.trace.retention_days follows them, now ending it.
 const PAYOUT_KEYS = [
   'payout.single_cap_fen',
   'payout.daily_cap_fen',
@@ -157,6 +158,7 @@ const PRICE_TAOBAO_KEYS = [
   'price.taobao.unknown_promo',
   'price.taobao.basis',
 ];
+const AGENT_TRACE_KEYS = ['agent.trace.retention_days'];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -190,6 +192,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...ORDERS_JD_KEYS,
     ...ORDER_RESCAN_TAOBAO_KEYS,
     ...PRICE_TAOBAO_KEYS,
+    ...AGENT_TRACE_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);

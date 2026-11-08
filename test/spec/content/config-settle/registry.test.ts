@@ -48,6 +48,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // week.enabled / window_minutes, in this order;
   // B1-22x (D10-963): then price.taobao.member_title_keywords / coupon_titles / discount_titles /
   // unknown_promo / basis, in this order;
+  // B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): then agent.trace.retention_days;
   // nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
@@ -144,6 +145,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'price.taobao.discount_titles',
     'price.taobao.unknown_promo',
     'price.taobao.basis',
+    'agent.trace.retention_days',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),

@@ -222,6 +222,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
   // order_sync.rescan.taobao.enabled / days / hour.enabled / week.enabled / window_minutes in this
   // order, and B1-22x (D10-963) then price.taobao.member_title_keywords / coupon_titles /
   // discount_titles / unknown_promo / basis in this order.
+  // B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): then agent.trace.retention_days.
   const keys = items.map((item) => item.key);
   const tail = [
     ...inviteNow().map((entry) => entry.key),
@@ -314,6 +315,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'price.taobao.discount_titles',
     'price.taobao.unknown_promo',
     'price.taobao.basis',
+    'agent.trace.retention_days',
   ];
   const settleEnd = keys.length - tail.length;
   const settleStart = settleEnd - 16;

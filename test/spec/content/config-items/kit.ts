@@ -468,6 +468,12 @@ export const PRICE_TAOBAO_UNSEEDED: readonly string[] = [
   'price.taobao.unknown_promo',
   'price.taobao.basis',
 ];
+// B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): the Agent trace retention in whole days, registered
+// right after PRICE_TAOBAO: editable config.risk like RETENTION, options null, seeded 190. Not part
+// of expectedNow() either.
+export const AGENT_TRACE: readonly Expected[] = [
+  row('agent.trace.retention_days', 'number', 'config.risk'),
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -495,6 +501,7 @@ export const expectedOf = (key: string): Expected => {
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
+    ...AGENT_TRACE,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

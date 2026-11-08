@@ -131,5 +131,7 @@ INSERT INTO app.config_items (app_id, key, value, updated_by) VALUES
   ('couli', 'ledger.bad_debt_days', '90'::jsonb, 'seed'), -- BR-FUND-12
   ('couli', 'ledger.bad_debt_min_fen', '0'::jsonb, 'seed'), -- BR-FUND-12
   -- 第 20 批：进店来源（B1-05zi，D10-736）；只给淘宝 dataoke（大淘客店铺转链），京东、拼多多无种子（按未配置）
-  ('couli', 'shop.entry.source.taobao', '"dataoke"'::jsonb, 'seed') -- BR-PRICE-21 细则「进店」、04 §10.1 / §11.2
+  ('couli', 'shop.entry.source.taobao', '"dataoke"'::jsonb, 'seed'), -- BR-PRICE-21 细则「进店」、04 §10.1 / §11.2
+  -- 第 21 批：Agent trace 保留天数（B3-08st，D10-971 ② / D10-999）；缺省取 08 的 190 天，后台不得设为小于 184 天
+  ('couli', 'agent.trace.retention_days', '190'::jsonb, 'seed') -- BR-ID-30 ①
 ON CONFLICT (app_id, key) DO NOTHING;

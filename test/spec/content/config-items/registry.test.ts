@@ -46,6 +46,8 @@
 // unset by default with no seed rows (ORDER_RESCAN_TAOBAO_UNSEEDED).
 // B1-22x (D10-963): the five price.taobao.* keys follow them (kit PRICE_TAOBAO), three lists and two
 // enums, unset by default with no seed rows (PRICE_TAOBAO_UNSEEDED).
+// B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): agent.trace.retention_days follows them (kit
+// AGENT_TRACE), config.risk, seeded 190.
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -60,6 +62,7 @@ import {
 import {
   ADVANCE_ALERT,
   ADVANCE_ALERT_UNSEEDED,
+  AGENT_TRACE,
   AUTO_ENABLE_CHECK,
   AUTO_ENABLE_UNSEEDED,
   AUTO_PAYOUT,
@@ -204,6 +207,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...ORDERS_JD,
         ...ORDER_RESCAN_TAOBAO,
         ...PRICE_TAOBAO,
+        ...AGENT_TRACE,
       ].map((entry) => entry.key),
     ),
   );
@@ -403,6 +407,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
+    ...AGENT_TRACE,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -467,6 +472,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
+    ...AGENT_TRACE,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -539,6 +545,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...ORDERS_JD,
       ...ORDER_RESCAN_TAOBAO,
       ...PRICE_TAOBAO,
+      ...AGENT_TRACE,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -562,6 +569,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...BAD_DEBT,
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
+    ...AGENT_TRACE,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({
@@ -666,6 +674,7 @@ const RETENTION_DAYS_KEYS = [
   ['retention.inbox_messages_days', 180],
   ['retention.notify_logs_days', 190],
   ['retention.union_raw_payloads_days', 180],
+  ['agent.trace.retention_days', 184],
 ] as const;
 
 it.each(RETENTION_DAYS_KEYS)(

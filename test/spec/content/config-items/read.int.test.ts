@@ -7,6 +7,7 @@ import { seed } from '../../admin/accounts/kit.ts';
 import { signedIn, useHarness } from '../../admin/auth/kit.ts';
 import {
   ADVANCE_ALERT,
+  AGENT_TRACE,
   AUTO_ENABLE_CHECK,
   AUTO_PAYOUT,
   AVATAR,
@@ -70,6 +71,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // and ledger.bad_debt_min_fen; B1-05zi: + the three shop.entry.source.* keys; B1-08zi: +
   // orders.jd.refunded_quantity_r9_enabled; B1-04zzz: + the five order_sync.rescan.taobao.* keys.
   // B1-22x: + the five price.taobao.* keys.
+  // B3-08st: + agent.trace.retention_days.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -95,6 +97,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
+    ...AGENT_TRACE,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

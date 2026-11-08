@@ -352,6 +352,11 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   spec('price.taobao.discount_titles', 'object', 'config.business'),
   businessEnum('price.taobao.unknown_promo', ['unavailable', 'add_back', 'count']),
   businessEnum('price.taobao.basis', ['promotion_path', 'coupon_only']),
+  // B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): the retention of the Agent sessions, messages, runs,
+  // tool calls, result sets, cards and traces (agent_*) in whole days, config.risk like the
+  // retention.* keys, editable; the lower bound is the 184 days 08 gives (the console may not set
+  // less), seeded 190. Registration only; B3-08s's Agent trace purge reads it.
+  riskInteger('agent.trace.retention_days', 184),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(
