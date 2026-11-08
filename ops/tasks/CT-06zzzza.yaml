@@ -1,0 +1,28 @@
+id: CT-06zzzza
+repo: rebate-platform
+title: CT-06zzzza：评审埋雷抽查首版——固定变异清单 + 应用器，codex-run.sh 与 claude-run.sh 的 RV2 通过轮都跑一次，命中结果按引擎记 ops/metrics/review-canary.csv（FU-REVIEW-CANARY，D10-886 / D10-1011）
+type: guard-change
+# 2026-11-08 w1 入账（D10-880 / D10-885 方案 couli-runs/FU-REVIEW-CANARY/plan.md；D10-886 四处裁定；D10-1011 认可清单首版并要求与引擎无关）。依据规划/11 §3.3 埋雷抽查、§7.1 第 6 类。
+# 本单（首版，只记录）：tools/agent/canary/mutations.json（照草稿 couli-runs/FU-REVIEW-CANARY/mutations-draft.json 的 21 条、8 类，只对本次 diff 新增行求值，排除测试 / 生成物 / 迁移）；tools/agent/canary/apply.ts（只依赖 Node 内置：读 diff、按类别优先级与 round 轮换选项、在临时 worktree 改一处、受影响包 tsc -b 编不过换下一项，输出 {mutation_id, category, file, line, before, after}）与单测。
+# 挂点：codex-run.sh review 在 RV2 任务的真实评审通过（pass 且 open_s0_s1 = 0）后，同一次调用里用同一 build_review_prompt / review_type / BASE 起新会话评审变异版（提示词不提埋雷）；claude-run.sh source 同一段，自动得到 claude-independent 版本。命中按 D10-886 ①：同文件、变异行 ±15 行内的 S0 / S1，或点名被改符号。写 meta.canary.json，追加 ops/metrics/review-canary.csv（列：date,task,round,engine,model,effort,review_type,mutation_id,category,file,line,hit,s0s1_count,duration_s；n/a 行写 reason）。tools/ops/canary-rate.ts 按引擎分别算近 10 次（不含 n/a）命中率，只打印、不拦。
+# 首版不做（另单 CT-06zzzzb，一周样本后再入账）：miss 作废本轮 / 新退出码 13、< 80% 拒跑 RV2（按引擎各算，D10-886 ③ 校准恢复）、evidence-check 的 RV2 canary 硬门槛（只对上线后的新评审生效）。
+# 第三类保护路径，RV2；实现 Opus 子代理，评审新鲜独立 Claude general（Codex 额度至 11-15，D10-993），编排按 #24 核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/canary/**'
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/claude-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/claude-run.test.ts'
+  - 'tools/ops/canary-rate.ts'
+  - 'tools/ops/canary-rate.test.ts'
+  - 'tools/agent/README.md'
+  - 'ops/metrics/review-canary.csv'
+  - 'ops/tasks/CT-06zzzza.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
