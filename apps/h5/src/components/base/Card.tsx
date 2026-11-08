@@ -15,6 +15,8 @@ import { CARD_PADDING, CARD_PRESSABLE, CARD_SURFACE } from './styles.ts';
  */
 export interface CardProps {
   onClick?: () => void;
+  /** A clickable card that stays a named button but is unavailable (aria-disabled, presses ignored). */
+  disabled?: boolean;
   'aria-label'?: string;
   /** Inner padding; defaults to 16 all round. */
   padding?: CardPadding;
@@ -85,11 +87,13 @@ function firstTextElement(root: HTMLElement): HTMLElement {
  */
 function ClickableCard({
   onClick,
+  disabled,
   ariaLabel,
   className,
   children,
 }: {
   onClick: () => void;
+  disabled: boolean;
   ariaLabel: string | undefined;
   className: string;
   children?: ReactNode;
@@ -98,6 +102,7 @@ function ClickableCard({
   const contentRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
   const contentId = `${baseId}-content`;
+  const press = disabled ? () => undefined : onClick;
 
   // Runs after every render: the content (and so its first line) may change with any render.
   useLayoutEffect(() => {
@@ -120,9 +125,10 @@ function ClickableCard({
       tabIndex={0}
       aria-label={ariaLabel}
       aria-describedby={contentId}
+      aria-disabled={disabled ? true : undefined}
       className={className}
-      onClick={onClick}
-      {...pressKeys(onClick)}
+      onClick={press}
+      {...pressKeys(press)}
     >
       <div id={contentId} ref={contentRef}>
         {children}
@@ -134,6 +140,7 @@ function ClickableCard({
 /** Surface card: a plain container, or one button over the whole card when `onClick` is set. */
 export function Card({
   onClick,
+  disabled = false,
   'aria-label': ariaLabel,
   padding = 'default',
   className,
@@ -155,6 +162,7 @@ export function Card({
   return (
     <ClickableCard
       onClick={onClick}
+      disabled={disabled}
       ariaLabel={ariaLabel}
       className={cardClass(padding, className, true)}
     >

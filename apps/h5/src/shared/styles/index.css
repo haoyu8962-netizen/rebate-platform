@@ -83,6 +83,20 @@
   }
 
   /*
+   * Image fade (components/base/AsyncImage, design/ui-rules §3.6): a loaded image fades in on
+   * opacity only, normal duration with the enter easing (规划/03 §10.6). Reduced motion: no fade.
+   */
+  .h5-image-fade {
+    transition: opacity var(--motion-duration-normal) var(--motion-easing-enter);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .h5-image-fade {
+      transition: none;
+    }
+  }
+
+  /*
    * Forced colours (DSX-108): fills and shadows are replaced by the system palette, so components
    * whose edge is a fill or a shadow (base/styles.ts FORCED_EDGE) draw a system-colour border.
    * The focus ring is an outline and stays (a11y.css adds one where a component has none).

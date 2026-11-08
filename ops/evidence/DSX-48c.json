@@ -1,0 +1,118 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-image/bundle.test.ts > [AC-DSX-48c-BUNDLE#1] 接入后正文与邀请页所在路由都打进图片件；主干基线构建（三处主干原文）服务了全部原文且任何路由都不含图片件",
+    "test/spec/frontend/h5-image/bundle.test.ts > [AC-DSX-48c-BUNDLE#2] 各 App 路由「入口 + 路由」JS gzip ≤ 150 KiB，且相对主干基线每条路由增量 ≤ 3 KiB",
+    "test/spec/frontend/h5-image/image.browser.test.ts > [AC-DSX-48c-FADE#1] 加载中是令牌底色占位、保持 3/2 不跳版、图不显示；load 后图以 opacity 渐显，时长与缓动取 --motion-duration-normal / --motion-easing-enter，只动 opacity/transform",
+    "test/spec/frontend/h5-image/image.browser.test.ts > [AC-DSX-48c-REDUCED#1] prefers-reduced-motion: reduce 时 load 后图直接完整显示：不跑任何过渡，框尺寸不变",
+    "test/spec/frontend/h5-image/image.browser.test.ts > [AC-DSX-48c-FAILED#1] 图片加载失败：占位底色上显示可见的失败文字，不显示破图，框尺寸不变",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#1] 加载中：占位框 data-state=loading、无文字，img 已在 DOM（lazy、async、src、alt 即可访问名称），不带 aria-busy 与骨架块",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#2] img 触发 load 后 data-state=loaded，img 与可访问名称不变，无失败文字",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#3] img 触发 error 后 data-state=error：不显示破图（img 移除或 hidden），显示字典 state.load_failed.title 失败文字且读屏可读",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#4] 调用方传入 failedText 时失败态显示该文字（不另写死文案）",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#5] src 为 null 时是无图态：不创建 img、不发请求，占位框 data-state=empty、无文字",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#6] src 为 undefined 时是无图态：不创建 img、不发请求，占位框 data-state=empty、无文字",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#7] src 为空串时是无图态：不创建 img、不发请求，占位框 data-state=empty、无文字",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#8] 换 src 时回到加载中：已加载或已失败的状态不沿用到新图",
+    "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#9] referrerPolicy 由调用方传给 img（no-referrer 照写）",
+    "test/spec/frontend/h5-image/source.test.ts > [AC-DSX-48c-SOURCE#1] base/index.ts 从 components/base 下的模块转出 AsyncImage，该模块源码不写死中文",
+    "test/spec/frontend/h5-image/source.test.ts > [AC-DSX-48c-SOURCE#2] 正文 article-body.tsx 与邀请页 invite-page.tsx 从 base/index.ts 引入 AsyncImage，不再直接渲染 <img>",
+    "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#1] 正文图经图片件渲染：每张图在占位框里（加载中），alt 即可访问名称、no-referrer、lazy、async 照旧，不带 aria-busy",
+    "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#2] 正文图 load 后渐显（loaded）；另一张 error 后显示读屏可读的失败态、不显示破图，正文文字不受影响",
+    "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#3] 邀请海报经图片件渲染：在【预览邀请海报】卡里、保持 750/1334 占位比例；加载失败时卡片仍在、显示失败态而不整块隐藏，卡片可访问名称不变",
+    "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#4] 邀请海报 load 后为已加载态、卡片名称不变；poster_url 为空时仍不显示海报卡与图片"
+  ],
+  "risk_note": "DSX-48c H5 image component (feel plan ④, orchestrator D10-1032; ui-rules §3.6, 03 §10.6, fix program DSX-118 four states). components/base exports AsyncImage: frame data-slot=image-frame with data-state loading / loaded / error / empty, token placeholder keeping the aspect ratio, fade-in only through .h5-image-fade (opacity on var(--motion-duration-normal) var(--motion-easing-enter); none under reduced motion), loading=lazy and decoding=async, referrerPolicy only when the caller passes it, failure text from the dictionary (state.load_failed.title), empty src renders an empty frame without an img. Article images use it with no-referrer; the invite poster keeps alt='' and no referrer policy, shows the failure state inside its card instead of hiding it (screen readers hear it through the card's aria-describedby), and after a failure the card is aria-disabled so tapping no longer opens a broken preview (review r1 S2-2, fixed in round 2 with an optional Card disabled and AsyncImage onError). Bundle: every App route initial + route grows by at most +515 B (limit 3 KiB per route), all within the frozen 150 KiB (largest claim-form 145090 -> ~145605). Rule tests by an independent Claude; independent Claude spec-test review r1 pass (four S2 written into the implementation constraints and done); red on the local container (20 tests, right reason). Implementation by Opus 5.5 in two rounds: local container browser run green for h5-image (round-2 browser run had one unrelated admin-pay-orders timeout under host load, green in round 1); container verify-fast OOM at tsc, host H5 frozen rule tests 773/773 and h5 unit tests 95/95 stand in, CI runs full verification. Non-funds. Codex usage limit: independent Claude general review r1 pass (S2-1 already covered by aria-describedby, S2-2 fixed), round-2 incremental review pass (one rare S2 logged as a follow-up). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 2,
+      "note": "Codex usage limit (until 2026-11-15), independent Claude per D10-823 ④: round 1 pass with two S2 (S2-1 covered by Card aria-describedby; S2-2 fixed in round 2), round 2 incremental pass (one rare S2 logged)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "independent Claude spec-test review round 1 pass, four S2 written into the implementation constraints; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-48c",
+  "spec_ref": "865361d5ec4637aef928bbbe3823621bc9b098fc",
+  "spec_commit": "f3174663b830cebe407eac0a75d16d96716fbbf6",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f3174663b830cebe407eac0a75d16d96716fbbf6",
+      "tree": "13a2c55d012756ee2384a188c332851306304035",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-08T15:47:29Z",
+      "finished_at": "2026-11-08T15:47:42Z",
+      "red_tests": [
+        "test/spec/frontend/h5-image/bundle.test.ts > [AC-DSX-48c-BUNDLE#1] 接入后正文与邀请页所在路由都打进图片件；主干基线构建（三处主干原文）服务了全部原文且任何路由都不含图片件",
+        "test/spec/frontend/h5-image/bundle.test.ts > [AC-DSX-48c-BUNDLE#2] 各 App 路由「入口 + 路由」JS gzip ≤ 150 KiB，且相对主干基线每条路由增量 ≤ 3 KiB",
+        "test/spec/frontend/h5-image/image.browser.test.ts > [AC-DSX-48c-FADE#1] 加载中是令牌底色占位、保持 3/2 不跳版、图不显示；load 后图以 opacity 渐显，时长与缓动取 --motion-duration-normal / --motion-easing-enter，只动 opacity/transform",
+        "test/spec/frontend/h5-image/image.browser.test.ts > [AC-DSX-48c-REDUCED#1] prefers-reduced-motion: reduce 时 load 后图直接完整显示：不跑任何过渡，框尺寸不变",
+        "test/spec/frontend/h5-image/image.browser.test.ts > [AC-DSX-48c-FAILED#1] 图片加载失败：占位底色上显示可见的失败文字，不显示破图，框尺寸不变",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#1] 加载中：占位框 data-state=loading、无文字，img 已在 DOM（lazy、async、src、alt 即可访问名称），不带 aria-busy 与骨架块",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#2] img 触发 load 后 data-state=loaded，img 与可访问名称不变，无失败文字",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#3] img 触发 error 后 data-state=error：不显示破图（img 移除或 hidden），显示字典 state.load_failed.title 失败文字且读屏可读",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#4] 调用方传入 failedText 时失败态显示该文字（不另写死文案）",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#5] src 为 null 时是无图态：不创建 img、不发请求，占位框 data-state=empty、无文字",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#6] src 为 undefined 时是无图态：不创建 img、不发请求，占位框 data-state=empty、无文字",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#7] src 为空串时是无图态：不创建 img、不发请求，占位框 data-state=empty、无文字",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#8] 换 src 时回到加载中：已加载或已失败的状态不沿用到新图",
+        "test/spec/frontend/h5-image/image.test.ts > [AC-DSX-48c-IMAGE#9] referrerPolicy 由调用方传给 img（no-referrer 照写）",
+        "test/spec/frontend/h5-image/source.test.ts > [AC-DSX-48c-SOURCE#1] base/index.ts 从 components/base 下的模块转出 AsyncImage，该模块源码不写死中文",
+        "test/spec/frontend/h5-image/source.test.ts > [AC-DSX-48c-SOURCE#2] 正文 article-body.tsx 与邀请页 invite-page.tsx 从 base/index.ts 引入 AsyncImage，不再直接渲染 <img>",
+        "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#1] 正文图经图片件渲染：每张图在占位框里（加载中），alt 即可访问名称、no-referrer、lazy、async 照旧，不带 aria-busy",
+        "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#2] 正文图 load 后渐显（loaded）；另一张 error 后显示读屏可读的失败态、不显示破图，正文文字不受影响",
+        "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#3] 邀请海报经图片件渲染：在【预览邀请海报】卡里、保持 750/1334 占位比例；加载失败时卡片仍在、显示失败态而不整块隐藏，卡片可访问名称不变",
+        "test/spec/frontend/h5-image/wiring.test.ts > [AC-DSX-48c-WIRING#4] 邀请海报 load 后为已加载态、卡片名称不变；poster_url 为空时仍不显示海报卡与图片"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-image/bundle.test.ts",
+        "test/spec/frontend/h5-image/image.browser.test.ts",
+        "test/spec/frontend/h5-image/image.test.ts",
+        "test/spec/frontend/h5-image/source.test.ts",
+        "test/spec/frontend/h5-image/wiring.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "364e80ea10f48958f02ececccc8a5215eb57fcf91228b850640685121db8f633"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "629236553c1d94b71cd7dd26d413bc069fc30ecb0d1f170c1ab426a4eef8ee68"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f132dbb50146b2f048d38bc3796d042c3f6eb5cb",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}

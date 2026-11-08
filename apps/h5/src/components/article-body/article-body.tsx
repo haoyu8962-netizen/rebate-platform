@@ -1,6 +1,7 @@
 import { useMemo, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 import { renderJSONContentToReactElement } from '@tiptap/static-renderer/json/react';
 import { call, has } from '@couli/bridge-sdk';
+import { AsyncImage } from '../../components/base/index.ts';
 import { rulesTexts } from '../../texts/rules.ts';
 import {
   normalizeOrigins,
@@ -87,13 +88,11 @@ function Image({ node }: NodeProps): ReactNode {
   const alt = node.attrs?.['alt'];
   if (typeof src !== 'string' || src === '') return null;
   return (
-    <img
+    <AsyncImage
       src={src}
       alt={typeof alt === 'string' ? alt : ''}
-      loading="lazy"
-      decoding="async"
       referrerPolicy="no-referrer"
-      className="block h-auto max-w-full rounded-couli-small"
+      className="rounded-couli-small"
     />
   );
 }

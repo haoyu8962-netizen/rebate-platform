@@ -12,3 +12,4 @@ export { Segmented, type SegmentedOption, type SegmentedProps } from './Segmente
 export { Card, type CardElement, type CardPadding, type CardProps } from './Card.tsx';
 export { ListRow, type ListRowProps } from './ListRow.tsx';
 export { Tabs, type TabItem, type TabsProps } from './Tabs.tsx';
+export { AsyncImage, type AsyncImageProps } from './AsyncImage.tsx';

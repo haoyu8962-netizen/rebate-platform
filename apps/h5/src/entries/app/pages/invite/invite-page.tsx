@@ -2,7 +2,13 @@ import { call, has } from '@couli/bridge-sdk';
 import { formatYuan } from '@couli/money';
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactElement, type ReactNode } from 'react';
-import { Button, Card, ErrorState, Skeleton } from '../../../../components/base/index.ts';
+import {
+  AsyncImage,
+  Button,
+  Card,
+  ErrorState,
+  Skeleton,
+} from '../../../../components/base/index.ts';
 import { ChevronIcon } from '../../../../components/icons/index.tsx';
 import { RetryPage } from '../../../../components/retry/index.ts';
 import { useApi } from '../../../../shared/api/app-api.ts';
@@ -219,8 +225,10 @@ function CodeCard({
   poster: string | null;
   notify: (text: string) => void;
 }): ReactElement {
-  const [posterBroken, setPosterBroken] = useState(false);
   const posterUrl = poster === null || poster === '' ? null : poster;
+  // A poster that failed to load keeps its card and failure text but opens no preview.
+  const [failedPoster, setFailedPoster] = useState<string | null>(null);
+  const posterFailed = posterUrl !== null && failedPoster === posterUrl;
 
   // clipboard.write 要求一秒内的用户点击：在点击处理里直接调用。
   function copy(text: string, done: string): void {
@@ -232,7 +240,7 @@ function CodeCard({
   }
 
   function preview(): void {
-    if (posterUrl === null) return;
+    if (posterUrl === null || posterFailed) return;
     const handle = has('media.previewImage');
     if (handle === null) return;
     call(handle, { urls: [posterUrl] }).catch(() => undefined);
@@ -263,20 +271,16 @@ function CodeCard({
           {t('invite.share.copy_code')}
         </Button>
       </div>
-      {posterUrl === null || posterBroken ? null : (
+      {posterUrl === null ? null : (
         <div className="mx-auto w-3/5 max-w-60">
           <Card
             aria-label={inviteTexts.posterPreview}
             padding="none"
             className="overflow-hidden"
             onClick={preview}
+            disabled={posterFailed}
           >
-            <img
-              src={posterUrl}
-              alt=""
-              className="block aspect-[750/1334] w-full bg-couli-background-muted object-cover"
-              onError={() => setPosterBroken(true)}
-            />
+            <AsyncImage src={posterUrl} alt="" aspectRatio="750 / 1334" onError={setFailedPoster} />
           </Card>
         </div>
       )}
