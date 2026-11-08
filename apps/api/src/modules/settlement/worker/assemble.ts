@@ -35,6 +35,7 @@ import {
   type BeneficiaryCredit,
 } from '../credit/beneficiary/beneficiary-credit.ts';
 import { createCreditOrder, type BeneficiaryEventInput } from '../credit/credit-order.ts';
+import { createJdRemainingZeroGuard } from '../rebate/application/rebate.ts';
 import { createSettleCatchUpStore, seedSettleBillCatchUp } from './catch-up.ts';
 import type { SettlementWorkerPorts } from './ports.ts';
 import { createSettleRunStore } from './run-store.ts';
@@ -137,6 +138,8 @@ export function createSettleWorkerHandler(
   const creditOrder = createCreditOrder({
     clock,
     logger,
+    // B2-04zzh (D10-923): a jd order with no item left is voided by R6 at credit when the switch is on.
+    remainingZeroGuard: createJdRemainingZeroGuard({ clock, logger, events, config }),
     ledger,
     gate,
     readAttribution: ports.readAttribution,

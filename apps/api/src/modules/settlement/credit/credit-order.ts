@@ -31,6 +31,8 @@
 //      invite reward trigger on the same transaction (it runs under its own savepoint and never
 //      throws on its own failures);
 //  10. publish order.credited on the same transaction.
+// B2-04zzh: between 2 and 3, the optional remainingZeroGuard voids a jd order with no item left (switch
+// on) and the credit skips with 'jd_remaining_zero_void'.
 // B2-04lb: N is the settlement commission less the deductions of successful partial rights results
 // received at or after the latest settlement record (D10-474 ①; floor 0).
 // Amounts only through @couli/money; time only from the injected Clock.
@@ -131,6 +133,17 @@ export interface CreditOrderDependencies {
    * of BR-INV-24 ② is the booked base). Only R5 calls it (R13, the admin restore, does not).
    */
   readonly inviteTrigger?: CreditInviteTrigger;
+  /**
+   * B2-04zzh (D10-923; BR-CALC-15, BR-FUND-07, BR-FUND-04 ⑨): optional. Called on the credit's own
+   * transaction after the step-2 checks passed, with the order key lock held. true: the guard voided
+   * the order by R6 (a jd order with no item left and orders.jd.refunded_quantity_r9_enabled on), so
+   * nothing is credited and the item is skipped with 'jd_remaining_zero_void'; false: credit as
+   * before. Not given: unchanged behaviour.
+   */
+  readonly remainingZeroGuard?: (
+    trx: Transaction<DB>,
+    ref: { readonly appId: string; readonly orderId: string; readonly attrAt: Date },
+  ) => Promise<boolean>;
   readonly clock: Clock;
   readonly logger: Pick<RootLogger, 'info' | 'warn' | 'error'>;
   readonly ledger: Pick<Ledger, 'openUserAccount' | 'lockBalances' | 'post'>;
@@ -178,7 +191,12 @@ export interface CreditOrderInput {
  * (BR-FUND-04 ⑦).
  */
 export type CreditSkipReason =
-  'not_waiting' | 'hold' | 'rights_pending' | 'settlement_changed' | 'tlj_deduct_unsupported';
+  | 'not_waiting'
+  | 'hold'
+  | 'rights_pending'
+  | 'settlement_changed'
+  | 'tlj_deduct_unsupported'
+  | 'jd_remaining_zero_void';
 
 export interface CreditBeneficiaryOutcome {
   readonly userId: string;
@@ -334,6 +352,14 @@ export function createCreditOrder(deps: CreditOrderDependencies): CreditOrder {
     const settled = order.settle_commission_fen;
     if (seq === null || seq !== input.expectedSettleSeq || settled === null) {
       return { outcome: 'skipped', reason: 'settlement_changed' };
+    }
+    // B2-04zzh: a jd order whose items were all refunded is invalid as a whole (BR-CALC-15, R6), even
+    // when no new report re-evaluated it after the switch went on; voided here instead of credited.
+    if (
+      deps.remainingZeroGuard !== undefined &&
+      (await deps.remainingZeroGuard(trx, { appId, orderId, attrAt: locator.attr_at }))
+    ) {
+      return { outcome: 'skipped', reason: 'jd_remaining_zero_void' };
     }
     // B2-04lb (D10-463 / D10-474 ①; BR-FUND-06, BR-FUND-08 ②, BR-CALC-15): partial rights results
     // before credit lower N. Deductions the union's updated commission answered (answered_at set on

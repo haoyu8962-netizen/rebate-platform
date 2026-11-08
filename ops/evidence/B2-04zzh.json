@@ -1,0 +1,103 @@
+{
+  "task": "B2-04zzh",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "19ba1177908b8bb0a630eecee3ceb71fa773d29d",
+  "red_tests": [
+    "test/spec/settlement/jd-remaining-zero-switch-on/atomicity.int.test.ts > [AC-B2-04zzh#6] 开关开、退完的 WAITING 京东单入账时作废，order.invalidated 追加失败：整个入账事务回滚（WAITING、无历史、无事件、无分录、批次项未写）；恢复后重跑只作废一次、只入队一次，批次项 skipped，再投不重复",
+    "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#1] 开关关时同步出 2 件退 2 的 WAITING 京东单 → 打开开关、不再同步、直接跑入账批次：该单 R6 → VOID（reason REFUND）、历史一行 PLATFORM_INVALID、恰一条 order.invalidated、无凭证无分录、无 order.credited，批次项 skipped / jd_remaining_zero_void；同批剩余 > 0 的京东单照常入账",
+    "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#2] 开关开、批次只有这一张退完的 WAITING 京东单：作废后该 app 的凭证、分录、余额逐行不变，批次 DONE；同一批次再投一次不再写第二条历史或事件",
+    "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#3] 开关未配置：2 件退 2 的 WAITING 京东单进批次 → 照常入账（CREDITED、有凭证、一条 order.credited、批次项 credited），不作废、无 order.invalidated；入账时多写一条 warn（alert jd_remaining_zero_r6_disabled，带 app_id、order_id、platform、quantity、refunded_quantity，outcome 标明入账时）",
+    "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#3] 开关false：2 件退 2 的 WAITING 京东单进批次 → 照常入账（CREDITED、有凭证、一条 order.credited、批次项 credited），不作废、无 order.invalidated；入账时多写一条 warn（alert jd_remaining_zero_r6_disabled，带 app_id、order_id、platform、quantity、refunded_quantity，outcome 标明入账时）",
+    "test/spec/settlement/jd-remaining-zero-switch-on/null-counts.int.test.ts > [AC-B2-04zzh#11] 开关开：件数为空（quantity、refunded_quantity 都为 null）的 WAITING 京东单与 2 件退 2 的 WAITING 京东单同批入账 → 前者照常 CREDITED（凭证、一条 order.credited、批次项 credited），无 PLATFORM_INVALID 历史、无 order.invalidated、无告警；后者作废（VOID、REFUND、批次项 skipped / jd_remaining_zero_void）",
+    "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock.int.test.ts > [AC-B2-04zzh#12] 开关开、apply 读出 3 张候选后另一条连接把其中一张改成剩余 1：锁内重读后跳过该张（状态、原因、历史、order.invalidated、audit_logs 都与改后相同，不多一行），另两张照常作废；返回 { candidates: 3, voided: 2, skipped: 1 }，并发改动只发生一次",
+    "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock.int.test.ts > [AC-B2-04zzh#13] 开关开 --apply、某一张候选的 audit_logs 插入失败一次：该张事务回滚（仍是原状态、无作废历史、无 order.invalidated、无审计行），其余两张照常作废并保留；run 退出码 1；恢复后重跑只剩这一张（{ 0, 1, 1, 0 }），作废一次",
+    "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#7] 开关开：dry-run 只列出 3 张剩余 ≤ 0 的 UNATTRIBUTED / ESTIMATED / WAITING 京东单（不含剩余 > 0、两列为空、非京东、已入账、已 VOID 的单，不含别的 app 的单），什么都不写，不打子订单号与用户",
+    "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#8] 开关开 --apply：3 张候选逐单 R6 → VOID（PLATFORM_INVALID、reason REFUND）、各恰一条 order.invalidated、各一条 audit_logs（actor = --actor、target orders:<order_id>、前后状态），无分录；其余单与别的 app 逐行不变；再跑一次 0 张、什么都不写",
+    "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#9] 开关未配置：--apply 只列清单（3 张）、一张不改，不写历史、事件、审计、分录",
+    "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#9] 开关false：--apply 只列清单（3 张）、一张不改，不写历史、事件、审计、分录",
+    "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#10] 参数不合法（缺 --app、--apply 缺 --actor、未知参数、多余位置参数）→ 退出码 2，计数全 0，什么都不写",
+    "test/spec/settlement/jd-remaining-zero-switch-on/scope.int.test.ts > [AC-B2-04zzh#4] 开关开：拼多多 WAITING 单（两列为 null；以及写进了 2 件退 2 的）照常入账、不作废、不告警；同 app 开关关期间退完的 WAITING 京东单在京东批次里作废",
+    "test/spec/settlement/jd-remaining-zero-switch-on/scope.int.test.ts > [AC-B2-04zzh#5] 开关开：京东单剩余 > 0（3 件退 2）照常入账、不作废；同批 2 件退 2 的京东单作废（剩余 ≤ 0 才是失效条件）"
+  ],
+  "risk_note": "RV2, settlement only (credit-order guard, rebate port decision, worker wiring, a one-off CLI); no migration, no contract change, no money moves (withdraw lane, model Claude Opus 5.5; orchestrator rulings D10-923, D10-924, D10-930). Before this task a jd order left fully refunded while orders.jd.refunded_quantity_r9_enabled was off stayed WAITING after the switch went on whenever the union report did not change (orders' content_hash short circuit), so the monthly batch credited it. Now (1) the single-order credit (R5), after its step-2 checks under the order key lock, voids such an order through the same decision as B2-04zzg (PLATFORM_INVALID through the generated transition, VOID with reason REFUND, history source system, order.invalidated on the same transaction, no voucher, no order.credited) and skips the batch item with jd_remaining_zero_void; with the switch off it credits as before with one warn; (2) a CLI lists such orders by default and voids them with --apply (needs --actor), one transaction per order under the order key lock, re-reading and skipping an order that no longer qualifies, writing an audit_logs row; a failing order rolls back alone and the CLI exits 1. Real risks: voiding a jd order whose counts are unknown (covered: #11), voiding on a partial refund (#5), voiding a credited or already VOID order (#7, #8), a stale CLI candidate (#12), a partial write when the publish or audit fails (#6, #13), cross-app effects (#8). Test-machine full verify not run (AWS runners disabled, D10-555; CI verify-int is the full verification); red and implementation runs in the local Docker container / host slot.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "19ba1177908b8bb0a630eecee3ceb71fa773d29d",
+      "tree": "476608ba0cbe45b5b7d8a6873d534119a7a3e1f4",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T23:06:13Z",
+      "finished_at": "2026-11-07T23:06:30Z",
+      "red_tests": [
+        "test/spec/settlement/jd-remaining-zero-switch-on/atomicity.int.test.ts > [AC-B2-04zzh#6] 开关开、退完的 WAITING 京东单入账时作废，order.invalidated 追加失败：整个入账事务回滚（WAITING、无历史、无事件、无分录、批次项未写）；恢复后重跑只作废一次、只入队一次，批次项 skipped，再投不重复",
+        "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#1] 开关关时同步出 2 件退 2 的 WAITING 京东单 → 打开开关、不再同步、直接跑入账批次：该单 R6 → VOID（reason REFUND）、历史一行 PLATFORM_INVALID、恰一条 order.invalidated、无凭证无分录、无 order.credited，批次项 skipped / jd_remaining_zero_void；同批剩余 > 0 的京东单照常入账",
+        "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#2] 开关开、批次只有这一张退完的 WAITING 京东单：作废后该 app 的凭证、分录、余额逐行不变，批次 DONE；同一批次再投一次不再写第二条历史或事件",
+        "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#3] 开关未配置：2 件退 2 的 WAITING 京东单进批次 → 照常入账（CREDITED、有凭证、一条 order.credited、批次项 credited），不作废、无 order.invalidated；入账时多写一条 warn（alert jd_remaining_zero_r6_disabled，带 app_id、order_id、platform、quantity、refunded_quantity，outcome 标明入账时）",
+        "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts > [AC-B2-04zzh#3] 开关false：2 件退 2 的 WAITING 京东单进批次 → 照常入账（CREDITED、有凭证、一条 order.credited、批次项 credited），不作废、无 order.invalidated；入账时多写一条 warn（alert jd_remaining_zero_r6_disabled，带 app_id、order_id、platform、quantity、refunded_quantity，outcome 标明入账时）",
+        "test/spec/settlement/jd-remaining-zero-switch-on/null-counts.int.test.ts > [AC-B2-04zzh#11] 开关开：件数为空（quantity、refunded_quantity 都为 null）的 WAITING 京东单与 2 件退 2 的 WAITING 京东单同批入账 → 前者照常 CREDITED（凭证、一条 order.credited、批次项 credited），无 PLATFORM_INVALID 历史、无 order.invalidated、无告警；后者作废（VOID、REFUND、批次项 skipped / jd_remaining_zero_void）",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock.int.test.ts > [AC-B2-04zzh#12] 开关开、apply 读出 3 张候选后另一条连接把其中一张改成剩余 1：锁内重读后跳过该张（状态、原因、历史、order.invalidated、audit_logs 都与改后相同，不多一行），另两张照常作废；返回 { candidates: 3, voided: 2, skipped: 1 }，并发改动只发生一次",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock.int.test.ts > [AC-B2-04zzh#13] 开关开 --apply、某一张候选的 audit_logs 插入失败一次：该张事务回滚（仍是原状态、无作废历史、无 order.invalidated、无审计行），其余两张照常作废并保留；run 退出码 1；恢复后重跑只剩这一张（{ 0, 1, 1, 0 }），作废一次",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#7] 开关开：dry-run 只列出 3 张剩余 ≤ 0 的 UNATTRIBUTED / ESTIMATED / WAITING 京东单（不含剩余 > 0、两列为空、非京东、已入账、已 VOID 的单，不含别的 app 的单），什么都不写，不打子订单号与用户",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#8] 开关开 --apply：3 张候选逐单 R6 → VOID（PLATFORM_INVALID、reason REFUND）、各恰一条 order.invalidated、各一条 audit_logs（actor = --actor、target orders:<order_id>、前后状态），无分录；其余单与别的 app 逐行不变；再跑一次 0 张、什么都不写",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#9] 开关未配置：--apply 只列清单（3 张）、一张不改，不写历史、事件、审计、分录",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#9] 开关false：--apply 只列清单（3 张）、一张不改，不写历史、事件、审计、分录",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts > [AC-B2-04zzh#10] 参数不合法（缺 --app、--apply 缺 --actor、未知参数、多余位置参数）→ 退出码 2，计数全 0，什么都不写",
+        "test/spec/settlement/jd-remaining-zero-switch-on/scope.int.test.ts > [AC-B2-04zzh#4] 开关开：拼多多 WAITING 单（两列为 null；以及写进了 2 件退 2 的）照常入账、不作废、不告警；同 app 开关关期间退完的 WAITING 京东单在京东批次里作废",
+        "test/spec/settlement/jd-remaining-zero-switch-on/scope.int.test.ts > [AC-B2-04zzh#5] 开关开：京东单剩余 > 0（3 件退 2）照常入账、不作废；同批 2 件退 2 的京东单作废（剩余 ≤ 0 才是失效条件）"
+      ],
+      "expected": [
+        "test/spec/settlement/jd-remaining-zero-switch-on/atomicity.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero-switch-on/credit-guard.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero-switch-on/null-counts.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate-lock.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero-switch-on/reevaluate.int.test.ts",
+        "test/spec/settlement/jd-remaining-zero-switch-on/scope.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "d5c5d2f50b89248bff759c605cf6bc50a7e44a73c30fa9ba792e2f5cffa8f58b"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Money review by a fresh independent Claude (claude-run.sh review --review-type money), D10-956: Codex usage limit until 11-15 00:24 (the Codex call at 06:5x failed at once with \"You've hit your usage limit … try again at Nov 15th, 2026 12:24 AM\", no output, round given back). Base = fork point 873db5d290c2, full diff 873db5d..6d0224f. Verdict pass, no S0/S1/S2; checklist: rounding na, sign / idempotency / concurrency / partial_refund / clock / app_id ok. The reviewer checked the guard runs after the step-2 skips under the order key lock on the item's own transaction, that the void, the event and the skipped item commit or roll back together, and that null-count, partial and non-jd orders take the trunk path."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 3/3); spec-test by fresh independent Claude (D10-848). r1 fail on 1abb74333: two S1 coverage gaps (a jd order with null counts never went through the credit guard; the CLI's lock re-read and skip had no test) and one S2 (a failing order's rollback). Test round 2 added #11–#13; round 3 changed only #8's untouched-events assertion to compare with before the run (the already VOID order carries its own setup event; checked on the implementation tree). r2 pass on 2ad4dd6b8: both S1 closed; one non-blocking S2 left (no test proves the CLI holds the order key lock during its re-read; the implementation takes it before re-reading)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "752bfb374746f794d6d608774aeb93ca84f0b283",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

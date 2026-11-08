@@ -1,5 +1,5 @@
 import type { DB } from '@couli/db';
-import type { Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import type { OrderRebateEvent, OrderRebateState } from '@couli/domain';
 import { chinaMonth } from '@couli/domain';
 import type {
@@ -10,7 +10,8 @@ import type {
   OrderUpdateDeps,
   UnmappedOrderInfo,
 } from '../../../orders/index.ts';
-import type { Clock, EventBus, RootLogger } from '../../../platform/index.ts';
+import { lockOrderKey } from '../../../orders/index.ts';
+import type { AuditPort, Clock, EventBus, RootLogger } from '../../../platform/index.ts';
 import {
   commissionChangeOf,
   commissionOutcome,
@@ -782,6 +783,298 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
         (row) => decideApply(trx, row, order, event),
         subContext ?? {},
       );
+    },
+  };
+}
+
+/**
+ * B2-04zzh（FU-JD-REMAINING-ZERO-SWITCH-ON，D10-923 / D10-930；BR-CALC-15、BR-FUND-07、BR-FUND-01 R6）：
+ * 京东未入账单一次性重评（运维 CLI apps/api/scripts/jd-remaining-zero-reevaluate.ts 的服务）的依赖。
+ * audit：admin 的审计写者，建在逐单事务上（audit_logs 与作废同事务提交 / 回滚）。
+ */
+export interface JdRemainingZeroReevaluationDependencies {
+  readonly db: Kysely<DB>;
+  readonly clock: Clock;
+  readonly logger: Pick<RootLogger, 'info' | 'warn' | 'error'>;
+  readonly events: Pick<EventBus, 'publish'>;
+  readonly config: {
+    get(appId: string, key: string): Promise<unknown>;
+  };
+  readonly audit: (trx: Transaction<DB>) => AuditPort;
+}
+
+/** 清单中的一张单：只带内部 order_id 与返利状态（不带子订单号、用户与买家参数）。 */
+export interface JdRemainingZeroCandidate {
+  readonly orderId: string;
+  readonly rebateStatus: 'UNATTRIBUTED' | 'ESTIMATED' | 'WAITING';
+}
+
+/** candidates：清单张数（处理数）；voided：作废数；skipped：锁内重读后已不满足而跳过的张数。 */
+export interface JdRemainingZeroReevaluationSummary {
+  readonly candidates: number;
+  readonly voided: number;
+  readonly skipped: number;
+}
+
+export interface JdRemainingZeroReevaluationApplyInput {
+  readonly appId: string;
+  /** 运维执行人（admin_users.id），写进每条 audit_logs。 */
+  readonly actor: string;
+}
+
+/**
+ * list：该 app 京东、rebate_status ∈ {UNATTRIBUTED, ESTIMATED, WAITING}、两列非空且
+ * quantity − refunded_quantity ≤ 0 的单，什么都不写。
+ * apply：逐单独立事务、取 orders.lockOrderKey、锁内重读按 B2-04zzg 同一判定 R6 → VOID（PLATFORM_INVALID、
+ * orders.reason REFUND、不写分录、同事务 order.invalidated 与一条 audit_logs）；开关关时不改任何单。
+ */
+export interface JdRemainingZeroReevaluation {
+  list(appId: string): Promise<readonly JdRemainingZeroCandidate[]>;
+  apply(input: JdRemainingZeroReevaluationApplyInput): Promise<JdRemainingZeroReevaluationSummary>;
+}
+
+/** B2-04zzh：入账守卫作废时批次项的跳过原因（settle_batch_items.skip_reason 是 text，契约无枚举）。 */
+export const JD_REMAINING_ZERO_SKIP_REASON = 'jd_remaining_zero_void';
+/** B2-04zzh：一次性重评作废一张单写的 audit_logs.action（target orders:<order_id>）。 */
+export const JD_REMAINING_ZERO_AUDIT_ACTION = 'order_remaining_zero_void';
+const REMAINING_ZERO_FROM: readonly OrderRebateState[] = ['UNATTRIBUTED', 'ESTIMATED', 'WAITING'];
+
+/** 入账守卫与一次性重评共用的依赖（不需要估值与审计端口：作废不推佣金版本、不写分录）。 */
+export interface JdRemainingZeroVoidDependencies {
+  readonly clock: Clock;
+  readonly logger: Pick<RootLogger, 'info' | 'warn' | 'error'>;
+  readonly events: Pick<EventBus, 'publish'>;
+  readonly config: {
+    get(appId: string, key: string): Promise<unknown>;
+  };
+}
+
+type RemainingZeroContext = 'credit' | 'reevaluate';
+
+interface RemainingZeroResult {
+  readonly outcome: 'voided' | 'kept' | 'not_applicable';
+  readonly from: OrderRebateState | null;
+}
+
+/**
+ * B2-04zzh（BR-CALC-15「剩余数量为 0 … 入账前 R6 → VOID」、BR-FUND-07、BR-FUND-01 R6；D10-923）：调用方已持有
+ * orders.lockOrderKey 并在自己的事务里。锁内重读；UNATTRIBUTED / ESTIMATED / WAITING 的京东单两列都已知且
+ * quantity − refunded_quantity ≤ 0 时，与 B2-04zzg 同一判定：开关开 → 经生成的 transition() 走 R6
+ * （PLATFORM_INVALID → VOID、orders.reason REFUND、reason_sub 不动）、CAS、history 一行（source system）、同事务
+ * order.invalidated，不写分录；开关关 → 不改，入账时写一条 warn（alert jd_remaining_zero_r6_disabled）。
+ * 本次没有新报文，orders 没推佣金版本，不刷金额行。
+ */
+async function voidRemainingZeroLocked(
+  deps: JdRemainingZeroVoidDependencies,
+  trx: Transaction<DB>,
+  ref: RebateOrderRef,
+  context: RemainingZeroContext,
+): Promise<RemainingZeroResult> {
+  const row = await readRebateOrder(trx, ref);
+  if (row === undefined || !isRebateState(row.rebate_status)) {
+    return { outcome: 'not_applicable', from: null };
+  }
+  const from = row.rebate_status;
+  if (!REMAINING_ZERO_FROM.includes(from) || !jdRemainingZero(row)) {
+    return { outcome: 'not_applicable', from };
+  }
+  const base = {
+    app_id: row.app_id,
+    order_id: row.order_id,
+    platform: row.platform,
+    rebate_status: from,
+  };
+  if (!jdRefundR9Enabled(await deps.config.get(row.app_id, JD_REFUND_R9_SWITCH))) {
+    if (context === 'credit') {
+      deps.logger.warn(
+        {
+          ...base,
+          alert: ALERT_JD_REMAINING_ZERO_OFF,
+          quantity: row.quantity,
+          refunded_quantity: row.refunded_quantity,
+          outcome: 'credited_anyway',
+        },
+        'jd remaining quantity is zero at credit; R9 switch off, credited as before',
+      );
+    }
+    return { outcome: 'kept', from };
+  }
+  const now = deps.clock.now();
+  const d = draft(from);
+  advance(d, 'PLATFORM_INVALID');
+  const plan = finish(d, row.rebate_status);
+  if (plan === null || !plan.write) {
+    throw new RebateError('ORDER_CAS_CONFLICT', 'remaining-zero void planned no write');
+  }
+  // 调用方持有订单键锁：同步与入账都在同一把锁下写，CAS 落空只能是并发写漏了锁，整事务回滚。
+  if (!(await casUpdateRebate(trx, row, plan.set, plan.guards, now))) {
+    throw new RebateError('ORDER_CAS_CONFLICT', 'order changed under the order key lock');
+  }
+  await insertRebateHistory(trx, row, plan.steps, 'system', now);
+  if (plan.invalidated !== null) {
+    await deps.events.publish(trx, {
+      appId: row.app_id,
+      name: 'order.invalidated',
+      payload: { order_id: row.order_id, platform: row.platform, reason: plan.invalidated },
+    });
+  }
+  deps.logger.info(
+    {
+      ...base,
+      event: 'PLATFORM_INVALID',
+      outcome: context === 'credit' ? 'voided_at_credit' : 'voided_by_reevaluation',
+    },
+    'jd order with no item left voided before credit',
+  );
+  return { outcome: 'voided', from };
+}
+
+/**
+ * B2-04zzh 入账前守卫（credit-order 的可选依赖）：返回 true 表示已按 R6 作废，调用方不入账、批次项记
+ * skipped / jd_remaining_zero_void；false 表示照常入账（不适用，或开关关只告警）。
+ */
+export function createJdRemainingZeroGuard(
+  deps: JdRemainingZeroVoidDependencies,
+): (trx: Transaction<DB>, ref: RebateOrderRef) => Promise<boolean> {
+  return async (trx, ref) =>
+    (await voidRemainingZeroLocked(deps, trx, ref, 'credit')).outcome === 'voided';
+}
+
+interface CandidateRow {
+  readonly order_id: string;
+  readonly attr_at: Date;
+  readonly sub_order_id: string;
+  readonly rebate_status: string;
+}
+
+/**
+ * apply 有单张失败（该张已整体回滚）时在处理完全部候选后抛出；summary 是已提交的计数，failed 是失败张数。
+ * CLI 据此打印计数并以退出码 1 结束；重跑会把失败的单再选进来。
+ */
+export class JdRemainingZeroReevaluationError extends Error {
+  override readonly name = 'JdRemainingZeroReevaluationError';
+  readonly summary: JdRemainingZeroReevaluationSummary;
+  readonly failed: number;
+
+  constructor(summary: JdRemainingZeroReevaluationSummary, failed: number) {
+    super(`${String(failed)} order(s) failed and were rolled back`);
+    this.summary = summary;
+    this.failed = failed;
+  }
+}
+
+export function createJdRemainingZeroReevaluation(
+  deps: JdRemainingZeroReevaluationDependencies,
+): JdRemainingZeroReevaluation {
+  const core: JdRemainingZeroVoidDependencies = {
+    clock: deps.clock,
+    logger: deps.logger,
+    events: deps.events,
+    config: deps.config,
+  };
+
+  async function candidates(appId: string): Promise<CandidateRow[]> {
+    const rows = await deps.db
+      .withSchema('app')
+      .selectFrom('orders')
+      .select([
+        'order_id',
+        'attr_at',
+        'sub_order_id',
+        'rebate_status',
+        'platform',
+        'quantity',
+        'refunded_quantity',
+      ])
+      .where('app_id', '=', appId)
+      .where('platform', '=', 'jd')
+      .where('rebate_status', 'in', [...REMAINING_ZERO_FROM])
+      .where('quantity', 'is not', null)
+      .where('refunded_quantity', 'is not', null)
+      .where(sql<boolean>`quantity - refunded_quantity <= 0`)
+      .orderBy('order_id')
+      .execute();
+    // 与同步、入账同一个纯判定（件数为 0 等边界以它为准）。
+    return rows.filter((row) => jdRemainingZero(row));
+  }
+
+  return {
+    async list(appId) {
+      return (await candidates(appId)).map((row) => ({
+        orderId: row.order_id,
+        rebateStatus: row.rebate_status as JdRemainingZeroCandidate['rebateStatus'],
+      }));
+    },
+
+    async apply(input) {
+      const rows = await candidates(input.appId);
+      if (!jdRefundR9Enabled(await deps.config.get(input.appId, JD_REFUND_R9_SWITCH))) {
+        deps.logger.warn(
+          {
+            app_id: input.appId,
+            alert: ALERT_JD_REMAINING_ZERO_OFF,
+            candidates: rows.length,
+            outcome: 'listed_only',
+          },
+          'jd remaining-zero re-evaluation: R9 switch off, nothing voided',
+        );
+        return { candidates: rows.length, voided: 0, skipped: 0 };
+      }
+      let voided = 0;
+      let skipped = 0;
+      let failed = 0;
+      for (const row of rows) {
+        // 逐单独立事务：一张失败只回滚它自己，其余照常处理；重跑时已 VOID 的不再入选。
+        let done: boolean;
+        try {
+          done = await deps.db.transaction().execute(async (trx) => {
+            await lockOrderKey(trx, 'jd', row.sub_order_id);
+            const ref = { appId: input.appId, orderId: row.order_id, attrAt: row.attr_at };
+            const result = await voidRemainingZeroLocked(core, trx, ref, 'reevaluate');
+            if (result.outcome !== 'voided') return false;
+            await deps.audit(trx).append({
+              appId: input.appId,
+              actor: input.actor,
+              action: JD_REMAINING_ZERO_AUDIT_ACTION,
+              target: `orders:${row.order_id}`,
+              before: { rebate_status: result.from },
+              after: { rebate_status: 'VOID', reason: 'REFUND' },
+              ip: null,
+            });
+            return true;
+          });
+        } catch (error) {
+          failed += 1;
+          deps.logger.error(
+            {
+              app_id: input.appId,
+              err: error instanceof Error ? error.name : 'unknown',
+              outcome: 'reevaluation_order_failed',
+            },
+            'jd remaining-zero re-evaluation: one order failed and was rolled back',
+          );
+          continue;
+        }
+        if (done) voided += 1;
+        else skipped += 1;
+      }
+      if (failed > 0) {
+        throw new JdRemainingZeroReevaluationError(
+          { candidates: rows.length, voided, skipped },
+          failed,
+        );
+      }
+      deps.logger.info(
+        {
+          app_id: input.appId,
+          candidates: rows.length,
+          voided,
+          skipped,
+          outcome: 'reevaluated',
+        },
+        'jd remaining-zero re-evaluation applied',
+      );
+      return { candidates: rows.length, voided, skipped };
     },
   };
 }

@@ -1,5 +1,14 @@
 export { SettlementAdminModule, SettlementModule, REBATE_PORT } from './settlement.module.ts';
 export { createRebatePort } from './rebate/application/rebate.ts';
+// B2-04zzh (D10-923 / D10-930): the one-shot re-evaluation of jd orders with no item left (CLI).
+export { createJdRemainingZeroReevaluation } from './rebate/application/rebate.ts';
+export type {
+  JdRemainingZeroCandidate,
+  JdRemainingZeroReevaluation,
+  JdRemainingZeroReevaluationApplyInput,
+  JdRemainingZeroReevaluationDependencies,
+  JdRemainingZeroReevaluationSummary,
+} from './rebate/application/rebate.ts';
 export { IllegalTransition, RebateError } from './rebate/application/errors.ts';
 export type { RebateErrorCode } from './rebate/application/errors.ts';
 export type {
