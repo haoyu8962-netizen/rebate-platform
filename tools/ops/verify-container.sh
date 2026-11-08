@@ -84,9 +84,16 @@
 # one at a time per slot directory; --red, --browser and --dry-run never take or check the slot.
 #   COULI_VERIFY_SLOT_DIR          default <runs>/verify-slot (created when missing)
 #   COULI_VERIFY_SLOT_WAIT_SECS    the longest wait for the slot, default 1800 (a positive integer);
-#                                  past it exit 2 naming the holder, before any docker call
+#                                  past it exit 2 naming the holder, before any container is
+#                                  started (only a docker ps may have run, CT-06zzzzb)
 #   COULI_VERIFY_SLOT_REPORT_SECS  while waiting, the holder and the time waited are printed at the
 #                                  start and every so many seconds, default 60 (a positive integer)
+#   COULI_VERIFY_SLOT_ORPHAN_SECS  a lock or takeover gate without an owner file whose directory is
+#                                  older than this is an orphan and is removed, default 30 (a positive
+#                                  integer; CT-06zzzzb)
+#   COULI_VERIFY_SLOT_PS_TIMEOUT_SECS  the longest a docker ps of the stale check may run (it runs
+#                                  under the takeover gate), default 10 (a positive integer); one
+#                                  that outlives it is killed and counts as failed (CT-06zzzzb)
 # The slot is taken before the run directory, the snapshot and the first docker call and released
 # however the script ends (see slot_acquire / slot_release below; tools/ops/README.md).
 #
@@ -314,8 +321,12 @@ if [ "$DRY_RUN" = 0 ] && { [ "$SCRIPT" = verify ] || [ "$SCRIPT" = 'verify:fast'
 if [ "$SLOT_NEEDED" = 1 ]; then
   SLOT_WAIT_SECS="${COULI_VERIFY_SLOT_WAIT_SECS:-1800}"
   SLOT_REPORT_SECS="${COULI_VERIFY_SLOT_REPORT_SECS:-60}"
+  SLOT_ORPHAN_SECS="${COULI_VERIFY_SLOT_ORPHAN_SECS:-30}"
+  SLOT_PS_TIMEOUT_SECS="${COULI_VERIFY_SLOT_PS_TIMEOUT_SECS:-10}"
   if ! [[ "$SLOT_WAIT_SECS" =~ ^[1-9][0-9]*$ ]]; then die "COULI_VERIFY_SLOT_WAIT_SECS must be a positive integer"; fi
   if ! [[ "$SLOT_REPORT_SECS" =~ ^[1-9][0-9]*$ ]]; then die "COULI_VERIFY_SLOT_REPORT_SECS must be a positive integer"; fi
+  if ! [[ "$SLOT_ORPHAN_SECS" =~ ^[1-9][0-9]*$ ]]; then die "COULI_VERIFY_SLOT_ORPHAN_SECS must be a positive integer"; fi
+  if ! [[ "$SLOT_PS_TIMEOUT_SECS" =~ ^[1-9][0-9]*$ ]]; then die "COULI_VERIFY_SLOT_PS_TIMEOUT_SECS must be a positive integer"; fi
 fi
 
 # Host services (see the header): checked here, used by start_host_services.
@@ -440,6 +451,21 @@ fi
 # moved; one whose pid is gone is stale and is removed only under the takeover gate
 # <slot dir>/slot.lock.takeover (mkdir, exclusive), and only while its token is still the one
 # found stale. Release, too, happens under the gate and only while the token is still this run's.
+# CT-06zzzzb (FU-COLIMA-VERIFY-SLOT-REST, the two S2 of #2751):
+#   - the verify container of a run carries the label couli.slot-token=<its token>. A holder killed
+#     with SIGKILL runs no trap and its container keeps running: before a dead holder's lock is
+#     removed, `docker ps` (under the gate) lists the running containers with that token; one
+#     listed, or a failing docker ps, means "not stale" and the run keeps waiting (re-checking at
+#     most every SLOT_PS_EVERY seconds); the docker ps runs at most SLOT_PS_TIMEOUT_SECS (see
+#     slot_bounded), a hung one is killed and counts as failed, so it never holds the gate longer;
+#   - a lock without an owner file whose directory mtime is older than SLOT_ORPHAN_SECS is an
+#     orphan (interrupted between its mkdir and its owner file): removed under the gate, after
+#     checking that it still has no owner file and is still the same directory (inode and mtime);
+#   - a takeover gate whose owner pid is gone, or one without an owner file older than
+#     SLOT_ORPHAN_SECS, is stale: it is renamed to a name of this run's own, and removed only when
+#     the renamed directory is the one found stale (same inode, mtime and owner text); otherwise
+#     it is put back (see slot_gate_reap; tools/ops/README.md for the window left).
+SLOT_PS_EVERY=5 # seconds between two docker ps checks of the same stale holder
 SLOT_STATE=0 # 0 nothing held, 1 slot.lock created (owner not written yet), 2 owner written
 SLOT_GATE_HELD=0
 SLOT_DIR=''
@@ -477,19 +503,115 @@ slot_pid_gone() { # <pid>: true only when that process certainly no longer exist
   ps -p "$1" >/dev/null 2>&1 && return 1
   return 0
 }
+slot_dir_id() { # <directory>: "<inode>:<mtime in epoch seconds>" of the directory itself; fails when gone
+  local id
+  id="$(stat -c '%i:%Y' "$1" 2>/dev/null)" || id="$(stat -f '%i:%m' "$1" 2>/dev/null)" || return 1
+  [[ "$id" =~ ^[0-9]+:[0-9]+$ ]] || return 1
+  printf '%s' "$id"
+}
+slot_age() { # <id from slot_dir_id>: seconds since that mtime
+  printf '%s' "$(($(date +%s) - ${1#*:}))"
+}
+# <secs> <command...>: runs the command for at most <secs> seconds (macOS has no timeout(1)). The
+# command runs as a child in its own process group; past the limit that group is killed (SIGKILL:
+# the docker CLI, a Go program, ignores SIGALRM, so alarm before exec would not stop it) and the
+# exit code is 124. An INT / TERM / HUP of this helper kills the group too, so nothing is left.
+SLOT_TIMED_OUT=124
+slot_bounded() {
+  perl -e '
+    use strict;
+    use warnings;
+    my $secs = shift @ARGV;
+    my $pid = fork();
+    defined $pid or exit 126;
+    if ($pid == 0) {
+      setpgrp(0, 0);
+      exec { $ARGV[0] } @ARGV or exit 127;
+    }
+    my $timed = 0;
+    my $cut = sub { kill "KILL", -$pid; kill "KILL", $pid; };
+    for my $sig (qw(INT TERM HUP)) {
+      $SIG{$sig} = sub { $cut->(); waitpid($pid, 0); exit 128 + ($sig eq "INT" ? 2 : $sig eq "TERM" ? 15 : 1); };
+    }
+    $SIG{ALRM} = sub { $timed = 1; $cut->(); };
+    alarm $secs;
+    my $got;
+    do { $got = waitpid($pid, 0); } while ($got == -1 && $!{EINTR});
+    alarm 0;
+    exit 124 if $timed;
+    exit(($? & 127) ? 128 + ($? & 127) : $? >> 8);
+  ' "$@"
+}
+slot_containers() { # <token>: "none", "running" (docker ps lists one), "timed out after <n>s" or "failed (exit <n>)"
+  local out rc=0
+  out="$(slot_bounded "$SLOT_PS_TIMEOUT_SECS" docker ps -q --filter "label=couli.slot-token=$1" 2>/dev/null)" || rc=$?
+  if [ "$rc" = "$SLOT_TIMED_OUT" ]; then
+    printf 'timed out after %ss (COULI_VERIFY_SLOT_PS_TIMEOUT_SECS)' "$SLOT_PS_TIMEOUT_SECS"
+  elif [ "$rc" != 0 ]; then
+    printf 'failed (exit %s)' "$rc"
+  elif [ -n "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+    printf running
+  else
+    printf none
+  fi
+}
 slot_owner_text() {
   printf 'pid=%s\ntask=%s\nmode=%s\nstarted_at=%s\ntoken=%s\n' "$$" "$ID" "$SCRIPT" "$(now_utc)" "$SLOT_TOKEN"
 }
 slot_gate_take() { # mkdir the takeover gate (exclusive); true when this run now holds it
   mkdir "$SLOT_GATE" 2>/dev/null || return 1
-  SLOT_GATE_HELD=1
-  slot_owner_text >"$SLOT_GATE/owner" 2>/dev/null || true
-  return 0
-}
-slot_gate_drop() { # removes the gate, only when this run made it
-  [ "$SLOT_GATE_HELD" = 1 ] || return 0
+  # Written aside and renamed, as the lock's: a reader sees no owner file or the whole of it.
+  if slot_owner_text >"$SLOT_GATE/owner.tmp.$$" 2>/dev/null && mv "$SLOT_GATE/owner.tmp.$$" "$SLOT_GATE/owner" 2>/dev/null; then
+    SLOT_GATE_HELD=1
+    return 0
+  fi
   rm -rf "$SLOT_GATE" 2>/dev/null || true
+  return 1
+}
+slot_gate_drop() { # removes the gate, only when this run made it and it still carries this run's token
+  [ "$SLOT_GATE_HELD" = 1 ] || return 0
   SLOT_GATE_HELD=0
+  if [ "$(slot_field "$(slot_owner "$SLOT_GATE")" token)" = "$SLOT_TOKEN" ]; then
+    rm -rf "$SLOT_GATE" 2>/dev/null || true
+  elif [ -d "$SLOT_GATE" ]; then
+    log "verify-container: the takeover gate $SLOT_GATE is no longer this run's (now $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE")): left to its holder"
+  fi
+}
+# Called after mkdir of the gate failed. A gate whose owner pid is gone, or one without an owner
+# file older than SLOT_ORPHAN_SECS, is stale: it is renamed to a name only this call uses (rename
+# is atomic, so exactly one directory moves) and removed only when the moved directory is the one
+# found stale (same inode and mtime, same owner text). Anything else moved meanwhile (a gate made
+# after the stale one went) is put back when the gate name is free. True when a stale gate was
+# removed (the caller tries again at once).
+slot_gate_reap() {
+  local id id2 gowner gpid age why reap
+  id="$(slot_dir_id "$SLOT_GATE")" || return 1
+  gowner="$(slot_owner "$SLOT_GATE")"
+  id2="$(slot_dir_id "$SLOT_GATE")" || return 1
+  [ "$id" = "$id2" ] || return 1 # changed while read: judged on the next round
+  if [ -n "$gowner" ]; then
+    gpid="$(slot_field "$gowner" pid)"
+    slot_pid_gone "$gpid" || return 1
+    why="stale takeover gate $SLOT_GATE of $(slot_who "$gowner" "$SLOT_GATE"): pid $gpid no longer exists"
+  else
+    age="$(slot_age "$id")"
+    [ "$age" -ge "$SLOT_ORPHAN_SECS" ] || return 1
+    why="orphan takeover gate $SLOT_GATE: no owner file for ${age}s (COULI_VERIFY_SLOT_ORPHAN_SECS=$SLOT_ORPHAN_SECS)"
+  fi
+  reap="$SLOT_GATE.reap.$$.${RANDOM}${RANDOM}${RANDOM}"
+  [ ! -e "$reap" ] || return 1
+  mv "$SLOT_GATE" "$reap" 2>/dev/null || return 1 # gone meanwhile: nothing moved
+  if [ "$(slot_dir_id "$reap")" = "$id" ] && [ "$(slot_owner "$reap")" = "$gowner" ]; then
+    rm -rf "$reap" 2>/dev/null || true
+    log "verify-container: removed the $why"
+    return 0
+  fi
+  if [ ! -e "$SLOT_GATE" ] && mv "$reap" "$SLOT_GATE" 2>/dev/null; then
+    log "verify-container: the takeover gate changed while it was found stale ($why); the new one is put back"
+  else
+    log "verify-container: the takeover gate changed while it was found stale ($why); the new one could not be put back and is left at $reap (see tools/ops/README.md)"
+  fi
+  return 1
 }
 # Never fails (it runs from the EXIT trap): the exit code stays the run's.
 slot_release() {
@@ -499,6 +621,7 @@ slot_release() {
   fi
   local tries=0 owner tok
   until slot_gate_take; do
+    slot_gate_reap && continue
     tries=$((tries + 1))
     if [ "$tries" -ge 50 ]; then
       log "verify-container: the verify slot $SLOT_LOCK is left as it is: the takeover gate $SLOT_GATE stayed held for 5 s by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE"); it counts as stale once this process has ended"
@@ -535,7 +658,8 @@ slot_acquire() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   trap 'exit 129' HUP
-  local began="$SECONDS" waited=0 next=0 owner pid tok said_gate=''
+  local began="$SECONDS" waited=0 next=0 owner pid tok id age seen said_gate='' said_ps=''
+  local ps_tok='' ps_at=0 ps_note=''
   while :; do
     if mkdir "$SLOT_LOCK" 2>/dev/null; then
       SLOT_STATE=1
@@ -550,21 +674,60 @@ slot_acquire() {
     pid="$(slot_field "$owner" pid)"
     if [ -n "$owner" ] && slot_pid_gone "$pid"; then
       tok="$(slot_field "$owner" token)"
-      if [ -n "$tok" ] && slot_gate_take; then
-        # Under the gate: only the lock that was found stale goes, never one taken meanwhile.
+      if [ -z "$tok" ]; then
+        if [ -z "$said_gate" ]; then
+          said_gate=1
+          log "verify-container: stale verify slot of $(slot_who "$owner") without a token: it is not taken over (see tools/ops/README.md); waiting"
+        fi
+      elif [ -n "$ps_tok" ] && [ "$tok" = "$ps_tok" ] && [ $((SECONDS - ps_at)) -lt "$SLOT_PS_EVERY" ]; then
+        : # its container was found running (or docker ps failed) moments ago: checked again later
+      elif slot_gate_take; then
+        # Under the gate: only the lock that was found stale goes, never one taken meanwhile, and
+        # only once no container of its run is running.
         if [ "$(slot_field "$(slot_owner "$SLOT_LOCK")" token)" = "$tok" ]; then
-          log "verify-container: taking over the stale verify slot of $(slot_who "$owner"): pid $pid no longer exists"
+          seen="$(slot_containers "$tok")"
+          if [ "$seen" = none ]; then
+            log "verify-container: taking over the stale verify slot of $(slot_who "$owner"): pid $pid no longer exists and no container labelled couli.slot-token=$tok is running"
+            rm -rf "$SLOT_LOCK" 2>/dev/null || true
+            ps_tok=''
+            ps_note=''
+          else
+            ps_tok="$tok"
+            ps_at="$SECONDS"
+            if [ "$seen" = running ]; then
+              ps_note="pid $pid no longer exists but its verify container (label couli.slot-token=$tok) is still running"
+            else
+              ps_note="pid $pid no longer exists but docker ps for its container (label couli.slot-token=$tok) $seen"
+            fi
+            if [ "$said_ps" != "$tok:$seen" ]; then
+              said_ps="$tok:$seen"
+              log "verify-container: the verify slot of $(slot_who "$owner") is not stale: $ps_note; waiting"
+            fi
+          fi
+        fi
+        slot_gate_drop
+        [ -d "$SLOT_LOCK" ] || continue
+      elif slot_gate_reap; then
+        continue
+      elif [ -z "$said_gate" ]; then
+        said_gate=1
+        log "verify-container: stale verify slot of $(slot_who "$owner"): the takeover gate $SLOT_GATE is held by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE"); waiting"
+      fi
+    elif [ -z "$owner" ] && id="$(slot_dir_id "$SLOT_LOCK")" && age="$(slot_age "$id")" && [ "$age" -ge "$SLOT_ORPHAN_SECS" ]; then
+      # No owner file for longer than the limit: interrupted between its mkdir and its owner file.
+      if slot_gate_take; then
+        # Under the gate: still without an owner file and still the same directory.
+        if [ -z "$(slot_owner "$SLOT_LOCK")" ] && [ "$(slot_dir_id "$SLOT_LOCK")" = "$id" ]; then
+          log "verify-container: removing the orphan verify slot $SLOT_LOCK: no owner file for ${age}s (COULI_VERIFY_SLOT_ORPHAN_SECS=$SLOT_ORPHAN_SECS)"
           rm -rf "$SLOT_LOCK" 2>/dev/null || true
         fi
         slot_gate_drop
         [ -d "$SLOT_LOCK" ] || continue
+      elif slot_gate_reap; then
+        continue
       elif [ -z "$said_gate" ]; then
         said_gate=1
-        if [ -n "$tok" ]; then
-          log "verify-container: stale verify slot of $(slot_who "$owner"): the takeover gate $SLOT_GATE is held by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE"); waiting"
-        else
-          log "verify-container: stale verify slot of $(slot_who "$owner") without a token: it is not taken over (see tools/ops/README.md); waiting"
-        fi
+        log "verify-container: the verify slot $SLOT_LOCK has had no owner file for ${age}s: the takeover gate $SLOT_GATE is held by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE"); waiting"
       fi
     fi
     waited=$((SECONDS - began))
@@ -572,6 +735,9 @@ slot_acquire() {
       owner="$(slot_owner "$SLOT_LOCK")"
       if [ -d "$SLOT_GATE" ]; then
         die "gave up waiting for the verify slot after ${waited}s (COULI_VERIFY_SLOT_WAIT_SECS=$SLOT_WAIT_SECS): $SLOT_LOCK is held by $(slot_who "$owner"); the takeover gate $SLOT_GATE is held by $(slot_who "$(slot_owner "$SLOT_GATE")" "$SLOT_GATE")"
+      fi
+      if [ -n "$ps_note" ] && [ "$(slot_field "$owner" token)" = "$ps_tok" ]; then
+        die "gave up waiting for the verify slot after ${waited}s (COULI_VERIFY_SLOT_WAIT_SECS=$SLOT_WAIT_SECS): $SLOT_LOCK is held by $(slot_who "$owner"); $ps_note"
       fi
       die "gave up waiting for the verify slot after ${waited}s (COULI_VERIFY_SLOT_WAIT_SECS=$SLOT_WAIT_SECS): $SLOT_LOCK is held by $(slot_who "$owner")"
     fi
@@ -752,6 +918,11 @@ RED_DB_NAME="$PREFIX-run-db-$TAG"
 FETCH_NAME="$PREFIX-fetch-$TAG"
 STORE_LOCK="$RUNS/lock/verify-store-$LOCK_HASH"
 LABELS=(--label "couli.verify=1" --label "couli.task=$ID")
+# CT-06zzzzb: the verify container (the one that runs verify:fast) of a run that holds the slot
+# also carries the slot's token, so a later run can tell that a killed holder's container still
+# runs (see slot_acquire). Only that container: it ends by itself (VERIFY_TIMEOUT_SECS).
+SLOT_LABEL=()
+if [ "$SLOT_STATE" = 2 ]; then SLOT_LABEL=(--label "couli.slot-token=$SLOT_TOKEN"); fi
 HARDEN=(--init --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 4096)
 # 2026-11-01 (CT-06zzw): `tsc -b` inside the container ran out of the default Node heap (about 4 GB),
 # the same as CI before CT-06zzv (#2116). Every container of a run gets the same 8 GB upper limit as
@@ -1548,7 +1719,7 @@ if [ "$SCRIPT" = 'verify:fast' ]; then
   FAST_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e "VERIFY_SCRIPT=verify:fast")
   [ -z "${PROP_RUNS:-}" ] || FAST_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
   rc=0
-  docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" "${HARDEN[@]}" "${TMPFS[@]}" \
+  docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" "${TMPFS[@]}" \
     --network none \
     -v "$SRC:/src:ro" \
     -v "$STORE_VOL:/store:ro" \
@@ -1572,7 +1743,7 @@ ENV_ARGS=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e TEST_PG_ADMIN_URL -e TEST_REDI
   -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
 [ -z "${PROP_RUNS:-}" ] || ENV_ARGS+=(-e "PROP_RUNS=$PROP_RUNS")
 rc=0
-svc_run docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" "${HARDEN[@]}" "${TMPFS[@]}" \
+svc_run docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" "${TMPFS[@]}" \
   "${VERIFY_NET[@]}" \
   -v "$SRC:/src:ro" \
   -v "$STORE_VOL:/store:ro" \

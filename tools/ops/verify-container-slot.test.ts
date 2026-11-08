@@ -29,6 +29,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -68,6 +69,13 @@ const RESULT_KEYS = [
 // STUB_DOCKER_REPLACE_LOCK=<text> replaces the lock with one whose owner file is that text (another
 // holder took it over); STUB_DOCKER_SLEEP=<s> makes the container run that long;
 // STUB_DOCKER_RUN_EXIT is its exit code. Everything else answers like a healthy daemon.
+// CT-06zzzzb: `docker ps` (or `docker container ls`) prints STUB_DOCKER_PS_ID (one container id)
+// only when one of its arguments is the filter label=couli.slot-token=<STUB_DOCKER_PS_TOKEN>
+// (as `label=...` after --filter, or `--filter=label=...`), and only while the file
+// STUB_DOCKER_PS_WHILE exists when that is set; otherwise it prints nothing (no such container).
+// STUB_DOCKER_PS_EXIT=<code> makes every docker ps fail with that code.
+// STUB_DOCKER_PS_HANG=<s> makes every docker ps hang that long first (a stuck daemon); with
+// STUB_DOCKER_PS_PIDS=<dir> each such ps writes its pid as a file name there before it hangs.
 const STUB = String.raw`'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -102,6 +110,26 @@ fs.appendFileSync(process.env.STUB_DOCKER_LOG, JSON.stringify(call) + '\n');
 function answer(text, code) {
   if (text !== '') fs.writeSync(1, text + '\n');
   process.exit(code);
+}
+const isPs =
+  args[0] === 'ps' || (args[0] === 'container' && ['ls', 'ps', 'list'].includes(args[1]));
+if (isPs) {
+  const hang = Number(process.env.STUB_DOCKER_PS_HANG || '0');
+  if (hang > 0) {
+    if (process.env.STUB_DOCKER_PS_PIDS) {
+      fs.writeFileSync(path.join(process.env.STUB_DOCKER_PS_PIDS, String(process.pid)), '');
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, hang * 1000);
+  }
+  if (process.env.STUB_DOCKER_PS_EXIT) {
+    fs.writeSync(2, 'Cannot connect to the Docker daemon (stub)\n');
+    process.exit(Number(process.env.STUB_DOCKER_PS_EXIT));
+  }
+  const tok = process.env.STUB_DOCKER_PS_TOKEN || '';
+  const want = 'label=couli.slot-token=' + tok;
+  const asked = tok !== '' && args.some((a) => a === want || a.endsWith('=' + want));
+  const gone = process.env.STUB_DOCKER_PS_WHILE && !fs.existsSync(process.env.STUB_DOCKER_PS_WHILE);
+  answer(asked && !gone ? process.env.STUB_DOCKER_PS_ID || '0123456789cd' : '', 0);
 }
 if (args[0] === 'version') answer('28.0.1', 0);
 if (args[0] === 'run' && args.includes('-d')) answer('0123456789ab', 0);
@@ -284,6 +312,14 @@ function start(args: string[], slot: string | null, env: Record<string, string> 
       COULI_VERIFY_SLOT_DIR: slot ?? undefined,
       COULI_VERIFY_SLOT_WAIT_SECS: undefined,
       COULI_VERIFY_SLOT_REPORT_SECS: undefined,
+      COULI_VERIFY_SLOT_ORPHAN_SECS: undefined,
+      STUB_DOCKER_PS_TOKEN: undefined,
+      STUB_DOCKER_PS_ID: undefined,
+      STUB_DOCKER_PS_WHILE: undefined,
+      STUB_DOCKER_PS_EXIT: undefined,
+      COULI_VERIFY_SLOT_PS_TIMEOUT_SECS: undefined,
+      STUB_DOCKER_PS_HANG: undefined,
+      STUB_DOCKER_PS_PIDS: undefined,
       STUB_DOCKER_LOG: log,
       STUB_SLOT_DIR: slot ?? join(runs, 'verify-slot'),
       ...env,
@@ -709,6 +745,491 @@ it(
       expect(result).toMatchObject({ mode: 'container', script, exit_code: code });
       expect(leftIn(slot)).toEqual([]);
     }
+  },
+  CLI_TIMEOUT,
+);
+
+// CT-06zzzzb (FU-COLIMA-VERIFY-SLOT-REST; the two S2 of #2751). What these tests fix in addition:
+//   - the verify container (the docker run of couli-verify-entrypoint) carries the label
+//     couli.slot-token=<the token of this run's slot> as the two arguments `--label` and
+//     `couli.slot-token=<token>`;
+//   - before a lock whose holder pid is dead counts as stale, `docker ps` with the filter
+//     label=couli.slot-token=<its token> is asked: a container listed there means the holder was
+//     killed (SIGKILL, no trap) while its container still runs, so the lock is not stale and the
+//     run keeps waiting (stderr says `still running` with the holder's task) until the container
+//     is gone or the limit is reached; a docker ps that fails counts as "not stale" as well;
+//   - a lock or a takeover gate without an owner file whose directory mtime is older than
+//     COULI_VERIFY_SLOT_ORPHAN_SECS (default 30, a positive integer) is an orphan and is removed
+//     (stderr says `orphan`); a younger one is left alone; an orphan lock is removed only through
+//     the gate (a live gate holder keeps it);
+//   - a takeover gate whose owner pid is dead is removed (stderr says `stale takeover gate` with
+//     its task); one whose owner is alive is left alone (the CT-06zzzx test above).
+const TOKEN_LABEL = 'couli.slot-token';
+
+function isPs(args: readonly string[]): boolean {
+  return (
+    args[0] === 'ps' || (args[0] === 'container' && ['ls', 'ps', 'list'].includes(args[1] ?? ''))
+  );
+}
+
+/** The docker ps calls that asked for the containers labelled with this slot token. */
+function psCallsFor(calls: readonly Call[], token: string): Call[] {
+  const want = `label=${TOKEN_LABEL}=${token}`;
+  return calls.filter(
+    (c) => isPs(c.args) && c.args.some((a) => a === want || a.endsWith(`=${want}`)),
+  );
+}
+
+/** docker run calls (any container). */
+function runCalls(calls: readonly Call[]): Call[] {
+  return calls.filter((c) => c.args[0] === 'run');
+}
+
+/** Sets the mtime (and atime) of a path to `secs` seconds ago. */
+function age(path: string, secs: number): void {
+  const t = Date.now() / 1000 - secs;
+  utimesSync(path, t, t);
+}
+
+/** A lock or gate directory without an owner file, its mtime `secs` seconds ago. */
+function placeOrphan(dir: string, name: string, secs: number): void {
+  mkdirSync(join(dir, name), { recursive: true });
+  age(join(dir, name), secs);
+}
+
+/** The stderr lines that contain every one of `parts`. */
+function linesWith(stderr: string, ...parts: string[]): string[] {
+  return stderr.split('\n').filter((line) => parts.every((p) => line.includes(p)));
+}
+
+it(
+  '[CT-06zzzzb] the verify container carries --label couli.slot-token=<the token in its slot owner> (--fast and pnpm verify)',
+  async () => {
+    for (const [task, extra, mode] of [
+      ['V6-01', ['--fast'], 'verify:fast'],
+      ['V6-02', [], 'verify'],
+    ] as const) {
+      const slot = slotDir(`label-${task}`);
+      const res = await run([task, '--worktree', workspace(`label-${task}`), ...extra], slot);
+      expect(res.status, res.stderr).toBe(0);
+      const verify = entrypointCall(res.calls);
+      const token = expectOwnLock(verify, res.pid, task, mode);
+      const args = verify?.args ?? [];
+      const labels = args.flatMap((a, i) => (a === '--label' ? [args[i + 1] ?? ''] : []));
+      expect(labels, `${task}: ${args.join(' ')}`).toContain(`${TOKEN_LABEL}=${token}`);
+      // One slot-token label, the run's own.
+      expect(args.filter((a) => a.includes(`${TOKEN_LABEL}=`))).toEqual([
+        `${TOKEN_LABEL}=${token}`,
+      ]);
+      expect(leftIn(slot)).toEqual([]);
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzb] holder pid dead but its container still running (docker ps by token lists it): not stale, --fast waits to the limit (exit 2), the lock untouched',
+  async () => {
+    const slot = slotDir('ps-running');
+    const token = 'x9-10:killed';
+    const stale = ownerText({ pid: deadPid(), task: 'X9-10', token });
+    placeLock(slot, stale);
+    const res = await run(['V6-03', '--worktree', workspace('ps-running'), '--fast'], slot, {
+      COULI_VERIFY_SLOT_WAIT_SECS: '2',
+      COULI_VERIFY_SLOT_REPORT_SECS: '1',
+      STUB_DOCKER_PS_TOKEN: token,
+      STUB_DOCKER_PS_ID: '0123456789cd',
+    });
+    expect(res.status, res.stderr).toBe(2);
+    // It asked docker for the containers of that slot token.
+    expect(psCallsFor(res.calls, token).length, JSON.stringify(res.calls)).toBeGreaterThanOrEqual(
+      1,
+    );
+    // Said why it does not take the slot over: the old holder's container is still running.
+    expect(
+      linesWith(res.stderr, 'still running', 'X9-10').length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    expect(res.stderr).not.toContain('taking over');
+    // The usual end of a bounded wait.
+    const last = res.stderr.trim().split('\n').at(-1) ?? '';
+    expect(last, res.stderr).toContain('verify slot');
+    expect(last).toContain('X9-10');
+    expect(entrypointCall(res.calls)).toBeUndefined();
+    expect(runCalls(res.calls)).toEqual([]);
+    expect(noResult('V6-03')).toBe(true);
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(readOwner(slot)).toBe(stale);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzb] holder pid dead and no container with its token (docker ps lists none): the stale slot is taken over as before',
+  async () => {
+    const slot = slotDir('ps-gone');
+    const token = 'x9-11:gone';
+    placeLock(slot, ownerText({ pid: deadPid(), task: 'X9-11', token }));
+    const res = await run(['V6-04', '--worktree', workspace('ps-gone'), '--fast'], slot, {
+      COULI_VERIFY_SLOT_WAIT_SECS: '10',
+      COULI_VERIFY_SLOT_REPORT_SECS: '1',
+      // A container of some other slot token runs; none of this one.
+      STUB_DOCKER_PS_TOKEN: 'x9-99:other',
+      STUB_DOCKER_PS_ID: '0123456789ef',
+    });
+    expect(res.status, res.stderr).toBe(0);
+    const asked = psCallsFor(res.calls, token);
+    expect(asked.length, JSON.stringify(res.calls)).toBeGreaterThanOrEqual(1);
+    const verify = entrypointCall(res.calls);
+    // The check came before the takeover, i.e. before this run's container.
+    expect(asked[0]?.at ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(verify?.at ?? 0);
+    expect(res.stderr).toContain('stale verify slot');
+    expect(res.stderr).toContain('X9-11');
+    expect(res.stderr).not.toContain('still running');
+    expectOwnLock(verify, res.pid, 'V6-04', 'verify:fast');
+    expect(leftIn(slot)).toEqual([]);
+    expect(resultOf('V6-04', 'verify-fast')).toMatchObject({ script: 'verify:fast', exit_code: 0 });
+  },
+  CLI_TIMEOUT,
+);
+
+it('[CT-06zzzzb] the killed holder container ends while --fast waits: the next check finds none and the slot is taken over', async () => {
+  const slot = slotDir('ps-ends');
+  const token = 'x9-12:ends';
+  const stale = ownerText({ pid: deadPid(), task: 'X9-12', token });
+  placeLock(slot, stale);
+  const alive = join(base, 'ps-ends-alive');
+  writeFileSync(alive, 'running\n');
+  const started = start(['V6-05', '--worktree', workspace('ps-ends'), '--fast'], slot, {
+    COULI_VERIFY_SLOT_WAIT_SECS: '20',
+    COULI_VERIFY_SLOT_REPORT_SECS: '1',
+    STUB_DOCKER_PS_TOKEN: token,
+    STUB_DOCKER_PS_WHILE: alive,
+  });
+  await pause(2000);
+  // While the old container runs: asked, not taken over, no container of this run.
+  const before = readCalls(started.log);
+  expect(psCallsFor(before, token).length, JSON.stringify(before)).toBeGreaterThanOrEqual(1);
+  expect(entrypointCall(before)).toBeUndefined();
+  expect(readOwner(slot)).toBe(stale);
+  // The old container ends.
+  removeDir(alive);
+  const res = await started.done;
+  expect(res.status, res.stderr).toBe(0);
+  expect(linesWith(res.stderr, 'still running', 'X9-12').length, res.stderr).toBeGreaterThanOrEqual(
+    1,
+  );
+  expect(res.stderr).toContain('stale verify slot');
+  expectOwnLock(entrypointCall(res.calls), res.pid, 'V6-05', 'verify:fast');
+  expect(leftIn(slot)).toEqual([]);
+  expect(resultOf('V6-05', 'verify-fast')).toMatchObject({ script: 'verify:fast', exit_code: 0 });
+}, 60_000);
+
+it(
+  '[CT-06zzzzb] docker ps itself fails: the dead holder counts as not stale, --fast waits to the limit (exit 2), the lock untouched',
+  async () => {
+    const slot = slotDir('ps-fails');
+    const token = 'x9-13:psfail';
+    const stale = ownerText({ pid: deadPid(), task: 'X9-13', token });
+    placeLock(slot, stale);
+    const res = await run(['V6-06', '--worktree', workspace('ps-fails'), '--fast'], slot, {
+      COULI_VERIFY_SLOT_WAIT_SECS: '2',
+      COULI_VERIFY_SLOT_REPORT_SECS: '1',
+      STUB_DOCKER_PS_EXIT: '1',
+    });
+    expect(res.status, res.stderr).toBe(2);
+    expect(psCallsFor(res.calls, token).length, JSON.stringify(res.calls)).toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(res.stderr).not.toContain('taking over');
+    const last = res.stderr.trim().split('\n').at(-1) ?? '';
+    expect(last, res.stderr).toContain('verify slot');
+    expect(last).toContain('X9-13');
+    expect(runCalls(res.calls)).toEqual([]);
+    expect(noResult('V6-06')).toBe(true);
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(readOwner(slot)).toBe(stale);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzb] a lock without an owner file: older than COULI_VERIFY_SLOT_ORPHAN_SECS it is an orphan and taken over (nothing left after); younger it is left alone, as is an old one while a live holder has the gate',
+  async () => {
+    // Old: taken over, the run runs, nothing is left.
+    const oldSlot = slotDir('ownerless-old');
+    placeOrphan(oldSlot, LOCK, 60);
+    const taken = await run(
+      ['V6-07', '--worktree', workspace('ownerless-old'), '--fast'],
+      oldSlot,
+      {
+        COULI_VERIFY_SLOT_WAIT_SECS: '10',
+        COULI_VERIFY_SLOT_REPORT_SECS: '1',
+        COULI_VERIFY_SLOT_ORPHAN_SECS: '1',
+      },
+    );
+    expect(taken.status, taken.stderr).toBe(0);
+    expect(linesWith(taken.stderr, 'orphan').length, taken.stderr).toBeGreaterThanOrEqual(1);
+    expectOwnLock(entrypointCall(taken.calls), taken.pid, 'V6-07', 'verify:fast');
+    expect(leftIn(oldSlot)).toEqual([]);
+    expect(resultOf('V6-07', 'verify-fast')).toMatchObject({ script: 'verify:fast', exit_code: 0 });
+
+    // Young (it may be a lock whose owner file is being written): left alone, wait to the limit.
+    const youngSlot = slotDir('ownerless-young');
+    placeOrphan(youngSlot, LOCK, 0);
+    const young = await run(
+      ['V6-08', '--worktree', workspace('ownerless-young'), '--fast'],
+      youngSlot,
+      {
+        COULI_VERIFY_SLOT_WAIT_SECS: '2',
+        COULI_VERIFY_SLOT_REPORT_SECS: '1',
+        COULI_VERIFY_SLOT_ORPHAN_SECS: '30',
+      },
+    );
+    expect(young.status, young.stderr).toBe(2);
+    expect(young.stderr).not.toContain('orphan');
+    expect(young.calls).toEqual([]);
+    expect(noResult('V6-08')).toBe(true);
+    expect(leftIn(youngSlot)).toEqual([LOCK]);
+    expect(readOwner(youngSlot)).toBeNull();
+
+    // Old, but a live holder has the gate: removed only through the gate, so both stay.
+    const gatedSlot = slotDir('ownerless-gated');
+    placeOrphan(gatedSlot, LOCK, 60);
+    const gate = ownerText({ pid: process.pid, task: 'X9-14', token: 'x9-14:gate:live' });
+    placeLock(gatedSlot, gate, GATE);
+    const gated = await run(
+      ['V6-11', '--worktree', workspace('ownerless-gated'), '--fast'],
+      gatedSlot,
+      {
+        COULI_VERIFY_SLOT_WAIT_SECS: '2',
+        COULI_VERIFY_SLOT_REPORT_SECS: '1',
+        COULI_VERIFY_SLOT_ORPHAN_SECS: '1',
+      },
+    );
+    expect(gated.status, gated.stderr).toBe(2);
+    expect(runCalls(gated.calls)).toEqual([]);
+    expect(noResult('V6-11')).toBe(true);
+    expect(leftIn(gatedSlot)).toEqual([LOCK, GATE]);
+    expect(readOwner(gatedSlot)).toBeNull();
+    expect(readOwner(gatedSlot, GATE)).toBe(gate);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzb] without COULI_VERIFY_SLOT_ORPHAN_SECS the orphan limit is 30 s: a 40 s old ownerless lock is taken over, a 20 s old one is not',
+  async () => {
+    const oldSlot = slotDir('ownerless-default-old');
+    placeOrphan(oldSlot, LOCK, 40);
+    const taken = await run(
+      ['V6-09', '--worktree', workspace('ownerless-default-old'), '--fast'],
+      oldSlot,
+      { COULI_VERIFY_SLOT_WAIT_SECS: '10', COULI_VERIFY_SLOT_REPORT_SECS: '1' },
+    );
+    expect(taken.status, taken.stderr).toBe(0);
+    expect(linesWith(taken.stderr, 'orphan').length, taken.stderr).toBeGreaterThanOrEqual(1);
+    expectOwnLock(entrypointCall(taken.calls), taken.pid, 'V6-09', 'verify:fast');
+    expect(leftIn(oldSlot)).toEqual([]);
+
+    const youngSlot = slotDir('ownerless-default-young');
+    placeOrphan(youngSlot, LOCK, 20);
+    const left = await run(
+      ['V6-10', '--worktree', workspace('ownerless-default-young'), '--fast'],
+      youngSlot,
+      { COULI_VERIFY_SLOT_WAIT_SECS: '2', COULI_VERIFY_SLOT_REPORT_SECS: '1' },
+    );
+    expect(left.status, left.stderr).toBe(2);
+    expect(left.calls).toEqual([]);
+    expect(leftIn(youngSlot)).toEqual([LOCK]);
+    expect(readOwner(youngSlot)).toBeNull();
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzb] a takeover gate whose owner pid is dead is removed: --fast then takes over the stale lock, runs, leaves neither lock nor gate',
+  async () => {
+    const slot = slotDir('gate-dead');
+    placeLock(slot, ownerText({ pid: deadPid(), task: 'X9-15', token: 'x9-15:stale' }));
+    placeLock(slot, ownerText({ pid: deadPid(), task: 'X9-16', token: 'x9-16:gate:dead' }), GATE);
+    const res = await run(['V6-12', '--worktree', workspace('gate-dead'), '--fast'], slot, {
+      COULI_VERIFY_SLOT_WAIT_SECS: '10',
+      COULI_VERIFY_SLOT_REPORT_SECS: '1',
+    });
+    expect(res.status, res.stderr).toBe(0);
+    expect(
+      linesWith(res.stderr, 'stale takeover gate', 'X9-16').length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    expect(res.stderr).toContain('stale verify slot');
+    expect(res.stderr).toContain('X9-15');
+    expectOwnLock(entrypointCall(res.calls), res.pid, 'V6-12', 'verify:fast');
+    expect(leftIn(slot)).toEqual([]);
+    expect(resultOf('V6-12', 'verify-fast')).toMatchObject({ script: 'verify:fast', exit_code: 0 });
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzb] a takeover gate without an owner file: older than COULI_VERIFY_SLOT_ORPHAN_SECS it is removed and the stale lock taken over (nothing left); younger it is left alone (exit 2)',
+  async () => {
+    const oldSlot = slotDir('gate-ownerless-old');
+    placeLock(oldSlot, ownerText({ pid: deadPid(), task: 'X9-17', token: 'x9-17:stale' }));
+    placeOrphan(oldSlot, GATE, 60);
+    const taken = await run(
+      ['V6-13', '--worktree', workspace('gate-ownerless-old'), '--fast'],
+      oldSlot,
+      {
+        COULI_VERIFY_SLOT_WAIT_SECS: '10',
+        COULI_VERIFY_SLOT_REPORT_SECS: '1',
+        COULI_VERIFY_SLOT_ORPHAN_SECS: '1',
+      },
+    );
+    expect(taken.status, taken.stderr).toBe(0);
+    expect(
+      linesWith(taken.stderr, 'orphan', 'takeover gate').length,
+      taken.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    expect(taken.stderr).toContain('stale verify slot');
+    expectOwnLock(entrypointCall(taken.calls), taken.pid, 'V6-13', 'verify:fast');
+    expect(leftIn(oldSlot)).toEqual([]);
+    expect(resultOf('V6-13', 'verify-fast')).toMatchObject({ script: 'verify:fast', exit_code: 0 });
+
+    const youngSlot = slotDir('gate-ownerless-young');
+    const stale = ownerText({ pid: deadPid(), task: 'X9-18', token: 'x9-18:stale' });
+    placeLock(youngSlot, stale);
+    placeOrphan(youngSlot, GATE, 0);
+    const young = await run(
+      ['V6-14', '--worktree', workspace('gate-ownerless-young'), '--fast'],
+      youngSlot,
+      {
+        COULI_VERIFY_SLOT_WAIT_SECS: '2',
+        COULI_VERIFY_SLOT_REPORT_SECS: '1',
+        COULI_VERIFY_SLOT_ORPHAN_SECS: '30',
+      },
+    );
+    expect(young.status, young.stderr).toBe(2);
+    expect(young.stderr).not.toContain('orphan');
+    expect(runCalls(young.calls)).toEqual([]);
+    expect(noResult('V6-14')).toBe(true);
+    expect(leftIn(youngSlot)).toEqual([LOCK, GATE]);
+    expect(readOwner(youngSlot)).toBe(stale);
+    expect(readOwner(youngSlot, GATE)).toBeNull();
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzb] COULI_VERIFY_SLOT_ORPHAN_SECS must be a positive integer (exit 2, no docker call) and defaults to 30',
+  async () => {
+    const ws = workspace('ownerless-settings');
+    const name = 'COULI_VERIFY_SLOT_ORPHAN_SECS';
+    for (const value of ['x', '-1', '1.5', '0']) {
+      const res = await run(['V6-15', '--worktree', ws, '--fast'], slotDir('ownerless-settings'), {
+        [name]: value,
+      });
+      expect(res.status, `${name}=${value}`).toBe(2);
+      expect(res.stderr, `${name}=${value}`).toContain(`${name} must be a positive integer`);
+      expect(res.calls, `${name}=${value}`).toEqual([]);
+    }
+    expect(noResult('V6-15')).toBe(true);
+    const text = readFileSync(SCRIPT, 'utf8');
+    expect(text).toMatch(/SLOT_ORPHAN_SECS[^\n]*\b30\b/);
+  },
+  CLI_TIMEOUT,
+);
+
+// CT-06zzzzb (编排 12:29): the docker ps of the stale check runs under the takeover gate, so it
+// has a limit, COULI_VERIFY_SLOT_PS_TIMEOUT_SECS (a positive integer, default 10). A docker ps that
+// outlives it is cut off and counts as a failed lookup: not stale, the gate is dropped, the run
+// keeps waiting; stderr says so with `docker ps` and `timed out` on one line.
+
+/** True while a process with this pid exists. */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+it('[CT-06zzzzb] a docker ps that hangs past COULI_VERIFY_SLOT_PS_TIMEOUT_SECS is cut off and counts as failed: no takeover, the gate dropped, exit 2 at the wait limit, no hung ps left', async () => {
+  const slot = slotDir('ps-hangs');
+  const token = 'x9-19:pshang';
+  const stale = ownerText({ pid: deadPid(), task: 'X9-19', token });
+  placeLock(slot, stale);
+  const pids = join(base, 'ps-hangs-pids');
+  mkdirSync(pids, { recursive: true });
+  const hungPids = () => readdirSync(pids).map(Number);
+  // What the slot directory held, sampled while the run waits: is the gate there?
+  const samples: { t: number; gate: boolean }[] = [];
+  const sampler = setInterval(() => {
+    samples.push({ t: Date.now(), gate: existsSync(join(slot, GATE)) });
+  }, 25);
+  try {
+    const started = start(['V6-16', '--worktree', workspace('ps-hangs'), '--fast'], slot, {
+      COULI_VERIFY_SLOT_WAIT_SECS: '4',
+      COULI_VERIFY_SLOT_REPORT_SECS: '1',
+      COULI_VERIFY_SLOT_PS_TIMEOUT_SECS: '1',
+      // The stuck daemon: each docker ps hangs 12 s, far past the 1 s limit, then lists nothing.
+      STUB_DOCKER_PS_HANG: '12',
+      STUB_DOCKER_PS_PIDS: pids,
+    });
+    const res = await started.done;
+    const end = Date.now();
+    clearInterval(sampler);
+    expect(res.status, res.stderr).toBe(2);
+    // It asked, and the stuck ps was cut off near its limit: the run ended at its own wait
+    // limit, long before one hung ps (12 s) could have returned.
+    const asked = psCallsFor(res.calls, token);
+    expect(asked.length, JSON.stringify(res.calls)).toBeGreaterThanOrEqual(1);
+    expect(res.elapsed, res.stderr).toBeLessThan(9000);
+    // Said so: docker ps timed out (with the old holder's task).
+    expect(
+      linesWith(res.stderr, 'docker ps', 'timed out', 'X9-19').length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    // A timeout is a failed lookup, not "no container": no takeover.
+    expect(res.stderr).not.toContain('taking over');
+    expect(runCalls(res.calls)).toEqual([]);
+    expect(entrypointCall(res.calls)).toBeUndefined();
+    expect(noResult('V6-16')).toBe(true);
+    // After the hung ps the gate was dropped while the run still waited (not held to the end),
+    // and nothing but the stale lock, as it was, is left.
+    const first = asked[0]?.at ?? end;
+    const freed = samples.filter((s) => s.t > first + 500 && s.t < end - 200 && !s.gate);
+    expect(freed.length, JSON.stringify(samples.filter((s) => s.gate).length)).toBeGreaterThan(0);
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(readOwner(slot)).toBe(stale);
+    // Every hung docker ps is gone (cut off, not left running in the background).
+    expect(hungPids().length).toBeGreaterThanOrEqual(1);
+    expect(await until(() => hungPids().every((pid) => !pidAlive(pid)), 3000)).toBe(true);
+  } finally {
+    clearInterval(sampler);
+    for (const pid of hungPids()) {
+      if (pidAlive(pid)) process.kill(pid, 'SIGKILL');
+    }
+  }
+}, 40_000);
+
+it(
+  '[CT-06zzzzb] COULI_VERIFY_SLOT_PS_TIMEOUT_SECS must be a positive integer (exit 2, no docker call) and defaults to 10',
+  async () => {
+    const ws = workspace('ps-timeout-settings');
+    const name = 'COULI_VERIFY_SLOT_PS_TIMEOUT_SECS';
+    for (const value of ['x', '-1', '1.5', '0']) {
+      const res = await run(['V6-17', '--worktree', ws, '--fast'], slotDir('ps-timeout-settings'), {
+        [name]: value,
+      });
+      expect(res.status, `${name}=${value}`).toBe(2);
+      expect(res.stderr, `${name}=${value}`).toContain(`${name} must be a positive integer`);
+      expect(res.calls, `${name}=${value}`).toEqual([]);
+    }
+    expect(noResult('V6-17')).toBe(true);
+    const text = readFileSync(SCRIPT, 'utf8');
+    expect(text).toMatch(/SLOT_PS_TIMEOUT_SECS[^\n]*\b10\b/);
   },
   CLI_TIMEOUT,
 );

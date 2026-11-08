@@ -1,0 +1,26 @@
+id: CT-06zzzzb
+repo: rebate-platform
+title: CT-06zzzzb：容器 verify 全机槽补 #2751 两条 S2——SIGKILL 后容器仍在跑不算陈旧；无 owner 的锁与卡死的闸门按时限回收（FU-COLIMA-VERIFY-SLOT-REST）
+type: guard-change
+# 2026-11-08 ops 入账（编排 11:52 认可；#2751 CT-06zzzx 独立 Claude r1 / r2 的两条 S2）。基于主干。
+# S2-1：持有者被 SIGKILL 时 trap 不跑，它的 verify 容器仍在 Colima 里跑；下一次运行按「pid 已死」接管，两个容器并存（正是槽要防的 OOM）。
+#   改法：每次运行的容器加标签 couli.slot-token=<本次槽 token>；判陈旧前先 docker ps 查带该 token 的容器，有就不算陈旧、照常等（日志写明）；
+#   docker ps 自身失败也按「不陈旧」处理（宁可等到超时也不并发）。
+# S2-2：mkdir slot.lock 之后、写 owner 之前被中断，或持闸门时被 SIGKILL，留下无 owner 的锁或卡住的闸门，之后每次都等满上限。
+#   改法：无 owner 的锁存在超过 COULI_VERIFY_SLOT_ORPHAN_SECS（默认 30）按陈旧、经闸门核对仍无 owner 且是同一目录后删除；
+#   闸门的 owner pid 已死、或无 owner 且超过同一时限的，按陈旧回收（只在核对后删，日志写明）。退出码与 result.json 语义不变。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现；Codex 额度用尽期间按 approvals 36 由独立 Claude 评审；按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container-slot.test.ts'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzb.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
