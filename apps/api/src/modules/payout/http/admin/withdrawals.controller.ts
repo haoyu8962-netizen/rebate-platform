@@ -5,10 +5,12 @@
 // Mounted only by PayoutAdminModule.forAdmin on the admin entry. The admin request check has
 // verified the admin_token and the route schema the query and the path before this runs. The
 // AdminOperationGuard re-reads the account and checks the permission point: any one of
-// withdraw.review or fund.view, read only (no step-up). A super admin holds every point. Refusals
-// of the reads (20001 data.fields) are thrown as error envelopes for the global filter. Answers
-// are no-store; reading writes no audit record. Without the database (isolated HTTP unit tests)
-// the routes still register and every call fails closed (50001).
+// withdraw.review or fund.view, read only (no step-up); with `user_id` also user.lookup (B2-09zg,
+// CT-24zzb; on the list not together with risk_flag), so its 10403 is the guard's own and nothing
+// is read. A super admin holds every point. Refusals of the reads (20001 data.fields) are thrown
+// as error envelopes for the global filter. Answers are no-store; reading writes no audit record.
+// Without the database (isolated HTTP unit tests) the routes still register and every call fails
+// closed (50001).
 import { Controller, Get, HttpException, Inject, Param, Query, Req, Res } from '@nestjs/common';
 import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
@@ -21,6 +23,7 @@ import {
 import {
   AdminWithdrawalFieldsError,
   getAdminWithdrawal,
+  isLookupOnly,
   listAdminWithdrawals,
   type AdminWithdrawalListQuery,
   type AdminWithdrawalReadDeps,
@@ -31,6 +34,24 @@ export const ADMIN_WITHDRAWAL_READS = Symbol('PAYOUT_ADMIN_WITHDRAWAL_READS');
 
 /** specs/permissions.yaml: withdraw.review, fund.view (both step-up null); either one suffices. */
 const READ = ['withdraw.review', 'fund.view'] as const;
+/** user.lookup (04 §11.1) opens the two reads only for the user it is looking at. */
+const READ_OR_LOOKUP = [...READ, 'user.lookup'] as const;
+
+/** The list: user.lookup needs user_id, and may not filter by the risk flags it cannot see. */
+export function listPermission(
+  query: Pick<AdminWithdrawalListQuery, 'user_id' | 'risk_flag'>,
+): readonly string[] {
+  return query.user_id === undefined || query.risk_flag !== undefined ? READ : READ_OR_LOOKUP;
+}
+
+/** The detail: user.lookup needs user_id. */
+export function detailPermission(userId: string | undefined): readonly string[] {
+  return userId === undefined ? READ : READ_OR_LOOKUP;
+}
+
+interface DetailQuery {
+  readonly user_id?: string;
+}
 
 export interface AdminWithdrawalsRequest extends CheckedRequest {
   /** Trace id set by `genReqId`. */
@@ -62,40 +83,52 @@ export class AdminWithdrawalsController {
     query: AdminWithdrawalListQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminWithdrawalPageResponse'>> {
-    return this.#read(request, reply, (deps, appId) => listAdminWithdrawals(deps, appId, query));
+    return this.#read(request, reply, listPermission(query), (deps, appId, blankInternal) =>
+      listAdminWithdrawals(deps, appId, query, blankInternal),
+    );
   }
 
   detail(
     request: AdminWithdrawalsRequest,
     withdrawalId: string,
+    query: DetailQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminWithdrawalDetailResponse'>> {
-    return this.#read(request, reply, (deps, appId) =>
-      getAdminWithdrawal(deps, appId, withdrawalId),
+    return this.#read(
+      request,
+      reply,
+      detailPermission(query.user_id),
+      (deps, appId, blankInternal) =>
+        getAdminWithdrawal(deps, appId, withdrawalId, { userId: query.user_id, blankInternal }),
     );
   }
 
   async #read<T>(
     request: AdminWithdrawalsRequest,
     reply: HeaderReply,
-    read: (deps: AdminWithdrawalReadDeps, appId: string) => Promise<T>,
+    permission: readonly string[],
+    read: (deps: AdminWithdrawalReadDeps, appId: string, blankInternal: boolean) => Promise<T>,
   ): Promise<Envelope<T>> {
     reply.header('Cache-Control', 'no-store');
     let response: Envelope<T> | undefined;
-    await this.#guard.run({ request, permission: READ, readOnly: true }, async (actor) => {
-      const deps = this.#deps;
-      if (deps === null) throw new Error('payout: admin withdrawal reads need the database');
-      try {
-        response = { code: 0, msg: '', data: await read(deps, actor.appId), trace_id: request.id };
-        return { statusCode: 200, body: response };
-      } catch (error: unknown) {
-        if (error instanceof AdminWithdrawalFieldsError) {
-          const refused = fieldsErrorEnvelope(error.fields, request.id);
-          throw new HttpException(refused.body, refused.statusCode);
+    await this.#guard.run(
+      { request, permission, readOnly: true, withPermissions: true },
+      async (actor) => {
+        const deps = this.#deps;
+        if (deps === null) throw new Error('payout: admin withdrawal reads need the database');
+        try {
+          const data = await read(deps, actor.appId, isLookupOnly(actor));
+          response = { code: 0, msg: '', data, trace_id: request.id };
+          return { statusCode: 200, body: response };
+        } catch (error: unknown) {
+          if (error instanceof AdminWithdrawalFieldsError) {
+            const refused = fieldsErrorEnvelope(error.fields, request.id);
+            throw new HttpException(refused.body, refused.statusCode);
+          }
+          throw error;
         }
-        throw error;
-      }
-    });
+      },
+    );
     if (response === undefined) throw new Error('payout: admin guard returned without an answer');
     return response;
   }
@@ -117,7 +150,8 @@ export class AdminWithdrawalsController {
   const detail = Object.getOwnPropertyDescriptor(prototype, 'detail')!;
   Req()(prototype, 'detail', 0);
   Param('withdrawal_id')(prototype, 'detail', 1);
-  Res({ passthrough: true })(prototype, 'detail', 2);
+  Query()(prototype, 'detail', 2);
+  Res({ passthrough: true })(prototype, 'detail', 3);
   Get('withdrawals/:withdrawal_id')(prototype, 'detail', detail);
   RouteSchema(contractRouteSchema('getAdminWithdrawal'))(prototype, 'detail', detail);
 

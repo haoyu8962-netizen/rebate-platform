@@ -120,6 +120,28 @@ it('[AC-F1-06u-UNIT#3] no verified principal or a failing database is a plain er
   expect(business).not.toHaveBeenCalled();
 });
 
+it('[AC-B2-09zg-UNIT#1] withPermissions hands the points read now to business, a super admin as stored, and is not forwarded', async () => {
+  for (const [profile, keys] of [
+    [{}, ['user.lookup', 'fund.recon']],
+    [{ isSuper: true }, []],
+  ] as const) {
+    const s = setup(profile, keys);
+    const business = vi.fn(async () => OK);
+    await s.port.run(
+      { request: s.request, permission: 'user.lookup', readOnly: true, withPermissions: true },
+      business,
+    );
+    expect(business).toHaveBeenCalledExactlyOnceWith({
+      adminId: s.adminId,
+      appId: 'couli',
+      isSuper: profile.isSuper === true,
+      loginName: 'operator',
+      permissions: keys,
+    });
+    expect(s.seen[0]).not.toHaveProperty('withPermissions');
+  }
+});
+
 it('[AC-F1-10c-UNIT#1] read-only requests forward the selection without accessing headers', async () => {
   const s = setup();
   const headers = vi.fn(() => {

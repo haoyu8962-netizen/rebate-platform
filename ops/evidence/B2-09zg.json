@@ -1,0 +1,101 @@
+{
+  "risk_note": "RV2 payout admin reads (FU-WITHDRAWALS-USER-LOOKUP, contract CT-24zzb #2849; rulings D10-1042, orchestrator 18:53). listAdminWithdrawals and getAdminWithdrawal now accept user.lookup: the guard's point list keeps user.lookup only when user_id is present (and, on the list, no risk_flag), so a missing user_id or a risk_flag gets the guard's own 10403 without reading. For an account with user.lookup but neither withdraw.review nor fund.view, reject_note and auto_decision are null, risk_flags is [] and holds[].source_ref is null, blanked once in the view; a non-super actor without permissions is treated the same (rather too little than too much). On the detail, a user_id of another user is the same 20001 [withdrawal_id] as an unknown id, a non-UUID user_id is 20001 [user_id]. AdminActor gains an optional read-only permissions, handed over only when the operation sets withPermissions (always handing it over would turn the frozen guard-mount exact actor comparisons red); it never decides who is let in. No write operation gains user.lookup; no amount, status or ledger is touched. Integration lookup + frozen admin-withdrawals + guard directories 98/98. A separate run with spec/admin/auth had 3 boot timeouts plus one follow-on assertion under load; those three files run alone 39/39.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (D10-1075, medium) over the whole implementation from the last rule-test commit: pass with no findings. Static, nothing executed by Codex. couli-runs/B2-09zg/review-money-codex.json."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "An earlier round by a fresh independent Claude (claude-run.sh) over the same whole diff, before D10-1075 asked for Codex first: pass with no findings. couli-runs/B2-09zg/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude each round (D10-848, D10-1080). Round 1 fail: two S1 (an account with no point sending user_id was not pinned to 10403, so an implementation treating user_id as lookup would pass). Round 2 pass. Round 3 adds permissions-missing.int.test.ts (a non-super actor without permissions is blanked, orchestrator 18:53): pass. Red on the round-3 spec commit: red/2 ok, problems 0, exempt 0, 10 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09zg",
+  "spec_commit": "652fc89d0be1a4ccd8d0a1214ab29da786a00214",
+  "spec_ref": "865361d5ec4637aef928bbbe3823621bc9b098fc",
+  "red_tests": [
+    "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#4] 提现单详情（只持 user.lookup，含另持 fund.recon 这类别的点）带本人 user_id → 200：reject_note、auto_decision 为 null，risk_flags 为 []，holds 每行 source_ref 为 null（holds 的 reason、时刻照常）；金额、状态、reject_reason_code、脱敏收款人、批次、转账尝试等其余字段照常，形状不变；库里这几项有真实值（持 withdraw.review 的账号读到真实值）；读取不写审计、不改任何行",
+    "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#5] 提现单详情（只持 user.lookup）：带本人 user_id 能读（且确实查了库）；不带 user_id → 10403 admin_permission_denied（提现单存在或不存在都一样，不暴露单号是否存在），应答与三个权限点都没有的账号完全相同，且不读提现相关表；没有任何点或只持 fund.recon 的账号带本人 user_id、持 user.lookup + fund.recon 不带 user_id 也是同样的 10403、不读提现相关表",
+    "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#6] 提现单详情的 user_id 防探测：任何账号（只持 user.lookup、withdraw.review、fund.view、同时持两者、超管）给了 user_id 而该提现属别的用户（同应用的另一用户、未知用户、别的应用的用户）→ 20001 data.fields=[withdrawal_id]，与未知 withdrawal_id、别的应用的提现单的应答完全相同；user_id 是本人时各账号照常 200；读取不写审计、不改任何行",
+    "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#7] 提现单详情的 user_id 不是 UUID 形状 → 20001 data.fields=[user_id]（只持 user.lookup、withdraw.review、fund.view、超管都一样；提现单存在也不例外），超过 64 字符同样 20001 [user_id]",
+    "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#8] 提现单详情：只持 user.lookup 的账号读到置空，而持 withdraw.review 或 fund.view（含同时持 user.lookup）的账号与超管不受影响——不带 user_id 与带本人 user_id 都是 200，reject_note、auto_decision、risk_flags 与 holds[].source_ref 都是真实值",
+    "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#9] 只持 user.lookup 的账号能读详情，但写操作不开放：驳回与批量通过 → 10403 admin_permission_denied（先于二次验证），提现单等各表不变",
+    "test/spec/payout/admin-withdrawals-lookup/list.int.test.ts > [AC-B2-09zg#1] 提现单列表（只持 user.lookup，含另持 fund.recon 这类别的点）带 user_id → 200，只有该用户的单，按申请时间倒序、total 为该用户的条数；每行 reject_note、auto_decision 为 null，risk_flags 为 []（库里都有真实值，持 withdraw.review 的账号读到真实值），金额、status、reject_reason_code 等其余字段照常、行的形状不变；可与别的筛选组合；未知用户、别的应用的用户、不是 UUID 的 user_id 是空页；读取不写审计、不改任何行",
+    "test/spec/payout/admin-withdrawals-lookup/list.int.test.ts > [AC-B2-09zg#2] 提现单列表（只持 user.lookup）：带 user_id 能读（且确实查了库）；不带 user_id、或带合法枚举值的 risk_flag（带不带 user_id 都一样）→ 10403 admin_permission_denied，应答与三个权限点都没有的账号完全相同，且不读提现相关表；没有任何点或只持 fund.recon 的账号带 user_id、持 user.lookup + fund.recon 不带 user_id 也是同样的 10403、不读提现相关表；risk_flag 不在枚举 → 20001 [risk_flag]（路由 schema 先于权限检查）",
+    "test/spec/payout/admin-withdrawals-lookup/list.int.test.ts > [AC-B2-09zg#3] 提现单列表：只持 user.lookup 的账号读到置空，而持 withdraw.review 或 fund.view（含同时持 user.lookup）的账号与超管不受影响——不带 user_id 照旧 200，reject_note、auto_decision、risk_flags 都是真实值，risk_flag 筛选照旧可用",
+    "test/spec/payout/admin-withdrawals-lookup/permissions-missing.int.test.ts > [AC-B2-09zg#10] 提现单列表（控制器直调）：guard 交来的 actor 没有 permissions 且不是超管 → 按只持 user.lookup 处理，每行 reject_note、auto_decision 为 null，risk_flags 为 []（库里都有真实值），金额、status 等其余字段照常；对照：超管不带 permissions、带 permissions=[withdraw.review] 的账号读到真实值"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "652fc89d0be1a4ccd8d0a1214ab29da786a00214",
+      "tree": "c677c4291084cf6c36462b2dc8567d5d4fc5a78f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T15:49:04Z",
+      "finished_at": "2026-11-08T15:49:27Z",
+      "red_tests": [
+        "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#4] 提现单详情（只持 user.lookup，含另持 fund.recon 这类别的点）带本人 user_id → 200：reject_note、auto_decision 为 null，risk_flags 为 []，holds 每行 source_ref 为 null（holds 的 reason、时刻照常）；金额、状态、reject_reason_code、脱敏收款人、批次、转账尝试等其余字段照常，形状不变；库里这几项有真实值（持 withdraw.review 的账号读到真实值）；读取不写审计、不改任何行",
+        "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#5] 提现单详情（只持 user.lookup）：带本人 user_id 能读（且确实查了库）；不带 user_id → 10403 admin_permission_denied（提现单存在或不存在都一样，不暴露单号是否存在），应答与三个权限点都没有的账号完全相同，且不读提现相关表；没有任何点或只持 fund.recon 的账号带本人 user_id、持 user.lookup + fund.recon 不带 user_id 也是同样的 10403、不读提现相关表",
+        "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#6] 提现单详情的 user_id 防探测：任何账号（只持 user.lookup、withdraw.review、fund.view、同时持两者、超管）给了 user_id 而该提现属别的用户（同应用的另一用户、未知用户、别的应用的用户）→ 20001 data.fields=[withdrawal_id]，与未知 withdrawal_id、别的应用的提现单的应答完全相同；user_id 是本人时各账号照常 200；读取不写审计、不改任何行",
+        "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#7] 提现单详情的 user_id 不是 UUID 形状 → 20001 data.fields=[user_id]（只持 user.lookup、withdraw.review、fund.view、超管都一样；提现单存在也不例外），超过 64 字符同样 20001 [user_id]",
+        "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#8] 提现单详情：只持 user.lookup 的账号读到置空，而持 withdraw.review 或 fund.view（含同时持 user.lookup）的账号与超管不受影响——不带 user_id 与带本人 user_id 都是 200，reject_note、auto_decision、risk_flags 与 holds[].source_ref 都是真实值",
+        "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts > [AC-B2-09zg#9] 只持 user.lookup 的账号能读详情，但写操作不开放：驳回与批量通过 → 10403 admin_permission_denied（先于二次验证），提现单等各表不变",
+        "test/spec/payout/admin-withdrawals-lookup/list.int.test.ts > [AC-B2-09zg#1] 提现单列表（只持 user.lookup，含另持 fund.recon 这类别的点）带 user_id → 200，只有该用户的单，按申请时间倒序、total 为该用户的条数；每行 reject_note、auto_decision 为 null，risk_flags 为 []（库里都有真实值，持 withdraw.review 的账号读到真实值），金额、status、reject_reason_code 等其余字段照常、行的形状不变；可与别的筛选组合；未知用户、别的应用的用户、不是 UUID 的 user_id 是空页；读取不写审计、不改任何行",
+        "test/spec/payout/admin-withdrawals-lookup/list.int.test.ts > [AC-B2-09zg#2] 提现单列表（只持 user.lookup）：带 user_id 能读（且确实查了库）；不带 user_id、或带合法枚举值的 risk_flag（带不带 user_id 都一样）→ 10403 admin_permission_denied，应答与三个权限点都没有的账号完全相同，且不读提现相关表；没有任何点或只持 fund.recon 的账号带 user_id、持 user.lookup + fund.recon 不带 user_id 也是同样的 10403、不读提现相关表；risk_flag 不在枚举 → 20001 [risk_flag]（路由 schema 先于权限检查）",
+        "test/spec/payout/admin-withdrawals-lookup/list.int.test.ts > [AC-B2-09zg#3] 提现单列表：只持 user.lookup 的账号读到置空，而持 withdraw.review 或 fund.view（含同时持 user.lookup）的账号与超管不受影响——不带 user_id 照旧 200，reject_note、auto_decision、risk_flags 都是真实值，risk_flag 筛选照旧可用",
+        "test/spec/payout/admin-withdrawals-lookup/permissions-missing.int.test.ts > [AC-B2-09zg#10] 提现单列表（控制器直调）：guard 交来的 actor 没有 permissions 且不是超管 → 按只持 user.lookup 处理，每行 reject_note、auto_decision 为 null，risk_flags 为 []（库里都有真实值），金额、status 等其余字段照常；对照：超管不带 permissions、带 permissions=[withdraw.review] 的账号读到真实值"
+      ],
+      "expected": [
+        "test/spec/payout/admin-withdrawals-lookup/detail.int.test.ts",
+        "test/spec/payout/admin-withdrawals-lookup/list.int.test.ts",
+        "test/spec/payout/admin-withdrawals-lookup/permissions-missing.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "dcf9e9378870e833f77fb9c2d024e19cb2cc744757b2b4cd9afcd0c5415aa93e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b9a6ee8ff52b9dfeb627e86f01e303177a394152",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}

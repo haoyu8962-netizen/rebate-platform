@@ -1,9 +1,13 @@
 // B2-09c: the console's read of withdrawals (contracts/openapi.yaml listAdminWithdrawals and
 // getAdminWithdrawal, CT-24y; 08 BR-WDR-10 细则 审核列表与详情). Read only on the given handle, by
-// app; the permission check (withdraw.review or fund.view, read only) is the controller's and
-// appId is always the guard's actor. Nothing is written or audited. The display status the
-// console shows (enum admin_withdrawal_display_status) is derived from status + review_mode +
-// hold_reason as the BR-WDR-08 细则 table; not stored and not a withdrawal status.
+// app; the permission check (withdraw.review or fund.view, or user.lookup with user_id, read only)
+// is the controller's and appId is always the guard's actor. Nothing is written or audited. The
+// display status the console shows (enum admin_withdrawal_display_status) is derived from status +
+// review_mode + hold_reason as the BR-WDR-08 细则 table; not stored and not a withdrawal status.
+//
+// For an account holding user.lookup but neither withdraw.review nor fund.view (B2-09zg, CT-24zzb,
+// D10-1042) the internal fields are blanked where the views are built: reject_note, auto_decision
+// (with its failed_conditions and warn_values), risk_flags and, on the detail, holds[].source_ref.
 //
 // Personal data (BR-ID-33): the user's phone comes masked from identity's port; the payee account
 // is decrypted through the process port only to be masked at once, the payee name keeps only its
@@ -15,6 +19,7 @@ import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { fenToJsonNumber } from '@couli/money';
 import type { Kysely, Selectable } from 'kysely';
+import type { AdminActor } from '../../platform/index.ts';
 import { maskPayeeAccount } from '../domain/mask-payee.ts';
 import {
   countAdminWithdrawals,
@@ -71,6 +76,18 @@ export class AdminWithdrawalFieldsError extends Error {
     this.name = 'AdminWithdrawalFieldsError';
     this.fields = fields;
   }
+}
+
+/**
+ * An account let in by user.lookup alone: neither withdraw.review nor fund.view, not a super. A
+ * non-super actor without `permissions` counts as one: rather too little than too much (D10-1042).
+ * Decides only the blanking; who is let in stays the guard's permission check.
+ */
+export function isLookupOnly(actor: Pick<AdminActor, 'isSuper' | 'permissions'>): boolean {
+  const { isSuper, permissions } = actor;
+  if (isSuper) return false;
+  if (permissions === undefined) return true;
+  return !permissions.includes('withdraw.review') && !permissions.includes('fund.view');
 }
 
 /** In-memory decryption of the payee snapshot; the cleartext is masked before it leaves here. */
@@ -148,7 +165,11 @@ function decisionView(stored: WithdrawalRow['auto_decision']): ListItem['auto_de
   };
 }
 
-function listView(row: WithdrawalRow, phoneMasked: string | null): ListItem {
+function listView(
+  row: WithdrawalRow,
+  phoneMasked: string | null,
+  blankInternal: boolean,
+): ListItem {
   return {
     withdrawal_id: row.id,
     out_biz_no: row.out_biz_no,
@@ -161,16 +182,18 @@ function listView(row: WithdrawalRow, phoneMasked: string | null): ListItem {
     fee_fen: fenToJsonNumber(row.fee_fen),
     tax_fen: fenToJsonNumber(row.tax_fen),
     net_fen: fenToJsonNumber(row.net_fen),
-    auto_decision: decisionView(row.auto_decision),
+    auto_decision: blankInternal ? null : decisionView(row.auto_decision),
     hold_reason: row.hold_reason as ListItem['hold_reason'],
     blocked_reason: row.blocked_reason as ListItem['blocked_reason'],
     needs_manual: row.needs_manual,
     reject_reason_code: row.reject_reason_code as ListItem['reject_reason_code'],
-    reject_note: row.reject_note,
+    reject_note: blankInternal ? null : row.reject_note,
     reviewer_id: row.reviewer_id,
     reviewed_at: iso(row.reviewed_at),
     batch_id: row.batch_id,
-    risk_flags: (Array.isArray(row.risk_flags) ? row.risk_flags : []) as ListItem['risk_flags'],
+    risk_flags: (!blankInternal && Array.isArray(row.risk_flags)
+      ? row.risk_flags
+      : []) as ListItem['risk_flags'],
     risk_flags_at: iso(row.risk_flags_at),
     created_at: row.created_at.toISOString(),
     paid_at: iso(row.paid_at),
@@ -198,6 +221,7 @@ export async function listAdminWithdrawals(
   deps: AdminWithdrawalReadDeps,
   appId: string,
   query: AdminWithdrawalListQuery,
+  blankInternal: boolean,
 ): Promise<Schema<'AdminWithdrawalPage'>> {
   if (
     query.amount_min_fen !== undefined &&
@@ -252,7 +276,7 @@ export async function listAdminWithdrawals(
     rows.map((row) => row.user_id),
   );
   return {
-    items: rows.map((row) => listView(row, phones.get(row.user_id) ?? null)),
+    items: rows.map((row) => listView(row, phones.get(row.user_id) ?? null, blankInternal)),
     page,
     page_size: pageSize,
     total,
@@ -264,11 +288,22 @@ export async function getAdminWithdrawal(
   deps: AdminWithdrawalReadDeps,
   appId: string,
   withdrawalId: string,
+  access: { readonly userId: string | undefined; readonly blankInternal: boolean },
 ): Promise<Detail> {
-  // Unknown and another app's answer alike: no 404 and no hint which one it was.
+  const { userId, blankInternal } = access;
+  // Before the database: the answer must not depend on whether the withdrawal exists.
+  if (userId !== undefined && !UUID.test(userId)) {
+    throw new AdminWithdrawalFieldsError(['user_id']);
+  }
+  // Unknown, another app's and (given user_id) another user's answer alike: no 404, no hint which.
   if (!UUID.test(withdrawalId)) throw new AdminWithdrawalFieldsError(['withdrawal_id']);
   const row = await findAdminWithdrawal(deps.db, appId, withdrawalId.toLowerCase());
-  if (row === undefined) throw new AdminWithdrawalFieldsError(['withdrawal_id']);
+  if (
+    row === undefined ||
+    (userId !== undefined && row.user_id.toLowerCase() !== userId.toLowerCase())
+  ) {
+    throw new AdminWithdrawalFieldsError(['withdrawal_id']);
+  }
   const now = deps.now();
   const [phones, batch, items, attempts, holds] = await Promise.all([
     deps.phones(appId, [row.user_id]),
@@ -280,7 +315,7 @@ export async function getAdminWithdrawal(
     holdsInEffect(deps.db, appId, row.user_id, now),
   ]);
   return {
-    ...listView(row, phones.get(row.user_id) ?? null),
+    ...listView(row, phones.get(row.user_id) ?? null, blankInternal),
     payout_method: row.payout_method as Detail['payout_method'],
     review_deadline: iso(row.review_deadline),
     fail_code: row.fail_code,
@@ -324,7 +359,7 @@ export async function getAdminWithdrawal(
     holds: holds.map((hold) => ({
       hold_id: hold.id,
       reason: hold.reason as Schema<'AdminWithdrawHoldKind'>,
-      source_ref: hold.source_ref,
+      source_ref: blankInternal ? null : hold.source_ref,
       created_at: hold.created_at.toISOString(),
       hold_until: iso(hold.hold_until),
     })),

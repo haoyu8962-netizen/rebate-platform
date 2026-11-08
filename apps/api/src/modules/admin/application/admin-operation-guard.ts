@@ -65,7 +65,7 @@ export class AdminOperationGuardImpl extends AdminOperationGuard {
     input: AdminOperationInput,
     business: (actor: AdminActor) => Promise<AdminOperationResponse>,
   ): Promise<AdminOperationResponse> {
-    const { request, permission, operation, readOnly } = input;
+    const { request, permission, operation, readOnly, withPermissions } = input;
     const principal = adminPrincipal(request);
     if (principal === undefined) {
       // Not a client error: a business route that is not x-auth admin / super used the guard.
@@ -83,6 +83,7 @@ export class AdminOperationGuardImpl extends AdminOperationGuard {
       appId: profile.appId,
       isSuper: profile.isSuper,
       loginName: profile.loginName,
+      ...(withPermissions === true ? { permissions } : {}),
     };
     return await this.#deps.guard.run(
       {

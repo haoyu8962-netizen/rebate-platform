@@ -14,6 +14,12 @@ export interface AdminActor {
   readonly isSuper: boolean;
   /** admin_users.login_name as read for this very request. */
   readonly loginName: string;
+  /**
+   * The points ticked for the account as read for this very request (a super admin's as stored,
+   * possibly none). Present only when the operation set `withPermissions`; a test double may leave
+   * it out. Read only to narrow what is shown, never to let anyone in (the guard's point check).
+   */
+  readonly permissions?: readonly string[];
 }
 
 export interface AdminOperationInput {
@@ -32,6 +38,8 @@ export interface AdminOperationInput {
    * step-up is required and X-Step-Up-Token is neither read nor consumed. Default false.
    */
   readonly readOnly?: boolean;
+  /** Hand the account's points to `business` as actor.permissions (B2-09zg). Default false. */
+  readonly withPermissions?: boolean;
 }
 
 /** One permission key, or a list of keys of which any one suffices (F1-10c). */
