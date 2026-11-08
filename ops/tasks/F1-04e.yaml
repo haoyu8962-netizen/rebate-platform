@@ -1,0 +1,19 @@
+id: F1-04e
+repo: rebate-platform
+title: H5 消息中心：翻页在途时排队的下拉刷新在退出登录后作废，不取令牌、不发请求、不写缓存（FU-H5-MESSAGES-LOGOUT-QUEUED-REFRESH，照 F1-04d）
+type: impl
+# 2026-11-08 content 入账（编排 12:30 核 #2796 时登记；D10-1029）。F1-04c 的 apps/h5/src/entries/app/pages/messages 刷新与 F1-04d 修前同写法：直接 api.request 取第一页（绕开 react-query 查询函数的账号代号绑定），翻页 finally 里执行排队的刷新——退出登录后仍会取令牌、多发一次请求，旧账号数据可能写回缓存；只是没有测试测到。照 F1-04d（#2796）ledger-page.tsx 的写法：排队刷新执行前、刷新开头、写缓存前、设提示前都核「页面仍挂着且该查询仍在」，退出后作废；消息中心其余行为不变。
+# 规则测试照 apps/h5/src/shared/api/logout-queued-refresh.test.tsx 的场景（翻页在途时排队下拉刷新、随后退出登录 → 不取令牌、不发请求）写到新目录；不改既有测试。不改接口、契约、文案键。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/entries/app/pages/messages/**'
+test_paths:
+  - 'test/spec/frontend/h5-messages-logout-refresh/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-messages-logout-refresh/**'
+status: todo
