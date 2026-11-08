@@ -1,0 +1,20 @@
+id: B1-09zc
+repo: rebate-platform
+title: B1-09zc：用户侧订单读接上 ROOT_LOGGER，不合法子原因告警在生产生效（FU-ORDERS-QUERY-LOGGER）
+type: impl
+# 2026-11-08 be 入账（本线 FU，B1-09y #2752 money S2）。B1-09y 让用户侧订单读在 orders.reason_sub 不属当前父编码 / 不在枚举时不出键并 warn（alert order_reason_sub_invalid），但 logger 是可选依赖，生产组装 apps/api/src/modules/orders/orders.module.ts（约 :147-160 OrderQueries 工厂，inject 只有 CLOCK、DB）没传，生产上只隐藏不告警。本单把 ROOT_LOGGER 注入该工厂并传给 createOrderQueries；无 DB 分支不变。不改读接口行为、不写表、不动金额。
+# 规则测试新目录，走生产装配（AppModule api 入口，真库）钉：存一单 reason REFUND / reason_sub FAKE_TRADE，GET /v1/orders 与 /v1/orders/{id} 不出 reason_sub 且根 logger 收到一条 warn（alert order_reason_sub_invalid，无单号 / 用户 / 金额）；合法值不告警。Codex 额度尽至 11-15：规则测试、spec-test 与代码评审都由新鲜独立 Claude（D10-823 ④ / D10-848）。
+refs: []
+refs_hash: {}
+deps: [B1-09y]
+paths:
+  - 'apps/api/src/modules/orders/orders.module.ts'
+  - 'test/spec/orders/reason-sub-read-wiring/**'
+test_paths:
+  - 'test/spec/orders/reason-sub-read-wiring/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
