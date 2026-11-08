@@ -1,0 +1,18 @@
+id: B2-12h
+repo: rebate-platform
+title: 人工调账关联单据按 UUID 不分大小写去重（FU-ADJUST-REFS-UUID-CASE）——同一张 recon_diff / withdrawal / account_deletion 换大小写重复提交返回 20001 fields=[refs]；order 单据号不转大小写
+type: impl
+# 2026-11-08 admin 入账（B2-12c money r1 S2；open-followups-20261108 表一，编排 13:31 排在 B2-09zg 之后，D10-1029 可并行）。refsShapeOk 按原字符串去重、checkRefs 转小写查询，同一单据大小写各写一次能两个都存下。只改去重键，不改校验顺序、错误码、响应与存储值。RV2；规则测试与评审新鲜独立 Claude（Codex 额度尽，D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/ledger/application/admin-adjustment{.ts,.test.ts}'
+test_paths:
+  - 'test/spec/ledger/admin-adjustment-refs-case/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-adjustment-refs-case/**'
+status: todo
