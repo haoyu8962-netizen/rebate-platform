@@ -33,6 +33,10 @@ accept:
   - 'pnpm verify'
   - 'test/spec/payment/**'
 status: todo
+red_exempt:
+  - file: test/spec/payment/result/concurrency.int.test.ts
+    test: '[AC-B2-15c#29] 压力：200 轮里同一通知两次与一次主动查询同时到达（两渠道、先后轮换），每张单都只迁移一次、恰一张 PAY_RECEIPT、一份通知留存、一个 pay_order.paid，通知都应答成功'
+    reason: '冻结用例，测试体与基线逐字相同，该单只改同文件另一条用例里的键字面量（prettier 重排）；整文件判只因 orders/kit.ts 可能读到本单改动的文件。压力用例不查 biz.reconcile 键，旧实现上本来就绿。'
 renames:
   - from: '`biz:${BIZ}:${order.biz_ref}`'
     to: '`biz:${order.app_id}:${BIZ}:${order.biz_ref}`'
