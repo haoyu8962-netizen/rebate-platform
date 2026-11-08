@@ -1,12 +1,16 @@
 // Consume the attempt before exchanging credentials. All database writes then share one
 // READ COMMITTED transaction; a provider failure or rollback never restores the attempt.
+// An Apple login of an account in deletion (deleting → 10007, deleted → 50001) rolls back without
+// storing the exchanged refresh token; after the rollback the token is queued for revocation in a
+// short transaction of its own (BR-ID-27, BR-ID-28; 编排 D10-968; B1-02zzd). The answer stays as is.
 import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
-import { newUuidV7, type RootLogger } from '../../platform/index.ts';
+import { newUuidV7, type JobQueue, type RootLogger } from '../../platform/index.ts';
 import { deviceHashOf, type LoginAccount } from '../infra/login-accounts.ts';
 import { findOauthAccount, replaceAppleRefreshToken } from '../infra/oauth-accounts.ts';
 import { lockDeviceRegistrations } from '../infra/registration-store.ts';
+import { enqueueDiscardedAppleToken } from './apple-unbind-revocation.ts';
 import {
   completeLogin,
   type LoginCommand,
@@ -49,6 +53,12 @@ export interface OauthLoginOptions extends LoginCompletionOptions {
   readonly attempts: Pick<OauthAttemptService, 'consume'>;
   readonly thirdPartyIdentity?: ThirdPartyIdentityPort;
   readonly registration: RegistrationService;
+  /**
+   * The queue of the Apple revocation job (apple_unbind_revoke). Required: an Apple refresh token
+   * exchanged for an account in deletion is never stored, so without the job it would stay valid
+   * at Apple; identity.module builds no login service without it.
+   */
+  readonly queue: Pick<JobQueue, 'send'>;
   readonly registrationBlocklist?: (
     trx: Transaction<DB>,
     input: { readonly app_id: string; readonly device_hash: string },
@@ -63,9 +73,12 @@ export interface OauthLoginService {
 
 class LoginAbort extends Error {
   readonly result: Exclude<OauthLoginResult, { code: 0 }> | 'no_account';
-  constructor(result: LoginAbort['result']) {
+  /** The account is in deletion (deleting or deleted): an exchanged Apple token is discarded. */
+  readonly inDeletion: boolean;
+  constructor(result: LoginAbort['result'], inDeletion = false) {
     super('identity: OAuth login rolled back');
     this.result = result;
+    this.inDeletion = inDeletion;
   }
 }
 
@@ -144,10 +157,10 @@ export function createOauthLoginService(options: OauthLoginOptions): OauthLoginS
         isNew: boolean,
       ): Promise<Schema<'LoginData'>> {
         if (account.status === 'deleting') {
-          throw new LoginAbort({ code: 10007, data: { stage: 'processing' } });
+          throw new LoginAbort({ code: 10007, data: { stage: 'processing' } }, true);
         }
         // A retained binding to a deleted account must never resurrect that account.
-        if (account.status === 'deleted') throw new LoginAbort({ code: 50001 });
+        if (account.status === 'deleted') throw new LoginAbort({ code: 50001 }, true);
         if (provider === 'apple' && identity.apple_refresh_token !== undefined) {
           await replaceAppleRefreshToken(
             trx,
@@ -234,6 +247,24 @@ export function createOauthLoginService(options: OauthLoginOptions): OauthLoginS
         );
       }
 
+      /**
+       * After the rollback: the Apple token of an account in deletion is queued for revocation. A
+       * failure changes no answer and logs one line without the token.
+       */
+      async function discardAppleToken(): Promise<void> {
+        const refreshToken = provider === 'apple' ? identity.apple_refresh_token : undefined;
+        if (refreshToken === undefined) return;
+        try {
+          await enqueueDiscardedAppleToken(
+            { queue: options.queue, db, crypto },
+            { appId, refreshToken },
+          );
+        } catch {
+          // The error may quote the payload: nothing of it is logged.
+          logger.warn({ app_id: appId, provider }, 'identity_apple_discarded_token_enqueue_failed');
+        }
+      }
+
       try {
         let data: Schema<'LoginData'>;
         try {
@@ -255,6 +286,7 @@ export function createOauthLoginService(options: OauthLoginOptions): OauthLoginS
           logger.error({ provider }, 'oauth_login_failed');
           return { code: 50001 };
         }
+        if (error.inDeletion) await discardAppleToken();
         if (error.result !== 'no_account') return error.result;
         const minimum =
           command.channel === undefined

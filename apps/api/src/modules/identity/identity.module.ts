@@ -8,6 +8,7 @@ import {
   EXPORT_STORE,
   FIELD_CRYPTO,
   IDEMPOTENCY,
+  JOB_QUEUE,
   REDIS,
   ROOT_LOGGER,
   openStagingTestPhones,
@@ -17,6 +18,7 @@ import {
   type FieldCrypto,
   type Idempotency,
   type IdempotencyPostMissCheck,
+  type JobQueue,
   type RedisHandle,
   type RequestCheck,
   type RequestCheckInput,
@@ -1066,6 +1068,7 @@ export class IdentityModule {
             FIRST_APP_LOGIN_REVIEW,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
+            { token: JOB_QUEUE, optional: true },
           ],
           useFactory: (
             clock: Clock,
@@ -1083,11 +1086,19 @@ export class IdentityModule {
             firstAppLoginReview: FirstAppLoginReview | null,
             db?: Kysely<Database>,
             fieldCrypto?: FieldCrypto,
+            queue?: JobQueue,
           ): OauthLoginService | null =>
-            db === undefined || fieldCrypto === undefined || reader === null || attempts === null
+            // The queue comes with the database (platform.module); B1-02zzd needs it for the
+            // revocation of an Apple token exchanged for an account in deletion.
+            db === undefined ||
+            fieldCrypto === undefined ||
+            queue === undefined ||
+            reader === null ||
+            attempts === null
               ? null
               : createOauthLoginService({
                   db,
+                  queue,
                   clock,
                   crypto: fieldCrypto,
                   logger,
@@ -1168,6 +1179,7 @@ export class IdentityModule {
             THIRD_PARTY_IDENTITY,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
+            { token: JOB_QUEUE, optional: true },
           ],
           useFactory: (
             clock: Clock,
@@ -1176,11 +1188,16 @@ export class IdentityModule {
             thirdPartyIdentity: ThirdPartyIdentityPort | null,
             db?: Kysely<Database>,
             fieldCrypto?: FieldCrypto,
+            queue?: JobQueue,
           ): ReverifyService | null =>
-            db === undefined || fieldCrypto === undefined || attempts === null
+            db === undefined ||
+            fieldCrypto === undefined ||
+            queue === undefined ||
+            attempts === null
               ? null
               : createReverifyService({
                   db,
+                  queue,
                   clock,
                   crypto: fieldCrypto,
                   logger,

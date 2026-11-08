@@ -1,0 +1,99 @@
+{
+  "red_tests": [
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#1][BR-ID-27][BR-ID-28] Apple 登录绑定账号 status=deleting：仍 10007 stage=processing，绑定行令牌列不变，恰好一条 apple_unbind_revoke，密文解密等于本次换码所得、不含明文，worker 撤销的正是它",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#2][BR-ID-28] 保留绑定指向 status=deleted 的账号：仍 50001，不新建账号、不动绑定，恰好一条作业、解密等于本次令牌",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#3][BR-ID-04] 正常账号 Apple 登录：令牌照常加密保存、不入队；同一身份在账号进入 deleting 后再登录：保存的仍是上次的，入队的只有这次的",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#4] deleting 账号、换码结果没有 refresh_token：仍 10007，不入队；再次登录带回令牌时才入队一条",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#5] 微信登录 deleting 账号：仍 10007，不入队；同一账号的 Apple 身份登录才入队一条（只撤 Apple 令牌）",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#6][BR-ID-04] 受限登录查不到账号 → 10405 no_account：令牌不保存、不入队；同样受限的登录查到 deleting 账号 → 10007 并只入队那一次的令牌",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#7] 回滚不连带作业：deleting 账号的 Apple 登录答 10007，登录事务的写入全部回滚（会话、令牌、日志、同意、用户、绑定都不变），作业仍已提交",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#7] 回滚不连带作业：deleted 账号的 Apple 登录答 50001，登录事务的写入全部回滚（会话、令牌、日志、同意、用户、绑定都不变），作业仍已提交",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#11] 日志不出现令牌明文：deleting 账号的 Apple 登录前后，api 日志与作业里都没有本次令牌，作业已入队",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#11] 日志不出现令牌明文：deleted 账号的 Apple 登录前后，api 日志与作业里都没有本次令牌，作业已入队",
+    "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#13] enqueueDiscardedAppleToken：自开短事务提交一条 data-copy 队列的 apple_unbind_revoke，载荷 {appId, cipher}，密文解密等于令牌、不含明文",
+    "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#8][BR-ID-27][BR-ID-28] Apple 加验比对一致，但账号此时已是 deleting：响应照旧 passed，不写 reverified_devices、不动绑定与已存令牌，恰好一条作业、解密等于本次令牌，日志无明文",
+    "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#8][BR-ID-27][BR-ID-28] Apple 加验比对一致，但账号此时已是 deleted：响应照旧 passed，不写 reverified_devices、不动绑定与已存令牌，恰好一条作业、解密等于本次令牌，日志无明文",
+    "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#9][BR-ID-04] 正常账号 Apple 加验通过：令牌照常保存、不入队；同一账号换台设备加验时进入 deleting：保存的仍是上次的，入队的只有这次的",
+    "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#10] 比对不一致（20005）：正常账号与进入 deleting 的账号都不保存、不入队；同一应用里另一个进入 deleting 的账号比对一致时只入队它的令牌"
+  ],
+  "risk_note": "RV1 (identity module only; no migration, no contract change). FU-APPLE-TOKEN-AFTER-DELETE (notices 6515-6516; D10-966 / D10-968): an Apple refresh token exchanged for an account in deletion was neither stored nor revoked — oauth-login signIn aborts deleting (10007) / deleted (50001) and rolls the login transaction back; reverify byOauth's settlePassed writes nothing for such an account. Basis BR-ID-27 (Sign in with Apple users must be revoked) and BR-ID-28 (user_oauth: revoke the Apple authorization first). Now enqueueDiscardedAppleToken encrypts the token (APPLE_REFRESH_TOKEN_CONTEXT) and writes one existing apple_unbind_revoke job (B1-02zw) in a short transaction of its own, after the rolled-back login / outside the reverify settle; responses unchanged; no user_oauth write. Not enqueued: other 50001, restricted login 10405 no_account (BR-ID-04 detail unchanged), non-Apple providers, no token, reverify mismatch 20005 (D10-968). An enqueue failure keeps the response and logs one warn without the token. Login and reverify services now require the job queue; identity.module injects JOB_QUEUE, which platform.module always provides together with DB (platform.module.ts:112/126). Implementer unit-test fake tokens shortened after gitleaks cn-doc-secret flagged them (no rule change, no bypass). Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex quota exhausted (D10-966): adversarial review by a fresh independent Claude through claude-run.sh (approvals 36). general r1 pass, 0 findings, 0 out_of_scope (couli-runs/B1-02zzd/review-code-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude through claude-run.sh (attempt 1; hand-assembled brief, brief.ts over 24KB). Gate spec-test review by a fresh independent Claude (D10-848): r1 pass, 0 findings (couli-runs/B1-02zzd/review-spec-r1.json). Red: 15 rule tests in 2 files red for the right reason, 0 problems, 0 exemptions; on the implementation the local container ran all 15 green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3b3a2017cef6b54817d5c831cbd512c8c23d3079",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "task": "B1-02zzd",
+  "spec_commit": "a8e4ca79512691afa149783a8ced0ebd1bce28fe",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a8e4ca79512691afa149783a8ced0ebd1bce28fe",
+      "tree": "7f050b23d6587a1cd4b5a159fe98a8513a339bc0",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T01:01:54Z",
+      "finished_at": "2026-11-08T01:02:14Z",
+      "red_tests": [
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#1][BR-ID-27][BR-ID-28] Apple 登录绑定账号 status=deleting：仍 10007 stage=processing，绑定行令牌列不变，恰好一条 apple_unbind_revoke，密文解密等于本次换码所得、不含明文，worker 撤销的正是它",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#2][BR-ID-28] 保留绑定指向 status=deleted 的账号：仍 50001，不新建账号、不动绑定，恰好一条作业、解密等于本次令牌",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#3][BR-ID-04] 正常账号 Apple 登录：令牌照常加密保存、不入队；同一身份在账号进入 deleting 后再登录：保存的仍是上次的，入队的只有这次的",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#4] deleting 账号、换码结果没有 refresh_token：仍 10007，不入队；再次登录带回令牌时才入队一条",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#5] 微信登录 deleting 账号：仍 10007，不入队；同一账号的 Apple 身份登录才入队一条（只撤 Apple 令牌）",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#6][BR-ID-04] 受限登录查不到账号 → 10405 no_account：令牌不保存、不入队；同样受限的登录查到 deleting 账号 → 10007 并只入队那一次的令牌",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#7] 回滚不连带作业：deleting 账号的 Apple 登录答 10007，登录事务的写入全部回滚（会话、令牌、日志、同意、用户、绑定都不变），作业仍已提交",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#7] 回滚不连带作业：deleted 账号的 Apple 登录答 50001，登录事务的写入全部回滚（会话、令牌、日志、同意、用户、绑定都不变），作业仍已提交",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#11] 日志不出现令牌明文：deleting 账号的 Apple 登录前后，api 日志与作业里都没有本次令牌，作业已入队",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#11] 日志不出现令牌明文：deleted 账号的 Apple 登录前后，api 日志与作业里都没有本次令牌，作业已入队",
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts > [AC-B1-02zzd#13] enqueueDiscardedAppleToken：自开短事务提交一条 data-copy 队列的 apple_unbind_revoke，载荷 {appId, cipher}，密文解密等于令牌、不含明文",
+        "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#8][BR-ID-27][BR-ID-28] Apple 加验比对一致，但账号此时已是 deleting：响应照旧 passed，不写 reverified_devices、不动绑定与已存令牌，恰好一条作业、解密等于本次令牌，日志无明文",
+        "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#8][BR-ID-27][BR-ID-28] Apple 加验比对一致，但账号此时已是 deleted：响应照旧 passed，不写 reverified_devices、不动绑定与已存令牌，恰好一条作业、解密等于本次令牌，日志无明文",
+        "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#9][BR-ID-04] 正常账号 Apple 加验通过：令牌照常保存、不入队；同一账号换台设备加验时进入 deleting：保存的仍是上次的，入队的只有这次的",
+        "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts > [AC-B1-02zzd#10] 比对不一致（20005）：正常账号与进入 deleting 的账号都不保存、不入队；同一应用里另一个进入 deleting 的账号比对一致时只入队它的令牌"
+      ],
+      "expected": [
+        "test/spec/identity/apple-token-after-deletion/login.int.test.ts",
+        "test/spec/identity/apple-token-after-deletion/reverify.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "78a6fcd56eb5af4c9cbfd96acae71e154ad80a8d4440b5f081fce23693873135"
+        }
+      ]
+    }
+  ]
+}

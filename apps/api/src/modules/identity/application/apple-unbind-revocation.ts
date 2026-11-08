@@ -9,7 +9,7 @@
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for types.
 import type { DB } from '@couli/db';
-import type { Transaction } from 'kysely';
+import type { Kysely, Transaction } from 'kysely';
 import type { FieldCrypto, JobHandler, JobQueue, RootLogger } from '../../platform/index.ts';
 import { APPLE_REFRESH_TOKEN_CONTEXT } from '../infra/oauth-accounts.ts';
 import type { AppleTokenRevoker } from '../ports/apple-token-revoker.ts';
@@ -42,6 +42,31 @@ export async function enqueueAppleUnbindRevocation(
     { appId: input.appId, cipher: Buffer.from(input.cipher).toString('utf8') },
     { trx },
   );
+}
+
+/**
+ * An Apple refresh token exchanged for an account in deletion (users.status deleting or deleted) is
+ * never stored (BR-ID-27, BR-ID-28; 编排 D10-968; task B1-02zzd): it is encrypted with
+ * APPLE_REFRESH_TOKEN_CONTEXT and one APPLE_UNBIND_REVOKE_JOB is written in a short transaction of
+ * its own, so the rolled-back login (or the reverify write that wrote nothing) does not take the job
+ * with it. The token reaches neither a log line nor the payload in plain text.
+ */
+export async function enqueueDiscardedAppleToken(
+  deps: {
+    readonly queue: Pick<JobQueue, 'send'>;
+    readonly db: Kysely<DB>;
+    readonly crypto: FieldCrypto;
+  },
+  input: { readonly appId: string; readonly refreshToken: string },
+): Promise<void> {
+  const { queue, db, crypto } = deps;
+  const cipher = Buffer.from(
+    crypto.encrypt(input.refreshToken, APPLE_REFRESH_TOKEN_CONTEXT),
+    'utf8',
+  );
+  await db
+    .transaction()
+    .execute((trx) => enqueueAppleUnbindRevocation(queue, trx, { appId: input.appId, cipher }));
 }
 
 export function createAppleUnbindRevocation(

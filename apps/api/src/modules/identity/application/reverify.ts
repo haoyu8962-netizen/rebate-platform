@@ -21,7 +21,9 @@
 //
 // An account that entered deletion in between (B1-02zy): the store writes nothing. No place left
 // answers 10010 manual as above; a comparison that passed still answers 0, only without the record
-// and without the passed log.
+// and without the passed log. An Apple refresh token exchanged by that passed comparison is not
+// stored either: it is queued for revocation in a short transaction of its own (BR-ID-27, BR-ID-28;
+// 编排 D10-968; B1-02zzd), and the answer stays 0. A mismatch (20005) queues nothing.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
@@ -29,7 +31,13 @@ import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { accountingDate, parseResidentIdNo } from '@couli/domain';
 import type { Kysely } from 'kysely';
-import type { Clock, FieldCrypto, RootLogger, TokenPrincipal } from '../../platform/index.ts';
+import type {
+  Clock,
+  FieldCrypto,
+  JobQueue,
+  RootLogger,
+  TokenPrincipal,
+} from '../../platform/index.ts';
 import {
   MANUAL_REQUIREMENT,
   REVERIFY_FAIL_LIMIT,
@@ -46,6 +54,7 @@ import {
   type FailureReservation,
   type ReverifySubject,
 } from '../infra/reverify-store.ts';
+import { enqueueDiscardedAppleToken } from './apple-unbind-revocation.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
 import {
   pendingData,
@@ -83,6 +92,12 @@ export interface ReverifyOptions {
   readonly logger: Pick<RootLogger, 'info' | 'warn'>;
   readonly attempts: OauthAttemptService;
   readonly thirdPartyIdentity?: ThirdPartyIdentityPort;
+  /**
+   * The queue of the Apple revocation job (apple_unbind_revoke). Required: an Apple refresh token
+   * exchanged for an account in deletion is never stored, so without the job it would stay valid
+   * at Apple; identity.module builds no re-verification service without it.
+   */
+  readonly queue: Pick<JobQueue, 'send'>;
 }
 
 const PASSED: ReverifyResult = Object.freeze({ code: 0 });
@@ -102,7 +117,7 @@ function mismatch(reservation: FailureReservation): ReverifyResult {
 }
 
 export function createReverifyService(options: ReverifyOptions): ReverifyService {
-  const { db, clock, crypto, logger, attempts, thirdPartyIdentity } = options;
+  const { db, clock, crypto, logger, attempts, thirdPartyIdentity, queue } = options;
 
   const subjectOf = (principal: TokenPrincipal): ReverifySubject => ({
     app_id: principal.app_id,
@@ -255,6 +270,21 @@ export function createReverifyService(options: ReverifyOptions): ReverifyService
         });
         compared = true;
         if (settled) logPassed(subject, 'oauth');
+        else if (refreshToken !== undefined) {
+          // In deletion, or gone: the token was not stored and must not stay valid at Apple.
+          try {
+            await enqueueDiscardedAppleToken(
+              { queue, db, crypto },
+              { appId: subject.app_id, refreshToken },
+            );
+          } catch {
+            // The error may quote the payload: nothing of it is logged; the answer stays.
+            logger.warn(
+              { app_id: subject.app_id, user_id: subject.user_id },
+              'identity_apple_discarded_token_enqueue_failed',
+            );
+          }
+        }
         return PASSED;
       } finally {
         if (!compared) await release(subject, reservation);
