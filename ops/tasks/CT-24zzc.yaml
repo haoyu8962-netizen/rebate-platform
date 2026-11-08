@@ -1,0 +1,32 @@
+id: CT-24zzc
+repo: rebate-platform
+title: 契约：后台用户余额与流水只读接口 adminGetUserFundSummary（GET /admin/v1/users/{user_id}/fund-summary）与 adminListLedgerEntries（GET /admin/v1/ledger?user_id=），新增枚举 ledger_sub_account
+type: contract
+# 2026-11-08 agent2 入账（D10-1049 ③、D10-1050 ②、D10-1057；方案 couli-runs/AGENT2-lane/admin-ledger-plan.md）。依据 01 F-ADM-04、design/specs/admin-user-detail.md / admin-ledger.md（couli #312 / #313）、04 §6.6 `ledger`、§11.1。
+# 形状：摘要 user_id、available_fen、frozen_fen、negative_since、withdrawn_fen（BR-FUND-18 同口径）、withdraw_block {blocked, hold_kinds[]}（只给 withdraw_hold_kind 枚举）；流水 user_id 必填，筛 ledger_type / sub_type / sub_account / accounting_date_from|to / ref，AdminPage + AdminPageSize，{items, page, page_size, total}；行 entry_id、booked_at、accounting_date、ledger_type、sub_type、sub_account、amount_fen（用户视角符号）、balance_after_fen、voucher {voucher_id, uniq_key, biz_type, biz_id}、link {type, id} | null。
+# 权限 fund.view 或 user.lookup（04 §11.1），不需二次验证；两接口对谁都不含 memo / operator / 调账 note / reject_note / hold source_ref / created_by（D10-1057 ① 选 A），description 写明。未知用户 20001（AdminUserIdPath 惯例，D10-1057 ③）；no-store。后台中文名字典归 fe（D10-1057 ⑤）。
+# RV1，新鲜独立 Claude 写规则测试，Codex contract 评审（额度不足时新鲜独立 Claude）；排契约槽 #2745 → #2849 → 本单。实现见 B2-02u。
+refs: [BR-FUND-13, BR-FUND-15, BR-FUND-16, BR-FUND-18]
+refs_hash:
+  BR-FUND-13: ad7aad8f8846
+  BR-FUND-15: 849cd1eab9f2
+  BR-FUND-16: 077f6d412d5a
+  BR-FUND-18: c7ebd23ee75e
+deps: []
+paths:
+  - 'test/spec/contracts/admin-ledger-read/**'
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/fund.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/admin-ledger-read/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

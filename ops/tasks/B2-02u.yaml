@@ -1,0 +1,31 @@
+id: B2-02u
+repo: rebate-platform
+title: 后台用户余额与流水只读接口实现（adminGetUserFundSummary、adminListLedgerEntries）：ledger 模块后台控制器，读 account_balances 缓存与 ledger_entries ⋈ ledger_vouchers，只读、两种权限同形同值
+type: impl
+# 2026-11-08 agent2 入账（D10-1049 ③、D10-1050 ②、D10-1057；方案 couli-runs/AGENT2-lane/admin-ledger-plan.md）。契约见 CT-24zzc。
+# 做法：照 ledger/http/admin/fund-ledger.controller.ts 写法，守卫权限 ['fund.view','user.lookup']，readOnly，Cache-Control: no-store。摘要读 ledger_accounts（owner_type=user、USER_BALANCE）+ account_balances 缓存（无账户行按 0），withdrawn_fen 复用用户侧 wallet-summary 的已提现取数，withdraw_block 读生效 withdraw_holds 的种类；流水只含该用户 USER_BALANCE 账户两个子户的分录，按 booked_at desc, id desc，符号按用户视角（同 listWalletLedger），筛选与分页照契约；只读 REPEATABLE READ。未知用户 20001。
+# 不暴露 memo / operator / 调账 note / reject_note / source_ref / created_by（D10-1057 ①），不查权限集合。不含导出、中文名字典（fe）、预估类字段。
+# RV2（ledger 模块）。新鲜独立 Claude 写规则测试，Opus 实现，money 评审 Codex medium（D10-1025；额度不足时新鲜独立 Claude money）。
+refs: [BR-FUND-13, BR-FUND-15, BR-FUND-16, BR-FUND-18]
+refs_hash:
+  BR-FUND-13: ad7aad8f8846
+  BR-FUND-15: 849cd1eab9f2
+  BR-FUND-16: 077f6d412d5a
+  BR-FUND-18: c7ebd23ee75e
+deps: [CT-24zzc]
+paths:
+  - 'apps/api/src/modules/ledger/http/admin/**'
+  - 'apps/api/src/modules/ledger/application/admin-ledger-read*.ts'
+  - 'apps/api/src/modules/ledger/infra/admin-ledger-read*.ts'
+  - 'apps/api/src/modules/ledger/ledger.module.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/ledger/admin-ledger-read/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-ledger-read/**'
+status: todo
+pr: null
