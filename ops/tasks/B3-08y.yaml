@@ -1,0 +1,29 @@
+id: B3-08y
+repo: rebate-platform
+title: Agent trace 本地重试队列（FU-AGENT-TRACE-RETRY 单 1）：写入失败的 run 进进程内有上限队列退避重试最多 24 小时，超时 / 永久失败 / 队列满 / 停机剩余各记一条 error 级 agent.trace_lost；写者事务内锁会话行、会话已脱离用户就跳过（BR-AI-22）；按 card_id 解析订单卡先查本进程已下发未落库的卡再查库（B3-08q S2）
+type: impl
+# 2026-11-08 agent 线入账（编排 D10-1060；方案 couli-runs/FU-AGENT-TRACE-RETRY/plan.md §4 单 1）。
+# 现状：B3-08q（#2785）stream/mount/trace.ts 写入失败只记一条 warn agent_trace_write_failed，记录即丢，违 BR-AI-19「进本地重试队列，最多重试 24 小时，仍失败记告警 agent.trace_lost，不得静默丢弃」；money S2：同会话下一 run 可能先于上一 run 异步写入读 agent_cards。
+# 做法：每 run 一项、只重试失败的一半（写入幂等）；退避 1s→2s→… 上限 5 分钟，截止 = 首次失败 + 24h，只读注入 Clock / scheduler，定时器 unref；队列上限默认 5000 run（满了丢最旧）；lost 只记计数（run_id、reason、cards、tool_calls），不带卡片 / 参数 / 文本，并调注入的 onLost(reason)（留给 B3-08z）；首次失败仍只一条 agent_trace_write_failed，重试再败只 debug；close() 先停定时器、有时限最后一写（≤ lockGraceMs），剩余记 shutdown lost，必须返回；永久性错误（run 不存在、违约束）立即记 lost 不重试。
+# 注销守卫：写者事务内先 SELECT agent_sessions … FOR SHARE，会话已脱离用户（user_hash 空且非游客）就返回 skipped，不写、不重试、不记 lost，只 info agent_trace_skipped_erased。S2：本进程记「已下发、未确认落库」的卡，按 card_id 解析先查内存（同 app 同会话）再查库；createOrderCardRefs(db) 原语义不变，只加包装。
+# 参数（队列上限、退避起止、截止时长）做成 agent 内可注入的默认参数对象（照 runTimingsDefaults），不进 content 配置注册表（那要动 content 与冻结注册表测试，另开前置单，待编排确认）。告警级别 warning、路由照 02 §13（D10-1060）。
+# 守冻结：trace-persist/** 不改；首次失败只一条 warn、runtime.close() 必返回、createOrderCardRefs(db) 语义不变。风险 RV1。新鲜独立 Claude 写规则测试，Opus 实现，独立 Claude 评审（Codex 额度至 11-15）。
+refs: [BR-AI-19, BR-AI-22, BR-AI-03, BR-AI-07]
+refs_hash:
+  BR-AI-19: f2aa4c7770c8
+  BR-AI-22: d412bc8a631a
+  BR-AI-03: 2131432de5c6
+  BR-AI-07: 0da3ace82049
+deps: [B3-08q]
+paths:
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/store/results/**'
+test_paths:
+  - 'test/spec/agent/trace-retry/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/trace-retry/**'
+status: todo
+pr: null

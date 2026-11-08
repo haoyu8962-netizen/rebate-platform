@@ -1,0 +1,27 @@
+id: B3-08z
+repo: rebate-platform
+title: Agent trace 缺失告警（FU-AGENT-TRACE-RETRY 单 2）：worker 上加指标 couli_agent_trace_missing_runs{app_id}（结束超过 24 小时、已出卡却无卡片行的 run 数，只读，注销会话不计），couli.yaml 加告警 CouliAgentTraceMissing（> 0、for 5m、warning、非资金、夜间静默），兜住进程崩溃丢失的 trace
+type: impl
+# 2026-11-08 agent 线入账（编排 D10-1060；方案 couli-runs/FU-AGENT-TRACE-RETRY/plan.md §4 单 2）。D10-1060 (a)：进程崩溃时丢的 trace 由本单指标兜住、会告警，不算静默丢弃，接受。
+# 现状：stream 进程无指标端口，抓取配置与冻结测试只认 api / worker / admin，故即时 agent.trace_lost 走日志服务（*_alert 先例），本单在 worker 上加只读 collector 兜底。
+# 做法：collectAgentTraceMissing 只读 agent_runs / agent_cards，查询从 agent 的只读端口注入（platform 不 import agent 内部）；registry 只在 worker 上有该指标；collector 出错时 render 报错、不编造 0；couli.yaml 加 CouliAgentTraceMissing。SLS 的 agent.trace_lost 日志告警配置在仓库外（私有运维），runbook 留 TODO；02 §13 告警表补行由编排回写规划仓库。
+# 风险 RV2（platform/metrics、entry.ts、infra/monitoring 不在白名单）。新鲜独立 Claude 写规则测试，Opus 实现，独立 Claude 评审。
+refs: [BR-AI-19]
+refs_hash:
+  BR-AI-19: f2aa4c7770c8
+deps: [B3-08y, B3-08za]
+paths:
+  - 'apps/api/src/modules/platform/metrics/**'
+  - 'apps/api/src/entry.ts'
+  - 'apps/api/src/modules/agent/store/**'
+  - 'apps/api/src/modules/agent/index.ts'
+  - 'infra/monitoring/rules/couli.yaml'
+test_paths:
+  - 'test/spec/platform/agent-trace-missing/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/agent-trace-missing/**'
+status: todo
+pr: null

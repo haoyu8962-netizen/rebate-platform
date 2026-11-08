@@ -1,0 +1,21 @@
+id: B3-08za
+repo: rebate-platform
+title: 过渡测试改动（B3-08z 前置）：冻结的告警规则清单与告警评估夹具只追加 Agent trace 缺失指标——metrics-followups/rules.test.ts 规则清单追加 CouliAgentTraceMissing，alerting-eval/metrics.test.ts 的 registry 夹具追加 collectAgentTraceMissing，其余断言不变
+type: test-change
+# 2026-11-08 agent 线入账（编排 D10-1060；方案 couli-runs/FU-AGENT-TRACE-RETRY/plan.md §4 单 2 前置）。先例 B2-02tb、B1-04zy。
+# 现状：test/spec/platform/metrics-followups/rules.test.ts [AC-B1-01zzo#10] 钉死 couli.yaml 规则清单；test/spec/platform/alerting-eval/metrics.test.ts 的 registry 夹具要加新 collector。B3-08z 加规则与 collector 必碰这两处。
+# 做法：只在清单 / 夹具里追加新规则名与新 collector（形状照现有条目），不改标题、不删不放宽断言；若 B3-08z 另开规则文件才碰 vmalert.test.ts（默认不另开）。
+# 改既有规则测试属第一类保护路径：走非 task 分支；全新上下文 Claude 修改、另一全新上下文 Claude 只读复审，按 approvals #24 由编排加 owner-approved 标签。RV2。
+refs: [BR-AI-19]
+refs_hash:
+  BR-AI-19: f2aa4c7770c8
+deps: [B3-08y]
+paths:
+  - 'test/spec/platform/metrics-followups/rules.test.ts'
+  - 'test/spec/platform/alerting-eval/metrics.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
