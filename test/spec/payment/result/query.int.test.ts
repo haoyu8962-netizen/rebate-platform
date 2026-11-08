@@ -112,7 +112,7 @@ it.each(CHANNELS)(
         job.options.singletonKey,
         job.inTransaction,
       ]),
-    ).toEqual([['pay', `biz:${BIZ}:${order.biz_ref}`, true]]);
+    ).toEqual([['pay', `biz:${order.app_id}:${BIZ}:${order.biz_ref}`, true]]);
     expect(kit.published.map((p) => [p.event.name, p.event.appId, p.inTransaction])).toEqual([
       ['pay_order.paid', f.subject.app_id, true],
     ]);

@@ -300,7 +300,7 @@ async function succeedRefund(
     };
     await deps.queue.send(PAY_QUEUE, BIZ_RECONCILE_JOB, payload, {
       trx,
-      singletonKey: bizReconcileKey(order.biz_type, order.biz_ref),
+      singletonKey: bizReconcileKey(order.app_id, order.biz_type, order.biz_ref),
     });
   } else {
     const anomaly = await addAnomalyRefundedFen(

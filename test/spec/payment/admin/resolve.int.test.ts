@@ -67,7 +67,7 @@ const s = suite();
 async function nothingSettled(f: Fixture, order: OrderRow): Promise<void> {
   expect(await vouchers(f)).toEqual([]);
   expect(await paidEvents(f)).toEqual([]);
-  expect(await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).toEqual([]);
+  expect(await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).toEqual([]);
   expect(await anomalies(f)).toEqual([]);
   expect(await userTraces(f)).toEqual({ user_accounts: 0, balances: 0, user_entries: 0 });
 }
@@ -79,11 +79,11 @@ async function settledOnce(f: Fixture, order: OrderRow): Promise<void> {
   expect(await vouchers(f)).toEqual([receiptOf(row)]);
   expect((await paidEvents(f)).map((event) => event['pay_order_id'])).toEqual([order.id]);
   expect(
-    (await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).map((job) => [
+    (await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).map((job) => [
       job.job,
       job.singleton_key,
     ]),
-  ).toEqual([['biz.reconcile', `biz:${BIZ}:${order.biz_ref}`]]);
+  ).toEqual([['biz.reconcile', `biz:${order.app_id}:${BIZ}:${order.biz_ref}`]]);
   expect(await anomalies(f)).toEqual([]);
   expect(await userTraces(f)).toEqual({ user_accounts: 0, balances: 0, user_entries: 0 });
 }

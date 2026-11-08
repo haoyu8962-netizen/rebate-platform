@@ -7,7 +7,7 @@
 //   channel re-sends or the next query comes), then the PAY_RECEIPT voucher through ledger's post
 //   (借 CASH_PAY:{pay_channel} / 贷 PAY_RECEIPTS:{biz_type}, platform subjects only, uniq key
 //   PAY_RECEIPT:<pay_order_id>: at most one per order, BR-PAY-07), the business object's
-//   fulfilment job (queue pay, biz.reconcile, singletonKey biz:<biz_type>:<biz_ref>: serial per
+//   fulfilment job (queue pay, biz.reconcile, singletonKey biz:<app_id>:<biz_type>:<biz_ref>: serial per
 //   object) and the pay_order.paid event — all on that one transaction, so a failure anywhere
 //   leaves nothing behind (BR-PAY-04 细则 应答表 last row).
 // registerAnomalyReceipt — BR-PAY-05 ④: one pay_anomalies row per (channel, channel trade
@@ -226,7 +226,7 @@ export async function settlePendingOrder(
   };
   await deps.queue.send(PAY_QUEUE, BIZ_RECONCILE_JOB, payload, {
     trx,
-    singletonKey: bizReconcileKey(paid.biz_type, paid.biz_ref),
+    singletonKey: bizReconcileKey(paid.app_id, paid.biz_type, paid.biz_ref),
   });
   await deps.events.publish(trx, {
     appId: paid.app_id,

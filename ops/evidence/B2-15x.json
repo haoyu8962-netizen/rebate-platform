@@ -1,0 +1,88 @@
+{
+  "risk_note": "Payment path, RV2, no money effect. The singletonKey of the biz.reconcile fulfilment job gains app_id (biz:<app_id>:<biz_type>:<biz_ref>, D10-1030): under the dual-brand setup two app_ids holding the same biz_type and biz_ref no longer share one key, where the later job would be swallowed. bizReconcileKey takes appId and its two callers (pay-settlement.ts, pay-refund-result.ts) pass the app_id of the same order as the payload; within one app one business object keeps one key, so fulfilment stays serial per object (BR-PAY-01). Payload, queue, amounts, vouchers and states are unchanged. pay.enabled is still off, so no queued job crosses the key change. A task branch with evidence because payment is in MONEY_PATHS. The tests come first and go red (D10-1078, D10-1083): the ledger's renames leave seven files out of the red run (CT-06zzzzl), result/concurrency keeps a prettier reflow and is judged by test, with one declared red_exempt. The eight frozen spec files change only the key literal (order.app_id added; plus one prettier reflow in result/concurrency): written by a fresh independent Claude, checked read-only by another fresh Claude (pass: couli-runs/B2-15x/readonly-review-r1.md), to be reported under approvals #24 for the owner-approved label.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh (D10-823, D10-1025), effort medium (D10-884), base the merge base; no findings (couli-runs/B2-15x/money-review-r1.json). The same diff as reviewed: the tests were reordered before the implementation (D10-1078) and their content is unchanged."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "renames_confirmed": {
+      "pairs": [
+        {
+          "from": "`biz:${BIZ}:${order.biz_ref}`",
+          "to": "`biz:${order.app_id}:${BIZ}:${order.biz_ref}`"
+        }
+      ],
+      "left_out": [
+        "test/spec/payment/admin/concurrency.int.test.ts",
+        "test/spec/payment/admin/resolve.int.test.ts",
+        "test/spec/payment/close/flow.int.test.ts",
+        "test/spec/payment/refund/result.int.test.ts",
+        "test/spec/payment/result/notify.int.test.ts",
+        "test/spec/payment/result/query.int.test.ts",
+        "test/spec/payment/result/rollback.int.test.ts"
+      ]
+    },
+    "note": "The frozen key literals were changed by a fresh independent Claude; another fresh Claude's read-only review passed (couli-runs/B2-15x/readonly-review-r1.md, supporting only). spec-test r1 by Codex (spec-test-review-r1.json, 03:03 rule: Codex first) failed on 2 S1: it would not confirm the renames as a pure name change, and negative assertions querying by the new key would miss a job under another key. Ruled by the orchestrator: D10-1083 / D10-1104 ① the literal follows the implementation's key format and renames applies here; D10-1104 ② recorded as S2, follow-up FU-PAY-QUEUE-NEGATIVE-BY-PAYLOAD (the old query had the same blind spot; the key has one generator). r2 by a fresh independent Claude (D10-1104 ③; spec-test-review-r2.json) passed and confirmed the renames pair, the seven files left out, the one red_exempt [AC-B2-15c#29] and that the 20 app_id values come from the real order."
+  },
+  "task": "B2-15x",
+  "spec_commit": "af38e1351147c1c23d9eae8883c669fa6571ae99",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "red_tests": [
+    "test/spec/payment/result/concurrency.int.test.ts > [AC-B2-15c#28] 真实并发：notify 先到、query 后到，再加一条重复通知（wechat_pay）：只迁移一次、只有一张 PAY_RECEIPT、一次开通入队、一个 pay_order.paid，通知都应答成功",
+    "test/spec/payment/result/concurrency.int.test.ts > [AC-B2-15c#28] 真实并发：query 先到、notify 后到，再加一条重复通知（alipay）：只迁移一次、只有一张 PAY_RECEIPT、一次开通入队、一个 pay_order.paid，通知都应答成功"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "af38e1351147c1c23d9eae8883c669fa6571ae99",
+      "tree": "685b4ec8a546c4a225e89414e3dd7eb141b77160",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T21:50:22Z",
+      "finished_at": "2026-11-08T21:50:47Z",
+      "red_tests": [
+        "test/spec/payment/result/concurrency.int.test.ts > [AC-B2-15c#28] 真实并发：notify 先到、query 后到，再加一条重复通知（wechat_pay）：只迁移一次、只有一张 PAY_RECEIPT、一次开通入队、一个 pay_order.paid，通知都应答成功",
+        "test/spec/payment/result/concurrency.int.test.ts > [AC-B2-15c#28] 真实并发：query 先到、notify 后到，再加一条重复通知（alipay）：只迁移一次、只有一张 PAY_RECEIPT、一次开通入队、一个 pay_order.paid，通知都应答成功"
+      ],
+      "expected": ["test/spec/payment/result/concurrency.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b21bafc556eb53ef037b54b460aa9943abde4cf8aecd6aa711bbf95284cfed85"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b955bb601fad8029265bea1f778a196621ea63df",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}

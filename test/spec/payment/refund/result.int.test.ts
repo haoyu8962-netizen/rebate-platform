@@ -116,7 +116,7 @@ function unmoved(refund: RefundRow) {
 /** Nothing of a SUCCESS happened: no PAY_REFUND, recovery job or event; refunded_fen as before. */
 async function nothingBooked(f: Fixture, order: OrderRow): Promise<void> {
   expect((await vouchers(f)).map((v) => v.voucher_kind)).toEqual(['PAY_RECEIPT']);
-  expect(await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).toEqual([]);
+  expect(await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).toEqual([]);
   expect(await refundEvents(f)).toEqual([]);
   expect(await payOrder(f, order.id)).toMatchObject({ status: 'PAID', refunded_fen: 0n });
 }
@@ -154,7 +154,7 @@ it.each(CHANNELS)(
     expect(voucherShape(books[1]!)).toEqual(refundVoucherOf(order, refund));
     expect(await subjectBalance(f, `CASH_PAY:${channel}`)).toBe(AMOUNT - refund.amount_fen);
     expect(await subjectBalance(f, `PAY_RECEIPTS:${BIZ}`)).toBe(refund.amount_fen - AMOUNT);
-    const recovery = await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`);
+    const recovery = await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`);
     expect(recovery.map((job) => job.job)).toEqual(['biz.reconcile']);
     expect(recovery[0]?.payload).toMatchObject({
       app_id: f.subject.app_id,
@@ -344,7 +344,7 @@ it.each(MISMATCHES)(
     });
     expect(await refundRow(f, refund.id), label).toMatchObject(unmoved(refund));
     expect((await vouchers(f)).map((v) => v.voucher_kind)).toEqual(['PAY_RECEIPT', 'PAY_RECEIPT']);
-    expect(await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).toEqual([]);
+    expect(await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).toEqual([]);
     expect(await refundEvents(f)).toEqual([]);
     expect(await payOrder(f, order.id)).toMatchObject({ status: 'PAID', refunded_fen: 0n });
     expect(await refundNotifications(f, sent.outRefundNo), 'the notification is kept').toHaveLength(
@@ -520,7 +520,7 @@ it.each(CHANNELS)(
         job.options.singletonKey,
         job.inTransaction,
       ]),
-    ).toEqual([['pay', `biz:${BIZ}:${order.biz_ref}`, true]]);
+    ).toEqual([['pay', `biz:${order.app_id}:${BIZ}:${order.biz_ref}`, true]]);
     expect(kit.published.map((p) => [p.event.name, p.event.appId, p.inTransaction])).toEqual([
       [REFUND_EVENT, f.subject.app_id, true],
     ]);
@@ -593,7 +593,7 @@ it('[AC-B2-15e#21] 退款通知与主动查询并发到达：只生效一次（�
   expect(await payOrder(f, order.id)).toMatchObject({ refunded_fen: refund.amount_fen });
   expect((await vouchers(f)).filter((v) => v.voucher_kind === 'PAY_REFUND')).toHaveLength(1);
   expect(await refundEvents(f)).toHaveLength(1);
-  expect(await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).toHaveLength(1);
+  expect(await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).toHaveLength(1);
 });
 
 it.each([

@@ -52,7 +52,7 @@ async function settledOnce(f: Fixture, order: OrderRow, trade: string): Promise<
   expect(await vouchers(f)).toEqual([receiptOf(row)]);
   expect(await paidEvents(f)).toHaveLength(1);
   expect(
-    (await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).filter(
+    (await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).filter(
       (job) => job.job === 'biz.reconcile',
     ),
   ).toHaveLength(1);

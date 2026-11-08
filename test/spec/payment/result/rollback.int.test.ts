@@ -140,7 +140,7 @@ async function refusingProcessLedger(
 async function rolledBack(f: Fixture, order: OrderRow) {
   expect(await payOrder(f, order.id)).toMatchObject(untouched(order));
   expect(await vouchers(f)).toEqual([]);
-  expect(await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).toEqual([]);
+  expect(await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).toEqual([]);
   expect(await paidEvents(f)).toEqual([]);
   expect(await userTraces(f)).toEqual(NO_USER_TRACES);
 }
@@ -156,11 +156,11 @@ async function settledOnce(f: Fixture, order: OrderRow, trade: string) {
   });
   expect(await vouchers(f)).toEqual([receiptOf(order)]);
   expect(
-    (await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).map((job) => [
+    (await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).map((job) => [
       job.job,
       job.singleton_key,
     ]),
-  ).toEqual([['biz.reconcile', `biz:${BIZ}:${order.biz_ref}`]]);
+  ).toEqual([['biz.reconcile', `biz:${order.app_id}:${BIZ}:${order.biz_ref}`]]);
   const events = await paidEvents(f);
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({ pay_order_id: order.id });

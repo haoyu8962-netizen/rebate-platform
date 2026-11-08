@@ -145,7 +145,7 @@ it.each(CHANNELS)(
     expect(await vouchers(f)).toEqual([receiptOf(order)]);
     expect(await anomalies(f)).toEqual([]);
     expect(sends(kit, 'biz.reconcile').map((job) => [job.queue, job.options.singletonKey])).toEqual(
-      [['pay', `biz:${BIZ}:${order.biz_ref}`]],
+      [['pay', `biz:${order.app_id}:${BIZ}:${order.biz_ref}`]],
     );
     expect(kit.published.map((p) => p.event.name)).toEqual(['pay_order.paid']);
     expect(sends(kit, 'order.close')).toEqual([]);

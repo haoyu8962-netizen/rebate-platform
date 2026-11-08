@@ -108,9 +108,9 @@ export function orderCloseRunKey(payOrderId: string, runAt: Date): string {
   return `${ORDER_CLOSE_JOB}:${payOrderId}:at${Math.ceil(runAt.getTime() / 1000)}`;
 }
 
-/** singletonKey of the fulfilment job: one queued or active per business object (serial per object). */
-export function bizReconcileKey(bizType: string, bizRef: string): string {
-  return `biz:${bizType}:${bizRef}`;
+/** singletonKey of the fulfilment job: one queued or active per business object (serial per object); app_id keeps the brands apart. */
+export function bizReconcileKey(appId: string, bizType: string, bizRef: string): string {
+  return `biz:${appId}:${bizType}:${bizRef}`;
 }
 
 /** B2-15e: singletonKey of one refund query slot: whole seconds after the refund's creation. */

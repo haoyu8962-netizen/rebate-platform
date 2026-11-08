@@ -88,9 +88,9 @@ it.each([
       expect(await vouchers(f)).toEqual([receiptOf(order)]);
       expect(await paidEvents(f)).toHaveLength(1);
       expect((await notifications(f)).map((row) => row.notify_id)).toEqual([built.notifyId]);
-      expect((await queuedByKey(f, `biz:${BIZ}:${order.biz_ref}`)).map((job) => job.job)).toEqual([
-        'biz.reconcile',
-      ]);
+      expect(
+        (await queuedByKey(f, `biz:${order.app_id}:${BIZ}:${order.biz_ref}`)).map((job) => job.job),
+      ).toEqual(['biz.reconcile']);
     });
   },
   90_000,

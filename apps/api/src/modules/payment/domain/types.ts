@@ -29,7 +29,7 @@ export type PayQueueName = 'pay';
  * order.query (singletonKey `order.query:<pay_order_id>:returned` for the client-return query,
  * `order.query:<pay_order_id>:t<seconds>` for a slot of pay.query_schedule),
  * order.close (singletonKey `order.close:<pay_order_id>`),
- * biz.reconcile (singletonKey `biz:<biz_type>:<biz_ref>`, the business object's fulfilment),
+ * biz.reconcile (singletonKey `biz:<app_id>:<biz_type>:<biz_ref>`, the business object's fulfilment),
  * refund.query (B2-15e: one refund query of a PROCESSING refund, payload RefundQueryPayload; the
  * same result handler as a refund notification, BR-PAY-06 ④),
  * bill.recon (B2-15j: the T+1 reconciliation of one app, payload PayBillReconPayload; the handler
