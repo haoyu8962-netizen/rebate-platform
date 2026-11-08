@@ -1,0 +1,19 @@
+id: B1-27l
+repo: rebate-platform
+title: 银行卡核验期间实名更正：锁内比核验预留时间与实名 verified_at，早于更正不绑卡、40901，核验记录照实落 matched（B1-27a money r1 S2，D10-1077 ③）
+type: impl
+# 2026-11-08 admin 入账（方案 couli-runs/ADMIN-backend/b127a-bankcard-plan.md，编排 14:25、D10-1077 ③ 认可）。实名更正与 saveBankCard 同一把用户行锁（FOR NO KEY UPDATE）。同键重试按现有语义 20901、须换新键（发生率极低，沿用）；重试会多一次付费核验，证据写明。不占契约槽、无迁移、不动资金；这是收紧，不放宽授权。RV2 评审（改收款账号）：money 先跑 Codex（D10-1075），规则测试写手与 spec-test 新鲜独立 Claude（D10-823 ②、D10-848）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/identity/application/payout-account{.ts,.test.ts}'
+  - 'apps/api/src/modules/identity/application/payout-bank-card{.ts,.test.ts}'
+test_paths:
+  - 'test/spec/identity/bank-card-correction-race/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/bank-card-correction-race/**'
+status: todo
