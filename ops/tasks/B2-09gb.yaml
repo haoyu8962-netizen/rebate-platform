@@ -35,4 +35,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/platform-restore/**'
-status: todo
+status: done
+pr: 2814
