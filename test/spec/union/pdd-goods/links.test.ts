@@ -99,7 +99,6 @@ it.each([undefined, '', 123])(
 it.each([
   [52101, 'rate_limited'],
   [52102, 'upstream_unavailable'],
-  [20005, 'upstream_rejected'],
 ] as const)(
   '[AC-B1-04u-LINK#6] 网关错误 %i 保留 %s，不吞成识别失败或调用转链',
   async (errorCode, code) => {

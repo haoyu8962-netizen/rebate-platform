@@ -1,0 +1,26 @@
+id: B1-04zzzzd
+repo: rebate-platform
+title: test-change B1-04zzzzc 前置（D10-1073 / D10-998 A）：只从冻结 .each 表与 jd-convert/kit.ts 删去将改期望的京东 403 / 2001403 / 2001602、拼多多 20031 / 20004 / 20005 行，主干上仍全绿；新期望由 B1-04zzzzc 的 test/spec/union/cred-class-jd-pdd/** 覆盖
+type: test-change
+# 2026-11-08 union 入账（D10-1073 拆法照 D10-998 A）。删处见方案 couli-runs/UNION-lane/cred-class-jd-pdd-plan-20261108.md §3.1 / §3.2：jd-core/response 顶层表一行与 #40 循环数组一元素、jd-goods/requests / jingfen-sku / secrecy、jd-narrow/flag、jd-live-wiring/startup、pdd-core/response（三行）、pdd-goods/links 各删行、jd-convert/kit.ts warned 数组三元素；resilience-wiring/kit.ts:46 只改注释（D10-1073 准）。别的一字不动；删行由新鲜独立 Claude 在 B1-04zzzzc 规则测试轮改好后原样拆出，另一位只读复核「只删这些行、其余断言没丢」，PR 正文逐行对照覆盖用例。
+# 时序照 D10-998 (c)：等 B1-04zzzzc 规则测试与实现评审都过、能落地时再合，合后 zzzzc 立刻变基落地。联盟适配器错误码用例，非资金测试；落地按 #24 报编排核。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/union/jd-core/response.test.ts'
+  - 'test/spec/union/jd-goods/requests.test.ts'
+  - 'test/spec/union/jd-goods/jingfen-sku.test.ts'
+  - 'test/spec/union/jd-goods/secrecy.test.ts'
+  - 'test/spec/union/jd-narrow/flag.test.ts'
+  - 'test/spec/union/jd-convert/kit.ts'
+  - 'test/spec/union/jd-live-wiring/startup.test.ts'
+  - 'test/spec/union/pdd-core/response.test.ts'
+  - 'test/spec/union/pdd-goods/links.test.ts'
+  - 'test/spec/union/resilience-wiring/kit.ts'
+  - 'ops/tasks/B1-04zzzzd.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

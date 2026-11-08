@@ -63,10 +63,7 @@ it.each([
 );
 
 const classifications: readonly (readonly [number, UnionErrorCode])[] = [
-  [20005, 'upstream_rejected'],
-  [20031, 'upstream_rejected'],
   [70036, 'upstream_rejected'],
-  [20004, 'upstream_rejected'],
   [10019, 'upstream_rejected'],
   [70032, 'upstream_rejected'],
   [70034, 'upstream_rejected'],

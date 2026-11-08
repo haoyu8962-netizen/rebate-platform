@@ -58,7 +58,6 @@ const OTHER_CODES: readonly { readonly code: string; readonly expected: UnionErr
   { code: '2002453', expected: 'upstream_rejected' },
   { code: '2002451', expected: 'upstream_rejected' },
   { code: '20024520', expected: 'upstream_rejected' },
-  { code: '403', expected: 'upstream_rejected' },
   { code: '500', expected: 'upstream_rejected' },
   { code: '429', expected: 'rate_limited' },
 ];

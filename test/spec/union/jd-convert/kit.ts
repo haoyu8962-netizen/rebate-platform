@@ -62,7 +62,7 @@ export const innerCodes: readonly (readonly [string, UnionErrorCode])[] = [
   ['201', 'upstream_rejected'],
   ['410', 'upstream_rejected'],
 ];
-export const warned: readonly string[] = ['2001701', '403', '2001403', '2001602', '2001603'];
+export const warned: readonly string[] = ['2001701', '2001603'];
 
 /** Structural stand-in for linking's server-built subclass; no linking import in union. */
 export class JdIdentity extends UnionIdentity {

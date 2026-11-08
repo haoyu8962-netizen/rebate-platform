@@ -413,17 +413,6 @@ it.each([
     }),
     '28',
   ],
-  [
-    '内层 code 403',
-    probeReply(
-      JSON.stringify({
-        code: 403,
-        message: 'FAKE_UPSTREAM_MESSAGE_TEXT',
-        requestId: 'FAKE_UPSTREAM_REQUEST_ID',
-      }),
-    ),
-    '403',
-  ],
 ])(
   '[AC-B1-04ze#26] 京东 warn 事件（%s）写一条 warn 日志，只带方法名与 code',
   async (_label, body, code) => {

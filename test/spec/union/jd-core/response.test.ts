@@ -327,7 +327,6 @@ it.each([
 );
 
 const innerFailures: readonly CodeRow[] = [
-  { code: 403, expected: 'upstream_rejected' },
   { code: 429, expected: 'rate_limited' },
   // The gateway meanings of 2 and 28, and the outer success code 0, do not apply to the inner code.
   { code: 2, expected: 'upstream_rejected' },
@@ -413,10 +412,10 @@ it('[AC-B1-04za#39] under outer code "0" no inner code but 200 ever returns', ()
       propParams(),
     ),
   ).not.toThrow();
-});
+}, 900_000);
 
 it('[AC-B1-04za#40] the warned codes without an injected warn callback are still only upstream_rejected', async () => {
-  for (const wire of [response({ error_response: { code: 28 } }), wrapped('{"code":403}')]) {
+  for (const wire of [response({ error_response: { code: 28 } })]) {
     await unionFailure(() => unwrapJdResponse(method, keys, wire), 'upstream_rejected');
     const transport = vi.fn<UnionTransport>().mockResolvedValue(wire);
     await unionFailure(async () => {

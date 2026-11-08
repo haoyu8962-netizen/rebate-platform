@@ -41,7 +41,6 @@ const innerFailures = [
   ['429', 'rate_limited'],
   ['410', 'link_unrecognized'],
   ['411', 'link_unrecognized'],
-  ['403', 'upstream_rejected'],
   ['999', 'upstream_rejected'],
 ] as const;
 

@@ -43,7 +43,7 @@ export function success(delayMs = 0): Reply {
   return { kind: 'success', delayMs };
 }
 
-/** 合成业务拒绝：现有分类表明确把 20031 归为 upstream_rejected。 */
+/** 合成业务拒绝：20031 属业务拒绝类（不重试、不计熔断） */
 export function rejected(): Reply {
   return { kind: 'business_rejected' };
 }

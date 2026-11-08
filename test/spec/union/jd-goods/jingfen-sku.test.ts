@@ -78,14 +78,14 @@ it('[AC-B1-04zc#86] sku 模式第一条价格异常也取它的 skuId，不换�
   expect(item).toMatchObject({ platform: 'jd', item_id: skuId });
 });
 
-it.each([
-  ['429', 'rate_limited'],
-  ['403', 'upstream_rejected'],
-] as const)('[AC-B1-04zc#87] sku 模式内层 %s → %s：上游失败不算取不到', async (code, expected) => {
-  const { adapter, requests } = wire(() => reply(failure(code)), mode('sku'));
-  await unionFailure(() => adapter.resolveLink(link, ctx), expected);
-  expect(requests).toHaveLength(1);
-});
+it.each([['429', 'rate_limited']] as const)(
+  '[AC-B1-04zc#87] sku 模式内层 %s → %s：上游失败不算取不到',
+  async (code, expected) => {
+    const { adapter, requests } = wire(() => reply(failure(code)), mode('sku'));
+    await unionFailure(() => adapter.resolveLink(link, ctx), expected);
+    expect(requests).toHaveLength(1);
+  },
+);
 
 it.each(forms)('[AC-B1-04zc#88] item 模式下 %s 直接得 itemId，不调上游', async (form) => {
   const { adapter, credentials, transport } = wire(() => listing([]), mode('item'));
