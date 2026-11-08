@@ -1,0 +1,22 @@
+id: CT-24zzb
+repo: rebate-platform
+title: 契约：后台提现列表 / 详情放开 user.lookup（04 §11.1「可见被查用户的提现记录」）——只持 user.lookup 时列表与详情都必须带 user_id（缺 → 10403），详情 user_id 与该提现用户不符 → 20001 [withdrawal_id]（照 adminGetClaim 防探测）（FU-WITHDRAWALS-USER-LOOKUP）
+type: contract
+# 2026-11-08 admin 入账（编排 13:25 盘点后续单，本线最高优先、无外部前提）。来源：CT-24y 契约评审 r1 S2——listAdminWithdrawals 只收 withdraw.review / fund.view，客服（user.lookup）查用户提现得 10403。
+# 照 CT-24d 找回列表先例：权限任一 withdraw.review / fund.view / user.lookup；只持 user.lookup 时 user_id 必填（缺 → 10403 admin_permission_denied），详情（getAdminWithdrawal）同样要求 user_id（缺 → 10403），给了 user_id（任何账号）而提现属于别的用户 → 20001 data.fields=[withdrawal_id]，与未知 id 同（adminGetClaim 先例）；持前两者照旧。只改描述与参数说明，响应形状不变。RV1。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

@@ -1,0 +1,20 @@
+id: B2-09zg
+repo: rebate-platform
+title: payout：后台提现列表 / 详情接受 user.lookup（CT-24zzb）——只持 user.lookup 时列表 / 详情缺 user_id → 10403 不读库，详情 user_id 不是该提现的用户 → 20001 [withdrawal_id]；持 withdraw.review / fund.view 照旧（FU-WITHDRAWALS-USER-LOOKUP）
+type: impl
+# 2026-11-08 admin 入账。实现照 CT-24zzb；只改读权限判定，不改返回字段与脱敏（收款账号与姓名仍只给脱敏值）。审计视图不涉及（只读不写审计）。RV2（payout 模块）；规则测试与评审新鲜独立 Claude（Codex 额度尽，D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: [CT-24zzb]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-withdrawals*.ts'
+  - 'apps/api/src/modules/payout/http/admin/withdrawals.controller*.ts'
+  - 'apps/api/src/modules/payout/http/admin/admin-withdrawals*.ts'
+test_paths:
+  - 'test/spec/payout/admin-withdrawals-lookup/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/admin-withdrawals-lookup/**'
+status: todo
