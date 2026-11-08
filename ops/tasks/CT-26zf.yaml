@@ -1,0 +1,23 @@
+id: CT-26zf
+repo: rebate-platform
+title: 契约：后台入池拒绝「类目禁售」——新错误码 30147 category_blocked（adminAddPoolItem / adminUpdatePoolItem）（FU-POOL-CATEGORY-BLOCK 契约前置）
+type: contract
+# 2026-11-08 be 入账（D10-1058 / D10-1059 ①：新增专用错误码，契约排契约槽 #2745 → #2849 → CT-24zzc → 本单）。只增不改：error-codes.yaml 加 30147（http 422，meaning「商品所在类目已被禁售，不能加入商品池」，action 后台只提示、不入池，retry never，sources 写 D10-1059）；openapi.yaml 的 adminAddPoolItem 与 adminUpdatePoolItem（仅 offline→online 复核时）x-error-codes 各加 30147；后台文案只写进 error-codes.yaml 的 meaning / action（后台尚无商品池页面，页面文案按 03 §9 放 apps/admin/src/texts、归 fe，建页时照用），不碰 texts.admin.default.json；oasdiff-accepted.txt 补对应两行；codegen 生成物随之更新。不改其他码与接口。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'contracts/error-codes.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

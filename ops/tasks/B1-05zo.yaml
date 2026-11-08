@@ -1,0 +1,24 @@
+id: B1-05zo
+repo: rebate-platform
+title: catalog：后台入池与 offline→online 复核按禁售类目拒绝、选品候选滤禁售类目（FU-POOL-CATEGORY-BLOCK）
+type: impl
+# 2026-11-08 be 入账（D10-1045 ② / D10-1058 / D10-1059；方案 couli-runs/FU-POOL-CATEGORY-BLOCK/plan.md）。两处写 pool_items 的入口——adminAddPoolItem（application/pool-admin.ts addItem）与 adminUpdatePoolItem 的 offline→online 复核（#recheck）——写库前用内存里的联盟详情（category_l1_id / category_l1_name、标题）过 catalog 现成 filterCategories（同一份 category_blocklist，与搜索 Tab / B1-04zzzz 同口径）：被拦 → CatalogError 30147 category_blocked（控制器 REFUSALS 加映射）、不写库，warn catalog_category_blocked（前缀 pool_admin:，只 platform / count）；无类目且无关键词规则命中 → 放行，warn catalog_category_missing（同前缀）。选品候选 searchPoolCandidates 也滤禁售类目（与拒绝入池一致）。不迁移、不落类目列；pool-refresh 不动（已在池的另立 FU-POOL-CATEGORY-RECHECK）。
+# 冻结：product-pool-admin/** 的 kit 不写 category_blocklist、demo 商品无类目，既有入库用例照绿，不改冻结；规则测试新目录。Codex 额度尽至 11-15：规则测试、spec-test、代码评审都由新鲜独立 Claude（D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: [CT-26zf]
+paths:
+  - 'apps/api/src/modules/catalog/application/pool-admin{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/application/pool-candidates{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/application/pool-category{.ts,.test.ts}'
+  - 'apps/api/src/modules/catalog/http/admin/product-pools.controller.ts'
+  - 'apps/api/src/modules/catalog/catalog.module.ts'
+  - 'test/spec/catalog/pool-category-block/**'
+test_paths:
+  - 'test/spec/catalog/pool-category-block/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
