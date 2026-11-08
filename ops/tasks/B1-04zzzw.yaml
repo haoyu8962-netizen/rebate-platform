@@ -1,0 +1,19 @@
+id: B1-04zzzw
+repo: rebate-platform
+title: test-change 淘宝详情类目按实录（D10-953 / D10-961）：详情只有类目名称、无类目 ID——新增一条按实录形状的用例（主干已绿、只新增），行为不变
+type: test-change
+# 2026-11-08 union 入账（D10-953，D10-961 ① 更正：不改行为）。依据：D10-859 探针 2026-11-08 06:21（凑狸应用 2 次调用，N=10）——taobao.tbk.item.info.upgrade.get 外层键 tbk_item_info_upgrade_get_response、results 单键包装 tbk_item_detail，item_basic_info 只有 level_one_category_name / category_name，无任何类目 ID；同商品与搜索 10/10 名称相等（规划/09 2_TB，couli #307；录制在私有库）。
+# 官方搜索与详情共用 goods.ts mapTaobaoDetail，搜索行有 level_one_category_id 照填，冻结 [AC-B1-04l#8]「有就填」不动。
+# 注释改写（goods.ts 头注释与 CAP-TB-02 两处 TODO、types.ts category_l1_id）移出本单：union 源码属归属实现路径，chore 分支过不了 evidence-check（owner 标签不豁免），并进下一张 union 单 FU-UNION-CRED-CLASS（补丁存 couli-runs/UNION-lane/B1-04zzzw-comments.patch）。
+# 本单：新目录 test/spec/union/taobao-detail-category/** 只新增一条用例（详情行按实录：无 level_one_category_id、有两个名称 → 不出 category_l1_id、出 category_l1_name），由新鲜独立 Claude 写、另一位只读复核；主干已绿，同 B1-04zzzu 先例。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/union/taobao-detail-category/**'
+  - 'ops/tasks/B1-04zzzw.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
