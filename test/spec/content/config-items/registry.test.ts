@@ -44,6 +44,8 @@
 // (off) by default with no seed row (ORDERS_JD_UNSEEDED).
 // B1-04zzz (D10-877): the five order_sync.rescan.taobao.* keys follow it (kit ORDER_RESCAN_TAOBAO),
 // unset by default with no seed rows (ORDER_RESCAN_TAOBAO_UNSEEDED).
+// B1-22x (D10-963): the five price.taobao.* keys follow them (kit PRICE_TAOBAO), three lists and two
+// enums, unset by default with no seed rows (PRICE_TAOBAO_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -82,6 +84,8 @@ import {
   PAYOUT,
   POOL,
   POOL_UNSEEDED,
+  PRICE_TAOBAO,
+  PRICE_TAOBAO_UNSEEDED,
   PROMO_LINK,
   PROMO_LINK_UNSEEDED,
   QUOTE,
@@ -143,6 +147,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...SHOP_SOURCE_UNSEEDED,
         ...ORDERS_JD_UNSEEDED,
         ...ORDER_RESCAN_TAOBAO_UNSEEDED,
+        ...PRICE_TAOBAO_UNSEEDED,
       ]),
     ]),
   );
@@ -160,6 +165,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...SHOP_SOURCE_UNSEEDED,
     ...ORDERS_JD_UNSEEDED,
     ...ORDER_RESCAN_TAOBAO_UNSEEDED,
+    ...PRICE_TAOBAO_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -197,6 +203,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...SHOP_SOURCE,
         ...ORDERS_JD,
         ...ORDER_RESCAN_TAOBAO,
+        ...PRICE_TAOBAO,
       ].map((entry) => entry.key),
     ),
   );
@@ -245,7 +252,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       LABOR_UNSEEDED.length -
       SHOP_SOURCE_UNSEEDED.length -
       ORDERS_JD_UNSEEDED.length -
-      ORDER_RESCAN_TAOBAO_UNSEEDED.length,
+      ORDER_RESCAN_TAOBAO_UNSEEDED.length -
+      PRICE_TAOBAO_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -394,6 +402,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...SHOP_SOURCE,
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
+    ...PRICE_TAOBAO,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -457,6 +466,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...SHOP_SOURCE,
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
+    ...PRICE_TAOBAO,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -528,6 +538,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...SHOP_SOURCE,
       ...ORDERS_JD,
       ...ORDER_RESCAN_TAOBAO,
+      ...PRICE_TAOBAO,
     ].map((entry) => entry.key),
   );
   for (const entry of [

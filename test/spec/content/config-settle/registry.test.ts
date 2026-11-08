@@ -46,6 +46,8 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // B1-08zi (D10-814 ⑥): then orders.jd.refunded_quantity_r9_enabled;
   // B1-04zzz (D10-877): then order_sync.rescan.taobao.enabled / days / hour.enabled /
   // week.enabled / window_minutes, in this order;
+  // B1-22x (D10-963): then price.taobao.member_title_keywords / coupon_titles / discount_titles /
+  // unknown_promo / basis, in this order;
   // nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
@@ -137,6 +139,11 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'order_sync.rescan.taobao.hour.enabled',
     'order_sync.rescan.taobao.week.enabled',
     'order_sync.rescan.taobao.window_minutes',
+    'price.taobao.member_title_keywords',
+    'price.taobao.coupon_titles',
+    'price.taobao.discount_titles',
+    'price.taobao.unknown_promo',
+    'price.taobao.basis',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),

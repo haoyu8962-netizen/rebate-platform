@@ -48,7 +48,8 @@ it('[AC-F1-02zx#1] 资格天数是唯一的可改业务配置，整数范围 1�
 // shop.entry.source.taobao / jd / pdd follow them in this order. B1-08zi (D10-814 ⑥):
 // orders.jd.refunded_quantity_r9_enabled follows them. B1-04zzz (D10-877):
 // order_sync.rescan.taobao.enabled / days / hour.enabled / week.enabled / window_minutes follow
-// it in this order, ending the tail.
+// it in this order. B1-22x (D10-963): price.taobao.member_title_keywords / coupon_titles /
+// discount_titles / unknown_promo / basis follow them in this order, ending the tail.
 const PAYOUT_KEYS = [
   'payout.single_cap_fen',
   'payout.daily_cap_fen',
@@ -149,6 +150,13 @@ const ORDER_RESCAN_TAOBAO_KEYS = [
   'order_sync.rescan.taobao.week.enabled',
   'order_sync.rescan.taobao.window_minutes',
 ];
+const PRICE_TAOBAO_KEYS = [
+  'price.taobao.member_title_keywords',
+  'price.taobao.coupon_titles',
+  'price.taobao.discount_titles',
+  'price.taobao.unknown_promo',
+  'price.taobao.basis',
+];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -181,6 +189,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...SHOP_SOURCE_KEYS,
     ...ORDERS_JD_KEYS,
     ...ORDER_RESCAN_TAOBAO_KEYS,
+    ...PRICE_TAOBAO_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);

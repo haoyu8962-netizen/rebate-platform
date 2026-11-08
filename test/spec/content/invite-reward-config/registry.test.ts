@@ -47,7 +47,8 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // (D10-736) shop.entry.source.taobao / jd / pdd in this order, then B1-08zi (D10-814 ⑥)
 // orders.jd.refunded_quantity_r9_enabled, then B1-04zzz (D10-877)
 // order_sync.rescan.taobao.enabled / days / hour.enabled / week.enabled / window_minutes in this
-// order, and nothing else.
+// order, then B1-22x (D10-963) price.taobao.member_title_keywords / coupon_titles /
+// discount_titles / unknown_promo / basis in this order, and nothing else.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
   const i = keys.indexOf('settle.statement.grace_days');
@@ -142,6 +143,11 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'order_sync.rescan.taobao.hour.enabled',
     'order_sync.rescan.taobao.week.enabled',
     'order_sync.rescan.taobao.window_minutes',
+    'price.taobao.member_title_keywords',
+    'price.taobao.coupon_titles',
+    'price.taobao.discount_titles',
+    'price.taobao.unknown_promo',
+    'price.taobao.basis',
   ]);
 });
 

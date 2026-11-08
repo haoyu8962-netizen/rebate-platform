@@ -342,6 +342,16 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   spec('order_sync.rescan.taobao.hour.enabled', 'boolean', 'config.business'),
   spec('order_sync.rescan.taobao.week.enabled', 'boolean', 'config.business'),
   businessInteger('order_sync.rescan.taobao.window_minutes', 1, 180),
+  // B1-22x (D10-959 / D10-963, 08 BR-PRICE-02): the Taobao price parameters union reads, in this
+  // order — the member price title keywords, the coupon titles and the discount titles (three
+  // lists), the handling of an unknown promotion (unavailable / add_back / count) and the price
+  // basis (promotion_path / coupon_only), all config.business, editable. No seed rows; unset or
+  // invalid = the 08 defaults, applied by union. Registration only.
+  spec('price.taobao.member_title_keywords', 'object', 'config.business'),
+  spec('price.taobao.coupon_titles', 'object', 'config.business'),
+  spec('price.taobao.discount_titles', 'object', 'config.business'),
+  businessEnum('price.taobao.unknown_promo', ['unavailable', 'add_back', 'count']),
+  businessEnum('price.taobao.basis', ['promotion_path', 'coupon_only']),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

@@ -450,6 +450,24 @@ export const ORDER_RESCAN_TAOBAO_UNSEEDED: readonly string[] = [
   'order_sync.rescan.taobao.week.enabled',
   'order_sync.rescan.taobao.window_minutes',
 ];
+// B1-22x (D10-963, BR-PRICE-02): the five Taobao price keys, registered right after
+// ORDER_RESCAN_TAOBAO in this order: editable config.business, three lists ('object') and two
+// enums with their options. Not part of expectedNow() either.
+export const PRICE_TAOBAO: readonly Expected[] = [
+  row('price.taobao.member_title_keywords', 'object', 'config.business'),
+  row('price.taobao.coupon_titles', 'object', 'config.business'),
+  row('price.taobao.discount_titles', 'object', 'config.business'),
+  enumRow('price.taobao.unknown_promo', ['unavailable', 'add_back', 'count']),
+  enumRow('price.taobao.basis', ['promotion_path', 'coupon_only']),
+];
+/** B1-22x (D10-963): all five are unset by default (union applies the 08 defaults), no seed rows. */
+export const PRICE_TAOBAO_UNSEEDED: readonly string[] = [
+  'price.taobao.member_title_keywords',
+  'price.taobao.coupon_titles',
+  'price.taobao.discount_titles',
+  'price.taobao.unknown_promo',
+  'price.taobao.basis',
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -476,6 +494,7 @@ export const expectedOf = (key: string): Expected => {
     ...SHOP_SOURCE,
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
+    ...PRICE_TAOBAO,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;
