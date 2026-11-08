@@ -5,6 +5,7 @@ type: impl
 # 2026-11-08 union 入账（D10-514 ③、D10-959 ②、D10-967 四点、D10-961 worker Clock 并入）。方案 couli-runs/UNION-lane/union-cred-class-plan-20261108.md。 ① union/domain/types.ts 加两个内部码：upstream_misconfigured（我方应用凭据 / 签名 / 接口权限：大淘客 10009 / 10010 / 10015 / 10016 / 10018 / 10020 / 10021 / 401，淘宝 TOP code 11——直连与大淘客 data 内两处）、site_auth_invalid（站长授权失效：大淘客 10072 / 10210 / 10211）；不进依赖故障组 → 不重试、熔断窗口算成功（熔断按平台 × online / offline 共用，单接口缺权限不拖垮平台），告警原样保留。infra/dataoke/response.ts、infra/taobao/response.ts 映射；taobao/search-fallback.ts FALLBACK_CODES 加两码（官方搜索遇 code 11 仍回落大淘客）；governed-adapter 只改注释。
 # ② D10-967 ③：catalog/detail.ts upstreamFailure 与 parsing/application/parsing.ts unionRefusal 各一行把两码映射到 BR-PROD-05 结果分类③暂时失败（50401 / 对应暂时码，不出 ref_expired、不下架），免 union 先合到 w1 合之间多出 50001；linking（站长授权 → 50301）与池刷新等展示侧仍归 w1 后续单。D10-967 ④：京东内层 403、拼多多 20031 不动，另立 FU-UNION-CRED-CLASS-JD-PDD。 ③ 冻结文件（D10-998 A）：.each 表要改期望的行由前置单 B1-04zzzy（#2787）先删，本单只把 8 个普通 it 块的期望码改为新码（旧实现上为红、按改动块判，标题不改），并在 detail-errors / share-code 末尾各新增一条红用例；新鲜独立 Claude 改、另一位只读核「无削弱」。新规则测试 test/spec/union/cred-class/**（映射、未受影响码不变、告警保留、不重试、不计熔断对照、配额 1 令牌、淘宝回落、classifyUnionError）。
 # ④ orders/worker-runtime.ts:343 createUnionSyncAccess 补传注入 clock（保持可选：冻结 4 处调用未传）；union/application/order-sync-ports.ts:59 注释改实情。⑤ 并入 B1-04zzzw 移出的注释改写：taobao/goods.ts 详情只有类目名称、关 CAP-TB-02 两处 TODO，types.ts category_l1_id 注释（补丁 couli-runs/UNION-lane/B1-04zzzw-comments.patch）。 风险：union / orders RV2，catalog / parsing RV1 → 整单 RV2；新鲜独立 Claude 写规则测试，spec-test 用 Claude（D10-848），代码评审 Codex money（额度用尽时照 approvals 36 / D10-913 独立 Claude）。不需要契约单（UnionErrorCode 是内部码）。
+# 完成 2026-11-08（#2841）：两码映射与回落、catalog / parsing 暂时码、worker 补 clock、详情类目注释并入；前置 B1-04zzzy #2787；Codex 额度用尽 → 独立 Claude money r1 pass。
 refs: []
 refs_hash: {}
 deps: []
@@ -35,7 +36,8 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/cred-class/**'
-status: todo
+status: done
+pr: 2841
 red_exempt:
   - file: 'test/spec/union/dataoke-wiring/startup.test.ts'
     test: '[AC-B1-04e#8] local 下大淘客凭据开启直接拒绝（prod 等待 KMS），不读文件、错误不带值'

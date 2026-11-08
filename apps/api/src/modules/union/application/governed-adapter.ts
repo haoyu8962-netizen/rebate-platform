@@ -10,7 +10,10 @@
 // failed answer ends the call with quota_exceeded.
 // Business refusals from the adapter (UnionError with a business code) are classified
 // `rejected`: not retried and not counted by the breaker; only timeouts, upstream throttling,
-// network and 5xx failures are.
+// network and 5xx failures are. B1-04zzzx (D10-967): the same holds for our own misconfiguration
+// (upstream_misconfigured: app credentials, signature, API permission) and an invalid site-owner
+// authorization (site_auth_invalid): retrying cannot fix either, and counting them would open the
+// breaker for every method of the platform; the adapter's warn hook still alerts once.
 // B1-04w: an adapter that declares `listOrdersMetering: 'per_request'` (the live Pinduoduo
 // adapter: tail-page probing plus reverse paging) gets no outer governance for listOrders;
 // instead it receives `CallCtx.gateUpstream`, and every upstream request it actually sends

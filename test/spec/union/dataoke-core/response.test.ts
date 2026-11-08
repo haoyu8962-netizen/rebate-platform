@@ -195,7 +195,7 @@ it('[AC-B1-04m#29] without an injected warn callback, warned codes are still onl
     ok({ error_response: { code: 11, sub_code: 'isv.permission-api-package-limit' } }),
   ];
   for (const wire of wires) {
-    await unionFailure(() => unwrapDataokeResponse(path, wire), 'upstream_rejected');
+    await unionFailure(() => unwrapDataokeResponse(path, wire), 'upstream_misconfigured');
     const transport = vi.fn<UnionTransport>().mockResolvedValue(wire);
     await unionFailure(async () => {
       const client = new DataokeClient({
@@ -206,7 +206,7 @@ it('[AC-B1-04m#29] without an injected warn callback, warned codes are still onl
         transport,
       });
       await client.request('GET', path, {}, { version });
-    }, 'upstream_rejected');
+    }, 'upstream_misconfigured');
     expect(transport).toHaveBeenCalledTimes(1);
   }
 });

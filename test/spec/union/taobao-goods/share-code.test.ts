@@ -134,3 +134,10 @@ it.each(shareErrors)('[AC-B1-04l#26] 淘口令错误 $name 得 $code', async ({ 
   await unionFailure(() => adapter.taobaoShareCode(CLICK_LINK, ctx), code);
   expect(transport).toHaveBeenCalledTimes(1);
 });
+
+it('[AC-B1-04zzzx#23] 淘口令错误 11 + sub_code 26（权限，不细分）得 upstream_misconfigured，告警一次、不重发', async () => {
+  const { adapter, transport, warn } = shareSetup(errorBody(11, '26'));
+  await unionFailure(() => adapter.taobaoShareCode(CLICK_LINK, ctx), 'upstream_misconfigured');
+  expect(transport).toHaveBeenCalledTimes(1);
+  expect(warn.mock.calls).toEqual([[{ method: TPWD, code: '11', sub_code: '26' }]]);
+});

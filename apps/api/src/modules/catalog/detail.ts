@@ -191,7 +191,10 @@ export function detailRawItemId(item: ItemRef, jdMode: string): string | undefin
  * (network / 5xx, throttling, governor timeout, open breaker, exhausted quota) with no usable cache
  * is 50401, the 「暂时查不到」 branch of BR-PRICE-11; getProduct reads the product pool first. A union refusal of the raw ID itself
  * (upstream_rejected / invalid_dto / link_unrecognized) is 30143 ref_expired (BR-PROD-05 结果分类
- * 「引用失效」). Anything else propagates unchanged.
+ * 「引用失效」). B1-04zzzx (D10-967 ③): our refused credentials / API permission
+ * (upstream_misconfigured) and an invalid site-owner authorization (site_auth_invalid) say nothing
+ * about the raw ID: 50401 like a dependency failure (结果分类 ③), never ref_expired or delisting.
+ * Anything else propagates unchanged.
  */
 export function upstreamFailure(error: unknown): unknown {
   if (error instanceof CatalogError) return error;
@@ -214,7 +217,10 @@ export function upstreamFailure(error: unknown): unknown {
   }
   if (
     (error instanceof UnionError &&
-      (error.code === 'upstream_unavailable' || error.code === 'rate_limited')) ||
+      (error.code === 'upstream_unavailable' ||
+        error.code === 'rate_limited' ||
+        error.code === 'upstream_misconfigured' ||
+        error.code === 'site_auth_invalid')) ||
     (error instanceof GovernanceError && error.code !== 'invalid_policy')
   ) {
     return new CatalogError(50401, 'detail: union temporarily unavailable', undefined, {

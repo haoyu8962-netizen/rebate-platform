@@ -1,12 +1,15 @@
 // 淘宝商品详情映射（B1-04l，② 段）：taobao.tbk.item.info.upgrade.get 的请求参数、results 解包与
-// TbkItemDetail → UnionItemDetail。字段按 10-06 物料搜索升级版形状（详情按同族假定）只读下列项，
-// 从不 spread 整份报文：item_basic_info.{title, pict_url, small_images.string[],
+// TbkItemDetail → UnionItemDetail。字段按 10-06 物料搜索升级版形状只读下列项（官方搜索的行也经
+// 这里映射），从不 spread 整份报文：item_basic_info.{title, pict_url, small_images.string[],
 // level_one_category_id, level_one_category_name}、price_promotion_info.{zk_final_price,
 // final_promotion_price, final_promotion_path_list.final_promotion_path_map_data[]}、
 // publish_info.income_info.commission_rate。white_image、reserve_price、income_rate、seller_id
 // （超 JS 安全整数）都不读。元转分只用 @couli/domain 的 parseYuanToFen（BR-PRICE-01：超两位小数、
 // 非数字、空串、负数一律按缺失，不截断；有限 number 先 String 再解析），价格经 mapTaobaoPrice。
-// TODO(规划/09 CAP-TB-02): 外层键与 results 包装键待商品物料权限批下后复录核对 — blocked on 详情录制
+// 详情实录（2026-11-08，凑狸应用，规划/09 2_TB；B1-04zzzw）：外层键 tbk_item_info_upgrade_get_response、
+// results 下单键包装 tbk_item_detail；item_basic_info 只有 level_one_category_name 与 category_name
+// 两个类目名称、没有任何类目 ID，故详情路径实际不出 category_l1_id、只出 category_l1_name；官方搜索的行
+// 带 level_one_category_id，照填。字段在就读，上游以后补上详情 ID 即自动生效。
 import { parseYuanToFen } from '@couli/domain';
 import { normalizeItemImages } from '../../domain/item-images.ts';
 import {
@@ -22,7 +25,7 @@ import {
 } from '../../domain/types.ts';
 
 export const TAOBAO_ITEM_DETAIL = 'taobao.tbk.item.info.upgrade.get';
-/** 按同族已录外层键 tbk_*_response 登记（TODO 待详情录制核对）。 */
+/** 外层键，2026-11-08 详情实录确认。 */
 export const TAOBAO_ITEM_DETAIL_ENVELOPE = 'tbk_item_info_upgrade_get_response';
 /** 本段固定 1（2 → 15/1911 scene 不支持，已录）。 */
 export const TAOBAO_ITEM_DETAIL_SCENE = 1;
@@ -73,8 +76,8 @@ export function detailItemId(ref: ItemRef): string {
 }
 
 /**
- * results 下的商品数组：非精简 JSON 每层数组外多一层单键包装，包装名未录到 → 取唯一键的数组，
- * 不写死包装名。results 缺失 / 空对象 / 空数组 → item_unavailable；results 不是对象、多个键、
+ * results 下的商品数组：非精简 JSON 每层数组外多一层单键包装（2026-11-08 实录为 tbk_item_detail）→
+ * 取唯一键的数组，不写死包装名。results 缺失 / 空对象 / 空数组 → item_unavailable；results 不是对象、多个键、
  * 包装值不是数组 → upstream_unavailable。
  */
 export function detailRows(inner: unknown): readonly unknown[] {

@@ -29,7 +29,7 @@
 //   taobao_search_row_skipped，字段只有 reason，不含取值；不走适配器 warn（那是 API 权限告警）。
 //   整页每行都因缺标题或佣金非法而跳过 → invalid_dto（不调换算）；换不到不算非法，本页照常返回。
 // ⑧ 外层：外层键缺失或不是对象 → upstream_unavailable（request() 的做法）；result_list / map_data
-//   损坏 → invalid_dto；code 11 → upstream_rejected。
+//   损坏 → invalid_dto；code 11 → upstream_misconfigured（B1-04zzzx）。
 // ⑨ 同页去重（B1-04zzj，D10-692 S2-4）：同一页里换回的凑狸 item_id（详情口径）相同的行只保留首条
 //   能返回的那条（被跳过 / 换不到的行不算首条），其余不出现，顺序不变；不报错、不另发告警。
 //   nextCursor 仍按原始条数（②）。只在同一页内去重，不跨页。

@@ -345,7 +345,7 @@ it('[AC-B1-04k#16] 淘宝 warn 事件写一条 warn 日志，只带方法名与 
       { q: 'FAKE_QUERY_TEXT' },
       { envelope: ENVELOPE },
     ),
-  ).rejects.toMatchObject({ code: 'upstream_rejected' });
+  ).rejects.toMatchObject({ code: 'upstream_misconfigured' });
   const added = logs.slice(before);
   expect(added).toHaveLength(1);
   expect(added[0]!.level).toBe('warn');

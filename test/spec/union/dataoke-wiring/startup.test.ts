@@ -416,7 +416,7 @@ it('[AC-B1-04e#16] 大淘客 warn 事件写一条 warn 日志，只带路径与 
   const before = logs.length;
   await expect(
     client.request('GET', DATAOKE_PATH, { q: 'FAKE_QUERY_TEXT' }, { version: DATAOKE_VERSION }),
-  ).rejects.toMatchObject({ code: 'upstream_rejected' });
+  ).rejects.toMatchObject({ code: 'upstream_misconfigured' });
   const added = logs.slice(before);
   expect(added).toHaveLength(1);
   expect(added[0]!.level).toBe('warn');

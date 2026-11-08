@@ -134,6 +134,16 @@ const DEPENDENCY_UNION_CODES: ReadonlySet<UnionErrorCode> = new Set<UnionErrorCo
   'rate_limited',
 ]);
 
+/**
+ * B1-04zzzx (D10-967 ③): our own refused credentials / API permission and an invalid site-owner
+ * authorization. Not retried nor counted by the breaker (union classifies them as refusals), but
+ * they say nothing about this hit: the temporary code (BR-PROD-05 结果分类 ③), never 50001.
+ */
+const MISCONFIGURED_UNION_CODES: ReadonlySet<UnionErrorCode> = new Set<UnionErrorCode>([
+  'upstream_misconfigured',
+  'site_auth_invalid',
+]);
+
 /** Governor outcomes that mean the dependency is unavailable; invalid_policy is a config bug. */
 const DEPENDENCY_GOVERNANCE_CODES: ReadonlySet<GovernanceErrorCode> = new Set<GovernanceErrorCode>([
   'timeout',
@@ -166,7 +176,9 @@ interface Identified {
 function unionRefusal(error: unknown, notFound: ParsingErrorCode): ParsingErrorCode | null {
   if (error instanceof UnionError) {
     if (error.code === 'item_unavailable') return notFound;
-    if (DEPENDENCY_UNION_CODES.has(error.code)) return DEPENDENCY_DOWN;
+    if (DEPENDENCY_UNION_CODES.has(error.code) || MISCONFIGURED_UNION_CODES.has(error.code)) {
+      return DEPENDENCY_DOWN;
+    }
     return UNRECOGNIZED_UNION_CODES.has(error.code) ? UNRECOGNIZED : null;
   }
   if (error instanceof DemoUnionError) {

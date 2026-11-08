@@ -285,7 +285,7 @@ it('[AC-B1-04j#21] code 11 is rejected and warned once with only method, code an
   );
   const error = await unionFailure(
     () => adapter.request(method, { q: 'x' }, { envelope }),
-    'upstream_rejected',
+    'upstream_misconfigured',
   );
   expect(error.message).toContain(method);
   expect(error.message).toContain('11');

@@ -74,17 +74,20 @@ function failingAdapter(
   };
 }
 
-it.each(['item_unavailable', 'link_unrecognized', 'upstream_rejected'] as const)(
-  '[AC-B1-04b-UNIT#1] 业务拒绝 %s 不重试',
-  async (code) => {
-    const { adapter, attempts } = failingAdapter(code);
-    const port = createGovernedAdapter(adapter, { endpoint, scheduler, quota });
-    await expect(port.getItem({ platform: 'jd', itemId: 'item-A' }, online)).rejects.toMatchObject({
-      code,
-    });
-    expect(attempts()).toBe(1);
-  },
-);
+it.each([
+  'item_unavailable',
+  'link_unrecognized',
+  'upstream_rejected',
+  'upstream_misconfigured',
+  'site_auth_invalid',
+] as const)('[AC-B1-04b-UNIT#1] 业务拒绝 %s 不重试', async (code) => {
+  const { adapter, attempts } = failingAdapter(code);
+  const port = createGovernedAdapter(adapter, { endpoint, scheduler, quota });
+  await expect(port.getItem({ platform: 'jd', itemId: 'item-A' }, online)).rejects.toMatchObject({
+    code,
+  });
+  expect(attempts()).toBe(1);
+});
 
 it.each(['upstream_unavailable', 'rate_limited'] as const)(
   '[AC-B1-04b-UNIT#2] 依赖故障 %s 按幂等读重试两次',

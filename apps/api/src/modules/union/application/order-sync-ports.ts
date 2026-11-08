@@ -56,7 +56,9 @@ const PLATFORMS: RegisteredPlatform[] = [...REGISTERED_PLATFORMS];
 
 export function createUnionSyncAccess(options: UnionSyncAccessOptions): UnionSyncAccess {
   const { db, endpoints, breaker, logger } = options;
-  // B1-22b: the request-side time guard reads the injected Clock (app.module always passes it).
+  // B1-22b: the request-side time guard reads the injected Clock. The admin wiring
+  // (orders-admin.module) and the worker runtime (orders/worker-runtime.ts, B1-04zzzx) pass it; the
+  // SystemClock fallback only serves callers that build the access without one (some test kits).
   const clock = options.clock ?? new SystemClock();
   /** Platforms whose unresolved credential owner was already logged by this instance. */
   const reported = new Set<RegisteredPlatform>();

@@ -73,3 +73,17 @@ it.each(['tbk_item_detail', 'synthetic_detail_wrapper'])(
     expect(transport).toHaveBeenCalledTimes(1);
   },
 );
+
+it('[AC-B1-04zzzx#22] 详情 code 11 + sub_code 50001（权限，不细分）得 upstream_misconfigured，告警一次、不重发', async () => {
+  const { adapter, transport, warn } = setup(() => errorBody(11, '50001'));
+  const error = await unionFailure(() => adapter.getItem(ref, ctx), 'upstream_misconfigured');
+  expect(transport).toHaveBeenCalledTimes(1);
+  expect(warn.mock.calls).toEqual([
+    [{ method: 'taobao.tbk.item.info.upgrade.get', code: '11', sub_code: '50001' }],
+  ]);
+  // 错误信息与告警都不带上游 msg / sub_msg / request_id。
+  for (const marker of ['synthetic remote error', '合成错误说明', 'synthetic-error-request']) {
+    expect(visible(error)).not.toContain(marker);
+    expect(visible(warn.mock.calls)).not.toContain(marker);
+  }
+});

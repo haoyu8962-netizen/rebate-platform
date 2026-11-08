@@ -345,6 +345,8 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
     endpoints,
     breaker: (platform) => governed.get(platform)?.offlineBreakerState() ?? 'closed',
     logger,
+    // B1-04zzzx (D10-961): the site-owner authorization expiry (BR-ID-24 ④) reads the injected Clock.
+    clock,
   });
   const cursors = createSyncCursorStore(db, clock);
 

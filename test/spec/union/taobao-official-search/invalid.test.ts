@@ -266,7 +266,10 @@ it.each([
 
 it('[AC-B1-04zx#43] code 11 权限错误 → upstream_rejected，告警一次（只带方法名与 code / sub_code），不调换算', async () => {
   const h = setup({ page: () => topError(11, 'isv.permission-api-package-limit') });
-  const error = await unionFailure(() => h.adapter.searchItems(query, ctx), 'upstream_rejected');
+  const error = await unionFailure(
+    () => h.adapter.searchItems(query, ctx),
+    'upstream_misconfigured',
+  );
   expect(h.warn).toHaveBeenCalledTimes(1);
   expect(h.warn).toHaveBeenCalledWith({
     method: OFFICIAL_SEARCH,

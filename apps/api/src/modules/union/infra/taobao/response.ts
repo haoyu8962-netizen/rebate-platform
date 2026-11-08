@@ -2,7 +2,8 @@
 // 外层键由调用方按接口显式给出（② 段每个接口用常量登记），不由方法名推导。
 // HTTP 5xx → upstream_unavailable；body 非 JSON / 非对象 → upstream_unavailable；
 // 顶层有 error_response 先判错误：code 7 或 sub_code 以 isp.call-limited 开头 → rate_limited；
-// code 11 → upstream_rejected 并告警一次；code 15 → upstream_rejected；其他 code → upstream_rejected。
+// 其余 code 11 → upstream_misconfigured（B1-04zzzx，D10-967：我方应用无 API 权限）；code 11 都告警一次；
+// code 15 → upstream_rejected；其他 code → upstream_rejected。
 // 数字 code 与同值字符串同等处理。否则必须有该外层键（自有属性）且值为对象，返回其内层对象；
 // 缺键 / 非对象 → upstream_unavailable。错误信息只带方法名与 code / sub_code，
 // 不带 msg、sub_msg、request_id 与请求内容；这里只取外层，不做任何字段映射。
@@ -68,7 +69,9 @@ function classify(
   ) {
     return businessSubCodes[subCode]!;
   }
-  // code 11（无权限）、15（业务错，按 sub_code 细分留给 ② 段）与表外 code 都是上游拒绝。
+  // code 11（无 API 权限，限流子码已在上面）：我方应用配置问题，不重试、不计熔断（B1-04zzzx）。
+  if (code === PERMISSION_CODE) return 'upstream_misconfigured';
+  // 15（业务错，表外 sub_code）与表外 code 都是上游拒绝。
   return 'upstream_rejected';
 }
 

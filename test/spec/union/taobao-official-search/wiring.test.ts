@@ -249,7 +249,7 @@ it('[AC-B1-04zx#70] 跳行写独立 warn 事件 taobao_search_row_skipped：平�
     }
 
     refusing = true;
-    await refused(() => adapter.searchItems(query, ctx), 'upstream_rejected');
+    await refused(() => adapter.searchItems(query, ctx), 'upstream_misconfigured');
     expect(logText(warnEntries(app.logs))).toContain(PERMISSION_EVENT);
   } finally {
     await app.close();

@@ -5,8 +5,9 @@
 // 开关：searchSource = official_first（UnionModule 保证此时有大淘客客户端，没有就拒绝启动）。官方、大淘客两种
 // 模式不回落。
 //
-// ① 触发：只看第 1 页（cursor 为空）。官方这一步抛 upstream_unavailable、rate_limited、upstream_rejected（含
-//   code 11；搜索与换算 ID 同样算）、到限时，或成功但 items 为空（含全部换不到 ID）。invalid_dto、
+// ① 触发：只看第 1 页（cursor 为空）。官方这一步抛 upstream_unavailable、rate_limited、upstream_rejected、
+//   upstream_misconfigured（code 11 无 API 权限，B1-04zzzx）、site_auth_invalid（官方搜索不会出，与大淘客侧对称
+//   列入；搜索与换算 ID 同样算）、到限时，或成功但 items 为空（含全部换不到 ID）。invalid_dto、
 //   adapter_unimplemented、读推广位等清单外的失败、调用方取消都不回落，原样抛。
 // ② 单一来源：回落时官方这一步的结果整个作废，items、nextCursor、quoted_at 全取大淘客这一次（quoted_at 是大淘客
 //   收到响应的时刻，#dataokeSearch 自己取）。续页按游标前缀走，不回落、不换源，也不看冷却。
@@ -25,7 +26,13 @@ import { UnionError, type CallCtx, type UnionErrorCode } from '../../domain/type
 export const TAOBAO_OFFICIAL_COOLDOWN_MS = 60_000;
 
 /** The UnionError codes of a failed official step that fall back (see the header ①). */
-const FALLBACK_CODES = ['upstream_unavailable', 'rate_limited', 'upstream_rejected'] as const;
+const FALLBACK_CODES = [
+  'upstream_unavailable',
+  'rate_limited',
+  'upstream_rejected',
+  'upstream_misconfigured',
+  'site_auth_invalid',
+] as const;
 
 type TaobaoSearchFailureReason = (typeof FALLBACK_CODES)[number];
 

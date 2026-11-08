@@ -35,8 +35,10 @@ export function isRegisteredPlatform(value: unknown): value is RegisteredPlatfor
 
 /**
  * Internal failures, not new HTTP error codes. Adapters report what the platform answered:
- * a business refusal (item_unavailable, link_unrecognized, upstream_rejected) or a dependency
- * failure (upstream_unavailable: network error or 5xx; rate_limited: upstream throttling).
+ * a business refusal (item_unavailable, link_unrecognized, upstream_rejected; and, B1-04zzzx,
+ * upstream_misconfigured / site_auth_invalid for refused credentials or authorization) or a
+ * dependency failure (upstream_unavailable: network error or 5xx; rate_limited: upstream
+ * throttling).
  */
 export type UnionErrorCode =
   | 'adapter_unimplemented'
@@ -47,10 +49,25 @@ export type UnionErrorCode =
   | 'item_unavailable'
   | 'link_unrecognized'
   | 'upstream_rejected'
+  /**
+   * B1-04zzzx (D10-967): our own app credentials, signature or API permission were refused
+   * (大淘客 10009 / 10010 / 10015 / 10016 / 10018 / 10020 / 10021 / 401, Taobao TOP code 11).
+   * A business refusal: not retried, not a breaker failure; the adapter still warns once.
+   */
+  | 'upstream_misconfigured'
+  /**
+   * B1-04zzzx (D10-967): the site owner's (站长) authorization is invalid (大淘客 10072 / 10210 /
+   * 10211). A business refusal: not retried, not a breaker failure; the adapter still warns once.
+   */
+  | 'site_auth_invalid'
   | 'upstream_unavailable'
   | 'rate_limited';
 
-/** The UnionError codes that mean the dependency itself failed (02 §6.2: retry and breaker). */
+/**
+ * The UnionError codes that mean the dependency itself failed (02 §6.2: retry and breaker).
+ * upstream_misconfigured and site_auth_invalid are deliberately absent (B1-04zzzx, D10-967): a
+ * retry cannot fix a refused credential or authorization, so they classify as `rejected`.
+ */
 const DEPENDENCY_FAILURE_CODES: ReadonlySet<UnionErrorCode> = new Set<UnionErrorCode>([
   'upstream_unavailable',
   'rate_limited',
@@ -177,7 +194,9 @@ export interface UnionItem extends ItemRef {
   /**
    * B1-04l (FU-CATEGORY-BLOCKLIST): the union's level-one category id, as a decimal string (Taobao
    * level_one_category_id). Filled only by the live Taobao adapter; jd / pdd / demo leave it absent,
-   * and so does Taobao when the upstream gave none.
+   * and so does Taobao when the upstream gave none. B1-04zzzw: Taobao's official search rows carry
+   * it; its item detail (recorded 2026-11-08) carries only the two category names and no id, so
+   * the detail path leaves it absent in practice.
    */
   readonly category_l1_id?: string;
   /** B1-04l: the union's level-one category name as given (Taobao level_one_category_name). */

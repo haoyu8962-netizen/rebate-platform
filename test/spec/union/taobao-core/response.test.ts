@@ -159,7 +159,7 @@ it('[AC-B1-04j#27] code 11 without an injected warn callback is still only upstr
         envelope,
         response({ error_response: { code: 11, sub_code: 'isv.permission-api-package-limit' } }),
       ),
-    'upstream_rejected',
+    'upstream_misconfigured',
   );
   const transport = vi
     .fn<UnionTransport>()
@@ -174,7 +174,7 @@ it('[AC-B1-04j#27] code 11 without an injected warn callback is still only upstr
       endpoint,
     });
     await adapter.request(method, {}, { envelope });
-  }, 'upstream_rejected');
+  }, 'upstream_misconfigured');
   expect(transport).toHaveBeenCalledTimes(1);
 });
 

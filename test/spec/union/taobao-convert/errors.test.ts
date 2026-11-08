@@ -64,7 +64,7 @@ it('[AC-B1-04d#23] 签名 / 凭据类外层 code 照 B1-04m 由大淘客客户�
   const h = setup({ reply: failed(10021) });
   const error = await unionFailure(
     () => h.adapter.convert(req, identity, ctx),
-    'upstream_rejected',
+    'upstream_misconfigured',
   );
   expect(h.dataokeWarn).toHaveBeenCalledTimes(1);
   expect(h.dataokeWarn.mock.calls[0]![0]).toMatchObject({ code: '10021' });

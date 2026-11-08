@@ -30,6 +30,8 @@ export const UNION_CODES = [
   'upstream_rejected',
   'upstream_unavailable',
   'rate_limited',
+  'upstream_misconfigured',
+  'site_auth_invalid',
 ] as const satisfies readonly UnionErrorCode[];
 type MissingCode = Exclude<UnionErrorCode, (typeof UNION_CODES)[number]>;
 export const ALL_CODES_LISTED: [MissingCode] extends [never] ? true : false = true;
