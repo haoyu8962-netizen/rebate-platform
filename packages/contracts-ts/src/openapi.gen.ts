@@ -4013,6 +4013,13 @@ export interface paths {
          *     (`[uid]` or `[phone]`). Returns the user as GET /admin/v1/users/{user_id} does, with the
          *     phone number masked (the full number only through POST /admin/v1/users/{user_id}/reveal).
          *     Lookup by order number comes with the order console.
+         *
+         *     Fields blanked by permission (04 §11.1, `user.list` sees non-sensitive fields only;
+         *     BR-TEXT-08 internal note; D10-1042, D10-1048): for an account holding none of the risk
+         *     permission points `risk.freeze`, `risk.ban`, `risk.blocklist` and `risk.appeal` (a super
+         *     admin holds every point and is not such an account), `risk.reason` is null.
+         *     `risk.reason_category`, `risk.state` and every other field are as usual, and the shape of
+         *     the response does not change. An account holding any of those points is not affected.
          */
         get: operations["adminLookupUser"];
         put?: never;
@@ -4052,6 +4059,14 @@ export interface paths {
          *     BR-ID-28; null when none). The full values stay with the audited reveal. This operation
          *     is implemented; the five new fields are 实现另单 and stay optional until that
          *     implementation is merged.
+         *
+         *     Fields blanked by permission (04 §11.1, `user.list` sees non-sensitive fields only;
+         *     BR-TEXT-08 internal note; D10-1042, D10-1048): for an account holding none of the risk
+         *     permission points `risk.freeze`, `risk.ban`, `risk.blocklist` and `risk.appeal`, whether it
+         *     came in with `user.list` or `user.lookup` (a super admin holds every point and is not such
+         *     an account), `risk.reason` is null. `risk.reason_category`, `risk.state` and every other
+         *     field are as usual, and the shape of the response does not change. An account holding any
+         *     of those points is not affected.
          */
         get: operations["adminGetUser"];
         put?: never;
@@ -4471,6 +4486,10 @@ export interface paths {
          *     edit, and a phone edit of an account without the flag, neither unbind nor clear anything.
          *     The audit record of such a save also lists the providers unbound and that the flag was
          *     cleared; the response shape is unchanged (no unbind count in it).
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; D10-1042, D10-1048): the user in
+         *     the response is blanked as on GET /admin/v1/users/{user_id}. For an account holding no
+         *     risk.* permission point, `risk.reason` is null; the shape of the response does not change.
          */
         patch: operations["adminEditUserProfile"];
         trace?: never;
@@ -4928,6 +4947,13 @@ export interface paths {
          *     The raw union payload (union_raw_payloads, the 「原始报文」 card of the design spec) is not
          *     returned: 04 §11 defines no permission point for it, so it stays out of this contract
          *     until one is decided (pending). Reading does not write an audit record.
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; D10-1042, D10-1048): for an
+         *     account without `order.view`, which came in through `user.lookup` with `user_id` (a super
+         *     admin holds every point and is not such an account), `last_hold_note`,
+         *     `commission_rate_bp` and `commission_split.reserve_bp` are null. The amounts, the statuses,
+         *     the `hold_reason` enum, the beneficiaries' shares and every other field are as usual, and
+         *     the shape of the response does not change. An account holding `order.view` is not affected.
          */
         get: operations["adminGetOrder"];
         put?: never;
@@ -4970,6 +4996,11 @@ export interface paths {
          *     reason_code, note), which the detail returns as `last_hold_by`, `last_hold_by_name`,
          *     `last_hold_note` and `last_hold_at`. The response is the order detail as it is now (same
          *     shape as GET /admin/v1/orders/{order_id}).
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; D10-1042, D10-1048): the order
+         *     detail in the response is blanked as on GET /admin/v1/orders/{order_id}. For an account
+         *     without `order.view`, `last_hold_note`, `commission_rate_bp` and
+         *     `commission_split.reserve_bp` are null; the shape of the response does not change.
          */
         post: operations["adminHoldOrder"];
         delete?: never;
@@ -5007,6 +5038,11 @@ export interface paths {
          *     the console greys out 【恢复结算】; BR-FUND-06 细则). Writes an audit record (action unhold,
          *     reason_code, note). The response is the order detail as it is now (same shape as GET
          *     /admin/v1/orders/{order_id}).
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; D10-1042, D10-1048): the order
+         *     detail in the response is blanked as on GET /admin/v1/orders/{order_id}. For an account
+         *     without `order.view`, `last_hold_note`, `commission_rate_bp` and
+         *     `commission_split.reserve_bp` are null; the shape of the response does not change.
          */
         post: operations["adminUnholdOrder"];
         delete?: never;
@@ -5050,6 +5086,11 @@ export interface paths {
          *     Writes an audit record (action `order_reason_sub_set`, with the old and new
          *     reason_sub, `none` written as null, and the order's reason; no personal information). The
          *     response is the order detail as it is now (same shape as GET /admin/v1/orders/{order_id}).
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; D10-1042, D10-1048): the order
+         *     detail in the response is blanked as on GET /admin/v1/orders/{order_id}. For an account
+         *     without `order.view`, `last_hold_note`, `commission_rate_bp` and
+         *     `commission_split.reserve_bp` are null; the shape of the response does not change.
          */
         post: operations["adminSetOrderReasonSub"];
         delete?: never;
@@ -5094,6 +5135,11 @@ export interface paths {
          *     is accepted. `reason` is required (5–200 characters, BR-ATTR-20 ③; else 20001 with
          *     `data.fields=[reason]`) and goes into the audit record. The response is the order detail
          *     as it is now (same shape as GET /admin/v1/orders/{order_id}).
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; D10-1042, D10-1048): the order
+         *     detail in the response is blanked as on GET /admin/v1/orders/{order_id}. For an account
+         *     without `order.view`, `last_hold_note`, `commission_rate_bp` and
+         *     `commission_split.reserve_bp` are null; the shape of the response does not change.
          */
         post: operations["adminReassignOrder"];
         delete?: never;
@@ -5385,6 +5431,12 @@ export interface paths {
          *     attribution time, newest first), each with its time and scene only: no product, shop,
          *     promotion or raw union data. It is empty for evidence `none`. Reading does not write an
          *     audit record.
+         *
+         *     Fields blanked by permission (BR-TEXT-08 internal note; D10-1042, D10-1048): for an
+         *     account without `order.claim`, which came in through `user.lookup` with `user_id` (a super
+         *     admin holds every point and is not such an account), `reason` is null. `items[].reject_reason`,
+         *     `matches`, `evidence_links` and every other field are as usual, and the shape of the
+         *     response does not change. An account holding `order.claim` is not affected.
          */
         get: operations["adminGetClaim"];
         put?: never;
@@ -17233,7 +17285,7 @@ export interface components {
         AdminUserRiskState: {
             state: components["schemas"]["AdminUserRiskStateCode"];
             reason_category: components["schemas"]["AdminRiskReasonCategory"] | null;
-            /** @description Internal reason of the last change (console only, never shown to the user). */
+            /** @description Internal reason of the last change (console only, never shown to the user). Null on the user detail and lookup reads for an account holding no risk.* permission point (D10-1048). */
             reason: string | null;
             /**
              * Format: date-time
@@ -18045,9 +18097,9 @@ export interface components {
             subsidy_commission_fen: components["schemas"]["Fen"];
             /**
              * Format: int32
-             * @description Platform reserve ratio of the rule version (commission_rule_reserves), basis points.
+             * @description Platform reserve ratio of the rule version (commission_rule_reserves), basis points. Null on GET /admin/v1/orders/{order_id} for an account without order.view (D10-1048).
              */
-            reserve_bp: number;
+            reserve_bp: number | null;
             reserve_fen: components["schemas"]["Fen"];
             tlj_deduct_fen: components["schemas"]["Fen"];
             base_fen: components["schemas"]["Fen"];
@@ -18139,7 +18191,7 @@ export interface components {
             settle_period: string | null;
             /**
              * Format: int32
-             * @description Union commission rate in basis points; null when the union gave none.
+             * @description Union commission rate in basis points; null when the union gave none, and on GET /admin/v1/orders/{order_id} for an account without order.view (D10-1048).
              */
             commission_rate_bp: number | null;
             /**
@@ -18163,7 +18215,7 @@ export interface components {
             last_hold_by: components["schemas"]["Id"] | null;
             /** @description The display name of last_hold_by (admin_users.display_name, else the username); null when last_hold_by is null or the account is deleted. */
             last_hold_by_name: string | null;
-            /** @description The note of the latest manual hold, from its audit record; null when never held by hand. */
+            /** @description The note of the latest manual hold, from its audit record; null when never held by hand, and on GET /admin/v1/orders/{order_id} for an account without order.view (D10-1048). */
             last_hold_note: string | null;
             /**
              * Format: date-time
@@ -18755,7 +18807,7 @@ export interface components {
             /** @description As the list row's; null while the claim is submitted. */
             evidence_level: components["schemas"]["AdminClaimEvidenceLevel"] | null;
             status: components["schemas"]["ClaimStatus"];
-            /** @description Note of the latest approval or rejection (claims.reason); null before any. */
+            /** @description Note of the latest approval or rejection (claims.reason); null before any, and on GET /admin/v1/claims/{claim_id} for an account without order.claim (D10-1048). */
             reason: string | null;
             items: components["schemas"]["AdminClaimItem"][];
         };

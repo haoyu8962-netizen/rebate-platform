@@ -1,0 +1,38 @@
+{
+  "risk_note": "RV1 (contract). Accounts without the matching business point get internal text and platform ratios blanked in admin detail responses (rulings D10-1042, D10-1048 ①②, D10-1074): adminGetUser / adminLookupUser risk.reason when the account holds no risk.* point (user.list too; reason_category and the state stay); adminGetOrder last_hold_note, commission_rate_bp and commission_split.reserve_bp when it holds no order.view; adminGetClaim reason when it holds no order.claim. The write operations that answer with the same details say so too (adminHoldOrder, adminUnholdOrder, assign, adminSetOrderReasonSub, adminEditUserProfile; FU-ADMIN-WRITE-READBACK-BLANK); claim approve / reject need nothing, they require order.claim. reserve_bp is widened to nullable, registered in contracts/oasdiff-accepted.txt (only the admin front end reads it; apps/admin tsc passes). Implementation is B1-10o and B1-10p.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "codex-run.sh review --review-type contract (D10-1075, medium). Round 1 over the implementation commit: pass, no findings. Round 2 over the increment (write operations' read-backs): pass, no findings. Static; the orchestrator ran codegen, the four route generators (no drift), contracts:check 0, contracts-ts 392/392, tsc -b apps/api test apps/admin 0. oasdiff is not available locally: the five accepted lines' paths are checked only by CI. couli-runs/CT-24zzd/review-contract-r1.json, review-contract-r2.json. The first CI run refused the five accepted lines (their paths were a guess); they were replaced with the text CI printed ([response-property-became-nullable], anyOf path), comments unchanged."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "not re-run for this task: test/properties is unchanged from main; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "legacy_no_red": true,
+  "task": "CT-24zzd",
+  "spec_commit": "b2c5080629336de9dd2661669c705d1cdab9b582",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "37eff9db0c17c30938e90ce4a8ab434962b3f966",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}

@@ -74,3 +74,11 @@ GET /v1/products/{product_key}/price-trend added the new `price_trend.source.pdd
 # together with the console (D10-557, D10-619 precedent).
 GET /admin/v1/audit-logs added the new `system:settlement` enum value to the `data/items/items/system_actor` response property for the response status `200`
 GET /admin/v1/audit-logs/{id} added the new `system:settlement` enum value to the `data/system_actor` response property for the response status `200`
+# D10-1048 / D10-1074 ② / D10-557 (CT-24zzd): AdminOrderCommissionSplit reserve_bp becomes nullable (blanked for
+# an account without order.view). Only /admin/v1/** responses: the console ships with the server (后台同发), so
+# no old client reads this field.
+GET /admin/v1/orders/{order_id} the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
+POST /admin/v1/orders/{order_id}/hold the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
+POST /admin/v1/orders/{order_id}/unhold the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
+POST /admin/v1/orders/{order_id}/reason-sub the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
+POST /admin/v1/orders/{order_id}/reassign the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
