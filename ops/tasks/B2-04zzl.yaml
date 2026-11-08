@@ -1,0 +1,30 @@
+id: B2-04zzl
+repo: rebate-platform
+title: 黑名单已入账订单人工复核确认扣回（BR-ATTR-26、BR-FUND-08 R8 BLACKLIST_CONFIRMED）——消费 order.blacklist_hit_after_credit 登记 blacklist_after_credit 差错单；确认接口经 clawback.apply 新 cause 走 R8（FULL、reason BLACKLIST）；开关默认关
+type: impl
+# 2026-11-08 funds 入账（编排 D10-1035 / D10-1095；方案 couli-runs/FUNDS-quote/fu-blacklist-confirmed-plan.md）。消费者锁单重读：仍 CREDITED 才 registerReconDiffOnce（source R3，ref_type order，ref_id order_key，dedupe 含命中维度，expected booked_n_fen / actual 0）；不冻结、不动钱。确认接口按 CT-24zzf：锁序照 settlement AGENTS，重读不是 CREDITED → 20902 order；ClawbackCause 加 BLACKLIST_CONFIRMED（r8Event BLACKLIST_CONFIRMED、r8SubType FULL、r8Reason BLACKLIST，无 R9，归 FULL_CAUSES），ClawbackEventRef 加 kind blacklist，rights_event_id `B{recon_diff_id}`（进凭证唯一键，重投不二次扣回）；差错单 → adjusted。不扣回走现有 close。开关 order.blacklist_clawback.enabled 读 value === true，默认关，打开前问负责人（D10-1095 ③）。用户侧文案（BR-TEXT-05 / 19）实现时核，不够报编排。RV2；规则测试新鲜独立 Claude，money 评审 Codex medium。R13（经 BLACKLIST_CONFIRMED 扣回单的恢复）在本单之后。
+refs: [BR-ATTR-26, BR-FUND-08]
+refs_hash:
+  BR-ATTR-26: 7070dbe36696
+  BR-FUND-08: 7acaff229759
+deps: [CT-24zzf, B2-04zzlt]
+paths:
+  - 'apps/api/src/modules/settlement/application/blacklist-clawback*.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-order.test.ts'
+  - 'apps/api/src/modules/settlement/clawback/index.ts'
+  - 'apps/api/src/modules/settlement/http/admin/**'
+  - 'apps/api/src/modules/settlement/settlement.module.ts'
+  - 'apps/api/src/modules/settlement/worker/assemble.ts'
+  - 'apps/api/src/modules/settlement/index.ts'
+  - 'apps/api/src/modules/ledger/**/*recon-diff*.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/settlement/blacklist-clawback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/blacklist-clawback/**'
+status: todo

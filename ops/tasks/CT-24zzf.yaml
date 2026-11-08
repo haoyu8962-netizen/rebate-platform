@@ -1,0 +1,29 @@
+id: CT-24zzf
+repo: rebate-platform
+title: 契约：黑名单已入账订单人工复核确认扣回（BR-ATTR-26、BR-FUND-08）——recon_diff_type 新增 blacklist_after_credit；POST /admin/v1/recon-diffs/{recon_diff_id}/blacklist-clawback（权限 order.blacklist_clawback，totp step-up，Idempotency-Key，审计）；不扣回走现有 close
+type: contract
+# 2026-11-08 funds 入账（编排 D10-1035 / D10-1095；方案 couli-runs/FUNDS-quote/fu-blacklist-confirmed-plan.md）。写法照 CT-24zz / CT-24ze：检查顺序权限 → step-up → body → 差错单存在且 type 正确（否则 20001 [recon_diff_id]）→ 已 adjusted / written_off / closed → 20902 recon_diff → 开关关（order.blacklist_clawback.enabled，默认关）→ 20001 data.reason=blacklist_clawback_disabled → 订单已不是 CREDITED → 20902 resource=order，差错单不动（处理人走 close）。
+# 成功：差错单 → adjusted，resolution 加 clawback（operator、note、时间），响应带 rebate_status_after=CLAWED_BACK。权限点 order.blacklist_clawback 新增（totp，一人可完成，ADD-05），不混用 order.restore（D10-1095 ②；04 §11.2 由编排回写）。金额不进请求，服务端按 BR-FUND-08 R8 算。
+refs: [BR-ATTR-26, BR-FUND-08]
+refs_hash:
+  BR-ATTR-26: 7070dbe36696
+  BR-FUND-08: 7acaff229759
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/enums/fund.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
