@@ -474,6 +474,13 @@ export const PRICE_TAOBAO_UNSEEDED: readonly string[] = [
 export const AGENT_TRACE: readonly Expected[] = [
   row('agent.trace.retention_days', 'number', 'config.risk'),
 ];
+// B2-02t (D10-1035 / D10-1038, BR-FUND-19): the post-credit check switch, registered right after AGENT_TRACE: an editable
+// config.business boolean, options null. Not part of expectedNow() either.
+export const CREDIT_POSTCHECK: readonly Expected[] = [
+  row('ledger.credit_postcheck.enabled', 'boolean', 'config.business'),
+];
+/** B2-02t: on by default through the reader (unset = on), hence no seed row. */
+export const CREDIT_POSTCHECK_UNSEEDED: readonly string[] = ['ledger.credit_postcheck.enabled'];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -502,6 +509,7 @@ export const expectedOf = (key: string): Expected => {
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
+    ...CREDIT_POSTCHECK,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

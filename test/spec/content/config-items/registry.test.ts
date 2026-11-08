@@ -48,6 +48,8 @@
 // enums, unset by default with no seed rows (PRICE_TAOBAO_UNSEEDED).
 // B3-08st (D10-971 ② / D10-999, BR-ID-30 ①): agent.trace.retention_days follows them (kit
 // AGENT_TRACE), config.risk, seeded 190.
+// B2-02t (D10-1035 / D10-1038, BR-FUND-19): ledger.credit_postcheck.enabled follows it (kit
+// CREDIT_POSTCHECK), unset (on) by default with no seed row (CREDIT_POSTCHECK_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -63,6 +65,8 @@ import {
   ADVANCE_ALERT,
   ADVANCE_ALERT_UNSEEDED,
   AGENT_TRACE,
+  CREDIT_POSTCHECK,
+  CREDIT_POSTCHECK_UNSEEDED,
   AUTO_ENABLE_CHECK,
   AUTO_ENABLE_UNSEEDED,
   AUTO_PAYOUT,
@@ -151,6 +155,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...ORDERS_JD_UNSEEDED,
         ...ORDER_RESCAN_TAOBAO_UNSEEDED,
         ...PRICE_TAOBAO_UNSEEDED,
+        ...CREDIT_POSTCHECK_UNSEEDED,
       ]),
     ]),
   );
@@ -169,6 +174,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...ORDERS_JD_UNSEEDED,
     ...ORDER_RESCAN_TAOBAO_UNSEEDED,
     ...PRICE_TAOBAO_UNSEEDED,
+    ...CREDIT_POSTCHECK_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -208,6 +214,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...ORDER_RESCAN_TAOBAO,
         ...PRICE_TAOBAO,
         ...AGENT_TRACE,
+        ...CREDIT_POSTCHECK,
       ].map((entry) => entry.key),
     ),
   );
@@ -257,7 +264,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       SHOP_SOURCE_UNSEEDED.length -
       ORDERS_JD_UNSEEDED.length -
       ORDER_RESCAN_TAOBAO_UNSEEDED.length -
-      PRICE_TAOBAO_UNSEEDED.length,
+      PRICE_TAOBAO_UNSEEDED.length -
+      CREDIT_POSTCHECK_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -408,6 +416,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
+    ...CREDIT_POSTCHECK,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -473,6 +482,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
+    ...CREDIT_POSTCHECK,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -546,6 +556,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...ORDER_RESCAN_TAOBAO,
       ...PRICE_TAOBAO,
       ...AGENT_TRACE,
+      ...CREDIT_POSTCHECK,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -570,6 +581,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...ORDERS_JD,
     ...ORDER_RESCAN_TAOBAO,
     ...AGENT_TRACE,
+    ...CREDIT_POSTCHECK,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({

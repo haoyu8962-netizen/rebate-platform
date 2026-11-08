@@ -50,6 +50,7 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // order, then B1-22x (D10-963) price.taobao.member_title_keywords / coupon_titles /
 // discount_titles / unknown_promo / basis in this order, and nothing else.
 // B3-08st (D10-971 ② / D10-999, BR-ID-30 ①) appends agent.trace.retention_days after them.
+// B2-02t (D10-1035 / D10-1038, BR-FUND-19) appends ledger.credit_postcheck.enabled after it.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
   const i = keys.indexOf('settle.statement.grace_days');
@@ -150,6 +151,7 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'price.taobao.unknown_promo',
     'price.taobao.basis',
     'agent.trace.retention_days',
+    'ledger.credit_postcheck.enabled',
   ]);
 });
 

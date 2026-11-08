@@ -357,6 +357,10 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // retention.* keys, editable; the lower bound is the 184 days 08 gives (the console may not set
   // less), seeded 190. Registration only; B3-08s's Agent trace purge reads it.
   riskInteger('agent.trace.retention_days', 184),
+  // B2-02t (D10-1035 / D10-1038, BR-FUND-19): the switch of the post-credit check, config.business,
+  // editable. No seed row; unset = on, the reader's default (`value !== false`), which is 08's value.
+  // Registration only; B2-02t reads it.
+  spec('ledger.credit_postcheck.enabled', 'boolean', 'config.business'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

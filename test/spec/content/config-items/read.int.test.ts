@@ -8,6 +8,7 @@ import { signedIn, useHarness } from '../../admin/auth/kit.ts';
 import {
   ADVANCE_ALERT,
   AGENT_TRACE,
+  CREDIT_POSTCHECK,
   AUTO_ENABLE_CHECK,
   AUTO_PAYOUT,
   AVATAR,
@@ -98,6 +99,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...ORDER_RESCAN_TAOBAO,
     ...PRICE_TAOBAO,
     ...AGENT_TRACE,
+    ...CREDIT_POSTCHECK,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(
