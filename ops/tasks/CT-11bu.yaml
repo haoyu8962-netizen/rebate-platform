@@ -1,0 +1,16 @@
+id: CT-11bu
+repo: rebate-platform
+title: FU-UI-TOKENS-TWO-STATE-CLEANUP：DSX-48 落地、主干令牌只剩 0.5.2 后，删掉冻结 ui-tokens 测试的 0.5.1 支与 f088f04 / 49bb4ad 不再用到的夹具，收紧为单态（D10-965）
+type: test-change
+# 2026-11-08 入账（前端线 f1-frontend-7，编排 D10-965 登记）。照 F1-09uv / D10-742 收紧单做法：只删旧支与选支判据，0.5.2 支逐字保留、不放宽；非 task 分支、台账同 PR，按 #24 核。
+refs: []
+refs_hash: {}
+deps: [CT-11bt, DSX-48]
+paths:
+  - 'test/spec/frontend/ui-tokens/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

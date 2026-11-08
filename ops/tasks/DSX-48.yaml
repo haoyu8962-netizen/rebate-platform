@@ -6,20 +6,19 @@ type: impl
 # 整改计划 DSX-48 另含「Toast 只在站外分支保留底部定位」与状态键对齐，本单一并核；DSX-108 验收「apps/h5 和 ui-tokens 里有 forced-colors 规则」。非资金。规则测试新鲜独立 Claude，评审 Codex（D10-823）。
 # 2026-11-07 22:1x 补 paths（前端线）：代码仓库 contracts/design-tokens.json 仍是 0.5.1（无 motion 组），规划仓库已到 0.5.2（couli #296）。本单先把快照整份换成 0.5.2（contracts/README 该行改版本号与来源提交，照 CT-11a 口径），ui-tokens 生成器支持 duration（ms）与 cubicBezier 两种新类型并重生成生成物，再在 H5 读 --motion-*。
 # 2026-11-08 04:0x 补 test_paths（前端线）：规则测试 r1 交回时报冻结 test/spec/frontend/ui-tokens/** 钉 0.5.1 / f088f04（snapshot AC-CT-11a#1/#2、drift #10–#13、upgrade AC-CT-11ba#1、kit SOURCE_COMMIT 与两个夹具），升 0.5.2 后必红。照 CT-11ba / CT-11b 先例由测试作者换成 c98ae93f 与 0.5.2、补 motion 组的生成断言，只改钉值、不放宽，按 #24 报核；dark.test 若只换夹具路径记 red_exempt_outside。.prettierignore 若新快照不合 prettier 照 D10-675 加逐字快照忽略。
+# 2026-11-08 07:5x（D10-965）：撤 D10-964；冻结 ui-tokens 改动拆到前置过渡 CT-11bt，本单 deps 加 CT-11bt、test_paths 去掉 ui-tokens/**、red_exempt / red_exempt_outside 撤；变基后不再碰 ui-tokens/**。
 refs: []
 refs_hash: {}
-deps: [DSX-46]
+deps: [DSX-46, CT-11bt]
 paths:
   - 'apps/h5/src/components/base/**'
   - 'apps/h5/src/shared/**'
   - 'packages/ui-tokens/**'
   - 'contracts/design-tokens.json'
   - 'contracts/README.md'
-  - '.prettierignore'
   - 'apps/h5/src/entries/app/pages/rules/rules-page.tsx'
 test_paths:
   - 'test/spec/frontend/h5-state-motion/**'
-  - 'test/spec/frontend/ui-tokens/**'
 impl: claude
 tester: claude-independent
 accept:
@@ -27,22 +26,4 @@ accept:
   - 'test/spec/frontend/h5-state-motion/**'
 status: todo
 pr: null
-# 2026-11-08 06:2x 补 paths：规则测试 [AC-DSX-48-DELAY#4] 要求代表页规则页首屏接入 useDelayedVisible，rules-page.tsx 原不在 paths（实现 r1 停下报）。.prettierignore 在保护清单（第二类）：新 CSS 夹具逐字副本不合 prettier，照 D10-675 / CT-11ba 加一行忽略，合并按 #24 核。
-red_exempt_outside:
-  - file: test/spec/frontend/ui-tokens/dark.test.ts
-    reason: 读取函数里的夹具路径由 variables.f088f04.css 换成 variables.c98ae93.css（随令牌来源提交换钉值，照 CT-11ba），用例体一字未改
-  - file: test/spec/frontend/ui-tokens/upgrade.test.ts
-    reason: 只新增顶层 motion 键表与新用例 [AC-DSX-48-UPGRADE#1]，[AC-CT-11ba#1] 改钉值（v0.4.0 以来新增键加上 motion 组）；其余用例体与主干逐字相同
-red_exempt:
-  - file: test/spec/frontend/ui-tokens/dark.test.ts
-    test: '[AC-CT-11b-THEME#2] 主题序列化读取输入 dark，不把深色值写死在模板中'
-    reason: 同文件只换了读取函数里的夹具路径；本用例标题与用例体与主干逐字相同。主干上旧生成器遇 duration 类型抛错（红但不是断言），实现支持新类型后转绿（DSX-48 red/1）
-  - file: test/spec/frontend/ui-tokens/upgrade.test.ts
-    test: '[AC-CT-11ba#2] 入库 CSS 含七个新令牌，五个同值颜色仍进入两个深色块'
-    reason: 用例体与主干逐字相同，只核 v0.5.1 的七个令牌，升 0.5.2 后照样成立（DSX-48 red/1 绿）
-  - file: test/spec/frontend/ui-tokens/upgrade.test.ts
-    test: '[AC-CT-11ba#3] 入库 TS 主题含七个新引用及浅深色解析值，圆角在深色回退'
-    reason: 用例体与主干逐字相同，只核 v0.5.1 的七个令牌，升 0.5.2 后照样成立（DSX-48 red/1 绿）
-  - file: test/spec/frontend/ui-tokens/upgrade.test.ts
-    test: '[AC-CT-11ba#4] 入库 Tailwind 为七个新令牌提供对应命名空间的变量引用'
-    reason: 用例体与主干逐字相同，只核 v0.5.1 的七个令牌，升 0.5.2 后照样成立（DSX-48 red/1 绿）
+# 2026-11-08 06:2x 补 paths：规则测试 [AC-DSX-48-DELAY#4] 要求代表页规则页首屏接入 useDelayedVisible，rules-page.tsx 原不在 paths（实现 r1 停下报）。.prettierignore 随 c98ae93 CSS 夹具移到 CT-11bt（D10-965）。

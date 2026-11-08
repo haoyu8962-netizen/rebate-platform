@@ -10,3 +10,4 @@ tools/agent/prompts/**
 # 规划原文的逐字快照，不按本仓库格式化（D10-675）
 contracts/design-tokens.json
 test/spec/frontend/ui-tokens/fixtures/*.json
+test/spec/frontend/ui-tokens/fixtures/*.css

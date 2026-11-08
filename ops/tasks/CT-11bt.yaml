@@ -1,0 +1,20 @@
+id: CT-11bt
+repo: rebate-platform
+title: 过渡测试改动（DSX-48 前置，D10-965）：冻结 test/spec/frontend/ui-tokens/** 按 contracts/design-tokens.json 的 metadata.version 两态选钉值与夹具——0.5.1 支逐一不变，0.5.2 支钉 c98ae93 来源提交、夹具与 motion 组生成断言
+type: test-change
+# 2026-11-08 入账（前端线 f1-frontend-7，编排 D10-965：撤 D10-964，照 D10-846 拆前置过渡 test-change）。
+# 现状：DSX-48 把令牌快照升 0.5.2（couli #296，c98ae93f），冻结 ui-tokens 测试钉 0.5.1 / f088f04（kit SOURCE_COMMIT、两个夹具、snapshot [AC-CT-11a#1]/[#2]、upgrade [AC-CT-11ba#1]、generation [AC-CT-11a#6]、dark 夹具路径）必红；在 task 分支上改它们时 dark [AC-CT-11b-THEME#2] 的主干红因是旧生成器遇新类型抛错（非断言），先红过不了门禁。
+# 做法：按 contracts/design-tokens.json 的 metadata.version 选支——0.5.1 支逐一不变（今天主干）；0.5.2 支即 DSX-48 r2 的钉值（SOURCE_COMMIT c98ae93f…、design-tokens.c98ae93.json / variables.c98ae93.css 逐字夹具、v0.5.1→v0.5.2 只新增 motion 组、generation 对 cubicBezier 的命名空间）；其他版本号 → 红。两个版本的夹具并存；variables.c98ae93.css 是规划仓库逐字副本、不合 prettier，.prettierignore 加一行 test/spec/frontend/ui-tokens/fixtures/*.css（第二类保护，照 D10-675 / CT-11ba）。标题与测试数不变，可新增用例。DSX-48 落地后由 CT-11bu 删 0.5.1 支。
+# 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；新鲜独立 Claude 修改，另一位只读复审（Codex 额度用尽至 11-15，D10-823 ④），按 approvals #24 由编排逐条核后加标签。
+refs: []
+refs_hash: {}
+deps: [CT-11ba]
+paths:
+  - 'test/spec/frontend/ui-tokens/**'
+  - '.prettierignore'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

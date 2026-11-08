@@ -3,14 +3,60 @@ import type { DesignTokens } from '@couli/ui-tokens';
 import { expect } from 'vitest';
 
 const moduleUrl = import.meta.url;
-export const SOURCE_COMMIT = 'f088f0473230d1e70232b8a246b92ef53d723929';
 export const ROOT = new URL('../../../../', moduleUrl);
 
-// JSON is copied byte for byte from this planning commit, not the implementation snapshot.
-// CSS preserves the old fixture plus the seven additions derived from the generation rules.
+// CT-11bt transition (D10-965): the pinned planning version follows contracts/design-tokens.json
+// metadata.version. '0.5.1' keeps the f088f04 pins unchanged; '0.5.2' (DSX-48) pins c98ae93.
+// Any other version fails. CT-11bu removes the 0.5.1 branch after DSX-48 lands.
+export interface Pin {
+  version: '0.5.1' | '0.5.2';
+  commit: string;
+  json: string;
+  css: string;
+}
+
+export const PINS: Readonly<Record<Pin['version'], Pin>> = {
+  // 0.5.1: JSON is copied byte for byte from this planning commit, not the implementation
+  // snapshot. CSS preserves the old fixture plus the seven additions derived from the rules.
+  '0.5.1': {
+    version: '0.5.1',
+    commit: 'f088f0473230d1e70232b8a246b92ef53d723929',
+    json: 'design-tokens.f088f04.json',
+    css: 'variables.f088f04.css',
+  },
+  // 0.5.2: JSON and CSS are copied byte for byte from this planning commit (design/tokens/).
+  '0.5.2': {
+    version: '0.5.2',
+    commit: 'c98ae93f5daf3b8d04671ee903b8f28fd805b72f',
+    json: 'design-tokens.c98ae93.json',
+    css: 'variables.c98ae93.css',
+  },
+};
+
+export function pinFor(version: unknown): Pin {
+  expect(
+    Object.keys(PINS),
+    `unsupported design-tokens metadata.version ${String(version)}`,
+  ).toContain(version);
+  return PINS[version as Pin['version']];
+}
+
+// Read at call time so an unsupported or missing contract fails an assertion inside the test.
+export function pin(): Pin {
+  return pinFor(record(snapshot().metadata).version);
+}
+
+export function fixturePath(name: string): string {
+  return `test/spec/frontend/ui-tokens/fixtures/${name}`;
+}
+
+export function sourceCommit(): string {
+  return pin().commit;
+}
+
 export function baseline(): DesignTokens {
   return JSON.parse(
-    readFileSync(new URL('./fixtures/design-tokens.f088f04.json', moduleUrl), 'utf8'),
+    readFileSync(new URL(`./fixtures/${pin().json}`, moduleUrl), 'utf8'),
   ) as DesignTokens;
 }
 
@@ -82,7 +128,5 @@ export function rootDeclarations(css: string): Map<string, string> {
 }
 
 export function baselineDeclarations(): Map<string, string> {
-  return rootDeclarations(
-    readFileSync(new URL('./fixtures/variables.f088f04.css', moduleUrl), 'utf8'),
-  );
+  return rootDeclarations(readFileSync(new URL(`./fixtures/${pin().css}`, moduleUrl), 'utf8'));
 }

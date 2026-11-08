@@ -6,6 +6,7 @@ import {
   baselineDeclarations,
   block,
   declarations,
+  pin,
   record,
   rootDeclarations,
   themeLeaves,
@@ -70,6 +71,7 @@ it('[AC-CT-11a#5] 浅色基准不再强制 only light，并提供系统与显式
 });
 
 it('[AC-CT-11a#6] Tailwind 4 主题使用有效命名空间并引用全部令牌，不能自引用', () => {
+  const branch = pin().version;
   const input = baseline();
   const css = succeeds(() => generateTailwindCss(input));
   const aliases = declarations(block(css, /@theme(?:\s+(?:inline|static))*\s*\{([^{}]*)\}/g));
@@ -90,8 +92,19 @@ it('[AC-CT-11a#6] Tailwind 4 主题使用有效命名空间并引用全部令牌
       shadow: '--shadow-',
       dimension: source.startsWith('--radius-') ? '--radius-' : '--spacing-',
     };
+    if (branch === '0.5.2') {
+      // v0.5.2 (DSX-48): easings feed Tailwind 4's ease-* utilities.
+      namespace.cubicBezier = '--ease-';
+    }
     expect(type).toBeDefined();
-    if (type !== 'number') expect(alias.startsWith(namespace[type!]!), alias).toBe(true);
+    if (branch === '0.5.1') {
+      if (type !== 'number') expect(alias.startsWith(namespace[type!]!), alias).toBe(true);
+    } else {
+      expect(branch).toBe('0.5.2');
+      // Tailwind 4 has no theme namespace for plain numbers or durations (duration-* takes numbers).
+      if (type !== 'number' && type !== 'duration')
+        expect(alias.startsWith(namespace[type!]!), alias).toBe(true);
+    }
   }
 });
 

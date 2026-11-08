@@ -1,6 +1,14 @@
 import { expect, it } from 'vitest';
 import { darkBlocks, leaves, serializedExports } from './dark-kit.ts';
-import { block, declarations, record, requiredText, rootDeclarations, snapshot } from './kit.ts';
+import {
+  block,
+  declarations,
+  pin,
+  record,
+  requiredText,
+  rootDeclarations,
+  snapshot,
+} from './kit.ts';
 
 // Fixed v0.5.1 expectations, independent of the generator and the implementation snapshot.
 // Alpha 0x8C / 255 rounds to 0.55; logical dimensions are emitted in px.
@@ -22,7 +30,28 @@ const additions = [
   { path: 'radius.avatar', value: '10px', alias: '--radius-couli-avatar' },
 ] as const;
 
+// v0.5.1 → v0.5.2 (planning c98ae93, couli #296; DSX-48): only the motion group is new.
+const motion = [
+  'motion.duration.instant',
+  'motion.duration.fast',
+  'motion.duration.normal',
+  'motion.duration.emphasized',
+  'motion.duration.slow',
+  'motion.easing.standard',
+  'motion.easing.enter',
+  'motion.easing.exit',
+  'motion.easing.emphasized-enter',
+  'motion.easing.emphasized-exit',
+  'motion.toast.display',
+  'motion.skeleton.shimmer',
+  'motion.skeleton.show-delay',
+  'motion.skeleton.min-visible',
+  'motion.reduced.fade',
+] as const;
+
 it('[AC-CT-11ba#1] 升级只新增七个令牌，完整保留 v0.4.0 的既有令牌', () => {
+  // CT-11bt: the contract version picks the branch; other versions fail in pin().
+  const branch = pin().version;
   const previous = record(
     JSON.parse(requiredText('test/spec/frontend/ui-tokens/fixtures/design-tokens.49bb4ad.json')),
   );
@@ -32,9 +61,47 @@ it('[AC-CT-11ba#1] 升级只新增七个令牌，完整保留 v0.4.0 的既有�
   for (const { path, token } of oldLeaves)
     expect(actual.get(path.join('.')), path.join('.')).toEqual(token);
   const oldPaths = new Set(oldLeaves.map(({ path }) => path.join('.')));
-  expect([...actual.keys()].filter((path) => !oldPaths.has(path)).sort()).toEqual(
-    additions.map(({ path }) => path).sort(),
+  if (branch === '0.5.1') {
+    expect([...actual.keys()].filter((path) => !oldPaths.has(path)).sort()).toEqual(
+      additions.map(({ path }) => path).sort(),
+    );
+  } else {
+    expect(branch).toBe('0.5.2');
+    // Since v0.4.0: the seven tokens of v0.5.1 plus the motion group of v0.5.2.
+    expect([...actual.keys()].filter((path) => !oldPaths.has(path)).sort()).toEqual(
+      [...additions.map(({ path }) => path), ...motion].sort(),
+    );
+  }
+});
+
+it('[AC-DSX-48-UPGRADE#1] v0.5.1 → v0.5.2 只新增 motion 组 15 个令牌，完整保留 v0.5.1 的既有令牌', () => {
+  const branch = pin().version;
+  const previous = record(
+    JSON.parse(requiredText('test/spec/frontend/ui-tokens/fixtures/design-tokens.f088f04.json')),
   );
+  expect(record(previous.metadata).version).toBe('0.5.1');
+  // 0.5.2: the contract itself is the upgraded side. 0.5.1 (CT-11bt): the contract must still be
+  // the f088f04 snapshot, so the same full check runs on the pinned c98ae93 fixture instead.
+  let next: Record<string, unknown>;
+  if (branch === '0.5.1') {
+    expect(snapshot()).toEqual(previous);
+    next = record(
+      JSON.parse(requiredText('test/spec/frontend/ui-tokens/fixtures/design-tokens.c98ae93.json')),
+    );
+  } else {
+    expect(branch).toBe('0.5.2');
+    next = record(snapshot());
+  }
+  const oldLeaves = leaves(previous.tokens);
+  const current = leaves(next.tokens);
+  const actual = new Map(current.map(({ path, token }) => [path.join('.'), token]));
+  for (const { path, token } of oldLeaves)
+    expect(actual.get(path.join('.')), path.join('.')).toEqual(token);
+  const oldPaths = new Set(oldLeaves.map(({ path }) => path.join('.')));
+  expect([...actual.keys()].filter((path) => !oldPaths.has(path)).sort()).toEqual(
+    [...motion].sort(),
+  );
+  expect(record(next.metadata).version).toBe('0.5.2');
 });
 
 it('[AC-CT-11ba#2] 入库 CSS 含七个新令牌，五个同值颜色仍进入两个深色块', () => {

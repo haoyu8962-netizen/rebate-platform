@@ -2,7 +2,15 @@ import * as committedTheme from '../../../../packages/ui-tokens/src/theme.gen.ts
 import { generateTailwindCss, generateThemeTs, generateTokensCss } from '@couli/ui-tokens';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
-import { baseline, baselineDeclarations, record, requiredText, rootDeclarations } from './kit.ts';
+import {
+  baseline,
+  baselineDeclarations,
+  fixturePath,
+  pin,
+  record,
+  requiredText,
+  rootDeclarations,
+} from './kit.ts';
 import {
   darkBlocks,
   expectValueTheme,
@@ -14,7 +22,8 @@ import {
 
 function plannedDark(): Map<string, string> {
   // The planning CSS includes optional classes after the token blocks; this package emits tokens.
-  const css = requiredText('test/spec/frontend/ui-tokens/fixtures/variables.f088f04.css');
+  // CT-11bt: 0.5.1 → variables.f088f04.css, 0.5.2 → variables.c98ae93.css (kit.ts PINS).
+  const css = requiredText(fixturePath(pin().css));
   return darkBlocks(css.split('/* Optional foundations:')[0]!)[0];
 }
 
