@@ -1,0 +1,83 @@
+{
+  "risk_note": "RV2 settlement rights (FU-REASON-SUB-STALE-ROW-MANUAL; ruling D10-969, the money r2 S2 of B1-09v #2761). A manual sub-reason stored on an order_rights row (no origin: it is not carried by the closing input) now fills an ended PUNISH order only while orders.reason_sub_manual is false, both when a later input resolves the row and when D10-699 reopens it; an order whose sub-reason an operator set by hand afterwards (adminSetOrderReasonSub, including none = NULL) is left alone and gets no replacement audit. A real replacement of an automatic value writes one order_reason_sub_set audit on the same transaction (actor system:settlement, admin_id null as the existing reopen audit, source stored_rights_choice with the order_rights id, no personal data); the audit port is checked before updateRightsResult. Inputs that carry their own choice (D10-957 duplicate import, B1-09v round 2 write-back) are unchanged. No amount, status, reason, balance, ledger entry, R6 or clawback is written; only reason PUNISH is touched. Only rights-command.ts changes, plus its first unit tests (9). The two FU-REASON-SUB-MANUAL-TESTS-R3 cases that pin behaviour main already has were split into the test-change task B1-09zb (#2791) under D10-903 (A), since red-check does not exempt new tests. Integration reason-sub-stale-row plus reason-sub-manual and the related frozen order / settlement directories 606/606 pass; api unit 4804 pass.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage limit exhausted until 2026-11-15, so per D10-823 ④ a fresh independent Claude (claude-run.sh review --review-type money) reviewed the whole implementation from the last rule-test commit: pass with no findings; both behaviours the implementer reported (an audit when the order already holds the same value automatically, the manual flag going false -> true; no broken-row throw when the order is already set by hand) judged harmless. Checklist rounding na, sign na, idempotency ok, concurrency ok, partial_refund na, clock ok, app_id ok. couli-runs/B1-09za/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude each round (D10-848). Round 1 pass with two S2 (operator's later none not covered; the D10-699 reopen path not covered), both added in round 2 (latest-choice.int.test.ts). Round 2 pass with no findings; it also confirmed that removing r3.int.test.ts (moved to the test-change task B1-09zb) leaves D10-969 fully covered. Red on the round-2 spec commit: red/1 ok, problems 0, exempt 0, 7 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-09za",
+  "spec_commit": "5c23da7e3074894be97b0519f4ac0bbe5a8e109e",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "red_tests": [
+    "test/spec/orders/reason-sub-stale-row/latest-choice.int.test.ts > [AC-B1-09za#1] 运营之后改的是「无」：违规单导入人工选 SHOP_TK 的记录 X「处理中」入库 → 淘宝同步经另一违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 none（reason_sub NULL、manual=true）→ 淘宝同步报 X 成功（「订单虚假交易」）：X 原地结案；orders.reason_sub 仍为 NULL、reason_sub_manual=true（X 上的旧人工值不填进运营之后选的「无」），不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+    "test/spec/orders/reason-sub-stale-row/latest-choice.int.test.ts > [AC-B1-09za#5] 已存同步记录 X 已结案 FAILED（source API、带人工值 SHOP_TK）→ 淘宝同步经另一违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 MARKET_DISRUPT → 淘宝同步报 X 成功（「订单虚假交易」，D10-699 重开）：X 原地改为 SUCCEEDED；orders.reason_sub 仍为 MARKET_DISRUPT、reason_sub_manual=true（重开记录上的旧人工值不覆盖运营之后改的值），不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+    "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#1] 违规单导入人工选 SHOP_TK 的记录 X「处理中」入库（订单未变）→ 淘宝同步经另一违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 MARKET_DISRUPT → 淘宝同步（真实 punish.window）报 X 成功、「订单虚假交易」：X 原地结案；orders.reason_sub 仍为 MARKET_DISRUPT、reason_sub_manual=true（X 上的旧人工值不覆盖运营之后改的值），不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+    "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#1] 同上 (1)–(3) 后，结案输入换成同一违规单号 X 的违规单导入（不传 reason_sub）：X 原地结案；orders.reason_sub 仍为 MARKET_DISRUPT、reason_sub_manual=true，不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+    "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#1] 已入账淘宝订单：违规单导入人工选 SHOP_TK 的记录 X「处理中」入库 → 同步经违规 Y 真实扣回落 CLAWED_BACK PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 RISK_ORDER → 淘宝同步报 X 成功（「订单虚假交易」）：X 原地结案；orders.reason_sub 仍为 RISK_ORDER、reason_sub_manual=true，不新增 order_reason_sub_set 审计；不再扣回，状态、原因、金额不变",
+    "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#2] 无改子原因的对照：违规单导入人工选 SHOP_TK 的记录 X「处理中」入库 → 同步经违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE、manual=false）→ 淘宝同步报 X 成功（「订单虚假交易」）：X 原地结案；自动值让位于人工值，orders.reason_sub=SHOP_TK、reason_sub_manual=true；写且只写一条 order_reason_sub_set 审计（前值 FAKE_TRADE → 新值 SHOP_TK，指明 X 这条已存记录，无个人信息）；状态、原因、金额不变",
+    "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#2] 无改子原因的对照，结案输入换成同一违规单号 X 的违规单导入（不传 reason_sub）：orders.reason_sub 由自动 FAKE_TRADE 换为 X 上的人工值 SHOP_TK、reason_sub_manual=true；写且只写一条 order_reason_sub_set 审计（前值 FAKE_TRADE → 新值 SHOP_TK，指明 X，无个人信息）；状态、原因、金额不变"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5c23da7e3074894be97b0519f4ac0bbe5a8e109e",
+      "tree": "55aaf0e468308618b50f2c8880754e5fedfe8a26",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T05:23:41Z",
+      "finished_at": "2026-11-08T05:23:57Z",
+      "red_tests": [
+        "test/spec/orders/reason-sub-stale-row/latest-choice.int.test.ts > [AC-B1-09za#1] 运营之后改的是「无」：违规单导入人工选 SHOP_TK 的记录 X「处理中」入库 → 淘宝同步经另一违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 none（reason_sub NULL、manual=true）→ 淘宝同步报 X 成功（「订单虚假交易」）：X 原地结案；orders.reason_sub 仍为 NULL、reason_sub_manual=true（X 上的旧人工值不填进运营之后选的「无」），不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+        "test/spec/orders/reason-sub-stale-row/latest-choice.int.test.ts > [AC-B1-09za#5] 已存同步记录 X 已结案 FAILED（source API、带人工值 SHOP_TK）→ 淘宝同步经另一违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 MARKET_DISRUPT → 淘宝同步报 X 成功（「订单虚假交易」，D10-699 重开）：X 原地改为 SUCCEEDED；orders.reason_sub 仍为 MARKET_DISRUPT、reason_sub_manual=true（重开记录上的旧人工值不覆盖运营之后改的值），不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+        "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#1] 违规单导入人工选 SHOP_TK 的记录 X「处理中」入库（订单未变）→ 淘宝同步经另一违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 MARKET_DISRUPT → 淘宝同步（真实 punish.window）报 X 成功、「订单虚假交易」：X 原地结案；orders.reason_sub 仍为 MARKET_DISRUPT、reason_sub_manual=true（X 上的旧人工值不覆盖运营之后改的值），不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+        "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#1] 同上 (1)–(3) 后，结案输入换成同一违规单号 X 的违规单导入（不传 reason_sub）：X 原地结案；orders.reason_sub 仍为 MARKET_DISRUPT、reason_sub_manual=true，不新增 order_reason_sub_set 审计；状态、原因、金额不变",
+        "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#1] 已入账淘宝订单：违规单导入人工选 SHOP_TK 的记录 X「处理中」入库 → 同步经违规 Y 真实扣回落 CLAWED_BACK PUNISH（自动 FAKE_TRADE）→ 运营改子原因为 RISK_ORDER → 淘宝同步报 X 成功（「订单虚假交易」）：X 原地结案；orders.reason_sub 仍为 RISK_ORDER、reason_sub_manual=true，不新增 order_reason_sub_set 审计；不再扣回，状态、原因、金额不变",
+        "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#2] 无改子原因的对照：违规单导入人工选 SHOP_TK 的记录 X「处理中」入库 → 同步经违规 Y 把订单落 VOID PUNISH（自动 FAKE_TRADE、manual=false）→ 淘宝同步报 X 成功（「订单虚假交易」）：X 原地结案；自动值让位于人工值，orders.reason_sub=SHOP_TK、reason_sub_manual=true；写且只写一条 order_reason_sub_set 审计（前值 FAKE_TRADE → 新值 SHOP_TK，指明 X 这条已存记录，无个人信息）；状态、原因、金额不变",
+        "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts > [AC-B1-09za#2] 无改子原因的对照，结案输入换成同一违规单号 X 的违规单导入（不传 reason_sub）：orders.reason_sub 由自动 FAKE_TRADE 换为 X 上的人工值 SHOP_TK、reason_sub_manual=true；写且只写一条 order_reason_sub_set 审计（前值 FAKE_TRADE → 新值 SHOP_TK，指明 X，无个人信息）；状态、原因、金额不变"
+      ],
+      "expected": [
+        "test/spec/orders/reason-sub-stale-row/latest-choice.int.test.ts",
+        "test/spec/orders/reason-sub-stale-row/stale-row.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "82b0a048f1be32cb8889ea13fd718546a7cd6189196f858c2ec6c19ad453bbc3"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "db258c8e7479ab9d75e596669044a651283c9aae",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  }
+}

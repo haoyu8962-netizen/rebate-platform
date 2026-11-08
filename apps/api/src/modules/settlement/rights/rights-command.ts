@@ -75,6 +75,14 @@
 // before / after reason, reason_sub (none as null), reason_sub_manual, source rights_import and
 // the import id; no personal information. Without the writer it throws before writing (D10-723's
 // fail-closed). Unchanged (already that value by hand): no write, no audit.
+// B1-09za (D10-969, 人工对人工以最新为准; B1-09v money r2 S2): a choice by hand kept only on a stored
+// row (no origin: the resolving input carries none of its own) is older than any choice made on the
+// order since (改子原因, including 「无」). When the row is closed by a later input (manualOnResolve)
+// or reopened (D10-699) it only fills an order whose reason_sub_manual is false; an order already
+// chosen by hand keeps its sub-reason and no replacement audit is written. When it does replace the
+// sub-reason of an order already ended PUNISH, one audit order_reason_sub_set is written on the same
+// transaction through deps.audit (actor system:settlement, source stored_rights_choice, the
+// order_rights id; no personal information); without that port it throws before writing.
 // createReasonSubAdminCommandPort: orders' 改子原因 (adminSetOrderReasonSub) — only orders.reason_sub
 // and reason_sub_manual, CAS on rebate_status, reason and the expected row_version.
 // BR-FUND-06 is 待验证 (which platforms send a「处理中」signal): no platform signal is invented
@@ -125,9 +133,31 @@ export type RightsReopenAuditInput = Omit<RightsSystemAuditInput, 'actor'> & {
   readonly actor: typeof RIGHTS_AUDIT_ACTOR;
 };
 
+/** One side of a sub-reason replaced by a stored row's choice by hand (B1-09za, D10-969). */
+export type StoredChoiceAuditSide = {
+  readonly reason: string | null;
+  readonly source: string;
+  readonly order_rights_id: string;
+  readonly reason_sub: string | null;
+  readonly reason_sub_manual: boolean;
+};
+
+/** B1-09za: the order_reason_sub_set audit of a stored row's choice, under settlement's identity. */
+export type StoredChoiceAuditInput = {
+  readonly appId: string;
+  readonly actor: typeof RIGHTS_AUDIT_ACTOR;
+  readonly action: typeof REASON_SUB_SET_AUDIT_ACTION;
+  readonly target: string;
+  readonly before: StoredChoiceAuditSide;
+  readonly after: StoredChoiceAuditSide;
+};
+
 /** admin's system audit on the caller's transaction, by shape (settlement imports no admin code). */
 export interface RightsSystemAudit {
-  appendAction(trx: Transaction<DB>, input: RightsReopenAuditInput): Promise<void>;
+  appendAction(
+    trx: Transaction<DB>,
+    input: RightsReopenAuditInput | StoredChoiceAuditInput,
+  ): Promise<void>;
 }
 
 export interface RightsCommandDependencies {
@@ -141,7 +171,9 @@ export interface RightsCommandDependencies {
   /**
    * D10-699: the system audit of a closed API record reopened as successful (production: admin's
    * createSystemAuditWriter). D10-723: the audit is only written through this port; absent, such a
-   * reopen is refused before anything is written (every other path works without it).
+   * reopen is refused before anything is written. B1-09za: a stored row's choice by hand that
+   * replaces an ended PUNISH order's sub-reason is audited through it too, and refused without it
+   * (every other path works without it).
    */
   readonly audit?: RightsSystemAudit;
   /**
@@ -161,11 +193,23 @@ export interface RightsCommandDependencies {
 export const REASON_SUB_SET_AUDIT_ACTION = 'order_reason_sub_set';
 /** D10-957: the audit's source of a choice made in a punish import. */
 export const REASON_SUB_SOURCE_IMPORT = 'rights_import';
+/** B1-09za (D10-969): the audit's source of a choice kept on a stored order_rights row. */
+export const REASON_SUB_SOURCE_STORED = 'stored_rights_choice';
 
 /** B1-09v: a choice made by hand as the record carries it (value null is 「无」). */
 type ManualChoice = NonNullable<RightsRecordInput['manual_reason_sub']>;
 
 type StoredStatus = 'PROCESSING' | 'WAIT_COMMISSION' | 'SUCCEEDED' | 'FAILED';
+
+/** B1-09za: the stored order_rights row whose own choice by hand marks the order. */
+interface StoredChoiceRef {
+  readonly rightsId: string;
+}
+
+/** Who audits a replacement of an ended order's sub-reason by a choice made by hand. */
+type SubAudit =
+  | { readonly kind: 'import'; readonly writer: Pick<AuditPort, 'append'> }
+  | { readonly kind: 'stored'; readonly audit: RightsSystemAudit; readonly rightsId: string };
 
 /** P7 / P8 from-states: only these platform states take a rights record. */
 function acceptsRights(platformStatus: string): boolean {
@@ -261,6 +305,8 @@ function manualOf(input: RightsRecordInput): ManualChoice | undefined {
  * CLAWED_BACK): the order's sub-reason is replaced only under reason PUNISH and only when it is
  * not already that value by hand; the stored row (a duplicate's) is written back unless it already
  * holds that value by hand. The audit follows the order's replacement.
+ * B1-09za (D10-969): `older` — the choice is a stored row's own (no origin), older than any choice
+ * made on the order since: it replaces only an order whose reason_sub_manual is false.
  */
 export function manualOnEnded(
   order: {
@@ -270,15 +316,38 @@ export function manualOnEnded(
   },
   stored: Pick<OrderRightsRow, 'reason_sub' | 'reason_sub_manual'> | undefined,
   manual: Pick<ManualChoice, 'value'>,
+  older = false,
 ): { readonly order: boolean; readonly row: boolean } {
   const replaces =
-    order.reason === 'PUNISH' && !(order.reason_sub_manual && order.reason_sub === manual.value);
+    order.reason === 'PUNISH' &&
+    (older
+      ? !order.reason_sub_manual
+      : !(order.reason_sub_manual && order.reason_sub === manual.value));
   const row =
     order.reason === 'PUNISH' &&
     stored !== undefined &&
     !(stored.reason_sub_manual && stored.reason_sub === manual.value);
   return { order: replaces, row };
 }
+
+/** What manualOnResolve decides for the resolving input. */
+export interface ResolvedChoice {
+  readonly manual: ManualChoice | undefined;
+  /** The input's choice goes onto the stored row with the result. */
+  readonly writeRow: boolean;
+  /**
+   * B1-09za (D10-969): the choice is the stored row's own (no origin), older than any choice made
+   * on the order since; it fills only an order not chosen by hand, and is audited when it replaces
+   * an ended order's sub-reason.
+   */
+  readonly fromRow: boolean;
+}
+
+const NO_CHOICE: ResolvedChoice = Object.freeze({
+  manual: undefined,
+  writeRow: false,
+  fromRow: false,
+});
 
 /**
  * B1-09v (money r1 S2, 08 BR-TEXT-05「人工选过的不被自动覆盖」): the choice made by hand that holds
@@ -288,27 +357,28 @@ export function manualOnEnded(
  * mark the order, so a later sync does not drop it; neither: no choice. Only a punishment carries a
  * choice (the K-2 key includes the type, so the stored row is of the same type). A stored value
  * outside the PUNISH sub-reasons is a broken row and throws before anything is written.
+ * B1-09za (D10-969, 人工对人工以最新为准): the row's choice is older than any choice made on the
+ * order (read under the lock) since; an order whose reason_sub_manual is true (改子原因, 「无」
+ * included) keeps its own, so the row's choice is not used (no choice; the automatic mapping never
+ * writes over a choice by hand either).
  */
 export function manualOnResolve(
   stored: Pick<OrderRightsRow, 'type' | 'reason_sub' | 'reason_sub_manual'>,
   input: Pick<RightsRecordInput, 'type' | 'manual_reason_sub'>,
-): {
-  readonly manual: ManualChoice | undefined;
-  readonly writeRow: boolean;
-} {
-  if (input.type !== 'PUNISH' || stored.type !== 'PUNISH')
-    return { manual: undefined, writeRow: false };
+  order: { readonly reason_sub_manual: boolean },
+): ResolvedChoice {
+  if (input.type !== 'PUNISH' || stored.type !== 'PUNISH') return NO_CHOICE;
   const incoming = input.manual_reason_sub;
   if (incoming !== undefined) {
     const same = stored.reason_sub_manual && stored.reason_sub === incoming.value;
-    return { manual: incoming, writeRow: !same };
+    return { manual: incoming, writeRow: !same, fromRow: false };
   }
-  if (!stored.reason_sub_manual) return { manual: undefined, writeRow: false };
+  if (!stored.reason_sub_manual || order.reason_sub_manual) return NO_CHOICE;
   const value = stored.reason_sub;
   if (value !== null && !isPunishSub(value)) {
     throw new TypeError('settlement rights: stored reason_sub is not a PUNISH sub-reason');
   }
-  return { manual: { value }, writeRow: false };
+  return { manual: { value }, writeRow: false, fromRow: true };
 }
 
 function isPunishSub(value: string): value is OrderReasonSub {
@@ -393,6 +463,7 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
     trx: Transaction<DB>,
     input: RightsRecordInput,
     mappedOnly = false,
+    storedChoice?: StoredChoiceRef,
   ): Promise<void> {
     if (input.type !== 'PUNISH') return;
     const ref = {
@@ -407,8 +478,11 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
     if (manual !== undefined) {
       // B1-09v: the choice made by hand reaches only an order whose parent is PUNISH, and
       // replaces whatever the automatic mapping wrote; another parent keeps its sub-reason.
-      if (!manualOnEnded(order, undefined, manual).order) return;
-      await replaceEndedSub(trx, order, manual, input.now);
+      // B1-09za: a stored row's (older) choice never replaces a choice made by hand.
+      const older = storedChoice !== undefined && manual.origin === undefined;
+      if (!manualOnEnded(order, undefined, manual, older).order) return;
+      const writer = older ? storedAuditFor(storedChoice) : auditFor(trx, manual);
+      await replaceEndedSub(trx, order, manual, input.now, writer);
       return;
     }
     const decision = reasonSubOnLaterPunish(order, input.violation_type, reasonSubMaps, {
@@ -432,36 +506,67 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
   }
 
   /** D10-957: the audit writer an import's replacement needs; checked before anything is written. */
-  function auditFor(trx: Transaction<DB>, manual: ManualChoice): Pick<AuditPort, 'append'> | null {
+  function auditFor(trx: Transaction<DB>, manual: ManualChoice): SubAudit | null {
     if (manual.origin === undefined) return null;
     const writer = deps.manualAudit?.(trx);
     if (writer === undefined) {
       throw new Error('settlement rights: an import replacing a sub-reason needs the audit writer');
     }
-    return writer;
+    return { kind: 'import', writer };
+  }
+
+  /** B1-09za: the system audit a stored row's replacement needs; checked before writing. */
+  function storedAuditFor(storedChoice: StoredChoiceRef): SubAudit {
+    if (audit === undefined) {
+      throw new Error(
+        'settlement rights: a stored choice replacing a sub-reason needs the audit port',
+      );
+    }
+    return { kind: 'stored', audit, rightsId: storedChoice.rightsId };
   }
 
   /**
    * B1-09v / D10-957: the order (already ended PUNISH, read under the lock) gets the choice by hand
-   * in its own CAS, then the audit of the import that chose it (same transaction).
+   * in its own CAS, then the audit of the import that chose it (same transaction). B1-09za: or of
+   * the stored row that kept it (system audit, the order_rights id).
    */
   async function replaceEndedSub(
     trx: Transaction<DB>,
     order: NonNullable<Awaited<ReturnType<typeof readRebateOrder>>>,
     manual: ManualChoice,
     now: Date,
-    writer: Pick<AuditPort, 'append'> | null = auditFor(trx, manual),
+    writer: SubAudit | null,
   ): Promise<void> {
     const ok = await casManualReasonSub(trx, order, manual.value, now);
     if (!ok) throw new Error('settlement rights: manual reason_sub CAS matched no row');
+    if (writer?.kind === 'stored') {
+      const side = {
+        reason: order.reason,
+        source: REASON_SUB_SOURCE_STORED,
+        order_rights_id: writer.rightsId,
+      };
+      const entry: StoredChoiceAuditInput = {
+        appId: order.app_id,
+        actor: RIGHTS_AUDIT_ACTOR,
+        action: REASON_SUB_SET_AUDIT_ACTION,
+        target: `orders:${order.order_id}`,
+        before: {
+          ...side,
+          reason_sub: order.reason_sub,
+          reason_sub_manual: order.reason_sub_manual,
+        },
+        after: { ...side, reason_sub: manual.value, reason_sub_manual: true },
+      };
+      await writer.audit.appendAction(trx, entry);
+    }
     const origin = manual.origin;
-    if (writer !== null && origin !== undefined) {
+    if (writer?.kind === 'import' && origin !== undefined) {
       const side = {
         reason: order.reason,
         source: REASON_SUB_SOURCE_IMPORT,
         import_id: origin.import_id,
       };
-      await writer.append({
+      await writer.writer.append({
         appId: order.app_id,
         actor: origin.admin_id,
         action: REASON_SUB_SET_AUDIT_ACTION,
@@ -641,6 +746,8 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
     let reopened: OrderRightsRow | undefined;
     // B1-09v (money r1 S2): what marks the order below; a resolved stored record may change it.
     let effective = input;
+    // B1-09za: set when that choice is the stored row's own (older than the order's).
+    let storedChoice: StoredChoiceRef | undefined;
     const stored = await findRights(trx, key);
     if (stored === undefined) {
       const id = await insertRights(trx, {
@@ -685,8 +792,20 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
       }
       // B1-09v (money r1 S2): a choice made by hand survives the resolve — the row's own when
       // the input has none, else the input's, written onto the row so row and order agree.
-      const choice = manualOnResolve(stored, input);
+      // B1-09za (D10-969): the row's own choice never fills an order already chosen by hand.
+      const choice = manualOnResolve(stored, input, order);
       effective = { ...input, manual_reason_sub: choice.manual };
+      if (choice.fromRow && choice.manual !== undefined) {
+        storedChoice = { rightsId: stored.id };
+        if (
+          isTerminal(order.rebate_status) &&
+          status === 'SUCCEEDED' &&
+          manualOnEnded(order, undefined, choice.manual, true).order
+        ) {
+          // Its replacement is audited; without the port, refused before anything is written.
+          storedAuditFor(storedChoice);
+        }
+      }
       const ok = await updateRightsResult(trx, stored, {
         ...result,
         ...(choice.writeRow ? { manualReasonSub: choice.manual } : {}),
@@ -729,7 +848,7 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
     } else if (isTerminal(order.rebate_status) && status === 'SUCCEEDED') {
       // VOID / CLAWED_BACK: recorded only (BR-FUND-01 细则「订单锁定」); B2-04zze refines the
       // display sub-reason of a PUNISH order only.
-      await refineTerminalSub(trx, effective);
+      await refineTerminalSub(trx, effective, false, storedChoice);
     }
 
     await syncRightsPending(trx, input);
