@@ -106,6 +106,10 @@ export async function member(h: Harness, f: Setup, points: readonly string[]): P
 /** A fresh totp-tier step-up token of `caller` (the clock moves one TOTP step first). */
 export async function stepUp(f: Setup, caller: Caller): Promise<string> {
   f.clock.advanceMs(30_000);
+  // The previous (already consumed) step is still in the verifier's [-1,+1] window and the
+  // verifier keeps the earliest match, so skip steps whose code equals the previous one.
+  while (totp(caller.account.secret, f.clock, -1) === totp(caller.account.secret, f.clock))
+    f.clock.advanceMs(30_000);
   const grantData = await ok<Grant>(
     await f.post(
       '/step-up',

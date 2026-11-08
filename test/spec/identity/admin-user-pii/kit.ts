@@ -44,6 +44,9 @@ export async function member(h: Harness, f: Setup, permissions: readonly string[
 
 export async function stepUp(f: Setup, who: Seed = f.actor, token = f.token) {
   f.clock.advanceMs(30_000);
+  // The previous (already consumed) step is still in the verifier's [-1,+1] window and the
+  // verifier keeps the earliest match, so skip steps whose code equals the previous one.
+  while (totp(who.secret, f.clock, -1) === totp(who.secret, f.clock)) f.clock.advanceMs(30_000);
   const response = await f.post(
     '/step-up',
     { tier: 'totp', code: totp(who.secret, f.clock) },
