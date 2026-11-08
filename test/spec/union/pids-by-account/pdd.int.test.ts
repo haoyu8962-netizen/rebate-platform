@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
 import { createPddAuthLinkOpen } from '../../../../apps/api/src/modules/linking/application/link-open-pdd-auth.ts';
@@ -12,6 +13,22 @@ for (const binding of ['active', 'pending_auth', 'invalid'] as const) {
       const db = database();
       const f = await fixture(db, { binding, query: true, scene });
       const slots = await accountSlots(db, f.appId, 'pdd', f.accountId);
+      // B1-06zj (BR-ID-22): an active binding has the scene pid filed (the slot selected below);
+      // seed only, no assertion changed.
+      if (binding === 'active') {
+        await db
+          .insertInto('union_pdd_pid_filings')
+          .values({
+            id: randomUUID(),
+            app_id: f.appId,
+            user_id: f.a.userId,
+            pid: slots.a[scene === 'agent' ? 'agent' : 'self_buy'].pid,
+            union_account_id: f.accountId,
+            platform: 'pdd',
+            filed_at: f.clock.now(),
+          })
+          .execute();
+      }
       const service = createPddAuthLinkOpen({ ...f.options, pids: slots.pids });
       const result = await outcome(() => service.open(f.request()));
       // BR-ATTR-11: A opening his own share link is re-registered as self_buy (decideOpenOwner).

@@ -59,12 +59,13 @@ export async function fixture(db: Kysely<DB>, setup: Setup) {
     return row?.attr_code ?? null;
   });
   let phase = 'snapshot';
+  const pidOf = (stage: string, union: string, scene: string) => `${stage}-${union}-${scene}`;
   const getActivePid = vi.fn(async (q: ActivePidInput) => ({
     id: accountId,
     app_id: q.appId,
     platform: q.platform,
     pid_scene: q.pidScene,
-    pid: `${phase}-${q.platform}-${q.pidScene}`,
+    pid: pidOf(phase, q.platform, q.pidScene),
     union_account_id: accountId,
     site_id: null,
     status: 'active',
@@ -226,6 +227,25 @@ export async function fixture(db: Kysely<DB>, setup: Setup) {
   // Registration lookups must not be mistaken for the open's query/conversion work.
   attrCode.mockClear();
   getActivePid.mockClear();
+  // B1-06zj (prerequisite of B1-06zi, BR-ID-22): an active binding means A's open-time pids are
+  // already filed. Seed one union_pdd_pid_filings row per current pid getActivePid will hand out
+  // (phase 'current'), so active cases need no authority query. Non-active setups get no rows.
+  if (setup.binding === 'active') {
+    for (const scene of ['self_buy', 'agent', 'share'] as const) {
+      await db
+        .insertInto('union_pdd_pid_filings')
+        .values({
+          id: randomUUID(),
+          app_id: appId,
+          user_id: a.userId,
+          pid: pidOf(phase, 'pdd', scene),
+          union_account_id: accountId,
+          platform: 'pdd',
+          filed_at: clock.now(),
+        })
+        .execute();
+    }
+  }
   return {
     ...seeded,
     clock,
