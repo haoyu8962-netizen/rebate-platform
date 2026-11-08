@@ -9,7 +9,7 @@
 import { Controller, Get, Inject, Req, Res } from '@nestjs/common';
 import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
-import { contractRouteSchema, type ContractOperationId } from '../../../platform/index.ts';
+import { contractRouteSchema } from '../../../platform/index.ts';
 import { ClientConfigService, ConfigViewerContext } from '../../application/client-config.ts';
 import { ifNoneMatchHits } from '../../domain/config-etag.ts';
 
@@ -23,23 +23,6 @@ export interface ConfigRequest {
 export interface ConfigReply {
   header(name: string, value: string): unknown;
   code(statusCode: number): unknown;
-}
-
-const OPERATION = 'getConfig';
-
-/**
- * The contract's route schema of getConfig once the operation is implemented in
- * contracts/openapi.yaml and the route schemas are regenerated; until then (the contract slot is
- * held by another task, F1-02c §9.6) the route registers without a request schema.
- * TODO(规划/11 §3.2): drop the fallback once getConfig loses `x-implementation: planned` — blocked
- * on the contract slot.
- */
-function routeSchema(): ReturnType<typeof contractRouteSchema> | Record<string, never> {
-  try {
-    return contractRouteSchema(OPERATION as ContractOperationId);
-  } catch {
-    return {};
-  }
 }
 
 export class ConfigController {
@@ -85,6 +68,6 @@ export class ConfigController {
   Req()(prototype, 'read', 0);
   Res({ passthrough: true })(prototype, 'read', 1);
   Get('config')(prototype, 'read', read);
-  RouteSchema(routeSchema())(prototype, 'read', read);
+  RouteSchema(contractRouteSchema('getConfig'))(prototype, 'read', read);
   Controller('v1')(ConfigController);
 }

@@ -1,0 +1,68 @@
+{
+  "risk_note": "RV2 (content /v1/config controller), no behaviour change. open-followups ⑤: getConfig is no longer x-implementation: planned and route-schemas.gen.ts has it, so routeSchema()'s try/catch fallback to {} and its TODO were unreachable. The controller now registers RouteSchema(contractRouteSchema('getConfig')) directly; the OPERATION const and the ContractOperationId cast are gone (-17/+1 net). Path, ETag / 304, viewer and X-Device-Id handling unchanged. Host: rule spec 1/1, config.controller unit 4/4, eslint 0; full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/F1-02zzzi/review-codex-money-r1.json, static, no findings. RV2 refuses general, so the money type is used."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule test by a fresh independent Claude (claude-run.sh, 3 rounds; the pure regression pin of r1/r2 was folded into the red test because red_exempt does not apply to new files): test/spec/content/config-route-schema/route-schema.test.ts asserts the controller source has no fallback (no catch, no planned TODO, no cast) and the registered route schema is the contract getConfig object; container red/3 PASS. Codex spec-test r1 pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/content/config-route-schema/route-schema.test.ts > [AC-F1-02zzzi#1] 控制器直接注册 getConfig 的契约 schema：源码无 planned 回落，注册的 schema 仍是契约那一份且非空"
+  ],
+  "task": "F1-02zzzi",
+  "spec_commit": "a7b4a93b17daa9da1e42382059f3fc870ccb4e97",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a7b4a93b17daa9da1e42382059f3fc870ccb4e97",
+      "tree": "05f65f2e809c415806db49a4037a7d5512f5728e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T20:15:00Z",
+      "finished_at": "2026-11-08T20:15:15Z",
+      "red_tests": [
+        "test/spec/content/config-route-schema/route-schema.test.ts > [AC-F1-02zzzi#1] 控制器直接注册 getConfig 的契约 schema：源码无 planned 回落，注册的 schema 仍是契约那一份且非空"
+      ],
+      "expected": ["test/spec/content/config-route-schema/route-schema.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ffdc5543b24f2bcc6f70be300362ec2529ec3bc0e39efa883ae4b7d91415020f"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5efa4f15dc8b0386fc030eb1e8b3c6ee4efc230e",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}
