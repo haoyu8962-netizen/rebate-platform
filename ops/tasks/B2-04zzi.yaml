@@ -19,4 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/rebate-reverse-version-row/**'
-status: todo
+status: done
+pr: 2739

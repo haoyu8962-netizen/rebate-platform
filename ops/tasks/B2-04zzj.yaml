@@ -15,4 +15,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/jd-remaining-zero/version-row.int.test.ts'
-status: todo
+status: done
+pr: 2738
