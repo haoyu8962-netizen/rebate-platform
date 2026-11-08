@@ -1,0 +1,32 @@
+id: B2-15y
+repo: rebate-platform
+title: B2-15y：下单幂等回放不再给已不可调起的单返回调起参数（FU-PAY-IDEM-REPLAY-AFTER-CLOSE，BR-PAY-03，D10-1067）——PAID → 30902，CLOSED / closing / 已过 expire_at → 20902；可调起的单照旧原样回放
+type: impl
+# 2026-11-08 收款线入账（编排 D10-1030 ②、D10-1067 选 A；方案 couli-runs/FU-PAY-IDEM-REPLAY-AFTER-CLOSE/plan.md）。
+# 现状：POST /v1/pay/orders 走幂等 standard 模式，首次答复（含 launch）存 30 天，同键同体回放原样返回、不查支付单，单已关闭或已支付后仍给旧 launch。
+# 改法只动 payment，不动 platform/idempotency：控制器在 source=replay、status 200、存储 body code 0 时用 findOwnOrder 现查支付单，口径同首次下单（PENDING、closing=false、未过 expire_at）；可调起照旧原样回放（AC-B2-15b#22 不改）；否则按上面答复，不带 launch；读单失败走 50001、不带 launch。不改写 idempotency_keys。
+# 不改 schema：两个码已在 createPayOrder 的 x-error-codes，契约 description 只补一句回放例外，排契约槽（D10-1067：#2849 → CT-24zzc → CT-26zf → B2-15y）。
+# 提醒（编排 20:43）：三端与 H5 现在都没接收款，没有要改的客户端；三端将来接收款时，createPayOrder 必须处理 30902（已支付，带 pay_order_id）和 20902（等关单完成再下单），回放也可能拿到这两个码。
+# RV2：规则测试新鲜独立 Claude，spec-test 新鲜独立 Claude（D10-848、D10-1080），money 评审 Codex medium（D10-1075）。排在 B2-09zc、B2-15x 之后。
+refs: [BR-PAY-03]
+refs_hash:
+  BR-PAY-03: d8433c7a1556
+deps: [B2-15b]
+paths:
+  - 'apps/api/src/modules/payment/application/pay-orders.ts'
+  - 'apps/api/src/modules/payment/http/public/pay-orders.controller.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'ops/evidence/B2-15y.json'
+test_paths:
+  - 'test/spec/payment/orders-replay-after-close/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payment/orders-replay-after-close/**'
+status: todo

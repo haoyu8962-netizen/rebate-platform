@@ -19,4 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/manual-paid-before-review/**'
-status: todo
+status: done
+pr: 2871
