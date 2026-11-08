@@ -1,0 +1,21 @@
+id: DSX-51a
+repo: rebate-platform
+title: DSX-107 管理后台恢复弹层动效：28 处卸载式 Modal 删 transitionName / maskTransitionName，用户关系两个切换式框改卸载式并显式还焦点（状态上提），StepUpModal 有意保留；并做 reduced-motion 关 motion、Spin / 表格 loading delay 300、工作台整卡 hoverable（手感方案 ⑥，编排 D10-1037）
+type: impl
+# 2026-11-08 入账（前端线 f1-frontend-7，编排 D10-1037；整改计划 DSX-107 不是 规划/05 行，按后台视口 DSX-51 续号；盘点 couli-runs/F1-frontend/dsx107-inventory.md）。依据：规划/03 §10.6 第 5 条「管理后台不得用 transitionName="" 关掉组件库的弹层与抽屉动画」、整改计划 DSX-107 验收「逐页设置空 transitionName 的写法为 0」（本单例外：StepUpModal，见下）。
+# 做法（零冻结测试改动）：① 28 处卸载式 Modal（open 恒为真、由父组件条件渲染）直接删两属性；② pages/users/relations/InviterChangeDialog.tsx、LevelChangeDialog.tsx 改为卸载式，onClose 里显式把焦点还给触发钮，INVITER#4「关后再开仍显示 30409 说明」靠状态上提到父组件，冻结 admin-user-relations 用例一条不改；③ StepUpModal.tsx 保留 transitionName=""（动态码弹窗，打开后立即测量与截图），源码注释写明是有意保留的例外（DSX-107 / D10-1037）；④ 手感方案 ⑥ 其余：prefers-reduced-motion 时 ConfigProvider 关 motion、Spin / 表格 loading 加 delay（取 motion.skeleton.show-delay 令牌值，不写死）、工作台整卡（DashboardPage）hoverable 或等价可见悬停反馈——开工前先查冻结用例，有冲突先报编排，不改测试。
+# 非资金（不碰 withdrawals / adjustments 业务代码；若共用组件改动波及资金页只限外观）；规则测试新鲜独立 Claude，评审 Codex（额度用尽期间独立 Claude，D10-823 ④）。与 DSX-48c 不重叠，可并行。
+refs: []
+refs_hash: {}
+deps: [DSX-48]
+paths:
+  - 'apps/admin/src/**'
+test_paths:
+  - 'test/spec/frontend/admin-motion/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-motion/**'
+status: todo
+pr: null
