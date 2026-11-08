@@ -238,6 +238,13 @@ it('[规划/02 §11 队列拆分; ADR-0001 §4.2 #19] 生产队列目录逐项�
       policy: 'exclusive',
       deadLetter: 'payout-overdue.dead',
     },
+    // B2-02tb（B2-02t 前置，BR-FUND-19，D10-1038）：入账后证实核对队列，standard，重试 3 次（累计约 70 秒，落在 5 分钟内），紧跟 payout-overdue。
+    {
+      name: 'ledger-credit-postcheck',
+      ...DEFAULT,
+      retryLimit: 3,
+      deadLetter: 'ledger-credit-postcheck.dead',
+    },
     // B2-07e（D10-428 / D10-415 ①）：payout 进程追加 W11 尝试记录的队列，exclusive（按 (提现单, 差错单) 键去重），紧跟 payout-recon。
     {
       name: 'payout-attempt-append',
@@ -424,6 +431,8 @@ it('[规划/02 §3.1 转账队列 concurrency=1; ADR-0001 §3 海报轮询 0.5 �
       w('ledger-check', 1),
       // B2-05n（BR-WDR-26，D10-475 ②）：审核超时检查只由 worker（couli_app）消费，并发 1，紧跟 ledger-check。
       w('payout-overdue', 1),
+      // B2-02tb：入账后证实核对只由 worker 消费，并发 2，紧跟 payout-overdue。
+      w('ledger-credit-postcheck', 2),
       w('notify', 5),
       w('evt.notification-risk-state', 5),
       w('evt.notification-appeal-result', 5),
@@ -462,6 +471,8 @@ it('[规划/02 §3.1; ADR-0001 §2 进程入口] 生产计划下每个入口只�
     'ledger-check',
     // B2-05n (D10-475 ②): the worker's review overdue check, never another entry's.
     'payout-overdue',
+    // B2-02tb (D10-1038): the worker's post-credit check, never another entry.
+    'ledger-credit-postcheck',
     // B2-07e (D10-428): the payout process's W11 attempt records, never the worker's.
     'payout-attempt-append',
     'notify',
@@ -496,6 +507,7 @@ it('[规划/02 §3.1; ADR-0001 §2 进程入口] 生产计划下每个入口只�
       'payout-recon',
       'ledger-check',
       'payout-overdue',
+      'ledger-credit-postcheck',
       'notify',
       'pool-refresh',
       'poster',

@@ -1,0 +1,20 @@
+id: B2-02tb
+repo: rebate-platform
+title: test-change（B2-02t 前置）：队列目录与 worker 车道登记 ledger-credit-postcheck（standard，retryLimit 3，并发 2），冻结队列清单只追加
+type: test-change
+# 2026-11-08 funds 入账（编排 D10-1038，B2-02t 写规则测试时发现：新队列会打破冻结的精确清单 test/spec/platform/queue/contract.test.ts、queue-concurrency/kit.ts + limits.test.ts；B2-02t 属资金路径不走例外，D10-450）。先例 B1-12zc 的同类追加。只登记队列（紧跟 payout-overdue），handler 由 B2-02t 做。retryLimit 3 使累计重试约 70 秒，落在 BR-FUND-19 的 5 分钟内（默认 5 次约 310 秒）；并发 2 供月结批量。非 task 分支，编排按 #24 核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/queue/catalog.ts'
+  - 'apps/api/src/modules/platform/queue/worker-plan.ts'
+  - 'test/spec/platform/queue/contract.test.ts'
+  - 'test/spec/platform/queue-concurrency/**'
+  - 'ops/tasks/B2-02tb.yaml'
+  - 'ops/tasks/B2-02t.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

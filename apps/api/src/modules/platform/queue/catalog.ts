@@ -33,6 +33,10 @@ const BUSINESS_QUEUES = [
   // every five minutes, singletonKey `review-overdue:<UTC minute of the slot>`; each run enqueues
   // the next slot.
   'payout-overdue',
+  // The worker's post-credit check (B2-02t, BR-FUND-19, D10-1038): job `check`, one per credited
+  // order, enqueued on the credit's transaction. Three retries, about 70 s in all, so a transient
+  // failure still lands inside the rule's five minutes.
+  'ledger-credit-postcheck',
   // The payout process's W11 attempt records (B2-07e, D10-428): job `append`, singletonKey
   // `${withdrawal_id}:${recon_diff_id}:attempt-append`, queued on the write-off transaction.
   'payout-attempt-append',
@@ -83,6 +87,7 @@ export const QUEUE_CATALOG: readonly QueueSpec[] = Object.freeze([
     Object.freeze({
       ...defaults,
       name,
+      ...(name === 'ledger-credit-postcheck' ? { retryLimit: 3 } : {}),
       // risk-scan (B1-03j): at most one queued or active job per time-slot singletonKey.
       // order-sync (B1-08g): one queued or active job per window singletonKey (02 §7.1).
       policy:
