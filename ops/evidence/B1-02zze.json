@@ -1,0 +1,78 @@
+{
+  "red_tests": [
+    "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#1][AC-B1-02zze#4] 唯一一台设备在读一页与读总数之间被吊销：要么 1 行且 total 1，要么空且 total 0，绝不 1 行配 0",
+    "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#1][AC-B1-02zze#5] 跨页时吊销最新一台：第 1 页与 total 同属吊销前（4 台）或同属吊销后（3 台），同一 last_seen_at 按 id 降序",
+    "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#3][AC-B1-02zze#4] 第 2 页在吊销后越过末尾：要么吊销前的末行配 total 3，要么空列表配真实总数 2",
+    "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#2][AC-B1-02zze#4] 读一页与读总数之间新增一台带本人会话的设备：要么 1 行配 total 1，要么 2 行配 total 2，绝不 total 2 而只有 1 行",
+    "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#3][AC-B1-02zze#4] 第 2 页在新增前越过末尾：要么空列表配真实总数 1，要么旧设备配 total 2",
+    "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#2][AC-B1-02zze#5] 读之间本人在他人设备上留下一条（已吊销的）会话：该设备随之归属本人，一页与 total 仍同属一侧"
+  ],
+  "risk_note": "RV1 (identity module only; no migration, no contract change). FU-ADMIN-DEVICES-SNAPSHOT (notices 6601, B1-02zz money r1 S2; 编排 10:01 / D10-968): adminListUserDevices read one page and the countAll through Promise.all on two pool connections, so a device revoked or added between them could give items and total from two moments (items one row, total 0). page() now opens a read-only REPEATABLE READ transaction and runs the two unchanged queries in order on one connection (snapshot taken at the first statement); the out-of-range page still gets the real total from its own count (no window count). Order, filters, fields, paging and permission unchanged; nothing written — READ ONLY also makes the database refuse a data-modifying CTE (spec-test r1 S2). Same pattern as WithdrawBlockedHits in app.module.ts. Full verification is the required CI checks (approvals 21; AWS runners off, D10-555).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex quota exhausted until 11-15: adversarial review by a fresh independent Claude through claude-run.sh (approvals 36). general r1 pass, 0 findings, 0 out_of_scope (couli-runs/B1-02zze/review-code-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude through claude-run.sh (attempt 1, 6 tests in 1 file; a gated pool commits the concurrent write right after the first app.devices statement, order-independent oracle). Gate spec-test review by a fresh independent Claude (D10-848): r1 pass with one S2 (the read-only assertion would miss a data-modifying CTE) — met by the READ ONLY transaction, pinned in the unit tests (couli-runs/B1-02zze/review-spec-r1.json). Red: 6 rule tests red for the right reason, 0 problems, 0 exemptions; on the implementation the local container ran all 6 green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f01f32d5e186ced15ed403433b9b74f7de38e514",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "task": "B1-02zze",
+  "spec_commit": "7db2c7281ec4ec480d7c6737940e6b923d640f39",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7db2c7281ec4ec480d7c6737940e6b923d640f39",
+      "tree": "0859e3435ff14600b2463242c6a9dbb24b152a37",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T05:15:58Z",
+      "finished_at": "2026-11-08T05:16:11Z",
+      "red_tests": [
+        "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#1][AC-B1-02zze#4] 唯一一台设备在读一页与读总数之间被吊销：要么 1 行且 total 1，要么空且 total 0，绝不 1 行配 0",
+        "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#1][AC-B1-02zze#5] 跨页时吊销最新一台：第 1 页与 total 同属吊销前（4 台）或同属吊销后（3 台），同一 last_seen_at 按 id 降序",
+        "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#3][AC-B1-02zze#4] 第 2 页在吊销后越过末尾：要么吊销前的末行配 total 3，要么空列表配真实总数 2",
+        "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#2][AC-B1-02zze#4] 读一页与读总数之间新增一台带本人会话的设备：要么 1 行配 total 1，要么 2 行配 total 2，绝不 total 2 而只有 1 行",
+        "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#3][AC-B1-02zze#4] 第 2 页在新增前越过末尾：要么空列表配真实总数 1，要么旧设备配 total 2",
+        "test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts > [AC-B1-02zze#2][AC-B1-02zze#5] 读之间本人在他人设备上留下一条（已吊销的）会话：该设备随之归属本人，一页与 total 仍同属一侧"
+      ],
+      "expected": ["test/spec/identity/admin-user-devices-snapshot/snapshot.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "2aff1125e87f187a4fb4663780283a007a78a9f5155614d36a7dfdb1c2b50e86"
+        }
+      ]
+    }
+  ]
+}
