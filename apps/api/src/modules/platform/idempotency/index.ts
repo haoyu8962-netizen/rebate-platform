@@ -194,6 +194,9 @@
 //        standard mode) and reject with IdempotencyError('outcome_unknown'): the HTTP layer must then answer without
 //        the envelope (close the connection), BR-ID-10 细则「服务端的配合」. A failure before
 //        COMMIT rolls back and rejects with the driver's error.
+//      - Optional third argument `{ archive }` (task B1-01zzs; contract in ./archive.ts): for a
+//        stored result the record keeps what `archive` returns instead of the handler's body;
+//        the caller still gets the handler's response. Absent → unchanged.
 //
 //    HandlerResult = { status, envelope }: status an integer 200–599; envelope a plain object
 //    with integer `code` ≥ 0, string `msg`, string `trace_id` and optional `data`. The body is
@@ -303,9 +306,11 @@ import { createHash } from 'node:crypto';
 import { sql, type Kysely, type Selectable, type Transaction } from 'kysely';
 import type { Clock } from '../clock/index.ts';
 import type { FieldCrypto } from '../crypto/index.ts';
+import type { IdempotencyArchiveOptions } from './archive.ts';
 import { StoredRejection } from './stored-rejection.ts';
 
 export { StoredRejection } from './stored-rejection.ts';
+export type { IdempotencyArchiveOptions } from './archive.ts';
 
 /** The four step-up actions (04 §2.5 step_up_action). */
 export type StepUpAction =
@@ -423,6 +428,8 @@ export interface Idempotency {
   executeInTransaction(
     request: IdempotentRequest,
     handler: (trx: Transaction<DB>) => Promise<HandlerResult>,
+    /** Archive override (task B1-01zzs; contract in ./archive.ts). */
+    options?: IdempotencyArchiveOptions,
   ): Promise<IdempotentResponse>;
   abandon(request: AbandonRequest): Promise<IdempotentResponse>;
   purgeExpired(): Promise<number>;
@@ -755,8 +762,9 @@ export function createIdempotency(options: IdempotencyOptions): Idempotency {
       return result.response;
     },
 
-    async executeInTransaction(request, handler) {
+    async executeInTransaction(request, handler, options) {
       entered(request);
+      const archive = options?.archive;
       const prepared = prepare(request, fieldCrypto);
       if (!validKey(request.key)) return errorResponse(20001, request.traceId);
       return transaction(db, request, report, async (trx) => {
@@ -785,13 +793,17 @@ export function createIdempotency(options: IdempotencyOptions): Idempotency {
         const stored = rejected;
         const result = handlerResponse(stored === undefined ? await handler(trx) : stored);
         if (!result.store) throw new RollbackResponse(result.response);
+        // Archive override (./archive.ts): the returned response is fixed above; only the stored
+        // body changes. Called only for a stored result; a throw rolls back like the handler's.
+        const storedBody =
+          archive === undefined ? result.response.body : archivedBody(result.response, archive);
         // This processing row has never been visible outside this transaction. The unique
         // constraint reserves the key before any business writes and excludes abandonment.
         await trx
           .updateTable('idempotency_keys')
           .set({
             status: 'completed',
-            response: { status: result.response.status, body: result.response.body },
+            response: { status: result.response.status, body: storedBody },
           })
           .where('id', '=', claim.id)
           .execute();
@@ -1076,6 +1088,28 @@ function handlerResponse(result: HandlerResult): { response: IdempotentResponse;
     response: { status: result.status, body, source: 'handler' },
     store: code === 0 || (code >= 30000 && code <= 39999),
   };
+}
+
+/**
+ * The body to store under the archive override (./archive.ts). `archive` gets a fresh copy of the
+ * handler's envelope (parsed from the body already fixed for the caller, so changing it cannot
+ * change the returned response); what it returns must be a valid envelope with the same code.
+ */
+function archivedBody(
+  response: IdempotentResponse,
+  archive: NonNullable<IdempotencyArchiveOptions['archive']>,
+): string {
+  if (typeof archive !== 'function') throw new IdempotencyError('invalid_result');
+  const original = JSON.parse(response.body) as ResponseEnvelope;
+  const code = original.code; // Read before `archive` may change `original`.
+  const archived = handlerResponse({
+    status: response.status,
+    envelope: archive(original),
+  }).response.body;
+  if ((JSON.parse(archived) as ResponseEnvelope).code !== code) {
+    throw new IdempotencyError('invalid_result');
+  }
+  return archived;
 }
 
 function envelopeResponse(

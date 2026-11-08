@@ -1,0 +1,80 @@
+{
+  "red_tests": [
+    "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#1] 不传覆写（省略、undefined、{}、{archive: undefined}）：返回与存档逐字相同、同键重放原样；同组传覆写的键：返回仍是含令牌的原响应，存档为覆写体，覆写函数只调用一次、收到的就是处理函数的 envelope，同键重放得到存档体",
+    "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#2] 传覆写（data.tokens 置 null）：调用方拿到的响应含 access / refresh 令牌原文；idempotency_keys 任何一行（整行转文本）都不含这两个令牌原文，日志也不含；业务写入照常一起提交；覆写函数直接改动传入的对象并返回它，已返回的响应也不受影响",
+    "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#3] 传覆写后同键重放：返回存档体（source replay，状态码同原响应，code、msg、trace_id 与 data 其余字段同原响应，tokens 为 null）；重放时带覆写、不带覆写、带会抛错的覆写都一样；处理函数与覆写函数都不再调用；换请求体仍 20901",
+    "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#4] 3xxxx 结果同样按覆写存档：返回原响应、存档为覆写体、业务写入提交、同键重放存档体；1xxxx / 2xxxx / 4xxxx / 5xxxx 带覆写时照旧不存档：返回原响应、业务写入回滚、没有记录、覆写函数不调用、库里没有令牌原文",
+    "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#5] 覆写只改 response 列：同一请求体分别不传与传覆写的两个键，主体、user_id、方法、路径、请求摘要、状态、创建时刻、过期时刻逐列相同并按规则写出（合并 30 天、提现 infinity）；response 的 status 都是处理函数的状态码，body 分别为原响应与覆写体",
+    "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#6] 覆写函数抛错：同一个错误对象原样抛出，处理函数的业务写入与幂等记录一起回滚，不留存档、库里与日志里没有令牌原文；同键再发带正常覆写，重新执行并按覆写存档",
+    "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#6] 覆写函数返回非法值（undefined、null、字符串、数组、缺 trace_id、code 非整数、msg 非字符串、data 含 NaN 或 undefined、原型非普通对象、code 与原响应不同）→ IdempotencyError invalid_result：不返回处理函数的响应，业务写入回滚、没有记录、库里没有令牌原文"
+  ],
+  "risk_note": "RV2 (platform idempotency; no migration, no contract change). D10-1099 Q-6 (B1-20c plan §8.1): executeInTransaction stores the full code 0 / 3xxxx response in idempotency_keys.response for 30 days; POST /v1/auth/merge's success response carries the target account's access / refresh tokens and is never replayed (the source session is revoked, a same-key retry stops at 10002), so plain tokens would sit in the database against 04 §3.2 「token 只存哈希」. Added an optional third argument { archive } (contract in platform/idempotency/archive.ts): for a stored result, archive gets a fresh copy of the response and returns the body to store; the caller still gets the original response. archive throwing rethrows and rolls back; an invalid return or a changed code is invalid_result with a full rollback; results that are not stored and same-key replays never call archive; StoredRejection 3xxxx also goes through it. Without the argument every stored column and the replay are unchanged (27 unit tests in platform/idempotency). Full verification is the required CI checks (approvals 21).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 (D10-1075: Codex first) pass, 0 findings, 0 out_of_scope (couli-runs/B1-01zzs/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude via claude-run.sh (attempt 1, 7 integration tests; the interface is a types-only contract archive.ts, no NotImplemented runtime). Gate spec-test by Codex: r1 pass, 0 findings (couli-runs/B1-01zzs/review-spec-r1.json). Red: 7 rule tests red for the right reason, 0 problems, 0 exemptions; on the implementation the local container ran all 7 green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7ffa35043d8192bd3b3a900a712565290b16c849",
+    "specs": "fb3470055042136c0a5f959c092261acff2a7f7f"
+  },
+  "task": "B1-01zzs",
+  "spec_commit": "5729a049b48109de25a97d10d8e73d0a8929e525",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5729a049b48109de25a97d10d8e73d0a8929e525",
+      "tree": "de634e89f69c4362e56e526cd6bb74d352d4482b",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T18:55:23Z",
+      "finished_at": "2026-11-08T18:55:31Z",
+      "red_tests": [
+        "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#1] 不传覆写（省略、undefined、{}、{archive: undefined}）：返回与存档逐字相同、同键重放原样；同组传覆写的键：返回仍是含令牌的原响应，存档为覆写体，覆写函数只调用一次、收到的就是处理函数的 envelope，同键重放得到存档体",
+        "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#2] 传覆写（data.tokens 置 null）：调用方拿到的响应含 access / refresh 令牌原文；idempotency_keys 任何一行（整行转文本）都不含这两个令牌原文，日志也不含；业务写入照常一起提交；覆写函数直接改动传入的对象并返回它，已返回的响应也不受影响",
+        "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#3] 传覆写后同键重放：返回存档体（source replay，状态码同原响应，code、msg、trace_id 与 data 其余字段同原响应，tokens 为 null）；重放时带覆写、不带覆写、带会抛错的覆写都一样；处理函数与覆写函数都不再调用；换请求体仍 20901",
+        "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#4] 3xxxx 结果同样按覆写存档：返回原响应、存档为覆写体、业务写入提交、同键重放存档体；1xxxx / 2xxxx / 4xxxx / 5xxxx 带覆写时照旧不存档：返回原响应、业务写入回滚、没有记录、覆写函数不调用、库里没有令牌原文",
+        "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#5] 覆写只改 response 列：同一请求体分别不传与传覆写的两个键，主体、user_id、方法、路径、请求摘要、状态、创建时刻、过期时刻逐列相同并按规则写出（合并 30 天、提现 infinity）；response 的 status 都是处理函数的状态码，body 分别为原响应与覆写体",
+        "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#6] 覆写函数抛错：同一个错误对象原样抛出，处理函数的业务写入与幂等记录一起回滚，不留存档、库里与日志里没有令牌原文；同键再发带正常覆写，重新执行并按覆写存档",
+        "test/spec/platform/idempotency-archive-override/archive.int.test.ts > [AC-B1-01zzs#6] 覆写函数返回非法值（undefined、null、字符串、数组、缺 trace_id、code 非整数、msg 非字符串、data 含 NaN 或 undefined、原型非普通对象、code 与原响应不同）→ IdempotencyError invalid_result：不返回处理函数的响应，业务写入回滚、没有记录、库里没有令牌原文"
+      ],
+      "expected": ["test/spec/platform/idempotency-archive-override/archive.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "05d8870a78836d35c9819e4408d82b2ddbb77ea225a0c8c84b186dabc73a5233"
+        }
+      ]
+    }
+  ]
+}
