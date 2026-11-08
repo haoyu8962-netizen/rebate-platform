@@ -1,0 +1,16 @@
+id: B1-09zb
+repo: rebate-platform
+title: test-change B1-09za 拆出：订单子原因两条主干已对行为的用例（同号重放对人工 PUNISH_ORDER 不 refine、对自动值仍 refine；VOID / CLAWED_BACK 且 reason OTHER / COMMISSION_ZERO 的订单不被导入改），主干上已绿、只新增（FU-REASON-SUB-MANUAL-TESTS-R3，D10-969、D10-903 (A)）
+type: test-change
+# 2026-11-08 admin 入账。B1-09za 规则测试 r1（新鲜独立 Claude）写的这两组钉主干已对的行为，red-check 不对新增用例做 red_exempt，照 D10-903 (A) 另开本单只新增；B1-09za spec-test r1（新鲜独立 Claude）已逐条确认它们抓得住 B1-09v r3 两条 S2 描述的错误实现。相对写手原稿只改两个标题的 AC 号与首行注释任务号。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/orders/reason-sub-manual-main/**'
+  - 'ops/tasks/B1-09zb.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
