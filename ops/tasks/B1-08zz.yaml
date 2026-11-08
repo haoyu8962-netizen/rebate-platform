@@ -5,6 +5,7 @@ type: impl
 # 2026-11-08 content 入账（编排 #2813 核过时选 (i)，12:20；D10-1029 ③ 准叠在依赖分支上先做）。B1-08zy 的 couli_service_fee_missing_total{platform} 按 D10-1003 ① 计过才出序列，worker 重启后某平台（淘宝无旧告警兜底）第一次缺费时序列首个样本即为 1，increase(…[1h]) 读 0，新告警这一次不响（两位 money 评审 S2）。
 # 改法：infra/monitoring/rules/couli.yaml 的 CouliServiceFeeMissing 告警式改为如 `sum by (platform) (increase(couli_service_fee_missing_total[1h])) > 0 or sum by (platform) (couli_service_fee_missing_total unless couli_service_fee_missing_total offset 1h) > 0`（for / severity / 标签不变）。计数器与旧 CouliPddServiceFeeMissing 不动。
 # 冻结 test/spec/platform/metrics-followups/rules.test.ts [AC-B1-01zzo#10] 逐字钉着 B1-08zy 追加的那一项 expr，改告警式必须改这一项的 expr 期望（不是只追加）：照 D10-327 由新鲜独立 Claude 只改该项 expr、另一位只读复核，合并前请编排按 #24 核。deps B1-08zy（#2813），在它之后变基。
+# **撤销**（2026-11-08）：D10-1051 定淘宝序列启动即导出 0（B1-08zy #2813 已合并），increase 从 0 起算即能报首次缺费，本单不再需要；未实现、未开 PR。
 refs: []
 refs_hash: {}
 deps: [B1-08zy]
@@ -18,4 +19,4 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/service-fee-alert-first-sample/**'
-status: todo
+status: void

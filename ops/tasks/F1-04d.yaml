@@ -16,4 +16,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/h5-ledger-refresh/**'
-status: todo
+status: done
+pr: 2796

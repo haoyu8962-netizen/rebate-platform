@@ -24,4 +24,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/orders/service-fee-missing-metric/**'
-status: todo
+status: done
+pr: 2813

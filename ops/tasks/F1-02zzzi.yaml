@@ -17,3 +17,7 @@ accept:
   - 'pnpm verify'
   - 'test/spec/content/config-route-schema/**'
 status: todo
+red_exempt:
+  - file: test/spec/content/config-route-schema/route-schema.test.ts
+    test: '[AC-F1-02zzzi#1] ConfigController.read 注册的路由 schema 就是契约 getConfig 的那一份且非空'
+    reason: '回归钉子（照 D10-657）：主干上 catch 回落从未生效，注册的本就是契约 schema，故主干为绿；本任务删回落后须保持，钉住无行为变化。源码不再有回落由 #2 先红'
