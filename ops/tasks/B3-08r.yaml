@@ -1,0 +1,25 @@
+id: B3-08r
+repo: rebate-platform
+title: Agent 收尾不再持着池连接读额度上限——独立收尾（live settle / sweeper）的 F0 在已取到的池连接上调 limits.current()，配置缓存过期时 ContentReader 再向同一池取连接；同实例并发收尾数达到池大小即互相等死、整实例 DB 访问卡住。改为不持连接时读上限，收尾结局与额度扣减不变
+type: impl
+# 2026-11-08 withdraw 入账（编排 D10-972 空档派工；清单 couli-runs/AGENT-lane/open-followups-20261108.md 第 23 条「finalize 持池连接时读额度上限」，staging 第 14 条，优先级高）。
+# 现状：stream/pg/finalize.ts independent() 经 transaction(step, work, prepare)；transaction.ts 先 deps.db.connection() 取一条池连接，再在这条连接上跑 prepare（F0：readRun 读 run 元数据 + deps.limits.current(app_id)）。limits.ts 的 current() 走进程级 ContentReader（有缓存），缓存过期刷新时向同一池另取连接。N 个收尾同时在 F0、池大小为 N 时，每个都攥着一条连接等第二条 → 死锁直到池取连接超时（或永久），同实例其他请求也拿不到连接。
+# 做法（实现方定）：上限在不持池连接时读（例如先短读 run 元数据并释放连接、再读上限、再进 F1 事务；或在同一连接上直接读 config_items 而不经第二条连接），F0 的语义不变：读上限失败不开写事务（AdmissionUnavailableError rolled_back）；F1–F6 的锁顺序、结局判定、额度计数 / 退还与 final_event 写入都不变。只改 finalize.ts 与它旁边的单测。
+# 规则测试钉：池大小 N（测试用小池）、同实例并发 N 个独立收尾且上限缓存已过期 → 全部在限定时间内完成、不卡死；每个 run 的结局（final_event、settle_result、quota_left）与额度扣减和串行收尾时一致；读上限失败仍不写库、返回 rolled_back。tester 新鲜独立 Claude；评审独立 Claude（Codex 额度用尽至 11-15，D10-956 / D10-972）。
+refs: [BR-AI-15, BR-AI-23]
+refs_hash:
+  BR-AI-15: 205067c74dda
+  BR-AI-23: 5ebdbaff580d
+deps: [B3-03g]
+paths:
+  - 'apps/api/src/modules/agent/stream/pg/finalize.ts'
+  - 'apps/api/src/modules/agent/stream/pg/finalize.test.ts'
+test_paths:
+  - 'test/spec/agent/stream-finalize-pool/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/stream-finalize-pool/**'
+status: todo
+pr: null
