@@ -1,0 +1,19 @@
+id: B1-06zfa
+repo: rebate-platform
+title: test-change：拼多多授权链接的 scheme 步补用例——installed=true / unknown 时 scheme 步就是上游 schema_url 原样、h5 步是 mobile_short_url，两处出口都钉（D10-662 / D10-1061 ③）
+type: test-change
+# 2026-11-08 w1 入账（D10-1061 ③；来源 B1-06zf 评审 out-of-scope S1「BR-ID-22 / BR-ATTR-27 scheme 步没被钉」）。
+# 现状：test/spec/linking/pdd-auth-link/** 的 [AC-B1-06zf#1][#7][#28][#29] 都请求 installed=false，h5-only 计划里没有 scheme 步，kit 的 expectAuthSteps 的 scheme 分支从没被走到；实现若对 installed=true / unknown 仍用旧做法（拿 App scheme 包裹网页地址），现有用例都发现不了。
+# 做法：只新增，新目录 test/spec/linking/pdd-auth-scheme/**（夹具取 ../pdd-auth-link/kit.ts，不改它）：installed=true 与 installed=unknown 各一例，经 createHttpApp 走两处出口（GET /v1/unions/pdd/auth-url 与点击购买 open 的 30111 备案跳转），断言计划里**有** scheme 步且其值 === 上游 schema_url 原样（不包裹、不编码进别的步），h5 步 === mobile_short_url。须在现行主干上跑绿；若主干是红的（未落实 D10-662），停下报编排，改走实现单。
+# 改规则测试目录属第一类保护路径（只新增）：非 task 分支、台账同 PR；新鲜独立 Claude 写、另一位只读复核，按 #24 由编排加标签。
+refs: []
+refs_hash: {}
+deps: [B1-06zf]
+paths:
+  - 'test/spec/linking/pdd-auth-scheme/**'
+  - 'ops/tasks/B1-06zfa.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
