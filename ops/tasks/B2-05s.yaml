@@ -15,5 +15,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/apply/disabled-banned.int.test.ts'
-status: todo
-pr: null
+status: done
+pr: 2860
