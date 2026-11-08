@@ -104,3 +104,13 @@ groups:
         annotations:
           summary: 'More than half of the official Taobao searches fall back to dataoke'
           description: 'Share of official search attempts that handed over to dataoke (failure, timeout or no result). Only official attempts are counted: searches served during the 60 second cooldown never ask the official search, so they do not dilute the share. Users still get dataoke results; check the reason field of the taobao_search_fallback warnings.'
+  - name: couli-agent
+    rules:
+      - alert: CouliAgentTraceMissing
+        expr: 'couli_agent_trace_missing_runs > 0'
+        for: '5m'
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Agent runs of {{ $labels.app_id }} ended over 24 hours ago without their card trace'
+          description: 'Runs that emitted cards yet have no card rows 24 hours after they ended (erased sessions are not counted; BR-AI-19, B3-08z). Read by the worker from agent_runs and agent_cards at scrape time.'

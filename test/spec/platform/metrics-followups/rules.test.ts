@@ -146,6 +146,8 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
     'couli-sync',
     'couli-redis',
     'couli-union',
+    // B3-08za（D10-1060 / D10-1087）：Agent trace 缺失告警自成一组，追加在最后。
+    'couli-agent',
   ]);
   // B1-04zy adds the Taobao search fallback alert in a group of its own, after the others. Its
   // window, threshold and hold are not this file's: [AC-B1-04zy#58] pins the expression's shape.
@@ -183,6 +185,14 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
     },
     ...EXPECTED.slice(lastSync + 1),
     fallbackAlert,
+    // B3-08za（D10-1060 / D10-1087）：couli-agent 组的 Agent trace 缺失告警（运维类，夜间静默）。
+    {
+      group: 'couli-agent',
+      alert: 'CouliAgentTraceMissing',
+      expr: 'couli_agent_trace_missing_runs > 0',
+      for: '5m',
+      labels: { severity: 'warning' },
+    },
   ]);
   for (const rule of all) {
     const summary = rule.annotations['summary'];

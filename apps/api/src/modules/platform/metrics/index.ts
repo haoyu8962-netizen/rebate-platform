@@ -1,4 +1,13 @@
 // Public surface of platform/metrics (B1-01zzh).
+export {
+  AGENT_TRACE_MISSING_GAUGE,
+  createAgentTraceMissingCollector,
+} from './agent-trace-missing.ts';
+export type {
+  AgentTraceMissingCount,
+  AgentTraceMissingPort,
+  AgentTraceMissingSnapshot,
+} from './agent-trace-missing.ts';
 export { cacheAutoPayoutCollector, collectAutoPayoutDaily } from './auto-payout.ts';
 export type {
   AutoPayoutCapEntry,

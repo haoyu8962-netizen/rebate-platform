@@ -5,11 +5,16 @@
 // daily gauges (B1-01zzp) likewise only on the worker, filled by `collectAutoPayout`; the review
 // overdue gauge (B2-05o) likewise, filled by `collectReviewOverdue`. The Taobao search counter
 // (B1-04zy) only on the api, filled by `collectTaobaoSearch` from union's in-process counter.
+// The agent trace missing gauge (B3-08za) only on the worker, filled by `collectAgentTraceMissing`.
 // The text exposition format 0.0.4 is written here from Node built-ins only: the client library
 // cannot be loaded in the test environment (its @opentelemetry/api dependency resolves to an ESM
 // build Node cannot import), so no third-party metrics library is used at runtime.
 import { performance } from 'node:perf_hooks';
 import type { EntryName } from '../entries.ts';
+import {
+  AGENT_TRACE_MISSING_GAUGE,
+  type AgentTraceMissingSnapshot,
+} from './agent-trace-missing.ts';
 import type { AutoPayoutDailySnapshot } from './auto-payout.ts';
 import type { WorkerCollection, WorkerMetricsSnapshot } from './collect.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
@@ -33,6 +38,8 @@ export interface MetricsRegistryOptions {
   readonly collectReviewOverdue?: () => Promise<ReviewOverdueSnapshot>;
   /** The water level gauge (B2-09j). Used only on 'worker'; called once per render(). */
   readonly collectWaterLow?: () => Promise<WaterLowSnapshot>;
+  /** The agent trace missing gauge (B3-08za). Used only on 'worker'; called once per render(). */
+  readonly collectAgentTraceMissing?: () => Promise<AgentTraceMissingSnapshot>;
   /** couli_taobao_search_total (B1-04zy). Used only on 'api', never 'worker'; once per render(). */
   readonly collectTaobaoSearch?: () => TaobaoSearchMetricsSnapshot;
 }
@@ -334,6 +341,21 @@ function waterLowFamilies(snapshot: WaterLowSnapshot): Family[] {
   ];
 }
 
+/** The agent trace missing gauge (B3-08za): only this snapshot's app_ids, none made up as 0. */
+function agentTraceMissingFamilies(snapshot: AgentTraceMissingSnapshot): Family[] {
+  return [
+    {
+      name: AGENT_TRACE_MISSING_GAUGE.name,
+      help: AGENT_TRACE_MISSING_GAUGE.help,
+      type: 'gauge',
+      samples: Object.entries(snapshot.missingRuns).map(([appId, value]) => ({
+        labels: { [AGENT_TRACE_MISSING_GAUGE.label]: appId },
+        value,
+      })),
+    },
+  ];
+}
+
 /** The review overdue gauge (B2-05o): always exported, 0 included (the rule compares with > 0). */
 function reviewOverdueFamilies(snapshot: ReviewOverdueSnapshot): Family[] {
   return [
@@ -367,6 +389,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
   const collectAutoPayout = worker ? options.collectAutoPayout : undefined;
   const collectReviewOverdue = worker ? options.collectReviewOverdue : undefined;
   const collectWaterLow = worker ? options.collectWaterLow : undefined;
+  const collectAgentTraceMissing = worker ? options.collectAgentTraceMissing : undefined;
   const collectTaobaoSearch = options.entry === 'api' ? options.collectTaobaoSearch : undefined;
   return {
     contentType: CONTENT_TYPE,
@@ -374,19 +397,23 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
       // Business, fund, auto-payout and review overdue values first, then the process values of
       // the same scrape. Any collection rejecting (or throwing synchronously) rejects the whole
       // render.
-      const [business, fund, autoPayout, reviewOverdue, waterLow] = await Promise.all([
-        collect === undefined ? [] : collect().then(businessFamilies),
-        collectFund === undefined ? [] : collectFund().then(fundFamilies),
-        collectAutoPayout === undefined
-          ? []
-          : Promise.resolve().then(collectAutoPayout).then(autoPayoutFamilies),
-        collectReviewOverdue === undefined
-          ? []
-          : Promise.resolve().then(collectReviewOverdue).then(reviewOverdueFamilies),
-        collectWaterLow === undefined
-          ? []
-          : Promise.resolve().then(collectWaterLow).then(waterLowFamilies),
-      ]);
+      const [business, fund, autoPayout, reviewOverdue, waterLow, agentTraceMissing] =
+        await Promise.all([
+          collect === undefined ? [] : collect().then(businessFamilies),
+          collectFund === undefined ? [] : collectFund().then(fundFamilies),
+          collectAutoPayout === undefined
+            ? []
+            : Promise.resolve().then(collectAutoPayout).then(autoPayoutFamilies),
+          collectReviewOverdue === undefined
+            ? []
+            : Promise.resolve().then(collectReviewOverdue).then(reviewOverdueFamilies),
+          collectWaterLow === undefined
+            ? []
+            : Promise.resolve().then(collectWaterLow).then(waterLowFamilies),
+          collectAgentTraceMissing === undefined
+            ? []
+            : Promise.resolve().then(collectAgentTraceMissing).then(agentTraceMissingFamilies),
+        ]);
       const taobaoSearch =
         collectTaobaoSearch === undefined ? [] : taobaoSearchFamilies(collectTaobaoSearch());
       return [
@@ -395,6 +422,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...autoPayout,
         ...reviewOverdue,
         ...waterLow,
+        ...agentTraceMissing,
         ...taobaoSearch,
         pddServiceFeeFamily(),
         serviceFeeMissingFamily(),
