@@ -1,0 +1,23 @@
+id: B1-04zzaa
+repo: rebate-platform
+title: 规则测试补强（FU-B104ZZA-PRECREDIT-REOPEN）——API 源维权已 FAILED 后联盟又报扣款成功，订单尚未入账（WAITING / ESTIMATED）时同一条记录按 SUCCEEDED 处理、按 BR-FUND-07 走 R7 降预估（或 R6 作废），只写一次、不重复
+type: test-change
+# 2026-11-08 funds 入账（编排 D10-973 / D10-982 ②；清单 couli-runs/FUNDS-quote/open-followups-20261108.md 表一）。来源：B1-04zza spec r3 S2——test/spec/orders/taobao-rights-sync/success-after-closed.int.test.ts
+#   的 [AC-B1-04zza#45] / #46 只钉入账后（CREDITED）的「FAILED → SUCCEEDED 重开」；入账前同一路径没有规则测试。
+# 现实现已覆盖（settlement/rights/rights-command.ts 第 2 步把 API 源 FAILED → SUCCEEDED 当同一记录 applied，第 3 步按 rebate_status 分流：WAITING / ESTIMATED → R7 RIGHTS_PARTIAL，
+#   正数部分为 0 → R6 RIGHTS_FULL，没有扣减额 → WAIT_COMMISSION），新测试先天绿：type test-change、tester none；新鲜独立 Claude 写、另一位只读复审（money），
+#   PR 正文附一次手工变异证据（把第 3 步对 WAITING / ESTIMATED 的分流改成跳过 → 新例红）。只新增目录，不动实现、不迁移、不动冻结测试（夹具只读复用 taobao-rights-sync 下的 kit，不改）。
+# 要钉：① WAITING 部分扣减 → R7，预估降到 N − 扣减、rebate_status 不变、不写分录；② 扣减至 0 → R6 RIGHTS_FULL → VOID、同事务 order.invalidated；③ 同一维权单号再报 → duplicate，什么都不写；
+#   ④ 审计一条 union_reported_success_after_closed、告警一条（同 #45）；⑤ ESTIMATED 同 ①。RV2（test/**）。
+refs: [BR-FUND-06, BR-FUND-07]
+refs_hash:
+  BR-FUND-06: f903ec00076a
+  BR-FUND-07: 3d63741c52d9
+deps: [B1-04zza]
+paths:
+  - 'test/spec/orders/taobao-rights-sync-precredit/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
