@@ -1,0 +1,27 @@
+id: CT-06zzzz
+repo: rebate-platform
+title: CT-06zzzz：codex-run 把 Codex 的额度原话（You've hit your usage limit 等）识别为 capacity_error、exit 11、退轮且不计入连续无产出（FU-CODEX-QUOTA-MESSAGE，D10-993）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-993：11-08 起 Codex 额度用尽，codex-run 把 turn.failed「You've hit your usage limit … try again at Nov 15th」当成 exit 10 无产出，
+#   w1 B1-06zg、agent B3-08q、B1-04zzz 等撞「连续 3 次无产出」熔断，只能手工 refund / release）。
+# 根因：tools/agent/meta.ts 的 eventFacts（Codex）只认 'Selected model is at capacity'；claude-independent 那一支已有 CLAUDE_CAPACITY 正则，Codex 这一支没有。
+# 改法：eventFacts 对 error / turn.failed 事件（只看这两类，普通条目里引用的文件内容仍当数据）与 stderr，额外认 Codex 的额度原话
+#   （You've hit your usage limit、purchase more credits、usage limit … try again at 等，正则写死在 meta.ts、有单测正反例），capacity=1 → 无产出时 exit 11；
+#   state.ts 现有口径不变（capacity 不延长也不打断连续无产出，settle 照旧退轮）。codex-run 日志写明是额度用尽及原话里的恢复时间。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现；Codex 额度用尽期间按 approvals 36 由独立 Claude 评审；按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/meta.ts'
+  - 'tools/agent/meta.test.ts'
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/testing/**'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzz.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

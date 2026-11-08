@@ -565,6 +565,54 @@ it('capacity text quoted inside an ordinary item is not a capacity error', LONG,
   expect(readJson(join(fx.run, 'meta.json'))['capacity_error']).toBe(false);
 });
 
+// CT-06zzzz (FU-CODEX-QUOTA-MESSAGE, D10-993): the fake's `usage-limit` scenario prints what a
+// real `codex exec` printed when the account was out of its usage window (error + turn.failed
+// with the quota text, exit 1, no output).
+const QUOTA_RESET = 'Nov 15th, 2026 12:25 AM';
+
+for (const [label, args] of [
+  ['impl', ['impl', TASK]],
+  ['review', ['review', TASK, '--review-type', 'general', '--base', '<base>']],
+] as const) {
+  it(
+    `[CT-06zzzz] ${label}: a Codex usage limit without output gives exit 11, capacity_error and a log line naming it`,
+    LONG,
+    () => {
+      const fx = fixture(`usage-limit-${label}`);
+      const argv = args.map((a) => (a === '<base>' ? fx.baseSha : a));
+      const res = codexRun(fx, argv, { FAKE_CODEX_SCENARIO: 'usage-limit' });
+      expect(res.status, res.stderr).toBe(11);
+      const meta = readJson(join(fx.run, 'meta.json'));
+      expect(meta).toMatchObject({
+        mode: label,
+        exit_code: 11,
+        codex_exit: 1,
+        capacity_error: true,
+        has_output: false,
+        last_event: 'turn.failed',
+      });
+      expect(readJson(join(fx.run, `meta.${label}.json`))).toEqual(meta);
+      // One line says it is the usage limit and when Codex can be tried again.
+      expect(logLine(res.stderr, 'usage limit', QUOTA_RESET), res.stderr).toBeDefined();
+    },
+  );
+}
+
+it(
+  '[CT-06zzzz] the usage-limit text quoted inside an ordinary item is not a capacity error',
+  LONG,
+  () => {
+    const fx = fixture('quoted-usage-limit');
+    const res = codexRun(fx, ['impl', TASK], { FAKE_CODEX_SCENARIO: 'fail-quoting-usage-limit' });
+    expect(res.status, res.stderr).toBe(10);
+    expect(readJson(join(fx.run, 'meta.json'))).toMatchObject({
+      exit_code: 10,
+      capacity_error: false,
+    });
+    expect(logLine(res.stderr, QUOTA_RESET)).toBeUndefined();
+  },
+);
+
 it(
   'a run that changes HEAD, the index, branches, stash, config or hooks gives exit 12',
   LONG,
@@ -2307,5 +2355,85 @@ it(
     expect(res.status).toBe(2);
     expect(releaseCalls(fx)).toHaveLength(1);
     expect(trustedTaskState(fx)?.attempts.test).toBe(0);
+  },
+);
+
+// CT-06zzzz (D10-993): a Codex usage limit gives the caller's round back (settle, reason
+// capacity) and, like any capacity error, neither counts towards nor breaks the run of calls
+// without output (state.ts taskCalls): three such calls in a row leave the breakers closed.
+
+/**
+ * Waits until the wall clock is past the second of `startedAt` (meta.json `started_at` has
+ * second resolution; settle and taskCalls tell calls apart by it, so two calls of one second
+ * would be one call to them).
+ */
+function afterSecondOf(startedAt: string | undefined): void {
+  if (startedAt === undefined) return;
+  const wait = Date.parse(startedAt) + 1000 - Date.now();
+  if (wait > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait + 20);
+}
+
+it(
+  '[CT-06zzzz] usage-limit calls give back the round bumped for them and do not open the no-output breaker',
+  LONG,
+  () => {
+    const fx = refusalFixture('usage-limit-rounds');
+    const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    const stateFile = join(fx.runs, 'state', `${TASK}.json`);
+    const startedAt: string[] = [];
+    for (let i = 1; i <= 3; i += 1) {
+      afterSecondOf(startedAt.at(-1));
+      const before = bumpThenClear(fx, GENERAL_ROUND);
+      expect(before).toBe(0);
+      const res = codexRun(fx, review, { FAKE_CODEX_SCENARIO: 'usage-limit' });
+      expect(res.status, `call ${i}: ${res.stderr}`).toBe(11);
+      const meta = readJson(join(fx.run, 'meta.review.json'));
+      expect(meta['capacity_error'], `call ${i}`).toBe(true);
+      startedAt.push(String(meta['started_at']));
+      // The wrapper settled the call: the round is back, the bump refunded, the reason capacity.
+      expect(
+        stubCalls(fx, 'state').filter((c) => c[1] === 'settle'),
+        `call ${i}`,
+      ).toHaveLength(1);
+      const state = trustedTaskState(fx);
+      expect(state?.attempts[GENERAL_ROUND.kind], `call ${i}`).toBe(0);
+      expect(state?.pending_bumps.at(-1), `call ${i}`).toMatchObject({
+        kind: GENERAL_ROUND.kind,
+        engine: 'codex',
+        outcome: 'refunded',
+      });
+      const uncounted = (
+        JSON.parse(readFileSync(stateFile, 'utf8')) as {
+          uncounted_calls: Record<string, unknown>[];
+        }
+      ).uncounted_calls;
+      expect(uncounted.at(-1), `call ${i}`).toMatchObject({
+        kind: GENERAL_ROUND.kind,
+        exit_code: 11,
+        reason: 'capacity',
+      });
+    }
+    // Three distinct calls were settled (each one paired with its own bump).
+    expect(new Set(startedAt).size).toBe(3);
+    expect(trustedTaskState(fx)?.pending_bumps.map((b) => b['outcome'])).toEqual([
+      'refunded',
+      'refunded',
+      'refunded',
+    ]);
+    // The failure breakers stay closed: no consecutive calls without output.
+    const breakers = trustedState(fx, ['breakers', TASK, '--engine', 'codex']);
+    expect(breakers.status, breakers.stderr).toBe(0);
+    const facts = JSON.parse(breakers.stdout) as {
+      consecutive_no_output: number;
+      reasons: unknown[];
+    };
+    expect(facts.consecutive_no_output).toBe(0);
+    expect(facts.reasons).toEqual([]);
+    // So the next round can be bumped and the next call is not refused by a breaker.
+    afterSecondOf(startedAt.at(-1));
+    bumpThenClear(fx, GENERAL_ROUND);
+    const next = codexRun(fx, review);
+    expect(next.status, next.stderr).toBe(0);
+    expect(next.stderr).not.toContain('failure breaker');
   },
 );

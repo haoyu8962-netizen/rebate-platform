@@ -7,7 +7,7 @@
 #                            [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
 #   codex-run.sh selfcheck
 #
-# Exit codes: 0 usable output | 10 no usable output | 11 model capacity error |
+# Exit codes: 0 usable output | 10 no usable output | 11 model capacity error or usage limit |
 #             12 position assertion failed (out of bounds) | 124 timeout or inactivity kill |
 #             2 usage error or refused argument. selfcheck: 0 ok, 1 a check failed.
 #
@@ -144,8 +144,8 @@ usage: codex-run.sh impl   <id> [--phase test|handover] [--worktree <dir>] [--ti
        the round still counts (not passed to codex)
 env:   CODEX_REVIEW_EFFORT  review reasoning effort: minimal|low|medium|high|xhigh (default medium;
                             change only when the owner decides otherwise; impl stays high)
-exit:  0 usable output | 10 no usable output | 11 model capacity | 12 position assertion failed
-       124 timeout | 2 usage error or refused argument
+exit:  0 usable output | 10 no usable output | 11 model capacity or usage limit
+       12 position assertion failed | 124 timeout | 2 usage error or refused argument
 EOF
 }
 
@@ -1472,14 +1472,18 @@ run_task() {
   fi
 
   # Event facts. The `-o` file is only looked at once no process of the group is alive.
-  local last_type=none thread_id='' capacity=0
+  # capacity_text (CT-06zzzz, D10-993): a short note for the exit-11 log line, e.g. the time a
+  # Codex usage limit ends as Codex wrote it; meta.ts extracts and cleans it (empty when none).
+  local last_type=none thread_id='' capacity=0 capacity_text=''
   while IFS='=' read -r key value; do
     case "$key" in
       last_type) last_type="$value" ;;
       thread_id) thread_id="$value" ;;
       capacity) capacity="$value" ;;
+      capacity_text) capacity_text="$value" ;;
     esac
-  done < <(node "$SELF_DIR/meta.ts" events --engine "$AGENT_ENGINE" --events "$EVENTS" --err "$ERR")
+  done < <(node "$SELF_DIR/meta.ts" events --engine "$AGENT_ENGINE" --events "$EVENTS" --err "$ERR" \
+    --capacity-text)
   # claude-independent: the answer is the structured output of the final `result` event; it is
   # written to the output file only once the whole group is gone (no late writer).
   if [ "$AGENT_ENGINE" = claude-independent ] && [ "$group_gone" = 1 ]; then
@@ -1589,7 +1593,15 @@ run_task() {
 
   case "$final" in
     0) log "$MODE $TASK: usable output at $OUT" ;;
-    11) log "$MODE $TASK: model capacity error ($CAPACITY_TEXT, or a usage limit)" ;;
+    11)
+      # A Codex usage limit is exit 11 as well (D10-993): the round is given back and the call is
+      # not counted as a call without output (state.ts).
+      if [ -n "$capacity_text" ]; then
+        log "$MODE $TASK: model capacity error or usage limit: $capacity_text"
+      else
+        log "$MODE $TASK: model capacity error ($CAPACITY_TEXT, or a usage limit)"
+      fi
+      ;;
     12) log "$MODE $TASK: position assertion failed, changed: $changed" ;;
     124) log "$MODE $TASK: killed after timeout or inactivity" ;;
     *) log "$MODE $TASK: no usable output (${SCRIPT_NAME%-run.sh} exit $codex_exit, last event $last_type, validation $validated, stragglers $stragglers, escaped $escaped, descendants left $descendants_left)" ;;

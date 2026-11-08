@@ -5,9 +5,12 @@
 //                      [--list k=a,b,c]... [--lines k=<file>]... [--json k=<json text>]...
 //       Writes (with --new) or updates a flat JSON object atomically.
 //   node meta.ts events [--engine codex|claude-independent] --events <file> [--err <file>]
+//                       [--capacity-text]
 //       Prints shell-readable facts about a `codex exec --json` event stream:
 //       last_type=<type of the last non-empty line | none | invalid>, thread_id=<id or empty>,
-//       capacity=<0|1> (model capacity error reported by an error event or on stderr).
+//       capacity=<0|1> (model capacity error or Codex usage limit, CODEX_QUOTA, reported by an
+//       error / turn.failed event or on stderr). With --capacity-text (codex only) one more line
+//       capacity_text=<short printable note, e.g. `usage limit, try again at <time>`, or empty>.
 //       claude-independent (ops/approvals.yaml id 36): a `claude -p --output-format stream-json`
 //       stream; last_type is result.success / result.error for its final `result` event (else
 //       the type of the last line), thread_id the session id, capacity also a usage limit.
@@ -30,6 +33,18 @@ import { expandBraces, splitTopLevelCommas } from '../lib/glob.ts';
 export const CAPACITY_TEXT = 'Selected model is at capacity';
 
 /**
+ * What Codex reports when the account is out of its usage window (CT-06zzzz, D10-993). Source: the
+ * real text of a `codex exec` run on 2026-11-07 (codex-cli 0.154.0), in an `error` and a
+ * `turn.failed` event: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage
+ * to purchase more credits or try again at Nov 15th, 2026 12:25 AM." Mapped to exit 11 like
+ * CAPACITY_TEXT, and like it matched only in error / turn.failed events and on stderr, never in
+ * ordinary items (file contents). A bare `try again` or `limit` is not enough: other failures
+ * (context window, tool errors) say that too.
+ */
+export const CODEX_QUOTA =
+  /you['\u2019]ve hit your usage limit|purchase more credits|usage limit[^\n]*?try again at/i;
+
+/**
  * What a Claude run reports when the model is overloaded or the account is out of its usage
  * window (claude-independent; mapped to exit 11 like Codex's capacity error). Matched only in the
  * final `result` event's error text and on stderr, never in ordinary messages (file contents).
@@ -47,11 +62,69 @@ function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The message texts of a Codex `error` / `turn.failed` event (the raw line as well). */
+function failureTexts(line: string, event: JsonObject): string[] {
+  const texts: string[] = [];
+  if (typeof event['message'] === 'string') texts.push(event['message']);
+  const error = event['error'];
+  if (isObject(error) && typeof error['message'] === 'string') texts.push(error['message']);
+  texts.push(line);
+  return texts;
+}
+
+/** Whether one text says the model is at capacity or the Codex usage window is exhausted. */
+function isCodexCapacity(text: string): boolean {
+  return text.includes(CAPACITY_TEXT) || CODEX_QUOTA.test(text);
+}
+
+/** The error / turn.failed message texts and stderr of a Codex run, in that order. */
+function codexFailureTexts(eventsText: string, stderrText: string): string[] {
+  const texts: string[] = [];
+  for (const line of eventsText.split('\n')) {
+    if (line.trim() === '') continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isObject(event) || (event['type'] !== 'error' && event['type'] !== 'turn.failed')) {
+      continue;
+    }
+    texts.push(...failureTexts(line, event));
+  }
+  texts.push(stderrText);
+  return texts;
+}
+
+/**
+ * A short, printable note on the capacity error of a Codex run for the wrapper's log line, or ''
+ * when there is none: `usage limit, try again at <time as Codex wrote it>` (the time only when
+ * Codex gave one), or `model at capacity`. Read from the same places as eventFacts.
+ */
+export function codexCapacityText(eventsText: string, stderrText: string): string {
+  const texts = codexFailureTexts(eventsText, stderrText);
+  for (const text of texts) {
+    if (!CODEX_QUOTA.test(text)) continue;
+    // The time as Codex wrote it: up to the end of its sentence, at most 80 characters.
+    const at = /try again at\s+([^"\\\n]{1,80})/i.exec(text);
+    const sentence = (at?.[1] ?? '').split(/\.\s/)[0] ?? '';
+    const when = [...sentence]
+      .map((ch) => (/\p{Cc}/u.test(ch) ? ' ' : ch))
+      .join('')
+      .replace(/\s+/g, ' ')
+      .replace(/[\s.]+$/, '')
+      .trim();
+    return when === '' ? 'usage limit' : `usage limit, try again at ${when}`;
+  }
+  return texts.some((text) => text.includes(CAPACITY_TEXT)) ? 'model at capacity' : '';
+}
+
 /** Reads the facts the wrapper needs from a `codex exec --json` event stream. */
 export function eventFacts(eventsText: string, stderrText: string): EventFacts {
   let lastType = 'none';
   let threadId = '';
-  let capacity = stderrText.includes(CAPACITY_TEXT);
+  let capacity = isCodexCapacity(stderrText);
   for (const line of eventsText.split('\n')) {
     if (line.trim() === '') continue;
     let event: unknown;
@@ -70,7 +143,10 @@ export function eventFacts(eventsText: string, stderrText: string): EventFacts {
       threadId = event['thread_id'];
     }
     // Only error-type events count: file contents quoted in ordinary items are data.
-    if ((lastType === 'error' || lastType === 'turn.failed') && line.includes(CAPACITY_TEXT)) {
+    if (
+      (lastType === 'error' || lastType === 'turn.failed') &&
+      failureTexts(line, event).some(isCodexCapacity)
+    ) {
       capacity = true;
     }
   }
@@ -283,6 +359,7 @@ function main(argv: readonly string[]): number {
     const engine = takeOption(args, '--engine') ?? 'codex';
     const eventsFile = takeOption(args, '--events');
     const errFile = takeOption(args, '--err');
+    const withText = takeSwitch(args, '--capacity-text');
     requireEmpty(args);
     if (eventsFile === undefined) throw new UsageError('events needs --events');
     if (engine !== 'codex' && engine !== 'claude-independent') {
@@ -290,14 +367,18 @@ function main(argv: readonly string[]): number {
     }
     const read = (file: string | undefined): string =>
       file !== undefined && existsSync(file) ? readFileSync(file, 'utf8') : '';
-    const facts = (engine === 'codex' ? eventFacts : claudeEventFacts)(
-      read(eventsFile),
-      read(errFile),
-    );
+    const eventsText = read(eventsFile);
+    const stderrText = read(errFile);
+    const facts = (engine === 'codex' ? eventFacts : claudeEventFacts)(eventsText, stderrText);
     const lastType = /^[A-Za-z0-9._-]+$/.test(facts.lastType) ? facts.lastType : 'invalid';
     process.stdout.write(
       `last_type=${lastType}\nthread_id=${facts.threadId}\ncapacity=${facts.capacity ? 1 : 0}\n`,
     );
+    if (withText) {
+      const text =
+        engine === 'codex' && facts.capacity ? codexCapacityText(eventsText, stderrText) : '';
+      process.stdout.write(`capacity_text=${text}\n`);
+    }
     return 0;
   }
   if (command === 'claude-output') {

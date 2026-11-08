@@ -77,6 +77,9 @@ fi
 
 emit() { printf '%s\n' "$1"; }
 
+# CT-06zzzz: the quota text of a real Codex run (D10-993).
+USAGE_LIMIT_TEXT="You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Nov 15th, 2026 12:25 AM."
+
 start_events() {
   emit '{"type":"thread.started","thread_id":"0199fake-0000-7000-8000-000000000001"}'
   emit '{"type":"turn.started"}'
@@ -150,6 +153,22 @@ case "$SCENARIO" in
     emit '{"type":"error","message":"Selected model is at capacity. Please try a different model."}'
     emit '{"type":"turn.failed","error":{"message":"Selected model is at capacity. Please try a different model."}}'
     echo 'ERROR: Selected model is at capacity. Please try a different model.' >&2
+    exit 1
+    ;;
+  usage-limit)
+    # CT-06zzzz (D10-993): what a real `codex exec` printed when the account was out of its
+    # usage window: no output, the quota text in an error and a turn.failed event, exit 1.
+    start_events
+    emit "{\"type\":\"error\",\"message\":\"$USAGE_LIMIT_TEXT\"}"
+    emit "{\"type\":\"turn.failed\",\"error\":{\"message\":\"$USAGE_LIMIT_TEXT\"}}"
+    echo 'Reading additional input from stdin...' >&2
+    exit 1
+    ;;
+  fail-quoting-usage-limit)
+    # The quota text appears only inside an ordinary item (quoted file content).
+    start_events
+    emit "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"command_execution\",\"aggregated_output\":\"$USAGE_LIMIT_TEXT\"}}"
+    emit '{"type":"turn.failed","error":{"message":"boom"}}'
     exit 1
     ;;
   hang)

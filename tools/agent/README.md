@@ -99,12 +99,14 @@ node tools/agent/validate-output.ts --schema <schema> --file <json> [--money] [-
 | --- | --- | --- |
 | 0 | 有可用产出 | `post-run.sh` → 守卫 → 沙箱外验证 |
 | 10 | 没有可用产出（退出码非 0、缺 `turn.completed`、缺 `-o`、校验不过、被中止） | 退避重试。没拿到回答（`validation` 为 `not-run`：缺 `-o`、`turn.failed`、退出码非 0、被中止、留下进程）不计轮次；拿到回答但校验不过（`validation: failed`）计一轮 |
-| 11 | 模型容量错误（`Selected model is at capacity`） | 退避重试，不计轮次，仍计入每任务 10 次；不计入连续无产出 |
+| 11 | 模型容量错误（`Selected model is at capacity`），或 Codex 额度用尽（`You've hit your usage limit … try again at <时间>` 等，CT-06zzzz，D10-993） | 退避重试（额度用尽时等到原话里的恢复时间，或按第 36 条改派独立 Claude），不计轮次，仍计入每任务 10 次；不计入连续无产出 |
 | 12 | 位置断言失败 | 按越界处理：不执行、不提交这个 worktree 里的任何东西，先人工看 `meta.json` 的 `position_changed` |
 | 124 | 硬超时或无活动被击杀 | 不计轮次，仍计入每任务 10 次与连续无产出；反复超时说明任务要拆小 |
 
 「计不计轮次」由 `tools/ops/state.ts settle` 判定（规划/11 §2.5，负责人 2026-10-02 决定）；位置断言失败（12）照计。
 | 2 | 用法错误，或参数被拒绝 | 修正调用；Codex 没有被启动；调用前已计的那一轮退回（见下） |
+
+**额度用尽也是 11**（CT-06zzzz，FU-CODEX-QUOTA-MESSAGE，D10-993）：Codex 额度用尽时不报 `Selected model is at capacity`，而是在 `error` 与 `turn.failed` 事件里写「You've hit your usage limit. Visit … to purchase more credits or try again at Nov 15th, 2026 12:25 AM.」、退出码 1。`meta.ts` 的 `CODEX_QUOTA` 正则（写死、有单测正反例；撇号认 `'` 与 `’`；单独的 `try again` 或 `limit` 不算）与 `Selected model is at capacity` 同一口径：只在 `error` / `turn.failed` 事件与 stderr 里认，普通条目（命令输出、代理消息里引用的文件内容）里的同样文字当数据。认出且没有产出时 exit 11、`capacity_error: true`；按 `state.ts` 现有口径，`settle` 以 `capacity` 退回这一轮，`taskCalls` 跳过它，既不计入也不打断「连续 3 次无产出」，仍计入每任务 10 次。exit 11 那行日志写明是容量或额度问题，并带上原话里的恢复时间（`meta.ts events --capacity-text` 截出的短句，去掉控制字符；取不到就只写 `usage limit`）。
 
 **拒绝时退回轮次**（CT-06zzzp，FU-CODEX-RUN-REJECT-COUNT，D10-898；CT-06zzzu，FU-CODEX-RUN-REJECT-COUNT-REST）：调用方在调用前已 `state.ts bump-attempt` 计了一轮，而拒绝（`fail_usage`、`refuse`、本引擎失败熔断已开，以及可信根确定之后那些直接退出 2 的拒绝：找不到或不可执行的 `codex` / `claude`、worktree 不存在 / 不是仓库 / 不是仓库根、同一任务同一模式上一轮仍活着、旧输出文件删不掉、缺任务书、可信根缺评审提示词、prompt 以 `-` 开头，它们走 `refuse_start`，日志原文不变）都发生在写 `meta.json` 之前，`settle` 不会跑。所以任务编号、模式与参数都已解析、可信根已确定、不是 `--dry-run`、可信根有 `tools/ops/state.ts` 时，脚本在退出 2 之前先调 `state.ts release <id> <kind> --engine <本引擎> --reason <拒绝原因的前一段> --call <调用标识>`（调用标识每次调用开头生成，UTC 时间加 pid；`state.ts` 凭它保证同一次调用重复 release 也只退一轮）：`kind` 与 `settle` 同口径（`impl` 按 `--phase` 记 `test` / `handover` / `impl`；`review` 按评审类型，没传类型按代码评审）。只退同 kind、同引擎、在 `settle` 配对窗口内最新一条未消耗的预计数（标 `refused`），找不到就不改。退出码仍是 2；`release` 失败只记一行 warning，这一轮按已计处理。任务编号缺失或不合法、参数解析阶段的错误（此时还不知道 `--dry-run`）、可信根确定之前的拒绝都不调 `release`。`claude-run.sh` 共用这段代码，以 `--engine claude-independent` 退回。
 

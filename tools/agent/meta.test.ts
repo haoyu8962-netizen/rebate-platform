@@ -61,6 +61,140 @@ it('eventFacts sees a capacity error only in error events or on stderr', () => {
   expect(eventFacts(quoted, '').capacity).toBe(false);
 });
 
+// CT-06zzzz (FU-CODEX-QUOTA-MESSAGE, D10-993): Codex reports an exhausted usage window with its
+// own text, not 'Selected model is at capacity'. The streams below follow a real run (a review
+// of CT-06zzzw on 2026-11-07, codex-cli 0.154.0) line for line.
+const USAGE_LIMIT =
+  "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Nov 15th, 2026 12:25 AM.";
+const QUOTA_STARTED =
+  '{"type":"thread.started","thread_id":"01a1b832-09ee-79f1-84b6-d8d781aa1bc4"}';
+const codexLines = (...lines: string[]): string => `${lines.join('\n')}\n`;
+const errorEvent = (message: string): string => JSON.stringify({ type: 'error', message });
+const turnFailed = (message: string): string =>
+  JSON.stringify({ type: 'turn.failed', error: { message } });
+
+it('[CT-06zzzz] eventFacts: the usage-limit text of a real Codex run (error + turn.failed) is a capacity error', () => {
+  expect(
+    eventFacts(
+      codexLines(
+        QUOTA_STARTED,
+        '{"type":"turn.started"}',
+        errorEvent(USAGE_LIMIT),
+        turnFailed(USAGE_LIMIT),
+      ),
+      'Reading additional input from stdin...\n',
+    ),
+  ).toEqual({
+    lastType: 'turn.failed',
+    threadId: '01a1b832-09ee-79f1-84b6-d8d781aa1bc4',
+    capacity: true,
+  });
+});
+
+it('[CT-06zzzz] eventFacts: the usage-limit text in a turn.failed event alone, or in an error event alone, is a capacity error', () => {
+  expect(
+    eventFacts(codexLines(QUOTA_STARTED, '{"type":"turn.started"}', turnFailed(USAGE_LIMIT)), '')
+      .capacity,
+  ).toBe(true);
+  expect(eventFacts(codexLines(QUOTA_STARTED, errorEvent(USAGE_LIMIT)), '').capacity).toBe(true);
+});
+
+it('[CT-06zzzz] eventFacts: the usage-limit text on stderr is a capacity error', () => {
+  expect(eventFacts('', `ERROR: ${USAGE_LIMIT}\n`).capacity).toBe(true);
+  // Next to an ordinary failure in the stream (stderr counts on its own, as for CAPACITY_TEXT).
+  expect(
+    eventFacts(
+      codexLines(QUOTA_STARTED, turnFailed('boom')),
+      `Reading additional input from stdin...\n${USAGE_LIMIT}\n`,
+    ).capacity,
+  ).toBe(true);
+});
+
+it('[CT-06zzzz] eventFacts: other wordings of the Codex quota text are capacity errors too', () => {
+  const variants = [
+    // Another reset time, an upgrade hint before the purchase hint.
+    "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:05 PM.",
+    // A typographic apostrophe.
+    'You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Nov 15th, 2026 12:25 AM.',
+  ];
+  for (const text of variants) {
+    expect(eventFacts(codexLines(QUOTA_STARTED, turnFailed(text)), '').capacity, text).toBe(true);
+    expect(eventFacts(codexLines(QUOTA_STARTED, errorEvent(text)), '').capacity, text).toBe(true);
+    expect(eventFacts('', `ERROR: ${text}\n`).capacity, text).toBe(true);
+  }
+});
+
+it('[CT-06zzzz] eventFacts: the usage-limit text inside ordinary items (file contents, agent messages) is data, not a capacity error', () => {
+  const quoted = [
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_0', type: 'command_execution', aggregated_output: USAGE_LIMIT },
+    }),
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_1', type: 'agent_message', text: `The log says: ${USAGE_LIMIT}` },
+    }),
+    JSON.stringify({
+      type: 'item.started',
+      item: { id: 'item_2', type: 'command_execution', command: `grep 'usage limit' x.jsonl` },
+    }),
+  ];
+  for (const line of quoted) {
+    expect(eventFacts(codexLines(QUOTA_STARTED, line, COMPLETED), '').capacity, line).toBe(false);
+    // Still data when the turn then fails for another reason.
+    expect(
+      eventFacts(codexLines(QUOTA_STARTED, line, errorEvent('boom'), turnFailed('boom')), '')
+        .capacity,
+      line,
+    ).toBe(false);
+  }
+});
+
+it('[CT-06zzzz] eventFacts: other failures in error / turn.failed events are not capacity errors', () => {
+  const failures = [
+    'boom',
+    'exec_command failed: tool `shell` returned exit status 2',
+    'stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)',
+    'Reconnecting... 2/5',
+    'Your input exceeds the context window of this model. Please adjust your input and try again.',
+  ];
+  for (const message of failures) {
+    expect(
+      eventFacts(codexLines(QUOTA_STARTED, errorEvent(message), turnFailed(message)), '').capacity,
+      message,
+    ).toBe(false);
+  }
+  expect(eventFacts('', 'Reading additional input from stdin...\n').capacity).toBe(false);
+});
+
+it('[CT-06zzzz] CLI: events prints capacity=1 for the real usage-limit stream; the capacity text still does', () => {
+  const dir = scratch();
+  const events = join(dir, 'events.jsonl');
+  const err = join(dir, 'err.txt');
+  writeFileSync(
+    events,
+    codexLines(
+      QUOTA_STARTED,
+      '{"type":"turn.started"}',
+      errorEvent(USAGE_LIMIT),
+      turnFailed(USAGE_LIMIT),
+    ),
+  );
+  writeFileSync(err, 'Reading additional input from stdin...\n');
+  const res = metaCli(['events', '--events', events, '--err', err]);
+  expect(res.status, res.stderr).toBe(0);
+  expect(res.stdout).toBe(
+    'last_type=turn.failed\nthread_id=01a1b832-09ee-79f1-84b6-d8d781aa1bc4\ncapacity=1\n',
+  );
+  expect(
+    metaCli(['events', '--engine', 'codex', '--events', events, '--err', err]).stdout,
+  ).toContain('capacity=1');
+  // 'Selected model is at capacity' is unchanged.
+  const text = 'Selected model is at capacity. Please try a different model.';
+  writeFileSync(events, codexLines(QUOTA_STARTED, errorEvent(text), turnFailed(text)));
+  expect(metaCli(['events', '--events', events, '--err', err]).stdout).toContain('capacity=1');
+});
+
 it('applyValueFlags builds typed values and returns what it did not understand', () => {
   const doc: Record<string, unknown> = {};
   const rest = applyValueFlags(doc, [
