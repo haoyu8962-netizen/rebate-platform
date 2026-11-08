@@ -8,6 +8,8 @@ type: impl
 # 见 couli-runs/CODEX-IMPL/contract-gaps-for-orchestrator.md 2026-10-08 条）；QA-06a 合并。接口未入契约前不臆造路径。
 # 在 QA-06a 的 infra/load/k6 上加 sync 场景（service admin、LOAD_ADMIN_BASE_URL）；QA-06a 的冻结测试不改，新规则测试放 test/spec/load/k6/sync/。
 # 订单同步的上游联盟接口只打 infra/fault 的 WireMock（09 README §0.2 硬规则 5）。
+# 2026-11-09 agent2 核开工条件（编排续跑）：后台订单手动同步 adminCreateOrderSync（POST /admin/v1/order-syncs，order.view）、adminListOrderSyncs、adminGetOrderSyncLimits 已入契约且已实现；QA-06a（#527）done，开工。approvals 第 34 条：改回 impl claude、tester codex。
+# 2026-11-09 编排 03:45 选 (a)：QA-06a 冻结测试钉死 config.json 恰为三场景，故 sync 不进 config.json，改为同目录单独入口与配置（如 sync.ts + sync.config.json，复用 options.ts 构造器、不改三场景校验，README 只追加一节）；标题「进同目录配置」以此为准。
 refs: []
 refs_hash: {}
 deps: [QA-06a]
@@ -15,8 +17,8 @@ paths:
   - 'infra/load/k6/**'
 test_paths:
   - 'test/spec/load/k6/sync/**'
-impl: codex
-tester: claude
+impl: claude
+tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/load/k6/sync/**'

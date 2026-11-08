@@ -6,6 +6,7 @@ type: impl
 # 流程：Claude 子代理先写规则测试（test_paths，先红）→ Codex 新只读会话过审 → Codex 经 codex-run.sh impl 实现 → 按风险级评审。
 # 开工条件：开关读写入口已实现（2026-10-16 入账：F1-10b 开关注册表与 10 秒生效、F1-10d 紧急开关后台接口；开关仍存 config_items，见 couli-runs/F1-10a/decision-orchestrator.md 裁定 1）；QA-05a 合并。
 # 资金开关（payout.*、pay.*）不在本批，留第 12 项分工。
+# 2026-11-09 agent2 核开工条件（编排续跑）：QA-05a（#194）、F1-10b（#570）、F1-10d（#642）均 done；紧急开关 adminListKillSwitches / adminUpdateKillSwitch 与配置中心已实现，开工。approvals 第 34 条：改回 impl claude、tester codex。演练只打本地与 staging，只碰非资金开关。
 refs: []
 refs_hash: {}
 deps: [QA-05a, F1-10b, F1-10d]
@@ -13,8 +14,8 @@ paths:
   - 'infra/drills/switches/**'
 test_paths:
   - 'test/spec/drills/switches/**'
-impl: codex
-tester: claude
+impl: claude
+tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/drills/switches/**'
