@@ -175,7 +175,8 @@ export const BANNED_WORDS = {
         "no_rebate.price_compare",
         "no_rebate.price_compare.confirm",
         "order.price_compare.hint",
-        "order.tag.price_compare"
+        "order.tag.price_compare",
+        "order_reason.PRICE_COMPARE.summary"
       ],
       "allow_rendered_in": [
         "ORDER_INVALID",

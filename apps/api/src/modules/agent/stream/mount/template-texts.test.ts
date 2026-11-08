@@ -7,6 +7,25 @@ import { expect, it, vi } from 'vitest';
 import { productionRunTexts } from './production.ts';
 import { agentTextIfPresent } from './texts.ts';
 
+/**
+ * Keys a test hides from contracts/texts.default.json, so the package-default fallback stays
+ * covered now that the contract carries every order summary key (CT-24zy). Empty by default:
+ * every other test reads the real contract copy.
+ */
+const hidden = vi.hoisted(() => new Set<string>());
+vi.mock('./texts.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./texts.ts')>();
+  return {
+    ...actual,
+    agentText: (key: string): string => {
+      if (hidden.has(key)) throw new Error('Missing agent text');
+      return actual.agentText(key);
+    },
+    agentTextIfPresent: (key: string): string | undefined =>
+      hidden.has(key) ? undefined : actual.agentTextIfPresent(key),
+  };
+});
+
 /** BR-TEXT-05 默认标题 (08 12_TEXT, SPEC_REF). */
 const TITLES: Readonly<Record<string, string>> = {
   REFUND: '订单已退款或取消',
@@ -70,14 +89,38 @@ it('[AC-B3-08m#3][BR-AI-07] every order_reason code: contract copy, else the BR-
 });
 
 it('[AC-B3-08m#3][BR-AI-07] REFUND without contract copy → 「订单已退款或取消，详情见卡片。」(08 example, AC-S1-44 ②); NOT_TRACKED → 「未找到这笔订单的返利记录，详情见卡片。」', async () => {
-  expect(agentTextIfPresent('order_reason.REFUND.summary')).toBeUndefined();
-  const t = texts();
-  expect(await t.texts.text('a', 'order_reason.REFUND.summary')).toBe(
-    '订单已退款或取消，详情见卡片。',
-  );
-  expect(await t.texts.text('a', 'order_reason.NOT_TRACKED.summary')).toBe(
+  const refund = 'order_reason.REFUND.summary';
+  const notTracked = 'order_reason.NOT_TRACKED.summary';
+  // The contract now carries both keys (CT-24zy), verbatim the 08 example; read without a warning.
+  expect(agentTextIfPresent(refund)).toBe('订单已退款或取消，详情见卡片。');
+  expect(agentTextIfPresent(notTracked)).toBe('未找到这笔订单的返利记录，详情见卡片。');
+  const configured = texts();
+  expect(await configured.texts.text('a', refund)).toBe('订单已退款或取消，详情见卡片。');
+  expect(await configured.texts.text('a', notTracked)).toBe(
     '未找到这笔订单的返利记录，详情见卡片。',
   );
+  expect(configured.warn).not.toHaveBeenCalled();
+  // Without contract copy: the 08 package default, one agent.template_missing warning each.
+  hidden.add(refund);
+  hidden.add(notTracked);
+  try {
+    expect(agentTextIfPresent(refund)).toBeUndefined();
+    expect(agentTextIfPresent(notTracked)).toBeUndefined();
+    const t = texts();
+    expect(await t.texts.text('a', refund)).toBe('订单已退款或取消，详情见卡片。');
+    expect(await t.texts.text('a', notTracked)).toBe('未找到这笔订单的返利记录，详情见卡片。');
+    expect(t.warn).toHaveBeenCalledTimes(2);
+    expect(t.warn.mock.calls.map((call) => call[1])).toEqual([
+      'agent.template_missing',
+      'agent.template_missing',
+    ]);
+    expect(t.warn.mock.calls.map((call) => (call[0] as { key?: unknown }).key)).toEqual([
+      refund,
+      notTracked,
+    ]);
+  } finally {
+    hidden.clear();
+  }
 });
 
 it('[AC-B3-08m#3][BR-AI-07] every display_status: contract copy, else the BR-TEXT-02 status text + 「，详情见卡片。」; CREDITED_PART_CLAWED (amount in its text) and an unknown code never show the key', async () => {
