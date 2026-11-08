@@ -55,8 +55,5 @@
     "apps/admin/src/pages/users/relations/parts.tsx": 1,
     "apps/admin/src/pages/withdrawals/WithdrawalDetailPage.tsx": 3,
     "apps/admin/src/pages/withdrawals/WithdrawalsPage.tsx": 4
-  },
-  "couli-style/no-raw-pressable": {
-    "apps/h5/src/components/retry/retry-page.tsx": 1
   }
 }

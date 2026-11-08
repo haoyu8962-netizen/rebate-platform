@@ -1,0 +1,87 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-retry-bundle/baseline.test.ts > [AC-DSX-47a-BASELINE#1] lint/style/baseline.json 不再给 couli-style/no-raw-pressable 留任何额度（无此键或为空），retry-page 条目已删除",
+    "test/spec/frontend/h5-retry-bundle/baseline.test.ts > [AC-DSX-47a-BASELINE#2] 对 apps/h5/src 下全部源码运行 couli-style/no-raw-pressable 共 0 处",
+    "test/spec/frontend/h5-retry-bundle/bundle.test.ts > [AC-DSX-47a-BUNDLE#1] App 入口每个懒加载路由的「入口静态闭包 + 路由静态闭包」JS gzip 都 ≤ 145 KiB（冻结上限 150 KiB 再留 5 KiB 余量）",
+    "test/spec/frontend/h5-retry-bundle/bundle.test.ts > [AC-DSX-47a-BUNDLE#2] 找回订单 claim-form 所在路由的「入口 + 路由」JS gzip ≤ 145 KiB",
+    "test/spec/frontend/h5-retry-bundle/retry-render.test.ts > [AC-DSX-47a-RENDER#1] 重试按钮渲染为基础件 Button 的主按钮（与 Button 同标签渲染的 DOM 一致），点击仍只调用一次 onRetry",
+    "test/spec/frontend/h5-retry-bundle/retry-source.test.ts > [AC-DSX-47a-RETRY#1] retry-page.tsx 没有原生 <button>，也没有给原生元素挂 onClick，且不靠 eslint-disable 豁免 no-raw-pressable",
+    "test/spec/frontend/h5-retry-bundle/retry-source.test.ts > [AC-DSX-47a-RETRY#2] retry-page.tsx 从 components/base 导入 Button，并用它渲染带 onClick 的重试按钮"
+  ],
+  "risk_note": "DSX-47a (FU-H5-RETRY-BUNDLE, orchestrator 2026-11-07 18:49; follow-up of DSX-47). A build-only Vite plugin in apps/h5/vite.config.ts (couli:h5-trim-error-codes) drops the descriptive fields meaning and sources of packages/contracts-ts error-codes.gen.ts from the App bundle: H5 only reads action and the other handling fields; every entry must carry exactly one line of each or the build fails, so a layout change cannot ship a half-trimmed catalog; the dev server and Vitest keep the full catalog. Entry closure gzip about 135.5 -> 125.7 KiB; every App route initial + route is now within 145 KiB (claim-form 150.09 -> 141.82 KiB), five KiB under the frozen 150 KiB gate (unchanged). components/retry/retry-page.tsx uses the base primary Button (label, accessible name and click unchanged; weight follows the base component), and lint/style/baseline.json drops the no-raw-pressable key, so the rule reports 0 in apps/h5/src. A react-router production alias was measured (0.6 KiB) and not adopted. Rule tests by an independent Claude; independent Claude spec-test review r1 pass (S2: import the base Button by file, followed); red on the local container (7 tests, right reason). Implementation by Opus 5.5: local container browser run green; container verify-fast OOM-killed at tsc twice, host H5 frozen rule tests (751), lint-style-web, h5-retry-bundle and h5-shell stand in, CI runs full verification. Non-funds; RV2 by default tier (lint/style). Codex usage limit (until 11-15): independent Claude money review r1 pass, no findings (D10-823 ④). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage limit reached (until 2026-11-15), fallback to an independent Claude per D10-823 ④; round 1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "independent Claude spec-test review round 1 pass (S2: directory-form import of the base Button would be misread; implementation imports the file); tests written by an independent Claude (claude-run.sh); Codex usage limit"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-47a",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "spec_commit": "14217529969d338010ee7afaac7a97b3f4f3d2d5",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "14217529969d338010ee7afaac7a97b3f4f3d2d5",
+      "tree": "e3b53953fec81c1336a9bf7ab549d6cbfc28a71f",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-08T04:22:44Z",
+      "finished_at": "2026-11-08T04:23:07Z",
+      "red_tests": [
+        "test/spec/frontend/h5-retry-bundle/baseline.test.ts > [AC-DSX-47a-BASELINE#1] lint/style/baseline.json 不再给 couli-style/no-raw-pressable 留任何额度（无此键或为空），retry-page 条目已删除",
+        "test/spec/frontend/h5-retry-bundle/baseline.test.ts > [AC-DSX-47a-BASELINE#2] 对 apps/h5/src 下全部源码运行 couli-style/no-raw-pressable 共 0 处",
+        "test/spec/frontend/h5-retry-bundle/bundle.test.ts > [AC-DSX-47a-BUNDLE#1] App 入口每个懒加载路由的「入口静态闭包 + 路由静态闭包」JS gzip 都 ≤ 145 KiB（冻结上限 150 KiB 再留 5 KiB 余量）",
+        "test/spec/frontend/h5-retry-bundle/bundle.test.ts > [AC-DSX-47a-BUNDLE#2] 找回订单 claim-form 所在路由的「入口 + 路由」JS gzip ≤ 145 KiB",
+        "test/spec/frontend/h5-retry-bundle/retry-render.test.ts > [AC-DSX-47a-RENDER#1] 重试按钮渲染为基础件 Button 的主按钮（与 Button 同标签渲染的 DOM 一致），点击仍只调用一次 onRetry",
+        "test/spec/frontend/h5-retry-bundle/retry-source.test.ts > [AC-DSX-47a-RETRY#1] retry-page.tsx 没有原生 <button>，也没有给原生元素挂 onClick，且不靠 eslint-disable 豁免 no-raw-pressable",
+        "test/spec/frontend/h5-retry-bundle/retry-source.test.ts > [AC-DSX-47a-RETRY#2] retry-page.tsx 从 components/base 导入 Button，并用它渲染带 onClick 的重试按钮"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-retry-bundle/baseline.test.ts",
+        "test/spec/frontend/h5-retry-bundle/bundle.test.ts",
+        "test/spec/frontend/h5-retry-bundle/retry-render.test.ts",
+        "test/spec/frontend/h5-retry-bundle/retry-source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "bc8122c153649a095fb6371274904016748d9e2abbc4b491d182c93cf5be45b1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4dad9eed36d2261cb1f11387c3a9ed27b744ff2e",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  }
+}
