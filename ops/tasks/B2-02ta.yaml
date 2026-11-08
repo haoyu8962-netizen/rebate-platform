@@ -1,0 +1,22 @@
+id: B2-02ta
+repo: rebate-platform
+title: test-change（B2-02t 前置）：config-registry 登记 ledger.credit_postcheck.enabled（boolean、config.business、可编辑，无种子行，未设置即开），冻结注册表用例只追加、计数 +1
+type: test-change
+# 2026-11-08 funds 入账（编排 D10-1035 / D10-1038 §2.5；方案 couli-runs/FUNDS-quote/fu-credit-postcheck-5min-plan.md）。冻结的注册表测试只读 0001 种子，加键须先走前置（先例 B1-08zit、B3-08st）：kit.ts 追加 *_UNSEEDED，各注册表用例只追加该键、计数 +1。默认开（08 BR-FUND-19 现值）由读取方 `value !== false` 表达，spec() 第 4 参是 adminEditable，不是默认值。非 task 分支，编排按 #24 核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'test/spec/content/config-items/**'
+  - 'test/spec/content/config-settle/**'
+  - 'test/spec/content/invite-reward-config/**'
+  - 'test/spec/content/invite-reward-eligibility/**'
+  - 'ops/tasks/B2-02ta.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

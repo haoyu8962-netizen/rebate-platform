@@ -1,0 +1,38 @@
+id: B2-02t
+repo: rebate-platform
+title: 入账后 5 分钟证实核对（FU-CREDIT-POSTCHECK-5MIN，BR-FUND-19）——R5 / R5a 同事务入队单独任务，按写凭证时的基数独立重算受益人入账凭证金额，不一致登 ledger_mismatch 差错单、告警并按账户级冻结该用户提现；开关 ledger.credit_postcheck.enabled
+type: impl
+# 2026-11-08 funds 入账（编排 D10-1035 / D10-1038；方案 couli-runs/FUNDS-quote/fu-credit-postcheck-5min-plan.md）。复用 registerReconDiffOnce（ledger_mismatch / R3，ref_type voucher，dedupe `R3:credit_postcheck:<voucher_id>`）+ createWithdrawHolds（source_ref recon_diff:<id>）+ 后台关差错单解冻（B2-09b）；无迁移、无契约。
+# 范围（D10-1038 ①）：受益人 `:CREDIT` 凭证（R5、R5a 首次入账义务）核并冻结；`:PLATFORM:FORFEIT` 核、只登差错单告警不冻结；CREDIT:PLATFORM、ADJ:DEFERRED:*、FORFEIT:DEFERRED 不核。触发（②）：同事务 queue.send 新队列 ledger-credit-postcheck，payload 带写凭证时的 base_fen（及 R5a 的写前净额），retryLimit 3（累计约 70 秒）；读不到一律失败重试进 .dead，不当一致。开关未设置即开（读 value !== false）。
+# D10-1038 ② 防误冻（a）：规则测试加属性测试，随机订单 / 归属 / 基数，断言独立重算 == planInitialCredit 各受益人金额，一分分歧即红。
+# D10-1038 ② 防误冻（b）R5 / R5a 写凭证时金额相对 floor(base × ratio_bp / 10000) 的偏离，逐条（来源 packages/domain settlement/credit/credit-plan.ts、credit-order.ts）：
+#  1. R5a 首次入账义务补记：金额 = max(0, floor(booked_base × ratio_bp / 10000) − 写前净额)（pendingOf，BR-FUND-04 ⑫）→ **并进重算**：payload 带 base_fen 与 net_before_fen，expected 同式；R5 恒 net_before 0。
+#  2. R5a 转没收（首次入账义务）：FORFEIT 金额同 1 → 并进重算（只登差错单）。R5 转没收：金额 = 份额（BR-CALC-13）。
+#  3. 快照已 forfeited（isForfeitedShare，D10-481）：share 0、无凭证 → 无凭证不核。  4. 份额为 0：无凭证（>0 才写）→ 不核。  5. 暂缓 held（frozen / appealing）：R5 不写凭证 → 不核，补记走 1。
+#  6. 预留 reserve_bp：applyReserve 已进 B（BR-CALC-02）→ 不偏离，base 由生产方给。  7. 未结维权扣减 openDeduction：N 已扣，进 B（D10-474 ①）→ 不偏离。  8. 技术服务费：N_base 已扣（BR-CALC-02）→ 不偏离。
+#  9. 淘礼金 tlj_deduct_fen > 0：不入账（D10-272）→ 无凭证；接入时 B 已扣，不偏离。  10. 封顶：入账路径无封顶（splitByBp 只校验 Σbp ≤ 10000，逐份 mulDivFloor，BR-CALC-08 尾差归平台）→ 不偏离。  11. 分享单比例（BR-CALC-24）：取归属快照 ratio_bp → 不偏离。  12. R14 / REASSIGN_CREDIT：不开放 → 不核。
+refs: [BR-FUND-19, BR-CALC-04, BR-CALC-13]
+refs_hash:
+  BR-FUND-19: e6205ee4fcc1
+  BR-CALC-04: 6a3c3082b870
+  BR-CALC-13: 54c06125032c
+deps: [B2-02ta]
+paths:
+  - 'apps/api/src/modules/ledger/application/credit-postcheck*.ts'
+  - 'apps/api/src/modules/ledger/infra/credit-postcheck*.ts'
+  - 'apps/api/src/modules/ledger/credit-postcheck.module.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/modules/settlement/credit/credit-order.ts'
+  - 'apps/api/src/modules/settlement/credit/credit-order.test.ts'
+  - 'apps/api/src/modules/settlement/credit/beneficiary/beneficiary-credit.ts'
+  - 'apps/api/src/modules/settlement/credit/beneficiary/beneficiary-credit.test.ts'
+  - 'apps/api/src/modules/platform/queue/catalog.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/ledger/credit-postcheck/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/credit-postcheck/**'
+status: todo
