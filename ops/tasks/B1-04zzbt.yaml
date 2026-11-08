@@ -1,0 +1,19 @@
+id: B1-04zzbt
+repo: rebate-platform
+title: test-change：冻结 [AC-B1-04zzb#13] 标题随淘宝回扫键登记更正——新增同体新标题用例（order_sync.rescan.taobao.* 已登记），旧标题用例过渡后删除（D10-892）
+type: test-change
+# 2026-11-08 w1 入账（D10-892：B1-04zzzt #2687 已把 [AC-B1-04zzb#13] 的两处 toBeNull() 改为断言已登记，标题一字未动，正文注明「标题沿用旧文，另开 test-change 更正」）。
+# 现状：test/spec/orders/taobao-sync/schedule.test.ts 的 [AC-B1-04zzb#13] 标题仍写「不登记 order_sync.rescan.taobao.* 配置键」，断言已是已登记（boolean / 整数 1～90、config.business），标题与事实不符。
+# 做法照 B3-08o（D10-742 两态过渡）：第一步同文件新增一条新标题用例，正文与旧用例逐字相同、只换标题（AC 编号不变）；第二步在第一步合并后删除旧标题用例并去掉「标题沿用旧文」注释。不改其他用例。
+# 改既有规则测试属第一类保护路径：非 task 分支、台账同 PR；新鲜独立 Claude 修改、另一位只读复核，按 #24 由编排加 owner-approved 标签。不是资金测试，不削弱断言。
+refs: []
+refs_hash: {}
+deps: [B1-04zzzt]
+paths:
+  - 'test/spec/orders/taobao-sync/schedule.test.ts'
+  - 'ops/tasks/B1-04zzbt.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

@@ -88,6 +88,28 @@ it('[AC-B1-04zzb#13] 回扫先单档：淘宝默认开、30 天（rescanDefaults
   });
 });
 
+it('[AC-B1-04zzb#13] 回扫先单档：淘宝默认开、30 天（rescanDefaults），order_sync.rescan.taobao.* 配置键已登记（boolean / 整数 1～90、config.business）；jd / pdd 不变', () => {
+  expect(rescanDefaults('taobao')).toEqual({ enabled: true, days: 30 });
+  expect(rescanDefaults('jd')).toEqual({ enabled: true, days: 30 });
+  expect(rescanDefaults('pdd')).toEqual({ enabled: false, days: 90 });
+  // B1-04zzz（D10-845 / D10-892）起淘宝回扫键已登记；标题沿用旧文，另开 test-change 更正
+  expect(configItemSpecOf(TAOBAO_ENABLED)).toEqual({
+    key: TAOBAO_ENABLED,
+    valueType: 'boolean',
+    options: null,
+    permission: 'config.business',
+    adminEditable: true,
+  });
+  expect(configItemSpecOf(TAOBAO_DAYS)).toEqual({
+    key: TAOBAO_DAYS,
+    valueType: 'number',
+    options: null,
+    permission: 'config.business',
+    adminEditable: true,
+    range: { integer: true, min: 1, max: 90 },
+  });
+});
+
 it('[AC-B1-04zzb#14] 增量调度：淘宝落后 3 小时只发 20 分钟一窗，真实淘宝适配器按这一窗取数', async () => {
   const fromMs = NOW_MS - 3 * HOUR_MS;
   const { f, deps } = gatedFixture(
