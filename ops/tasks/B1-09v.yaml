@@ -29,4 +29,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/orders/reason-sub-manual/**'
-status: todo
+status: done
+pr: 2761

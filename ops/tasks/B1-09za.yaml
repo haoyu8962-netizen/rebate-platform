@@ -1,0 +1,24 @@
+id: B1-09za
+repo: rebate-platform
+title: 订单子原因人工对人工以最新为准（FU-REASON-SUB-STALE-ROW-MANUAL，D10-969）——已存「处理中」维权行里的旧人工值经后续同步结案时不覆盖运营之后改过的人工值；凡覆盖人工值都写审计 order_reason_sub_set；补 B1-09v spec-test r3 两条 S2 用例
+type: impl
+# 2026-11-08 admin 入账（编排 D10-969；B1-09v #2761 money r2 S2、spec-test r3 两条 S2 = FU-REASON-SUB-MANUAL-TESTS-R3）。只改子原因两个展示字段与审计，不改金额、状态、reason。
+# 规则测试新目录（reason-sub-manual 已冻结、只增不改）；S2 补的两组用例钉主干已对的行为，写完后按用例名补 red_exempt。RV2，测试与评审新鲜独立 Claude（Codex 额度尽，D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: [B1-09v]
+paths:
+  - 'apps/api/src/modules/settlement/rights/rights-command.ts'
+  - 'apps/api/src/modules/settlement/rights/rights-store.ts'
+  - 'apps/api/src/modules/settlement/rights/*.test.ts'
+  - 'apps/api/src/modules/orders/application/rights-import-rows{.ts,.test.ts}'
+  - 'apps/api/src/modules/orders/application/rights-ports.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/orders/reason-sub-stale-row/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/reason-sub-stale-row/**'
+status: todo
