@@ -130,12 +130,41 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     deps.logger?.error({ run_id: failure.runId, reason: failure.reason }, 'agent.finalize_held');
   }
 
+  /**
+   * F0 before any connection is leased: the run's app (one short pooled read, released at once),
+   * then the limits with nothing held. A failure is wrapped as the former in-transaction F0
+   * failure was (TransactionFailure, nothing committed), so retries and the rolled_back outcome
+   * are unchanged.
+   */
+  async function limitsOf(
+    runId: string,
+  ): Promise<{ readonly appId: string; readonly limits: AdmissionLimits }> {
+    let appId: string;
+    try {
+      const { rows } = await sql<{ app_id: string }>`SELECT app_id FROM app.agent_runs
+        WHERE id = ${runId}`.execute(deps.db);
+      if (!rows[0]) throw new Error('Agent run missing');
+      appId = rows[0].app_id;
+    } catch (error) {
+      throw new TransactionFailure(error, false);
+    }
+    try {
+      return { appId, limits: await deps.limits.current(appId) };
+    } catch {
+      throw new TransactionFailure(new AdmissionUnavailableError('rolled_back'), false);
+    }
+  }
+
   async function independent(runId: string, live?: EndingMemo): Promise<FinalizeOutcome> {
     const step = live ? 'settle' : 'finalize';
     for (let attempt = 0; ; attempt += 1) {
       try {
         let info!: RunRow;
-        let limits!: AdmissionLimits;
+        // B3-08r: F0's configuration read happens while no pool connection is held. transaction()
+        // leases its connection before `prepare`; reading the limits there could make the content
+        // reader's refresh wait for a second connection of the same pool, and N finalizations on
+        // a pool of N would deadlock the instance. Failures keep F0's classification.
+        const { appId, limits } = await limitsOf(runId);
         return await transaction(
           step,
           async (q) => {
@@ -153,14 +182,11 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
             return finalizeRun(q, session, row, now, limits, live);
           },
           async (q) => {
-            // F0 precedes BEGIN: a failed configuration refresh opens no write transaction.
-            // Metadata reads take no row lock; F1 always locks the session before the run.
+            // F0 precedes BEGIN: the limits were read before the connection was leased (a failed
+            // configuration refresh opens no write transaction). Metadata reads take no row lock;
+            // F1 always locks the session before the run.
             info = await readRun(q, runId);
-            try {
-              limits = await deps.limits.current(info.app_id);
-            } catch {
-              throw new AdmissionUnavailableError('rolled_back');
-            }
+            if (info.app_id !== appId) throw new Error('Agent run app changed');
           },
         );
       } catch (error) {

@@ -1,0 +1,74 @@
+{
+  "task": "B3-08r",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "spec_commit": "5e7cea1d04c94ee9b7e3434768b3c4a8b1f7bd0c",
+  "red_tests": [
+    "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#1][BR-AI-23][BR-AI-15] 池 3 条连接、上限缓存已过期：3 个 worker 独立收尾同时进 F0，10 s 内全部 final、不互相等死；每个 run 的终态、counted / refunded、quota_left、会话锁释放与当日计数都与串行逐个收尾相同",
+    "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#2][BR-AI-23][BR-AI-15] 池 3 条连接、上限缓存已过期：3 个活进程 settle（S5）同时进 F0，10 s 内全部返回、不互相等死；refunded / quota_left、final_event、会话锁释放、finish 重放的帧与当日计数都与串行逐个 settle 相同",
+    "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#3][BR-AI-15][BR-AI-23] 池 3 条连接、上限缓存已过期且刷新读库失败：2 个 worker 收尾 + 1 个活进程 settle 同时进 F0，10 s 内全部是 AdmissionUnavailableError(rolled_back)，agent 三张表逐行逐列不变；读库恢复后同样并发再收尾一次，10 s 内按 B3-03g 结局完成",
+    "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#4][BR-AI-23][BR-AI-15] 池 3 条连接、上限缓存已过期：同一 run 3 个 worker 收尾同时进 F0，10 s 内完成且只写一次（一个 wrote=true）；再过期后 2 个 worker 收尾 + 1 个活进程 settle 并发重入，10 s 内都按 final_event 回答（wrote=false），不重复计数、三张表不变"
+  ],
+  "risk_note": "RV1, agent stream only (stream/pg/finalize.ts); no migration, no contract change, no quota or outcome change (withdraw lane, model Claude Opus 5.5; orchestrator ruling D10-972; agent follow-up list open-followups-20261108 #23). Before this task an independent finalization (live settle, worker sweeper) read the daily quota limits inside transaction()'s prepare, i.e. while holding a leased pool connection; the content reader behind limits.current() leases a second connection of the same pool when its cache refreshes, so N concurrent finalizations on a pool of N waited for each other with no timeout and the instance's DB access stalled. Now F0's configuration read happens before the lease: one short pooled read of the run's app_id, released at once, then limits.current() with nothing held; prepare keeps its readRun through the SQL hooks (hook order unchanged) and checks the app_id; failures are wrapped as the former in-transaction F0 failure was, so the live retry and the rolled_back outcome are unchanged; F1–F6 untouched. Covered: concurrent worker finalizations (#1), live settles (#2), a failing limit refresh (#3), one run finalized three times at once (#4), all on a 3-connection pool with an expired cache. Test-machine full verify not run (AWS runners disabled, D10-555; CI verify-int is the full verification).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5e7cea1d04c94ee9b7e3434768b3c4a8b1f7bd0c",
+      "tree": "e195862fbff52a134b4617f1fedd24ace60d6522",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T01:05:12Z",
+      "finished_at": "2026-11-08T01:06:04Z",
+      "red_tests": [
+        "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#1][BR-AI-23][BR-AI-15] 池 3 条连接、上限缓存已过期：3 个 worker 独立收尾同时进 F0，10 s 内全部 final、不互相等死；每个 run 的终态、counted / refunded、quota_left、会话锁释放与当日计数都与串行逐个收尾相同",
+        "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#2][BR-AI-23][BR-AI-15] 池 3 条连接、上限缓存已过期：3 个活进程 settle（S5）同时进 F0，10 s 内全部返回、不互相等死；refunded / quota_left、final_event、会话锁释放、finish 重放的帧与当日计数都与串行逐个 settle 相同",
+        "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#3][BR-AI-15][BR-AI-23] 池 3 条连接、上限缓存已过期且刷新读库失败：2 个 worker 收尾 + 1 个活进程 settle 同时进 F0，10 s 内全部是 AdmissionUnavailableError(rolled_back)，agent 三张表逐行逐列不变；读库恢复后同样并发再收尾一次，10 s 内按 B3-03g 结局完成",
+        "test/spec/agent/stream-finalize-pool/pool.int.test.ts > [B3-08r#4][BR-AI-23][BR-AI-15] 池 3 条连接、上限缓存已过期：同一 run 3 个 worker 收尾同时进 F0，10 s 内完成且只写一次（一个 wrote=true）；再过期后 2 个 worker 收尾 + 1 个活进程 settle 并发重入，10 s 内都按 final_event 回答（wrote=false），不重复计数、三张表不变"
+      ],
+      "expected": ["test/spec/agent/stream-finalize-pool/pool.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "d91dc1236b1732538ef102046f9c1b228ace379ae09c4dfbdd2322811cd00783"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "Code review (general, RV1) by a fresh independent Claude (claude-run.sh review --review-type general), D10-972: Codex usage limit until 11-15 00:24 (failed at once at 06:5x on B2-04zzh). Base = fork point ec82192b364f, full diff. Verdict pass, no S0/S1/S2: the app_id pre-read releases its connection and limits.current() runs with nothing held before transaction() leases one; failures keep the TransactionFailure(…, false) classification (unavailable / rolled_back, live retries once); crash hooks, F1's lock order, F2–F6 outcomes and quota counting unchanged; callers traced (sweeper, live settle via requireFinal, admit with caller-passed limits)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 1/3); spec-test r1 by a fresh independent Claude: pass on a0e57071f2fd. The reviewer traced the deadlock on trunk (3 held connections, 3 per-key refresh loads queued on the same pool, no connection timeout) and checked the hand-computed outcomes; one non-blocking S2: an in-process semaphore capping finalizations at pool-1 would also pass, which no code or brief prescribes."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "dd08f636467cdae2d93fcce629edf2c228117571",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
