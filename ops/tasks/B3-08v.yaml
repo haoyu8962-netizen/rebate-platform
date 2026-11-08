@@ -1,0 +1,24 @@
+id: B3-08v
+repo: rebate-platform
+title: Agent HTTP 入口的兜底 catch 记日志——agent/http/index.ts 多处 catch 直接回 50001 不留任何记录（:263、:278、:300、:377、:470；:187 注入了 logger 却未用），每处记一行 error（只带操作名与错误名，不含用户文本、令牌与错误信息原文），响应不变
+type: impl
+# 2026-11-08 withdraw 入账（编排 D10-1004 ②；agent 清单 couli-runs/AGENT-lane/open-followups-20261108.md 第 26 条，staging 第 17 条，优先级中）。
+# 清单写的路径 stream/http/index.ts 在仓库里从未存在；行号与 apps/api/src/modules/agent/http/index.ts 一一对上（187 logger?: Pick<RootLogger,'error'|'warn'>；263 / 278 / 300 / 377 / 470 的 catch 回 50001），以此为准。生产装配（stream/mount/index.ts:442 createAgentHttp）已传 logger，不用改装配。
+# 做法：每处兜底 catch 在回包前记一行 logger.error（事件名区分操作，例如 agent_http_failed {op, error_name}；与 sweeper / finalize 一样只带错误名，不带 message：可能含用户文本），logger 未注入时不记、行为不变；回包码、文案、时机、SSE 已开始时不再回 JSON 的分支都不变；:378 的 50401 / 50001 分类不变。只改 index.ts 与旁边新增的单测。
+# 规则测试钉：逐个让依赖端口在对应操作里抛错（含错误信息里带用户文本 / 令牌样式的合成串），响应与主干一致，日志恰一行 error、带操作名与错误名、不含那段文本；未注入 logger 时不抛、响应一致。tester 新鲜独立 Claude；评审独立 Claude（Codex 额度用尽至 11-15，D10-1004）。
+refs: [BR-AI-23]
+refs_hash:
+  BR-AI-23: 5ebdbaff580d
+deps: [B3-03d]
+paths:
+  - 'apps/api/src/modules/agent/http/index.ts'
+  - 'apps/api/src/modules/agent/http/index.test.ts'
+test_paths:
+  - 'test/spec/agent/http-catch-log/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/http-catch-log/**'
+status: todo
+pr: null

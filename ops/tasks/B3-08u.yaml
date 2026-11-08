@@ -1,0 +1,24 @@
+id: B3-08u
+repo: rebate-platform
+title: Agent sweeper 锁连接遇半开 TCP 不再挂约 15 分钟——stream/sweeper/loop.ts 一轮的取锁、SELECT 1 与解锁在钉住的连接上无上限等待，连接半开（不回包）时整轮卡住、后续各轮都因 running 跳过；改为有上限地等待，超限放弃本轮、下一轮重取连接，收尾结局与恢复逻辑不变
+type: impl
+# 2026-11-08 withdraw 入账（编排 D10-1004 ①；agent 清单 couli-runs/AGENT-lane/open-followups-20261108.md 第 27 条，staging 第 25 条，优先级中）。
+# 现状：loop.ts 一轮用 db.connection().execute(c => …) 钉住一条连接，在 c 上 pg_try_advisory_lock / 每步前 SELECT 1 / 结束时 pg_advisory_unlock。连接半开（对端不回包、本机未察觉断开）时这些语句的等待只受 TCP 重传超时约束（约 15 分钟）：取锁阶段卡住时 tick_timeout 还没布，running 不清，之后每轮都 'agent_sweep_skipped' busy，残留 run 迟迟不收尾。
+# 做法（实现方定）：给锁连接上的语句设上限（例如经 deps.schedule 的计时器与语句竞速、到点放弃，并 / 或在 c 上 SET statement_timeout、idle_in_transaction_session_timeout、TCP keepalive 等价做法）；超限放弃本轮：记一条 error（只带阶段与错误名），running 清掉、本轮结束，下一轮重新借连接；不在本轮重复派发收尾。loop.ts 头注释是 stream-recovery 规则测试的契约：名字、签名、既有日志行与语义保持（新增的放弃路径写进头注释）。只改 loop.ts 与旁边新增的单测。
+# 规则测试钉：模拟半开 / 不回包的锁连接（取锁、SELECT 1、解锁三处各一），限定时间内放弃本轮、下一轮照常进行；放弃不导致同一 run 重复收尾、不留未处理的拒绝；正常连接下行为与既有用例一致。tester 新鲜独立 Claude；评审独立 Claude（Codex 额度用尽至 11-15，D10-1004）。
+refs: [BR-AI-23]
+refs_hash:
+  BR-AI-23: 5ebdbaff580d
+deps: [B3-03h]
+paths:
+  - 'apps/api/src/modules/agent/stream/sweeper/loop.ts'
+  - 'apps/api/src/modules/agent/stream/sweeper/loop.test.ts'
+test_paths:
+  - 'test/spec/agent/stream-sweeper-halfopen/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/stream-sweeper-halfopen/**'
+status: todo
+pr: null
