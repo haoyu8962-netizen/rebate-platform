@@ -16,8 +16,23 @@ import type { UnionTransportResponse } from '../replay.ts';
 export interface PddWarning {
   readonly error_code: string;
   readonly type: string;
-  readonly event?: 'PRICE_ANOMALY';
+  readonly event?: 'PRICE_ANOMALY' | PddOrderAlert;
+  /**
+   * B1-04zgd（D10-1069 / D10-1096）：拼多多订单告警（order_status 4 / 10 按失效）与 event 同值；
+   * 只订单告警带。
+   */
+  readonly alert?: PddOrderAlert;
+  /** B1-04zgd：订单告警恒为 'pdd'。 */
+  readonly platform?: 'pdd';
+  /**
+   * B1-04zgd：只 order_reason_sub_unmapped 带，上游 fail_reason 原值（空串原样，缺失为 null）；
+   * 不带订单号、金额、用户。
+   */
+  readonly fail_reason?: string | null;
 }
+
+/** B1-04zgd：拼多多订单的两种告警（event 与 alert 同值）。 */
+export type PddOrderAlert = 'order_reason_sub_unmapped' | 'pdd_invalid_with_commission';
 
 /** 接口名 → 响应外层键；4_PDD_附 §3.4 列出的接口，加 B1-04u probe 实测的商品接口。 */
 const ENVELOPES: ReadonlyMap<string, string> = new Map([

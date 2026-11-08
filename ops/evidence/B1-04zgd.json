@@ -1,0 +1,78 @@
+{
+  "risk_note": "RV2 by path (union module wiring; logging only). D10-1096 (split from B1-04zgc after three spec-test rounds; its r3 S1 is this task): union.module.ts logPddWarning logged every PddWarning with an event as 'pinduoduo goods price anomaly' with only event + method, so the Pinduoduo order_status 4 / 10 alerts would lose alert / platform / fail_reason. PddWarning gains the two order events (order_reason_sub_unmapped, pdd_invalid_with_commission) and optional alert, platform and fail_reason (union/infra/pdd/response.ts); logPddWarning logs order_reason_sub_unmapped as exactly {event, alert, platform: 'pdd', method: warning.type, fail_reason} and pdd_invalid_with_commission as exactly {event, alert, platform: 'pdd', method: warning.type}, each with its own message; PRICE_ANOMALY and unknown-error-code output unchanged; no order number, amount or user. No behaviour outside logging; independent of B1-04zgc (which rebases on it).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review (D10-1096 asks Codex first; effort medium) round 1 pass with no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests (test/spec/union/pdd-warning-log/log.test.ts, 6 tests through the assembled union module and a spy pino logger) by a fresh independent Claude; red at the base. spec-test review by a fresh independent Claude (D10-848) round 1 pass with two S2 (method must come from warning.type; the two messages must not be swapped), both handled in the implementation."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#1] order_reason_sub_unmapped：平铺字段恰为 event、alert、platform=pdd、method、fail_reason 原值，消息如实（不是价格异常）；不带单号、金额、用户；价格异常与未知错误码两条既有输出不变",
+    "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#2] order_reason_sub_unmapped 的 fail_reason（空串原样）：字段集合不变、值如实，不带单号、金额、用户",
+    "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#2] order_reason_sub_unmapped 的 fail_reason（null 记为 null）：字段集合不变、值如实，不带单号、金额、用户",
+    "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#2] order_reason_sub_unmapped 的 fail_reason（缺失记为 null）：字段集合不变、值如实，不带单号、金额、用户",
+    "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#3] pdd_invalid_with_commission：平铺字段恰为 event、alert、platform=pdd、method（无 fail_reason），消息如实且与 order_reason_sub_unmapped 不同；不带单号、金额、用户；既有两条输出不变",
+    "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#4] 两种订单告警各只记一条 warn，platform 恒 pdd、alert 与 event 同值，每个字段值都只来自 event / alert / platform / method / fail_reason"
+  ],
+  "task": "B1-04zgd",
+  "spec_commit": "78040e278934a8383c135b5642c08ceb083be70b",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "78040e278934a8383c135b5642c08ceb083be70b",
+      "tree": "9094beb4d14f62c981fdb980ecb7c98c7c234e57",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T17:59:58Z",
+      "finished_at": "2026-11-08T18:00:07Z",
+      "red_tests": [
+        "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#1] order_reason_sub_unmapped：平铺字段恰为 event、alert、platform=pdd、method、fail_reason 原值，消息如实（不是价格异常）；不带单号、金额、用户；价格异常与未知错误码两条既有输出不变",
+        "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#2] order_reason_sub_unmapped 的 fail_reason（空串原样）：字段集合不变、值如实，不带单号、金额、用户",
+        "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#2] order_reason_sub_unmapped 的 fail_reason（null 记为 null）：字段集合不变、值如实，不带单号、金额、用户",
+        "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#2] order_reason_sub_unmapped 的 fail_reason（缺失记为 null）：字段集合不变、值如实，不带单号、金额、用户",
+        "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#3] pdd_invalid_with_commission：平铺字段恰为 event、alert、platform=pdd、method（无 fail_reason），消息如实且与 order_reason_sub_unmapped 不同；不带单号、金额、用户；既有两条输出不变",
+        "test/spec/union/pdd-warning-log/log.test.ts > [AC-B1-04zgd#4] 两种订单告警各只记一条 warn，platform 恒 pdd、alert 与 event 同值，每个字段值都只来自 event / alert / platform / method / fail_reason"
+      ],
+      "expected": ["test/spec/union/pdd-warning-log/log.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "109674f0885227dc9f8067156793261b78040b11d02f8c73d8e6b9bafe03037c"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "613680080b0fa510b25ef0af362c31c8e7b25c38",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}

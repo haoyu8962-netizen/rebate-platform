@@ -170,11 +170,33 @@ function logPriceWarning(logger: RootLogger, warning: TaobaoPriceWarning): void 
 }
 
 /**
- * The Pinduoduo warn hook as flat pino fields; no request content, item data or amount. A warning
- * with an `event` (B1-04u: PRICE_ANOMALY from the goods mapping) is logged as that event; one
+ * The Pinduoduo warn hook as flat pino fields; no request content, item data, order number, amount
+ * or user. The two order alerts (B1-04zgd, D10-1069) are logged with event, alert, platform and
+ * method (order_reason_sub_unmapped also the raw fail_reason, missing as null); a warning with
+ * another `event` (B1-04u: PRICE_ANOMALY from the goods mapping) is logged as that event; one
  * without is an unknown error code (B1-04g).
  */
 function logPddWarning(logger: RootLogger, warning: PddWarning): void {
+  if (warning.event === 'order_reason_sub_unmapped') {
+    logger.warn(
+      {
+        event: warning.event,
+        alert: warning.event,
+        platform: 'pdd',
+        method: warning.type,
+        fail_reason: warning.fail_reason ?? null,
+      },
+      'pinduoduo order failed or punished: raw fail_reason',
+    );
+    return;
+  }
+  if (warning.event === 'pdd_invalid_with_commission') {
+    logger.warn(
+      { event: warning.event, alert: warning.event, platform: 'pdd', method: warning.type },
+      'pinduoduo failed or punished order still carries commission',
+    );
+    return;
+  }
   if (warning.event !== undefined) {
     logger.warn({ event: warning.event, method: warning.type }, 'pinduoduo goods price anomaly');
     return;
