@@ -10,6 +10,8 @@ paths:
   - 'apps/api/src/modules/payout/application/admin-withdrawals*.ts'
   - 'apps/api/src/modules/payout/http/admin/withdrawals.controller*.ts'
   - 'apps/api/src/modules/payout/http/admin/admin-withdrawals*.ts'
+  - 'apps/api/src/modules/platform/http/admin-guard.ts' # AdminActor 加可选 permissions：控制器要分辨「只持 user.lookup」（D10-1042），guard 已读出权限点，D10-1048 的三个接口复用
+  - 'apps/api/src/modules/admin/application/admin-operation-guard{.ts,.test.ts}'
 test_paths:
   - 'test/spec/payout/admin-withdrawals-lookup/**'
 impl: claude
