@@ -38,8 +38,6 @@ it.each([10031, '10031', 10212, '10212', 10213, '10213'])(
 const OTHER_CODES: [number | string, UnionErrorCode][] = [
   [10014, 'rate_limited'],
   ['10202', 'rate_limited'],
-  [10021, 'upstream_rejected'],
-  [10072, 'upstream_rejected'],
   [10012, 'upstream_unavailable'],
   [-1, 'upstream_unavailable'],
   [10071, 'upstream_rejected'],

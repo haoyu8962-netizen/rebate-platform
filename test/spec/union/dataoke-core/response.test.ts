@@ -95,12 +95,6 @@ function group(codes: readonly number[], expected: UnionErrorCode, warns: boolea
 const outerRows: readonly OuterRow[] = [
   // Throttling (gz-13): error-count limit, call limits, frequency, daily / per-minute quota.
   ...group([10064, 10045, 10013, 10014, 10022, 10201, 10202, 10038], 'rate_limited', false),
-  // Signature / credential / authorisation: rejected and warned once.
-  ...group(
-    [10009, 10010, 10016, 10015, 10018, 10021, 10020, 10072, 10210, 10211, 401],
-    'upstream_rejected',
-    true,
-  ),
   // Temporary server-side failures.
   ...group(
     [-1, 500, 503, 10008, 10012, 10019, 10023, 10025, 10053, 10054],
@@ -145,8 +139,6 @@ interface TopRow {
 }
 
 const topClassifications: readonly TopRow[] = [
-  // code 11: no API permission → rejected and one warning.
-  { code: 11, sub_code: 'isv.permission-api-package-limit', expected: 'upstream_rejected' },
   // code 15: business error (api-27 example: sub_code 2000, bad start or end time) → rejected.
   { code: 15, sub_code: '2000', expected: 'upstream_rejected' },
   // code 7, or a sub_code starting with isp.call-limited → rate limited.
@@ -225,12 +217,6 @@ it.each<[string, unknown, UnionErrorCode, [DataokeWarning][]]>([
     { code: 10013, data: { synthetic: true } },
     'rate_limited',
     [],
-  ],
-  [
-    'a non-zero outer code over a taobao error inside data',
-    { code: 10021, data: { error_response: { code: 7 } } },
-    'upstream_rejected',
-    [[{ path, code: '10021' }]],
   ],
   [
     'a taobao error inside data over other data keys',

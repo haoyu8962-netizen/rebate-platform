@@ -144,7 +144,7 @@ const FAILED_ANSWER: readonly UnionErrorCode[] = [
   'rate_limited',
 ];
 
-it.each([10021, 10071, 10014, 20001])(
+it.each([10071, 10014, 20001])(
   '[AC-B1-04zzt#17] 其余外层 code %s（即使 data 里带着链接）→ 失败、不返回地址，错误不带 pid / relationId / 链接',
   async (code) => {
     const reply = response({ code, msg: 'synthetic upstream msg', data: shopData() });

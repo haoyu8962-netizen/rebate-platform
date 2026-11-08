@@ -91,8 +91,6 @@ interface Classification {
 }
 
 const classifications: readonly Classification[] = [
-  // code 11: no API permission (probe: isv.permission-api-package-limit) → rejected + one warning.
-  { code: 11, sub_code: 'isv.permission-api-package-limit', expected: 'upstream_rejected' },
   // code 15: business error (probe: 50001 no result, 26 link not recognised) → rejected for now.
   { code: 15, sub_code: '50001', expected: 'upstream_rejected' },
   { code: 15, sub_code: '26', expected: 'upstream_rejected' },

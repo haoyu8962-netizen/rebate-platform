@@ -1,0 +1,22 @@
+id: B1-04zzzy
+repo: rebate-platform
+title: test-change B1-04zzzx 前置（D10-998 A）：只从 8 张冻结 .each 表删去将改期望的凭据 / 签名 / 权限 / 站长授权码与 TOP 11 行，主干上仍全绿；新期望由 B1-04zzzx 的 test/spec/union/cred-class/** 覆盖
+type: test-change
+# 2026-11-08 union 入账（D10-998 选 A）。B1-04zzzx（FU-UNION-CRED-CLASS）把这些码从 upstream_rejected 收紧为 upstream_misconfigured / site_auth_invalid；冻结 .each 表就地改行会让红检查整表判「没有牙齿」，dataoke-core #30 行内表在整份判下无豁免可用，故先删行。别的一字不动；删行由新鲜独立 Claude 在 B1-04zzzx 规则测试轮改好后原样拆出，另一位只读复核「只删这些行、其余断言没丢」。
+# D10-998 (c)：本单等 B1-04zzzx 规则测试与实现评审都过、能落地时再合，合后 zzzx 立刻变基落地（冻结覆盖缺位压在一小时内）。逐行对照见 PR 正文。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/union/dataoke-core/response.test.ts'
+  - 'test/spec/union/taobao-core/response.test.ts'
+  - 'test/spec/union/taobao-convert/errors.test.ts'
+  - 'test/spec/union/taobao-goods/detail-errors.test.ts'
+  - 'test/spec/union/taobao-goods/share-code.test.ts'
+  - 'test/spec/union/taobao-shop-convert/response.test.ts'
+  - 'ops/tasks/B1-04zzzy.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

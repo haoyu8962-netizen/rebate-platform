@@ -44,11 +44,6 @@ const detailErrors: readonly ErrorCase[] = [
     code: 'upstream_rejected',
   },
   {
-    name: 'code 11 + sub_code 50001（不是 15，不细分）',
-    answer: errorBody(11, '50001'),
-    code: 'upstream_rejected',
-  },
-  {
     name: 'code 7（限流，沿用 B1-04j）',
     answer: errorBody(7),
     code: 'rate_limited',

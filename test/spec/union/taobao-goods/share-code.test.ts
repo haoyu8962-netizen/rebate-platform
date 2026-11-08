@@ -118,11 +118,6 @@ const shareErrors: readonly ErrorCase[] = [
     code: 'upstream_rejected',
   },
   {
-    name: '11 + sub_code 26（不是 15）',
-    answer: errorBody(11, '26'),
-    code: 'upstream_rejected',
-  },
-  {
     name: '7（限流）',
     answer: errorBody(7),
     code: 'rate_limited',
