@@ -75,3 +75,21 @@ it('[AC-B1-04zzp-UNIT#3] 无可删行、results 不是数组、data 或整体不
     taobaoPunishArchiveBody('{"data":{"results":[]}},"data":{"results":[]}', OURS),
   ).toThrow(SyntaxError);
 });
+
+it('[AC-B1-04zgb-UNIT#2] 重复键：data.results 写两遍且胜出那份里有别家推广位的行——按解析语义重写后照常删掉，被覆盖那份与别家行都不在，数字原文保真；无可删时也按解析语义重写', () => {
+  const body =
+    '{"time":1793600000000,"data":{"total_count":9,' +
+    '"results":[{"tb_trade_id":"2900000000000003060","tk_adzone_id":222222222222}],' +
+    '"results":[{"tb_trade_id":"2900000000000003001","tk_adzone_id":111111111111,"rate":0.29999999999999999},' +
+    '{"tb_trade_id":"2900000000000003061","tk_adzone_id":999999999999}]}}';
+  expect(taobaoPunishArchiveBody(body, OURS)).toBe(
+    '{"time":1793600000000,"data":{"total_count":9,"results":[' +
+      '{"tb_trade_id":"2900000000000003001","tk_adzone_id":111111111111,"rate":0.29999999999999999}]}}',
+  );
+  expect(taobaoPunishArchiveBody('{"code":1,"code":0,"data":{"results":[]}}', OURS)).toBe(
+    '{"code":0,"data":{"results":[]}}',
+  );
+  expect(taobaoPunishArchiveBody('[{"tk_adzone_id":9,"tk_adzone_id":8}]', OURS)).toBe(
+    '[{"tk_adzone_id":8}]',
+  );
+});

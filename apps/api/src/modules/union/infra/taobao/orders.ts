@@ -389,6 +389,68 @@ function rawJsonText(value: unknown): string {
 }
 
 /**
+ * B1-04zgb: whether JSON text `text` has an object (at any depth, arrays included) with a member
+ * name written more than once, names compared as JSON.parse decodes them (escapes resolved).
+ * Assumes `text` is JSON (callers parse it first); quotes inside strings are skipped.
+ */
+export function taobaoJsonHasDuplicateKeys(text: string): boolean {
+  /** One entry per open container: the names seen so far (an object) or null (an array). */
+  const open: (Set<string> | null)[] = [];
+  let expectName = false;
+  let at = 0;
+  while (at < text.length) {
+    const char = text[at];
+    if (char === '"') {
+      let end = at + 1;
+      let escaped = false;
+      while (end < text.length && text[end] !== '"') {
+        if (text[end] === '\\') {
+          escaped = true;
+          end += 2;
+        } else {
+          end += 1;
+        }
+      }
+      const names = open[open.length - 1];
+      if (expectName && names !== undefined && names !== null) {
+        const name = escaped
+          ? (JSON.parse(text.slice(at, end + 1)) as string)
+          : text.slice(at + 1, end);
+        if (names.has(name)) return true;
+        names.add(name);
+      }
+      expectName = false;
+      at = end + 1;
+      continue;
+    }
+    if (char === '{') {
+      open.push(new Set());
+      expectName = true;
+    } else if (char === '[') {
+      open.push(null);
+    } else if (char === '}' || char === ']') {
+      open.pop();
+    } else if (char === ',') {
+      const names = open[open.length - 1];
+      expectName = names !== undefined && names !== null;
+    }
+    at += 1;
+  }
+  return false;
+}
+
+/**
+ * B1-04zgb: a JSON body an archive rewrite keeps whole: as received when no object repeats a
+ * member name; otherwise rewritten as JSON.parse reads it (the later copy wins, the overwritten
+ * one and the repeat are gone), every JSON number literal written as received. Throws when the
+ * body is not JSON.
+ */
+export function taobaoArchiveAsParsed(body: string): string {
+  const tree = parseRawJson(body);
+  return taobaoJsonHasDuplicateKeys(body) ? rawJsonText(tree) : body;
+}
+
+/**
  * The `data` object of a 大淘客 response body, every JSON number kept as its literal
  * (TaobaoRawNumber). Not JSON / no data object → upstream_unavailable.
  */
@@ -461,21 +523,23 @@ export function taobaoOrderAdzone(row: unknown): string | null {
  * `adzones`) are dropped from data.results.publisher_order_dto; our rows and rows whose slot cannot
  * be read (missing / invalid adzone_id, not an object: the bad-row evidence) stay, in upstream
  * order. Every other member is kept and JSON number literals are written as received. A body with
- * nothing to drop (or without that list) is returned unchanged. Throws when the body is not JSON.
+ * nothing to drop (or without that list) is returned unchanged. B1-04zgb: the rows are those of the
+ * tree JSON.parse reads; a body with a repeated member name in any object is rewritten as parsed
+ * (taobaoArchiveAsParsed), then filtered. Throws when the body is not JSON.
  * Pure: no warning here (the foreign count comes from ourRows only).
  */
 export function taobaoOrderArchiveBody(body: string, adzones: ReadonlySet<string>): string {
   const tree = parseRawJson(body);
   const data = isRecord(tree) && !(tree instanceof TaobaoRawNumber) ? tree.data : undefined;
   const results = isRecord(data) && !(data instanceof TaobaoRawNumber) ? data.results : undefined;
-  if (!isRecord(results) || results instanceof TaobaoRawNumber) return body;
+  if (!isRecord(results) || results instanceof TaobaoRawNumber) return taobaoArchiveAsParsed(body);
   const list = results.publisher_order_dto;
-  if (!Array.isArray(list)) return body;
+  if (!Array.isArray(list)) return taobaoArchiveAsParsed(body);
   const kept = list.filter((row) => {
     const adzone = taobaoOrderAdzone(row);
     return adzone === null || adzones.has(adzone);
   });
-  if (kept.length === list.length) return body;
+  if (kept.length === list.length) return taobaoArchiveAsParsed(body);
   results.publisher_order_dto = kept;
   return rawJsonText(tree);
 }

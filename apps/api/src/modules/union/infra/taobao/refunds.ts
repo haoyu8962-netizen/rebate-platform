@@ -30,6 +30,7 @@ import {
   isRecord,
   parseTaobaoRawData,
   TaobaoRawNumber,
+  taobaoArchiveAsParsed,
   taobaoAbsent,
   taobaoBeijingDate,
   taobaoDecimalId,
@@ -130,17 +131,19 @@ export function taobaoRefundTradeIds(body: string): readonly string[] {
  * B1-04zzu: the refund body to archive: data.result without the rows whose tb_trade_id is readable
  * (as taobaoRefundTradeIds reads it) and not in `own`; rows whose tb_trade_id cannot be read stay,
  * in upstream order; every other member and every JSON number literal is kept as received. Nothing
- * to drop (or data not an object, result not an array): the body as received. Throws when the body
- * is not JSON. Pure: no warning, no log.
+ * to drop (or data not an object, result not an array): the body as received. B1-04zgb: rows come
+ * from the tree JSON.parse reads; a body with a repeated member name in any object is rewritten as
+ * parsed (taobaoArchiveAsParsed), then filtered. Throws when the body is not JSON. Pure: no
+ * warning, no log.
  */
 export function taobaoRefundArchiveBody(body: string, own: ReadonlySet<string>): string {
   const found = refundTree(body);
-  if (found === null) return body;
+  if (found === null) return taobaoArchiveAsParsed(body);
   const kept = found.list.filter((row) => {
     const id = refundTradeId(row);
     return id === null || own.has(id);
   });
-  if (kept.length === found.list.length) return body;
+  if (kept.length === found.list.length) return taobaoArchiveAsParsed(body);
   found.data.result = kept;
   return literalJson(found.tree);
 }

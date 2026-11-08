@@ -1,0 +1,92 @@
+{
+  "risk_note": "RV2 (union archive; order ownership evidence). FU-TB-ARCHIVE-EDGE ① (B1-04zzc read-only re-check S2): the Taobao order-details, punishment and refund archive rewrites (taobaoOrderArchiveBody, taobaoPunishArchiveBody, taobaoRefundArchiveBody) used to return the page as received when the parsed tree had nothing to drop; with a duplicate JSON key (e.g. two publisher_order_dto / results / result members) JSON.parse keeps the last copy, so foreign rows in an earlier copy were archived. A shared detector (taobaoJsonHasDuplicateKeys in taobao/orders.ts: every object level incl. objects in arrays, keys compared decoded, string escapes skipped) and taobaoArchiveAsParsed now re-serialize such a body by parse semantics (last wins, number literals kept) and the usual per-kind filter still runs, so foreign rows in the winning copy are dropped too (spec-test S2, pinned by [AC-B1-04zgb-UNIT#1..3]). Bodies without duplicate keys are byte-for-byte unchanged. No change to the archive wrapper, error codes, logs, returned items or amounts. Single-object publisher_order_dto (②) and non-2xx empty payload (③) are out of scope (await the orchestrator).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage limit until 11-15 (D10-823 ④): money review by a fresh independent Claude via tools/agent/claude-run.sh, round 1 pass with no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests (test/spec/union/taobao-archive-duplicate-keys/, 3 files, 11 tests) by a fresh independent Claude; red at the base. spec-test review by a fresh independent Claude round 1 pass with three S2 of one kind (no test had a foreign row in the winning copy, so a re-serialize-and-return shortcut would pass) — handled in the implementation and pinned by unit tests [AC-B1-04zgb-UNIT#1..3]."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#1] 订单：data 里 results 键出现两次（前一份有别家行与自家行，后一份只有自家行）：归档是后一份按解析语义重写的报文，前一份的单号与别家推广位一个字也没有，也没有重复键；对照：没有重复键的同页报文逐字节原样存，listOrders 条目与告警两者一样",
+    "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#2] 订单：results 里 publisher_order_dto 键出现两次（前一份是别家行与已停用推广位的自家行，后一份一行自家行）：归档只剩后一份，前一份的单号与推广位都不在，也没有重复键；对照：没有重复键而有别家行的报文照旧只删别家行",
+    "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#3] 订单：行内重复键（别家行后面再写一遍 trade_id 与自家 adzone_id、同名备注写两遍、alimm_share_info_dto 里服务费写两遍）：归档里每行只有后出现的值，被覆盖的单号、别家推广位、备注与服务费原文都不在，也没有重复键；listOrders 与只含后出现值的正常报文一样",
+    "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#4] 订单：顶层 data 与 request_id 各出现两次（前一份 data 全是别家行）：归档只有后一份 data 与后一个 request_id，别家单号、推广位、被覆盖的 data 成员与 request_id 都不在，也没有重复键",
+    "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#5] 订单：重复键报文重写后数字原文保真（长整型单号、0.29999999999999999、7.10、1E-7、超 2^53 的外层整数）、外层字段保留、读不出推广位的坏行（缺 adzone_id、整行不是对象）照样在；被覆盖那一份的小数与外层时间戳都不在",
+    "test/spec/union/taobao-archive-duplicate-keys/punishments.test.ts > [AC-B1-04zgb#6] 违规：data 里 results 键出现两次（前一份有别家行与自家行，后一份只有自家行）：归档是后一份按解析语义重写的报文，前一份的单号与别家推广位一个字也没有，也没有重复键；对照：没有重复键的同页报文逐字节原样存，listPunishments 条目与告警两者一样",
+    "test/spec/union/taobao-archive-duplicate-keys/punishments.test.ts > [AC-B1-04zgb#7] 违规：行内重复键（别家行后面再写一遍 tb_trade_id 与自家 tk_adzone_id——键名用 \\u005f 转义也是同一个键、同名备注写两遍、读不出推广位的行里 relation_id 写两遍）：归档里每行只有后出现的值，被覆盖的单号、别家推广位、备注与长整型都不在，也没有重复键；读不出推广位的行照样在",
+    "test/spec/union/taobao-archive-duplicate-keys/punishments.test.ts > [AC-B1-04zgb#8] 违规：顶层 data 与 server_time 各出现两次（前一份 data 全是别家行），后一份 data 里 total_count 也写两遍：归档只有后出现的值，别家单号与推广位、被覆盖的 data 成员与时间戳都不在，也没有重复键；数字原文（长整型、0.29999999999999999、1E-7、超 2^53 的整数）保真，外层字段保留",
+    "test/spec/union/taobao-archive-duplicate-keys/refunds.test.ts > [AC-B1-04zgb#9] 维权：data 里 result 键出现两次（前一份有别家维权与一笔凑狸订单的维权，后一份只有凑狸订单的维权）：归档是后一份按解析语义重写的报文，前一份的单号与维权单号一个字也没有，也没有重复键；对照：没有重复键的同页报文逐字节原样存，listRefunds 条目与告警两者一样",
+    "test/spec/union/taobao-archive-duplicate-keys/refunds.test.ts > [AC-B1-04zgb#10] 维权：行内重复键（别家维权后面再写一遍凑狸订单的 tb_trade_id 与 refund_suit_id、同名备注写两遍、读不出 tb_trade_id 的行里 refund_suit_id 写两遍）：归档里每行只有后出现的值，被覆盖的单号、维权单号与备注都不在，也没有重复键；读不出 tb_trade_id 的行照样在",
+    "test/spec/union/taobao-archive-duplicate-keys/refunds.test.ts > [AC-B1-04zgb#11] 维权：顶层 data 与 server_time 各出现两次（前一份 data 全是别家维权）：归档只有后出现的值，别家单号与维权单号、被覆盖的 data 成员与时间戳都不在，也没有重复键；数字原文（JSON 整数单号、0.29999999999999999、1E-7、超 2^53 的整数）保真，外层字段保留"
+  ],
+  "task": "B1-04zgb",
+  "spec_commit": "f2553ed48131d98f3e46de476efcd550983302a8",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f2553ed48131d98f3e46de476efcd550983302a8",
+      "tree": "4cb433adf1a525b64cabb91e8a943cd3600b8d56",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T04:44:26Z",
+      "finished_at": "2026-11-08T04:44:40Z",
+      "red_tests": [
+        "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#1] 订单：data 里 results 键出现两次（前一份有别家行与自家行，后一份只有自家行）：归档是后一份按解析语义重写的报文，前一份的单号与别家推广位一个字也没有，也没有重复键；对照：没有重复键的同页报文逐字节原样存，listOrders 条目与告警两者一样",
+        "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#2] 订单：results 里 publisher_order_dto 键出现两次（前一份是别家行与已停用推广位的自家行，后一份一行自家行）：归档只剩后一份，前一份的单号与推广位都不在，也没有重复键；对照：没有重复键而有别家行的报文照旧只删别家行",
+        "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#3] 订单：行内重复键（别家行后面再写一遍 trade_id 与自家 adzone_id、同名备注写两遍、alimm_share_info_dto 里服务费写两遍）：归档里每行只有后出现的值，被覆盖的单号、别家推广位、备注与服务费原文都不在，也没有重复键；listOrders 与只含后出现值的正常报文一样",
+        "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#4] 订单：顶层 data 与 request_id 各出现两次（前一份 data 全是别家行）：归档只有后一份 data 与后一个 request_id，别家单号、推广位、被覆盖的 data 成员与 request_id 都不在，也没有重复键",
+        "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts > [AC-B1-04zgb#5] 订单：重复键报文重写后数字原文保真（长整型单号、0.29999999999999999、7.10、1E-7、超 2^53 的外层整数）、外层字段保留、读不出推广位的坏行（缺 adzone_id、整行不是对象）照样在；被覆盖那一份的小数与外层时间戳都不在",
+        "test/spec/union/taobao-archive-duplicate-keys/punishments.test.ts > [AC-B1-04zgb#6] 违规：data 里 results 键出现两次（前一份有别家行与自家行，后一份只有自家行）：归档是后一份按解析语义重写的报文，前一份的单号与别家推广位一个字也没有，也没有重复键；对照：没有重复键的同页报文逐字节原样存，listPunishments 条目与告警两者一样",
+        "test/spec/union/taobao-archive-duplicate-keys/punishments.test.ts > [AC-B1-04zgb#7] 违规：行内重复键（别家行后面再写一遍 tb_trade_id 与自家 tk_adzone_id——键名用 \\u005f 转义也是同一个键、同名备注写两遍、读不出推广位的行里 relation_id 写两遍）：归档里每行只有后出现的值，被覆盖的单号、别家推广位、备注与长整型都不在，也没有重复键；读不出推广位的行照样在",
+        "test/spec/union/taobao-archive-duplicate-keys/punishments.test.ts > [AC-B1-04zgb#8] 违规：顶层 data 与 server_time 各出现两次（前一份 data 全是别家行），后一份 data 里 total_count 也写两遍：归档只有后出现的值，别家单号与推广位、被覆盖的 data 成员与时间戳都不在，也没有重复键；数字原文（长整型、0.29999999999999999、1E-7、超 2^53 的整数）保真，外层字段保留",
+        "test/spec/union/taobao-archive-duplicate-keys/refunds.test.ts > [AC-B1-04zgb#9] 维权：data 里 result 键出现两次（前一份有别家维权与一笔凑狸订单的维权，后一份只有凑狸订单的维权）：归档是后一份按解析语义重写的报文，前一份的单号与维权单号一个字也没有，也没有重复键；对照：没有重复键的同页报文逐字节原样存，listRefunds 条目与告警两者一样",
+        "test/spec/union/taobao-archive-duplicate-keys/refunds.test.ts > [AC-B1-04zgb#10] 维权：行内重复键（别家维权后面再写一遍凑狸订单的 tb_trade_id 与 refund_suit_id、同名备注写两遍、读不出 tb_trade_id 的行里 refund_suit_id 写两遍）：归档里每行只有后出现的值，被覆盖的单号、维权单号与备注都不在，也没有重复键；读不出 tb_trade_id 的行照样在",
+        "test/spec/union/taobao-archive-duplicate-keys/refunds.test.ts > [AC-B1-04zgb#11] 维权：顶层 data 与 server_time 各出现两次（前一份 data 全是别家维权）：归档只有后出现的值，别家单号与维权单号、被覆盖的 data 成员与时间戳都不在，也没有重复键；数字原文（JSON 整数单号、0.29999999999999999、1E-7、超 2^53 的整数）保真，外层字段保留"
+      ],
+      "expected": [
+        "test/spec/union/taobao-archive-duplicate-keys/orders.test.ts",
+        "test/spec/union/taobao-archive-duplicate-keys/punishments.test.ts",
+        "test/spec/union/taobao-archive-duplicate-keys/refunds.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d74935de646512ea094142728bd39ebb0f28c0c2347078295cf6fab6f240a482"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bb67b49e861d361ceecad7b4a206e950c6c76611",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  }
+}

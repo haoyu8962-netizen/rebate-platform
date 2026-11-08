@@ -42,3 +42,16 @@ it('[AC-B1-04zzu-UNIT#3] taobaoRefundArchiveBody：去掉读得出且不在 own 
   expect(() => taobaoRefundArchiveBody('{"data":', new Set())).toThrow();
   expect(() => taobaoRefundArchiveBody('plain text', new Set())).toThrow();
 });
+
+it('[AC-B1-04zgb-UNIT#3] 重复键：data.result 写两遍且胜出那份里有非凑狸单号的行——按解析语义重写后照常删掉，被覆盖那份（即使是凑狸单号）不在；无可删时也按解析语义重写', () => {
+  const text =
+    `{"time":1793433600000,"data":{"has_next":false,"result":[{"tb_trade_id":"${C}","note":"overwritten"}],` +
+    `"result":[{"tb_trade_id":${A},"fee":0.10000000000000001},{"tb_trade_id":"${B}"}]}}`;
+  expect(taobaoRefundTradeIds(text)).toEqual([A, B]);
+  expect(taobaoRefundArchiveBody(text, new Set([A, C]))).toBe(
+    `{"time":1793433600000,"data":{"has_next":false,"result":[{"tb_trade_id":${A},"fee":0.10000000000000001}]}}`,
+  );
+  expect(
+    taobaoRefundArchiveBody(body(`[{"tb_trade_id":"${A}","tb_trade_id":"${A}"}]`), new Set([A])),
+  ).toBe(body(`[{"tb_trade_id":"${A}"}]`));
+});

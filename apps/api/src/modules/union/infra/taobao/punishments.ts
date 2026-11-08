@@ -27,6 +27,7 @@ import {
   isRecord,
   parseTaobaoRawData,
   TaobaoRawNumber,
+  taobaoArchiveAsParsed,
   taobaoAbsent,
   taobaoDecimalId,
   taobaoInvalid,
@@ -234,23 +235,25 @@ function literalJson(value: unknown): string {
  * and not in `adzones`) are dropped from data.results; our rows (retired included) and rows whose
  * slot cannot be read stay, in upstream order. Every other member (total_count included) is kept
  * and JSON number literals are written as received. A body with nothing to drop (or whose
- * data.results is not a list) is returned unchanged. Throws when the body is not JSON. Pure: no
+ * data.results is not a list) is returned unchanged. B1-04zgb: rows come from the tree JSON.parse
+ * reads; a body with a repeated member name in any object is rewritten as parsed
+ * (taobaoArchiveAsParsed), then filtered. Throws when the body is not JSON. Pure: no
  * warning here (the foreign count comes from ourPunishRows only).
  */
 export function taobaoPunishArchiveBody(body: string, adzones: ReadonlySet<string>): string {
   // 先确认正文是一个完整的 JSON 值（不是就抛），再借 parseTaobaoRawData（数字保原文）取整棵树。
   const plain: unknown = JSON.parse(body);
-  if (!isRecord(plain)) return body;
+  if (!isRecord(plain)) return taobaoArchiveAsParsed(body);
   const tree = parseTaobaoRawData(`{"data":${body}}`, OPERATION);
   const data = tree.data;
-  if (!isRecord(data) || data instanceof TaobaoRawNumber) return body;
+  if (!isRecord(data) || data instanceof TaobaoRawNumber) return taobaoArchiveAsParsed(body);
   const list = data.results;
-  if (!Array.isArray(list)) return body;
+  if (!Array.isArray(list)) return taobaoArchiveAsParsed(body);
   const kept = list.filter((row) => {
     const adzone = punishAdzone(row);
     return adzone === null || adzones.has(adzone);
   });
-  if (kept.length === list.length) return body;
+  if (kept.length === list.length) return taobaoArchiveAsParsed(body);
   data.results = kept;
   return literalJson(tree);
 }

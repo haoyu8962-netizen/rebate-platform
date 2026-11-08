@@ -11,6 +11,7 @@ import {
   parseTaobaoOrderBody,
   planTaobaoOrders,
   slotAdzones,
+  taobaoJsonHasDuplicateKeys,
   taobaoOrderArchiveBody,
   taobaoOrderCursor,
   type TaobaoOrderWarning,
@@ -433,4 +434,30 @@ it('[AC-B1-04zzc-UNIT#7] 订单详情请求带 archiveBody（去掉别家行）�
   expect(stored).not.toContain('2900000000000001050');
   expect(requests[0]!.archive).toEqual({ appId: ctx.appId, kind: 'order' });
   expect(requests[1]!).not.toHaveProperty('archiveBody');
+});
+
+it('[AC-B1-04zgb-UNIT#1] 重复键：results 写两遍且胜出那份里有别家行——按解析语义重写后照常删别家行，被覆盖那份与别家行都不在；行内重复 adzone_id 按后者判；检测按解码后的键名、跳过字符串里的引号与数组内对象', () => {
+  const overwritten =
+    '{"publisher_order_dto":[{"trade_id":"2900000000000001060","adzone_id":222222222222}]}';
+  const winning =
+    '{"publisher_order_dto":[{"trade_id":"2900000000000001001","adzone_id":111111111111,"income":0.29999999999999999},' +
+    '{"trade_id":"2900000000000001061","adzone_id":333333333333},' +
+    '{"trade_id":"2900000000000001002","adzone_id":222222222222,"adzone_id":111111111122}]}';
+  const body = `{"time":1793600000000,"data":{"has_next":false,"results":${overwritten},"results":${winning}}}`;
+  const stored = taobaoOrderArchiveBody(body, OURS);
+  expect(stored).toBe(
+    '{"time":1793600000000,"data":{"has_next":false,"results":{"publisher_order_dto":[' +
+      '{"trade_id":"2900000000000001001","adzone_id":111111111111,"income":0.29999999999999999},' +
+      '{"trade_id":"2900000000000001002","adzone_id":111111111122}]}}}',
+  );
+  // 胜出那份全是自家行、无可删：仍按解析语义重写（不原样存）。
+  const noDrop =
+    '{"data":{"results":{"publisher_order_dto":[]},"results":{"publisher_order_dto":[]}}}';
+  expect(taobaoOrderArchiveBody(noDrop, OURS)).toBe(
+    '{"data":{"results":{"publisher_order_dto":[]}}}',
+  );
+  expect(taobaoJsonHasDuplicateKeys('{"a":1,"\\u0061":2}')).toBe(true);
+  expect(taobaoJsonHasDuplicateKeys('[{"a":{"b":1}},{"a":[{"c":1,"c":2}]}]')).toBe(true);
+  expect(taobaoJsonHasDuplicateKeys('{"a":"\\"a\\":1","b":{"a":1},"c":["a","a"]}')).toBe(false);
+  expect(taobaoJsonHasDuplicateKeys(' { "x" : 1 , "y" : [ { "x" : 2 } ] } ')).toBe(false);
 });
