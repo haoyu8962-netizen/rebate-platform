@@ -14,6 +14,7 @@ paths:
   - 'apps/api/src/modules/catalog/http/admin/product-pools.controller.ts'
   - 'apps/api/src/modules/catalog/catalog.module.ts'
   - 'apps/api/src/modules/catalog/catalog-admin.module.ts'
+  - 'apps/api/src/modules/catalog/application/pool-source{.ts,.test.ts}'
   - 'test/spec/catalog/pool-category-block/**'
 test_paths:
   - 'test/spec/catalog/pool-category-block/**'
