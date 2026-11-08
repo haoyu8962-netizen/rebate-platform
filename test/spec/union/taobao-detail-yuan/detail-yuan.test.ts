@@ -1,3 +1,4 @@
+import { propRuns, propSeed } from '@couli/testing';
 import fc from 'fast-check';
 import { expect, it } from 'vitest';
 import {
@@ -180,5 +181,8 @@ it('[AC-B1-04zj#6][BR-PRICE-01] 任一价格字段在合法两位小数后再追
         final_price_fen: final,
       });
     }),
+    // Every run builds a detail adapter fixture, so PROP_RUNS is scaled by 1/100 with a floor of 50
+    // and the seed is PROP_SEED as it is (same as #2682 / D10-902).
+    { numRuns: Math.max(50, Math.floor(propRuns() / 100)), seed: propSeed() },
   );
-});
+}, 900_000);

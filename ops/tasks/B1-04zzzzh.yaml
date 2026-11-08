@@ -1,0 +1,17 @@
+id: B1-04zzzzh
+repo: rebate-platform
+title: test-change 冻结 [AC-B1-04zj#6] 属性测试改走 PROP_RUNS / PROP_SEED（B1-04zj spec-test r1 S2 遗留，编排 11-09 02:00 ②）——轮数 max(50, PROP_RUNS/100)、种子 PROP_SEED、显式超时 900_000，断言不变
+type: test-change
+# 2026-11-09 union 入账（编排 11-09 02:00 照 union 顺序 ②）。test/spec/union/taobao-detail-yuan/detail-yuan.test.ts 的 [AC-B1-04zj#6] 用 fast-check 默认次数与随机种子（fc.assert 无参数），不经 @couli/testing 的 propRuns / propSeed，失败不可按 PROP_SEED 复现（AGENTS §9：属性测试的次数与种子只从 PROP_RUNS、PROP_SEED 读）。改：fc.assert 加 { numRuns: Math.max(50, Math.floor(propRuns() / 100)), seed: propSeed() }（每轮建一次详情适配器夹具，按 #2682 / D10-902 先例缩放，CI PROP_RUNS 100000 → 1000 轮），用例补 `}, 900_000);`（D10-750），导入加 propRuns / propSeed；生成器、属性体与断言一字不动。主干改前改后都绿（tighten_only：同一期望、可复现）。
+# 新鲜独立 Claude 改、另一位只读复核「只改轮数 / 种子 / 超时 / 导入，断言没动」；落地按 #24 报编排核（非资金测试）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/union/taobao-detail-yuan/detail-yuan.test.ts'
+  - 'ops/tasks/B1-04zzzzh.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
