@@ -2,24 +2,26 @@ id: B1-06zh
 repo: rebate-platform
 title: db：union_bindings 加 pid、拼多多唯一约束改按 (app_id, user_id, platform, pid)（迁移 0135，FU-PDD-BINDING-PID 第一单，BR-ID-22）
 type: impl
-# 2026-11-08 w1 入账（D10-1061 ② / D10-1063；方案 couli-runs/FU-PDD-BINDING-PID/plan.md）。BR-ID-22「拼多多：授权状态按 (user_id, pid) 记录」，影响面写明唯一约束改为 (app_id, user_id, platform, pid)。
-# 本单只做库：db/migrations/0135_union-bindings-pdd-pid.sql（D10-1063 定号）——union_bindings 加 pid text NULL；旧唯一索引 union_bindings_user_platform_key 拆成两条部分索引：非拼多多照旧 (app_id, user_id, platform) WHERE platform <> 'pdd' AND 未释放四态；拼多多 (app_id, user_id, platform, pid) NULLS NOT DISTINCT WHERE platform = 'pdd' AND 未释放四态（NULLS NOT DISTINCT 让 linking 单落地前仍按空 pid 写的拼多多行保持「每用户一行」，过渡期不变松）。
-# 旧拼多多行 pid 回填 NULL、按 created_at 认作迁移前旧行（D10-1063 ①，不加 pid_legacy 列）；非拼多多行 pid 必须为 NULL（CHECK）。迁移注释写清回滚（删两条新索引、重建旧索引、删列）。授权写在本迁移；schema.sql 与 db.gen.ts 是生成物（pnpm db:snapshot 沙箱外）。
-# 全仓已 grep：除 schema.sql 外只有 0018 迁移、taobao-reauth-read.ts 注释、B1-06v 台账注释提到旧索引名，无代码 / 测试按名依赖；冻结 [AC-B1-06b#6] 断言唯一键含 (app_id, user_id, platform) 列集，拆分后非拼多多那条仍满足。linking 读写按 pid 留给第二单（deps 本单）。
-# 规则测试：新鲜独立 Claude 写（tester claude-independent，D10-823 ②），评审先跑 Codex（D10-1075），RV2。
+# 2026-11-08 w1 入账（D10-1061 ② / D10-1063）；2026-11-09 改走新表（D10-1097 (B)）：标题沿用入账原文（台账补丁不改 id / type / title），**范围以本注释为准**。
+# 原方案（union_bindings 加 pid、拆唯一索引）撞迁移门禁：union_ 前缀属资金与归属表，索引改定义要登记 APPROVED_GUARD_CHANGES，删索引还触发 squawk require-concurrent-index-deletion；D10-1097 定 (B)：union_bindings 一行不动、不改门禁。
+# 本单只做库：db/migrations/0135_union-pdd-pid-filings.sql（号仍 0135）新建 app.union_pdd_pid_filings——按 (app_id, user_id, pid) 记拼多多备案事实（含 union_account_id、filed_at = authority.query 答已备案的时刻），唯一 (app_id, user_id, pid)；授权写在本迁移（couli_app 读写、couli_readonly 读，照 union_bindings）；schema.sql / db.gen.ts 是生成物（pnpm db:snapshot 沙箱外）。
+# 判定先后（linking 第二单）：open 先按 union_bindings 判（blocked / released / 无绑定照旧拒），绑定可用后才看本场景 pid 的备案行，没有就 authority.query、答已备案才插一行、未备案 30111；授权管理页 / 后台仍取 union_bindings 自买位一行（D10-1063 ② 不变）；不必等 CAP-PDD 实测（D10-1063 ③）；旧行回填作废。
+# 用户数据路径（couli-runs/B1-06zh/user-data-paths.md，报编排待核）：注销保留不删（比照 BR-ID-28 对联盟绑定的处理，平台无撤销备案接口、不被他人复用）；个人数据副本不纳入（BR-ID-40 导出范围无联盟授权）；并号不改记到目标账号（备案拿源 attr_code 做的），留墓碑名下。BR-ID-30 留存期限补登由编排回写。
+# 已知局限：用户在拼多多平台侧撤销备案我们不会知道（与现在用户级 active 一样），备案行不会因此失效。
+# 规则测试：新鲜独立 Claude 写（第 2 次；第 1 次按原方案写的 14 条作废，存 couli-runs/B1-06zh/plan-a-void/）；spec-test 新鲜独立 Claude（D10-1080），money 评审先 Codex（D10-1075）。RV2。
 refs: [BR-ID-22]
 refs_hash:
   BR-ID-22: 07f1349bf0ac
 deps: []
 paths:
-  - 'db/migrations/0135_union-bindings-pdd-pid.sql'
+  - 'db/migrations/0135_union-pdd-pid-filings.sql'
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
 test_paths:
-  - 'test/spec/db/union-bindings-pdd-pid/**'
+  - 'test/spec/db/union-pdd-pid-filings/**'
 impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-  - 'test/spec/db/union-bindings-pdd-pid/**'
+  - 'test/spec/db/union-pdd-pid-filings/**'
 status: todo
