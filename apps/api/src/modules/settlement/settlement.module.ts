@@ -229,6 +229,7 @@ export class SettlementAdminModule {
           provide: ADMIN_RECON_RESTORE,
           inject: [
             CLOCK,
+            ROOT_LOGGER,
             { token: DB_TOKEN, optional: true },
             { token: IDEMPOTENCY, optional: true },
             { token: EVENT_BUS, optional: true },
@@ -236,6 +237,7 @@ export class SettlementAdminModule {
           ],
           useFactory: (
             clock: Clock,
+            logger: RootLogger,
             db?: Kysely<DB>,
             idempotency?: Idempotency,
             eventBus?: EventBus,
@@ -248,6 +250,7 @@ export class SettlementAdminModule {
               ? null
               : {
                   clock,
+                  logger: logger.child({ module: 'settlement' }),
                   idempotency,
                   auditOn: (trx) => ports.auditWriter(trx, clock),
                   gate: createBeneficiaryGate({

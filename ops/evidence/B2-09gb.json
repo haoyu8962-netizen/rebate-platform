@@ -1,0 +1,131 @@
+{
+  "task": "B2-09gb",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "spec_commit": "580d51fcaa102acbd857f1ac51bfb21eabc87aaa",
+  "red_tests": [
+    "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#9] R13 受益人冻结 / 申诉中（BR-CALC-09）：其正向差额延后——不写其凭证、开延后差额义务（beneficiary_credits：deferred、opened_by R13、origin ADMIN_ADJUST / RESTORE、open、无凭证）；本人照写 850、平台 895；restored_fen 850（延后的不计）；UNION_RECEIVABLE 净额 1745 = booked_n_fen 2000 − 延后 170 − 85；订单 CREDITED、booked 1700 / 2000",
+    "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#10] R13 受益人封禁 / 已注销（BR-CALC-09，新应得取重拆份额与已有净额 0 的较小者）：份额归平台——平台凭证 895 + 170 + 85 = 1150，两人都没有 RESTORE 凭证、余额不变、不开义务；restored_fen 850；UNION_RECEIVABLE 净额 2000。注销冷静期（deletion_requests cooling，users.status 仍 normal）不算失效：照常补 85",
+    "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#11] R13 入账时被剥夺的份额（最新份额事件为 forfeited，BR-CALC-09「新应得恒为 0」）：即使会员现在正常也不补，归平台——平台 895 + 170 = 1065；本人 850、间推 85，restored_fen 935；直推没有 RESTORE 凭证、余额 0",
+    "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#12] 处理时再核（D10-986 ②、D10-994）：受益人差额为 0 不写分录；小于 0（本人净额 850 = 应得 850 → 0；直推净额 200 > 应得 170 → −30）不写分录、不扣用户的钱，并写进 resolution.restore 与本次审计（受益人、角色、负差额）；间推 85、平台 895 照写；restored_fen 85",
+    "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#25] R13 被剥夺判定取最新份额事件（D10-481：从 initial_status 起按 event_seq 取最新，最新为 forfeited 才算被剥夺）：入账时直推被封禁（active → forfeited，85 进平台 FORFEIT），之后账户申诉撤销、申诉恢复追加 active 并补 85，订单再被全额扣回、联盟恢复佣金 2000 → 直推按 active 计：RESTORE +170（余额 0 → 170）、本人 850、间推 85、平台 895，restored_fen 1105，不开义务；UNION_RECEIVABLE 净额 2000",
+    "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#26] R13 受益人注销中（users.status = deleting，BR-CALC-09，与已注销同）：其份额并入平台凭证——平台 895 + 85 = 980，该成员没有 RESTORE 凭证、余额 0、不开义务；本人 850、直推 170，restored_fen 1020；UNION_RECEIVABLE 净额 2000",
+    "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#27] 处理时再核（D10-994，08 BR-FUND-22 细则「平台的负差同样只告警不写」）：扣回后平台净额仍为 1000（合成），R13 平台应得 895 → 差额 −105：不写 {order_key}:PLATFORM:RESTORE:{id}、平台净额仍 1000，resolution.restore 与本次审计记下 −105；受益人正差照写 850 / 170 / 85，restored_fen 1105，恢复照常完成：CREDITED、booked 1700 / 2000",
+    "test/spec/settlement/platform-restore/idempotency.int.test.ts > [AC-B2-09gb#20] 幂等（R13 与 R12）：同一 Idempotency-Key 同一请求体重放 → 原样返回第一次的应答（同一 restored_fen 与 rebate_status_after），不再记账、不再写审计、不再改订单；同 key 换请求体 → 20901；新 key → 20902 recon_diff；别的账号用同一 key 是它自己的作用域 → 20902 recon_diff",
+    "test/spec/settlement/platform-restore/idempotency.int.test.ts > [AC-B2-09gb#21] 并发：同一张平台恢复差错单两个处理同时到（不同 key）→ 恰一个成功、另一个 20902 recon_diff；RESTORE 凭证各一张、审计一条、余额只多一次、订单只迁移一次（CREDITED，booked 1700 / 2000）",
+    "test/spec/settlement/platform-restore/idempotency.int.test.ts > [AC-B2-09gb#22] 锁序：订单键 advisory 锁被别的事务持有时处理等待，期间订单、差错单、账务都不变；放行后完成（R13 补 1105）",
+    "test/spec/settlement/platform-restore/minor.int.test.ts > [AC-B2-09gb#13] R13 已识别未成年（BR-CALC-09、BR-ID-26 (b)）：本人份额照补（未成年本人 850）；未成年直推的推广份额 170 归平台，不写其凭证、余额不变；成年间推 85 照补；平台 895 + 170 = 1065；restored_fen 935；UNION_RECEIVABLE 净额 2000",
+    "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#1] R12：VOID 按当前 platform_status 回到 ESTIMATED（DEPOSIT_PAID / PAID）或 WAITING（RECEIVED / SETTLED，settle_period 按 received_at 的中国时间月份：09-30T17:00Z → 2026-10，08-31T16:30Z → 2026-09）；应答 restored_fen 0、rebate_status_after 为新状态、recon_diff 为处理后的详情；不写任何凭证与分录、余额不变；订单其余列不动；经状态机迁移：row_version + 1、返利状态历史恰新增一行（VOID → 新状态、ADMIN_RESTORE、来源 admin）",
+    "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#2] R12：user_id 为空（未归因）的 VOID 回到 UNATTRIBUTED（未归因池，BR-ATTR-16），不论 platform_status 是 PAID 还是 SETTLED；不写凭证；user_id 仍为空；row_version + 1、历史恰新增 VOID → UNATTRIBUTED（ADMIN_RESTORE、admin）一行",
+    "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#3] R12（契约默认）：platform_status 为 RECEIVED 但没有 received_at → 回到 ESTIMATED（之后照 R4 走），settle_period 仍为空，不写凭证",
+    "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#4] R12 结案：差错单 adjusted、handler_id 为处理人、closed_at = updated_at = 服务端时钟，expected_fen / actual_fen / diff_fen 按登记不变；resolution 保留原键（reason_code、rebate_status、trigger、platform_status）并加 restore（rebate_status_before VOID、rebate_status_after WAITING、beneficiaries 空、platform_fen 与 restored_fen 为 \"0\"、operator、restored_at）与去空白的 note；审计 recon_diff_restore 一条：处理人、目标差错单，前后 status、order_key、返利状态前后与 restored_fen 0",
+    "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#5] 08 BR-FUND-22 例（R13）：预留 0，已入账 617 / 123 / 494 后全额扣回 → CLAWED_BACK；联盟恢复佣金 1234 → 处理恢复：ADMIN_ADJUST +617（本人）/ +123（直推）/ +494（平台），各借 UNION_RECEIVABLE:taobao、贷 USER_BALANCE.available 或 COMMISSION_REVENUE，键 `…:RESTORE:{差错单 id}`，受益人凭证挂受益人键、平台凭证不挂；booked_base_fen = booked_n_fen = 1234，CREDITED；应答 restored_fen 740、rebate_status_after CREDITED",
+    "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#6] R13 按当前有效联盟佣金重算（BR-CALC-02 取值阶段）：入账 N 1000（预留 1500 → 425 / 85 / 42、平台 448）全额扣回后结算佣金 2000、预估 5555 → B 1700：本人 850、直推 170、间推 85、平台 895，不取预估、不取快照基数、不取差错单登记额（改成 999999）；结算佣金为空时取预估 1500 → B 1275：637 / 127 / 63、平台 673；同一 CAS：booked_base_fen = 新基数、booked_n_fen = 有效佣金、refunded_quantity_r9_baseline = 当时 refunded_quantity（2），refunded_quantity_at_credit（0）不动，其余列不动；row_version + 1、返利状态历史恰新增一行（CLAWED_BACK → CREDITED、ADMIN_RESTORE、来源 admin）；结算佣金为空的单没有 order_settlements 行（有效佣金只能来自预估）",
+    "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#7] 属性：任意入账佣金 O（1000～99999 分）、任意当前有效佣金 N（1～999999 分与大于 2^31 分）、预留 0 / 1500 / 2000 / 3333：R13 后每个受益人凭证 = floor(B × 比例 / 10000)（为 0 不写），平台凭证 = N − Σ受益人；UNION_RECEIVABLE 净额 = booked_n_fen = N，平台净额 = N − Σ受益人，booked_base_fen = floor(N × (10000 − 预留) / 10000)；restored_fen = Σ受益人",
+    "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#8] R13 边界：有效佣金 1 分、预留 1500 → B = 0：不写任何受益人凭证（不写 0 金额分录），平台凭证 1、booked_base_fen 0、booked_n_fen 1、CREDITED、restored_fen 0；有效佣金 2^31 + 7 = 2147483655 分、预留 1500 → B = floor(1825361106.75) = 1825361106：本人 912680553、直推 182536110、间推 91268055、平台 960998937，restored_fen 1186484718",
+    "test/spec/settlement/platform-restore/recheck.int.test.ts > [AC-B2-09gb#14] 处理时再核（R12）：VOID 订单当前 platform_status 又为 INVALID（差错单登记之后平台再报失效）→ 20001 data.fields=[recon_diff_id] reason=restore_platform_invalid：什么都不写，差错单保持 open；平台随后回到 PAID，同一张差错单再处理即恢复到 ESTIMATED",
+    "test/spec/settlement/platform-restore/recheck.int.test.ts > [AC-B2-09gb#15] 处理时再核（R13）：CLAWED_BACK 订单当前 platform_status 为 INVALID → restore_platform_invalid；INVALID 且有效佣金为 0 时也先报 restore_platform_invalid；什么都不写，差错单保持 open",
+    "test/spec/settlement/platform-restore/recheck.int.test.ts > [AC-B2-09gb#16] 处理时再核（R13）：当前有效联盟佣金的正数部分为 0（结算佣金 0；结算佣金 −50；结算佣金为空而预估 0；结算佣金 0 而预估 5000——结算佣金非空只取它）→ 20001 reason=restore_commission_zero：不恢复、什么都不写、差错单保持 open；有效佣金 1 分则照常恢复（只写平台 1）",
+    "test/spec/settlement/platform-restore/stale.int.test.ts > [AC-B2-09gb#17] 订单已不是 VOID / CLAWED_BACK（别处已恢复：VOID → ESTIMATED、CLAWED_BACK → CREDITED，各有返利历史）→ 20902 data.resource=order：订单、凭证、差错单、审计都不动；同一入口对仍为 VOID 的订单照常恢复",
+    "test/spec/settlement/platform-restore/stale.int.test.ts > [AC-B2-09gb#18] 离开后又进入（VOID → ESTIMATED → VOID、CLAWED_BACK → CREDITED → CLAWED_BACK：进入当前状态的历史行已换）或 ref_id 的 entry_id 不是进入行 → 20902 data.resource=order，什么都不写；按新进入行登记的差错单照常处理（R12 → ESTIMATED）",
+    "test/spec/settlement/platform-restore/stale.int.test.ts > [AC-B2-09gb#19] ref_id 不是 `{order_key}#RESTORE#{entry_id}` 的形式（没有后缀、entry_id 为空或不是数字、分隔不是 #RESTORE#、order_key 为空），或指向本 app 没有的订单（不存在的子订单、别的 app 的订单）→ 20001 data.fields=[recon_diff_id] reason=restore_not_supported：什么都不写；同一订单形式正确的差错单照常恢复",
+    "test/spec/settlement/platform-restore/tenancy.int.test.ts > [AC-B2-09gb#23] 多租户：别的 app 有同平台另一子订单的订单（R12 的 VOID、R13 的 CLAWED_BACK）及其平台恢复差错单；本 app 处理只动本 app 的订单——别的 app 的订单、差错单、账务、审计一律不变；别的 app 的处理人拿本 app 的差错单 id → 20001 data.fields=[recon_diff_id]，本 app 什么都不变",
+    "test/spec/settlement/platform-restore/tenancy.int.test.ts > [AC-B2-09gb#24] 一个事务：写凭证、改差错单、写审计任一步失败 → 50001，整笔回滚（订单状态与 booked 列、凭证、余额、义务、返利历史、差错单都不变），不留幂等记录；同一 key 重发即成功且只入账一次（R13 每个失败点各一单，R12 在改差错单与审计两点各一单）"
+  ],
+  "risk_note": "RV2 settlement (B2-09gb; BR-FUND-22 R12 / R13 platform restore, contract CT-24zz #2772 / CT-24zza; D10-973 / D10-982 / D10-986 / D10-994 / D10-1010). restoreAdminReconDiff's platform_restore: lock the order by ref_id's order_key, re-check at handling time (stale entry → 20902 order; platform_status INVALID → restore_platform_invalid; R13 commission not positive → restore_commission_zero; nothing written); VOID → R12 through the generated transition (ESTIMATED / WAITING / UNATTRIBUTED, no vouchers); CLAWED_BACK → R13 at the current effective union commission with ADMIN_ADJUST:RESTORE:USER / :PLATFORM, beneficiaries by BR-CALC-09 (frozen / appealing → deferred obligation, banned / deleted / deleting / minor promotion → platform plus forfeited share event), differences 0 not written and < 0 (beneficiary or platform) not written but alerted and audited, same CAS booked_base_fen / booked_n_fen / refunded_quantity_r9_baseline (D10-937). appeal_restore unchanged.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "580d51fcaa102acbd857f1ac51bfb21eabc87aaa",
+      "tree": "32a3b2529a8ffa5ef97fad32cc74349913954863",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-08T04:31:02Z",
+      "finished_at": "2026-11-08T04:34:14Z",
+      "red_tests": [
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#9] R13 受益人冻结 / 申诉中（BR-CALC-09）：其正向差额延后——不写其凭证、开延后差额义务（beneficiary_credits：deferred、opened_by R13、origin ADMIN_ADJUST / RESTORE、open、无凭证）；本人照写 850、平台 895；restored_fen 850（延后的不计）；UNION_RECEIVABLE 净额 1745 = booked_n_fen 2000 − 延后 170 − 85；订单 CREDITED、booked 1700 / 2000",
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#10] R13 受益人封禁 / 已注销（BR-CALC-09，新应得取重拆份额与已有净额 0 的较小者）：份额归平台——平台凭证 895 + 170 + 85 = 1150，两人都没有 RESTORE 凭证、余额不变、不开义务；restored_fen 850；UNION_RECEIVABLE 净额 2000。注销冷静期（deletion_requests cooling，users.status 仍 normal）不算失效：照常补 85",
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#11] R13 入账时被剥夺的份额（最新份额事件为 forfeited，BR-CALC-09「新应得恒为 0」）：即使会员现在正常也不补，归平台——平台 895 + 170 = 1065；本人 850、间推 85，restored_fen 935；直推没有 RESTORE 凭证、余额 0",
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#12] 处理时再核（D10-986 ②、D10-994）：受益人差额为 0 不写分录；小于 0（本人净额 850 = 应得 850 → 0；直推净额 200 > 应得 170 → −30）不写分录、不扣用户的钱，并写进 resolution.restore 与本次审计（受益人、角色、负差额）；间推 85、平台 895 照写；restored_fen 85",
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#25] R13 被剥夺判定取最新份额事件（D10-481：从 initial_status 起按 event_seq 取最新，最新为 forfeited 才算被剥夺）：入账时直推被封禁（active → forfeited，85 进平台 FORFEIT），之后账户申诉撤销、申诉恢复追加 active 并补 85，订单再被全额扣回、联盟恢复佣金 2000 → 直推按 active 计：RESTORE +170（余额 0 → 170）、本人 850、间推 85、平台 895，restored_fen 1105，不开义务；UNION_RECEIVABLE 净额 2000",
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#26] R13 受益人注销中（users.status = deleting，BR-CALC-09，与已注销同）：其份额并入平台凭证——平台 895 + 85 = 980，该成员没有 RESTORE 凭证、余额 0、不开义务；本人 850、直推 170，restored_fen 1020；UNION_RECEIVABLE 净额 2000",
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts > [AC-B2-09gb#27] 处理时再核（D10-994，08 BR-FUND-22 细则「平台的负差同样只告警不写」）：扣回后平台净额仍为 1000（合成），R13 平台应得 895 → 差额 −105：不写 {order_key}:PLATFORM:RESTORE:{id}、平台净额仍 1000，resolution.restore 与本次审计记下 −105；受益人正差照写 850 / 170 / 85，restored_fen 1105，恢复照常完成：CREDITED、booked 1700 / 2000",
+        "test/spec/settlement/platform-restore/idempotency.int.test.ts > [AC-B2-09gb#20] 幂等（R13 与 R12）：同一 Idempotency-Key 同一请求体重放 → 原样返回第一次的应答（同一 restored_fen 与 rebate_status_after），不再记账、不再写审计、不再改订单；同 key 换请求体 → 20901；新 key → 20902 recon_diff；别的账号用同一 key 是它自己的作用域 → 20902 recon_diff",
+        "test/spec/settlement/platform-restore/idempotency.int.test.ts > [AC-B2-09gb#21] 并发：同一张平台恢复差错单两个处理同时到（不同 key）→ 恰一个成功、另一个 20902 recon_diff；RESTORE 凭证各一张、审计一条、余额只多一次、订单只迁移一次（CREDITED，booked 1700 / 2000）",
+        "test/spec/settlement/platform-restore/idempotency.int.test.ts > [AC-B2-09gb#22] 锁序：订单键 advisory 锁被别的事务持有时处理等待，期间订单、差错单、账务都不变；放行后完成（R13 补 1105）",
+        "test/spec/settlement/platform-restore/minor.int.test.ts > [AC-B2-09gb#13] R13 已识别未成年（BR-CALC-09、BR-ID-26 (b)）：本人份额照补（未成年本人 850）；未成年直推的推广份额 170 归平台，不写其凭证、余额不变；成年间推 85 照补；平台 895 + 170 = 1065；restored_fen 935；UNION_RECEIVABLE 净额 2000",
+        "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#1] R12：VOID 按当前 platform_status 回到 ESTIMATED（DEPOSIT_PAID / PAID）或 WAITING（RECEIVED / SETTLED，settle_period 按 received_at 的中国时间月份：09-30T17:00Z → 2026-10，08-31T16:30Z → 2026-09）；应答 restored_fen 0、rebate_status_after 为新状态、recon_diff 为处理后的详情；不写任何凭证与分录、余额不变；订单其余列不动；经状态机迁移：row_version + 1、返利状态历史恰新增一行（VOID → 新状态、ADMIN_RESTORE、来源 admin）",
+        "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#2] R12：user_id 为空（未归因）的 VOID 回到 UNATTRIBUTED（未归因池，BR-ATTR-16），不论 platform_status 是 PAID 还是 SETTLED；不写凭证；user_id 仍为空；row_version + 1、历史恰新增 VOID → UNATTRIBUTED（ADMIN_RESTORE、admin）一行",
+        "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#3] R12（契约默认）：platform_status 为 RECEIVED 但没有 received_at → 回到 ESTIMATED（之后照 R4 走），settle_period 仍为空，不写凭证",
+        "test/spec/settlement/platform-restore/r12.int.test.ts > [AC-B2-09gb#4] R12 结案：差错单 adjusted、handler_id 为处理人、closed_at = updated_at = 服务端时钟，expected_fen / actual_fen / diff_fen 按登记不变；resolution 保留原键（reason_code、rebate_status、trigger、platform_status）并加 restore（rebate_status_before VOID、rebate_status_after WAITING、beneficiaries 空、platform_fen 与 restored_fen 为 \"0\"、operator、restored_at）与去空白的 note；审计 recon_diff_restore 一条：处理人、目标差错单，前后 status、order_key、返利状态前后与 restored_fen 0",
+        "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#5] 08 BR-FUND-22 例（R13）：预留 0，已入账 617 / 123 / 494 后全额扣回 → CLAWED_BACK；联盟恢复佣金 1234 → 处理恢复：ADMIN_ADJUST +617（本人）/ +123（直推）/ +494（平台），各借 UNION_RECEIVABLE:taobao、贷 USER_BALANCE.available 或 COMMISSION_REVENUE，键 `…:RESTORE:{差错单 id}`，受益人凭证挂受益人键、平台凭证不挂；booked_base_fen = booked_n_fen = 1234，CREDITED；应答 restored_fen 740、rebate_status_after CREDITED",
+        "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#6] R13 按当前有效联盟佣金重算（BR-CALC-02 取值阶段）：入账 N 1000（预留 1500 → 425 / 85 / 42、平台 448）全额扣回后结算佣金 2000、预估 5555 → B 1700：本人 850、直推 170、间推 85、平台 895，不取预估、不取快照基数、不取差错单登记额（改成 999999）；结算佣金为空时取预估 1500 → B 1275：637 / 127 / 63、平台 673；同一 CAS：booked_base_fen = 新基数、booked_n_fen = 有效佣金、refunded_quantity_r9_baseline = 当时 refunded_quantity（2），refunded_quantity_at_credit（0）不动，其余列不动；row_version + 1、返利状态历史恰新增一行（CLAWED_BACK → CREDITED、ADMIN_RESTORE、来源 admin）；结算佣金为空的单没有 order_settlements 行（有效佣金只能来自预估）",
+        "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#7] 属性：任意入账佣金 O（1000～99999 分）、任意当前有效佣金 N（1～999999 分与大于 2^31 分）、预留 0 / 1500 / 2000 / 3333：R13 后每个受益人凭证 = floor(B × 比例 / 10000)（为 0 不写），平台凭证 = N − Σ受益人；UNION_RECEIVABLE 净额 = booked_n_fen = N，平台净额 = N − Σ受益人，booked_base_fen = floor(N × (10000 − 预留) / 10000)；restored_fen = Σ受益人",
+        "test/spec/settlement/platform-restore/r13.int.test.ts > [AC-B2-09gb#8] R13 边界：有效佣金 1 分、预留 1500 → B = 0：不写任何受益人凭证（不写 0 金额分录），平台凭证 1、booked_base_fen 0、booked_n_fen 1、CREDITED、restored_fen 0；有效佣金 2^31 + 7 = 2147483655 分、预留 1500 → B = floor(1825361106.75) = 1825361106：本人 912680553、直推 182536110、间推 91268055、平台 960998937，restored_fen 1186484718",
+        "test/spec/settlement/platform-restore/recheck.int.test.ts > [AC-B2-09gb#14] 处理时再核（R12）：VOID 订单当前 platform_status 又为 INVALID（差错单登记之后平台再报失效）→ 20001 data.fields=[recon_diff_id] reason=restore_platform_invalid：什么都不写，差错单保持 open；平台随后回到 PAID，同一张差错单再处理即恢复到 ESTIMATED",
+        "test/spec/settlement/platform-restore/recheck.int.test.ts > [AC-B2-09gb#15] 处理时再核（R13）：CLAWED_BACK 订单当前 platform_status 为 INVALID → restore_platform_invalid；INVALID 且有效佣金为 0 时也先报 restore_platform_invalid；什么都不写，差错单保持 open",
+        "test/spec/settlement/platform-restore/recheck.int.test.ts > [AC-B2-09gb#16] 处理时再核（R13）：当前有效联盟佣金的正数部分为 0（结算佣金 0；结算佣金 −50；结算佣金为空而预估 0；结算佣金 0 而预估 5000——结算佣金非空只取它）→ 20001 reason=restore_commission_zero：不恢复、什么都不写、差错单保持 open；有效佣金 1 分则照常恢复（只写平台 1）",
+        "test/spec/settlement/platform-restore/stale.int.test.ts > [AC-B2-09gb#17] 订单已不是 VOID / CLAWED_BACK（别处已恢复：VOID → ESTIMATED、CLAWED_BACK → CREDITED，各有返利历史）→ 20902 data.resource=order：订单、凭证、差错单、审计都不动；同一入口对仍为 VOID 的订单照常恢复",
+        "test/spec/settlement/platform-restore/stale.int.test.ts > [AC-B2-09gb#18] 离开后又进入（VOID → ESTIMATED → VOID、CLAWED_BACK → CREDITED → CLAWED_BACK：进入当前状态的历史行已换）或 ref_id 的 entry_id 不是进入行 → 20902 data.resource=order，什么都不写；按新进入行登记的差错单照常处理（R12 → ESTIMATED）",
+        "test/spec/settlement/platform-restore/stale.int.test.ts > [AC-B2-09gb#19] ref_id 不是 `{order_key}#RESTORE#{entry_id}` 的形式（没有后缀、entry_id 为空或不是数字、分隔不是 #RESTORE#、order_key 为空），或指向本 app 没有的订单（不存在的子订单、别的 app 的订单）→ 20001 data.fields=[recon_diff_id] reason=restore_not_supported：什么都不写；同一订单形式正确的差错单照常恢复",
+        "test/spec/settlement/platform-restore/tenancy.int.test.ts > [AC-B2-09gb#23] 多租户：别的 app 有同平台另一子订单的订单（R12 的 VOID、R13 的 CLAWED_BACK）及其平台恢复差错单；本 app 处理只动本 app 的订单——别的 app 的订单、差错单、账务、审计一律不变；别的 app 的处理人拿本 app 的差错单 id → 20001 data.fields=[recon_diff_id]，本 app 什么都不变",
+        "test/spec/settlement/platform-restore/tenancy.int.test.ts > [AC-B2-09gb#24] 一个事务：写凭证、改差错单、写审计任一步失败 → 50001，整笔回滚（订单状态与 booked 列、凭证、余额、义务、返利历史、差错单都不变），不留幂等记录；同一 key 重发即成功且只入账一次（R13 每个失败点各一单，R12 在改差错单与审计两点各一单）"
+      ],
+      "expected": [
+        "test/spec/settlement/platform-restore/beneficiaries.int.test.ts",
+        "test/spec/settlement/platform-restore/idempotency.int.test.ts",
+        "test/spec/settlement/platform-restore/minor.int.test.ts",
+        "test/spec/settlement/platform-restore/r12.int.test.ts",
+        "test/spec/settlement/platform-restore/r13.int.test.ts",
+        "test/spec/settlement/platform-restore/recheck.int.test.ts",
+        "test/spec/settlement/platform-restore/stale.int.test.ts",
+        "test/spec/settlement/platform-restore/tenancy.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "198ff6c16aeb4e421a6ec8b66ce2be616ecba3a3ac84f2bc148d1df1736aaa8e"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex quota exhausted until 11-15 (D10-823 ④): money review by a fresh independent Claude via claude-run.sh, base the spec commit (whole implementation), round 1 pass. One S2 left as FU-R13-TLJ-BASE: planR13 does not subtract tlj_deduct_fen from the base (not reachable today: credit skips Taobao gift orders, D10-272). Static review, nothing executed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by an independent Claude in 3 attempts. spec-test r1 fail (3 S1: latest share event decides forfeiture, deleting member, row_version and history row not asserted; 1 S2 fixture), r2 incremental pass; attempt 3 changed only [AC-B2-09gb#23] (the other app's twin needs another sub_order_id: order_keys is not keyed by app_id) and r3 reviewed only that increment (one-off exception D10-1010) pass."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4185bb8a7e08a71965a3e2ce5c6d491c52658579",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

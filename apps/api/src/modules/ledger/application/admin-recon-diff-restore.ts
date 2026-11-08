@@ -17,6 +17,9 @@ export interface ReconDiffRestoreRow {
   readonly id: string;
   readonly type: string;
   readonly status: string;
+  /** B2-09gb: a platform_restore difference names its order through ref_type order and ref_id. */
+  readonly ref_type: string | null;
+  readonly ref_id: string | null;
   readonly resolution: unknown;
 }
 

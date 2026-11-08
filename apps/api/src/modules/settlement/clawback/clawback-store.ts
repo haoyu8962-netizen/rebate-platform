@@ -84,12 +84,19 @@ export interface DeferredObligation {
   readonly opened_ref: string;
   readonly split_ref: string;
   readonly opened_at: Date;
+  /**
+   * B2-09gb (BR-FUND-04 ⑫, BR-FUND-22 R13): the transition that opened it and its origin; absent →
+   * R10 with SETTLE_ADJUST / SETTLE_DIFF (B2-04zi).
+   */
+  readonly opened_by?: 'R10' | 'R13';
+  readonly origin?: { readonly ledger_type: string; readonly sub_type: string };
 }
 
 /**
  * BR-FUND-04 ⑫ (B2-04zi): one open deferred obligation for a positive difference the negative route
- * of BR-FUND-09 left pending, opened by R10 with its origin SETTLE_ADJUST / SETTLE_DIFF. The partial
- * unique index on open rows refuses a second one for the same (order, beneficiary, role).
+ * of BR-FUND-09 left pending, opened by R10 with its origin SETTLE_ADJUST / SETTLE_DIFF (B2-09gb: or
+ * by R13 with ADMIN_ADJUST / RESTORE, a restore while the beneficiary is frozen or under appeal). The
+ * partial unique index on open rows refuses a second one for the same (order, beneficiary, role).
  */
 export async function insertDeferredObligation(
   trx: Transaction<DB>,
@@ -105,10 +112,10 @@ export async function insertDeferredObligation(
       user_id: row.user_id,
       role: row.role,
       kind: 'deferred',
-      opened_by: 'R10',
+      opened_by: row.opened_by ?? 'R10',
       opened_ref: row.opened_ref,
-      origin_ledger_type: 'SETTLE_ADJUST',
-      origin_sub_type: 'SETTLE_DIFF',
+      origin_ledger_type: row.origin?.ledger_type ?? 'SETTLE_ADJUST',
+      origin_sub_type: row.origin?.sub_type ?? 'SETTLE_DIFF',
       split_ref: row.split_ref,
       status: 'open',
       closed_by: null,

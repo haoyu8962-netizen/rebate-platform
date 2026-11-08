@@ -30,6 +30,9 @@
 // Last the difference to adjusted through ledger's command and the audit record recon_diff_restore.
 // rebate_status and withdrawal holds are not touched. Any failure rolls everything back (5xx) and
 // leaves no idempotency record.
+// B2-09gb (编排 D10-973): a platform_restore difference (BR-FUND-22 R12 / R13) goes, after the same
+// body, difference and status checks, to platform-restore.ts on the same transaction; the
+// account-appeal path below is unchanged.
 import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { buildVouchers, orderKey, type BuiltVoucher } from '@couli/domain';
@@ -55,6 +58,7 @@ import {
   type HandlerResult,
   type Idempotency,
   type IdempotentResponse,
+  type RootLogger,
 } from '../../platform/index.ts';
 import type {
   BeneficiaryGate,
@@ -63,20 +67,22 @@ import type {
 } from '../credit/beneficiary-gate.ts';
 import { readOrderLocator } from '../credit/credit-store.ts';
 import { readRebateOrder } from '../rebate/infra/rebate-store.ts';
+import {
+  restorePlatformDiff,
+  type PlatformRestoreRefusal,
+  type PlatformRestoreSnapshot,
+} from './platform-restore.ts';
 
 /** The data.reason of a 20001 [recon_diff_id] on a difference that cannot be restored here. */
-export type ReconDiffRestoreRefusal = 'restore_not_supported' | 'restore_user_deleted';
+export type ReconDiffRestoreRefusal = 'restore_user_deleted' | PlatformRestoreRefusal;
 
 type RestoreRole = 'self' | 'share' | 'direct' | 'indirect';
 
-/** commission's version-independent read of the snapshot's attribution (structural). */
-export interface RestoreSnapshot {
-  readonly beneficiaries: readonly {
-    readonly userId: string;
-    readonly role: RestoreRole;
-    readonly ratioBp: number;
-  }[];
-}
+/**
+ * commission's version-independent read of the snapshot's attribution (structural); the reserve
+ * and the share states are read by the platform restore (R13).
+ */
+export type RestoreSnapshot = PlatformRestoreSnapshot;
 
 type ReadRestoreSnapshot = (
   trx: Transaction<DB>,
@@ -91,7 +97,8 @@ type AppendRestoreEvent = (
     readonly userId: string;
     readonly role: RestoreRole;
     readonly status: 'active' | 'forfeited';
-    readonly reason: 'minor' | null;
+    /** The appeal restore writes minor (D10-482); the platform restore banned / deleted / minor. */
+    readonly reason: 'minor' | 'banned' | 'deleted' | null;
   },
   dependencies: { readonly clock: Clock },
 ) => Promise<void>;
@@ -123,6 +130,8 @@ export interface AdminReconRestorePorts {
 
 export interface RestoreAdminReconDiffDeps {
   readonly clock: Clock;
+  /** B2-09gb: the platform restore's warnings (negative differences left unposted). */
+  readonly logger: Pick<RootLogger, 'warn'>;
   readonly idempotency: Idempotency;
   /** admin's audit writer bound to the restore transaction (the single writer of audit_logs). */
   readonly auditOn: (trx: Transaction<DB>) => AuditPort;
@@ -155,6 +164,8 @@ const NOTE_MAX = 200;
 const CONFLICT_MESSAGE = '状态已变化，请刷新后重试';
 /** The difference risk's producer registers (risk/application/appeal-restore.ts). */
 const RESTORE_TYPE = 'appeal_restore';
+/** The difference orders' producer registers (orders/application/platform-restore-step.ts). */
+const PLATFORM_RESTORE_TYPE = 'platform_restore';
 const RESTORE_REASON_CODE = 'APPEAL_RESTORE';
 const VOUCHER_TEMPLATE = 'ADMIN_ADJUST:RESTORE:APPEAL';
 const VOUCHER_KIND = 'ADMIN_ADJUST';
@@ -305,6 +316,17 @@ export function restoreAdminReconDiff(
       const seen = await readReconDiffForRestore(trx, appId, reconDiffId);
       if (seen === undefined) return fieldsRefusal(['recon_diff_id'], traceId);
       if (!isOpen(seen)) return conflictRefusal(traceId);
+      if (seen.type === PLATFORM_RESTORE_TYPE) {
+        return restorePlatformDiff(deps, trx, {
+          appId,
+          adminId,
+          ip: operator.ip,
+          traceId,
+          note,
+          seen,
+          auditAction: RECON_DIFF_RESTORE_AUDIT_ACTION,
+        });
+      }
       const target = restoreTargetOf(seen);
       if (target === null) return guardRefusal('restore_not_supported', traceId);
       const { orderId, userId } = target;
