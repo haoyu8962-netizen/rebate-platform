@@ -386,6 +386,15 @@ function trimmedNote(note: string | null): string | null | undefined {
   return trimmed === '' ? undefined : trimmed;
 }
 
+/**
+ * What makes two refs the same document: a UUID is the same in either letter case, an `order`
+ * ref_id (order_key) is case-sensitive. Only for comparing; refs are stored as submitted.
+ */
+function refDedupeKey(ref: AdminAdjustmentRef): string {
+  const id = ref.ref_type === 'order' ? ref.ref_id : ref.ref_id.toLowerCase();
+  return `${ref.ref_type}\u0000${id}`;
+}
+
 /** BR-FUND-24 ②③: the document check of the body (20001 fields=[refs], no reason). */
 function refsShapeOk(
   reason: AdminAdjustmentNewInput['reasonCode'],
@@ -393,7 +402,7 @@ function refsShapeOk(
 ): boolean {
   const seen = new Set<string>();
   for (const ref of refs) {
-    const key = `${ref.ref_type}\u0000${ref.ref_id}`;
+    const key = refDedupeKey(ref);
     if (seen.has(key)) return false;
     seen.add(key);
   }

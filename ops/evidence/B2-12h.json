@@ -1,0 +1,72 @@
+{
+  "risk_note": "RV2 ledger admin adjustment (FU-ADJUST-REFS-UUID-CASE, the B2-12c money r1 S2). refsShapeOk compared ref_id as submitted while checkRefs looked recon_diff, withdrawal and account_deletion up in lower case, so one document written in both letter cases was accepted and stored twice. Now the duplicate key lower-cases those three types (refDedupeKey) and compares order ids exactly (order_key is case-sensitive). Only the comparison changes: stored refs stay as submitted, and the check order, error codes, vouchers, audit and balances are untouched. One response detail: two values of those types that differ only in case and are not UUIDs now get 20001 fields=[refs] at the duplicate check instead of 20001 reason=adjust_ref_invalid later. Integration refs-case plus the frozen admin-adjustments directories 146/146. The rule-test unit run had 4 boot-the-app tests time out at 15 s under load (no assertion failed); run alone with a longer timeout 17/17.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage limit exhausted until 2026-11-15, so per D10-823 ④ a fresh independent Claude (claude-run.sh review --review-type money) reviewed the whole implementation from the last rule-test commit: pass with no findings. Checklist rounding na, sign na, idempotency ok, concurrency na, partial_refund na, clock na, app_id ok. couli-runs/B2-12h/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude each round (D10-848). Round 1 fail: one S1 (two processing deletion requests for one member hit a unique index, so the case was red by a database error, not an assertion). Round 2 fixed the seed and passed. Red: red/1 ok, problems 0, exempt 0, 3 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-12h",
+  "spec_commit": "055c763f1334eb75c8a9514ce83a9ac738b79cf8",
+  "spec_ref": "39756e36debb7660e6b113b9e4392e7339ab687c",
+  "red_tests": [
+    "test/spec/ledger/admin-adjustment-refs-case/refs-case.int.test.ts > [AC-B2-12h#1] 同一张 recon_diff 以大小写不同的 UUID 出现两次（RECON_FIX、PAYOUT_RECOVERY）→ 20001 fields=[refs]，不建调账单、不写凭证与审计；只有一张且写成大写 UUID → 照常生效，refs 按提交原样保存",
+    "test/spec/ledger/admin-adjustment-refs-case/refs-case.int.test.ts > [AC-B2-12h#2] 同一张 withdrawal 以大小写不同的 UUID 出现两次（PAYOUT_RECOVERY、RECON_FIX、OTHER）→ 20001 fields=[refs]，都不留痕；PAYOUT_RECOVERY 只有一张提现单且写成大写 UUID → 照常生效，对方科目取该提现单的通道",
+    "test/spec/ledger/admin-adjustment-refs-case/refs-case.int.test.ts > [AC-B2-12h#3] 同一张 account_deletion 以大小写不同的 UUID 出现两次 → 20001 fields=[refs]，都不留痕；只有一张且写成大写 UUID → 照常生效；order 单据号区分大小写：两个只差大小写的子订单号都存在时一起生效、refs 都保留，完全相同的子订单号仍算重复，只差大小写而不存在的子订单号是 adjust_ref_invalid"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "055c763f1334eb75c8a9514ce83a9ac738b79cf8",
+      "tree": "7478e1795de0adfcd6fff0347718f226b8adf20f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T13:29:58Z",
+      "finished_at": "2026-11-08T13:30:24Z",
+      "red_tests": [
+        "test/spec/ledger/admin-adjustment-refs-case/refs-case.int.test.ts > [AC-B2-12h#1] 同一张 recon_diff 以大小写不同的 UUID 出现两次（RECON_FIX、PAYOUT_RECOVERY）→ 20001 fields=[refs]，不建调账单、不写凭证与审计；只有一张且写成大写 UUID → 照常生效，refs 按提交原样保存",
+        "test/spec/ledger/admin-adjustment-refs-case/refs-case.int.test.ts > [AC-B2-12h#2] 同一张 withdrawal 以大小写不同的 UUID 出现两次（PAYOUT_RECOVERY、RECON_FIX、OTHER）→ 20001 fields=[refs]，都不留痕；PAYOUT_RECOVERY 只有一张提现单且写成大写 UUID → 照常生效，对方科目取该提现单的通道",
+        "test/spec/ledger/admin-adjustment-refs-case/refs-case.int.test.ts > [AC-B2-12h#3] 同一张 account_deletion 以大小写不同的 UUID 出现两次 → 20001 fields=[refs]，都不留痕；只有一张且写成大写 UUID → 照常生效；order 单据号区分大小写：两个只差大小写的子订单号都存在时一起生效、refs 都保留，完全相同的子订单号仍算重复，只差大小写而不存在的子订单号是 adjust_ref_invalid"
+      ],
+      "expected": ["test/spec/ledger/admin-adjustment-refs-case/refs-case.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "886a9e7395dea763a249ffc0afd03f6ece678eeaaafd8e924246dfdd903eed29"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "76c2ad3db6731094d187f83f1222c79c1f60d23e",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}
