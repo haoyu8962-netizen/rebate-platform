@@ -5,7 +5,7 @@ type: contract
 # 2026-11-07 入账（agent2-acct4，编排 18:42、D10-871）。08 BR-AI-07 细则：order_reason.<CODE>.summary 是 T5 唯一文本来源，主干字典缺键时 B3-08m 回落默认句。RV1，Codex contract 评审。
 # 2026-11-08 D10-882 扩范围（标题按守卫不改）：补齐 order_reason 16 码与 display_status 缺的 8 个 summary，值按 BR-TEXT-22 拼法「{BR-TEXT-02 状态文案或 BR-TEXT-05 标题}，详情见卡片。」逐字；
 #   例外：NOT_TRACKED 用 BR-AI-07 默认句；CREDITED_PART_CLAWED 用 #299 固定句；CANCELLED（旧编码 → REFUND）用 REFUND 的句子；已有三条不动。测试由新鲜独立 Claude 写，准备见 couli-runs/CT-24zy/prep.md。
-# 2026-11-08 D10-941 选 (a)：PRICE_COMPARE.summary 照拼法「比价订单，详情见卡片。」，该键加进 banned-words.yaml「比价」allow_keys；paths 加该文件与生成物（同 CT-26p），refs 加 BR-TEXT-13。
+# 2026-11-08 D10-941 选 (a)：PRICE_COMPARE.summary 照拼法「比价订单，详情见卡片。」，该键加进 banned-words.yaml「比价」allow_keys；paths 加该文件与生成物（同 CT-26p），refs 加 BR-TEXT-13。contract r2 S2：补键使 B3-08m 单测 template-texts.test.ts「契约无 REFUND summary」前提过期，paths 加该文件、去掉用不到的 oasdiff-accepted.txt。
 refs: [BR-AI-07, BR-TEXT-22, BR-TEXT-05, BR-TEXT-02, BR-TEXT-13]
 refs_hash:
   BR-AI-07: 0da3ace82049
@@ -17,13 +17,13 @@ deps: []
 paths:
   - 'test/spec/contracts/agent-order-summaries/**'
   - 'contracts/openapi.yaml'
-  - 'contracts/oasdiff-accepted.txt'
   - 'contracts/error-codes.yaml'
   - 'contracts/enums/**'
   - 'contracts/texts.default.json'
   - 'specs/fund-term-keys.yaml'
   - 'specs/banned-words.yaml'
   - 'apps/api/src/modules/content/specs/banned-words.gen.ts'
+  - 'apps/api/src/modules/agent/stream/mount/template-texts.test.ts'
   - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
