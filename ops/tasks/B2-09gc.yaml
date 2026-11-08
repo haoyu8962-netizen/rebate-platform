@@ -1,0 +1,21 @@
+id: B2-09gc
+repo: rebate-platform
+title: 过渡测试改动（B2-09gd 前置）：事件订阅、队列目录、worker 计划的冻结测试容许 settlement-order-appeal-restore 及其队列（有则钉死名称、属性与位置，无则原断言不变）
+type: test-change
+# 2026-11-09 withdraw 入账（编排 D10-1093：冻结清单追加走前置 test-change，新鲜独立 Claude 只追加、另一位只读复核，按 #24 报核）。写法照 F1-09q、B1-34c、B1-03s。
+# 新增项：消费者 settlement-order-appeal-restore（只订 appeal.resolved）、队列 evt.settlement-order-appeal-restore（目录默认值、紧接 evt.risk-appeal-restore，死信 .dead）、worker 计划并发 1 轮询 2 s、limits 计数 +1、环境变量键 QUEUE_CONCURRENCY_EVT_SETTLEMENT_ORDER_APPEAL_RESTORE。
+# 不删 it、不放宽其他断言，不加 skip / only / retry；其余条目与顺序仍确切。B2-09gd 合并后由后续收紧改回只认存在。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/platform/queue/**'
+  - 'test/spec/platform/events/**'
+  - 'test/spec/platform/queue-concurrency/**'
+  - 'test/spec/notification/appeal-result-message/consumer.int.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

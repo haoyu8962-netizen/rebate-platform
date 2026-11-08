@@ -6,6 +6,7 @@ type: impl
 # 做法：只改 sweeper/loop.ts 三处已有语句。取锁：WITH l AS MATERIALIZED (SELECT pg_try_advisory_lock(...) AS got) SELECT got AS pg_try_advisory_lock, CASE WHEN got THEN set_config('idle_session_timeout', 2 × tickTimeoutMs, false) END，拿到锁才设、列名不变。解锁与迟到拿到锁时的静默归还：同一条语句里 set_config 还原 pg_settings.reset_val。不加配置项；头注释（stream-recovery 的契约）补写。
 # 不动冻结用例：冻结与 B3-08u 用例按正则认语句、语句序列不变。开工前已在 B3-08u 树上实测（未提交、已还原）：stream-recovery / sweeper / halfopen / finalize-pool 单元 27/27、集成 47/47；真实 PG（couli_app）上持锁方 2min、未拿到锁方 0、解锁还原 0、持锁方沉默超时后服务端断开且别的连接随即取到锁。这些结果写进证据（D10-1070）。
 # 规则测试钉（真实 PG，集成层，主干上都红）：拿到锁的连接设上超时且值 = 2 × tickTimeoutMs；未拿到锁的不设；解锁后还原、连接回池不带超时；持锁方沉默超时后服务端释放、下一轮取到锁并派发；迟到拿到的锁静默归还时也还原。tester 新鲜独立 Claude；评审独立 Claude（Codex 额度用尽至 11-15）。
+# **作废（D10-1098，2026-11-09）**：#2908 CI 红在 agent 写范围扫描（CT-06zu，BR-AI-02：set_config 与读 pg_settings 违规），不为低优先边角在安全扫描上开口子；改由 PostgreSQL 服务端 TCP keepalive 配置解决（FU-PG-SERVER-KEEPALIVE）。#2908 已关闭、未合并。上面「冻结 27/27、集成 47/47」是未生效补丁的结果，真实改动为单元 27/27、集成 45/45；真实 PG 实测结论留在 couli-runs/B3-08zb。
 refs: [BR-AI-23]
 refs_hash:
   BR-AI-23: 5ebdbaff580d
@@ -20,5 +21,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/stream-sweeper-server-lock/**'
-status: todo
+status: void
 pr: null

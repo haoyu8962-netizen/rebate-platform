@@ -1,0 +1,32 @@
+id: CT-24zzg
+repo: rebate-platform
+title: 契约：差错单恢复处理放开订单申诉的 R12（BR-FUND-22 申诉恢复 ①）——restoreAdminReconDiff 收 reason_code=BLACKLIST 的 appeal_restore，加「需补快照但选不出已发布规则版本」的拒绝子原因
+type: contract
+# 2026-11-09 withdraw 入账（编排 D10-1091、D10-1093 及 23:56 / 00:05 / 00:36 口径；方案 couli-runs/FU-R12-BLACKLIST-PRODUCER/plan.md §1-4、§9；规则回写 couli #315）。
+# 本段写：① 收窄 restoreAdminReconDiff 的 restore_not_supported：type=appeal_restore、ref_type=order、ref_id 形如 {order_key}#RESTORE#{entry_id}、resolution.reason_code=BLACKLIST 的差错单可处理，走 R12，守卫与 platform_restore 相同（锁单、状态再判、entry_id 不符 20902 order、platform_status=INVALID restore_platform_invalid）；订单申诉的 R13 仍 restore_not_supported。
+#   ② resolution 形状：{reason_code:'BLACKLIST', appeal_id, order_id, order_key, user_id, rebate_status:'VOID', platform_status}，没有 shares，账户申诉恢复（APPEAL_RESTORE + shares）一字不改。③ 响应 rebate_status_after 对这种单也出现。
+#   ④ 新 20001 子原因 restore_snapshot_unavailable（R12 或平台恢复 R12 时需补快照、但选不出任何已发布规则版本），登 error-codes；未归因、DEPOSIT_PAID、佣金未回传、缺平台规则或预留都照常恢复，不用这个子原因。expected_fen 仍只作展示。
+# 实现 B2-09gd。契约单 RV1，tester none。
+refs: [BR-FUND-22, BR-CALC-10]
+refs_hash:
+  BR-FUND-22: 075baebf41f3
+  BR-CALC-10: 47e3f28505e7
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null

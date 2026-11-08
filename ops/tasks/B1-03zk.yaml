@@ -1,0 +1,25 @@
+id: B1-03zk
+repo: rebate-platform
+title: 订单侧黑名单再命中豁免（BR-ATTR-26）——订单申诉撤销后，该订单在结案前已留下 risk_hits 的全部名单值不再命中；其他名单值与其他订单照常，名单本身不变
+type: impl
+# 2026-11-09 withdraw 入账（编排 D10-1093 ②及 23:56 更正，Jev 判断 0.92，负责人可推翻；方案 plan.md §5.2、§9.2；规则回写 couli #315）。
+# 做法：orders 第 ③ 步更新路径把 order_id 传给 risk 的 match（新增可选入参，首次入库没有 order_id、无历史，行为不变）；risk 的 match 在同事务排除这样的命中：该订单存在 status=revoked、target_type=order 的申诉，且 risk_hits 里 ref_type=order、ref_id=该订单、value_hmac=该值、created_at ≤ 申诉 closed_at（不限 risk_action，R13 路径也覆盖）。
+# 只读，不写库、不改 blocklist。规则测试钉：撤销后原值不再作废（WAITING / ESTIMATED）、已入账不再发 after_credit、结案后新增的名单值照常命中、别的订单照常、upheld 不豁免、没有申诉不豁免。须先于或同时于 B2-09gd 合并。RV2，规则测试新鲜独立 Claude，money 评审 Codex medium。
+refs: [BR-ATTR-26, BR-ID-36]
+refs_hash:
+  BR-ATTR-26: d115d750e3a5
+  BR-ID-36: 2758a53910fa
+deps: []
+paths:
+  - 'apps/api/src/modules/risk/application/order-blocklist*.ts'
+  - 'apps/api/src/modules/orders/application/blacklist-step*.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+test_paths:
+  - 'test/spec/risk/order-blocklist-appeal-exempt/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/risk/order-blocklist-appeal-exempt/**'
+status: todo
+pr: null
