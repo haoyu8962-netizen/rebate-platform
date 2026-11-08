@@ -8,7 +8,7 @@ type: impl
 # 2026-10-24 paths 补 packages/contracts-ts/src/planned-operations.gen.ts：去 planned 后 codegen 会改这份生成物（contracts:check 校验它；#1467 guard-git path-guard 红）。
 refs: [BR-ID-34]
 refs_hash:
-  BR-ID-34: 5ec74e78c860
+  BR-ID-34: 6a2bdd4ca3ce
 deps: [CT-24o, B1-34h]
 paths:
   - 'apps/api/src/modules/admin/**'

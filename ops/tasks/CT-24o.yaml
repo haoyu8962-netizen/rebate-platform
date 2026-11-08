@@ -12,7 +12,7 @@ type: contract
 refs: [BR-ID-43, BR-ID-34, BR-ID-33, BR-ID-42]
 refs_hash:
   BR-ID-43: aabc9139136d
-  BR-ID-34: 5ec74e78c860
+  BR-ID-34: 6a2bdd4ca3ce
   BR-ID-33: 01b25f773b29
   BR-ID-42: 2f9cd1710ed3
 contract_sections: ['11.1']

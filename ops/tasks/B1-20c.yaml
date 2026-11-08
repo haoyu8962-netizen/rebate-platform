@@ -7,11 +7,11 @@ type: impl
 # Q-5 目标冻结放行；Q-6 存档 tokens 置空（依赖 B1-01zzs）；T-1～T-9 认可，T-7（linking 写者锁后拒 status='deleted'）并入。union_pdd_pid_filings 留墓碑（D10-1097）。无迁移。规划回写由编排随下一批 SPEC_REF 做。
 refs: [BR-ID-06, BR-ID-05, BR-ID-07, BR-ID-37, BR-WDR-01]
 refs_hash:
-  BR-ID-06: 1b8572f798d4
+  BR-ID-06: 379a6a53b315
   BR-ID-05: 0737ee3b67e2
   BR-ID-07: 4f2a4bdf0a2a
   BR-ID-37: b93e6a37d3dc
-  BR-WDR-01: 6f61aa67b7fb
+  BR-WDR-01: 6c6d0b8c5854
 deps: [B1-01zzs, B1-20a, B1-20e, B1-02zp]
 paths:
   - 'apps/api/src/modules/identity/**'

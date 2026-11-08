@@ -10,7 +10,7 @@ type: impl
 # RV2：规则测试新鲜独立 Claude，spec-test 新鲜独立 Claude（D10-848、D10-1080），money 评审 Codex medium（D10-1075）。排在 B2-09zc、B2-15x 之后。
 refs: [BR-PAY-03]
 refs_hash:
-  BR-PAY-03: d8433c7a1556
+  BR-PAY-03: ce78552d8b5d
 deps: [B2-15b]
 paths:
   - 'apps/api/src/modules/payment/application/pay-orders.ts'

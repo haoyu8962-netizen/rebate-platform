@@ -11,7 +11,7 @@ type: impl
 # 规则测试：新鲜独立 Claude 写（第 2 次；第 1 次按原方案写的 14 条作废，存 couli-runs/B1-06zh/plan-a-void/）；spec-test 新鲜独立 Claude（D10-1080），money 评审先 Codex（D10-1075）。RV2。
 refs: [BR-ID-22]
 refs_hash:
-  BR-ID-22: 07f1349bf0ac
+  BR-ID-22: d56b046f5b7c
 deps: []
 paths:
   - 'db/migrations/0135_union-pdd-pid-filings.sql'

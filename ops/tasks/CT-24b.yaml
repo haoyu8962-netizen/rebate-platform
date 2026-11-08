@@ -7,7 +7,7 @@ type: contract
 # 实现由 B1-34 承接。
 refs: [BR-ID-34]
 refs_hash:
-  BR-ID-34: 5ec74e78c860
+  BR-ID-34: 6a2bdd4ca3ce
 contract_sections: ['11.1']
 deps: []
 paths:

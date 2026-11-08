@@ -6,7 +6,7 @@ type: impl
 # 取舍（本线定）：claims 在 app.module 装配处按 countOrders 同样写法直查（只读）；余额流水经 ledger index 新导出的只读函数（只读、不写分录、不改余额；同 D10-432 先例，请编排确认 funds 归属）；注销阶段用 identity 自有 createDeletionStageReader。并号接口 POST /v1/auth/merge 不在本任务。
 refs: [BR-ID-06]
 refs_hash:
-  BR-ID-06: 1b8572f798d4
+  BR-ID-06: 379a6a53b315
 deps: []
 paths:
   - 'apps/api/src/app.module.ts'

@@ -7,8 +7,8 @@ type: impl
 # 冻结：B1-22n#5/#6（D10-654）；替身补 pddAuthorityUrl、构造补 registry / attrCodes（D10-658）；四类与新规则冲突的用例照 D10-659 改（D10-327）。
 refs: [BR-ID-22, BR-ID-17]
 refs_hash:
-  BR-ID-22: 07f1349bf0ac
-  BR-ID-17: 01dbb87f6f09
+  BR-ID-22: d56b046f5b7c
+  BR-ID-17: ba4ebcc6279a
 deps: []
 paths:
   - 'apps/api/src/modules/linking/linking.module.ts'

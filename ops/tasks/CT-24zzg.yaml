@@ -10,7 +10,7 @@ type: contract
 refs: [BR-FUND-22, BR-CALC-10]
 refs_hash:
   BR-FUND-22: 075baebf41f3
-  BR-CALC-10: 47e3f28505e7
+  BR-CALC-10: 93337079f138
 contract_sections: ['11.1']
 deps: []
 paths:

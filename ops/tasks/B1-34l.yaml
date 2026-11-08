@@ -6,7 +6,7 @@ type: impl
 # 本线技术取舍：只改 admin/domain/totp.ts 的 createTotpVerifier——收集窗口内全部匹配步，按步升序逐个 replay.consume，第一个成功即通过；全部失败才返回 false（重放）。replay 存储（totp_last_step 单调）不改：每步只能用一次、已接受步之前的步一律视为已用；相邻两步码相同时同一个码字符串最多可分属两步各用一次（按步计防重放，与 RFC 6238 §5.2 按码字面不同，D10-238 接受的取舍，概率约百万分之一）。只有 consume 返回 false 才试下一步，consume 抛错立即往外传（fail closed，不得 catch 后继续）。登录、首次绑定、step-up 共用同一校验器，一并生效。规则测试（D10-238 及两家评审补充，编排者摘进任务书第 9 节）：① 相邻两步码相同且上一步已用 → 本步通过；② 两步都已用 → 拒；③ consume 按步升序调用、第一次成功后不再调用；④ 第一个匹配步 consume 抛错 → 整个 verify 失败且不再占下一步；⑤ 接 createPgTotpReplayStore 的集成用例：上一步已用 → 本步通过、两步都已用 → 拒、已接受 N 后 N-1 拒；撞码夹具（hotp(k,N-1)==hotp(k,N) 的 Base32 密钥与计数器）离线算好写成常量，测试里用独立 HMAC 复核，不在运行时搜索、不调被测模块的 hotp 生成。病因（相邻步撞码）是推测：实现时若能从失败日志核实就记下，核实不了在 PR 说明写明「此修复不保证消除该偶发」；冻结的 step-up 重放用例（[AC-F1-06l#15] / #16）在撞码时可能转为误收，同概率量级，照旧重跑或日后开 test-change。Codex 额度用尽（至 10-30），按 approvals #36 规则测试由独立 Claude 写（tester claude-independent）。
 refs: [BR-ID-34]
 refs_hash:
-  BR-ID-34: 5ec74e78c860
+  BR-ID-34: 6a2bdd4ca3ce
 deps: []
 paths:
   - 'apps/api/src/modules/admin/domain/totp.ts'

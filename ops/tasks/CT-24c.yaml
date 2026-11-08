@@ -8,7 +8,7 @@ type: contract
 # 实现由 B1-34 承接。权限点 audit.view_all 已存在（无需 test-change）。
 refs: [BR-ID-34]
 refs_hash:
-  BR-ID-34: 5ec74e78c860
+  BR-ID-34: 6a2bdd4ca3ce
 contract_sections: ['11.1']
 deps: []
 paths:

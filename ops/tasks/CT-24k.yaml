@@ -11,8 +11,8 @@ type: contract
 # 实现由 B1-34 承接（另需私有对象存储签名端口、导出队列、停用账号即取消的钩子，依赖 B1-30 与后续 admins 停用契约）。权限点 export 已存在（无需 test-change）。
 refs: [BR-ID-34, BR-ID-30]
 refs_hash:
-  BR-ID-34: 5ec74e78c860
-  BR-ID-30: c355f7bb09d0
+  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-30: f957e2ece7ec
 contract_sections: ['11.1']
 deps: [CT-24c]
 paths:
