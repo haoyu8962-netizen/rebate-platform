@@ -1,0 +1,26 @@
+id: B1-02zzh
+repo: rebate-platform
+title: 过渡测试改动（B1-02zzi 前置，同 B1-02zzf 口径，编排 D10-1034 ②）：登记配置键 device.invalid_hashes（config.risk、object：64 位小写十六进制字符串数组，种子为 specs/device-hash.vectors.json 的 invalid_hash_seeds，BR-ID-09 细则「设备标识的无效值」），冻结配置注册表与种子用例只追加该键、不放宽其余断言
+type: test-change
+# 2026-11-08 入账（identity，D10-1034 ②）。取值照 08 / specs 现值不改；运营只能追加（读取侧与种子取并集，见 B1-02zzi）。新鲜独立 Claude 改、另一位只读复核，按 #24 报核。排在 B1-02zzf 之后（同改注册表与种子文件）。
+refs: []
+refs_hash: {}
+deps: [B1-02zzf]
+paths:
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'test/spec/content/invite-reward-config/seeds.test.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'db/seeds/0001_config-defaults.sql'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

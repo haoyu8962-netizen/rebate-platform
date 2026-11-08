@@ -1,0 +1,18 @@
+id: B1-02zzj
+repo: rebate-platform
+title: 清理过时 TODO 注释三组（只改注释、不改行为）：RISK_STATE_CHANGED 已由通知线消费；在途提现 / 注销到期端口已由 app.module 注入 payout 真实读取；落地页「只有 deleted 放号」与 BR-ID-27 一致
+type: impl
+# 2026-11-08 入账（identity，D10-1034 ③；清单 couli-runs/IDENTITY-tips/open-followups-20261108.md 11:25 / 13:55 节）。RV1，代码 token 零变化。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/risk/application/admin-risk-state.ts'
+  - 'apps/api/src/modules/identity/ports/withdrawal-in-flight.ts'
+  - 'apps/api/src/modules/identity/deletion-expiry.module.ts'
+  - 'apps/api/src/modules/identity/application/landing-register.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

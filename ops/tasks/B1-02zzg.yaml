@@ -1,0 +1,22 @@
+id: B1-02zzg
+repo: rebate-platform
+title: 实名年龄线改读配置 minor.min_realname_age（BR-ID-26）——取不到 / 非法时按 08 默认 14，不放宽；判定口径（第 N 个生日次日 00:00 +08:00、2 月 29 日规则）不变
+type: impl
+# 2026-11-08 入账（identity，D10-1034 ①）。主干 identity/application/realname.ts:77 写死 MIN_REALNAME_AGE = 14（TODO 等配置登记）。
+# 改为提交实名时经 identity 的配置读取口读该键（SmsConfigReader.configValue，同 reverify-activity.ts readDormantReverifyDays 写法）；缺省、读失败或低于 14 一律按 14（不放宽），配置更高时照配置。
+refs: [BR-ID-26]
+refs_hash:
+  BR-ID-26: 5a5a56cd755e
+deps: [B1-02zzf]
+paths:
+  - 'apps/api/src/modules/identity/application/realname.ts'
+  - 'apps/api/src/modules/identity/application/realname.test.ts'
+  - 'apps/api/src/modules/identity/identity.module.ts'
+test_paths:
+  - 'test/spec/identity/realname-min-age-config/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/realname-min-age-config/**'
+status: todo

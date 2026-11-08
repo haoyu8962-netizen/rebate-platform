@@ -1,0 +1,23 @@
+id: B1-02zzi
+repo: rebate-platform
+title: 设备注册的无效设备哈希清单改读配置 device.invalid_hashes（BR-ID-09）——与 specs 种子取并集（运营只能追加、删不掉种子），取不到 / 非法时只用种子，不放宽；20001 口径不变
+type: impl
+# 2026-11-08 入账（identity，D10-1034 ②）。主干 identity/infra/invalid-device-hashes.ts 只用种子（TODO 等配置读取 F1-02b，已 done）；identity.module.ts:647 启动时一次性装入 INVALID_DEVICE_HASHES。改为按 app 经 SmsConfigReader.configValue 读该键与种子取并集。
+refs: [BR-ID-09]
+refs_hash:
+  BR-ID-09: d54901c67242
+deps: [B1-02zzh, B1-02zzg]
+paths:
+  - 'apps/api/src/modules/identity/infra/invalid-device-hashes.ts'
+  - 'apps/api/src/modules/identity/infra/invalid-device-hashes.test.ts'
+  - 'apps/api/src/modules/identity/application/register-device.service.ts'
+  - 'apps/api/src/modules/identity/application/register-device.service.test.ts'
+  - 'apps/api/src/modules/identity/identity.module.ts'
+test_paths:
+  - 'test/spec/identity/invalid-device-hashes-config/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/invalid-device-hashes-config/**'
+status: todo
