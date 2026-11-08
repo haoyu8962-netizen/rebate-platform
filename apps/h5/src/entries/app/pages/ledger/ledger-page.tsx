@@ -157,6 +157,20 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
   const busy = useRef<'more' | 'refresh' | null>(null);
   // 翻页在途时的下拉刷新先记下，等这一页回来再刷新（只刷新一次）。
   const refreshQueued = useRef(false);
+  // 页面仍挂着、且这份查询仍在缓存里且有观察者：退出登录或换号时壳层清空查询并重挂页面树，
+  // 之后旧页面里排队或在途的刷新一律作废（不取令牌、不发请求、不把旧账号的数据写回缓存）。
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      refreshQueued.current = false;
+    };
+  }, []);
+  function alive(): boolean {
+    const query = queryClient.getQueryCache().find({ queryKey: QUERY_KEY, exact: true });
+    return mounted.current && query !== undefined && query.isActive();
+  }
   function inFlight(): boolean {
     return busy.current !== null || queryClient.isFetching({ queryKey: QUERY_KEY }) > 0;
   }
@@ -172,7 +186,7 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
         busy.current = null;
         if (refreshQueued.current) {
           refreshQueued.current = false;
-          refresh();
+          if (alive()) refresh();
         }
       });
   }
@@ -180,9 +194,10 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
 
   // 已有数据时刷新失败（含 10405）：保留已显示的流水，顶部显示错误提示与手动重试；
   // 不自动重放。重试进行中只显示刷新提示。
-  const refreshFailed = list.isRefetchError && !isFetching;
+  const [refreshFailure, setRefreshFailure] = useState<unknown>(null);
+  const refreshFailed = refreshFailure !== null;
   const refreshError = refreshFailed
-    ? list.error instanceof ApiError && list.error.code === 10405
+    ? refreshFailure instanceof ApiError && refreshFailure.code === 10405
       ? ledgerText('error.10405')
       : ledgerTexts.refreshFailed
     : null;
@@ -201,9 +216,11 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
     return () => observer.disconnect();
   }, [showSentinel, pageCount]);
 
-  // 下拉刷新：丢掉第一页以后的页，只重取第一页一次；刷新在途时不再发起，翻页在途时排到其后。
+  // 下拉刷新：只重取第一页一次，成功后才以它替换已加载的全部页（丢掉旧的后续页与游标）；
+  // 失败时缓存不动，已加载的流水全部保留。刷新在途时不再发起，翻页在途时排到其后。
   const [isRefreshing, setRefreshing] = useState(false);
   function refresh(): void {
+    if (!alive()) return;
     if (busy.current === 'more') {
       refreshQueued.current = true;
       return;
@@ -211,17 +228,24 @@ function LedgerList({ api }: { api: H5ApiClient }): ReactElement {
     if (inFlight()) return;
     busy.current = 'refresh';
     setRefreshing(true);
-    queryClient.setQueryData<InfiniteData<LedgerListData, string | null>>(QUERY_KEY, (old) =>
-      old === undefined || old.pages.length <= 1
-        ? old
-        : { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) },
-    );
-    list
-      .refetch()
-      .catch(() => undefined)
+    api
+      .request('GET', '/v1/wallet/ledger', { params: { query: { limit: PAGE_LIMIT } } })
+      .then(
+        (first) => {
+          if (!alive()) return;
+          queryClient.setQueryData<InfiniteData<LedgerListData, string | null>>(QUERY_KEY, {
+            pages: [first],
+            pageParams: [null],
+          });
+          setRefreshFailure(null);
+        },
+        (error: unknown) => {
+          if (alive()) setRefreshFailure(error ?? new Error('refresh failed'));
+        },
+      )
       .finally(() => {
         busy.current = null;
-        setRefreshing(false);
+        if (mounted.current) setRefreshing(false);
       });
   }
   const pull = useRef<{ startY: number; distance: number } | null>(null);
