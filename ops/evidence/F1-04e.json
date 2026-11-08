@@ -1,0 +1,75 @@
+{
+  "risk_note": "RV1 (H5 messages page). FU-H5-MESSAGES-LOGOUT-QUEUED-REFRESH (orchestrator 12:30 on #2796; D10-1029). F1-04c's messages page fetched the first page by hand (api.request, outside react-query's account-generation binding) and ran a queued refresh in the load-more finally, so after logout a queued refresh still fetched a token, sent GET /v1/messages and could write the old account's data back. Same guard as F1-04d's ledger page: a mounted ref plus alive() (page mounted and the ['messages','list'] query still cached and active) checked before the queued refresh runs, at refresh start, before writing the cache and before setting the failure alert; setRefreshing only while mounted. While logged in the behaviour is unchanged. Only messages-page.tsx (+21 / -3); no contract, API or text-key change; no existing test changed. Host: apps/h5 unit 92/92 (incl. logout-queued-refresh), rule + frozen h5-messages 43/43, tsc (couli-src) 0; full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex hit its usage limit (until 11-15); fresh independent Claude via claude-run.sh (approvals #36), general r1 pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude context: 3 tests in test/spec/frontend/h5-messages-logout-refresh/** (queued refresh + logout: no token / request / old data; still-logged-in control then logout half; in-flight refresh + logout: no cache write / alert); container red/1 PASS (3 red, 2 files); spec-test r1 pass, no findings. Round 2 (CI verify-static on #2848): TS2345 at messages-logout-in-flight.test.ts:31 ('AppApiClient | null' passed as H5ApiClient); a fresh independent Claude made only the mechanical fix (http.api!), no assertion changed; red/3 PASS; spec-test r2 pass. The implementation commit is unchanged. Host after the fix: tsc -b test 0 errors, rule + frozen h5-messages 43/43, apps/h5 unit 92/92."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/frontend/h5-messages-logout-refresh/messages-logout-in-flight.test.ts > [F1-04e-LOGOUT#3] 下拉刷新在途时退出登录，刷新的响应随后返回：不写回缓存、不出提示、不再发请求",
+    "test/spec/frontend/h5-messages-logout-refresh/messages-logout-queued.test.ts > [F1-04e-LOGOUT#1] 翻页在途时下拉刷新排队，随后退出登录、翻页返回：排队的刷新作废，不取令牌、不发请求、缓存里没有旧账号的消息",
+    "test/spec/frontend/h5-messages-logout-refresh/messages-logout-queued.test.ts > [F1-04e-LOGOUT#2] 仍登录时翻页在途的下拉刷新照常排队：翻页回来后只发一次第一页请求并替换列表；之后同一页再次排队并退出登录，排队的刷新作废"
+  ],
+  "task": "F1-04e",
+  "spec_commit": "59b6fbef9996dbf6de67b142793ef87efdeb4495",
+  "spec_ref": "39756e36debb7660e6b113b9e4392e7339ab687c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "59b6fbef9996dbf6de67b142793ef87efdeb4495",
+      "tree": "80f291be60584fcc1a78f52cb0f6035eda08aa41",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T12:15:06Z",
+      "finished_at": "2026-11-08T12:15:20Z",
+      "red_tests": [
+        "test/spec/frontend/h5-messages-logout-refresh/messages-logout-in-flight.test.ts > [F1-04e-LOGOUT#3] 下拉刷新在途时退出登录，刷新的响应随后返回：不写回缓存、不出提示、不再发请求",
+        "test/spec/frontend/h5-messages-logout-refresh/messages-logout-queued.test.ts > [F1-04e-LOGOUT#1] 翻页在途时下拉刷新排队，随后退出登录、翻页返回：排队的刷新作废，不取令牌、不发请求、缓存里没有旧账号的消息",
+        "test/spec/frontend/h5-messages-logout-refresh/messages-logout-queued.test.ts > [F1-04e-LOGOUT#2] 仍登录时翻页在途的下拉刷新照常排队：翻页回来后只发一次第一页请求并替换列表；之后同一页再次排队并退出登录，排队的刷新作废"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-messages-logout-refresh/messages-logout-in-flight.test.ts",
+        "test/spec/frontend/h5-messages-logout-refresh/messages-logout-queued.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f30c53932aef7a1f7a908874894fe9ae0e6757d68e08d14ab652afe57fde65c2"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "34daa43ddb3671652c957b1c8757dfa839a0bd24",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}

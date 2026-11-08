@@ -216,6 +216,20 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
   const busy = useRef<'more' | 'refresh' | null>(null);
   // 翻页在途时的下拉刷新先记下，等这一页回来再刷新（只刷新一次）。
   const refreshQueued = useRef(false);
+  // 页面仍挂着、且这份查询仍在缓存里且有观察者：退出登录或换号时壳层清空查询并重挂页面树，
+  // 之后旧页面里排队或在途的刷新一律作废（不取令牌、不发请求、不把旧账号的数据写回缓存）。
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      refreshQueued.current = false;
+    };
+  }, []);
+  function alive(): boolean {
+    const query = queryClient.getQueryCache().find({ queryKey: LIST_KEY, exact: true });
+    return mounted.current && query !== undefined && query.isActive();
+  }
   function inFlight(): boolean {
     return busy.current !== null || queryClient.isFetching({ queryKey: LIST_KEY }) > 0;
   }
@@ -230,7 +244,7 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
         busy.current = null;
         if (refreshQueued.current) {
           refreshQueued.current = false;
-          refresh();
+          if (alive()) refresh();
         }
       });
   }
@@ -262,6 +276,7 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
   // 失败时缓存不动，已加载的消息全部保留。刷新在途时不再发起，翻页在途时排到其后。
   const [isRefreshing, setRefreshing] = useState(false);
   function refresh(): void {
+    if (!alive()) return;
     if (busy.current === 'more') {
       refreshQueued.current = true;
       return;
@@ -273,17 +288,20 @@ function MessagesList({ api }: { api: H5ApiClient }): ReactElement {
       .request('GET', '/v1/messages', { params: { query: { limit: PAGE_LIMIT } } })
       .then(
         (first) => {
+          if (!alive()) return;
           queryClient.setQueryData<InfiniteData<MessagesListData, string | null>>(LIST_KEY, {
             pages: [first],
             pageParams: [null],
           });
           setRefreshFailure(null);
         },
-        (error: unknown) => setRefreshFailure(error ?? new Error('refresh failed')),
+        (error: unknown) => {
+          if (alive()) setRefreshFailure(error ?? new Error('refresh failed'));
+        },
       )
       .finally(() => {
         busy.current = null;
-        setRefreshing(false);
+        if (mounted.current) setRefreshing(false);
       });
   }
   const pull = useRef<{ startY: number; distance: number } | null>(null);
