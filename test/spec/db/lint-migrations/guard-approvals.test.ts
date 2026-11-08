@@ -134,6 +134,10 @@ it(
     // B1-04zv (guard-change): 0119 widens the reason CHECK NOT VALID, validated in 0120. Same pinning as 0057.
     const b104zv = '0119_order-sync-pending-row-invalid.sql';
     const b104zvHash = 'f7a549c012b28c7aad6e682194ef8a9b4b978d7ee2088aa70cb6eab6c40abf98';
+    // B2-04zzlt (guard-change): 0136 rebuilds recon_diffs_type_check NOT VALID with the 0081 values plus
+    // blacklist_after_credit, validated in 0137 (orchestrator ruling D10-1101 ③). Same pinning as 0057.
+    const b204zzlt = '0136_recon-diff-type-blacklist.sql';
+    const b204zzltHash = '2450e3975462d41bc793a543ab519c31984a3c359e2261383bd9218f4512b74f';
     expect(module.APPROVED_GUARD_CHANGES).toEqual({
       [APPROVED_FILE]: createHash('sha256').update(bytes).digest('hex'),
       [ct25d]: ct25dHash,
@@ -143,6 +147,7 @@ it(
       [b215e]: b215eHash,
       [b204rb]: b204rbHash,
       [b104zv]: b104zvHash,
+      [b204zzlt]: b204zzltHash,
     });
     const ct25dPath = join(ROOT, 'db/migrations', ct25d);
     if (existsSync(ct25dPath)) {

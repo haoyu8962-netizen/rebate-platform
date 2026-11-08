@@ -137,6 +137,11 @@ export const APPROVED_GUARD_CHANGES: Readonly<Record<string, string>> = {
   // ORDER_ROW_INVALID; it only widens. Validated in 0120.
   '0119_order-sync-pending-row-invalid.sql':
     'f7a549c012b28c7aad6e682194ef8a9b4b978d7ee2088aa70cb6eab6c40abf98',
+  // B2-04zzlt (funds lane, orchestrator ruling D10-1101 ③): rebuilds recon_diffs_type_check on the funds
+  // table recon_diffs NOT VALID under the same name with the 0081 values plus blacklist_after_credit
+  // (BR-ATTR-26 manual review of a credited order); it only widens. Validated in 0137.
+  '0136_recon-diff-type-blacklist.sql':
+    '2450e3975462d41bc793a543ab519c31984a3c359e2261383bd9218f4512b74f',
 };
 /** Extensions node-pg-migrate would run from db/migrations besides SQL. */
 const SCRIPT_MIGRATION = /\.(?:js|cjs|mjs|ts|cts|mts|jsx|tsx)$/;
