@@ -23,3 +23,14 @@ export const motionMs = {
     },
   },
 } as const;
+// One constant per duration token, so a script that needs a few timings does not bundle motionMs.
+export const motionDurationInstantMs = 0;
+export const motionDurationFastMs = 150;
+export const motionDurationNormalMs = 250;
+export const motionDurationEmphasizedMs = 350;
+export const motionDurationSlowMs = 500;
+export const motionToastDisplayMs = 2000;
+export const motionSkeletonShimmerMs = 1500;
+export const motionSkeletonShowDelayMs = 300;
+export const motionSkeletonMinVisibleMs = 300;
+export const motionReducedFadeMs = 150;

@@ -6,11 +6,12 @@
 //   `./tailwind.css` Tailwind 4 @theme  -> src/tailwind.gen.css (generated, needs tokens.css)
 //   `./a11y.css`     reduced-motion and forced-colors fallbacks -> src/a11y.gen.css (generated,
 //                    needs tokens.css)
-//   `motionMs`       duration tokens in milliseconds -> src/motion.gen.ts (generated)
+//   `motionMs`       duration tokens in milliseconds -> src/motion.gen.ts (generated), plus one
+//                    motion<Path>Ms constant per token (e.g. motionSkeletonShowDelayMs)
 // Regenerate all five: node packages/ui-tokens/scripts/generate.ts
 
 export { tokenTheme, tokenValues } from './theme.gen.ts';
-export { motionMs } from './motion.gen.ts';
+export * from './motion.gen.ts';
 export {
   generateTokensCss,
   generateTailwindCss,
@@ -19,5 +20,6 @@ export {
   themeValuesFromTokens,
   generateThemeTs,
   generateMotionTs,
+  motionConstName,
 } from './generate.ts';
 export type { DesignTokens, TokenMode, TokenTheme } from './generate.ts';

@@ -1,9 +1,13 @@
 // Unit tests for the generator edge cases; the contract-level rules live in test/spec/frontend/ui-tokens.
 import { expect, it } from 'vitest';
 import type { DesignTokens } from './index.ts';
+import * as tokensModule from './index.ts';
 import {
   generateA11yCss,
+  generateMotionTs,
   generateTailwindCss,
+  motionConstName,
+  motionMs,
   generateThemeTs,
   generateTokensCss,
   themeFromTokens,
@@ -197,4 +201,56 @@ it('builds the accessibility fallbacks from token variables and needs the refere
   expect(css).toContain('animation-duration: var(--motion-duration-instant) !important;');
   expect(css).toContain('outline: var(--focus-width) solid Highlight;');
   expect(() => generateA11yCss(doc({ focus: tokens.focus }))).toThrow('motion.duration.instant');
+});
+
+it('exports one motion<Path>Ms constant per duration token, equal to motionMs', () => {
+  const exported = tokensModule as unknown as Record<string, unknown>;
+  const walk = (node: object, path: string[]): number => {
+    let count = 0;
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === 'number') {
+        expect(exported[motionConstName([...path, key])]).toBe(value);
+        count += 1;
+      } else count += walk(value as object, [...path, key]);
+    }
+    return count;
+  };
+  const count = walk(motionMs, []);
+  expect(count).toBeGreaterThan(0);
+  expect(Object.keys(exported).filter((name) => /^motion.+Ms$/.test(name))).toHaveLength(count);
+  expect(tokensModule.motionSkeletonShowDelayMs).toBe(motionMs.motion.skeleton['show-delay']);
+  expect(tokensModule.motionSkeletonMinVisibleMs).toBe(motionMs.motion.skeleton['min-visible']);
+  expect(tokensModule.motionToastDisplayMs).toBe(motionMs.motion.toast.display);
+});
+
+it('names motion constants by PascalCased path segments without the leading motion', () => {
+  expect(motionConstName(['motion', 'skeleton', 'show-delay'])).toBe('motionSkeletonShowDelayMs');
+  expect(motionConstName(['motion', 'duration', 'fast'])).toBe('motionDurationFastMs');
+  expect(motionConstName(['motion', 'toast', 'display'])).toBe('motionToastDisplayMs');
+  expect(motionConstName(['spinner', 'cycle'])).toBe('motionSpinnerCycleMs');
+  expect(() => motionConstName(['motion', 'a--b'])).toThrow('cannot name');
+  const ts = generateMotionTs(
+    doc({
+      motion: {
+        duration: { fast: { type: 'duration', value: 150, unit: 'ms' } },
+        skeleton: { 'show-delay': { type: 'duration', value: 12.5, unit: 'ms' } },
+      },
+    }),
+  );
+  expect(ts).toContain('export const motionMs = {');
+  expect(
+    ts.split('\n').filter((line) => line.startsWith('export const motion') && line.endsWith(';')),
+  ).toEqual([
+    'export const motionDurationFastMs = 150;',
+    'export const motionSkeletonShowDelayMs = 12.5;',
+  ]);
+});
+
+it('rejects duration tokens whose constant names collide', () => {
+  const ms = (value: number) => ({ type: 'duration', value, unit: 'ms' });
+  expect(() => generateMotionTs(doc({ motion: { 'a-1': ms(1), a1: ms(2) } }))).toThrow(
+    'motionA1Ms',
+  );
+  expect(() => generateMotionTs(doc({ motion: { a: ms(1) }, a: ms(2) }))).toThrow('motionAMs');
+  expect(() => generateMotionTs(doc({ motion: ms(1) }))).toThrow('motionMs');
 });

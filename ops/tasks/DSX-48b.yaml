@@ -1,0 +1,22 @@
+id: DSX-48b
+repo: rebate-platform
+title: P0 主干 H5 包体超限修复：ui-tokens 生成器给 duration 令牌另出逐个具名常量、H5 motion.ts 改用它们，使只用三个时长的脚本不再整包带上 motionMs 对象，找回订单路由首屏 + 路由 gzip 回到冻结 150 KiB 以内（编排 D10-1001）
+type: impl
+# 2026-11-08 入账（前端线 f1-frontend-7，编排 D10-1001 P0）。主干 test/spec/frontend/h5-shell/entries.test.ts [AC-F1-01c-BUILD#1] 红：claim-form 首屏 + 路由 gzip 153694 > 153600（超 94 字节）。定位：#2740 DSX-48 后共享 base 块增 282 字节（useDelayedVisible、motion.ts、motion.gen.ts 的整个 motionMs 对象、styles 强制配色类），首屏块未变；base 经 components/base/index.ts 桶文件被所有路由引用，rolldown 合成一个共享块（改 claim-form 直接引组件文件不改变分块；把动效模块单独分组会被首屏拉进去，更大）。
+# 修法：generateMotionTs 在 motionMs 对象之外为每个 duration 叶子另出 export const motion<路径帕斯卡>Ms 具名常量（对象保留、未用即被摇掉），ui-tokens index 导出它们，apps/h5 components/base/motion.ts 改用具名常量；本机实测 153564（余 36 字节）。不改冻结测试与 150 KiB 预算；更大余量由 DSX-47a（FU-H5-RETRY-BUNDLE，≤145 KiB）承担。另记线索：初始块里 react-router 走 dist/development（其 exports 无 production 条件），留给 DSX-47a 评估。
+# P0：走非 task 分支、台账同 PR，tester none（冻结 entries.test 即验收）；新鲜 Claude 实现、独立 Claude 评审（Codex 额度用尽，D10-823 ④），编排按 #24 核后加 owner-approved。
+refs: []
+refs_hash: {}
+deps: [DSX-48]
+paths:
+  - 'packages/ui-tokens/src/generate.ts'
+  - 'packages/ui-tokens/src/motion.gen.ts'
+  - 'packages/ui-tokens/src/index.ts'
+  - 'packages/ui-tokens/src/index.test.ts'
+  - 'apps/h5/src/components/base/motion.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

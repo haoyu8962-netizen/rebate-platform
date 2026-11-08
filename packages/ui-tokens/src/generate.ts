@@ -518,6 +518,9 @@ function serializeDurations(tree: DurationTree, indent: string): string[] {
 export function generateMotionTs(tokens: DesignTokens): string {
   const base = fontBase(tokens);
   const tree: DurationTree = {};
+  // motionMs itself is taken; each value names the token that claimed the constant.
+  const named = new Map<string, string>([['motionMs', 'the motionMs object']]);
+  const constants: string[] = [];
   for (const leaf of leaves(tokens)) {
     if (leaf.type !== 'duration') continue;
     cssValue(leaf, base);
@@ -528,6 +531,12 @@ export function generateMotionTs(tokens: DesignTokens): string {
       node = child ?? (node[segment] = {});
     }
     node[leaf.path.at(-1)!] = leaf.value as number;
+    const name = motionConstName(leaf.path);
+    const clash = named.get(name);
+    if (clash !== undefined)
+      fail(`${leaf.path.join('.')}: constant ${name} also comes from ${clash}`);
+    named.set(name, leaf.path.join('.'));
+    constants.push(`export const ${name} = ${numericText(leaf.value as number)};`);
   }
   return [
     `// ${HEADER}`,
@@ -536,6 +545,22 @@ export function generateMotionTs(tokens: DesignTokens): string {
     'export const motionMs = {',
     ...serializeDurations(tree, '  '),
     '} as const;',
+    '// One constant per duration token, so a script that needs a few timings does not bundle motionMs.',
+    ...constants,
     '',
   ].join('\n');
+}
+
+/**
+ * Name of the standalone constant for a duration token: the path without a leading `motion`
+ * segment, each segment split on hyphens and PascalCased, between `motion` and `Ms`
+ * (motion.skeleton.show-delay -> motionSkeletonShowDelayMs).
+ */
+export function motionConstName(path: readonly string[]): string {
+  const rest = path[0] === 'motion' ? path.slice(1) : path;
+  const words = rest.flatMap((segment) => segment.split('-'));
+  const name = `motion${words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('')}Ms`;
+  if (words.some((word) => word === '') || !IDENTIFIER.test(name))
+    fail(`${path.join('.')}: cannot name a constant for this token`);
+  return name;
 }
