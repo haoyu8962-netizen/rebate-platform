@@ -1,0 +1,23 @@
+id: B1-04zgb
+repo: rebate-platform
+title: B1-04zgb：淘宝订单 / 违规 / 维权归档遇重复 JSON 键时按解析语义重写再过滤（FU-TB-ARCHIVE-EDGE ①）
+type: impl
+# 2026-11-08 be 入账（本线 FU；B1-04zzc 只读复核 S2 ①，FU-TB-ARCHIVE-EDGE）。taobaoOrderArchiveBody（taobao/orders.ts）、taobaoPunishArchiveBody（punishments.ts）、taobaoRefundArchiveBody（refunds.ts）在「解析后的树里没有可删的行」时整页原样返回；若上游正文同一对象里某键出现两份（如两份 publisher_order_dto / results / result），JSON.parse 取最后一份——最后一份无别家行时，前一份里的别家行随原文入档（变更记录 20261031 §1 第 24 行「不入库别家订单」）。
+# 修法：三个改写函数共用一个重复键检测（扫描原文，任一对象有重复键即为真）；有重复键时一律按 JSON.parse 语义（后者胜）重新序列化（数字原文保真，复用既有写法）后再按各自口径过滤，结果里不再含被覆盖的那份；正常报文（无重复键）行为不变，仍逐字节原样返回或只删别家行。不改归档包装、错误码与日志；② 单对象形态与 ③ 非 2xx 空串另等编排定。不动金额。
+# 冻结用例：既有归档规则测试不含重复键报文，不改；规则测试新目录。Codex 额度尽至 11-15：规则测试、spec-test 与代码评审新鲜独立 Claude（D10-823 ④）。
+refs: []
+refs_hash: {}
+deps: [B1-04zzu]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/orders{.ts,.test.ts}'
+  - 'apps/api/src/modules/union/infra/taobao/punishments{.ts,.test.ts}'
+  - 'apps/api/src/modules/union/infra/taobao/refunds{.ts,.test.ts}'
+  - 'test/spec/union/taobao-archive-duplicate-keys/**'
+test_paths:
+  - 'test/spec/union/taobao-archive-duplicate-keys/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
