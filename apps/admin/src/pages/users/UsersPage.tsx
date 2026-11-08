@@ -53,6 +53,7 @@ import {
 import { UsersExportEntries } from './ExportUsers.tsx';
 import { RiskTag } from './RiskTag.tsx';
 import { UserDetailView } from './UserDetailView.tsx';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 export interface UsersPageProps {
   readonly access: AccessControl;
@@ -123,6 +124,7 @@ interface UsersContentProps {
 }
 
 function UsersContent({ access, canList, canLookup, canReveal }: UsersContentProps): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const lookupId = useId();
@@ -505,7 +507,7 @@ function UsersContent({ access, canList, canLookup, canReveal }: UsersContentPro
           rowKey="user_id"
           columns={columns}
           dataSource={data.items as UserRow[]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           scroll={{ x: 'max-content' }}
           locale={{ emptyText: empty }}
           pagination={{

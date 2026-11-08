@@ -301,8 +301,6 @@ export function ChannelsTab({
           open
           width={520}
           title={t.confirm.title(confirm.code)}
-          transitionName=""
-          maskTransitionName=""
           onCancel={() => setConfirm(undefined)}
           footer={
             <Flex justify="end" gap={8}>

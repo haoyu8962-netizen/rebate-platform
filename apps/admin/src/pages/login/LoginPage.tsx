@@ -7,6 +7,7 @@ import {
   memo,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -41,6 +42,7 @@ import {
 import { OTP_LENGTH, OtpInput } from '../../components/otp-input/index.ts';
 import type { AdminAuthProvider, LoginError, LoginSnapshot } from '../../providers/auth/index.ts';
 import type { AdminEnvironment } from '../../shell-options.ts';
+import { useReducedMotion } from '../../motion.ts';
 import { createAntdTheme } from '../../theme.ts';
 import { ensureMatchMedia } from './media-query.ts';
 import { isLoginTextKey, loginText, type LoginTextKey } from '../../texts/login.ts';
@@ -359,10 +361,12 @@ export function LoginPage({ authProvider, environment, onComplete }: LoginPagePr
     authProvider.getSnapshot,
   );
   // The login page also renders on its own (outside the app's ConfigProvider).
-  const [theme] = useState(() => {
+  // Reduced motion (规划/03 §10.6 第 8 条) switches antd motion off here too.
+  const reducedMotion = useReducedMotion();
+  const theme = useMemo(() => {
     ensureMatchMedia();
-    return createAntdTheme();
-  });
+    return createAntdTheme(document.documentElement, { reducedMotion });
+  }, [reducedMotion]);
   // What the user typed lives in the fields; the page keeps a copy for submitting and only
   // re-renders on its own state (step, errors, submitting), not on every keystroke.
   const [typed] = useState(() => new TypedValues());

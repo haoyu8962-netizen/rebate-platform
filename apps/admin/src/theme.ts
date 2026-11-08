@@ -79,7 +79,15 @@ export function sameAntdTheme(a: ThemeConfig, b: ThemeConfig): boolean {
   );
 }
 
-export function createAntdTheme(root: Element = document.documentElement): ThemeConfig {
+export interface AntdThemeOptions {
+  /** The system asks for reduced motion: antd motion off (规划/03 §10.6 第 8 条, D10-1037). */
+  readonly reducedMotion?: boolean;
+}
+
+export function createAntdTheme(
+  root: Element = document.documentElement,
+  options: AntdThemeOptions = {},
+): ThemeConfig {
   const style = getComputedStyle(root);
   // Light mode keeps antd's default algorithm (no `algorithm` key), exactly as before.
   const dark = isDarkScheme(root) ? { algorithm: antdTheme.darkAlgorithm } : {};
@@ -97,6 +105,7 @@ export function createAntdTheme(root: Element = document.documentElement): Theme
       fontFamily: 'var(--font-family-system)',
       fontSize: FONT_SIZE,
       borderRadius: RADIUS,
+      ...(options.reducedMotion === true ? { motion: false } : {}),
     },
     components: {
       Button: {

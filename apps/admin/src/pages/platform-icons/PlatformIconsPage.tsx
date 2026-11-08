@@ -32,6 +32,7 @@ import {
   type Version,
 } from './model.ts';
 import { builtinRow, Preview } from './Preview.tsx';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 export interface PlatformIconsPageProps {
   readonly now?: () => Date;
@@ -39,6 +40,7 @@ export interface PlatformIconsPageProps {
 type LoadStatus = 'loading' | 'ready' | 'failed' | 'forbidden';
 
 export function PlatformIconsPage({ now }: PlatformIconsPageProps): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const navigate = useNavigate();
   const { token } = theme.useToken();
@@ -420,7 +422,7 @@ export function PlatformIconsPage({ now }: PlatformIconsPageProps): ReactElement
             }))}
             dataSource={items}
             pagination={false}
-            loading={status === 'loading'}
+            loading={delayedLoading(status === 'loading', loadingClock)}
             tableLayout="fixed"
             scroll={{ x: 1172 }}
             rowClassName={(icon) => (result?.key === icon.key ? 'platform-icon-changed' : '')}

@@ -181,8 +181,6 @@ export function TestSendModal({
       open
       width={520}
       title={title}
-      transitionName=""
-      maskTransitionName=""
       maskClosable={false}
       closable={!busy}
       keyboard={!busy}

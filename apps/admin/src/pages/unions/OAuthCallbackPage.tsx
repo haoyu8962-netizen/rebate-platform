@@ -4,13 +4,14 @@
 // 立即从地址栏去掉查询串。未登录的窗口见 UnionOAuthCallbackSignedOut。
 import type { Schema } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
-import { Button, Card, Flex, Result, Spin, Typography } from 'antd';
+import { Button, Card, Flex, Result, Typography } from 'antd';
 import { useEffect, useEffectEvent, useRef, useState, type ReactElement } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
 import { CALLBACK_URL, codeOf, customOf, fieldsOf, isNetwork, type ReauthResult } from './model.ts';
 import { Forbidden, UNION_PERMISSION, type UnionsPageProps } from './UnionsPage.tsx';
+import { DelayedSpin } from '../../components/loading/index.ts';
 
 type Outcome =
   | { readonly kind: 'submitting' }
@@ -97,7 +98,7 @@ function OAuthCallbackContent({ access }: UnionsPageProps): ReactElement {
     content = (
       <Card>
         <Flex align="center" gap={8} role="status">
-          <Spin size="small" />
+          <DelayedSpin size="small" />
           <Typography.Text>{t.callback.submitting}</Typography.Text>
         </Flex>
       </Card>

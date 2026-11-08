@@ -98,7 +98,8 @@ function LinkCard(props: {
   const state: DashboardLinkState = { dashboardTarget: props.destination };
   return (
     <Link to={props.to} state={state} aria-label={props.label} className="dashboard-card-link">
-      <Card {...CARD} className="dashboard-card">
+      {/* Whole-card link: hover lifts the card (dashboard.css), beside the :focus-visible ring. */}
+      <Card {...CARD} hoverable className="dashboard-card">
         {props.children}
       </Card>
     </Link>

@@ -111,8 +111,6 @@ export function PublishModal({
       centered
       width={480}
       title={t.publish.title(version)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       closable={!writing}
@@ -198,8 +196,6 @@ export function GrayModal({
       centered
       width={440}
       title={t.gray.title(version)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       closable={!writing}
@@ -254,8 +250,6 @@ export function ConfirmActionModal({
       centered
       width={440}
       title={title}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       closable={!writing}

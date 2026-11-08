@@ -63,6 +63,7 @@ import {
   type WithdrawalRow,
   type WithdrawalStatus,
 } from './model.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 type ListStatus = 'loading' | 'ready' | 'failed' | 'forbidden';
 
@@ -105,6 +106,7 @@ export function marksOf(row: WithdrawalRow): string[] {
 }
 
 function WithdrawalsList(): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const navigate = useNavigate();
   const { token } = theme.useToken();
@@ -372,7 +374,7 @@ function WithdrawalsList(): ReactElement {
           rowKey="withdrawal_id"
           columns={columns}
           dataSource={data.items as WithdrawalRow[]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           scroll={{ x: 'max-content' }}
           locale={{
             emptyText: (

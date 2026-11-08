@@ -297,8 +297,6 @@ function ActionDialog({
           open
           width={520}
           title={t.title(actionName, platform)}
-          transitionName=""
-          maskTransitionName=""
           destroyOnHidden
           maskClosable={false}
           keyboard={!busy}

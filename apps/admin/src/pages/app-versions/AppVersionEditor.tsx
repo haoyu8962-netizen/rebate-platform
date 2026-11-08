@@ -556,8 +556,6 @@ export function AppVersionEditor({
           centered
           width={520}
           title={t.confirm.title}
-          transitionName=""
-          maskTransitionName=""
           destroyOnHidden
           maskClosable={false}
           onCancel={() => setConfirm(undefined)}

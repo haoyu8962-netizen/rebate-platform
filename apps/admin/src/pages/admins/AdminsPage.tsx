@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import { AdminApiError } from '../../providers/data/index.ts';
 import { adminsTexts } from '../../texts/admins.ts';
 import { formatBeijingDate, formatBeijingTime, isLocked } from './format.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 type Account = Schema<'AdminAccount'>;
 
@@ -99,6 +100,7 @@ function columns(now: Date): TableColumnsType<Account> {
 const SCROLL_X = 180 + 120 + 100 + 100 + 140 + 160 + 120;
 
 export function AdminsPage({ now }: AdminsPageProps): ReactElement {
+  const loadingClock = useLoadingClock();
   const getDataProvider = useDataProvider();
   const [current, setCurrent] = useState(1);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -173,7 +175,7 @@ export function AdminsPage({ now }: AdminsPageProps): ReactElement {
         rowKey="admin_id"
         columns={columns(now?.() ?? new Date())}
         dataSource={data.items as Account[]}
-        loading={state.status === 'loading'}
+        loading={delayedLoading(state.status === 'loading', loadingClock)}
         scroll={{ x: SCROLL_X }}
         locale={{
           emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={adminsTexts.empty} />,

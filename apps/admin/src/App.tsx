@@ -94,6 +94,7 @@ import { settleBillsTexts } from './texts/settle-bills.ts';
 import { shellTexts } from './texts/shell.ts';
 import { unionsTexts } from './texts/unions.ts';
 import { withdrawalsTexts } from './texts/withdrawals.ts';
+import { useReducedMotion } from './motion.ts';
 import { createAntdTheme, sameAntdTheme } from './theme.ts';
 
 type PermissionState =
@@ -294,11 +295,15 @@ function ShellRouter({ kind, initialRoute, children }: ShellRouterProps) {
 
 // The antd theme follows the CSS in effect: rebuilt when the system scheme changes or <html>
 // data-theme changes, and only when the resulting theme differs. The tree is never remounted.
-function useFollowColorScheme(setTheme: Dispatch<SetStateAction<ThemeConfig>>): void {
+// Reduced motion (规划/03 §10.6 第 8 条) switches antd motion off and follows the setting too.
+function useFollowColorScheme(
+  setTheme: Dispatch<SetStateAction<ThemeConfig>>,
+  reducedMotion: boolean,
+): void {
   useEffect(() => {
     const refresh = (): void =>
       setTheme((previous) => {
-        const next = createAntdTheme();
+        const next = createAntdTheme(document.documentElement, { reducedMotion });
         return sameAntdTheme(previous, next) ? previous : next;
       });
     const media =
@@ -317,12 +322,15 @@ function useFollowColorScheme(setTheme: Dispatch<SetStateAction<ThemeConfig>>): 
       media?.removeEventListener('change', refresh);
       observer.disconnect();
     };
-  }, [setTheme]);
+  }, [setTheme, reducedMotion]);
 }
 
 function AdminApp({ options }: { readonly options: AdminAppOptions }) {
-  const [theme, setTheme] = useState(() => createAntdTheme());
-  useFollowColorScheme(setTheme);
+  const reducedMotion = useReducedMotion();
+  const [theme, setTheme] = useState(() =>
+    createAntdTheme(document.documentElement, { reducedMotion }),
+  );
+  useFollowColorScheme(setTheme, reducedMotion);
   // The own guard is built without timers; only the instance React keeps starts them (effect) and
   // stops them on unmount, so a render React throws away (StrictMode) never clears the session.
   const [ownApi] = useState(() =>

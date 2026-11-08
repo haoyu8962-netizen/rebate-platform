@@ -395,8 +395,9 @@ function StepUpDialog(props: StepUpModalProps): ReactElement {
       // Escape and Tab are handled by the capture listener above (cancel in-flight work first).
       keyboard={false}
       destroyOnHidden
-      // No zoom / fade: the dialog is measured and screenshotted right after opening, and it
-      // unmounts at once on close (every opening starts afresh).
+      // No zoom / fade, the one deliberate exception to 规划/03 §10.6 第 5 条 (DSX-107, D10-1037):
+      // the dialog is measured and screenshotted right after opening, focuses its title at once,
+      // and unmounts at once on close (every opening starts afresh).
       transitionName=""
       maskTransitionName=""
       getContainer={bodyContainer}

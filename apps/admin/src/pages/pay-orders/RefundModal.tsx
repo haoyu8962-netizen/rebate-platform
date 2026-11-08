@@ -96,8 +96,6 @@ export function RefundModal({
       centered
       width={520}
       title={t.title}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onCancel}

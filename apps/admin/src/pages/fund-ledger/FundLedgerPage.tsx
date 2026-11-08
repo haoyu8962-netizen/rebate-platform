@@ -42,6 +42,7 @@ import {
   type DraftErrors,
   type Filters,
 } from './model.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 type ListStatus = 'loading' | 'ready' | 'failed' | 'invalid' | 'forbidden';
 
@@ -112,6 +113,7 @@ function Receivables({
 }
 
 function FundLedgerContent(): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const ids = { from: useId(), to: useId() };
@@ -307,7 +309,7 @@ function FundLedgerContent(): ReactElement {
           rowKey="snapshot_date"
           columns={columns}
           dataSource={data.items as AssetSnapshot[]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           scroll={{ x: 'max-content' }}
           locale={{
             emptyText: (

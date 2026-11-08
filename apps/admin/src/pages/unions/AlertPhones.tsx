@@ -346,8 +346,6 @@ function AddPhoneDialog({
       centered
       width={480}
       title={t.phones.addTitle}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}
@@ -448,8 +446,6 @@ function RemovePhoneDialog({
       centered
       width={480}
       title={t.phones.removeTitle}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}

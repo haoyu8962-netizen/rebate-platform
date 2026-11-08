@@ -3,7 +3,7 @@
 // …/reauthorize/{session_id}，直到 status 不是 pending。轮询有本地上限（会话有效期 + 宽限、
 // 最多次数），对话框关闭或卸载即停止，迟到的响应一律丢弃。
 import { useDataProvider } from '@refinedev/core';
-import { Alert, Button, Flex, Form, Input, Modal, Spin, Typography } from 'antd';
+import { Alert, Button, Flex, Form, Input, Modal, Typography } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { AuthClock } from '../../providers/auth/index.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
@@ -23,6 +23,7 @@ import {
   customOf,
 } from './model.ts';
 import type { StepUp } from './useStepUp.tsx';
+import { DelayedSpin } from '../../components/loading/index.ts';
 
 /** 两次查询之间的间隔。 */
 export const POLL_INTERVAL_MS = 3000;
@@ -200,7 +201,7 @@ export function ReauthDialog({
         </Form>
         {phase.kind === 'starting' ? (
           <Flex align="center" gap={8} role="status">
-            <Spin size="small" />
+            <DelayedSpin size="small" />
             <Typography.Text type="secondary">{t.reauth.starting}</Typography.Text>
           </Flex>
         ) : null}
@@ -211,7 +212,7 @@ export function ReauthDialog({
     body = (
       <Flex vertical gap={12}>
         <Flex align="center" gap={8} role="status">
-          <Spin size="small" />
+          <DelayedSpin size="small" />
           <Typography.Text>{t.reauth.waiting}</Typography.Text>
         </Flex>
         {url === undefined ? null : (
@@ -280,8 +281,6 @@ export function ReauthDialog({
       centered
       width={520}
       title={t.reauth.title(account.account_name)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}

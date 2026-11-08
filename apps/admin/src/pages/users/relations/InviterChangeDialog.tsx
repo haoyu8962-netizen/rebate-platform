@@ -1,7 +1,8 @@
 // 【改上级】对话框（design-hifi AdmUserInviterChangeOk / AdmUserInviterChange；adminChangeInviter，
 // 权限点 user.inviter）：改为新上级（填 UID）或解绑（inviter_user_id = null），填原因 → 动态码 →
 // 一次 POST /admin/v1/users/{user_id}/inviter；成功后用返回的用户详情刷新页面并关闭。
-// 30409：对话框只给不可改的说明、没有提交按钮，关闭再开仍是说明；30401 / 30403 提示在新上级输入
+// 卸载式（DSX-107）：父组件只在打开时渲染，每次打开都是一张空白表单。
+// 30409：对话框只给不可改的说明、没有提交按钮，关闭再开仍是说明（父组件保存）；30401 / 30403 提示在新上级输入
 // 旁并保留输入；网络 / 服务异常用 message.error 并保留输入。
 import { Alert, Flex, Form, Input, Modal, Button, Radio, Typography, message, theme } from 'antd';
 import { useId, useState, type ReactElement, type ReactNode } from 'react';
@@ -16,7 +17,7 @@ import {
   fieldsOf,
   reasonError,
 } from './parts.tsx';
-import type { RelationChangeDialogProps } from './types.ts';
+import type { InviterChangeDialogProps } from './types.ts';
 import { useVerifiedWrite } from './useVerifiedWrite.ts';
 
 const t = usersTexts.relations;
@@ -37,11 +38,11 @@ interface InviterPayload {
 
 export function InviterChangeDialog({
   user,
-  open,
   onClose,
   onUserChange,
-  afterClose,
-}: RelationChangeDialogProps): ReactElement {
+  locked,
+  onLocked,
+}: InviterChangeDialogProps): ReactElement {
   const { token } = theme.useToken();
   const [notice, contextHolder] = message.useMessage();
   const inviterId = useId();
@@ -52,8 +53,6 @@ export function InviterChangeDialog({
   const [inviterError, setInviterError] = useState<string>();
   const [reasonFieldError, setReasonFieldError] = useState<string>();
   const [pending, setPending] = useState<InviterPayload>();
-  // 30409 是目标用户自身的状态：本次详情里关闭再开仍只给说明。
-  const [locked, setLocked] = useState(false);
 
   const write = useVerifiedWrite<InviterPayload>({
     url: `${USERS_URL}/${encodeURIComponent(user.user_id)}/inviter`,
@@ -64,7 +63,8 @@ export function InviterChangeDialog({
     onFailed: (cause) => {
       const code = cause instanceof AdminApiError ? cause.code : undefined;
       if (code === LOCKED) {
-        setLocked(true);
+        // 30409 是目标用户自身的状态：由父组件保存，本次详情里关闭再开仍只给说明。
+        onLocked();
         return;
       }
       if (code === UNAVAILABLE) {
@@ -87,19 +87,6 @@ export function InviterChangeDialog({
       void notice.error(failureText(cause));
     },
   });
-
-  // 每次打开都是一张空白表单（30409 的说明除外；渲染期按上一次的 open 调整，不用 effect）。
-  const [shown, setShown] = useState(open);
-  if (shown !== open) {
-    setShown(open);
-    if (open) {
-      setMode('set');
-      setInviter('');
-      setReason('');
-      setInviterError(undefined);
-      setReasonFieldError(undefined);
-    }
-  }
 
   const busy = write.phase !== 'idle';
 
@@ -261,17 +248,13 @@ export function InviterChangeDialog({
     <>
       {contextHolder}
       <Modal
-        open={open}
+        open
         width={560}
         title={t.inviter.title(user.user_id)}
-        transitionName=""
-        maskTransitionName=""
-        destroyOnHidden
         maskClosable={false}
         keyboard={!busy}
         closable={!busy}
         onCancel={cancel}
-        {...(afterClose === undefined ? {} : { afterClose })}
         footer={footer}
       >
         {body}

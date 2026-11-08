@@ -273,8 +273,6 @@ function RiskDialog({
           open
           width={560}
           title={t.title(actionName, user.user_id)}
-          transitionName=""
-          maskTransitionName=""
           destroyOnHidden
           maskClosable={false}
           onCancel={cancel}

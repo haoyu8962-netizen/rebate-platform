@@ -298,8 +298,6 @@ export function SyncDialog({ onClose, onDone }: SyncDialogProps): ReactElement {
       centered
       width={560}
       title={t.dialogTitle}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}

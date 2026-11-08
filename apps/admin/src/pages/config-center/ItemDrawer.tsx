@@ -42,6 +42,7 @@ import {
   type NewValue,
 } from './model.ts';
 import { ValueField } from './ValueField.tsx';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 const VERSION_PAGE_SIZE = 20;
 
@@ -86,6 +87,7 @@ export function ItemDrawer({
   onSave,
   onRollback,
 }: ItemDrawerProps): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const [form] = Form.useForm<FormValues>();
@@ -246,7 +248,7 @@ export function ItemDrawer({
         size="middle"
         showHeader={false}
         columns={columns}
-        loading={history.status === 'loading'}
+        loading={delayedLoading(history.status === 'loading', loadingClock)}
         dataSource={history.status === 'ready' ? history.items : []}
         locale={{ emptyText: t.drawer.historyEmpty }}
         pagination={

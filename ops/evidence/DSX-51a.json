@@ -1,0 +1,108 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-motion/dashboard-hover.browser.test.ts > [AC-DSX-51a-HOVER#1] 工作台待办整卡悬停有可见反馈，键盘聚焦仍显示焦点环",
+    "test/spec/frontend/admin-motion/loading.test.ts > [AC-DSX-51a-LOADING#1] 表格 loading 在短于 show-delay 时不显示，加载超过 show-delay 才出现",
+    "test/spec/frontend/admin-motion/loading.test.ts > [AC-DSX-51a-LOADING#2] 页面 Spin 在短于 show-delay 时不转，加载超过 show-delay 才出现",
+    "test/spec/frontend/admin-motion/reduced-motion.browser.test.ts > [AC-DSX-51a-REDUCED#1] 系统设置减弱动态时后台关闭 antd 动效",
+    "test/spec/frontend/admin-motion/reduced-motion.browser.test.ts > [AC-DSX-51a-REDUCED#2] 不减弱时保持 antd 默认动效，系统设置切换后随之关闭与恢复",
+    "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#1] 改上级只在打开时挂载，取消即卸载并由代码把焦点还给触发按钮，再开是新表单",
+    "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#2] 调等级只在打开时挂载，取消即卸载并由代码把焦点还给触发按钮，再开是新表单",
+    "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#3] 改上级保存成功后对话框卸载，焦点回到触发按钮",
+    "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#4] 调等级保存成功后对话框卸载，焦点回到触发按钮",
+    "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#5] 30409 说明由父组件保存：对话框关闭卸载后再开仍只给说明",
+    "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-SOURCE#1] 后台源码只剩 StepUpModal 一处把 transitionName 与 maskTransitionName 置空，其余弹层恢复组件库动效",
+    "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-SOURCE#2] StepUpModal 保留的置空动效有源码注释写明 DSX-107 与 D10-1037",
+    "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-SOURCE#3] 改上级与调等级对话框改为卸载式：不由 open 开关常驻 Modal，不靠 afterClose 还焦点",
+    "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-LOADING#3] 加载防闪的延迟取 @couli/ui-tokens 的 motionSkeletonShowDelayMs，不写死毫秒",
+    "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-LOADING#4] 后台每个 antd Spin 都带 delay，表格 loading 不再直接传布尔值"
+  ],
+  "risk_note": "DSX-51a (fix program DSX-107, not a 规划/05 row, so numbered after DSX-51; orchestrator D10-1037; inventory couli-runs/F1-frontend/dsx107-inventory.md). Admin modals get antd's default motion back: transitionName / maskTransitionName removed from 28 unmount-style Modals; the two relations dialogs (InviterChangeDialog, LevelChangeDialog) are now unmount-style too, return focus to the trigger in an effect and keep the 30409 explanation state in UserRelationsCard, so the frozen admin-user-relations cases stay green with default motion; StepUpModal keeps transitionName='' on purpose (code dialog measured and screenshotted right after opening), commented with DSX-107 / D10-1037. Reduced motion turns antd motion off through createAntdTheme's reducedMotion (App and the login page follow the system setting; admin-antd SOURCE#1 wiring kept). Loading anti-flash on motionSkeletonShowDelayMs: all 14 Tables use delayedLoading(flag, useLoadingClock()), the 5 Spins use a shared DelayedSpin. Dashboard todo cards are hoverable with token shadows on hover and focus. No frozen test changed or in conflict. Tables on the funds pages only change their loading indicator timing. Rule tests by an independent Claude; independent Claude spec-test review r1 pass (two S2 written into the implementation constraints and done); red on the local container (15 tests, right reason). Implementation by Opus 5.5: local container browser run 206 green; container verify-fast OOM-killed at tsc twice, host admin jsdom rule tests 1494/1494, tsc / eslint / prettier stand in, CI runs full verification. Non-funds logic; reviewed with the money checklist because funds-page tables are touched. Codex usage limit: independent Claude money review r1 pass, no findings (D10-823 ④). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex usage limit reached (until 2026-11-15), fallback to an independent Claude per D10-823 ④; round 1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "independent Claude spec-test review round 1 pass, two S2 (dashboard hover shadow specificity, boolean-identifier loophole for Table delay) written into the implementation constraints; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-51a",
+  "spec_ref": "865361d5ec4637aef928bbbe3823621bc9b098fc",
+  "spec_commit": "6d881f783eefa557e2eb10056989620d282b7aa2",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6d881f783eefa557e2eb10056989620d282b7aa2",
+      "tree": "645736aba77a80df213c362ff76f400515b739b2",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-08T16:05:52Z",
+      "finished_at": "2026-11-08T16:06:54Z",
+      "red_tests": [
+        "test/spec/frontend/admin-motion/dashboard-hover.browser.test.ts > [AC-DSX-51a-HOVER#1] 工作台待办整卡悬停有可见反馈，键盘聚焦仍显示焦点环",
+        "test/spec/frontend/admin-motion/loading.test.ts > [AC-DSX-51a-LOADING#1] 表格 loading 在短于 show-delay 时不显示，加载超过 show-delay 才出现",
+        "test/spec/frontend/admin-motion/loading.test.ts > [AC-DSX-51a-LOADING#2] 页面 Spin 在短于 show-delay 时不转，加载超过 show-delay 才出现",
+        "test/spec/frontend/admin-motion/reduced-motion.browser.test.ts > [AC-DSX-51a-REDUCED#1] 系统设置减弱动态时后台关闭 antd 动效",
+        "test/spec/frontend/admin-motion/reduced-motion.browser.test.ts > [AC-DSX-51a-REDUCED#2] 不减弱时保持 antd 默认动效，系统设置切换后随之关闭与恢复",
+        "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#1] 改上级只在打开时挂载，取消即卸载并由代码把焦点还给触发按钮，再开是新表单",
+        "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#2] 调等级只在打开时挂载，取消即卸载并由代码把焦点还给触发按钮，再开是新表单",
+        "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#3] 改上级保存成功后对话框卸载，焦点回到触发按钮",
+        "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#4] 调等级保存成功后对话框卸载，焦点回到触发按钮",
+        "test/spec/frontend/admin-motion/relations.test.ts > [AC-DSX-51a-RELATIONS#5] 30409 说明由父组件保存：对话框关闭卸载后再开仍只给说明",
+        "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-SOURCE#1] 后台源码只剩 StepUpModal 一处把 transitionName 与 maskTransitionName 置空，其余弹层恢复组件库动效",
+        "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-SOURCE#2] StepUpModal 保留的置空动效有源码注释写明 DSX-107 与 D10-1037",
+        "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-SOURCE#3] 改上级与调等级对话框改为卸载式：不由 open 开关常驻 Modal，不靠 afterClose 还焦点",
+        "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-LOADING#3] 加载防闪的延迟取 @couli/ui-tokens 的 motionSkeletonShowDelayMs，不写死毫秒",
+        "test/spec/frontend/admin-motion/source.test.ts > [AC-DSX-51a-LOADING#4] 后台每个 antd Spin 都带 delay，表格 loading 不再直接传布尔值"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-motion/dashboard-hover.browser.test.ts",
+        "test/spec/frontend/admin-motion/loading.test.ts",
+        "test/spec/frontend/admin-motion/reduced-motion.browser.test.ts",
+        "test/spec/frontend/admin-motion/relations.test.ts",
+        "test/spec/frontend/admin-motion/source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "18f7b6a6452917df9903a7a16c387c806dbc6520ccbab44a4416bb6970ba396e"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "fb504023d2578002de8e913a4bb3ee77be399ab1d97a026cbccd8312b802a6a8"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f54e2586bcebb8f34a0bd2766f7ea9795a16eef7",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  }
+}

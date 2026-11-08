@@ -177,8 +177,6 @@ export function ActivateDialog({
       centered
       width={560}
       title={t.pids.activateTitle(row.pid)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}

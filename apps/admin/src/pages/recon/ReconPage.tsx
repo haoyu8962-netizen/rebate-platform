@@ -66,6 +66,7 @@ import {
   type ReconDiffStatus,
   type ReconDiffType,
 } from './model.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 const LIST_URL = '/admin/v1/recon-diffs';
 const itemUrl = (id: string): string => `${LIST_URL}/${encodeURIComponent(id)}`;
@@ -143,6 +144,7 @@ function ReconContent({
   readonly canClose: boolean;
   readonly canWriteOff: boolean;
 }): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const ids = {
@@ -635,7 +637,7 @@ function ReconContent({
           rowKey="recon_diff_id"
           columns={columns}
           dataSource={data.items as ReconDiff[]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           scroll={{ x: 'max-content' }}
           locale={{
             emptyText: (

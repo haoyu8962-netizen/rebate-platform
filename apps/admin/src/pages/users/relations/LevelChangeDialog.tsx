@@ -1,7 +1,8 @@
 // 【调等级】对话框（design-hifi AdmUserLevelChange；adminChangeUserLevel，权限点 user.level）：
 // 选新等级、填原因 → 动态码 → 一次 POST /admin/v1/users/{user_id}/level；成功后用返回的用户详情
 // 刷新页面并关闭。20001 [level]（当前等级或已停用等级）提示在等级选择旁；网络 / 服务异常用
-// message.error，已选等级与原因保留。
+// message.error，已选等级与原因保留。卸载式（DSX-107）：父组件只在打开时渲染，每次打开都是
+// 一张空白表单。
 import { user_level } from '@couli/contracts-ts';
 import { Form, Modal, Select, Alert, message, theme } from 'antd';
 import { useId, useState, type ReactElement } from 'react';
@@ -32,10 +33,8 @@ interface LevelPayload {
 
 export function LevelChangeDialog({
   user,
-  open,
   onClose,
   onUserChange,
-  afterClose,
 }: RelationChangeDialogProps): ReactElement {
   const { token } = theme.useToken();
   const [notice, contextHolder] = message.useMessage();
@@ -67,18 +66,6 @@ export function LevelChangeDialog({
     },
   });
 
-  // 每次打开都是一张空白表单（渲染期按上一次的 open 调整，不用 effect）。
-  const [shown, setShown] = useState(open);
-  if (shown !== open) {
-    setShown(open);
-    if (open) {
-      setLevel(undefined);
-      setReason('');
-      setLevelError(undefined);
-      setReasonFieldError(undefined);
-    }
-  }
-
   const busy = write.phase !== 'idle';
 
   const submit = () => {
@@ -104,17 +91,13 @@ export function LevelChangeDialog({
     <>
       {contextHolder}
       <Modal
-        open={open}
+        open
         width={560}
         title={t.level.title(user.user_id)}
-        transitionName=""
-        maskTransitionName=""
-        destroyOnHidden
         maskClosable={false}
         keyboard={!busy}
         closable={!busy}
         onCancel={cancel}
-        {...(afterClose === undefined ? {} : { afterClose })}
         footer={
           <DialogFooter permission={PERMISSION} busy={busy} onCancel={cancel} onSubmit={submit} />
         }

@@ -70,8 +70,6 @@ export function WriteOffModal({
       centered
       width={520}
       title={covered ? undefined : t.title}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onCancel}

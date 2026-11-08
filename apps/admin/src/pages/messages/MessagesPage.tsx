@@ -6,7 +6,7 @@
 // 时整页「功能开发中」。
 // TODO(规划/11 §7): 「发送记录」页签 — blocked on 契约未出
 import { useDataProvider } from '@refinedev/core';
-import { Alert, Button, Flex, Result, Spin, Tabs, Typography } from 'antd';
+import { Alert, Button, Flex, Result, Tabs, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
@@ -40,6 +40,7 @@ import { SmsDrawer, type DrawerErrors } from './SmsDrawer.tsx';
 import { SmsTab } from './SmsTab.tsx';
 import { TestSendModal, type TestDialog } from './TestSendModal.tsx';
 import { useStepUp } from './useStepUp.tsx';
+import { DelayedSpin } from '../../components/loading/index.ts';
 
 export interface MessagesPageProps {
   readonly access: AccessControl;
@@ -525,7 +526,7 @@ function MessagesContent({
   if (status === 'loading') {
     body = (
       <Flex aria-busy="true" align="center" gap={8} style={{ padding: 24 }}>
-        <Spin />
+        <DelayedSpin />
         <Typography.Text type="secondary">{t.loading}</Typography.Text>
       </Flex>
     );

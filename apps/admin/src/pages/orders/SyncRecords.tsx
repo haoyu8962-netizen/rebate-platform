@@ -212,8 +212,6 @@ export function SyncRecords({ onClose }: { readonly onClose: () => void }): Reac
       centered
       width={1040}
       title={t.recordsTitle}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       onCancel={onClose}
       footer={[

@@ -19,6 +19,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { usersTexts } from '../../../texts/users.ts';
 import { beijingTime } from '../model.ts';
 import type { InviteesDrawerProps } from './types.ts';
+import { delayedLoading, useLoadingClock } from '../../../motion.ts';
 
 const t = usersTexts.relations.invitees;
 const USERS_URL = '/admin/v1/users';
@@ -42,6 +43,7 @@ export function InviteesDrawer({
   onOpenUser,
   afterClose,
 }: InviteesDrawerProps): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const [paging, setPaging] = useState<Paging>(FIRST);
@@ -175,7 +177,7 @@ export function InviteesDrawer({
           size="middle"
           columns={columns}
           dataSource={status === 'loading' && total === undefined ? [] : [...items]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           locale={{
             emptyText:
               status === 'loading' ? (

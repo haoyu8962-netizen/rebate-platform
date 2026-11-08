@@ -96,8 +96,6 @@ function WriteShell(props: ShellProps): ReactElement {
           open
           width={560}
           title={props.title}
-          transitionName=""
-          maskTransitionName=""
           destroyOnHidden
           maskClosable={false}
           keyboard={!busy}

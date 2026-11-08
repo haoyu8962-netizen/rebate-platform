@@ -207,8 +207,6 @@ function ExportDialog({
         centered
         width={520}
         title={t.dialogTitle}
-        transitionName=""
-        maskTransitionName=""
         destroyOnHidden
         maskClosable={false}
         closable={!busy}

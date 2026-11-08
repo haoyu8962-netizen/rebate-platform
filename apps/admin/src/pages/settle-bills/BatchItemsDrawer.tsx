@@ -37,6 +37,7 @@ import {
   type SettleBatchItemResultFilter,
   type SettleBatchItemType,
 } from './model.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 const t = settleBillsTexts.items;
 
@@ -60,6 +61,7 @@ export interface BatchItemsDrawerProps {
 }
 
 export function BatchItemsDrawer({ batch, onClose }: BatchItemsDrawerProps): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const ids = { type: useId(), result: useId() };
@@ -214,7 +216,7 @@ export function BatchItemsDrawer({ batch, onClose }: BatchItemsDrawerProps): Rea
         rowKey="id"
         columns={columns}
         dataSource={data.items as SettleBatchItem[]}
-        loading={status === 'loading'}
+        loading={delayedLoading(status === 'loading', loadingClock)}
         scroll={{ x: 'max-content' }}
         locale={{
           emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t.empty} />,

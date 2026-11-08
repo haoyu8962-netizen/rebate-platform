@@ -38,6 +38,7 @@ import {
   type AuditRow,
   type FilterDraft,
 } from './model.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 const LOGS_URL = '/admin/v1/audit-logs';
 const EXPORTS_URL = '/admin/v1/exports';
@@ -71,6 +72,7 @@ function fieldsOf(error: AdminApiError): readonly unknown[] {
 }
 
 export function AuditLogsPage({ access }: { readonly access: AccessControl }): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const ids = {
@@ -317,7 +319,7 @@ export function AuditLogsPage({ access }: { readonly access: AccessControl }): R
           rowKey="id"
           columns={columns}
           dataSource={data.items as AuditRow[]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           locale={{
             emptyText: (
               <Empty

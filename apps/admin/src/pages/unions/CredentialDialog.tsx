@@ -134,8 +134,6 @@ export function CredentialDialog({
       centered
       width={520}
       title={t.credential.title(account.account_name)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}

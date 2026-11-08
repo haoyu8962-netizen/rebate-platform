@@ -61,8 +61,6 @@ export function ConfirmModal({
       centered
       width={640}
       title={t.confirmTitle(verb, name)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onCancel}

@@ -61,6 +61,12 @@ html[data-admin-tier='narrow'] .dashboard-grid {
   outline: var(--focus-width) solid var(--color-focus-ring);
   outline-offset: var(--focus-offset);
 }
+/* Whole-card links lift on hover (手感方案 ⑥, D10-1037): the floating shadow token. This rule must
+   outrank the resting card shadow above, which would otherwise hide the hover change. */
+.dashboard-page .dashboard-card-link:hover .dashboard-card,
+.dashboard-page .dashboard-card-link:focus-visible .dashboard-card {
+  box-shadow: var(--shadow-floating);
+}
 .dashboard-card-footer {
   margin-top: var(--space-1);
   font-size: var(--font-size-caption);

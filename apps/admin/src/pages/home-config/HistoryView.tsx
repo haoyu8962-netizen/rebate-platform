@@ -17,6 +17,7 @@ import {
   type VersionRole,
   type VersionSummary,
 } from './model.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 export interface VersionsState {
   readonly status: 'loading' | 'ready' | 'failed';
@@ -60,6 +61,7 @@ const ROLE_COLOR: Record<VersionRole, string> = {
 };
 
 export function HistoryView(props: HistoryViewProps): ReactElement {
+  const loadingClock = useLoadingClock();
   const { token } = theme.useToken();
   const { page, versions } = props;
   const small = { fontSize: 12 } as const;
@@ -295,7 +297,10 @@ export function HistoryView(props: HistoryViewProps): ReactElement {
             rowKey="version"
             columns={columns}
             dataSource={[...versions.items]}
-            loading={versions.status === 'loading' && versions.items.length === 0}
+            loading={delayedLoading(
+              versions.status === 'loading' && versions.items.length === 0,
+              loadingClock,
+            )}
             locale={{ emptyText: <Empty description={t.history.empty} /> }}
             tableLayout="fixed"
             pagination={{

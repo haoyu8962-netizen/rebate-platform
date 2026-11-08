@@ -9,6 +9,7 @@ import { plannedButtonProps, usePlanned } from '../../../components/planned/inde
 import { usersTexts } from '../../../texts/users.ts';
 import { InviteesDrawer } from './InviteesDrawer.tsx';
 import { InviterChangeDialog } from './InviterChangeDialog.tsx';
+import { useDialogSwitch } from './useDialogSwitch.ts';
 import type { UserRelationsCardProps } from './types.ts';
 
 const t = usersTexts.relations;
@@ -25,9 +26,12 @@ export function UserRelationsCard({
   // 改上级 / 直推名单接口还没上线（planned，D10-284）：入口置灰并标「功能开发中」，不开对话框与抽屉。
   const changePlanned = usePlanned('adminChangeInviter');
   const listPlanned = usePlanned('adminListInvitees');
-  const [changing, setChanging] = useState(false);
   const [listing, setListing] = useState(false);
   const changeTrigger = useRef<HTMLButtonElement>(null);
+  // 【改上级】是卸载式对话框（DSX-107）：只在打开时渲染，关闭后由代码把焦点还给触发按钮。
+  const change = useDialogSwitch(changeTrigger);
+  // 30409 是目标用户自身的状态，按用户保存：对话框卸载后再开仍只给说明。
+  const [lockedUser, setLockedUser] = useState<string>();
   const listTrigger = useRef<HTMLButtonElement>(null);
   const inviter = user.inviter_user_id;
   const code = { fontFamily: token.fontFamilyCode } as const;
@@ -42,7 +46,7 @@ export function UserRelationsCard({
             size="small"
             icon={<SafetyOutlined aria-hidden />}
             style={{ paddingInline: 0 }}
-            onClick={() => setChanging(true)}
+            onClick={change.show}
             {...plannedButtonProps(changePlanned)}
           >
             {t.changeInviter}
@@ -97,13 +101,13 @@ export function UserRelationsCard({
           },
         ]}
       />
-      {canChange && !changePlanned ? (
+      {canChange && !changePlanned && change.open ? (
         <InviterChangeDialog
           user={user}
-          open={changing}
-          onClose={() => setChanging(false)}
+          onClose={change.close}
           onUserChange={onUserChange}
-          afterClose={() => changeTrigger.current?.focus()}
+          locked={lockedUser === user.user_id}
+          onLocked={() => setLockedUser(user.user_id)}
         />
       ) : null}
       {canList && !listPlanned ? (

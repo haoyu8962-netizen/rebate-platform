@@ -63,8 +63,6 @@ export function ConfirmModal({ request, onCancel, onConfirm }: ConfirmModalProps
       centered
       width={560}
       title={titleOf(request)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onCancel}

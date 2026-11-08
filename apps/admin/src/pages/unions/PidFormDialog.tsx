@@ -235,8 +235,6 @@ export function PidFormDialog({
       centered
       width={560}
       title={editing ? t.pids.editTitle(row.pid) : t.pids.registerTitle}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}

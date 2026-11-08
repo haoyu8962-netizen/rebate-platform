@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { payOrdersTexts as t } from '../../texts/pay-orders.ts';
 import { PAGE_SIZE, codeOf } from './model.ts';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 type ListStatus = 'loading' | 'ready' | 'failed' | 'forbidden';
 
@@ -111,6 +112,7 @@ export function PagedTable<Row extends object>({
   failedText,
   emptyText,
 }: PagedTableProps<Row>): ReactElement {
+  const loadingClock = useLoadingClock();
   const { token } = theme.useToken();
   const { status, data, page } = read;
 
@@ -167,7 +169,7 @@ export function PagedTable<Row extends object>({
         rowKey={rowKey}
         columns={columns}
         dataSource={data.items as Row[]}
-        loading={status === 'loading'}
+        loading={delayedLoading(status === 'loading', loadingClock)}
         scroll={{ x: 'max-content' }}
         locale={{
           emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />,

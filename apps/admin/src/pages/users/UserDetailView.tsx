@@ -40,7 +40,7 @@ import {
 } from './model.ts';
 import { ReasonModal } from './ReasonModal.tsx';
 import { plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
-import { LevelChangeDialog, UserRelationsCard } from './relations.ts';
+import { LevelChangeDialog, UserRelationsCard, useDialogSwitch } from './relations.ts';
 import { RiskTag } from './RiskTag.tsx';
 import { useRiskStateActions } from './RiskStateActions.tsx';
 import { UserTabs } from './tabs/UserTabs.tsx';
@@ -347,8 +347,9 @@ function DetailBody({
   const canChangeLevel = access.can('user.level');
   // 调等级接口还没上线（planned，D10-284）：入口置灰并标「功能开发中」，不开对话框。
   const levelPlanned = usePlanned('adminChangeUserLevel');
-  const [levelOpen, setLevelOpen] = useState(false);
   const levelTrigger = useRef<HTMLButtonElement>(null);
+  // 【调等级】是卸载式对话框（DSX-107）：只在打开时渲染，关闭后由代码把焦点还给触发按钮。
+  const levelDialog = useDialogSwitch(levelTrigger);
   const code = { fontFamily: token.fontFamilyCode } as const;
   const bindingActions = useUnionBindingActions({ user, access, onUserChange });
   const inviter = user.inviter_user_id;
@@ -425,7 +426,7 @@ function DetailBody({
             size="small"
             icon={<SafetyOutlined aria-hidden />}
             style={{ paddingInline: 0 }}
-            onClick={() => setLevelOpen(true)}
+            onClick={levelDialog.show}
             {...plannedButtonProps(levelPlanned)}
           >
             {usersTexts.relations.changeLevel}
@@ -544,14 +545,8 @@ function DetailBody({
         onOpenUser={onOpenUser}
         onUserChange={onUserChange}
       />
-      {canChangeLevel && !levelPlanned ? (
-        <LevelChangeDialog
-          user={user}
-          open={levelOpen}
-          onClose={() => setLevelOpen(false)}
-          onUserChange={onUserChange}
-          afterClose={() => levelTrigger.current?.focus()}
-        />
+      {canChangeLevel && !levelPlanned && levelDialog.open ? (
+        <LevelChangeDialog user={user} onClose={levelDialog.close} onUserChange={onUserChange} />
       ) : null}
     </Flex>
   );

@@ -31,8 +31,6 @@ export function ReasonModal({ onCancel, onConfirm }: ReasonModalProps): ReactEle
       centered
       width={520}
       title={t.title}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onCancel}

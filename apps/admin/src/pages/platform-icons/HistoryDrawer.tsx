@@ -9,7 +9,6 @@ import {
   Pagination,
   Result,
   Space,
-  Spin,
   Typography,
   theme,
 } from 'antd';
@@ -26,6 +25,7 @@ import {
 import { builtinRow, Preview } from './Preview.tsx';
 import { VersionDetails } from './VersionDetails.tsx';
 import { StatusTag } from './StatusTag.tsx';
+import { DelayedSpin } from '../../components/loading/index.ts';
 
 export function HistoryDrawer({
   icon,
@@ -159,7 +159,7 @@ export function HistoryDrawer({
           </Flex>
         )}
         {state.status === 'loading' ? (
-          <Spin />
+          <DelayedSpin />
         ) : state.status === 'failed' ? (
           <Result
             status="error"

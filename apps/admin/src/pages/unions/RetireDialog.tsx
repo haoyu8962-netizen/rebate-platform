@@ -115,8 +115,6 @@ export function RetireDialog({
       centered
       width={480}
       title={t.pids.retireTitle(row.pid)}
-      transitionName=""
-      maskTransitionName=""
       destroyOnHidden
       maskClosable={false}
       onCancel={onClose}

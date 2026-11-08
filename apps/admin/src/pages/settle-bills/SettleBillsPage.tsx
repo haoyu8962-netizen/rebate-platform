@@ -49,6 +49,7 @@ import {
 } from './model.ts';
 import { PlatformValues } from './PlatformValues.tsx';
 import { DictName } from './DictName.tsx';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 type ListStatus = 'loading' | 'ready' | 'failed' | 'forbidden';
 
@@ -93,6 +94,7 @@ export function SettleBillsPage({ access }: SettleBillsPageProps): ReactElement 
 }
 
 function SettleBillsContent(): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const navigate = useNavigate();
   const { token } = theme.useToken();
@@ -297,7 +299,7 @@ function SettleBillsContent(): ReactElement {
           rowKey="bill_id"
           columns={columns}
           dataSource={data.items as SettleBill[]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           scroll={{ x: 'max-content' }}
           locale={{
             emptyText: (

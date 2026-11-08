@@ -43,6 +43,7 @@ import {
   type ExportStatus,
 } from './model.ts';
 import { ReasonModal } from './ReasonModal.tsx';
+import { delayedLoading, useLoadingClock } from '../../motion.ts';
 
 const EXPORTS_URL = '/admin/v1/exports';
 const STEP_UP_URL = '/admin/v1/auth/step-up';
@@ -109,6 +110,7 @@ export function ExportsPage({ access, clock = SYSTEM_CLOCK }: ExportsPageProps):
 }
 
 function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactElement {
+  const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
   const statusId = useId();
@@ -518,7 +520,7 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
           rowKey="id"
           columns={columns}
           dataSource={data.items as ExportRow[]}
-          loading={status === 'loading'}
+          loading={delayedLoading(status === 'loading', loadingClock)}
           locale={{
             emptyText: (
               <Empty
