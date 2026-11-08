@@ -1,0 +1,19 @@
+id: F1-04d
+repo: rebate-platform
+title: H5 余额流水页下拉刷新不先截断已加载页：刷新请求失败时保留原来的全部页并提示，成功后才回到第一页（ledger-page.tsx）
+type: impl
+# 2026-11-08 content 入账（编排 D10-990 / D10-992 ②；本线 followups 2026-11-01 记）。现状：apps/h5/src/entries/app/pages/ledger/ledger-page.tsx refresh() 先 setQueryData 把 InfiniteData 截成第一页再 refetch，refetch 失败（.catch 吞掉）后已加载的后几页丢失；F1-04c 消息中心评审同类 S2 已在那边修过（下拉刷新失败保留已加载行并提示、按需重试一次），照同一做法。
+# 只改 ledger 页；不改接口与契约。规则测试照 test/spec/frontend/h5-ledger/** 的写法（jsdom），钉：刷新成功后回到第一页并显示新数据；刷新失败时原有全部页保留、出提示、不清空；刷新期间不与加载更多并发（现有 refreshQueued 行为不变）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/entries/app/pages/ledger/**'
+test_paths:
+  - 'test/spec/frontend/h5-ledger-refresh/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-ledger-refresh/**'
+status: todo

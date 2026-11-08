@@ -1,0 +1,26 @@
+id: B1-08zy
+repo: rebate-platform
+title: 服务费缺失监控按平台：新增 couli_service_fee_missing_total{platform}（拼多多与淘宝都计），旧 couli_pdd_service_fee_missing_total 与告警暂留双写，新告警按 platform 分组（FU-TB-FEE-MISSING-METRIC）
+type: impl
+# 2026-11-08 content 入账（编排 D10-741 ⑤、D10-990、D10-992 ①选 (a)）。现状：orders update-step 在「已有 est 的单后续报文缺服务费」（serviceFeeDeducted 平台，est 不覆盖、版本不前进）时只对 pdd 计 couli_pdd_service_fee_missing_total 并打 pdd_service_fee_missing（service-fee-alert.ts 限定 pdd，B1-04zz）；淘宝 serviceFeeDeducted 已打开，缺费既不计数也不告警。
+# 做法：同一条件对 pdd 与 taobao 都计新计数器 couli_service_fee_missing_total{platform}（不带金额、单号），pdd 另照旧计旧计数器、打旧事件（双写，不改 5 个冻结用例）；infra/monitoring/rules/couli.yaml 加按 platform 分组的新告警，旧 CouliPddServiceFeeMissing 暂留。新单首入缺费仍走待处理表 SERVICE_FEE_RATE_MISSING，不在本单。
+# 另记 FU-PDD-FEE-METRIC-RETIRE（新指标稳定后 test-change 下线旧名，低优先）。冻结 metrics / pdd-net-n / taobao-net-n 用例预计不变；若实测有钉指标或告警全集的冻结用例要改，照 D10-327 报编排。Codex 额度至 11-15，评审照 approvals #36 / D10-775 由独立 Claude 两位。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/orders/domain/platform-rules/service-fee-alert.ts'
+  - 'apps/api/src/modules/orders/domain/platform-rules/service-fee-alert.test.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+  - 'apps/api/src/modules/orders/application/update-step.test.ts'
+  - 'apps/api/src/modules/platform/metrics/**'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'infra/monitoring/rules/couli.yaml'
+test_paths:
+  - 'test/spec/orders/service-fee-missing-metric/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/service-fee-missing-metric/**'
+status: todo
