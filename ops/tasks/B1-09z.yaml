@@ -1,0 +1,19 @@
+id: B1-09z
+repo: rebate-platform
+title: B1-09z：订单尾号作废开关的生产接线——开 / 关 / 缺省三态经生产装配生效（FU-SUFFIX-VOID-WIRING，补测试缺口）
+type: test-change
+# 2026-11-08 be 入账（D10-962 / D10-961 ②；淘宝开入账前必须补完，编排已记上线清单）。attr.blacklist.order_suffix_void_enabled 的生产接线（app.module.ts:2044 由 content 配置读开关 → orders/worker-runtime.ts:205 / :364 → orders/application/blacklist-step.ts:56 / :101 → domain/blacklist.ts actionable）没有规则测试：既有 test/spec/orders/blacklist/** 与 rebate-wiring/blacklist.int.test.ts 在模块层直接喂开关值。
+# 只新增 test/spec/orders/suffix-void-wiring/**，不改已有文件、不动实现：走生产装配（AppModule / worker runtime 的真实组装）钉开关 true → 尾号命中作废、false → 只记录待复核不作废、缺省（未配置）→ 同 false（08 默认 false）；渠道维度命中不受开关影响。须在现行主干上跑绿；变异实跑（把装配处开关恒 true / 恒 false / 不读配置）应红。
+# 分工：新鲜独立 Claude 写，另一位新鲜独立 Claude 复审（Codex 额度尽至 11-15，D10-823 ④）；非 task 分支、不带证据文件，标签由编排核对后加（先例 B2-09zd）。RV2。
+refs: [BR-ATTR-26]
+refs_hash:
+  BR-ATTR-26: 7070dbe36696
+deps: [B1-09m]
+paths:
+  - 'test/spec/orders/suffix-void-wiring/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
