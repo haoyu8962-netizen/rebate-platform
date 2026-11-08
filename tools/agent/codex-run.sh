@@ -5,7 +5,11 @@
 #                            [--dry-run]
 #   codex-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
 #                            [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
+#   codex-run.sh canary <id> --review-type <t> --base <ref> --worktree <dir> --round <n>
 #   codex-run.sh selfcheck
+#
+# canary (CT-06zzzza, review canary 埋雷抽查, first version: record only): run by review mode itself
+# after an RV2 review passed; see run_canary. It never changes the review's exit code.
 #
 # Exit codes: 0 usable output | 10 no usable output | 11 model capacity error or usage limit |
 #             12 position assertion failed (out of bounds) | 124 timeout or inactivity kill |
@@ -115,6 +119,10 @@ ROUND_RELEASED=0
 # CT-06zzzu: the id of this call (UTC time and pid; never starts with `-`), given to every
 # release as --call, so that a repeated release of the same refused call gives back nothing more.
 CALL_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+# CT-06zzzza: 1 inside the canary review (canary_child_setup); the round of this review
+# (build_previous_round), handed to the canary step.
+CANARY_CHILD=0
+REVIEW_ROUND=''
 
 log() { printf '%s: %s\n' "${SCRIPT_NAME%.sh}" "$*" >&2; }
 
@@ -159,6 +167,8 @@ EOF
 # stays 2. CT-06zzzu: the release names this call (--call "$CALL_ID"), and the refusals that exit 2
 # directly once the trusted root is resolved go through refuse_start.
 release_refused_round() {
+  # CT-06zzzza: a canary review counted no round, so it gives none back.
+  [ -z "${COULI_CANARY_RUN:-}" ] || return 0
   [ "$ROUND_RELEASED" = 0 ] && [ "$ARGS_PARSED" = 1 ] && [ "$ROOTS_RESOLVED" = 1 ] &&
     [ "$DRY_RUN" = 0 ] || return 0
   ROUND_RELEASED=1
@@ -1089,6 +1099,7 @@ build_previous_round() {
     done
   done
   local round=$((rounds + 1))
+  REVIEW_ROUND=$round
   if [ "$FULL" = 1 ]; then
     FULL_REASON=flag
     log "review: --full given: no previous $REVIEW_TYPE round is the baseline (D10-940); full review (round $round)"
@@ -1317,6 +1328,7 @@ run_task() {
   check_own_rule_tests
   check_breakers
   assert_position
+  canary_child_setup
   if [ "$DRY_RUN" = 0 ]; then
     mkdir -p "$RUN"
     RUN="$(cd "$RUN" && pwd -P)"
@@ -1574,7 +1586,7 @@ run_task() {
   # Token accounting only (规划/11 §1.3): the Codex quota is unlimited and nothing is gated on
   # this ledger, so a failure here is a warning and never changes the exit code. The ledger reads
   # Codex event streams; a claude-independent call is not recorded there.
-  if [ "$AGENT_ENGINE" = claude-independent ]; then
+  if [ "$AGENT_ENGINE" = claude-independent ] || [ "$CANARY_CHILD" = 1 ]; then
     :
   elif [ -f "$TRUSTED/tools/ops/usage.ts" ]; then
     node "$TRUSTED/tools/ops/usage.ts" record --run "$RUN" --task "$TASK" --mode "$MODE" >&2 ||
@@ -1586,7 +1598,7 @@ run_task() {
   # output gives it back (state.ts settle decides, idempotently). Its meta.<mode>.json stays in
   # the run directory, so it still counts towards the per-task call cap and the no-output
   # breaker (state.ts taskCalls).
-  if [ -f "$TRUSTED/tools/ops/state.ts" ]; then
+  if [ "$CANARY_CHILD" = 0 ] && [ -f "$TRUSTED/tools/ops/state.ts" ]; then
     node "$TRUSTED/tools/ops/state.ts" settle "$TASK" --meta "$RUN/meta.$MODE.json" >&2 ||
       log "warning: in-flight state was not settled (tools/ops/state.ts settle failed); the round stays counted"
   fi
@@ -1606,8 +1618,170 @@ run_task() {
     124) log "$MODE $TASK: killed after timeout or inactivity" ;;
     *) log "$MODE $TASK: no usable output (${SCRIPT_NAME%-run.sh} exit $codex_exit, last event $last_type, validation $validated, stragglers $stragglers, escaped $escaped, descendants left $descendants_left)" ;;
   esac
+  canary_after_review "$final"
   cat "$RUN/meta.json"
   exit "$final"
+}
+
+# ---- CT-06zzzza: review canary (埋雷抽查, 规划/11 §3.3; FU-REVIEW-CANARY, D10-886 / D10-1011) ----
+# First version, record only: whether the canary review reported the mutation is written to
+# <runs>/<id>/canary/<n>/meta.canary.json (copied to <runs>/<id>/meta.canary.json) and one line of
+# <runs>/metrics/review-canary.csv (the orchestrator carries new lines into
+# ops/metrics/review-canary.csv when it commits). The real review's verdict, meta.json and exit
+# code never change, and nothing of the canary is counted by tools/ops/state.ts (it reads only
+# <runs>/<id>/meta.*.json and attempts/; settle and release are skipped for the canary review).
+# The miss / exit 13, the < 80% stop and the evidence-check requirement are CT-06zzzzb.
+
+# The canary review (run_canary starts this script's review mode with COULI_CANARY_RUN): its run
+# directory is <runs>/<id>/canary/<n> and its worktree <runs>/<id>/canary/<n>/wt, nothing else.
+canary_child_setup() {
+  [ -n "${COULI_CANARY_RUN:-}" ] || return 0
+  [ "$MODE" = review ] || refuse_start "COULI_CANARY_RUN applies to the canary review only"
+  local runs_real n
+  runs_real="$(real_dir "$RUNS")"
+  n="${COULI_CANARY_RUN#"$runs_real/$TASK/canary/"}"
+  case "$n" in
+    "$COULI_CANARY_RUN" | '' | *[!0-9]*)
+      refuse_start "COULI_CANARY_RUN must be $runs_real/$TASK/canary/<n> (got $COULI_CANARY_RUN)"
+      ;;
+  esac
+  [ "$WT_REAL" = "$COULI_CANARY_RUN/wt" ] ||
+    refuse_start "a canary review runs in $COULI_CANARY_RUN/wt only (got $WT_REAL)"
+  RUN="$COULI_CANARY_RUN"
+  CANARY_CHILD=1
+}
+
+# After the real review (D10-886 ②): only an RV2 task, only a usable output whose verdict is pass
+# with no S0 / S1 (the round that lets the change merge), never inside a canary review. Whatever
+# the canary step does, this review's result stays as it is.
+canary_after_review() {
+  [ "$MODE" = review ] && [ "$1" = 0 ] && [ "$CANARY_CHILD" = 0 ] && [ "$TASK_RISK" = RV2 ] ||
+    return 0
+  local passed
+  passed="$(node -e '
+const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+const open = (r.findings || []).filter((f) => f.severity === "S0" || f.severity === "S1");
+console.log(r.verdict === "pass" && open.length === 0 ? "yes" : "no");
+' "$OUT" 2>/dev/null || true)"
+  if [ "$passed" != yes ]; then
+    log "canary: not run (the $REVIEW_TYPE review did not pass with no open S0 / S1)"
+    return 0
+  fi
+  log "canary: the RV2 $REVIEW_TYPE review passed; one mutation of the change goes to a fresh $AGENT_ENGINE session (record only, CT-06zzzza)"
+  bash "$SELF_DIR/$SCRIPT_NAME" canary "$TASK" --review-type "$REVIEW_TYPE" --base "$BASE_SHA" \
+    --worktree "$WT_REAL" --round "${REVIEW_ROUND:-1}" </dev/null >&2 ||
+    log "warning: the canary step failed (exit $?); the review result is unchanged"
+}
+
+# Tracked changes not yet committed and the untracked files of the reviewed worktree, carried
+# into the canary worktree: the review reads `git diff BASE` plus the untracked files.
+canary_copy_changes() {
+  local from="$1" to="$2" patch="$3" file
+  git -C "$from" diff --binary --no-ext-diff --no-textconv HEAD -- >"$patch" || return 1
+  if [ -s "$patch" ]; then git -C "$to" apply --whitespace=nowarn "$patch" || return 1; fi
+  git -C "$from" ls-files --others --exclude-standard -z | while IFS= read -r -d '' file; do
+    mkdir -p "$(dirname "$to/$file")" && cp -p "$from/$file" "$to/$file" || exit 1
+  done
+}
+
+# canary <id> --review-type <t> --base <ref> --worktree <dir> --round <n> (plan §2): a detached
+# worktree of the reviewed head in <runs>/<id>/canary/<n>/wt, one mutation of
+# tools/agent/canary/mutations.json (trusted root) on the added lines, the same review type, base
+# and build_review_prompt in a fresh session, then meta.canary.json and one CSV line; the
+# worktree is removed. Every failure (no landing, apply error, no output, capacity) is one CSV
+# line with a reason. Exits 0 once the arguments are valid.
+run_canary() {
+  shift
+  [ $# -ge 1 ] || fail_usage "missing task id"
+  TASK="$1"
+  shift
+  check_forbidden "$TASK"
+  agent_valid_task_id "$TASK" || fail_usage "invalid task id: $TASK (expected e.g. B2-03a)"
+  MODE=review
+  local round=''
+  while [ $# -gt 0 ]; do
+    [ $# -ge 2 ] || fail_usage "$1 needs a value"
+    check_forbidden "$2"
+    case "$1" in
+      --review-type) REVIEW_TYPE="$2" ;;
+      --base) BASE_ARG="$2" ;;
+      --worktree) WT_ARG="$2" ;;
+      --round) round="$2" ;;
+      *) fail_usage "unknown argument: $1" ;;
+    esac
+    shift 2
+  done
+  case "$REVIEW_TYPE" in
+    money | general | contract | spec-test) ;;
+    *) fail_usage "canary: --review-type money|general|contract|spec-test is required" ;;
+  esac
+  [[ "$BASE_ARG" =~ $REF_PATTERN ]] || fail_usage "canary: invalid --base: $BASE_ARG"
+  case "$round" in
+    '' | *[!0-9]* | 0*) fail_usage "canary: --round must be a positive integer" ;;
+  esac
+  [ -n "$WT_ARG" ] && [ -d "$WT_ARG" ] || fail_usage "canary: --worktree must be an existing directory"
+  resolve_tools
+  resolve_roots
+  resolve_review_effort
+  local effort="$REVIEW_EFFORT"
+  [ "$AGENT_ENGINE" = codex ] || effort=high
+  local wt_real head base_sha root dir n=1 started rc reason='' review_file=''
+  wt_real="$(cd "$WT_ARG" && pwd -P)"
+  head="$(git -C "$wt_real" rev-parse --verify HEAD)" || fail_usage "canary: no HEAD in $wt_real"
+  base_sha="$(git -C "$wt_real" rev-parse --verify --quiet "$BASE_ARG^{commit}" || true)"
+  [ -n "$base_sha" ] || fail_usage "canary: base ref is not a commit in the worktree: $BASE_ARG"
+  mkdir -p "$RUNS/$TASK/canary"
+  root="$(cd "$RUNS/$TASK/canary" && pwd -P)"
+  while [ -e "$root/$n" ]; do n=$((n + 1)); done
+  dir="$root/$n"
+  mkdir "$dir"
+  started="$(date +%s)"
+  if ! git -C "$wt_real" worktree add --detach -q "$dir/wt" "$head" >"$dir/worktree.log" 2>&1; then
+    reason='the canary worktree could not be created'
+  elif ! canary_copy_changes "$wt_real" "$dir/wt" "$dir/uncommitted.patch" >>"$dir/worktree.log" 2>&1; then
+    reason='the uncommitted changes could not be carried into the canary worktree'
+  else
+    rc=0
+    node "$TRUSTED/tools/agent/canary/apply.ts" apply --worktree "$dir/wt" --base "$base_sha" \
+      --round "$round" --trusted "$TRUSTED" --compile-from "$wt_real" --out "$dir/mutation.json" \
+      >"$dir/apply.log" 2>&1 ||
+      rc=$?
+    if [ "$rc" = 0 ]; then
+      # The same brief as the real review (build_review_prompt reads RUN/brief.md).
+      cp "$RUNS/$TASK/brief.md" "$dir/brief.md" 2>/dev/null || true
+      rc=0
+      COULI_CANARY_RUN="$dir" bash "$SELF_DIR/$SCRIPT_NAME" review "$TASK" --worktree "$dir/wt" \
+        --review-type "$REVIEW_TYPE" --base "$base_sha" </dev/null >"$dir/review.stdout" \
+        2>"$dir/review.stderr" || rc=$?
+      if [ "$rc" = 0 ] && [ -s "$dir/$REVIEW_OUT_NAME" ]; then
+        review_file="$dir/$REVIEW_OUT_NAME"
+      elif [ "$rc" = 11 ]; then
+        reason='canary review: model capacity or usage limit (exit 11)'
+      else
+        reason="canary review: no usable output (exit $rc)"
+      fi
+    elif [ "$rc" != 3 ]; then
+      reason="apply.ts failed (exit $rc, see $dir/apply.log)"
+    fi
+  fi
+  local record_args=(--csv "$RUNS/metrics/review-canary.csv" --meta-out "$dir/meta.canary.json"
+    --task "$TASK" --round "$round" --engine "$AGENT_ENGINE" --model "$MODEL" --effort "$effort"
+    --review-type "$REVIEW_TYPE" --duration "$(($(date +%s) - started))" --run "$n"
+    --mutation "$dir/mutation.json" --reason "$reason")
+  if [ -n "$review_file" ]; then record_args+=(--review "$review_file"); fi
+  if node "$TRUSTED/tools/agent/canary/apply.ts" record "${record_args[@]}" >&2; then
+    cp "$dir/meta.canary.json" "$RUNS/$TASK/meta.canary.json" 2>/dev/null || true
+    log "canary $TASK: $(node "$SELF_DIR/meta.ts" get --file "$dir/meta.canary.json" hit 2>/dev/null || printf '?') ($dir/meta.canary.json)"
+  else
+    log "warning: the canary result was not recorded"
+  fi
+  if [ -e "$dir/wt" ]; then
+    git -C "$wt_real" worktree remove --force "$dir/wt" >/dev/null 2>&1 || {
+      rm -rf "$dir/wt"
+      git -C "$wt_real" worktree prune >/dev/null 2>&1 || true
+    }
+  fi
+  exit 0
 }
 
 # selfcheck: uses no quota. It never starts a Codex turn (claude-independent: no Claude turn; it
@@ -1716,6 +1890,7 @@ selfcheck() {
 
 case "${1:-}" in
   impl | review) run_task "$@" ;;
+  canary) run_canary "$@" ;;
   selfcheck)
     [ $# -eq 1 ] || fail_usage "selfcheck takes no arguments"
     selfcheck

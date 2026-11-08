@@ -2437,3 +2437,85 @@ it(
     expect(next.stderr).not.toContain('failure breaker');
   },
 );
+
+/**
+ * CT-06zzzza r2: canary/apply.ts takes MONEY_PATHS from tools/ci/evidence-check.ts, so the fake
+ * trusted root also gets tools/ci and tools/guard/lib (no tests, no fixtures).
+ */
+function canaryTrustedTools(fx: Fixture): void {
+  const keep = (src: string) => !src.endsWith('.test.ts') && !/fixtures/.test(src);
+  for (const dir of [join('ci'), join('guard', 'lib')])
+    cpSync(join(TOOLS_DIR, dir), join(fx.trusted, 'tools', dir), { recursive: true, filter: keep });
+}
+
+/** CT-06zzzza: an RV2 change with one line the generic canary mutation lands on. */
+function canaryFixture(fx: Fixture): void {
+  taskLedger(fx, { risk: 'RV2', tester: 'none' });
+  canaryTrustedTools(fx);
+  mkdirSync(join(fx.worktree, 'packages', 'p', 'src'), { recursive: true });
+  writeFileSync(
+    join(fx.worktree, 'packages', 'p', 'src', 'b.ts'),
+    'export const ok = (x: number): boolean => x === 1;\n',
+  );
+}
+
+it(
+  '[CT-06zzzza] an RV2 review that passed is followed by one canary review and one CSV line; a failed one is not',
+  LONG,
+  () => {
+    const fx = fixture('canary');
+    canaryFixture(fx);
+    const csv = join(fx.runs, 'metrics', 'review-canary.csv');
+    const failed = codexRun(
+      fx,
+      ['review', TASK, '--review-type', 'contract', '--base', fx.baseSha],
+      {
+        FAKE_CODEX_SCENARIO: 'fail',
+      },
+    );
+    expect(failed.status, failed.stderr).toBe(10);
+    expect(existsSync(csv)).toBe(false);
+
+    const res = codexRun(fx, ['review', TASK, '--review-type', 'contract', '--base', fx.baseSha]);
+    // Record only: the real review's exit code and output stay as they are.
+    expect(res.status, res.stderr).toBe(0);
+    expect(readJson(join(fx.run, 'meta.json'))).toMatchObject({ mode: 'review', exit_code: 0 });
+    const lines = readFileSync(csv, 'utf8').trim().split('\n');
+    expect(lines[0]).toBe(
+      'date,task,round,engine,model,effort,review_type,mutation_id,category,file,line,hit,s0s1_count,duration_s,reason',
+    );
+    expect(lines).toHaveLength(2);
+    const cols = (lines[1] ?? '').split(',');
+    expect(cols.slice(1, 13)).toEqual([
+      TASK,
+      '1',
+      'codex',
+      'gpt-6-astra',
+      'medium',
+      'contract',
+      'GEN-03',
+      'generic',
+      'packages/p/src/b.ts',
+      '1',
+      '0',
+      '0',
+    ]);
+    const meta = readJson(join(fx.run, 'canary', '1', 'meta.canary.json'));
+    expect(meta).toMatchObject({ engine: 'codex', hit: false, gating: false });
+    // The canary review ran in its own worktree, which is gone again; the reviewed one is untouched.
+    expect(existsSync(join(fx.run, 'canary', '1', 'wt'))).toBe(false);
+    expect(existsSync(join(fx.run, 'canary', '1', 'review-codex.json'))).toBe(true);
+    expect(readFileSync(join(fx.worktree, 'packages', 'p', 'src', 'b.ts'), 'utf8')).toContain(
+      'x === 1',
+    );
+  },
+);
+
+it('[CT-06zzzza] no canary for an RV1 review', LONG, () => {
+  const fx = fixture('canary-rv1');
+  canaryFixture(fx);
+  taskLedger(fx, { risk: 'RV1', tester: 'none' });
+  const res = codexRun(fx, ['review', TASK, '--base', fx.baseSha]);
+  expect(res.status, res.stderr).toBe(0);
+  expect(existsSync(join(fx.runs, 'metrics', 'review-canary.csv'))).toBe(false);
+});

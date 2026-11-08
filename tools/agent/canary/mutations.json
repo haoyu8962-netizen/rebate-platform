@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "note": "FU-REVIEW-CANARY 变异清单首版草稿（w1，2026-11-08，D10-886 ④：七类各至少 2 条，报编排核；入账后落 tools/agent/canary/mutations.json，第三类保护路径，改动走 #16）。pattern 是 JS 正则，只对本次 diff 的新增行求值，命中第一处替换一次；replacement 可用 $1 等分组。file_glob 限定落点文件；全部排除 **/*.test.ts、test/**、**/*.gen.ts、db/migrations/**。选项顺序：资金与归属路径优先前七类，按 round 轮换起点；都落不上用 generic；generic 也落不上记 n/a。命中判定按 D10-886 ①：变异版评审的 S0 / S1 落在同一文件、变异行 ±15 行内，或点名被改的符号。",
+  "exclude_globs": [
+    "**/*.test.ts",
+    "**/*.int.test.ts",
+    "test/**",
+    "**/*.gen.ts",
+    "db/migrations/**",
+    "docs/**",
+    "ops/**"
+  ],
+  "mutations": [
+    {
+      "id": "ROUND-01",
+      "category": "rounding",
+      "file_glob": "{apps/api/src,packages/domain/src,packages/money/src}/**/*.ts",
+      "pattern": "\\bmulDivFloor\\(",
+      "replacement": "mulDivCeil(",
+      "note": "向下取整改向上取整（同签名、能编译）：佣金 / 返利多算 1 分。"
+    },
+    {
+      "id": "ROUND-02",
+      "category": "rounding",
+      "file_glob": "{apps/api/src,packages/domain/src,packages/money/src}/**/*.ts",
+      "pattern": "\\bfloorToStepFen\\(([^,()]+),\\s*([^()]+?)\\)",
+      "replacement": "($1)",
+      "note": "去掉按步长向下取整（返回原值）：提现 / 展示金额不再对齐步长。"
+    },
+    {
+      "id": "ROUND-03",
+      "category": "rounding",
+      "file_glob": "{apps/api/src,packages/domain/src}/**/*.ts",
+      "pattern": "\\bMath\\.floor\\(",
+      "replacement": "Math.round(",
+      "note": "非 money 包里的取整（比例、份数、时间片）向下改四舍五入。"
+    },
+    {
+      "id": "SIGN-01",
+      "category": "sign",
+      "file_glob": "{apps/api/src,packages/domain/src}/**/*.ts",
+      "pattern": "\\bsubFen\\(([^,()]+),\\s*([^,()]+)\\)",
+      "replacement": "subFen($2, $1)",
+      "note": "减法两边对调：余额 / 差额符号反了。"
+    },
+    {
+      "id": "SIGN-02",
+      "category": "sign",
+      "file_glob": "{apps/api/src,packages/domain/src}/**/*.ts",
+      "pattern": "([\\w.\\]\\)]+)\\s*>\\s*0n\\b",
+      "replacement": "$1 >= 0n",
+      "note": "严格正改非负：0 分也放行（零金额入账 / 打款）。"
+    },
+    {
+      "id": "SIGN-03",
+      "category": "sign",
+      "file_glob": "apps/api/src/modules/{ledger,settlement,payout,commission,payment}/**/*.ts",
+      "pattern": "\\bamount_fen:\\s*([^,\\n]+),",
+      "replacement": "amount_fen: -($1),",
+      "note": "分录 / 金额字段取反：借贷方向或退款冲回方向写反。"
+    },
+    {
+      "id": "IDEM-01",
+      "category": "idempotency",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "\\.onConflict\\(\\s*\\(oc\\)\\s*=>\\s*oc\\.(columns|column)\\(([^)]*)\\)\\.doNothing\\(\\)\\s*\\)",
+      "replacement": "",
+      "note": "删掉 ON CONFLICT DO NOTHING：重复投递时报唯一约束错或重复写。只取单行写法。"
+    },
+    {
+      "id": "IDEM-02",
+      "category": "idempotency",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "^(\\s*)singletonKey:\\s*[^,]+,\\s*$",
+      "replacement": "$1",
+      "note": "删掉任务的 singletonKey 一行：同一窗口 / 同一单被重复入队。"
+    },
+    {
+      "id": "IDEM-03",
+      "category": "idempotency",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "\\bidempotency\\.execute(InTransaction)?\\(",
+      "replacement": "((_req: unknown, run: () => unknown) => run())(",
+      "note": "绕过幂等原语直接执行处理函数（保持调用形状能编译时才选）。"
+    },
+    {
+      "id": "CONC-01",
+      "category": "concurrency",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "\\.forUpdate\\(\\)",
+      "replacement": "",
+      "note": "删掉 SELECT … FOR UPDATE：并发两笔读到同一余额。"
+    },
+    {
+      "id": "CONC-02",
+      "category": "concurrency",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "^(\\s*)await sql`select pg_advisory_xact_lock\\([^`]*\\)`\\.execute\\([^)]*\\);\\s*$",
+      "replacement": "$1",
+      "note": "删掉事务级咨询锁一行。"
+    },
+    {
+      "id": "CONC-03",
+      "category": "concurrency",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "\\.skipLocked\\(\\)",
+      "replacement": "",
+      "note": "去掉 SKIP LOCKED：两个消费者互等 / 认领行为改变。"
+    },
+    {
+      "id": "REFUND-01",
+      "category": "partial-refund",
+      "file_glob": "apps/api/src/modules/{orders,commission,settlement,ledger}/**/*.ts",
+      "pattern": "(refunded_quantity|refundedQuantity)\\s*<\\s*",
+      "replacement": "$1 <= ",
+      "note": "部分退款边界：已退数量 < 总数 改 <=，全退被当成部分退。"
+    },
+    {
+      "id": "REFUND-02",
+      "category": "partial-refund",
+      "file_glob": "apps/api/src/modules/{orders,commission,settlement,ledger,payment,growth}/**/*.ts",
+      "pattern": "(refunded_\\w+)(\\s*\\?\\?\\s*0n?\\)?)?\\s*>\\s*",
+      "replacement": "$1$2 >= ",
+      "note": "已退数量 / 已退金额与基准比较的 > 改 >=：没有新增退款也被当成发生了退款。"
+    },
+    {
+      "id": "CLOCK-01",
+      "category": "clock",
+      "file_glob": "{apps/api/src,packages/domain/src}/**/*.ts",
+      "pattern": "\\b(this\\.#?)?(deps\\.|options\\.)?clock\\.now\\(\\)",
+      "replacement": "new Date()",
+      "note": "注入时钟换系统时钟（硬规则 5）。"
+    },
+    {
+      "id": "CLOCK-02",
+      "category": "clock",
+      "file_glob": "{apps/api/src,packages/domain/src}/**/*.ts",
+      "pattern": "\\b(accountingDate|chinaMonth)\\(([^()]+)\\)",
+      "replacement": "$1(new Date())",
+      "note": "会计日 / 结算月取当前时刻而不是业务时刻（packages/domain calendar 的 accountingDate / chinaMonth）。"
+    },
+    {
+      "id": "APPID-01",
+      "category": "app_id",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "\\.where\\('app_id',\\s*'=',\\s*[^)]+\\)",
+      "replacement": "",
+      "note": "删掉一个 app_id 过滤：跨 App 读写。"
+    },
+    {
+      "id": "APPID-02",
+      "category": "app_id",
+      "file_glob": "apps/api/src/**/*.ts",
+      "pattern": "\\.where\\('(\\w+)\\.app_id',\\s*'=',\\s*[^)]+\\)",
+      "replacement": "",
+      "note": "带表前缀的 app_id 过滤（联表查询）删掉一处。"
+    },
+    {
+      "id": "GEN-01",
+      "category": "generic",
+      "file_glob": "{apps,packages}/**/src/**/*.ts",
+      "pattern": "^(\\s*)if \\(([^)]*)\\) throw ([^;]+);\\s*$",
+      "replacement": "$1",
+      "note": "删一个单行守卫 throw。"
+    },
+    {
+      "id": "GEN-02",
+      "category": "generic",
+      "file_glob": "{apps,packages}/**/src/**/*.ts",
+      "pattern": "^(\\s*)if \\(([^)]*)\\) return ([^;]*);\\s*$",
+      "replacement": "$1",
+      "note": "删一个单行提前 return 守卫。"
+    },
+    {
+      "id": "GEN-03",
+      "category": "generic",
+      "file_glob": "{apps,packages}/**/src/**/*.ts",
+      "pattern": "([\\w.\\]\\)'\"]+)\\s*===\\s*([\\w.'\"]+)",
+      "replacement": "$1 !== $2",
+      "note": "一处 === 改 !==。"
+    }
+  ]
+}

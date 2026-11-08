@@ -2,6 +2,7 @@
 // reviews by a fresh, independent Claude context when Codex is not available. They spawn bash with
 // a fake claude selected through COULI_CLAUDE_BIN; the real claude is never started.
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -25,6 +26,7 @@ import {
   runScript,
   stubCalls,
   TASK,
+  TOOLS_DIR,
   trustedState,
   trustedTaskState,
   writeFakeFormatters,
@@ -716,5 +718,58 @@ it(
     expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
     expect(existsSync(join(fx.run, 'meta.impl.json'))).toBe(false);
     expect(claudeRun(fx, ['impl', TASK, '--dry-run']).status).toBe(0);
+  },
+);
+
+/**
+ * CT-06zzzza r2: canary/apply.ts takes MONEY_PATHS from tools/ci/evidence-check.ts, so the fake
+ * trusted root also gets tools/ci and tools/guard/lib (no tests, no fixtures).
+ */
+function canaryTrustedTools(fx: Fixture): void {
+  const keep = (src: string) => !src.endsWith('.test.ts') && !/fixtures/.test(src);
+  for (const dir of [join('ci'), join('guard', 'lib')])
+    cpSync(join(TOOLS_DIR, dir), join(fx.trusted, 'tools', dir), { recursive: true, filter: keep });
+}
+
+it(
+  '[CT-06zzzza] claude-run: an RV2 review that passed records a canary line with engine claude-independent; a failed one does not',
+  LONG,
+  () => {
+    const fx = fixture('canary');
+    ledger(fx, { risk: 'RV2' });
+    canaryTrustedTools(fx);
+    mkdirSync(join(fx.worktree, 'packages', 'p', 'src'), { recursive: true });
+    writeFileSync(
+      join(fx.worktree, 'packages', 'p', 'src', 'b.ts'),
+      'export const ok = (x: number): boolean => x === 1;\n',
+    );
+    const csv = join(fx.runs, 'metrics', 'review-canary.csv');
+    const failed = claudeRun(
+      fx,
+      ['review', TASK, '--review-type', 'contract', '--base', fx.baseSha],
+      {
+        FAKE_CLAUDE_SCENARIO: 'no-result',
+      },
+    );
+    expect(failed.status, failed.stderr).not.toBe(0);
+    expect(existsSync(csv)).toBe(false);
+    const res = claudeRun(fx, ['review', TASK, '--review-type', 'contract', '--base', fx.baseSha]);
+    expect(res.status, res.stderr).toBe(0);
+    const lines = readFileSync(csv, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(2);
+    const cols = (lines[1] ?? '').split(',');
+    expect(cols.slice(3, 12)).toEqual([
+      'claude-independent',
+      'claude-opus-5-5',
+      'high',
+      'contract',
+      'GEN-03',
+      'generic',
+      'packages/p/src/b.ts',
+      '1',
+      '0',
+    ]);
+    expect(existsSync(join(fx.run, 'canary', '1', 'review-claude-independent.json'))).toBe(true);
+    expect(existsSync(join(fx.run, 'canary', '1', 'wt'))).toBe(false);
   },
 );

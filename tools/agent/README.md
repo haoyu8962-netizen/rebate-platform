@@ -312,3 +312,14 @@ tools/agent/claude-run.sh selfcheck      # 只读 claude --help，不发起任�
 ]
 ```
 
+
+## 15. 评审埋雷抽查（canary，CT-06zzzza，首版只记录）
+
+依据规划/11 §3.3、§7.1 第 6 类；方案 FU-REVIEW-CANARY，编排裁定 D10-886 / D10-1011。
+
+- 什么时候跑：`codex-run.sh review` / `claude-run.sh review` 对 RV2 任务、真实评审有可用产出且结论 pass、没有 S0 / S1 时，在同一次调用里自动接着跑一次（两种引擎都跑）；RV0 / RV1、失败轮、`--dry-run` 不跑。
+- 怎么跑：`<runs>/<id>/canary/<n>/wt` 建被评审头的临时 worktree（`git worktree add --detach`，带上未提交改动与未跟踪文件）；`canary/apply.ts apply` 按可信根的 `canary/mutations.json` 在本次 diff 新增行上打一处变异（排除测试、生成物、迁移；资金路径——即 `tools/ci/evidence-check.ts` 的 `MONEY_PATHS`，直接引用、不另抄——先试七类、再 generic，按评审轮次轮换起点；所在包编不过换下一项。编译检查只用可信根的 `node_modules/typescript`，被评审工作树及其 node_modules 里的任何可执行文件都不运行，那边的 node_modules 只作类型声明链接进来；可信根没有 typescript 就不做检查、直接取第一项，原因记在 `mutation.json` 的 `compile`）；再用同一 review_type、同一 BASE、同一 build_review_prompt 起新会话评审（运行目录就是 `canary/<n>`）；评审完删临时 worktree。
+- 命中（D10-886 ①）：同一文件、变异行 ±15 行内的 S0 / S1，或点名变异删去 / 引入的标识符（不含 TS / JS 关键字）；变异没改任何标识符（只改运算符、参数顺序）时只看 ±15 行。
+- 记在哪：`<runs>/<id>/canary/<n>/meta.canary.json`（最近一次另抄到 `<runs>/<id>/meta.canary.json`）与 `<runs>/metrics/review-canary.csv` 一行（列同仓库 `ops/metrics/review-canary.csv` 表头）；编排提交时把新行带进 `ops/metrics/review-canary.csv`。`hit` 列：1 / 0 已判定，`n/a` 一项都落不上，`error` 其他异常（应用失败、评审无产出、额度错误），后两种在 `reason` 写原因。
+- 不影响什么：真实评审的 meta.json、产出与退出码不变；埋雷评审不计轮次、不进调用熔断（state.ts 只读 `<runs>/<id>/meta.*.json` 与 `attempts/`，埋雷评审也不 settle / release、不记 usage）。
+- 命中率：`node tools/ops/canary-rate.ts [--csv <file>] [--last 10] [--json]` 按引擎分别算近 10 次（不含 n/a / error），首版只打印。miss 作废本轮、< 80% 拒跑 RV2、evidence-check 硬门槛是另单 CT-06zzzzb。
