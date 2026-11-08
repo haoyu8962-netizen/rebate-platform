@@ -5,8 +5,8 @@ type: impl
 # 2026-11-01 W1 入账（编排 D10-548、D10-550）。B1-08n 留的空桩，B2-04j 实现后没人回填装配，生产 worker 的订单返利状态停在 UNATTRIBUTED，黑名单步整步跳过；测试都自注入端口所以全绿。只动装配，只经 settlement 公开入口；要改 settlement 内部就停下报编排（funds 11-06 回来）。已入账订单命中只发复核事件、不改已入账金额（BR-ATTR-26）。money 口径评审。
 refs: [BR-ATTR-26, BR-FUND-01, BR-FUND-02, BR-FUND-03, BR-FUND-04, BR-FUND-06, BR-FUND-07]
 refs_hash:
-  BR-ATTR-26: 7070dbe36696
-  BR-FUND-01: dd565783f7a4
+  BR-ATTR-26: d115d750e3a5
+  BR-FUND-01: c03344713dbf
   BR-FUND-02: 382c4075d2cb
   BR-FUND-03: 0a35db902f66
   BR-FUND-04: 497806f6f068

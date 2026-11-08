@@ -10,7 +10,7 @@ refs_hash:
   BR-FUND-06: f903ec00076a
   BR-FUND-07: 3d63741c52d9
   BR-FUND-08: 7acaff229759
-  BR-FUND-01: dd565783f7a4
+  BR-FUND-01: c03344713dbf
 deps: [B1-09c, B1-09e, B1-09l, B2-04s]
 paths:
   # D10-470：单一写者——order_sync_pending.status 由 orders 写；orders 导出 clawback 待处理行 open / resolve 端口（同 pending.open 口径），settlement 只经它关闭 CLAWBACK_NO_COMMISSION 行；orders 部分由 content 线评审。

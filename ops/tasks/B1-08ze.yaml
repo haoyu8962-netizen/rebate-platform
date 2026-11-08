@@ -6,7 +6,7 @@ type: impl
 # 2026-10-30 入账（content-client；B1-08zd #1839 money r2 out_of_scope S2：P9 INVALID → SETTLED 的拼多多单（适配器 settle 恒空）expected_fen = settleAfter ?? 0 = 0，未用同文件 effectiveCommission）。仅展示金额，ADMIN_RESTORE 重算；不改触发、幂等与告警。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 03bb77e84436
+  BR-FUND-22: 075baebf41f3
 deps: [B1-08zd]
 paths:
   - 'apps/api/src/modules/orders/**'

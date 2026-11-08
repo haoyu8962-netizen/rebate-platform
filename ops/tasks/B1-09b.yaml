@@ -8,7 +8,7 @@ type: impl
 #   渠道比对的 union_account_id 取 pid 行的账号；登记配置 attr.blacklist.order_suffix_void_enabled（默认 false）；order.blacklist_hit_after_credit 按 02 §11 位置补进 EVENT_NAMES（同事务入队），若冻结测试钉全表照 #707 先例另开 test-change。
 refs: [BR-ATTR-26]
 refs_hash:
-  BR-ATTR-26: 7070dbe36696
+  BR-ATTR-26: d115d750e3a5
 deps: [B1-09a]
 paths:
   - 'apps/api/src/modules/orders/**'

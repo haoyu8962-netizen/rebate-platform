@@ -6,7 +6,7 @@ type: impl
 refs: [BR-ID-36, BR-ATTR-26]
 refs_hash:
   BR-ID-36: 2758a53910fa
-  BR-ATTR-26: 7070dbe36696
+  BR-ATTR-26: d115d750e3a5
 deps: [B1-09b]
 paths:
   - 'apps/api/src/modules/orders/application/blacklist-step.ts'

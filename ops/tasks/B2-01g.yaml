@@ -9,7 +9,7 @@ type: migration
 # tools/ci/lint-migrations.test.ts 逐表锁定资金表清单，新资金表须同步加入（B2-01d #550 CI 实测；第三类保护路径，带标签）。
 refs: [BR-CALC-10, BR-CALC-27]
 refs_hash:
-  BR-CALC-10: 1848b1fb0a51
+  BR-CALC-10: 47e3f28505e7
   BR-CALC-27: ff78446ad011
 deps: [B2-01d]
 paths:

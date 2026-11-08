@@ -6,7 +6,7 @@ type: contract
 # 成功：差错单 → adjusted，resolution 加 clawback（operator、note、时间），响应带 rebate_status_after=CLAWED_BACK。权限点 order.blacklist_clawback 新增（totp，一人可完成，ADD-05），不混用 order.restore（D10-1095 ②；04 §11.2 由编排回写）。金额不进请求，服务端按 BR-FUND-08 R8 算。
 refs: [BR-ATTR-26, BR-FUND-08]
 refs_hash:
-  BR-ATTR-26: 7070dbe36696
+  BR-ATTR-26: d115d750e3a5
   BR-FUND-08: 7acaff229759
 contract_sections: ['11.1']
 deps: []

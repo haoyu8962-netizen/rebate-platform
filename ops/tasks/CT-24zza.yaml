@@ -7,7 +7,7 @@ type: contract
 #   oasdiff 预期无变化（只改 description）；生成物随 codegen。B2-09gb 实现与之同步（台账已照 08），deps 不变。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 03bb77e84436
+  BR-FUND-22: 075baebf41f3
 contract_sections: ['11.1']
 deps: [CT-24zz]
 paths:

@@ -8,7 +8,7 @@ type: impl
 #   重复口径同 B1-09a 端口（K-5）；每行一事务；之后改 end_at 或停用在黑名单管理做（BR-ID-31），本任务不提供；名单只让订单失效，处理在 B1-09b 的流水线步骤。
 refs: [BR-ATTR-26]
 refs_hash:
-  BR-ATTR-26: 7070dbe36696
+  BR-ATTR-26: d115d750e3a5
 deps: [B1-09g, B1-09a]
 paths:
   - 'apps/api/src/modules/orders/**'

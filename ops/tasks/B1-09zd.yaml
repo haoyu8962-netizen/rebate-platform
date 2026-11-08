@@ -7,7 +7,7 @@ type: test-change
 # 分工：新鲜独立 Claude 写，另一位新鲜独立 Claude 只读复审（Codex 尽至 11-15，D10-823 ④）；非 task 分支、不带证据文件，标签由编排核对后加（先例 B1-09z / B2-09zd）。RV2。
 refs: [BR-ATTR-26]
 refs_hash:
-  BR-ATTR-26: 7070dbe36696
+  BR-ATTR-26: d115d750e3a5
 deps: [B1-09z]
 paths:
   - 'test/spec/orders/suffix-void-wiring-r2/**'

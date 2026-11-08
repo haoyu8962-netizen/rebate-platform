@@ -7,7 +7,7 @@ type: impl
 # 风险：改动覆盖入账、扣回、补记、预估四条资金路径，既有规则测试须全绿；funds（commission / settlement 归属）读改动。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 03bb77e84436
+  BR-FUND-22: 075baebf41f3
 deps: [B2-09g]
 paths:
   - 'apps/api/src/modules/commission/application/forfeited-state*.ts'
