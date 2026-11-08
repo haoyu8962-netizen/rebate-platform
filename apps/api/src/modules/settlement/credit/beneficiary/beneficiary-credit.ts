@@ -53,12 +53,16 @@ import {
   type CreditVoucherRequest,
 } from '@couli/domain';
 import type { Transaction } from 'kysely';
-import type {
-  Ledger,
-  OrderNetSelection,
-  OrderNets,
-  PostingEntry,
-  PostingVoucher,
+import {
+  creditPostcheckKindOf,
+  enqueueCreditPostcheck,
+  type CreditPostcheckEnqueue,
+  type CreditPostcheckVoucher,
+  type Ledger,
+  type OrderNetSelection,
+  type OrderNets,
+  type PostingEntry,
+  type PostingVoucher,
 } from '../../../ledger/index.ts';
 import { lockOrderKey } from '../../../orders/index.ts';
 import type { Clock, RootLogger } from '../../../platform/index.ts';
@@ -80,6 +84,12 @@ import type {
 } from '../credit-order.ts';
 
 export interface BeneficiaryCreditDependencies {
+  /**
+   * B2-02t (BR-FUND-19, D10-1038): optional. When given, a first_credit item that wrote a voucher
+   * enqueues the post-credit confirmation on its own transaction, with the net before the voucher
+   * (ledger/application/credit-postcheck.ts). Deferred items do not.
+   */
+  readonly postcheck?: CreditPostcheckEnqueue;
   readonly clock: Clock;
   readonly logger: Pick<RootLogger, 'info' | 'warn' | 'error'>;
   readonly ledger: Pick<Ledger, 'openUserAccount' | 'lockBalances' | 'post'>;
@@ -511,6 +521,7 @@ export function createBeneficiaryCredit(deps: BeneficiaryCreditDependencies): Be
 
     // vouchers (uniq_key per BR-FUND-05 / ⑫); a stored key here would mean an unpaid duplicate.
     let voucherId: string | null = null;
+    const postchecked: CreditPostcheckVoucher[] = [];
     for (const request of plan.vouchers) {
       for (const built of buildVouchers(request.template_id, request.params)) {
         const posted = await ledger.post(
@@ -526,6 +537,18 @@ export function createBeneficiaryCredit(deps: BeneficiaryCreditDependencies): Be
           throw new Error('settlement beneficiary credit: more than one voucher planned');
         }
         voucherId = posted.voucherId;
+        // B2-02t: the first_credit templates only; base and net as this voucher was computed.
+        const kind = creditPostcheckKindOf(request.template_id);
+        if (kind !== null) {
+          postchecked.push({
+            voucher_id: posted.voucherId,
+            user_id: userId,
+            role,
+            kind,
+            base_fen: bookedBase.toString(),
+            net_before_fen: (netOf.get(identity(userId, row.role)) ?? 0n).toString(),
+          });
+        }
       }
     }
     if (plan.append_forfeited_event) {
@@ -569,6 +592,12 @@ export function createBeneficiaryCredit(deps: BeneficiaryCreditDependencies): Be
       'system',
       now,
     );
+    // B2-02t (BR-FUND-19): the post-credit confirmation of the voucher above, same transaction.
+    await enqueueCreditPostcheck(deps.postcheck, trx, {
+      app_id: appId,
+      order_id: orderId,
+      vouchers: postchecked,
+    });
     logger.info(
       {
         app_id: appId,

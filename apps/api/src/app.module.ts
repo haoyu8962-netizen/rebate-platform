@@ -237,6 +237,7 @@ import {
   LedgerAdminModule,
   LedgerBadDebtWriteoffModule,
   LedgerAssetSnapshotModule,
+  LedgerCreditPostcheckModule,
   LedgerDailyCheckModule,
   LedgerModule,
   WalletLedgerModule,
@@ -4528,6 +4529,19 @@ function ledgerDailyCheckModule(): DynamicModule {
 }
 
 /**
+ * B2-02t (BR-FUND-19, D10-1038): the worker's post-credit confirmation on queue
+ * ledger-credit-postcheck, over commission's immutable attribution and payout's withdraw holds
+ * under identity's users lock (same hold port as the daily check).
+ */
+function ledgerCreditPostcheckModule(): DynamicModule {
+  return LedgerCreditPostcheckModule.forWorker({
+    holds: (clock, logger) =>
+      createWithdrawHolds({ clock, lockUsersForUpdate, audit: ledgerCheckHoldAudit(logger) }),
+    readAttribution: readCommissionAttribution,
+  });
+}
+
+/**
  * B2-04zo (BR-FUND-18, BR-FUND-20): the worker's asset daily snapshot schedule, over settlement's
  * PendingEarningsSource (built per read, config reads on the snapshot's read transaction, as
  * walletSummaryDependencies does) and content's ledger.advance_alert_fen, unset = no alert.
@@ -5285,6 +5299,8 @@ export class AppModule {
               // B2-02q (BR-FUND-19): the daily ledger check at 01:00 +08:00 for D−1 (queue
               // ledger-check), its seed / heal timer and the B2-02p ports assembled above.
               ledgerDailyCheckModule(),
+              // B2-02t (BR-FUND-19): the post-credit confirmation of R5 / R5a vouchers.
+              ledgerCreditPostcheckModule(),
               // B2-04zo (BR-FUND-18): the asset daily snapshot timer, D+1 00:01 +08:00 per app.
               ledgerAssetSnapshotModule(),
               // B2-12f (BR-FUND-12): the daily generation of the bad debt write-off candidates,

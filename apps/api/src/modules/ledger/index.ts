@@ -150,6 +150,27 @@ export type {
   DailyCheckRunStore,
 } from './application/daily-check-schedule-heal.ts';
 export { createDailyCheckRunStore } from './infra/daily-check-run-store.ts';
+// B2-02t: the post-credit confirmation of BR-FUND-19 (queue ledger-credit-postcheck).
+export {
+  createCreditPostcheck,
+  creditPostcheckKindOf,
+  enqueueCreditPostcheck,
+  expectedShareFen,
+} from './application/credit-postcheck.ts';
+export type {
+  CreditPostcheck,
+  CreditPostcheckAttribution,
+  CreditPostcheckAttributionReader,
+  CreditPostcheckDependencies,
+  CreditPostcheckEnqueue,
+  CreditPostcheckKind,
+  CreditPostcheckPayload,
+  CreditPostcheckRole,
+  CreditPostcheckVoucher,
+  ExpectedShareInput,
+} from './application/credit-postcheck.ts';
+export { LedgerCreditPostcheckModule } from './credit-postcheck.module.ts';
+export type { LedgerCreditPostcheckWorkerOptions } from './credit-postcheck.module.ts';
 // B2-02s: the durable completion record of (app, D) the handler writes and stateOf reads.
 export { dailyCheckDoneEventId } from './application/daily-check-schedule-done.ts';
 export type { DailyCheckDoneConsumer } from './application/daily-check-schedule-done.ts';

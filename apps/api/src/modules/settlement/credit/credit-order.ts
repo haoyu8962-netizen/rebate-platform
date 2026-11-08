@@ -52,7 +52,15 @@ import {
 } from '@couli/domain';
 import { applyReserve, subFen } from '@couli/money';
 import type { Transaction } from 'kysely';
-import type { Ledger, PostingEntry, PostingVoucher } from '../../ledger/index.ts';
+import {
+  creditPostcheckKindOf,
+  enqueueCreditPostcheck,
+  type CreditPostcheckEnqueue,
+  type CreditPostcheckVoucher,
+  type Ledger,
+  type PostingEntry,
+  type PostingVoucher,
+} from '../../ledger/index.ts';
 import { lockOrderKey } from '../../orders/index.ts';
 import type { Clock, EventBus, RootLogger } from '../../platform/index.ts';
 import { insertRebateHistory, readRebateOrder } from '../rebate/infra/rebate-store.ts';
@@ -133,6 +141,11 @@ export interface CreditOrderDependencies {
    * of BR-INV-24 ② is the booked base). Only R5 calls it (R13, the admin restore, does not).
    */
   readonly inviteTrigger?: CreditInviteTrigger;
+  /**
+   * B2-02t (BR-FUND-19, D10-1038): optional. When given, the credit enqueues the post-credit
+   * confirmation on its own transaction (ledger/application/credit-postcheck.ts).
+   */
+  readonly postcheck?: CreditPostcheckEnqueue;
   /**
    * B2-04zzh (D10-923; BR-CALC-15, BR-FUND-07, BR-FUND-04 ⑨): optional. Called on the credit's own
    * transaction after the step-2 checks passed, with the order key lock held. true: the guard voided
@@ -329,6 +342,30 @@ function postingVoucher(
   };
 }
 
+/** The voucher R5 just wrote as a job item of the post-credit check; null when it is not checked. */
+function postcheckVoucher(
+  request: CreditVoucherRequest,
+  voucherId: string,
+  baseFen: bigint,
+): CreditPostcheckVoucher | null {
+  const kind = creditPostcheckKindOf(request.template_id);
+  if (kind === null) return null;
+  // The FORFEIT template names its beneficiary uid, the user CREDIT templates user_id.
+  const userId = request.params[kind === 'forfeit' ? 'uid' : 'user_id'];
+  const role = request.params['role'];
+  if (typeof userId !== 'string' || typeof role !== 'string') {
+    throw new Error(`settlement credit: ${request.template_id} without a beneficiary`);
+  }
+  return {
+    voucher_id: voucherId,
+    user_id: userId,
+    role: role as CreditRole,
+    kind,
+    base_fen: baseFen.toString(),
+    net_before_fen: '0',
+  };
+}
+
 export function createCreditOrder(deps: CreditOrderDependencies): CreditOrder {
   const { clock, logger, ledger, gate, events } = deps;
 
@@ -437,9 +474,15 @@ export function createCreditOrder(deps: CreditOrderDependencies): CreditOrder {
     });
 
     // 6. vouchers (uniq_key per BR-FUND-05: a stored key is a duplicate, never a second credit).
+    const postchecked: CreditPostcheckVoucher[] = [];
     for (const request of plan.vouchers) {
       for (const built of buildVouchers(request.template_id, request.params)) {
-        await ledger.post(trx, postingVoucher(appId, key, request, built, accounts));
+        const posted = await ledger.post(trx, postingVoucher(appId, key, request, built, accounts));
+        // B2-02t: only a voucher this credit wrote; a duplicate key was booked on another base.
+        if (deps.postcheck !== undefined && posted.kind === 'posted') {
+          const item = postcheckVoucher(request, posted.voucherId, bCredit);
+          if (item !== null) postchecked.push(item);
+        }
       }
     }
 
@@ -485,6 +528,13 @@ export function createCreditOrder(deps: CreditOrderDependencies): CreditOrder {
         booked_base_fen: bCredit,
       });
     }
+
+    // B2-02t (BR-FUND-19): the post-credit confirmation of the vouchers above, same transaction.
+    await enqueueCreditPostcheck(deps.postcheck, trx, {
+      app_id: appId,
+      order_id: orderId,
+      vouchers: postchecked,
+    });
 
     // 10. order.credited on the same transaction.
     await events.publish(trx, {

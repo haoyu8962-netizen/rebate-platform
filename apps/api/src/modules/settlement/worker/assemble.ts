@@ -135,9 +135,12 @@ export function createSettleWorkerHandler(
   // commission's writer takes the clock as its third argument; the credits pass (trx, input).
   const appendBeneficiaryEvent = (trx: Transaction<DB>, input: BeneficiaryEventInput) =>
     ports.appendBeneficiaryEvent(trx, input, { clock });
+  // B2-02t (BR-FUND-19, D10-1038): R5 and R5a enqueue the post-credit confirmation.
+  const postcheck = { queue, config };
   const creditOrder = createCreditOrder({
     clock,
     logger,
+    postcheck,
     // B2-04zzh (D10-923): a jd order with no item left is voided by R6 at credit when the switch is on.
     remainingZeroGuard: createJdRemainingZeroGuard({ clock, logger, events, config }),
     ledger,
@@ -155,6 +158,7 @@ export function createSettleWorkerHandler(
   const beneficiaryCredit = createBeneficiaryCredit({
     clock,
     logger,
+    postcheck,
     ledger,
     gate,
     readAttribution: ports.readAttribution,
