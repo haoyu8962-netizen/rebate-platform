@@ -162,6 +162,173 @@ function promoOf(link: LinkOpenOwnerResult['link'], nowMs: number): string | nul
   return parsed.protocol === 'https:' && parsed.host !== '' ? url : null;
 }
 
+/** A paused conversion (50301), as the open's and the shop entry's stages throw it. */
+export function isTaobaoPaused(error: unknown): boolean {
+  return error instanceof Error && (error as { readonly code?: unknown }).code === 50301;
+}
+
+interface TaobaoWarn {
+  warn(fields: Readonly<Record<string, unknown>>, message: string): void;
+}
+
+/**
+ * The scene's active promotion slot of the account in use (B1-19d); none, or not a Taobao pid
+ * → 50301 with a warning. Never another account's slot nor another scene's. Shared by the open
+ * and the shop entry (B1-06zg: self_buy only), so both read the slot the same way.
+ */
+export async function taobaoActivePid(
+  pids: WiredLinkOpenOptions['pids'],
+  logger: TaobaoWarn,
+  appId: string,
+  pidScene: string,
+  accountId: string,
+): Promise<UnionPidRow> {
+  const row = await pids.getActivePid({
+    appId,
+    platform: PLATFORM,
+    pidScene: pidScene as PidScene,
+    purpose: 'convert',
+    unionAccountId: accountId,
+  });
+  if (
+    row === null ||
+    row.status !== 'active' ||
+    row.app_id !== appId ||
+    row.platform !== PLATFORM ||
+    row.pid_scene !== pidScene ||
+    typeof row.pid !== 'string' ||
+    row.pid.length > PID_MAX ||
+    !PID.test(row.pid)
+  ) {
+    logger.warn(
+      {
+        event: 'linking.open.no_active_pid',
+        app_id: appId,
+        platform: PLATFORM,
+        pid_scene: pidScene,
+      },
+      'linking: no active taobao promotion slot for the open',
+    );
+    throw paused('linking: no active promotion slot');
+  }
+  return row;
+}
+
+/**
+ * The user's own active Taobao binding in this app; its relation_id within the contract, else
+ * 50301 with a warning. Shared by the open (the snapshot user) and the shop entry (the caller).
+ */
+export async function taobaoActiveRelation(
+  executor: Kysely<DB>,
+  logger: TaobaoWarn,
+  appId: string,
+  userId: string,
+): Promise<{ readonly relationId: string; readonly bindingAccountId: string }> {
+  const row = await executor
+    .selectFrom('union_bindings')
+    .select(['relation_id', 'union_account_id'])
+    .where('app_id', '=', appId)
+    .where('user_id', '=', userId)
+    .where('platform', '=', PLATFORM)
+    .where('status', '=', 'active')
+    .executeTakeFirst();
+  const relation = row?.relation_id ?? null;
+  if (row === undefined || relation === null || relation === '' || relation.length > RELATION_MAX) {
+    logger.warn(
+      { event: 'linking.open.relation_unavailable', app_id: appId, platform: PLATFORM },
+      'linking: active taobao binding without a usable relation_id',
+    );
+    throw paused('linking: active binding without a usable relation_id');
+  }
+  return { relationId: relation, bindingAccountId: row.union_account_id };
+}
+
+/** What issuing a Taobao authorization state reads. */
+export interface TaobaoAuthIssueDeps {
+  readonly config: WiredLinkOpenOptions['config'];
+  readonly pids: WiredLinkOpenOptions['pids'];
+  readonly clock: WiredLinkOpenOptions['clock'];
+  readonly appEnv: TaobaoLinkOpenOptions['appEnv'];
+  readonly authApps: TaobaoLinkOpenOptions['authApps'];
+}
+
+/**
+ * 30101 / 30102 with a one-time state bound to uid + device (+ the link an open serves; null for
+ * the shop entry, which has no link). A caller that is not the user, or has no usable device,
+ * answers 10001; a device without an app client has no authorization path (50301).
+ */
+export async function issueTaobaoAuthState(
+  deps: TaobaoAuthIssueDeps,
+  executor: Kysely<DB>,
+  input: {
+    readonly appId: string;
+    readonly caller: { readonly userId: string | null; readonly deviceId: string | null };
+    readonly userId: string;
+    readonly code: 30101 | 30102;
+    readonly linkId: string | null;
+  },
+): Promise<Extract<LinkOpenAuthorization, { kind: 'refused' }>> {
+  const { config, pids, clock, appEnv, authApps } = deps;
+  const { appId, caller, userId, code } = input;
+  if (caller.deviceId === null || caller.userId !== userId) {
+    return { kind: 'refused', code: 10001 };
+  }
+  let client: AuthClient | 'missing';
+  try {
+    client = await deviceClientOf(executor, appId, caller.deviceId);
+  } catch (error) {
+    // A device with no app client (h5 / web) has no authorization path in the open.
+    if (error instanceof AuthConfigError) throw paused('linking: no taobao authorization path');
+    throw error;
+  }
+  if (client === 'missing') return { kind: 'refused', code: 10001 };
+  const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
+  const methods = await reads.configuredMethods(appId, client);
+  const refs = await authAppRefs(authApps, appEnv, appId, client, methods);
+  const now = clock.now();
+  // A second reading of the injected clock, moved by the TTL (no `new Date` outside the clock).
+  const expireAt = clock.now();
+  expireAt.setTime(now.getTime() + AUTH_STATE_TTL_MS);
+  const state = newAuthState();
+  await insertAuthSession(executor, {
+    state,
+    appId,
+    userId,
+    deviceId: caller.deviceId,
+    platform: PLATFORM,
+    client,
+    linkId: input.linkId,
+    now,
+    expireAt,
+    methods,
+    refs,
+  });
+  return {
+    kind: 'refused',
+    code,
+    data: { auth_url: syntheticAuthUrl(PLATFORM, state), state, auth_methods: [...methods] },
+  };
+}
+
+/** now + link.convert_cache_ttl_sec (default and ceiling 900 s), as the jd / pdd plans. */
+export async function taobaoJumpExpiry(
+  config: WiredLinkOpenOptions['config'],
+  clock: WiredLinkOpenOptions['clock'],
+  appId: string,
+): Promise<Date> {
+  const configured = intSetting(
+    (await config.configValue(appId, CONVERT_CACHE_TTL_SEC))?.value,
+    MAX_CONVERT_CACHE_TTL_SEC,
+  );
+  const sec =
+    configured > 0 && configured <= MAX_CONVERT_CACHE_TTL_SEC
+      ? configured
+      : MAX_CONVERT_CACHE_TTL_SEC;
+  const at = clock.now();
+  at.setTime(at.getTime() + sec * 1000);
+  return at;
+}
+
 /** The Taobao conversion port: admission, authorization and the Baichuan instruction. */
 function createTaobaoConversion(
   options: TaobaoLinkOpenOptions,
@@ -208,72 +375,13 @@ function createTaobaoConversion(
     }
   }
 
-  /**
-   * The scene's active promotion slot of the account in use (B1-19d); none, or not a Taobao pid
-   * → 50301 with a warning. Never another account's slot nor another scene's. Read only on an
-   * allowed branch of authorize (B1-22m).
-   */
-  async function activePid(
-    appId: string,
-    pidScene: string,
-    accountId: string,
-  ): Promise<UnionPidRow> {
-    const row = await pids.getActivePid({
-      appId,
-      platform: PLATFORM,
-      pidScene: pidScene as PidScene,
-      purpose: 'convert',
-      unionAccountId: accountId,
-    });
-    if (
-      row === null ||
-      row.status !== 'active' ||
-      row.app_id !== appId ||
-      row.platform !== PLATFORM ||
-      row.pid_scene !== pidScene ||
-      typeof row.pid !== 'string' ||
-      row.pid.length > PID_MAX ||
-      !PID.test(row.pid)
-    ) {
-      logger.warn(
-        {
-          event: 'linking.open.no_active_pid',
-          app_id: appId,
-          platform: PLATFORM,
-          pid_scene: pidScene,
-        },
-        'linking: no active taobao promotion slot for the open',
-      );
-      throw paused('linking: no active promotion slot');
-    }
-    return row;
-  }
+  /** The scene's slot of the account in use; read only on an allowed branch (B1-22m). */
+  const activePid = (appId: string, pidScene: string, accountId: string) =>
+    taobaoActivePid(pids, logger, appId, pidScene, accountId);
 
   /** The snapshot user's own active binding in this app; its relation_id within the contract. */
-  async function activeRelation(executor: Kysely<DB>, appId: string, userId: string) {
-    const row = await executor
-      .selectFrom('union_bindings')
-      .select(['relation_id', 'union_account_id'])
-      .where('app_id', '=', appId)
-      .where('user_id', '=', userId)
-      .where('platform', '=', PLATFORM)
-      .where('status', '=', 'active')
-      .executeTakeFirst();
-    const relation = row?.relation_id ?? null;
-    if (
-      row === undefined ||
-      relation === null ||
-      relation === '' ||
-      relation.length > RELATION_MAX
-    ) {
-      logger.warn(
-        { event: 'linking.open.relation_unavailable', app_id: appId, platform: PLATFORM },
-        'linking: active taobao binding without a usable relation_id',
-      );
-      throw paused('linking: active binding without a usable relation_id');
-    }
-    return { relationId: relation, bindingAccountId: row.union_account_id };
-  }
+  const activeRelation = (executor: Kysely<DB>, appId: string, userId: string) =>
+    taobaoActiveRelation(executor, logger, appId, userId);
 
   async function authorize(input: LinkOpenAuthorizationInput): Promise<LinkOpenAuthorization> {
     const { caller, owner, noRebate, executor } = input;
@@ -347,68 +455,24 @@ function createTaobaoConversion(
   }
 
   /** 30101 / 30102 with a one-time state bound to uid + device + the link this open serves. */
-  async function issue(
+  function issue(
     executor: Kysely<DB>,
     caller: LinkOpenAuthorizationInput['caller'],
     owner: LinkOpenOwnerResult,
     userId: string,
     code: 30101 | 30102,
   ): Promise<LinkOpenAuthorization> {
-    const appId = owner.link.app_id;
-    if (caller.deviceId === null || caller.userId !== userId) {
-      return { kind: 'refused', code: 10001 };
-    }
-    let client: AuthClient | 'missing';
-    try {
-      client = await deviceClientOf(executor, appId, caller.deviceId);
-    } catch (error) {
-      // A device with no app client (h5 / web) has no authorization path in the open.
-      if (error instanceof AuthConfigError) throw paused('linking: no taobao authorization path');
-      throw error;
-    }
-    if (client === 'missing') return { kind: 'refused', code: 10001 };
-    const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
-    const methods = await reads.configuredMethods(appId, client);
-    const refs = await authAppRefs(authApps, appEnv, appId, client, methods);
-    const now = clock.now();
-    // A second reading of the injected clock, moved by the TTL (no `new Date` outside the clock).
-    const expireAt = clock.now();
-    expireAt.setTime(now.getTime() + AUTH_STATE_TTL_MS);
-    const state = newAuthState();
-    await insertAuthSession(executor, {
-      state,
-      appId,
+    return issueTaobaoAuthState({ config, pids, clock, appEnv, authApps }, executor, {
+      appId: owner.link.app_id,
+      caller,
       userId,
-      deviceId: caller.deviceId,
-      platform: PLATFORM,
-      client,
-      linkId: owner.link.link_id,
-      now,
-      expireAt,
-      methods,
-      refs,
-    });
-    return {
-      kind: 'refused',
       code,
-      data: { auth_url: syntheticAuthUrl(PLATFORM, state), state, auth_methods: [...methods] },
-    };
+      linkId: owner.link.link_id,
+    });
   }
 
   /** now + link.convert_cache_ttl_sec (default and ceiling 900 s), as the jd / pdd plans. */
-  async function jumpExpiry(appId: string): Promise<Date> {
-    const configured = intSetting(
-      (await config.configValue(appId, CONVERT_CACHE_TTL_SEC))?.value,
-      MAX_CONVERT_CACHE_TTL_SEC,
-    );
-    const sec =
-      configured > 0 && configured <= MAX_CONVERT_CACHE_TTL_SEC
-        ? configured
-        : MAX_CONVERT_CACHE_TTL_SEC;
-    const at = clock.now();
-    at.setTime(at.getTime() + sec * 1000);
-    return at;
-  }
+  const jumpExpiry = (appId: string) => taobaoJumpExpiry(config, clock, appId);
 
   async function convert(input: LinkOpenConversionInput): Promise<LinkOpenJump> {
     const { owner, noRebate, client } = input;

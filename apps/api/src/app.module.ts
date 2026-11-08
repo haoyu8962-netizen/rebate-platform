@@ -50,6 +50,7 @@ import {
   POOL_EXTRA_JOBS,
   type PoolExtraJobs,
   PRODUCT_CACHE_NAMESPACE,
+  createShopOf,
   LinkRegistrar,
   RebateQuoter,
   ViewerContext,
@@ -3047,6 +3048,7 @@ function catalogPorts(
           ROOT_LOGGER,
           { token: FIELD_CRYPTO, optional: true },
           { token: DB, optional: true },
+          { token: REDIS, optional: true },
         ],
         useFactory: (
           union: GovernedUnion,
@@ -3056,6 +3058,7 @@ function catalogPorts(
           logger: RootLogger,
           crypto?: FieldCrypto,
           db?: Kysely<Database>,
+          redis?: RedisHandle,
         ): LinkOpenPorts => {
           if (crypto === undefined && config.appEnv !== 'local' && config.appEnv !== 'test') {
             throw new Error('linking: item_ref needs the field keyring outside local / test');
@@ -3076,6 +3079,19 @@ function catalogPorts(
             // B1-15w: POST /v1/shares reads the verified birth date (BR-INV-19) through identity's
             // realname reader; without the field keyring it cannot, and every share fails closed.
             ...(db === undefined || crypto === undefined ? {} : { shares: sharePorts(db, crypto) }),
+            // B1-06zg: the shop entry reads catalog's shop port over the shared detail cache (read
+            // only; no Redis → no cache → every entry 30146 shop_unavailable). createShopOf does not
+            // read product_refs yet (no shop name column), so its refs answer nothing.
+            ...(db === undefined
+              ? {}
+              : {
+                  shops: {
+                    shopOf: createShopOf({
+                      cache: redis === undefined ? null : redis.namespace(PRODUCT_CACHE_NAMESPACE),
+                      refs: { shopIdOf: () => Promise.resolve(null) },
+                    }),
+                  },
+                }),
           };
         },
       },

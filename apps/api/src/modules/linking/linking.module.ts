@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { DB as Database } from '@couli/db';
 import { type DynamicModule, type FactoryProvider, Module, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
@@ -26,6 +27,7 @@ import {
   type Idempotency,
   type JobQueue,
   type RedisHandle,
+  type RedisNamespace,
   type RootLogger,
   type VerifiedDevice,
 } from '../platform/index.ts';
@@ -42,6 +44,17 @@ import {
   type LinkConvertUrlParser,
 } from './application/link-convert.ts';
 import { createLinkOpenPrices } from './application/link-open-prices.ts';
+import { MAX_CONVERT_CACHE_TTL_SEC } from './domain/rules.ts';
+import {
+  ShopOpenService,
+  createShopOpen,
+  type ShopOpenCache,
+  type ShopOpenCacheKey,
+  type ShopOpenInput,
+  type ShopOpenJump,
+  type ShopOpenShops,
+} from './application/shop-open.ts';
+import { ShopOpenController } from './http/public/shop-open.controller.ts';
 import {
   createTaobaoLinkOpen,
   type TaobaoLinkOpenOptions,
@@ -164,6 +177,11 @@ export interface LinkOpenPorts {
    * keyring) every share fails closed with 50301.
    */
   readonly shares?: LinkSharePorts;
+  /**
+   * B1-06zg: catalog's read-only shop port (createShopOf over the detail cache) for the shop
+   * entry. Absent (isolated HTTP unit tests) every shop entry fails closed with 50301.
+   */
+  readonly shops?: ShopOpenShops;
 }
 
 /** B1-15w: the share's ports outside linking, assembled by app.module.ts. */
@@ -197,6 +215,129 @@ const NO_PRODUCTS: LinkLandingPorts['products'] = { read: () => Promise.resolve(
 interface LinkOpenProcess {
   readonly flights: LinkOpenFlights;
   readonly cache: LinkJumpCache;
+  /** B1-06zg: converted shop plans (Redis; none without Redis). */
+  readonly shopCache: ShopOpenCache;
+}
+
+/** B1-06zg: the Redis namespace of converted shop plans. */
+export const SHOP_JUMP_REDIS_NAMESPACE = 'linking-shop-jump';
+
+/** No Redis: every shop entry converts afresh. */
+const NO_SHOP_CACHE: ShopOpenCache = {
+  get: () => Promise.resolve(null),
+  put: () => Promise.resolve(),
+};
+
+/** A cached shop plan only in the shape the service writes: https URL steps, an expiry. */
+function shopJumpOf(text: string): ShopOpenJump | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const https = (url: unknown): url is string => {
+    if (typeof url !== 'string' || url.length === 0 || url.length > 2048) return false;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' && parsed.host !== '';
+    } catch {
+      return false;
+    }
+  };
+  const step = (item: unknown): boolean => {
+    if (typeof item !== 'object' || item === null) return false;
+    const { type, value: url, sdk } = item as Record<string, unknown>;
+    if (!https(url)) return false;
+    if (type === 'h5') return sdk === undefined;
+    if (type !== 'sdk' || typeof sdk !== 'object' || sdk === null) return false;
+    const fields = sdk as Record<string, unknown>;
+    return (
+      Object.keys(fields).length === 3 &&
+      fields.provider === 'baichuan' &&
+      fields.open_by === 'url' &&
+      fields.url === url
+    );
+  };
+  if (typeof value !== 'object' || value === null) return null;
+  const jump = value as Record<string, unknown>;
+  if (
+    !step(jump.primary) ||
+    !Array.isArray(jump.fallbacks) ||
+    !jump.fallbacks.every(step) ||
+    typeof jump.expire_at !== 'string' ||
+    !Number.isFinite(Date.parse(jump.expire_at))
+  ) {
+    return null;
+  }
+  return value as ShopOpenJump;
+}
+
+/**
+ * B1-06zg: converted shop plans in Redis, one key per (app, platform, account, pid, relation_id,
+ * shopRef) with the identity hashed so no user parameter appears in a key name, expiring with the
+ * plan (at most 900 s). A Redis failure is a miss on read and a skipped write.
+ */
+function createRedisShopCache(
+  redis: RedisNamespace,
+  clock: Clock,
+  logger: RootLogger,
+): ShopOpenCache {
+  const keyOf = (key: ShopOpenCacheKey) => {
+    const identity = JSON.stringify([
+      key.platform,
+      key.unionAccountId,
+      key.pid,
+      key.relationId,
+      key.shopRef,
+    ]);
+    return `${key.appId}:${createHash('sha256').update(identity).digest('hex')}`;
+  };
+  const warn = (appId: string, op: string, error: unknown) =>
+    logger.warn(
+      {
+        event: 'linking.shop_open.cache_unavailable',
+        app_id: appId,
+        op,
+        reason: error instanceof Error ? error.name : 'unknown',
+      },
+      'linking: shop jump cache unavailable',
+    );
+  return {
+    async get(key) {
+      try {
+        const text = await redis.get(keyOf(key));
+        return text === null ? null : shopJumpOf(text);
+      } catch (error) {
+        warn(key.appId, 'get', error);
+        return null;
+      }
+    },
+    async put(key, jump) {
+      const remainingMs = Date.parse(jump.expire_at) - clock.now().getTime();
+      if (!Number.isFinite(remainingMs) || remainingMs <= 0) return;
+      const ttl = Math.min(MAX_CONVERT_CACHE_TTL_SEC, Math.ceil(remainingMs / 1000));
+      try {
+        await redis.set(keyOf(key), JSON.stringify(jump), ttl);
+      } catch (error) {
+        warn(key.appId, 'set', error);
+      }
+    },
+  };
+}
+
+/** The shop entry of a process without its ports: 50301 like the open, nothing converted. */
+class PausedShopOpen extends ShopOpenService {
+  override open(input: ShopOpenInput): Promise<HandlerResult> {
+    return Promise.resolve({
+      status: 503,
+      envelope: {
+        code: 50301,
+        msg: '该平台暂时无法购买，请稍后再试',
+        trace_id: input.traceId,
+      },
+    });
+  }
 }
 
 type PidReader = Pick<UnionPidService, 'getActivePid'>;
@@ -461,6 +602,7 @@ export class LinkingModule {
       module: LinkingModule,
       controllers: [
         LinkOpenController,
+        ShopOpenController,
         LinkConvertController,
         SharesController,
         LinkLandingController,
@@ -478,7 +620,38 @@ export class LinkingModule {
               redis === undefined
                 ? NO_JUMP_CACHE
                 : createRedisJumpCache(redis.namespace(LINK_JUMP_REDIS_NAMESPACE), clock, logger),
+            shopCache:
+              redis === undefined
+                ? NO_SHOP_CACHE
+                : createRedisShopCache(redis.namespace(SHOP_JUMP_REDIS_NAMESPACE), clock, logger),
           }),
+        },
+        {
+          // B1-06zg: POST /v1/products/{product_key}/shop/open, per request like the open, over
+          // the same parts and catalog's shop port of LINK_OPEN_PORTS.
+          provide: ShopOpenService,
+          scope: Scope.REQUEST,
+          inject: OPEN_INJECT,
+          useFactory: (...args: OpenFactoryArgs): ShopOpenService => {
+            const parts = openParts(...args);
+            const shops = parts?.ports.shops;
+            if (parts === null || shops === undefined) return new PausedShopOpen();
+            const { db, clock, logger, appConfig, callerContext, config, pids, ports } = parts;
+            return createShopOpen({
+              db,
+              clock,
+              callerContext,
+              config,
+              pids,
+              registry: { get: (platform) => ports.union.adapter(platform) },
+              shops,
+              cache: parts.process.shopCache,
+              idempotency: parts.idempotency,
+              logger,
+              appEnv: appConfig.appEnv,
+              authApps: parts.authApps ?? createDemoUnionAuthApps(),
+            });
+          },
         },
         {
           // Per request, like its CallerContext; the flights and the cache are the process's.

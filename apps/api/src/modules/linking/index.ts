@@ -74,6 +74,17 @@ export type {
 // link) composed over the wired open. Rule tests: test/spec/linking/open-taobao/**.
 export { createTaobaoLinkOpen } from './application/link-open-taobao.ts';
 export type { TaobaoLinkOpenOptions } from './application/link-open-taobao.ts';
+// Task B1-06zg: the shop entry (POST /v1/products/{product_key}/shop/open). Rule tests:
+// test/spec/linking/shop-open/**.
+export { ShopOpenService, createShopOpen } from './application/shop-open.ts';
+export type {
+  ShopOpenCache,
+  ShopOpenCacheKey,
+  ShopOpenInput,
+  ShopOpenJump,
+  ShopOpenOptions,
+  ShopOpenShops,
+} from './application/shop-open.ts';
 export { openScopedConfig } from './application/link-open-reads.ts';
 export { inOpenReads, openScopedReader } from './application/link-open-reads.ts';
 export type { LinkOpenReadPlan } from './application/link-open-reads.ts';

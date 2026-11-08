@@ -488,10 +488,10 @@ codes:
   - code: 30153
     http: 422
     meaning: 该平台返利已被停用（绑定为 blocked 且用户未被封禁）；授权管理页取授权链接（GET /v1/unions/{platform}/auth-url）时同码
-    action: 购买入口：给无返利购买与联系客服两个按钮；授权管理页：只给联系客服（BR-ID-17 细则「授权管理页」）
+    action: 购买入口：给无返利购买与联系客服两个按钮；授权管理页：只给联系客服（BR-ID-17 细则「授权管理页」）。进店（POST /v1/products/{product_key}/shop/open）遇 30153 例外：只给联系客服，不给「仍去购买（无返利）」按钮，不外跳、不改跳无推广参数的店铺页（BR-ID-18 进店例外）
     retry: 否
     retry_kind: never
-    sources: [BR-ID-17, BR-ID-18]
+    sources: [BR-ID-17, BR-ID-18, BR-PRICE-21]
   - code: 30154
     http: 422
     meaning: 用户联盟绑定的当前状态不允许该操作（只出现在 /admin/v1 的 users/{id}/union-bindings/{platform}/reset、disable、enable：重置只接受 active、invalid；停用只接受 active、invalid；恢复只接受 blocked_reason=admin_disable 的 blocked；该平台没有绑定记录同码；不带 data。码值按 08 §13.11 301 段顺序取号，CT-02j）

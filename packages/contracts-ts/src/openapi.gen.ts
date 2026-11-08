@@ -2444,7 +2444,10 @@ export interface paths {
          *     never answers with a shop address without promotion parameters. Exception to the 50303
          *     action for this endpoint: the client only shows a notice (text taken from error.30146
          *     「暂时不能进入这家店铺」), offers no 「仍去购买（无返利）」 secondary button, does not jump out
-         *     and does not fall back to a shop page without promotion parameters. `jump.expire_at`: the
+         *     and does not fall back to a shop page without promotion parameters. The user's taobao
+         *     binding is blocked (rebate disabled by operations) → 30153; exception to the 30153 action
+         *     for this endpoint (BR-ID-18 进店例外): the client only offers 【联系客服】, offers no
+         *     「仍去购买（无返利）」 button, does not jump out and has no fallback page. `jump.expire_at`: the
          *     Dataoke shop conversion returns no validity field (规划/09 2_TB §2.11, measured), so the
          *     server sets the technical value now + `link.convert_cache_ttl_sec`. Native clients open the
          *     shop link through Baichuan by URL with an H5 link as fallback (whether the long shop link
