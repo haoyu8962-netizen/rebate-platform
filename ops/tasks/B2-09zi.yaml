@@ -1,0 +1,24 @@
+id: B2-09zi
+repo: rebate-platform
+title: 后台差错单恢复 / 关闭的请求体校验移到权限（及 step-up）之后：restoreAdminReconDiff、closeAdminReconDiff 无权限带非法体须先得 10403 / 10003，不再先得 20001（FU-RECON-ADMIN-BODY-ORDER）
+type: impl
+# 2026-11-09 content 入账（D10-1128；funds 07:19 登记 FU-RECON-ADMIN-BODY-ORDER，转 content）。契约检查顺序：restore 为 order.restore（10403）→ step-up totp（10003）→ body（20001）；close 为 fund.recon（10403）→ body（20001）。两控制器挂完整 RouteSchema（recon-restore.controller.ts:107、recon-diff-close.controller.ts:105），Fastify 先校验 body。funds 读代码得出，规则测试先红即实测；主干上若绿则撤单。
+# 修法照 settle-adjustments 与 B2-04zzl r2：路由只挂 params / headers（withoutBody），body 用契约 schema 在 guard 内校验；合法权限 + 非法体仍 20001、字段同前。不改契约、金额、状态。land 在 B2-04zzl（同改 settle-adjustments.validation.ts）合并后变基。RV2：新鲜独立 Claude 写测试，money Codex medium（评审 brief 带可引用行号，D10-1121）。
+refs: []
+refs_hash: {}
+deps: [B2-04zzl]
+paths:
+  - 'apps/api/src/modules/settlement/http/admin/recon-restore.controller.ts'
+  - 'apps/api/src/modules/settlement/http/admin/recon-restore.controller.test.ts'
+  - 'apps/api/src/modules/settlement/http/admin/settle-adjustments.validation.ts'
+  - 'apps/api/src/modules/ledger/http/admin/recon-diff-close.controller.ts'
+  - 'apps/api/src/modules/ledger/http/admin/recon-diff-close.controller.test.ts'
+  - 'apps/api/src/modules/ledger/http/admin/recon-diff-close.validation.ts'
+test_paths:
+  - 'test/spec/settlement/recon-admin-body-order/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/recon-admin-body-order/**'
+status: todo
