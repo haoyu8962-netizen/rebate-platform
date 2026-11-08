@@ -30,5 +30,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/trace-persist/**'
-status: todo
-pr: null
+status: done
+pr: 2785

@@ -27,5 +27,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/content/**'
-status: todo
-pr: null
+status: done
+pr: 2816
