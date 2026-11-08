@@ -1,0 +1,38 @@
+id: B2-09gb
+repo: rebate-platform
+title: settlement：差错单平台恢复处理实现（CT-24zz restoreAdminReconDiff 的 platform_restore，BR-FUND-22 R12 / R13）——锁单按当前 rebate_status 分流：VOID → R12 回 ESTIMATED / WAITING / UNATTRIBUTED 不写分录；CLAWED_BACK → R13 按当前有效联盟佣金重算、ADMIN_ADJUST RESTORE、同 CAS 写 booked 与 R9 退件基线；差错单到 adjusted、审计
+type: impl
+# 2026-11-08 funds 入账（编排 D10-973 / D10-982 / D10-986 / D10-994；契约 CT-24zz #2772 已合）。依据 08 BR-FUND-22（couli #310 细则「处理时再核」在下一次 SPEC_REF 升级前由任务书摘录）、BR-FUND-01 R13 行与「已处置退件数」（D10-937）、BR-CALC-02、BR-CALC-09。
+# 只做 platform_restore；appeal_restore（B2-09g）一字不动；订单申诉的 R12 / R13 仍 restore_not_supported（生产方未建）。加锁顺序照 B2-09g / settlement AGENTS：订单键 advisory → 差错单行 FOR UPDATE → 订单行 → users → ledger.lockBalances。
+# R12：transition() 经生成的状态机迁移；WAITING 时 settle_period 按 received_at（缺失回 ESTIMATED，CT-24zz 代理默认），user_id 为空回 UNATTRIBUTED；不写分录。
+# R13：模板 ADMIN_ADJUST:RESTORE:USER / :PLATFORM（specs/ledger-templates.csv 已有）；受益人按 BR-CALC-09（冻结 / 申诉中开延后差额义务 BR-FUND-04 ⑫，封禁 / 已注销 / 未成年推广份额归平台）；差额 = 0 不写、< 0 不写并告警入审计（受益人与平台都如此，D10-986 ② / D10-994）；
+#   同一 CAS：rebate_status CREDITED、booked_base_fen、booked_n_fen、refunded_quantity_r9_baseline = refunded_quantity（at_credit 不动）。处理时再核：platform_status 失效（R12 / R13）或 R13 时有效联盟佣金不为正 → 20001，差错单不动。
+# 留给本单提方案报编排：CT-24zz contract r2 S2「VOID 佣金回 0 仍可 R12」。RV2；规则测试新鲜独立 Claude，资金评审照 D10-823 ④ 独立 Claude money，标签照 #24。
+refs: [BR-FUND-22, BR-FUND-01, BR-CALC-02, BR-CALC-09]
+refs_hash:
+  BR-FUND-22: 27d181deaeeb
+  BR-FUND-01: dd565783f7a4
+  BR-CALC-02: 0ffe8a4d0b65
+  BR-CALC-09: 2414ed15d885
+deps: [CT-24zz, B2-04zzf, B2-09g]
+paths:
+  - 'apps/api/src/modules/settlement/application/admin-recon-restore*.ts'
+  - 'apps/api/src/modules/settlement/application/platform-restore*.ts'
+  - 'apps/api/src/modules/settlement/infra/platform-restore-store*.ts'
+  - 'apps/api/src/modules/settlement/http/admin/**'
+  - 'apps/api/src/modules/settlement/settlement.module.ts'
+  - 'apps/api/src/modules/settlement/index.ts'
+  - 'apps/api/src/modules/settlement/clawback/clawback-store.ts'
+  - 'apps/api/src/modules/commission/index.ts'
+  - 'apps/api/src/modules/ledger/**/*recon-diff-restore*.ts'
+  - 'apps/api/src/modules/ledger/infra/recon-diffs-store.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/settlement/platform-restore/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/platform-restore/**'
+status: todo
