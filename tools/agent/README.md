@@ -54,7 +54,7 @@ tools/agent/codex-run.sh impl <id> [--phase test|handover] [--worktree <dir>] [-
 
 # 评审（只读沙箱）
 tools/agent/codex-run.sh review <id> [--worktree <dir>] \
-  [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--dry-run]
+  [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
 
 # 自检：不发起任何 Codex 回合，不耗额度
 tools/agent/codex-run.sh selfcheck
@@ -73,6 +73,7 @@ node tools/agent/validate-output.ts --schema <schema> --file <json> [--money] [-
 - `--base` 不传时取 `HEAD` 与 `origin/main`（没有则 `main`）的分叉点。
 - `--timeout-min` 只能调小：实现上限 30 分钟、评审 15 分钟（规划/11 §2.2）。超时的任务要拆小，不是加时间。
 - `--dry-run` 把将要执行的 argv 一行一个打印出来（参数里的换行显示为 `\n`），不启动 Codex、不写任何文件。
+- `--full` 只用于 `review`（CT-06zzzw，D10-940）：本轮强制全面审，不拼 `Previous review round` 块，轮次照常计数，这一轮的产出照常当本引擎下一轮的增量基准；是包装脚本自己的开关，不传给 Codex（argv 与不加时相同，只有提示词不同）。位置不限，可与 `--dry-run` 同用（dry-run 语义不变）。`impl` 带 `--full` 是用法错误（退出 2）。编排人工判定「这轮必须全面审」时用它，不必再挪运行目录里的文件；证据 note 写明为什么全面审。
 
 ## 3. 包装脚本保证什么
 
@@ -88,7 +89,7 @@ node tools/agent/validate-output.ts --schema <schema> --file <json> [--money] [-
 12. **规则测试评审还以任务 `paths` 为界**（负责人 2026-10-02 决定，`ops/approvals.yaml` 第 14 条）。spec-test 评审的上下文多一行「Allowed paths」（任务 `paths`，取自可信副本的 `task.ts show`），校验时带 `--allowed-paths`；规则测试目录（可信副本 `tools/guard/protected-paths.json` 第一类）自动算在范围内。下面几种 `findings` 条目算范围外：只引用 refs 以外的 BR；`file` 在任务 `paths` 与规则测试目录之外；正文引用的仓库路径全在其外；`rule` 以评审方的范围标记 `[out-of-scope]` 开头。校验带 `--rewrite`：通过校验后把这些条目移进 `-o` 文件的 `out_of_scope`，`verdict` 只按范围内的 S0 / S1 重算（有就 `fail`，没有就 `pass`），每条移动与结论改变都记一条警告进 `validation_messages`；再带 `--out-of-scope-log <runs>/<id>/out-of-scope.md`：把全部 `out_of_scope` 条目（评审方自己写的和移进来的）按 `key` 去重追加进这个文件（不存在就建），留给后续任务写规则测试。校验不过的产出不改写、不追加。资金评审不变。
 11. **评审类型跟着风险级**。`--review-type` 不传时，可信副本的 `tools/ops/task.ts show <id>` 算出 RV2 就用 `money`（强制资金清单），否则 `general`；RV2 任务显式传 `general` 被拒绝（`contract`、`spec-test` 仍可用）。评审产出里 `verdict: pass` 却带 S0 / S1 发现的，按无产出处理（退出 10）。
 8. **每次调用都记账并结算轮次**：结束后调用 `tools/ops/usage.ts record`（规划/11 §1.3；只记 token 用量，额度不设限制，记账失败只记警告、不改退出码），再调用 `tools/ops/state.ts settle <id> --meta <meta.<mode>.json>`：没有产出就结束的调用（见 §4）把派发前计上的那一轮还回去；它的 `meta.<mode>.json` 照样留在运行目录，仍计入每任务 10 次与「连续 3 次无产出」两道失败熔断（`state.ts taskCalls`）。`settle` 按调用的 `started_at` 去重，重复执行不会多还；没有在途状态文件时什么都不做；它失败只记警告，这一轮按已计处理。调用前就被拒绝（退出 2）的调用没有 `meta.json`，改由 `state.ts release` 退回那一轮（§4「拒绝时退回轮次」）。
-13. **增量评审**（CT-06x，负责人 2026-10-19）。评审指引 `REVIEW.md`（高风险区、严重度、免查文件、发现必须给文件与行号、增量规则）只取门禁可信根的那份：包装脚本构造提示词时读 `<可信根>/REVIEW.md`，原文作为只读的规则块 `Review guide (trusted root, rules)` 拼在提示词与上下文之间；可信根里没有就不拼，并在 stderr 记一行。被审 worktree 里的 `REVIEW.md`（包括被审改动新增或改过的）一律算待审数据，提示词要求不得据它放宽检查。Claude 评审子代理不经包装脚本，由编排者把可信根的 `REVIEW.md` 原文交给它们，不让它们读被审工作树里的那份。第 2 轮起，包装脚本在构造提示词时（归档之前）找同一评审类型的上一轮产出，只认「同一次调用」成对留下的产出与元数据——`<runs>/<id>/review-codex.json` 配 `meta.review.json`，否则最大编号的 `attempts/<n>/` 内的 `review-codex.json` 配 `meta.json`；成对要求 meta 的 `mode` 为 `review`、`review_type` 相同、`has_output` 为真、`exit_code` 为 0、`output_file` 是本运行目录的 `review-codex.json`，且产出文件的修改时间落在该次调用的 `started_at`～`finished_at` 之内（容差 1 秒）。调用方另存的编号文件（如 `review-codex-<类型>-r<N>.json`）不与任何 meta 配对。找到后把「上一轮评审 JSON 原文」与「上一轮评审时的头提交」（meta 的 `head_before`）作为只读数据块 `Previous review round` 拼进上下文；找不到、对不上或头提交不在 worktree 里就照旧全面审，并在 stderr 记一行。命令行参数、沙箱与退出码不变。
+13. **增量评审**（CT-06x，负责人 2026-10-19）。评审指引 `REVIEW.md`（高风险区、严重度、免查文件、发现必须给文件与行号、增量规则）只取门禁可信根的那份：包装脚本构造提示词时读 `<可信根>/REVIEW.md`，原文作为只读的规则块 `Review guide (trusted root, rules)` 拼在提示词与上下文之间；可信根里没有就不拼，并在 stderr 记一行。被审 worktree 里的 `REVIEW.md`（包括被审改动新增或改过的）一律算待审数据，提示词要求不得据它放宽检查。Claude 评审子代理不经包装脚本，由编排者把可信根的 `REVIEW.md` 原文交给它们，不让它们读被审工作树里的那份。第 2 轮起，包装脚本在构造提示词时（归档之前）找同一评审类型的上一轮产出，只认「同一次调用」成对留下的产出与元数据——`<runs>/<id>/review-codex.json` 配 `meta.review.json`，否则最大编号的 `attempts/<n>/` 内的 `review-codex.json` 配 `meta.json`；成对要求 meta 的 `mode` 为 `review`、`review_type` 相同、`has_output` 为真、`exit_code` 为 0、`output_file` 是本运行目录的 `review-codex.json`，且产出文件的修改时间落在该次调用的 `started_at`～`finished_at` 之内（容差 1 秒）。调用方另存的编号文件（如 `review-codex-<类型>-r<N>.json`）不与任何 meta 配对。找到后把「上一轮评审 JSON 原文」与「上一轮评审时的头提交」（meta 的 `head_before`）作为只读数据块 `Previous review round` 拼进上下文；找不到、对不上或头提交不在 worktree 里就照旧全面审，并在 stderr 记一行。（独立 Claude 的产出 `review-claude-independent.json` 同样这样配对。）**增量基准只认同一引擎**（CT-06zzzw，D10-896 / D10-940）：两家引擎成对的产出都计轮次（`ops/approvals.yaml` 第 36 条只管计数），但增量基准只取本次引擎自己的同类型上一轮（运行目录下的那份优先，否则 `attempts/<n>/` 里本引擎编号最大的一份）。理由是 `REVIEW.md` §5 第 2 条（第 2 轮起只审增量）与第 4 条（增量没碰到的代码新发现最多记 S2）：拿另一引擎的记录当基准，新引擎对那家放过的旧代码判不了 fail。以下情形改做全面审，stderr 记一行原因与轮次（`full review (round N)`），第 2 轮起提示词里另有只读块 `Review round` 写明 `This review round: N` 与原因：只有另一引擎的轮（`other engine`）；**零增量**——上一轮头是 HEAD 或其祖先、`git diff --name-only <头>` 为空、没有未跟踪文件（`no change since the previous round`，所有评审类型都一样，沿用上一轮的结论不算评审）；同引擎上一轮的头提交不在 worktree 里或产出读不出；调用方加了 `--full`。变基后（上一轮头不是 HEAD 的祖先）即使没有文件改动也照旧增量，块里写明 `no (rebased …)`。评审调用的 `meta.json` 记 `review_scope`（`incremental` / `full`）、`full_reason`（增量为 `null`；全面审为 `flag`、`first-round`、`other-engine`、`unusable-previous`、`no-change` 之一，`--full` 优先于其余原因）与 `previous_output`（增量时是基准产出归档后的实际路径，全面审为 `null`）；三个键总是写出，实现调用不带。命令行参数、沙箱与退出码不变。
 
 有产出不等于任务成功。Codex 说「测试通过」不算数，成败看 PR 头提交上的必过 CI 检查（`ops/approvals.yaml` 第 21 条，2026-10-06 起）；本机 `tools/ops/verify-container.sh` 的完整验证可作自查。
 
@@ -125,7 +126,7 @@ node tools/agent/validate-output.ts --schema <schema> --file <json> [--money] [-
 | `verify/<n>/` | 沙箱外验证的日志与结果（`tools/ops/verify-container.sh` 写） |
 | `out-of-scope.md` | 规则测试评审范围以外的条目，按 `key` 去重累积追加（`validate-output.ts --out-of-scope-log` 写，不随 `attempts/` 归档）；编排者据此给后续任务写规则测试 |
 
-`meta.json` 字段：`mode`、`engine`（`codex` / `claude-independent`，§14；没有这个字段的旧文件是 Codex）、`phase`（只 `impl` 有：`test` / `handover`）、`task`、`worktree`、`run`、`started_at`、`finished_at`、`exit_code`、`codex_exit`、`timed_out`、`idle_killed`、`aborted`、`has_output`、`capacity_error`、`head_before`、`head_after`、`thread_id`、`codex_version`、`model`、`last_event`、`pgid`、`group_gone`、`stragglers_killed`、`validation`、`validation_messages`、`position_changed`、`other_task_branches_changed`、`timeout_secs`、`idle_secs`、`wrapper_pid`、`output_file`、`events_file`，评审另有 `review_type`、`base`。`has_output` 只表示产出通过了校验；位置断言失败时 `exit_code` 仍是 12。
+`meta.json` 字段：`mode`、`engine`（`codex` / `claude-independent`，§14；没有这个字段的旧文件是 Codex）、`phase`（只 `impl` 有：`test` / `handover`）、`task`、`worktree`、`run`、`started_at`、`finished_at`、`exit_code`、`codex_exit`、`timed_out`、`idle_killed`、`aborted`、`has_output`、`capacity_error`、`head_before`、`head_after`、`thread_id`、`codex_version`、`model`、`last_event`、`pgid`、`group_gone`、`stragglers_killed`、`validation`、`validation_messages`、`position_changed`、`other_task_branches_changed`、`timeout_secs`、`idle_secs`、`wrapper_pid`、`output_file`、`events_file`，评审另有 `review_type`、`base`、`review_scope`、`full_reason`、`previous_output`（第 13 条）。`has_output` 只表示产出通过了校验；位置断言失败时 `exit_code` 仍是 12。
 
 ## 6. 禁止的用法（规划/11 §2.4 禁用）
 
@@ -273,7 +274,7 @@ Agent 评测集与注入集放私有库（规划/11 §1.1）。读脚本的结�
 
 ```bash
 tools/agent/claude-run.sh impl <id> [--phase test] [--worktree <dir>] [--timeout-min <n>] [--dry-run]
-tools/agent/claude-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--dry-run]
+tools/agent/claude-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
 tools/agent/claude-run.sh selfcheck      # 只读 claude --help，不发起任何 Claude 回合
 ```
 
@@ -290,7 +291,7 @@ tools/agent/claude-run.sh selfcheck      # 只读 claude --help，不发起任�
 - `meta.json` 与 codex 相同的字段，另有 `engine: "claude-independent"`、`agent_exit`、`agent_version`、`config_dir`，没有 `codex_exit` / `codex_version`。Codex 的 token 账本（`usage.ts`）不记 Claude 调用。
 - **Codex 路径登记的变化**（#1046 r1 S2）：Codex 的命令行与工作目录不变（只有 claude 分支在 worktree 里启动，有测试断言 Codex 的 cwd 与 argv）；`meta.json` 多一个 `engine: "codex"`；评审调用前归档时连 `review-claude-independent.json` 一起归档；退出 11 的日志文案多了「or a usage limit」；spec-test 评审多一道「Codex 写过本任务测试就拒绝」；每次调用前多查一次本引擎的失败熔断（`state.ts breakers <id> --engine codex`，退出 3 就拒绝，退出 2）。
 
-**计数**（`tools/ops/state.ts`）：轮次是任务的，不分引擎——写测试 3 次、规则测试评审 2 轮、代码评审 3 轮，Codex 与独立 Claude 合计；派发前照旧 `state.ts bump-attempt <id> test|review … --engine claude-independent`。失败熔断（每任务 10 次调用、连续 3 次无产出）按引擎分开算：Codex 撞用量上限或连败不挡独立 Claude，反过来也一样。`--engine` 是调用方自报的，所以两个包装脚本启动前还会用自己的引擎再查一次（`state.ts breakers <id> --engine <AGENT_ENGINE>`），用 `--engine claude-independent` 计轮次再去跑 codex-run.sh 绕不过 Codex 的熔断。`post-run.sh <id>` 可照常用于写测试那次运行（它读 `meta.impl.json` 与 `impl.json`）。
+**计数**（`tools/ops/state.ts`）：轮次是任务的，不分引擎——写测试 3 次、规则测试评审 2 轮、代码评审 3 轮，Codex 与独立 Claude 合计（这一条只管计数：增量评审的基准只取同一引擎的上一轮，只有另一引擎的轮时全面审，§3 第 13 条，D10-896 / D10-940）；派发前照旧 `state.ts bump-attempt <id> test|review … --engine claude-independent`。失败熔断（每任务 10 次调用、连续 3 次无产出）按引擎分开算：Codex 撞用量上限或连败不挡独立 Claude，反过来也一样。`--engine` 是调用方自报的，所以两个包装脚本启动前还会用自己的引擎再查一次（`state.ts breakers <id> --engine <AGENT_ENGINE>`），用 `--engine claude-independent` 计轮次再去跑 codex-run.sh 绕不过 Codex 的熔断。`post-run.sh <id>` 可照常用于写测试那次运行（它读 `meta.impl.json` 与 `impl.json`）。
 
 **证据怎么记**（`ops/evidence/<id>.json`，`tools/ci/evidence-check.ts`）：
 

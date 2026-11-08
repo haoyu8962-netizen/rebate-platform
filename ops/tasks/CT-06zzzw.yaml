@@ -1,0 +1,27 @@
+id: CT-06zzzw
+repo: rebate-platform
+title: CT-06zzzw：codex-run 评审增量基准只认同一引擎、零增量与 --full 一律全量（FU-CODEX-RUN-ROUND-PER-ENGINE，D10-914 / D10-940）
+type: guard-change
+# 2026-11-08 ops 入账（编排 D10-940：照方案 couli-runs/FU-CODEX-RUN-ROUND-PER-ENGINE/plan.md，从暂缓的 CT-06zzzo 只移植第 ② 部分，分支本身不动）。基于主干（含 #2709 / #2727）。
+# 根因：build_previous_round 两个引擎的输出都认，找到的上一轮既计轮次也当增量基准；配上 REVIEW.md §5 第 2、4 条，拿另一引擎的记录当基准时新引擎对旧代码判不了 fail，零增量时只剩沿用 pass（#2696 r3）。
+# 改法：轮次计数照旧不分引擎（approvals #36）；增量基准只取本次引擎的同类型上一轮（RUN 下与 attempts/<n>/），只有另一引擎的轮时全量；
+#   零增量（上一轮头是 HEAD 的祖先、git diff --name-only 为空、无未跟踪文件）全量，变基后照旧增量；新增 --full 强制本轮全量、照常计轮次；
+#   第 2 轮起全量时提示词写明 This review round: N 与全量原因；日志一行写原因；meta 记 review_scope（incremental / full）、full_reason、previous_output。
+# 与新规则冲突的既有用例照实改，PR 里逐条列改前 / 改后与理由。工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现；Codex general 评审；按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/claude-run.test.ts'
+  - 'tools/agent/meta.ts'
+  - 'tools/agent/meta.test.ts'
+  - 'tools/agent/testing/**'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzw.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

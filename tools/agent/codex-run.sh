@@ -4,7 +4,7 @@
 #   codex-run.sh impl   <id> [--phase test|handover] [--worktree <dir>] [--timeout-min <n>]
 #                            [--dry-run]
 #   codex-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
-#                            [--base <ref>] [--timeout-min <n>] [--dry-run]
+#                            [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
 #   codex-run.sh selfcheck
 #
 # Exit codes: 0 usable output | 10 no usable output | 11 model capacity error |
@@ -76,7 +76,10 @@ case "${AGENT_ENGINE:-}" in
     exit 2
     ;;
 esac
-# Output names of both engines: an earlier review of the other engine is archived as well.
+# Output names of both engines: an earlier review of the other engine is archived as well, and
+# counted as a round (approvals #36, which is about counting only); only this engine's own
+# (REVIEW_OUT_NAME) is the baseline of an incremental review (D10-896, D10-940;
+# build_previous_round).
 REVIEW_OUT_NAMES='review-codex.json review-claude-independent.json'
 IMPL_TIMEOUT_MIN=30   # 规划/11 §2.2: hard timeout, implementation
 REVIEW_TIMEOUT_MIN=15 # 规划/11 §2.2: hard timeout, review
@@ -94,9 +97,16 @@ PREV_HEAD=''
 WT_ARG=''
 REVIEW_TYPE=''
 REVIEW_EFFORT=''
+# Review scope of this round (build_previous_round): full or incremental, why a full review
+# (first-round, other-engine, unusable-previous, no-change or flag) and the baseline output.
+REVIEW_SCOPE=''
+FULL_REASON=''
+PREV_OUTPUT=''
 BASE_ARG=''
 TIMEOUT_MIN=''
 DRY_RUN=0
+# --full (review only, D10-940): this round reviews the whole change, whatever the earlier rounds.
+FULL=0
 # CT-06zzzp: a refusal gives back the caller's round only once the arguments are parsed (task id,
 # mode, phase, --dry-run known) and the trusted root is resolved.
 ARGS_PARSED=0
@@ -113,8 +123,10 @@ print_usage() {
     cat <<'EOF'
 usage: claude-run.sh impl   <id> [--phase test] [--worktree <dir>] [--timeout-min <n>] [--dry-run]
        claude-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
-                                 [--base <ref>] [--timeout-min <n>] [--dry-run]
+                                 [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
        claude-run.sh selfcheck
+--full (review only): review the whole change this round, with no previous round as baseline;
+       the round still counts
 env:   CLAUDE_INDEPENDENT_CONFIG_DIR  Claude configuration directory (the account) of the fresh
                                       context, passed as CLAUDE_CONFIG_DIR; unset: the current one
 exit:  0 usable output | 10 no usable output | 11 model capacity or usage limit
@@ -126,8 +138,10 @@ EOF
 usage: codex-run.sh impl   <id> [--phase test|handover] [--worktree <dir>] [--timeout-min <n>]
                                 [--dry-run]
        codex-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
-                                [--base <ref>] [--timeout-min <n>] [--dry-run]
+                                [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
        codex-run.sh selfcheck
+--full (review only): review the whole change this round, with no previous round as baseline;
+       the round still counts (not passed to codex)
 env:   CODEX_REVIEW_EFFORT  review reasoning effort: minimal|low|medium|high|xhigh (default medium;
                             change only when the owner decides otherwise; impl stays high)
 exit:  0 usable output | 10 no usable output | 11 model capacity | 12 position assertion failed
@@ -251,6 +265,11 @@ parse_args() {
         DRY_RUN=1
         shift
         ;;
+      --full)
+        # This wrapper's own switch (D10-940): never passed to codex.
+        FULL=1
+        shift
+        ;;
       *)
         check_forbidden "$opt"
         fail_usage "unknown argument: $opt (arguments are not passed through to codex)"
@@ -261,6 +280,7 @@ parse_args() {
   if [ "$MODE" = impl ]; then
     [ -z "$REVIEW_TYPE" ] || fail_usage "--review-type applies to review only"
     [ -z "$BASE_ARG" ] || fail_usage "--base applies to review only"
+    [ "$FULL" = 0 ] || fail_usage "--full applies to review only"
     case "$PHASE" in
       '') PHASE=test ;;
       test | handover | impl) ;;
@@ -777,7 +797,9 @@ position_changes() {
 }
 
 # Moves the outputs of the previous call of this mode to RUN/attempts/<n>/ and guarantees that
-# no stale `-o` file is left (规划/11 §2.4: 调用前先删旧的 -o 文件).
+# no stale `-o` file is left (规划/11 §2.4: 调用前先删旧的 -o 文件). The baseline of an
+# incremental review (PREV_OUTPUT) moved here is followed to its new place, so that meta.json
+# names where it is kept, never the path this call's own output is written to.
 archive_previous() {
   local n=0 d name dest
   if [ -f "$WORK/pgid" ]; then
@@ -806,6 +828,7 @@ archive_previous() {
     if [ -e "$RUN/$name" ]; then
       mkdir -p "$dest"
       mv "$RUN/$name" "$dest/$name"
+      if [ "$PREV_OUTPUT" = "$RUN/$name" ]; then PREV_OUTPUT="$dest/$name"; fi
     fi
   done
   if [ -f "$RUN/meta.$MODE.json" ]; then
@@ -976,35 +999,77 @@ say("ok");
 ' "$1" "$2" "$REVIEW_TYPE" "$RUN/$3" 2>/dev/null || printf 'pairing check failed\n'
 }
 
-# Incremental review (REVIEW.md, CT-06x): from the second round on, the previous review output of
-# the same review type and the head commit it reviewed are given to the reviewer as data. Looked
-# up before archive_previous moves anything, and only from an output and a meta of one and the
-# same call (review_output_paired): RUN/<output> with RUN/meta.review.json, else the highest
-# RUN/attempts/<n>/ holding an <output> and its meta.json, <output> being review-codex.json or
-# review-claude-independent.json (approvals #36: either engine's round counts). Other files in RUN
-# (numbered review-codex*-r<N>.json copies a caller may keep) are never paired with a meta.
-# Sets PREV_BLOCK (empty on the first round or when the previous round cannot be read; a log
-# line says which).
+# A full review from round 2 on (CT-06zzzo r1 S2, ported by CT-06zzzw): there is no baseline, so
+# no `Previous review round` block, but the prompt still says which round this is and why the
+# whole change is reviewed: REVIEW.md §5 rule 5 (三轮未过) counts the rounds of a review type
+# whatever their scope. Round 1 gets no such block. Arguments: this round, the earlier usable
+# outputs found (of either engine), why (one line, data). Sets PREV_BLOCK.
+full_review_round_block() {
+  PREV_BLOCK="
+
+### Review round (data; full review, no previous round as baseline)
+
+- This review round: $1 (earlier usable $REVIEW_TYPE outputs found: $2, of either engine)
+- Scope of this round: full review of the whole change (the diff to review above), as in round 1 (REVIEW.md §5 rule 1); the round number still counts for rule 5
+- Why no incremental review: $3"
+}
+
+# Incremental review (REVIEW.md, CT-06x; CT-06zzzw, D10-896 / D10-940): from the second round on,
+# the previous review output of the same review type and the head commit it reviewed are given to
+# the reviewer as data. Looked up before archive_previous moves anything, and only from an output
+# and a meta of one and the same call (review_output_paired): RUN/<output> with
+# RUN/meta.review.json, and RUN/attempts/<n>/<output> with its meta.json, <output> being
+# review-codex.json or review-claude-independent.json. Other files in RUN (numbered
+# review-codex*-r<N>.json copies a caller may keep) are never paired with a meta.
+#   Rounds: every paired output of either engine counts (approvals #36: the round count does not
+#     tell the engines apart). That rule is about counting only.
+#   Baseline: only this engine's own output (REVIEW_OUT_NAME), RUN's when it holds one, else the
+#     highest attempt of this engine (D10-896, D10-940). Why: from the second round on only the
+#     increment is reviewed (REVIEW.md §5 rule 2) and new findings on code the increment did not
+#     touch are S2 at most (rule 4), so an increment reviewed on another engine's baseline would
+#     leave the code that engine passed unreviewed by this one. With rounds of the other engine
+#     only, the whole change is reviewed.
+#   No change since that baseline (its head is HEAD or an ancestor of it, `git diff --name-only`
+#     against it is empty, no untracked file in the list the prompt shows): a full review, any
+#     review type, since carrying the previous verdict over is no review (D10-896, D10-940).
+#     After a rebase (the head is no ancestor) the increment also holds main changes and stays
+#     incremental, whether or not a file differs.
+#   --full (FULL=1, D10-940): a full review whatever the earlier rounds; the round still counts,
+#     and as this engine's output it is the baseline of the next round.
+# $1: the untracked files the prompt lists (build_review_prompt). Sets PREV_BLOCK (the `Previous
+# review round` block of an incremental review; for a full review from round 2 on the `Review
+# round` block of full_review_round_block; empty in round 1), PREV_HEAD and PREV_OUTPUT (the
+# baseline's head and output, empty for a full review; archive_previous follows PREV_OUTPUT when
+# it moves the file), REVIEW_SCOPE (full or incremental) and FULL_REASON (for a full review:
+# flag, which wins over every other reason, first-round, other-engine, unusable-previous or
+# no-change; empty for an incremental one). Every full review logs one line why, with its round.
 build_previous_round() {
+  local untracked="$1"
   PREV_BLOCK=''
   PREV_HEAD=''
-  local prev_json='' prev_meta='' d name best=0 rounds=0 facts h why out
-  # approvals #36: the previous round may be either engine's output (REVIEW_OUT_NAMES).
+  PREV_OUTPUT=''
+  REVIEW_SCOPE=full
+  FULL_REASON=''
+  local prev_json='' prev_meta='' run_out='' d name best=-1 rounds=0 facts h why out
+  # RUN holds the output of the latest review call, of either engine.
   for out in $REVIEW_OUT_NAMES; do
-    [ -z "$prev_json" ] || break
+    [ -z "$run_out" ] || break
     if [ -s "$RUN/$out" ] && [ -s "$RUN/meta.review.json" ]; then
       why="$(review_output_paired "$RUN/$out" "$RUN/meta.review.json" "$out")"
       if [ "$why" = ok ]; then
-        prev_json="$RUN/$out"
-        prev_meta="$RUN/meta.review.json"
+        run_out="$out"
         rounds=1
+        if [ "$out" = "$REVIEW_OUT_NAME" ]; then
+          prev_json="$RUN/$out"
+          prev_meta="$RUN/meta.review.json"
+        fi
       else
         log "review: $RUN/$out is not used as a previous $REVIEW_TYPE round ($why)"
       fi
     fi
   done
-  # Earlier usable outputs of this review type in attempts/ (counted for the round number; the
-  # highest is the previous round when RUN holds none).
+  # Earlier usable outputs of this review type in attempts/: each counts for the round number;
+  # the highest of this engine is the baseline when RUN holds none of this engine.
   for d in "$RUN/attempts"/*; do
     [ -s "$d/meta.json" ] || continue
     name="$(basename "$d")"
@@ -1015,43 +1080,72 @@ build_previous_round() {
       [ -s "$d/$out" ] || continue
       [ "$(review_output_paired "$d/$out" "$d/meta.json" "$out")" = ok ] || continue
       rounds=$((rounds + 1))
-      if [ "$prev_meta" != "$RUN/meta.review.json" ] && [ "$((10#$name))" -gt "$best" ]; then
+      if [ "$out" = "$REVIEW_OUT_NAME" ] && [ "$prev_meta" != "$RUN/meta.review.json" ] &&
+        [ "$((10#$name))" -gt "$best" ]; then
         best="$((10#$name))"
         prev_json="$d/$out"
         prev_meta="$d/meta.json"
       fi
     done
   done
-  if [ -z "$prev_json" ]; then
+  local round=$((rounds + 1))
+  if [ "$FULL" = 1 ]; then
+    FULL_REASON=flag
+    log "review: --full given: no previous $REVIEW_TYPE round is the baseline (D10-940); full review (round $round)"
+    if [ "$rounds" -gt 0 ]; then
+      full_review_round_block "$round" "$rounds" "the caller passed --full, which makes this round a full review whatever the earlier rounds (D10-940)"
+    fi
+    return 0
+  fi
+  if [ "$rounds" = 0 ]; then
+    FULL_REASON=first-round
     log "review: no previous $REVIEW_TYPE round of $TASK in $RUN, full review (round 1)"
+    return 0
+  fi
+  if [ -z "$prev_json" ]; then
+    FULL_REASON=other-engine
+    log "review: the earlier $REVIEW_TYPE rounds of $TASK ($rounds) are of the other engine only, never a baseline of $AGENT_ENGINE (D10-896, D10-940); full review (round $round)"
+    full_review_round_block "$round" "$rounds" "the earlier usable $REVIEW_TYPE outputs are all of the other engine, and a round of the other engine is never the baseline of an incremental review (D10-896, D10-940)"
     return 0
   fi
   facts="$(review_meta_facts "$prev_meta")"
   h="$(printf '%s\n' "$facts" | sed -n 2p | tr -cd '0-9a-f')"
   if [ "${#h}" -ne 40 ] || ! git -C "$WT_REAL" cat-file -e "$h^{commit}" 2>/dev/null; then
-    log "review: previous head in $prev_meta is missing or not a commit in the worktree; full review"
+    FULL_REASON=unusable-previous
+    log "review: previous head in $prev_meta is missing or not a commit in the worktree; full review (round $round)"
+    full_review_round_block "$round" "$rounds" "the previous round of this engine cannot be the baseline: the head commit it reviewed is missing or not a commit in the worktree"
     return 0
   fi
   if ! node "$SELF_DIR/meta.ts" get --file "$prev_json" verdict >/dev/null 2>&1; then
-    log "review: previous review output $prev_json is not readable JSON; full review"
+    FULL_REASON=unusable-previous
+    log "review: previous review output $prev_json is not readable JSON; full review (round $round)"
+    full_review_round_block "$round" "$rounds" "the previous round of this engine cannot be the baseline: its review output is not readable JSON"
     return 0
   fi
   local ancestry='yes' since prev_text
   git -C "$WT_REAL" merge-base --is-ancestor "$h" HEAD 2>/dev/null || ancestry='no (rebased: the increment also holds main changes; judge by content)'
   since="$(git -C "$WT_REAL" -c core.quotepath=false diff --name-only "$h" -- || true)"
+  if [ "$ancestry" = yes ] && [ -z "$since" ] && [ -z "$untracked" ]; then
+    FULL_REASON=no-change
+    log "review: no change since the previous round $prev_json (head $h, an ancestor of HEAD; nothing changed or untracked): its verdict is not carried over (D10-896, D10-940); full review (round $round)"
+    full_review_round_block "$round" "$rounds" "no change since the previous round of this engine (its head $h is HEAD or an ancestor of it, and nothing is changed or untracked since): carrying its verdict over would be no review (D10-896, D10-940)"
+    return 0
+  fi
   prev_text="$(cat "$prev_json")"
   PREV_HEAD="$h"
+  PREV_OUTPUT="$prev_json"
+  REVIEW_SCOPE=incremental
   # claude-independent has no shell: the increment is written to its context directory.
   local increment="\`git diff $h\` in the working directory, plus the untracked files above"
   if [ "$AGENT_ENGINE" = claude-independent ]; then
     increment="git-diff-since-previous.patch in the context directory (\`git diff $h\`), plus the untracked files above"
   fi
-  log "review: round $((rounds + 1)) of $REVIEW_TYPE, previous output $prev_json, previous head $h"
+  log "review: round $round of $REVIEW_TYPE, incremental, previous output $prev_json, previous head $h"
   PREV_BLOCK="
 
 ### Previous review round (data; incremental rules of REVIEW.md apply)
 
-- This review round: $((rounds + 1)) (earlier usable $REVIEW_TYPE outputs found: $rounds)
+- This review round: $round (earlier usable $REVIEW_TYPE outputs found: $rounds)
 - Head commit at the previous round: $h (from $prev_meta)
 - Previous head is an ancestor of the current HEAD: $ancestry
 - Increment to review: $increment
@@ -1100,7 +1194,8 @@ $(cat "$guide")
 # (build_review_guide, when the trusted root has one) + a context block. The context
 # block is this wrapper's addition to the §2.4 command: task id, base ref, changed files and the
 # task brief, so that the read-only reviewer knows what to compare against; from the second
-# round on also the previous round (build_previous_round).
+# round on also the previous round, or for a full review the round number and why
+# (build_previous_round).
 build_review_prompt() {
   local prompt_file="$TRUSTED/tools/agent/prompts/review-$REVIEW_TYPE.md"
   [ -s "$prompt_file" ] || refuse_start "review prompt missing in the trusted root: $prompt_file"
@@ -1123,7 +1218,9 @@ build_review_prompt() {
     paths_line="
 - Allowed paths (the task's paths; the rule-test locations are added): ${TASK_PATHS:-(none listed)}"
   fi
-  build_previous_round
+  # The same untracked list the prompt shows: an untracked file is a change too, so a round with
+  # one is never "no change since the previous round" (D10-896).
+  build_previous_round "$untracked"
   build_review_guide
   PROMPT="$(cat "$prompt_file")${GUIDE_BLOCK}
 
@@ -1294,6 +1391,15 @@ run_task() {
   fi
   if [ "$MODE" = review ]; then
     meta_args+=(--str "review_type=$REVIEW_TYPE" --str "base=$BASE_SHA" --str "risk=$TASK_RISK")
+    # CT-06zzzw (D10-896, D10-940): the scope build_previous_round decided before the call, why a
+    # full review, and the baseline output where archive_previous keeps it (null for a full
+    # review), so that the round can be checked later. All three keys, a null written out.
+    meta_args+=(--str "review_scope=$REVIEW_SCOPE")
+    if [ "$REVIEW_SCOPE" = incremental ]; then
+      meta_args+=(--null full_reason --str "previous_output=$PREV_OUTPUT")
+    else
+      meta_args+=(--str "full_reason=$FULL_REASON" --null previous_output)
+    fi
   else
     # Which counter the call uses (tools/ops/state.ts callKind): test, handover or impl.
     meta_args+=(--str "phase=$PHASE")

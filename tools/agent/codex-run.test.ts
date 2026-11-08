@@ -123,6 +123,26 @@ function decodeDryRun(stdout: string): string[] {
     .map((line) => line.replace(/\\(\\|n)/g, (_, c: string) => (c === 'n' ? '\n' : '\\')));
 }
 
+/** The first line the wrapper logged to stderr that holds every one of `words`, if any. */
+function logLine(stderr: string, ...words: string[]): string | undefined {
+  return stderr.split('\n').find((line) => words.every((word) => line.includes(word)));
+}
+
+/**
+ * CT-06zzzw (from CT-06zzzo r1 S2): what the prompt of a full review from round 2 on lacks of
+ * "which round this is and why the whole change is reviewed" (empty when nothing is missing). The
+ * block that says so and its title are the wrapper's choice; only the round line and the keywords
+ * are fixed here.
+ */
+function missingRoundFacts(prompt: string, round: number, reason: string): string[] {
+  const facts: [string, boolean][] = [
+    [`This review round: ${round}`, new RegExp(`This review round: ${round}(?!\\d)`).test(prompt)],
+    ['full review', prompt.includes('full review')],
+    [reason, prompt.includes(reason)],
+  ];
+  return facts.filter(([, found]) => !found).map(([fact]) => fact);
+}
+
 it('impl: usable output gives exit 0, a complete meta.json and a usage record', LONG, () => {
   const fx = fixture('ok');
   const res = codexRun(fx, ['impl', TASK]);
@@ -298,6 +318,9 @@ it(
     // Archived into attempts/ by the next call, round 1 is still found there.
     const run2 = codexRun(fx, review);
     expect(run2.status, run2.stderr).toBe(0);
+    // CT-06zzzw: a change since round 2, so that the next rounds have an increment (no change
+    // since the previous round is a full review now).
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 3;\n');
     const third = codexRun(fx, [...review, '--dry-run']);
     expect(promptOf(third)).toContain(
       '- This review round: 3 (earlier usable general outputs found: 2)',
@@ -1258,47 +1281,486 @@ it(
 );
 
 it(
-  '[CT-06x, approvals 36] a previous round of either engine is the baseline; the independent Claude reads the increment from its context directory',
+  "[CT-06zzzw, approvals 36] the baseline is the same engine's previous round, the rounds of both engines count, and the independent Claude reads its increment from its context directory",
   LONG,
   () => {
     const fx = fixture('review-prev-engines');
+    // The fake claude only: a claude-run.sh call must never reach the real binary.
     fx.env['COULI_CLAUDE_BIN'] = FAKE_CLAUDE;
     writeFileSync(join(fx.trusted, 'REVIEW.md'), '# review guide (fixture)\n');
     writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
     const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
     const claudeRun = (args: readonly string[]) => runScript('claude-run.sh', args, fx.env);
-    // Round 1 by Codex.
+    const promptSeen = (): string => observedArgv(fx).at(-1) ?? '';
+    const metaNow = (): Record<string, unknown> => readJson(join(fx.run, 'meta.review.json'));
+    // Round 1 by Codex, then a fix.
     const firstHead = gitIn(fx.worktree, ['rev-parse', 'HEAD']);
     const run1 = codexRun(fx, review);
     expect(run1.status, run1.stderr).toBe(0);
     gitIn(fx.worktree, ['add', '-A']);
     gitIn(fx.worktree, ['commit', '-q', '-m', 'fix']);
+    const secondHead = gitIn(fx.worktree, ['rev-parse', 'HEAD']);
     writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 3;\n');
-    // Round 2 by the independent Claude: Codex's round 1 is its baseline, and with no shell the
-    // increment since that head is a file of its context directory.
+
+    // Round 2 by the independent Claude: it has no round of its own, so it reviews the whole
+    // change (D10-914: on another engine's baseline it could only note S2 on code it never
+    // reviewed). The round number still counts Codex's round (approvals 36).
     const run2 = claudeRun(review);
     expect(run2.status, run2.stderr).toBe(0);
-    const prompt = observedArgv(fx).at(-1) ?? '';
-    expect(prompt).toContain('- This review round: 2 (earlier usable general outputs found: 1)');
-    expect(prompt).toContain(`- Head commit at the previous round: ${firstHead}`);
-    expect(prompt).toContain('git-diff-since-previous.patch in the context directory');
-    expect(prompt).toContain('<<<REVIEW.md (trusted root) begin>>>');
+    expect(promptSeen()).not.toContain('### Previous review round');
+    expect(promptSeen()).not.toContain('review-codex.json');
+    expect(promptSeen()).toContain('<<<REVIEW.md (trusted root) begin>>>');
+    expect(
+      logLine(run2.stderr, 'other engine', 'full review (round 2)'),
+      run2.stderr,
+    ).toBeDefined();
+    // The prompt itself says which round this is and why the whole change is reviewed.
+    expect(missingRoundFacts(promptSeen(), 2, 'other engine')).toEqual([]);
+    expect(metaNow()).toMatchObject({
+      engine: 'claude-independent',
+      review_scope: 'full',
+      full_reason: 'other-engine',
+      previous_output: null,
+    });
+
+    // Round 3 by Codex: its own round 1 (archived to attempts/1) is the baseline, and the
+    // independent Claude's round 2 is counted.
+    const run3 = codexRun(fx, review);
+    expect(run3.status, run3.stderr).toBe(0);
+    const codexBaseline = join(fx.run, 'attempts', '1', 'review-codex.json');
+    const prompt3 = promptSeen();
+    expect(prompt3).toContain('- This review round: 3 (earlier usable general outputs found: 2)');
+    expect(prompt3).toContain(
+      `- Head commit at the previous round: ${firstHead} (from ${join(fx.run, 'attempts', '1', 'meta.json')})`,
+    );
+    expect(prompt3).toContain(`- Previous review output: ${codexBaseline}`);
+    expect(prompt3).toContain(`- Increment to review: \`git diff ${firstHead}\``);
+    expect(prompt3).not.toContain('review-claude-independent.json');
+    expect(metaNow()).toMatchObject({
+      engine: 'codex',
+      review_scope: 'incremental',
+      full_reason: null,
+      previous_output: codexBaseline,
+    });
+
+    // Round 4 by the independent Claude: its own round 2 (archived to attempts/2) is the
+    // baseline; with no shell, the increment since that head is a file of its context directory.
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 4;\n');
+    const run4 = claudeRun(review);
+    expect(run4.status, run4.stderr).toBe(0);
+    const claudeBaseline = join(fx.run, 'attempts', '2', 'review-claude-independent.json');
+    const prompt4 = promptSeen();
+    expect(prompt4).toContain('- This review round: 4 (earlier usable general outputs found: 3)');
+    expect(prompt4).toContain(`- Head commit at the previous round: ${secondHead}`);
+    expect(prompt4).toContain(`- Previous review output: ${claudeBaseline}`);
+    expect(prompt4).toContain('git-diff-since-previous.patch in the context directory');
     const patch = readFileSync(
       join(fx.run, 'wrapper-review', 'context', 'git-diff-since-previous.patch'),
       'utf8',
     );
-    expect(patch).toContain('+export const a = 3;');
-    // Round 3 by Codex again: the independent Claude's round 2 (archived) counts as well.
-    const third = codexRun(fx, [...review, '--dry-run']);
-    expect(third.status, third.stderr).toBe(0);
-    const thirdPrompt = decodeDryRun(third.stdout).at(-1) ?? '';
-    expect(thirdPrompt).toContain(
-      '- This review round: 3 (earlier usable general outputs found: 2)',
-    );
-    expect(thirdPrompt).toContain('review-claude-independent.json');
-    expect(thirdPrompt).toContain('- Increment to review: `git diff ');
+    expect(patch).toContain('+export const a = 4;');
+    expect(metaNow()).toMatchObject({
+      engine: 'claude-independent',
+      review_scope: 'incremental',
+      full_reason: null,
+      previous_output: claudeBaseline,
+    });
   },
 );
+
+it(
+  '[CT-06zzzw] Codex after rounds of the independent Claude only: no previous-round block but a full review whose prompt still names the round and why, and a log line says why',
+  LONG,
+  () => {
+    const fx = fixture('review-other-engine');
+    // The fake claude only: a claude-run.sh call must never reach the real binary.
+    fx.env['COULI_CLAUDE_BIN'] = FAKE_CLAUDE;
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    const promptOf = (res: { stdout: string }): string => decodeDryRun(res.stdout).at(-1) ?? '';
+    // Round 1 by the independent Claude (only review-claude-independent.json in the run
+    // directory), then a fix: there is an increment, so only the engine of the previous round
+    // decides.
+    const run1 = runScript('claude-run.sh', review, fx.env);
+    expect(run1.status, run1.stderr).toBe(0);
+    expect(existsSync(join(fx.run, 'review-claude-independent.json'))).toBe(true);
+    expect(existsSync(join(fx.run, 'review-codex.json'))).toBe(false);
+    // Round 1 (nothing earlier): the prompt stays as it was, without a round line.
+    expect(observedArgv(fx).at(-1) ?? '').not.toContain('This review round');
+    expect(readJson(join(fx.run, 'meta.review.json'))).toMatchObject({
+      engine: 'claude-independent',
+      review_scope: 'full',
+      full_reason: 'first-round',
+      previous_output: null,
+    });
+    gitIn(fx.worktree, ['add', '-A']);
+    gitIn(fx.worktree, ['commit', '-q', '-m', 'fix']);
+    const dry = codexRun(fx, [...review, '--dry-run']);
+    expect(dry.status, dry.stderr).toBe(0);
+    expect(promptOf(dry)).not.toContain('### Previous review round');
+    expect(promptOf(dry)).not.toContain('review-claude-independent.json');
+    expect(logLine(dry.stderr, 'other engine', 'full review (round 2)'), dry.stderr).toBeDefined();
+    // The prompt itself says which round this is (the other engine's round counted) and why the
+    // whole change is reviewed, so that a third round that still fails can be called out as such
+    // (REVIEW.md §5).
+    expect(missingRoundFacts(promptOf(dry), 2, 'other engine')).toEqual([]);
+    // A real call is recorded as a full review.
+    const run2 = codexRun(fx, review);
+    expect(run2.status, run2.stderr).toBe(0);
+    expect(readJson(join(fx.run, 'meta.review.json'))).toMatchObject({
+      engine: 'codex',
+      review_scope: 'full',
+      full_reason: 'other-engine',
+      previous_output: null,
+    });
+    // From then on Codex has a round of its own: after the next change it is the baseline, and
+    // the independent Claude's round 1 (archived) is still counted.
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 3;\n');
+    const next = codexRun(fx, [...review, '--dry-run']);
+    expect(next.status, next.stderr).toBe(0);
+    expect(promptOf(next)).toContain(
+      '- This review round: 3 (earlier usable general outputs found: 2)',
+    );
+    expect(promptOf(next)).toContain(
+      `- Previous review output: ${join(fx.run, 'review-codex.json')}`,
+    );
+    // Back to the content Codex's round 2 reviewed, nothing changed since its head: a full review
+    // of round 3 (the independent Claude's round 1 counted), and the prompt says so.
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    const unchanged = codexRun(fx, [...review, '--dry-run']);
+    expect(unchanged.status, unchanged.stderr).toBe(0);
+    const why = 'no change since the previous round';
+    expect(promptOf(unchanged)).not.toContain('### Previous review round');
+    expect(logLine(unchanged.stderr, why, 'full review (round 3)'), unchanged.stderr).toBeDefined();
+    expect(missingRoundFacts(promptOf(unchanged), 3, why)).toEqual([]);
+  },
+);
+
+it(
+  '[CT-06zzzw] no change since the previous round of the same engine is a full review whose prompt still names the round and why, for every review type; an untracked file is a change',
+  LONG,
+  () => {
+    const fx = fixture('review-zero-increment');
+    const general = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    const contract = ['review', TASK, '--review-type', 'contract', '--base', fx.baseSha];
+    const promptOf = (res: { stdout: string }): string => decodeDryRun(res.stdout).at(-1) ?? '';
+    const noChange = (res: { stderr: string }, round: number): string | undefined =>
+      logLine(res.stderr, 'no change since the previous round', `full review (round ${round})`);
+    // The prompt itself says which round this is and why the whole change is reviewed.
+    const missingInPrompt = (res: { stdout: string }, round: number): string[] =>
+      missingRoundFacts(promptOf(res), round, 'no change since the previous round');
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    gitIn(fx.worktree, ['add', '-A']);
+    gitIn(fx.worktree, ['commit', '-q', '-m', 'change']);
+    const run1 = codexRun(fx, general);
+    expect(run1.status, run1.stderr).toBe(0);
+    // The previous head is HEAD, nothing changed, nothing untracked: carrying the previous pass
+    // over is no review, so the whole change is reviewed again.
+    const same = codexRun(fx, [...general, '--dry-run']);
+    expect(same.status, same.stderr).toBe(0);
+    expect(promptOf(same)).not.toContain('### Previous review round');
+    expect(noChange(same, 2), same.stderr).toBeDefined();
+    expect(missingInPrompt(same, 2)).toEqual([]);
+    // The previous head an ancestor of HEAD (an empty commit on top), nothing changed: the same.
+    gitIn(fx.worktree, ['commit', '-q', '--allow-empty', '-m', 'empty']);
+    const ancestor = codexRun(fx, [...general, '--dry-run']);
+    expect(ancestor.status, ancestor.stderr).toBe(0);
+    expect(promptOf(ancestor)).not.toContain('### Previous review round');
+    expect(noChange(ancestor, 2), ancestor.stderr).toBeDefined();
+    expect(missingInPrompt(ancestor, 2)).toEqual([]);
+    // An untracked file is a change: incremental as before.
+    writeFileSync(join(fx.worktree, 'src', 'b.ts'), 'export const b = 1;\n');
+    const untracked = codexRun(fx, [...general, '--dry-run']);
+    expect(untracked.status, untracked.stderr).toBe(0);
+    expect(promptOf(untracked)).toContain(
+      '### Previous review round (data; incremental rules of REVIEW.md apply)',
+    );
+    expect(promptOf(untracked)).toContain(
+      '- This review round: 2 (earlier usable general outputs found: 1)',
+    );
+    expect(untracked.stderr).not.toContain('no change since the previous round');
+    rmSync(join(fx.worktree, 'src', 'b.ts'));
+    // A real call with no change is recorded as a full review.
+    const run2 = codexRun(fx, general);
+    expect(run2.status, run2.stderr).toBe(0);
+    expect(readJson(join(fx.run, 'meta.review.json'))).toMatchObject({
+      review_type: 'general',
+      review_scope: 'full',
+      full_reason: 'no-change',
+      previous_output: null,
+    });
+    // Every review type (D10-896 ②): a contract round with no change since is a full review too.
+    const contract1 = codexRun(fx, contract);
+    expect(contract1.status, contract1.stderr).toBe(0);
+    // The first contract round (nothing earlier of that type): its prompt stays as it was,
+    // without a round line.
+    expect(observedArgv(fx).at(-1) ?? '').not.toContain('This review round');
+    const contract2 = codexRun(fx, [...contract, '--dry-run']);
+    expect(contract2.status, contract2.stderr).toBe(0);
+    expect(promptOf(contract2)).not.toContain('### Previous review round');
+    expect(noChange(contract2, 2), contract2.stderr).toBeDefined();
+    expect(missingInPrompt(contract2, 2)).toEqual([]);
+    const contractReal = codexRun(fx, contract);
+    expect(contractReal.status, contractReal.stderr).toBe(0);
+    expect(readJson(join(fx.run, 'meta.review.json'))).toMatchObject({
+      review_type: 'contract',
+      review_scope: 'full',
+      full_reason: 'no-change',
+      previous_output: null,
+    });
+    // Two usable general rounds, and a third with no change since the second: a full review, and
+    // the prompt says round 3, so that a third round that still fails is called out (REVIEW.md
+    // §5: 三轮未过，建议重新考虑实现方案).
+    const third = codexRun(fx, [...general, '--dry-run']);
+    expect(third.status, third.stderr).toBe(0);
+    expect(promptOf(third)).not.toContain('### Previous review round');
+    expect(noChange(third, 3), third.stderr).toBeDefined();
+    expect(missingInPrompt(third, 3)).toEqual([]);
+  },
+);
+
+it(
+  '[CT-06zzzw] after a rebase the previous head is no ancestor of HEAD: incremental as before, even when no file changed',
+  LONG,
+  () => {
+    const fx = fixture('review-rebased');
+    const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    gitIn(fx.worktree, ['add', '-A']);
+    gitIn(fx.worktree, ['commit', '-q', '-m', 'change']);
+    const reviewed = gitIn(fx.worktree, ['rev-parse', 'HEAD']);
+    const run1 = codexRun(fx, review);
+    expect(run1.status, run1.stderr).toBe(0);
+    // The same tree on a rewritten commit: nothing differs from the previous head, but that head
+    // is no longer on the branch (the increment may hold main changes: judged by content).
+    gitIn(fx.worktree, ['commit', '-q', '--amend', '-m', 'change (rebased)']);
+    expect(gitIn(fx.worktree, ['rev-parse', 'HEAD'])).not.toBe(reviewed);
+    expect(gitIn(fx.worktree, ['diff', '--name-only', reviewed])).toBe('');
+    const dry = codexRun(fx, [...review, '--dry-run']);
+    expect(dry.status, dry.stderr).toBe(0);
+    const prompt = decodeDryRun(dry.stdout).at(-1) ?? '';
+    expect(prompt).toContain(
+      '### Previous review round (data; incremental rules of REVIEW.md apply)',
+    );
+    expect(prompt).toContain(`- Head commit at the previous round: ${reviewed}`);
+    expect(prompt).toContain('- Previous head is an ancestor of the current HEAD: no (rebased');
+    expect(dry.stderr).not.toContain('no change since the previous round');
+    const run2 = codexRun(fx, review);
+    expect(run2.status, run2.stderr).toBe(0);
+    expect(readJson(join(fx.run, 'meta.review.json'))).toMatchObject({
+      review_scope: 'incremental',
+      full_reason: null,
+      previous_output: join(fx.run, 'attempts', '1', 'review-codex.json'),
+    });
+  },
+);
+
+it(
+  '[CT-06zzzw] meta.json of a review records review_scope, full_reason and previous_output: full with its reason and null, or incremental, null and where the baseline output is kept',
+  LONG,
+  () => {
+    const fx = fixture('review-scope-meta');
+    const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    const metaFile = join(fx.run, 'meta.review.json');
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    // Round 1: nothing earlier, a full review. Its output is told apart from round 2's.
+    const firstOutput = join(fx.root, 'round-1-review.json');
+    writeFileSync(
+      firstOutput,
+      JSON.stringify({
+        verdict: 'pass',
+        summary: 'round 1 review',
+        findings: [],
+        out_of_scope: [],
+        checklist: [],
+      }),
+    );
+    const run1 = codexRun(fx, review, { FAKE_CODEX_OUTPUT_FILE: firstOutput });
+    expect(run1.status, run1.stderr).toBe(0);
+    const full1 = { review_scope: 'full', full_reason: 'first-round', previous_output: null };
+    expect(readJson(metaFile)).toMatchObject(full1);
+    expect(readJson(join(fx.run, 'meta.json'))).toMatchObject(full1);
+    // Round 2 after a fix: incremental. previous_output names round 1's output where it is kept
+    // once this call has archived it (attempts/1), never this call's own output file, so that the
+    // baseline of the round can still be looked up afterwards.
+    gitIn(fx.worktree, ['add', '-A']);
+    gitIn(fx.worktree, ['commit', '-q', '-m', 'fix']);
+    const run2 = codexRun(fx, review);
+    expect(run2.status, run2.stderr).toBe(0);
+    const meta2 = readJson(metaFile);
+    expect(meta2).toMatchObject({
+      review_scope: 'incremental',
+      full_reason: null,
+      previous_output: join(fx.run, 'attempts', '1', 'review-codex.json'),
+    });
+    // The keys are present with a null value, not left out.
+    expect(Object.keys(meta2)).toEqual(
+      expect.arrayContaining(['review_scope', 'full_reason', 'previous_output']),
+    );
+    expect(meta2['previous_output']).not.toBe(meta2['output_file']);
+    expect(readJson(String(meta2['previous_output']))['summary']).toBe('round 1 review');
+    // A previous round that cannot be used (its head is no commit) is a full review: full, its
+    // own reason, and null.
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 3;\n');
+    writeFileSync(metaFile, `${JSON.stringify({ ...meta2, head_before: '0'.repeat(40) })}\n`);
+    rmSync(join(fx.run, 'attempts'), { recursive: true, force: true });
+    const run3 = codexRun(fx, review);
+    expect(run3.status, run3.stderr).toBe(0);
+    expect(run3.stderr).toContain('missing or not a commit in the worktree; full review');
+    expect(readJson(metaFile)).toMatchObject({
+      review_scope: 'full',
+      full_reason: 'unusable-previous',
+      previous_output: null,
+    });
+    // An implementation call records none of the three.
+    const impl = codexRun(fx, ['impl', TASK]);
+    expect(impl.status, impl.stderr).toBe(0);
+    const implMeta = readJson(join(fx.run, 'meta.impl.json'));
+    for (const key of ['review_scope', 'full_reason', 'previous_output']) {
+      expect(implMeta, key).not.toHaveProperty(key);
+    }
+  },
+);
+
+it(
+  '[CT-06zzzw] --full forces a full review even with a same-engine previous round; the log, the prompt and meta.json say why; the round still counts and is the next baseline',
+  LONG,
+  () => {
+    const fx = fixture('review-full-flag');
+    const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    const promptOf = (res: { stdout: string }): string => decodeDryRun(res.stdout).at(-1) ?? '';
+    const metaFile = join(fx.run, 'meta.review.json');
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    // Round 1 without --full; then a fix, so that an incremental round 2 would be possible.
+    const run1 = codexRun(fx, review);
+    expect(run1.status, run1.stderr).toBe(0);
+    gitIn(fx.worktree, ['add', '-A']);
+    gitIn(fx.worktree, ['commit', '-q', '-m', 'fix']);
+    const plain = codexRun(fx, [...review, '--dry-run']);
+    expect(plain.status, plain.stderr).toBe(0);
+    expect(promptOf(plain)).toContain('### Previous review round');
+
+    // --full: no previous-round block, a log line and the prompt say round 2 and why.
+    const forced = codexRun(fx, [...review, '--full', '--dry-run']);
+    expect(forced.status, forced.stderr).toBe(0);
+    const prompt = promptOf(forced);
+    expect(prompt).not.toContain('### Previous review round');
+    expect(logLine(forced.stderr, '--full', 'full review (round 2)'), forced.stderr).toBeDefined();
+    expect(missingRoundFacts(prompt, 2, '--full')).toEqual([]);
+    // The switch is the wrapper's own: Codex's argv is the usual one, only the prompt differs.
+    expect(decodeDryRun(forced.stdout)).toEqual([FAKE_CODEX, ...expectedReviewArgv(fx, prompt)]);
+    // Its place among the options does not matter.
+    const placed = codexRun(fx, ['review', TASK, '--full', '--dry-run', ...review.slice(2)]);
+    expect(placed.status, placed.stderr).toBe(0);
+    expect(promptOf(placed)).toBe(prompt);
+
+    // A real call with --full is recorded as a full review for the flag.
+    const run2 = codexRun(fx, [...review, '--full']);
+    expect(run2.status, run2.stderr).toBe(0);
+    expect(logLine(run2.stderr, '--full', 'full review (round 2)'), run2.stderr).toBeDefined();
+    expect(missingRoundFacts(observedArgv(fx).at(-1) ?? '', 2, '--full')).toEqual([]);
+    expect(readJson(metaFile)).toMatchObject({
+      engine: 'codex',
+      review_scope: 'full',
+      full_reason: 'flag',
+      previous_output: null,
+    });
+    // It counts as a round and, being the same engine's, is the next round's baseline.
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 3;\n');
+    const next = codexRun(fx, [...review, '--dry-run']);
+    expect(next.status, next.stderr).toBe(0);
+    expect(promptOf(next)).toContain(
+      '- This review round: 3 (earlier usable general outputs found: 2)',
+    );
+    expect(promptOf(next)).toContain(
+      `- Previous review output: ${join(fx.run, 'review-codex.json')}`,
+    );
+    // --full on a first round: the flag is the recorded reason.
+    const contract = codexRun(fx, [
+      'review',
+      TASK,
+      '--review-type',
+      'contract',
+      '--base',
+      fx.baseSha,
+      '--full',
+    ]);
+    expect(contract.status, contract.stderr).toBe(0);
+    expect(readJson(metaFile)).toMatchObject({
+      review_type: 'contract',
+      review_scope: 'full',
+      full_reason: 'flag',
+      previous_output: null,
+    });
+  },
+);
+
+it(
+  '[CT-06zzzw] --full with --dry-run keeps the dry-run semantics: argv printed, nothing started, archived or recorded',
+  LONG,
+  () => {
+    const fx = fixture('review-full-dry');
+    const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    const run1 = codexRun(fx, review);
+    expect(run1.status, run1.stderr).toBe(0);
+    gitIn(fx.worktree, ['add', '-A']);
+    gitIn(fx.worktree, ['commit', '-q', '-m', 'fix']);
+    const argvBefore = readFileSync(join(fx.log, 'argv.nul'), 'utf8');
+    const metaBefore = readFileSync(join(fx.run, 'meta.review.json'), 'utf8');
+    const metaAllBefore = readFileSync(join(fx.run, 'meta.json'), 'utf8');
+    const outBefore = readFileSync(join(fx.run, 'review-codex.json'), 'utf8');
+    const dry = codexRun(fx, [...review, '--dry-run', '--full']);
+    expect(dry.status, dry.stderr).toBe(0);
+    const argv = decodeDryRun(dry.stdout);
+    expect(argv).toEqual([FAKE_CODEX, ...expectedReviewArgv(fx, argv.at(-1) ?? '')]);
+    expect(argv.at(-1) ?? '').not.toContain('### Previous review round');
+    expect(dry.stderr).toContain('dry run:');
+    // Nothing started, nothing archived, nothing recorded.
+    expect(readFileSync(join(fx.log, 'argv.nul'), 'utf8')).toBe(argvBefore);
+    expect(readFileSync(join(fx.run, 'meta.review.json'), 'utf8')).toBe(metaBefore);
+    expect(readFileSync(join(fx.run, 'meta.json'), 'utf8')).toBe(metaAllBefore);
+    expect(readFileSync(join(fx.run, 'review-codex.json'), 'utf8')).toBe(outBefore);
+    expect(existsSync(join(fx.run, 'attempts'))).toBe(false);
+    expect(existsSync(join(fx.run, 'review-events.jsonl'))).toBe(true);
+    // The round 1 call is still the previous round of a plain call afterwards.
+    const plain = codexRun(fx, [...review, '--dry-run']);
+    expect(plain.status, plain.stderr).toBe(0);
+    expect(decodeDryRun(plain.stdout).at(-1) ?? '').toContain(
+      '- This review round: 2 (earlier usable general outputs found: 1)',
+    );
+  },
+);
+
+it('[CT-06zzzw] --full applies to review only: impl --full is a usage error (exit 2)', LONG, () => {
+  const fx = fixture('impl-full');
+  for (const args of [
+    ['impl', TASK, '--full'],
+    ['impl', TASK, '--full', '--dry-run'],
+    ['impl', TASK, '--phase', 'test', '--full'],
+  ]) {
+    const res = codexRun(fx, args);
+    expect(res.status, args.join(' ')).toBe(2);
+    expect(res.stderr, args.join(' ')).toContain('--full');
+    expect(res.stdout, args.join(' ')).toBe('');
+  }
+  expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
+  expect(existsSync(join(fx.run, 'meta.json'))).toBe(false);
+  // The same impl call without --full is accepted, and review takes --full.
+  expect(codexRun(fx, ['impl', TASK, '--dry-run']).status).toBe(0);
+  writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+  const review = codexRun(fx, [
+    'review',
+    TASK,
+    '--review-type',
+    'general',
+    '--base',
+    fx.baseSha,
+    '--full',
+    '--dry-run',
+  ]);
+  expect(review.status, review.stderr).toBe(0);
+});
 
 // CT-06zzzp (FU-CODEX-RUN-REJECT-COUNT, D10-898): the caller bumps a round before it calls
 // codex-run.sh; a call refused before it starts (exit 2, no meta.json, so no settle) gives that

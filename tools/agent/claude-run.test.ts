@@ -16,6 +16,7 @@ import { afterEach, expect, it } from 'vitest';
 import {
   FAKE_CLAUDE,
   type Fixture,
+  gitIn,
   installLoggedState,
   makeFixture,
   observed,
@@ -625,5 +626,95 @@ it(
     expect(after(argv, '--engine')).toBe('claude-independent');
     expect(after(argv, '--call')).toBe(call);
     expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
+  },
+);
+
+/** The first line the wrapper logged to stderr that holds every one of `words`, if any. */
+function logLine(stderr: string, ...words: string[]): string | undefined {
+  return stderr.split('\n').find((line) => words.every((word) => line.includes(word)));
+}
+
+/** CT-06zzzw: the round line, `full review` and the reason a full review prompt lacks. */
+function missingRoundFacts(prompt: string, round: number, reason: string): string[] {
+  const facts: [string, boolean][] = [
+    [`This review round: ${round}`, new RegExp(`This review round: ${round}(?!\\d)`).test(prompt)],
+    ['full review', prompt.includes('full review')],
+    [reason, prompt.includes(reason)],
+  ];
+  return facts.filter(([, found]) => !found).map(([fact]) => fact);
+}
+
+it(
+  '[CT-06zzzw] claude-run.sh: no change since its own previous round is a full review, a change is incremental, --full forces a full review; impl --full is a usage error',
+  LONG,
+  () => {
+    const fx = fixture('review-scope');
+    ledger(fx, {});
+    const review = ['review', TASK, '--review-type', 'general', '--base', fx.baseSha];
+    const promptOf = (res: { stdout: string }): string => decodeDryRun(res.stdout).at(-1) ?? '';
+    const metaFile = join(fx.run, 'meta.review.json');
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    gitIn(fx.worktree, ['add', '-A']);
+    gitIn(fx.worktree, ['commit', '-q', '-m', 'change']);
+    // Round 1: nothing earlier.
+    const run1 = claudeRun(fx, review);
+    expect(run1.status, run1.stderr).toBe(0);
+    expect(readJson(metaFile)).toMatchObject({
+      engine: 'claude-independent',
+      review_scope: 'full',
+      full_reason: 'first-round',
+      previous_output: null,
+    });
+    // Nothing changed since its own round 1: a full review of round 2, and the prompt says why.
+    const why = 'no change since the previous round';
+    const same = claudeRun(fx, [...review, '--dry-run']);
+    expect(same.status, same.stderr).toBe(0);
+    expect(promptOf(same)).not.toContain('### Previous review round');
+    expect(logLine(same.stderr, why, 'full review (round 2)'), same.stderr).toBeDefined();
+    expect(missingRoundFacts(promptOf(same), 2, why)).toEqual([]);
+    // A change: incremental on its own round 1, the increment in its context directory.
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 3;\n');
+    const changed = claudeRun(fx, [...review, '--dry-run']);
+    expect(changed.status, changed.stderr).toBe(0);
+    expect(promptOf(changed)).toContain(
+      '- This review round: 2 (earlier usable general outputs found: 1)',
+    );
+    expect(promptOf(changed)).toContain(
+      `- Previous review output: ${join(fx.run, 'review-claude-independent.json')}`,
+    );
+    expect(promptOf(changed)).toContain('git-diff-since-previous.patch in the context directory');
+    // --full: a full review all the same, recorded for the flag; the round still counts.
+    const forced = claudeRun(fx, [...review, '--full']);
+    expect(forced.status, forced.stderr).toBe(0);
+    const prompt = observedArgv(fx).at(-1) ?? '';
+    expect(prompt).not.toContain('### Previous review round');
+    expect(logLine(forced.stderr, '--full', 'full review (round 2)'), forced.stderr).toBeDefined();
+    expect(missingRoundFacts(prompt, 2, '--full')).toEqual([]);
+    expect(readJson(metaFile)).toMatchObject({
+      engine: 'claude-independent',
+      review_scope: 'full',
+      full_reason: 'flag',
+      previous_output: null,
+    });
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 4;\n');
+    const next = claudeRun(fx, [...review, '--dry-run']);
+    expect(next.status, next.stderr).toBe(0);
+    expect(promptOf(next)).toContain(
+      '- This review round: 3 (earlier usable general outputs found: 2)',
+    );
+    // impl takes no --full (review only); the same call without it is accepted.
+    rmSync(join(fx.log, 'argv.nul'), { force: true });
+    for (const args of [
+      ['impl', TASK, '--full'],
+      ['impl', TASK, '--full', '--dry-run'],
+    ]) {
+      const res = claudeRun(fx, args);
+      expect(res.status, args.join(' ')).toBe(2);
+      expect(res.stderr, args.join(' ')).toContain('--full');
+      expect(res.stdout, args.join(' ')).toBe('');
+    }
+    expect(existsSync(join(fx.log, 'argv.nul'))).toBe(false);
+    expect(existsSync(join(fx.run, 'meta.impl.json'))).toBe(false);
+    expect(claudeRun(fx, ['impl', TASK, '--dry-run']).status).toBe(0);
   },
 );
