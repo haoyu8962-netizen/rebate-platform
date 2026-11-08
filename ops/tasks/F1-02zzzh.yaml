@@ -1,0 +1,19 @@
+id: F1-02zzzh
+repo: rebate-platform
+title: 版本管理 store_url 方括号主机须是合法 IPv6 字面量（`[abc]`、`[]` 之类拒收 20001 [store_url]），其余校验不变（F1-02zb Codex r2 S2 遗留）
+type: impl
+# 2026-11-08 content 入账（编排 21:17 回 open-followups ④；needs.md 末行 F1-02zb Codex r2 S2）。apps/api/src/modules/content/domain/app-versions/index.ts isAuthority（约 l.88-105）对 `[...]` 主机只查非空，`[abc]` 能通过。改为方括号内必须是 IPv6 字面量（可用 node:net isIPv6；zone id 等边角按现有 §9.8 / §9.12 口径从严拒收），非方括号主机、端口、scheme 等现有规则不变。只有后台运营能写，影响商店链接格式。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/app-versions/index.ts'
+  - 'apps/api/src/modules/content/domain/app-versions/index.test.ts'
+test_paths:
+  - 'test/spec/content/app-versions-store-url-ipv6/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/app-versions-store-url-ipv6/**'
+status: todo

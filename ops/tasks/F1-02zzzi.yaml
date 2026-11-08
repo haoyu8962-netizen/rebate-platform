@@ -1,0 +1,19 @@
+id: F1-02zzzi
+repo: rebate-platform
+title: 清理 /v1/config 控制器：getConfig 已不是 planned、路由 schema 已生成，删掉 routeSchema() 里永远走不到的 try/catch 回落与对应 TODO（无行为变化）
+type: impl
+# 2026-11-08 content 入账（编排 21:17 回 open-followups ⑤）。apps/api/src/modules/content/http/public/config.controller.ts（约 l.30-43）的 TODO 写「getConfig 去掉 x-implementation: planned 后删 try/catch 回落」；主干 contracts/openapi.yaml 的 getConfig 已无 planned，platform/validation/route-schemas.gen.ts 已有 getConfig，回落分支不可达。改为直接用 contractRouteSchema('getConfig')；无行为变化；RV2 须有规则测试作者：独立 Claude 钉「getConfig 路由总以契约路由 schema 注册（非空），控制器源码不再有回落分支」，并以既有 config.controller.test.ts 与 /v1/config 规则测试回归。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/http/public/config.controller.ts'
+  - 'apps/api/src/modules/content/http/public/config.controller.test.ts'
+test_paths:
+  - 'test/spec/content/config-route-schema/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/config-route-schema/**'
+status: todo

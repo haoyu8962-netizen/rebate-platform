@@ -1,0 +1,19 @@
+id: F1-02zzzg
+repo: rebate-platform
+title: test-change：管理端 TOTP 夹具 stepUp 前进 30 秒后若当前步码与上一步相同再多进一步，消除 [AC-F1-02zza#4] 类约 10⁻⁶ 的偶发 400（config-items / kill-switches / admin-user-pii 三处 kit，只改时钟推进、不动断言）
+type: test-change
+# 2026-11-08 content 入账（编排 21:17 回 open-followups ③；本线 followups 编排 11:08 / 11:11）。根因见 couli-runs/CONTENT-client/flake-F1-02zza-4.md：校验器窗口 [-1,+1] 取最早匹配步，上一次已消费的步总在 -1 位；随机 secret 恰好 hotp(W)==hotp(W+1)（约 10⁻⁶）时匹配到已消费步、防重放失败得 20002 / 400。
+# 做法：三个 kit 的 stepUp 在 advanceMs(30_000) 后加 `while (totp(secret, clock, -1) === totp(secret, clock)) clock.advanceMs(30_000);`（admin/auth/kit.ts 的 totp 已支持 delta）；正常情况下时间轴不变，不改断言、不改产品 totp.ts。新鲜 Claude 写、另一位只读复核「只改时钟推进、不削弱」，按 #24 加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/content/config-items/kit.ts'
+  - 'test/spec/content/kill-switches/kit.ts'
+  - 'test/spec/identity/admin-user-pii/kit.ts'
+  - 'ops/tasks/F1-02zzzg.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
