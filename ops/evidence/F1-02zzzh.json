@@ -1,0 +1,80 @@
+{
+  "risk_note": "RV2 (content app-versions domain; only admin operators write store_url). open-followups ④ (F1-02zb Codex r2 S2): isAuthority accepted any non-empty bracketed host, so https://[abc]/x could be saved. Now the bracket content must be an IPv6 literal (node:net isIPv6) without a zone id ('%' rejected) or validateAppVersionSave returns 20001 [store_url]; port, tail after ']', non-bracket hosts, schemes and whitespace rules unchanged. index.ts +10/-2, unit tests +28. No contract, API, money or attribution change. Host: rule spec 7/7, apps/api app-versions unit 56/56, eslint 0; the container verify:fast was OOM-killed in tsc -b under host load (exit 137), so full verification is by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/F1-02zzzh/review-codex-money-r1.json, static, no findings. RV2 refuses general, so the money type is used."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, 3 rounds: r1 properties without expect and pure controls; r2 controls collapsed; r3 controls removed because red_exempt does not apply to new files). 7 tests in test/spec/content/app-versions-store-url-ipv6/** (non-IPv6 bracket content and zone ids rejected with fields ['store_url'], property over hex/colon/dot strings, valid IPv6 still accepted inside the red tests); container red/3 PASS (7 red). Codex spec-test r1 pass, no findings. Round 2 (CI guard-git test-guard on #2953, D10-750 prop-timeout): a fresh independent Claude changed only the [AC-F1-02zzzh#3] timeout to the literal 900_000 and dropped the unused PROPERTY_TIMEOUT_MS / propRuns (prettier re-indented the block); no assertion, sample or title changed; red/7 PASS (7 red); Codex spec-test r2 pass. The implementation commit is unchanged (re-applied)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#1] store_url 方括号内不是 IPv6 字面量即拒收，其余规则不变",
+    "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[fe80::1%25eth0]/x",
+    "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[fe80::1%eth0]/x",
+    "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[fe80::1%25eth0]:8443/x",
+    "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 market://[fe80::1%251]/d?id=1",
+    "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[::1%]/x",
+    "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#3] 方括号主机以 isIPv6 为准：非 IPv6 的十六进制 / 冒号 / 点串拒收，合法 IPv6 照常接受"
+  ],
+  "task": "F1-02zzzh",
+  "spec_commit": "59a20db6299f5f24943b9805a0e42cf6d173159d",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "59a20db6299f5f24943b9805a0e42cf6d173159d",
+      "tree": "dd1d9c65c1967bd34f2dfad132eb36a1b30ab46f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T22:43:23Z",
+      "finished_at": "2026-11-08T22:43:35Z",
+      "red_tests": [
+        "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#1] store_url 方括号内不是 IPv6 字面量即拒收，其余规则不变",
+        "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[fe80::1%25eth0]/x",
+        "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[fe80::1%eth0]/x",
+        "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[fe80::1%25eth0]:8443/x",
+        "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 market://[fe80::1%251]/d?id=1",
+        "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#2] store_url 方括号主机带 zone id 从严拒收 https://[::1%]/x",
+        "test/spec/content/app-versions-store-url-ipv6/validation.test.ts > [AC-F1-02zzzh#3] 方括号主机以 isIPv6 为准：非 IPv6 的十六进制 / 冒号 / 点串拒收，合法 IPv6 照常接受"
+      ],
+      "expected": ["test/spec/content/app-versions-store-url-ipv6/validation.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "97f4ef506aafdb50c5740a978e9a485cf90011e767cbfe38b0948853fb7ce530"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3fec729748144dcd2f097d6ef3c2e6e82a3b7a53",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}

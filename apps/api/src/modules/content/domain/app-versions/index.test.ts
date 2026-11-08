@@ -65,6 +65,34 @@ describe('validateAppVersionSave', () => {
     });
   });
 
+  it.each([
+    'https://[abc]/x',
+    'market://[zz]',
+    'https://[1.2.3.4]/x',
+    'https://[::g]/x',
+    'https://[v1.fe80::1]/x',
+    'https://user@[abc]:443/x',
+    'https://[fe80::1%25eth0]/x',
+    'https://[fe80::1%eth0]/x',
+    'https://[]/x',
+  ])('[AC-F1-02zzzh] bracketed store_url host %s is rejected', (store_url) => {
+    expect(isStoreUrl(store_url)).toBe(false);
+    expect(validateAppVersionSave(row({ store_url }), ['s1', 's2'])).toStrictEqual({
+      ok: false,
+      fields: ['store_url'],
+      store_table_empty: false,
+    });
+  });
+
+  it.each([
+    'https://[2001:db8::1]:8443/app',
+    'https://[::ffff:192.0.2.1]/x',
+    'market://[2001:db8::1]/d?id=1',
+    'https://user@[2001:DB8::1]/x',
+  ])('[AC-F1-02zzzh] bracketed IPv6 store_url %s is accepted', (store_url) => {
+    expect(isStoreUrl(store_url)).toBe(true);
+  });
+
   it('[AC-F1-02zb] the scheme allow-list is exactly https, market, appmarket, itms-apps', () => {
     expect(APP_VERSION_STORE_URL_SCHEMES).toStrictEqual([
       'https',

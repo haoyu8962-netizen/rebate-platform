@@ -6,6 +6,8 @@
 // re-implemented here so this domain module needs no value import from platform (task §9.2 #6);
 // the unit test cross-checks the two.
 
+import { isIPv6 } from 'node:net';
+
 export interface AppVersionStoreListing {
   readonly store: string;
   readonly listed_version: string | null;
@@ -85,7 +87,10 @@ export const APP_VERSION_STORE_URL_SCHEMES: readonly string[] = Object.freeze([
   'itms-apps',
 ]);
 
-/** Authority `[userinfo@]host[:port]`: host non-empty after stripping both; port all digits. */
+/**
+ * Authority `[userinfo@]host[:port]`: host non-empty after stripping both; port all digits. A
+ * bracketed host must be an IPv6 literal (node:net isIPv6) without a zone id (`%` rejected).
+ */
 function isAuthority(authority: string): boolean {
   const hostPort = authority.slice(authority.lastIndexOf('@') + 1);
   let host: string;
@@ -94,6 +99,7 @@ function isAuthority(authority: string): boolean {
     const close = hostPort.indexOf(']');
     if (close < 0) return false;
     host = hostPort.slice(1, close);
+    if (host.includes('%') || !isIPv6(host)) return false;
     const tail = hostPort.slice(close + 1);
     if (tail.length > 0 && !tail.startsWith(':')) return false;
     port = tail.length > 0 ? tail.slice(1) : null;
@@ -109,7 +115,7 @@ function isAuthority(authority: string): boolean {
 /**
  * §9.8 / §9.12: scheme in APP_VERSION_STORE_URL_SCHEMES, no whitespace or control characters;
  * https must be `https://<non-empty host>`; any written authority (`//`) must have a non-empty
- * host and a numeric port. Judged on the raw string (WHATWG URL would read `https:///x` as host x).
+ * host and a numeric port, and a bracketed host must be a zone-free IPv6 literal. Judged on the raw string (WHATWG URL would read `https:///x` as host x).
  */
 export function isStoreUrl(value: unknown): boolean {
   if (typeof value !== 'string' || URI_FORBIDDEN.test(value)) return false;
