@@ -1,0 +1,27 @@
+id: B1-22x
+repo: rebate-platform
+title: test-change：config-registry 末尾登记淘宝价格五键（price.taobao.member_title_keywords / coupon_titles / discount_titles 为 object，unknown_promo、basis 为 businessEnum；config.business、可改、无种子），冻结注册表用例只追加 PRICE_TAOBAO 常量（D10-959 / D10-963）
+type: test-change
+# 2026-11-08 content 入账（编排 D10-959、D10-963，照 B1-04zzzt / B1-08zit 先例）。B1-22q 的 union taobao-price-settings 每次经 ContentReader 读这五键、缺省回落 08 BR-PRICE-02 默认，但 content 注册表未登记 → 后台配置页看不到、改不了。
+# 取值：三张清单 'object'（字符串数组，替换不合并，union 校验非法回落默认并告警）；unknown_promo businessEnum [unavailable, add_back, count]；basis businessEnum [promotion_path, coupon_only]；全部 config.business、adminEditable、无种子行（未设 = 08 默认，由 union 读值给）；改动照配置项通则留审计。
+# kit.ts 是支持文件，任务分支上改会让引用它的冻结文件整份判定，所以加键与冻结用例的追加同一 PR 到主干，改前改后都绿；改动由新鲜 Claude 写、另一位只读复核，按 #24 加标签。04 未列这五键，落地后编排在规划补登。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'test/spec/content/config-items/kit.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'ops/tasks/B1-22x.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
