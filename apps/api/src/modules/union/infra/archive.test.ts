@@ -101,6 +101,28 @@ it('[AC-B1-04p-UNIT#3] 错误码：非 2xx、错误信封、其余为 null', () 
   expect(responseErrorCode(reply(200, 'x'))).toBeNull();
 });
 
+it('[AC-B1-04zzzze-UNIT#1] 错误码：大淘客 data 内转发的淘宝 error_response 也记码，顶层优先', () => {
+  const reply = (status: number, body: string) => ({ status, headers: {}, body });
+  const nested = '{"code":0,"data":{"error_response":{"code":11,"sub_code":"isv.unit"}}}';
+  expect(responseErrorCode(reply(200, nested))).toBe('11');
+  expect(
+    responseErrorCode(reply(200, '{"data":{"error_response":{"error_code":5,"code":8}}}')),
+  ).toBe('5');
+  expect(
+    responseErrorCode(
+      reply(200, '{"error_response":{"code":7},"data":{"error_response":{"code":11}}}'),
+    ),
+  ).toBe('7');
+  expect(
+    responseErrorCode(reply(200, '{"error_response":null,"data":{"error_response":{"code":12}}}')),
+  ).toBe('12');
+  expect(responseErrorCode(reply(200, '{"code":0,"data":{"list":[]}}'))).toBeNull();
+  expect(
+    responseErrorCode(reply(200, '{"code":0,"data":{"error_response":[{"code":11}]}}')),
+  ).toBeNull();
+  expect(responseErrorCode(reply(502, nested))).toBe('http_502');
+});
+
 it('[AC-B1-04p-UNIT#4] 成功调用插入一行后返回原响应，延迟取 Clock 差', async () => {
   const { db, statements } = fakeDb();
   const clock = new FixedClock('2026-10-15T00:00:00.000Z');

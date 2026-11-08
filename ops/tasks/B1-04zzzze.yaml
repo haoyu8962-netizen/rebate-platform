@@ -5,6 +5,7 @@ type: impl
 # 2026-11-09 union 入账（D10-1072 ② 低优先适配器边角第 1 件；followups B1-04m 实现留问）。现状 union/infra/archive.ts responseErrorCode 只认顶层 error_response：大淘客转发淘宝错误时报文是 {code: 0, data: {error_response: {code, sub_code…}}}，归档 error_code 记 NULL，排障看不出是淘宝哪条错。
 # 改：2xx 且 body 是 JSON 对象时，顶层 error_response 优先（现有口径与冻结 [AC-B1-04p-ERROR#1] 不变）；顶层没有 error_response 对象时，若 data 是对象且 data.error_response 是对象 → String(error_code ?? code)；其余照旧 NULL（大淘客正常回包 data 内无 error_response、仍 NULL）。非 2xx 仍 http_<status>；inner 抛 UnionError 时仍取其 code（调用方逻辑不动）。大淘客外层非 0 code 不在本单（通用函数不分平台，另议）。
 # 风险：union RV2；新鲜独立 Claude 写规则测试（新目录 test/spec/union/archive-dataoke-error/**，支撑文件勿名 kit.ts，冻结 archive/** 不改），spec-test Claude，代码评审 Codex money。
+# 完成 2026-11-09（#2926）：responseErrorCode 顶层无 error_response 时取 data.error_response；Codex money r1 pass。
 refs: []
 refs_hash: {}
 deps: []
@@ -18,4 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/archive-dataoke-error/**'
-status: todo
+status: done
+pr: 2926

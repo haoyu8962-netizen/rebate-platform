@@ -122,7 +122,10 @@ export function requestSummary(request: UnionTransportRequest): Record<string, u
 
 /**
  * error_code：inner 抛 UnionError → 其 code（别的错误为 NULL）；非 2xx → `http_<status>`；
- * 2xx 且 body 是带 `error_response` 对象的 JSON 对象 → `String(error_code ?? code)`；否则 NULL。
+ * 2xx 且 body 是 JSON 对象时：顶层 `error_response` 是对象 → `String(error_code ?? code)`（顶层优先）；
+ * 否则 `data` 是对象且 `data.error_response` 是对象 → 同样取它的 `String(error_code ?? code)`
+ * （B1-04zzzze：大淘客转发淘宝错误时形如 `{code: 0, data: {error_response: {code, sub_code…}}}`）；
+ * 其余 NULL（大淘客正常回包 data 内无 error_response，仍 NULL）。
  */
 export function responseErrorCode(response: UnionTransportResponse): string | null {
   if (response.status < 200 || response.status > 299) return `http_${response.status}`;
@@ -133,8 +136,14 @@ export function responseErrorCode(response: UnionTransportResponse): string | nu
     return null;
   }
   if (!isPlainObject(parsed)) return null;
-  const envelope = parsed['error_response'];
-  if (!isPlainObject(envelope)) return null;
+  const top = parsed['error_response'];
+  const data = parsed['data'];
+  const envelope = isPlainObject(top)
+    ? top
+    : isPlainObject(data) && isPlainObject(data['error_response'])
+      ? data['error_response']
+      : undefined;
+  if (envelope === undefined) return null;
   return String(envelope['error_code'] ?? envelope['code']);
 }
 

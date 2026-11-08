@@ -1,0 +1,153 @@
+{
+  "task": "B1-04zzzze",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "7f0c677a52c6b5c94df25d2edc343be3a35ad73a",
+  "red_tests": [
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"code\":11,\"sub_code\":\"isv.synthetic\",\"msg\":\"合成说明\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 11",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=201 body={\"code\":0,\"data\":{\"error_response\":{\"code\":\"E-synthetic\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → E-synthetic",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=299 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":50001,\"code\":8}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 50001",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":null,\"code\":27}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 27",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":0,\"code\":8}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 0",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":\"isv.e-syn\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → isv.e-syn",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"data\":{\"error_response\":{}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → undefined",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"list\":[],\"error_response\":{\"code\":15,\"msg\":\"x\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 15",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":null,\"data\":{\"error_response\":{\"code\":12}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 12",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":[{\"code\":1}],\"data\":{\"error_response\":{\"code\":13}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 13",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":\"synthetic\",\"data\":{\"error_response\":{\"code\":14}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 14",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":3,\"data\":{\"error_response\":{\"error_code\":16}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 16",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#2] 顶层 error_response 对象优先于 data 内的（即使两处都有）；只有 data 内时取 data 内的",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 大淘客正常回包 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 大淘客正常回包（data 为空对象） → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为 null → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为数组 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为字符串 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为数字 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data 为字符串 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data 为 null → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data 为数组 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 只在更深一层 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 在 data 以外的键下 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 顶层 error_response 为 null 且无 data → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] body 是数组 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] body 不是 JSON → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] body 为空 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（199）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（300）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（302）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（404）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（500）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（503）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+    "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#5] 性质：任一 2xx、顶层无 error_response 键、data.error_response 是对象 → String(error_code ?? code)；顶层加 error_response 对象后改记顶层的",
+    "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"code\":11,\"sub_code\":\"isv.synthetic\",\"msg\":\"合成说明\"}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 11，原文与时延不变",
+    "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":50001,\"code\":8}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 50001，原文与时延不变",
+    "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=201 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":null,\"code\":\"E-syn\"}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 E-syn，原文与时延不变",
+    "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=299 body={\"error_response\":null,\"data\":{\"error_response\":{\"code\":12}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 12，原文与时延不变",
+    "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#7] 同一 app 依次归档：顶层优先、正常回包与 data.error_response 非对象记 NULL、非 2xx 记 http_<status>、只在 data 内时记其码"
+  ],
+  "risk_note": "RV2 (union): the raw-payload archive's error_code also reads a 淘宝 error_response that 大淘客 forwards inside data ({code: 0, data: {error_response: {...}}}): when the body's top level has no error_response object, data.error_response's error_code ?? code is recorded; the top level still wins, non-2xx stays http_<status>, every other shape stays NULL (frozen [AC-B1-04p-ERROR#1] unchanged). Followup of B1-04m (D10-1072 ②). Rule tests by independent Claude (approvals #36) in 1 attempt, container red/1 PASS (40 tests in 2 files). Implementation Claude Opus 5.5 (1 round). Host: archive rule / unit tests pass, tsc -b apps/api test 0, eslint / prettier clean; integration tests not run locally (no test database), full verification is the required CI checks.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7f0c677a52c6b5c94df25d2edc343be3a35ad73a",
+      "tree": "5bf8823f783458335b73b125714029013e960e28",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T17:38:53Z",
+      "finished_at": "2026-11-08T17:39:07Z",
+      "red_tests": [
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"code\":11,\"sub_code\":\"isv.synthetic\",\"msg\":\"合成说明\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 11",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=201 body={\"code\":0,\"data\":{\"error_response\":{\"code\":\"E-synthetic\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → E-synthetic",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=299 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":50001,\"code\":8}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 50001",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":null,\"code\":27}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 27",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":0,\"code\":8}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 0",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":\"isv.e-syn\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → isv.e-syn",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"data\":{\"error_response\":{}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → undefined",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"code\":0,\"data\":{\"list\":[],\"error_response\":{\"code\":15,\"msg\":\"x\"}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 15",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":null,\"data\":{\"error_response\":{\"code\":12}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 12",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":[{\"code\":1}],\"data\":{\"error_response\":{\"code\":13}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 13",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":\"synthetic\",\"data\":{\"error_response\":{\"code\":14}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 14",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#1] status=200 body={\"error_response\":3,\"data\":{\"error_response\":{\"error_code\":16}}}：顶层无 error_response 对象时取 data.error_response 的 error_code ?? code → 16",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#2] 顶层 error_response 对象优先于 data 内的（即使两处都有）；只有 data 内时取 data 内的",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 大淘客正常回包 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 大淘客正常回包（data 为空对象） → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为 null → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为数组 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为字符串 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data.error_response 为数字 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data 为字符串 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data 为 null → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] data 为数组 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 只在更深一层 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 在 data 以外的键下 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] 顶层 error_response 为 null 且无 data → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] body 是数组 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] body 不是 JSON → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#3] body 为空 → NULL；同一用例里 data 内有 error_response 对象时记其码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（199）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（300）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（302）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（404）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（500）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#4] 非 2xx（503）即使 data 内有 error_response 也记 http_<status>；2xx 时记 data 内的码",
+        "test/spec/union/archive-dataoke-error/error-code.test.ts > [AC-B1-04zzzze#5] 性质：任一 2xx、顶层无 error_response 键、data.error_response 是对象 → String(error_code ?? code)；顶层加 error_response 对象后改记顶层的",
+        "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"code\":11,\"sub_code\":\"isv.synthetic\",\"msg\":\"合成说明\"}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 11，原文与时延不变",
+        "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=200 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":50001,\"code\":8}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 50001，原文与时延不变",
+        "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=201 body={\"code\":0,\"data\":{\"error_response\":{\"error_code\":null,\"code\":\"E-syn\"}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 E-syn，原文与时延不变",
+        "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#6] status=299 body={\"error_response\":null,\"data\":{\"error_response\":{\"code\":12}}} 经归档传输提交的行 error_code 为 data 内淘宝错误码 12，原文与时延不变",
+        "test/spec/union/archive-dataoke-error/transport.int.test.ts > [AC-B1-04zzzze#7] 同一 app 依次归档：顶层优先、正常回包与 data.error_response 非对象记 NULL、非 2xx 记 http_<status>、只在 data 内时记其码"
+      ],
+      "expected": [
+        "test/spec/union/archive-dataoke-error/error-code.test.ts",
+        "test/spec/union/archive-dataoke-error/transport.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "10b68017dfb00d06e4bf69a1f2108f3c3f0f8e41e569d17111b50783f5101bfe"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "55ebba7cf2fb0e25a1855b6b25a0623eb1e4b52f852d929a9667a118bd48db6b"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "money r1 pass, no findings (couli-runs/B1-04zzzze/review-codex.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "r1 pass, no findings"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f622a95876cf2da98739cead11ea81e0b36b403f",
+    "specs": "3d83e80c1d09ff7c7746467cec21376b7ada4b64"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
