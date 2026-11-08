@@ -67,6 +67,17 @@
 //     of the last step that resolved in time.
 //     Log lines carry counts and error names only (never error messages: they may hold user
 //     text). Whatever happens, the next 'tick' timer still fires as usual.
+//   - B3-08u (half-open lock connection): a tick waiting on one statement of its pinned
+//     connection (borrowing c, the lock query, a `SELECT 1`, the unlock) answers only within TCP
+//     retransmission (~15 min) when the connection is half open. Such a wait is a stall; steps
+//     never are. When a 'tick' timer fires while the running tick has stalled for at least
+//     stallLimit = min(tickTimeoutMs, floor(intervalMs × (1 − jitterRatio))) (≥ 1), the running
+//     tick is given up instead of 'busy': error 'agent_sweep_lock_failed' {stage: 'acquire' |
+//     'check' | 'unlock', error_name: 'AgentSweepConnectionStalled'} (that tick's only error
+//     line), its timer promise resolves, and this tick runs as usual on a newly borrowed
+//     connection. Whatever the abandoned tick's connection answers later (a result or a
+//     failure) is ignored: no step is dispatched, nothing is logged, the cursor stays (a lock it
+//     got late is given back quietly). No extra timer is armed for this.
 //   - stop(): idempotent (every call resolves; later calls do nothing more). Cancels the armed
 //     'tick' timer; a 'tick' timer that still fires afterwards does nothing; a running tick
 //     dispatches no further step (check (1)) and unlocks after its current step; stop() resolves
@@ -148,7 +159,23 @@ const defaultSchedule: AgentSweepSchedule = (run, delayMs) => {
 };
 
 type TickEnd =
-  { kind: 'normal' } | { kind: 'timeout' } | { kind: 'lost' | 'failed'; error: unknown };
+  | { kind: 'normal' }
+  | { kind: 'timeout' }
+  | { kind: 'abandoned' }
+  | { kind: 'lost' | 'failed'; error: unknown };
+
+/** The statement of the pinned lock connection a tick is waiting on (B3-08u). */
+type AbandonStage = 'acquire' | 'check' | 'unlock';
+
+/** One running tick: its stall tracking and the abandonment by a later 'tick' timer (B3-08u). */
+interface TickRun {
+  abandoned: boolean;
+  over: Promise<void>;
+  stall(stage: AbandonStage): void;
+  flowing(): void;
+  stalledFor(now: number, limitMs: number): boolean;
+  abandon(): void;
+}
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
@@ -171,17 +198,67 @@ export function startAgentSweeper(deps: AgentSweepLoopDeps): AgentSweepLoop {
   const random = deps.random ?? Math.random;
   let stopped = false;
   let pendingTick: AgentSweepTimerHandle;
-  let running: Promise<void> | undefined;
+  let running: TickRun | undefined;
+  // B3-08u: a tick waiting this long on one statement of its lock connection (borrow, lock,
+  // SELECT 1, unlock) is given up by the next 'tick' timer. Steps never count as a stall.
+  const stallLimitMs = Math.min(
+    tickTimeoutMs,
+    Math.max(1, Math.floor(intervalMs * (1 - jitterRatio))),
+  );
+
+  function tickRun(): TickRun {
+    let stage: AbandonStage | null = null;
+    let since = 0;
+    let release!: () => void;
+    const abandonedOver = new Promise<void>((resolve) => (release = resolve));
+    const run: TickRun = {
+      abandoned: false,
+      over: Promise.resolve(),
+      stall(next) {
+        stage = next;
+        since = clock.now().getTime();
+      },
+      flowing() {
+        stage = null;
+      },
+      stalledFor(now, limitMs) {
+        return !run.abandoned && stage !== null && now - since >= limitMs;
+      },
+      abandon() {
+        if (run.abandoned) return;
+        run.abandoned = true;
+        logger.error(
+          { stage: stage ?? 'acquire', error_name: 'AgentSweepConnectionStalled' },
+          'agent_sweep_lock_failed',
+        );
+        release();
+      },
+    };
+    // A late result of an abandoned tick is ignored; nothing it does can reject this promise.
+    run.over = Promise.race([tick(run).catch(() => undefined), abandonedOver]);
+    return run;
+  }
   let stopping: Promise<void> | undefined;
   let cursor = sweepStart();
 
-  async function tick(): Promise<void> {
+  async function tick(run: TickRun): Promise<void> {
     let endLogged = false;
     try {
+      run.stall('acquire');
       await db.connection().execute(async (connection) => {
         const { rows } = await sql<{
           pg_try_advisory_lock: boolean;
         }>`SELECT pg_try_advisory_lock(hashtextextended('agent.sweep', 0))`.execute(connection);
+        run.flowing();
+        if (run.abandoned) {
+          // Abandoned while the lock statement hung: give the lock back quietly, dispatch nothing.
+          if (rows[0]?.pg_try_advisory_lock === true) {
+            await sql`SELECT pg_advisory_unlock(hashtextextended('agent.sweep', 0))`
+              .execute(connection)
+              .catch(() => undefined);
+          }
+          return;
+        }
         if (rows[0]?.pg_try_advisory_lock !== true) {
           endLogged = true;
           logger.info({ reason: 'locked' }, 'agent_sweep_skipped');
@@ -219,16 +296,22 @@ export function startAgentSweeper(deps: AgentSweepLoopDeps): AgentSweepLoop {
             if (stopped || counts.processed >= maxPerTick) return { kind: 'normal' };
             if (clock.now().getTime() - t0 >= tickTimeoutMs) return { kind: 'timeout' };
             try {
+              run.stall('check');
               await sql`SELECT 1`.execute(connection);
             } catch (error) {
+              if (run.abandoned) return { kind: 'abandoned' };
               return { kind: 'lost', error };
+            } finally {
+              run.flowing();
             }
+            if (run.abandoned) return { kind: 'abandoned' };
             if (ended) return { kind: 'timeout' };
             // A signal or the deadline may have arrived while the connection was checked.
             if (stopped) return { kind: 'normal' };
             if (clock.now().getTime() - t0 >= tickTimeoutMs) return { kind: 'timeout' };
             try {
               const result = await step.sweepOnce(cursor);
+              if (run.abandoned) return { kind: 'abandoned' };
               if (ended) return { kind: 'timeout' };
               counts.processed += result.processed;
               counts.finalized += result.finalized;
@@ -251,7 +334,9 @@ export function startAgentSweeper(deps: AgentSweepLoopDeps): AgentSweepLoop {
           timeout?.cancel();
           lockLost = end.kind === 'lost';
           endLogged = true;
-          if (end.kind === 'normal') {
+          if (end.kind === 'abandoned' || run.abandoned) {
+            // The abandonment already wrote this tick's one end line.
+          } else if (end.kind === 'normal') {
             logger.info({ ...counts, duration_ms: clock.now().getTime() - t0 }, 'agent_sweep_tick');
           } else if (end.kind === 'timeout') {
             logger.warn(
@@ -269,22 +354,29 @@ export function startAgentSweeper(deps: AgentSweepLoopDeps): AgentSweepLoop {
           timeout?.cancel();
           if (!lockLost) {
             try {
+              run.stall('unlock');
               await sql`SELECT pg_advisory_unlock(hashtextextended('agent.sweep', 0))`.execute(
                 connection,
               );
             } catch (error) {
-              logger.error(
-                { stage: 'unlock', error_name: errorName(error) },
-                'agent_sweep_lock_failed',
-              );
+              if (!run.abandoned) {
+                logger.error(
+                  { stage: 'unlock', error_name: errorName(error) },
+                  'agent_sweep_lock_failed',
+                );
+              }
+            } finally {
+              run.flowing();
             }
           }
         }
       });
     } catch (error) {
-      if (!endLogged) {
+      if (!endLogged && !run.abandoned) {
         logger.error({ stage: 'acquire', error_name: errorName(error) }, 'agent_sweep_lock_failed');
       }
+    } finally {
+      run.flowing();
     }
   }
 
@@ -295,14 +387,20 @@ export function startAgentSweeper(deps: AgentSweepLoopDeps): AgentSweepLoop {
         if (stopped) return;
         armTick();
         if (running !== undefined) {
-          logger.info({ reason: 'busy' }, 'agent_sweep_skipped');
-          return;
+          if (!running.stalledFor(clock.now().getTime(), stallLimitMs)) {
+            logger.info({ reason: 'busy' }, 'agent_sweep_skipped');
+            return;
+          }
+          // B3-08u: the running tick hangs on a statement of its pinned connection (half-open TCP
+          // answers nothing for ~15 min): give it up and start this tick on a new connection.
+          running.abandon();
         }
-        running = tick();
+        const run = tickRun();
+        running = run;
         try {
-          await running;
+          await run.over;
         } finally {
-          running = undefined;
+          if (running === run) running = undefined;
         }
       },
       delay,
@@ -319,7 +417,7 @@ export function startAgentSweeper(deps: AgentSweepLoopDeps): AgentSweepLoop {
       if (running === undefined) {
         stopping = Promise.resolve();
       } else {
-        const active = running;
+        const active = running.over;
         stopping = (async () => {
           let timeout: AgentSweepTimerHandle | undefined;
           const deadline = new Promise<void>((resolve) => {

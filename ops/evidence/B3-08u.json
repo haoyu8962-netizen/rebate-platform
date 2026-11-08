@@ -1,0 +1,80 @@
+{
+  "task": "B3-08u",
+  "spec_ref": "29c27a1b53f3f7bac49de49a580f1e3fdbf5ac46",
+  "spec_commit": "567c92eeca04e7e4da26942363c3c17088fd9582",
+  "red_tests": [
+    "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#1] 取锁卡住（借连接后 pg_try_advisory_lock 不回包）；迟到结果为恢复应答（取锁 true / SELECT 1 / 解锁 true）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+    "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#2] 取锁卡住（借连接后 pg_try_advisory_lock 不回包）；迟到结果为报错（连接终于被发现已重置）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+    "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#3] 每步前的 SELECT 1 卡住（第一步已派发并返回之后）；迟到结果为恢复应答（取锁 true / SELECT 1 / 解锁 true）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+    "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#4] 每步前的 SELECT 1 卡住（第一步已派发并返回之后）；迟到结果为报错（连接终于被发现已重置）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+    "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#5] 解锁卡住（本轮正常结束后 pg_advisory_unlock 不回包）；迟到结果为恢复应答（取锁 true / SELECT 1 / 解锁 true）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+    "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#6] 解锁卡住（本轮正常结束后 pg_advisory_unlock 不回包）；迟到结果为报错（连接终于被发现已重置）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+    "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#7] 正常连接口径未退化（代表用例，同 stream-recovery #8 的数字）：取锁卡住的一轮被放弃后，连着两轮各借一条新连接、各排一个 tick_timeout 并在结束时取消；一轮逐行调用 step，到本轮上限即停、记 agent_sweep_tick（行数合计与 Clock 计的耗时）；下一轮从上一轮停下的游标接着走，wrapped 时本轮结束；每轮结束解锁并归还连接"
+  ],
+  "risk_note": "RV1, agent stream sweeper only (stream/sweeper/loop.ts); no migration, no contract change, no outcome change (withdraw lane, model Claude Opus 5.5; orchestrator ruling D10-1004; agent follow-up list open-followups-20261108 #27). Before this task a tick waited without a bound on its pinned lock connection (lock query, SELECT 1 before each step, unlock); a half-open connection answers only within TCP retransmission (~15 min) and a stall before tick_timeout was armed left the loop's running flag set, so every later tick was skipped as busy and left-over runs were not finalized. Now each wait on the pinned connection marks the tick as stalled and the next 'tick' timer gives up a tick stalled for at least min(tickTimeoutMs, floor(intervalMs × (1 − jitterRatio))): one error line (stage, error_name only), the timer promise resolves, and the tick runs on a newly borrowed connection; a late answer of the abandoned connection is ignored (no step, no log, cursor unchanged; a late lock is given back quietly). No extra timer is armed; a step in flight is still 'busy'; the header contract documents the new path. Covered: lock / SELECT 1 / unlock stuck with late answer and late failure (#1–#6), normal numbers after an abandoned tick (#7); frozen stream-recovery and stream-sweeper suites pass unchanged. Test-machine full verify not run (AWS runners disabled, D10-555; CI is the full verification).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "567c92eeca04e7e4da26942363c3c17088fd9582",
+      "tree": "e4a49ad43070e4edd835e164726e74284de57da6",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T04:47:56Z",
+      "finished_at": "2026-11-08T04:50:36Z",
+      "red_tests": [
+        "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#1] 取锁卡住（借连接后 pg_try_advisory_lock 不回包）；迟到结果为恢复应答（取锁 true / SELECT 1 / 解锁 true）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+        "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#2] 取锁卡住（借连接后 pg_try_advisory_lock 不回包）；迟到结果为报错（连接终于被发现已重置）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+        "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#3] 每步前的 SELECT 1 卡住（第一步已派发并返回之后）；迟到结果为恢复应答（取锁 true / SELECT 1 / 解锁 true）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+        "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#4] 每步前的 SELECT 1 卡住（第一步已派发并返回之后）；迟到结果为报错（连接终于被发现已重置）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+        "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#5] 解锁卡住（本轮正常结束后 pg_advisory_unlock 不回包）；迟到结果为恢复应答（取锁 true / SELECT 1 / 解锁 true）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+        "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#6] 解锁卡住（本轮正常结束后 pg_advisory_unlock 不回包）；迟到结果为报错（连接终于被发现已重置）：最迟到下一个 tick 时本轮已结束（promise resolve、恰一条只带 stage / error_name 的 error），下一轮借新连接照常取锁、派发、解锁，从最后按时返回的游标接着走；被放弃连接的迟到结果不派发、不写日志、不动游标、无未处理的拒绝",
+        "test/spec/agent/stream-sweeper-halfopen/loop.test.ts > [AC-B3-08u#7] 正常连接口径未退化（代表用例，同 stream-recovery #8 的数字）：取锁卡住的一轮被放弃后，连着两轮各借一条新连接、各排一个 tick_timeout 并在结束时取消；一轮逐行调用 step，到本轮上限即停、记 agent_sweep_tick（行数合计与 Clock 计的耗时）；下一轮从上一轮停下的游标接着走，wrapped 时本轮结束；每轮结束解锁并归还连接"
+      ],
+      "expected": ["test/spec/agent/stream-sweeper-halfopen/loop.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "291cef28793de9a095efb376b6512674c5b12f6ef50d94c7cffb124bee547784"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "Code review (general, RV1) by a fresh independent Claude (claude-run.sh review --review-type general), D10-1004: Codex usage limit until 11-15 00:24. Base = fork point 524367d7fe1b, full diff. Verdict pass, no S0/S1; one non-blocking S2: if only client→server packets are lost after the lock was taken, the server-side backend may keep the session advisory lock until its keepalive drops it, so later ticks log 'locked' instead of 'busy'. Bounding that needs an extra statement on the lock connection (e.g. idle_session_timeout), which the frozen and new tests' statement sequence rules out; recorded as a follow-up in the PR."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 1/3); spec-test r1 by a fresh independent Claude: pass on 37db084ffaa2. One non-blocking S2: no test shows a lock granted late on an abandoned connection is given back (the implementation unlocks it quietly)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "cfb00801b37539dd591a4657c4b335b2c0370bb5",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
