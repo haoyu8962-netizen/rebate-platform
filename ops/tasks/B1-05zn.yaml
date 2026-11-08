@@ -1,0 +1,17 @@
+id: B1-05zn
+repo: rebate-platform
+title: B1-05zn：detail-extras 规则测试夹具头注释改为 shop_entry 四条件口径（FU-DETAIL-EXTRAS-KIT-COMMENT，只改注释）
+type: test-change
+# 2026-11-08 be 入账（本线 FU；B1-05zm #2706 已合并）。冻结夹具 test/spec/catalog/detail-extras/kit.ts 头注释第 9-10 行仍写「shop_entry is false until S-17 … whatever shop.entry.enabled / source / shop_ref say」，B1-05zm 后实际口径是四条件（开关严格 true、来源已配、适配器 shopConvertSources 含该来源、商品有 shop_ref 与 shop_name）。kit 的期望值 shop_entry: false 仍正确（夹具商品无 shop_name、测试适配器不声明来源），不改。
+# 只改该文件头注释这两行（照 D10-327：新鲜独立 Claude 改、另一位只读复审「只改注释」），不改任何代码、期望值、用例；非 task 分支、不带证据文件，标签由编排按 #24 核后加（先例 B1-09z）。RV2（test/**）。
+refs: []
+refs_hash: {}
+deps: [B1-05zm]
+paths:
+  - 'test/spec/catalog/detail-extras/kit.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
