@@ -1,0 +1,27 @@
+id: B3-08w
+repo: rebate-platform
+title: Agent「那返了吗」承接上一轮意图：continuation.previousIntent 读同 app 同会话紧挨的上一 run 的 agent_runs.intent（order_query / earnings_query，其余 null），不再恒为 null
+type: impl
+# 2026-11-08 agent2 入账（编排 D10-1022；agent 清单 couli-runs/AGENT-lane/open-followups-20261108.md 第 12 条；方案 couli-runs/AGENT2-lane/previous-intent-plan.md）。
+# 现状：stream/mount/assembly.ts 的 continuation.previousIntent 恒为 null，意图端口 personal 分支（port.ts serverIntent）因而从不承接上文订单。08 BR-AI-01 细则判定顺序②：承接上文的订单按 order_query。
+# 做法：agent/store 下新增读取函数，按 (app_id, session_id) 取 accepted_at 早于本轮、id ≠ 本 runId 的紧挨上一 run（accepted_at desc, id desc, limit 1，走 agent_runs_session_accepted_idx），intent 为 order_query / earnings_query 原样返回，其余（含 NULL）返回 null；不设时间窗、不往前跳（D10-1022 ④）。sessionId 非 uuid 直接 null；读失败只 warn、返回 null。assembly 用 deps.db 组装，删 TODO。
+# 不在本单：agent_runs.intent 的写入（归 B3-08t：端口决定时同步写改判后的值，D10-1022 ①）；生产生效依赖 B3-08t，本单测试夹具直接写 intent。不动契约、不动表、不改分类器与端口判定。
+# RV1（agent 模块）。新鲜独立 Claude 写规则测试，Opus 实现，评审 Codex（额度不足时新鲜独立 Claude general）。
+refs: [BR-AI-01, BR-AI-19, BR-AI-20]
+refs_hash:
+  BR-AI-01: 502e051e2593
+  BR-AI-19: f2aa4c7770c8
+  BR-AI-20: ed15f04bab16
+deps: [B3-08q]
+paths:
+  - 'apps/api/src/modules/agent/stream/mount/assembly.ts'
+  - 'apps/api/src/modules/agent/store/runs/**'
+test_paths:
+  - 'test/spec/agent/previous-intent/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/previous-intent/**'
+status: todo
+pr: null
