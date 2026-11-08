@@ -9,7 +9,7 @@ type: impl
 #   义务关闭不记 voucher_id 另登 FU-OBLIGATION-CLOSE-VOUCHER-REF（admin B2-04zzb，排本单合并后）。与 withdraw B2-04zk、content B2-04zzd 同改 clawback-order.ts，后合者变基。RV2。
 refs: [BR-FUND-08, BR-FUND-09]
 refs_hash:
-  BR-FUND-08: 4fad67b21a32
+  BR-FUND-08: 7acaff229759
   BR-FUND-09: 3162bdea830e
 deps: [B2-04zi]
 paths:

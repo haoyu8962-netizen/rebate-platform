@@ -8,7 +8,7 @@ refs: [BR-PRICE-04, BR-PRICE-21, BR-TEXT-13]
 refs_hash:
   BR-PRICE-04: 4848c2b9346d
   BR-PRICE-21: 877056f01e26
-  BR-TEXT-13: 81791b1bb9dd
+  BR-TEXT-13: 225ce1a6f17e
 deps: []
 paths:
   - 'apps/api/src/modules/catalog/detail{.ts,.test.ts}'

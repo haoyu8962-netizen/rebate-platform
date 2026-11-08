@@ -7,7 +7,7 @@ type: impl
 refs: [BR-FUND-06, BR-FUND-08]
 refs_hash:
   BR-FUND-06: f903ec00076a
-  BR-FUND-08: 4fad67b21a32
+  BR-FUND-08: 7acaff229759
 deps: [B1-04zza]
 paths:
   - 'apps/api/src/modules/settlement/rights/rights-command.ts'

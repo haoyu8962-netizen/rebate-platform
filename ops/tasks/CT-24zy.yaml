@@ -12,7 +12,7 @@ refs_hash:
   BR-TEXT-22: 1daceeac3c5f
   BR-TEXT-05: baf501a7d59c
   BR-TEXT-02: 6a9e76de47ef
-  BR-TEXT-13: 81791b1bb9dd
+  BR-TEXT-13: 225ce1a6f17e
 deps: []
 paths:
   - 'test/spec/contracts/agent-order-summaries/**'
