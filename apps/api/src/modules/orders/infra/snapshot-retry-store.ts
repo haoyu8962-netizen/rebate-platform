@@ -9,6 +9,7 @@ import {
   SNAPSHOT_RETRY_REASONS,
   snapshotResolutionNote,
 } from '../domain/snapshot-retry.ts';
+import { orderKeyMatch } from './pipeline-store.ts';
 
 type Trx = Transaction<DB>;
 
@@ -84,7 +85,10 @@ export async function markSnapshotHandoff(trx: Trx, ref: SubOrderRef): Promise<v
     .execute();
 }
 
-/** 按子订单键读订单行（扫描路径锁内重读）。 */
+/**
+ * 按子订单键读订单行（扫描路径锁内重读）。B1-09x（D10-853）：子单号经 order_keys 取 (order_id, attr_at) 再按
+ * orders 主键读（orderKeyMatch，一条语句；与直接比 orders.sub_order_id 同一行）。
+ */
 export async function readOrderByKey(
   trx: Trx,
   ref: SubOrderRef,
@@ -95,7 +99,13 @@ export async function readOrderByKey(
     .selectAll()
     .where('app_id', '=', ref.app_id)
     .where('platform', '=', ref.platform)
-    .where('sub_order_id', '=', ref.sub_order_id)
+    .where((eb) =>
+      orderKeyMatch(eb, {
+        app_id: ref.app_id,
+        platform: ref.platform,
+        sub_order_ids: ref.sub_order_id,
+      }),
+    )
     .executeTakeFirst();
 }
 
@@ -128,11 +138,19 @@ export async function selectDueSubOrders(
   const rows = await db
     .withSchema('app')
     .selectFrom('order_sync_pending as p')
+    // B1-09x（D10-853）：经 order_keys（主键 platform, sub_order_id）连到 orders 主键 (order_id, attr_at)，不按
+    // orders.sub_order_id 连（无索引）；orders_identity_fkey 保证连到的仍是同 (app, platform, 子单号) 的那一行。
+    .innerJoin('order_keys as k', (join) =>
+      join
+        .onRef('k.platform', '=', 'p.platform')
+        .onRef('k.sub_order_id', '=', 'p.sub_order_id')
+        .onRef('k.app_id', '=', 'p.app_id'),
+    )
     .innerJoin('orders as o', (join) =>
       join
-        .onRef('o.app_id', '=', 'p.app_id')
-        .onRef('o.platform', '=', 'p.platform')
-        .onRef('o.sub_order_id', '=', 'p.sub_order_id'),
+        .onRef('o.order_id', '=', 'k.order_id')
+        .onRef('o.attr_at', '=', 'k.attr_at')
+        .onRef('o.app_id', '=', 'k.app_id'),
     )
     .select(['p.platform', 'p.sub_order_id'])
     .where('p.app_id', '=', appId)

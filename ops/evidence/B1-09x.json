@@ -1,0 +1,132 @@
+{
+  "risk_note": "RV2 orders read paths (FU-ORDERS-OWN-LOOKUP-INDEX; rulings D10-851 ①, D10-853). Lookups of app.orders by order number no longer scan an app's orders: exact sub-order lookups (taobao / jd) resolve (order_id, attr_at) through app.order_keys and read orders by primary key (admin order search, H5 claim, rights lookup, snapshot retry read and due scan); parent-order lookups use orders_parent_order_idx (B1-09w); the admin search and readOwnTaobaoOrderNos split their sub OR parent into two branches of one UNION ALL (count and page from the same source, no duplicates). readOwnTaobaoOrderNos drives the sub branch from order_keys with a LATERAL primary-key read and the parent branch with unnest + LATERAL per value ending in a literal OFFSET 0: real EXPLAIN (ANALYZE, BUFFERS) on the test database without statistics showed that a multi-value parent IN, and an un-fenced LATERAL that PostgreSQL pulls up, both fall back to an app_id-only index scan (1200 / 600 rows per partition); with OFFSET 0 each value is a parameterised index lookup (21 buffers). Results are unchanged; pdd hyphen-stripped matching and the H5 order search are untouched (FU-PDD-ORDERNO-NORMALIZED-INDEX). Frozen [AC-B1-09c#20-22] (one statement, no OR) and taobao-refund-archive expectOwnOrderRead still hold. Integration own-lookup-index plus the related frozen order / union directories 304/304 pass (re-run after the round-3 kit move); rule-test unit 93/93.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "codex-run.sh review --review-type money (D10-823): round 1 over the whole implementation diff from the last rule-test commit (rounds 1-2 of the implementation) pass with no findings; round 2 over the increment (implementation rounds 3-4: the parent branch's unnest + LATERAL and OFFSET 0) pass with no findings; checklist rounding na, sign na, idempotency ok, concurrency ok, partial_refund na, clock na/ok, app_id ok. The integration run was the gate between rounds; the plan behaviour was confirmed by EXPLAIN, not by Codex (static review)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude (D10-848). Round 1 fail: six S1 (results-only cases are green on main; [#15] parent lookup already indexed on main) and one out-of-scope S1 (a small background could flip the planner to seq scans after autoanalyze). Round 2 pass: every case measures pg_stat_xact_user_tables in the same transaction (orders seq_scan delta 0, rows read <= 24, precedent [AC-B1-01zk]) and then checks the results; #15 merged into #14; background raised to about 2400 rows per partition. Round 3 (CI verify-static red on #2731, dependency-cruiser testcontainers-only-in-int-tests: kit.ts imported @couli/db/testing): a fresh independent Claude moved the kit's database lifecycle into an exported installWorld(createTestDatabase) that each *.int.test.ts calls at top level (precedents rescan-config-wiring-main, admin/totp-window) - a mechanical move, no case, title, assertion, seed, query or hook timeout changed; a second fresh independent Claude spec-test review of that increment passed with no findings. depcruise 0 violations; red re-checked at the new spec commit by land.sh."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-09x",
+  "spec_commit": "7696b0ab5fa94e2584b35d14314e9bbc365969a7",
+  "spec_ref": "7666a46e7e4d5de18fff05aa153b327f4374eba6",
+  "red_tests": [
+    "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#1] 后台订单搜索 q：子单号命中、父单号命中都列出，子单号与父单号同时命中同一单只列一次；count 与列表条数一致，顺序 paid_at 倒序（无 paid_at 在后）再 order_id 倒序；同一事务内不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#2] 后台订单搜索 q 带 platform：只列该平台命中的单（淘宝子单号与父单号两路合并、京东同号一单、拼多多无），count 同步；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#3] 后台订单搜索 q 不跨 app：别的 app 同号的子单、父单只在它自己的 app 下出现；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#4] 后台订单搜索 q 分页：各页按同一顺序衔接、末页之后为空，每页的 count 都是总数；q 与其他筛选（平台状态）同时生效；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#5] 后台订单搜索 q 都不命中：count 为 0、列表为空；只是别的单的子单号前缀或父单号前缀的 q 不命中；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#6] 后台订单搜索按子单号命中（不带与带 platform）：同一事务内 count 与 page 不顺序扫描 app.orders 任何分区，读的行数有界，只列这一单",
+    "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#7] 后台订单搜索按父单号命中（不带 platform）：同一事务内 count 与 page 不顺序扫描 app.orders 任何分区，读的行数有界，两个分区的子单按 paid_at 倒序列出",
+    "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#11] 找回 taobao 按子单号：命中本 app 该平台的那一单（字段同改写前）；只是父单号的值、别的 app、别的平台的同号都不命中；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#11] 找回 jd 按子单号：命中本 app 该平台的那一单（字段同改写前）；只是父单号的值、别的 app、别的平台的同号都不命中；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#12] 找回 taobao 按父单号：列出本 app 该平台这个父单下的全部子单（跨分区）；只是子单号的值、别的 app 的同父单子单、别的平台的同父单子单都不在；其子单按子单号仍可单独找回；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#12] 找回 jd 按父单号：列出本 app 该平台这个父单下的全部子单（跨分区）；只是子单号的值、别的 app 的同父单子单、别的平台的同父单子单都不在；其子单按子单号仍可单独找回；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#13] 找回拼多多照旧去横线比较：库里带横线的子单号 / 父单号与去横线的输入相等即命中，不带横线存的也命中；别的 app 不命中；淘宝 / 京东照旧原样比较（带横线存的只按原样命中，不去横线），且这些淘宝 / 京东查找不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#14] 找回 taobao 先按子单号、再按父单号命中：两次查找各自在同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+    "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#14] 找回 jd 先按子单号、再按父单号命中：两次查找各自在同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+    "test/spec/orders/own-lookup-index/own-taobao.int.test.ts > [AC-B1-09x#8] readOwnTaobaoOrderNos：子单号与父单号混合传入，答案是其中本 app 淘宝订单的子单号或父单号（原样相等）；京东、别的 app、没入库的、只差前导零的不在；重复只答一次；同一事务内不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/own-taobao.int.test.ts > [AC-B1-09x#9] readOwnTaobaoOrderNos：只问父单号也算（父单下两个子单也只答一次）；单号同为某单的子单号与父单号只答一次；只问子单号不带出它的父单号；空入参答空集；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/own-taobao.int.test.ts > [AC-B1-09x#10] readOwnTaobaoOrderNos 混合传入子单号与父单号：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#15] 维权定位 taobao：子单号命中答 found（整行同改写前）；只命中父单号答 sub_order_no_missing；都不命中答 not_found；别的 app、别的平台的同号不算；单号原样比较（保留横线与前导零）；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#15] 维权定位 jd：子单号命中答 found（整行同改写前）；只命中父单号答 sub_order_no_missing；都不命中答 not_found；别的 app、别的平台的同号不算；单号原样比较（保留横线与前导零）；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#16] 维权定位 taobao：同一单的子单号与父单号相同答 found；某单的子单号恰是另一单的父单号时答子单号那一单；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#16] 维权定位 jd：同一单的子单号与父单号相同答 found；某单的子单号恰是另一单的父单号时答子单号那一单；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#17] 维权定位拼多多照旧去横线：带横线存的子单号按任意横线写法命中 found；只命中去横线后的父单号答 sub_order_no_missing；别的 app 的不算；同号的淘宝 / 京东单照旧原样比较（去横线写法不命中），且这些淘宝 / 京东查找不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#18] 维权定位 taobao 子单号命中（默认分区）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界，答 found 整行",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#18] 维权定位 jd 子单号命中（默认分区）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界，答 found 整行",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#19] 维权定位 taobao 子单号未命中、父单号探查命中两个分区的子单（sub_order_no_missing）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#19] 维权定位 jd 子单号未命中、父单号探查命中两个分区的子单（sub_order_no_missing）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#20] 维权定位 taobao 子单号与父单号探查都不命中（not_found）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+    "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#20] 维权定位 jd 子单号与父单号探查都不命中（not_found）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+    "test/spec/orders/own-lookup-index/snapshot-retry.int.test.ts > [AC-B1-09x#21] 快照重试 readOrderByKey：按 (app, platform, 子单号) 读出该单整行（同改写前，三个分区）；别的 app 的同号、别的平台、没入库的读不到；每次都不顺序扫描 app.orders、读的行数有界",
+    "test/spec/orders/own-lookup-index/snapshot-retry.int.test.ts > [AC-B1-09x#22] 快照重试 selectDueSubOrders：只选本 app 到期、未转人工、订单满足资格的子订单，必然 skip 的排末尾，其余按最早 detected_at；limit 截断；别的 app 的只在它自己的 app 下；每次都不顺序扫描 app.orders、读的行数有界"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7696b0ab5fa94e2584b35d14314e9bbc365969a7",
+      "tree": "5ec8e065d8120af5d8d46893d514e6a73d7cf587",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-07T23:40:01Z",
+      "finished_at": "2026-11-07T23:40:09Z",
+      "red_tests": [
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#1] 后台订单搜索 q：子单号命中、父单号命中都列出，子单号与父单号同时命中同一单只列一次；count 与列表条数一致，顺序 paid_at 倒序（无 paid_at 在后）再 order_id 倒序；同一事务内不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#2] 后台订单搜索 q 带 platform：只列该平台命中的单（淘宝子单号与父单号两路合并、京东同号一单、拼多多无），count 同步；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#3] 后台订单搜索 q 不跨 app：别的 app 同号的子单、父单只在它自己的 app 下出现；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#4] 后台订单搜索 q 分页：各页按同一顺序衔接、末页之后为空，每页的 count 都是总数；q 与其他筛选（平台状态）同时生效；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#5] 后台订单搜索 q 都不命中：count 为 0、列表为空；只是别的单的子单号前缀或父单号前缀的 q 不命中；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#6] 后台订单搜索按子单号命中（不带与带 platform）：同一事务内 count 与 page 不顺序扫描 app.orders 任何分区，读的行数有界，只列这一单",
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts > [AC-B1-09x#7] 后台订单搜索按父单号命中（不带 platform）：同一事务内 count 与 page 不顺序扫描 app.orders 任何分区，读的行数有界，两个分区的子单按 paid_at 倒序列出",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#11] 找回 taobao 按子单号：命中本 app 该平台的那一单（字段同改写前）；只是父单号的值、别的 app、别的平台的同号都不命中；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#11] 找回 jd 按子单号：命中本 app 该平台的那一单（字段同改写前）；只是父单号的值、别的 app、别的平台的同号都不命中；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#12] 找回 taobao 按父单号：列出本 app 该平台这个父单下的全部子单（跨分区）；只是子单号的值、别的 app 的同父单子单、别的平台的同父单子单都不在；其子单按子单号仍可单独找回；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#12] 找回 jd 按父单号：列出本 app 该平台这个父单下的全部子单（跨分区）；只是子单号的值、别的 app 的同父单子单、别的平台的同父单子单都不在；其子单按子单号仍可单独找回；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#13] 找回拼多多照旧去横线比较：库里带横线的子单号 / 父单号与去横线的输入相等即命中，不带横线存的也命中；别的 app 不命中；淘宝 / 京东照旧原样比较（带横线存的只按原样命中，不去横线），且这些淘宝 / 京东查找不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#14] 找回 taobao 先按子单号、再按父单号命中：两次查找各自在同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts > [AC-B1-09x#14] 找回 jd 先按子单号、再按父单号命中：两次查找各自在同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+        "test/spec/orders/own-lookup-index/own-taobao.int.test.ts > [AC-B1-09x#8] readOwnTaobaoOrderNos：子单号与父单号混合传入，答案是其中本 app 淘宝订单的子单号或父单号（原样相等）；京东、别的 app、没入库的、只差前导零的不在；重复只答一次；同一事务内不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/own-taobao.int.test.ts > [AC-B1-09x#9] readOwnTaobaoOrderNos：只问父单号也算（父单下两个子单也只答一次）；单号同为某单的子单号与父单号只答一次；只问子单号不带出它的父单号；空入参答空集；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/own-taobao.int.test.ts > [AC-B1-09x#10] readOwnTaobaoOrderNos 混合传入子单号与父单号：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#15] 维权定位 taobao：子单号命中答 found（整行同改写前）；只命中父单号答 sub_order_no_missing；都不命中答 not_found；别的 app、别的平台的同号不算；单号原样比较（保留横线与前导零）；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#15] 维权定位 jd：子单号命中答 found（整行同改写前）；只命中父单号答 sub_order_no_missing；都不命中答 not_found；别的 app、别的平台的同号不算；单号原样比较（保留横线与前导零）；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#16] 维权定位 taobao：同一单的子单号与父单号相同答 found；某单的子单号恰是另一单的父单号时答子单号那一单；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#16] 维权定位 jd：同一单的子单号与父单号相同答 found；某单的子单号恰是另一单的父单号时答子单号那一单；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#17] 维权定位拼多多照旧去横线：带横线存的子单号按任意横线写法命中 found；只命中去横线后的父单号答 sub_order_no_missing；别的 app 的不算；同号的淘宝 / 京东单照旧原样比较（去横线写法不命中），且这些淘宝 / 京东查找不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#18] 维权定位 taobao 子单号命中（默认分区）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界，答 found 整行",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#18] 维权定位 jd 子单号命中（默认分区）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界，答 found 整行",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#19] 维权定位 taobao 子单号未命中、父单号探查命中两个分区的子单（sub_order_no_missing）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#19] 维权定位 jd 子单号未命中、父单号探查命中两个分区的子单（sub_order_no_missing）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#20] 维权定位 taobao 子单号与父单号探查都不命中（not_found）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts > [AC-B1-09x#20] 维权定位 jd 子单号与父单号探查都不命中（not_found）：同一事务内不顺序扫描 app.orders 任何分区，读的行数有界",
+        "test/spec/orders/own-lookup-index/snapshot-retry.int.test.ts > [AC-B1-09x#21] 快照重试 readOrderByKey：按 (app, platform, 子单号) 读出该单整行（同改写前，三个分区）；别的 app 的同号、别的平台、没入库的读不到；每次都不顺序扫描 app.orders、读的行数有界",
+        "test/spec/orders/own-lookup-index/snapshot-retry.int.test.ts > [AC-B1-09x#22] 快照重试 selectDueSubOrders：只选本 app 到期、未转人工、订单满足资格的子订单，必然 skip 的排末尾，其余按最早 detected_at；limit 截断；别的 app 的只在它自己的 app 下；每次都不顺序扫描 app.orders、读的行数有界"
+      ],
+      "expected": [
+        "test/spec/orders/own-lookup-index/admin-search.int.test.ts",
+        "test/spec/orders/own-lookup-index/claim.int.test.ts",
+        "test/spec/orders/own-lookup-index/own-taobao.int.test.ts",
+        "test/spec/orders/own-lookup-index/rights.int.test.ts",
+        "test/spec/orders/own-lookup-index/snapshot-retry.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "9c9cbd404a254a7bd7ef0c34bc627d3ef331225c0de27f731231beae65711833"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "353a76d3b9bf2d7ae0f624a66bcca4b790611a26",
+    "specs": "1850da5c4fd4bf6f5096768bc7eb2867d4848c19"
+  }
+}

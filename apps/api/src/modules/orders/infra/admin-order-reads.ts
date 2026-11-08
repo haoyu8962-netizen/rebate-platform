@@ -4,7 +4,8 @@
 // order_id descending (the server's internal order for the same time). paid_from / paid_to are
 // ISO 8601 texts compared as timestamptz in PostgreSQL (no Date is built here).
 import type { DB } from '@couli/db';
-import { sql, type ExpressionBuilder, type Kysely } from 'kysely';
+import { sql, type ExpressionBuilder, type Kysely, type QueryCreator } from 'kysely';
+import { orderKeyMatch } from './pipeline-store.ts';
 
 /** The list filters (q already normalised, user_id a UUID, enums checked by the route schema). */
 export interface AdminOrderFilter {
@@ -133,6 +134,7 @@ const DETAIL_COLUMNS = [
 
 type OrdersScope = ExpressionBuilder<DB, 'orders'>;
 
+/** Every filter but q (q splits the list in two branches, see `matching`). */
 function where(eb: OrdersScope, filter: AdminOrderFilter) {
   const conditions = [eb('app_id', '=', filter.appId)];
   if (filter.platform !== undefined) conditions.push(eb('platform', '=', filter.platform));
@@ -149,11 +151,6 @@ function where(eb: OrdersScope, filter: AdminOrderFilter) {
     conditions.push(eb('rebate_status', 'in', STATUS_LOCKED));
   }
   if (filter.userId !== undefined) conditions.push(eb('user_id', '=', filter.userId));
-  if (filter.q !== undefined) {
-    conditions.push(
-      eb.or([eb('sub_order_id', '=', filter.q), eb('parent_order_id', '=', filter.q)]),
-    );
-  }
   // A row without paid_at compares as null and so never matches either bound.
   if (filter.paidFrom !== undefined) {
     conditions.push(eb('paid_at', '>=', sql<Date>`${filter.paidFrom}::timestamptz`));
@@ -164,23 +161,68 @@ function where(eb: OrdersScope, filter: AdminOrderFilter) {
   return eb.and(conditions);
 }
 
+/**
+ * B1-09x (FU-ORDERS-OWN-LOOKUP-INDEX, D10-853): the rows of the filter with q, as the UNION ALL of
+ * two disjoint branches instead of `sub_order_id = q OR parent_order_id = q` (which no index
+ * serves): the sub number through order_keys (orders read by PK; orderKeyMatch), the parent number
+ * through orders_parent_order_idx minus the rows whose sub number is q (already in the first
+ * branch; sub_order_id is never null), so an order hit both ways is listed once. Same rows as
+ * before; count and page read the same source, the order is applied outside.
+ */
+function matching(db: QueryCreator<DB>, filter: AdminOrderFilter, q: string) {
+  const scoped = () =>
+    db
+      .selectFrom('orders')
+      .select([...LIST_COLUMNS])
+      .where((eb) => where(eb, filter));
+  const bySub = scoped().where((eb) =>
+    orderKeyMatch(eb, {
+      app_id: filter.appId,
+      ...(filter.platform === undefined ? {} : { platform: filter.platform }),
+      sub_order_ids: q,
+    }),
+  );
+  const byParent = scoped()
+    .where('parent_order_id', 'is not', null)
+    .where('parent_order_id', '=', q)
+    .where('sub_order_id', '<>', q);
+  return bySub.unionAll(byParent).as('o');
+}
+
 export function createAdminOrderReads(database: Kysely<DB>): AdminOrderReads {
   const db = database.withSchema('app');
   return {
     async count(filter) {
-      const row = await db
-        .selectFrom('orders')
-        .select(sql<number>`count(*)::int`.as('n'))
-        .where((eb) => where(eb, filter))
-        .executeTakeFirstOrThrow();
+      const n = sql<number>`count(*)::int`.as('n');
+      const row =
+        filter.q === undefined
+          ? await db
+              .selectFrom('orders')
+              .select(n)
+              .where((eb) => where(eb, filter))
+              .executeTakeFirstOrThrow()
+          : await db
+              .selectFrom(matching(db, filter, filter.q))
+              .select(n)
+              .executeTakeFirstOrThrow();
       return row.n;
     },
 
     async page(filter, offset, limit) {
+      if (filter.q === undefined) {
+        return db
+          .selectFrom('orders')
+          .select([...LIST_COLUMNS])
+          .where((eb) => where(eb, filter))
+          .orderBy(sql`${sql.ref('paid_at')} desc nulls last`)
+          .orderBy('order_id', 'desc')
+          .offset(offset)
+          .limit(limit)
+          .execute();
+      }
       return db
-        .selectFrom('orders')
+        .selectFrom(matching(db, filter, filter.q))
         .select([...LIST_COLUMNS])
-        .where((eb) => where(eb, filter))
         .orderBy(sql`${sql.ref('paid_at')} desc nulls last`)
         .orderBy('order_id', 'desc')
         .offset(offset)

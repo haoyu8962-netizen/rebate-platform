@@ -121,3 +121,22 @@ it('[AC-B1-09c#21] 拼多多规范化只去连字符，不改位置、不转 num
   expect(normalizeOrderNo('pdd', '260101-123456-789012345')).toBe('260101123456789012345');
   expect(normalizeOrderNo('pdd', '000123')).toBe('000123');
 });
+
+it.each(['taobao', 'jd', 'pdd'] as const)(
+  '[AC-B1-09x-UNIT#7] %s 子单号精确分支经 order_keys 取 (order_id, attr_at)（一条语句、没有 or）；父单号探查带 is not null 走父单号等值',
+  async (platform) => {
+    const d = database([]);
+    expect(
+      await findOrderForRights(d.db, { app_id: APP, platform, platform_order_no: '880012340001' }),
+    ).toEqual({ kind: 'not_found' });
+    expect(d.statements).toHaveLength(2);
+    const [sub, parent] = d.statements as [CompiledQuery, CompiledQuery];
+    expect(sub.sql).toContain(
+      '("order_id", "attr_at") in (select "k"."order_id", "k"."attr_at" from "app"."order_keys" as "k" where "k"."app_id" = $3 and "k"."platform" = $4 and "k"."sub_order_id" = $5)',
+    );
+    expect(sub.parameters.slice(0, 5)).toEqual([APP, platform, APP, platform, '880012340001']);
+    for (const statement of d.statements) expect(statement.sql).not.toMatch(/\bor\b/i);
+    expect(parent.sql).not.toContain('order_keys');
+    expect(parent.sql).toContain('"parent_order_id" is not null and "parent_order_id" = $3');
+  },
+);

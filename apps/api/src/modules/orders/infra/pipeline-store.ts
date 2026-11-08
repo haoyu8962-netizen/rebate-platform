@@ -1,7 +1,15 @@
 // B1-08h：归因流水线主事务的读写（只写 orders 模块自己的表；一律 .withSchema('app')）。所有函数都
 // 在调用方已取得子订单 advisory 锁的事务里运行（infra/order-lock.ts）。
 import type { DB } from '@couli/db';
-import { sql, type Insertable, type Selectable, type Transaction } from 'kysely';
+import {
+  sql,
+  type Expression,
+  type ExpressionBuilder,
+  type Insertable,
+  type Selectable,
+  type SqlBool,
+  type Transaction,
+} from 'kysely';
 
 type Trx = Transaction<DB>;
 
@@ -39,6 +47,41 @@ export async function readOrder(
     .where('attr_at', '=', key.attr_at)
     .where('app_id', '=', key.app_id)
     .executeTakeFirst();
+}
+
+/** The sub-order numbers an order_keys lookup asks for: one number, or several (IN). */
+export interface OrderKeyLookup {
+  readonly app_id: string;
+  /** Omitted: every platform of the app (the console search without a platform filter). */
+  readonly platform?: string;
+  readonly sub_order_ids: string | readonly string[];
+}
+
+/**
+ * B1-09x (FU-ORDERS-OWN-LOOKUP-INDEX, D10-853): "this app.orders row is the one app.order_keys holds
+ * for (app, platform, sub number)", as `(order_id, attr_at) IN (SELECT k.order_id, k.attr_at FROM
+ * order_keys k WHERE …)`. The sub number is matched on order_keys (PK platform, sub_order_id), and
+ * the orders row is then reached by its PK (order_id, attr_at) instead of filtering
+ * orders.sub_order_id, which has no index. Same rows as `orders.app_id = … AND orders.platform = …
+ * AND orders.sub_order_id = …`: orders_identity_fkey ties every orders row to the order_keys row of
+ * the same (order_id, attr_at, app_id, platform, sub_order_id). Exact comparison only (no pdd
+ * hyphen stripping). For a query on app.orders without alias, under `.withSchema('app')`.
+ */
+export function orderKeyMatch(
+  eb: ExpressionBuilder<DB, 'orders'>,
+  lookup: OrderKeyLookup,
+): Expression<SqlBool> {
+  let keys = eb
+    .selectFrom('order_keys as k')
+    .select(['k.order_id', 'k.attr_at'])
+    .where('k.app_id', '=', lookup.app_id);
+  if (lookup.platform !== undefined) keys = keys.where('k.platform', '=', lookup.platform);
+  const subs = lookup.sub_order_ids;
+  keys =
+    typeof subs === 'string'
+      ? keys.where('k.sub_order_id', '=', subs)
+      : keys.where('k.sub_order_id', 'in', [...subs]);
+  return eb(eb.refTuple('order_id', 'attr_at'), 'in', keys.$asTuple('order_id', 'attr_at'));
 }
 
 export interface DropInput {

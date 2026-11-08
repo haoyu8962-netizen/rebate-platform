@@ -2,6 +2,7 @@ import type { DB } from '@couli/db';
 import type { Kysely, Selectable } from 'kysely';
 import type { RegisteredPlatform } from '../../union/index.ts';
 import { findPlatformRules } from '../domain/platform-rules/index.ts';
+import { orderKeyMatch } from './pipeline-store.ts';
 
 export interface RightsOrderLookupInput {
   readonly app_id: string;
@@ -29,9 +30,13 @@ type OrderNoColumn = 'sub_order_id' | 'parent_order_id';
 /**
  * Read-only sub_order_id lookup within app + platform. PDD adapters store order_sn verbatim
  * (with hyphens), so for PDD both the stored column and the input are hyphen-stripped before
- * comparing: replace(col, '-', '') = <normalized input>. An exact `col = <normalized input>`
- * branch is kept next to it in one UNION ALL statement (redundant for matching; it keeps a bound
- * equality on the column). Taobao / JD compare the stored value verbatim.
+ * comparing: replace(col, '-', '') = <normalized input>. An exact branch is kept next to it in one
+ * UNION ALL statement (redundant for matching; it keeps a bound equality on the number). Taobao /
+ * JD compare the stored value verbatim.
+ * B1-09x (D10-853): the exact sub-number match goes through order_keys and reads orders by its PK
+ * (orderKeyMatch; one statement, same row as comparing orders.sub_order_id); the exact parent probe
+ * uses orders_parent_order_idx. The pdd hyphen-stripped branches keep their scan
+ * (FU-PDD-ORDERNO-NORMALIZED-INDEX).
  * A parent-only hit is diagnostic, never a list of children or a command target.
  * This result is NOT a locked snapshot: caller must lockOrderKey and reread FOR UPDATE
  * before sending a command through the settlement ports.
@@ -48,24 +53,29 @@ export async function findOrderForRights(
       .selectFrom('orders')
       .where('app_id', '=', input.app_id)
       .where('platform', '=', input.platform);
-  const exact = (column: OrderNoColumn) => scoped().where(column, '=', no);
+  const exactSub = () =>
+    scoped().where((eb) =>
+      orderKeyMatch(eb, { app_id: input.app_id, platform: input.platform, sub_order_ids: no }),
+    );
+  const exactParent = () =>
+    scoped().where('parent_order_id', 'is not', null).where('parent_order_id', '=', no);
   const stripped = (column: OrderNoColumn) =>
     scoped().where((eb) =>
       eb(eb.fn<string>('replace', [eb.ref(column), eb.val('-'), eb.val('')]), '=', no),
     );
 
   const subQuery = strip
-    ? exact('sub_order_id').selectAll().unionAll(stripped('sub_order_id').selectAll())
-    : exact('sub_order_id').selectAll();
+    ? exactSub().selectAll().unionAll(stripped('sub_order_id').selectAll())
+    : exactSub().selectAll();
   const order = await subQuery.executeTakeFirst();
   if (order !== undefined) return { kind: 'found', order };
 
   // Diagnostic probe only: a parent hit is reported, never expanded to its children.
   const parentQuery = strip
-    ? exact('parent_order_id')
+    ? exactParent()
         .select('sub_order_id')
         .unionAll(stripped('parent_order_id').select('sub_order_id'))
-    : exact('parent_order_id').select('sub_order_id');
+    : exactParent().select('sub_order_id');
   const parent = await parentQuery.limit(1).executeTakeFirst();
   return parent === undefined ? { kind: 'not_found' } : { kind: 'sub_order_no_missing' };
 }

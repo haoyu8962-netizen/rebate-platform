@@ -6,6 +6,7 @@ import { chinaDayRange } from '@couli/domain';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { OrderSubject } from '../application/order-queries.ts';
 import { findPlatformRules } from '../domain/platform-rules/index.ts';
+import { orderKeyMatch } from './pipeline-store.ts';
 
 /** What acceptance reads of a matched orders row. */
 export interface ClaimOrderRow {
@@ -25,8 +26,8 @@ export interface ClaimOrderRow {
 /**
  * Orders of (app_id, platform) whose child (`sub`) or parent (`parent`) number equals `value`.
  * pdd compares with every hyphen removed from the stored number (the caller removes them from the
- * input); other platforms compare exactly (rule table orderNoStripHyphens). A null parent number
- * never matches.
+ * input); other platforms compare exactly (rule table orderNoStripHyphens), by `sub` through
+ * order_keys. A null parent number never matches.
  */
 export async function findClaimOrders(
   trx: Transaction<DB>,
@@ -36,11 +37,9 @@ export async function findClaimOrders(
   by: 'sub' | 'parent',
 ): Promise<ClaimOrderRow[]> {
   const column = by === 'sub' ? 'sub_order_id' : 'parent_order_id';
-  const stored =
-    findPlatformRules(platform)?.orderNoStripHyphens === true
-      ? sql<string>`replace(${sql.ref(column)}, '-', '')`
-      : sql.ref(column);
-  return trx
+  const strip = findPlatformRules(platform)?.orderNoStripHyphens === true;
+  const stored = strip ? sql<string>`replace(${sql.ref(column)}, '-', '')` : sql.ref(column);
+  const query = trx
     .withSchema('app')
     .selectFrom('orders')
     .select([
@@ -57,9 +56,16 @@ export async function findClaimOrders(
     ])
     .where('app_id', '=', appId)
     .where('platform', '=', platform)
-    .where(sql<boolean>`${sql.ref(column)} is not null`)
-    .where(sql<boolean>`${stored} = ${value}`)
-    .execute();
+    .where(sql<boolean>`${sql.ref(column)} is not null`);
+  // B1-09x (D10-853): an exact sub number goes through order_keys and reads orders by its PK (same
+  // rows as comparing orders.sub_order_id); an exact parent number uses orders_parent_order_idx.
+  // The pdd hyphen-stripped comparison keeps its scan (FU-PDD-ORDERNO-NORMALIZED-INDEX).
+  if (!strip && by === 'sub') {
+    return query
+      .where((eb) => orderKeyMatch(eb, { app_id: appId, platform, sub_order_ids: value }))
+      .execute();
+  }
+  return query.where(sql<boolean>`${stored} = ${value}`).execute();
 }
 
 /** Claims of the subject created on the +08:00 day `day` (YYYY-MM-DD), whatever their status. */
