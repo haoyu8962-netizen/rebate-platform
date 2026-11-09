@@ -26,6 +26,31 @@ let client: ReturnType<typeof createQueryClient> | undefined;
 let viewport: { width: number; height: number };
 let originalTheme: string | null;
 
+/**
+ * Wait (at most 2s, well under the test timeout) for the finite CSS transitions / animations of
+ * the document to finish, so visibility and geometry are read from the settled frame rather than
+ * an enter motion in progress. Infinite ones (skeleton shimmer) never finish and are skipped.
+ */
+async function motionSettled(): Promise<void> {
+  const running = document
+    .getAnimations()
+    .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+    .map((animation) =>
+      animation.finished.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.all(running),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, 2_000);
+    }),
+  ]);
+  clearTimeout(timer);
+}
+
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(NOW));
@@ -175,6 +200,7 @@ it('[AC-F1-04b-BROWSER#3] h5-find-order-records', async () => {
     await expect.element(page.getByText(label, { exact: true })).toBeVisible();
   await expect.element(page.getByText(noEvidenceText, { exact: false })).toBeVisible();
   await expect.element(container).toMatchTextContent('只显示你本人提交的找回申请');
+  await motionSettled();
   const probe = document.createElement('output');
   const orderElements = claims.map((claim) => page.getByText(new RegExp(claim.order_no)).element());
   // Scope to the records' common container without requiring a particular list/tab markup.

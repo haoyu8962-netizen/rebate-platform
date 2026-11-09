@@ -1,0 +1,22 @@
+id: F1-01ft
+repo: rebate-platform
+title: 测试改动（D10-1161 / D10-1165）：冻结浏览器用例在读几何或可见性前等动效结束——h5-find-order [AC-F1-04b-BROWSER#3]、h5-components [AC-F1-01f-LAYOUT#1] 与 [AC-F1-01f-VISUAL#2]，断言条件不变
+type: test-change
+# 2026-11-09 入账（前端线 f1-frontend-7，编排 D10-1161 主干红灯优先、D10-1165 并单）。
+# 现状：DSX-48d（#2999）给 H5 内容与弹层加了进场动效后，冻结用例在动效进行中一次性读取：
+#   test/spec/frontend/h5-find-order/find-order.browser.test.ts [AC-F1-04b-BROWSER#3]（约 L187 用 checkVisibility({checkOpacity:true}) 一次性数角标，第一帧 opacity 0 被滤掉，主干 04fddbfc verify-int-1 随机红；#2999 CI 过是碰巧）；
+#   test/spec/frontend/h5-components/components.browser.test.ts [AC-F1-01f-LAYOUT#1] sheet（以 open:true 挂载后只等 toBeVisible 就同步读几何，滑入中底边超界）与 [AC-F1-01f-VISUAL#2]（靠截图耗时盖过进场，碰巧过）——DSX-48f ② 的「挂载即 open 也播进场」补丁（couli-runs/DSX-48f/modal-appear-r1.patch）待本单合并后另开小单套用。
+# 做法：在读几何 / 可见性 / 截图前等相关元素的动效结束（如 await Promise.all(el.getAnimations({subtree:true}).map(a => a.finished))，或对同一断言条件用 expect.element 重试式等待），断言条件、阈值、标题与测试数一律不变；不靠改样式或关动画绕过。
+# 改既有规则测试属第一类保护路径：走非 task 分支、台账同 PR；新鲜 Claude 修改，Codex 只读复审（D10-823），按 approvals #24 由编排加 owner-approved 标签。另：DSX-48f 台账加一行注释写明范围收窄（只交付 ①，D10-1165），title 不改。
+refs: []
+refs_hash: {}
+deps: [DSX-48d]
+paths:
+  - 'test/spec/frontend/h5-find-order/find-order.browser.test.ts'
+  - 'test/spec/frontend/h5-components/components.browser.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

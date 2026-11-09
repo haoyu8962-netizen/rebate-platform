@@ -17,6 +17,31 @@ import '../../../../apps/h5/src/shared/styles/index.css';
 let root: Root | undefined;
 let originalViewport: { width: number; height: number };
 
+/**
+ * Wait (at most 2s, well under the test timeout) for the finite CSS transitions / animations of
+ * the document to finish, so geometry and screenshots are read from the settled frame rather
+ * than an enter motion in progress. Infinite ones (skeleton shimmer) never finish and are skipped.
+ */
+async function motionSettled(): Promise<void> {
+  const running = document
+    .getAnimations()
+    .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+    .map((animation) =>
+      animation.finished.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.all(running),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, 2_000);
+    }),
+  ]);
+  clearTimeout(timer);
+}
+
 beforeEach(async () => {
   originalViewport = { width: window.innerWidth, height: window.innerHeight };
   await page.viewport(375, 812);
@@ -197,6 +222,7 @@ for (const { Component, slug, title } of modalCases) {
     await expect.element(page.getByRole('dialog', { name: title })).toBeVisible();
     await expect.element(page.getByRole('button', { name: '确认', exact: true })).toBeVisible();
     await document.fonts.ready;
+    await motionSettled();
     const screenshot = await page.screenshot();
     expect(screenshot).toContain(`h5-components-${slug}`);
     const modal = page.getByRole('dialog', { name: title }).element();
@@ -294,6 +320,7 @@ for (const { Component, slug, title } of modalCases) {
     );
     await expect.element(page.getByRole('dialog', { name: title })).toBeVisible();
     await expect.element(page.getByRole('button', { name: '确认', exact: true })).toBeVisible();
+    await motionSettled();
     const modal = page.getByRole('dialog', { name: title }).element();
     const body = required('[data-slot="modal-body"]', modal);
     const titleElement = page.getByRole('heading', { name: title }).element();
