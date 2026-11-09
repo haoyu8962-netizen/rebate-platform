@@ -1,0 +1,18 @@
+id: CT-06zzzzo
+repo: rebate-platform
+title: CT-06zzzzo：dependabot 的 open-pull-requests-limit 由 5 改为 1，少占 CI（D10-1144 ① / D10-1146 选 A）
+type: guard-change
+# 2026-11-09 ops 入账（编排 D10-1143 分拣 #3001–#3004 后，D10-1144 ① 想改 0；冻结测试 test/spec/ci/dependabot/config.test.ts [CT-23#6] 要求 1～10、
+#   规划/05 CT-23 验收写「每周一批依赖 PR」，D10-1146 选 (A) 改 1：在冻结范围内，不动测试与 05）。只改 .github/dependabot.yml 一行与注释（含改回办法）。
+# 生产依赖的新公告另由 couli-runs/OPS-lane/nightly-audit.sh 每晚 pnpm audit --prod 报告（不占 CI）。.github/** 属第三类，按 #16 / #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/dependabot.yml'
+  - 'ops/tasks/CT-06zzzzo.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

@@ -20,6 +20,10 @@ updates:
       minor-and-patch:
         applies-to: version-updates
         update-types: [minor, patch]
-    open-pull-requests-limit: 5
+    # D10-1146（2026-11-09，CT-06zzzzo）：由 5 改为 1，少占 CI——每周最多开一张版本升级 PR；
+    # 依赖 PR 一律不合并，由 ops 分拣，有安全意义的另开 deps 任务。生产依赖的新公告由每晚
+    # pnpm audit --prod（couli-runs/OPS-lane/nightly-audit.sh）报告。改回：把这里改回 5
+    # （冻结测试 [CT-23#6] 允许 1～10）。
+    open-pull-requests-limit: 1
     commit-message:
       prefix: 'chore(deps)'
