@@ -5,6 +5,7 @@ import type { Schema } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Card, Flex, Form, Input, List, Modal, Typography } from 'antd';
 import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { codePointLength } from '../../text-length.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
 import {
   PHONES_URL,
@@ -333,8 +334,8 @@ function AddPhoneDialog({
     const note = reason.trim();
     setMessage(undefined);
     setPhoneError(value === '' ? t.phones.phoneRequired : undefined);
-    setReasonError(note.length > REASON_MAX ? t.reasonInvalid : undefined);
-    if (value === '' || note.length > REASON_MAX) return;
+    setReasonError(codePointLength(note) > REASON_MAX ? t.reasonInvalid : undefined);
+    if (value === '' || codePointLength(note) > REASON_MAX) return;
     stepUp.ask({ operation: t.phones.addOperation, run: (token) => void run(value, note, token) });
   };
 
@@ -385,7 +386,6 @@ function AddPhoneDialog({
               id={reasonId}
               value={reason}
               rows={2}
-              maxLength={REASON_MAX}
               placeholder={t.reasonPlaceholder}
               onChange={(event) => setReason(event.target.value)}
             />

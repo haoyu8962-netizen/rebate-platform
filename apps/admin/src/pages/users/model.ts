@@ -2,6 +2,7 @@
 // No copy lives here (texts/users.ts); nothing is invented beyond the contract fields.
 import type { Schema } from '@couli/contracts-ts';
 import { AdminApiError } from '../../providers/data/index.ts';
+import { rawCodePointLength } from '../../text-length.ts';
 import { usersTexts as t } from '../../texts/users.ts';
 
 export type UserRow = Schema<'AdminUserListItem'>;
@@ -127,7 +128,7 @@ export function revealErrorText(cause: unknown): string {
   return t.reveal.failed;
 }
 
-/** Reason accepted by the contract: not blank and at most 200 characters. */
+/** Reason accepted by the contract: not blank and at most 200 code points as sent (untrimmed). */
 export function validReason(reason: string): boolean {
-  return reason.trim() !== '' && reason.length <= REASON_MAX;
+  return reason.trim() !== '' && rawCodePointLength(reason) <= REASON_MAX;
 }

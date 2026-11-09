@@ -35,6 +35,7 @@ import { useNavigate } from 'react-router';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
+import { rawCodePointLength } from '../../text-length.ts';
 import { killSwitchesTexts as t } from '../../texts/kill-switches.ts';
 import { ConfirmModal, REASON_MAX } from './ConfirmModal.tsx';
 import {
@@ -688,7 +689,7 @@ export function KillSwitchesPage({ access }: KillSwitchesPageProps): ReactElemen
           onCancel={cancel}
           onConfirm={(reason) => {
             const current = pendingRef.current;
-            if (current?.phase !== 'confirm' || reason.length > REASON_MAX) return;
+            if (current?.phase !== 'confirm' || rawCodePointLength(reason) > REASON_MAX) return;
             setPending({ ...current, reason, phase: 'verify' });
           }}
         />

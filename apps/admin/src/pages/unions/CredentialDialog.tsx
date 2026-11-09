@@ -5,6 +5,7 @@ import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Flex, Form, Input, Modal, Typography } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { Schema } from '@couli/contracts-ts';
+import { codePointLength } from '../../text-length.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
 import {
   CREDENTIAL_MAX,
@@ -109,7 +110,7 @@ export function CredentialDialog({
     const expiresAt = beijingInputToIso(expires);
     if (expiresAt === null) next.expires_at = t.credential.expiresInvalid;
     const note = reason.trim();
-    if (note.length > REASON_MAX) next.reason = t.reasonInvalid;
+    if (codePointLength(note) > REASON_MAX) next.reason = t.reasonInvalid;
     setErrors(next);
     setMessage(undefined);
     if (Object.keys(next).length > 0) return;
@@ -192,7 +193,6 @@ export function CredentialDialog({
               id={reasonId}
               value={reason}
               rows={2}
-              maxLength={REASON_MAX}
               placeholder={t.reasonPlaceholder}
               onChange={(event) => setReason(event.target.value)}
             />

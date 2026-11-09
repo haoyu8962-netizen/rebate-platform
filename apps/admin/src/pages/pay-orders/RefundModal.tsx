@@ -4,6 +4,7 @@
 // [amount_fen] 也提示在金额旁。不弹动态码。请求由 useRefund 发出，这里只收输入、显示错误。
 import { Alert, Button, Flex, Form, Input, Modal, Select, Typography } from 'antd';
 import { useEffect, useRef, type ReactElement } from 'react';
+import { codePointLength } from '../../text-length.ts';
 import { payOrdersTexts } from '../../texts/pay-orders.ts';
 import {
   REFUND_NOTE_MAX,
@@ -68,6 +69,11 @@ export function RefundModal({
     if (fen > refundable) return Promise.reject(new Error(t.amountOver(moneyOf(refundable))));
     return Promise.resolve();
   };
+
+  const checkNote = (_: unknown, value: string | undefined): Promise<void> =>
+    codePointLength(value ?? '') > REFUND_NOTE_MAX
+      ? Promise.reject(new Error(t.noteTooLong))
+      : Promise.resolve();
 
   const submit = () => {
     if (lock.current || sending || !canSubmit) return;
@@ -144,13 +150,13 @@ export function RefundModal({
           <Form.Item
             name="note"
             label={t.noteLabel}
-            rules={[{ max: REFUND_NOTE_MAX, message: t.noteTooLong }]}
+            rules={[{ validator: checkNote }]}
             style={{ marginBottom: 0 }}
           >
             <Input.TextArea
               rows={3}
-              maxLength={REFUND_NOTE_MAX}
               showCount
+              count={{ max: REFUND_NOTE_MAX, strategy: codePointLength }}
               placeholder={t.notePlaceholder}
             />
           </Form.Item>

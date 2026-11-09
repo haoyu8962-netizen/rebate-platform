@@ -7,6 +7,7 @@ import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Flex, Form, Input, Modal, Typography } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { AuthClock } from '../../providers/auth/index.ts';
+import { codePointLength } from '../../text-length.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
 import {
   EVIDENCE_MAX_BYTES,
@@ -147,7 +148,7 @@ export function ActivateDialog({
     if (evidence === undefined) next.hjy_ignore_evidence = t.pids.evidenceRequired;
     else if (!evidenceValid(evidence)) next.hjy_ignore_evidence = t.pids.evidenceInvalid;
     const note = reason.trim();
-    if (note.length > REASON_MAX) next.reason = t.reasonInvalid;
+    if (codePointLength(note) > REASON_MAX) next.reason = t.reasonInvalid;
     setErrors(next);
     setMessage(undefined);
     if (Object.keys(next).length > 0) return;
@@ -241,7 +242,6 @@ export function ActivateDialog({
               id={reasonId}
               value={reason}
               rows={2}
-              maxLength={REASON_MAX}
               disabled={busy}
               placeholder={t.reasonPlaceholder}
               onChange={(event) => setReason(event.target.value)}

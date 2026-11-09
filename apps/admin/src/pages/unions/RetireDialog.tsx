@@ -3,6 +3,7 @@
 import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Flex, Form, Input, Modal, Typography } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { codePointLength } from '../../text-length.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
 import {
   REASON_MAX,
@@ -94,7 +95,7 @@ export function RetireDialog({
   const submit = () => {
     if (busy) return;
     const note = reason.trim();
-    if (note.length > REASON_MAX) {
+    if (codePointLength(note) > REASON_MAX) {
       setReasonError(t.reasonInvalid);
       return;
     }
@@ -150,7 +151,6 @@ export function RetireDialog({
               id={reasonId}
               value={reason}
               rows={2}
-              maxLength={REASON_MAX}
               disabled={busy}
               placeholder={t.reasonPlaceholder}
               onChange={(event) => setReason(event.target.value)}

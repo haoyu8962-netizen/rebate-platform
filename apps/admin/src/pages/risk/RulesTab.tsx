@@ -26,6 +26,7 @@ import { Link } from 'react-router';
 import { plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
+import { rawCodePointLength } from '../../text-length.ts';
 import { riskTexts } from '../../texts/risk.ts';
 import { ConfirmModal } from './ConfirmModal.tsx';
 import {
@@ -431,7 +432,7 @@ export function RulesTab(): ReactElement {
           onCancel={cancel}
           onConfirm={(reason) => {
             const current = pendingRef.current;
-            if (current?.phase !== 'confirm' || reason.length > REASON_MAX) return;
+            if (current?.phase !== 'confirm' || rawCodePointLength(reason) > REASON_MAX) return;
             setPending({ ...current, reason, phase: 'verify' });
           }}
         />

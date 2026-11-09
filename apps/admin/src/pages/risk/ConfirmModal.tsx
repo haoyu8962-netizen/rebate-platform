@@ -5,6 +5,7 @@
 import { SafetyOutlined } from '@ant-design/icons';
 import { Button, Flex, Input, Modal, Typography, theme } from 'antd';
 import { useId, useRef, useState, type ReactElement } from 'react';
+import { rawCodePointLength } from '../../text-length.ts';
 import { riskTexts } from '../../texts/risk.ts';
 import { REASON_MAX, statusLabel, targetOf, type RiskRule, type RiskRuleChange } from './model.ts';
 
@@ -39,8 +40,8 @@ export function ConfirmModal({
     </Typography.Text>
   );
   const confirm = () => {
-    // The TextArea already stops at 200 characters; this guards a pasted or scripted value.
-    if (reason.current.length > REASON_MAX) {
+    // Sent as typed: counted in code points as typed, as the server does.
+    if (rawCodePointLength(reason.current) > REASON_MAX) {
       setTooLong(true);
       return;
     }
@@ -104,13 +105,13 @@ export function ConfirmModal({
             aria-describedby={tooLong ? errorId : undefined}
             aria-invalid={tooLong ? true : undefined}
             defaultValue={initialReason}
-            maxLength={REASON_MAX}
             showCount
+            count={{ max: REASON_MAX, strategy: rawCodePointLength }}
             rows={3}
             placeholder={t.confirm.reasonPlaceholder}
             onChange={(event) => {
               reason.current = event.target.value;
-              if (event.target.value.length <= REASON_MAX) setTooLong(false);
+              if (rawCodePointLength(event.target.value) <= REASON_MAX) setTooLong(false);
             }}
           />
           {tooLong ? (

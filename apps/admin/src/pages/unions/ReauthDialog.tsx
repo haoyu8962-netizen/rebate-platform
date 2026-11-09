@@ -6,6 +6,7 @@ import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Flex, Form, Input, Modal, Typography } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { AuthClock } from '../../providers/auth/index.ts';
+import { codePointLength } from '../../text-length.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
 import {
   REASON_MAX,
@@ -160,7 +161,7 @@ export function ReauthDialog({
   const submit = () => {
     if (phase.kind !== 'form') return;
     const note = reason.trim();
-    if (note.length > REASON_MAX) {
+    if (codePointLength(note) > REASON_MAX) {
       setPhase({ kind: 'form', reasonError: t.reasonInvalid });
       return;
     }
@@ -192,7 +193,6 @@ export function ReauthDialog({
               id={reasonId}
               value={reason}
               rows={2}
-              maxLength={REASON_MAX}
               placeholder={t.reasonPlaceholder}
               disabled={phase.kind === 'starting'}
               onChange={(event) => setReason(event.target.value)}

@@ -3,7 +3,8 @@
 // written here; 【验证并…】 hands over to the totp step-up.
 import { SafetyOutlined } from '@ant-design/icons';
 import { Alert, Button, Flex, Input, Modal, Radio, Typography, theme } from 'antd';
-import { useId, useRef, type ReactElement } from 'react';
+import { useId, useRef, useState, type ReactElement } from 'react';
+import { rawCodePointLength } from '../../text-length.ts';
 import { killSwitchesTexts as t } from '../../texts/kill-switches.ts';
 import {
   displayName,
@@ -27,7 +28,7 @@ export interface ConfirmModalProps {
   /** Enum rows: another option picked in the dialog. */
   readonly onNext: (next: SwitchValue) => void;
   readonly onCancel: () => void;
-  /** The operation note as typed (the TextArea owns its value and the 200 limit). */
+  /** The operation note as typed (≤200 code points as typed; longer notes cannot be confirmed). */
   readonly onConfirm: (reason: string) => void;
 }
 
@@ -43,6 +44,7 @@ export function ConfirmModal({
   const optionsId = useId();
   // Uncontrolled: the note never round-trips through page state on every keystroke.
   const reason = useRef('');
+  const [tooLong, setTooLong] = useState(false);
   const name = displayName(row.key);
   const verb = verbOf(row, next);
   const current = currentOf(row);
@@ -70,6 +72,7 @@ export function ConfirmModal({
           <Button
             type={turningOff ? 'default' : 'primary'}
             danger={turningOff}
+            disabled={tooLong}
             icon={<SafetyOutlined aria-hidden />}
             onClick={() => onConfirm(reason.current)}
           >
@@ -135,12 +138,15 @@ export function ConfirmModal({
           <Input.TextArea
             aria-labelledby={reasonId}
             defaultValue=""
-            maxLength={REASON_MAX}
+            aria-invalid={tooLong ? true : undefined}
             showCount
+            count={{ max: REASON_MAX, strategy: rawCodePointLength }}
+            status={tooLong ? 'error' : ''}
             rows={3}
             placeholder={t.reasonPlaceholder}
             onChange={(event) => {
               reason.current = event.target.value;
+              setTooLong(rawCodePointLength(event.target.value) > REASON_MAX);
             }}
           />
         </Flex>

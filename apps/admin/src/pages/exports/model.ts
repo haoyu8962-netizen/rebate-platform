@@ -1,6 +1,7 @@
 // Export task helpers: the status shown (a done task past expires_at is expired, as the server
 // answers), its BR-TEXT-25 name, and which action a row offers. No copy lives here.
 import { export_status, type Schema } from '@couli/contracts-ts';
+import { rawCodePointLength } from '../../text-length.ts';
 import { exportsTexts as t } from '../../texts/exports.ts';
 
 export type ExportRow = Schema<'AdminExport'>;
@@ -66,7 +67,7 @@ export function statusTagColor(status: ExportStatus): string {
 }
 
 export function validReason(reason: string): boolean {
-  return reason.trim() !== '' && reason.length <= REASON_MAX;
+  return reason.trim() !== '' && rawCodePointLength(reason) <= REASON_MAX;
 }
 
 /** data.status of a 30417 answer, when it names a known status. */

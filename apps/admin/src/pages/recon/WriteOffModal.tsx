@@ -5,6 +5,7 @@
 import { Alert, Button, Flex, Input, Modal, Typography } from 'antd';
 import { useId, useState, type ReactElement } from 'react';
 import { reconTexts } from '../../texts/recon.ts';
+import { codePointLength } from '../../text-length.ts';
 import { NOTE_MAX } from './model.ts';
 
 const t = reconTexts.writeOff;
@@ -34,7 +35,7 @@ export interface WriteOffModalProps {
   readonly onSubmit: (note: string | undefined) => void;
 }
 
-const noteTooLong = (note: string): boolean => note.trim().length > NOTE_MAX;
+const noteTooLong = (note: string): boolean => codePointLength(note) > NOTE_MAX;
 
 export function WriteOffModal({
   reconDiffId,
@@ -99,7 +100,7 @@ export function WriteOffModal({
           value={note}
           rows={3}
           showCount
-          count={{ max: NOTE_MAX }}
+          count={{ max: NOTE_MAX, strategy: codePointLength }}
           status={shownError === undefined ? '' : 'error'}
           placeholder={t.placeholder}
           disabled={busy || locked}

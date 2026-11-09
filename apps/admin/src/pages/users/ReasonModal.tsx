@@ -4,6 +4,7 @@
 import { SafetyOutlined } from '@ant-design/icons';
 import { Alert, Button, Flex, Input, Modal, Typography } from 'antd';
 import { useId, useState, type ReactElement } from 'react';
+import { rawCodePointLength } from '../../text-length.ts';
 import { usersTexts } from '../../texts/users.ts';
 import { REASON_MAX, validReason } from './model.ts';
 
@@ -58,7 +59,7 @@ export function ReasonModal({
           value={reason}
           rows={3}
           showCount
-          count={{ max: REASON_MAX }}
+          count={{ max: REASON_MAX, strategy: rawCodePointLength }}
           status={invalid ? 'error' : ''}
           placeholder={t.reasonPlaceholder}
           onChange={(event) => {

@@ -4,6 +4,7 @@
 import { Alert, Button, Flex, Input, Modal, Typography } from 'antd';
 import { useId, useState, type ReactElement } from 'react';
 import { reconTexts } from '../../texts/recon.ts';
+import { codePointLength } from '../../text-length.ts';
 import { REASON_MAX } from './model.ts';
 
 const t = reconTexts.close;
@@ -23,8 +24,8 @@ export interface CloseModalProps {
 }
 
 function validReason(reason: string): boolean {
-  const trimmed = reason.trim();
-  return trimmed.length >= 1 && trimmed.length <= REASON_MAX;
+  const length = codePointLength(reason);
+  return length >= 1 && length <= REASON_MAX;
 }
 
 export function CloseModal({
@@ -82,7 +83,7 @@ export function CloseModal({
           value={reason}
           rows={3}
           showCount
-          count={{ max: REASON_MAX }}
+          count={{ max: REASON_MAX, strategy: codePointLength }}
           status={shownError === undefined ? '' : 'error'}
           placeholder={t.placeholder}
           disabled={sending}

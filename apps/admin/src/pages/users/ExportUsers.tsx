@@ -12,6 +12,7 @@ import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router';
 import { StepUpModal } from '../../components/step-up/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
+import { codePointLength } from '../../text-length.ts';
 import { usersTexts } from '../../texts/users.ts';
 import { REASON_MAX, type RiskState } from './model.ts';
 import { useVerifiedWrite } from './relations/useVerifiedWrite.ts';
@@ -49,7 +50,7 @@ function outcomeOf(cause: unknown): Outcome {
 function reasonError(reason: string): string | undefined {
   const value = reason.trim();
   if (value === '') return t.reasonEmpty;
-  if (value.length > REASON_MAX) return t.reasonTooLong;
+  if (codePointLength(value) > REASON_MAX) return t.reasonTooLong;
   return undefined;
 }
 
@@ -270,7 +271,7 @@ function ExportDialog({
                   aria-required
                   disabled={busy}
                   showCount
-                  count={{ max: REASON_MAX }}
+                  count={{ max: REASON_MAX, strategy: codePointLength }}
                   placeholder={t.reasonPlaceholder}
                   onChange={(event) => {
                     setReason(event.target.value);

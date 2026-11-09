@@ -5,6 +5,7 @@
 import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Flex, Form, Input, Modal, Select, Typography } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { codePointLength } from '../../text-length.ts';
 import { unionsTexts as t } from '../../texts/unions.ts';
 import {
   PIDS_URL,
@@ -185,7 +186,7 @@ export function PidFormDialog({
     if (pidValue === '') next.pid = t.pids.pidRequired;
     else if (!PID_CODE.test(pidValue)) next.pid = t.pids.pidInvalid;
     if (scene === undefined) next.pid_scene = t.pids.sceneRequired;
-    if (note.length > REASON_MAX) next.reason = t.reasonInvalid;
+    if (codePointLength(note) > REASON_MAX) next.reason = t.reasonInvalid;
     setErrors(next);
     setMessage(undefined);
     if (Object.keys(next).length > 0) return;
@@ -349,7 +350,6 @@ export function PidFormDialog({
               id={reasonId}
               value={reason}
               rows={2}
-              maxLength={REASON_MAX}
               disabled={busy}
               placeholder={t.reasonPlaceholder}
               onChange={(event) => setReason(event.target.value)}

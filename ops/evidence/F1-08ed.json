@@ -1,0 +1,116 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-note-length/kill-switches.test.ts > [AC-F1-08ed-KILL#1] 紧急开关操作说明 199 个汉字 + 1 个「𠮷」（200 码点）：不截断、页面显示的字数为 200、不报超长，【验证并…】交出这段原值；201 码点：字数显示 201 并报超长（或不能提交）",
+    "test/spec/frontend/admin-note-length/pay-orders.test.ts > [AC-F1-08ed-REFUND#1] 退款备注 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不截断、字数显示 200、不报超长，提交的请求体带去首尾空白后的整段备注；201 码点：在备注旁报超长、不提交",
+    "test/spec/frontend/admin-note-length/recon.test.ts > [AC-F1-08ed-RECON#1] 【核销】备注 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不截断、字数显示 200、不报超长，确认后交出去首尾空白后的整段备注；201 码点：在备注旁报超长、不提交",
+    "test/spec/frontend/admin-note-length/recon.test.ts > [AC-F1-08ed-RECON#2] 【关闭（不处理）】原因 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不截断、字数显示 200、不报错，确认后交出去首尾空白后的整段原因；201 码点或只有空白：在原因旁报错、不提交",
+    "test/spec/frontend/admin-note-length/risk.test.ts > [AC-F1-08ed-RISK#1] 风控规则启用原因 199 个汉字 + 1 个「𠮷」（200 码点）：不截断、页面显示的字数为 200、不报超长，【确认启用】交出这段原值；201 码点：字数显示 201，确认时在原因旁报超长、不往下走",
+    "test/spec/frontend/admin-note-length/settle-bills.test.ts > [AC-F1-08ed-SETTLE#1] 批次驳回原因 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不报超长、【确认驳回】可点，点后进入动态码；201 码点：在原因旁报超长、不进入动态码",
+    "test/spec/frontend/admin-note-length/shared.test.ts > [AC-F1-08ed-SHARED#1] codePointLength：199 个汉字 + 1 个「𠮷」计 200（UTF-16 是 201），去首尾空白后仍计 200；再多 1 个「𠮷」计 201",
+    "test/spec/frontend/admin-note-length/shared.test.ts > [AC-F1-08ed-SHARED#2] codePointLength：空串与只有空白计 0；内部空白照计；普通字符与 UTF-16 长度一致",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#1] 差错单【核销】备注与【关闭】原因（recon WriteOffModal / CloseModal）：用 text-length.ts 计数，不再按 .length 比较上限，字数显示带按码点的 strategy",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#2] 配置中心单项 / 批量修改原因（config-center ItemDrawer / BatchDrawer）：用 text-length.ts 计数，不再按 .length 比较上限、不再用 maxLength={REASON_MAX}",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#3] 导出记录重试原因（exports ReasonModal 与 model.validReason）：用 text-length.ts 计数，不再按 .length 比较上限，字数显示带按码点的 strategy",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#4] 紧急开关操作备注（kill-switches ConfirmModal / KillSwitchesPage）：用 text-length.ts 计数，不再按 .length 比较上限、不再用 maxLength={REASON_MAX}，字数显示用按码点的 count.strategy（不留裸 showCount）",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#5] 原路退款备注（pay-orders RefundModal）：用 text-length.ts 计数，不再用 Form 规则 { max: REFUND_NOTE_MAX } 与 maxLength={REFUND_NOTE_MAX}，字数显示用按码点的 count.strategy（不留裸 showCount）",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#6] 风控规则启停原因（risk ConfirmModal / RulesTab）：用 text-length.ts 计数，不再按 .length 比较上限、不再用 maxLength={REASON_MAX}，字数显示用按码点的 count.strategy（不留裸 showCount）",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#7] 月结批次驳回原因（settle-bills WriteDialogs）：用 text-length.ts 计数，不再按 .length 比较上限",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#8] 联盟账号与推广位的原因（unions ActivateDialog / AlertPhones / CredentialDialog / PidFormDialog / ReauthDialog / RetireDialog；凭据、手机号、PID 等字段不在内）：用 text-length.ts 计数，不再按 .length 比较 REASON_MAX、不再用 maxLength={REASON_MAX}",
+    "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#9] 用户的原因框（users ExportUsers / ReasonModal / RiskStateActions / UnionBindingActions / model.validReason / relations/parts）：用 text-length.ts 计数，不再按 .length 比较上限，字数显示带按码点的 strategy",
+    "test/spec/frontend/admin-note-length/unions.test.ts > [AC-F1-08ed-UNIONS#1] 推广位【停用】原因 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：输入框不按 UTF-16 截断、不报错，【验证并停用】进入动态码；201 码点：在原因旁报错、不进入动态码",
+    "test/spec/frontend/admin-note-length/users.test.ts > [AC-F1-08ed-USERS#1] 查看完整手机号的原因 199 个汉字 + 1 个「𠮷」（200 码点）：不截断、字数显示 200、不报错，【验证并查看】交出这段原因；201 码点或空白：在原因旁报错、不往下走"
+  ],
+  "risk_note": "F1-08ed (orchestrator 2026-11-09 21:17; same class as F1-08ec r1 S1). Admin note / reason fields with a length cap now count Unicode code points like the servers do: new apps/admin/src/text-length.ts (codePointLength trims, rawCodePointLength counts the raw value) is used by 24 fields across recon (write-off, close), config-center, exports, kill-switches, pay-orders refund, risk, settle-bills, unions (six dialogs), users; character counters use count.strategy on the same counting, native maxLength / Form max rules that cut by UTF-16 units are removed. Fields whose value is sent untrimmed (kill-switches, users reveal, exports retry, risk enable / disable, users relations level / inviter) count the raw value. Credentials, order numbers, search boxes, SMS fields, URLs and OTP are out of scope. The test author checked every in-scope endpoint counts code points (explicit [...s].length or contract maxLength via Ajv), so no backend ticket. Rule tests by an independent Claude in two rounds; Codex spec-test r1 fail (S1 bare showCount) -> r2 pass; red on the local container. Implementation by Opus 5.5: local container fast-1 and browser-1 green (admin-note-length 19 and every frozen admin test), run.ts static 10/10. The review tool classifies the task as RV2 (pay-orders / settle-bills note fields under pages/**): Codex money review r1 pass with one S2 (shared ReasonField shows the raw count where two callers validate trimmed; logged as a follow-up). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, one S2 (ReasonField display count raw vs trimmed validation in two callers) logged as a follow-up"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test: r1 fail (S1 a bare showCount passed the scan), r2 pass; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08ed",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "69d9f6d4b2f4a4d70f5017863e9ad4926cd4a732",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "69d9f6d4b2f4a4d70f5017863e9ad4926cd4a732",
+      "tree": "1758a35d253650d0888cdd26768e8ae6a7ae2da1",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-09T16:04:41Z",
+      "finished_at": "2026-11-09T16:04:52Z",
+      "red_tests": [
+        "test/spec/frontend/admin-note-length/kill-switches.test.ts > [AC-F1-08ed-KILL#1] 紧急开关操作说明 199 个汉字 + 1 个「𠮷」（200 码点）：不截断、页面显示的字数为 200、不报超长，【验证并…】交出这段原值；201 码点：字数显示 201 并报超长（或不能提交）",
+        "test/spec/frontend/admin-note-length/pay-orders.test.ts > [AC-F1-08ed-REFUND#1] 退款备注 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不截断、字数显示 200、不报超长，提交的请求体带去首尾空白后的整段备注；201 码点：在备注旁报超长、不提交",
+        "test/spec/frontend/admin-note-length/recon.test.ts > [AC-F1-08ed-RECON#1] 【核销】备注 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不截断、字数显示 200、不报超长，确认后交出去首尾空白后的整段备注；201 码点：在备注旁报超长、不提交",
+        "test/spec/frontend/admin-note-length/recon.test.ts > [AC-F1-08ed-RECON#2] 【关闭（不处理）】原因 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不截断、字数显示 200、不报错，确认后交出去首尾空白后的整段原因；201 码点或只有空白：在原因旁报错、不提交",
+        "test/spec/frontend/admin-note-length/risk.test.ts > [AC-F1-08ed-RISK#1] 风控规则启用原因 199 个汉字 + 1 个「𠮷」（200 码点）：不截断、页面显示的字数为 200、不报超长，【确认启用】交出这段原值；201 码点：字数显示 201，确认时在原因旁报超长、不往下走",
+        "test/spec/frontend/admin-note-length/settle-bills.test.ts > [AC-F1-08ed-SETTLE#1] 批次驳回原因 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：不报超长、【确认驳回】可点，点后进入动态码；201 码点：在原因旁报超长、不进入动态码",
+        "test/spec/frontend/admin-note-length/shared.test.ts > [AC-F1-08ed-SHARED#1] codePointLength：199 个汉字 + 1 个「𠮷」计 200（UTF-16 是 201），去首尾空白后仍计 200；再多 1 个「𠮷」计 201",
+        "test/spec/frontend/admin-note-length/shared.test.ts > [AC-F1-08ed-SHARED#2] codePointLength：空串与只有空白计 0；内部空白照计；普通字符与 UTF-16 长度一致",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#1] 差错单【核销】备注与【关闭】原因（recon WriteOffModal / CloseModal）：用 text-length.ts 计数，不再按 .length 比较上限，字数显示带按码点的 strategy",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#2] 配置中心单项 / 批量修改原因（config-center ItemDrawer / BatchDrawer）：用 text-length.ts 计数，不再按 .length 比较上限、不再用 maxLength={REASON_MAX}",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#3] 导出记录重试原因（exports ReasonModal 与 model.validReason）：用 text-length.ts 计数，不再按 .length 比较上限，字数显示带按码点的 strategy",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#4] 紧急开关操作备注（kill-switches ConfirmModal / KillSwitchesPage）：用 text-length.ts 计数，不再按 .length 比较上限、不再用 maxLength={REASON_MAX}，字数显示用按码点的 count.strategy（不留裸 showCount）",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#5] 原路退款备注（pay-orders RefundModal）：用 text-length.ts 计数，不再用 Form 规则 { max: REFUND_NOTE_MAX } 与 maxLength={REFUND_NOTE_MAX}，字数显示用按码点的 count.strategy（不留裸 showCount）",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#6] 风控规则启停原因（risk ConfirmModal / RulesTab）：用 text-length.ts 计数，不再按 .length 比较上限、不再用 maxLength={REASON_MAX}，字数显示用按码点的 count.strategy（不留裸 showCount）",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#7] 月结批次驳回原因（settle-bills WriteDialogs）：用 text-length.ts 计数，不再按 .length 比较上限",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#8] 联盟账号与推广位的原因（unions ActivateDialog / AlertPhones / CredentialDialog / PidFormDialog / ReauthDialog / RetireDialog；凭据、手机号、PID 等字段不在内）：用 text-length.ts 计数，不再按 .length 比较 REASON_MAX、不再用 maxLength={REASON_MAX}",
+        "test/spec/frontend/admin-note-length/source.test.ts > [AC-F1-08ed-SOURCE#9] 用户的原因框（users ExportUsers / ReasonModal / RiskStateActions / UnionBindingActions / model.validReason / relations/parts）：用 text-length.ts 计数，不再按 .length 比较上限，字数显示带按码点的 strategy",
+        "test/spec/frontend/admin-note-length/unions.test.ts > [AC-F1-08ed-UNIONS#1] 推广位【停用】原因 199 个汉字 + 1 个「𠮷」（前后带空白，去首尾空白后 200 码点）：输入框不按 UTF-16 截断、不报错，【验证并停用】进入动态码；201 码点：在原因旁报错、不进入动态码",
+        "test/spec/frontend/admin-note-length/users.test.ts > [AC-F1-08ed-USERS#1] 查看完整手机号的原因 199 个汉字 + 1 个「𠮷」（200 码点）：不截断、字数显示 200、不报错，【验证并查看】交出这段原因；201 码点或空白：在原因旁报错、不往下走"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-note-length/kill-switches.test.ts",
+        "test/spec/frontend/admin-note-length/pay-orders.test.ts",
+        "test/spec/frontend/admin-note-length/recon.test.ts",
+        "test/spec/frontend/admin-note-length/risk.test.ts",
+        "test/spec/frontend/admin-note-length/settle-bills.test.ts",
+        "test/spec/frontend/admin-note-length/shared.test.ts",
+        "test/spec/frontend/admin-note-length/source.test.ts",
+        "test/spec/frontend/admin-note-length/unions.test.ts",
+        "test/spec/frontend/admin-note-length/users.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "dffe6c61766b5b6dc04ce82ac914f7169a2eb8e0df77d86b702079812b0d0975"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c52582aa4bbb65a5d09b207ddad7bab46c38a931",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

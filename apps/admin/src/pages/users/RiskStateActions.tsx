@@ -10,6 +10,7 @@ import { useId, useState, type ReactElement, type ReactNode } from 'react';
 import { StepUpModal } from '../../components/step-up/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
+import { codePointLength } from '../../text-length.ts';
 import { usersTexts } from '../../texts/users.ts';
 import { REASON_MAX, riskLabel, type UserDetail } from './model.ts';
 import { DialogFooter, ReasonField, Summary, fieldsOf } from './relations/parts.tsx';
@@ -52,7 +53,7 @@ export function riskEntries(
 function reasonProblem(reason: string): string | undefined {
   const trimmed = reason.trim();
   if (trimmed === '') return t.reasonEmpty;
-  if (trimmed.length > REASON_MAX) return t.reasonTooLong;
+  if (codePointLength(trimmed) > REASON_MAX) return t.reasonTooLong;
   return undefined;
 }
 

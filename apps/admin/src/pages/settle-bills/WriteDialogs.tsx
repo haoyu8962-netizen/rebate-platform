@@ -5,6 +5,7 @@
 import { Alert, Button, Flex, Form, Input, Modal, Radio, Typography, theme } from 'antd';
 import { useId, useState, type ReactElement, type ReactNode } from 'react';
 import { StepUpModal } from '../../components/step-up/index.ts';
+import { codePointLength } from '../../text-length.ts';
 import { settleBillsTexts } from '../../texts/settle-bills.ts';
 import { DictName } from './DictName.tsx';
 import {
@@ -331,7 +332,7 @@ export function BatchDialog({
     if (write.phase !== 'idle') return;
     setError(undefined);
     if (rejecting) {
-      if (trimmed === '' || trimmed.length > REASON_MAX) {
+      if (trimmed === '' || codePointLength(trimmed) > REASON_MAX) {
         setReasonError(trimmed === '' ? t.reject.reasonInvalid : t.reject.reasonTooLong);
         return;
       }
@@ -351,7 +352,7 @@ export function BatchDialog({
     <WriteShell
       title={copy.title}
       submitText={copy.submit}
-      canSubmit={!rejecting || (trimmed !== '' && trimmed.length <= REASON_MAX)}
+      canSubmit={!rejecting || (trimmed !== '' && codePointLength(trimmed) <= REASON_MAX)}
       write={write}
       operation={copy.operation(batch.batch_id)}
       details={[]}
@@ -380,7 +381,7 @@ export function BatchDialog({
               onChange={(event) => {
                 setReason(event.target.value);
                 setReasonError(
-                  event.target.value.trim().length > REASON_MAX
+                  codePointLength(event.target.value) > REASON_MAX
                     ? t.reject.reasonTooLong
                     : undefined,
                 );

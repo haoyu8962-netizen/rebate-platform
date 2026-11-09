@@ -5,14 +5,15 @@ import { Button, Flex, Form, Input, Typography, theme } from 'antd';
 import type { ReactElement, ReactNode } from 'react';
 import { AdminApiError } from '../../../providers/data/index.ts';
 import { usersTexts } from '../../../texts/users.ts';
+import { rawCodePointLength } from '../../../text-length.ts';
 import { REASON_MAX } from '../model.ts';
 
 const t = usersTexts.relations;
 
-/** 原因：去首尾空白后非空，长度不超过契约上限（AdminUserReason）。 */
+/** 原因：去首尾空白后非空，按发送的原值计码点不超过契约上限（AdminUserReason）。 */
 export function reasonError(reason: string): string | undefined {
   if (reason.trim() === '') return t.reasonEmpty;
-  if (reason.length > REASON_MAX) return t.reasonTooLong(REASON_MAX);
+  if (rawCodePointLength(reason) > REASON_MAX) return t.reasonTooLong(REASON_MAX);
   return undefined;
 }
 
@@ -97,7 +98,7 @@ export function ReasonField({
         aria-required
         disabled={disabled}
         showCount
-        count={{ max: REASON_MAX }}
+        count={{ max: REASON_MAX, strategy: rawCodePointLength }}
         placeholder={t.reasonPlaceholder}
         onChange={(event) => onChange(event.target.value)}
       />

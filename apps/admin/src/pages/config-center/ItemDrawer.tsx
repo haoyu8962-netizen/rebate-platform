@@ -18,6 +18,7 @@ import {
   type TableColumnsType,
 } from 'antd';
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { codePointLength } from '../../text-length.ts';
 import { configCenterTexts as t } from '../../texts/config-center.ts';
 import {
   REASON_MAX,
@@ -399,18 +400,14 @@ export function ItemDrawer({
                     validator: (_, value: unknown) => {
                       const text = typeof value === 'string' ? value.trim() : '';
                       if (text === '') return Promise.reject(new Error(t.validation.reason));
-                      if (text.length > REASON_MAX)
+                      if (codePointLength(text) > REASON_MAX)
                         return Promise.reject(new Error(t.validation.reasonMax));
                       return Promise.resolve();
                     },
                   },
                 ]}
               >
-                <Input.TextArea
-                  rows={3}
-                  maxLength={REASON_MAX}
-                  placeholder={t.drawer.reasonPlaceholder}
-                />
+                <Input.TextArea rows={3} placeholder={t.drawer.reasonPlaceholder} />
               </Form.Item>
             </Form>
           </Flex>
