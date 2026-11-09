@@ -1,0 +1,27 @@
+id: B2-04zzr
+repo: rebate-platform
+title: 订单同步写 P7 的 order_rights(INVALID_AFTER_SETTLE, SUCCEEDED) 与同步状态码处罚的 order_rights(PUNISH, SUCCEEDED)（FU-P7-ORDER-RIGHTS-ROW）
+type: impl
+# 2026-11-09 be 入账（编排 D10-1118 / D10-1124 / D10-1125；be 只读核查见 notices 07:16）。BR-FUND-01 P 表：P7（SETTLED 后 PLATFORM_INVALID，platform_status 不变）写 order_rights(type=INVALID_AFTER_SETTLE, status=SUCCEEDED)；P8 的处罚（PLATFORM_PUNISH，PAID / RECEIVED / SETTLED，含结算前）写 order_rights(type=PUNISH, status=SUCCEEDED)（BR-FUND-02 处罚码映射）。现状：全仓只有 settlement/rights/rights-store.ts 写这张表，入口是维权 / 处罚同步任务与后台导入；订单同步交给 settlement 的路径（clawback/clawback-order.ts onUpdated 已入账 R8；rebate/application/rebate.ts onUpdated 未入账 R6）一行不写。
+# 做法（实现自定细节，留记录）：order_rights 仍只经 settlement 写（BR-FUND-01）；在 settlement 处理订单同步更新的同一事务内，按 source.event 写这一行（P7：event PLATFORM_INVALID 且 from_status SETTLED；处罚：event PLATFORM_PUNISH），不论 rebate_status（已入账、未入账、已作废都写），platform_rights_no 为 null，幂等落在 order_rights_dedupe_key（app_id, order_id, type, platform_rights_no NULLS NOT DISTINCT）——同一事件重放不多写；rights_pending 照 BR-FUND-01 在同一事务重算（SUCCEEDED 不使其为 true）。已入账的扣回（R8，P{row_version} 键、CLAWBACK 凭证、原因码）、未入账的作废（R6）、金额与状态迁移都不变；这一行不得再触发第二次扣回（rights.record 的成功扣回路径不经过这里）。
+# 实际后果（规则测试要钉）：BR-FUND-19 ⑧（db/invariants/ledger/08_invalid-still-credited.sql）据这一行发现「P7 后又成 CREDITED」的单（P7 时未入账被作废、之后经 R12 恢复再入账）。R13（CLAWED_BACK→CREDITED）⑧ 要不要报不进本单（D10-1125，编排记待回写）。三张 status-map 现无 PLATFORM_PUNISH 码，处罚经测试替身的 source.event 钉。
+# 不进本单：淘宝结算后维权的原因、结算后整单退款原因码（FU-CLAWBACK-REASON-CHECK，本单开出后先只读深核）。
+refs: [BR-FUND-01, BR-FUND-02, BR-FUND-19]
+refs_hash:
+  BR-FUND-01: c03344713dbf
+  BR-FUND-02: 382c4075d2cb
+  BR-FUND-19: e6205ee4fcc1
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/clawback/**'
+  - 'apps/api/src/modules/settlement/rebate/**'
+  - 'apps/api/src/modules/settlement/rights/**'
+  - 'test/spec/settlement/sync-order-rights/**'
+test_paths:
+  - 'test/spec/settlement/sync-order-rights/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
