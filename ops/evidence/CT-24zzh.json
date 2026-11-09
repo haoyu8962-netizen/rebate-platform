@@ -1,0 +1,37 @@
+{
+  "task": "CT-24zzh",
+  "spec_ref": "03383a10b26e6a9f0b154e495214a4d6555bafce",
+  "spec_commit": "094c38c2d73deb8e18a3bc507b9b3c4e72c387d4",
+  "red_tests": [],
+  "risk_note": "RV1 contract, description text only (CT-24zzh; BR-FUND-22 申诉恢复 ②, BR-ID-36 ②; D10-1180). submitAppeal, adminRegisterAppeal, adminResolveAppeal and restoreAdminReconDiff now include an order clawed back by BLACKLIST_CONFIRMED (CLAWED_BACK, reason BLACKLIST): an order-appeal restore goes R12 or R13 by the order's current status, and the R13 is no longer restore_not_supported. restore_platform_invalid now states the handling-time recheck (BR-FUND-22, D10-1134) already implemented: a succeeded INVALID_AFTER_SETTLE record at or after the difference's registration refuses the restore. No enum, error code or response shape changes. The implementation of the producer is B2-09gg.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base origin/main. Round 1 fail, one S0: the handling-time recheck of BR-FUND-22 was not written into restore_platform_invalid. Fixed in round 2 (matching hasSucceededInvalidSince in platform-restore.ts); round 2 pass, no findings, including the two schema descriptions (can_resubmit, restored_fen) adjusted to the same wording."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ea766276106dde76162727b914d647688792fad1",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "not re-run for this task: test/properties is unchanged from main; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

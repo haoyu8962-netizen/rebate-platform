@@ -5780,7 +5780,9 @@ paths:
       description: |
         Appeal on the account (target_type=account) or on one order (target_type=order, target_id
         = the order_id); who may appeal is BR-ID-36 (① account: risk_state banned or frozen;
-        ② order: an order whose rebate risk control voided, BR-ATTR-26). At most one processing
+        ② order: an order whose rebate risk control voided, BR-ATTR-26, or that was clawed back
+        after the blacklist review confirmed the hit, `rebate_status` CLAWED_BACK with `reason`
+        BLACKLIST, BR-FUND-22 申诉恢复 ②, D10-1180). At most one processing
         appeal per target (the account, or one order): while one is processing, submitting again
         returns that original appeal and creates no new one (BR-ID-36). An account appeal sets
         risk_state to appealing and records prev_risk_state (BR-ID-36); target_type=order does not
@@ -22079,7 +22081,9 @@ paths:
 
         Who may appeal is the same as POST /v1/me/appeals (04 §6.1, BR-ID-36): account — a user
         whose risk_state is banned or frozen (or appealing, which has a processing appeal, see
-        below); order — an order whose rebate risk control voided (BR-ATTR-26); blocked_request
+        below); order — an order whose rebate risk control voided (BR-ATTR-26), or that was
+        clawed back after the blacklist review confirmed the hit (`rebate_status` CLAWED_BACK with
+        `reason` BLACKLIST; BR-FUND-22 申诉恢复 ②, D10-1180); blocked_request
         — a request blocked with 44001 (a risk_hits row with ref_type blocked_request). An
         unknown target, a target of another app and a target that cannot be appealed are all
         20001 with `data.fields=[target_id]`.
@@ -22464,9 +22468,10 @@ paths:
           normal, and revoking a ban unbans the user as BR-ID-31 says (the union bindings blocked
           for ban come back as PUT /admin/v1/users/{user_id}/risk-state `unban` describes; taobao
           ones become invalid).
-        - order: upheld → the order is no longer under appeal and stays voided; revoked → the
-          settlement module creates the appeal restore difference (appeal_restore, BR-FUND-22,
-          拍板第二批 FUND-14) from the domain event below.
+        - order: upheld → the order is no longer under appeal and its status does not change (it
+          stays voided or clawed back); revoked → the settlement module creates the appeal restore
+          difference (appeal_restore, R12 or R13 by the order's current status, BR-FUND-22
+          申诉恢复 ① ②, 拍板第二批 FUND-14, D10-1180) from the domain event below.
         - blocked_request: no risk_state changes. Revoked with cause blocklist → the blocklist
           entries that caused the block are removed in the same operation (BR-ID-31, written to
           the audit log; 编排裁定 D10-154); revoked with cause rule → the one-time pass of BR-ID-36
@@ -24148,12 +24153,14 @@ paths:
         `{order_key}#RESTORE#{entry_id}` where `entry_id` is the rebate-history row by which the
         order entered its current VOID or CLAWED_BACK; `resolution` holds `reason_code`,
         `rebate_status` (VOID or CLAWED_BACK when registered), `trigger` (`status` or `commission`)
-        and `platform_status`). (c) R12 of BR-FUND-22 申诉恢复 ① (编排裁定 D10-1091, D10-1093): an
-        order voided by the blocklist (`reason` BLACKLIST) whose order appeal was revoked; the
-        difference is the order-appeal restore: an `appeal_restore` the system registered when the
-        appeal closed (source R3, `ref_type=order`, `ref_id` of the same form as above;
+        and `platform_status`). (c) R12 or R13 of BR-FUND-22 申诉恢复 ① ② (编排裁定 D10-1091,
+        D10-1093, D10-1180): an order voided by the blocklist (`reason` BLACKLIST), or clawed back
+        because the blacklist review confirmed the hit (CLAWED_BACK, `reason` BLACKLIST), whose
+        order appeal was revoked; the difference is the order-appeal restore: an `appeal_restore`
+        the system registered when the appeal closed (source R3, `ref_type=order`, `ref_id` of the same form as above;
         `resolution` holds `reason_code` BLACKLIST, `appeal_id`, `order_id`, `order_key`, `user_id`,
-        `rebate_status` VOID and `platform_status`, and no `shares`). The list and the detail are
+        `rebate_status` (VOID or CLAWED_BACK when registered) and `platform_status`, and no
+        `shares`). The list and the detail are
         GET /admin/v1/recon-diffs and GET /admin/v1/recon-diffs/{recon_diff_id}. Permission point
         `order.restore` (04 §11.2; one person can complete it, ADD-05). Step-up: totp tier
         (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
@@ -24178,10 +24185,12 @@ paths:
         (`resolution.reason_code` BLACKLIST with a `ref_id` of the form above naming an order of the
         app), or a `platform_restore` whose
         `ref_id` does not have the form above or names no order of the app, is 20001 with
-        `data.fields=[recon_diff_id]` and `data.reason=restore_not_supported`. That covers the
-        order-appeal R13 of BR-FUND-22 (申诉恢复 ②): its producer is not built yet, and handling it
-        is left to a later step (D10-973, D10-1091). The checks then go by type; an order-appeal
-        restore goes as a `platform_restore` does on a VOID order.
+        `data.fields=[recon_diff_id]` and `data.reason=restore_not_supported`. An order-appeal
+        restore of a CLAWED_BACK order (BR-FUND-22 申诉恢复 ②, D10-1180) is handled and is not
+        `restore_not_supported`. The checks then go by type; an order-appeal restore
+        (`resolution.reason_code` BLACKLIST) goes by the order's current `rebate_status` when it is
+        handled: VOID by R12, CLAWED_BACK by R13, with the same checks as a `platform_restore` of
+        that status.
 
         For an account-appeal restore, the member has been
         deleted: 20001 with `data.fields=[recon_diff_id]` and `data.reason=restore_user_deleted`;
@@ -24192,10 +24201,17 @@ paths:
         current `rebate_status` is not VOID or CLAWED_BACK, or the rebate-history row by which it
         entered that status is no longer the `entry_id` of `ref_id` (the order left the status and
         came back, so the difference is out of date) → 20902 with `data.resource=order`; the
-        difference is ended with POST .../close. An order, VOID or CLAWED_BACK, whose current
-        `platform_status` is INVALID (the platform reported failure again after the difference was
-        registered; the guard `platform_status ≠ INVALID` of both R12 and R13) is not restored:
-        20001 with `data.fields=[recon_diff_id]` and `data.reason=restore_platform_invalid`. A
+        difference is ended with POST .../close. An order, VOID or CLAWED_BACK, that the platform
+        invalidated again is not restored (BR-FUND-22 处理时再核, D10-1134; R12 and R13 alike, for a
+        `platform_restore` and for an order-appeal restore): its current `platform_status` is
+        INVALID (the guard `platform_status ≠ INVALID` of both R12 and R13), or, whatever its
+        current `platform_status` (it may still be SETTLED), the order has a succeeded
+        INVALID_AFTER_SETTLE rights record that became successful at or after the registration of
+        the difference (`order_rights.updated_at`, type INVALID_AFTER_SETTLE, status SUCCEEDED, not
+        earlier than `recon_diffs.created_at`). Either condition is 20001 with
+        `data.fields=[recon_diff_id]` and `data.reason=restore_platform_invalid`; the difference and
+        the funds are not touched. A later report that the order is valid again does not lift the
+        second condition, because the record stays. A
         CLAWED_BACK order whose current effective union commission (BR-CALC-02) has a positive
         part of 0 does not meet the premise of BR-FUND-22 (commission back above 0): 20001 with
         `data.fields=[recon_diff_id]` and `data.reason=restore_commission_zero`. Both checks run
@@ -24239,7 +24255,8 @@ paths:
         hold is released (an `appeal_restore` difference carries none, BR-FUND-19). The response
         has no `rebate_status_after`.
 
-        Effects of an order-appeal restore: those of a `platform_restore` on a VOID order (R12)
+        Effects of an order-appeal restore: by the order's current `rebate_status` when it is
+        handled, those of a `platform_restore` on a VOID order (R12) or on a CLAWED_BACK order (R13)
         below, and the closing paragraph for both R12 and R13 applies to it too.
 
         Effects of a `platform_restore` on a VOID order (R12), in one transaction: the order's
@@ -34420,7 +34437,7 @@ components:
           rebate_status_after: WAITING
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminReconDiffRestorePlatformInvalid:
-      summary: 20001 a VOID or CLAWED_BACK order whose platform_status is INVALID again cannot be restored; end the difference with POST .../close
+      summary: 20001 a VOID or CLAWED_BACK order whose platform_status is INVALID again, or with a succeeded INVALID_AFTER_SETTLE record since the difference was registered, cannot be restored; end the difference with POST .../close
       value:
         code: 20001
         msg: 参数错误
@@ -37700,7 +37717,8 @@ components:
             Computed by the server (BR-ID-36 细则): true only when this is the latest appeal for the
             target, it was upheld, the appeal count for the target's current penalty is not used up
             (same rule as 30418), and the target is still restricted (account still frozen or
-            banned, order still voided); false otherwise.
+            banned, order still voided or still clawed back by the blacklist review); false
+            otherwise.
     AppealResponse:
       type: object
       additionalProperties: false
@@ -53268,7 +53286,7 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: For an `appeal_restore`, the total this call paid to the member over all roles; 0 when nothing was posted (D10-469 ③, D10-482). For a `platform_restore`, the total credited to beneficiaries' `available` by this call (R13; the platform's part and deferred obligations are not counted), 0 for R12 and for an order-appeal restore. Never `expected_fen` taken as is.
+          description: For an account-appeal restore, the total this call paid to the member over all roles; 0 when nothing was posted (D10-469 ③, D10-482). For a `platform_restore` or an order-appeal restore, the total credited to beneficiaries' `available` by this call (R13; the platform's part and deferred obligations are not counted), 0 for R12. Never `expected_fen` taken as is.
         rebate_status_after:
           description: |
             Only for a `platform_restore` or an order-appeal restore (always present there; absent
