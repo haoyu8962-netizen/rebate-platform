@@ -1,0 +1,19 @@
+id: DSX-48e
+repo: rebate-platform
+title: H5 Sheet 面板进出补淡入淡出（translateY + opacity），补单元断言（DSX-48d 跟进，编排 D10-1141）
+type: impl
+# 2026-11-09 入账（前端线 f1-frontend-7，编排 D10-1141）。DSX-48d Codex general r3 S1（依 REVIEW.md §5.4 降 S2）：apps/h5/src/shared/styles/index.css 约 L115，Sheet 面板只做 translateY 过渡、起始样式无 opacity，非减弱动态下面板全程不透明——任务书要求「从下滑入（transform translateY + opacity）」。
+# 修法：Sheet 面板进场起始样式与退出样式加 opacity 0（时长 / 缓动沿用现有 emphasized-enter / 退出 normal + emphasized-exit），transition-property 含 opacity；减弱动态照旧只淡入淡出。补 apps/h5 单元断言（或在已有 base 单测里）钉住 Sheet 面板 transition 含 opacity、起始 opacity 0。包体增量 ≤ 3 KiB。
+# 小改：tester none（冻结 h5-transitions 与 h5-components 即回归），实现新鲜 Claude，Codex general 评审（当次失败才退独立 Claude 并写真实报错）。
+refs: []
+refs_hash: {}
+deps: [DSX-48d]
+paths:
+  - 'apps/h5/src/shared/styles/index.css'
+  - 'apps/h5/src/components/base/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
