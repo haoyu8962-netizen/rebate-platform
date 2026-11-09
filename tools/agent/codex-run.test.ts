@@ -37,6 +37,7 @@ import {
   trustedTaskState,
   writeStub,
 } from './testing/fixture.ts';
+import { gitLineChecker, parseHunks } from './validate-output.ts';
 
 const LONG = { timeout: 60_000 };
 const fixtures: Fixture[] = [];
@@ -780,6 +781,320 @@ it('money review: checklist lines must lie inside the diff', LONG, () => {
   });
   expect(empty.status, empty.stderr).toBe(10);
 });
+
+// ---- CT-06zzzzn (D10-1119): citable lines and the previous rejection in the money prompt ----
+// validate-output.ts stays as it is; the money review prompt gives the reviewer, as data, the
+// line ranges the validator accepts for checklist citations, and the validator's messages when
+// the previous money call of the task was rejected.
+
+const CITABLE_TITLE = '### Citable lines for the money checklist (data)';
+const REJECTED_TITLE = '### Previous attempt rejected by the validator (data)';
+const MONEY_ITEMS = [
+  'rounding',
+  'sign',
+  'idempotency',
+  'concurrency',
+  'partial_refund',
+  'clock',
+  'app_id',
+];
+
+/**
+ * CT-06zzzzn: the body of the prompt section titled `title` (title line excluded), up to the next
+ * `## ` / `### ` heading or `---` rule (a `#### ` sub-heading does not end it); null when absent.
+ */
+function promptSection(prompt: string, title: string): string | null {
+  const at = prompt.indexOf(`\n${title}\n`);
+  if (at < 0) return null;
+  const rest = prompt.slice(at + title.length + 2);
+  const end = rest.search(/\n(?:#{2,3} |---\n)/);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+/** CT-06zzzzn: `- <path>: <a>-<b>, <c>-<d>` lines of the citable-lines section, by path. */
+function citableEntries(section: string): Map<string, string> {
+  const entries = new Map<string, string>();
+  for (const line of section.split('\n')) {
+    const m = /^- (.+): (\d+-\d+(?:, \d+-\d+)*)$/.exec(line);
+    if (m === null) continue;
+    const [, path, ranges] = m as unknown as [string, string, string];
+    expect(entries.has(path), `${path} listed twice`).toBe(false);
+    entries.set(path, ranges);
+  }
+  return entries;
+}
+
+/**
+ * CT-06zzzzn: what validate-output.ts accepts in the worktree against `base`, in the section's
+ * format: every file of `git diff --name-only <base>` by the hunks of `git diff -U3 <base> --
+ * <file>` (parseHunks: new side, old side for a hunk with no new lines), every untracked file
+ * whole (1..N, N = the '\n'-split segments of its content).
+ */
+function expectedCitable(wt: string, base: string): Map<string, string> {
+  const list = (args: string[]): string[] =>
+    gitIn(wt, ['-c', 'core.quotepath=false', ...args])
+      .split('\n')
+      .filter((line) => line !== '');
+  const expected = new Map<string, string>();
+  for (const file of list(['diff', '--name-only', base, '--'])) {
+    const diff = gitIn(wt, ['diff', '--no-color', '--no-ext-diff', '-U3', base, '--', file]);
+    expected.set(
+      file,
+      parseHunks(diff)
+        .map((r) => `${r.start}-${r.end}`)
+        .join(', '),
+    );
+  }
+  for (const file of list(['ls-files', '--others', '--exclude-standard'])) {
+    expected.set(file, `1-${readFileSync(join(wt, file), 'utf8').split('\n').length}`);
+  }
+  return expected;
+}
+
+/** CT-06zzzzn: a money review output whose seven checklist items all cite `file:line`. */
+function moneyReview(file: string, line: number): string {
+  return JSON.stringify({
+    verdict: 'pass',
+    summary: 'Checked the seven money items against the brief.',
+    findings: [],
+    out_of_scope: [],
+    checklist: MONEY_ITEMS.map((item) => ({
+      item,
+      status: 'ok',
+      file,
+      line,
+      note: `checked ${item}`,
+    })),
+  });
+}
+
+it(
+  '[CT-06zzzzn] money review: the context lists the citable lines of every changed and untracked file exactly as validate-output judges them',
+  LONG,
+  () => {
+    const fx = fixture('citable');
+    const wt = fx.worktree;
+    const numbered = (n: number): string =>
+      Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const rewrite = (file: string, edit: (lines: string[]) => string[]): void => {
+      const lines = readFileSync(join(wt, file), 'utf8').split('\n');
+      writeFileSync(join(wt, file), edit(lines).join('\n'));
+    };
+    // The base of this review: a commit with longer files, on the task branch.
+    mkdirSync(join(wt, 'docs'), { recursive: true });
+    writeFileSync(join(wt, 'src', 'mid.ts'), numbered(30));
+    writeFileSync(join(wt, 'src', 'far.ts'), numbered(40));
+    writeFileSync(join(wt, 'src', 'near.ts'), numbered(30));
+    writeFileSync(join(wt, 'src', 'del.ts'), numbered(20));
+    writeFileSync(join(wt, 'src', 'gone.ts'), numbered(5));
+    writeFileSync(join(wt, 'src', 'empty.ts'), numbered(5));
+    writeFileSync(join(wt, 'docs', '金额 说明.md'), numbered(10));
+    gitIn(wt, ['add', '-A']);
+    gitIn(wt, ['commit', '-q', '-m', 'base of the review']);
+    const base = gitIn(wt, ['rev-parse', 'HEAD']);
+
+    const change = (n: number) => (line: string, i: number) =>
+      i + 1 === n ? `changed ${n}` : line;
+    // Two middle lines: one hunk, its -U3 context included (12-19).
+    rewrite('src/mid.ts', (l) => l.map(change(15)).map(change(16)));
+    // Two changes far apart: two hunks (2-8, 32-38).
+    rewrite('src/far.ts', (l) => l.map(change(5)).map(change(35)));
+    // Two changes whose contexts overlap: git merges them into one hunk (7-18).
+    rewrite('src/near.ts', (l) => l.map(change(10)).map(change(15)));
+    // Lines 8-10 deleted in the middle: the hunk still has new lines (context), 5-10.
+    rewrite('src/del.ts', (l) => l.filter((_, i) => i + 1 < 8 || i + 1 > 10));
+    // Hunks without new lines (a deleted file, an emptied file): the old side, 1-5.
+    rmSync(join(wt, 'src', 'gone.ts'));
+    writeFileSync(join(wt, 'src', 'empty.ts'), '');
+    // A tracked file with Chinese and a space in its name (core.quotepath=false): 1-4.
+    rewrite('docs/金额 说明.md', (l) => l.map(change(1)));
+    // A new file in the index (tracked, not in the base): 1-3.
+    writeFileSync(join(wt, 'src', 'staged.ts'), 'a\nb\nc\n');
+    gitIn(wt, ['add', 'src/staged.ts']);
+    // Untracked files, whole: a final newline adds a segment (1-4); without one, 1-2.
+    writeFileSync(join(wt, 'src', '新 文件.ts'), 'a\nb\nc\n');
+    writeFileSync(join(wt, 'src', 'noeol.ts'), 'x\ny');
+
+    const dry = codexRun(fx, [
+      'review',
+      TASK,
+      '--review-type',
+      'money',
+      '--base',
+      base,
+      '--dry-run',
+    ]);
+    expect(dry.status, dry.stderr).toBe(0);
+    const prompt = decodeDryRun(dry.stdout).at(-1) ?? '';
+    const section = promptSection(prompt, CITABLE_TITLE);
+    expect(section, 'citable-lines section in the money prompt').not.toBeNull();
+    // Inside the review context, after the untracked files and before the task brief.
+    const at = prompt.indexOf(`\n${CITABLE_TITLE}\n`);
+    expect(at).toBeGreaterThan(prompt.indexOf('## Review context'));
+    expect(at).toBeGreaterThan(
+      prompt.indexOf('### Untracked files (new files that are part of the change)'),
+    );
+    expect(at).toBeLessThan(prompt.indexOf('### Task brief (data)'));
+    // The opening sentence says what an item without a relevant change does (status na).
+    expect(section ?? '').toMatch(/\bna\b/);
+
+    const entries = citableEntries(section ?? '');
+    const expected = expectedCitable(wt, base);
+    expect(Object.fromEntries(entries)).toEqual(Object.fromEntries(expected));
+    expect(Object.fromEntries(entries)).toEqual({
+      'docs/金额 说明.md': '1-4',
+      'src/del.ts': '5-10',
+      'src/empty.ts': '1-5',
+      'src/far.ts': '2-8, 32-38',
+      'src/gone.ts': '1-5',
+      'src/mid.ts': '12-19',
+      'src/near.ts': '7-18',
+      'src/staged.ts': '1-3',
+      'src/noeol.ts': '1-2',
+      'src/新 文件.ts': '1-4',
+    });
+
+    // Every end point is accepted by the validator's own line checker, the lines just outside
+    // are not.
+    const check = gitLineChecker(base, wt);
+    for (const [file, ranges] of entries) {
+      for (const range of ranges.split(', ')) {
+        const [a, b] = range.split('-').map(Number) as [number, number];
+        expect(check(file, a).ok, `${file}:${a}`).toBe(true);
+        expect(check(file, b).ok, `${file}:${b}`).toBe(true);
+        if (a > 1) expect(check(file, a - 1).ok, `${file}:${a - 1}`).toBe(false);
+        expect(check(file, b + 1).ok, `${file}:${b + 1}`).toBe(false);
+      }
+    }
+
+    // The real call gives Codex the same section as the dry run prints.
+    const real = codexRun(fx, ['review', TASK, '--review-type', 'money', '--base', base]);
+    expect(real.status, real.stderr).toBe(10);
+    expect(promptSection(observedArgv(fx).at(-1) ?? '', CITABLE_TITLE)).toBe(section);
+  },
+);
+
+it('[CT-06zzzzn] general and contract reviews carry no citable-lines section', LONG, () => {
+  const fx = fixture('citable-other');
+  writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+  writeFileSync(join(fx.worktree, 'src', 'new.ts'), 'export const b = 1;\n');
+  for (const type of ['general', 'contract']) {
+    const dry = codexRun(fx, [
+      'review',
+      TASK,
+      '--review-type',
+      type,
+      '--base',
+      fx.baseSha,
+      '--dry-run',
+    ]);
+    expect(dry.status, dry.stderr).toBe(0);
+    const prompt = decodeDryRun(dry.stdout).at(-1) ?? '';
+    expect(prompt).toContain(`- Review type: ${type}`);
+    expect(prompt).not.toContain('Citable lines for the money checklist');
+  }
+});
+
+it(
+  '[CT-06zzzzn] money review: after a money call the validator rejected, the next money prompt carries its messages; after an accepted one it does not',
+  LONG,
+  () => {
+    const fx = fixture('money-retry');
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\nexport const c = 3;\n');
+    mkdirSync(fx.log, { recursive: true });
+    const outputFile = join(fx.log, 'review-output.json');
+    const money = ['review', TASK, '--review-type', 'money', '--base', fx.baseSha];
+
+    // Attempt 1: every checklist line lies outside the diff, the validator rejects the output.
+    writeFileSync(outputFile, moneyReview('src/a.ts', 50));
+    const first = codexRun(fx, money, { FAKE_CODEX_OUTPUT_FILE: outputFile });
+    expect(first.status, first.stderr).toBe(10);
+    const meta = readJson(join(fx.run, 'meta.review.json'));
+    expect(meta).toMatchObject({ review_type: 'money', validation: 'failed' });
+    const messages = meta['validation_messages'] as string[];
+    expect(messages.join('\n')).toContain(
+      'src/a.ts:50 line is outside the diff hunks of this file',
+    );
+
+    // The next money prompt (dry run) carries the rejection, next to the citable lines.
+    const dry = codexRun(fx, [...money, '--dry-run']);
+    expect(dry.status, dry.stderr).toBe(0);
+    const prompt = decodeDryRun(dry.stdout).at(-1) ?? '';
+    const rejected = promptSection(prompt, REJECTED_TITLE);
+    expect(rejected, 'rejection section in the retry prompt').not.toBeNull();
+    expect(prompt.indexOf(`\n${REJECTED_TITLE}\n`)).toBeGreaterThan(
+      prompt.indexOf('## Review context'),
+    );
+    expect(rejected ?? '').toContain('src/a.ts:50 line is outside the diff hunks of this file');
+    for (const message of messages.slice(0, 20)) {
+      expect(rejected ?? '').toContain(message.replace(/^invalid: /, ''));
+    }
+    expect(promptSection(prompt, CITABLE_TITLE)).not.toBeNull();
+
+    // Attempt 2 (a real call) gets the same rejection; its output is accepted.
+    writeFileSync(outputFile, moneyReview('src/a.ts', 1));
+    const second = codexRun(fx, money, { FAKE_CODEX_OUTPUT_FILE: outputFile });
+    expect(second.status, second.stderr).toBe(0);
+    expect(promptSection(observedArgv(fx).at(-1) ?? '', REJECTED_TITLE)).toBe(rejected);
+    expect(readJson(join(fx.run, 'meta.review.json'))).toMatchObject({
+      review_type: 'money',
+      validation: 'ok',
+    });
+
+    // The latest money call was accepted: no rejection section any more (attempt 1 now lies in
+    // attempts/ and is not the latest money call).
+    const after = codexRun(fx, [...money, '--dry-run']);
+    expect(after.status, after.stderr).toBe(0);
+    const afterPrompt = decodeDryRun(after.stdout).at(-1) ?? '';
+    expect(afterPrompt).not.toContain(REJECTED_TITLE);
+    expect(afterPrompt).not.toContain('line is outside the diff hunks of this file');
+  },
+);
+
+it(
+  '[CT-06zzzzn] money review: no rejection section without an earlier call, nor after a rejected call of another review type',
+  LONG,
+  () => {
+    const fx = fixture('money-retry-other');
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    mkdirSync(fx.log, { recursive: true });
+    const outputFile = join(fx.log, 'review-output.json');
+    const money = ['review', TASK, '--review-type', 'money', '--base', fx.baseSha, '--dry-run'];
+
+    const fresh = codexRun(fx, money);
+    expect(fresh.status, fresh.stderr).toBe(0);
+    expect(decodeDryRun(fresh.stdout).at(-1) ?? '').not.toContain(REJECTED_TITLE);
+
+    // A general call whose output the validator rejects (empty summary).
+    writeFileSync(
+      outputFile,
+      JSON.stringify({
+        verdict: 'pass',
+        summary: ' ',
+        findings: [],
+        out_of_scope: [],
+        checklist: [],
+      }),
+    );
+    const general = codexRun(
+      fx,
+      ['review', TASK, '--review-type', 'general', '--base', fx.baseSha],
+      {
+        FAKE_CODEX_OUTPUT_FILE: outputFile,
+      },
+    );
+    expect(general.status, general.stderr).toBe(10);
+    const meta = readJson(join(fx.run, 'meta.review.json'));
+    expect(meta).toMatchObject({ review_type: 'general', validation: 'failed' });
+    expect((meta['validation_messages'] as string[]).join('\n')).toContain('summary: empty');
+
+    const after = codexRun(fx, money);
+    expect(after.status, after.stderr).toBe(0);
+    const prompt = decodeDryRun(after.stdout).at(-1) ?? '';
+    expect(prompt).not.toContain(REJECTED_TITLE);
+    expect(prompt).not.toContain('summary: empty');
+  },
+);
 
 it(
   'a replacement codex is accepted only for test fixtures; a real codex may not live in a repo',

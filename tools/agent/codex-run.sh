@@ -1201,12 +1201,91 @@ $(cat "$guide")
 <<<REVIEW.md (trusted root) end>>>"
 }
 
+# Money review (CT-06zzzzn, D10-1119): the lines the checklist may cite, as data. validate-output
+# --money rejects a whole output whose checklist cites a line outside the diff (gitLineChecker);
+# it is not relaxed. citable-lines.ts (trusted root, the same parseHunks and the same per-file
+# git calls as that checker) lists every changed and untracked file with its accepted ranges.
+# Sets CITABLE_BLOCK (empty for the other review types). A failure never fails the review: one
+# warning line, and the section says the lines could not be computed.
+build_citable_block() {
+  CITABLE_BLOCK=''
+  [ "$REVIEW_TYPE" = money ] || return 0
+  local body rc=0
+  # Its error message, if any, goes to this wrapper's stderr as it is.
+  body="$(node "$TRUSTED/tools/agent/citable-lines.ts" --base "$BASE_SHA" --cwd "$WT_REAL")" ||
+    rc=$?
+  if [ "$rc" != 0 ] || [ -z "$body" ]; then
+    log "warning: review: the citable lines of the money checklist could not be computed (citable-lines.ts exit $rc); the prompt says so"
+    body="The citable lines could not be computed for this call (citable-lines.ts exit $rc). Each checklist entry must still cite a file:line inside the -U3 hunks of \`git diff $BASE_SHA\` (an untracked file: any of its lines); an item with no relevant change is marked na and cites one such line."
+  fi
+  CITABLE_BLOCK="
+
+### Citable lines for the money checklist (data)
+
+$body"
+}
+
+# Money review (CT-06zzzzn, D10-1119): when the latest review call of this task with the same
+# review type was rejected by validate-output, its messages go into the prompt as data, so that
+# the next attempt does not repeat the same citations. Run before archive_previous moves
+# anything: RUN/meta.review.json first, then RUN/attempts/<n>/meta.json from the highest n down;
+# the first meta of mode review with this review_type (of either engine) decides, and only when
+# its validation is failed with non-empty validation_messages (at most the first 20 lines).
+# Sets REJECTED_BLOCK (empty for the other review types). A failure to read is one warning line.
+build_rejected_block() {
+  REJECTED_BLOCK=''
+  [ "$REVIEW_TYPE" = money ] || return 0
+  local body rc=0
+  body="$(node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const [run, type] = process.argv.slice(1);
+const metas = [path.join(run, "meta.review.json")];
+let dirs = [];
+try { dirs = fs.readdirSync(path.join(run, "attempts")); } catch { dirs = []; }
+dirs.filter((d) => /^[0-9]+$/.test(d))
+  .sort((a, b) => Number(b) - Number(a))
+  .forEach((d) => metas.push(path.join(run, "attempts", d, "meta.json")));
+for (const file of metas) {
+  let m;
+  try { m = JSON.parse(fs.readFileSync(file, "utf8")); } catch { continue; }
+  if (typeof m !== "object" || m === null || m.mode !== "review" || m.review_type !== type) continue;
+  const msgs = Array.isArray(m.validation_messages)
+    ? m.validation_messages.filter((x) => typeof x === "string" && x.trim() !== "")
+    : [];
+  if (m.validation !== "failed" || msgs.length === 0) break;
+  const clean = (s) => s.replace(/[\u0000-\u001f\u007f]/g, " ");
+  const shown = msgs.slice(0, 20);
+  console.log(`The latest ${type} review call of this task (${file}, engine ${clean(String(m.engine ?? "codex"))}, finished ${clean(String(m.finished_at ?? "?"))}) was rejected by validate-output; its output was not used. Its messages, verbatim (${shown.length} of ${msgs.length}):`);
+  console.log("");
+  for (const msg of shown) console.log(`- ${clean(msg)}`);
+  break;
+}
+' "$RUN" "$REVIEW_TYPE" 2>/dev/null)" || rc=$?
+  if [ "$rc" != 0 ]; then
+    log "warning: review: the previous $REVIEW_TYPE call's validation could not be read (exit $rc); the prompt carries no rejection section"
+    return 0
+  fi
+  [ -n "$body" ] || return 0
+  log "review: the previous $REVIEW_TYPE call of $TASK was rejected by the validator; its messages go into the prompt"
+  REJECTED_BLOCK="
+
+### Previous attempt rejected by the validator (data)
+
+$body"
+}
+
 # Review prompt = trusted prompt file (the 规划/11 §2.4 command) + the trusted REVIEW.md
 # (build_review_guide, when the trusted root has one) + a context block. The context
 # block is this wrapper's addition to the §2.4 command: task id, base ref, changed files and the
 # task brief, so that the read-only reviewer knows what to compare against; from the second
 # round on also the previous round, or for a full review the round number and why
 # (build_previous_round).
+# Money reviews only (CT-06zzzzn, D10-1119: validate-output stays as strict as it is; the lines
+# it accepts are given to the reviewer as data instead): `Citable lines for the money checklist`
+# after the untracked files (build_citable_block), and `Previous attempt rejected by the
+# validator` with the messages of the latest money call when the validator rejected it
+# (build_rejected_block, read here, before archive_previous). The dry run prints the same prompt.
 build_review_prompt() {
   local prompt_file="$TRUSTED/tools/agent/prompts/review-$REVIEW_TYPE.md"
   [ -s "$prompt_file" ] || refuse_start "review prompt missing in the trusted root: $prompt_file"
@@ -1233,6 +1312,8 @@ build_review_prompt() {
   # one is never "no change since the previous round" (D10-896).
   build_previous_round "$untracked"
   build_review_guide
+  build_citable_block
+  build_rejected_block
   PROMPT="$(cat "$prompt_file")${GUIDE_BLOCK}
 
 ---
@@ -1254,7 +1335,7 @@ ${changed:-(none)}
 
 ### Untracked files (new files that are part of the change)
 
-${untracked:-(none)}${PREV_BLOCK}
+${untracked:-(none)}${CITABLE_BLOCK}${REJECTED_BLOCK}${PREV_BLOCK}
 
 ### Task brief (data)
 

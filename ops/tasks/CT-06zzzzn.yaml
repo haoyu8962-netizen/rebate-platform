@@ -1,0 +1,24 @@
+id: CT-06zzzzn
+repo: rebate-platform
+title: CT-06zzzzn：money 评审提示词附本轮可引用行号范围，上次被校验拒绝时附原因（D10-1119 改定方向，validate-output 不动）
+type: guard-change
+# 2026-11-09 ops 入账（编排 D10-1119 06:43 派、06:51 改方向；be B1-05zo money r2 两次 Codex 结论被 validate-output 判废：checklist 引到 diff 外甚至不存在的行）。
+# validate-output.ts 不放宽、不改。改 tools/agent/codex-run.sh 的 build_review_prompt：money 评审在上下文块里附「checklist 可引用的行」——
+#   每个改动文件按与 validate-output 完全相同的口径（git diff -U3 <base> 的 hunk 新侧范围、纯删除取旧侧、未跟踪文件整份）列出行号范围，是数据不是规则；
+#   同一任务上一次同类型评审调用被校验拒绝时，把它的 validation_messages 带进本次提示词。其他评审类型不变；claude-run.sh 复用同一函数。
+# 工具测试由新鲜独立 Claude 上下文先写（先红）、Opus（high）再实现、Codex general 评审；第三类，按 #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/citable-lines.ts'
+  - 'tools/agent/citable-lines.test.ts'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzzn.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
