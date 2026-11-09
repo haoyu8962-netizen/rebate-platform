@@ -47,6 +47,12 @@ export interface BizFulfillmentHandler {
 export interface BizTypeEntry {
   /** biz_type code (contract PayBizType: ^[a-z][a-z0-9_]*$). */
   readonly code: string;
+  /**
+   * Whether the business object belongs to the caller (D10-1030 ②, the user's authorization
+   * boundary): required, so no type can be registered without it. Asked before the price and before
+   * anything is written; false for an object that does not exist as well as for someone else's.
+   */
+  ownedBy(input: BizPriceInput): Promise<boolean>;
   price(input: BizPriceInput): Promise<BizPrice>;
   /** Default sellable platforms; config `pay.biz.<biz_type>.platforms` replaces them. */
   readonly platforms: readonly PayPlatform[];
@@ -78,6 +84,10 @@ const testItemFulfillment: BizFulfillmentHandler = {
 
 const testItem: BizTypeEntry = Object.freeze({
   code: TEST_ITEM_BIZ_TYPE,
+  // The test type has no real business object: every biz_ref is the caller's.
+  ownedBy(): Promise<boolean> {
+    return Promise.resolve(true);
+  },
   price(): Promise<BizPrice> {
     return Promise.resolve({ amountFen: TEST_ITEM_AMOUNT_FEN, title: TEST_ITEM_TITLE });
   },

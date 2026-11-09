@@ -1,0 +1,97 @@
+{
+  "risk_note": "Payment path, RV2, the user's authorization boundary (D10-1030 ②, HANDOFF:1206, D10-1155 ①): before the first real business type is registered, a payment must be limited to the caller's own business object. BizTypeEntry gains a required ownedBy({appId, userId, bizRef}), so no type can be registered without it; test_item answers true (no real object, non-production only), and the production registry is still empty. createPayOrder asks it after the switch and platform checks, before the price and before any write. False answers 30901 reason=biz_not_sellable (D10-1156 ①: no contract change, not told apart from a missing object, so it reveals neither existence nor owner); nothing is priced, written, queued or sent to a channel. A hook that throws is not caught: 50001 and no order. No money moves; no migration; no frozen test changes. BR-PAY-01 has no text for this yet: the orchestrator writes it back in the next spec batch (D10-1156 ②). When a real type is connected, ownership changes against order creation and idempotent replay have to be checked for that type (money r1 note).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh (D10-1075), effort medium, base the last test(spec) commit; pass with no findings (couli-runs/B2-15z/money-review-r1.json). It notes that a real business type must check ownership changes against order creation and idempotent replay when it is connected; the rule basis is D10-1030 ② and D10-1156 until the spec write-back."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests in 2 attempts by a fresh independent Claude; spec-test by Codex (CT-06zzzzm, the claude-only rule of D10-848 is void). r1 (spec-test-review-r1.json) failed on one S1: a property callback returned a boolean with no assertion inside. The 2nd attempt changed only that callback to assert inside and return true. r2 (spec-test-review-r2.json) passed with no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-15z",
+  "spec_commit": "2155ac9aa5b70a23acce4ca03af1428637218db2",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "red_tests": [
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#1] wechat_pay 别人的业务对象（ownedBy=false）：30901 biz_not_sellable，不定价、不建单、不写尝试、不调渠道、不入队",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#1] alipay 别人的业务对象（ownedBy=false）：30901 biz_not_sellable，不定价、不建单、不写尝试、不调渠道、不入队",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#2] 本人的业务对象（ownedBy=true）：正常下单；钩子收到的 appId、userId 来自令牌，bizRef 来自请求体，每次下单只调一次",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#3] 已有本人 PENDING 单时再次下单 ownedBy=false：同样 30901，响应无 launch，已有单不变，不取调起参数",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#4] 防探测：不存在的对象、别人有 PENDING 单的对象、别人有 PAID 单的对象，三种拒绝除 trace_id 外字节一致，且与不可售业务类型的答复一致",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#5] 钩子失败（返回被拒绝的 Promise）：不捕获、答 50001，响应不含错误信息，不定价、不建单、不调渠道、不入队",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#5] 钩子失败（同步抛错）：不捕获、答 50001，响应不含错误信息，不定价、不建单、不调渠道、不入队",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#6] 判定顺序：pay.enabled 关、渠道关、端不可售时先答原 reason，钩子未被调用；三项都通过后才调钩子",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#7] 跨 app 隔离：两个 app 的同一 biz_ref，钩子按各自令牌的 app_id 调用，一个拒一个过，互不影响",
+    "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#9] 同一幂等键不绕过：拒绝 30901 按既有语义存储，同键回放答同样字节；对象后来归属本人，同键也不下单",
+    "test/spec/payment/orders-biz-owner/registry.test.ts > [AC-B2-15z#8] 注册表完整性：local / test / staging / prod 的 list() 里，每个业务类型都登记了 ownedBy 函数",
+    "test/spec/payment/orders-biz-owner/registry.test.ts > [AC-B2-15z#10] test_item 没有真实业务对象：非生产环境下它的 ownedBy 对任意 appId、userId、bizRef 都是 true"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "2155ac9aa5b70a23acce4ca03af1428637218db2",
+      "tree": "a2ed651c5a87c25e0dd9d9c2e100692c8de3c558",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T05:34:25Z",
+      "finished_at": "2026-11-09T05:34:58Z",
+      "red_tests": [
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#1] wechat_pay 别人的业务对象（ownedBy=false）：30901 biz_not_sellable，不定价、不建单、不写尝试、不调渠道、不入队",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#1] alipay 别人的业务对象（ownedBy=false）：30901 biz_not_sellable，不定价、不建单、不写尝试、不调渠道、不入队",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#2] 本人的业务对象（ownedBy=true）：正常下单；钩子收到的 appId、userId 来自令牌，bizRef 来自请求体，每次下单只调一次",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#3] 已有本人 PENDING 单时再次下单 ownedBy=false：同样 30901，响应无 launch，已有单不变，不取调起参数",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#4] 防探测：不存在的对象、别人有 PENDING 单的对象、别人有 PAID 单的对象，三种拒绝除 trace_id 外字节一致，且与不可售业务类型的答复一致",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#5] 钩子失败（返回被拒绝的 Promise）：不捕获、答 50001，响应不含错误信息，不定价、不建单、不调渠道、不入队",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#5] 钩子失败（同步抛错）：不捕获、答 50001，响应不含错误信息，不定价、不建单、不调渠道、不入队",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#6] 判定顺序：pay.enabled 关、渠道关、端不可售时先答原 reason，钩子未被调用；三项都通过后才调钩子",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#7] 跨 app 隔离：两个 app 的同一 biz_ref，钩子按各自令牌的 app_id 调用，一个拒一个过，互不影响",
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts > [AC-B2-15z#9] 同一幂等键不绕过：拒绝 30901 按既有语义存储，同键回放答同样字节；对象后来归属本人，同键也不下单",
+        "test/spec/payment/orders-biz-owner/registry.test.ts > [AC-B2-15z#8] 注册表完整性：local / test / staging / prod 的 list() 里，每个业务类型都登记了 ownedBy 函数",
+        "test/spec/payment/orders-biz-owner/registry.test.ts > [AC-B2-15z#10] test_item 没有真实业务对象：非生产环境下它的 ownedBy 对任意 appId、userId、bizRef 都是 true"
+      ],
+      "expected": [
+        "test/spec/payment/orders-biz-owner/owner.int.test.ts",
+        "test/spec/payment/orders-biz-owner/registry.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "1856b2045dcdc0251708b5515b92a883372479dabcce9dd289447fcf17f9ec94"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b2019f846b8cb5aae74070cbe57e3e3acb1e390975b2a05f5c3fb66cad0417d8"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "59fe42a27161356f8e02cc6a55100bcf144d7a27",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}

@@ -192,6 +192,12 @@ export async function createPayOrder(
   if (reason !== null || entry === undefined) {
     return { code: 30901, data: { reason: reason ?? 'biz_not_sellable' } };
   }
+  // B2-15z (D10-1030 ②): the object must be the caller's, before its price and before any write.
+  // Not told apart from an unsellable object, so the answer does not reveal who owns what; a hook
+  // that throws fails closed (50001, no order).
+  if (!(await entry.ownedBy({ appId, userId, bizRef: input.biz_ref }))) {
+    return { code: 30901, data: { reason: 'biz_not_sellable' } };
+  }
   // The adapter of the channel: resolved before anything is written, so a process without it
   // fails closed without an order (payment/AGENTS.md rule 6).
   const payChannel = deps.channels.of(channel);
