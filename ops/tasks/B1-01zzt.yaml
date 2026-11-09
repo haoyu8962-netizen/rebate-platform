@@ -1,0 +1,26 @@
+id: B1-01zzt
+repo: rebate-platform
+title: 配置签名私钥接 KMS 适配器（代码一半，prod-wiring-gaps 第 23 项）——staging / prod 只配 CONFIG_SIGN_KEY_ID 且 KMS 已配置时从 KMS 读 couli/<appEnv>/config/sign-private-key；配了 FILE / ID 一对照旧读文件；两者都无仍拒绝；不碰真实密钥
+type: impl
+# 2026-11-09 入账（identity，编排 D10-1155 ④；couli-runs/B3-lane/prod-wiring-gaps-status-20261109.md 第 23 项、HANDOFF:1027）。
+# 现状：platform/config/config-sign-key.ts:4-9 TODO（prod 改走 KMS — blocked on 负责人开通 KMS），只认文件；platform/kms/index.ts 的 KMS_SECRETS 没有这一项。
+# 口径（本线取，编排核台账时可改）：负责人可选「生产先用文件挂载」，所以不强制 prod 只走 KMS——FILE / ID 一对照旧读文件（显式挂载优先）；只有 ID、且 KMS_* 已配置 → readStartupKmsSecret 读 config/sign-private-key（P-256 PKCS#8 PEM，kid 取 CONFIG_SIGN_KEY_ID）；
+# 两者都无或只有 FILE → 照旧拒绝；local / test 不变（无 KMS，临时钥）。错误只提变量名，不带路径、密钥或 SDK 原文。冻结 [AC-F1-02zzzb#7] / #9 不受影响（其用例未配 KMS）。
+# 验证只用现有假适配器 / 测试替身，不读 .env、~/.couli，不连真实 KMS。公钥与 kid 打进三端包属 native，不在本单。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/config/config-sign-key.ts'
+  - 'apps/api/src/modules/platform/config/config-sign-key.test.ts'
+  - 'apps/api/src/modules/platform/config/index.ts'
+  - 'apps/api/src/modules/platform/kms/index.ts'
+  - 'apps/api/src/modules/content/content-public.module.ts'
+test_paths:
+  - 'test/spec/platform/config-sign-key-kms/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/config-sign-key-kms/**'
+status: todo
