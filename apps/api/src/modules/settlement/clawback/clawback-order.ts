@@ -178,6 +178,12 @@ import {
 } from '../rebate/domain/reason-sub.ts';
 import { defaultReasonSubMaps } from '../rebate/infra/reason-sub-table.ts';
 import {
+  WHOLE_REFUND_REASON,
+  answeredRightsReasonOf,
+  remainingQuantityZero,
+  type RightsReasonDecision,
+} from '../rebate/domain/rights-reason.ts';
+import {
   casClawbackOrder,
   casRefundBaseline,
   casRightsPending,
@@ -227,6 +233,13 @@ export interface ClawbackCommand {
    * automatic mapping; ignored under any other reason.
    */
   readonly reasonSub?: ReasonSubContext & { readonly manual?: ManualReasonSub | undefined };
+  /**
+   * B2-04zzs (BR-TEXT-05 ①, BR-FUND-08 细则「sub_type 与订单原因码」): the order reason an R8 of cause
+   * RIGHTS / COMMISSION / PARTIAL_REFUND writes (orders.reason and the order.clawed_back reason)
+   * instead of the cause's own (table above); its REFUND sub-reason rides in reasonSub.refundSub.
+   * The cause still decides N_new, the history event, sub_type and the uniq_keys; R9 ignores it.
+   */
+  readonly r8Reason?: 'REFUND' | 'RIGHTS' | undefined;
 }
 
 /** One order_sync_pending entry (orders owns the table; written only through deps.pending). */
@@ -358,6 +371,8 @@ const FULL_CAUSES: readonly ClawbackCause[] = [
   'PUNISH',
   'BLACKLIST_CONFIRMED',
 ];
+/** B2-04zzs: the causes whose R8 reason the caller may decide (r8Reason). */
+const REASON_CAUSES: readonly ClawbackCause[] = ['RIGHTS', 'COMMISSION', 'PARTIAL_REFUND'];
 const ALERT_WAIT = 'clawback_wait_commission';
 const ALERT_ESTIMATE = 'estimate_changed_after_credit';
 const ALERT_JD_ZERO = 'clawback_jd_commission_zero';
@@ -472,6 +487,14 @@ function checkCommand(command: ClawbackCommand): void {
   }
   optionalFen(command.newCommissionFen, 'newCommissionFen');
   optionalFen(command.rightsDeductFen, 'rightsDeductFen');
+  if (command.r8Reason !== undefined) {
+    if (command.r8Reason !== 'REFUND' && command.r8Reason !== 'RIGHTS') {
+      throw new TypeError('settlement clawback: unknown r8Reason');
+    }
+    if (!REASON_CAUSES.includes(command.cause)) {
+      throw new TypeError(`settlement clawback: ${command.cause} takes no r8Reason`);
+    }
+  }
   if (command.rightsDeductFen !== null && command.rightsDeductFen < 0n) {
     throw new TypeError('settlement clawback: rightsDeductFen must be nonnegative');
   }
@@ -507,6 +530,15 @@ function switchedOff(value: unknown): boolean {
 
 function identity(userId: string, role: string): string {
   return JSON.stringify([userId, role]);
+}
+
+/** B2-04zzs: a reason decision as the command's r8Reason (and its REFUND sub-reason). */
+export function reasonFields(
+  decision: RightsReasonDecision,
+): Pick<ClawbackCommand, 'r8Reason' | 'reasonSub'> {
+  return decision.reason === 'REFUND'
+    ? { r8Reason: 'REFUND', reasonSub: { refundSub: decision.refundSub } }
+    : { r8Reason: 'RIGHTS' };
 }
 
 /** B2-04zze: the rights record type a cause stands for, for the REFUND sub-reason. */
@@ -902,6 +934,8 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     checkCommand(command);
     const { appId, orderId, cause } = command;
     const rules = rulesOf(cause);
+    // B2-04zzs: the R8 reason (the caller's, else the cause's); R9 keeps its sub_type as before.
+    const r8Reason = command.r8Reason ?? rules.r8Reason;
 
     // 1. lock, re-read.
     const { order, key } = await lockAndRead(trx, appId, orderId);
@@ -1030,18 +1064,18 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
     // B2-04zze: R8 writes the display sub-reason with its reason (R9 leaves both unchanged).
     // B1-09v: a choice made by hand under reason PUNISH replaces the mapping and sets the flag.
     const manual =
-      transition === 'R8' && rules.r8Reason === 'PUNISH' ? command.reasonSub?.manual : undefined;
+      transition === 'R8' && r8Reason === 'PUNISH' ? command.reasonSub?.manual : undefined;
     const sub =
       manual !== undefined
         ? ({ write: true, value: manual.value, unmapped: null } as const)
         : transition === 'R8'
-          ? reasonSubWithReason(order, rules.r8Reason, subContextOf(command), reasonSubMaps)
+          ? reasonSubWithReason(order, r8Reason, subContextOf(command), reasonSubMaps)
           : ({ write: false } as const);
     const written = await casClawbackOrder(trx, order, {
       to: step.to,
       booked_base_fen: plan.booked_after.booked_base_fen,
       booked_n_fen: plan.booked_after.booked_n_fen,
-      ...(transition === 'R8' ? { reason: rules.r8Reason } : { diff_reason_code: 'PART_REFUND' }),
+      ...(transition === 'R8' ? { reason: r8Reason } : { diff_reason_code: 'PART_REFUND' }),
       ...(sub.write ? { reason_sub: { value: sub.value } } : {}),
       ...(manual === undefined ? {} : { reason_sub_manual: true as const }),
       ...(repriced
@@ -1107,7 +1141,7 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
         rights_event_id: rightsEventId,
         transition,
         // D10-817 ②: R9 carries the cause's reason too, the R9 sub_type of the table above.
-        reason: transition === 'R8' ? rules.r8Reason : subType,
+        reason: transition === 'R8' ? r8Reason : subType,
         beneficiaries: plan.beneficiaries
           .filter((b) => b.delta_fen < 0n && b.posting === 'user_available')
           .map((b) => ({
@@ -1249,6 +1283,9 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
         ref: { kind: 'commission' },
         newCommissionFen: settleFen,
         rightsDeductFen: null,
+        // B2-04zzs (BR-FUND-08 细则 full-rights row, D10-1133 ④): the waiting rights success answered
+        // by 0 takes the rights reason (Taobao REFUND / AFTER_SETTLE, others RIGHTS), not COMMISSION_ZERO.
+        ...(answersRights ? reasonFields(answeredRightsReasonOf(order.platform)) : {}),
       });
     }
     const seq = await readLatestSettleSeq(trx, appId, orderId);
@@ -1565,6 +1602,9 @@ export function createClawbackOrder(deps: ClawbackDependencies): ClawbackOrder {
         cause: 'PARTIAL_REFUND',
         ref: { kind: 'commission' },
         newCommissionFen: newSettleFen ?? (settled ? null : change.est_after),
+        // B2-04zzs (BR-CALC-15, BR-FUND-08 细则「整单退款」, D10-1169 ③): refunded to a remaining
+        // quantity of 0 → an R8 writes REFUND with no sub-reason; a partial refund keeps COMMISSION_ZERO.
+        ...(remainingQuantityZero(order) ? reasonFields(WHOLE_REFUND_REASON) : {}),
       });
       // B2-04zzf（money r1 S2，编排 D10-918 ②）：联盟的新结算记录到了、R9 结果无变化时，等联盟佣金这一状态
       // 已被回应：同一事务按 R9 扣回出口的口径关闭（WAIT_COMMISSION 维权、rights_pending、

@@ -1,0 +1,89 @@
+{
+  "risk_note": "RV2 (settlement clawback / rebate / rights reason codes, orders rights sync). FU-CLAWBACK-REASON-CHECK (orchestrator D10-1126 ①, 07:41 correction, D10-1133 ④, D10-1169, D10-1172; 08 BR-TEXT-05 write-back batch 3 in SPEC_REF 03383a1). Only orders.reason / reason_sub (and the reason of the order.clawed_back event) change; amounts, clawback vouchers (sub_type, uniq_key), state transitions and restore eligibility are unchanged, and the clawback cause of a Taobao rights record stays RIGHTS (REFUND_AFTER_SETTLE is not borrowed, so a partial rights clawback never becomes full). Taobao rights (orders/jobs/rights-sync.ts passes the adapter's earning_at through RightsSyncExtras / RightsRecordInput; settlement/rebate/domain/rights-reason.ts decides): earning_time set → REFUND / AFTER_SETTLE; earning_time and received_at both empty → REFUND with no reason_sub (the Taobao order feed has no receipt time, D10-1172); received_at set → REFUND / IN_SALE when the rights record precedes it, else RIGHTS / AFTER_SALE; records without union timing (imports) stay RIGHTS. Refund to zero remaining quantity via PARTIAL_REFUND → R8: REFUND, no reason_sub (a partial refund whose commission drops to 0 stays COMMISSION_ZERO). A waiting rights record answered by a settlement of 0 (settleDiff → R8): Taobao REFUND / AFTER_SETTLE, other platforms RIGHTS, sub_type FULL. A reason_sub chosen by hand is kept (reasonSubWithReason guard). Frozen test test/spec/settlement/refund-r9-baseline/writers.int.test.ts: only line 37 of [AC-B2-04zzf#8a] changes, reason COMMISSION_ZERO → REFUND (D10-327 / D10-1169; red on the old code); #8b / #8c unchanged and declared red_exempt. Host checks: root tsc -b 0, eslint 0, settlement / orders unit 88 files 531 tests, integration 9 groups 289 files 2303 tests; container green check (one worker) 8 rule tests all green. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money review (effort medium; brief listed the citable diff lines, D10-1121 / D10-1125). Round 1 fail, one S1: the Taobao order adapter always gives received_at = null, so 'received_at empty → before receipt' recorded after-receipt rights as REFUND / IN_SALE — ruled D10-1172 (no receipt time → REFUND, no reason_sub), rule test attempt 3 and implementation adjusted. Round 2 fail, one S1: SPEC_REF deaba4f still read IN_SALE for that case; closed by SPEC_REF 03383a1 (batch 3, #3054) and a rebase, code unchanged. Round 3 (incremental) pass, no findings; amounts, vouchers and transitions checked unchanged. Money canary ran (record only)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests in test/spec/settlement/clawback-reason by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent), three attempts: 1 new tests; 2 the frozen [AC-B2-04zzf#8a] line 37 COMMISSION_ZERO → REFUND (D10-327 / D10-1169) and the whole refund writes no reason_sub; 3 [AC-B2-04zzs#2] first case REFUND with reason_sub null (D10-1172). Red runs red/1–red/3 red for the right reason, #8b / #8c exempt. spec-test r1 (fresh independent Claude): pass, confirmed the frozen file changes exactly one line inside #8a, red on the old code, and both red_exempt entries byte-for-byte unchanged; one S2 (a hand-chosen reason_sub must not be overwritten) carried into the implementation. r2 incremental: pass, confirmed only the two lines of attempt 3 changed; S2: the #2 title and file header still mention IN_SALE (test attempts at 3 of 3, left as is)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/settlement/clawback-reason/remaining-zero.int.test.ts > [AC-B2-04zzs#5] [AC-B2-04zzs#7] 入账后退到剩余数量 0（2 件全退）且联盟新结算 0：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），reason = REFUND（不是 COMMISSION_ZERO），order.clawed_back 带 REFUND；对照：只退 1 件、结算同样降到 0 → 金额、sub_type、迁移都相同，reason 仍 COMMISSION_ZERO（「联系客服」那条照旧）；两单都仍可按 BR-FUND-22 恢复",
+    "test/spec/settlement/clawback-reason/taobao-rights.int.test.ts > [AC-B2-04zzs#1] [AC-B2-04zzs#4] [AC-B2-04zzs#7] 淘宝维权全额成功（应扣 1000 = N）、维权时订单已结算（earning_time 有值）：已入账单按 R8 扣回（RIGHTS_FULL，sub_type RIGHTS，键 R{id}，425 / 85 / 42、平台 448，booked 0 / 0），reason = REFUND、reason_sub = AFTER_SETTLE，order.clawed_back 带 REFUND；入账前（WAITING）同样一单按 R6 RIGHTS_FULL 作废，REFUND / AFTER_SETTLE；对照：同样已结算的部分维权（应扣 400）按 R9 只扣 170 / 34 / 17、平台 179，reason 不写、diff_reason_code PART_REFUND；作废 / 扣回后仍可按 BR-FUND-22 恢复",
+    "test/spec/settlement/clawback-reason/taobao-rights.int.test.ts > [AC-B2-04zzs#2] [AC-B2-04zzs#3] [AC-B2-04zzs#7] 淘宝维权全额成功、未入账：确认收货前（ESTIMATED，平台 PAID，未收货，earning_time 空）→ R6 RIGHTS_FULL 作废，reason = REFUND、reason_sub = IN_SALE，order.invalidated 带 REFUND；对照：确认收货后、结算前（WAITING，平台 RECEIVED，earning_time 空）→ 同样 R6 作废，reason = RIGHTS、reason_sub = AFTER_SALE；两单都不写分录、仍可按 BR-FUND-22 恢复",
+    "test/spec/settlement/clawback-reason/wait-answered-zero.int.test.ts > [AC-B2-04zzs#6] [AC-B2-04zzs#7] taobao 入账后维权成功等联盟佣金（WAIT_COMMISSION），联盟新结算记录 0（seq 3）回应：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），该维权记录关闭为 SUCCEEDED；reason = REFUND、reason_sub = AFTER_SETTLE（不是 COMMISSION_ZERO），order.clawed_back 带同一 reason；仍可按 BR-FUND-22 恢复",
+    "test/spec/settlement/clawback-reason/wait-answered-zero.int.test.ts > [AC-B2-04zzs#6] [AC-B2-04zzs#7] jd 入账后维权成功等联盟佣金（WAIT_COMMISSION），联盟新结算记录 0（seq 3）回应：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），该维权记录关闭为 SUCCEEDED；reason = RIGHTS、reason_sub = null（不是 COMMISSION_ZERO），order.clawed_back 带同一 reason；仍可按 BR-FUND-22 恢复",
+    "test/spec/settlement/clawback-reason/wait-answered-zero.int.test.ts > [AC-B2-04zzs#6] [AC-B2-04zzs#7] pdd 入账后维权成功等联盟佣金（WAIT_COMMISSION），联盟新结算记录 0（seq 3）回应：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），该维权记录关闭为 SUCCEEDED；reason = RIGHTS、reason_sub = null（不是 COMMISSION_ZERO），order.clawed_back 带同一 reason；仍可按 BR-FUND-22 恢复",
+    "test/spec/settlement/clawback-reason/whole-refund-no-sub.int.test.ts > [AC-B2-04zzs#5] [AC-B2-04zzs#7] 入账后 2 件全退（剩余数量 0）且联盟新结算 0：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0，迁移事件 COMMISSION_POSITIVE_ZERO），reason = REFUND 且不写子原因（reason_sub 为 null，D10-1169 ③），order.clawed_back 带 REFUND；仍可按 BR-FUND-22 恢复",
+    "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8a] 已退 0 → 2（全退）且新结算 0：R8 整单扣回（CLAWED_BACK，本人与平台各扣 500），同一次写库基线推到 2，at_credit 仍为 0"
+  ],
+  "task": "B2-04zzs",
+  "spec_commit": "1989ae663a19006abd1c28fd043c96316bf613cc",
+  "spec_ref": "03383a10b26e6a9f0b154e495214a4d6555bafce",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1989ae663a19006abd1c28fd043c96316bf613cc",
+      "tree": "c613d138589fc9fce0072fb54dbfa8fb2722f971",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T09:36:49Z",
+      "finished_at": "2026-11-09T09:37:26Z",
+      "red_tests": [
+        "test/spec/settlement/clawback-reason/remaining-zero.int.test.ts > [AC-B2-04zzs#5] [AC-B2-04zzs#7] 入账后退到剩余数量 0（2 件全退）且联盟新结算 0：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），reason = REFUND（不是 COMMISSION_ZERO），order.clawed_back 带 REFUND；对照：只退 1 件、结算同样降到 0 → 金额、sub_type、迁移都相同，reason 仍 COMMISSION_ZERO（「联系客服」那条照旧）；两单都仍可按 BR-FUND-22 恢复",
+        "test/spec/settlement/clawback-reason/taobao-rights.int.test.ts > [AC-B2-04zzs#1] [AC-B2-04zzs#4] [AC-B2-04zzs#7] 淘宝维权全额成功（应扣 1000 = N）、维权时订单已结算（earning_time 有值）：已入账单按 R8 扣回（RIGHTS_FULL，sub_type RIGHTS，键 R{id}，425 / 85 / 42、平台 448，booked 0 / 0），reason = REFUND、reason_sub = AFTER_SETTLE，order.clawed_back 带 REFUND；入账前（WAITING）同样一单按 R6 RIGHTS_FULL 作废，REFUND / AFTER_SETTLE；对照：同样已结算的部分维权（应扣 400）按 R9 只扣 170 / 34 / 17、平台 179，reason 不写、diff_reason_code PART_REFUND；作废 / 扣回后仍可按 BR-FUND-22 恢复",
+        "test/spec/settlement/clawback-reason/taobao-rights.int.test.ts > [AC-B2-04zzs#2] [AC-B2-04zzs#3] [AC-B2-04zzs#7] 淘宝维权全额成功、未入账：确认收货前（ESTIMATED，平台 PAID，未收货，earning_time 空）→ R6 RIGHTS_FULL 作废，reason = REFUND、reason_sub = IN_SALE，order.invalidated 带 REFUND；对照：确认收货后、结算前（WAITING，平台 RECEIVED，earning_time 空）→ 同样 R6 作废，reason = RIGHTS、reason_sub = AFTER_SALE；两单都不写分录、仍可按 BR-FUND-22 恢复",
+        "test/spec/settlement/clawback-reason/wait-answered-zero.int.test.ts > [AC-B2-04zzs#6] [AC-B2-04zzs#7] taobao 入账后维权成功等联盟佣金（WAIT_COMMISSION），联盟新结算记录 0（seq 3）回应：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），该维权记录关闭为 SUCCEEDED；reason = REFUND、reason_sub = AFTER_SETTLE（不是 COMMISSION_ZERO），order.clawed_back 带同一 reason；仍可按 BR-FUND-22 恢复",
+        "test/spec/settlement/clawback-reason/wait-answered-zero.int.test.ts > [AC-B2-04zzs#6] [AC-B2-04zzs#7] jd 入账后维权成功等联盟佣金（WAIT_COMMISSION），联盟新结算记录 0（seq 3）回应：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），该维权记录关闭为 SUCCEEDED；reason = RIGHTS、reason_sub = null（不是 COMMISSION_ZERO），order.clawed_back 带同一 reason；仍可按 BR-FUND-22 恢复",
+        "test/spec/settlement/clawback-reason/wait-answered-zero.int.test.ts > [AC-B2-04zzs#6] [AC-B2-04zzs#7] pdd 入账后维权成功等联盟佣金（WAIT_COMMISSION），联盟新结算记录 0（seq 3）回应：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0），该维权记录关闭为 SUCCEEDED；reason = RIGHTS、reason_sub = null（不是 COMMISSION_ZERO），order.clawed_back 带同一 reason；仍可按 BR-FUND-22 恢复",
+        "test/spec/settlement/clawback-reason/whole-refund-no-sub.int.test.ts > [AC-B2-04zzs#5] [AC-B2-04zzs#7] 入账后 2 件全退（剩余数量 0）且联盟新结算 0：R8 整单扣回（sub_type FULL，键 C{commission_version}，425 / 85 / 42、平台 448，booked 0 / 0，迁移事件 COMMISSION_POSITIVE_ZERO），reason = REFUND 且不写子原因（reason_sub 为 null，D10-1169 ③），order.clawed_back 带 REFUND；仍可按 BR-FUND-22 恢复",
+        "test/spec/settlement/refund-r9-baseline/writers.int.test.ts > [AC-B2-04zzf#8a] 已退 0 → 2（全退）且新结算 0：R8 整单扣回（CLAWED_BACK，本人与平台各扣 500），同一次写库基线推到 2，at_credit 仍为 0"
+      ],
+      "expected": [
+        "test/spec/settlement/clawback-reason/remaining-zero.int.test.ts",
+        "test/spec/settlement/clawback-reason/taobao-rights.int.test.ts",
+        "test/spec/settlement/clawback-reason/wait-answered-zero.int.test.ts",
+        "test/spec/settlement/clawback-reason/whole-refund-no-sub.int.test.ts",
+        "test/spec/settlement/refund-r9-baseline/writers.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "2e2596eccaf07288fec09bc619c5d7cf6ea5a4b7d46acd91f59cf14515f84b59"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f00bf5547af633d6f668ac8fb57b55598af6427c",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

@@ -132,6 +132,11 @@ export interface RightsSyncItem {
  */
 export interface RightsSyncExtras {
   readonly violation_type?: string | null | undefined;
+  /**
+   * B2-04zzs: UnionRefund.earning_at of a rights record (null when the union reported none), passed
+   * on to rights.record as is, only for settlement's order reason; punishments pass none.
+   */
+  readonly earning_at?: Date | null | undefined;
 }
 
 export type RightsSyncWriteResult = {
@@ -476,6 +481,8 @@ export function createRightsSyncWriter(deps: RightsSyncWriterDeps): RightsSyncWr
           ...(extras?.violation_type === undefined
             ? {}
             : { violation_type: extras.violation_type }),
+          // B2-04zzs: a rights record's earning_time, only for settlement's order reason.
+          ...(extras?.earning_at === undefined ? {} : { earning_at: extras.earning_at }),
         });
         return { kind: result.kind };
       });

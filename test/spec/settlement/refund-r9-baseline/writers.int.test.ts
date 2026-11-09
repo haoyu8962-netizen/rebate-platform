@@ -34,7 +34,7 @@ it(
       const row = await o.row();
       expect(row).toMatchObject({
         rebate_status: 'CLAWED_BACK',
-        reason: 'COMMISSION_ZERO',
+        reason: 'REFUND',
         booked_base_fen: 0n,
         booked_n_fen: 0n,
         refunded_quantity: 2,

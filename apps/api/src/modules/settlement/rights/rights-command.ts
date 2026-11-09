@@ -102,6 +102,7 @@ import type { ClawbackCause, ClawbackOrder } from '../clawback/index.ts';
 import { computeRightsPending, casRightsPending } from '../clawback/clawback-store.ts';
 import type { PrecreditEvent, RebatePort, ReasonSubWrite } from '../rebate/application/rebate.ts';
 import { isPrecredit } from '../rebate/domain/rules.ts';
+import { rightsReasonOf, type RightsReasonDecision } from '../rebate/domain/rights-reason.ts';
 import {
   REASON_SUB_UNMAPPED_ALERT,
   reasonSubOnLaterPunish,
@@ -288,11 +289,37 @@ function reopensAsSucceeded(
  */
 function subContextOf(input: RightsRecordInput): ReasonSubWrite {
   const manual = manualOf(input);
+  const decision = rightsReasonOfInput(input);
   const context: ReasonSubContext = {
     rightsType: input.type,
     ...(input.type === 'PUNISH' ? { violationType: input.violation_type ?? null } : {}),
+    ...(decision?.reason === 'REFUND' ? { refundSub: decision.refundSub } : {}),
   };
-  return manual === undefined ? context : { ...context, manual };
+  const write: ReasonSubWrite =
+    decision === undefined ? context : { ...context, rightsReason: decision.reason };
+  return manual === undefined ? write : { ...write, manual };
+}
+
+/**
+ * B2-04zzs (08 BR-TEXT-05 细则「写入来源」①): the reason a full result of a RIGHTS record writes, from
+ * the union's timing the record carries (Taobao earning_time, passed through by the sync, never
+ * stored); undefined for any other type. Without the timing (absent) it stays RIGHTS.
+ */
+function rightsReasonOfInput(input: RightsRecordInput): RightsReasonDecision | undefined {
+  if (input.type !== 'RIGHTS') return undefined;
+  const earningAt = input.earning_at;
+  return rightsReasonOf({
+    platform: input.before.platform,
+    receivedAt: input.before.received_at,
+    occurredAt: input.occurred_at,
+    timing: earningAt === undefined ? undefined : { earningAt },
+  });
+}
+
+/** B2-04zzs: the clawback's r8Reason of a RIGHTS record (absent for any other type). */
+function r8ReasonOf(input: RightsRecordInput): { readonly r8Reason?: 'REFUND' | 'RIGHTS' } {
+  const decision = rightsReasonOfInput(input);
+  return decision === undefined ? {} : { r8Reason: decision.reason };
 }
 
 /** B1-09v: the record's sub-reason chosen by hand; only a punishment carries one. */
@@ -689,6 +716,9 @@ export function createRightsCommandPort(deps: RightsCommandDependencies): Rights
       newCommissionFen: null,
       rightsDeductFen: input.type === 'RIGHTS' ? input.deduction_commission_fen : null,
       reasonSub: subContextOf(input),
+      // B2-04zzs: an R8 of this record writes the BR-TEXT-05 ① reason; the cause stays RIGHTS
+      // (N_new from the deduction, sub_type RIGHTS, R9 for a partial result).
+      ...r8ReasonOf(input),
     });
     logger.info(
       {

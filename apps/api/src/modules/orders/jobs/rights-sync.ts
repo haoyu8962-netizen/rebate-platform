@@ -275,14 +275,19 @@ export async function handleRightsWindow(
         counts.count += 1;
         const status = rightsStatusOf(refund, counts);
         if (status === null) continue;
-        const result = await deps.writer.write(targetOf(win, refund.order_id), {
-          type: 'RIGHTS',
-          status,
-          amount_fen: null,
-          deduction_commission_fen: refund.refund_fen,
-          occurred_at: refund.refund_created_at ?? deps.clock.now(),
-          platform_rights_no: refund.refund_id,
-        });
+        const result = await deps.writer.write(
+          targetOf(win, refund.order_id),
+          {
+            type: 'RIGHTS',
+            status,
+            amount_fen: null,
+            deduction_commission_fen: refund.refund_fen,
+            occurred_at: refund.refund_created_at ?? deps.clock.now(),
+            platform_rights_no: refund.refund_id,
+          },
+          // B2-04zzs (BR-TEXT-05 ①): the adapter's earning_time, for settlement's order reason.
+          { earning_at: refund.earning_at ?? null },
+        );
         tally(counts, result);
       }
     },

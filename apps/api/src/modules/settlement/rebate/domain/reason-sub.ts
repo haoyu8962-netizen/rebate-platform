@@ -7,7 +7,8 @@
 // - PUNISH: the violation text matched exactly through specs/reason-sub-map/taobao.csv; unmapped
 //   (codes, empty, absent) → PUNISH_ORDER and the caller raises order_reason_sub_unmapped.
 // - RIGHTS → AFTER_SALE.
-// - REFUND: a rights record INVALID_AFTER_SETTLE / REFUND_AFTER_SETTLE → AFTER_SETTLE; a sync that
+// - REFUND: a sub-reason the caller decided (context.refundSub, null included; B2-04zzs) first;
+//   a rights record INVALID_AFTER_SETTLE / REFUND_AFTER_SETTLE → AFTER_SETTLE; a sync that
 //   voided the order: platform status before PAID / DEPOSIT_PAID → IN_SALE, SETTLED → AFTER_SETTLE,
 //   RECEIVED (or unknown) → null.
 // - Any other parent: null (no sub-reason of its own). A sub-reason always belongs to the parent
@@ -34,6 +35,12 @@ export interface ReasonSubContext {
   readonly rightsType?: 'RIGHTS' | 'PUNISH' | 'INVALID_AFTER_SETTLE' | 'REFUND_AFTER_SETTLE';
   /** platform_status before the sync that voided the order (OrderUpdateChange.from_status). */
   readonly fromPlatformStatus?: string | null | undefined;
+  /**
+   * B2-04zzs (BR-TEXT-05 ①, D10-1169 ③): the REFUND sub-reason the caller decided (Taobao rights by
+   * the union's timing → AFTER_SETTLE / IN_SALE / null; a whole-order refund → null). Absent: from
+   * the record type and the platform status as before. Still only for Taobao, never over a manual pick.
+   */
+  readonly refundSub?: OrderReasonSub | null | undefined;
 }
 
 /** The order's current display columns. */
@@ -56,6 +63,7 @@ export type ReasonSubDecision =
 const NO_WRITE: ReasonSubDecision = Object.freeze({ write: false });
 
 function refundSub(context: ReasonSubContext): OrderReasonSub | null {
+  if (context.refundSub !== undefined) return context.refundSub;
   if (
     context.rightsType === 'INVALID_AFTER_SETTLE' ||
     context.rightsType === 'REFUND_AFTER_SETTLE'

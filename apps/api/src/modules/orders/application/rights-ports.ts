@@ -39,6 +39,13 @@ export interface RightsRecordInput {
    */
   readonly violation_type?: string | null | undefined;
   /**
+   * B2-04zzs (08 BR-TEXT-05 细则「写入来源」①): the union's earning_time of a Taobao rights record as the
+   * adapter parsed it, only for settlement's choice of the order reason (已结算 → REFUND /
+   * AFTER_SETTLE); never stored. null: the union reported none; absent: the caller does not know it
+   * (an import, a record written without the union's timing) and the reason stays RIGHTS.
+   */
+  readonly earning_at?: Date | null | undefined;
+  /**
    * B1-09v (08 BR-TEXT-05 子原因 写入来源 ②, D10-819 ①): the sub-reason a punish import was created
    * with, chosen by hand; value null is 「无」 (no sub-reason, still chosen by hand). Stored on the
    * order_rights row (reason_sub_manual true) and, when this record marks the order PUNISH, written

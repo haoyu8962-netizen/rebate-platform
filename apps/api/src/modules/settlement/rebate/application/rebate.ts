@@ -108,7 +108,15 @@ export interface RebateHoldAudit extends RebateOrderRef {
  * reason PUNISH it replaces the automatic mapping and sets orders.reason_sub_manual in the same
  * CAS; under any other reason it is ignored (a PUNISH sub-reason never goes with another parent).
  */
-export type ReasonSubWrite = ReasonSubContext & { readonly manual?: ManualReasonSub | undefined };
+export type ReasonSubWrite = ReasonSubContext & {
+  readonly manual?: ManualReasonSub | undefined;
+  /**
+   * B2-04zzs (BR-TEXT-05 ①): the reason an R6 RIGHTS_FULL writes (orders.reason and the
+   * order.invalidated reason) instead of RIGHTS; its REFUND sub-reason rides in refundSub. Ignored by
+   * any other plan. Status, history, amounts and the event itself are unchanged.
+   */
+  readonly rightsReason?: 'REFUND' | 'RIGHTS' | undefined;
+};
 
 export type RebatePort = OrderPipelineDeps['rebate'] &
   OrderUpdateDeps['rebate'] & {
@@ -252,6 +260,19 @@ function finish(d: Draft, stored: string): Plan | null {
     invalidated: d.invalidated,
     audit: d.audit,
   };
+}
+
+/**
+ * B2-04zzs (BR-TEXT-05 ①): a plan that ends in R6 RIGHTS_FULL (VOID, reason RIGHTS) takes the reason
+ * the caller decided; the sub-reason is then written for that reason (withReasonSub). Nothing else
+ * of the plan changes.
+ */
+function withRightsReason(plan: Plan | null, context: ReasonSubWrite | undefined): Plan | null {
+  const reason = context?.rightsReason;
+  if (plan === null || reason === undefined || reason === 'RIGHTS') return plan;
+  const last = plan.steps.at(-1);
+  if (!plan.write || plan.set.reason !== 'RIGHTS' || last?.event !== 'RIGHTS_FULL') return plan;
+  return { ...plan, set: { ...plan.set, reason }, invalidated: reason };
 }
 
 function refOf(order: { app_id: string; order_id: string; attr_at: Date }): RebateOrderRef {
@@ -807,7 +828,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
         trx,
         ref,
         'system',
-        (row) => decideApply(trx, row, order, event),
+        async (row) => withRightsReason(await decideApply(trx, row, order, event), subContext),
         subContext ?? {},
       );
     },
