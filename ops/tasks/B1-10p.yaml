@@ -12,6 +12,13 @@ paths:
   - 'apps/api/src/modules/identity/http/admin/user-profile.controller*.ts'
 test_paths:
   - 'test/spec/admin/lookup-blank-write-readback/**'
+  - 'test/spec/orders/admin-mounts/ports.int.test.ts'
+modify_existing:
+  - file: 'test/spec/orders/admin-mounts/ports.int.test.ts'
+    test: '[AC-B1-10m#18] hold 经真实 rebate 命令：hold 与原因写入、row_version + 1、返利状态不变；响应带最新暂停记录'
+    reason: tighten_only
+    ruling: D10-1048
+    note: '只给这条用例的管理员加 order.view（setup 的 grants 由 GRANTS.hold 改为再加 order.view），断言一字不动，语义仍是有权限的人看到原文；只持 order.hold 的账号回读置空由 B1-10p 规则测试钉（编排 2026-11-09 10:24，照 D10-327 / modify_existing）'
 impl: claude
 tester: claude-independent
 accept:
