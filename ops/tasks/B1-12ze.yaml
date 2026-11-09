@@ -1,0 +1,121 @@
+id: B1-12ze
+repo: rebate-platform
+title: 订单申诉结果站内信落到订单详情：APPEAL_RESULT 的 target_type=order（order_revoked 与 upheld）带落地 OrderDetail{order_id=target_id}，账户申诉仍无落地（D10-1183）
+type: impl
+# 2026-11-09 content 入账（D10-1183，承 D10-1182 核查）。notification/application/appeal-result-message.ts 现对三个变体都写 route: null。改为：载荷 target_type=order 时（order_revoked 与维持 upheld）route 为 OrderDetail、params {order_id: target_id}（同其他订单消息的写法，如 clawback-message.ts 的 DeductionRoute），target_type=account 仍为 null，blocked_request 仍不发。只改这一处与对应单测；模板、变量、渠道（只发站内信）不变。08 BR-TEXT-23 由编排下一批回写，refs 先指现有条目。排在 CT-26zi 之后。
+# D10-1189：冻结 appeal-result-message 的 [AC-B1-12p#1/#8/#18/#21] 对全部变体钉 route 为空，照 D10-327 由新鲜独立 Claude 只把订单变体（target_type=order 的 revoked / upheld）的 route 期望改为 OrderDetail{order_id=target_id}，账户行与其余断言不动（回调按 target_type 取期望，故整表各行登记 modify_existing）；另一位只读复核；落地按 #24 核。
+refs: [BR-TEXT-23]
+refs_hash:
+  BR-TEXT-23: e160b53ddf45
+deps: [CT-26zi]
+paths:
+  - 'apps/api/src/modules/notification/application/appeal-result-message.ts'
+  - 'apps/api/src/modules/notification/application/appeal-result-message.test.ts'
+test_paths:
+  - 'test/spec/notification/appeal-result-landing/**'
+  - 'test/spec/notification/appeal-result-message/render.test.ts'
+  - 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+  - 'test/spec/notification/appeal-result-message/delivery.int.test.ts'
+  - 'test/spec/notification/appeal-result-message/fixtures.ts'
+modify_existing:
+  - file: 'test/spec/notification/appeal-result-message/render.test.ts'
+    test: '[AC-B1-12p#1] account / revoked 使用逐字默认文案、服务类别、仅站内与空路由'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/render.test.ts'
+    test: '[AC-B1-12p#1] order / revoked 使用逐字默认文案、服务类别、仅站内与空路由'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/render.test.ts'
+    test: '[AC-B1-12p#1] account / upheld 使用逐字默认文案、服务类别、仅站内与空路由'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/render.test.ts'
+    test: '[AC-B1-12p#1] order / upheld 使用逐字默认文案、服务类别、仅站内与空路由'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#18] account / revoked 精确匹配同 app、code、variant 的模板'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#18] order / revoked 精确匹配同 app、code、variant 的模板'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#18] account / upheld 精确匹配同 app、code、variant 的模板'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#18] order / upheld 精确匹配同 app、code、variant 的模板'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] account / revoked 覆盖正文按载荷 need_reauth=true 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] account / revoked 覆盖正文按载荷 need_reauth=false 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] order / revoked 覆盖正文按载荷 need_reauth=true 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] order / revoked 覆盖正文按载荷 need_reauth=false 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] account / upheld 覆盖正文按载荷 need_reauth=true 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] account / upheld 覆盖正文按载荷 need_reauth=false 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] order / upheld 覆盖正文按载荷 need_reauth=true 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/templates.int.test.ts'
+    test: '[AC-B1-12p#21] order / upheld 覆盖正文按载荷 need_reauth=false 追加提示，渠道与路由不能被覆盖'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/delivery.int.test.ts'
+    test: '[AC-B1-12p#8] account_revoked 从事件快照写一条信与成功日志，无模板仍可发'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/delivery.int.test.ts'
+    test: '[AC-B1-12p#8] order_revoked 从事件快照写一条信与成功日志，无模板仍可发'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+  - file: 'test/spec/notification/appeal-result-message/delivery.int.test.ts'
+    test: '[AC-B1-12p#8] upheld 从事件快照写一条信与成功日志，无模板仍可发'
+    reason: tighten_only
+    ruling: D10-1189
+    note: '只把订单变体（target_type=order）的 route 期望由空改为 OrderDetail{order_id=target_id}；账户变体仍为空，其余断言不动（D10-1183）'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/notification/appeal-result-landing/**'
+status: todo
