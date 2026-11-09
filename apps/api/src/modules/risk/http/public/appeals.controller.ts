@@ -5,7 +5,9 @@
 // state change, its event and the key's completed record commit together; a refusal (20001) or an
 // error rolls all of them back and leaves no record of the key. 30418 (the appeals of the
 // current penalty used up, BR-ID-36; HTTP 422, no data) is a 3xxxx business result: nothing was
-// written, and the key's record stores it like a success (04 §5). The idempotency response is
+// written, and the key's record stores it like a success (04 §5). 30701 (target_type=order: the
+// order_id is unknown in the app or not the caller's, BR-ID-36 ②, B1-03zl; HTTP 404, no data) is
+// likewise a 3xxxx result stored with the key, nothing else written. The idempotency response is
 // written as is (HTTP status and body bytes, so a replay equals the first answer). Stage ④a, ⑤
 // (10006 whitelist) and ⑬ are the global guard's and the idempotency post-miss hooks', not
 // judged here. Without a database (no appeals service or idempotency primitive) both routes fail
@@ -43,6 +45,8 @@ export const APPEALS_SERVICE = Symbol('APPEALS_SERVICE');
 const PATH = '/v1/me/appeals';
 /** BR-TEXT-14 error.30418 (contracts/texts.default.json); clients show their own copy by code. */
 const USED_UP_MSG = '这项申诉的次数已用完，不能再提交申诉';
+/** BR-TEXT-14 error.30701 (contracts/texts.default.json). */
+const NOT_FOUND_MSG = '内容不存在或已下线';
 
 /** What this controller reads of the Fastify request, already checked by stages ①–③ and the schema. */
 export interface AppealsHttpRequest extends CheckedRequest {
@@ -104,8 +108,15 @@ export class AppealsController {
             envelope: { code: 30418, msg: USED_UP_MSG, trace_id: traceId },
           };
         }
+        if (outcome.code === 30701) {
+          // Stored by the idempotency module (3xxxx); nothing else was written.
+          return {
+            status: 404,
+            envelope: { code: 30701, msg: NOT_FOUND_MSG, trace_id: traceId },
+          };
+        }
         // Not stored by the idempotency module (2xxxx): everything rolls back.
-        const refused = fieldsErrorEnvelope(['target_type'], traceId);
+        const refused = fieldsErrorEnvelope(outcome.fields ?? ['target_type'], traceId);
         return { status: refused.statusCode, envelope: refused.body };
       },
     );

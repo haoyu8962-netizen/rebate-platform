@@ -23,7 +23,9 @@
 // service needs DB and stage ⑤'s service (the single writer of user_risk_state); the calendar is
 // read through the configuration port over a handle (content's reader, assembled by app.module).
 // Without them the service is not installed (one info line `appeals_disabled` at startup) and both
-// routes answer 50001.
+// routes answer 50001. Order appeals (BR-ID-36 ②, B1-03zl) read app.orders through the
+// AppealOrderReader port over a handle, built by app.module (risk imports no orders module);
+// without it order appeals are refused (20001).
 //
 // Also compiled by the `test` project (through ./index.ts): a class decorator only (no parameter
 // decorators or parameter properties; dependencies are injected through a factory), as in
@@ -95,7 +97,11 @@ import {
   riskStateServiceToken,
   type RiskStateService,
 } from './application/risk-state.ts';
-import { createAppealsService, type AppealsService } from './application/appeals.ts';
+import {
+  createAppealsService,
+  type AppealOrderReader,
+  type AppealsService,
+} from './application/appeals.ts';
 import { APPEALS_SERVICE, AppealsController } from './http/public/appeals.controller.ts';
 import {
   createSameDeviceAccountsCheck,
@@ -137,6 +143,7 @@ const SAME_DEVICE_ACCOUNTS_CHECK = sameDeviceAccountsCheckToken();
 const SAME_DEVICE_LOGIN_READER = sameDeviceLoginReaderToken();
 const SAME_DEVICE_CONFIG = Symbol('SAME_DEVICE_CONFIG');
 const APPEALS_CONFIG = Symbol('APPEALS_CONFIG');
+const APPEALS_ORDERS = Symbol('APPEALS_ORDERS');
 
 /** The minimum supported version port as app.module supplies it (content's reader). */
 export interface MinimumVersionReaders {
@@ -237,12 +244,16 @@ export interface RiskModuleOptions {
    * Appeals (BR-ID-36, B1-03i): the configuration port bound to a handle (content's reader), for
    * the working-day calendar of the deadline, read on the submission's transaction. Absent: the
    * calendar reads nothing and counts weekends only.
+   * `orders` (BR-ID-36 ②, B1-03zl): the orders port over a given handle (read only, scoped by
+   * app_id), for target_type=order. Absent: order appeals are refused (20001) and never offer a
+   * resubmission.
    */
   readonly appeals?: {
     readonly config: Pick<
       FactoryProvider<(handle: Kysely<Database>) => RateLimitConfigReader>,
       'inject' | 'useFactory'
     >;
+    readonly orders?: (handle: Kysely<Database>) => AppealOrderReader;
   };
 }
 
@@ -419,6 +430,7 @@ export class RiskModule {
           : { provide: BEFORE_RATE_LIMIT_GUARDS, ...options.beforeRateLimitGuards },
         ...sameDeviceProviders,
         appealsConfig,
+        { provide: APPEALS_ORDERS, useValue: options.appeals?.orders ?? null },
         {
           provide: SIGNATURE_CHECK,
           // R-04 (B1-02zi): the Redis generation gate, enabled by APP_ENV (staging / prod) only.
@@ -538,6 +550,7 @@ export class RiskModule {
             ROOT_LOGGER,
             RISK_STATE_SERVICE,
             APPEALS_CONFIG,
+            APPEALS_ORDERS,
             { token: DB, optional: true },
           ],
           useFactory: (
@@ -545,6 +558,7 @@ export class RiskModule {
             logger: RootLogger,
             riskState: RiskStateService | null,
             configOn: (handle: Kysely<Database>) => RateLimitConfigReader,
+            ordersOn: ((handle: Kysely<Database>) => AppealOrderReader) | null,
             db?: Kysely<Database>,
           ): AppealsService | null => {
             if (db === undefined || riskState === null) {
@@ -558,6 +572,7 @@ export class RiskModule {
               logger,
               config: configOn(db),
               configOn,
+              ...(ordersOn === null ? {} : { ordersOn }),
             });
           },
         },

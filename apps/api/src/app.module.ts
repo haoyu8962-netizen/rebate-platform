@@ -2553,6 +2553,49 @@ function adminAppealWritePorts(db: Kysely<Database>): AdminAppealsWritePorts {
   };
 }
 /**
+ * B1-03zl: risk's user order appeal port (BR-ID-36 ②; POST / GET /v1/me/appeals) over a given
+ * handle — the submission's transaction or the pool. Read only, every read scoped by app_id:
+ * a sub-order's owner and whether risk control voided its rebate (rebate_status VOID, reason
+ * BLACKLIST; BR-ATTR-26, the same rule as adminAppealWritePorts.voidedOrderOwner), and which of a
+ * user's orders are so voided. Building it reads nothing.
+ */
+function appealOrderReader(db: Kysely<Database>) {
+  return {
+    async orderTarget(appId: string, orderId: string) {
+      const row = await db
+        .withSchema('app')
+        .selectFrom('orders')
+        .select(['user_id', 'rebate_status', 'reason'])
+        .where('app_id', '=', appId)
+        .where('order_id', '=', orderId)
+        .executeTakeFirst();
+      if (row === undefined) return null;
+      return {
+        user_id: row.user_id,
+        risk_voided: row.rebate_status === 'VOID' && row.reason === 'BLACKLIST',
+      };
+    },
+    async riskVoidedOrderIds(
+      appId: string,
+      userId: string,
+      orderIds: readonly string[],
+    ): Promise<ReadonlySet<string>> {
+      if (orderIds.length === 0) return new Set();
+      const rows = await db
+        .withSchema('app')
+        .selectFrom('orders')
+        .select('order_id')
+        .where('app_id', '=', appId)
+        .where('user_id', '=', userId)
+        .where('order_id', 'in', [...orderIds])
+        .where('rebate_status', '=', 'VOID')
+        .where('reason', '=', 'BLACKLIST')
+        .execute();
+      return new Set(rows.map((row) => row.order_id));
+    },
+  };
+}
+/**
  * B1-10j: orders' console claim review ports — identity's masked phones (BR-ID-33, decrypted and
  * masked inside identity; without the field cipher a phone read fails closed), admin's reviewer
  * display names and linking's link_logs time and scene. Building them reads nothing.
@@ -3771,13 +3814,15 @@ function riskModule(identity: DynamicModule, contentReader: SharedContentReader)
       },
     },
     // Appeals (BR-ID-36, B1-03i): the deadline's working-day calendar (calendar.cn_holidays.<year>,
-    // calendar.cn_makeup_workdays.<year>) through content's reader over the submission's handle.
+    // calendar.cn_makeup_workdays.<year>) through content's reader over the submission's handle;
+    // order appeals (B1-03zl) read app.orders through appealOrderReader over the same handle.
     appeals: {
       config: {
         inject: [CLOCK],
         useFactory: (clock: Clock) => (handle: Kysely<Database>) =>
           createContentReader({ db: handle, clock }),
       },
+      orders: appealOrderReader,
     },
   });
 }
