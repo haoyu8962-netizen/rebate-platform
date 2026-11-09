@@ -10,8 +10,10 @@
 //      `P{orders.row_version}` as re-read under the lock (the row_version written by the sync
 //      update that carried the platform status change); ref commission →
 //      `C{orders.commission_version}` as re-read.
+//      B2-04zzl: ref blacklist → `B{reconDiffId}` (the confirmed difference of BR-ATTR-26).
 //   3. N_new (BR-FUND-08, @couli/domain selectClawbackCommission): the full causes
-//      PLATFORM_INVALID, INVALID_AFTER_SETTLE, REFUND_AFTER_SETTLE and PUNISH → 0; otherwise
+//      PLATFORM_INVALID, INVALID_AFTER_SETTLE, REFUND_AFTER_SETTLE, PUNISH and
+//      BLACKLIST_CONFIRMED → 0; otherwise
 //      ① command.newCommissionFen, ② booked_n_fen − command.rightsDeductFen (below 0 → 0),
 //      ③ neither → WAIT_COMMISSION (S12): no voucher, no rebate transition; the order_rights row
 //      of a rights ref → status WAIT_COMMISSION and orders.rights_pending recomputed in the same
@@ -62,6 +64,7 @@
 // | INVALID_AFTER_SETTLE | INVALID_AFTER_SETTLE                   | —                | FULL            | REFUND          |
 // | REFUND_AFTER_SETTLE  | REFUND_AFTER_SETTLE                    | —                | FULL            | REFUND          |
 // | PUNISH               | PUNISH                                 | —                | PUNISH          | PUNISH          |
+// | BLACKLIST_CONFIRMED  | BLACKLIST_CONFIRMED                    | —                | FULL            | BLACKLIST       |
 // | RIGHTS               | RIGHTS_FULL                            | RIGHTS_PARTIAL   | RIGHTS          | RIGHTS          |
 // | PARTIAL_REFUND       | COMMISSION_POSITIVE_ZERO / BASE_ZERO   | PARTIAL_REFUND   | FULL / PART_REFUND | COMMISSION_ZERO |
 // | COMMISSION           | COMMISSION_POSITIVE_ZERO / BASE_ZERO   | — (not_reverse)  | FULL            | COMMISSION_ZERO |
@@ -195,6 +198,7 @@ export type ClawbackCause =
   | 'INVALID_AFTER_SETTLE'
   | 'REFUND_AFTER_SETTLE'
   | 'PUNISH'
+  | 'BLACKLIST_CONFIRMED'
   | 'RIGHTS'
   | 'PARTIAL_REFUND'
   | 'COMMISSION';
@@ -203,7 +207,8 @@ export type ClawbackCause =
 export type ClawbackEventRef =
   | { readonly kind: 'rights'; readonly orderRightsId: string }
   | { readonly kind: 'platform' }
-  | { readonly kind: 'commission' };
+  | { readonly kind: 'commission' }
+  | { readonly kind: 'blacklist'; readonly reconDiffId: string };
 
 export interface ClawbackCommand {
   readonly appId: string;
@@ -351,6 +356,7 @@ const FULL_CAUSES: readonly ClawbackCause[] = [
   'INVALID_AFTER_SETTLE',
   'REFUND_AFTER_SETTLE',
   'PUNISH',
+  'BLACKLIST_CONFIRMED',
 ];
 const ALERT_WAIT = 'clawback_wait_commission';
 const ALERT_ESTIMATE = 'estimate_changed_after_credit';
@@ -400,6 +406,14 @@ function rulesOf(cause: ClawbackCause): CauseRules {
         r8SubType: 'PUNISH',
         r9SubType: null,
         r8Reason: 'PUNISH',
+      };
+    case 'BLACKLIST_CONFIRMED':
+      return {
+        r8Event: () => 'BLACKLIST_CONFIRMED',
+        r9Event: null,
+        r8SubType: 'FULL',
+        r9SubType: null,
+        r8Reason: 'BLACKLIST',
       };
     case 'RIGHTS':
       return {
@@ -452,6 +466,7 @@ function checkCommand(command: ClawbackCommand): void {
   const ref = command.ref as ClawbackEventRef | undefined;
   if (ref === undefined || ref === null) throw new TypeError('settlement clawback: ref missing');
   if (ref.kind === 'rights') text(ref.orderRightsId, 'ref.orderRightsId');
+  else if (ref.kind === 'blacklist') text(ref.reconDiffId, 'ref.reconDiffId');
   else if (ref.kind !== 'platform' && ref.kind !== 'commission') {
     throw new TypeError('settlement clawback: unknown ref kind');
   }
@@ -471,6 +486,8 @@ function rightsEventIdOf(ref: ClawbackEventRef, order: OrderRow): string {
       return `P${String(order.row_version)}`;
     case 'commission':
       return `C${String(order.commission_version)}`;
+    case 'blacklist':
+      return `B${ref.reconDiffId}`;
   }
 }
 

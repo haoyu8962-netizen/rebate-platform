@@ -13,6 +13,7 @@ import {
   type EventBus,
   type FieldCrypto,
   type Idempotency,
+  registerEventConsumer,
   type QueueRuntime,
   type RootLogger,
 } from '../platform/index.ts';
@@ -21,6 +22,12 @@ import type {
   RestoreAdminReconDiffDeps,
 } from './application/admin-recon-restore.ts';
 import type { AdminSettleBillReadDeps } from './application/admin-settle-bills.ts';
+import {
+  BLACKLIST_AFTER_CREDIT_CONSUMER,
+  createBlacklistAfterCreditHandler,
+  type AdminBlacklistClawbackPorts,
+  type BlacklistClawbackDeps,
+} from './application/blacklist-clawback.ts';
 import {
   createAdminSettleCommandDeps,
   type AdminSettleCommandDeps,
@@ -34,6 +41,10 @@ import {
   ADMIN_RECON_RESTORE,
   AdminReconRestoreController,
 } from './http/admin/recon-restore.controller.ts';
+import {
+  ADMIN_BLACKLIST_CLAWBACK,
+  AdminBlacklistClawbackController,
+} from './http/admin/blacklist-clawback.controller.ts';
 import {
   ADMIN_UNION_RECEIPTS,
   AdminUnionReceiptsController,
@@ -69,6 +80,8 @@ import type { SettlementWorkerPorts } from './worker/ports.ts';
 /** The settle queue's registration and timer on the worker entry (lifecycle hooks). */
 const SETTLE_WORKER = Symbol('SETTLEMENT_SETTLE_WORKER');
 const SETTLE_QUEUE = 'settle';
+/** The consumer of order.blacklist_hit_after_credit on the worker entry (registered at build). */
+const BLACKLIST_AFTER_CREDIT_WORKER = Symbol('SETTLEMENT_BLACKLIST_AFTER_CREDIT_WORKER');
 
 interface SettleWorkerLifecycle {
   onApplicationBootstrap(): void;
@@ -113,11 +126,53 @@ export class SettlementModule {
    * the period again on a later tick. On destroy the timer stops and a tick in flight is
    * awaited: nothing is sent once the module is closed. Without a database or queue nothing is
    * registered and no timer runs.
+   * B2-04zzl: options.blacklistReview (only app.module's worker entry passes true) also registers
+   * the consumer of order.blacklist_hit_after_credit; left out, the module registers the settle
+   * queue alone.
    */
-  static forWorker(ports: SettlementWorkerPorts): DynamicModule {
+  static forWorker(
+    ports: SettlementWorkerPorts,
+    options?: { blacklistReview?: boolean },
+  ): DynamicModule {
     return {
       module: SettlementModule,
       providers: [
+        ...(options?.blacklistReview === true
+          ? [
+              {
+                // B2-04zzl (BR-ATTR-26): the manual review difference of a credited blacklist hit.
+                provide: BLACKLIST_AFTER_CREDIT_WORKER,
+                inject: [
+                  CLOCK,
+                  ROOT_LOGGER,
+                  { token: DB_TOKEN, optional: true },
+                  { token: JOB_QUEUE, optional: true },
+                ],
+                useFactory: (
+                  clock: Clock,
+                  logger: RootLogger,
+                  db?: Kysely<DB>,
+                  queue?: QueueRuntime,
+                ): boolean => {
+                  if (db === undefined || queue === undefined) {
+                    logger.info(
+                      { consumer: BLACKLIST_AFTER_CREDIT_CONSUMER },
+                      'blacklist_review_disabled',
+                    );
+                    return false;
+                  }
+                  const consumerLogger = logger.child({ module: 'settlement' });
+                  registerEventConsumer(queue, {
+                    consumer: BLACKLIST_AFTER_CREDIT_CONSUMER,
+                    db,
+                    logger: consumerLogger,
+                    handler: createBlacklistAfterCreditHandler({ clock, logger: consumerLogger }),
+                  });
+                  return true;
+                },
+              },
+            ]
+          : []),
         {
           provide: SETTLE_WORKER,
           inject: [
@@ -190,11 +245,15 @@ export class SettlementModule {
  * B2-09zc: the 补差批次 list (fund.settle_adjust or fund.view) and the batch approval / rejection
  * (fund.settle_adjust, step-up totp); without a database, idempotency, the event bus or the field
  * cipher they register and fail closed.
+ * B2-04zzl: POST /admin/v1/recon-diffs/{recon_diff_id}/blacklist-clawback (order.blacklist_clawback,
+ * step-up totp): the confirmed clawback of BR-ATTR-26; without a database, idempotency, the event
+ * bus or the field cipher it registers and fails closed.
  */
 export class SettlementAdminModule {
   static forAdmin(
     ports: AdminSettleCommandPorts &
       AdminReconRestorePorts &
+      AdminBlacklistClawbackPorts &
       AdminUnionReceiptPorts &
       AdminSettleAdjustPorts,
   ): DynamicModule {
@@ -204,6 +263,7 @@ export class SettlementAdminModule {
         AdminSettleBillsController,
         AdminSettleCommandsController,
         AdminReconRestoreController,
+        AdminBlacklistClawbackController,
         AdminUnionReceiptsController,
         AdminSettleAdjustRunsController,
         AdminSettleAdjustmentsController,
@@ -278,6 +338,46 @@ export class SettlementAdminModule {
                   appendBeneficiaryEvent: ports.appendBeneficiaryEvent,
                   ledger: ports.ledger({ clock, eventBus }),
                 },
+        },
+        {
+          provide: ADMIN_BLACKLIST_CLAWBACK,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            { token: DB_TOKEN, optional: true },
+            { token: IDEMPOTENCY, optional: true },
+            { token: EVENT_BUS, optional: true },
+            { token: FIELD_CRYPTO, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<DB>,
+            idempotency?: Idempotency,
+            eventBus?: EventBus,
+            crypto?: FieldCrypto,
+          ): BlacklistClawbackDeps | null => {
+            if (
+              db === undefined ||
+              idempotency === undefined ||
+              eventBus === undefined ||
+              crypto === undefined
+            ) {
+              return null;
+            }
+            const child = logger.child({ module: 'settlement' });
+            return {
+              clock,
+              logger: child,
+              idempotency,
+              auditOn: (trx) => ports.auditWriter(trx, clock),
+              clawback: ports.blacklistClawback(
+                { db, clock, logger: child, events: eventBus },
+                crypto,
+              ),
+              config: ports.config(db, clock),
+            };
+          },
         },
         {
           provide: ADMIN_UNION_RECEIPTS,

@@ -3940,7 +3940,7 @@ export function workerPushSendCore(config: AppConfig): (clock: Clock) => PushSen
  * content's switches are read fresh on the worker's handle (the executor caches at most 10 s).
  */
 function settlementWorkerModule(): DynamicModule {
-  return SettlementModule.forWorker({
+  const ports: Parameters<typeof SettlementModule.forWorker>[0] = {
     platforms: REGISTERED_PLATFORMS,
     readAttribution: readCommissionAttribution,
     readSnapshot: readCommissionSnapshot,
@@ -3978,7 +3978,9 @@ function settlementWorkerModule(): DynamicModule {
       }),
     // B2-09zb (D10-780): the audit of candidates superseded by a newer commission_version.
     systemAudit: (clock) => createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
-  });
+  };
+  // B2-04zzl: only this entry consumes order.blacklist_hit_after_credit.
+  return SettlementModule.forWorker(ports, { blacklistReview: true });
 }
 
 type InviteRewardOrderFacts = ReturnType<typeof createInviteRewardOrderFacts>;
@@ -5168,6 +5170,8 @@ export class AppModule {
                 minors: (crypto) => createMinorStatusBatchReader({ crypto }),
                 readRestoreSnapshot: readCommissionAttribution,
                 appendBeneficiaryEvent,
+                // B2-04zzl: the confirmed blacklist clawback runs the worker's own R8.
+                blacklistClawback: orderClawback,
                 ledger: ({ clock, eventBus }) =>
                   createLedger({
                     clock,

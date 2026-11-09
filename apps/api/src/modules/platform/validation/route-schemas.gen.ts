@@ -17109,6 +17109,63 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "blacklistClawbackAdminReconDiff": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "idempotency-key"
+      ]
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "recon_diff_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "recon_diff_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "description": "Body of POST /admin/v1/recon-diffs/{recon_diff_id}/blacklist-clawback. The console sends no\namount: the amount is calculated by the server (BR-FUND-08, R8); `expected_fen` is for display only.\n",
+      "additionalProperties": false,
+      "properties": {
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Optional operator note, 1–200 characters after trimming (else 20001 with data.fields=[note]); recorded under resolution.note."
+        }
+      }
+    }
+  },
   "adminListAdjustments": {
     "headers": {
       "type": "object",

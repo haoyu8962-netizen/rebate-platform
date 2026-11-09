@@ -56,6 +56,17 @@ export interface SettleAdjustBodyValidators {
   readonly reject: BodyValidator;
 }
 
+/** The write routes whose body is checked after the guard. */
+type BodyAfterGuardOperation =
+  | 'adminApproveSettleAdjustBatch'
+  | 'adminRejectSettleAdjustBatch'
+  | 'blacklistClawbackAdminReconDiff';
+
+/** The contract body validator of one such route, compiled when its controller is built. */
+export function createContractBodyValidator(operationId: BodyAfterGuardOperation): BodyValidator {
+  return validator(createAjv().compile(contractRouteSchema(operationId).body));
+}
+
 /** Built once per entry: compiling at startup makes a bad contract fail there, not per request. */
 export function createSettleAdjustBodyValidators(): SettleAdjustBodyValidators {
   const ajv = createAjv();
@@ -66,9 +77,7 @@ export function createSettleAdjustBodyValidators(): SettleAdjustBodyValidators {
 }
 
 /** The route schema of a write without its body (the body is checked after the guard). */
-export function withoutBody(
-  operationId: 'adminApproveSettleAdjustBatch' | 'adminRejectSettleAdjustBatch',
-): object {
+export function withoutBody(operationId: BodyAfterGuardOperation): object {
   const schema = contractRouteSchema(operationId);
   return { params: schema.params, headers: schema.headers };
 }

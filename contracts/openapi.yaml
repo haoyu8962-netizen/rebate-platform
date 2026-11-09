@@ -24449,7 +24449,6 @@ paths:
         is a header and not part of the body hash, so a replay after a 10003 keeps its key.
       x-auth: admin
       x-idempotent: true
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003
