@@ -1,0 +1,39 @@
+{
+  "red_tests": [],
+  "risk_note": "DSX-48f ① (orchestrator D10-1159; ② split out by D10-1165). The invite poster's failure mark now follows the current load: AsyncImage gains an optional onLoad, and invite-page clears the failed-URL mark when the poster loads, so after A fails, B, then A again loading fine, the card is tappable again; a failed load still leaves the card aria-disabled with no preview. Unit test apps/h5/src/entries/app/pages/invite/code-card.test.tsx covers A fails -> B -> A loads (tappable) and A failing (not tappable). ② (conditionally mounted open modals animate in) conflicts with the frozen h5-components LAYOUT#1 / VISUAL#2 cases and was reverted; the test-change F1-01ft (#3042, D10-1161 / D10-1165) makes those cases wait for motion, then ② lands as its own task with couli-runs/DSX-48f/modal-appear-r1.patch. tester none (frozen h5-image / h5-invite / h5-transitions are the regression net). Host: h5 unit tests, frozen h5-image, h5-invite, h5-transitions, h5-components, tsc, eslint, prettier, run.ts static 10/10 green; CI runs full verification. Non-funds. Codex general review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex general r1 pass on ①, no findings"
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-48f",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "spec_commit": "5a476c432a52b16e777188d541f8a74dae091cbd",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "96b3bd7258d305e48f14649bdc329fade43b1ec7",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

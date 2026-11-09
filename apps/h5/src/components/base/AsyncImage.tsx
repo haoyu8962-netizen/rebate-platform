@@ -43,7 +43,7 @@ function joined(...parts: (string | false | undefined)[]): string {
  * fades in; no fade under reduced motion), error (placeholder plus a readable failure text, no
  * broken-image icon) and empty (no src: the placeholder frame only). With `aspectRatio` the frame
  * keeps that ratio in every state and the img covers it; without it the img sets the height once
- * loaded. A new `src` starts again at loading.
+ * loaded. A new `src` starts again at loading, including a return to a url that failed before.
  */
 export function AsyncImage({
   src,
@@ -56,6 +56,13 @@ export function AsyncImage({
 }: AsyncImageProps): ReactElement {
   const url = typeof src === 'string' && src !== '' ? src : null;
   const [settled, setSettled] = useState<{ url: string; state: Settled } | null>(null);
+  // A new url drops the last result, so going back to an earlier url (A → B → A) loads it again
+  // even when B never settled, instead of reusing A's old failure.
+  const [shown, setShown] = useState(url);
+  if (shown !== url) {
+    setShown(url);
+    setSettled(null);
+  }
   const imgRef = useRef<HTMLImageElement>(null);
   const state =
     url === null ? 'empty' : settled !== null && settled.url === url ? settled.state : 'loading';

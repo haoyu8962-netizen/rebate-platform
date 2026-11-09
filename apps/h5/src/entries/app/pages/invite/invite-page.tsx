@@ -214,7 +214,7 @@ function openArticle(target: HelpTarget): void {
   call(navOpen, target).catch(() => undefined);
 }
 
-function CodeCard({
+export function CodeCard({
   code,
   link,
   poster,
@@ -226,8 +226,14 @@ function CodeCard({
   notify: (text: string) => void;
 }): ReactElement {
   const posterUrl = poster === null || poster === '' ? null : poster;
-  // A poster that failed to load keeps its card and failure text but opens no preview.
+  // A poster that failed to load keeps its card and failure text but opens no preview. Only the
+  // current load counts: a new poster url clears the mark, so A failed → B → A loads A afresh.
   const [failedPoster, setFailedPoster] = useState<string | null>(null);
+  const [shownPoster, setShownPoster] = useState(posterUrl);
+  if (shownPoster !== posterUrl) {
+    setShownPoster(posterUrl);
+    setFailedPoster(null);
+  }
   const posterFailed = posterUrl !== null && failedPoster === posterUrl;
 
   // clipboard.write 要求一秒内的用户点击：在点击处理里直接调用。
