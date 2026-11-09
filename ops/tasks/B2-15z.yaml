@@ -1,0 +1,23 @@
+id: B2-15z
+repo: rebate-platform
+title: B2-15z：收款业务归属校验钩子（HANDOFF:1206，D10-1030 ②）——BizTypeEntry 加必填 ownedBy，下单在定价前校验业务对象归属本人，否则 30901 biz_not_sellable
+type: impl
+# 2026-11-09 收款线入账（编排 D10-1030 ②、D10-1155 ①；方案 couli-runs/B2-15z/plan.md）。用户授权边界：接入第一个真实收款业务类型前必须有此钩子与规则测试，生产注册表现在为空，先落。
+# BizTypeEntry 加必填 ownedBy({appId,userId,bizRef})；createPayOrder 在可售判定之后、price 之前调用。false → 30901 reason=biz_not_sellable（不读价、不建单、不调渠道，不区分不存在与别人的）；抛错走 50001、不建单。test_item 恒 true。
+# 不改契约（createPayOrder 已写 "object cannot be sold → 30901"）、无迁移、不动冻结用例。RV2：规则测试新鲜独立 Claude，spec-test / money 先跑 Codex，money medium（D10-1075、CT-06zzzzm）。
+refs: [BR-PAY-01]
+refs_hash:
+  BR-PAY-01: 15ea5ac62c34
+deps: [B2-15b]
+paths:
+  - 'apps/api/src/modules/payment/application/biz-registry.ts'
+  - 'apps/api/src/modules/payment/application/pay-orders.ts'
+  - 'ops/evidence/B2-15z.json'
+test_paths:
+  - 'test/spec/payment/orders-biz-owner/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payment/orders-biz-owner/**'
+status: todo
