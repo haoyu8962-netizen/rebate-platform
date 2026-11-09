@@ -7,7 +7,7 @@ type: contract
 refs: [BR-ATTR-26, BR-FUND-08]
 refs_hash:
   BR-ATTR-26: d115d750e3a5
-  BR-FUND-08: 7acaff229759
+  BR-FUND-08: 4135d1b47230
 contract_sections: ['11.1']
 deps: []
 paths:

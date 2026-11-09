@@ -11,7 +11,7 @@ type: impl
 # pay- 前缀不变量（收款，D10-358 ②）：只登记差错单、不冻结、不关开关（B2-02o 建议口径不变）。差异按 app 分组，关开关每 app 一次。
 refs: [BR-FUND-19, BR-WDR-05]
 refs_hash:
-  BR-FUND-19: e6205ee4fcc1
+  BR-FUND-19: 34f619112535
   BR-WDR-05: 99e2e2654ce0
 deps: [B2-02o, B2-09b]
 paths:

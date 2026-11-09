@@ -13,7 +13,7 @@ type: impl
 #  9. 淘礼金 tlj_deduct_fen > 0：不入账（D10-272）→ 无凭证；接入时 B 已扣，不偏离。  10. 封顶：入账路径无封顶（splitByBp 只校验 Σbp ≤ 10000，逐份 mulDivFloor，BR-CALC-08 尾差归平台）→ 不偏离。  11. 分享单比例（BR-CALC-24）：取归属快照 ratio_bp → 不偏离。  12. R14 / REASSIGN_CREDIT：不开放 → 不核。
 refs: [BR-FUND-19, BR-CALC-04, BR-CALC-13]
 refs_hash:
-  BR-FUND-19: e6205ee4fcc1
+  BR-FUND-19: 34f619112535
   BR-CALC-04: 6a3c3082b870
   BR-CALC-13: 54c06125032c
 deps: [B2-02ta, B2-02tb]

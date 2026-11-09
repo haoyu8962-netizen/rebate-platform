@@ -7,7 +7,7 @@ type: impl
 # 不含写操作（关闭结案并解除提现冻结、申诉恢复、重算余额缓存、核销，后续 CT-24w / B2-09b），不含对账任务列表与月末三项（运行表未建）。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 075baebf41f3
+  BR-FUND-22: c9930aaf2459
 deps: [CT-24v]
 paths:
   - 'apps/api/src/modules/ledger/application/admin-recon-diffs*.ts'

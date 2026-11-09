@@ -10,8 +10,8 @@ type: impl
 # 留给本单提方案报编排：CT-24zz contract r2 S2「VOID 佣金回 0 仍可 R12」。RV2；规则测试新鲜独立 Claude，资金评审照 D10-823 ④ 独立 Claude money，标签照 #24。
 refs: [BR-FUND-22, BR-FUND-01, BR-CALC-02, BR-CALC-09]
 refs_hash:
-  BR-FUND-22: 075baebf41f3
-  BR-FUND-01: de36644cdd41
+  BR-FUND-22: c9930aaf2459
+  BR-FUND-01: 681de36ba809
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-09: 2414ed15d885
 deps: [CT-24zz, B2-04zzf, B2-09g]

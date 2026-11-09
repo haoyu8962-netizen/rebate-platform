@@ -10,10 +10,10 @@ type: impl
 # 2026-11-09 补（D10-1140）：⑧ 由 10_invalid-still-credited-since-restore.sql 替代旧 08 后，两个冻结夹具写死的旧文件名照 D10-327 与 03→09 先例改成新文件名——test/spec/ledger/daily-check-execute/kit.ts:66（FILES['08']）与 test/spec/settlement/admin-union-receipts/kit.ts:97（INVARIANT_FILES），只改这两处，由新鲜独立 Claude 改、另一位只读复审「只改这两处」；合并时编排按 #24 核后加标签。
 refs: [BR-FUND-01, BR-FUND-02, BR-FUND-19, BR-FUND-22]
 refs_hash:
-  BR-FUND-01: de36644cdd41
+  BR-FUND-01: 681de36ba809
   BR-FUND-02: 382c4075d2cb
-  BR-FUND-19: e6205ee4fcc1
-  BR-FUND-22: 075baebf41f3
+  BR-FUND-19: 34f619112535
+  BR-FUND-22: c9930aaf2459
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/clawback/**'

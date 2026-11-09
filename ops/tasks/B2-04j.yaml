@@ -6,12 +6,12 @@ type: impl
 # 状态备注：可开（B2-04c 已合并，S1）。入账后路由留给 B2-04s / B2-04t。
 refs: [BR-FUND-01, BR-FUND-02, BR-FUND-03, BR-FUND-04, BR-FUND-06, BR-FUND-07]
 refs_hash:
-  BR-FUND-01: de36644cdd41
+  BR-FUND-01: 681de36ba809
   BR-FUND-02: 382c4075d2cb
   BR-FUND-03: 0a35db902f66
   BR-FUND-04: 497806f6f068
   BR-FUND-06: f903ec00076a
-  BR-FUND-07: 3d63741c52d9
+  BR-FUND-07: b61cfed0a77b
 deps: [B2-04c]
 paths:
   - 'apps/api/src/modules/settlement/settlement.module.ts'

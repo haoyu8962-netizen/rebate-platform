@@ -7,7 +7,7 @@ type: impl
 refs: [BR-ATTR-26, BR-FUND-08]
 refs_hash:
   BR-ATTR-26: d115d750e3a5
-  BR-FUND-08: 7acaff229759
+  BR-FUND-08: 4135d1b47230
 deps: [CT-24zzf, B2-04zzlt]
 paths:
   - 'apps/api/src/modules/settlement/application/blacklist-clawback*.ts'

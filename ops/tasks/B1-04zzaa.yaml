@@ -12,7 +12,7 @@ type: test-change
 refs: [BR-FUND-06, BR-FUND-07]
 refs_hash:
   BR-FUND-06: f903ec00076a
-  BR-FUND-07: 3d63741c52d9
+  BR-FUND-07: b61cfed0a77b
 deps: [B1-04zza]
 paths:
   - 'test/spec/orders/taobao-rights-sync-precredit/**'

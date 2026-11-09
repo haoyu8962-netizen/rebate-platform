@@ -9,7 +9,7 @@ type: contract
 # 实现 B2-09gd。契约单 RV1，tester none。
 refs: [BR-FUND-22, BR-CALC-10]
 refs_hash:
-  BR-FUND-22: 075baebf41f3
+  BR-FUND-22: c9930aaf2459
   BR-CALC-10: 93337079f138
 contract_sections: ['11.1']
 deps: []

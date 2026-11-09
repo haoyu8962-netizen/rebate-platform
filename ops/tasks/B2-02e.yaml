@@ -6,7 +6,7 @@ type: impl
 # 按 2026-10-05 之后的默认分工（approvals 第 19 条）：Codex 先写规则测试——每条一份故意破坏的数据至少报 1 条差异、干净数据 0 差异，检查行数为 0 在测试中判失败（D18 A）；Opus 写不变量 SQL；Codex money 评审（approvals 第 27 条）。db/invariants 只能新增：写错只能新增替代文件。
 refs: [BR-FUND-19]
 refs_hash:
-  BR-FUND-19: e6205ee4fcc1
+  BR-FUND-19: 34f619112535
 deps: [B2-02c, B2-02d]
 paths:
   - 'db/invariants/ledger/**'

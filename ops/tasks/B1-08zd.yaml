@@ -6,7 +6,7 @@ type: impl
 # 本任务：orders/domain/platform-restore.ts 的佣金触发在 SETTLED 时只认结算佣金列；其余判定、幂等键、金额与告警不变。B1-08zc 的冻结规则测试不改，新规则测试另列目录。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: 075baebf41f3
+  BR-FUND-22: c9930aaf2459
 deps: [B1-08zc]
 paths:
   - 'apps/api/src/modules/orders/**'
