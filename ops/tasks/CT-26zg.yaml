@@ -1,0 +1,20 @@
+id: CT-26zg
+repo: rebate-platform
+title: 契约：后台差错单恢复 / 关闭 / 核销接口的检查顺序写明路由 schema 先于守卫（形状不合法的请求体在路由层先得 20001，先于权限与 step-up）；只改文字（D10-1132，照 CT-26n / D10-591）
+type: contract
+# 2026-11-09 content 入账（D10-1132；FU-RECON-ADMIN-BODY-ORDER 随 B2-09zi 作废改为文字）。restoreAdminReconDiff、closeAdminReconDiff、writeOffAdminReconDiff 三处 Order of checks 写明：形状不合法的请求体（路由 schema 校验）在路由层先得 20001，先于权限与 step-up，不写审计；形状合法的按 权限 → step-up（close 无）→ 业务校验。已核：三控制器都挂完整 RouteSchema（recon-restore.controller.ts:107、recon-diff-close.controller.ts:105、recon-diff-write-off.controller.ts:103），守卫在 handler 内；restore / close 由 B2-09zi 规则测试实测（400 先于 403）。只改文字与生成的 openapi.gen.ts，不改代码、测试、错误码。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo

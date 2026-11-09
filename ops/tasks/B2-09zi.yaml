@@ -4,6 +4,7 @@ title: 后台差错单恢复 / 关闭的请求体校验移到权限（及 step-u
 type: impl
 # 2026-11-09 content 入账（D10-1128；funds 07:19 登记 FU-RECON-ADMIN-BODY-ORDER，转 content）。契约检查顺序：restore 为 order.restore（10403）→ step-up totp（10003）→ body（20001）；close 为 fund.recon（10403）→ body（20001）。两控制器挂完整 RouteSchema（recon-restore.controller.ts:107、recon-diff-close.controller.ts:105），Fastify 先校验 body。funds 读代码得出，规则测试先红即实测；主干上若绿则撤单。
 # 修法照 settle-adjustments 与 B2-04zzl r2：路由只挂 params / headers（withoutBody），body 用契约 schema 在 guard 内校验；合法权限 + 非法体仍 20001、字段同前。不改契约、金额、状态。land 在 B2-04zzl（同改 settle-adjustments.validation.ts）合并后变基。RV2：新鲜独立 Claude 写测试，money Codex medium（评审 brief 带可引用行号，D10-1121）。
+# **作废**（2026-11-09，D10-1132 撤回 D10-1128，照 D10-591 / D10-590 ⑥）：路由 schema 先于 handler 内守卫是全仓后台接口现状，被拒请求不写不泄露，只是形状不合法的请求体先得 20001，已定不改代码、改契约文字（CT-26zg）。实测属实：独立 Claude 规则测试 red/1 PASS（主干上 restore / close 无权限 + schema 非法体得 400 而非 403），测试草稿不合并。
 refs: []
 refs_hash: {}
 deps: [B2-04zzl]
@@ -21,4 +22,4 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/recon-admin-body-order/**'
-status: todo
+status: void
