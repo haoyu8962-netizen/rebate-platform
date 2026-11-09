@@ -1,0 +1,18 @@
+id: B2-09gf
+repo: rebate-platform
+title: 过渡测试改动（B2-09gd 前置）：平台恢复规则测试夹具给已归因的 VOID 单补分佣快照行（commission_version=1 却无 commission_splits 的形状不真实），断言不变
+type: test-change
+# 2026-11-09 withdraw 入账（编排 D10-1136）。B2-09gd 按 money r1 S1 改成直接查 commission_splits 后，夹具造的「版本 1、无快照」VOID 单会进补快照分支并被拒，10 条 [AC-B2-09gb#…] 失败。
+# 只改 test/spec/settlement/platform-restore/kit.ts 的 seedBareOrder：已归因的 VOID 单在 PAID / RECEIVED / SETTLED / INVALID 下写真实形状的快照四表；INVALID 含在内是因为 [AC-B2-09gb#14] 之后把订单改回 PAID。
+# 未归因、CLAWED_BACK 的 bare twin、DEPOSIT_PAID 不带，补快照场景不变成跳过。断言一字不动。新鲜独立 Claude 写，Codex 只读复核；非 task 分支、台账同 PR，按 approvals #24 报编排核对。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/settlement/platform-restore/kit.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

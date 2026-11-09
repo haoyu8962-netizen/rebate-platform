@@ -26,6 +26,7 @@
 // platform_restore difference.
 import { randomUUID } from 'node:crypto';
 import type { DB } from '@couli/db';
+import { mulDivFloor, subFen } from '@couli/money';
 import type { Selectable } from 'kysely';
 import { expect } from 'vitest';
 import type { PostingVoucher } from '../../../../apps/api/src/modules/ledger/index.ts';
@@ -246,9 +247,109 @@ export interface BareOrder extends PlatformDiffTarget {
   readonly userId: string | null;
 }
 
+/** reserve_bp and the member's ratio of a bare order's snapshot (the B2-09g kit's defaults). */
+const BARE_RESERVE_BP = 1500;
+const BARE_SELF_RATIO_BP = 5000;
+/**
+ * The platform statuses at which an attributed order has its snapshot: paid or later, and INVALID
+ * (such an order had its snapshot before the platform invalidated it, and goes back to a paid
+ * status in the tests).
+ */
+const SNAPSHOT_STATUSES: readonly PlatformStatus[] = ['PAID', 'RECEIVED', 'SETTLED', 'INVALID'];
+
+/**
+ * The immutable snapshot (version 1) of a bare order, the four tables commission's insertSnapshot
+ * writes: the member alone, self, on the estimate. BR-CALC-02 B = floor(N⁺ × (10000 − reserve_bp) /
+ * 10000), BR-CALC-04 amount = floor(B × ratio / 10000), the rest of B retained by the platform.
+ */
+async function seedBareSnapshot(
+  f: RestoreFixture,
+  orderId: string,
+  userId: string,
+  est: bigint | null,
+): Promise<void> {
+  const rawN = est ?? 0n;
+  const positiveN = rawN > 0n ? rawN : 0n;
+  const base = mulDivFloor(positiveN, BigInt(10000 - BARE_RESERVE_BP), 10000n);
+  const amount = mulDivFloor(base, BigInt(BARE_SELF_RATIO_BP), 10000n);
+  await f.db
+    .insertInto('commission_splits')
+    .values({
+      app_id: f.appId,
+      order_id: orderId,
+      rule_version_id: f.ruleVersionId,
+      order_type: 'self',
+      activity_type: null,
+      rebate_mode: null,
+      paid_at: ATTR_AT,
+      paid_at_source: 'platform',
+      raw_n_fen: rawN,
+      subsidy_commission_fen: 0n,
+      reserve_bp: BARE_RESERVE_BP,
+      reserve_fen: subFen(positiveN, base),
+      tlj_deduct_fen: 0n,
+      base_fen: base,
+      platform_retain_fen: subFen(base, amount),
+      beneficiaries: JSON.stringify([
+        {
+          user_id: userId,
+          role: 'self',
+          ratio_bp: BARE_SELF_RATIO_BP,
+          level: 'L1',
+          initial_status: 'active',
+          forfeit_reason: null,
+        },
+      ]),
+      created_at: ATTR_AT,
+    })
+    .execute();
+  await f.db
+    .insertInto('commission_split_totals')
+    .values({
+      app_id: f.appId,
+      order_id: orderId,
+      commission_version: 1,
+      n_total_fen: rawN,
+      pre_base_deduct_fen: subFen(rawN, base),
+      base_fen: base,
+      user_share_total_fen: amount,
+      tlj_redpacket_fen: 0n,
+      platform_est_profit_fen: subFen(rawN, amount),
+      created_at: ATTR_AT,
+    })
+    .execute();
+  await f.db
+    .insertInto('commission_split_amounts')
+    .values({
+      app_id: f.appId,
+      order_id: orderId,
+      commission_version: 1,
+      user_id: userId,
+      role: 'self',
+      base_fen: base,
+      amount_fen: amount,
+      created_at: ATTR_AT,
+    })
+    .execute();
+  await f.db
+    .insertInto('commission_split_beneficiary_events')
+    .values({
+      app_id: f.appId,
+      order_id: orderId,
+      user_id: userId,
+      role: 'self',
+      status: 'active',
+      reason: null,
+      created_at: ATTR_AT,
+    })
+    .execute();
+}
+
 /**
  * A VOID order of the fixture's app (est 800, PAID, never credited, settle_period empty) with its
  * rebate history: imported (ESTIMATED, or UNATTRIBUTED without user) and the row entering VOID.
+ * An attributed VOID order paid or later, or INVALID, also has its snapshot (D10-1136); an
+ * unattributed order, a bare CLAWED_BACK twin and a DEPOSIT_PAID order have none.
  */
 export async function seedBareOrder(f: RestoreFixture, spec: BareSpec = {}): Promise<BareOrder> {
   const orderId = randomUUID();
@@ -306,6 +407,9 @@ export async function seedBareOrder(f: RestoreFixture, spec: BareSpec = {}): Pro
       updated_at: LEFT_AT,
     })
     .execute();
+  if (userId !== null && rebate === 'VOID' && SNAPSHOT_STATUSES.includes(platformStatus)) {
+    await seedBareSnapshot(f, orderId, userId, est);
+  }
   const start = userId === null ? 'UNATTRIBUTED' : 'ESTIMATED';
   await addRebateStep(f, orderId, {
     from: null,
