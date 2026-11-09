@@ -28,5 +28,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
-status: todo
-pr: null
+status: done
+pr: 3027
