@@ -3,6 +3,7 @@ repo: rebate-platform
 title: 扣回 / 作废的订单原因码对齐 BR-TEXT-05 写入来源 ①（淘宝结算后维权、退到 0、维权被结算额 0 回应）（FU-CLAWBACK-REASON-CHECK）
 type: impl
 # 2026-11-09 be 入账（编排 D10-1126 ①、07:41 更正；be 只读深核见 notices 07:23）。只改 orders.reason / reason_sub（及随之的 order.clawed_back 事件 reason），不改金额、幂等键、sub_type、恢复资格。a) 淘宝维权（orders/jobs/rights-sync.ts 现一律 type RIGHTS、不读适配器已解析的 earning_at）：维权时已结算（earning_time 有值）→ REFUND / AFTER_SETTLE；确认收货前 → REFUND / IN_SALE；收货后结算前 → RIGHTS / AFTER_SALE（BR-TEXT-05 细则「写入来源」①，负责人 11-07）。只改 reason / 上下文，不借 REFUND_AFTER_SETTLE 这个 cause（clawback-order.ts FULL_CAUSES 会强制 N_new=0，部分维权变全额扣回）。b①) 退款到剩余数量 0 走 PARTIAL_REFUND → R8：reason 由 COMMISSION_ZERO 改 REFUND（05_CALC BR-CALC-15 + 06_FUND BR-FUND-08 表）；「退一部分、佣金降到 0」保持 COMMISSION_ZERO。b②) 等待中的维权被结算额 0 回应走 settleDiff 转 R8：reason 按全额维权行——淘宝取 REFUND / AFTER_SETTLE（已入账的淘宝单维权时必然已结算），其他平台取 RIGHTS；sub_type 保持 FULL（D10-1133 ④）。依赖 B2-04zzr（同改 settlement/clawback、rebate、rights，排在其后）。
+# 2026-11-09 补（D10-1169）：① 冻结 refund-r9-baseline/writers.int.test.ts:37 [AC-B2-04zzf#8a] 的 reason 'COMMISSION_ZERO' 改 'REFUND'（全退到剩余 0 → 整单退款），照 D10-327 由新鲜独立 Claude 只改这一处、另一位只读复审，其余断言不动，改后的块在旧实现上红；同文件 #8b / #8c 未改，登记 red_exempt。② orders/application/rights-ports.ts 进 paths（结算时点经 RightsRecordInput 交 settlement）。③ 退到剩余 0 的整单退款不写子原因（reason_sub 为空）。
 refs: [BR-TEXT-05, BR-FUND-08]
 refs_hash:
   BR-TEXT-05: e22ebfe2491e
@@ -11,12 +12,22 @@ deps: [B2-04zzr]
 paths:
   - 'apps/api/src/modules/orders/jobs/rights-sync.ts'
   - 'apps/api/src/modules/orders/application/rights-sync.ts'
+  - 'apps/api/src/modules/orders/application/rights-ports.ts'
   - 'apps/api/src/modules/settlement/rights/**'
   - 'apps/api/src/modules/settlement/clawback/**'
   - 'apps/api/src/modules/settlement/rebate/**'
   - 'test/spec/settlement/clawback-reason/**'
+  - 'test/spec/settlement/refund-r9-baseline/writers.int.test.ts'
 test_paths:
   - 'test/spec/settlement/clawback-reason/**'
+  - 'test/spec/settlement/refund-r9-baseline/writers.int.test.ts'
+red_exempt:
+  - file: test/spec/settlement/refund-r9-baseline/writers.int.test.ts
+    test: '[AC-B2-04zzf#8b] 等佣金的维权 + 同一次同步已退 0 → 1 且新结算 600：R10 回应维权（不扣 CLAWBACK），基线推到 1；之后一次没有新内容的同步：不按 R9 再等联盟佣金，不开待处理、钱不动'
+    reason: '同文件未改的用例（D10-327 / D10-1169）：本单只把 [AC-B2-04zzf#8a] 的原因码期望 COMMISSION_ZERO 改为 REFUND（D10-1126 b①），本块与基线逐字相同，新旧实现下都成立'
+  - file: test/spec/settlement/refund-r9-baseline/writers.int.test.ts
+    test: '[AC-B2-04zzf#8c] 入账时已退 1（at_credit 1）、新结算 800 且已退件数不变：R10 ADJ:2 各扣 100，基线推到 1；再退一件（1 → 2）且新结算 600 → R9 各扣 100，基线推到 2'
+    reason: '同文件未改的用例（D10-327 / D10-1169）：本单只把 [AC-B2-04zzf#8a] 的原因码期望 COMMISSION_ZERO 改为 REFUND（D10-1126 b①），本块与基线逐字相同，新旧实现下都成立'
 impl: claude
 tester: claude-independent
 accept:
