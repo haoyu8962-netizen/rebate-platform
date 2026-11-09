@@ -22,5 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/convert-off-reason/**'
-status: todo
-pr: null
+status: done
+pr: 3006

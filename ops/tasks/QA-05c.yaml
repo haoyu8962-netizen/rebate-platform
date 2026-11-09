@@ -19,5 +19,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/drills/switches/**'
-status: todo
-pr: null
+status: done
+pr: 2972
