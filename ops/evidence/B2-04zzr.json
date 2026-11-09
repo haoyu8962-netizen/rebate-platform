@@ -1,0 +1,111 @@
+{
+  "risk_note": "RV2 (settlement rights / rebate / restore, orders update-step source, ledger invariant ⑧). FU-P7-ORDER-RIGHTS-ROW (orchestrator D10-1118 / D10-1124 / D10-1125 / D10-1126 ②③ / D10-1133 / D10-1134 / D10-1140 / D10-1147 / D10-1149; 08 second-batch write-back couli b7ff780 in SPEC_REF). The order sync now writes, in settlement on the sync transaction (settlement/rights/sync-rights.ts, called at the start of the rebate port's onUpdated, before R6 / R8): P7 (PLATFORM_INVALID from SETTLED, platform_status unchanged) → order_rights {INVALID_AFTER_SETTLE, SUCCEEDED, platform_rights_no 'P' || the row_version the sync update wrote, passed by orders as OrderStatusSource.sync_row_version (optional; only on PLATFORM_INVALID because update-step.test.ts U9 / U10 compare the third argument exactly)}, on CREDITED, unbooked and already CLAWED_BACK / VOID orders alike; P8 punishment (PLATFORM_PUNISH on PAID / RECEIVED / SETTLED) → {PUNISH, SUCCEEDED, no number}. Idempotency is the K-2 unique index (insertRights ON CONFLICT DO NOTHING); a restore followed by a new invalid report writes a new row. No amount, deduction or second clawback: R6 / R8 money paths, the P{row_version} clawback key and reasons are unchanged; rights_pending recomputed on the same transaction. BR-FUND-19 ⑧: db/invariants/ledger/10_invalid-still-credited-since-restore.sql supersedes 08 (superseded.json appended one entry; old 08 untouched, append-only like B2-02l): a successful INVALID_AFTER_SETTLE counts only when its updated_at is not before the order's last R12 / R13 (order_status_history field rebate, event ADMIN_RESTORE, from VOID / CLAWED_BACK); the platform_status = INVALID branch and the global no_beneficiary_account row are unchanged. BR-FUND-22 re-check: platform-restore.ts refuses R12 / R13 with restore_platform_invalid when a successful INVALID_AFTER_SETTLE has updated_at >= the difference's recon_diffs.created_at (ReconDiffRestoreRow gains created_at). Two frozen kits had the old 08 file name replaced by the new one only (test/spec/ledger/daily-check-execute/kit.ts:66, test/spec/settlement/admin-union-receipts/kit.ts:97; D10-327 / D10-1140, confirmed one line each by spec-test r2). Host checks on the implementation commit: root tsc -b 0, eslint 0, unit 40 files 276 tests, integration 10 groups 112 files 645 tests (sync-order-rights, daily-check-execute, admin-union-receipts, platform-restore, admin-recon-restore, clawback, rights, db/ledger, commission/version-rule, commission/estimate-port). Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review (effort medium; brief listed the citable diff lines, D10-1121 / D10-1125). Round 1 fail: S1 — SPEC_REF b1410c4 had no restore cut in BR-FUND-19 ⑧ (closed by rebasing onto main with SPEC_REF b7ff780, D10-1147); S2 — when the same sync also hit the blocklist, R6 bumped row_version before settlement and the P7 number became P{v+2} (fixed with OrderStatusSource.sync_row_version, rule test [AC-B2-04zzr#19]). Round 2 (incremental) pass, no findings, both closed. Money canary ran (record only). Not re-run after test attempt 4 (D10-1150): the implementation commit f7f8e67d9 is the money-r2-reviewed implementation without the superseded.json hunk, which moved verbatim into the rule-test commit c9d51dccc; the resulting tree is identical to the reviewed and host-verified one (git diff cf4dfce0f f7f8e67d9 empty)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "note": "Rule tests in test/spec/settlement/sync-order-rights by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent), three attempts; red runs red/1 (15), red/2 (18), red/3 (19), each red for the right reason. spec-test r1 by a fresh independent Claude: fail, 2 S1 + 1 S2 (⑧ status/type filter, restore cut not applying to the platform_status=INVALID branch, global no-account row), closed by test attempt 2 (#16–#18) together with the D10-1140 kit file-name edits; r2 by a fresh independent Claude: pass, no findings, and confirmed each of the two frozen kits changes exactly one line. With the spec-test attempts at 2 of 2, the orchestrator approved a one-off incremental r3 (D10-1149): Codex (medium) on ac4d32bd8..8623758bb only ([AC-B2-04zzr#19], the blocklist case added for money r1 S2), pass, no findings. Test attempt 4 (approvals 61, D10-1150; not bumped — the attempt counter has no exception switch, as with approvals 50 for B2-04zi): a fresh independent Claude appended only the 08 → 10 entry to db/invariants/ledger/superseded.json (evidence-check counts db/invariants as rule-test assets, so the change of an existing file belongs in a rule-test commit; ledger #3031 put the file into test_paths); red/7 PASS 19. Codex spec-test r4 incremental (07f420224..c9d51dccc, medium, not bumped, D10-1150): pass, no findings; only one object appended, the 03 → 09 entry unchanged, valid JSON, matches the ⑧ replacement."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/settlement/sync-order-rights/blacklist-p7.int.test.ts > [AC-B2-04zzr#19] 同一次同步里 P7（SETTLED 收到 PLATFORM_INVALID）同时命中新加入的订单黑名单：orders 先写同步更新（row_version v → v+1），再经 applyOrderBlacklist 走 R6 作废（→ v+2），之后才到 settlement；order_rights 恰好一行 (INVALID_AFTER_SETTLE, SUCCEEDED, P{v+1})，是同步更新写入的版本而不是 R6 之后的 v+2；订单照旧被黑名单作废为 VOID（原因码 BLACKLIST、platform_status 仍 SETTLED）、没有扣回凭证、rights_pending 仍 false",
+    "test/spec/settlement/sync-order-rights/invariant-since-restore-branches.int.test.ts > [AC-B2-04zzr#16] ⑧ 只认成功的 INVALID_AFTER_SETTLE：CREDITED 单只有 INVALID_AFTER_SETTLE 的 PROCESSING / WAIT_COMMISSION / FAILED 记录不报，只有成功的 RIGHTS / PUNISH / REFUND_AFTER_SETTLE 记录（如部分维权 R9 后仍 CREDITED）不报，恢复之后才写入的这些记录也不报；对照：从未恢复而有成功的 INVALID_AFTER_SETTLE 照报",
+    "test/spec/settlement/sync-order-rights/invariant-since-restore-branches.int.test.ts > [AC-B2-04zzr#17] ⑧ 恢复截断只作用在成功记录这一支：已扣回 → R13 恢复为 CREDITED → 之后平台结算前失效（platform_status = INVALID）且扣回丢失、仍 CREDITED → 照报（有 ADMIN_RESTORE 历史行、恢复前的成功记录也照报）；R12 恢复后同样；恢复晚于一切的 INVALID 单照报；对照：platform_status 未变的同样历史不报",
+    "test/spec/settlement/sync-order-rights/invariant-since-restore-branches.int.test.ts > [AC-B2-04zzr#18] ⑧ 保留 global 分支：报出的子订单所有受益人都没有 USER_BALANCE 账户 → 一行 scope global（account_id 为空、app_id 为该单），detail 照旧 08（reasons 含 no_beneficiary_account，受益人与未定位用户都列出）；platform_status = INVALID 与从未恢复的成功记录各一例；恢复前成功的无账户单不报；部分受益人有账户只出 account 行，未定位的列在 unlocated_user_ids",
+    "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#12] ⑧ 替代登记：superseded.json 登记旧 08 由 10_invalid-still-credited-since-restore.sql 替代（原因非空），两文件都在、08_ 仍只旧文件一份；新文件开头注释写明 BR-FUND-19 ⑧，口径注释写最后一次恢复与 updated_at",
+    "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#13] ⑧ 合法恢复之后不报：P7 后经 R12（VOID）或 R13（CLAWED_BACK）恢复为 CREDITED、之后没有新的成功失效记录；occurred_at 晚于恢复而 updated_at 早于恢复的也不报；多次恢复取最后一次；对照无记录的正常单；检查数按 CREDITED 子订单",
+    "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#14] ⑧ 恢复之后又有成功的失效记录、订单仍 CREDITED → 报：晚于最后一次恢复、与恢复同一时刻（不早于即报）、恢复前创建而恢复后才变成功（按 updated_at）、occurred_at 早于恢复而记录在恢复后写入；对照：恢复前成功的那单不报",
+    "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#15] ⑧ 照旧报：从未恢复而有成功的 INVALID_AFTER_SETTLE；platform_status=INVALID 的 CREDITED；只有入账历史（SETTLE_BATCH_CREDIT）不算恢复；只有账户申诉恢复的 RESTORE 凭证、没有 ADMIN_RESTORE 历史行也不算恢复；已 CLAWED_BACK 的不是候选",
+    "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#1] P7 已入账（CREDITED、SETTLED）：同一次同步写恰好一行 order_rights(INVALID_AFTER_SETTLE, SUCCEEDED)，platform_rights_no = P{这次同步更新写入的 row_version}，与 R8 扣回键同值（R8 后的 row_version 不是键）；R8 照旧：两张 CLAWBACK（FULL）各 500、CLAWED_BACK、原因码 REFUND、platform_status 仍 SETTLED；不因这一行多出第二笔扣回；rights_pending 仍 false",
+    "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#2] P7 已入账的重放：同一报文再同步一次、再投递一次都被 content_hash 短路（unchanged）→ order_rights 仍恰好一行（同一单号），扣回凭证仍只一笔，订单列不变",
+    "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#3] P7 未入账（WAITING、SETTLED）：R6 照旧作废为 VOID、不写凭证；同一次同步写恰好一行 (INVALID_AFTER_SETTLE, SUCCEEDED, P{row_version})；同报文重放（content_hash 短路）仍一行；rights_pending 仍 false",
+    "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#4] 订单已是 CLAWED_BACK（入账后被处罚扣回）或 VOID（入账前被处罚作废）时再来 P7：照旧不再扣回、不再作废、返利列不变，但 (INVALID_AFTER_SETTLE, SUCCEEDED, P{row_version}) 这一行照写",
+    "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#5] 恢复后再次失效：P7（未入账 → VOID，第一行 P{v1}）→ 平台恢复 R12（VOID → WAITING）→ 平台又一次失效（新的同步更新、新的 row_version v2）→ 新写第二行 P{v2}，两行并存、单号不同；订单再次 VOID",
+    "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#6] 结算前失效（P6：PAID → INVALID）不写 INVALID_AFTER_SETTLE 行（R6 照旧作废）；对照：结算前的处罚（P8，PAID）写恰好一行 (PUNISH, SUCCEEDED)；rights_pending 仍 false",
+    "test/spec/settlement/sync-order-rights/punish.int.test.ts > [AC-B2-04zzr#7] P8 处罚已入账（CREDITED、SETTLED）：同一次同步写恰好一行 (PUNISH, SUCCEEDED)、无单号；R8 照旧：两张 CLAWBACK（PUNISH）各 500、键 P{row_version}、CLAWED_BACK、原因码 PUNISH、platform_status 仍 SETTLED；rights_pending 仍 false",
+    "test/spec/settlement/sync-order-rights/punish.int.test.ts > [AC-B2-04zzr#8] P8 处罚重放：同报文再同步（content_hash 短路）不多写；之后内容不同的又一份处罚报文（新的同步更新）仍只这一行（无单号处罚每单一条），也不出第二笔扣回、返利列不变",
+    "test/spec/settlement/sync-order-rights/punish.int.test.ts > [AC-B2-04zzr#9] P8 处罚结算前与未入账（PAID / ESTIMATED、RECEIVED、SETTLED / WAITING）：platform_status 不变，R6 照旧作废为 VOID、不写凭证；每单恰好一行 (PUNISH, SUCCEEDED)、无单号；同报文重放仍一行；rights_pending 仍 false",
+    "test/spec/settlement/sync-order-rights/restore-recheck.int.test.ts > [AC-B2-04zzr#10] 处理时再核（R12，VOID、SETTLED）：差错单登记之后（同一时刻、晚一分钟各一例）出现成功的 INVALID_AFTER_SETTLE → restore_platform_invalid：返利状态不变、不写恢复凭证与历史、审计不写、差错单不关；对照：登记之前就成功的那条（时钟已推进）与登记之后仍 PROCESSING 的那条不挡恢复，照常 VOID → WAITING",
+    "test/spec/settlement/sync-order-rights/restore-recheck.int.test.ts > [AC-B2-04zzr#11] 处理时再核（R13，CLAWED_BACK、SETTLED）：登记之后（同一时刻、晚一分钟、先为 WAIT_COMMISSION 登记后才变成功各一例）有成功的 INVALID_AFTER_SETTLE → restore_platform_invalid、什么都不写、差错单保持 open；对照：登记前已成功的那条不挡，照常恢复为 CREDITED"
+  ],
+  "task": "B2-04zzr",
+  "spec_commit": "96dcc1171f10ee6f8234261ed1552f844f3fab9f",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "96dcc1171f10ee6f8234261ed1552f844f3fab9f",
+      "tree": "03066035c2a2922824949eef936bbb4d30e0eba1",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T05:59:09Z",
+      "finished_at": "2026-11-09T05:59:43Z",
+      "red_tests": [
+        "test/spec/settlement/sync-order-rights/blacklist-p7.int.test.ts > [AC-B2-04zzr#19] 同一次同步里 P7（SETTLED 收到 PLATFORM_INVALID）同时命中新加入的订单黑名单：orders 先写同步更新（row_version v → v+1），再经 applyOrderBlacklist 走 R6 作废（→ v+2），之后才到 settlement；order_rights 恰好一行 (INVALID_AFTER_SETTLE, SUCCEEDED, P{v+1})，是同步更新写入的版本而不是 R6 之后的 v+2；订单照旧被黑名单作废为 VOID（原因码 BLACKLIST、platform_status 仍 SETTLED）、没有扣回凭证、rights_pending 仍 false",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore-branches.int.test.ts > [AC-B2-04zzr#16] ⑧ 只认成功的 INVALID_AFTER_SETTLE：CREDITED 单只有 INVALID_AFTER_SETTLE 的 PROCESSING / WAIT_COMMISSION / FAILED 记录不报，只有成功的 RIGHTS / PUNISH / REFUND_AFTER_SETTLE 记录（如部分维权 R9 后仍 CREDITED）不报，恢复之后才写入的这些记录也不报；对照：从未恢复而有成功的 INVALID_AFTER_SETTLE 照报",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore-branches.int.test.ts > [AC-B2-04zzr#17] ⑧ 恢复截断只作用在成功记录这一支：已扣回 → R13 恢复为 CREDITED → 之后平台结算前失效（platform_status = INVALID）且扣回丢失、仍 CREDITED → 照报（有 ADMIN_RESTORE 历史行、恢复前的成功记录也照报）；R12 恢复后同样；恢复晚于一切的 INVALID 单照报；对照：platform_status 未变的同样历史不报",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore-branches.int.test.ts > [AC-B2-04zzr#18] ⑧ 保留 global 分支：报出的子订单所有受益人都没有 USER_BALANCE 账户 → 一行 scope global（account_id 为空、app_id 为该单），detail 照旧 08（reasons 含 no_beneficiary_account，受益人与未定位用户都列出）；platform_status = INVALID 与从未恢复的成功记录各一例；恢复前成功的无账户单不报；部分受益人有账户只出 account 行，未定位的列在 unlocated_user_ids",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#12] ⑧ 替代登记：superseded.json 登记旧 08 由 10_invalid-still-credited-since-restore.sql 替代（原因非空），两文件都在、08_ 仍只旧文件一份；新文件开头注释写明 BR-FUND-19 ⑧，口径注释写最后一次恢复与 updated_at",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#13] ⑧ 合法恢复之后不报：P7 后经 R12（VOID）或 R13（CLAWED_BACK）恢复为 CREDITED、之后没有新的成功失效记录；occurred_at 晚于恢复而 updated_at 早于恢复的也不报；多次恢复取最后一次；对照无记录的正常单；检查数按 CREDITED 子订单",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#14] ⑧ 恢复之后又有成功的失效记录、订单仍 CREDITED → 报：晚于最后一次恢复、与恢复同一时刻（不早于即报）、恢复前创建而恢复后才变成功（按 updated_at）、occurred_at 早于恢复而记录在恢复后写入；对照：恢复前成功的那单不报",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts > [AC-B2-04zzr#15] ⑧ 照旧报：从未恢复而有成功的 INVALID_AFTER_SETTLE；platform_status=INVALID 的 CREDITED；只有入账历史（SETTLE_BATCH_CREDIT）不算恢复；只有账户申诉恢复的 RESTORE 凭证、没有 ADMIN_RESTORE 历史行也不算恢复；已 CLAWED_BACK 的不是候选",
+        "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#1] P7 已入账（CREDITED、SETTLED）：同一次同步写恰好一行 order_rights(INVALID_AFTER_SETTLE, SUCCEEDED)，platform_rights_no = P{这次同步更新写入的 row_version}，与 R8 扣回键同值（R8 后的 row_version 不是键）；R8 照旧：两张 CLAWBACK（FULL）各 500、CLAWED_BACK、原因码 REFUND、platform_status 仍 SETTLED；不因这一行多出第二笔扣回；rights_pending 仍 false",
+        "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#2] P7 已入账的重放：同一报文再同步一次、再投递一次都被 content_hash 短路（unchanged）→ order_rights 仍恰好一行（同一单号），扣回凭证仍只一笔，订单列不变",
+        "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#3] P7 未入账（WAITING、SETTLED）：R6 照旧作废为 VOID、不写凭证；同一次同步写恰好一行 (INVALID_AFTER_SETTLE, SUCCEEDED, P{row_version})；同报文重放（content_hash 短路）仍一行；rights_pending 仍 false",
+        "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#4] 订单已是 CLAWED_BACK（入账后被处罚扣回）或 VOID（入账前被处罚作废）时再来 P7：照旧不再扣回、不再作废、返利列不变，但 (INVALID_AFTER_SETTLE, SUCCEEDED, P{row_version}) 这一行照写",
+        "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#5] 恢复后再次失效：P7（未入账 → VOID，第一行 P{v1}）→ 平台恢复 R12（VOID → WAITING）→ 平台又一次失效（新的同步更新、新的 row_version v2）→ 新写第二行 P{v2}，两行并存、单号不同；订单再次 VOID",
+        "test/spec/settlement/sync-order-rights/p7.int.test.ts > [AC-B2-04zzr#6] 结算前失效（P6：PAID → INVALID）不写 INVALID_AFTER_SETTLE 行（R6 照旧作废）；对照：结算前的处罚（P8，PAID）写恰好一行 (PUNISH, SUCCEEDED)；rights_pending 仍 false",
+        "test/spec/settlement/sync-order-rights/punish.int.test.ts > [AC-B2-04zzr#7] P8 处罚已入账（CREDITED、SETTLED）：同一次同步写恰好一行 (PUNISH, SUCCEEDED)、无单号；R8 照旧：两张 CLAWBACK（PUNISH）各 500、键 P{row_version}、CLAWED_BACK、原因码 PUNISH、platform_status 仍 SETTLED；rights_pending 仍 false",
+        "test/spec/settlement/sync-order-rights/punish.int.test.ts > [AC-B2-04zzr#8] P8 处罚重放：同报文再同步（content_hash 短路）不多写；之后内容不同的又一份处罚报文（新的同步更新）仍只这一行（无单号处罚每单一条），也不出第二笔扣回、返利列不变",
+        "test/spec/settlement/sync-order-rights/punish.int.test.ts > [AC-B2-04zzr#9] P8 处罚结算前与未入账（PAID / ESTIMATED、RECEIVED、SETTLED / WAITING）：platform_status 不变，R6 照旧作废为 VOID、不写凭证；每单恰好一行 (PUNISH, SUCCEEDED)、无单号；同报文重放仍一行；rights_pending 仍 false",
+        "test/spec/settlement/sync-order-rights/restore-recheck.int.test.ts > [AC-B2-04zzr#10] 处理时再核（R12，VOID、SETTLED）：差错单登记之后（同一时刻、晚一分钟各一例）出现成功的 INVALID_AFTER_SETTLE → restore_platform_invalid：返利状态不变、不写恢复凭证与历史、审计不写、差错单不关；对照：登记之前就成功的那条（时钟已推进）与登记之后仍 PROCESSING 的那条不挡恢复，照常 VOID → WAITING",
+        "test/spec/settlement/sync-order-rights/restore-recheck.int.test.ts > [AC-B2-04zzr#11] 处理时再核（R13，CLAWED_BACK、SETTLED）：登记之后（同一时刻、晚一分钟、先为 WAIT_COMMISSION 登记后才变成功各一例）有成功的 INVALID_AFTER_SETTLE → restore_platform_invalid、什么都不写、差错单保持 open；对照：登记前已成功的那条不挡，照常恢复为 CREDITED"
+      ],
+      "expected": [
+        "test/spec/settlement/sync-order-rights/blacklist-p7.int.test.ts",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore-branches.int.test.ts",
+        "test/spec/settlement/sync-order-rights/invariant-since-restore.int.test.ts",
+        "test/spec/settlement/sync-order-rights/p7.int.test.ts",
+        "test/spec/settlement/sync-order-rights/punish.int.test.ts",
+        "test/spec/settlement/sync-order-rights/restore-recheck.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "2203c3350e733d3234fd452370a115ee02c8e5c60ebace3cd4e602cd480b5495"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ff727bbd241b7888471f9d39212828d2aa990c9c",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}

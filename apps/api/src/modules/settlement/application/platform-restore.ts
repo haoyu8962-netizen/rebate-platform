@@ -63,6 +63,7 @@ import {
   readOpenObligations,
 } from '../clawback/clawback-store.ts';
 import type { BeneficiaryGate } from '../credit/beneficiary-gate.ts';
+import { hasSucceededInvalidSince } from '../rights/rights-store.ts';
 import { isForfeitedShare } from '../reads/pending-earnings-rules.ts';
 import {
   casUpdateRebate,
@@ -237,6 +238,11 @@ export async function restorePlatformDiff(
   const entryId = await readRebateEntryId(trx, appId, order.order_id, from);
   if (entryId !== ref.entryId) return conflictRefusal('order', traceId);
   if (order.platform_status === 'INVALID') {
+    return guardRefusal('restore_platform_invalid', traceId);
+  }
+  // B2-04zzr (BR-FUND-22 处理时再核): a successful INVALID_AFTER_SETTLE record at or after the
+  // difference's registration means the platform invalidated the order again (R12 and R13 alike).
+  if (await hasSucceededInvalidSince(trx, appId, order.order_id, row.created_at)) {
     return guardRefusal('restore_platform_invalid', traceId);
   }
 

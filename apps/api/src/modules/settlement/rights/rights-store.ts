@@ -492,3 +492,28 @@ export interface RightsSystemAuditInput {
     readonly reason: string;
   };
 }
+
+/**
+ * B2-04zzr (BR-FUND-22 处理时再核, D10-1126 ③ / D10-1134): whether the order has a SUCCEEDED
+ * INVALID_AFTER_SETTLE record that became successful (updated_at; a row written as SUCCEEDED has
+ * updated_at = created_at) at or after `since` — the platform invalidated the order again.
+ */
+export async function hasSucceededInvalidSince(
+  trx: Transaction<DB>,
+  appId: string,
+  orderId: string,
+  since: Date,
+): Promise<boolean> {
+  const row = await trx
+    .withSchema('app')
+    .selectFrom('order_rights')
+    .select('id')
+    .where('app_id', '=', appId)
+    .where('order_id', '=', orderId)
+    .where('type', '=', 'INVALID_AFTER_SETTLE')
+    .where('status', '=', 'SUCCEEDED')
+    .where('updated_at', '>=', since)
+    .limit(1)
+    .executeTakeFirst();
+  return row !== undefined;
+}

@@ -3,5 +3,10 @@
     "file": "03_credit-unique.sql",
     "replaced_by": "09_credit-unique-net.sql",
     "reason": "BR-FUND-16 的更正写红冲凭证（沿用原 voucher_kind，uniq_key = 原键 + ':REVERSE'），旧 03 按 CREDIT 张数计会把原单与其红冲数成两张而报假差异；09 只在原凭证与其红冲的分录按（账户、子户、ledger_type、sub_type）逐项相加为 0 且红冲无多出分录项时视为抵消，再判同键有效入账至多一张；配对未完全抵消与孤立红冲都报差异，输出编号仍为 03。"
+  },
+  {
+    "file": "08_invalid-still-credited.sql",
+    "replaced_by": "10_invalid-still-credited-since-restore.sql",
+    "reason": "BR-FUND-19 ⑧ 与 BR-FUND-22：P7 后经平台恢复 R12 / R13 合法回到 CREDITED 的子订单，旧 08 因仍有成功的 INVALID_AFTER_SETTLE 记录而报假差异；10 只计 updated_at 不早于该单最后一次 R12 / R13（order_status_history 中 field = rebate、event = ADMIN_RESTORE、from_status 为 VOID / CLAWED_BACK 的 max(at)）的成功记录，从未恢复的单全部计入，platform_status = INVALID 一支不受恢复截断；其余口径、account / global 两种行与 detail 形状照旧，输出编号仍为 08。"
   }
 ]

@@ -50,6 +50,7 @@ import {
   readLatestSettlementAt,
   type ManualReasonSub,
 } from '../../rights/rights-store.ts';
+import { recordSyncRights } from '../../rights/sync-rights.ts';
 import { createSettlementRecords } from '../../settlements/index.ts';
 import { IllegalTransition, RebateError } from './errors.ts';
 import {
@@ -754,6 +755,9 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       change: OrderUpdateChange,
       source: OrderStatusSource,
     ): Promise<void> {
+      // B2-04zzr (BR-FUND-01 P7 / P8): the order_rights row of this status signal, before R6 here
+      // and R8 in the clawback hook that follows (both bump row_version; P7's number is the sync's).
+      await recordSyncRights(trx, change, source, deps.clock.now());
       await execute(
         trx,
         refOf(change),

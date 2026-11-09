@@ -94,7 +94,7 @@ const INVARIANT_FILES = [
   '05_union-receivable.sql',
   '06_frozen-equals-open-withdrawals.sql',
   '07_negative-balance-drops.sql',
-  '08_invalid-still-credited.sql',
+  '10_invalid-still-credited-since-restore.sql',
   '09_credit-unique-net.sql',
 ];
 

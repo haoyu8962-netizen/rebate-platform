@@ -176,6 +176,13 @@ export interface OrderStatusSource {
   readonly event: PlatformStatusEvent | null;
   /** 平台原始状态码，入参原样（不 trim、不归一）；平台未给为 null。 */
   readonly raw_status: string | null;
+  /**
+   * B2-04zzr（BR-FUND-01 P7、BR-FUND-08 P{row_version}）：本次同步更新那条 CAS 写入后的 orders.row_version。
+   * 同一事务里黑名单 R6 等后续迁移还会再推进 row_version，settlement 取 P7 的维权单号用这个值而不重读当前行。
+   * 可选：同步流水线只在 event 为 PLATFORM_INVALID 时给；不经流水线构造的来源（如测试替身）可不给，
+   * settlement 缺省时回落到读当前行。
+   */
+  readonly sync_row_version?: number;
 }
 
 /**
@@ -747,6 +754,9 @@ export function createOrderUpdateStep(
     const source: OrderStatusSource = {
       event: plan.event ?? null,
       raw_status: incoming.raw_status ?? null,
+      // 同步更新 CAS 写入的版本（上面 set.row_version），不是黑名单 R6 之后的当前行版本；只有 PLATFORM_INVALID
+      // 用得到（P7 的维权单号），其余事件不带，第三参数形状不变。
+      ...(plan.event === 'PLATFORM_INVALID' ? { sync_row_version: set.row_version } : {}),
     };
     if (plan.pending === 'UNMAPPED_STATUS') {
       await deps.rebate.onUnmappedStatus(

@@ -21,6 +21,11 @@ export interface ReconDiffRestoreRow {
   readonly ref_type: string | null;
   readonly ref_id: string | null;
   readonly resolution: unknown;
+  /**
+   * B2-04zzr (BR-FUND-22 处理时再核): the registration instant; a successful INVALID_AFTER_SETTLE
+   * record at or after it means the platform invalidated the order again.
+   */
+  readonly created_at: Date;
 }
 
 export interface ReconDiffRestoreInput {
