@@ -7,6 +7,11 @@
 // R2、待处理 / 处理中；确认对话框 → 动态码（totp，每次新取令牌，不缓存）→ 请求带 X-Step-Up-Token、
 // Idempotency-Key（打开对话框时生成，同框重试与 10003 重放沿用，新开换新）与
 // {expected_withdrawal_status: 'APPROVED', note?}，不传金额、渠道结果或凭证。
+// 【确认扣回】POST …/{id}/blacklist-clawback（F1-08ec，CT-24zzf；黑名单复核结论「扣回」）：只给
+// order.blacklist_clawback、blacklist_after_credit、待处理 / 处理中；二次确认（订单、命中维度、
+// expected_fen 只作展示）→ 动态码（totp，每次新取令牌）→ 请求带 X-Step-Up-Token、Idempotency-Key
+// （打开对话框时生成，同框重试与 10003 重放沿用，新开换新）与 {note?}（空则 {}），从不传金额；
+// 实扣以返回的 clawed_back_fen 为准。各种拒绝都不把差错单移出列表、不在本地改状态。
 // TODO(规划/11 §7): 「对账任务」页签（任务列表、手动触发 R1、月末三项、导出）与工作台计数 — blocked on 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
@@ -33,6 +38,7 @@ import type { AccessControl } from '../../providers/access-control/index.ts';
 import { reconTexts as t } from '../../texts/recon.ts';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
+import { ClawbackModal } from './ClawbackModal.tsx';
 import { CloseModal } from './CloseModal.tsx';
 import { DetailDrawer, type DetailState } from './DetailDrawer.tsx';
 import { WriteOffModal } from './WriteOffModal.tsx';
@@ -43,7 +49,11 @@ import {
   STATUSES,
   TYPES,
   STEP_UP_URL,
+  blacklistDimensions,
+  blacklistOrderKey,
   checkDraft,
+  clawable,
+  clawbackReason,
   codeOf,
   conflictResource,
   guardReason,
@@ -115,6 +125,27 @@ interface WriteOffFlow {
   readonly canSubmit: boolean;
 }
 
+/**
+ * One clawback dialog: its own Idempotency-Key, kept for every retry and 10003 replay inside it.
+ * `phase`: editing the note, passing the step-up (`note` is what will be sent), or sending.
+ */
+interface ClawbackFlow {
+  readonly id: string;
+  readonly orderKey: string;
+  readonly dimensions: readonly string[];
+  readonly expectedFen: number;
+  readonly requestKey: string;
+  readonly phase: 'editing' | 'verifying' | 'sending';
+  readonly note?: string | undefined;
+  /** The step-up is asked again after a 10003. */
+  readonly again?: boolean;
+  /** A sent body whose outcome is unknown: the note stays as sent. */
+  readonly locked?: boolean;
+  readonly fieldError?: string;
+  readonly error?: string;
+  readonly canSubmit: boolean;
+}
+
 export interface ReconPageProps {
   readonly access: AccessControl;
 }
@@ -133,16 +164,22 @@ export function ReconPage({ access }: ReconPageProps): ReactElement {
     );
   }
   return (
-    <ReconContent canClose={access.can('fund.recon')} canWriteOff={access.can('payout.execute')} />
+    <ReconContent
+      canClose={access.can('fund.recon')}
+      canWriteOff={access.can('payout.execute')}
+      canClawback={access.can('order.blacklist_clawback')}
+    />
   );
 }
 
 function ReconContent({
   canClose,
   canWriteOff,
+  canClawback,
 }: {
   readonly canClose: boolean;
   readonly canWriteOff: boolean;
+  readonly canClawback: boolean;
 }): ReactElement {
   const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
@@ -169,6 +206,8 @@ function ReconContent({
   const flowRef = useRef<CloseFlow | undefined>(undefined);
   const [writeOff, setWriteOffState] = useState<WriteOffFlow>();
   const writeOffRef = useRef<WriteOffFlow | undefined>(undefined);
+  const [clawback, setClawbackState] = useState<ClawbackFlow>();
+  const clawbackRef = useRef<ClawbackFlow | undefined>(undefined);
   const drawerRef = useRef<DrawerTarget | undefined>(undefined);
   const alive = useRef(true);
 
@@ -187,6 +226,15 @@ function ReconContent({
     writeOffRef.current = next;
     setWriteOffState(next);
   };
+  const setClawback = (next: ClawbackFlow | undefined) => {
+    clawbackRef.current = next;
+    setClawbackState(next);
+  };
+  /** A close, write-off or clawback dialog is open. */
+  const busyElsewhere = (): boolean =>
+    flowRef.current !== undefined ||
+    writeOffRef.current !== undefined ||
+    clawbackRef.current !== undefined;
   const openDrawer = (next: DrawerTarget | undefined) => {
     drawerRef.current = next;
     setDrawer(next);
@@ -304,7 +352,7 @@ function ReconContent({
   };
 
   const startClose = (item: ReconDiffDetail) => {
-    if (!canClose || flowRef.current !== undefined || writeOffRef.current !== undefined) return;
+    if (!canClose || busyElsewhere()) return;
     setNotice(undefined);
     // A new dialog is a new close: a new Idempotency-Key (kept for every retry inside it).
     setFlow({
@@ -379,7 +427,7 @@ function ReconContent({
   };
 
   const startWriteOff = (item: ReconDiffDetail) => {
-    if (!canWriteOff || writeOffRef.current !== undefined || flowRef.current !== undefined) return;
+    if (!canWriteOff || busyElsewhere()) return;
     if (item.source !== 'R2' || (item.status !== 'open' && item.status !== 'processing')) return;
     setNotice(undefined);
     // A new dialog is a new write-off: a new Idempotency-Key (kept for every retry inside it).
@@ -511,6 +559,133 @@ function ReconContent({
         keep({ error: t.writeOff.network, locked: true });
       } else {
         keep({ error: t.writeOff.failed });
+      }
+    }
+  };
+
+  const startClawback = (item: ReconDiffDetail) => {
+    if (!canClawback || busyElsewhere() || !clawable(item)) return;
+    setNotice(undefined);
+    // A new dialog is a new clawback: a new Idempotency-Key (kept for every retry inside it).
+    setClawback({
+      id: item.recon_diff_id,
+      orderKey: blacklistOrderKey(item.ref_id),
+      dimensions: blacklistDimensions(item),
+      expectedFen: item.expected_fen,
+      requestKey: newRequestKey(),
+      phase: 'editing',
+      canSubmit: true,
+    });
+  };
+
+  const cancelClawback = () => {
+    if (clawbackRef.current?.phase === 'sending') return;
+    setClawback(undefined);
+  };
+
+  /** The dialog's confirm: the step-up comes first (a new totp value for every clawback). */
+  const confirmClawback = (note: string | undefined) => {
+    const current = clawbackRef.current;
+    if (current === undefined || current.phase !== 'editing' || !current.canSubmit) return;
+    // After an unknown outcome the same body is resent (the note field is locked meanwhile).
+    const sent = current.locked === true ? current.note : note;
+    setClawback({
+      id: current.id,
+      orderKey: current.orderKey,
+      dimensions: current.dimensions,
+      expectedFen: current.expectedFen,
+      requestKey: current.requestKey,
+      phase: 'verifying',
+      note: sent,
+      ...(current.locked === true ? { locked: true } : {}),
+      canSubmit: true,
+    });
+  };
+
+  const cancelClawbackStepUp = () => {
+    const current = clawbackRef.current;
+    if (current === undefined || current.phase !== 'verifying') return;
+    setClawback({ ...current, phase: 'editing', again: false });
+  };
+
+  const submitClawback = async (stepUpToken: string) => {
+    const current = clawbackRef.current;
+    if (current === undefined || current.phase !== 'verifying') return;
+    const sending: ClawbackFlow = {
+      id: current.id,
+      orderKey: current.orderKey,
+      dimensions: current.dimensions,
+      expectedFen: current.expectedFen,
+      requestKey: current.requestKey,
+      phase: 'sending',
+      note: current.note,
+      ...(current.locked === true ? { locked: true } : {}),
+      canSubmit: true,
+    };
+    setClawback(sending);
+    // Only the optional note: the console never sends an amount (the server calculates it).
+    const payload: Schema<'AdminReconDiffBlacklistClawbackRequest'> =
+      current.note === undefined ? {} : { note: current.note };
+    try {
+      const response = await customOf()<Schema<'AdminReconDiffBlacklistClawback'>>({
+        url: `${itemUrl(current.id)}/blacklist-clawback`,
+        method: 'post',
+        payload,
+        meta: { idempotencyKey: current.requestKey, stepUpToken },
+      });
+      if (!alive.current) return;
+      setClawback(undefined);
+      applyItem(response.data.recon_diff);
+      setNotice({ type: 'success', text: t.clawback.done(money(response.data.clawed_back_fen)) });
+    } catch (cause) {
+      if (!alive.current) return;
+      const keep = (patch: Partial<ClawbackFlow>) =>
+        setClawback({ ...sending, phase: 'editing', ...patch });
+      const code = codeOf(cause);
+      const reason = clawbackReason(cause);
+      const fields = rejectedFields(cause);
+      if (code === 10003) {
+        // The step-up value was refused: verify again, then replay with the same key and body.
+        setClawback({ ...sending, phase: 'verifying', again: true });
+      } else if (reason !== undefined) {
+        // Not supported, or the switch is off: nothing was written; the difference stays listed.
+        setClawback(undefined);
+        setNotice({
+          type: 'error',
+          text:
+            reason === 'blacklist_clawback_disabled'
+              ? t.clawback.disabled
+              : t.clawback.notSupported,
+        });
+      } else if (code === 20001 && fields.includes('note')) {
+        keep({ fieldError: t.clawback.rejected });
+      } else if (code === 20001) {
+        setClawback(undefined);
+        setNotice({ type: 'error', text: t.clawback.missing });
+        reload();
+        readDetailAgain();
+      } else if (code === 20902) {
+        // The difference or its order changed meanwhile: nothing was written; read it again.
+        setClawback(undefined);
+        setNotice({
+          type: 'warning',
+          text:
+            conflictResource(cause) === 'order' ? t.clawback.orderGone : t.clawback.conflictDiff,
+        });
+        reload();
+        readDetailAgain();
+      } else if (code === 20901) {
+        // The same key with another body: never resent from this dialog.
+        keep({ error: t.clawback.changed, canSubmit: false });
+      } else if (code === 40901) {
+        keep({ error: t.clawback.running, locked: true });
+      } else if (code === 10403) {
+        keep({ error: t.clawback.forbidden, canSubmit: false });
+      } else if (isNetwork(cause)) {
+        // Not known whether it was clawed back: a retry here resends the same key and body.
+        keep({ error: t.clawback.network, locked: true });
+      } else {
+        keep({ error: t.clawback.failed });
       }
     }
   };
@@ -784,12 +959,14 @@ function ReconContent({
         state={detail}
         canClose={canClose}
         canWriteOff={canWriteOff}
-        closing={flow !== undefined || writeOff !== undefined}
-        covered={writeOff?.phase === 'verifying'}
+        canClawback={canClawback}
+        closing={flow !== undefined || writeOff !== undefined || clawback !== undefined}
+        covered={writeOff?.phase === 'verifying' || clawback?.phase === 'verifying'}
         onClose={() => openDrawer(undefined)}
         onRetry={readDetailAgain}
         onCloseDiff={startClose}
         onWriteOff={startWriteOff}
+        onClawback={startClawback}
       />
       {flow === undefined ? null : (
         <CloseModal
@@ -829,6 +1006,35 @@ function ReconContent({
         onSubmit={verifyStepUp}
         onClose={cancelStepUp}
         onVerified={(stepUpToken) => void submitWriteOff(stepUpToken)}
+      />
+      {clawback === undefined ? null : (
+        <ClawbackModal
+          key={clawback.requestKey}
+          reconDiffId={clawback.id}
+          orderKey={clawback.orderKey}
+          dimensions={clawback.dimensions}
+          expectedFen={clawback.expectedFen}
+          busy={clawback.phase !== 'editing'}
+          covered={clawback.phase === 'verifying'}
+          locked={clawback.locked === true}
+          fieldError={clawback.fieldError}
+          error={clawback.error}
+          canSubmit={clawback.canSubmit}
+          onCancel={cancelClawback}
+          onSubmit={confirmClawback}
+        />
+      )}
+      <StepUpModal
+        open={clawback?.phase === 'verifying'}
+        tier="totp"
+        operation={t.clawback.stepUpOperation}
+        details={[
+          ...(clawback === undefined ? [] : [t.clawback.target(clawback.id)]),
+          ...(clawback?.again === true ? [t.clawback.stepUpAgain] : []),
+        ]}
+        onSubmit={verifyStepUp}
+        onClose={cancelClawbackStepUp}
+        onVerified={(stepUpToken) => void submitClawback(stepUpToken)}
       />
     </Flex>
   );

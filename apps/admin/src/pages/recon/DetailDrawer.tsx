@@ -1,13 +1,15 @@
 // 差错单详情抽屉（getAdminReconDiff）：三项金额（分 → 元）、类型 / 来源 / 状态（后台字典名）、周期、
 // 关联单据、创建 / 更新 / 结案时刻、处理人（未处理时显示文案）、resolution.reason（有才显示；
 // resolution 的其他键不读）。持 fund.recon 且状态为待处理 / 处理中时给【已关闭（不处理）】；持
-// payout.execute 且为 R2、待处理 / 处理中时给【核销】（F1-08eb，W11 凭账单行）。
+// payout.execute 且为 R2、待处理 / 处理中时给【核销】（F1-08eb，W11 凭账单行）；持
+// order.blacklist_clawback 且为 blacklist_after_credit、待处理 / 处理中时给【确认扣回】（F1-08ec）。
 // TODO(规划/11 §7): 申诉恢复、去调账、重算余额缓存的操作区 — blocked on 契约未出
 import { Alert, Button, Descriptions, Drawer, Flex, Result, Tag, Typography, theme } from 'antd';
 import type { ReactElement } from 'react';
 import { reconTexts } from '../../texts/recon.ts';
 import {
   beijingTime,
+  clawable,
   closable,
   money,
   resolutionReason,
@@ -33,7 +35,9 @@ export interface DetailDrawerProps {
   readonly canClose: boolean;
   /** The account holds payout.execute (【核销】 of R2 late successes). */
   readonly canWriteOff: boolean;
-  /** A close or write-off is under way (its dialog is open). */
+  /** The account holds order.blacklist_clawback (【确认扣回】 of blacklist_after_credit). */
+  readonly canClawback: boolean;
+  /** A close, write-off or clawback is under way (its dialog is open). */
   readonly closing: boolean;
   /**
    * A step-up dialog is open above: the drawer drops its antd title meanwhile (it is inert then).
@@ -44,6 +48,7 @@ export interface DetailDrawerProps {
   readonly onRetry: () => void;
   readonly onCloseDiff: (item: ReconDiffDetail) => void;
   readonly onWriteOff: (item: ReconDiffDetail) => void;
+  readonly onClawback: (item: ReconDiffDetail) => void;
 }
 
 export function DetailDrawer({
@@ -51,12 +56,14 @@ export function DetailDrawer({
   state,
   canClose,
   canWriteOff,
+  canClawback,
   closing,
   covered,
   onClose,
   onRetry,
   onCloseDiff,
   onWriteOff,
+  onClawback,
 }: DetailDrawerProps): ReactElement {
   const { token } = theme.useToken();
   const code = { fontFamily: token.fontFamilyCode, wordBreak: 'break-all' } as const;
@@ -81,6 +88,7 @@ export function DetailDrawer({
     const reason = resolutionReason(item.resolution);
     const showClose = closable(item.status) && canClose;
     const showWriteOff = canWriteOff && writableOff(item);
+    const showClawback = canClawback && clawable(item);
     body = (
       <Flex vertical gap={16}>
         <Descriptions
@@ -132,8 +140,13 @@ export function DetailDrawer({
               : [{ key: 'resolution', label: t.resolution, children: reason }]),
           ]}
         />
-        {showClose || showWriteOff ? (
+        {showClose || showWriteOff || showClawback ? (
           <Flex gap={8} wrap>
+            {showClawback ? (
+              <Button type="primary" danger disabled={closing} onClick={() => onClawback(item)}>
+                {t.clawbackEntry}
+              </Button>
+            ) : null}
             {showWriteOff ? (
               <Button type="primary" disabled={closing} onClick={() => onWriteOff(item)}>
                 {t.writeOffEntry}

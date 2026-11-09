@@ -1,4 +1,5 @@
-// 差错单页的数据辅助：R1–R3 的类型 / 来源 / 状态取值与后台字典名（BR-TEXT-25，缺键显示编码）、
+// 差错单页的数据辅助：R1–R3 的类型 / 来源 / 状态取值与后台字典名（BR-TEXT-25，字典缺键时类型名取
+// texts/recon.ts，再缺显示编码）、黑名单差错单的订单与命中维度（F1-08ec）、
 // 后台金额（BR-TEXT-10，经 @couli/money，只用整数分）、北京时间、筛选条件到查询参数、错误分类。
 // 这里不放文案。
 import { formatYuanAdmin, parseFen } from '@couli/money';
@@ -18,10 +19,15 @@ export const PAGE_SIZE = 20;
 export const REASON_MAX = 200;
 /** Write-off note: optional, 1–200 characters after trimming (AdminReconDiffWriteOffRequest). */
 export const NOTE_MAX = 200;
+/**
+ * Characters of a note or reason as the contract counts them: Unicode code points after trimming
+ * (an extension-B character such as 𠮷 is one character, two UTF-16 units).
+ */
+export const noteLength = (note: string): number => Array.from(note.trim()).length;
 /** The step-up endpoint (totp tier for payout.execute). */
 export const STEP_UP_URL = '/admin/v1/auth/step-up';
 
-/** The nine R1–R3 types (AdminReconDiffType; the R4 types stay on the pay-order page). */
+/** The ten R1–R3 types (AdminReconDiffType; the R4 types stay on the pay-order page). */
 export const TYPES: readonly ReconDiffType[] = [
   'union_mismatch',
   'channel_mismatch',
@@ -32,6 +38,7 @@ export const TYPES: readonly ReconDiffType[] = [
   'settle_missing',
   'appeal_restore',
   'estimate_changed_after_credit',
+  'blacklist_after_credit',
 ];
 export const SOURCES: readonly ReconDiffSource[] = ['R1', 'R2', 'R3'];
 export const STATUSES: readonly ReconDiffStatus[] = recon_diff_status;
@@ -53,9 +60,12 @@ function dictName(key: string, code: string): string {
   return typeof name === 'string' && name !== '' ? name : code;
 }
 
-/** admin_dict.recon_diff_type.<code>, else the code. */
+/** admin_dict.recon_diff_type.<code>, else the console name of texts/recon.ts, else the code. */
 export const typeLabel = (code: string): string =>
-  dictName(`admin_dict.recon_diff_type.${code}`, code);
+  dictName(
+    `admin_dict.recon_diff_type.${code}`,
+    Object.hasOwn(t.types, code) ? (t.types[code] ?? code) : code,
+  );
 /** admin_dict.recon_diffs.source.<code>, else the code. */
 export const sourceLabel = (code: string): string =>
   dictName(`admin_dict.recon_diffs.source.${code}`, code);
@@ -81,6 +91,64 @@ export const closable = (status: ReconDiffStatus): boolean =>
  */
 export const writableOff = (item: { source: string; status: ReconDiffStatus }): boolean =>
   item.source === 'R2' && closable(item.status);
+
+/** The difference type 【确认扣回】 applies to (CT-24zzf). */
+export const BLACKLIST_TYPE = 'blacklist_after_credit';
+
+/**
+ * 【确认扣回】 (blacklistClawbackAdminReconDiff): blacklist_after_credit differences still open /
+ * processing. order.blacklist_clawback is checked by the caller.
+ */
+export const clawable = (item: { type: string; status: ReconDiffStatus }): boolean =>
+  item.type === BLACKLIST_TYPE && closable(item.status);
+
+const BLACKLIST_MARK = '#BLACKLIST#';
+
+/** The order_key part of a blacklist difference's ref_id (`{order_key}#BLACKLIST#{dimensions}`). */
+export function blacklistOrderKey(ref: string): string {
+  const at = ref.indexOf(BLACKLIST_MARK);
+  return at < 0 ? ref : ref.slice(0, at);
+}
+
+/** The hit dimensions: resolution.dimensions, else the part of ref_id after `#BLACKLIST#`. */
+export function blacklistDimensions(item: {
+  ref_id: string;
+  resolution?: unknown;
+}): readonly string[] {
+  const resolution = item.resolution;
+  if (typeof resolution === 'object' && resolution !== null && !Array.isArray(resolution)) {
+    const listed: unknown = (resolution as Record<string, unknown>)['dimensions'];
+    if (Array.isArray(listed)) {
+      const names = listed.filter((entry): entry is string => typeof entry === 'string');
+      if (names.length > 0) return names;
+    }
+  }
+  const at = item.ref_id.indexOf(BLACKLIST_MARK);
+  if (at < 0) return [];
+  return item.ref_id
+    .slice(at + BLACKLIST_MARK.length)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+}
+
+/** Console name of a blacklist dimension, else the code. */
+export const dimensionLabel = (code: string): string =>
+  Object.hasOwn(t.dimensions, code) ? (t.dimensions[code] ?? code) : code;
+
+/** The two data.reason values of a refused clawback (20001, data.fields=[recon_diff_id]). */
+export const CLAWBACK_REASONS = [
+  'blacklist_clawback_not_supported',
+  'blacklist_clawback_disabled',
+] as const;
+export type ClawbackReason = (typeof CLAWBACK_REASONS)[number];
+
+/** `data.reason` of a 20001 refusing the clawback, when it is one of the two known values. */
+export function clawbackReason(cause: unknown): ClawbackReason | undefined {
+  if (codeOf(cause) !== 20001) return undefined;
+  const reason = dataOf(cause)?.['reason'];
+  return CLAWBACK_REASONS.find((item) => item === reason);
+}
 
 /** The five data.reason values of the W11 guard (20001, data.fields=[recon_diff_id]). */
 export const GUARD_REASONS = [
@@ -251,7 +319,7 @@ export const codeOf = (cause: unknown): number | undefined =>
 export const isNetwork = (cause: unknown): boolean =>
   cause instanceof AdminApiError && cause.kind === 'network';
 
-/** A new Idempotency-Key for one close / write-off dialog. */
+/** A new Idempotency-Key for one close / write-off / clawback dialog. */
 export function newRequestKey(): string {
   return globalThis.crypto.randomUUID();
 }

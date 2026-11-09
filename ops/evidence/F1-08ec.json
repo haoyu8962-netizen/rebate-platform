@@ -1,0 +1,117 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#1] 待处理的黑名单差错单【确认扣回】填备注：确认后先弹动态码，验证后才 POST blacklist-clawback（X-Step-Up-Token + Idempotency-Key + 只有 {note}，不带金额）；成功提示含服务端返回的 clawed_back_fen（后台金额格式），该行变为「已调账」、入口消失",
+    "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#2] 处理中的黑名单差错单不填备注：请求体是 {}（不带 note、金额）；服务端实扣 0 时成功提示照样给出并显示 0.00，该行变为「已调账」",
+    "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#3] 连点两次确认、再连点两次【验证并继续】：只弹一个动态码对话框，只发一次 blacklist-clawback POST",
+    "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#4] 请求进行中：确认框的确认按钮不可用，再点也不发第二个请求、不再要动态码；请求返回后提示成功，全程只有一个 POST",
+    "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#5] 连续确认扣回两张差错单：两次 POST 的 Idempotency-Key 不同、请求体都是 {}，两张都变为「已调账」",
+    "test/spec/frontend/admin-recon-blacklist-clawback/confirm.test.ts > [AC-F1-08ec-CONFIRM#1] 点【确认扣回】先弹二次确认：显示订单（order_key）、命中维度（channel、order_no_suffix）、差错单金额 expected_fen（后台金额格式）并注明实扣以服务端计算为准，有选填的备注；还没弹动态码、没发请求",
+    "test/spec/frontend/admin-recon-blacklist-clawback/confirm.test.ts > [AC-F1-08ec-CONFIRM#2] 处理中、单一命中维度的差错单：确认框显示该订单与维度 channel、金额 expected_fen；点【取消】关闭确认框，不弹动态码、不发任何 POST，入口仍可用",
+    "test/spec/frontend/admin-recon-blacklist-clawback/entry.test.ts > [AC-F1-08ec-ENTRY#1] 持 fund.recon + order.blacklist_clawback：待处理 / 处理中的黑名单差错单详情有可用的【确认扣回】；已调账 / 已关闭的黑名单差错单与其他类型（账实不符、通道对账不一致）的待处理差错单都没有，点置灰的也不弹框、不发 POST",
+    "test/spec/frontend/admin-recon-blacklist-clawback/entry.test.ts > [AC-F1-08ec-ENTRY#2] 不持 order.blacklist_clawback（只持 fund.recon）：待处理 / 处理中的黑名单差错单都没有可用的【确认扣回】，不发 POST；同样的差错单换成持该权限点的账号就有",
+    "test/spec/frontend/admin-recon-blacklist-clawback/entry.test.ts > [AC-F1-08ec-ENTRY#3] 持 fund.view + order.blacklist_clawback（不持 fund.recon）：待处理的黑名单差错单详情照样有可用的【确认扣回】，只打开详情时不发 POST",
+    "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#1] 10003（动态码令牌失效）：不自动重发，重新弹动态码；再次验证后重放，Idempotency-Key 与第一次相同、动态码令牌是新的，成功提示含 clawed_back_fen",
+    "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#2] 网络失败后在同一确认框重试：两次 POST 的 Idempotency-Key 相同、请求体相同，重试成功后该行变为「已调账」",
+    "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#3] 开关 order.blacklist_clawback.enabled 关闭（20001 reason=blacklist_clawback_disabled）：显示开关未开启的后台文案，不显示成功、不重发；差错单照常列出、仍待处理，订单仍已入账",
+    "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#4] 20001 reason=blacklist_clawback_not_supported 与 blacklist_clawback_disabled：各给后台文案、彼此不同（不支持的不说成开关未开），都不显示原因码、不显示成功、不重发，差错单照常列出、仍待处理",
+    "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#5] 20902 resource=order（订单已不是已入账）：提示订单已不是已入账、请用关单结案；不显示成功、不重发，差错单照常列出、仍待处理",
+    "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#6] 20902 resource=recon_diff（差错单已被他人关闭）：提示已变化并重新读取详情，显示「已关闭（不处理）」，【确认扣回】消失，差错单仍在列表里，不显示成功、不重发",
+    "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#7] 10403（服务端判定无 order.blacklist_clawback）：提示无权限，不显示成功、不重发，差错单照常列出、仍待处理",
+    "test/spec/frontend/admin-recon-blacklist-clawback/note.test.ts > [AC-F1-08ec-NOTE#1] 备注去首尾空白后 201 字：不成功、在备注旁提示、确认框不关、差错单仍待处理（不发请求，或发出后收 20001 [note]，两种都可）；改成正好 200 字再确认即扣回成功，请求体只有该备注",
+    "test/spec/frontend/admin-recon-blacklist-clawback/note.test.ts > [AC-F1-08ec-NOTE#2] 服务端 20001 data.fields=[note]：在备注旁提示，确认框不关、不显示成功，差错单状态不变",
+    "test/spec/frontend/admin-recon-blacklist-clawback/type.test.ts > [AC-F1-08ec-TYPE#1] 差错单列表与详情把 blacklist_after_credit 显示为中文名称（含「黑名单」，取自 texts/recon.ts），页面上不出现原始枚举值；其他类型照旧显示后台字典名",
+    "test/spec/frontend/admin-recon-blacklist-clawback/type.test.ts > [AC-F1-08ec-TYPE#2] 类型筛选里有黑名单类型：选中后【查询】的列表请求带 type=blacklist_after_credit，只列出该类型的差错单"
+  ],
+  "risk_note": "F1-08ec (FU-ADMIN-BLACKLIST-CLAWBACK, orchestrator 2026-11-09 18:56, D10-1095 / D10-1180; backend #3026). Admin recon page: the difference type blacklist_after_credit gets a Chinese name (texts/recon.ts) and a list filter; the detail shows 【确认扣回】 only for blacklist_after_credit differences that are open or processing and only with order.blacklist_clawback. It opens a confirmation (order_key, hit dimensions, expected_fen formatted as fen with a note that the amount actually taken back is calculated by the server, optional note), then calls blacklistClawbackAdminReconDiff with a totp step-up and one Idempotency-Key per confirmation (reused after 10003 and network retries). The body is only the optional note ({} when empty); the console never sends an amount. Errors per the contract (blacklist_clawback_disabled with the switch off, blacklist_clawback_not_supported, 20902 for the order or the difference, 10403) show admin texts and never hide the difference or mark it closed. The note length is counted in Unicode code points after trimming, as the contract and backend do (Codex money r1 S1, fixed in round 2). The switch is not turned on. Paths apps/admin/src/pages/recon/** and texts/recon.ts; the review tool classifies the task as RV2, so it was reviewed with the money checklist. Rule tests by an independent Claude; Codex spec-test review r1 pass; red on the local container (21 tests, right reason). Implementation by Opus 5.5 in two rounds: host admin-recon-blacklist-clawback + admin-recon + admin-recon-writeoff 77/77, admin unit tests, tsc, eslint, prettier, run.ts static 10/10 green; the local container fast / browser runs were OOM-killed (host memory), CI runs full verification. Codex money review: r1 fail (S1 note length in UTF-16 units), r2 pass. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money: r1 fail (S1 note length counted in UTF-16 units), r2 pass after counting code points"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test review round 1 pass; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08ec",
+  "spec_ref": "03383a10b26e6a9f0b154e495214a4d6555bafce",
+  "spec_commit": "450483e3212962ea29a383afbc669839ae7e24e3",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "450483e3212962ea29a383afbc669839ae7e24e3",
+      "tree": "24cd641e8d63b9d5900d0ba5d997c5394cd8e64a",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-09T12:15:48Z",
+      "finished_at": "2026-11-09T12:17:44Z",
+      "red_tests": [
+        "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#1] 待处理的黑名单差错单【确认扣回】填备注：确认后先弹动态码，验证后才 POST blacklist-clawback（X-Step-Up-Token + Idempotency-Key + 只有 {note}，不带金额）；成功提示含服务端返回的 clawed_back_fen（后台金额格式），该行变为「已调账」、入口消失",
+        "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#2] 处理中的黑名单差错单不填备注：请求体是 {}（不带 note、金额）；服务端实扣 0 时成功提示照样给出并显示 0.00，该行变为「已调账」",
+        "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#3] 连点两次确认、再连点两次【验证并继续】：只弹一个动态码对话框，只发一次 blacklist-clawback POST",
+        "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#4] 请求进行中：确认框的确认按钮不可用，再点也不发第二个请求、不再要动态码；请求返回后提示成功，全程只有一个 POST",
+        "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts > [AC-F1-08ec-CLAWBACK#5] 连续确认扣回两张差错单：两次 POST 的 Idempotency-Key 不同、请求体都是 {}，两张都变为「已调账」",
+        "test/spec/frontend/admin-recon-blacklist-clawback/confirm.test.ts > [AC-F1-08ec-CONFIRM#1] 点【确认扣回】先弹二次确认：显示订单（order_key）、命中维度（channel、order_no_suffix）、差错单金额 expected_fen（后台金额格式）并注明实扣以服务端计算为准，有选填的备注；还没弹动态码、没发请求",
+        "test/spec/frontend/admin-recon-blacklist-clawback/confirm.test.ts > [AC-F1-08ec-CONFIRM#2] 处理中、单一命中维度的差错单：确认框显示该订单与维度 channel、金额 expected_fen；点【取消】关闭确认框，不弹动态码、不发任何 POST，入口仍可用",
+        "test/spec/frontend/admin-recon-blacklist-clawback/entry.test.ts > [AC-F1-08ec-ENTRY#1] 持 fund.recon + order.blacklist_clawback：待处理 / 处理中的黑名单差错单详情有可用的【确认扣回】；已调账 / 已关闭的黑名单差错单与其他类型（账实不符、通道对账不一致）的待处理差错单都没有，点置灰的也不弹框、不发 POST",
+        "test/spec/frontend/admin-recon-blacklist-clawback/entry.test.ts > [AC-F1-08ec-ENTRY#2] 不持 order.blacklist_clawback（只持 fund.recon）：待处理 / 处理中的黑名单差错单都没有可用的【确认扣回】，不发 POST；同样的差错单换成持该权限点的账号就有",
+        "test/spec/frontend/admin-recon-blacklist-clawback/entry.test.ts > [AC-F1-08ec-ENTRY#3] 持 fund.view + order.blacklist_clawback（不持 fund.recon）：待处理的黑名单差错单详情照样有可用的【确认扣回】，只打开详情时不发 POST",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#1] 10003（动态码令牌失效）：不自动重发，重新弹动态码；再次验证后重放，Idempotency-Key 与第一次相同、动态码令牌是新的，成功提示含 clawed_back_fen",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#2] 网络失败后在同一确认框重试：两次 POST 的 Idempotency-Key 相同、请求体相同，重试成功后该行变为「已调账」",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#3] 开关 order.blacklist_clawback.enabled 关闭（20001 reason=blacklist_clawback_disabled）：显示开关未开启的后台文案，不显示成功、不重发；差错单照常列出、仍待处理，订单仍已入账",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#4] 20001 reason=blacklist_clawback_not_supported 与 blacklist_clawback_disabled：各给后台文案、彼此不同（不支持的不说成开关未开），都不显示原因码、不显示成功、不重发，差错单照常列出、仍待处理",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#5] 20902 resource=order（订单已不是已入账）：提示订单已不是已入账、请用关单结案；不显示成功、不重发，差错单照常列出、仍待处理",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#6] 20902 resource=recon_diff（差错单已被他人关闭）：提示已变化并重新读取详情，显示「已关闭（不处理）」，【确认扣回】消失，差错单仍在列表里，不显示成功、不重发",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts > [AC-F1-08ec-ERR#7] 10403（服务端判定无 order.blacklist_clawback）：提示无权限，不显示成功、不重发，差错单照常列出、仍待处理",
+        "test/spec/frontend/admin-recon-blacklist-clawback/note.test.ts > [AC-F1-08ec-NOTE#1] 备注去首尾空白后 201 字：不成功、在备注旁提示、确认框不关、差错单仍待处理（不发请求，或发出后收 20001 [note]，两种都可）；改成正好 200 字再确认即扣回成功，请求体只有该备注",
+        "test/spec/frontend/admin-recon-blacklist-clawback/note.test.ts > [AC-F1-08ec-NOTE#2] 服务端 20001 data.fields=[note]：在备注旁提示，确认框不关、不显示成功，差错单状态不变",
+        "test/spec/frontend/admin-recon-blacklist-clawback/type.test.ts > [AC-F1-08ec-TYPE#1] 差错单列表与详情把 blacklist_after_credit 显示为中文名称（含「黑名单」，取自 texts/recon.ts），页面上不出现原始枚举值；其他类型照旧显示后台字典名",
+        "test/spec/frontend/admin-recon-blacklist-clawback/type.test.ts > [AC-F1-08ec-TYPE#2] 类型筛选里有黑名单类型：选中后【查询】的列表请求带 type=blacklist_after_credit，只列出该类型的差错单"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-recon-blacklist-clawback/clawback.test.ts",
+        "test/spec/frontend/admin-recon-blacklist-clawback/confirm.test.ts",
+        "test/spec/frontend/admin-recon-blacklist-clawback/entry.test.ts",
+        "test/spec/frontend/admin-recon-blacklist-clawback/errors.test.ts",
+        "test/spec/frontend/admin-recon-blacklist-clawback/note.test.ts",
+        "test/spec/frontend/admin-recon-blacklist-clawback/type.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "706f30435f618c8ba4bfac985d71b6a8e0a2989c93792fb00ba9eb84b4ef24d1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a3b4b58b410ba991aec5008dcce833b8dba5811b",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

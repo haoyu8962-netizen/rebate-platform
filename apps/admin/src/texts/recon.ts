@@ -1,11 +1,22 @@
-// 对账与差错页文案（规格 admin-recon.md，画板 AdmReconDiffsList / AdmReconDiffs；F1-08e，核销 F1-08eb）。
-// 差错单类型、来源、状态的中文名只从后台字典读（BR-TEXT-25 admin_dict.recon_diff_type.*、
-// admin_dict.recon_diffs.source.*、admin_dict.recon_diff_status.*，contracts/texts.admin.default.json），
-// 缺键显示编码，所以这里不写这些名字。错误措辞按 contracts/error-codes.yaml（BR-TEXT-14）。
+// 对账与差错页文案（规格 admin-recon.md，画板 AdmReconDiffsList / AdmReconDiffs；F1-08e，核销 F1-08eb，
+// 黑名单复核确认扣回 F1-08ec）。差错单类型、来源、状态的中文名先从后台字典读（BR-TEXT-25
+// admin_dict.recon_diff_type.*、admin_dict.recon_diffs.source.*、admin_dict.recon_diff_status.*，
+// contracts/texts.admin.default.json）；字典还没有的类型（blacklist_after_credit）用下面 `types` 的名字，
+// 都没有时显示编码。错误措辞按 contracts/error-codes.yaml（BR-TEXT-14）；20001 的
+// blacklist_clawback_* 两个原因只出现在后台接口，显示这里的后台文案，不进用户侧字典。
 export const reconTexts = {
   title: '对账与差错',
   listTitle: '差错单',
   dash: '—',
+  /** Type names the admin dictionary does not carry yet (contracts/enums/fund.yaml recon_diff_type). */
+  types: {
+    blacklist_after_credit: '已入账订单命中黑名单待复核',
+  } as Readonly<Record<string, string>>,
+  /** Order-side blacklist dimensions (contracts/enums/identity.yaml blocklist_dimension). */
+  dimensions: {
+    channel: '渠道',
+    order_no_suffix: '淘宝订单号后 6 位',
+  } as Readonly<Record<string, string>>,
   loading: '正在加载差错单…',
   empty: '暂无差错单',
   emptyHint: '换个筛选条件再查，或等下一次对账生成差错单。',
@@ -72,6 +83,7 @@ export const reconTexts = {
     closeEntry: '已关闭（不处理）',
     readOnly: '当前账号只读（fund.view），关闭差错单需要 fund.recon。',
     writeOffEntry: '核销',
+    clawbackEntry: '确认扣回',
   },
   close: {
     title: '关闭差错单（不处理）',
@@ -123,5 +135,36 @@ export const reconTexts = {
       transfer_attempts_mismatch: '不能核销：原提现单的转账次数与账单不一致，请走调账处理。',
       amount_mismatch: '不能核销：账单金额与原提现单实付金额不一致，请走调账处理。',
     },
+  },
+  clawback: {
+    title: '确认扣回（黑名单复核）',
+    note: '确认后按订单整单扣回规则，扣回各受益人在该订单上已入账的返利；实扣金额以服务端计算为准，可能与下面的差错单金额不同。不扣回请用【已关闭（不处理）】结案。',
+    target: (id: string): string => `差错单号：${id}`,
+    order: (orderKey: string): string => `订单：${orderKey}`,
+    dimensions: (names: string): string => `命中维度：${names}`,
+    separator: '、',
+    expected: (amount: string): string => `差错单金额（登记时的已入账返利）：${amount}`,
+    label: '备注（选填）',
+    placeholder: '选填，最多 200 字，会记入处理结果与操作日志',
+    submit: '确认扣回',
+    cancel: '取消',
+    invalid: '备注去掉首尾空白后最多 200 字',
+    rejected: '备注不符合要求（去掉首尾空白后 1–200 字），请修改后再提交',
+    stepUpOperation: '黑名单复核确认扣回（扣回该订单已入账的返利）',
+    stepUpAgain: '动态码已失效，请重新验证后继续（沿用同一次提交）。',
+    done: (amount: string): string =>
+      `扣回完成：实扣 ${amount}（服务端计算），差错单状态为「已调账」。`,
+    disabled: '不能扣回：黑名单复核扣回功能当前未开启，请联系超管；差错单保持不变。',
+    notSupported:
+      '不能扣回：该差错单不是「已入账订单命中黑名单」类型，或关联单据指不到本应用的订单；差错单保持不变。',
+    orderGone:
+      '本次未扣回：该订单已不是「已入账」状态（可能已被另一张差错单扣回或已作废）；请用【已关闭（不处理）】结案该差错单。',
+    conflictDiff: '该差错单的状态已变化（可能已被他人处理），本次未扣回；已重新读取最新状态。',
+    changed: '请求内容有变化，请关闭对话框后重新提交。',
+    running: '上一次提交仍在处理中，请稍后刷新查看结果。',
+    network: '网络异常，未确认是否扣回成功；可再点【确认扣回】重试（沿用同一次提交）。',
+    forbidden: '无权限确认扣回（需要 order.blacklist_clawback）。',
+    missing: '差错单不存在或已不可见，已重新读取列表。',
+    failed: '扣回失败，请稍后重试。',
   },
 } as const;
