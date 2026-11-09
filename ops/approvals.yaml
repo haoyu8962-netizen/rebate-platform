@@ -381,3 +381,9 @@ approvals:
     granted: true
     date: '2026-11-09'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（测试轮次属门禁流程小改动；只新增用例，收紧不放宽，钉住 Codex 全量 spec-test 查出的边界，其中第一条已确认是真实缺陷且已修；不改任何金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产），事后向负责人一句话报告；D10-1131。'
+  - id: 61
+    row: 4
+    title: 'B2-04zzr 任务专属一次性追加：规则测试第 4 次，只往 db/invariants/ledger/superseded.json 追加一条（旧 08_invalid-still-credited.sql 由 10_invalid-still-credited-since-restore.sql 替代），原条目一字不动，不改任何测试断言；并追加一轮只审该增量的规则测试评审；只追加一次，其他任务不适用'
+    granted: true
+    date: '2026-11-09'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（测试轮次属门禁流程小改动；evidence-check 把 db/invariants 既有文件算规则测试资产，只能在规则测试提交里改，这条追加按 08 BR-FUND-19 ⑧ 与 D10-1126、D10-1140 执行，先例 B2-02l；不改任何金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产），事后向负责人一句话报告；D10-1150。'
