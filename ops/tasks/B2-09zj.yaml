@@ -1,0 +1,50 @@
+id: B2-09zj
+repo: rebate-platform
+title: FU-PAYOUT-W6-RATIO-ALERT：提现打款失败率与连续失败告警——worker 指标（当日 W6 / W5+W6 / 末尾连续 W6）与 couli-fund.yaml 两条规则，删第 18 行过时 TODO（BR-WDR-24 前两项，D10-1157）
+type: impl
+# 2026-11-09 ops 入账（D10-1155 ② 只读核对 couli-runs/OPS-lane/w6-ratio-alert-check-20261109.md，D10-1157 定开单，排在 B2-09ze #3028 之后）。
+# 口径（BR-WDR-24）：① 每个 app 的自然日（+08:00，用 packages/domain 的会计日函数）内 W6 次数 ÷（W5 + W6 次数）> 2% 且分母 ≥ 20，不计 W8、W10；
+#   ② 按 W5 / W6 迁移时间排序，末尾连续 3 次 W6（不限当日）。数据都在 payout 自有表，不加迁移：W6 = withdrawals.status FAILED 且 manual_resolution
+#   为空（W10 判 FAILED 的单 manual_resolution = failed），迁移时间取该单最后一条 payout_attempts.result = fail 的 at；W5 = status PAID_API 且
+#   manual_resolution 为空，时间取 paid_at；PAID_MANUAL（W8）不计。W9 的转账尝试也是 fail，但单子回到 APPROVED，不算 W6。
+# 做法照 B2-09j / B2-09ze：payout 只读口经 entry.ts 接线，只 worker 导出、缓存与读失败即抓取失败同 water-low；指标名由实现定（建议
+#   couli_withdrawals_w6_today / couli_withdrawals_w5w6_today / couli_withdrawals_w6_streak，均带 app_id），规则带 fund: 'true'；删 couli-fund.yaml:18 的 TODO。
+# 现状：payout.definite_fail_codes 种子为 []，W6 发生不了；**填 payout.definite_fail_codes 的单（BR-WDR-28 验证）台账须 deps 指向本单**，防止先填值后补告警。
+# RV2：新鲜独立 Claude 写规则测试，Opus 实现，Codex money（medium）评审。冻结测试两处照 B2-09ze 先例预先声明，测试轮发现别的再补台账。
+refs: [BR-WDR-24]
+refs_hash:
+  BR-WDR-24: 1e9585c4b8bf
+deps: [B2-09ze]
+paths:
+  - 'apps/api/src/modules/payout/application/**'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/platform/metrics/**'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/entry.ts'
+  - 'infra/monitoring/rules/couli-fund.yaml'
+test_paths:
+  - 'test/spec/platform/metrics/withdrawal-fail/**'
+  - 'test/spec/platform/fund-metrics/rules.test.ts'
+  - 'test/spec/platform/alerting-eval/metrics.test.ts'
+modify_existing:
+  - file: test/spec/platform/fund-metrics/rules.test.ts
+    test: '[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标'
+    reason: tighten_only
+    ruling: D10-1157
+    note: '允许清单只加本单新导出的指标名（照 B2-09j、B2-09ze / D10-807 先例），其他断言不改；编排按 #24 核'
+red_exempt:
+  - file: test/spec/platform/alerting-eval/metrics.test.ts
+    test: '[AC-B1-25b#8] couli.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源'
+    reason: '冻结用例体未改；本文件只在用例外的 registry 夹具里补本单的采集函数（照 B2-09ze 补 collectWaterStale 的先例），让新规则能找到导出方；新旧实现下都成立'
+  - file: test/spec/platform/alerting-eval/metrics.test.ts
+    test: '[AC-B1-25b#8] couli-fund.yaml 的每个指标都有被抓取的应用导出方或已知 Redis exporter 来源'
+    reason: '冻结用例体未改；本文件只在用例外的 registry 夹具里补本单的采集函数（照 B2-09ze 补 collectWaterStale 的先例），让新规则能找到导出方；新旧实现下都成立'
+red_exempt_outside:
+  - file: test/spec/platform/alerting-eval/metrics.test.ts
+    reason: '用例外只在 registry 夹具里补本单的采集函数（照 collectWaterStale），用例体未改'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/metrics/withdrawal-fail/**'
+status: todo
