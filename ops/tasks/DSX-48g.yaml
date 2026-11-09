@@ -1,0 +1,18 @@
+id: DSX-48g
+repo: rebate-platform
+title: H5 条件挂载即 open 的弹层首次打开也播进场动效（DSX-48f ②，编排 D10-1165）
+type: impl
+# 2026-11-09 入账（前端线 f1-frontend-7，编排 D10-1165：DSX-48f 选 A 拆出 ②）。apps/h5/src/components/base/ModalFrame.tsx:275 `appear` 初值为 !open，以 open=true 挂载的 Dialog / Sheet 没有 data-appear，首次打开直接出现、无进场。
+# 当时与冻结 h5-components [AC-F1-01f-LAYOUT#1] / [AC-F1-01f-VISUAL#2] 冲突（挂载即 open 后立即读几何）；F1-01ft（#3042）已让这两条与 find-order [AC-F1-04b-BROWSER#3] 在读几何 / 可见性前等动效结束，冲突解除。
+# 做法：套 couli-runs/DSX-48f/modal-appear-r1.patch（挂载即 open 也带 data-appear、播进场；减弱动态只淡入淡出），补单元断言；冻结 h5-components / h5-transitions 全绿。tester none，Codex general（当次失败才退独立 Claude 并写真实报错）。包体增量 ≤ 3 KiB。
+refs: []
+refs_hash: {}
+deps: [DSX-48f, F1-01ft]
+paths:
+  - 'apps/h5/src/components/base/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
