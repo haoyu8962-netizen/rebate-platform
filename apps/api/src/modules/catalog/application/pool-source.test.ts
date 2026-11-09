@@ -7,6 +7,7 @@ import {
   type PoolLinkParser,
   type PoolSourceOptions,
 } from './pool-source.ts';
+import { PoolCategoryBlockedError, type PoolCategoryOptions } from './pool-category.ts';
 import { searchRawByTitle } from './raw-reparse.ts';
 
 const NOW = '2026-10-31T02:00:00.000Z';
@@ -316,4 +317,139 @@ it('[AC-B1-05r-unit#2] 平台不支持按标题搜：与找不到同键一样答
   await expect(search(new UnionError('rate_limited', 'x', 'taobao'))).rejects.toMatchObject({
     code: 'rate_limited',
   });
+});
+
+/** B1-05zo: a blocklist of one taobao category; `blocked` records each judged title. */
+const BLOCKED = '9000501';
+function blocklist() {
+  const judged: string[] = [];
+  const warn = vi.fn();
+  const category: PoolCategoryOptions = {
+    filter: {
+      filterCategories: (_app, items) => {
+        judged.push(...items.map((item) => item.title));
+        return Promise.resolve(items.filter((item) => item.categoryId !== BLOCKED));
+      },
+    },
+    logger: { warn },
+  };
+  return { category, judged, warn };
+}
+const blockedDetail = (stable: string): UnionItemDetail => ({
+  ...detail(stable),
+  category_l1_id: BLOCKED,
+});
+const blockedLive = (stable: string) => {
+  const item = blockedDetail(stable);
+  return { ok: true as const, item, ref: refOf(item) };
+};
+
+it('[AC-B1-05zo-UNIT#4] 链接：两件不同商品、其中一件禁售 → PoolManyProductsError（20001），不判类目；只有一件且禁售才 30147', async () => {
+  const { category, judged } = blocklist();
+  const links = parser({ a: live('K1'), b: blockedLive('K2'), c: blockedLive('K2') });
+  await expect(source(links, { category }).fromLink('app', 'b a')).rejects.toBeInstanceOf(
+    PoolManyProductsError,
+  );
+  await expect(source(links, { category }).fromLink('app', 'a b')).rejects.toBeInstanceOf(
+    PoolManyProductsError,
+  );
+  expect(judged).toEqual([]);
+  await expect(source(links, { category }).fromLink('app', 'b c')).rejects.toBeInstanceOf(
+    PoolCategoryBlockedError,
+  );
+  expect(judged).toEqual(['K2']);
+});
+
+it('[AC-B1-05zo-UNIT#5] 带详情的答复才判：异常价且禁售 → 30147（先于 50401）；派生出别的键且禁售 → 照旧 not_passed 30143', async () => {
+  const { category } = blocklist();
+  const flagged = blockedLive('K1');
+  const anomaly = parser({ a: { ...flagged, item: { ...flagged.item, price_status: 'anomaly' } } });
+  await expect(source(anomaly, { category }).fromLink('app', 'a')).rejects.toBeInstanceOf(
+    PoolCategoryBlockedError,
+  );
+  const other = parser({ a: { ...live('K1'), item: blockedDetail('K2') } });
+  expect(await source(other, { category }).fromLink('app', 'a')).toEqual(
+    notPassed('ref_expired', 30143),
+  );
+  const pool = (item: UnionItemDetail) =>
+    source(parser({}), {
+      category,
+      itemRefs: { read: () => token },
+      upstream: { detail: () => Promise.resolve(item) },
+    });
+  expect(await pool(blockedDetail('K2')).fromItemRef('app', 'ref')).toEqual(
+    notPassed('ref_expired', 30143),
+  );
+  await expect(
+    pool({ ...blockedDetail('K1'), price_status: 'anomaly' }).fromItemRef('app', 'ref'),
+  ).rejects.toBeInstanceOf(PoolCategoryBlockedError);
+  // Every call is judged on its own answer, also when the union hands back the same object.
+  const repeated = pool(blockedDetail('K1'));
+  await expect(repeated.fromItemRef('app', 'ref')).rejects.toBeInstanceOf(PoolCategoryBlockedError);
+  await expect(repeated.fromItemRef('app', 'ref')).rejects.toBeInstanceOf(PoolCategoryBlockedError);
+});
+
+it('[AC-B1-05zo-UNIT#6] 复核走重新解析且禁售 → 30147，product_refs 不登记；不禁售照旧登记一次、只问一次详情；current 不判类目', async () => {
+  const run = async (item: UnionItemDetail) => {
+    const { category } = blocklist();
+    const registered: string[] = [];
+    const asked: (string | undefined)[] = [];
+    const pool = source(parser({}), {
+      category,
+      union: {
+        adapter: () =>
+          ({
+            searchItems: () => Promise.resolve({ items: [item], hasMore: false }),
+            getItem: vi.fn(),
+            resolveLink: vi.fn(),
+          }) as never,
+      },
+      catalog: {
+        ...catalog,
+        // As Catalog.takeRawItemId step ③: re-parse, then register the found raw ID.
+        takeRawItemId: async (request) => {
+          const result = await request.reparse({
+            appId: request.appId,
+            platform: request.platform,
+            productKey: request.productKey,
+          });
+          if (result.kind !== 'found') throw new CatalogError(30143, 'x');
+          registered.push(result.ref.rawItemId);
+          return { rawItemId: result.ref.rawItemId, source: 'reparse' };
+        },
+      },
+      upstream: {
+        detail: (request) => {
+          asked.push(request.rawItemId);
+          return Promise.resolve(item);
+        },
+      },
+    });
+    const stored = {
+      appId: 'app',
+      platform: 'taobao' as const,
+      productKey: 'tb:K1',
+      rawItemId: 'raw-K1',
+      fetchedAt: '2026-10-01T00:00:00.000Z',
+      title: 'K1',
+    };
+    return { pool, stored, registered, asked };
+  };
+  const hit = await run(blockedDetail('K1'));
+  await expect(hit.pool.recheck(hit.stored)).rejects.toBeInstanceOf(PoolCategoryBlockedError);
+  expect(hit.registered).toEqual([]);
+  const pass = await run(detail('K1'));
+  expect(await pass.pool.recheck(pass.stored)).toMatchObject({ kind: 'live', productKey: 'tb:K1' });
+  expect(pass.registered).toEqual(['raw-K1']);
+  expect(pass.asked).toEqual(['raw-K1']);
+  const refresh = await run(blockedDetail('K1'));
+  expect(
+    await refresh.pool.current({
+      appId: 'app',
+      platform: 'taobao',
+      productKey: 'tb:K1',
+      title: 'K1',
+    }),
+  ).toMatchObject({ kind: 'live' });
+  expect(refresh.registered).toEqual(['raw-K1']);
 });

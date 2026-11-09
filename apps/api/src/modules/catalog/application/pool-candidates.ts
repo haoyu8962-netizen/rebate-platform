@@ -5,6 +5,7 @@
 import type { Schema } from '@couli/contracts-ts';
 import type { ProductCard } from './card-assembler.ts';
 import type { CatalogCardEntry } from './card-entry.ts';
+import type { Catalog } from '../domain/types.ts';
 import type { ViewerContext } from '../ports.ts';
 import {
   searchProducts,
@@ -23,6 +24,12 @@ export interface PoolCandidateQuery {
 
 /** BR-PROD-07 server page size of this console search. */
 const CANDIDATE_PAGE_SIZE = 20;
+
+function withFilter(
+  filter: Pick<Catalog, 'filterCategories'> | undefined,
+): Pick<SearchProductsOptions, 'categoryFilter'> {
+  return filter === undefined ? {} : { categoryFilter: filter };
+}
 
 /** The prepared card keeps its quote for the tie; commit registers nothing (no link here). */
 function candidateCards(entry: CatalogCardEntry): CatalogCardEntry {
@@ -64,7 +71,24 @@ function toCandidate(card: ProductCard): Schema<'AdminPoolCandidate'> {
   };
 }
 
-/** `options.cards` and `options.upstream` are searchProducts' own; `requester` is the admin's. */
+/**
+ * B1-05zo: the search tab's category blocklist. The admin wiring hands its full Catalog as
+ * `options.catalog`; a catalog without filterCategories (hand-written fixtures) leaves it off.
+ */
+function categoryFilterOf(
+  options: Omit<SearchProductsOptions, 'viewerContext'>,
+): Pick<Catalog, 'filterCategories'> | undefined {
+  if (options.categoryFilter !== undefined) return options.categoryFilter;
+  const catalog = options.catalog as Partial<Catalog>;
+  return typeof catalog.filterCategories === 'function'
+    ? (catalog as Pick<Catalog, 'filterCategories'>)
+    : undefined;
+}
+
+/**
+ * `options.cards` and `options.upstream` are searchProducts' own; `requester` is the admin's.
+ * Blocked-category products never become candidates (B1-05zo, as the search tab).
+ */
 export async function searchPoolCandidates(
   query: PoolCandidateQuery,
   requester: ViewerContext,
@@ -81,6 +105,7 @@ export async function searchPoolCandidates(
       ...options,
       viewerContext: requester,
       cards: candidateCards(options.cards),
+      ...withFilter(categoryFilterOf(options)),
       upstream: noFeed(options.upstream),
     },
   );

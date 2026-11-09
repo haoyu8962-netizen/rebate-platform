@@ -164,6 +164,8 @@ function poolAdmin(
       upstream: createUnionDetailUpstream({ union }),
       links: db === undefined ? NO_DATABASE_LINKS : options.links(db, clock, logger),
       redis: redis === undefined ? null : redis.namespace(RAW_REPARSE_NAMESPACE),
+      // B1-05zo: the add and the re-check refuse a blocked category (30147) before any write.
+      category: { filter: catalog, logger },
     }),
     candidates: (query, actor) =>
       searchPoolCandidates(query, adminRequester(actor), {

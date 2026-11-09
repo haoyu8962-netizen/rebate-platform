@@ -29,6 +29,11 @@ import type {
 } from '../domain/types.ts';
 import type { CatalogConfigReader, GovernedUnion } from '../ports.ts';
 import type { ItemRefService } from './item-ref.ts';
+import {
+  PoolCategoryBlockedError,
+  poolCategoryBlocked,
+  type PoolCategoryOptions,
+} from './pool-category.ts';
 import { createRawReparser } from './raw-reparse.ts';
 
 /** One link or token of the operator's text, in parsing's own extraction. */
@@ -112,6 +117,13 @@ export interface PoolSourceOptions {
   readonly purpose?: CallCtx['purpose'];
   /** The re-parse lock's store (RAW_REPARSE_NAMESPACE); absent, nothing is locked. */
   readonly redis?: RedisNamespace | null;
+  /**
+   * B1-05zo (CT-26zf 30147): the category blocklist of the admin's add and re-check (fromLink,
+   * fromItemRef, recheck; never `current`). Judged only on an answer with details that names this
+   * product (after the one-product and key checks), before the price judgment and before any write
+   * of this source (a re-parse's product_refs row included). Absent, nothing is judged.
+   */
+  readonly category?: PoolCategoryOptions;
 }
 
 /** Thrown when one `link_text` holds more than one product (20001 data.fields=[link_text]). */
@@ -156,6 +168,22 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
 
   function context(appId: string): CallCtx {
     return { appId, requestId: randomUUID(), purpose };
+  }
+
+  const { category } = options;
+  /** The details behind a price_anomaly answer, which carries none itself (B1-05zo). */
+  const anomalyDetails = new WeakMap<PoolProduct, UnionItemDetail>();
+
+  async function assertCategory(appId: string, item: UnionItemDetail): Promise<void> {
+    if (category === undefined) return;
+    if (await poolCategoryBlocked(appId, item, category)) throw new PoolCategoryBlockedError();
+  }
+
+  /** A link's one product, judged by category when it carries this product's details. */
+  async function judgedProduct(appId: string, product: PoolProduct): Promise<PoolProduct> {
+    const item = product.kind === 'live' ? product.item : anomalyDetails.get(product);
+    if (item !== undefined) await assertCategory(appId, item);
+    return product;
   }
 
   async function jdModeOf(appId: string, platform: Platform): Promise<string> {
@@ -215,11 +243,46 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
     productKey: string,
     requestRef: RequestRawRef | null,
     titleHint: string | null,
+    judge: boolean,
   ): Promise<PoolProduct> {
     if (!isRegisteredPlatform(platform)) {
       return refExpired(productKey, new CatalogError(30131, 'pool: platform has no union adapter'));
     }
     const jdMode = await jdModeOf(appId, platform);
+    const detailOf = (raw: string): Promise<UnionItemDetail> =>
+      upstream.detail({
+        appId,
+        productKey,
+        platform,
+        ...(platform === 'jd' ? { jdMode } : {}),
+        rawItemId: raw,
+      });
+    // B1-05zo: takeRawItemId registers a re-parsed raw ID as soon as reparse answers, so with a
+    // category to judge the detail is asked inside reparse and judged there, before that write. Its
+    // answer (or failure) is then used as the detail of this call, so the union is asked once and a
+    // failure still surfaces after the registration, as before.
+    const early: {
+      raw?: string;
+      item?: UnionItemDetail;
+      error?: { cause: unknown };
+      judged?: boolean;
+    } = {};
+    const reparseFor = async (identity: ProductIdentity): Promise<ReparseResult> => {
+      const result = await reparse(identity, platform, titleHint, jdMode);
+      if (!judge || category === undefined || result.kind !== 'found') return result;
+      early.raw = result.ref.rawItemId;
+      try {
+        early.item = await detailOf(early.raw);
+      } catch (error: unknown) {
+        early.error = { cause: error };
+        return result;
+      }
+      if (await isThisProduct(early.item, platform, productKey, jdMode)) {
+        await assertCategory(appId, early.item);
+        early.judged = true;
+      }
+      return result;
+    };
     let rawItemId: string;
     let item: UnionItemDetail;
     try {
@@ -230,15 +293,13 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
         requestRef,
         fallbackEnabled: false,
         capabilities: POOL_CAPABILITIES,
-        reparse: (identity) => reparse(identity, platform, titleHint, jdMode),
+        reparse: reparseFor,
       }));
-      item = await upstream.detail({
-        appId,
-        productKey,
-        platform,
-        ...(platform === 'jd' ? { jdMode } : {}),
-        rawItemId,
-      });
+      if (early.raw === rawItemId && early.error !== undefined) throw early.error.cause;
+      item =
+        early.raw === rawItemId && early.item !== undefined
+          ? early.item
+          : await detailOf(rawItemId);
     } catch (error: unknown) {
       const mapped = upstreamFailure(error);
       if (mapped instanceof CatalogError && mapped.code === 30141) {
@@ -255,7 +316,19 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
       return refExpired(productKey, new CatalogError(30131, 'pool: key not derivable'));
     }
     if (derived !== productKey) return anotherProduct(productKey);
+    // B1-05zo: this product's details, judged before the price (once per call).
+    if (judge && !(early.judged === true && item === early.item)) await assertCategory(appId, item);
     return live(productKey, platform, detailRawItemId(item, jdMode) ?? rawItemId, item);
+  }
+
+  /** byKey's own identity checks: the requested platform, and the requested key derived. */
+  async function isThisProduct(
+    item: UnionItemDetail,
+    platform: Platform,
+    productKey: string,
+    jdMode: string,
+  ): Promise<boolean> {
+    return item.platform === platform && (await keyOf(item, jdMode)) === productKey;
   }
 
   /**
@@ -270,12 +343,14 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
     item: UnionItemDetail,
   ): PoolProduct {
     if (item.price_status === 'anomaly') {
-      return {
+      const flagged: PoolProduct = {
         kind: 'not_passed',
         productKey,
         failure: 'price_anomaly',
         refusal: unavailable('the union flags this price'),
       };
+      anomalyDetails.set(flagged, item);
+      return flagged;
     }
     return { kind: 'live', productKey, platform, rawItemId, item };
   }
@@ -337,7 +412,8 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
       if (products.size > 1) throw new PoolManyProductsError();
       if (refusals.includes(PARSE_DEPENDENCY_DOWN)) throw unavailable('link not resolved now');
       const [product] = products.values();
-      if (product !== undefined) return product;
+      // B1-05zo: judged only now, one product confirmed (20001 and 50401 come first).
+      if (product !== undefined) return judgedProduct(appId, product);
       throw new CatalogError(refusals[0] as 30131 | 30132 | 30141, 'pool: link refused');
     },
 
@@ -346,7 +422,7 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
       const token = itemRefs.read(itemRef, appId);
       if (token === null) throw new CatalogError(30132, 'pool: item_ref not usable');
       const productKey = await catalog.resolveProductKey(token.productKey);
-      return byKey(appId, token.platform, productKey, token, null);
+      return byKey(appId, token.platform, productKey, token, null, true);
     },
 
     async recheck(stored) {
@@ -361,12 +437,12 @@ export function createPoolSource(options: PoolSourceOptions): PoolSource {
         fetchedAt,
         source: 'link',
       };
-      return byKey(appId, platform, productKey, held, title);
+      return byKey(appId, platform, productKey, held, title, true);
     },
 
     async current({ appId, platform, productKey, title }) {
       const resolved = await catalog.resolveProductKey(productKey);
-      return byKey(appId, platform, resolved, null, title);
+      return byKey(appId, platform, resolved, null, title, false);
     },
   };
 }

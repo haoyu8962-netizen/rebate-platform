@@ -41,6 +41,7 @@ import {
   type PoolListQuery,
 } from '../../application/pool-admin.ts';
 import type { PoolCandidateQuery } from '../../application/pool-candidates.ts';
+import { PoolCategoryBlockedError } from '../../application/pool-category.ts';
 import { PoolManyProductsError } from '../../application/pool-source.ts';
 import { CatalogError } from '../../domain/rules.ts';
 
@@ -62,6 +63,7 @@ const REFUSALS: Readonly<Record<number, { readonly status: number; readonly msg:
   30132: { status: 422, msg: '未识别到商品，请检查链接或口令' },
   30141: { status: 422, msg: '商品已下架' },
   30143: { status: 422, msg: '商品信息已失效，请重新搜索' },
+  30147: { status: 422, msg: '该商品所在类目已被禁售，不能加入商品池' },
   50304: { status: 503, msg: '搜索暂不可用，请稍后再试' },
   50401: { status: 504, msg: '网络繁忙，请稍后再试' },
 };
@@ -218,6 +220,11 @@ export function refusal(error: unknown, traceId: string): unknown {
   }
   if (error instanceof PoolNotFoundError) {
     return new HttpException({ code: 30701, msg: '内容不存在', trace_id: traceId }, 404);
+  }
+  if (error instanceof PoolCategoryBlockedError) {
+    // CT-26zf: 30147 carries no data.
+    const blocked = REFUSALS[30147]!;
+    return new HttpException({ code: 30147, msg: blocked.msg, trace_id: traceId }, blocked.status);
   }
   if (error instanceof CatalogError) {
     // searchProducts' only 20001 on this route: q and platform passed the route schema.

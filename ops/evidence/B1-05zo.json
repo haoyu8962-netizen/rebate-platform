@@ -1,0 +1,113 @@
+{
+  "risk_note": "RV2 by path (catalog admin pool; no money, ledger, settlement or attribution change). FU-POOL-CATEGORY-BLOCK (orchestrator D10-1045 ② / D10-1058 / D10-1059; contract CT-26zf #2954 merged, error code 30147 category_blocked, admin only). The admin pool add (POST /admin/v1/product-pools/{pool_id}/items) and the offline→online re-check of PATCH refuse a live union detail (incl. price_status=anomaly) whose category hits an active blocklist rule of the same app and platform with 422 / 30147 and write nothing (no insert, no overwrite, no takedown of same-key rows, no product_refs row on the re-check path). The category is judged in pool-source.ts only when the admin wiring passes the new category option, after multi-link dedup / exactly-one-item / 50401, and on re-parse before takeRawItemId registers product_refs; order follows the CT-26zf openapi text (param / permission refusals first, category before price). Non-live answers keep the existing 30141 / 50401 / offline behaviour. A live detail without category matches keyword rules against the title only; warns catalog_category_missing / catalog_category_blocked with prefix pool_admin:, platform and count only. Pool candidates (searchPoolCandidates) filter blocked categories like the search tab. Rules are read per call (no cache). Container green check OOM-killed twice on Colima 8G; per D10-772 the host-int run (host test runner, PG on colima) passed pool-category-block + product-pool-admin + category-blocklist-search: 14 files, 198 tests. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review (effort medium). Round 1 fail with two S1 (judge the category only after multi-link dedup, so a multi-item link keeps its earlier refusal; on re-parse judge before takeRawItemId registers product_refs), both fixed in 9ff3b1792 (duplicate key derivation removed). Round 2 (incremental) pass, no findings, previous two S1 confirmed closed. Before that, five round-2 calls (Codex ×3 incremental, fresh independent Claude ×2) returned pass with no findings but were rejected by validate-output for checklist lines outside the diff hunks (no usable output, not counted as rounds); per D10-1121 the task brief got a section listing the citable hunk lines, and the next Codex call produced this usable pass. The money canary ran (record only, CT-06zzzza)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests in test/spec/catalog/pool-category-block by a fresh independent Claude (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 1/3); red run: every new case fails on main at an assertion. spec-test r1 by a fresh independent Claude: pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#1] link_text 新 key、联盟详情 live 且类目命中本 App 本平台 active 规则 → 422 30147，什么都不写，同键别的池条目不下架、别的 App 的不动，warn catalog_category_blocked（pool_admin:）",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#1] item_ref 新 key、联盟详情 live 且类目命中本 App 本平台 active 规则 → 422 30147，什么都不写，同键别的池条目不下架、别的 App 的不动，warn catalog_category_blocked（pool_admin:）",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#2] 已在池的键（online）再入库且类目命中 → 30147：原行一字不变（不覆盖三项、不回 online），同键别的池条目不动，不写审计",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#2] 已在池的键（offline）再入库且类目命中 → 30147：原行一字不变（不覆盖三项、不回 online），同键别的池条目不动，不写审计",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#3] link_text 联盟详情 price_status=anomaly 且类目命中 → 30147（先于 50401）：新 key 什么都不写；已在池的键也 30147，不走覆盖下架，原行一字不变",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#3] item_ref 联盟详情 price_status=anomaly 且类目命中 → 30147（先于 50401）：新 key 什么都不写；已在池的键也 30147，不走覆盖下架，原行一字不变",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#4] live 无类目（缺省）：带关键词的规则命中标题 → 30147，什么都不写，warn catalog_category_blocked（pool_admin:，只带平台与计数）",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#4] live 无类目（空串）：带关键词的规则命中标题 → 30147，什么都不写，warn catalog_category_blocked（pool_admin:，只带平台与计数）",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#5] live 无类目（缺省）且标题不含任何关键词 → 放行入池 online，纯类目规则不拦；warn catalog_category_missing（pool_admin:，只带平台与计数，不带标题、键、操作者），不记 catalog_category_blocked",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#5] live 无类目（空串）且标题不含任何关键词 → 放行入池 online，纯类目规则不拦；warn catalog_category_missing（pool_admin:，只带平台与计数，不带标题、键、操作者），不记 catalog_category_blocked",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#6] 联盟答复不带商品详情照既有口径，即使类目在名单里：下架 → 30141 并下架同键别的池、已在池的键 200 offline 带原因、失效 → 30143、答不了 → 50401；同一名单下 live 命中才是 30147",
+    "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#7] 参数与权限类先于联盟答复：命中名单的商品，未知池 → 30701、无 content.pool → 10403、缺 sort → 20001，均不问联盟、不写入；同一商品正常提交才是 30147",
+    "test/spec/catalog/pool-category-block/candidates.int.test.ts > [AC-B1-05zo#16] 选品候选不出现禁售类目商品（与搜索 Tab 同口径）：命中类目的、无类目但标题含关键词的滤掉，其余照出；别的 App 的规则不滤，名单下一次请求即生效",
+    "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#8] offline→online 复核：联盟详情 live 且类目命中 → 30147，条目保持 offline 一字不变，同请求的排序改动不生效，不写审计与 product_refs；复核下架的照旧 200 offline 带原因",
+    "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#9] offline→online 复核：联盟详情 price_status=anomaly 且类目命中 → 30147（先于价格判定），条目一字不变，不改写原因",
+    "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#10] 不经复核的 PATCH 不受名单影响：改排序、时间窗、手动下架照常 200 且不问联盟；同一条目 offline→online 复核时才 30147",
+    "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#11] 复核 live 无类目：标题含规则关键词 → 30147 且条目不变，warn catalog_category_blocked（pool_admin:）；不含 → 回到 online，warn catalog_category_missing（pool_admin:），不带标题、键、操作者",
+    "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#12] 名单按应用：别的 App 的 active 规则不拦本 App；本 App 同类目的 active 规则拦",
+    "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#13] 名单按平台：别的平台同类目 id 的规则不拦淘宝商品；淘宝的才拦",
+    "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#14] status 非 active 的规则不拦；名单改动下一次调用即生效（不缓存）：启用 → 30147，停用 → 放行，再启用 → 30147",
+    "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#15] 带关键词的类目规则：同类目且标题含关键词 → 30147；同类目不含关键词、别的类目含关键词都放行"
+  ],
+  "task": "B1-05zo",
+  "spec_commit": "d20db73375c4dc7eefee7e83079d41e95b7f8fb0",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d20db73375c4dc7eefee7e83079d41e95b7f8fb0",
+      "tree": "3b9442c67d02bddc60c3019ea35481a6ef4eeec2",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T23:12:49Z",
+      "finished_at": "2026-11-08T23:14:33Z",
+      "red_tests": [
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#1] link_text 新 key、联盟详情 live 且类目命中本 App 本平台 active 规则 → 422 30147，什么都不写，同键别的池条目不下架、别的 App 的不动，warn catalog_category_blocked（pool_admin:）",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#1] item_ref 新 key、联盟详情 live 且类目命中本 App 本平台 active 规则 → 422 30147，什么都不写，同键别的池条目不下架、别的 App 的不动，warn catalog_category_blocked（pool_admin:）",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#2] 已在池的键（online）再入库且类目命中 → 30147：原行一字不变（不覆盖三项、不回 online），同键别的池条目不动，不写审计",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#2] 已在池的键（offline）再入库且类目命中 → 30147：原行一字不变（不覆盖三项、不回 online），同键别的池条目不动，不写审计",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#3] link_text 联盟详情 price_status=anomaly 且类目命中 → 30147（先于 50401）：新 key 什么都不写；已在池的键也 30147，不走覆盖下架，原行一字不变",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#3] item_ref 联盟详情 price_status=anomaly 且类目命中 → 30147（先于 50401）：新 key 什么都不写；已在池的键也 30147，不走覆盖下架，原行一字不变",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#4] live 无类目（缺省）：带关键词的规则命中标题 → 30147，什么都不写，warn catalog_category_blocked（pool_admin:，只带平台与计数）",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#4] live 无类目（空串）：带关键词的规则命中标题 → 30147，什么都不写，warn catalog_category_blocked（pool_admin:，只带平台与计数）",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#5] live 无类目（缺省）且标题不含任何关键词 → 放行入池 online，纯类目规则不拦；warn catalog_category_missing（pool_admin:，只带平台与计数，不带标题、键、操作者），不记 catalog_category_blocked",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#5] live 无类目（空串）且标题不含任何关键词 → 放行入池 online，纯类目规则不拦；warn catalog_category_missing（pool_admin:，只带平台与计数，不带标题、键、操作者），不记 catalog_category_blocked",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#6] 联盟答复不带商品详情照既有口径，即使类目在名单里：下架 → 30141 并下架同键别的池、已在池的键 200 offline 带原因、失效 → 30143、答不了 → 50401；同一名单下 live 命中才是 30147",
+        "test/spec/catalog/pool-category-block/add.int.test.ts > [AC-B1-05zo#7] 参数与权限类先于联盟答复：命中名单的商品，未知池 → 30701、无 content.pool → 10403、缺 sort → 20001，均不问联盟、不写入；同一商品正常提交才是 30147",
+        "test/spec/catalog/pool-category-block/candidates.int.test.ts > [AC-B1-05zo#16] 选品候选不出现禁售类目商品（与搜索 Tab 同口径）：命中类目的、无类目但标题含关键词的滤掉，其余照出；别的 App 的规则不滤，名单下一次请求即生效",
+        "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#8] offline→online 复核：联盟详情 live 且类目命中 → 30147，条目保持 offline 一字不变，同请求的排序改动不生效，不写审计与 product_refs；复核下架的照旧 200 offline 带原因",
+        "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#9] offline→online 复核：联盟详情 price_status=anomaly 且类目命中 → 30147（先于价格判定），条目一字不变，不改写原因",
+        "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#10] 不经复核的 PATCH 不受名单影响：改排序、时间窗、手动下架照常 200 且不问联盟；同一条目 offline→online 复核时才 30147",
+        "test/spec/catalog/pool-category-block/recheck.int.test.ts > [AC-B1-05zo#11] 复核 live 无类目：标题含规则关键词 → 30147 且条目不变，warn catalog_category_blocked（pool_admin:）；不含 → 回到 online，warn catalog_category_missing（pool_admin:），不带标题、键、操作者",
+        "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#12] 名单按应用：别的 App 的 active 规则不拦本 App；本 App 同类目的 active 规则拦",
+        "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#13] 名单按平台：别的平台同类目 id 的规则不拦淘宝商品；淘宝的才拦",
+        "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#14] status 非 active 的规则不拦；名单改动下一次调用即生效（不缓存）：启用 → 30147，停用 → 放行，再启用 → 30147",
+        "test/spec/catalog/pool-category-block/scope.int.test.ts > [AC-B1-05zo#15] 带关键词的类目规则：同类目且标题含关键词 → 30147；同类目不含关键词、别的类目含关键词都放行"
+      ],
+      "expected": [
+        "test/spec/catalog/pool-category-block/add.int.test.ts",
+        "test/spec/catalog/pool-category-block/candidates.int.test.ts",
+        "test/spec/catalog/pool-category-block/recheck.int.test.ts",
+        "test/spec/catalog/pool-category-block/scope.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "28f7c84f21b6644572d377c2785f9736add2861e869b92a7c5102c71e04d4c2a"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f71e5a5274a64d71f4a56d08758da589bcd26185",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}
