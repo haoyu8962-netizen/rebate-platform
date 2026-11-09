@@ -9,7 +9,7 @@ type: impl
 # 风险 RV2（db/**、迁移、platform/**），需迁移槽。新鲜独立 Claude 写规则测试（Codex 额度用尽至 11-15，approvals #36），Opus 实现，独立 Claude money 评审。
 refs: [BR-ID-30, BR-AI-19, BR-AI-22]
 refs_hash:
-  BR-ID-30: f957e2ece7ec
+  BR-ID-30: 8ea92988c8cd
   BR-AI-19: 49ef9e9ca65d
   BR-AI-22: d412bc8a631a
 deps: [B3-08q, B3-08st]

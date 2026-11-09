@@ -7,7 +7,7 @@ type: impl
 # 不改契约（createPayOrder 已写 "object cannot be sold → 30901"）、无迁移、不动冻结用例。RV2：规则测试新鲜独立 Claude，spec-test / money 先跑 Codex，money medium（D10-1075、CT-06zzzzm）。
 refs: [BR-PAY-01]
 refs_hash:
-  BR-PAY-01: 15ea5ac62c34
+  BR-PAY-01: d4f2440d8518
 deps: [B2-15b]
 paths:
   - 'apps/api/src/modules/payment/application/biz-registry.ts'

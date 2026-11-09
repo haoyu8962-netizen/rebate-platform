@@ -10,7 +10,7 @@ type: impl
 # staging 部署后用 B1-25a 的演练再走一遍「规则真的触发 → 路由到对的组」（人为让一条资金规则、一条运维规则成立），结果写私有 README。不接外部服务。
 refs: [BR-WDR-24]
 refs_hash:
-  BR-WDR-24: 1e9585c4b8bf
+  BR-WDR-24: 356b5d012a5d
 deps: [B1-25a]
 paths:
   - 'infra/monitoring/vmalert/**'

@@ -11,7 +11,7 @@ type: impl
 # staging 部署与演练（另起 couli 专用 alertmanager 实例 + log-sink，经 API 人为触发一条资金、一条运维告警）由 ops 在仓库外脚本做，结果写私有 README。
 refs: [BR-WDR-24, BR-WDR-26]
 refs_hash:
-  BR-WDR-24: 1e9585c4b8bf
+  BR-WDR-24: 356b5d012a5d
   BR-WDR-26: 158db40de631
 deps: []
 paths:

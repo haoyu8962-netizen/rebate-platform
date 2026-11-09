@@ -10,7 +10,7 @@ type: test-change
 # 2026-11-09 台账补丁（D10-1078、D10-1083）：NO_SPEC 形态被 evidence-check 拒（spec_commit 取主干尖，冻结文件改动都算其后）。改 tester claude-independent + test_paths，测试提交在前先红；字面量用 renames（CT-06zzzzl 放宽后接受反引号串里的占位）：替换后与基线逐字相同的 7 个文件不进红检，result/concurrency 多一处 prettier 重排，按用例判，须红。
 refs: [BR-PAY-01]
 refs_hash:
-  BR-PAY-01: 15ea5ac62c34
+  BR-PAY-01: d4f2440d8518
 deps: [B2-15c, B2-15e]
 paths:
   - 'apps/api/src/modules/payment/jobs/names.ts'

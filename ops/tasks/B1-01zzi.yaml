@@ -13,7 +13,7 @@ refs_hash:
   BR-CALC-13: 54c06125032c
   BR-WDR-14: 6328f3cda2e6
   BR-WDR-18: 9247640dde57
-  BR-WDR-24: 1e9585c4b8bf
+  BR-WDR-24: 356b5d012a5d
 deps: [B1-01zzh]
 paths:
   - 'apps/api/src/modules/platform/metrics/**'

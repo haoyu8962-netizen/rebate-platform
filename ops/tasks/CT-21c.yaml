@@ -8,7 +8,7 @@ type: contract
 # 2026-10-23 paths 补 apps/h5/src/shared/api/signed.ts：H5 app-api 的 x-signed 操作清单手工维护，冻结测试 [AC-F1-01q-SIGNED#1] 逐条对照契约，新增签名接口须同 PR 登记（先例 CT-04f #756）。
 refs: [BR-PAY-01, BR-PAY-02, BR-PAY-03, BR-PAY-04, BR-PAY-05]
 refs_hash:
-  BR-PAY-01: 15ea5ac62c34
+  BR-PAY-01: d4f2440d8518
   BR-PAY-02: 7bccee0eeb26
   BR-PAY-03: ce78552d8b5d
   BR-PAY-04: 6763ec22c098

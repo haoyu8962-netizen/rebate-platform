@@ -12,7 +12,7 @@ refs_hash:
   BR-WDR-30: ec74379ec48c
   BR-WDR-26: 158db40de631
   BR-WDR-05: 99e2e2654ce0
-  BR-WDR-24: 1e9585c4b8bf
+  BR-WDR-24: 356b5d012a5d
 deps: [B2-11a, B2-11b, B2-06c]
 paths:
   - 'apps/api/src/modules/payout/**'

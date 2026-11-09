@@ -6,7 +6,7 @@ type: impl
 # 2026-11-09 补（D10-1169）：① 冻结 refund-r9-baseline/writers.int.test.ts:37 [AC-B2-04zzf#8a] 的 reason 'COMMISSION_ZERO' 改 'REFUND'（全退到剩余 0 → 整单退款），照 D10-327 由新鲜独立 Claude 只改这一处、另一位只读复审，其余断言不动，改后的块在旧实现上红；同文件 #8b / #8c 未改，登记 red_exempt。② orders/application/rights-ports.ts 进 paths（结算时点经 RightsRecordInput 交 settlement）。③ 退到剩余 0 的整单退款不写子原因（reason_sub 为空）。
 refs: [BR-TEXT-05, BR-FUND-08]
 refs_hash:
-  BR-TEXT-05: e22ebfe2491e
+  BR-TEXT-05: 34a6ab7e2ca2
   BR-FUND-08: 4135d1b47230
 deps: [B2-04zzr]
 paths:

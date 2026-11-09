@@ -6,7 +6,7 @@ type: impl
 refs: [BR-WDR-26, BR-WDR-24]
 refs_hash:
   BR-WDR-26: 158db40de631
-  BR-WDR-24: 1e9585c4b8bf
+  BR-WDR-24: 356b5d012a5d
 deps: [B2-05n, B1-01zzp]
 paths:
   - 'apps/api/src/modules/platform/metrics/**'

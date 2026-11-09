@@ -13,7 +13,7 @@ type: impl
 # RV2：新鲜独立 Claude 写规则测试，Opus 实现，Codex money（medium）评审。冻结测试两处照 B2-09ze 先例预先声明，测试轮发现别的再补台账。
 refs: [BR-WDR-24]
 refs_hash:
-  BR-WDR-24: 1e9585c4b8bf
+  BR-WDR-24: 356b5d012a5d
 deps: [B2-09ze]
 paths:
   - 'apps/api/src/modules/payout/application/**'

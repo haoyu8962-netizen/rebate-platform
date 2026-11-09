@@ -8,7 +8,7 @@ type: contract
 # 2026-10-23 paths 补 specs/fund-term-keys.yaml：contracts:codegen 要求 texts.default.json 的每个新键先在该清单归类（BR-TEXT-12），三条错误文案归 ordinary.keys（不带金额、无资金关键词）；运行时生成物 content/specs/fund-term-keys.gen.ts 由 generate-text-specs.ts 重生成（先例 CT-16j）。
 refs: [BR-PAY-01, BR-PAY-02, BR-PAY-03, BR-PAY-04, BR-PAY-05, BR-PAY-06, BR-PAY-07]
 refs_hash:
-  BR-PAY-01: 15ea5ac62c34
+  BR-PAY-01: d4f2440d8518
   BR-PAY-02: 7bccee0eeb26
   BR-PAY-03: ce78552d8b5d
   BR-PAY-04: 6763ec22c098
