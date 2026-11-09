@@ -1,0 +1,18 @@
+id: B1-20cb
+repo: rebate-platform
+title: test-change：补 B1-20c T-7 拼多多刷新路径的两处覆盖——GET /v1/unions/bindings 刷新与并号争用用户锁（锁等待）不为墓碑写 active，且变墓碑后不写 union_pdd_pid_filings 备案行（D10-1154）
+type: test-change
+# 2026-11-09 w1 入账（D10-1154；来源 B1-06zk D10-1151 Codex 只读复核：主干 test/spec/linking/merge-release/writers-pdd.int.test.ts [AC-B1-20c#47] 覆盖五种存量绑定 during_query 变墓碑不写 active，但没有刷新路径的锁等待用例，也没有「备案行不写」断言）。
+# 只新增新文件 test/spec/linking/merge-release-pdd-refresh/**（不动 merge-release 已有文件）：① 刷新与并号争用同一用户锁——查询替身里另开事务锁 users FOR UPDATE 写 status=deleted 不提交，等刷新确实在等锁（pg_blocking_pids，确定性）后提交 → 不写 active、行原样、页面照常 200；② 刷新途中变墓碑 → union_pdd_pid_filings 不新增行。主干已有 B1-20c 调用方检查与 B1-06zk 的 activatePddBinding 检查，所以主干上即绿（test-change）。
+# 第一类保护路径只新增：非 task 分支、台账同 PR；新鲜独立 Claude 写、另一位只读复核，按 #24 编排核后加标签。
+refs: []
+refs_hash: {}
+deps: [B1-20c, B1-06zh]
+paths:
+  - 'test/spec/linking/merge-release-pdd-refresh/**'
+  - 'ops/tasks/B1-20cb.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
