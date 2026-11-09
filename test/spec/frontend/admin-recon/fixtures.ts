@@ -27,8 +27,12 @@ export type DiffType = Schema<'AdminReconDiffType'>;
 export type DiffSource = Schema<'AdminReconDiffSource'>;
 export type DiffStatus = Schema<'AdminReconDiffStatus'>;
 
-/** admin_dict.recon_diff_type.* of the nine R1–R3 types (AdminReconDiffType). */
-export const TYPE_NAME: Readonly<Record<DiffType, string>> = {
+/**
+ * admin_dict.recon_diff_type.* of the nine R1–R3 types shown by the console (AdminReconDiffType).
+ * blacklist_after_credit is widened by CT-24zzf; its name and filter option join with the console
+ * ticket of B2-04zzl, so the cast keeps these nine compiling on both sides of that widening.
+ */
+export const TYPE_NAME = {
   union_mismatch: '联盟对账不一致',
   channel_mismatch: '通道对账不一致',
   ledger_mismatch: '账实不符',
@@ -38,7 +42,7 @@ export const TYPE_NAME: Readonly<Record<DiffType, string>> = {
   settle_missing: '应结未结',
   appeal_restore: '申诉恢复',
   estimate_changed_after_credit: '入账后预估变化',
-};
+} as Readonly<Record<DiffType, string>>;
 /** admin_dict.recon_diffs.source.R1–R3 (R4 is not a value of this list). */
 export const SOURCE_NAME: Readonly<Record<DiffSource, string>> = {
   R1: '联盟对账',

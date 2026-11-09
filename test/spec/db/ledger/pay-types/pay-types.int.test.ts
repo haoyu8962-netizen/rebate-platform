@@ -163,7 +163,20 @@ it('[AC-B2-15i#2] R4 接受两种收款差错，原九种仍可存储，未知�
       type,
     ).toEqual({ code: '23514', constraint: 'recon_diffs_type_check' });
   }
-  await checkConstraint('recon_diffs', 'recon_diffs_type_check', RECON_TYPES);
+  // D10-1137: migration 0136 (B2-04zzlt) adds blacklist_after_credit. Exact in both states; once
+  // B2-04zzl has landed this goes back to the single 12-value list.
+  const current = await sql<{ definition: string }>`
+    SELECT pg_get_constraintdef(oid) AS definition
+    FROM pg_constraint
+    WHERE conrelid = to_regclass('app.recon_diffs') AND conname = 'recon_diffs_type_check'
+  `.execute(h.app);
+  await checkConstraint(
+    'recon_diffs',
+    'recon_diffs_type_check',
+    current.rows[0]?.definition.includes("'blacklist_after_credit'")
+      ? [...RECON_TYPES, 'blacklist_after_credit']
+      : RECON_TYPES,
+  );
 });
 
 it('[AC-B2-15i#3] 两个守卫按原名 NOT VALID 重建于新迁移，紧随的 -validate 迁移 VALIDATE，均保留有限超时', () => {
