@@ -118,8 +118,10 @@ export function openHttpResult(outcome: LinkOpenRequoteOutcome, traceId: string)
   // Error envelopes carry data only for codes that define it (ErrorEnvelope): 20001, which only
   // the idempotency layer answers, for the Idempotency-Key header; 30101 / 30102 / 30153 with the
   // authorization's data (B1-06f: auth_url, state, auth_methods, or reason); 30111 with auth_jump
-  // or reason and 50301 with reason=maintenance (B1-06v). B1-06i: a convert's own 20001 (item_ref
-  // of another product, platform mismatch) carries its fields as the error data, which wins.
+  // or reason and 50301 with reason=maintenance (B1-06v), or, switched off, exactly { platform,
+  // reason } (B1-06zl, reason from convert.off_reason.<platform>). B1-06i: a convert's own 20001
+  // (item_ref of another product, platform mismatch) carries its fields as the error data, which
+  // wins.
   // A convert's success data keeps its link_id through wire().
   const error = 'error' in outcome ? outcome.error : undefined;
   return {

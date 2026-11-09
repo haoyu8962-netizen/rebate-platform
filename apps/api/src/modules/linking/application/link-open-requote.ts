@@ -82,6 +82,7 @@ import { hasUnresolvedBindingConflict } from '../infra/binding-conflicts.ts';
 import { storedLinkCode } from '../infra/link-code.ts';
 import type { Caller } from '../ports.ts';
 import type { Platform, UnionItem } from '../../union/index.ts';
+import { pausedDataOf } from './convert-paused.ts';
 import {
   attrCodeOf,
   clickCodeKey,
@@ -1025,7 +1026,11 @@ export function createLinkOpenRequote(options: LinkOpenRequoteOptions): LinkOpen
       try {
         await conversion.admit(owner, input.client);
       } catch (error) {
-        return failure(conversionFailure(error).code === 50301 ? 50301 : 50303, owner);
+        if (conversionFailure(error).code !== 50301) return failure(50303, owner);
+        // B1-06zl: the switched-off pause carries { platform, reason } (BR-PROD-10, BR-TEXT-14);
+        // every other pause (no verified path, no slot) answers without data, as before.
+        const data = pausedDataOf(error);
+        return { ...failure(50301, owner), ...(data === undefined ? {} : { error: { ...data } }) };
       }
     }
     // B1-06f: the port's authorization, before any cache or price work (an unauthorized open

@@ -39,6 +39,7 @@ import {
 } from '../../union/index.ts';
 import { isSwitchOn } from '../domain/rules.ts';
 import type { CallerContext, LinkingConfigReader } from '../ports.ts';
+import { convertPausedData } from './convert-paused.ts';
 import type { LinkOpenInput } from './link-open.ts';
 import {
   isTaobaoPaused,
@@ -346,8 +347,9 @@ class ComposedShopOpen extends ShopOpenService {
     const platform = input.body.platform;
     const adapter = await this.#admit(appId, platform);
     // convert.enabled.<platform> as the open (50301).
+    // B1-06zl: data exactly { platform, reason }, reason from convert.off_reason.<platform>.
     if (!isSwitchOn((await config.configValue(appId, `convert.enabled.${PLATFORM}`))?.value)) {
-      refuse(50301);
+      refuse(50301, { ...(await convertPausedData(config, appId, PLATFORM)) });
     }
 
     // Authorization as the Taobao open (link-open-taobao.ts authorize), the caller as subject;

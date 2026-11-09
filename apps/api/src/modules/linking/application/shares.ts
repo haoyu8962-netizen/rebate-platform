@@ -7,7 +7,8 @@
 //   login (10001) → platform idempotency (standard mode: the same key with the same body replays the
 //   stored answer — 0 and 3xxxx — without running anything; any other result is not stored) →
 //   identified minor (verified birth date under 18 at the injected clock, BR-ID-26) → 30413
-//   data.reason=self_minor → convert.enabled.<platform> (50301 maintenance) → the platform
+//   data.reason=self_minor → convert.enabled.<platform> (50301 with data { platform, reason }, the
+//   reason convert.off_reason.<platform>, B1-06zl) → the platform
 //   authorization of the sharer (Taobao active binding, else 30101 with auth_url / state /
 //   auth_methods; Pinduoduo filing, else 30111 with auth_jump — the states issued by the auth-url
 //   service, link_id empty; JD none) → Taobao: share.taobao_enabled off → 50301
@@ -81,6 +82,7 @@ import { storedLinkCode } from '../infra/link-code.ts';
 import { recordPddPidFiling } from '../infra/pdd-pid-filings.ts';
 import { insertShareMaterial } from '../infra/share-material-store.ts';
 import type { AttrCodeReader, Caller, CallerContext, LinkingConfigReader } from '../ports.ts';
+import { convertPausedData } from './convert-paused.ts';
 import { detailFailure } from './link-convert.ts';
 import { LinkingUnionIdentity, itemRefOf } from './link-open-conversion.ts';
 import {
@@ -463,7 +465,12 @@ class ComposedShares extends SharesService {
       `convert.enabled.${platform}`,
     );
     if (!isSwitchOn(switchValue?.value)) {
-      return fail(refused(50301, { reason: 'maintenance', platform }));
+      // B1-06zl (D10-1139): reason = convert.off_reason.<platform>, as features.platform_status.
+      const paused = await convertPausedData(this.#options.config, caller.appId, platform);
+      return fail(
+        refused(50301, { ...paused }),
+        paused.reason === 'not_launched' ? NOT_LAUNCHED_MSG : undefined,
+      );
     }
 
     let accountId: string | undefined;

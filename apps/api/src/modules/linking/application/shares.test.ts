@@ -203,7 +203,12 @@ interface Logged {
   readonly values: Record<string, unknown>;
 }
 
-function fixture(overrides: { caller?: Caller; birthDate?: string | null; switchOn?: boolean }) {
+function fixture(overrides: {
+  caller?: Caller;
+  birthDate?: string | null;
+  switchOn?: boolean;
+  offReason?: string;
+}) {
   const logged: Logged[] = [];
   const db = {
     insertInto: (table: string) => ({
@@ -224,7 +229,16 @@ function fixture(overrides: { caller?: Caller; birthDate?: string | null; switch
     appEnv: 'test',
     logger: { warn: () => undefined },
     callerContext: { current: () => Promise.resolve(caller) },
-    config: { configValue: () => Promise.resolve({ value: switchOn, version: 1 }) },
+    config: {
+      configValue: (_app: string, key: string) =>
+        Promise.resolve(
+          key.startsWith('convert.off_reason.')
+            ? overrides.offReason === undefined
+              ? null
+              : { value: overrides.offReason, version: 1 }
+            : { value: switchOn, version: 1 },
+        ),
+    },
     pids: { getActivePid: unreachable },
     registry: { get: unreachable },
     idempotency: {
@@ -289,12 +303,17 @@ describe('shares use case: early answers (B1-15w)', () => {
     ]);
   });
 
-  it('[AC-B1-15w] the platform conversion switched off is 50301 maintenance', async () => {
+  it('[AC-B1-15w] the platform conversion switched off is 50301 with convert.off_reason (B1-06zl)', async () => {
+    const { service } = fixture({ switchOn: false, offReason: 'maintenance' });
+    const result = await service.create(INPUT);
+    expect(result).toMatchObject({ status: 503, envelope: { code: 50301 } });
+    expect(result.envelope.data).toStrictEqual({ platform: 'jd', reason: 'maintenance' });
+  });
+
+  it('[AC-B1-06zl] switched off with no convert.off_reason: 50301 data { platform, reason=not_launched }', async () => {
     const { service } = fixture({ switchOn: false });
     const result = await service.create(INPUT);
-    expect(result).toMatchObject({
-      status: 503,
-      envelope: { code: 50301, data: { reason: 'maintenance', platform: 'jd' } },
-    });
+    expect(result).toMatchObject({ status: 503, envelope: { code: 50301 } });
+    expect(result.envelope.data).toStrictEqual({ platform: 'jd', reason: 'not_launched' });
   });
 });

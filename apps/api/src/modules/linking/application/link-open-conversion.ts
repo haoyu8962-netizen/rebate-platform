@@ -33,6 +33,11 @@ import {
 } from '../domain/rules.ts';
 import type { AttrCodeReader, Caller, CallerContext, LinkingConfigReader } from '../ports.ts';
 import { storedLinkCode } from '../infra/link-code.ts';
+import {
+  convertOffReasonKey,
+  convertPausedData,
+  type ConvertPausedData,
+} from './convert-paused.ts';
 import { attrCodeOf, clickCodeOn } from './link-registration.ts';
 import type { LinkOpenOwnerResult } from './link-open-owner.ts';
 import {
@@ -114,14 +119,22 @@ export interface LinkConversionFailure extends Error {
 /** Conversion is paused for this request (BR-PROD-10, BR-ATTR-06/08); never a cache bypass. */
 export interface LinkConversionPaused extends Error {
   readonly code: 50301;
+  /**
+   * B1-06zl: the error data { platform, reason } — set only when convert.enabled.<platform> is off
+   * (reason from convert.off_reason.<platform>); every other pause carries none.
+   */
+  readonly data?: ConvertPausedData;
 }
 
 const ATTR_CODE = /^[0-9a-z]{8}$/;
 const JD_USER_KEY_MODE = 'attr.jd.user_key_mode';
 const CLICK_CODE = { jd: 'attr.click_code.jd', pdd: 'attr.click_code.pdd' } as const;
 
-function paused(message: string): LinkConversionPaused {
-  return Object.assign(new Error(message), { code: 50301 as const });
+function paused(message: string, data?: ConvertPausedData): LinkConversionPaused {
+  return Object.assign(new Error(message), {
+    code: 50301 as const,
+    ...(data === undefined ? {} : { data }),
+  });
 }
 
 function failed(message: string, noRebateUrl: string): LinkConversionFailure {
@@ -393,6 +406,8 @@ export function createLinkOpenConversion(options: LinkConversionOptions): LinkCo
     const reads: Promise<unknown>[] = [
       config.configValue(appId, CONVERT_CACHE_TTL_SEC),
       config.configValue(appId, `convert.enabled.${platform}`),
+      // B1-06zl: the off reason a switched-off admit answers with.
+      config.configValue(appId, convertOffReasonKey(platform)),
     ];
     if (platform === 'jd' || platform === 'pdd') {
       reads.push(config.configValue(appId, JD_USER_KEY_MODE));
@@ -446,7 +461,10 @@ export function createLinkOpenConversion(options: LinkConversionOptions): LinkCo
       throw paused('linking: platform conversion not available');
     }
     if (!(await switchOn(appId, `convert.enabled.${platform}`))) {
-      throw paused('linking: platform conversion switched off');
+      throw paused(
+        'linking: platform conversion switched off',
+        await convertPausedData(config, appId, platform),
+      );
     }
   }
 

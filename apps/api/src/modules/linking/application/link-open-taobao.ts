@@ -49,6 +49,11 @@ import {
   intSetting,
   isSwitchOn,
 } from '../domain/rules.ts';
+import {
+  convertOffReasonKey,
+  convertPausedData,
+  type ConvertPausedData,
+} from './convert-paused.ts';
 import type { LinkOpenService } from './link-open.ts';
 import type { LinkOpenOwnerResult } from './link-open-owner.ts';
 import { createPddAuthorization } from './link-open-pdd-auth.ts';
@@ -99,8 +104,14 @@ const RELATION_MAX = 32;
 const ITEM_MAX = 64;
 const URL_MAX = 2048;
 
-function paused(message: string): Error & { readonly code: 50301 } {
-  return Object.assign(new Error(message), { code: 50301 as const });
+function paused(
+  message: string,
+  data?: ConvertPausedData,
+): Error & { readonly code: 50301; readonly data?: ConvertPausedData } {
+  return Object.assign(new Error(message), {
+    code: 50301 as const,
+    ...(data === undefined ? {} : { data }),
+  });
 }
 
 /** What this open's authorization settled on, per owner stage result. */
@@ -349,6 +360,8 @@ function createTaobaoConversion(
     await Promise.allSettled([
       prepareAccountSlots(options.db, pids, { appId, platform: PLATFORM, scenes }),
       config.configValue(appId, SWITCH),
+      // B1-06zl: the off reason a switched-off admit answers with.
+      config.configValue(appId, convertOffReasonKey(PLATFORM)),
       config.configValue(appId, CONVERT_CACHE_TTL_SEC),
       ...AUTH_CLIENTS.map((client) =>
         config.configValue(appId, `union.taobao.auth_methods.${client}`),
@@ -367,7 +380,10 @@ function createTaobaoConversion(
   async function admit(owner: LinkOpenOwnerResult, client: LinkOpenConversionInput['client']) {
     const value = await config.configValue(owner.link.app_id, SWITCH);
     if (!isSwitchOn(value?.value)) {
-      throw paused('linking: taobao conversion switched off');
+      throw paused(
+        'linking: taobao conversion switched off',
+        await convertPausedData(config, owner.link.app_id, PLATFORM),
+      );
     }
     if (!admission.possible(PLATFORM, client)) {
       // TODO(规划/11 §4.5): 淘宝打开路径的生产放行 — blocked on CAP-TB-11 实测。
