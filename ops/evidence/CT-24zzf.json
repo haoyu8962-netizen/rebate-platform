@@ -1,0 +1,37 @@
+{
+  "task": "CT-24zzf",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "spec_commit": "6508c4a928c4d8e510563257d76c930c8514c8aa",
+  "red_tests": [],
+  "risk_note": "RV1 contract (CT-24zzf; D10-1035, D10-1095). recon_diff_type gains blacklist_after_credit (the manual-review worklist row of BR-ATTR-26); new planned operation POST /admin/v1/recon-diffs/{recon_diff_id}/blacklist-clawback (blacklistClawbackAdminReconDiff, permission order.blacklist_clawback, totp step-up, Idempotency-Key, switch order.blacklist_clawback.enabled); error reasons blacklist_clawback_not_supported and blacklist_clawback_disabled. The difference's ref_id is {order_key}#BLACKLIST#{sorted dimensions}. The operation stays x-implementation: planned until B2-04zzl. oasdiff-accepted lists the enum widening on admin responses only, shipped with the console (D10-557).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 3,
+      "note": "Round 1 by a fresh independent Claude via claude-run.sh (Codex was not yet back as first choice for contract reviews): fail, one S1 (a bare order_key ref_id collides on recon_diffs_business_key for a later hit in the same period) and one S2 (the frozen admin-recon fixture's Record misses the new key). The S1 was fixed in round 2 by the #BLACKLIST# fingerprint; the S2 by the test-change #2993 (as-assertion). From round 2 Codex via codex-run.sh, reasoning effort medium (orchestrator notice 2026-11-09 03:03): round 2 fail, one S1 (a nested example amount written as a string, ADR-0001 4.2 item 3), fixed in round 3; round 3 pass, no findings."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b220457a5be8d8a9d790b2f4d3cf58c144d6669d",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "not re-run for this task: test/properties is unchanged from main; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

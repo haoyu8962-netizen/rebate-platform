@@ -24342,6 +24342,142 @@ paths:
                   $ref: '#/components/examples/AdminTokenExpired'
         5XX:
           $ref: '#/components/responses/ServerError'
+  /admin/v1/recon-diffs/{recon_diff_id}/blacklist-clawback:
+    post:
+      operationId: blacklistClawbackAdminReconDiff
+      tags:
+        - admin-recon
+      summary: Confirm the clawback of a credited order that hit the blacklist (黑名单复核确认扣回, R8)
+      description: |
+        The manual review conclusion of BR-ATTR-26: a CREDITED order that hit the blacklist is
+        not clawed back automatically; it is registered as a difference of type
+        `blacklist_after_credit` (source R3, `period` the accounting month `YYYY-MM` when
+        registered, `ref_type=order`, `ref_id` `{order_key}#BLACKLIST#{dimensions}` where
+        `{dimensions}` is the hit dimensions, `order_no_suffix` and / or `channel`, sorted in
+        dictionary order and joined by English commas, for example
+        `taobao:5550004#BLACKLIST#channel,order_no_suffix`; `expected_fen` the order's
+        `booked_n_fen` when registered, `actual_fen` 0, `resolution` holds the hit `dimensions`).
+        When the same order later hits a new combination of dimensions, that hit is registered
+        as another difference. Differences are listed by GET /admin/v1/recon-diffs and
+        GET /admin/v1/recon-diffs/{recon_diff_id}. This operation is the conclusion 「扣回」. The
+        conclusion 「不扣回」 is POST /admin/v1/recon-diffs/{recon_diff_id}/close, unchanged.
+        Permission point `order.blacklist_clawback` (one person can complete it, ADD-05).
+        Step-up: totp tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with
+        `data.tier=totp`.
+
+        Request: `note`, optional, 1–200 characters after trimming (else 20001 with
+        `data.fields=[note]`), recorded under `resolution.note`; the body is `{}` without it. The
+        console sends no amount. `expected_fen` of the difference is for display only: what is
+        taken back is calculated by the server when this operation runs, and may differ from it.
+
+        Order of checks: `order.blacklist_clawback` (10403 with
+        `data.reason=admin_permission_denied`) → step-up (10003) → body (20001) → an unknown
+        `recon_diff_id`, a difference of another app, or one of source R4 is 20001 with
+        `data.fields=[recon_diff_id]` (no 404) → a difference already `adjusted`, `written_off`
+        or `closed` is 20902 with `data.resource=recon_diff` → a difference whose `type` is not
+        `blacklist_after_credit`, or whose `ref_id` does not name an order of the app by its
+        `order_key` part (before `#BLACKLIST#`), is 20001 with
+        `data.fields=[recon_diff_id]` and `data.reason=blacklist_clawback_not_supported` → the
+        switch `order.blacklist_clawback.enabled` is off: 20001 with
+        `data.fields=[recon_diff_id]` and `data.reason=blacklist_clawback_disabled` → the order
+        is locked, and when its `rebate_status` is no longer CREDITED: 20902 with
+        `data.resource=order`; nothing is written, the difference stays as it is, and the handler
+        ends it with POST .../close. So when an order has several open differences, the first
+        confirmed clawback takes the order to CLAWED_BACK and confirming any of the others is
+        this 20902 with `data.resource=order`; the handler closes those with POST .../close.
+
+        Effects, in one transaction, by BR-FUND-08 「黑名单人工复核确认」: the order moves CREDITED →
+        CLAWED_BACK (R8, event BLACKLIST_CONFIRMED) with order reason code BLACKLIST, and CLAWBACK
+        vouchers with sub_type FULL are posted. All amounts are calculated by the server as R8
+        does for a whole-order clawback. The voucher event id is `B{recon_diff_id}`, part of the
+        voucher's unique key, so a redelivery never claws back twice. The `status` of the
+        difference becomes `adjusted`, `closed_at` and `updated_at` the server's current time,
+        `handler_id` the caller, and `resolution` keeps its keys and adds `clawback` (`operator`,
+        `clawed_back_at` and `clawed_back_fen`, the total in fen as an int64 JSON integer, the
+        same type as `data.clawed_back_fen`) and the trimmed `note` when given.
+        `expected_fen`, `actual_fen` and `diff_fen` stay as registered. Writes an audit record
+        (action recon_diff_blacklist_clawback, with the `order_key`, `clawed_back_fen`, the
+        order's `rebate_status` before and after and, before and after, the `status` of the
+        difference; no personal data). No withdrawal is frozen and no withdrawal hold is released
+        (BR-ATTR-26 asks for a manual review only).
+
+        `Idempotency-Key` is required: same key and body → the first result (the same
+        `clawed_back_fen`); same key with another body → 20901; same key while still running →
+        40901. A new key for a difference that is already `adjusted` is 20902. The step-up token
+        is a header and not part of the body hash, so a replay after a 10003 keeps its key.
+      x-auth: admin
+      x-idempotent: true
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10003
+        - 10403
+        - 20001
+        - 20901
+        - 20902
+        - 40901
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminReconDiffIdPath'
+        - $ref: '#/components/parameters/AdminStepUpToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminReconDiffBlacklistClawbackRequest'
+            example:
+              note: 复核确认命中黑名单，按 R8 扣回
+      responses:
+        '200':
+          description: The difference after the clawback with the total taken back, or the first result of the same key.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminReconDiffBlacklistClawbackResponse'
+              examples:
+                clawedBack:
+                  $ref: '#/components/examples/AdminReconDiffBlacklistClawbackDone'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not clawed back (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                stepUpRequired:
+                  $ref: '#/components/examples/AdminStepUpRequiredTotp'
+                bodyInvalid:
+                  $ref: '#/components/examples/AdminReconDiffBlacklistClawbackNoteInvalid'
+                reconDiffInvalid:
+                  $ref: '#/components/examples/AdminReconDiffIdInvalid'
+                notSupported:
+                  $ref: '#/components/examples/AdminReconDiffBlacklistClawbackNotSupported'
+                switchOff:
+                  $ref: '#/components/examples/AdminReconDiffBlacklistClawbackDisabled'
+                orderNotCredited:
+                  $ref: '#/components/examples/AdminReconDiffBlacklistClawbackOrderConflict'
+                alreadyHandled:
+                  $ref: '#/components/examples/AdminReconDiffConflict'
+                idempotencyConflict:
+                  $ref: '#/components/examples/AdminReconDiffBlacklistClawbackIdempotencyConflict'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
   /admin/v1/adjustments:
     get:
       operationId: adminListAdjustments
@@ -34271,6 +34407,82 @@ components:
           resource: order
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminReconDiffRestoreIdempotencyConflict:
+      summary: 20901 the same Idempotency-Key with another body
+      value:
+        code: 20901
+        msg: 请求内容有变化，请重新提交
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminReconDiffBlacklistClawbackDone:
+      summary: The review confirmed the blacklist hit; the order was clawed back by R8 and the difference is adjusted
+      value:
+        code: 0
+        msg: ''
+        data:
+          recon_diff:
+            recon_diff_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8e21
+            source: R3
+            type: blacklist_after_credit
+            period: '2026-12'
+            ref_type: order
+            ref_id: 'taobao:5550004#BLACKLIST#channel,order_no_suffix'
+            expected_fen: 1000
+            actual_fen: 0
+            diff_fen: 1000
+            status: adjusted
+            created_at: '2026-12-05T10:00:00+08:00'
+            closed_at: '2026-12-06T09:30:00+08:00'
+            handler_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01
+            updated_at: '2026-12-06T09:30:00+08:00'
+            resolution:
+              dimensions:
+                - channel
+                - order_no_suffix
+              clawback:
+                operator: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01
+                clawed_back_at: '2026-12-06T09:30:00+08:00'
+                clawed_back_fen: 700
+              note: 复核确认命中黑名单，按 R8 扣回
+          clawed_back_fen: 700
+          rebate_status_after: CLAWED_BACK
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminReconDiffBlacklistClawbackNoteInvalid:
+      summary: 20001 note empty after trimming, or longer than 200 characters
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - note
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminReconDiffBlacklistClawbackNotSupported:
+      summary: 20001 the difference is not a blacklist_after_credit difference of an order of the app
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - recon_diff_id
+          reason: blacklist_clawback_not_supported
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminReconDiffBlacklistClawbackDisabled:
+      summary: 20001 the switch order.blacklist_clawback.enabled is off; nothing is written
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - recon_diff_id
+          reason: blacklist_clawback_disabled
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminReconDiffBlacklistClawbackOrderConflict:
+      summary: 20902 the order is no longer CREDITED; the difference stays as it is and is ended with POST .../close
+      value:
+        code: 20902
+        msg: 状态已变化，请刷新后重试
+        data:
+          resource: order
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminReconDiffBlacklistClawbackIdempotencyConflict:
       summary: 20901 the same Idempotency-Key with another body
       value:
         code: 20901
@@ -52662,6 +52874,7 @@ components:
         - settle_missing
         - appeal_restore
         - estimate_changed_after_credit
+        - blacklist_after_credit
     AdminReconDiffSource:
       type: string
       description: Source of a difference listed under /admin/v1/recon-diffs (recon_diffs.source without R4) — R1 联盟对账, R2 通道对账, R3 内部日终与月末核对.
@@ -53027,6 +53240,54 @@ components:
           type: string
         data:
           $ref: '#/components/schemas/AdminReconDiffRestore'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminReconDiffBlacklistClawbackRequest:
+      type: object
+      description: |
+        Body of POST /admin/v1/recon-diffs/{recon_diff_id}/blacklist-clawback. The console sends no
+        amount: the amount is calculated by the server (BR-FUND-08, R8); `expected_fen` is for display only.
+      additionalProperties: false
+      properties:
+        note:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Optional operator note, 1–200 characters after trimming (else 20001 with data.fields=[note]); recorded under resolution.note.
+    AdminReconDiffBlacklistClawback:
+      type: object
+      additionalProperties: false
+      required:
+        - recon_diff
+        - clawed_back_fen
+        - rebate_status_after
+      properties:
+        recon_diff:
+          $ref: '#/components/schemas/AdminReconDiffDetail'
+        clawed_back_fen:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The total of the beneficiaries' shares taken back by this call under R8 (a share booked to bad debt for a deleted beneficiary, BR-FUND-08, counts; the platform's part does not); 0 when no beneficiary had a booked share. Never `expected_fen` taken as is.
+        rebate_status_after:
+          description: The order's `rebate_status` after the clawback, always CLAWED_BACK (R8).
+          allOf:
+            - $ref: '#/components/schemas/AdminOrderRebateStatus'
+    AdminReconDiffBlacklistClawbackResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminReconDiffBlacklistClawback'
         trace_id:
           $ref: '#/components/schemas/TraceId'
     AdminAdjustmentStatus:

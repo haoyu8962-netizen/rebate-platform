@@ -2535,6 +2535,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "blacklistClawbackAdminReconDiff",
+    "method": "POST",
+    "path": "/admin/v1/recon-diffs/:recon_diff_id/blacklist-clawback",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": true
+  },
+  {
     "operationId": "adminListAdjustments",
     "method": "GET",
     "path": "/admin/v1/adjustments",

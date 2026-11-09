@@ -16848,7 +16848,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "settle_amount_mismatch",
             "settle_missing",
             "appeal_restore",
-            "estimate_changed_after_credit"
+            "estimate_changed_after_credit",
+            "blacklist_after_credit"
           ]
         },
         "source": {

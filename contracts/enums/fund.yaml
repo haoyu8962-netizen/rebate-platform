@@ -307,6 +307,7 @@ enums:
       settle_missing: 应结未结
       appeal_restore: 申诉撤销后恢复订单
       estimate_changed_after_credit: 入账后只有预估佣金变化（BR-FUND-01 R9b；开关关闭时不生成）
+      blacklist_after_credit: 已入账订单命中黑名单待复核（BR-ATTR-26、BR-FUND-08）
       pay_mismatch: 收款对账不一致（R4）
       pay_anomaly: 收款异常（R4）
   payout_batch_item_result:

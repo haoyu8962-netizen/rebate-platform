@@ -82,3 +82,10 @@ POST /admin/v1/orders/{order_id}/hold the response property `data/commission_spl
 POST /admin/v1/orders/{order_id}/unhold the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
 POST /admin/v1/orders/{order_id}/reason-sub the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
 POST /admin/v1/orders/{order_id}/reassign the response property `data/commission_split/anyOf[#/components/schemas/AdminOrderCommissionSplit]/reserve_bp` became nullable for the status `200`
+# CT-24zzf (B2-04zzl, D10-1035 / D10-1095): AdminReconDiffType gains blacklist_after_credit. Only /admin/v1/**
+# responses widen, shipped together with the console (D10-557, D10-619 precedent).
+GET /admin/v1/recon-diffs added the new `blacklist_after_credit` enum value to the `data/items/items/type` response property for the response status `200`
+GET /admin/v1/recon-diffs/{recon_diff_id} added the new `blacklist_after_credit` enum value to the `data/type` response property for the response status `200`
+POST /admin/v1/recon-diffs/{recon_diff_id}/close added the new `blacklist_after_credit` enum value to the `data/recon_diff/type` response property for the response status `200`
+POST /admin/v1/recon-diffs/{recon_diff_id}/restore added the new `blacklist_after_credit` enum value to the `data/recon_diff/type` response property for the response status `200`
+POST /admin/v1/recon-diffs/{recon_diff_id}/write-off added the new `blacklist_after_credit` enum value to the `data/recon_diff/type` response property for the response status `200`

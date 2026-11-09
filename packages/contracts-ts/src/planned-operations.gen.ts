@@ -12,6 +12,7 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "adminListInvitees",
   "adminSearch",
   "bindOauthIdentity",
+  "blacklistClawbackAdminReconDiff",
   "listAgentSessionMessages",
   "loginByHuawei",
   "reportAgentMessage",
