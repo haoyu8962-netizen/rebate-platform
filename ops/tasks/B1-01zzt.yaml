@@ -23,4 +23,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/config-sign-key-kms/**'
-status: todo
+status: done
+pr: 3029
