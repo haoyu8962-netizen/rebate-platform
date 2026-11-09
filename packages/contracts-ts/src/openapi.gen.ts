@@ -8384,6 +8384,11 @@ export interface paths {
          *     check on it nor writes it: a close carrying `outcome` still closes the difference, with
          *     no conclusion and for good. Clients must not send `outcome` before B2-09h.
          *
+         *     The route schema runs first (D10-590 ⑥, D10-1132, as every console route): a body that
+         *     fails it (for example a missing `reason`, an extra key or an `outcome` outside the enum) is
+         *     20001 before `fund.recon`, with or without that permission, and writes nothing; a
+         *     well-formed body follows the order below, where the body step covers the checks after the
+         *     schema (for example a `reason` that is blank after trimming).
          *     Order of checks: `fund.recon` (10403 with `data.reason=admin_permission_denied`) → body
          *     (20001 with `data.fields=[reason]` or `data.fields=[outcome]`) → an unknown
          *     `recon_diff_id`, a difference of another app, or one of source R4 (see
@@ -8445,6 +8450,13 @@ export interface paths {
          *     result, amount or evidence of its own: the evidence is the bill line the reconciliation
          *     stored with the difference.
          *
+         *     The route schema runs first (D10-590 ⑥, D10-1132, as every console route): a body that
+         *     fails it (for example a missing `expected_withdrawal_status`, an
+         *     `expected_withdrawal_status` other than `APPROVED`, an extra key, or a non-string or
+         *     over-long `note`) is 20001 before `payout.execute` and step-up, with or without that
+         *     permission or a step-up token, and writes nothing; a well-formed body follows the order
+         *     below, where the body step covers the checks after the schema (for example a `note` that
+         *     is blank after trimming).
          *     Order of checks: `payout.execute` (10403 with `data.reason=admin_permission_denied`) →
          *     step-up (10003) → body (20001) → an unknown `recon_diff_id`, a difference of another
          *     app, or one of source R4 is 20001 with `data.fields=[recon_diff_id]` (no 404) → a
@@ -8534,6 +8546,11 @@ export interface paths {
          *     console sends no amount. `expected_fen` of the difference is for display only: what is
          *     paid is calculated by the server when this operation runs, and may differ from it.
          *
+         *     The route schema runs first (D10-590 ⑥, D10-1132, as every console route): a body that
+         *     fails it (for example an extra key, or a non-string or over-long `note`) is 20001 before
+         *     `order.restore` and step-up, with or without that permission or a step-up token, and
+         *     writes nothing; a well-formed body follows the order below, where the body step covers the
+         *     checks after the schema (for example a `note` that is blank after trimming).
          *     Order of checks: `order.restore` (10403 with `data.reason=admin_permission_denied`) →
          *     step-up (10003) → body (20001) → an unknown `recon_diff_id`, a difference of another app,
          *     or one of source R4 is 20001 with `data.fields=[recon_diff_id]` (no 404) → a difference
@@ -19805,7 +19822,7 @@ export interface components {
          */
         AdminReconDiffWriteOffRequest: {
             /**
-             * @description Compare-and-set on the withdrawal status; only APPROVED (subset of withdrawal_status), else 20902 with data.resource=withdrawal.
+             * @description The withdrawal status the console showed; only APPROVED (subset of withdrawal_status); any other value is 20001 (route schema; data.fields=[expected_withdrawal_status]); a withdrawal whose current status is no longer APPROVED is 20902 with data.resource=withdrawal (compare-and-set, BR-WDR-08).
              * @enum {string}
              */
             expected_withdrawal_status: "APPROVED";

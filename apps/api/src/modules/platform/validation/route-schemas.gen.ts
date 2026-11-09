@@ -17038,7 +17038,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       "properties": {
         "expected_withdrawal_status": {
           "type": "string",
-          "description": "Compare-and-set on the withdrawal status; only APPROVED (subset of withdrawal_status), else 20902 with data.resource=withdrawal.",
+          "description": "The withdrawal status the console showed; only APPROVED (subset of withdrawal_status); any other value is 20001 (route schema; data.fields=[expected_withdrawal_status]); a withdrawal whose current status is no longer APPROVED is 20902 with data.resource=withdrawal (compare-and-set, BR-WDR-08).",
           "enum": [
             "APPROVED"
           ]

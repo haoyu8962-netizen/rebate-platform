@@ -1,0 +1,37 @@
+{
+  "risk_note": "Contract text only (D10-1132, after D10-590 ⑥ / D10-591; CT-26n precedent). restoreAdminReconDiff, closeAdminReconDiff and writeOffAdminReconDiff each get one paragraph before their Order of checks: a body that fails the route schema is 20001 at the route layer, before the permission point and step-up, and writes nothing; a well-formed body follows the order below. Matches the code (all three controllers mount the full contract RouteSchema and run AdminOperationGuard inside the handler; restore / close measured on main by B2-09zi's rule tests: no permission + schema-invalid body gets 400 / 20001, not 403). Merged in by the orchestrator (08:21): AdminReconDiffWriteOffRequest.expected_withdrawal_status said 'else 20902 with data.resource=withdrawal'; per code (route schema enum [APPROVED]; admin-recon-diff-write-off.ts:223 also 20001 [expected_withdrawal_status]) any other value is 20001, and 20902 withdrawal is only when the withdrawal's current status is no longer APPROVED (compare-and-set). No schema, error code, enum or code change; only description text in contracts/openapi.yaml and the regenerated packages/contracts-ts/src/openapi.gen.ts and route-schemas.gen.ts (route generator script). Host: contracts:check 0. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 3,
+      "note": "Codex via codex-run.sh: r1 pass (order paragraphs); r2 incremental pass with 1 S2 (route-schemas.gen.ts still carried the old expected_withdrawal_status description) fixed by running generate-route-schemas.ts; r3 incremental pass, no findings. couli-runs/CT-26zg/review-codex-contract-r{1,2,3}.json."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-26zg",
+  "spec_commit": "3ef020b8d7d3e0cfef879509c371de510eec565f",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2080ecec56fb20f41f09ca3e2f277b558f1779ff",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}
