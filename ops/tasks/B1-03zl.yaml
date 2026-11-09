@@ -1,0 +1,26 @@
+id: B1-03zl
+repo: rebate-platform
+title: 用户端提交订单申诉（POST /v1/me/appeals target_type=order，BR-ID-36 ②）——target_id=order_id，不存在或非本人 30701，本人但未被风控作废 20001，资格走 voidedOrderOwner；同一订单最多 1 条处理中（再提交返回原单），按订单计次 30418；不改账户风险状态；幂等与审计同账户申诉
+type: impl
+# 2026-11-09 入账（identity，编排 D10-1181 ②；B1-03i 台账写明「B1-09 入账后另起一个 B1-03 后缀补上」，契约 submitAppeal 早已写 order）。
+# 现状：risk/application/appeals.ts:18-20 对 target_type=order 一律 20001（TODO blocked on B1-08 / B1-09）。voidedOrderOwner 已有（app.module.ts adminAppealWritePorts：VOID + BLACKLIST 的 owner，B1-03ze）；
+# 它对「不存在」与「存在但未作废」都返回 null，所以 30701（不存在 / 非本人）与 20001（本人但不可申诉）需另读订单归属来分（同 app、按 order_id）。CLAWED_BACK 的放开由 funds B2-09gg 做，本单不管。
+# appeal_pending 派生已在（risk/application/order-appeal-read.ts，B1-09p → settlement order-figures → GET /v1/orders/{order_id}），本单核通即可。判定顺序照契约：20001 / 30701 → 同目标处理中返回原单 → 计次用尽 30418 → 新建。
+refs: [BR-ID-36]
+refs_hash:
+  BR-ID-36: 2758a53910fa
+deps: [B1-03i, B1-03ze, B1-09p]
+paths:
+  - 'apps/api/src/modules/risk/application/appeals.ts'
+  - 'apps/api/src/modules/risk/application/appeals.test.ts'
+  - 'apps/api/src/modules/risk/http/public/appeals.controller.ts'
+  - 'apps/api/src/modules/risk/risk.module.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/risk/order-appeals/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/risk/order-appeals/**'
+status: todo
