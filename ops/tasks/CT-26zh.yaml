@@ -1,0 +1,17 @@
+id: CT-26zh
+repo: rebate-platform
+title: 系统权限清单登记鸿蒙 ohos.permission.VIBRATE（触感反馈，system_grant 不弹窗）与用途文案键 perm.vibrate.system_purpose（D10-1160）；iOS 不登记，安卓按实际声明
+type: contract
+# 2026-11-09 content 入账（D10-1160，承 D10-1153 ③）。specs/system-permissions.yaml 是三端系统权限唯一来源（生成器写鸿蒙模块配置与隐私中心条目，CT-05 / QA-07 断言产物权限集合与清单一致），鸿蒙 FEEL-KIT 已在 module.json5 声明 VIBRATE，不登记即红。加一条 harmony / ohos.permission.VIBRATE / purpose_key perm.vibrate.system_purpose / MVP / 三种构建 / own，version 递增；contracts/texts.default.json 加该键默认文案。03 §4.9 权限类型与 BR-TEXT-14 表 D 由编排下一批规划回写（D10-1160），refs 暂空。隐私中心向量（specs/client/me-vectors.json 鸿蒙 permissionRows）是否随之加行，与 native-harmony 对齐后定。须在鸿蒙集成分支推 main 前合。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'specs/system-permissions.yaml'
+  - 'contracts/texts.default.json'
+  - 'specs/client/me-vectors.json'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
