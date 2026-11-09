@@ -36,4 +36,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/identity/merge-account/**'
   - 'test/spec/linking/merge-release/**'
-status: todo
+status: done
+pr: 3014
