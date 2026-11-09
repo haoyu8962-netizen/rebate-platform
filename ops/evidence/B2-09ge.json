@@ -1,0 +1,37 @@
+{
+  "risk_note": "test-change, tester none (withdraw lane, model Claude Opus 5.5; orchestrator ruling D10-1135, D10-828 form): B2-09gd's money r1 S1 ① was fixed in the implementation with the rule-test rounds used up; this adds the regression. New directory only, no existing file or implementation changed; written by a fresh independent Claude subagent. A VOID order with commission_version 1 and no commission_splits row (as a sync leaves it) restores through the real admin entry, gets its snapshot and then credits through the real settle entry. Real PostgreSQL 2/2; mutation with the check put back to commission_version >= 1: 0/2, both red, reverted. Container --fast verify not run per D10-1184 (host root tsc and CI instead).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Read-only review of the test-change by Codex, effort medium (tester none, so the money type is used as for B2-05s, B2-09gc). Verdict pass, no findings; the reviewer confirmed the fixture and the real restore and settle entries. One remark without a finding: in the settled case the fixture's order of writes differs from a sync's, which does not change the snapshot-missing assertion."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "B2-09ge",
+  "runs": [],
+  "spec_commit": "482364653b485f2ab28e8a5af52824f9502a6c25",
+  "spec_ref": "03383a10b26e6a9f0b154e495214a4d6555bafce",
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "22cccc79134334a4a74c5cbc1b50788cb0647dac",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}
