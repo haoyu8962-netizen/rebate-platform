@@ -417,3 +417,9 @@ approvals:
     granted: true
     date: '2026-11-09'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（测试与评审轮次属门禁流程小改动；money 评审三轮未过，按负责人 2026-10-19 要求重新考虑方案，换成单一定义；只影响告警指标，不改任何金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产），事后向负责人一句话报告；D10-1203，同任务前次例外 approvals 63、65。'
+  - id: 67
+    row: 4
+    title: 'ADR-0004 CI 分流第一批（CT-06zzzzp）：ci.yml 的 verify-props-sha-1/2/3 三个作业 runs-on 改固定路由表达式（仓库变量 SELF_HOSTED_CI 为 on 且是 push 或本仓库 PR 时走局域网一次性虚拟机，否则 ubuntu-latest），check-workflows.ts 与工具测试按 ADR §2.6 收紧约束；合并门槛和必需检查不变'
+    granted: true
+    date: '2026-11-10'
+    note: '负责人 2026-11-09 在对话中确认「启用 CI 分流」，ADR-0004 已采纳（zora4523-bot/couli#311），外部 PR 审批策略已由负责人改为 all_external_contributors；编排按 approvals 16 / 24 核 diff 后加标签；D10-1196、D10-1206。'
