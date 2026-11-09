@@ -181,7 +181,7 @@ it('[AC-F1-07b#23] lookup 返回体与详情接口逐字段相同（含风控与
     row_version: 1,
   });
   const taobao = await binding(h, target, 'taobao', { status: 'active', createdAt: at(3) });
-  const expected = detail(target, risk, [taobao]);
+  const expected = detail(target, { ...risk, reason: null }, [taobao]);
   const token = await member(h, f, ['user.lookup']);
   const byUid = await ok<Detail>(await get(f, url(LOOKUP, { uid: target.id }), { token }), LOOKUP);
   const byPhone = await get(f, url(LOOKUP, { phone: target.phone! }), { token });

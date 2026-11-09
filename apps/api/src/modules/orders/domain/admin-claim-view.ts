@@ -3,8 +3,31 @@
 // the q normalisation, the per-status counts, the field-by-field comparison of what the user
 // submitted with what the union reported, and the evidence link list. No database, clock or
 // logging here.
+import type { Schema } from '@couli/contracts-ts';
 import { accountingDate } from '@couli/domain';
 import { claimCompareValue } from './claim-rules.ts';
+
+/** What blanking reads of the admin actor; `permissions` is absent when they could not be read. */
+export interface AdminFieldAccess {
+  readonly isSuper: boolean;
+  readonly permissions?: readonly string[];
+}
+
+/** A super admin holds every point; absent points count as none. Narrows, never lets in. */
+export function holdsPoint(access: AdminFieldAccess, point: string): boolean {
+  return access.isSuper || (access.permissions?.includes(point) ?? false);
+}
+
+/**
+ * adminGetClaim (D10-1048 ②; BR-TEXT-08 internal note): `reason` is null for an account without
+ * order.claim; items[].reject_reason, matches and evidence_links are untouched.
+ */
+export function blankAdminClaimDetail(
+  detail: Schema<'AdminClaimDetail'>,
+  access: AdminFieldAccess,
+): Schema<'AdminClaimDetail'> {
+  return holdsPoint(access, 'order.claim') ? detail : { ...detail, reason: null };
+}
 
 /** claim_status values in the contract's counts order. */
 export const ADMIN_CLAIM_STATUSES = [

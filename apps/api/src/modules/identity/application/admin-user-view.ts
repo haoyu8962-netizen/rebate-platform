@@ -1,6 +1,7 @@
 import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Selectable } from 'kysely';
+import type { AdminActor } from '../../platform/index.ts';
 import { maskPhone } from '../domain/mask-phone.ts';
 
 /** Internal read result; decrypted phone must never be returned as a user view. */
@@ -29,6 +30,24 @@ export interface AdminUserViewReader {
     readonly appId: string;
     readonly userId: string;
   }): Promise<AdminUserViewSource | null>;
+}
+
+/** specs/permissions.yaml: holding any one of these shows risk.reason. */
+const RISK_REASON_POINTS = ['risk.freeze', 'risk.ban', 'risk.blocklist', 'risk.appeal'] as const;
+
+/**
+ * adminGetUser / adminLookupUser (D10-1048 ①; BR-TEXT-08 internal note): risk.reason is null for an
+ * account holding none of the risk points; every other field, union_bindings[].reason included, is
+ * untouched. Points that could not be read count as none. Only narrows the answer, never lets in.
+ */
+export function blankAdminUserDetail(
+  detail: Schema<'AdminUserDetail'>,
+  access: Pick<AdminActor, 'isSuper' | 'permissions'>,
+): Schema<'AdminUserDetail'> {
+  if (access.isSuper || RISK_REASON_POINTS.some((point) => access.permissions?.includes(point))) {
+    return detail;
+  }
+  return { ...detail, risk: { ...detail.risk, reason: null } };
 }
 
 /** Both permitted view shapes whitelist fields; neither permits plaintext, even for a super. */

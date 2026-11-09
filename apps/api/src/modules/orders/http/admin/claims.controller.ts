@@ -13,6 +13,7 @@ import {
   AdminOperationGuard,
   contractRouteSchema,
   fieldsErrorEnvelope,
+  type AdminActor,
   type CheckedRequest,
 } from '../../../platform/index.ts';
 import {
@@ -20,6 +21,7 @@ import {
   AdminClaimsFieldsError,
   type AdminClaimListQuery,
 } from '../../application/admin-claims.ts';
+import { blankAdminClaimDetail } from '../../domain/admin-claim-view.ts';
 
 interface ClaimsRequest extends CheckedRequest {
   readonly id: string;
@@ -52,7 +54,9 @@ export class AdminClaimsController {
     query: AdminClaimListQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminClaimPageResponse'>> {
-    return this.run(request, reply, query.user_id, (appId) => this.#claims.list(appId, query));
+    return this.run(request, reply, query.user_id, false, (actor) =>
+      this.#claims.list(actor.appId, query),
+    );
   }
 
   detail(
@@ -61,8 +65,8 @@ export class AdminClaimsController {
     query: DetailQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminClaimDetailResponse'>> {
-    return this.run(request, reply, query.user_id, (appId) =>
-      this.#claims.detail(appId, claimId, query.user_id),
+    return this.run(request, reply, query.user_id, true, async (actor) =>
+      blankAdminClaimDetail(await this.#claims.detail(actor.appId, claimId, query.user_id), actor),
     );
   }
 
@@ -70,15 +74,16 @@ export class AdminClaimsController {
     request: ClaimsRequest,
     reply: HeaderReply,
     userId: string | undefined,
-    read: (appId: string) => Promise<T>,
+    withPermissions: boolean,
+    read: (actor: AdminActor) => Promise<T>,
   ): Promise<{ code: 0; msg: string; data: T; trace_id: string }> {
     reply.header('Cache-Control', 'no-store');
     let response: { code: 0; msg: string; data: T; trace_id: string } | undefined;
     await this.#guard.run(
-      { request, permission: permissionOf(userId), readOnly: true },
+      { request, permission: permissionOf(userId), readOnly: true, withPermissions },
       async (actor) => {
         try {
-          response = { code: 0, msg: '', data: await read(actor.appId), trace_id: request.id };
+          response = { code: 0, msg: '', data: await read(actor), trace_id: request.id };
           return { statusCode: 200, body: response };
         } catch (error) {
           if (!(error instanceof AdminClaimsFieldsError)) throw error;

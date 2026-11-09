@@ -3,6 +3,26 @@
 // flags of a row (status_locked derived from rebate_status), the q normalization, the derived
 // unmapped_pending_open and the latest manual hold (方案 K-7). No Nest, no data access.
 import type { Schema } from '@couli/contracts-ts';
+import { holdsPoint, type AdminFieldAccess } from './admin-claim-view.ts';
+
+/**
+ * adminGetOrder (D10-1048 ②; BR-TEXT-08 internal note): last_hold_note, commission_rate_bp and
+ * commission_split.reserve_bp are null for an account without order.view; the amounts, the enums
+ * and the beneficiaries' shares are untouched.
+ */
+export function blankAdminOrderDetail(
+  detail: Schema<'AdminOrderDetail'>,
+  access: AdminFieldAccess,
+): Schema<'AdminOrderDetail'> {
+  if (holdsPoint(access, 'order.view')) return detail;
+  return {
+    ...detail,
+    last_hold_note: null,
+    commission_rate_bp: null,
+    commission_split:
+      detail.commission_split === null ? null : { ...detail.commission_split, reserve_bp: null },
+  };
+}
 
 /** The orders columns a row's flags come from. */
 export interface AdminOrderFlagSource {

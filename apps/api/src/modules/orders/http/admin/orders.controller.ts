@@ -13,6 +13,7 @@ import {
   AdminOperationGuard,
   contractRouteSchema,
   fieldsErrorEnvelope,
+  type AdminActor,
   type CheckedRequest,
 } from '../../../platform/index.ts';
 import {
@@ -20,6 +21,7 @@ import {
   AdminOrdersFieldsError,
   type AdminOrderListQuery,
 } from '../../application/admin-orders.ts';
+import { blankAdminOrderDetail } from '../../domain/admin-order-view.ts';
 
 interface OrdersRequest extends CheckedRequest {
   readonly id: string;
@@ -52,7 +54,9 @@ export class AdminOrdersController {
     query: AdminOrderListQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminOrderPageResponse'>> {
-    return this.run(request, reply, query.user_id, (appId) => this.#orders.list(appId, query));
+    return this.run(request, reply, query.user_id, false, (actor) =>
+      this.#orders.list(actor.appId, query),
+    );
   }
 
   detail(
@@ -61,8 +65,8 @@ export class AdminOrdersController {
     query: DetailQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminOrderDetailResponse'>> {
-    return this.run(request, reply, query.user_id, (appId) =>
-      this.#orders.detail(appId, orderId, query.user_id),
+    return this.run(request, reply, query.user_id, true, async (actor) =>
+      blankAdminOrderDetail(await this.#orders.detail(actor.appId, orderId, query.user_id), actor),
     );
   }
 
@@ -70,15 +74,16 @@ export class AdminOrdersController {
     request: OrdersRequest,
     reply: HeaderReply,
     userId: string | undefined,
-    read: (appId: string) => Promise<T>,
+    withPermissions: boolean,
+    read: (actor: AdminActor) => Promise<T>,
   ): Promise<{ code: 0; msg: string; data: T; trace_id: string }> {
     reply.header('Cache-Control', 'no-store');
     let response: { code: 0; msg: string; data: T; trace_id: string } | undefined;
     await this.#guard.run(
-      { request, permission: permissionOf(userId), readOnly: true },
+      { request, permission: permissionOf(userId), readOnly: true, withPermissions },
       async (actor) => {
         try {
-          response = { code: 0, msg: '', data: await read(actor.appId), trace_id: request.id };
+          response = { code: 0, msg: '', data: await read(actor), trace_id: request.id };
           return { statusCode: 200, body: response };
         } catch (error) {
           if (!(error instanceof AdminOrdersFieldsError)) throw error;

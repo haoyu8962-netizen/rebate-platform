@@ -5,8 +5,10 @@ import {
   AdminOperationGuard,
   contractRouteSchema,
   fieldsErrorEnvelope,
+  type AdminActor,
   type CheckedRequest,
 } from '../../../platform/index.ts';
+import { blankAdminUserDetail } from '../../application/admin-user-view.ts';
 import {
   AdminUsers,
   AdminUsersFieldsError,
@@ -34,7 +36,9 @@ export class AdminUsersController {
     query: AdminUserListQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminUserPageResponse'>> {
-    return this.run(request, reply, 'user.list', (appId) => this.users.list(appId, query));
+    return this.run(request, reply, 'user.list', false, (actor) =>
+      this.users.list(actor.appId, query),
+    );
   }
 
   lookup(
@@ -42,7 +46,9 @@ export class AdminUsersController {
     query: AdminUserLookupQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminUserDetailResponse'>> {
-    return this.run(request, reply, 'user.lookup', (appId) => this.users.lookup(appId, query));
+    return this.run(request, reply, 'user.lookup', true, async (actor) =>
+      blankAdminUserDetail(await this.users.lookup(actor.appId, query), actor),
+    );
   }
 
   detail(
@@ -50,8 +56,8 @@ export class AdminUsersController {
     userId: string,
     reply: HeaderReply,
   ): Promise<Schema<'AdminUserDetailResponse'>> {
-    return this.run(request, reply, ['user.list', 'user.lookup'], (appId) =>
-      this.users.detail(appId, userId),
+    return this.run(request, reply, ['user.list', 'user.lookup'], true, async (actor) =>
+      blankAdminUserDetail(await this.users.detail(actor.appId, userId), actor),
     );
   }
 
@@ -59,29 +65,33 @@ export class AdminUsersController {
     request: UsersRequest,
     reply: HeaderReply,
     permission: string | readonly string[],
-    read: (appId: string) => Promise<T>,
+    withPermissions: boolean,
+    read: (actor: AdminActor) => Promise<T>,
   ): Promise<{ code: 0; msg: string; data: T; trace_id: string }> {
     reply.header('Cache-Control', 'no-store');
     let response: { code: 0; msg: string; data: T; trace_id: string } | undefined;
-    await this.guard.run({ request, permission, readOnly: true }, async (actor) => {
-      try {
-        response = { code: 0, msg: '', data: await read(actor.appId), trace_id: request.id };
-        return { statusCode: 200, body: response };
-      } catch (error) {
-        if (!(error instanceof AdminUsersFieldsError)) throw error;
-        const refused = fieldsErrorEnvelope(error.fields, request.id);
-        throw new HttpException(
-          {
-            ...refused.body,
-            data: {
-              ...refused.body.data,
-              ...(error.reason === undefined ? {} : { reason: error.reason }),
+    await this.guard.run(
+      { request, permission, readOnly: true, withPermissions },
+      async (actor) => {
+        try {
+          response = { code: 0, msg: '', data: await read(actor), trace_id: request.id };
+          return { statusCode: 200, body: response };
+        } catch (error) {
+          if (!(error instanceof AdminUsersFieldsError)) throw error;
+          const refused = fieldsErrorEnvelope(error.fields, request.id);
+          throw new HttpException(
+            {
+              ...refused.body,
+              data: {
+                ...refused.body.data,
+                ...(error.reason === undefined ? {} : { reason: error.reason }),
+              },
             },
-          },
-          refused.statusCode,
-        );
-      }
-    });
+            refused.statusCode,
+          );
+        }
+      },
+    );
     if (response === undefined) throw new Error('identity: admin guard returned without an answer');
     return response;
   }

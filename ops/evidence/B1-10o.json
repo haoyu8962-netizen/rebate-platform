@@ -1,0 +1,112 @@
+{
+  "risk_note": "RV2 identity and orders admin reads (FU-ADMIN-LOOKUP-FIELD-AUDIT; contract CT-24zzd; rulings D10-1042, D10-1048 ①②, D10-1074, D10-1084). Accounts without the matching business point get internal text and platform ratios blanked: adminGetUser / adminLookupUser risk.reason without any risk.* point; adminGetOrder last_hold_note, commission_rate_bp and commission_split.reserve_bp without order.view; adminGetClaim reason without order.claim. Whether to blank is decided once per endpoint from actor.permissions (handed over through withPermissions); it never decides who is let in, and a non-super actor without permissions is blanked. Blanking happens in the controller after the read; enum reasons, evidence, masked values and amounts stay. One frozen test changes its expectation by ledger declaration: [AC-F1-07b#23] now expects risk.reason null for a user.lookup-only account (D10-1084, tighten_only). Integration lookup-blank-fields plus the frozen admin-users, admin-orders-read, claims and guard directories 172/172. Write endpoints' read-backs are B1-10p.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (D10-1075, medium) over the whole implementation from the last rule-test commit: pass with no findings. Static, nothing executed by Codex. One out-of-scope S1 (write endpoints' read-back still shows the blanked fields) was ruled a separate task by the orchestrator (B1-10p, FU-ADMIN-WRITE-READBACK-BLANK). couli-runs/B1-10o/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude each round (D10-848, D10-1080). Round 1 pass with two S2 (fixture gaps) and one out-of-scope S1 (frozen [AC-F1-07b#23] pinned the old behaviour, ruled D10-1084). Round 2 closed the S2s. Round 3 is the read-only re-check D10-1084 asks for: the frozen test's diff is exactly one line. Red on the round-2 spec commit: red/1 ok, 13 red; red/2 on the round-3 spec commit ok, the modify_existing block left out of the expected list by design."
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/identity/admin-users/lookup.int.test.ts",
+      "test": "[AC-F1-07b#23] lookup 返回体与详情接口逐字段相同（含风控与联盟绑定，手机号脱敏）",
+      "reason": "tighten_only",
+      "before": "it('[AC-F1-07b#23] lookup 返回体与详情接口逐字段相同（含风控与联盟绑定，手机号脱敏）', async () => {\n  const f = await setup(h);\n  const parent = await user(h, f.appId, { createdAt: at(1) });\n  const target = await user(h, f.appId, {\n    createdAt: at(2),\n    parentId: parent.id,\n    level: 'L2',\n    registeredChannel: null,\n  });\n  const risk = await riskRow(h, target, {\n    state: 'frozen',\n    reason_category: 'abnormal_trade',\n    reason: '人工复核中',\n    frozen_until: at(60 * 24 * 30),\n    row_version: 1,\n  });\n  const taobao = await binding(h, target, 'taobao', { status: 'active', createdAt: at(3) });\n  const expected = detail(target, risk, [taobao]);\n  const token = await member(h, f, ['user.lookup']);\n  const byUid = await ok<Detail>(await get(f, url(LOOKUP, { uid: target.id }), { token }), LOOKUP);\n  const byPhone = await get(f, url(LOOKUP, { phone: target.phone! }), { token });\n  const phoneData = await ok<Detail>(byPhone, LOOKUP);\n  const shown = await ok<Detail>(await get(f, detailUrl(target.id), { token }), DETAIL);\n  expect(normalDetail(byUid)).toEqual(expected);\n  expect(normalDetail(phoneData)).toEqual(expected);\n  expect(normalDetail(shown)).toEqual(expected);\n  noPlaintext(f, [target, parent], byPhone);\n});",
+      "after": "it('[AC-F1-07b#23] lookup 返回体与详情接口逐字段相同（含风控与联盟绑定，手机号脱敏）', async () => {\n  const f = await setup(h);\n  const parent = await user(h, f.appId, { createdAt: at(1) });\n  const target = await user(h, f.appId, {\n    createdAt: at(2),\n    parentId: parent.id,\n    level: 'L2',\n    registeredChannel: null,\n  });\n  const risk = await riskRow(h, target, {\n    state: 'frozen',\n    reason_category: 'abnormal_trade',\n    reason: '人工复核中',\n    frozen_until: at(60 * 24 * 30),\n    row_version: 1,\n  });\n  const taobao = await binding(h, target, 'taobao', { status: 'active', createdAt: at(3) });\n  const expected = detail(target, { ...risk, reason: null }, [taobao]);\n  const token = await member(h, f, ['user.lookup']);\n  const byUid = await ok<Detail>(await get(f, url(LOOKUP, { uid: target.id }), { token }), LOOKUP);\n  const byPhone = await get(f, url(LOOKUP, { phone: target.phone! }), { token });\n  const phoneData = await ok<Detail>(byPhone, LOOKUP);\n  const shown = await ok<Detail>(await get(f, detailUrl(target.id), { token }), DETAIL);\n  expect(normalDetail(byUid)).toEqual(expected);\n  expect(normalDetail(phoneData)).toEqual(expected);\n  expect(normalDetail(shown)).toEqual(expected);\n  noPlaintext(f, [target, parent], byPhone);\n});",
+      "mutation": [
+        {
+          "mutant": "blankAdminUserDetail returns the detail unchanged (risk.reason is not blanked)",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-10o",
+  "spec_commit": "941b314a2ddc6b17de667f2d45f3e148a42631f1",
+  "spec_ref": "b1410c4f5b0910562f03f8119f3fb0f0949aba0d",
+  "red_tests": [
+    "test/spec/admin/lookup-blank-fields/claims.int.test.ts > [AC-B1-10o#8] 只持 user.lookup 带 user_id：reason 为 null，items[].reject_reason、matches、evidence_links 照常；对照：持 order.claim（含同时持 user.lookup）、超管带或不带 user_id 都拿到真实值",
+    "test/spec/admin/lookup-blank-fields/claims.int.test.ts > [AC-B1-10o#9] 只有 order.claim 算数：持 user.lookup 加 order.view、风控与资金权限点带 user_id 仍置空",
+    "test/spec/admin/lookup-blank-fields/claims.int.test.ts > [AC-B1-10o#10] 权限点只决定置空、不放行：没有 order.claim 与 user.lookup 的账号带 user_id 仍 10403；只持 user.lookup 不带 user_id 也 10403",
+    "test/spec/admin/lookup-blank-fields/orders.int.test.ts > [AC-B1-10o#5] 只持 user.lookup 带 user_id：last_hold_note、commission_rate_bp、commission_split.reserve_bp 为 null，金额、状态、hold_reason、受益人份额照常；对照：持 order.view（含同时持 user.lookup）、超管带或不带 user_id 都拿到真实值",
+    "test/spec/admin/lookup-blank-fields/orders.int.test.ts > [AC-B1-10o#6] 只有 order.view 算数：持 user.lookup 加 order.claim、风控与资金权限点带 user_id 仍置空",
+    "test/spec/admin/lookup-blank-fields/orders.int.test.ts > [AC-B1-10o#7] 权限点只决定置空、不放行：没有 order.view 与 user.lookup 的账号带 user_id 仍 10403；只持 user.lookup 不带 user_id 也 10403",
+    "test/spec/admin/lookup-blank-fields/permissions-missing.int.test.ts > [AC-B1-10o#11] 订单详情（控制器直调）：actor 不带 permissions 且不是超管 → last_hold_note、commission_rate_bp、commission_split.reserve_bp 置空；对照：超管不带 permissions、带 permissions=[order.view] 的账号拿到真实值，permissions=[user.lookup] 仍置空",
+    "test/spec/admin/lookup-blank-fields/permissions-missing.int.test.ts > [AC-B1-10o#12] 找回详情（控制器直调）：actor 不带 permissions 且不是超管 → reason 置空；对照：超管不带 permissions、带 permissions=[order.claim] 的账号拿到真实值，permissions=[user.lookup] 仍置空",
+    "test/spec/admin/lookup-blank-fields/permissions-missing.int.test.ts > [AC-B1-10o#13] 用户 lookup 与详情（控制器直调）：actor 不带 permissions 且不是超管 → risk.reason 置空；对照：超管不带 permissions、带 permissions=[risk.appeal] 的账号拿到真实值，permissions=[user.lookup] 仍置空",
+    "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#1] 只持 user.lookup：adminGetUser、adminLookupUser（按 uid、按完整手机号）的 risk.reason 为 null，reason_category、风控状态与其余字段照常；对照：超管三条路径都拿到真实值",
+    "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#2] 只持 user.list：adminGetUser 的 risk.reason 为 null，其余字段照常；adminLookupUser 仍 10403（置空不改放行）",
+    "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#3] 四个 risk.* 点任持其一都拿到真实 risk.reason；其他业务权限点不算，持 user.lookup 加一串非风控点仍置空",
+    "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#4] risk.* 点只决定置空、不放行：只持 risk.* 或什么都没有的账号读详情、查找都 10403"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "941b314a2ddc6b17de667f2d45f3e148a42631f1",
+      "tree": "771ee05f9bf2fd2529989b86a18a7c4f1dc2937a",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T00:05:06Z",
+      "finished_at": "2026-11-09T00:05:42Z",
+      "red_tests": [
+        "test/spec/admin/lookup-blank-fields/claims.int.test.ts > [AC-B1-10o#8] 只持 user.lookup 带 user_id：reason 为 null，items[].reject_reason、matches、evidence_links 照常；对照：持 order.claim（含同时持 user.lookup）、超管带或不带 user_id 都拿到真实值",
+        "test/spec/admin/lookup-blank-fields/claims.int.test.ts > [AC-B1-10o#9] 只有 order.claim 算数：持 user.lookup 加 order.view、风控与资金权限点带 user_id 仍置空",
+        "test/spec/admin/lookup-blank-fields/claims.int.test.ts > [AC-B1-10o#10] 权限点只决定置空、不放行：没有 order.claim 与 user.lookup 的账号带 user_id 仍 10403；只持 user.lookup 不带 user_id 也 10403",
+        "test/spec/admin/lookup-blank-fields/orders.int.test.ts > [AC-B1-10o#5] 只持 user.lookup 带 user_id：last_hold_note、commission_rate_bp、commission_split.reserve_bp 为 null，金额、状态、hold_reason、受益人份额照常；对照：持 order.view（含同时持 user.lookup）、超管带或不带 user_id 都拿到真实值",
+        "test/spec/admin/lookup-blank-fields/orders.int.test.ts > [AC-B1-10o#6] 只有 order.view 算数：持 user.lookup 加 order.claim、风控与资金权限点带 user_id 仍置空",
+        "test/spec/admin/lookup-blank-fields/orders.int.test.ts > [AC-B1-10o#7] 权限点只决定置空、不放行：没有 order.view 与 user.lookup 的账号带 user_id 仍 10403；只持 user.lookup 不带 user_id 也 10403",
+        "test/spec/admin/lookup-blank-fields/permissions-missing.int.test.ts > [AC-B1-10o#11] 订单详情（控制器直调）：actor 不带 permissions 且不是超管 → last_hold_note、commission_rate_bp、commission_split.reserve_bp 置空；对照：超管不带 permissions、带 permissions=[order.view] 的账号拿到真实值，permissions=[user.lookup] 仍置空",
+        "test/spec/admin/lookup-blank-fields/permissions-missing.int.test.ts > [AC-B1-10o#12] 找回详情（控制器直调）：actor 不带 permissions 且不是超管 → reason 置空；对照：超管不带 permissions、带 permissions=[order.claim] 的账号拿到真实值，permissions=[user.lookup] 仍置空",
+        "test/spec/admin/lookup-blank-fields/permissions-missing.int.test.ts > [AC-B1-10o#13] 用户 lookup 与详情（控制器直调）：actor 不带 permissions 且不是超管 → risk.reason 置空；对照：超管不带 permissions、带 permissions=[risk.appeal] 的账号拿到真实值，permissions=[user.lookup] 仍置空",
+        "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#1] 只持 user.lookup：adminGetUser、adminLookupUser（按 uid、按完整手机号）的 risk.reason 为 null，reason_category、风控状态与其余字段照常；对照：超管三条路径都拿到真实值",
+        "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#2] 只持 user.list：adminGetUser 的 risk.reason 为 null，其余字段照常；adminLookupUser 仍 10403（置空不改放行）",
+        "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#3] 四个 risk.* 点任持其一都拿到真实 risk.reason；其他业务权限点不算，持 user.lookup 加一串非风控点仍置空",
+        "test/spec/admin/lookup-blank-fields/users.int.test.ts > [AC-B1-10o#4] risk.* 点只决定置空、不放行：只持 risk.* 或什么都没有的账号读详情、查找都 10403"
+      ],
+      "expected": [
+        "test/spec/admin/lookup-blank-fields/claims.int.test.ts",
+        "test/spec/admin/lookup-blank-fields/orders.int.test.ts",
+        "test/spec/admin/lookup-blank-fields/permissions-missing.int.test.ts",
+        "test/spec/admin/lookup-blank-fields/users.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "fc8a3cd65ba18f0c847e65bac203c32ec78d692616ce953d3e8a0cb823f9bcd3"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7921fd4bdfafa0ad0a2a7e86916e169b0eae01fb",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  }
+}
