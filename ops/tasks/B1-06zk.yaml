@@ -1,0 +1,24 @@
+id: B1-06zk
+repo: rebate-platform
+title: linking：拼多多 open 等激活路径锁后拒墓碑用户——activatePddBinding 在 userBannedOn 之后再判 userTombstonedOn，status=deleted 不写 active 绑定也不写备案（FU-MERGE-PDD-OPEN-TOMBSTONE，D10-1123 / B1-20c T-7）
+type: impl
+# 2026-11-09 w1 入账（D10-1123：同 B1-20c（D10-1099 T-7）的口子，B1-20c 只覆盖淘宝授权提交与 GET 列表的拼多多备案刷新，拼多多 open 链路 activatePddBinding 未覆盖）。
+# 做法：复用 B1-20c 在 linking/application/binding-lock.ts 新增的 userTombstonedOn（锁后读 users.status = deleted）：pdd-authority.ts 的 activatePddBinding 在 lockBindingUser + userBannedOn 之后再判它，墓碑 → 不写 active 绑定、不写 union_pdd_pid_filings 备案行，返回与 banned 同一类结果（open 的回答照 banned 用户：10001），由测试按 B1-20c 的墓碑口径钉。因 open、GET 刷新、分享创建都经 activatePddBinding，一处补齐；已由 B1-20c 在调用方判过的刷新路径再判一次无害。
+# 竞态窗口窄（open 已过前面检查、并号在其后提交），墓碑 attr_code 的订单本就归墓碑，所以不挡 B1-20c 落地（D10-1123）。
+# 规则测试新目录 test/spec/linking/merge-pdd-open-tombstone/**，新鲜独立 Claude 写；spec-test 新鲜独立 Claude（D10-1080）；money 评审 Codex medium（D10-1075）。RV2。deps：B1-06zi（同一路径的备案读写）、B1-20c（userTombstonedOn）。
+refs: [BR-ID-06]
+refs_hash:
+  BR-ID-06: 379a6a53b315
+deps: [B1-06zi, B1-20c]
+paths:
+  - 'apps/api/src/modules/linking/application/pdd-authority.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.test.ts'
+  - 'apps/api/src/modules/linking/application/link-open-pdd-auth.ts'
+test_paths:
+  - 'test/spec/linking/merge-pdd-open-tombstone/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/merge-pdd-open-tombstone/**'
+status: todo
