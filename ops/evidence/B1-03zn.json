@@ -1,0 +1,105 @@
+{
+  "red_tests": [
+    "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（维持、维持、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+    "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（撤销、撤销、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+    "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（维持、撤销、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+    "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（撤销、维持、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+    "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#2] 撤销不重算：后台代登记的第 1、2、3 次都被撤销（订单仍为风控作废），第 4 次代登记 30418；用户端列表里这三条依次为第 1、2、3 次",
+    "test/spec/risk/admin-appeals-order-attempts/mixed-sources.int.test.ts > [AC-B1-03zn#3] 两端交替且每次都撤销：用户端第 1 次、后台第 2 次、用户端第 3 次依次计次，之后后台与用户端都 30418；用户端列表为第 1、2、3 次",
+    "test/spec/risk/admin-appeals-order-attempts/mixed-sources.int.test.ts > [AC-B1-03zn#4] 用户端 2 条（维持）+ 后台代登记第 3 条：处理中时用户端再提交返回这条（第 3 次）；第 3 条无论维持还是撤销，之后用户端与后台都 30418",
+    "test/spec/risk/admin-appeals-order-attempts/mixed-sources.int.test.ts > [AC-B1-03zn#5] 后台代登记 2 条（维持）+ 用户端第 3 条：处理中时后台再登记返回这条；第 3 条无论维持还是撤销，之后后台与用户端都 30418",
+    "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为用户端提交，后台代登记：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+    "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为后台代登记，后台再代登记：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+    "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为用户端提交，两个后台代登记并发：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+    "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为后台代登记，后台代登记与用户端提交并发：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+    "test/spec/risk/admin-appeals-order-attempts/order-lock.int.test.ts > [AC-B1-03zn#6] 后台代登记：订单已有 2 条已结案，另一事务持 risk.appeals.order 锁写入第 3 条期间都等锁；提交后都 30418，订单总数仍为 3，不写审计，锁已释放",
+    "test/spec/risk/admin-appeals-order-attempts/order-lock.int.test.ts > [AC-B1-03zn#6] 后台代登记与用户端提交并发：订单已有 2 条已结案，另一事务持 risk.appeals.order 锁写入第 3 条期间都等锁；提交后都 30418，订单总数仍为 3，不写审计，锁已释放",
+    "test/spec/risk/admin-appeals-order-attempts/order-lock.int.test.ts > [AC-B1-03zn#6] 两个后台代登记并发：订单已有 2 条已结案，另一事务持 risk.appeals.order 锁写入第 3 条期间都等锁；提交后都 30418，订单总数仍为 3，不写审计，锁已释放",
+    "test/spec/risk/admin-appeals-order-attempts/other-targets.int.test.ts > [AC-B1-03zn#7] 账户申诉计次照旧：同一处罚已维持 2 次 → 代登记第 3 次成功（appealing）；同一用户的订单已有 3 条（末条撤销）→ 订单代登记 30418，两者互不计入",
+    "test/spec/risk/admin-appeals-order-attempts/other-targets.int.test.ts > [AC-B1-03zn#8] 被拦请求申诉计次照旧：提现被拦已维持 2 次 → 代登记第 3 次成功；同一用户的订单已有 3 条（末条撤销）→ 订单代登记 30418，两者互不计入"
+  ],
+  "risk_note": "B1-03zn (orchestrator 21:27, B1-03zl Codex money r2 out_of_scope): the console registration of an order appeal (admin-appeals-write.ts register) now follows the user submission. appeals.ts exports lockOrderAppeals (the same pg_advisory_xact_lock(hashtextextended('risk.appeals.order:<app>:<order>', 0)) that submitOrder used inline; submitOrder now calls it) and orderAppealAttemptsLeft (the order's count = every appeal on that order in the app, any status incl. revoked, user and console alike; 3 → refused). register for an order target: lock → processing appeal returned → count → insert, on one transaction. Account and blocked_request counting and locking unchanged; user submission behaviour unchanged; audit as before (appeal_register). Rule tests by an independent Claude in two attempts (r1 spec-test S1: the lock fixture inserted a closed third appeal, so 'processing read before the lock' would pass; attempt 2 adds a processing-holder case); red 17 tests for the right reason. Implementation by Opus 5.5 in one round; container rule tests 17/17 green. No migration, no contract change. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 fail (1 S1: concurrency fixture could not catch processing-read-before-lock) → r2 pass; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-03zn",
+  "spec_commit": "7eb2f9d6ec35570f5a3fd2772d2df27e7b115cce",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7eb2f9d6ec35570f5a3fd2772d2df27e7b115cce",
+      "tree": "28f530a6935054b3df4006b99d5108078b427c44",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T16:17:24Z",
+      "finished_at": "2026-11-09T16:18:03Z",
+      "red_tests": [
+        "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（维持、维持、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+        "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（撤销、撤销、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+        "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（维持、撤销、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+        "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#1] 订单已有 3 条申诉（撤销、维持、撤销），订单仍为风控作废 → 后台代登记 30418，不建单、不写审计；用户端提交同样 30418",
+        "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts > [AC-B1-03zn#2] 撤销不重算：后台代登记的第 1、2、3 次都被撤销（订单仍为风控作废），第 4 次代登记 30418；用户端列表里这三条依次为第 1、2、3 次",
+        "test/spec/risk/admin-appeals-order-attempts/mixed-sources.int.test.ts > [AC-B1-03zn#3] 两端交替且每次都撤销：用户端第 1 次、后台第 2 次、用户端第 3 次依次计次，之后后台与用户端都 30418；用户端列表为第 1、2、3 次",
+        "test/spec/risk/admin-appeals-order-attempts/mixed-sources.int.test.ts > [AC-B1-03zn#4] 用户端 2 条（维持）+ 后台代登记第 3 条：处理中时用户端再提交返回这条（第 3 次）；第 3 条无论维持还是撤销，之后用户端与后台都 30418",
+        "test/spec/risk/admin-appeals-order-attempts/mixed-sources.int.test.ts > [AC-B1-03zn#5] 后台代登记 2 条（维持）+ 用户端第 3 条：处理中时后台再登记返回这条；第 3 条无论维持还是撤销，之后后台与用户端都 30418",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为用户端提交，后台代登记：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为后台代登记，后台再代登记：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为用户端提交，两个后台代登记并发：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts > [AC-B1-03zn#7] A 为后台代登记，后台代登记与用户端提交并发：订单已有 2 条已结案，事务 A 持 risk.appeals.order 锁写入处理中的第 3 条期间都在这把咨询锁上等待；A 提交后都返回 A 的原申诉单（不是 30418），订单总数仍为 3，锁已释放",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock.int.test.ts > [AC-B1-03zn#6] 后台代登记：订单已有 2 条已结案，另一事务持 risk.appeals.order 锁写入第 3 条期间都等锁；提交后都 30418，订单总数仍为 3，不写审计，锁已释放",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock.int.test.ts > [AC-B1-03zn#6] 后台代登记与用户端提交并发：订单已有 2 条已结案，另一事务持 risk.appeals.order 锁写入第 3 条期间都等锁；提交后都 30418，订单总数仍为 3，不写审计，锁已释放",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock.int.test.ts > [AC-B1-03zn#6] 两个后台代登记并发：订单已有 2 条已结案，另一事务持 risk.appeals.order 锁写入第 3 条期间都等锁；提交后都 30418，订单总数仍为 3，不写审计，锁已释放",
+        "test/spec/risk/admin-appeals-order-attempts/other-targets.int.test.ts > [AC-B1-03zn#7] 账户申诉计次照旧：同一处罚已维持 2 次 → 代登记第 3 次成功（appealing）；同一用户的订单已有 3 条（末条撤销）→ 订单代登记 30418，两者互不计入",
+        "test/spec/risk/admin-appeals-order-attempts/other-targets.int.test.ts > [AC-B1-03zn#8] 被拦请求申诉计次照旧：提现被拦已维持 2 次 → 代登记第 3 次成功；同一用户的订单已有 3 条（末条撤销）→ 订单代登记 30418，两者互不计入"
+      ],
+      "expected": [
+        "test/spec/risk/admin-appeals-order-attempts/admin-cap.int.test.ts",
+        "test/spec/risk/admin-appeals-order-attempts/mixed-sources.int.test.ts",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock-processing.int.test.ts",
+        "test/spec/risk/admin-appeals-order-attempts/order-lock.int.test.ts",
+        "test/spec/risk/admin-appeals-order-attempts/other-targets.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a2e813cab8926437bd039eef61b25e670b9483b691b0332d0606f415830e07d2"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "46505422083b8ca3993f786b69675650ad9d9ce4",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

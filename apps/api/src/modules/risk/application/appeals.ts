@@ -25,14 +25,16 @@
 //     caller's → 30701; the caller's own order whose rebate risk control did not void (anything
 //     but rebate_status VOID with reason BLACKLIST, the voidedOrderOwner rule) → 20001;
 //   · a transaction-level advisory lock on (app_id, order_id) is taken before anything about the
-//     order's appeals is read (see submitOrder);
+//     order's appeals is read (lockOrderAppeals; the console's registration takes the same lock,
+//     B1-03zn, so submissions and registrations on one order queue on it);
 //   · a processing appeal on the order → that appeal, nothing written;
 //   · the order's appeals used up (MAX_APPEAL_ATTEMPTS appeals already on the order, whatever
-//     their outcome, revoked included; counted per order, never restarted) → 30418;
+//     their outcome, revoked included, the console's registrations included; counted per order,
+//     never restarted; orderAppealAttemptsLeft, shared with the registration) → 30418;
 //   · else insert the appeal (processing, prev_risk_state and penalty_started_at null, deadline_at
 //     by the same working-day calendar). The account's risk state is never touched (拍板第二批
-//     OPS-07): no setRiskState, no event. Concurrent submissions on one order queue on the
-//     advisory lock; the unique index on the processing target (ON CONFLICT DO NOTHING) stays as
+//     OPS-07): no setRiskState, no event. Concurrent submissions (and console registrations) on one
+//     order queue on the advisory lock; the unique index on the processing target (ON CONFLICT DO NOTHING) stays as
 //     the backstop: losing it returns the earlier one's appeal.
 //   Without the port (an entry or fixture that does not wire it) an order cannot be judged: 20001,
 //   nothing written.
@@ -169,6 +171,32 @@ const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
  * included.
  */
 export const MAX_APPEAL_ATTEMPTS = 3;
+
+/**
+ * B1-03zn: takes the transaction-level advisory lock of one order's appeals on `trx` (key
+ * `risk.appeals.order:<app_id>:<order_id>`, the key submitOrder uses), before anything about the
+ * order's appeals is read. The user submission and the console registration both take it, so they
+ * queue on one lock and the per-order cap holds across both (BR-ID-36).
+ */
+export async function lockOrderAppeals(
+  trx: Transaction<DB>,
+  appId: string,
+  orderId: string,
+): Promise<void> {
+  await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`risk.appeals.order:${appId}:${orderId}`}, 0))`.execute(
+    trx,
+  );
+}
+
+/**
+ * BR-ID-36 (B1-03zl, B1-03zn): whether one more appeal fits on an order that already has `count`
+ * appeals in its app (every appeal on the order, whatever its outcome — revoked included — and
+ * whoever made it, the app's submission or the console's registration; never restarted). Read
+ * under lockOrderAppeals. Shared by the submission and the console registration.
+ */
+export function orderAppealAttemptsLeft(count: number): boolean {
+  return count + 1 <= MAX_APPEAL_ATTEMPTS;
+}
 
 interface AppealRow {
   readonly id: string;
@@ -493,7 +521,7 @@ export function createAppealsService(options: AppealsOptions): AppealsService {
     started?: Date | null,
   ): Promise<boolean> {
     const rows = await history(trx, subject, target);
-    if (target.target_type === 'order') return rows.length + 1 <= MAX_APPEAL_ATTEMPTS;
+    if (target.target_type === 'order') return orderAppealAttemptsLeft(rows.length);
     const attempts = appealAttempts(rows, null, clock.now());
     let latest: AppealHistoryRow | undefined;
     for (const row of rows) {
@@ -556,9 +584,8 @@ export function createAppealsService(options: AppealsOptions): AppealsService {
     // (released at commit / rollback) B's reads, under READ COMMITTED, see A's committed row, so
     // the cap of three holds. The account branch is serialised the same way by its
     // user_risk_state row lock (FOR UPDATE).
-    await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`risk.appeals.order:${subject.app_id}:${orderId}`}, 0))`.execute(
-      trx,
-    );
+    // The console's registration (admin-appeals-write.ts) takes the same lock (B1-03zn).
+    await lockOrderAppeals(trx, subject.app_id, orderId);
     const existing = await processingAppeal(trx, subject, target);
     if (existing !== undefined) {
       return { code: 0, data: publicAppeal(existing, await attemptOf(trx, subject, existing)) };

@@ -20,6 +20,7 @@ import {
   createAppealsService,
   MAX_APPEAL_ATTEMPTS,
   nextAppealAttempt,
+  orderAppealAttemptsLeft,
   type AccountRestriction,
   type AppealHistoryRow,
   type AppealOrderReader,
@@ -730,4 +731,35 @@ it('[AC-B1-03zl-UNIT#11] the order count reads every appeal on the order of the 
   expect(count.sql).toContain('"target_type" = $');
   expect(count.sql).toContain('"target_id" = $');
   expect(count.sql).not.toContain('"user_id" = $');
+});
+
+// ---- B1-03zn: the order lock and count shared with the console registration ----
+
+it('[AC-B1-03zn-UNIT#6] orderAppealAttemptsLeft: a new order appeal fits only while fewer than three are on the order', () => {
+  expect([0, 1, 2, 3, 4].map(orderAppealAttemptsLeft)).toEqual([true, true, true, false, false]);
+  expect(orderAppealAttemptsLeft(MAX_APPEAL_ATTEMPTS - 1)).toBe(true);
+});
+
+it('[AC-B1-03zn-UNIT#7] submit(order): the order lock is the first statement, keyed by app and lowercased order_id, before the processing read', async () => {
+  const s = orderScripted({ order: MINE_VOIDED });
+  await s.submit(ORDER_A.toUpperCase());
+  const [lock, processing] = s.compiled;
+  expect(lock?.sql).toBe('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))');
+  expect(lock?.parameters).toEqual([`risk.appeals.order:couli:${ORDER_A}`]);
+  expect(processing?.sql).toContain('from "app"."appeals"');
+  expect(processing?.sql).toContain('"status" = $');
+  expect(s.compiled.filter((q) => q.sql.includes('pg_advisory_xact_lock')).length).toBe(1);
+});
+
+it('[AC-B1-03zn-UNIT#8] submit(order): a revoked third appeal does not restart the count → 30418, nothing written', async () => {
+  const s = orderScripted({
+    order: MINE_VOIDED,
+    history: [
+      orderAppeal(1, ORDER_A, 'upheld'),
+      orderAppeal(2, ORDER_A, 'upheld'),
+      orderAppeal(3, ORDER_A, 'revoked'),
+    ],
+  });
+  expect(await s.submit(ORDER_A)).toEqual({ code: 30418 });
+  expect(s.inserts()).toEqual([]);
 });

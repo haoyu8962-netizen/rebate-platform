@@ -32,11 +32,17 @@
 // - register: the reason (appealConsoleText), the target (account: banned / frozen / appealing in
 //   this app; order: voided by risk control, through the port; blocked_request: a 44001 request of
 //   this app with a request type) and user_id against the appellant the server derives (20001);
-//   then a processing appeal on the target (a register-type request: also on its related phone) is
+//   an order target then takes the order's transaction-level advisory lock (lockOrderAppeals of
+//   appeals.ts, the very lock the app's submission takes; B1-03zn), so registrations and
+//   submissions on one order queue on it and each reads the others' committed appeals; then a
+//   processing appeal on the target (a register-type request: also on its related phone) is
 //   returned with nothing written; then the attempt cap (30418, every target type —
-//   BR-ID-36: a registered blocked_request appeal counts too —, the rule of appeals.ts); then the insert (source admin, registered_by caller, deadline by the
-//   working-day calendar) and, for an account appeal, risk state appealing; audit appeal_register.
-//   A concurrent insert losing on a processing unique index answers the winner's appeal.
+//   BR-ID-36: a registered blocked_request appeal counts too —, the rule of appeals.ts: an order
+//   by every appeal on it, revoked included and never restarted, orderAppealAttemptsLeft; an
+//   account by its current penalty; a blocked_request by nextAppealAttempt); then the insert
+//   (source admin, registered_by caller, deadline by the working-day calendar) and, for an account
+//   appeal, risk state appealing; audit appeal_register. A concurrent insert losing on a
+//   processing unique index answers the winner's appeal.
 //
 // TODO(规划/11 §4.5): 撤销 cause rule 的被拦请求申诉后的一次性放行 — blocked on 放行凭据的存放与校验位置未定（契约只说由服务端内部保存）
 //
@@ -62,7 +68,9 @@ import { resolveAppealDeadline } from './appeal-calendar.ts';
 import {
   MAX_APPEAL_ATTEMPTS,
   appealAttempts,
+  lockOrderAppeals,
   nextAppealAttempt,
+  orderAppealAttemptsLeft,
   type AppealHistoryRow,
 } from './appeals.ts';
 import type { RateLimitConfigReader } from './rate-limit.ts';
@@ -715,6 +723,11 @@ export class AdminAppealsWrite {
         throw new AdminAppealsWriteFieldsError(['target_id']);
       }
     }
+    if (target.target_type === 'order') {
+      // B1-03zn: before the order's appeals are read, the lock the app's submission takes; the
+      // processing unique index alone cannot stop a fourth appeal once an earlier one has closed.
+      await lockOrderAppeals(trx, actor.appId, target.target_id);
+    }
     const existing = await this.#processing(trx, actor.appId, target);
     if (existing !== undefined) return { id: existing, riskVersion: null };
     if (account !== undefined && account.state === 'appealing') {
@@ -865,7 +878,8 @@ export class AdminAppealsWrite {
 
   /**
    * Whether a new appeal on the target is within the cap (BR-ID-36 细则; the rule of appeals.ts:
-   * every appeal on the target counts, registered ones too; an account by its current penalty).
+   * every appeal on the target counts, registered ones too; an order by its count of appeals,
+   * revoked included, never restarted; an account by its current penalty).
    */
   async #attemptsLeft(
     trx: Transaction<DB>,
@@ -896,6 +910,7 @@ export class AdminAppealsWrite {
       .where('target_type', '=', target.target_type)
       .where('target_id', '=', target.target_id)
       .execute();
+    if (target.target_type === 'order') return orderAppealAttemptsLeft(rows.length);
     if (rows.length === 0) return true;
     const attempts = appealAttempts(rows, null, this.#clock.now());
     let latest: AppealHistoryRow | undefined;

@@ -27,7 +27,7 @@ type Rows = (text: string) => readonly Record<string, unknown>[];
 type Overrides = Partial<
   Pick<
     ConstructorParameters<typeof AdminAppealsWrite>[0],
-    'riskState' | 'restoreAfterUnban' | 'taobaoReauth'
+    'riskState' | 'restoreAfterUnban' | 'taobaoReauth' | 'ports'
   >
 >;
 
@@ -362,4 +362,113 @@ it('[AC-B1-03ze#78] register: a blocked request whose appeals were upheld 3 time
   expect(error).toBeInstanceOf(AdminAppealAttemptsUsedUpError);
   expect(sqls.some((q) => /insert into/i.test(q.text))).toBe(false);
   expect(audits).toEqual([]);
+});
+
+// ---- B1-03zn: order registrations share the app's per-order count and lock (BR-ID-36) ----
+
+const ORDER = '019a0000-0000-7000-8000-000000000e02';
+const ORDER_LOCK_KEY = `risk.appeals.order:${APP}:${ORDER}`;
+
+function orderAppealRow(n: number, status: string) {
+  return {
+    id: `019a0000-0000-7000-8000-00000000f00${n}`,
+    target_type: 'order',
+    target_id: ORDER,
+    status,
+    prev_risk_state: null,
+    created_at: new Date(Date.parse(NOW) - (10 - n) * 86_400_000),
+    closed_at: status === 'processing' ? null : new Date(Date.parse(NOW) - (9 - n) * 86_400_000),
+    penalty_started_at: null,
+  };
+}
+
+/** register(order) over scripted rows: `history` answers the count, `processing` the 原单 read. */
+function orderHarness(history: readonly Record<string, unknown>[], processing?: string) {
+  return harness(
+    (text) => {
+      if (!text.includes('from "app"."appeals"')) return [];
+      if (text.includes('"prev_risk_state"')) return history;
+      return processing === undefined ? [] : [{ id: processing }];
+    },
+    { ports: { voidedOrderOwner: async () => USER } },
+  );
+}
+
+const registerOrder = { target_type: 'order', target_id: ORDER, content: '请核查', reason: '登记' };
+
+function lockIndex(sqls: readonly { text: string; params: readonly unknown[] }[]): number {
+  return sqls.findIndex(
+    (q) =>
+      q.text.includes('pg_advisory_xact_lock(hashtextextended(') && q.params[0] === ORDER_LOCK_KEY,
+  );
+}
+
+it('[AC-B1-03zn-UNIT#1] register(order): two upheld and a revoked third appeal → 30418, the count is not restarted, nothing inserted or audited', async () => {
+  const { writes, sqls, audits } = orderHarness([
+    orderAppealRow(1, 'upheld'),
+    orderAppealRow(2, 'upheld'),
+    orderAppealRow(3, 'revoked'),
+  ]);
+  const error = await failure(writes.register(actor, registerOrder));
+  expect(error).toBeInstanceOf(AdminAppealAttemptsUsedUpError);
+  expect(sqls.some((q) => /insert into/i.test(q.text))).toBe(false);
+  expect(audits).toEqual([]);
+});
+
+it('[AC-B1-03zn-UNIT#2] register(order): a revoked first appeal still counts; with two on the order a third is registered', async () => {
+  const { writes, sqls, audits } = orderHarness([
+    orderAppealRow(1, 'revoked'),
+    orderAppealRow(2, 'upheld'),
+  ]);
+  const detail = await writes.register(actor, registerOrder);
+  const insert = sqls.find((q) => /insert into app\.appeals/i.test(q.text));
+  expect(insert?.params).toContain(ORDER);
+  expect(insert?.params).toContain('order');
+  expect(detail).toMatchObject({ appeal_id: insert?.params[0] });
+  expect(audits.map((a) => a.action)).toEqual(['appeal_register']);
+});
+
+it('[AC-B1-03zn-UNIT#3] register(order): the order lock (the app submission key) is taken before the processing read and the count', async () => {
+  const { writes, sqls } = orderHarness([orderAppealRow(1, 'upheld')]);
+  await writes.register(actor, registerOrder);
+  const lock = lockIndex(sqls);
+  const processing = sqls.findIndex(
+    (q) => q.text.includes('from "app"."appeals"') && !q.text.includes('"prev_risk_state"'),
+  );
+  const count = sqls.findIndex(
+    (q) => q.text.includes('from "app"."appeals"') && q.text.includes('"prev_risk_state"'),
+  );
+  expect(lock).toBeGreaterThanOrEqual(0);
+  expect(sqls.filter((q) => q.text.includes('pg_advisory_xact_lock')).length).toBe(1);
+  expect(processing).toBeGreaterThan(lock);
+  expect(count).toBeGreaterThan(processing);
+});
+
+it('[AC-B1-03zn-UNIT#4] register(order): a processing appeal read behind the lock is returned, nothing counted, inserted or audited', async () => {
+  const existing = '019a0000-0000-7000-8000-00000000f009';
+  const { writes, sqls, audits } = orderHarness(
+    [orderAppealRow(1, 'upheld'), orderAppealRow(2, 'upheld'), orderAppealRow(3, 'revoked')],
+    existing,
+  );
+  expect(await writes.register(actor, registerOrder)).toEqual({ appeal_id: existing });
+  expect(lockIndex(sqls)).toBeGreaterThanOrEqual(0);
+  expect(sqls.some((q) => q.text.includes('"prev_risk_state"'))).toBe(false);
+  expect(sqls.some((q) => /insert into/i.test(q.text))).toBe(false);
+  expect(audits).toEqual([]);
+});
+
+it('[AC-B1-03zn-UNIT#5] register(blocked_request): no order lock is taken', async () => {
+  const BLOCKED = '019a0000-0000-7000-8000-000000000b02';
+  const { writes, sqls } = harness((text) =>
+    text.includes('from "app"."risk_hits"')
+      ? [{ request_type: 'withdraw', user_id: USER, related_phone_hmac: null, rows: '1' }]
+      : [],
+  );
+  await writes.register(actor, {
+    target_type: 'blocked_request',
+    target_id: BLOCKED,
+    content: '请核查',
+    reason: '登记',
+  });
+  expect(sqls.some((q) => q.text.includes('pg_advisory_xact_lock'))).toBe(false);
 });
