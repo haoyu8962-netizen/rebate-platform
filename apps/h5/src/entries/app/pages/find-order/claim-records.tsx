@@ -15,6 +15,12 @@ import {
 } from './records-model.ts';
 import type { RecordParts } from './records-parts.tsx';
 
+/**
+ * 数据到手后替换骨架的内容只淡入（shared/styles/index.css `h5-content-fade`，DSX-48d）。
+ * 内容放在新挂载的容器里，接口晚于面板返回时也有进场；提示条留在外层不重挂，不重复播报。
+ */
+const CONTENT_FADE = 'h5-content-fade';
+
 /** 每页条数（契约上限 50）。 */
 const PAGE_LIMIT = 20;
 
@@ -138,7 +144,7 @@ export function ClaimRecords({
     return (
       <div className="flex flex-col gap-couli-3">
         {banner}
-        <div className="flex justify-center pt-couli-12">
+        <div key="empty" className={`flex justify-center pt-couli-12 ${CONTENT_FADE}`}>
           <EmptyState
             icon={<parts.SearchDocIcon />}
             title={findOrderText('claim.records.empty')}
@@ -154,34 +160,41 @@ export function ClaimRecords({
   return (
     <div className="flex flex-col gap-couli-3">
       {banner}
-      <ul className="flex flex-col gap-couli-3">
-        {claims.map((claim) => (
-          <li key={claim.claim_id}>
-            <RecordCard
-              view={recordView(claim, now)}
-              register={(element) => {
-                if (element === null) cards.current.delete(claim.claim_id);
-                else cards.current.set(claim.claim_id, element);
-              }}
-              parts={parts}
-            />
-          </li>
-        ))}
-      </ul>
-      {isFetchingNextPage ? <RecordSkeleton /> : null}
-      {isFetchNextPageError ? (
-        <p role="alert" className={`${CAPTION} text-center`}>
-          {findOrderTexts.moreFailed}
+      <div key="list" className={`flex flex-col gap-couli-3 ${CONTENT_FADE}`}>
+        <ul className="flex flex-col gap-couli-3">
+          {claims.map((claim) => (
+            <li key={claim.claim_id}>
+              <RecordCard
+                view={recordView(claim, now)}
+                register={(element) => {
+                  if (element === null) cards.current.delete(claim.claim_id);
+                  else cards.current.set(claim.claim_id, element);
+                }}
+                parts={parts}
+              />
+            </li>
+          ))}
+        </ul>
+        {isFetchingNextPage ? <RecordSkeleton /> : null}
+        {isFetchNextPageError ? (
+          <p role="alert" className={`${CAPTION} text-center`}>
+            {findOrderTexts.moreFailed}
+          </p>
+        ) : null}
+        {hasNextPage && !isFetchingNextPage ? (
+          <span className="flex self-center">
+            <Button
+              variant="text"
+              onClick={() => void list.fetchNextPage({ cancelRefetch: false })}
+            >
+              {findOrderTexts.more}
+            </Button>
+          </span>
+        ) : null}
+        <p className={`${CAPTION} pt-couli-1 text-center`}>
+          {findOrderText('claim.records.footer')}
         </p>
-      ) : null}
-      {hasNextPage && !isFetchingNextPage ? (
-        <span className="flex self-center">
-          <Button variant="text" onClick={() => void list.fetchNextPage({ cancelRefetch: false })}>
-            {findOrderTexts.more}
-          </Button>
-        </span>
-      ) : null}
-      <p className={`${CAPTION} pt-couli-1 text-center`}>{findOrderText('claim.records.footer')}</p>
+      </div>
     </div>
   );
 }

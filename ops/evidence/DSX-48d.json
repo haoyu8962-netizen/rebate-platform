@@ -1,0 +1,116 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-transitions/bundle.test.ts > [AC-DSX-48d-BUNDLE#1] 过渡已接入（base / shared 引用弹层与减弱动态令牌）；主干基线构建里 base / shared / 找回页三处路径下打进包的每个模块都读自 trunk 主干副本（无一读自工作区），字典裁剪也按主干源码，两次构建的懒加载路由相同",
+    "test/spec/frontend/h5-transitions/bundle.test.ts > [AC-DSX-48d-BUNDLE#2] 各 App 路由「入口 + 路由」JS gzip ≤ 150 KiB，且相对主干基线每条路由增量 ≤ 3 KiB",
+    "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#1] Dialog 点关闭按钮：立即退出无障碍树、焦点回到打开者、onClose 一次；退出层留在容器里播退出且不再响应点击与 Esc；不靠 transitionend，假时钟走过 --motion-duration-emphasized 后移除",
+    "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#2] Sheet 点遮罩：立即退出无障碍树、焦点回到打开者、onClose 一次；退出层留在容器里播退出且不再响应点击与 Esc；不靠 transitionend，假时钟走过 --motion-duration-emphasized 后移除",
+    "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#3] Dialog 与 Sheet 由调用方直接置 open=false：同样立即退出无障碍树并还焦点，退出层留到假时钟走过 --motion-duration-emphasized 后移除，onClose 不被调用",
+    "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#4] Dialog 与 Sheet 退出中再次打开：只有一个可用弹层且焦点在其标题；旧的退出走完后不抢焦点、不移除新弹层",
+    "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#5] Dialog 与 Sheet 退出中卸载：退出层立即清掉，之后计时器到点也不报错",
+    "test/spec/frontend/h5-transitions/find-order.browser.test.ts > [AC-DSX-48d-CONTENT#1] 找回页配置到达、骨架换成表单时新内容淡入：只动 opacity（不位移），时长取 --motion-duration-normal、缓动取 --motion-easing-enter 或 --motion-easing-standard",
+    "test/spec/frontend/h5-transitions/find-order.browser.test.ts > [AC-DSX-48d-TABS#1] 找回页切换页签（到找回记录、再回到申请找回）：新显示的面板淡入，只动 opacity 不位移，时长取 --motion-duration-normal、缓动取 --motion-easing-standard 或 --motion-easing-enter",
+    "test/spec/frontend/h5-transitions/find-order.browser.test.ts > [AC-DSX-48d-REDUCED#2] 减弱动态：找回页骨架换内容与页签切换仍只淡入（无位移），时长取 --motion-reduced-fade",
+    "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-SHEET#1] Sheet 打开：面板从下滑入（起点下移不少于半个面板高、终点归位），只动 opacity / transform，时长取 --motion-duration-emphasized、缓动取 --motion-easing-emphasized-enter；遮罩只淡入",
+    "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-SHEET#2] Sheet 关闭：同一面板向下滑出后才移除，缓动取 --motion-easing-emphasized-exit、时长为进入的 0.5–0.8，遮罩淡出；拦掉 transitionend / animationend 仍按时移除，焦点回到打开者",
+    "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-DIALOG#1] Dialog 打开：淡入（起点 opacity ≤ 0.5）加轻微放大（起点 scale 0.85–0.99、终点 1，不平移），时长取 --motion-duration-emphasized、缓动取 --motion-easing-emphasized-enter；遮罩只淡入",
+    "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-DIALOG#2] Dialog 关闭：同一面板淡出（终点 opacity ≤ 0.1）后才移除，缓动取 --motion-easing-emphasized-exit、时长为进入的 0.5–0.8，遮罩淡出；拦掉 transitionend / animationend 仍按时移除，焦点回到打开者",
+    "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-REDUCED#1] 减弱动态：Sheet 与 Dialog 进出只淡入淡出（无位移、无缩放），进入时长取 --motion-reduced-fade、退出不长于它；拦掉结束事件仍按时移除、焦点回到打开者",
+    "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-TOAST#1] 轻提示进出淡入淡出：进入只动 opacity（不位移），时长取 --motion-duration-normal、缓动取 --motion-easing-enter；到时前以 --motion-easing-exit 淡出（不长于 normal）再移除，拦掉结束事件也按时移除",
+    "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-TOAST#2] 减弱动态：轻提示只淡入淡出，进入时长取 --motion-reduced-fade，退出不长于它，到时移除",
+    "test/spec/frontend/h5-transitions/source.test.ts > [AC-DSX-48d-SOURCE#1] H5 共用代码（components/base、shared）引用弹层与减弱动态所需令牌：--motion-duration-emphasized、--motion-easing-emphasized-enter / -exit、--motion-easing-exit、--motion-reduced-fade（CSS 变量、ui-tokens Tailwind 别名或具名常量均可）；base、shared 与找回页的计时器不以数字字面量作延时",
+    "test/spec/frontend/h5-transitions/source.test.ts > [AC-DSX-48d-SOURCE#2] H5 样式里的 transition 与 @keyframes、base / shared / 找回页里的过渡类名与内联过渡只动 opacity / transform（离散的 display / overlay / visibility 可随行），且声明了 transform 过渡或关键帧（底部弹层滑入、对话框放大）"
+  ],
+  "risk_note": "DSX-48d H5 transitions (feel plan ⑦, orchestrator D10-1032; 规划/03 §10.6). Dialog and Sheet enter with CSS transitions and @starting-style (Dialog fade + slight scale, Sheet slide up, scrim fade; emphasized-enter), exit is timer-driven: in the same commit the modal gets aria-hidden + inert, drops its handlers and returns focus (again in the layout phase so React's end-of-commit restore cannot pull it back to the title), and a timer of motionDurationEmphasizedMs removes it, with the last rendered content kept during the exit (round 3); exit uses the normal duration and emphasized-exit. Toast fades out from durationMs minus normal. The find-order tab panels and the claim form / claim records content fade in when they appear, including content that arrives after the panel (round 2). Durations and easings only from var(--motion-*) or @couli/ui-tokens named constants; opacity and transform only; reduced motion fades only on --motion-reduced-fade. Frozen tests unchanged, including the sheet position and find-order badge cases flagged as possible conflicts. Bundle: every App route grows by at most 227 B (limit 3 KiB), all within 150 KiB. Rule tests by an independent Claude in three rounds (round 3 only made test options inline object literals and removed describe() from motion-kit after CI test-guard flagged them; the branch was rebuilt with the three implementation commits replayed on top); Codex spec-test review r1 fail (S1 bundle baseline covered only 8 files) -> r2 pass; red on the local container (19 tests, right reason). Implementation by Opus 5.5 in three rounds; host H5 jsdom rule tests (785) and h5 unit tests (97) green; local container browser run browser-5 green for every H5 case (later runs disconnected under host load around 50; admin-only timeouts in files this task did not touch), CI runs full verification. Codex general review: r1 fail (S1 content swapped in after the panel cut in, fixed in r2), r2 pass (S2-1 content cleared before the exit, fixed in r3; S2-2 logged as a follow-up), r3 Codex verdict fail with one S1 (Sheet panel slides without fading, index.css:115) on code the r3 increment did not touch; per REVIEW.md §5.4 the orchestrator downgraded it to S2 (ruling D10-1141), so no S0/S1 stays open; the Sheet panel fade goes to the follow-up task DSX-48e. Non-funds. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 3,
+      "note": "Codex general: r1 fail (S1 fixed in r2), r2 pass (S2-1 fixed in r3), r3 Codex verdict fail with one S1 on code the r3 increment did not touch (Sheet panel opacity, apps/h5/src/shared/styles/index.css:115); per REVIEW.md §5.4 downgraded to S2 by the orchestrator, ruling D10-1141; follow-up DSX-48e"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Codex spec-test review: r1 fail (S1 bundle baseline covered only 8 files), r2 pass, r3 pass after the round-3 test edit (inline test options and no describe in motion-kit, caught by CI test-guard; assertions unchanged); tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-48d",
+  "spec_ref": "b7ff78072ef93dab475f1e56a6994750e78cb781",
+  "spec_commit": "b2370ae773963b0d20e7cbbe05dfe1da4ab53693",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b2370ae773963b0d20e7cbbe05dfe1da4ab53693",
+      "tree": "c20c91412cd010148f20ccc91589d8e92d620ddd",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-09T02:25:51Z",
+      "finished_at": "2026-11-09T02:26:09Z",
+      "red_tests": [
+        "test/spec/frontend/h5-transitions/bundle.test.ts > [AC-DSX-48d-BUNDLE#1] 过渡已接入（base / shared 引用弹层与减弱动态令牌）；主干基线构建里 base / shared / 找回页三处路径下打进包的每个模块都读自 trunk 主干副本（无一读自工作区），字典裁剪也按主干源码，两次构建的懒加载路由相同",
+        "test/spec/frontend/h5-transitions/bundle.test.ts > [AC-DSX-48d-BUNDLE#2] 各 App 路由「入口 + 路由」JS gzip ≤ 150 KiB，且相对主干基线每条路由增量 ≤ 3 KiB",
+        "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#1] Dialog 点关闭按钮：立即退出无障碍树、焦点回到打开者、onClose 一次；退出层留在容器里播退出且不再响应点击与 Esc；不靠 transitionend，假时钟走过 --motion-duration-emphasized 后移除",
+        "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#2] Sheet 点遮罩：立即退出无障碍树、焦点回到打开者、onClose 一次；退出层留在容器里播退出且不再响应点击与 Esc；不靠 transitionend，假时钟走过 --motion-duration-emphasized 后移除",
+        "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#3] Dialog 与 Sheet 由调用方直接置 open=false：同样立即退出无障碍树并还焦点，退出层留到假时钟走过 --motion-duration-emphasized 后移除，onClose 不被调用",
+        "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#4] Dialog 与 Sheet 退出中再次打开：只有一个可用弹层且焦点在其标题；旧的退出走完后不抢焦点、不移除新弹层",
+        "test/spec/frontend/h5-transitions/close.test.ts > [AC-DSX-48d-CLOSE#5] Dialog 与 Sheet 退出中卸载：退出层立即清掉，之后计时器到点也不报错",
+        "test/spec/frontend/h5-transitions/find-order.browser.test.ts > [AC-DSX-48d-CONTENT#1] 找回页配置到达、骨架换成表单时新内容淡入：只动 opacity（不位移），时长取 --motion-duration-normal、缓动取 --motion-easing-enter 或 --motion-easing-standard",
+        "test/spec/frontend/h5-transitions/find-order.browser.test.ts > [AC-DSX-48d-TABS#1] 找回页切换页签（到找回记录、再回到申请找回）：新显示的面板淡入，只动 opacity 不位移，时长取 --motion-duration-normal、缓动取 --motion-easing-standard 或 --motion-easing-enter",
+        "test/spec/frontend/h5-transitions/find-order.browser.test.ts > [AC-DSX-48d-REDUCED#2] 减弱动态：找回页骨架换内容与页签切换仍只淡入（无位移），时长取 --motion-reduced-fade",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-SHEET#1] Sheet 打开：面板从下滑入（起点下移不少于半个面板高、终点归位），只动 opacity / transform，时长取 --motion-duration-emphasized、缓动取 --motion-easing-emphasized-enter；遮罩只淡入",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-SHEET#2] Sheet 关闭：同一面板向下滑出后才移除，缓动取 --motion-easing-emphasized-exit、时长为进入的 0.5–0.8，遮罩淡出；拦掉 transitionend / animationend 仍按时移除，焦点回到打开者",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-DIALOG#1] Dialog 打开：淡入（起点 opacity ≤ 0.5）加轻微放大（起点 scale 0.85–0.99、终点 1，不平移），时长取 --motion-duration-emphasized、缓动取 --motion-easing-emphasized-enter；遮罩只淡入",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-DIALOG#2] Dialog 关闭：同一面板淡出（终点 opacity ≤ 0.1）后才移除，缓动取 --motion-easing-emphasized-exit、时长为进入的 0.5–0.8，遮罩淡出；拦掉 transitionend / animationend 仍按时移除，焦点回到打开者",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-REDUCED#1] 减弱动态：Sheet 与 Dialog 进出只淡入淡出（无位移、无缩放），进入时长取 --motion-reduced-fade、退出不长于它；拦掉结束事件仍按时移除、焦点回到打开者",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-TOAST#1] 轻提示进出淡入淡出：进入只动 opacity（不位移），时长取 --motion-duration-normal、缓动取 --motion-easing-enter；到时前以 --motion-easing-exit 淡出（不长于 normal）再移除，拦掉结束事件也按时移除",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts > [AC-DSX-48d-TOAST#2] 减弱动态：轻提示只淡入淡出，进入时长取 --motion-reduced-fade，退出不长于它，到时移除",
+        "test/spec/frontend/h5-transitions/source.test.ts > [AC-DSX-48d-SOURCE#1] H5 共用代码（components/base、shared）引用弹层与减弱动态所需令牌：--motion-duration-emphasized、--motion-easing-emphasized-enter / -exit、--motion-easing-exit、--motion-reduced-fade（CSS 变量、ui-tokens Tailwind 别名或具名常量均可）；base、shared 与找回页的计时器不以数字字面量作延时",
+        "test/spec/frontend/h5-transitions/source.test.ts > [AC-DSX-48d-SOURCE#2] H5 样式里的 transition 与 @keyframes、base / shared / 找回页里的过渡类名与内联过渡只动 opacity / transform（离散的 display / overlay / visibility 可随行），且声明了 transform 过渡或关键帧（底部弹层滑入、对话框放大）"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-transitions/bundle.test.ts",
+        "test/spec/frontend/h5-transitions/close.test.ts",
+        "test/spec/frontend/h5-transitions/find-order.browser.test.ts",
+        "test/spec/frontend/h5-transitions/overlays.browser.test.ts",
+        "test/spec/frontend/h5-transitions/source.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "95d4a8fb2e4ca3ede69612e1328bacfc382131248f82ca907fdea14e6f600367"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b7158bc02edfffbe3378969538a8d9a5594362ec6ea2d2ff28b6a8d525de4e0b"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "648ffb692be3efa82817a77ee3746c2460a0202a",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}

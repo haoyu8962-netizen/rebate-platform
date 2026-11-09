@@ -210,3 +210,57 @@ it('stacks a nested modal opened in the same render above its parent', async () 
   expect(onOuterClose).toHaveBeenCalledTimes(1);
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Opener' }));
 });
+
+/** Like the earnings page: one piece of state drives both `open` and the content. */
+function ClearsOnClose(props: { Component: ComponentType<ModalProps> }): ReactElement {
+  const { Component } = props;
+  const [note, setNote] = useState<{ title: string; body: string } | null>(null);
+  return (
+    <div>
+      <button type="button" onClick={() => setNote({ title: 'First', body: 'First body' })}>
+        Open first
+      </button>
+      <button type="button" onClick={() => setNote({ title: 'Second', body: 'Second body' })}>
+        Open second
+      </button>
+      <Component
+        open={note !== null}
+        title={note?.title ?? ''}
+        description={note?.body ?? ''}
+        closeLabel="Close"
+        onClose={() => setNote(null)}
+        {...(note === null
+          ? {}
+          : { primaryAction: { label: `OK ${note.title}`, onClick: () => setNote(null) } })}
+      >
+        {note === null ? null : <span>{`${note.title} child`}</span>}
+      </Component>
+    </div>
+  );
+}
+
+describe.each(COMPONENTS)('%s exit content', (_name, Component) => {
+  it('keeps showing the last open content while exiting when the caller clears it', async () => {
+    const user = userEvent.setup();
+    render(<ClearsOnClose Component={Component} />);
+    await user.click(screen.getByRole('button', { name: 'Open first' }));
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+
+    const layer = document.body.querySelector('[data-state="closed"]');
+    expect(layer).not.toBeNull();
+    expect(layer?.getAttribute('aria-hidden')).toBe('true');
+    expect(layer?.hasAttribute('inert')).toBe(true);
+    expect(layer?.querySelector('h2')?.textContent).toBe('First');
+    expect(layer?.textContent).toContain('First body');
+    expect(layer?.textContent).toContain('First child');
+    expect(layer?.textContent).toContain('OK First');
+
+    await user.click(screen.getByRole('button', { name: 'Open second' }));
+    expect(screen.getByRole('heading', { name: 'Second' })).toBeTruthy();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('Second body');
+    expect(dialog.textContent).toContain('Second child');
+    expect(dialog.textContent).toContain('OK Second');
+    expect(dialog.textContent).not.toContain('First');
+  });
+});

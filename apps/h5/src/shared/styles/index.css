@@ -97,6 +97,122 @@
   }
 
   /*
+   * Transitions (DSX-48d, 规划/03 §10.6 items 1–3, 5, 8; design/ui-rules §3.3): opacity and
+   * transform only, durations and easings from the --motion-* tokens. Entries start from
+   * @starting-style; exits are driven by script timers (components/base/motion.ts), never by
+   * transitionend, and leave the element through `data-state='closed'`.
+   *
+   * Modals (components/base/ModalFrame): the backdrop fades, the sheet slides up from below, the
+   * dialog fades in and grows slightly; emphasized duration with the emphasized-enter easing.
+   * Closing runs the other way with the emphasized-exit easing and the normal duration (about
+   * 2/3 of the enter). A modal mounted already open (no `data-appear`) shows at once.
+   */
+  .h5-modal-backdrop {
+    transition: opacity var(--motion-duration-emphasized) var(--motion-easing-emphasized-enter);
+  }
+
+  .h5-modal-sheet {
+    transition: transform var(--motion-duration-emphasized) var(--motion-easing-emphasized-enter);
+  }
+
+  .h5-modal-dialog {
+    transition-property: opacity, transform;
+    transition-duration: var(--motion-duration-emphasized);
+    transition-timing-function: var(--motion-easing-emphasized-enter);
+  }
+
+  [data-state='closed'] > .h5-modal-backdrop,
+  [data-state='closed'] > .h5-modal-sheet,
+  [data-state='closed'] > .h5-modal-dialog {
+    transition-duration: var(--motion-duration-normal);
+    transition-timing-function: var(--motion-easing-emphasized-exit);
+  }
+
+  [data-state='closed'] > .h5-modal-backdrop {
+    opacity: 0;
+  }
+
+  [data-state='closed'] > .h5-modal-sheet {
+    transform: translateY(100%);
+  }
+
+  [data-state='closed'] > .h5-modal-dialog {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  @starting-style {
+    [data-appear] > .h5-modal-backdrop {
+      opacity: 0;
+    }
+
+    [data-appear] > .h5-modal-sheet {
+      transform: translateY(100%);
+    }
+
+    [data-appear] > .h5-modal-dialog {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+
+  /* Light notice (components/base/Toast): fades in (normal, enter), fades out with the exit easing. */
+  .h5-toast {
+    transition: opacity var(--motion-duration-normal) var(--motion-easing-enter);
+  }
+
+  .h5-toast[data-state='closed'] {
+    opacity: 0;
+    transition-timing-function: var(--motion-easing-exit);
+  }
+
+  @starting-style {
+    .h5-toast {
+      opacity: 0;
+    }
+  }
+
+  /* Content replacing a skeleton or another tab's panel (find-order page panels). */
+  .h5-content-fade {
+    transition: opacity var(--motion-duration-normal) var(--motion-easing-enter);
+  }
+
+  @starting-style {
+    .h5-content-fade {
+      opacity: 0;
+    }
+  }
+
+  /* Reduced motion (item 8): no slide, no scale; everything only fades, motion.reduced.fade. */
+  @media (prefers-reduced-motion: reduce) {
+    [data-state] > .h5-modal-backdrop,
+    [data-state] > .h5-modal-sheet,
+    [data-state] > .h5-modal-dialog {
+      transition-property: opacity;
+      transition-duration: var(--motion-reduced-fade);
+    }
+
+    [data-state='closed'] > .h5-modal-sheet,
+    [data-state='closed'] > .h5-modal-dialog {
+      opacity: 0;
+      transform: none;
+    }
+
+    @starting-style {
+      [data-appear] > .h5-modal-sheet,
+      [data-appear] > .h5-modal-dialog {
+        opacity: 0;
+        transform: none;
+      }
+    }
+
+    .h5-toast,
+    .h5-content-fade {
+      transition-duration: var(--motion-reduced-fade);
+    }
+  }
+
+  /*
    * Forced colours (DSX-108): fills and shadows are replaced by the system palette, so components
    * whose edge is a fill or a shadow (base/styles.ts FORCED_EDGE) draw a system-colour border.
    * The focus ring is an outline and stays (a11y.css adds one where a component has none).

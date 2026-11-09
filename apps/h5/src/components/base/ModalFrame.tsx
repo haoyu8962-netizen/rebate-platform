@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useEffectEvent,
   useId,
   useLayoutEffect,
@@ -10,6 +11,7 @@ import {
   type ReactElement,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { MODAL_EXIT_MS } from './motion.ts';
 import {
   ACTION_IN_ROW,
   ACTION_ROW,
@@ -37,6 +39,9 @@ interface ModalEntry {
 const openModals: ModalEntry[] = [];
 
 const ParentModal = createContext<ModalNode | null>(null);
+
+/** True inside a modal that is playing its exit: a modal nested in it closes along with it. */
+const ParentClosing = createContext(false);
 
 function isInside(node: ModalNode, ancestor: ModalNode): boolean {
   for (let current = node.parent; current !== null; current = current.parent) {
@@ -80,6 +85,7 @@ function restoreFocus(panel: HTMLElement, previous: HTMLElement | null): void {
   const attempt = (): boolean => {
     if (!previous.isConnected || !focusLost(panel)) return true;
     previous.focus();
+
     return document.activeElement === previous;
   };
   if (attempt()) return;
@@ -168,7 +174,7 @@ const SHEET_FRAME: CSSProperties = {
 const VARIANT = {
   dialog: {
     root: 'flex items-center justify-center px-couli-6',
-    panel: 'w-full rounded-couli-card p-couli-5',
+    panel: 'h5-modal-dialog w-full rounded-couli-card p-couli-5',
     panelStyle: DIALOG_HEIGHT,
     title: 'px-couli-8 text-center text-couli-body leading-couli-body',
     close: 'top-couli-2 right-couli-2',
@@ -179,7 +185,7 @@ const VARIANT = {
   },
   sheet: {
     root: 'flex flex-col justify-end',
-    panel: 'w-full rounded-t-couli-panel px-couli-4 pt-couli-5',
+    panel: 'h5-modal-sheet w-full rounded-t-couli-panel px-couli-4 pt-couli-5',
     panelStyle: SHEET_FRAME,
     // Sheet titles use the title size, 22/28.6 (ProductAuthSheet, AdaptShortAuthSheet).
     title: 'pr-couli-8 text-couli-title leading-couli-title',
@@ -208,6 +214,24 @@ function CloseIcon(): ReactElement {
   );
 }
 
+interface ModalContent {
+  title: ModalProps['title'];
+  description: ModalProps['description'] | undefined;
+  children: ModalProps['children'];
+  primaryAction: ModalProps['primaryAction'] | undefined;
+  secondaryAction: ModalProps['secondaryAction'] | undefined;
+}
+
+function sameContent(a: ModalContent, b: ModalContent): boolean {
+  return (
+    a.title === b.title &&
+    a.description === b.description &&
+    a.children === b.children &&
+    a.primaryAction === b.primaryAction &&
+    a.secondaryAction === b.secondaryAction
+  );
+}
+
 interface ModalFrameProps extends ModalProps {
   variant: ModalVariant;
 }
@@ -216,22 +240,25 @@ interface ModalFrameProps extends ModalProps {
  * Shared modal behaviour for Dialog and Sheet: portal into `portalContainer` (default
  * document.body), focus the title on open, keep Tab inside, close on Escape / backdrop as allowed,
  * and return focus to the previously focused control when closed or unmounted.
+ *
+ * Motion (DSX-48d, shared/styles/index.css): opening animates in (sheet slides up, dialog fades in
+ * and grows slightly, backdrop fades); a modal rendered already open at mount shows at once.
+ * Closing takes effect in the same commit — out of the accessibility tree (`aria-hidden`,
+ * `inert`), focus back, no handlers — while the same layer stays in the portal to play its exit,
+ * removed by a timer (MODAL_EXIT_MS) and never by transitionend / animationend. While it exits
+ * it keeps showing the content it had when last open.
  */
 export function ModalFrame(props: ModalFrameProps): ReactElement | null {
   const {
     variant,
-    open,
-    title,
-    description,
     closeLabel,
     onClose,
-    children,
-    primaryAction,
-    secondaryAction,
     dismissible = true,
     closeOnBackdrop = true,
     portalContainer,
   } = props;
+  const parentClosing = useContext(ParentClosing);
+  const open = props.open && !parentClosing;
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -239,8 +266,37 @@ export function ModalFrame(props: ModalFrameProps): ReactElement | null {
   const bodyRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [scrollable, setScrollable] = useState(false);
+  const closedFocus = useRef<{ panel: HTMLElement; previous: HTMLElement | null } | null>(null);
   const parent = useContext(ParentModal);
   const [node] = useState<ModalNode>(() => ({ parent }));
+  // `present`: the layer is in the portal (open, or playing its exit). `appear`: opening animates;
+  // false only while the modal is in the open state it was mounted with.
+  const [present, setPresent] = useState(open);
+  const [appear, setAppear] = useState(!open);
+  if (open && !present) setPresent(true);
+  if (!open && !appear) setAppear(true);
+  const closing = present && !open;
+  // What the panel shows: the caller's content while open; while closing, the content it had when
+  // last open, so a caller that clears its content in the same update as closing (e.g.
+  // `setNote(null)`) does not empty the panel before it leaves. Reopening shows the new content.
+  const current: ModalContent = {
+    title: props.title,
+    description: props.description,
+    children: props.children,
+    primaryAction: props.primaryAction,
+    secondaryAction: props.secondaryAction,
+  };
+  const [lastOpen, setLastOpen] = useState(current);
+  if (open && !sameContent(lastOpen, current)) setLastOpen(current);
+  const { title, description, children, primaryAction, secondaryAction } = open
+    ? current
+    : lastOpen;
+
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(() => setPresent(false), MODAL_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [closing]);
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent, panel: HTMLElement) => {
     if (event.key === 'Escape') {
@@ -270,8 +326,17 @@ export function ModalFrame(props: ModalFrameProps): ReactElement | null {
       document.removeEventListener('keydown', listener);
       openModals.splice(openModals.indexOf(entry), 1);
       restoreFocus(panel, entry.previous);
+      closedFocus.current = { panel, previous: entry.previous };
     };
   }, [open, node]);
+
+  // A closing layer stays in the document, so React's own focus restore at the end of the commit
+  // (after the cleanup above) can put focus back on the title. Return it again once that is done.
+  useLayoutEffect(() => {
+    const pending = closedFocus.current;
+    closedFocus.current = null;
+    if (closing && pending !== null) restoreFocus(pending.panel, pending.previous);
+  }, [closing]);
 
   // Track whether the body overflows: the body box follows the viewport, the content box follows
   // the caller's content. Environments without ResizeObserver simply show no divider.
@@ -288,94 +353,104 @@ export function ModalFrame(props: ModalFrameProps): ReactElement | null {
     return () => observer.disconnect();
   }, [open]);
 
-  if (!open) return null;
+  if (!present) return null;
   const style = VARIANT[variant];
   const hasActions = primaryAction !== undefined || secondaryAction !== undefined;
-  const allowBackdrop = dismissible && closeOnBackdrop;
+  const allowBackdrop = dismissible && closeOnBackdrop && open;
+  /** No handler of a closing layer runs. */
+  const live = (handler: () => void): (() => void) | undefined => (open ? handler : undefined);
 
   return createPortal(
     <ParentModal value={node}>
-      <div className={`${LAYER} inset-0 ${style.root}`}>
+      <ParentClosing value={closing}>
         <div
-          data-slot="modal-backdrop"
-          aria-hidden="true"
-          className="absolute inset-0 bg-couli-overlay-scrim"
-          onClick={allowBackdrop ? onClose : undefined}
-        />
-        <div
-          ref={panelRef}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-          aria-describedby={description === undefined ? undefined : descriptionId}
-          className={`relative flex flex-col gap-couli-4 bg-couli-background-surface text-couli-text-primary [box-shadow:var(--shadow-floating)] ${style.panel}`}
-          style={style.panelStyle}
+          data-state={closing ? 'closed' : 'open'}
+          data-appear={appear ? '' : undefined}
+          aria-hidden={closing ? 'true' : undefined}
+          inert={closing}
+          className={`${LAYER} inset-0 ${style.root}`}
         >
-          {variant === 'sheet' ? (
-            <div
-              data-slot="sheet-handle"
-              aria-hidden="true"
-              className="absolute top-couli-2 left-1/2 h-couli-1 w-9 -translate-x-1/2 rounded-couli-pill bg-couli-border-subtle"
-            />
-          ) : null}
-          <h2
-            ref={titleRef}
-            id={titleId}
-            tabIndex={-1}
-            className={`flex-none font-couli-semibold outline-none ${style.title}`}
-          >
-            {title}
-          </h2>
-          <button
-            type="button"
-            aria-label={closeLabel}
-            className={`absolute flex size-couli-interaction-target-minimum cursor-pointer items-center justify-center rounded-couli-button text-couli-text-secondary active:bg-couli-background-muted active:opacity-70 ${FOCUS_RING} ${style.close}`}
-            onClick={onClose}
-          >
-            <CloseIcon />
-          </button>
           <div
-            ref={bodyRef}
-            data-slot="modal-body"
-            className="-m-couli-1 min-h-0 overflow-y-auto p-couli-1 text-couli-footnote leading-couli-footnote"
+            data-slot="modal-backdrop"
+            aria-hidden="true"
+            className="h5-modal-backdrop absolute inset-0 bg-couli-overlay-scrim"
+            onClick={allowBackdrop ? onClose : undefined}
+          />
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={description === undefined ? undefined : descriptionId}
+            className={`relative flex flex-col gap-couli-4 bg-couli-background-surface text-couli-text-primary [box-shadow:var(--shadow-floating)] ${style.panel}`}
+            style={style.panelStyle}
           >
-            <div ref={contentRef}>
-              {description === undefined ? null : (
-                <p id={descriptionId} className="mb-couli-3 last:mb-0">
-                  {description}
-                </p>
-              )}
-              {children}
-            </div>
-          </div>
-          {hasActions ? (
-            <div
-              data-slot="modal-actions"
-              data-scrollable={scrollable ? '' : undefined}
-              className={`${ACTION_ROW} ${style.actions} ${style.divider}`}
+            {variant === 'sheet' ? (
+              <div
+                data-slot="sheet-handle"
+                aria-hidden="true"
+                className="absolute top-couli-2 left-1/2 h-couli-1 w-9 -translate-x-1/2 rounded-couli-pill bg-couli-border-subtle"
+              />
+            ) : null}
+            <h2
+              ref={titleRef}
+              id={titleId}
+              tabIndex={-1}
+              className={`flex-none font-couli-semibold outline-none ${style.title}`}
             >
-              {secondaryAction === undefined ? null : (
-                <button
-                  type="button"
-                  className={`${ACTION_IN_ROW} ${SECONDARY_BUTTON}`}
-                  onClick={secondaryAction.onClick}
-                >
-                  {secondaryAction.label}
-                </button>
-              )}
-              {primaryAction === undefined ? null : (
-                <button
-                  type="button"
-                  className={`${ACTION_IN_ROW} ${PRIMARY_BUTTON}`}
-                  onClick={primaryAction.onClick}
-                >
-                  {primaryAction.label}
-                </button>
-              )}
+              {title}
+            </h2>
+            <button
+              type="button"
+              aria-label={closeLabel}
+              className={`absolute flex size-couli-interaction-target-minimum cursor-pointer items-center justify-center rounded-couli-button text-couli-text-secondary active:bg-couli-background-muted active:opacity-70 ${FOCUS_RING} ${style.close}`}
+              onClick={live(onClose)}
+            >
+              <CloseIcon />
+            </button>
+            <div
+              ref={bodyRef}
+              data-slot="modal-body"
+              className="-m-couli-1 min-h-0 overflow-y-auto p-couli-1 text-couli-footnote leading-couli-footnote"
+            >
+              <div ref={contentRef}>
+                {description === undefined ? null : (
+                  <p id={descriptionId} className="mb-couli-3 last:mb-0">
+                    {description}
+                  </p>
+                )}
+                {children}
+              </div>
             </div>
-          ) : null}
+            {hasActions ? (
+              <div
+                data-slot="modal-actions"
+                data-scrollable={scrollable ? '' : undefined}
+                className={`${ACTION_ROW} ${style.actions} ${style.divider}`}
+              >
+                {secondaryAction === undefined ? null : (
+                  <button
+                    type="button"
+                    className={`${ACTION_IN_ROW} ${SECONDARY_BUTTON}`}
+                    onClick={live(secondaryAction.onClick)}
+                  >
+                    {secondaryAction.label}
+                  </button>
+                )}
+                {primaryAction === undefined ? null : (
+                  <button
+                    type="button"
+                    className={`${ACTION_IN_ROW} ${PRIMARY_BUTTON}`}
+                    onClick={live(primaryAction.onClick)}
+                  >
+                    {primaryAction.label}
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
+      </ParentClosing>
     </ParentModal>,
     portalContainer ?? document.body,
   );

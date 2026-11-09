@@ -36,6 +36,12 @@ const DEFAULT_BRIDGE: AppApiBridge = {
   createH5TokenManager: bridgeSdk.createH5TokenManager,
 };
 
+/**
+ * 新显示的页签面板、替换骨架的表单与记录内容只淡入（shared/styles/index.css `h5-content-fade`，DSX-48d）。
+ * 记录页签的加载完成态在 claim-records.tsx 里带同一个类。
+ */
+const CONTENT_FADE = 'h5-content-fade';
+
 /** 本页启动配置的缓存键（账号切换时由壳层连同整份缓存清掉）。 */
 const BOOT_KEY = ['find-order', 'boot'] as const;
 
@@ -227,15 +233,18 @@ function FindOrderContent({
         role="tabpanel"
         aria-labelledby={ids.apply}
         hidden={tab !== 'apply'}
-        className="flex flex-1 flex-col"
+        className={`flex flex-1 flex-col ${CONTENT_FADE}`}
       >
         <Suspense fallback={<FormSkeleton />}>
-          <ClaimForm
-            bridge={bridge}
-            config={config}
-            onCreated={onCreated}
-            onDuplicate={onDuplicate}
-          />
+          {/* 表单块晚于面板到达时，骨架换成的是这层新挂载的容器，由它自己淡入。 */}
+          <div className={`flex flex-1 flex-col ${CONTENT_FADE}`}>
+            <ClaimForm
+              bridge={bridge}
+              config={config}
+              onCreated={onCreated}
+              onDuplicate={onDuplicate}
+            />
+          </div>
         </Suspense>
       </section>
       {tab === 'records' ? (
@@ -243,7 +252,7 @@ function FindOrderContent({
           id={ids.recordsPanel}
           role="tabpanel"
           aria-labelledby={ids.records}
-          className="flex flex-1 flex-col pb-couli-6"
+          className={`flex flex-1 flex-col pb-couli-6 ${CONTENT_FADE}`}
         >
           <Suspense fallback={<RecordsFallback />}>
             <ClaimRecords

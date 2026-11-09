@@ -1,6 +1,6 @@
 import { useLayoutEffect } from 'react';
 import { isInApp } from '@couli/bridge-sdk';
-import { TOAST_DISPLAY_MS } from './motion.ts';
+import { TOAST_DISPLAY_MS, TOAST_EXIT_MS } from './motion.ts';
 import { TOAST_LAYER } from './styles.ts';
 
 export interface ToastProps {
@@ -28,7 +28,7 @@ function acquireRegion(container: HTMLElement): HTMLElement {
   return region;
 }
 
-const STATUS_CLASS = `${TOAST_LAYER} pointer-events-none inset-x-couli-4 mx-auto w-fit max-w-full rounded-couli-button border border-couli-border-subtle bg-couli-background-surface px-couli-4 py-couli-2 text-center text-couli-footnote leading-couli-footnote text-couli-text-primary [box-shadow:var(--shadow-floating)]`;
+const STATUS_CLASS = `h5-toast ${TOAST_LAYER} pointer-events-none inset-x-couli-4 mx-auto w-fit max-w-full rounded-couli-button border border-couli-border-subtle bg-couli-background-surface px-couli-4 py-couli-2 text-center text-couli-footnote leading-couli-footnote text-couli-text-primary [box-shadow:var(--shadow-floating)]`;
 /** Outside the App: bottom centre, clear of the home indicator. */
 const STATUS_BOTTOM = 'calc(env(safe-area-inset-bottom, 0px) + var(--space-16))';
 /** Inside the App: top centre, below the status bar; the navigation bar is native, above the page. */
@@ -45,6 +45,9 @@ const STATUS_TOP = 'calc(env(safe-area-inset-top, 0px) + var(--space-4))';
  * A new `message` replaces the text and restarts the timer. To announce the same text again,
  * mount a new Toast (for example with a new `key`, even in the same commit): every notice clears
  * the previous text and writes its own into a fresh element, so screen readers announce it again.
+ *
+ * Motion (DSX-48d, shared/styles/index.css `h5-toast`): the notice fades in, and fades out over
+ * the last TOAST_EXIT_MS before it is removed; it never moves. Timers only, no transitionend.
  */
 export function Toast({ message, durationMs = TOAST_DISPLAY_MS, container }: ToastProps): null {
   useLayoutEffect(() => {
@@ -60,8 +63,13 @@ export function Toast({ message, durationMs = TOAST_DISPLAY_MS, container }: Toa
     else status.style.setProperty('bottom', STATUS_BOTTOM);
     region.append(status);
     status.textContent = message;
+    const fade = setTimeout(
+      () => status.setAttribute('data-state', 'closed'),
+      Math.max(0, durationMs - TOAST_EXIT_MS),
+    );
     const timer = setTimeout(() => status.remove(), durationMs);
     return () => {
+      clearTimeout(fade);
       clearTimeout(timer);
       status.remove();
     };
