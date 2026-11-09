@@ -1,0 +1,39 @@
+{
+  "red_tests": [],
+  "risk_note": "DSX-48e (orchestrator D10-1141; follow-up of DSX-48d whose Codex general r3 S1 was downgraded to S2 under REVIEW.md §5.4). The Sheet panel now fades as it slides: the entry start style (@starting-style / data-appear) and the closed state add opacity 0 next to translateY(100%), transition-property includes opacity, timings stay on the existing tokens (enter emphasized-enter on the emphasized duration, exit normal + emphasized-exit); reduced motion still fades only. Unit test apps/h5/src/components/base/sheetMotion.test.ts (5 cases) reads the rules from index.css and pins opacity 0 at the start and in the closed state and opacity in the transition (3 of 5 fail with main's index.css). tester none (frozen h5-transitions and h5-components are the regression net). Host: h5 unit tests 102, frozen h5-transitions + h5-components 44, tsc, eslint, prettier, run.ts static 10/10 green; local container browser run disconnected under host overload after admin-only timeouts, every H5 browser file that ran (including the sheet enter / exit) passed, CI runs full verification. Non-funds. Codex general review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex general r1 pass, no findings"
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-48e",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "spec_commit": "04fddbfc38ce3c8481d1e724bf285f5735ccef02",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b220457a5be8d8a9d790b2f4d3cf58c144d6669d",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}
