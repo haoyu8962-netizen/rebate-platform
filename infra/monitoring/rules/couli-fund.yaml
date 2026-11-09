@@ -16,7 +16,6 @@
 # The log alerts config_change_alert, sms_daily_budget_alert and device_hash_hot_alert are not in
 # the fund list of 规划/02 §13, so they get no rule here (D10-393 (d)).
 # TODO(规划/11 §2.3): W6 ratio and repeated W6 (BR-WDR-24) — blocked on B2-06a.
-# TODO(规划/11 §2.3): corporate Alipay balance watermark W < 1.5P (BR-WDR-18) — blocked on B2-06fz.
 groups:
   - name: couli-fund-orders
     rules:
@@ -96,6 +95,15 @@ groups:
         annotations:
           summary: 'The enterprise Alipay balance W is below 1.5 times the forecast withdrawals P'
           description: 'couli_payout_water_low is 1 for an app whose latest W, read within 2 hours, is below 1.5 P (BR-WDR-18). This only warns finance: it does not refuse payouts. EXECUTE refuses on its own checks (W below P, W stale, or the usable share of W exceeded). There is no sample without a fresh W, so a stale W does not fire this alert; re-enter W on the payout console.'
+      - alert: CouliPayoutWaterStale
+        expr: 'couli_payout_water_stale > 0'
+        for: '5m'
+        labels:
+          severity: warning
+          fund: 'true'
+        annotations:
+          summary: 'Approved enterprise Alipay withdrawals are waiting while W is missing or older than 2 hours'
+          description: 'couli_payout_water_stale is 1 for an app with APPROVED enterprise Alipay withdrawals waiting to be executed and no fresh W: no W row, or the latest one is stale by the same judgement EXECUTE uses (BR-WDR-18 ②). EXECUTE refuses those withdrawals until W is entered again; re-enter W on the payout console. Apps without waiting Alipay withdrawals have no sample.'
       - alert: CouliAutoPayoutDailyNearCap
         expr: 'couli_auto_payout_daily_total_fen / couli_auto_payout_daily_cap_fen >= 0.8'
         for: '5m'

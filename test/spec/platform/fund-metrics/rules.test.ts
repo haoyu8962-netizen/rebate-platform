@@ -146,6 +146,7 @@ it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：
     ...AUTO_PAYOUT_METRIC_NAMES,
     ...REVIEW_OVERDUE_METRIC_NAMES,
     'couli_payout_water_low',
+    'couli_payout_water_stale',
   ];
   expect(named.filter((name) => !allowed.includes(name))).toEqual([]);
   for (const metric of FUND_METRIC_NAMES) {

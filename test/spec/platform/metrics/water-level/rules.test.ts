@@ -106,9 +106,7 @@ it('[AC-B2-09j#23] 阈值边界：值 0（查过，不低）不触发，值 1 �
 it('[AC-B2-09j#24] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处', () => {
   const rule = waterLowRule();
   expect(rule.labels['fund'], rule.alert).toBe('true');
-  const named = rules(FUND_RULES).flatMap(
-    (r) => r.expr.match(/\bcouli_payout_water_[a-z0-9_]+/g) ?? [],
-  );
+  const named = rules(FUND_RULES).flatMap((r) => r.expr.match(/\bcouli_payout_water_low\b/g) ?? []);
   expect(named).toEqual([WATER_LOW_METRIC]);
   const base = rules(BASE_RULES).flatMap((r) => r.expr.match(/\bcouli_[a-z0-9_]+/g) ?? []);
   expect(base.filter((name) => name === WATER_LOW_METRIC)).toEqual([]);

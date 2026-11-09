@@ -1,0 +1,156 @@
+{
+  "risk_note": "Payout read-only alert, RV2 by path (payout application, platform metrics, the fund alert rules), no money effect: no voucher, no balance change, no external write. The worker exports couli_payout_water_stale{app_id} (1 when an app has an Alipay withdrawal waiting in APPROVED and the latest Alipay W is missing or older than EXECUTE's two-hour limit, judged by the very judgeWatermark EXECUTE uses; BR-WDR-18 ②), read through payout's read-only port at scrape time and cached like the water-low gauge; a failed read fails the scrape, never a 0. couli-fund.yaml gets CouliPayoutWaterStale (for 5m, fund: 'true'), and the outdated W < 1.5P TODO is removed (that alert is B2-09j's CouliPayoutWaterLow). Rebased onto main 04fddbfc3: the conflicts in entry.ts and metrics/registry.ts were B3-08z's agent trace gauge next to this one, both kept. Three frozen spec files change as the ledger declares: [AC-B1-01zzi#6] allow list adds couli_payout_water_stale, [AC-B2-09j#24] regex narrowed to couli_payout_water_low (modify_existing tighten_only, D10-807), and the alerting-eval/metrics.test.ts registry fixture adds collectWaterStale outside the test bodies (red_exempt / red_exempt_outside; red-check expands its it.each(RULE_FILES) since CT-06zzzzi #2864).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, effort medium, base the merge base 04fddbfc3, full review of the whole change with the citable-lines section (CT-06zzzzn); no findings (couli-runs/B2-09ze/money-review-r1.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by fresh independent Claude contexts (claude-run.sh --phase test), four rounds: r1–r3 on 11-07, r4 on 11-09 under approvals 54 (only [AC-B2-09ze#24]). spec-test r1 / r2 by fresh independent Claude (r1 fail → round 2, r2 pass). r3 by Codex after the rebase (CT-06zzzzm #2909: Codex confirms independent Claude tests; D10-848 void): it covered the three frozen-file changes (allow list, water_low regex, the registry fixture with the two red_exempt [AC-B1-25b#8] entries and red_exempt_outside) without a finding on them, and failed on one S1, a test gap (an older APPROVED plus a newer non-APPROVED Alipay withdrawal of one app; the implementation already reads 'any APPROVED'). r4 by Codex, incremental, passed and closed it (spec-test-review-r3-codex.json, spec-test-review-r4-codex.json)."
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/fund-metrics/rules.test.ts",
+      "test": "[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "after": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n    'couli_payout_water_stale',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "couli-fund.yaml CouliPayoutWaterStale expr also reads an unlisted metric ('couli_payout_water_stale > 0 or couli_payout_w6_ratio > 0.02')",
+          "result": "killed"
+        }
+      ],
+      "note": "Mutants run by ops on a copy of the head tree (vitest on this one test): green unmutated, red with the mutant; D10-807."
+    },
+    {
+      "file": "test/spec/platform/metrics/water-level/rules.test.ts",
+      "test": "[AC-B2-09j#24] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处",
+      "reason": "tighten_only",
+      "before": "it('[AC-B2-09j#24] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处', () => {\n  const rule = waterLowRule();\n  expect(rule.labels['fund'], rule.alert).toBe('true');\n  const named = rules(FUND_RULES).flatMap(\n    (r) => r.expr.match(/\\bcouli_payout_water_[a-z0-9_]+/g) ?? [],\n  );\n  expect(named).toEqual([WATER_LOW_METRIC]);\n  const base = rules(BASE_RULES).flatMap((r) => r.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => name === WATER_LOW_METRIC)).toEqual([]);\n});",
+      "after": "it('[AC-B2-09j#24] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处', () => {\n  const rule = waterLowRule();\n  expect(rule.labels['fund'], rule.alert).toBe('true');\n  const named = rules(FUND_RULES).flatMap((r) => r.expr.match(/\\bcouli_payout_water_low\\b/g) ?? []);\n  expect(named).toEqual([WATER_LOW_METRIC]);\n  const base = rules(BASE_RULES).flatMap((r) => r.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => name === WATER_LOW_METRIC)).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "couli-fund.yaml CouliPayoutWaterStale expr also reads couli_payout_water_low ('couli_payout_water_stale > 0 or couli_payout_water_low > 1'): a second rule reading water_low",
+          "result": "killed"
+        }
+      ],
+      "note": "Mutants run by ops on a copy of the head tree (vitest on this one test): green unmutated, red with the mutant; D10-807."
+    }
+  ],
+  "task": "B2-09ze",
+  "spec_commit": "6f0d688ca00a20390db896aeb381362b5d8be8aa",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "red_tests": [
+    "test/spec/platform/metrics/water-stale/cache.test.ts > [AC-B2-09ze#5] 默认缓存 5 分钟：差 1 毫秒仍是同一份快照、不再读；满 5 分钟重读并跟随新值",
+    "test/spec/platform/metrics/water-stale/cache.test.ts > [AC-B2-09ze#6] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+    "test/spec/platform/metrics/water-stale/entry.test.ts > [AC-B2-09ze#7] worker 的 /metrics 在 scrape 时经 payout/index.ts 的 readPayoutWaterStale（本入口的库句柄、本入口的时钟）导出 couli_payout_water_stale（gauge、app_id 标签、值为端口结论）；启动时不读；其余四个入口没有该指标、不调该端口",
+    "test/spec/platform/metrics/water-stale/entry.test.ts > [AC-B2-09ze#8] worker 的 W 过期读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论",
+    "test/spec/platform/metrics/water-stale/entry.test.ts > [AC-B2-09ze#9] worker 装配走 5 分钟缓存：5 分钟内不再读、值不变，满 5 分钟重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#12]有待执行的提现（APPROVED）：没有 W 值 1，W 新鲜值 0；W 的金额不影响（W=0、W 低于 1.5P 只要新鲜都是 0）",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#13]新鲜与否与 judgeWatermark 同源（D10-807 ①）：t_W 距今恰好 2 小时、2 小时 + 1 ms、没有 W 三种时刻（另加超前 4 分钟），gauge 为 1 当且仅当 judgeWatermark 判 watermark_stale；恰好 2 小时值 0，多 1 ms 值 1，没有 W 值 1",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#14]没有待执行的提现不为 1：只有 PENDING_REVIEW / REJECTED / PAYING / PAID_API / PAID_MANUAL / FAILED 的 app，没有 W 或 W 过期都不为 1；只有 W 没有提现的 app 也不为 1",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#15]只看企业支付宝的 W（各通道分别取，细则「多通道的 W」）：只有 wechat / bank_card 有新鲜 W 时值 1；alipay 的 W 过期而别的通道新鲜也值 1；alipay 新鲜而别的通道过期值 0",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#23]待执行的提现只计与 W 同一通道的单（withdrawals.payout_channel = alipay，细则「多通道的 W」）：只有 wechat / bank_card 的 APPROVED 单时，企业支付宝 W 缺失或过期都不为 1；企业支付宝自己有 APPROVED 单时按 W 判（缺失值 1、新鲜值 0）",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#16]取的是最新一行 W（按 measured_at，不按写入先后），端口不缓存：较新的新鲜 W 盖过旧行；再录一行新鲜 W 下一次读就从 1 变 0；早于近 7 日窗口建的待执行单同样算",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#17]多 app 各算各的：一个 app 的 W 不顶替另一个 app 的；一个 app 有多笔待执行单也只一个样本",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#18]只读、只用注入时钟：只读事务可跑、两张表的行前后不变；W 的新旧只看注入时钟（库的 now() 早好几年，按库时钟 3 小时前的 W 还在未来）；worker registry 以该端口渲染出同样的值",
+    "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#24]判断依据是「存在待执行（APPROVED）的企业支付宝单」，不是「取该 app / 通道最新一笔提现看状态」：较早一笔 alipay 仍 APPROVED、之后又来一笔较新的 alipay PENDING_REVIEW，alipay 没有 W 或最新 W 已过期（距注入时钟 2 小时 + 1 ms）时，样本都存在且值 1",
+    "test/spec/platform/metrics/water-stale/port.test.ts > [AC-B2-09ze#10] payout 端口经 payout/index.ts 导出：读 payout_watermarks 与 withdrawals；不读别的模块的资金表、不写、不读数据库时钟",
+    "test/spec/platform/metrics/water-stale/port.test.ts > [AC-B2-09ze#11] 端口的任一库读失败时端口拒绝（原错误）：W 读失败、提现读失败都不以 0 或只含部分 app 的结果代替",
+    "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#1] worker 的 registry 在 scrape 时调 collectWaterStale：有 # HELP 与 # TYPE couli_payout_water_stale gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致；其余指标（含 couli_payout_water_low）照旧",
+    "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#2] 样本跟随每次快照、不常驻轮询：消失的 app 没有样本（不留旧值），快照为空时只有 # TYPE 行没有样本",
+    "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#3] 只在 worker 且给了 collectWaterStale 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+    "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#4] collectWaterStale 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把值编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+    "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#19] couli-fund.yaml 有且只有一条读 couli_payout_water_stale 的规则：alert CouliPayoutWaterStale、expr 就是 couli_payout_water_stale > 0、for 5m（与资金规则通用粒度一致，[AC-B1-01zzi#4]）、severity warning、labels.fund 为字符串 \"true\"、有 summary 和 description；alert 名在两个文件里唯一",
+    "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#20] 阈值边界：值 0（W 新鲜或没有待执行单）不触发，值 1 触发（严格大于 0，不是 >= 0、不是 > 1）",
+    "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#21] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处",
+    "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#22] couli-fund.yaml 不再有「W < 1.5P … blocked on B2-06fz」那行过时的 TODO（B2-09j 已落地）"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6f0d688ca00a20390db896aeb381362b5d8be8aa",
+      "tree": "fc15086f73b8b716518c09f927a8ef8ea5f5dd48",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T05:10:21Z",
+      "finished_at": "2026-11-09T05:11:51Z",
+      "red_tests": [
+        "test/spec/platform/metrics/water-stale/cache.test.ts > [AC-B2-09ze#5] 默认缓存 5 分钟：差 1 毫秒仍是同一份快照、不再读；满 5 分钟重读并跟随新值",
+        "test/spec/platform/metrics/water-stale/cache.test.ts > [AC-B2-09ze#6] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+        "test/spec/platform/metrics/water-stale/entry.test.ts > [AC-B2-09ze#7] worker 的 /metrics 在 scrape 时经 payout/index.ts 的 readPayoutWaterStale（本入口的库句柄、本入口的时钟）导出 couli_payout_water_stale（gauge、app_id 标签、值为端口结论）；启动时不读；其余四个入口没有该指标、不调该端口",
+        "test/spec/platform/metrics/water-stale/entry.test.ts > [AC-B2-09ze#8] worker 的 W 过期读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论",
+        "test/spec/platform/metrics/water-stale/entry.test.ts > [AC-B2-09ze#9] worker 装配走 5 分钟缓存：5 分钟内不再读、值不变，满 5 分钟重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#12]有待执行的提现（APPROVED）：没有 W 值 1，W 新鲜值 0；W 的金额不影响（W=0、W 低于 1.5P 只要新鲜都是 0）",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#13]新鲜与否与 judgeWatermark 同源（D10-807 ①）：t_W 距今恰好 2 小时、2 小时 + 1 ms、没有 W 三种时刻（另加超前 4 分钟），gauge 为 1 当且仅当 judgeWatermark 判 watermark_stale；恰好 2 小时值 0，多 1 ms 值 1，没有 W 值 1",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#14]没有待执行的提现不为 1：只有 PENDING_REVIEW / REJECTED / PAYING / PAID_API / PAID_MANUAL / FAILED 的 app，没有 W 或 W 过期都不为 1；只有 W 没有提现的 app 也不为 1",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#15]只看企业支付宝的 W（各通道分别取，细则「多通道的 W」）：只有 wechat / bank_card 有新鲜 W 时值 1；alipay 的 W 过期而别的通道新鲜也值 1；alipay 新鲜而别的通道过期值 0",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#23]待执行的提现只计与 W 同一通道的单（withdrawals.payout_channel = alipay，细则「多通道的 W」）：只有 wechat / bank_card 的 APPROVED 单时，企业支付宝 W 缺失或过期都不为 1；企业支付宝自己有 APPROVED 单时按 W 判（缺失值 1、新鲜值 0）",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#16]取的是最新一行 W（按 measured_at，不按写入先后），端口不缓存：较新的新鲜 W 盖过旧行；再录一行新鲜 W 下一次读就从 1 变 0；早于近 7 日窗口建的待执行单同样算",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#17]多 app 各算各的：一个 app 的 W 不顶替另一个 app 的；一个 app 有多笔待执行单也只一个样本",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#18]只读、只用注入时钟：只读事务可跑、两张表的行前后不变；W 的新旧只看注入时钟（库的 now() 早好几年，按库时钟 3 小时前的 W 还在未来）；worker registry 以该端口渲染出同样的值",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts > [AC-B2-09ze#24]判断依据是「存在待执行（APPROVED）的企业支付宝单」，不是「取该 app / 通道最新一笔提现看状态」：较早一笔 alipay 仍 APPROVED、之后又来一笔较新的 alipay PENDING_REVIEW，alipay 没有 W 或最新 W 已过期（距注入时钟 2 小时 + 1 ms）时，样本都存在且值 1",
+        "test/spec/platform/metrics/water-stale/port.test.ts > [AC-B2-09ze#10] payout 端口经 payout/index.ts 导出：读 payout_watermarks 与 withdrawals；不读别的模块的资金表、不写、不读数据库时钟",
+        "test/spec/platform/metrics/water-stale/port.test.ts > [AC-B2-09ze#11] 端口的任一库读失败时端口拒绝（原错误）：W 读失败、提现读失败都不以 0 或只含部分 app 的结果代替",
+        "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#1] worker 的 registry 在 scrape 时调 collectWaterStale：有 # HELP 与 # TYPE couli_payout_water_stale gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致；其余指标（含 couli_payout_water_low）照旧",
+        "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#2] 样本跟随每次快照、不常驻轮询：消失的 app 没有样本（不留旧值），快照为空时只有 # TYPE 行没有样本",
+        "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#3] 只在 worker 且给了 collectWaterStale 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+        "test/spec/platform/metrics/water-stale/registry.test.ts > [AC-B2-09ze#4] collectWaterStale 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把值编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+        "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#19] couli-fund.yaml 有且只有一条读 couli_payout_water_stale 的规则：alert CouliPayoutWaterStale、expr 就是 couli_payout_water_stale > 0、for 5m（与资金规则通用粒度一致，[AC-B1-01zzi#4]）、severity warning、labels.fund 为字符串 \"true\"、有 summary 和 description；alert 名在两个文件里唯一",
+        "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#20] 阈值边界：值 0（W 新鲜或没有待执行单）不触发，值 1 触发（严格大于 0，不是 >= 0、不是 > 1）",
+        "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#21] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处",
+        "test/spec/platform/metrics/water-stale/rules.test.ts > [AC-B2-09ze#22] couli-fund.yaml 不再有「W < 1.5P … blocked on B2-06fz」那行过时的 TODO（B2-09j 已落地）"
+      ],
+      "expected": [
+        "test/spec/platform/metrics/water-stale/cache.test.ts",
+        "test/spec/platform/metrics/water-stale/entry.test.ts",
+        "test/spec/platform/metrics/water-stale/port.int.test.ts",
+        "test/spec/platform/metrics/water-stale/port.test.ts",
+        "test/spec/platform/metrics/water-stale/registry.test.ts",
+        "test/spec/platform/metrics/water-stale/rules.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "acfeaeee072f370cd5948e92d5b182239efbd31e32ab4bf4b1110de6a49fb0fc"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "dbb55c784ed7fc548ac76c56001196b1f428e3449c1bd7e901cd70166720c6cf"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "903fac99e31c2902b34152130c90f2901456b27d",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}

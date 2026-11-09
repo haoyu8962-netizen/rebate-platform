@@ -147,6 +147,9 @@ export type { PayoutReviewOverdue } from './application/review-overdue-count.ts'
 // B2-09j (BR-WDR-18, D10-592): the worker's water level gauge (read only).
 export { readPayoutWaterLow } from './application/water-low-read.ts';
 export type { PayoutWaterLow } from './application/water-low-read.ts';
+// B2-09ze (BR-WDR-18 ②, D10-805 ④): the worker's stale / missing W gauge (read only).
+export { readPayoutWaterStale } from './application/water-stale-read.ts';
+export type { PayoutWaterStale } from './application/water-stale-read.ts';
 // B1-01zzp: B2-11c's reading of withdraw.auto_payout.* (absent or malformed → its 08 default), so
 // the worker's auto-payout cap gauge carries the cap the decision executes with.
 export { autoPayoutConfigOf } from './application/auto-payout.ts';

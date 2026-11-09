@@ -64,6 +64,7 @@ import {
   readPayoutFundMetrics,
   readPayoutReviewOverdue,
   readPayoutWaterLow,
+  readPayoutWaterStale,
   resolvePayoutMode,
   type PayoutModeDecision,
   type PayoutRuntime,
@@ -73,6 +74,7 @@ import {
   cacheFundCollector,
   cacheReviewOverdueCollector,
   cacheWaterLowCollector,
+  cacheWaterStaleCollector,
   collectAutoPayoutDaily,
   createAgentTraceMissingCollector,
   type AgentTraceMissingSnapshot,
@@ -81,6 +83,7 @@ import {
   type FundMetricsSnapshot,
   type ReviewOverdueSnapshot,
   type WaterLowSnapshot,
+  type WaterStaleSnapshot,
   type TaobaoSearchMetricsSnapshot,
 } from './modules/platform/metrics/index.ts';
 import { readSettlementFundMetrics } from './modules/settlement/index.ts';
@@ -308,8 +311,10 @@ function startGenerationRenewal(
  * total against the cap, cached per +08:00 day) and, since B2-05o, `collectReviewOverdue` (the
  * withdrawals judged review-overdue still waiting, payout's read-only port) and, since B2-09j,
  * `collectWaterLow` (W against 1.5 P per app, payout's read-only port) and, since B3-08z,
- * `collectAgentTraceMissing` (runs missing their card trace, agent's read-only port). Since B1-04zy
- * only the api passes `collectTaobaoSearch` (union's in-process search counter, read at scrape time).
+ * `collectAgentTraceMissing` (runs missing their card trace, agent's read-only port) and, since
+ * B2-09ze, `collectWaterStale` (Alipay withdrawals waiting without a fresh W, per app, payout's
+ * read-only port). Since B1-04zy only the api passes `collectTaobaoSearch` (union's in-process
+ * search counter, read at scrape time).
  * Not on the Nest application, not in the OAS.
  */
 async function openMetrics(
@@ -324,6 +329,7 @@ async function openMetrics(
         readonly collectReviewOverdue: () => Promise<ReviewOverdueSnapshot>;
         readonly collectWaterLow: () => Promise<WaterLowSnapshot>;
         readonly collectAgentTraceMissing: () => Promise<AgentTraceMissingSnapshot>;
+        readonly collectWaterStale: () => Promise<WaterStaleSnapshot>;
       }
     | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot },
 ): Promise<MetricsServer | undefined> {
@@ -541,6 +547,12 @@ async function start(
           // worker's own handle, read at every scrape; a failed read fails the scrape (no 0).
           collectAgentTraceMissing: createAgentTraceMissingCollector(
             createPgAgentTraceMissingPort({ db: dbHandles.db }),
+            clock,
+          ),
+          // The stale W gauge (B2-09ze; BR-WDR-18 ②): payout's read-only port, cached the same
+          // way; a failed read fails the scrape (no 0 in its place) and is read again next time.
+          collectWaterStale: cacheWaterStaleCollector(
+            () => readPayoutWaterStale(dbHandles.db, clock),
             clock,
           ),
         });

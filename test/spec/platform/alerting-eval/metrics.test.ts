@@ -56,6 +56,7 @@ async function exportedMetrics(entry: Entry): Promise<Set<string>> {
     collectReviewOverdue: async () => ({ reviewOverdue: 1 }),
     collectWaterLow: async () => ({ waterLow: { 'fixture-app': 1 } }),
     collectAgentTraceMissing: async () => ({ missingRuns: { 'fixture-app': 1 } }),
+    collectWaterStale: async () => ({ waterStale: { 'fixture-app': 1 } }),
     collectTaobaoSearch: () => [{ source: 'official', outcome: 'fallback', value: 1 }],
   });
   const text = await registry.render();

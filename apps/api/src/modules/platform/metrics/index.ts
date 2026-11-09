@@ -32,6 +32,8 @@ export { cacheReviewOverdueCollector } from './review-overdue.ts';
 export type { ReviewOverdueSnapshot } from './review-overdue.ts';
 export { cacheWaterLowCollector } from './water-low.ts';
 export type { WaterLowSnapshot } from './water-low.ts';
+export { cacheWaterStaleCollector } from './water-stale.ts';
+export type { WaterStaleSnapshot } from './water-stale.ts';
 export { createMetricsRegistry } from './registry.ts';
 export type {
   MetricsRegistry,
