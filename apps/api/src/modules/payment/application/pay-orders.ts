@@ -31,7 +31,9 @@
 // summaries only); they are part of the response, which platform idempotency's standard mode
 // stores in idempotency_keys with the first answer and replays byte for byte to the same
 // Idempotency-Key for its retention (30 days) — so a replay needs no channel call and touches no
-// payment row. The order never carries a channel-side user id; no ledger posting happens here
+// payment row. B2-15y (BR-PAY-03): those stored launch parameters are replayed only while the order
+// can still be launched; replayRefusal reads the order under the business object lock, the one
+// closing takes. The order never carries a channel-side user id; no ledger posting happens here
 // (payment/AGENTS.md rules 1, 6).
 import type { DB } from '@couli/db';
 import type { Schema } from '@couli/contracts-ts';
@@ -348,6 +350,42 @@ export async function createPayOrder(
 }
 
 /** GET /v1/pay/orders/{pay_order_id}: the owner's order only, else 30701 (unknown and foreign alike). */
+/**
+ * B2-15y (BR-PAY-03, D10-1067): what a replayed create answers instead of its stored bytes, or null
+ * to replay them. Only a stored success carries launch parameters; for one, the order is read under
+ * the business object lock (取参数与关单互斥), with the same test as a first create: PENDING,
+ * closing=false and before expire_at can still be launched. PAID → 30902, anything else → 20902, as
+ * another create for the object would answer. Writes nothing: a replay is not a new issue of the
+ * parameters, so launch_issued_at stays. A failed read throws (50001), never the stored bytes.
+ */
+export async function replayRefusal(
+  deps: PayOrderDeps,
+  subject: PaySubject,
+  storedBody: string,
+): Promise<PayFailure | null> {
+  const stored = JSON.parse(storedBody) as {
+    readonly code: number;
+    readonly data?: Schema<'CreatePayOrderData'>;
+  };
+  const data = stored.data;
+  if (stored.code !== 0 || data === undefined) return null;
+  return deps.db.transaction().execute(async (trx) => {
+    await lockBizObject(trx, {
+      appId: subject.app_id,
+      bizType: data.biz_type,
+      bizRef: data.biz_ref,
+    });
+    const order = await findOwnOrder(trx, subject.app_id, subject.user_id, data.pay_order_id);
+    if (order === undefined) return CONFLICT;
+    if (order.status === 'PAID') return { code: 30902, data: { pay_order_id: order.id } };
+    const launchable =
+      order.status === 'PENDING' &&
+      !order.closing &&
+      !isPayOrderExpired(deps.clock.now(), order.expire_at);
+    return launchable ? null : CONFLICT;
+  });
+}
+
 export async function getPayOrder(
   deps: PayOrderDeps,
   subject: PaySubject,

@@ -12,6 +12,8 @@
 //   path /v1/pay/orders): a replay answers the stored bytes without touching the channel; a
 //   missing or malformed Idempotency-Key is 20001, another body under the same key 20901. Code 0
 //   and 3xxxx results are stored; 20902 and 50306 are not, so the same key may be sent again.
+//   B2-15y: a replayed success gives its launch parameters only while the order can be launched;
+//   otherwise it answers 30902 / 20902 (replayRefusal), and the stored row stays as it is.
 // - Codes as the use case returns them, HTTP status from contracts/error-codes.yaml, msg the
 //   BR-TEXT-14 fallback text (contracts/texts.default.json error.<code>).
 // - Nothing of a response is logged here; the launch parameters go to the reply only.
@@ -44,6 +46,7 @@ import {
   createPayOrder,
   getPayOrder,
   payOrderReturned,
+  replayRefusal,
   type PayFailure,
   type PayOrderDeps,
   type PayResult,
@@ -158,6 +161,18 @@ export class PayOrdersController {
       },
       async () => answer(await createPayOrder(deps, subject, body), traceId),
     );
+    const refusal =
+      result.source === 'replay' && result.status === 200
+        ? await replayRefusal(deps, subject, result.body)
+        : null;
+    if (refusal !== null) {
+      const refused = answer(refusal, traceId);
+      reply
+        .code(refused.status)
+        .type('application/json; charset=utf-8')
+        .send(JSON.stringify(refused.envelope));
+      return;
+    }
     reply.code(result.status).type('application/json; charset=utf-8').send(result.body);
   }
 

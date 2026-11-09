@@ -1318,6 +1318,11 @@ export interface paths {
          *     The response is the pay order plus `launch`, the parameters the channel SDK needs, one
          *     branch per pay_channel. They are signed by the server; no private key, API key or
          *     certificate ever reaches the client. Version gate: applied.
+         *
+         *     A replay (same Idempotency-Key and body) answers the stored response only while the order
+         *     can still be launched (PENDING, closing=false, before expire_at). Once it cannot, no launch
+         *     parameters are returned (BR-PAY-03): a PAID order → 30902 with data.pay_order_id; a closed,
+         *     closing or expired order → 20902 with data.resource=pay_order.
          */
         post: operations["createPayOrder"];
         delete?: never;

@@ -1,0 +1,120 @@
+{
+  "risk_note": "Payment path, RV2, no money effect (the channels refuse a closed order anyway). BR-PAY-03, FU-PAY-IDEM-REPLAY-AFTER-CLOSE, D10-1067: a replayed POST /v1/pay/orders no longer returns its stored launch parameters once the order cannot be launched. On a replay of a stored success the controller calls replayRefusal: under the business object lock (the one taking parameters and closing use, spec-test r1 S1) it reads the caller's own order with the same test as a first create (PENDING, closing=false, before expire_at). Launchable: the stored bytes, unchanged. PAID: 30902 with data.pay_order_id. Anything else: 20902 with data.resource=pay_order. A failed read throws (50001) and never returns the stored bytes. idempotency_keys and pay_orders are not written: a byte-for-byte replay is not a new issue, launch_issued_at stays (D10-1102). The contract description gains one sentence; no schema change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh (D10-1075), effort medium, base the last test(spec) commit (couli-runs/B2-15y/money-review-r1.json). The round was output as fail with one S1: a launchable replay returns the launch parameters again without updating launch_issued_at, while BR-PAY-03 says every return records it and has no replay exception. Idempotency, concurrency, app_id and rounding were ok. Orchestrator ruling D10-1102 reclassified it as S2: the field only tells whether parameters were ever returned (BR-PAY-05 ①; pay-close.ts:151 only tests for null), a byte-for-byte replay gives the first answer again, and the first issue already wrote it; the orchestrator clarifies BR-PAY-03 in the next spec batch; [AC-B2-15y#4] stays and no r2 runs. So no S0 / S1 remains open by that ruling; the original verdict is recorded here."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests in 2 attempts by a fresh independent Claude. spec-test r1 (spec-test-review-r1.json, before D10-848 was voided) failed on 2 S1 + 1 S2: no test of the lock exclusion between a replay and a close, logs not asserted on the refused and launchable branches, launch_issued_at unpinned. The 2nd attempt added [AC-B2-15y#13], the log assertions and the whole-row pin in [AC-B2-15y#4]. r2 (spec-test-review-r2.json) passed with no S0 / S1."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-15y",
+  "spec_commit": "966ae09bf89e2e462a129f24e5604087360b090d",
+  "spec_ref": "b1410c4f5b0910562f03f8119f3fb0f0949aba0d",
+  "red_tests": [
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：CLOSED 的单（wechat_pay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：closing=true（仍 PENDING，关单流程中） 的单（wechat_pay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：PENDING 已过 expire_at（closing=false） 的单（wechat_pay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：CLOSED 的单（alipay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：closing=true（仍 PENDING，关单流程中） 的单（alipay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：PENDING 已过 expire_at（closing=false） 的单（alipay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#2] BR-PAY-02 / 03：PAID 的单（wechat_pay）回放 → 30902 data.pay_order_id=该单，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#2] BR-PAY-02 / 03：PAID 的单（alipay）回放 → 30902 data.pay_order_id=该单，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#2] BR-PAY-02 / 03：PAID 且已过 expire_at 的单（alipay）回放 → 30902 data.pay_order_id=该单，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#3] closing=true 的回放与换新键对同一业务对象再下单答复一致（code、msg、data）",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#3] PENDING 已过 expire_at 的回放与换新键对同一业务对象再下单答复一致（code、msg、data）",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#3] PAID 的回放与换新键对同一业务对象再下单答复一致（code、msg、data）",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#4] 对照（wechat_pay）：PENDING、closing=false、未过 expire_at 的回放现查支付单后字节与首次完全相同（含 launch），状态不变、不调渠道",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#4] 对照（alipay）：PENDING、closing=false、未过 expire_at 的回放现查支付单后字节与首次完全相同（含 launch），状态不变、不调渠道",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#5] 边界（isPayOrderExpired，与首次下单口径一致）：expire_at 前 1 毫秒仍原样回放，恰好 now == expire_at 算已过期 → 20902 不带 launch",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#6] 读单失败（wechat_pay）：数据库读支付单抛错 → 50001，响应体与日志都不含 launch，什么也不写；读恢复后可调起的单照旧原样回放",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#6] 读单失败（alipay）：数据库读支付单抛错 → 50001，响应体与日志都不含 launch，什么也不写；读恢复后可调起的单照旧原样回放",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向同 app 他人的可调起单 时按查无本人的单处理，不带 launch，不描述对方的单",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向同 app 他人的已支付单 时按查无本人的单处理，不带 launch，不描述对方的单",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向别的 app 的可调起单 时按查无本人的单处理，不带 launch，不描述对方的单",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向别的 app 的已支付单 时按查无本人的单处理，不带 launch，不描述对方的单",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#8] 隔离：本人的单已 CLOSED、同一业务对象已被他人下了可调起的单，回放仍按本人的单 → 20902，不带 launch，不描述他人的单",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#9] 同一业务对象换了新单：旧键按旧单 CLOSED → 20902，新键照旧原样回放",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#10] 存储答复 30902（不是 code 0）的回放照旧原样、不现查支付单；同一张单 code 0 的旧键仍现查并答 30902",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#11] 存储答复 30901（不是 code 0）的回放照旧原样、不现查支付单；同一请求体 code 0 的键在单 CLOSED 后 → 20902",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#12] 不可调起的回放连续两次答复一致、不改写 idempotency_keys；之后单变 PAID，同一个键现查答 30902",
+    "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#13] BR-PAY-03（取参数与关单在同一把业务对象级锁内互斥）：回放等业务对象级锁，持锁期间单被置 closing=true 并提交，放锁后答 20902 data.resource=pay_order，不带 launch，其余不变"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "966ae09bf89e2e462a129f24e5604087360b090d",
+      "tree": "8546552e02734582419c601433cf1488499d69cb",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T00:59:22Z",
+      "finished_at": "2026-11-09T00:59:51Z",
+      "red_tests": [
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：CLOSED 的单（wechat_pay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：closing=true（仍 PENDING，关单流程中） 的单（wechat_pay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：PENDING 已过 expire_at（closing=false） 的单（wechat_pay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：CLOSED 的单（alipay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：closing=true（仍 PENDING，关单流程中） 的单（alipay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#1] BR-PAY-03：PENDING 已过 expire_at（closing=false） 的单（alipay）回放 → 20902 data.resource=pay_order，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#2] BR-PAY-02 / 03：PAID 的单（wechat_pay）回放 → 30902 data.pay_order_id=该单，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#2] BR-PAY-02 / 03：PAID 的单（alipay）回放 → 30902 data.pay_order_id=该单，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#2] BR-PAY-02 / 03：PAID 且已过 expire_at 的单（alipay）回放 → 30902 data.pay_order_id=该单，不带 launch；不调渠道、不写 pay_query_attempts、不改支付单、不动 idempotency_keys",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#3] closing=true 的回放与换新键对同一业务对象再下单答复一致（code、msg、data）",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#3] PENDING 已过 expire_at 的回放与换新键对同一业务对象再下单答复一致（code、msg、data）",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#3] PAID 的回放与换新键对同一业务对象再下单答复一致（code、msg、data）",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#4] 对照（wechat_pay）：PENDING、closing=false、未过 expire_at 的回放现查支付单后字节与首次完全相同（含 launch），状态不变、不调渠道",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#4] 对照（alipay）：PENDING、closing=false、未过 expire_at 的回放现查支付单后字节与首次完全相同（含 launch），状态不变、不调渠道",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#5] 边界（isPayOrderExpired，与首次下单口径一致）：expire_at 前 1 毫秒仍原样回放，恰好 now == expire_at 算已过期 → 20902 不带 launch",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#6] 读单失败（wechat_pay）：数据库读支付单抛错 → 50001，响应体与日志都不含 launch，什么也不写；读恢复后可调起的单照旧原样回放",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#6] 读单失败（alipay）：数据库读支付单抛错 → 50001，响应体与日志都不含 launch，什么也不写；读恢复后可调起的单照旧原样回放",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向同 app 他人的可调起单 时按查无本人的单处理，不带 launch，不描述对方的单",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向同 app 他人的已支付单 时按查无本人的单处理，不带 launch，不描述对方的单",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向别的 app 的可调起单 时按查无本人的单处理，不带 launch，不描述对方的单",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#7] 隔离：存储答复指向别的 app 的已支付单 时按查无本人的单处理，不带 launch，不描述对方的单",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#8] 隔离：本人的单已 CLOSED、同一业务对象已被他人下了可调起的单，回放仍按本人的单 → 20902，不带 launch，不描述他人的单",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#9] 同一业务对象换了新单：旧键按旧单 CLOSED → 20902，新键照旧原样回放",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#10] 存储答复 30902（不是 code 0）的回放照旧原样、不现查支付单；同一张单 code 0 的旧键仍现查并答 30902",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#11] 存储答复 30901（不是 code 0）的回放照旧原样、不现查支付单；同一请求体 code 0 的键在单 CLOSED 后 → 20902",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#12] 不可调起的回放连续两次答复一致、不改写 idempotency_keys；之后单变 PAID，同一个键现查答 30902",
+        "test/spec/payment/orders-replay-after-close/replay.int.test.ts > [AC-B2-15y#13] BR-PAY-03（取参数与关单在同一把业务对象级锁内互斥）：回放等业务对象级锁，持锁期间单被置 closing=true 并提交，放锁后答 20902 data.resource=pay_order，不带 launch，其余不变"
+      ],
+      "expected": ["test/spec/payment/orders-replay-after-close/replay.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "93a075d4a78f3c28d11943639850b4b53d008a8607ef7cc6ae1107adc30c0355"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "aa9df8695680d7f94d8b8b6ce58d5841971b20fc",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}
