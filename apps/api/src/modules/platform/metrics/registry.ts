@@ -7,6 +7,7 @@
 // (B1-04zy) only on the api, filled by `collectTaobaoSearch` from union's in-process counter.
 // The agent trace missing gauge (B3-08za) only on the worker, filled by `collectAgentTraceMissing`.
 // The open post-credit diffs gauge (B2-02v) only on the worker, filled by `collectCreditPostcheck`.
+// The three payout failure gauges (B2-09zj) only on the worker, filled by `collectWithdrawalFail`.
 // The text exposition format 0.0.4 is written here from Node built-ins only: the client library
 // cannot be loaded in the test environment (its @opentelemetry/api dependency resolves to an ESM
 // build Node cannot import), so no third-party metrics library is used at runtime.
@@ -25,6 +26,11 @@ import { serviceFeeMissingSamples } from './service-fee-missing.ts';
 import { REVIEW_OVERDUE_GAUGE, type ReviewOverdueSnapshot } from './review-overdue.ts';
 import { WATER_LOW_GAUGE, type WaterLowSnapshot } from './water-low.ts';
 import { WATER_STALE_GAUGE, type WaterStaleSnapshot } from './water-stale.ts';
+import {
+  WITHDRAWAL_FAIL_GAUGES,
+  WITHDRAWAL_FAIL_LABEL,
+  type WithdrawalFailSnapshot,
+} from './withdrawal-fail.ts';
 
 export interface MetricsRegistryOptions {
   readonly entry: EntryName;
@@ -47,6 +53,8 @@ export interface MetricsRegistryOptions {
   readonly collectWaterStale?: () => Promise<WaterStaleSnapshot>;
   /** The open post-credit diffs gauge (B2-02v). Used only on 'worker'; called once per render(). */
   readonly collectCreditPostcheck?: () => Promise<CreditPostcheckSnapshot>;
+  /** The payout failure gauges (B2-09zj). Used only on 'worker'; called once per render(). */
+  readonly collectWithdrawalFail?: () => Promise<WithdrawalFailSnapshot>;
   /** couli_taobao_search_total (B1-04zy). Used only on 'api', never 'worker'; once per render(). */
   readonly collectTaobaoSearch?: () => TaobaoSearchMetricsSnapshot;
 }
@@ -393,6 +401,23 @@ function creditPostcheckFamilies(snapshot: CreditPostcheckSnapshot): Family[] {
   ];
 }
 
+const WITHDRAWAL_FAIL_KEYS = Object.keys(
+  WITHDRAWAL_FAIL_GAUGES,
+) as (keyof WithdrawalFailSnapshot)[];
+
+/** The payout failure gauges (B2-09zj): only this snapshot's app_ids, none made up as 0. */
+function withdrawalFailFamilies(snapshot: WithdrawalFailSnapshot): Family[] {
+  return WITHDRAWAL_FAIL_KEYS.map((key) => ({
+    name: WITHDRAWAL_FAIL_GAUGES[key].name,
+    help: WITHDRAWAL_FAIL_GAUGES[key].help,
+    type: 'gauge' as const,
+    samples: Object.entries(snapshot[key]).map(([appId, value]) => ({
+      labels: { [WITHDRAWAL_FAIL_LABEL]: appId },
+      value,
+    })),
+  }));
+}
+
 /** The review overdue gauge (B2-05o): always exported, 0 included (the rule compares with > 0). */
 function reviewOverdueFamilies(snapshot: ReviewOverdueSnapshot): Family[] {
   return [
@@ -429,6 +454,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
   const collectAgentTraceMissing = worker ? options.collectAgentTraceMissing : undefined;
   const collectWaterStale = worker ? options.collectWaterStale : undefined;
   const collectCreditPostcheck = worker ? options.collectCreditPostcheck : undefined;
+  const collectWithdrawalFail = worker ? options.collectWithdrawalFail : undefined;
   const collectTaobaoSearch = options.entry === 'api' ? options.collectTaobaoSearch : undefined;
   return {
     contentType: CONTENT_TYPE,
@@ -445,6 +471,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         agentTraceMissing,
         waterStale,
         creditPostcheck,
+        withdrawalFail,
       ] = await Promise.all([
         collect === undefined ? [] : collect().then(businessFamilies),
         collectFund === undefined ? [] : collectFund().then(fundFamilies),
@@ -466,6 +493,9 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         collectCreditPostcheck === undefined
           ? []
           : Promise.resolve().then(collectCreditPostcheck).then(creditPostcheckFamilies),
+        collectWithdrawalFail === undefined
+          ? []
+          : Promise.resolve().then(collectWithdrawalFail).then(withdrawalFailFamilies),
       ]);
       const taobaoSearch =
         collectTaobaoSearch === undefined ? [] : taobaoSearchFamilies(collectTaobaoSearch());
@@ -478,6 +508,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...agentTraceMissing,
         ...waterStale,
         ...creditPostcheck,
+        ...withdrawalFail,
         ...taobaoSearch,
         pddServiceFeeFamily(),
         serviceFeeMissingFamily(),

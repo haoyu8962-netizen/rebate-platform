@@ -66,6 +66,7 @@ import {
   readPayoutReviewOverdue,
   readPayoutWaterLow,
   readPayoutWaterStale,
+  readPayoutWithdrawalFail,
   resolvePayoutMode,
   type PayoutModeDecision,
   type PayoutRuntime,
@@ -77,6 +78,7 @@ import {
   cacheReviewOverdueCollector,
   cacheWaterLowCollector,
   cacheWaterStaleCollector,
+  cacheWithdrawalFailCollector,
   collectAutoPayoutDaily,
   createAgentTraceMissingCollector,
   type AgentTraceMissingSnapshot,
@@ -87,6 +89,7 @@ import {
   type ReviewOverdueSnapshot,
   type WaterLowSnapshot,
   type WaterStaleSnapshot,
+  type WithdrawalFailSnapshot,
   type TaobaoSearchMetricsSnapshot,
 } from './modules/platform/metrics/index.ts';
 import { readSettlementFundMetrics } from './modules/settlement/index.ts';
@@ -317,7 +320,9 @@ function startGenerationRenewal(
  * `collectAgentTraceMissing` (runs missing their card trace, agent's read-only port) and, since
  * B2-09ze, `collectWaterStale` (Alipay withdrawals waiting without a fresh W, per app, payout's
  * read-only port) and, since B2-02v, `collectCreditPostcheck` (unresolved post-credit confirmation
- * diffs per app, ledger's read-only port). Since B1-04zy only the api passes `collectTaobaoSearch` (union's in-process
+ * diffs per app, ledger's read-only port) and, since B2-09zj, `collectWithdrawalFail` (today's W6
+ * and W5 + W6 and the longest run of W6 ending in the last 24 hours, per app, payout's read-only
+ * port). Since B1-04zy only the api passes `collectTaobaoSearch` (union's in-process
  * search counter, read at scrape time).
  * Not on the Nest application, not in the OAS.
  */
@@ -335,6 +340,7 @@ async function openMetrics(
         readonly collectAgentTraceMissing: () => Promise<AgentTraceMissingSnapshot>;
         readonly collectWaterStale: () => Promise<WaterStaleSnapshot>;
         readonly collectCreditPostcheck: () => Promise<CreditPostcheckSnapshot>;
+        readonly collectWithdrawalFail: () => Promise<WithdrawalFailSnapshot>;
       }
     | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot },
 ): Promise<MetricsServer | undefined> {
@@ -564,6 +570,13 @@ async function start(
           // 30 seconds; a failed read fails the scrape (no 0 in its place) and is read again next time.
           collectCreditPostcheck: cacheCreditPostcheckCollector(
             () => readCreditPostcheckOpen(dbHandles.db),
+            clock,
+          ),
+          // The payout failure gauges (B2-09zj; BR-WDR-24): payout's read-only port, cached the
+          // same way and within the +08:00 day; a failed read fails the scrape (no 0 in its place)
+          // and is read again next time.
+          collectWithdrawalFail: cacheWithdrawalFailCollector(
+            () => readPayoutWithdrawalFail(dbHandles.db, clock),
             clock,
           ),
         });

@@ -1,0 +1,152 @@
+{
+  "risk_note": "Payout read-only alert, RV2 by path (payout application, platform metrics, the fund alert rules), no money effect: no voucher, no balance change, no external write. The worker exports per app couli_withdrawals_w6_today, couli_withdrawals_w5w6_today (the +08:00 day, by transition time withdrawals.updated_at, D10-1186) and couli_withdrawals_w6_streak (D10-1203: W5 / W6 ordered by (updated_at, id), runs of W6 cut at each W5, the longest run whose last W6 is within (now - 24h, now], counted whole); W8, W9, W10 and W11 neither count nor break (D10-1170). couli-fund.yaml gets CouliWithdrawalFailRatioHigh (W6 / (W5 + W6) > 2 % with at least 20) and CouliWithdrawalFailStreak (>= 3), fund: 'true', and the outdated W6 TODO goes (BR-WDR-24 first two items, D10-1157). Read through payout's read-only port at scrape time, cached like the water gauges; a failed read fails the scrape. Rebased onto main after the reviews: the conflicts in entry.ts, metrics/index.ts, metrics/registry.ts, couli-fund.yaml and the two frozen spec files were B2-02v's credit-postcheck gauge added next to this one, both kept. The tie order of equal updated_at (id ascending) is implemented but not pinned by a rule test: tightening task B2-09zk (FU-B209ZJ-TIE-ORDER, ledger #3094) follows this PR.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Fresh independent Claude via claude-run.sh, full money review of the whole change (base the merge base), reviewed head 10ef009e0: no findings (couli-runs/B2-09zj/money-review-r4-claude-independent.json). Engine changed because Codex reached its per-task limit of 10 calls (规划/11 §2.5); D10-1209 (approvals 36: failure breakers are per engine; approvals 66 round). Codex money r1-r3 failed (r1: transition time and streak lost between scrapes; r2: 24 h window missed slow runs; r3: a W5 before the next scrape erased a cross-day run), each fixed by the rulings D10-1186, D10-1202, D10-1203 with new rule-test rounds."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 7,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by fresh independent Claude contexts, six writes (approvals 63, 65, 66 for the fourth to sixth). spec-test r1 (Codex) void: it reviewed only the second write's increment; r2 (Codex, full) fail, 2 S1; r3 (Codex, D10-1175) pass; r4 (Codex, D10-1186) pass; r5 (Codex, D10-1202) pass; r6 (Codex, D10-1203) fail, 1 S1: equal updated_at ordered by id ascending has no rule test (an id-descending implementation would pass); per D10-828 / D10-1209 it goes to the tightening task B2-09zk (FU-B209ZJ-TIE-ORDER), not a seventh write. r7 is the gate record of D10-848 ③ / D10-1210 by a fresh independent Claude (not counted as a round; Codex is past its call limit): it confirmed both red_exempt entries ([AC-B1-25b#8] couli.yaml and couli-fund.yaml), red_exempt_outside of alerting-eval/metrics.test.ts (only the collectWithdrawalFail fixture lines outside the test bodies), the modify_existing [AC-B1-01zzi#6] (three names added to the allow list, no assertion changed) and that both frozen files changed only in the first write; pass (couli-runs/B2-09zj/spec-test-gate-r7-claude-independent.json)."
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/fund-metrics/rules.test.ts",
+      "test": "[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n    'couli_payout_water_stale',\n    'couli_credit_postcheck_mismatch_open',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "after": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n    'couli_payout_water_stale',\n    'couli_credit_postcheck_mismatch_open',\n    'couli_withdrawals_w6_today',\n    'couli_withdrawals_w5w6_today',\n    'couli_withdrawals_w6_streak',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "couli-fund.yaml CouliWithdrawalFailStreak expr also reads an unlisted metric ('couli_withdrawals_w6_streak >= 3 or couli_withdrawals_w6_ratio_unlisted > 0')",
+          "result": "killed"
+        }
+      ],
+      "note": "Mutant run by ops on a copy of the head tree (vitest on this test): green unmutated, red with the mutant; precedent B2-09ze / D10-807, ruling D10-1157."
+    }
+  ],
+  "task": "B2-09zj",
+  "spec_commit": "debc1dbb00495ead2b14a86892e0779044929608",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "red_tests": [
+    "test/spec/platform/metrics/withdrawal-fail/cache.test.ts > [AC-B2-09zj#5] 默认缓存 5 分钟：差 1 毫秒仍是同一份快照、不再读；满 5 分钟重读并跟随新值",
+    "test/spec/platform/metrics/withdrawal-fail/cache.test.ts > [AC-B2-09zj#6] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+    "test/spec/platform/metrics/withdrawal-fail/entry.test.ts > [AC-B2-09zj#7] worker 的 /metrics 在 scrape 时经 payout/index.ts 的 readPayoutWithdrawalFail（本入口的库句柄、本入口的时钟）导出三个指标（gauge、app_id 标签、值为端口结论）；启动时不读；其余四个入口没有这些指标、不调该端口",
+    "test/spec/platform/metrics/withdrawal-fail/entry.test.ts > [AC-B2-09zj#8] worker 的失败率读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论",
+    "test/spec/platform/metrics/withdrawal-fail/entry.test.ts > [AC-B2-09zj#9] worker 装配走 5 分钟缓存：5 分钟内不再读、值不变，满 5 分钟重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#12] 08 的例子：当日 30 笔 W5/W6 中 1 笔 W6 → W6 1、W5+W6 30；10 笔中 1 笔 → 1、10；10 笔里最后 3 笔连续 W6 → 3、10、最长连续 3（分母不足仍可按连续告警）；只有第一笔是 W6、之后全是 W5 时最长连续为 1",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#13] 只计 W5 / W6：W10 判 FAILED（manual_resolution failed，带查询失败记录）、W9（转账失败但回到 APPROVED）、仍在 PAYING 的单不算 W6、不接长连续；W8（PAID_MANUAL）与 W10 判成功（manual_resolution paid）不算 W5、不打断连续（W6、W8、W6、W10 判成功、W6 的最长连续为 3）；只有这些单（含 W11、REJECTED、PENDING_REVIEW）的 app 三个值都是 0",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#14] 自然日按 +08:00 与注入时钟（updated_at 取时）：00:00 +08:00 前 1 毫秒的 W5 / W6 不计入当日，恰好 00:00 的计入；时钟到次日 00:00 前 1 毫秒仍是同一天，到次日 00:00 当日计数清零；时钟在前一天最后 1 毫秒时，计入的是前一天那两笔；连续不按当日切、只看段尾是否在 24 小时内（D10-1203）：次日 00:00 前 1 毫秒时前一天 23:59:59.999 那笔恰在 now − 24h 上，段尾出窗 → 0，当日 00:00 那笔仍在窗内 → 1；次日 00:00 时当日 00:00 那笔也恰在 now − 24h 上 → 0；只有 W5 的为 0；updated_at 恰为 now 的计入",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#15] 迁移时间一律取 withdrawals.updated_at（D10-1186）：W6 的失败尝试 at、W5 的 paid_at 与转账尝试 at 落在别的日子都不影响——updated_at 恰为 00:00 +08:00 的计入当日（尝试 at / paid_at 在前 1 毫秒），updated_at 在 00:00 前 1 毫秒的不计（尝试 at / paid_at 恰为 00:00 或其后）；查询失败与转账未知都在昨天、updated_at 在今天的 W6 算今天；连续按 updated_at 排序，不按建单时间、paid_at 或尝试 at",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#16] 连续 W6 = 按 (updated_at, id) 排序、遇 W5 断开成段，段尾 W6 落在 (now − 24h, now] 的段中最长一段的整段长度（D10-1203）：W5 之后 3 次 W6 为 3；W6、W6、W6、W5 仍为 3；W6×3 后立刻（恰在 now）来 W5 → 3；W6、W6、W5、W6、W6 为 2（W5 打断，两段不相加）；W6、W5、W6×3、W5、W6×2 取中间那段 3；跨过 00:00 +08:00 照样连成一段（不按当日切）；夹着 W8 / W10 判成功 / W11 / W10 判失败 / W9 不断也不长；没有 W5 的 5 次 W6 为 5；各 app 各算各的（交错的 2 次与 1 次不合成 3）；跨天慢速三连：t−50h、t−26h、t−2h 各一笔 W6、其间没有 W5 → 3（段往窗口前延伸、整段计数），更早的 W5 截止、其前的 W6 不计，夹着 W11 / W9 / W10 判失败 / W8 照样为 3；三连之后在 t−1h 或下次采集前的 t−1min 来一笔 W5 → 仍为 3（段尾 t−2h 在窗口内）",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#17] 任意序列（fast-check）：W5 / W6 / W8 / W10 / W9 / W11 在近 72 小时内（含恰为当前时刻与 24 小时边界上下，W6 偏多以出现跨天连败）的任意次序与时刻、任意建单时间、任意偏离 updated_at 的 paid_at / 尝试 at、任意写入次序下，在当前时刻与其后 0～12 小时内的任一时刻读，三个值都等于按 BR-WDR-24 与 D10-1186、D10-1203 手算的结果（updated_at 取时；当日按 +08:00；连续：W5 / W6 按时间排序、遇 W5 断开成段，段尾 W6 落在 (now − 24h, now] 的段中最长一段的整段长度，没有则 0）",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#18] 只读、只用注入时钟、不缓存：只读事务可跑、两张表的行前后不变；当日只看注入时钟（库的 now() 早好几年）；再落一笔 W6 下一次读就跟上；worker registry 以该端口渲染出同样的值",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#26] W11 不进分母也不进分子（D10-1170）：同一 app 当日 W5 / W6 若干外加一笔当日核销的 W11（PAID_API、manual_resolution 为空、有一条 transfer / fail 尝试，失败与 paid_at 都在当日），三个值与没有这笔 W11 的同样序列相同",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#27] W11 不打断连续（D10-1170、D10-1186）：按迁移时间 W6、W6、W11、W6 的最长连续为 3；对照：同一位置换成 W5 时最长连续为 2",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#28] 查询成功形成的 W5 照样是 W5（D10-1170：只要求没有 transfer / fail 尝试，不要求有 transfer / success）：transfer 返回 unknown、之后 query 返回 success 进 PAID_API（manual_resolution 为空、没有 result = fail 的尝试、updated_at 与 paid_at 取查询成功时刻）的单夹在 W6、W6 与 W6、W6 之间，updated_at 在当日时计入当日 W5+W6、把连续 W6 打断为 2；对照：updated_at 落在前一天（+08:00）时不计入当日分母，但仍在 24 小时内打断连续",
+    "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#29] 连续的 24 小时边界只看段尾（D10-1203：段尾 W6 的 updated_at ∈ (now − 24h, now] 的段整段计数）：段尾恰为 now − 24h 的段不计、now − 24h + 1 毫秒的计（单笔或 3 笔、之后有没有 W5 都一样），时钟后移 1 毫秒随之不计；一段跨过窗口下界、段尾在窗口内时整段计数（W6×5 跨边界、之后有没有 W5 都为 5，时钟后移 1 毫秒仍为 5）；段尾在窗口外的段不计、之后没有 W5 也一样（30 小时前的 4 连败单独为 0，之后窗口内来 W5、W6 → 1）；24 小时外 2 笔 W6 + 24 小时内 1 笔 W6、其间没有 W5 → 3，其间有 W5（窗口内或窗口外）→ 1；跨下界的长段与窗口内的短段取长段；恰为 now 的 W6 计入",
+    "test/spec/platform/metrics/withdrawal-fail/port.test.ts > [AC-B2-09zj#10] payout 端口经 payout/index.ts 导出：读 withdrawals 与 payout_attempts；不读别的模块的资金表、不写、不读数据库时钟",
+    "test/spec/platform/metrics/withdrawal-fail/port.test.ts > [AC-B2-09zj#11] 端口的任一库读失败时端口拒绝（原错误）：提现读失败、尝试记录读失败都不以 0 或只含部分 app 的结果代替",
+    "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#1] worker 的 registry 在 scrape 时调 collectWithdrawalFail：三个指标各有 # HELP 与 # TYPE gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致（三个记录的 app 集合可以不同）；其余指标（含水位两个）照旧",
+    "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#2] 样本跟随每次快照、不常驻轮询：消失的 app 没有样本（不留旧值），快照为空时三个指标只有 # TYPE 行没有样本",
+    "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#3] 只在 worker 且给了 collectWithdrawalFail 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+    "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#4] collectWithdrawalFail 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把值编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+    "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#19] couli-fund.yaml 有两条新规则：读当日 W6 数的有且只有一条（比例规则，同时读当日 W5+W6 数），读 24 小时内最长连续 W6 数的有且只有一条（连续规则），两条不是同一条；读这三个指标的规则只有这两条；各自 for 5m、labels.fund 为字符串 \"true\"、severity 为 critical / warning、有 summary 与 description；alert 名在两个文件里唯一",
+    "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#20] 比例规则按 08 的例子与边界：30 笔中 1 笔 W6（3.3%）告警；10 笔中 1 笔不告警（分母不足）；分母恰好 20 告警、19 不告警；恰好 2%（50 笔中 1 笔、100 笔中 2 笔）不告警（严格大于）；49 笔中 1 笔、100 笔中 3 笔告警；没有 W6、0/0 不告警",
+    "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#21] 比例规则对任意当日计数（W6 ≤ W5+W6 ≤ 2000）都与「W6 ÷ (W5+W6) > 2% 且分母 ≥ 20」一致（fast-check）；最长连续 W6 的大小不影响比例规则",
+    "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#22] 连续规则（D10-1186：指标为 24 小时内最长连续 W6，规则仍 ≥ 3）：最长连续 W6 为 0、1、2 不告警，3、4、12 告警；与当日分母无关——分母 3（不足 20）、当日没有任何 W5/W6（样本缺失或为 0）时连续 3 次仍告警",
+    "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#23] 两条规则按 app_id 各算各的：一个 app 的计数不借给另一个 app；比例告警只落在比例超限的 app，连续告警只落在连续 ≥ 3 的 app",
+    "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#24] couli.yaml 不读这三个指标（夜间只推资金类）",
+    "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#25] couli-fund.yaml 不再有「W6 ratio and repeated W6 … blocked on B2-06a」那行过时的 TODO"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "debc1dbb00495ead2b14a86892e0779044929608",
+      "tree": "78f432074c67c39f39edc3c0c40198f710fd66b9",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T20:55:04Z",
+      "finished_at": "2026-11-09T20:55:19Z",
+      "red_tests": [
+        "test/spec/platform/metrics/withdrawal-fail/cache.test.ts > [AC-B2-09zj#5] 默认缓存 5 分钟：差 1 毫秒仍是同一份快照、不再读；满 5 分钟重读并跟随新值",
+        "test/spec/platform/metrics/withdrawal-fail/cache.test.ts > [AC-B2-09zj#6] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+        "test/spec/platform/metrics/withdrawal-fail/entry.test.ts > [AC-B2-09zj#7] worker 的 /metrics 在 scrape 时经 payout/index.ts 的 readPayoutWithdrawalFail（本入口的库句柄、本入口的时钟）导出三个指标（gauge、app_id 标签、值为端口结论）；启动时不读；其余四个入口没有这些指标、不调该端口",
+        "test/spec/platform/metrics/withdrawal-fail/entry.test.ts > [AC-B2-09zj#8] worker 的失败率读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论",
+        "test/spec/platform/metrics/withdrawal-fail/entry.test.ts > [AC-B2-09zj#9] worker 装配走 5 分钟缓存：5 分钟内不再读、值不变，满 5 分钟重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#12] 08 的例子：当日 30 笔 W5/W6 中 1 笔 W6 → W6 1、W5+W6 30；10 笔中 1 笔 → 1、10；10 笔里最后 3 笔连续 W6 → 3、10、最长连续 3（分母不足仍可按连续告警）；只有第一笔是 W6、之后全是 W5 时最长连续为 1",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#13] 只计 W5 / W6：W10 判 FAILED（manual_resolution failed，带查询失败记录）、W9（转账失败但回到 APPROVED）、仍在 PAYING 的单不算 W6、不接长连续；W8（PAID_MANUAL）与 W10 判成功（manual_resolution paid）不算 W5、不打断连续（W6、W8、W6、W10 判成功、W6 的最长连续为 3）；只有这些单（含 W11、REJECTED、PENDING_REVIEW）的 app 三个值都是 0",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#14] 自然日按 +08:00 与注入时钟（updated_at 取时）：00:00 +08:00 前 1 毫秒的 W5 / W6 不计入当日，恰好 00:00 的计入；时钟到次日 00:00 前 1 毫秒仍是同一天，到次日 00:00 当日计数清零；时钟在前一天最后 1 毫秒时，计入的是前一天那两笔；连续不按当日切、只看段尾是否在 24 小时内（D10-1203）：次日 00:00 前 1 毫秒时前一天 23:59:59.999 那笔恰在 now − 24h 上，段尾出窗 → 0，当日 00:00 那笔仍在窗内 → 1；次日 00:00 时当日 00:00 那笔也恰在 now − 24h 上 → 0；只有 W5 的为 0；updated_at 恰为 now 的计入",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#15] 迁移时间一律取 withdrawals.updated_at（D10-1186）：W6 的失败尝试 at、W5 的 paid_at 与转账尝试 at 落在别的日子都不影响——updated_at 恰为 00:00 +08:00 的计入当日（尝试 at / paid_at 在前 1 毫秒），updated_at 在 00:00 前 1 毫秒的不计（尝试 at / paid_at 恰为 00:00 或其后）；查询失败与转账未知都在昨天、updated_at 在今天的 W6 算今天；连续按 updated_at 排序，不按建单时间、paid_at 或尝试 at",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#16] 连续 W6 = 按 (updated_at, id) 排序、遇 W5 断开成段，段尾 W6 落在 (now − 24h, now] 的段中最长一段的整段长度（D10-1203）：W5 之后 3 次 W6 为 3；W6、W6、W6、W5 仍为 3；W6×3 后立刻（恰在 now）来 W5 → 3；W6、W6、W5、W6、W6 为 2（W5 打断，两段不相加）；W6、W5、W6×3、W5、W6×2 取中间那段 3；跨过 00:00 +08:00 照样连成一段（不按当日切）；夹着 W8 / W10 判成功 / W11 / W10 判失败 / W9 不断也不长；没有 W5 的 5 次 W6 为 5；各 app 各算各的（交错的 2 次与 1 次不合成 3）；跨天慢速三连：t−50h、t−26h、t−2h 各一笔 W6、其间没有 W5 → 3（段往窗口前延伸、整段计数），更早的 W5 截止、其前的 W6 不计，夹着 W11 / W9 / W10 判失败 / W8 照样为 3；三连之后在 t−1h 或下次采集前的 t−1min 来一笔 W5 → 仍为 3（段尾 t−2h 在窗口内）",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#17] 任意序列（fast-check）：W5 / W6 / W8 / W10 / W9 / W11 在近 72 小时内（含恰为当前时刻与 24 小时边界上下，W6 偏多以出现跨天连败）的任意次序与时刻、任意建单时间、任意偏离 updated_at 的 paid_at / 尝试 at、任意写入次序下，在当前时刻与其后 0～12 小时内的任一时刻读，三个值都等于按 BR-WDR-24 与 D10-1186、D10-1203 手算的结果（updated_at 取时；当日按 +08:00；连续：W5 / W6 按时间排序、遇 W5 断开成段，段尾 W6 落在 (now − 24h, now] 的段中最长一段的整段长度，没有则 0）",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#18] 只读、只用注入时钟、不缓存：只读事务可跑、两张表的行前后不变；当日只看注入时钟（库的 now() 早好几年）；再落一笔 W6 下一次读就跟上；worker registry 以该端口渲染出同样的值",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#26] W11 不进分母也不进分子（D10-1170）：同一 app 当日 W5 / W6 若干外加一笔当日核销的 W11（PAID_API、manual_resolution 为空、有一条 transfer / fail 尝试，失败与 paid_at 都在当日），三个值与没有这笔 W11 的同样序列相同",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#27] W11 不打断连续（D10-1170、D10-1186）：按迁移时间 W6、W6、W11、W6 的最长连续为 3；对照：同一位置换成 W5 时最长连续为 2",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#28] 查询成功形成的 W5 照样是 W5（D10-1170：只要求没有 transfer / fail 尝试，不要求有 transfer / success）：transfer 返回 unknown、之后 query 返回 success 进 PAID_API（manual_resolution 为空、没有 result = fail 的尝试、updated_at 与 paid_at 取查询成功时刻）的单夹在 W6、W6 与 W6、W6 之间，updated_at 在当日时计入当日 W5+W6、把连续 W6 打断为 2；对照：updated_at 落在前一天（+08:00）时不计入当日分母，但仍在 24 小时内打断连续",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts > [AC-B2-09zj#29] 连续的 24 小时边界只看段尾（D10-1203：段尾 W6 的 updated_at ∈ (now − 24h, now] 的段整段计数）：段尾恰为 now − 24h 的段不计、now − 24h + 1 毫秒的计（单笔或 3 笔、之后有没有 W5 都一样），时钟后移 1 毫秒随之不计；一段跨过窗口下界、段尾在窗口内时整段计数（W6×5 跨边界、之后有没有 W5 都为 5，时钟后移 1 毫秒仍为 5）；段尾在窗口外的段不计、之后没有 W5 也一样（30 小时前的 4 连败单独为 0，之后窗口内来 W5、W6 → 1）；24 小时外 2 笔 W6 + 24 小时内 1 笔 W6、其间没有 W5 → 3，其间有 W5（窗口内或窗口外）→ 1；跨下界的长段与窗口内的短段取长段；恰为 now 的 W6 计入",
+        "test/spec/platform/metrics/withdrawal-fail/port.test.ts > [AC-B2-09zj#10] payout 端口经 payout/index.ts 导出：读 withdrawals 与 payout_attempts；不读别的模块的资金表、不写、不读数据库时钟",
+        "test/spec/platform/metrics/withdrawal-fail/port.test.ts > [AC-B2-09zj#11] 端口的任一库读失败时端口拒绝（原错误）：提现读失败、尝试记录读失败都不以 0 或只含部分 app 的结果代替",
+        "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#1] worker 的 registry 在 scrape 时调 collectWithdrawalFail：三个指标各有 # HELP 与 # TYPE gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致（三个记录的 app 集合可以不同）；其余指标（含水位两个）照旧",
+        "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#2] 样本跟随每次快照、不常驻轮询：消失的 app 没有样本（不留旧值），快照为空时三个指标只有 # TYPE 行没有样本",
+        "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#3] 只在 worker 且给了 collectWithdrawalFail 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+        "test/spec/platform/metrics/withdrawal-fail/registry.test.ts > [AC-B2-09zj#4] collectWithdrawalFail 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把值编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#19] couli-fund.yaml 有两条新规则：读当日 W6 数的有且只有一条（比例规则，同时读当日 W5+W6 数），读 24 小时内最长连续 W6 数的有且只有一条（连续规则），两条不是同一条；读这三个指标的规则只有这两条；各自 for 5m、labels.fund 为字符串 \"true\"、severity 为 critical / warning、有 summary 与 description；alert 名在两个文件里唯一",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#20] 比例规则按 08 的例子与边界：30 笔中 1 笔 W6（3.3%）告警；10 笔中 1 笔不告警（分母不足）；分母恰好 20 告警、19 不告警；恰好 2%（50 笔中 1 笔、100 笔中 2 笔）不告警（严格大于）；49 笔中 1 笔、100 笔中 3 笔告警；没有 W6、0/0 不告警",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#21] 比例规则对任意当日计数（W6 ≤ W5+W6 ≤ 2000）都与「W6 ÷ (W5+W6) > 2% 且分母 ≥ 20」一致（fast-check）；最长连续 W6 的大小不影响比例规则",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#22] 连续规则（D10-1186：指标为 24 小时内最长连续 W6，规则仍 ≥ 3）：最长连续 W6 为 0、1、2 不告警，3、4、12 告警；与当日分母无关——分母 3（不足 20）、当日没有任何 W5/W6（样本缺失或为 0）时连续 3 次仍告警",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#23] 两条规则按 app_id 各算各的：一个 app 的计数不借给另一个 app；比例告警只落在比例超限的 app，连续告警只落在连续 ≥ 3 的 app",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#24] couli.yaml 不读这三个指标（夜间只推资金类）",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts > [AC-B2-09zj#25] couli-fund.yaml 不再有「W6 ratio and repeated W6 … blocked on B2-06a」那行过时的 TODO"
+      ],
+      "expected": [
+        "test/spec/platform/metrics/withdrawal-fail/cache.test.ts",
+        "test/spec/platform/metrics/withdrawal-fail/entry.test.ts",
+        "test/spec/platform/metrics/withdrawal-fail/port.int.test.ts",
+        "test/spec/platform/metrics/withdrawal-fail/port.test.ts",
+        "test/spec/platform/metrics/withdrawal-fail/registry.test.ts",
+        "test/spec/platform/metrics/withdrawal-fail/rules.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "4a1d259756078c51d9bd7fd29219f2e581675a41059ca64b1e30d27e158df2c4"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a3f58d5162f101ef317270b23e34591e6775662c7c2080009f0a32cff20ebbc7"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c03f3db85ce7cc33fa887e7d5215379609cff65e",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

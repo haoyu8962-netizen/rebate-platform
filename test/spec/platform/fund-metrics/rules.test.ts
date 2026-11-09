@@ -151,6 +151,9 @@ it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：
     'couli_payout_water_low',
     'couli_payout_water_stale',
     'couli_credit_postcheck_mismatch_open',
+    'couli_withdrawals_w6_today',
+    'couli_withdrawals_w5w6_today',
+    'couli_withdrawals_w6_streak',
   ];
   expect(named.filter((name) => !allowed.includes(name))).toEqual([]);
   for (const metric of FUND_METRIC_NAMES) {

@@ -15,7 +15,11 @@
 # by entry.ts): an app_id with no cap row or a malformed one carries B2-11c's default (D10-393 (c)).
 # The log alerts config_change_alert, sms_daily_budget_alert and device_hash_hot_alert are not in
 # the fund list of 规划/02 §13, so they get no rule here (D10-393 (d)).
-# TODO(规划/11 §2.3): W6 ratio and repeated W6 (BR-WDR-24) — blocked on B2-06a.
+# Payout failures (B2-09zj; BR-WDR-24 前两项; D10-1157, D10-1170, D10-1186, D10-1203): the worker
+# exports, per app_id, today's W6 count and W5 + W6 count (the +08:00 day, by transition time) and
+# the longest run of consecutive W6 in the W5 / W6 sequence whose last W6 is within the last 24 hours,
+# counted whole (not cut at the day). Two rules: the ratio (above 2 % with at least 20 in the day) and
+# the run (3 or more), so the run still alerts on a day short of 20.
 groups:
   - name: couli-fund-orders
     rules:
@@ -113,6 +117,24 @@ groups:
         annotations:
           summary: 'A credit voucher does not match its commission snapshot; the withdrawals of the account are on hold'
           description: 'couli_credit_postcheck_mismatch_open counts the unresolved (open or processing) post-credit confirmation diffs of an app (BR-FUND-19): the voucher amount differs from the share recomputed from the commission snapshot, and the account that received it had its withdrawals put on hold. On the admin console, check the recon diff (差错单, ledger_mismatch, ref_id credit_postcheck:<voucher id>) against the voucher and the snapshot; closing the diff releases the withdrawal hold of that account. Apps without such diffs have no sample.'
+      - alert: CouliWithdrawalFailRatioHigh
+        expr: 'couli_withdrawals_w6_today / couli_withdrawals_w5w6_today > 0.02 and couli_withdrawals_w5w6_today >= 20'
+        for: '5m'
+        labels:
+          severity: warning
+          fund: 'true'
+        annotations:
+          summary: 'More than 2% of the payouts of the day failed at the channel'
+          description: 'In the current +08:00 day, W6 (failed by the channel, no manual resolution) divided by W5 + W6 is above 2% with at least 20 of them (BR-WDR-24). W8, W10 and W11 are not counted. Finance should check the failure codes of the FAILED withdrawals of the day and the channel.'
+      - alert: CouliWithdrawalFailStreak
+        expr: 'couli_withdrawals_w6_streak >= 3'
+        for: '5m'
+        labels:
+          severity: critical
+          fund: 'true'
+        annotations:
+          summary: '3 or more payouts of an app failed at the channel in a row, the last of them within 24 hours'
+          description: 'couli_withdrawals_w6_streak orders the app W5 / W6 by transition time (then id), cuts them into runs of consecutive W6 at each W5, and is the length of the longest run whose last W6 is within the last 24 hours, counted whole: slow failures over days still add up, whatever the day (BR-WDR-24). W8, W9, W10 and W11 neither count nor break a run. A later W5 ends a run but does not drop it: the run keeps alerting until its last W6 is more than 24 hours old. Finance should check the channel before more withdrawals are executed.'
       - alert: CouliAutoPayoutDailyNearCap
         expr: 'couli_auto_payout_daily_total_fen / couli_auto_payout_daily_cap_fen >= 0.8'
         for: '5m'

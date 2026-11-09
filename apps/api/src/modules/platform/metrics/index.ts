@@ -36,6 +36,8 @@ export { cacheWaterStaleCollector } from './water-stale.ts';
 export type { WaterStaleSnapshot } from './water-stale.ts';
 export { cacheCreditPostcheckCollector } from './credit-postcheck.ts';
 export type { CreditPostcheckSnapshot } from './credit-postcheck.ts';
+export { cacheWithdrawalFailCollector } from './withdrawal-fail.ts';
+export type { WithdrawalFailSnapshot } from './withdrawal-fail.ts';
 export { createMetricsRegistry } from './registry.ts';
 export type {
   MetricsRegistry,

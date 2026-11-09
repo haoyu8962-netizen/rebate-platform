@@ -150,6 +150,9 @@ export type { PayoutWaterLow } from './application/water-low-read.ts';
 // B2-09ze (BR-WDR-18 ②, D10-805 ④): the worker's stale / missing W gauge (read only).
 export { readPayoutWaterStale } from './application/water-stale-read.ts';
 export type { PayoutWaterStale } from './application/water-stale-read.ts';
+// B2-09zj (BR-WDR-24, D10-1157): the worker's payout failure gauges (read only).
+export { readPayoutWithdrawalFail } from './application/withdrawal-fail-read.ts';
+export type { PayoutWithdrawalFail } from './application/withdrawal-fail-read.ts';
 // B1-01zzp: B2-11c's reading of withdraw.auto_payout.* (absent or malformed → its 08 default), so
 // the worker's auto-payout cap gauge carries the cap the decision executes with.
 export { autoPayoutConfigOf } from './application/auto-payout.ts';
