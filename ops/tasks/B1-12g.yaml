@@ -6,7 +6,7 @@ type: impl
 # SPEC_REF b90e712（#832）后 BR-TEXT-23 unbanned 为「你的账号限制已解除。{need_reauth}」，{need_reauth} 在用户有淘宝绑定时为「购物前需重新完成淘宝授权。」否则为空。编排者技术决定（be-codex，admin-backend 18:05 提示请通知线定）： 消费时经 linking 导出的只读口判断该用户 taobao 的 union_bindings 当前是否为 invalid（解封后需重新授权；已重新授权为 active 则不提示），不改 risk.state_changed 载荷；口径「有淘宝绑定」按 admin-backend 建议的「解封后淘宝绑定为 invalid」，待规划回写。
 refs: [BR-TEXT-23]
 refs_hash:
-  BR-TEXT-23: e160b53ddf45
+  BR-TEXT-23: 216a9f60b6ea
 deps: [B1-12f, B1-03y]
 paths:
   - 'apps/api/src/modules/notification/**'

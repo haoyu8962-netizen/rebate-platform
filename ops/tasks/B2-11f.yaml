@@ -6,7 +6,7 @@ type: impl
 # 2026-11-02 pay 改派（D10-564）后按主干核：③ 已由 B1-03zh 在 risk 侧 same-device-accounts judge 判定前查读口，payout 不再加第二次读取；D10-537 ② 的按维度跳过（risk/ports/blocklist-match.ts）另开的小单未入账、identity 暂停到 11-06，并入本单，这才是提现 ⑨ / 44001 的真实缺口。
 refs: [BR-ID-36, BR-WDR-29, BR-WDR-30]
 refs_hash:
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
   BR-WDR-29: c576e429b058
   BR-WDR-30: ec74379ec48c
 deps: [B2-11a, B2-11b]

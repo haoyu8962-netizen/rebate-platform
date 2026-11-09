@@ -6,7 +6,7 @@ type: impl
 # 关联手机号不解密（D10-681 ① 取 A）：risk 的 BlockedRequest 加可选入参（摘要 = users.phone_hmac、脱敏号 = identity 的 MaskedPhoneReader），明文入参照旧。命中由匹配端口当次判定（已读过规则状态，B2-11f），写入走 decided 路径，不再读一次（B1-03zh money r1 S1 的口径）。⑨ 并进本单（D10-681 ②）：risk_hits 现有约束可表达（ref_type withdrawal、risk_action manual_review，request_type / 金额 / 手机号两列留空），不加迁移。
 refs: [BR-ID-36, BR-WDR-03, BR-ID-31, BR-WDR-29]
 refs_hash:
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
   BR-WDR-03: 9120874c20b6
   BR-ID-31: 497747587b67
   BR-WDR-29: c576e429b058

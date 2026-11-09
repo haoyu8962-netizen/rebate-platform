@@ -5,7 +5,7 @@ type: impl
 # 2026-11-01 W1 入账（编排 D10-536 (b)）。规则码以 risk 规则目录为准（BLACKLIST_HIT，order-blocklist.ts）。读口随 B1-03zh 合入，本单排在它之后。GATE-RISK-RULE-TOGGLE 的一环。
 refs: [BR-ID-36, BR-ATTR-26]
 refs_hash:
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
   BR-ATTR-26: d115d750e3a5
 deps: [B1-09b]
 paths:

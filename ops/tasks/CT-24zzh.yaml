@@ -7,7 +7,7 @@ type: contract
 refs: [BR-FUND-22, BR-ID-36]
 refs_hash:
   BR-FUND-22: c9930aaf2459
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
 contract_sections: ['11.1']
 deps: []
 paths:

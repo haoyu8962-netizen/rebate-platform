@@ -6,7 +6,7 @@ type: contract
 # 新码不在 04 / 08 预造：20902 data.resource 新增 risk_rule 由本契约按 08 §13.11 分配。风控规则清单无页面规格，本契约只出接口形状。
 refs: [BR-ID-36]
 refs_hash:
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
 contract_sections: ['11.2']
 deps: []
 paths:

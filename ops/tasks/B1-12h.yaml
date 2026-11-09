@@ -7,7 +7,7 @@ type: test-change
 # 2026-10-21 标 done：编排裁定 C（createHttpApp 给 dbHandles 时默认启动 JOB_QUEUE）取代了 kit 级 startQueue，四份 kit 无需改动，本任务不再实施；B1-12g #807 变基时已去掉对应提交。
 refs: [BR-TEXT-23]
 refs_hash:
-  BR-TEXT-23: e160b53ddf45
+  BR-TEXT-23: 216a9f60b6ea
 deps: [B1-12g]
 paths:
   - 'test/spec/platform/idempotency/abandon-route/http-kit.ts'

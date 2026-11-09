@@ -8,7 +8,7 @@ type: impl
 # appeal_pending 派生已在（risk/application/order-appeal-read.ts，B1-09p → settlement order-figures → GET /v1/orders/{order_id}），本单核通即可。判定顺序照契约：20001 / 30701 → 同目标处理中返回原单 → 计次用尽 30418 → 新建。
 refs: [BR-ID-36]
 refs_hash:
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
 deps: [B1-03i, B1-03ze, B1-09p]
 paths:
   - 'apps/api/src/modules/risk/application/appeals.ts'

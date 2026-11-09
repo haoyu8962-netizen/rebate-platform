@@ -8,7 +8,7 @@ type: impl
 refs: [BR-ATTR-26, BR-ID-36]
 refs_hash:
   BR-ATTR-26: d115d750e3a5
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
 deps: []
 paths:
   - 'apps/api/src/modules/risk/application/order-blocklist*.ts'

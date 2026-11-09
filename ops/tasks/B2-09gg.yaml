@@ -10,7 +10,7 @@ type: impl
 refs: [BR-FUND-22, BR-ID-36]
 refs_hash:
   BR-FUND-22: c9930aaf2459
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
 deps: [CT-24zzh, B2-09gd]
 paths:
   - 'apps/api/src/app.module.ts'

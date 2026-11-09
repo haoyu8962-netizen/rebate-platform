@@ -7,7 +7,7 @@ type: contract
 # contract_sections 只填 11.1：§6.6 / §11.2 全节带上超限，编排者把 04 §6.6 `appeals` 段、§3.2 `appeals` 与 `risk_hits` 行、§7 的 20902 与 30418 行、§11.2 `risk.appeal`、`risk.freeze`、`risk.ban`、`risk.blocklist` 四行原文逐字摘进第 9 节。
 refs: [BR-ID-36, BR-ID-31]
 refs_hash:
-  BR-ID-36: 2758a53910fa
+  BR-ID-36: 307e5d74ad54
   BR-ID-31: 497747587b67
 contract_sections: ['11.1']
 deps: [CT-26e]
