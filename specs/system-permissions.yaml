@@ -7,6 +7,7 @@
 #   version      每次改动递增
 #   permissions  每条 {type, platform, system_key, feature, purpose_key, phase, builds, source}
 #     type         权限类型（03 §4.9：MVP 为 push、photos；camera 留到 P1）
+#                  另有 vibrate（鸿蒙触感反馈，system_grant 不弹窗；03 §4.9 由下一批规划回写，D10-1160）
 #     platform     ios / android / harmony
 #     system_key   iOS 的用途说明键，Android 与鸿蒙的权限名；null = 该端没有要写进工程的键（如 iOS 通知授权
 #                  不需要 Info.plist 用途说明），生成器不写工程声明，但隐私中心「系统权限」一节照样列出
@@ -24,7 +25,7 @@
 #
 # TODO(规划/03 §4.9): Android、鸿蒙的对应权限（含通知、相册写入）与各 SDK 带进来的权限 — blocked on 各端
 #   工程接入时按系统文档核对（不臆造权限名）。
-version: '1'
+version: '2'
 permissions:
   - type: photos
     platform: ios
@@ -39,6 +40,14 @@ permissions:
     system_key: null
     feature: 通知（PermissionRequester，push 类型；只在用户需要时申请，BR-ID-13）
     purpose_key: perm.push.card_hint
+    phase: MVP
+    builds: [debug, staging, release]
+    source: own
+  - type: vibrate
+    platform: harmony
+    system_key: ohos.permission.VIBRATE
+    feature: 触感反馈（FEEL-KIT，操作时的轻微震动；system_grant，安装即授予、不弹窗）
+    purpose_key: perm.vibrate.system_purpose
     phase: MVP
     builds: [debug, staging, release]
     source: own

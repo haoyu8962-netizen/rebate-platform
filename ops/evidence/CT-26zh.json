@@ -1,0 +1,37 @@
+{
+  "risk_note": "Data and one default text only (D10-1160, after D10-1153 ③). specs/system-permissions.yaml (the single source of the three clients' system permissions) gets version '2' and one entry: harmony / ohos.permission.VIBRATE (FEEL-KIT haptics; system_grant, granted at install, no dialog) / purpose_key perm.vibrate.system_purpose / MVP / debug, staging, release / own; the header notes vibrate pending the 03 §4.9 write-back. contracts/texts.default.json gets perm.vibrate.system_purpose = 用于操作时的轻微震动反馈 (alphabetical place; 'perm.' is an agreement prefix, not a fund term). iOS registers nothing (UIFeedbackGenerator needs no permission); Android only when it actually declares android.permission.VIBRATE. No code reads system-permissions.yaml yet (the generator / CI assertion belong to CT-05 / QA-07). Host: text-guard + dict-agreement-real-name 2057, contracts-ts texts / fund-term-keys 17, contracts:check 0. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-26zh/review-codex-contract-r1.json, no findings."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-26zh",
+  "spec_commit": "295c747b25e524d68591d10aba07553ee3dc8881",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2080ecec56fb20f41f09ca3e2f277b558f1779ff",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

@@ -706,6 +706,7 @@
     "perm.push.denied_forever": "通知权限已关闭，可以在系统设置中开启",
     "perm.push.guide_bar": "通知没有开启，跟单和提现到账的消息可能收不到。去开启",
     "perm.push.not_asked_hint": "购物后回到 App 时，可以在订单同步提示里开启通知",
+    "perm.vibrate.system_purpose": "用于操作时的轻微震动反馈",
     "phone_change.current_label": "当前手机号",
     "phone_change.done.desc": "当前手机号 {phone}。以后用手机号登录时，请使用新手机号",
     "phone_change.done.title": "手机号已更换",
