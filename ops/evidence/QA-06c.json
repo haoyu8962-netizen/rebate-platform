@@ -1,0 +1,109 @@
+{
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "dad489863226bc5e8aeed50c71adbc23a134bd96",
+  "red_tests": [
+    "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#12] 真实入口读同目录配置、导出 sync options，并以本场景参数发一次 POST",
+    "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#13] 时间窗入口先读 limits，之后才 POST，两个请求均禁止重定向",
+    "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#14] 初始化拒绝生产目标、未给令牌和非法配置，负载前即失败",
+    "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#15] HTTP 错误、业务错误、非 JSON 和重定向计为失败，不重试或跟随跳转",
+    "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#16] 独立配置仅含 sync，余量 5 QPS 乘三；P95 与错误率写在配置",
+    "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#17] sync 入口使用独立配置及生产纯构造器，共用 options.ts 不复制 QA-06a 三场景入口",
+    "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#18] 增加 sync 后 QA-06a 三场景配置与入口逐字保持原样",
+    "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#19] README 只追加同步节，含运行命令、阈值依据、环境变量和 WireMock 隔离说明",
+    "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#1] 同步配置合法，独立场景以三倍峰值升压、保持、降至零",
+    "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#2] 峰值、阶段、阈值从配置读取，不在实现中钉死本地初值",
+    "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#3] 只有 sync，一个都不能缺，也不能混入 QA-06a 场景",
+    "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#4] 缺失或非法阈值、负载、阶段、接口参数阻止运行",
+    "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#5] 目标根地址只接受回环和 WireMock，环境覆盖也受同一校验",
+    "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#6] 拒绝生产、未登记 staging、伪装主机、认证信息和非根地址",
+    "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#7] 订单号形态按契约 POST admin，身份仅用管理员令牌，不加 step-up 或幂等键",
+    "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#8] 时间窗保留带时区的 from/to，接受 earliest_from 边界和等价时刻",
+    "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#9] 请求体拒绝混合形态、越界订单号、未知平台和客户端身份",
+    "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#10] 时间窗不早于对应平台 limits，起止合法且严格递增",
+    "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#11] 令牌来自环境变量，缺失或换行拒绝；URL 覆盖不能绕过安全校验"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "dad489863226bc5e8aeed50c71adbc23a134bd96",
+      "tree": "0e6947401b3614d9926e1444c4592366a6560635",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-08T23:16:03Z",
+      "finished_at": "2026-11-08T23:16:16Z",
+      "red_tests": [
+        "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#12] 真实入口读同目录配置、导出 sync options，并以本场景参数发一次 POST",
+        "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#13] 时间窗入口先读 limits，之后才 POST，两个请求均禁止重定向",
+        "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#14] 初始化拒绝生产目标、未给令牌和非法配置，负载前即失败",
+        "test/spec/load/k6/sync/entry.test.ts > [AC-QA-06c#15] HTTP 错误、业务错误、非 JSON 和重定向计为失败，不重试或跟随跳转",
+        "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#16] 独立配置仅含 sync，余量 5 QPS 乘三；P95 与错误率写在配置",
+        "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#17] sync 入口使用独立配置及生产纯构造器，共用 options.ts 不复制 QA-06a 三场景入口",
+        "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#18] 增加 sync 后 QA-06a 三场景配置与入口逐字保持原样",
+        "test/spec/load/k6/sync/files.test.ts > [AC-QA-06c#19] README 只追加同步节，含运行命令、阈值依据、环境变量和 WireMock 隔离说明",
+        "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#1] 同步配置合法，独立场景以三倍峰值升压、保持、降至零",
+        "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#2] 峰值、阶段、阈值从配置读取，不在实现中钉死本地初值",
+        "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#3] 只有 sync，一个都不能缺，也不能混入 QA-06a 场景",
+        "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#4] 缺失或非法阈值、负载、阶段、接口参数阻止运行",
+        "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#5] 目标根地址只接受回环和 WireMock，环境覆盖也受同一校验",
+        "test/spec/load/k6/sync/options.test.ts > [AC-QA-06c#6] 拒绝生产、未登记 staging、伪装主机、认证信息和非根地址",
+        "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#7] 订单号形态按契约 POST admin，身份仅用管理员令牌，不加 step-up 或幂等键",
+        "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#8] 时间窗保留带时区的 from/to，接受 earliest_from 边界和等价时刻",
+        "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#9] 请求体拒绝混合形态、越界订单号、未知平台和客户端身份",
+        "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#10] 时间窗不早于对应平台 limits，起止合法且严格递增",
+        "test/spec/load/k6/sync/requests.test.ts > [AC-QA-06c#11] 令牌来自环境变量，缺失或换行拒绝；URL 覆盖不能绕过安全校验"
+      ],
+      "expected": [
+        "test/spec/load/k6/sync/entry.test.ts",
+        "test/spec/load/k6/sync/files.test.ts",
+        "test/spec/load/k6/sync/options.test.ts",
+        "test/spec/load/k6/sync/requests.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1a117be79aaf7a90e7e8534f37cde3fd94f91ea236f968fc28e5c56640e95e6e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3c7633d625ffc948095c061032ebd0b6472041ee",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "QA-06c",
+  "risk_note": "RV2 by path (infra/** outside the whitelist); a k6 load script, no money code. Per orchestrator 03:45 (a): QA-06a's frozen tests pin config.json to exactly three scenarios, so the sync scenario has its own entry and config in the same directory (infra/load/k6/sync.ts, sync-options.ts, sync.config.json), reusing options.ts builders without changing its three-scenario check or output; README gets an appended sync section (its frozen first 7711 bytes untouched). adminCreateOrderSync (POST /admin/v1/order-syncs, order.view) at 5 → 15 req/s (planning/01 §7.3: 50 − search 30 − convert 15), P95 1500 ms and 1% errors as local initial values (01 §7.1 has no admin-write entry, stated in README). Targets loopback and the infra/fault WireMock only; prod refused; the admin token never echoed. The Codex skeleton had been left out of the first spec commit by the lane's commit helper; recovered unchanged from the object store and amended in. Host: local tsconfig typecheck, eslint, prettier 0; Codex-written rule tests run only in the container (verify:fast killed at tsc by memory, 137), judged by the container red run and the required CI checks (approvals #21).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex money (RV2 by path; general refused) r1 pass, no findings (couli-runs/QA-06c/review-codex-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (tester codex, approvals 34). Codex does not review its own tests, so a fresh independent Claude reviewed: r1 pass with five S2, four handled in the implementation (token not echoed, setup fails before load, README notes on reused=true dedup and on passing LOAD_ADMIN_TOKEN / LOAD_ENV), one not fixable (frozen README bytes keep 'QA-06c not started'; the new section says it is implemented) (couli-runs/QA-06c/review-claude-spectest-r1.json)."
+  }
+}

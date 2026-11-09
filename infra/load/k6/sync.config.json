@@ -1,0 +1,29 @@
+{
+  "multiplier": 3,
+  "base_urls": {
+    "admin": "http://127.0.0.1:3002"
+  },
+  "requests": {
+    "sync": {
+      "platform": "pdd",
+      "order_nos": ["local-load-order-1"]
+    }
+  },
+  "scenarios": {
+    "sync": {
+      "service": "admin",
+      "method": "POST",
+      "path": "/admin/v1/order-syncs",
+      "executor": "ramping-arrival-rate",
+      "peak": 5,
+      "ramp_up": "30s",
+      "hold": "2m",
+      "latency_metric": "http_req_duration",
+      "p95_ms": 1500,
+      "error_rate": 0.01,
+      "request_timeout": "10s",
+      "pre_allocated_vus": 30,
+      "max_vus": 150
+    }
+  }
+}

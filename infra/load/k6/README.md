@@ -112,3 +112,73 @@ docker compose -f infra/load/k6/compose.yaml run --rm k6
 第二条命令执行全部三个场景，阈值失败时退出码非零；保留终端指标与退出码到编排产物目录，
 不要把夹具或完整请求体写进报告。故障场景预期会触发性能门槛失败，与正常场景分开留证。
 编排者还须在隔离验证容器运行冻结规则测试 `test/spec/load/k6/**`；本轮只执行静态检查。
+
+## 同步场景（sync，QA-06c）
+
+同步场景已由 QA-06c 实现；上文「同步场景见 QA-06c，尚未开工」「`admin` 根地址当前无场景使用」
+是 QA-06a 时的说法，以本节为准。入口为独立的 `sync.ts`，参数、请求体和阈值在同目录
+`sync.config.json`，纯参数构造器为 `sync-options.ts`（复用 `options.ts` 的场景与阈值构造，
+不改 QA-06a 三场景的 `config.json`、`script.ts` 与校验）。`sync.config.json` 只能有 `sync`
+一个场景，其他名称拒绝启动。
+
+### 接口
+
+以 `contracts/openapi.yaml` 为准：`adminCreateOrderSync`（`POST /admin/v1/order-syncs`），
+权限点 `order.view`，无二次验证、无 `Idempotency-Key`。请求体二选一：
+
+- 按订单号：`platform` + `order_nos`（1–50 个，每个 1–64 字符）；默认配置用这种，不读 limits。
+- 按时间窗：`platform` + `from` + `to`（带时区偏移的 ISO 8601，`from` 早于 `to`），可选
+  `status_filter`（须是该平台登记过的值）。`setup()` 先 `GET /admin/v1/order-syncs/limits`
+  （`adminGetOrderSyncLimits`）取一次，`from` 不得早于该平台 `earliest_from`；取不到、401
+  或窗口越界时在加压前就失败退出。`earliest_from` 随时钟后移，窗口起点应离边界留足余量。
+
+请求体原样发送，不带 `app_id`、管理员编号等身份字段，身份只来自管理员令牌。每次迭代
+只发一次 POST，不重试、不跟随跳转。只有 HTTP 200、`code=0` 且返回 `sync_id`、合法
+`status` 和 `reused` 才算成功；401、429、5xx、30156（同步流暂停）、非 JSON、跳转都计失败。
+
+注意去重：同一筛选条件在排队或执行中再次提交不会新建，返回原请求并带 `reused=true`。
+固定请求体加压时绝大多数请求命中去重，压测结果主要反映去重查找与鉴权的开销，
+**不等于新建同步的容量**，也不代表 worker 执行同步的吞吐。
+
+### 负载与判定
+
+基准来源是任务指定规格版本的规划/01 §7.3 公开首月 API 峰值 50 QPS。01 §7.3 只给总峰值，
+没有按接口的占比；QA-06a 已分给搜索 30、转链 15，余量 50 − 30 − 15 = 5 QPS 作为本地分配给
+同步，三倍即 15 次/秒。这是可校准的本地参数，不是规划给出的占比。
+
+| 场景 | 基准 → 三倍 | 执行器 | P95 | HTTP 错误率 |
+| --- | --- | --- | --- | --- |
+| `sync` | 5 → 15 次/秒 | ramping-arrival-rate | <1500 ms | <1% |
+
+与 QA-06a 同口径：30 秒升至三倍、保持 2 分钟、30 秒降至零；VU 预分配 30、上限 150
+（三倍每秒请求数乘 10 秒请求超时）。01 §7.1 对后台写接口无专条，没有专门的延迟指标；
+P95 1500 ms 与错误率 1% 沿用 QA-06a 的本地验收初值，不是规划给定的目标。
+同样额外要求 `checks rate==1` 与 `dropped_iterations count==0`。峰值、阶段、阈值都只在
+`sync.config.json` 调整，倍数固定为 3。
+
+### 隔离
+
+遵守 09 README §0.2 硬规则 5：不压真实联盟接口。订单同步的联盟上游只用 `infra/fault` 的
+WireMock，应用须用演示适配器或指向该 WireMock 的测试装配；本目录不另起 WireMock、不加载新桩。
+根地址只接受 `127.0.0.1`、`localhost`、`[::1]`、`wiremock` 的 HTTP(S) 根地址；`LOAD_ENV`
+只能是 `local`（缺省）或 `wiremock`，`prod`、`staging` 及其他值在初始化时就拒绝，不发任何请求。
+
+### 环境变量与运行
+
+| 变量 | 用途 |
+| --- | --- |
+| `LOAD_ADMIN_BASE_URL` | admin 根地址，默认 `http://127.0.0.1:3002`（`compose.yaml` 已透传） |
+| `LOAD_ADMIN_TOKEN` | 本地种子管理员令牌，须有 `order.view`，必填；只从环境变量读，不写入配置、报告或日志 |
+| `LOAD_ENV` | `local` 或 `wiremock`，缺省 `local` |
+
+`compose.yaml` 默认运行 `script.ts`，只透传三个 `LOAD_*_BASE_URL`，且要求 `LOAD_FIXTURES_FILE`。
+同步场景不读夹具，但 Compose 仍要求该变量，可指向任意存在的本地 JSON 文件（如工作区被忽略的
+`.tmp/qa-06c/fixtures.json`，内容 `{}`）。令牌与 `LOAD_ENV` 用 `-e 变量名`（不写值）从编排环境
+传入，令牌不出现在命令行，也不要写进 `compose.yaml`（否则 `docker compose config` 会打印它）。
+从仓库根目录执行：
+
+```sh
+docker compose -f infra/load/k6/compose.yaml run --rm -e LOAD_ADMIN_TOKEN -e LOAD_ENV k6 run --no-usage-report /load/sync.ts
+```
+
+阈值失败时退出码非零；保留终端指标与退出码，不要把令牌或完整请求体写进报告。

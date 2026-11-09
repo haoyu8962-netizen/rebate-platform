@@ -76,12 +76,12 @@ function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function positiveInteger(value: unknown): value is number {
+export function positiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
 /** Deliberately narrower than a URL parser; k6 has no dependency on Node's URL implementation. */
-function localBase(value: unknown): value is string {
+export function localBase(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   const match =
     /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]|wiremock)(?::([0-9]{1,5}))?\/?$/.exec(value);
@@ -91,7 +91,7 @@ function localBase(value: unknown): value is string {
   );
 }
 
-function duration(value: unknown): boolean {
+export function duration(value: unknown): boolean {
   // A single positive unit suffices for this suite and avoids ambiguous k6 duration strings.
   return typeof value === 'string' && /^[1-9][0-9]*(?:ms|s|m|h)$/.test(value);
 }
@@ -158,42 +158,64 @@ export function configProblems(config: LoadConfig): string[] {
   return problems;
 }
 
+/** Run-wide thresholds shared by every suite: check() failures and dropped iterations fail the run. */
+export function baseThresholds(): Record<string, string[]> {
+  // check() failures must fail the run, including HTTP 200 business failures and invalid SSE.
+  return { checks: ['rate==1'], dropped_iterations: ['count==0'] };
+}
+
+/**
+ * One k6 scenario plus its per-scenario thresholds, for an already validated scenario config:
+ * ramp up to peak x multiplier, hold, ramp down to zero. Shared with the sync suite (QA-06c).
+ */
+export function scenarioOptions(
+  name: string,
+  s: ScenarioConfig,
+  multiplier: number,
+): { scenario: K6Scenario; thresholds: Record<string, string[]> } {
+  const target = s.peak * multiplier;
+  const scenario: K6Scenario = {
+    executor: s.executor,
+    exec: name,
+    gracefulStop: s.request_timeout ?? '60s',
+    stages: [
+      { duration: s.ramp_up, target },
+      { duration: s.hold, target },
+      { duration: s.ramp_up, target: 0 },
+    ],
+  };
+  if (s.executor === 'ramping-vus') {
+    scenario.startVUs = 0;
+    // Let in-flight streams complete their checks during ramp-down, up to their timeout.
+    scenario.gracefulRampDown = scenario.gracefulStop;
+  } else {
+    scenario.startRate = 0;
+    scenario.timeUnit = '1s';
+    scenario.preAllocatedVUs = s.pre_allocated_vus ?? target;
+    scenario.maxVUs = s.max_vus ?? scenario.preAllocatedVUs;
+  }
+  return {
+    scenario,
+    thresholds: {
+      [`${s.latency_metric}{scenario:${name}}`]: [`p(95)<${s.p95_ms}`],
+      [`http_req_failed{scenario:${name}}`]: [`rate<${s.error_rate}`],
+    },
+  };
+}
+
 /** k6 `options` for a valid config; throws (with the problems) on an invalid one. */
 export function buildOptions(config: LoadConfig): K6Options {
   const problems = configProblems(config);
   if (problems.length > 0) throw new Error(problems.join('\n'));
-  const options: K6Options = {
-    scenarios: {},
-    // check() failures must fail the run, including HTTP 200 business failures and invalid SSE.
-    thresholds: { checks: ['rate==1'], dropped_iterations: ['count==0'] },
-    maxRedirects: 0,
-  };
+  const options: K6Options = { scenarios: {}, thresholds: baseThresholds(), maxRedirects: 0 };
   for (const name of scenarioNames) {
-    const s = config.scenarios[name]!;
-    const target = s.peak * config.multiplier;
-    const scenario: K6Scenario = {
-      executor: s.executor,
-      exec: name,
-      gracefulStop: s.request_timeout ?? '60s',
-      stages: [
-        { duration: s.ramp_up, target },
-        { duration: s.hold, target },
-        { duration: s.ramp_up, target: 0 },
-      ],
-    };
-    if (s.executor === 'ramping-vus') {
-      scenario.startVUs = 0;
-      // Let in-flight streams complete their checks during ramp-down, up to their timeout.
-      scenario.gracefulRampDown = scenario.gracefulStop;
-    } else {
-      scenario.startRate = 0;
-      scenario.timeUnit = '1s';
-      scenario.preAllocatedVUs = s.pre_allocated_vus ?? target;
-      scenario.maxVUs = s.max_vus ?? scenario.preAllocatedVUs;
-    }
+    const { scenario, thresholds } = scenarioOptions(
+      name,
+      config.scenarios[name]!,
+      config.multiplier,
+    );
     options.scenarios[name] = scenario;
-    options.thresholds[`${s.latency_metric}{scenario:${name}}`] = [`p(95)<${s.p95_ms}`];
-    options.thresholds[`http_req_failed{scenario:${name}}`] = [`rate<${s.error_rate}`];
+    Object.assign(options.thresholds, thresholds);
   }
   return options;
 }
