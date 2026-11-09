@@ -19,5 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-recon-blacklist-clawback/**'
-status: todo
-pr: null
+status: done
+pr: 3077
