@@ -4,6 +4,7 @@ title: 拼多多 order_status 4（审核失败）、10（已处罚）补进 pdd.
 type: impl
 # 2026-11-08 be 入账（D10-1069：负责人「只要联盟返回没有佣金 全部算失效」；08 BR-FUND-02 / BR-TEXT-05 已回写 couli #314；照 B1-04zga 京东先例）。specs/order-status-map/pdd.csv 补 4（审核失败，不可提现）、10（已处罚）→ PLATFORM_INVALID，source doc、verified false：未入账整单作废（R6 VOID）、已入账按现有失效口径整单扣回（R8 FULL）、首次入库即该码照 P13 建行作废；不再挂 UNMAPPED_STATUS、不再拒收。不写子原因（FU-PDD-REASON-SUB 结案）。拼多多适配器（union/infra/pdd/**，平台差异止于适配器；告警经适配器既有的 warn 出口；生产日志字段（union.module.ts logPddWarning）拆给 B1-04zgd（D10-1096，spec-test r3 S1 归 zgd））对状态 4 / 10 的订单：fail_reason 原值打 warn（alert order_reason_sub_unmapped，platform pdd，带原值、不带单号 / 金额 / 用户）；状态 4 / 10 而佣金 > 0 的照样按失效，另打一条 warn（alert pdd_invalid_with_commission，待录制核对）。不改状态机、扣回规则与金额。
 # 冻结：test/spec/orders/status-map/pdd.test.ts 的 [AC-B1-08f#1] / #2（顶层 EXPECTED 表）/ #3 / #4 钉「4、10 不进表」，照 D10-327 由新鲜独立 Claude 只改这几处期望（EXPECTED 加 4、10 → PLATFORM_INVALID；#3 改为按失效；#4 表外码清单去掉 4、10），另一位只读复审「只改这几处」；未改的行 / 用例按先红报告补 red_exempt / red_exempt_rows。规则测试新目录钉生产流水线按失效处理。Codex 额度尽至 11-15：测试、spec-test、money 评审都由新鲜独立 Claude（D10-823 ④）。
+# 完成 2026-11-09（#2950）：pdd.csv 4 / 10 → PLATFORM_INVALID，适配器经 warn 发 order_reason_sub_unmapped / pdd_invalid_with_commission；D10-1114 起 union 收尾——[AC-B1-04zgc#4] 期望按 BR-FUND-01 P7 改 SETTLED（测试第 4 次，approvals 59，D10-1115 / D10-1118），P7 的 order_rights 行另见 FU-P7-ORDER-RIGHTS-ROW（归 be，D10-1124）。
 refs: [BR-FUND-02]
 refs_hash:
   BR-FUND-02: 382c4075d2cb
@@ -70,5 +71,5 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
-pr: null
+status: done
+pr: 2950
