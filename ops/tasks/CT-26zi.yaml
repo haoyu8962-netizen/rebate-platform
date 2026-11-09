@@ -1,0 +1,18 @@
+id: CT-26zi
+repo: rebate-platform
+title: 契约：路由 Appeal 加可选参数 order_id（有 order_id 为订单申诉、无则账户申诉，不加 target_type），生成物同步（D10-1182，design/specs/app-appeal-order.md §7 缺口）
+type: contract
+# 2026-11-09 content 入账（D10-1182 ①）。contracts/routes.json 的 Appeal（native）params 现为空对象，订单详情【去申诉】带不了是哪笔订单。加 properties.order_id（与 OrderDetail 同形：string、minLength 1），required 仍为空；routes.json version 按约定递增；packages/contracts-ts 重生成（bridge.gen.ts 等），contracts:check 过。
+# 已核 APPEAL_RESULT（BR-TEXT-23）：只发站内信、不发推送；08 细则表未规定落地，notification/application/appeal-result-message.ts 写 route: null。是否给 order_revoked 加落地（Appeal 或 OrderDetail 带 order_id）要改 08 与通知代码，不在本单，已报编排定。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/routes.json'
+  - 'packages/contracts-ts/**'
+  - 'specs/client/order-vectors.json'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
