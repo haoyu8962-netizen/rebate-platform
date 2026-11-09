@@ -1,0 +1,23 @@
+id: F1-08ec
+repo: rebate-platform
+title: 后台「对账与差错」页补黑名单复核确认扣回（FU-ADMIN-BLACKLIST-CLAWBACK）：差错单新类型 blacklist_after_credit 的名称与列表筛选；详情【确认扣回】调 blacklistClawbackAdminReconDiff（权限点 order.blacklist_clawback、totp 动态码 step-up、Idempotency-Key、二次确认与金额展示），开关关闭与各错误按契约提示、不隐藏差错单（编排 D10-1095、D10-1180）
+type: impl
+# 2026-11-09 入账（前端线 f1-frontend-7，编排 18:56 派工 FU-ADMIN-BLACKLIST-CLAWBACK，D10-1095 / D10-1180；后端 #3026 已合并）。
+# 依据：contracts/openapi.yaml POST /admin/v1/recon-diffs/{recon_diff_id}/blacklist-clawback（blacklistClawbackAdminReconDiff）：请求只有可选 note（trim 后 1–200 字），控制台**不发金额**；expected_fen 只作展示，实扣由服务端算、可能不同，成功返回 data.clawed_back_fen；校验顺序 10403（admin_permission_denied）→ 10003（data.tier=totp）→ 20001（note）→ 20001 [recon_diff_id]（未知 / 别的应用 / R4）→ 20902 recon_diff（已 adjusted / written_off / closed）→ 20001 reason=blacklist_clawback_not_supported → 20001 reason=blacklist_clawback_disabled（开关 order.blacklist_clawback.enabled 关）→ 20902 resource=order（订单已不是 CREDITED，处理人改用【关单】结案）；Idempotency-Key 必填（重放同 key；10003 后带同 key 重试；20901 / 40901）。contracts/enums/fund.yaml recon_diff_type 的 blacklist_after_credit；specs/permissions.yaml 的 order.blacklist_clawback；error-codes.yaml 20001 的两个 reason 只出现在后台接口、显示后台文案（不进用户侧字典，文案放 apps/admin/src/texts/recon.ts）。另按 规划/04 §11.2。
+# 交互：【确认扣回】只对 open / processing 的 blacklist_after_credit 差错单、持 order.blacklist_clawback 时出现；点击先弹二次确认（展示差错单金额 expected_fen 与「实扣以服务端计算为准」、订单与命中维度、可选备注），确认后走现有 StepUpModal（totp）再发请求；成功提示含 clawed_back_fen 并刷新；开关关闭等错误按契约在弹窗内提示、差错单照常列出不隐藏。不打开开关。
+# 风险级：apps/admin/src/pages/recon/** 不在 risk-map 的资金路径（withdrawals / adjustments）内，按 RV1；它是扣用户钱的入口，评审时按资金口径多看一眼（编排 18:56：拿不准报编排）。规则测试新鲜独立 Claude；评审 Codex general（当次失败才退独立 Claude 并写真实报错）。
+refs: []
+refs_hash: {}
+deps: [F1-08e]
+paths:
+  - 'apps/admin/src/pages/recon/**'
+  - 'apps/admin/src/texts/recon.ts'
+test_paths:
+  - 'test/spec/frontend/admin-recon-blacklist-clawback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-recon-blacklist-clawback/**'
+status: todo
+pr: null
