@@ -32,7 +32,8 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/payment/**'
-status: todo
+status: done
+pr: 2965
 red_exempt:
   - file: test/spec/payment/result/concurrency.int.test.ts
     test: '[AC-B2-15c#29] 压力：200 轮里同一通知两次与一次主动查询同时到达（两渠道、先后轮换），每张单都只迁移一次、恰一张 PAY_RECEIPT、一份通知留存、一个 pay_order.paid，通知都应答成功'
