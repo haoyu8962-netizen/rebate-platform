@@ -1,0 +1,29 @@
+id: B1-03zn
+repo: rebate-platform
+title: 后台代登记订单申诉与用户端同口径——同一订单按单累计最多 3 次（含撤销，不重算），与用户端提交共用 risk.appeals.order 同一把事务级咨询锁（BR-ID-36）
+type: impl
+# 2026-11-09 入账（identity，编排 21:27「范围外 S1 你接」；来源 B1-03zl Codex money r2 out_of_scope 两条 S1）。
+# 现状：risk/application/admin-appeals-write.ts register 的 #attemptsLeft 对订单走 nextAppealAttempt，遇 revoked 返回 1，
+# 订单第 3 条被撤销（恢复差错单未处理、订单仍 VOID + BLACKLIST）后后台还能登记第 4 条；且登记不取订单锁，
+# 与用户端提交（appeals.ts submitOrder 的 pg_advisory_xact_lock(hashtextextended('risk.appeals.order:<app_id>:<order_id>', 0))）
+# 或另一次后台登记并发时，不同请求可越过 3 次（处理中唯一索引只挡同时处理中，挡不住「先到者已结案」）。
+# 做法：订单目标在读处理中申诉与计次之前取同一把锁（键与用户端逐字相同，最好由 appeals.ts 导出同一个取锁函数共用）；
+# 订单计次 = 该 app 该订单全部申诉条数（任何结案状态，含 revoked；含用户端提交与后台登记），满 3 即 30418。
+# 账户、被拦请求申诉的计次与锁不变；用户端行为不变。
+refs: [BR-ID-36]
+refs_hash:
+  BR-ID-36: 307e5d74ad54
+deps: [B1-03ze, B1-03zl]
+paths:
+  - 'apps/api/src/modules/risk/application/admin-appeals-write.ts'
+  - 'apps/api/src/modules/risk/application/admin-appeals-write.test.ts'
+  - 'apps/api/src/modules/risk/application/appeals.ts'
+  - 'apps/api/src/modules/risk/application/appeals.test.ts'
+test_paths:
+  - 'test/spec/risk/admin-appeals-order-attempts/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/risk/admin-appeals-order-attempts/**'
+status: todo
