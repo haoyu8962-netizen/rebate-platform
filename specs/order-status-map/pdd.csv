@@ -3,4 +3,6 @@ raw_code,event,source,verified,note
 1,PLATFORM_PAID,doc,false,已成团
 2,PLATFORM_RECEIVED,doc,false,确认收货
 3,PLATFORM_RECEIVED,doc,false,审核成功（实测前不算已结算，BR-FUND-02）
+4,PLATFORM_INVALID,doc,false,审核失败（不可提现，D10-1069）
 5,PLATFORM_SETTLED,doc,false,已经结算
+10,PLATFORM_INVALID,doc,false,已处罚（D10-1069）

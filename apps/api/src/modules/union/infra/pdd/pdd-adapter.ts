@@ -59,6 +59,7 @@ import {
   incrementWindow,
   lastOrderId,
   mapPddOrder,
+  type PddOrderLogger,
   type PddOrderPage,
   type PddOrderSource,
   orderList,
@@ -234,7 +235,39 @@ export class PddUnionAdapter implements UnionAdapter {
     // B1-08e：归档行 id 只取传输回传的元数据（十进制字符串），不读报文里的同名值。
     const id: unknown = Reflect.get(response, 'raw_payload_id');
     const rawPayloadId = typeof id === 'string' && /^[0-9]+$/.test(id) ? id : null;
-    return { envelope, page: { rawPayloadId, like: this.#clock.now() } };
+    const logger = this.#orderLogger(method);
+    return {
+      envelope,
+      page: { rawPayloadId, like: this.#clock.now(), ...(logger === undefined ? {} : { logger }) },
+    };
+  }
+
+  /**
+   * B1-04zgc（D10-1069）：订单映射的告警（order_status 4 / 10）接到构造时的 warn 出口，转成 PddWarning：
+   * error_code、event、alert 同为告警名，platform pdd，type 为拉单接口名；fail_reason 只
+   * order_reason_sub_unmapped 带。不带单号、金额、用户。没有 warn 时不告警。
+   */
+  #orderLogger(method: string): PddOrderLogger | undefined {
+    const warn = this.#warn;
+    if (warn === undefined) return undefined;
+    return {
+      warn(fields) {
+        const alert = fields['alert'];
+        if (alert !== 'order_reason_sub_unmapped' && alert !== 'pdd_invalid_with_commission')
+          return;
+        const failReason = fields['fail_reason'];
+        warn({
+          error_code: alert,
+          event: alert,
+          alert,
+          platform: 'pdd',
+          type: method,
+          ...(alert === 'order_reason_sub_unmapped'
+            ? { fail_reason: typeof failReason === 'string' ? failReason : null }
+            : {}),
+        });
+      },
+    };
   }
 
   /** 签名并发送；返回未解包的原始响应。 */

@@ -366,12 +366,23 @@ function subsidyList(value: unknown): readonly null[] | null {
 }
 
 /**
+ * B1-04zgc（D10-1069）：拼多多订单映射的告警出口，形状同 pino logger 的 warn（平铺字段 + 消息）。
+ * 只给 order_status 4（审核失败）/ 10（已处罚）的订单用：alert order_reason_sub_unmapped（platform pdd、
+ * fail_reason 原值），以及有佣金时的 alert pdd_invalid_with_commission；都不带单号、金额、用户。
+ */
+export interface PddOrderLogger {
+  warn(fields: Readonly<Record<string, unknown>>, message: string): void;
+}
+
+/**
  * B1-08e：一页订单报文的元数据。rawPayloadId 是这页响应在 union_raw_payloads 的行 id（归档传输
  * 回传，没有为 null）；like 是注入时钟给出的任一时刻，只作构造 Date 的模板，取值不进 DTO。
+ * B1-04zgc：logger 是 PddOrderLogger 告警出口；没有时不告警。
  */
 export interface PddOrderPage {
   readonly rawPayloadId: string | null;
   readonly like: Date;
+  readonly logger?: PddOrderLogger;
 }
 
 /** B1-04zv：被拒的行还能读出的单号与状态码；读不出就是 null，这里不抛错。 */
@@ -432,14 +443,15 @@ export function mapPddOrder(
   const settleTime = f.seconds('order_settle_time');
   const modifyAt = f.seconds('order_modify_at');
   const serviceFeeFen = f.fen('duo_id_service_fee');
-  return Object.freeze({
+  const failReason = f.text('fail_reason');
+  const order = Object.freeze({
     ...base,
     platform_order_id: f.text('order_id'),
     pid,
     custom_parameters: customParameters,
     order_status: orderStatus,
     order_status_desc: f.text('order_status_desc'),
-    fail_reason: f.text('fail_reason'),
+    fail_reason: failReason,
     return_status: f.integer('return_status'),
     service_fee_fen: serviceFeeFen,
     goods_price_fen: f.fen('goods_price'),
@@ -481,6 +493,38 @@ export function mapPddOrder(
     // B1-08p：拼多多订单总带店铺键（缺失 / 不合格为 null）；淘宝、京东映射不加此键（见 UnionOrder.shop_id）。
     shop_id: shopId(f.raw('mall_id')),
   });
+  // 映射成功后才告警：collect 模式下被拒的行不打（它进 rejected，由表外流程处理）。
+  alertInvalidStatus(page.logger, orderStatus, failReason, base.commission_fen);
+  return order;
+}
+
+/** B1-04zgc（D10-1069）：specs/order-status-map/pdd.csv 里按失效处理的 4（审核失败）、10（已处罚）。 */
+const INVALID_ORDER_STATUSES: ReadonlySet<number> = new Set([4, 10]);
+
+/**
+ * B1-04zgc：order_status 4 / 10 的订单每单一条 order_reason_sub_unmapped（fail_reason 原值，缺失为 null）；
+ * 毛额 promotion_amount > 0 时另打一条 pdd_invalid_with_commission（按毛额判，不看净额）。
+ * 只带 alert、platform 与 fail_reason，不带单号、金额、用户；没有 logger 时不告警。
+ */
+function alertInvalidStatus(
+  logger: PddOrderLogger | undefined,
+  orderStatus: number | null,
+  failReason: string | null,
+  grossCommissionFen: bigint,
+): void {
+  if (logger === undefined || orderStatus === null || !INVALID_ORDER_STATUSES.has(orderStatus)) {
+    return;
+  }
+  logger.warn(
+    { alert: 'order_reason_sub_unmapped', platform: 'pdd', fail_reason: failReason },
+    'pdd invalid order status has no mapped reason_sub',
+  );
+  if (grossCommissionFen > 0n) {
+    logger.warn(
+      { alert: 'pdd_invalid_with_commission', platform: 'pdd' },
+      'pdd invalid order status carries commission',
+    );
+  }
 }
 
 /**
