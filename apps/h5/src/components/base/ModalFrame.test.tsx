@@ -264,3 +264,55 @@ describe.each(COMPONENTS)('%s exit content', (_name, Component) => {
     expect(dialog.textContent).not.toContain('First');
   });
 });
+
+/** The caller mounts the modal only while it is shown: `{show && <Component open />}`. */
+function MountsOpen(props: { Component: ComponentType<ModalProps> }): ReactElement {
+  const { Component } = props;
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <button type="button" onClick={() => setShow(true)}>
+        Show
+      </button>
+      {show ? (
+        <Component open title="Mounted open" closeLabel="Close" onClose={() => setShow(false)} />
+      ) : null}
+    </div>
+  );
+}
+
+describe.each(COMPONENTS)('%s enter motion', (_name, Component) => {
+  it('plays the enter (data-appear) when mounted already open', () => {
+    render(<Component open title="At mount" closeLabel="Close" onClose={() => {}} />);
+    const layer = screen.getByRole('dialog').parentElement;
+    expect(layer?.getAttribute('data-state')).toBe('open');
+    expect(layer?.hasAttribute('data-appear')).toBe(true);
+  });
+
+  it('plays the enter when a caller mounts it open later', async () => {
+    const user = userEvent.setup();
+    render(<MountsOpen Component={Component} />);
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+    const layer = screen.getByRole('dialog', { name: 'Mounted open' }).parentElement;
+    expect(layer?.getAttribute('data-state')).toBe('open');
+    expect(layer?.hasAttribute('data-appear')).toBe(true);
+  });
+
+  it('still plays the enter when switched from closed to open, and again on reopen', () => {
+    const view = render(
+      <Component open={false} title="Toggled" closeLabel="Close" onClose={() => {}} />,
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    view.rerender(<Component open title="Toggled" closeLabel="Close" onClose={() => {}} />);
+    const first = screen.getByRole('dialog', { name: 'Toggled' }).parentElement;
+    expect(first?.getAttribute('data-state')).toBe('open');
+    expect(first?.hasAttribute('data-appear')).toBe(true);
+
+    view.rerender(<Component open={false} title="Toggled" closeLabel="Close" onClose={() => {}} />);
+    view.rerender(<Component open title="Toggled" closeLabel="Close" onClose={() => {}} />);
+    const again = screen.getByRole('dialog', { name: 'Toggled' }).parentElement;
+    expect(again?.getAttribute('data-state')).toBe('open');
+    expect(again?.hasAttribute('data-appear')).toBe(true);
+  });
+});

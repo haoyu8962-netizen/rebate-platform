@@ -1,0 +1,39 @@
+{
+  "red_tests": [],
+  "risk_note": "DSX-48g (orchestrator D10-1165; DSX-48f ② split out). ModalFrame now marks a Dialog / Sheet mounted with open=true with data-appear as well, so its first opening plays the entry motion (reduced motion still fades only); the closed-to-open path is unchanged, and the exit / inert / focus-return contract is untouched. Unit tests in ModalFrame.test.tsx cover both paths. The frozen h5-components LAYOUT#1 / VISUAL#2 cases wait for motion since F1-01ft (#3042) and pass. tester none. Host: h5 unit tests, frozen h5-components and h5-transitions, tsc, eslint, prettier, run.ts static 10/10 green; local container browser: h5-components 8/8, h5-transitions 10/10 green, only admin pages this task did not touch timed out under host load; CI runs full verification. Non-funds. Codex general review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex general r1 pass, no findings"
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "DSX-48g",
+  "spec_ref": "03383a10b26e6a9f0b154e495214a4d6555bafce",
+  "spec_commit": "1a42aef60a9974f7ffd27845bcb40361ead04891",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3f37c7e85d51c14095e8bf0a14cb6a08f302fe8a",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}

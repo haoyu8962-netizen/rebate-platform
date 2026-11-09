@@ -242,7 +242,8 @@ interface ModalFrameProps extends ModalProps {
  * and return focus to the previously focused control when closed or unmounted.
  *
  * Motion (DSX-48d, shared/styles/index.css): opening animates in (sheet slides up, dialog fades in
- * and grows slightly, backdrop fades); a modal rendered already open at mount shows at once.
+ * and grows slightly, backdrop fades), also for a modal mounted already open (DSX-48f, e.g.
+ * `{show && <Sheet open />}`); under reduced motion it only fades.
  * Closing takes effect in the same commit — out of the accessibility tree (`aria-hidden`,
  * `inert`), focus back, no handlers — while the same layer stays in the portal to play its exit,
  * removed by a timer (MODAL_EXIT_MS) and never by transitionend / animationend. While it exits
@@ -269,12 +270,9 @@ export function ModalFrame(props: ModalFrameProps): ReactElement | null {
   const closedFocus = useRef<{ panel: HTMLElement; previous: HTMLElement | null } | null>(null);
   const parent = useContext(ParentModal);
   const [node] = useState<ModalNode>(() => ({ parent }));
-  // `present`: the layer is in the portal (open, or playing its exit). `appear`: opening animates;
-  // false only while the modal is in the open state it was mounted with.
+  // `present`: the layer is in the portal (open, or playing its exit).
   const [present, setPresent] = useState(open);
-  const [appear, setAppear] = useState(!open);
   if (open && !present) setPresent(true);
-  if (!open && !appear) setAppear(true);
   const closing = present && !open;
   // What the panel shows: the caller's content while open; while closing, the content it had when
   // last open, so a caller that clears its content in the same update as closing (e.g.
@@ -365,7 +363,7 @@ export function ModalFrame(props: ModalFrameProps): ReactElement | null {
       <ParentClosing value={closing}>
         <div
           data-state={closing ? 'closed' : 'open'}
-          data-appear={appear ? '' : undefined}
+          data-appear=""
           aria-hidden={closing ? 'true' : undefined}
           inert={closing}
           className={`${LAYER} inset-0 ${style.root}`}
