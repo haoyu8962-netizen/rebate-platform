@@ -1,0 +1,26 @@
+id: B1-06zl
+repo: rebate-platform
+title: 转链暂停 50301 带 data.platform 与 data.reason（取 convert.off_reason.<platform>，缺省 not_launched）：open / convert / shop 关开关路径补全，createShare 关开关的 reason 改读 off_reason
+type: impl
+# 2026-11-09 agent2 入账（D10-1138 派工、D10-1139 选 A；只读核查 couli-runs/AGENT2-lane/fu-50301-findings.md）。
+# 现状：openLink / convertLink（link-open.ts openHttpResult，failure 固定 data:null）与 openProductShop 在 convert.enabled.<platform> 关闭时 50301 不带 data；createShare 关开关 reason 写死 maintenance；全服务端不读 convert.off_reason.<platform>（只用于 features.platform_status）。三端只读 data.reason、无 reason 按 maintenance → 未开放平台被显示成「维护中」Toast 并错标平台状态（BR-TEXT-14 例：拼多多 not_launched → 不弹 Toast、按钮「拼多多返利即将开放」）。
+# 做法：上述关开关路径返回 data {platform, reason}，reason = convert.off_reason.<platform>（缺省 not_launched，与 client-config 的 features.platform_status 同源读取）；createShare 关开关同口径。
+# 不在本单：拼多多站长授权失效（{reason: maintenance}，9 处冻结测试 toEqual）与 getUnionAuthUrl 不动；缺推广位 / attr_code / 联盟账号等配置类拒绝维持现状（open-jdpdd 冻结测试钉不带 reason）；契约 description 补句另排契约槽或实现合并后顺手。
+# RV2（linking）。新鲜独立 Claude 写规则测试（钉未开放平台 → not_launched、不弹维护 Toast 的依据），Opus 实现，money Codex medium（D10-1121 brief 带可引用行号）。
+refs: [BR-PROD-10, BR-TEXT-14]
+refs_hash:
+  BR-PROD-10: 2a77fcf983e8
+  BR-TEXT-14: 085c79c572ad
+deps: []
+paths:
+  - 'apps/api/src/modules/linking/application/**'
+  - 'apps/api/src/modules/linking/linking.module.ts'
+test_paths:
+  - 'test/spec/linking/convert-off-reason/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/convert-off-reason/**'
+status: todo
+pr: null
