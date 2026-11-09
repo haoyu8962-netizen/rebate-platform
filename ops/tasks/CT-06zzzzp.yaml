@@ -1,0 +1,23 @@
+id: CT-06zzzzp
+repo: rebate-platform
+title: CI 分流第一批（ADR-0004）：verify-props-sha-1/2/3 的 runs-on 改固定路由表达式（仓库变量 SELF_HOSTED_CI 为 on 且是 push 或本仓库 PR 时排到局域网一次性虚拟机 [self-hosted, couli-ci]，否则 ubuntu-latest），check-workflows 按 ADR §2.6 收紧并补工具测试
+type: guard-change
+# 2026-11-10 be 入账（规划仓库 docs/adr/0004 已采纳，负责人 11-09 确认；编排 D10-1196 / D10-1197 / D10-1198 / D10-1205 / D10-1206；局域网宿主、镜像、控制器、隔离与看门狗见 couli-runs/CI-lan/plan.md）。开关默认关（变量不设或不等于 on 时与现在完全相同）；开 on 由编排点头。
+# 路由表达式只有一种写法（逐字固定）：${{ (vars.SELF_HOSTED_CI == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}；fork PR、workflow_dispatch、schedule 一律托管机。第一批只分流 verify-props-sha-1/2/3（D10-1206）；必需检查名称与判定不变。
+# check-workflows（ADR §2.6）：① 「self-hosted」字样只能出现在这条固定表达式里；② 只有白名单作业（ci.yml 的 verify-props-sha-1/2/3）可以用它，其余作业仍必须 runs-on: ubuntu-latest；③ 用它的作业权限只能只读（作业级 permissions 不得出现 write，工作流级同理），不得引用 secrets.；④ pull_request_target / workflow_run 触发的工作流里不许出现它。工具测试逐条覆盖合法与各种违规写法。
+# 门禁类改动按 approvals 第 16 条 / #24 由编排核后加标签（approvals 67，编排补）。Opus 实现，Codex 对抗评审。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ci/check-workflows.ts'
+  - 'tools/ci/check-workflows.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzp.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null

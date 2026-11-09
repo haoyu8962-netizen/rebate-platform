@@ -20,6 +20,14 @@ type Job = {
   hasNeeds: boolean;
   condition: string | null;
   runsOn: string | null;
+  /** Raw text after `runs-on:` (trailing spaces trimmed), compared verbatim with the route. */
+  runsOnRaw: string | null;
+  /** 0-based indexes of the job-level `runs-on:` lines. */
+  runsOnLines: number[];
+  /** 0-based index range [start, end) of the job body. */
+  body: [number, number];
+  /** 0-based index of the job-level `permissions:` line, or null. */
+  permissionsLine: number | null;
 };
 
 type Workflow = {
@@ -36,6 +44,30 @@ const BEGIN_MARKER = '# BEGIN protected-paths.json';
 const END_MARKER = '# END protected-paths.json';
 const PROTECTED_KEYS = ['class1_add_only', 'class2_verify_config', 'class3_gates'] as const;
 const PINNED_USES = /^[\w.-]+\/[\w.-]+(\/[^@\s]+)?@[0-9a-f]{40}$/;
+
+// ADR-0004 §2 (CI heavy jobs routed to the LAN one-shot VM runner; D10-1196 / D10-1206,
+// CT-06zzzzp). The only `runs-on` besides `ubuntu-latest`, compared character for character (no
+// normalisation): repository variable SELF_HOSTED_CI = 'on' AND (a push, or a PR whose head repo
+// is this repo) picks the LAN runner labels; anything else (variable unset or not 'on', fork PRs,
+// workflow_dispatch, schedule) stays on ubuntu-latest, so the default is unchanged (§2.1, §2.2).
+export const SELF_HOSTED_ROUTE =
+  "${{ (vars.SELF_HOSTED_CI == 'on' && (github.event_name == 'push' || " +
+  'github.event.pull_request.head.repo.full_name == github.repository)) && ' +
+  'fromJSON(\'["self-hosted","couli-ci"]\') || \'ubuntu-latest\' }}';
+
+// Jobs allowed to use SELF_HOSTED_ROUTE, keyed by workflow file name (ADR-0004 §2.5: heavy jobs
+// only, enabled in three batches; D10-1206: batch 1 is the commit-SHA-seed property tests). A
+// later batch widens this constant, nothing else. Gate checks, summary jobs, jobs with write
+// permissions or secrets and pull_request_target / workflow_run workflows never qualify.
+export const SELF_HOSTED_JOBS: Readonly<Record<string, readonly string[]>> = {
+  'ci.yml': ['verify-props-sha-1', 'verify-props-sha-2', 'verify-props-sha-3'],
+};
+
+// The runner label. It may appear only inside SELF_HOSTED_ROUTE on a job's own `runs-on:` line;
+// anywhere else, comments included, it is rejected: a comment is cheap to bend into another
+// `runs-on` spelling (a flow list, a block list, a different expression) on a later edit, and
+// banning the word everywhere keeps the one legitimate place trivially auditable (ADR-0004 §2.6).
+const SELF_HOSTED_WORD = /self-hosted/i;
 
 function indentOf(line: string): number {
   return line.length - line.trimStart().length;
@@ -147,8 +179,13 @@ function parseWorkflow(file: string, text: string, problems: Problem[]): Workflo
       hasNeeds: false,
       condition: null,
       runsOn: null,
+      runsOnRaw: null,
+      runsOnLines: [],
+      body: [i + 1, i + 1],
+      permissionsLine: null,
     };
     const [bodyStart, bodyEnd] = blockRange(lines, i);
+    job.body = [bodyStart, bodyEnd];
     for (let j = bodyStart; j < bodyEnd; j++) {
       const bodyLine = lines[j] ?? '';
       if (indentOf(bodyLine) !== 4) continue;
@@ -158,18 +195,29 @@ function parseWorkflow(file: string, text: string, problems: Problem[]): Workflo
       if (key[1] === 'name') job.context = value;
       if (key[1] === 'needs') job.hasNeeds = true;
       if (key[1] === 'if') job.condition = value;
-      if (key[1] === 'runs-on') job.runsOn = value;
+      if (key[1] === 'runs-on') {
+        job.runsOn = value;
+        job.runsOnRaw = (key[2] ?? '').trimEnd();
+        job.runsOnLines.push(j);
+      }
+      if (key[1] === 'permissions') job.permissionsLine = j;
     }
-    if (job.runsOn !== 'ubuntu-latest') {
+    const routed = job.runsOnRaw === SELF_HOSTED_ROUTE;
+    if (job.runsOnLines.length > 1) {
+      add(job.line, 'runs-on', `job \`${id}\` has more than one \`runs-on:\` line`);
+    } else if (job.runsOn !== 'ubuntu-latest' && !routed) {
       add(
         job.line,
         'runs-on',
-        `job \`${id}\` must use \`runs-on: ubuntu-latest\` (never ubuntu-slim; ADR-0001 §2)`,
+        `job \`${id}\` must use \`runs-on: ubuntu-latest\` (never ubuntu-slim; ADR-0001 §2), ` +
+          'or, if listed in SELF_HOSTED_JOBS, exactly the fixed ADR-0004 routing expression',
       );
     }
     workflow.jobs.push(job);
   }
   if (workflow.jobs.length === 0) add(jobsLines[0] ?? 1, 'jobs-block', 'workflow has no jobs');
+
+  checkSelfHostedRouting(workflow, [jobsLines[0] ?? 0, jobsEnd], problems);
 
   // --- uses: every action pinned to a full commit SHA with a version comment ---
   lines.forEach((line, i) => {
@@ -207,6 +255,103 @@ function parseWorkflow(file: string, text: string, problems: Problem[]): Workflo
   }
 
   return workflow;
+}
+
+/** ADR-0004 §2.5 / §2.6: who may use the self-hosted route, and on what terms. */
+/** `jobs` is the 0-based range [the `jobs:` line, end of its block). */
+function checkSelfHostedRouting(
+  workflow: Workflow,
+  jobs: [number, number],
+  problems: Problem[],
+): void {
+  const { file, lines } = workflow;
+  const add = (line: number, code: string, message: string): void => {
+    problems.push({ file, line, code, message });
+  };
+  const name = file.slice(file.lastIndexOf('/') + 1);
+  const allowed = SELF_HOSTED_JOBS[name] ?? [];
+  const routed = workflow.jobs.filter((job) => job.runsOnRaw === SELF_HOSTED_ROUTE);
+
+  // ③ the runner label only inside the fixed expression on a job's single `runs-on:` line.
+  const routeLines = new Set(
+    routed.filter((job) => job.runsOnLines.length === 1).flatMap((job) => job.runsOnLines),
+  );
+  lines.forEach((line, i) => {
+    if (routeLines.has(i) || !SELF_HOSTED_WORD.test(line)) return;
+    add(
+      i + 1,
+      'self-hosted-text',
+      '`self-hosted` may appear only inside the fixed ADR-0004 routing expression on a job ' +
+        '`runs-on:` line (comments included)',
+    );
+  });
+
+  // ⑤ never in a workflow that runs with base-repo privileges on outside input.
+  const privileged = workflow.triggers.filter(
+    (t) => t === 'pull_request_target' || t === 'workflow_run',
+  );
+  if (privileged.length > 0) {
+    lines.forEach((line, i) => {
+      if (!line.includes(SELF_HOSTED_ROUTE)) return;
+      add(
+        i + 1,
+        'self-hosted-trigger',
+        `a ${privileged.join(' / ')} workflow must never be routed to the self-hosted runner ` +
+          '(ADR-0004 §2.5)',
+      );
+    });
+  }
+
+  if (routed.length === 0) return;
+  const topPermissions = lines.findIndex((line) => /^permissions:/.test(line));
+  for (const job of routed) {
+    // ② only the allowlisted jobs.
+    if (!allowed.includes(job.id)) {
+      add(
+        job.line,
+        'self-hosted-job',
+        `job \`${job.id}\` is not in SELF_HOSTED_JOBS for ${name}; it must use ` +
+          '`runs-on: ubuntu-latest` (ADR-0004 §2.5, D10-1206)',
+      );
+    }
+    // ④ read-only permissions: the job's own block, else the workflow-level block.
+    const permIndex = job.permissionsLine ?? (topPermissions >= 0 ? topPermissions : null);
+    if (permIndex === null) {
+      add(job.line, 'self-hosted-permissions', `routed job \`${job.id}\` has no permissions block`);
+    } else {
+      const [start, end] = blockRange(lines, permIndex);
+      for (let i = permIndex; i < end; i++) {
+        const line = lines[i] ?? '';
+        if (i >= start && isBlankOrComment(line)) continue;
+        if (/write/i.test(line.replace(/\s+#.*$/, ''))) {
+          add(
+            i + 1,
+            'self-hosted-permissions',
+            `routed job \`${job.id}\` must be read-only: no \`write\` in its effective ` +
+              'permissions (ADR-0004 §2.5)',
+          );
+        }
+      }
+    }
+    // ④ no secrets: the job body, plus every top-level line outside the `jobs:` block, before
+    // or after it (workflow-level env and defaults are inherited by every job). Any `secrets` word counts: `secrets.X`,
+    // `secrets['X']`, `toJSON(secrets)`; expression contexts are case-insensitive. Whole-line
+    // comments are skipped: they cannot read a secret.
+    const [bodyStart, bodyEnd] = job.body;
+    const scope = [
+      ...lines.flatMap((_, k) => (k < jobs[0] || k >= jobs[1] ? [k] : [])),
+      ...Array.from({ length: bodyEnd - bodyStart }, (_, k) => bodyStart + k),
+    ];
+    for (const i of scope) {
+      const line = lines[i] ?? '';
+      if (line.trim().startsWith('#') || !/\bsecrets\b/i.test(line)) continue;
+      add(
+        i + 1,
+        'self-hosted-secrets',
+        `routed job \`${job.id}\` must not reference secrets (ADR-0004 §2.4, §2.5)`,
+      );
+    }
+  }
 }
 
 function isInsidePermissions(lines: string[], index: number): boolean {
