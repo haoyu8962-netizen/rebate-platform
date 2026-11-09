@@ -1,0 +1,20 @@
+id: B2-09zk
+repo: rebate-platform
+title: B2-09zk：提现连续失败指标的同一时刻排序——同一 updated_at 的 W5 / W6 按 id 升序成段，钉住两条精确断言（FU-B209ZJ-TIE-ORDER，补 B2-09zj 测试缺口）
+type: test-change
+# 2026-11-10 ops 入账（编排 D10-1209 认可、D10-1210 要求在 B2-09zj 合并前入账）。B2-09zj 规则测试评审 r6 的 S1：couli_withdrawals_w6_streak 按 D10-1203
+#   「段尾 W6 落在 24 小时内的最长一段」计数，成段次序是 (updated_at, id) 升序，但没有同一 updated_at 的用例；按 id 降序的错实现也能过（B2-09zj 测试轮已满，照 D10-828 开收紧单）。
+# 只新增 test/spec/platform/metrics/withdrawal-fail-tie/**，不改已有文件、不动实现：同一 app 窗口内先两笔 W6，再两笔 updated_at 相同、W5 的 id 小于 W6 的 id
+#   → 序列 W6 W6 W5 W6，最长段 2；反过来 W6 的 id 小于 W5 → W6 W6 W6 W5，最长段 3。插入顺序与 id 顺序不同；须在 B2-09zj 合并后的主干上跑绿，变异实跑（并列按 id 降序）应红。
+# 分工：新鲜独立 Claude 写，另一位新鲜独立 Claude 复审（B2-09zj 的 Codex 已触发 10 次熔断，本单是新任务、计数从 0 起，Codex 可用时优先）；非 task 分支、不带证据文件，标签由编排核后加（先例 B2-09zd）。RV2。
+refs: [BR-WDR-24]
+refs_hash:
+  BR-WDR-24: 356b5d012a5d
+deps: [B2-09zj]
+paths:
+  - 'test/spec/platform/metrics/withdrawal-fail-tie/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
