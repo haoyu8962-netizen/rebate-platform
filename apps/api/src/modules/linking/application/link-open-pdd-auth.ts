@@ -5,8 +5,8 @@
 // Order of one Pinduoduo open: ownership (owner stage) → convert.enabled.pdd and path admission
 // (50301) → this check (⑥, then ⑦ the slot, B1-22n) → re-check price → conversion (orchestrator
 // ruling D7-4 ②⑤).
-// The check is judged on the identity snapshot's user, at (user, platform) granularity
-// (TODO(规划/11 §4.5): BR-ID-22 的 (user, pid) 粒度 — blocked on union_bindings 加 pid 维度的迁移):
+// The check is judged on the identity snapshot's user: the binding at (user, platform), then for an
+// own active binding the filing at (user, pid) (B1-06zi below):
 // - another user's share link (BR-ATTR-05 细则「别人的分享 link 不可用」, ruling D7-11 ①): the
 //   sharer's stored binding only, never queried; not active (blocked included) → 30111
 //   data.reason=sharer_auth_invalid, no auth_jump and no state; no_rebate is ignored there. Active
@@ -16,7 +16,7 @@
 //   server's value, never the client's). Then the site authorization of the account this
 //   authorization uses (union-auth-reads.ts authAccountId) expired → 50301 reason=maintenance
 //   (BR-ID-24 ④: conversion and the authority query depend on it), no_rebate included. no_rebate
-//   and active go on; any other status (unbound, pending_auth, invalid, released, no row) asks the
+//   goes on; active goes on to its filing (B1-06zi below); any other status (unbound, pending_auth, invalid, released, no row) asks the
 //   union authority port (UnionAdapter.queryPddAuthority, an idempotent governed read) with the
 //   same server-built identity the conversion uses (custom_parameters {app, uid=attr_code, sc},
 //   never a user_id; no attr_code → 50301; no active slot of the scene → 50301 maintenance,
@@ -60,6 +60,18 @@
 // (pdd-authority.ts generatePddAuthorityLink, D10-662: the h5 step the web address
 // mobile_short_url → url, the scheme step the upstream schema_url as is); the
 // state lives only in union_auth_sessions. Generation missing or failing → 50303, nothing written.
+// B1-06zi (BR-ID-22 「授权状态按 (user_id, pid) 记录」; FU-PDD-BINDING-PID second order): the filing
+// is per pid (app.union_pdd_pid_filings, infra/pdd-pid-filings.ts), never overriding the binding:
+// - own active binding: first ⑦ (the slot / identity check, its read-failure mapping unchanged),
+//   then the identity of this open's current slot (getActivePid of the binding's account and the
+//   scene, the very slot the conversion uses) is looked up by (app_id, user_id, pid): a row → the
+//   open goes on, not queried; none → one authority query with that identity: filed → the row is
+//   inserted (insert-if-absent, on the open's transaction, filed_at = the clock) and the open goes
+//   on; not filed → 30111 with the auth_jump of that identity (as above; the binding stays
+//   active); the port missing or failing → 50303, nothing written.
+// - not active, queried filed and activated: the queried slot's row is inserted in the same
+//   transaction after the activation, so the next open finds it.
+// - another user's share link and no_rebate: unchanged (never queried, nothing filed).
 import type { UnionPidRow } from '../../union/index.ts';
 import {
   createConversionPrecheck,
@@ -88,6 +100,7 @@ import {
   pddBindingRows,
   queryPddAuthority,
 } from './pdd-authority.ts';
+import { hasPddPidFiling, recordPddPidFiling } from '../infra/pdd-pid-filings.ts';
 import {
   AuthConfigError,
   UNRELEASED,
@@ -246,10 +259,14 @@ export function createPddAuthorization(options: PddAuthLinkOpenOptions) {
     binding: { readonly id: string; readonly accountId: string } | null,
     accountId: string,
     blocked = false,
+    /** B1-06zi: ⑦ already passed for this open (the active binding's filing check). */
+    checked = false,
   ): Promise<LinkOpenAuthorization> {
     const { owner } = input;
-    const refused = await slotRefusal(input, noRebate, accountId, blocked);
-    if (refused !== null) return refused;
+    if (!checked) {
+      const refused = await slotRefusal(input, noRebate, accountId, blocked);
+      if (refused !== null) return refused;
+    }
     const { link, identitySnapshot } = owner;
     const pidScene = noRebate ? 'self_buy' : identitySnapshot.pid_scene;
     const slot = await slotOf(link.app_id, pidScene, accountId);
@@ -322,6 +339,70 @@ export function createPddAuthorization(options: PddAuthLinkOpenOptions) {
     return { kind: 'refused', code: 30111, data: { auth_jump: authJump } };
   }
 
+  /**
+   * B1-06zi: an own active binding's open — ⑦ first, then the filing of this open's current slot
+   * (looked up, else queried: filed → recorded; not filed → 30111; failing → 50303).
+   */
+  async function allowActive(
+    input: LinkOpenAuthorizationInput,
+    userId: string,
+    active: { readonly id: string; readonly accountId: string },
+  ): Promise<LinkOpenAuthorization> {
+    const refused = await slotRefusal(input, false, active.accountId);
+    if (refused !== null) return refused;
+    const { owner, executor, traceId } = input;
+    const appId = owner.link.app_id;
+    let identity: Awaited<ReturnType<typeof pddAuthorityIdentity>>;
+    try {
+      identity = await pddAuthorityIdentity(
+        { pids, attrCodes, logger },
+        {
+          appId,
+          userId,
+          pidScene: owner.identitySnapshot.pid_scene,
+          unionAccountId: active.accountId,
+          traceId,
+          events: 'linking.open',
+        },
+      );
+    } catch (error) {
+      // ⑦ just read the same slot and attr_code; a read failing now maps as ⑦'s does.
+      const code = (error as { code?: unknown } | null)?.code;
+      if (code === 50301) return NO_SLOT;
+      logger.warn(
+        {
+          event: 'linking.open.filing_identity_read_failed',
+          app_id: appId,
+          platform: PLATFORM,
+          trace_id: traceId,
+          error_code:
+            typeof code === 'string' || typeof code === 'number' ? String(code) : 'unknown',
+        },
+        'linking: identity read failed before the pdd filing check',
+      );
+      return QUERY_FAILED;
+    }
+    // ⑦ passed, so the identity builds; should it not, the conversion's own 50301 (no data).
+    if (typeof identity === 'string') return NO_SLOT;
+    const pid = identity.claims.promotionSlot;
+    if (!(await hasPddPidFiling(executor, { appId, userId, pid }))) {
+      const authorized = await queryPddAuthority(
+        { registry, logger },
+        { appId, identity, traceId, events: 'linking.open' },
+      );
+      if (authorized === null) return QUERY_FAILED;
+      if (!authorized) return issue(input, userId, identity);
+      await recordPddPidFiling(executor, {
+        appId,
+        userId,
+        pid,
+        unionAccountId: active.accountId,
+        filedAt: clock.now(),
+      });
+    }
+    return allow(input, false, active, active.accountId, false, true);
+  }
+
   async function authorize(input: LinkOpenAuthorizationInput): Promise<LinkOpenAuthorization> {
     const { caller, owner, noRebate, executor } = input;
     if (owner.link.platform !== PLATFORM) {
@@ -368,7 +449,11 @@ export function createPddAuthorization(options: PddAuthLinkOpenOptions) {
         : MAINTENANCE;
     }
     if (noRebate) return allow(input, true, null, accountId, status === 'blocked');
-    if (active !== null) return allow(input, false, active, active.accountId);
+    if (active !== null) {
+      // BR-ATTR-05 细则: another user's share link is judged on the sharer's binding only.
+      if (sharedByOther) return allow(input, false, active, active.accountId);
+      return allowActive(input, subject, active);
+    }
 
     const identity = await pddAuthorityIdentity(
       { pids, attrCodes, logger },
@@ -401,6 +486,14 @@ export function createPddAuthorization(options: PddAuthLinkOpenOptions) {
     if (written.kind === 'blocked') return { kind: 'refused', code: 30153 };
     // F1-07c: banned meanwhile (read after the user lock): the banned user's answer, as above.
     if (written.kind === 'banned') return { kind: 'refused', code: 10001 };
+    // B1-06zi: the queried slot's filing, the pid the next open of this scene looks up.
+    await recordPddPidFiling(executor, {
+      appId,
+      userId: subject,
+      pid: identity.claims.promotionSlot,
+      unionAccountId: accountId,
+      filedAt: clock.now(),
+    });
     return allow(input, false, { id: written.id, accountId: written.accountId }, written.accountId);
   }
 

@@ -14,6 +14,8 @@
 //   writer without the user lock, such as the inspection turning active into invalid, is waited
 //   for by the row lock and the row is re-evaluated against the status set, so it is never
 //   silently skipped).
+// - B1-06zi: app.union_pdd_pid_filings rows are kept (insert-only facts under the tombstoned
+//   user_id; migration 0135 header): usability is gated by the binding, blocked here.
 // TODO(规划/11 §4.5): 换用生成的 transition() — blocked on CT-10 状态机生成器（approvals #26）
 import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';

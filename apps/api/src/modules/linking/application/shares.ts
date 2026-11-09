@@ -78,6 +78,7 @@ import {
 import { renderShareCopy, type ShareCopy } from '../domain/share-copy.ts';
 import { SHARE_TAOBAO_SWITCH_KEY, isSwitchOn } from '../domain/rules.ts';
 import { storedLinkCode } from '../infra/link-code.ts';
+import { recordPddPidFiling } from '../infra/pdd-pid-filings.ts';
 import { insertShareMaterial } from '../infra/share-material-store.ts';
 import type { AttrCodeReader, Caller, CallerContext, LinkingConfigReader } from '../ports.ts';
 import { detailFailure } from './link-convert.ts';
@@ -581,6 +582,9 @@ class ComposedShares extends SharesService {
    * in use expired → 50301 maintenance; otherwise the union authority query with the share
    * identity — authorized → the binding written active, not filed (or no share slot) → 30111 with
    * auth_jump, the query failing → 50303. Answers the account the conversion uses.
+   * B1-06zi (BR-ID-22 「授权状态按 (user_id, pid) 记录」): an authorized answer whose activation
+   * leaves the binding active also records the share slot's filing (app.union_pdd_pid_filings,
+   * insert-if-absent, filed_at = the clock) in the activation's transaction.
    */
   async #pddAuthorization(
     caller: Caller,
@@ -622,7 +626,19 @@ class ComposedShares extends SharesService {
     if (authorized === null) return refused(50303);
     if (!authorized) return this.#authRefusal(PDD, input);
     const values = { appId, userId, accountId, custom: JSON.stringify(identity.custom_parameters) };
-    const written = await db.transaction().execute((trx) => activatePddBinding(trx, clock, values));
+    const written = await db.transaction().execute(async (trx) => {
+      const decided = await activatePddBinding(trx, clock, values);
+      if (decided.kind === 'active') {
+        await recordPddPidFiling(trx, {
+          appId,
+          userId,
+          pid: identity.claims.promotionSlot,
+          unionAccountId: accountId,
+          filedAt: clock.now(),
+        });
+      }
+      return decided;
+    });
     if (written.kind === 'blocked') return refused(30153);
     if (written.kind === 'banned') return refused(10001);
     return { accountId: written.accountId };

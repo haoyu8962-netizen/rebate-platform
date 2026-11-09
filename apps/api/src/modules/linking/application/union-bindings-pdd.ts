@@ -25,7 +25,9 @@
 // open does); that account having none is the no-slot failure above, never another account's slot.
 // Taobao is never queried. No concurrency cap or timeout is added to the query yet (followup:
 // before the real pdd adapter); same-user concurrent GETs converge on the unique index + CAS.
-// TODO(规划/11 §4.5): BR-ID-22 的 (user, pid) 粒度 — blocked on union_bindings 加 pid 维度的迁移
+// B1-06zi (BR-ID-22 「授权状态按 (user_id, pid) 记录」): an authorized answer whose activation leaves
+// the binding active also records the queried self_buy slot's filing (app.union_pdd_pid_filings,
+// insert-if-absent, filed_at = the clock) in that same transaction; blocked / banned write no row.
 import type { PddAuthLinkOpenOptions } from './link-open-pdd-auth.ts';
 import {
   PDD,
@@ -33,6 +35,7 @@ import {
   pddAuthorityIdentity,
   queryPddAuthority,
 } from './pdd-authority.ts';
+import { recordPddPidFiling } from '../infra/pdd-pid-filings.ts';
 import {
   createUnionBindings,
   type UnionBindingsOptions,
@@ -81,9 +84,17 @@ export function createUnionBindingsWithPddQuery(
       );
       if (authorized !== true) return;
       const custom = JSON.stringify(identity.custom_parameters);
-      await db
-        .transaction()
-        .execute((trx) => activatePddBinding(trx, clock, { appId, userId, accountId, custom }));
+      await db.transaction().execute(async (trx) => {
+        const written = await activatePddBinding(trx, clock, { appId, userId, accountId, custom });
+        if (written.kind !== 'active') return;
+        await recordPddPidFiling(trx, {
+          appId,
+          userId,
+          pid: identity.claims.promotionSlot,
+          unionAccountId: accountId,
+          filedAt: clock.now(),
+        });
+      });
     } catch (error) {
       skipped('pdd_refresh_failed', appId, traceId, {
         error_name: error instanceof Error ? error.name : typeof error,

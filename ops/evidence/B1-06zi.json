@@ -1,0 +1,132 @@
+{
+  "task": "B1-06zi",
+  "spec_ref": "d5713bf4e3fe81023d5f928e3aa3d7effdfe5965",
+  "spec_commit": "ad0527a676598718d9bbdffe744db1ba7748649c",
+  "red_tests": [
+    "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 absent 查询答已备案：照现置 active，并插所查自买位的备案行",
+    "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 unbound 查询答已备案：照现置 active，并插所查自买位的备案行",
+    "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 pending_auth 查询答已备案：照现置 active，并插所查自买位的备案行",
+    "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 invalid 查询答已备案：照现置 active，并插所查自买位的备案行",
+    "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 released 查询答已备案：照现置 active，并插所查自买位的备案行",
+    "test/spec/linking/pdd-pid-filings/concurrency.int.test.ts > [AC-B1-06zi#8] 并发：active 绑定、同一用户同一 pid 两个 open 同时答已备案 → 只一行备案、两个都 200、仅一条未释放 active 绑定",
+    "test/spec/linking/pdd-pid-filings/concurrency.int.test.ts > [AC-B1-06zi#8] 并发：invalid 绑定、同一用户同一 pid 两个 open 同时答已备案 → 只一行备案、两个都 200、仅一条未释放 active 绑定",
+    "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#1] active 绑定缺本场景当前推广位（self_buy）备案：查一次 authority，答已备案插一行后照常 200；再开同 pid 有备案行不再查",
+    "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#1] active 绑定缺本场景当前推广位（agent）备案：查一次 authority，答已备案插一行后照常 200；再开同 pid 有备案行不再查",
+    "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#2] active 绑定缺本场景当前推广位（self_buy）备案且答未备案：30111 仅 auth_jump，链接就是该 pid 身份的 pddAuthorityUrl，state 只在会话里并绑定本 link，不写备案行、绑定仍 active 不变",
+    "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#2] active 绑定缺本场景当前推广位（agent）备案且答未备案：30111 仅 auth_jump，链接就是该 pid 身份的 pddAuthorityUrl，state 只在会话里并绑定本 link，不写备案行、绑定仍 active 不变",
+    "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#3] active 绑定缺本 pid 备案、查询端口 failing：50303，不写备案行、不签发 state、绑定不变",
+    "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#3] active 绑定缺本 pid 备案、查询端口 missing：50303，不写备案行、不签发 state、绑定不变",
+    "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#4] 备案按 pid 不按用户：另一推广位、注册时的旧推广位、别人在本 pid 的备案都不算，active 仍查并只补本 pid",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] absent 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] unbound 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] pending_auth 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] invalid 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] released 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#6] 备案行不越过绑定状态：active 补写本 pid 备案后转 blocked → 30153，不查上游、备案行不变",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#6] 备案行不越过绑定状态：active 补写本 pid 备案后转 banned → 10001，不查上游、备案行不变",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#6] 备案行不越过绑定状态：active 补写本 pid 备案后转 site_expired → 50301，不查上游、备案行不变",
+    "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#7] no_rebate 照现不查、不写备案；备案行不让 invalid 绑定免查（答未备案 30111，行不删）；blocked 的 no_rebate 照现放行",
+    "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 absent 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+    "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 unbound 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+    "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 pending_auth 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+    "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 invalid 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+    "test/spec/linking/pdd-pid-filings/share.int.test.ts > [AC-B1-06zi#9] 分享者本人开自己的分享 link 补写自买位备案后，b 开其分享 link：只看分享者绑定，不查、不写备案",
+    "test/spec/linking/pdd-pid-filings/share.int.test.ts > [AC-B1-06zi#9] 分享者本人开自己的分享 link 补写自买位备案后，guest 开其分享 link：只看分享者绑定，不查、不写备案"
+  ],
+  "risk_note": "RV2 by path (linking). An own Pinduoduo open with an active binding now also needs a filing row in app.union_pdd_pid_filings for the open's current promotion slot; without one it asks queryPddAuthority (same identity): filed → insert the row and go on, not filed → 30111 with that slot's auth jump, port failure → 50303. The non-active activation, the GET /v1/unions/bindings refresh and Pinduoduo share creation also write the queried slot's filing row in the same transaction. union_bindings is judged first and unchanged (user-level row, D10-1117 ②); another user's share link is unchanged. Inserts are ON CONFLICT DO NOTHING on the caller's executor; filed_at / created_at come from the injected Clock. No money, ledger, contract or migration change.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ad0527a676598718d9bbdffe744db1ba7748649c",
+      "tree": "81f0bc3b7b418b65d8a97cd87be4818f4603f70a",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-08T23:54:02Z",
+      "finished_at": "2026-11-08T23:54:25Z",
+      "red_tests": [
+        "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 absent 查询答已备案：照现置 active，并插所查自买位的备案行",
+        "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 unbound 查询答已备案：照现置 active，并插所查自买位的备案行",
+        "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 pending_auth 查询答已备案：照现置 active，并插所查自买位的备案行",
+        "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 invalid 查询答已备案：照现置 active，并插所查自买位的备案行",
+        "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts > [AC-B1-06zi#10] 授权管理页刷新 released 查询答已备案：照现置 active，并插所查自买位的备案行",
+        "test/spec/linking/pdd-pid-filings/concurrency.int.test.ts > [AC-B1-06zi#8] 并发：active 绑定、同一用户同一 pid 两个 open 同时答已备案 → 只一行备案、两个都 200、仅一条未释放 active 绑定",
+        "test/spec/linking/pdd-pid-filings/concurrency.int.test.ts > [AC-B1-06zi#8] 并发：invalid 绑定、同一用户同一 pid 两个 open 同时答已备案 → 只一行备案、两个都 200、仅一条未释放 active 绑定",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#1] active 绑定缺本场景当前推广位（self_buy）备案：查一次 authority，答已备案插一行后照常 200；再开同 pid 有备案行不再查",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#1] active 绑定缺本场景当前推广位（agent）备案：查一次 authority，答已备案插一行后照常 200；再开同 pid 有备案行不再查",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#2] active 绑定缺本场景当前推广位（self_buy）备案且答未备案：30111 仅 auth_jump，链接就是该 pid 身份的 pddAuthorityUrl，state 只在会话里并绑定本 link，不写备案行、绑定仍 active 不变",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#2] active 绑定缺本场景当前推广位（agent）备案且答未备案：30111 仅 auth_jump，链接就是该 pid 身份的 pddAuthorityUrl，state 只在会话里并绑定本 link，不写备案行、绑定仍 active 不变",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#3] active 绑定缺本 pid 备案、查询端口 failing：50303，不写备案行、不签发 state、绑定不变",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#3] active 绑定缺本 pid 备案、查询端口 missing：50303，不写备案行、不签发 state、绑定不变",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts > [AC-B1-06zi#4] 备案按 pid 不按用户：另一推广位、注册时的旧推广位、别人在本 pid 的备案都不算，active 仍查并只补本 pid",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] absent 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] unbound 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] pending_auth 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] invalid 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#5] released 查询答已备案：照现激活绑定，并插本 pid 备案行；再开同 pid 不再查",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#6] 备案行不越过绑定状态：active 补写本 pid 备案后转 blocked → 30153，不查上游、备案行不变",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#6] 备案行不越过绑定状态：active 补写本 pid 备案后转 banned → 10001，不查上游、备案行不变",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#6] 备案行不越过绑定状态：active 补写本 pid 备案后转 site_expired → 50301，不查上游、备案行不变",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts > [AC-B1-06zi#7] no_rebate 照现不查、不写备案；备案行不让 invalid 绑定免查（答未备案 30111，行不删）；blocked 的 no_rebate 照现放行",
+        "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 absent 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+        "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 unbound 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+        "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 pending_auth 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+        "test/spec/linking/pdd-pid-filings/share-create.int.test.ts > [AC-B1-06zi#11] 拼多多分享创建 invalid 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行",
+        "test/spec/linking/pdd-pid-filings/share.int.test.ts > [AC-B1-06zi#9] 分享者本人开自己的分享 link 补写自买位备案后，b 开其分享 link：只看分享者绑定，不查、不写备案",
+        "test/spec/linking/pdd-pid-filings/share.int.test.ts > [AC-B1-06zi#9] 分享者本人开自己的分享 link 补写自买位备案后，guest 开其分享 link：只看分享者绑定，不查、不写备案"
+      ],
+      "expected": [
+        "test/spec/linking/pdd-pid-filings/bindings-refresh.int.test.ts",
+        "test/spec/linking/pdd-pid-filings/concurrency.int.test.ts",
+        "test/spec/linking/pdd-pid-filings/open-active.int.test.ts",
+        "test/spec/linking/pdd-pid-filings/open-binding-states.int.test.ts",
+        "test/spec/linking/pdd-pid-filings/share-create.int.test.ts",
+        "test/spec/linking/pdd-pid-filings/share.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "0c52eeefee415c2c83120c0d035feba49d839ec3f20dd92e0515828329c0f927"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money (effort medium, D10-1075): r1 fail with one S1 (created_at fell back to the database now(), breaking hard rule 5), fixed in Opus r2; r2 pass with no findings; static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude in 3 attempts (ledger tester claude-independent): attempt 2 built active-without-filing fixtures through activeUnfiled so the B1-06zj kit seeds do not mask them; spec-test r1 (fresh independent Claude, D10-1080) fail with 2 S1 (30111 link not compared with the queried identity; share creation not pinned), fixed in attempt 3; red run 29/29 red for the right reason; spec-test r2 pass."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "9e3bc280bbcc565694ea36c36a27c30a735d7c4c",
+    "specs": "6b754c31df0da0f8ab1d5047e5b1c2e6bf1e7582"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

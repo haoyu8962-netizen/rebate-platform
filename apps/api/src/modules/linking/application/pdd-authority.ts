@@ -33,7 +33,11 @@
 // F1-07c (BR-ID-20, owner 2026-10-18): Pinduoduo has no re-authorization; the console's enable
 // and the unban write the binding active themselves (binding-risk.ts), and the refresh and the open
 // activate from a valid filing as before.
-// TODO(规划/11 §4.5): BR-ID-22 的 (user, pid) 粒度 — blocked on union_bindings 加 pid 维度的迁移
+// B1-06zi (BR-ID-22 「授权状态按 (user_id, pid) 记录」): union_bindings stays per (user, platform);
+// the per-pid filing lives in app.union_pdd_pid_filings (infra/pdd-pid-filings.ts). Every caller
+// whose query answers filed and whose activation leaves the binding active records the queried
+// pid's row (the open, the refresh, the share creation); the open of an active binding looks the
+// row of its current slot up before it goes on (link-open-pdd-auth.ts).
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import { newUuidV7, type Clock } from '../../platform/index.ts';
