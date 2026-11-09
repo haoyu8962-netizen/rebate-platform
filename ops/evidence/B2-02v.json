@@ -1,0 +1,162 @@
+{
+  "task": "B2-02v",
+  "spec_ref": "03383a10b26e6a9f0b154e495214a4d6555bafce",
+  "spec_commit": "014acdf7445cdc44023f976c7292325758d848e0",
+  "red_tests": [
+    "test/spec/platform/metrics/credit-postcheck/cache.test.ts > [AC-B2-02v#5] 默认缓存 30 秒：差 1 毫秒仍是同一份快照、不再读；满 30 秒重读并跟随新值（不是通用的 5 分钟）",
+    "test/spec/platform/metrics/credit-postcheck/cache.test.ts > [AC-B2-02v#6] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+    "test/spec/platform/metrics/credit-postcheck/e2e.int.test.ts > [AC-B2-02v#23] 真实证实核对造一次不一致 → 指标 1；再来一张 → 2；重投同一任务不增加；后台关一张 → 回到 1；已关单的任务再投不把告警带回来",
+    "test/spec/platform/metrics/credit-postcheck/e2e.int.test.ts > [AC-B2-02v#24] 多租户各算各的（两个 app 各有自己的凭证）：金额一致的 app 没有样本；一个 app 关单不影响另一个；全部关完样本消失",
+    "test/spec/platform/metrics/credit-postcheck/entry.test.ts > [AC-B2-02v#7] worker 的 /metrics 在 scrape 时经 ledger/index.ts 的 readCreditPostcheckOpen（本入口的库句柄）导出 couli_credit_postcheck_mismatch_open（gauge、app_id 标签、值为端口结论）；启动时不读；其余四个入口没有该指标、不调该端口",
+    "test/spec/platform/metrics/credit-postcheck/entry.test.ts > [AC-B2-02v#8] worker 的未结差错单读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论（失败不进缓存）",
+    "test/spec/platform/metrics/credit-postcheck/entry.test.ts > [AC-B2-02v#9] worker 装配走 30 秒缓存（注入的时钟）：30 秒内不再读、值不变，满 30 秒重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+    "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#12] 按 app_id 分别计数，值为数字：一个 app 多张未结单计多张，各 app 互不影响",
+    "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#13] 只数未结案 status ∈ {open, processing}：processing 与 open 同样计入，adjusted / written_off / closed 都不算；只有已结案状态的 app 没有样本，与未结案行同 app 时只数未结案行；processing 行同样要满足 type、ref_type、ref_id 前缀",
+    "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#14] 只数 type=ledger_mismatch：别的 type 即使 status=open、ref_type=voucher、ref_id 带前缀也不算",
+    "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#15] 只数 ref_type=voucher：ref_id 带前缀但 ref_type 为 order / ledger_account 的 ledger_mismatch 不算",
+    "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#16] ref_id 必须以 credit_postcheck: 开头：日终校验的 voucher 差错单、只是含这个串但不在开头、没有冒号、别的前缀、下划线换成别的字符（LIKE 通配）、大小写不同都不算",
+    "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#17] 没有未结单的 app 没有样本（不是 0），端口不缓存：表空时为空；新增一张下一次读就加一，结案一张就减一，结案到 0 时样本消失",
+    "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#18] 只读：只读事务可跑、表的行前后不变；worker registry 以该端口渲染出同样的值",
+    "test/spec/platform/metrics/credit-postcheck/port.test.ts > [AC-B2-02v#10] ledger 端口经 ledger/index.ts 导出：读 recon_diffs；不读别的模块的资金表、不写、不读数据库时钟",
+    "test/spec/platform/metrics/credit-postcheck/port.test.ts > [AC-B2-02v#11] 库读失败时端口拒绝（原错误），不以 0 或空结果代替",
+    "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#1] worker 的 registry 在 scrape 时调 collectCreditPostcheck：有 # HELP 与 # TYPE gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致；其余指标照旧",
+    "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#2] 样本跟随每次快照、不常驻轮询：没有未结单的 app 没有样本（不是 0、不留旧值），快照为空时只有 # TYPE 行没有样本",
+    "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#3] 只在 worker 且给了 collectCreditPostcheck 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+    "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#4] collectCreditPostcheck 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把值编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+    "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#19] couli-fund.yaml 有且只有一条读 couli_credit_postcheck_mismatch_open 的规则：alert CouliCreditPostcheckMismatch、expr 就是 couli_credit_postcheck_mismatch_open > 0（严格大于 0、不加聚合）、severity critical、labels.fund 为字符串 \"true\"；alert 名在两个文件里唯一",
+    "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#20] for 精确为 '1m'（D10-1185，BR-FUND-19 五分钟内告警；[AC-B1-25b#7] 要求 for > 0），只这一条例外：couli-fund.yaml 其余规则仍一律 '5m'",
+    "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#21] summary / description 非空、不含个人信息（不写用户标识、手机号、收款信息，模板变量只许 $labels.app_id 与 $value），写清处理路径：后台核对差错单，关闭差错单解除该用户的提现冻结",
+    "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#22] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处"
+  ],
+  "risk_note": "RV2 ledger + platform metrics + fund alert rule (B2-02v; BR-FUND-19; D10-1038, D10-1181, D10-1185). A worker gauge couli_credit_postcheck_mismatch_open{app_id} counts the unresolved (open or processing) post-credit confirmation diffs (type ledger_mismatch, ref_type voucher, ref_id starting with credit_postcheck:), read through a ledger read-only port wired by entry.ts, cached 30 seconds, a failed read fails the scrape and is never exported as 0. couli-fund.yaml gains CouliCreditPostcheckMismatch (critical, fund, for 1m), so the alert fires within BR-FUND-19's 5 minutes. Read-only; no money moves, no migration, no contract. The existing log line stays.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "014acdf7445cdc44023f976c7292325758d848e0",
+      "tree": "ea415db796eeada662574c6995edfa93495af1ee",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-09T11:39:13Z",
+      "finished_at": "2026-11-09T11:39:47Z",
+      "red_tests": [
+        "test/spec/platform/metrics/credit-postcheck/cache.test.ts > [AC-B2-02v#5] 默认缓存 30 秒：差 1 毫秒仍是同一份快照、不再读；满 30 秒重读并跟随新值（不是通用的 5 分钟）",
+        "test/spec/platform/metrics/credit-postcheck/cache.test.ts > [AC-B2-02v#6] 失败不缓存：读失败原样拒绝，下一次立刻重读；过期的旧快照不会在读失败时顶替",
+        "test/spec/platform/metrics/credit-postcheck/e2e.int.test.ts > [AC-B2-02v#23] 真实证实核对造一次不一致 → 指标 1；再来一张 → 2；重投同一任务不增加；后台关一张 → 回到 1；已关单的任务再投不把告警带回来",
+        "test/spec/platform/metrics/credit-postcheck/e2e.int.test.ts > [AC-B2-02v#24] 多租户各算各的（两个 app 各有自己的凭证）：金额一致的 app 没有样本；一个 app 关单不影响另一个；全部关完样本消失",
+        "test/spec/platform/metrics/credit-postcheck/entry.test.ts > [AC-B2-02v#7] worker 的 /metrics 在 scrape 时经 ledger/index.ts 的 readCreditPostcheckOpen（本入口的库句柄）导出 couli_credit_postcheck_mismatch_open（gauge、app_id 标签、值为端口结论）；启动时不读；其余四个入口没有该指标、不调该端口",
+        "test/spec/platform/metrics/credit-postcheck/entry.test.ts > [AC-B2-02v#8] worker 的未结差错单读失败时整次 scrape 失败（render 拒绝），不以 0 代替；读恢复后下一次 scrape 导出端口结论（失败不进缓存）",
+        "test/spec/platform/metrics/credit-postcheck/entry.test.ts > [AC-B2-02v#9] worker 装配走 30 秒缓存（注入的时钟）：30 秒内不再读、值不变，满 30 秒重读并跟随新结论；过期后读失败整次 scrape 失败，旧值不回来",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#12] 按 app_id 分别计数，值为数字：一个 app 多张未结单计多张，各 app 互不影响",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#13] 只数未结案 status ∈ {open, processing}：processing 与 open 同样计入，adjusted / written_off / closed 都不算；只有已结案状态的 app 没有样本，与未结案行同 app 时只数未结案行；processing 行同样要满足 type、ref_type、ref_id 前缀",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#14] 只数 type=ledger_mismatch：别的 type 即使 status=open、ref_type=voucher、ref_id 带前缀也不算",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#15] 只数 ref_type=voucher：ref_id 带前缀但 ref_type 为 order / ledger_account 的 ledger_mismatch 不算",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#16] ref_id 必须以 credit_postcheck: 开头：日终校验的 voucher 差错单、只是含这个串但不在开头、没有冒号、别的前缀、下划线换成别的字符（LIKE 通配）、大小写不同都不算",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#17] 没有未结单的 app 没有样本（不是 0），端口不缓存：表空时为空；新增一张下一次读就加一，结案一张就减一，结案到 0 时样本消失",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts > [AC-B2-02v#18] 只读：只读事务可跑、表的行前后不变；worker registry 以该端口渲染出同样的值",
+        "test/spec/platform/metrics/credit-postcheck/port.test.ts > [AC-B2-02v#10] ledger 端口经 ledger/index.ts 导出：读 recon_diffs；不读别的模块的资金表、不写、不读数据库时钟",
+        "test/spec/platform/metrics/credit-postcheck/port.test.ts > [AC-B2-02v#11] 库读失败时端口拒绝（原错误），不以 0 或空结果代替",
+        "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#1] worker 的 registry 在 scrape 时调 collectCreditPostcheck：有 # HELP 与 # TYPE gauge，每个 app_id 一个样本、只有 app_id 标签、值与快照一致；其余指标照旧",
+        "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#2] 样本跟随每次快照、不常驻轮询：没有未结单的 app 没有样本（不是 0、不留旧值），快照为空时只有 # TYPE 行没有样本",
+        "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#3] 只在 worker 且给了 collectCreditPostcheck 时出现：api / stream / admin / payout 给了也不调用、不出指标名；worker 不给也没有",
+        "test/spec/platform/metrics/credit-postcheck/registry.test.ts > [AC-B2-02v#4] collectCreditPostcheck 拒绝或同步抛出时 render() 拒绝（抓取失败可见）：不把值编造成 0，也不沿用上一次的值；恢复后下一次 scrape 取新值",
+        "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#19] couli-fund.yaml 有且只有一条读 couli_credit_postcheck_mismatch_open 的规则：alert CouliCreditPostcheckMismatch、expr 就是 couli_credit_postcheck_mismatch_open > 0（严格大于 0、不加聚合）、severity critical、labels.fund 为字符串 \"true\"；alert 名在两个文件里唯一",
+        "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#20] for 精确为 '1m'（D10-1185，BR-FUND-19 五分钟内告警；[AC-B1-25b#7] 要求 for > 0），只这一条例外：couli-fund.yaml 其余规则仍一律 '5m'",
+        "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#21] summary / description 非空、不含个人信息（不写用户标识、手机号、收款信息，模板变量只许 $labels.app_id 与 $value），写清处理路径：后台核对差错单，关闭差错单解除该用户的提现冻结",
+        "test/spec/platform/metrics/credit-postcheck/rules.test.ts > [AC-B2-02v#22] couli.yaml 不读这个指标（夜间只推资金类）；couli-fund.yaml 里读它的只有这一条的这一处"
+      ],
+      "expected": [
+        "test/spec/platform/metrics/credit-postcheck/cache.test.ts",
+        "test/spec/platform/metrics/credit-postcheck/e2e.int.test.ts",
+        "test/spec/platform/metrics/credit-postcheck/entry.test.ts",
+        "test/spec/platform/metrics/credit-postcheck/port.int.test.ts",
+        "test/spec/platform/metrics/credit-postcheck/port.test.ts",
+        "test/spec/platform/metrics/credit-postcheck/registry.test.ts",
+        "test/spec/platform/metrics/credit-postcheck/rules.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "25beb28bf16c74175fcb5c516c4ab2f7c57872cf3963e30f530c4f3768f1d974"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "6b5ddfcb91b775245b4fed7b11e42b53152a1f5e2ee90c7e941d8afa40a4d7b9"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base the spec commit: pass, no findings. Before pushing, the new rule tests and the related frozen groups ran green on a real local PostgreSQL (Colima, single worker): integration 38 of 38, unit 52 of 52."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by a fresh independent Claude in 2 attempts (attempt 2: for 1m and open + processing, D10-1185). Codex spec-test r1, reasoning effort medium, base origin/main, over both attempts: pass, no findings; the review covered the frozen-file changes, namely the two modify_existing blocks of fund-metrics/rules.test.ts and the one-line registry fixture of alerting-eval/metrics.test.ts with its red_exempt entries."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3c4ea2f92b60b01460012f9fc0274c8bbf62017d",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/fund-metrics/rules.test.ts",
+      "test": "[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n    'couli_payout_water_stale',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "after": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n    'couli_payout_water_stale',\n    'couli_credit_postcheck_mismatch_open',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "couli-fund.yaml CouliCreditPostcheckMismatch expr also reads an unlisted metric ('couli_credit_postcheck_mismatch_open > 0 or couli_payout_w6_ratio > 0.02')",
+          "result": "killed"
+        }
+      ],
+      "note": "Mutants run on the head tree (vitest, fund-metrics/rules.test.ts only), each reverted after the run; orchestrator rulings D10-1181, D10-1185."
+    },
+    {
+      "file": "test/spec/platform/fund-metrics/rules.test.ts",
+      "test": "[AC-B1-01zzi#4] couli-fund.yaml 结构：每条规则 alert 唯一（也不与 couli.yaml 重名）、有 expr、for、severity（critical / warning）、summary，且 labels.fund 为字符串 \"true\"；couli.yaml 的规则不带 fund",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-01zzi#4] couli-fund.yaml 结构：每条规则 alert 唯一（也不与 couli.yaml 重名）、有 expr、for、severity（critical / warning）、summary，且 labels.fund 为字符串 \"true\"；couli.yaml 的规则不带 fund', () => {\n  const fund = rules(FUND_RULES);\n  expect(fund.length).toBeGreaterThanOrEqual(5);\n  const base = rules(BASE_RULES);\n  const names = [...fund, ...base].map((rule) => rule.alert);\n  expect(new Set(names).size, 'alert names unique across both files').toBe(names.length);\n  for (const rule of fund) {\n    expect(rule.alert, 'alert name').toMatch(/^[A-Za-z][A-Za-z0-9_]*$/);\n    expect(['critical', 'warning'], `${rule.alert}.labels.severity`).toContain(\n      rule.labels['severity'],\n    );\n    expect(rule.labels['fund'], `${rule.alert}.labels.fund`).toBe('true');\n    expect(rule.summary, `${rule.alert}.annotations.summary`).toEqual(expect.any(String));\n    expect((rule.summary as string).trim().length, `${rule.alert} summary`).toBeGreaterThan(0);\n    expect(rule.for, `${rule.alert}.for`).toBe('5m');\n  }\n  // Night routing pages only fund alerts: B1-01zzh's queue / sync / Redis rules are not fund.\n  for (const rule of base) expect(rule.labels['fund'], rule.alert).toBeUndefined();\n});",
+      "after": "it('[AC-B1-01zzi#4] couli-fund.yaml 结构：每条规则 alert 唯一（也不与 couli.yaml 重名）、有 expr、for、severity（critical / warning）、summary，且 labels.fund 为字符串 \"true\"；couli.yaml 的规则不带 fund', () => {\n  const fund = rules(FUND_RULES);\n  expect(fund.length).toBeGreaterThanOrEqual(5);\n  const base = rules(BASE_RULES);\n  const names = [...fund, ...base].map((rule) => rule.alert);\n  expect(new Set(names).size, 'alert names unique across both files').toBe(names.length);\n  for (const rule of fund) {\n    expect(rule.alert, 'alert name').toMatch(/^[A-Za-z][A-Za-z0-9_]*$/);\n    expect(['critical', 'warning'], `${rule.alert}.labels.severity`).toContain(\n      rule.labels['severity'],\n    );\n    expect(rule.labels['fund'], `${rule.alert}.labels.fund`).toBe('true');\n    expect(rule.summary, `${rule.alert}.annotations.summary`).toEqual(expect.any(String));\n    expect((rule.summary as string).trim().length, `${rule.alert} summary`).toBeGreaterThan(0);\n    // B2-02v (D10-1185): BR-FUND-19 alerts within 5 minutes, so this one rule holds for exactly 1m.\n    expect(rule.for, `${rule.alert}.for`).toBe(\n      rule.alert === 'CouliCreditPostcheckMismatch' ? '1m' : '5m',\n    );\n  }\n  // Night routing pages only fund alerts: B1-01zzh's queue / sync / Redis rules are not fund.\n  for (const rule of base) expect(rule.labels['fund'], rule.alert).toBeUndefined();\n});",
+      "mutation": [
+        {
+          "mutant": "couli-fund.yaml CouliCreditPostcheckMismatch for: '2m' instead of '1m'",
+          "result": "killed"
+        },
+        {
+          "mutant": "couli-fund.yaml CouliAutoPayoutDailyCapReached for: '1m' instead of '5m' (the exception must not reach another rule)",
+          "result": "killed"
+        }
+      ],
+      "note": "Mutants run on the head tree (vitest, fund-metrics/rules.test.ts only), each reverted after the run; orchestrator rulings D10-1181, D10-1185."
+    }
+  ]
+}

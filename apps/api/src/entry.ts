@@ -18,6 +18,7 @@ import {
   startDeletionExpiry,
   startPayoutVerifyRecheck,
 } from './modules/identity/index.ts';
+import { readCreditPostcheckOpen } from './modules/ledger/index.ts';
 import {
   type AppConfig,
   type Clock,
@@ -71,6 +72,7 @@ import {
 } from './modules/payout/index.ts';
 import {
   cacheAutoPayoutCollector,
+  cacheCreditPostcheckCollector,
   cacheFundCollector,
   cacheReviewOverdueCollector,
   cacheWaterLowCollector,
@@ -80,6 +82,7 @@ import {
   type AgentTraceMissingSnapshot,
   type AutoPayoutCapFenOf,
   type AutoPayoutDailySnapshot,
+  type CreditPostcheckSnapshot,
   type FundMetricsSnapshot,
   type ReviewOverdueSnapshot,
   type WaterLowSnapshot,
@@ -313,7 +316,8 @@ function startGenerationRenewal(
  * `collectWaterLow` (W against 1.5 P per app, payout's read-only port) and, since B3-08z,
  * `collectAgentTraceMissing` (runs missing their card trace, agent's read-only port) and, since
  * B2-09ze, `collectWaterStale` (Alipay withdrawals waiting without a fresh W, per app, payout's
- * read-only port). Since B1-04zy only the api passes `collectTaobaoSearch` (union's in-process
+ * read-only port) and, since B2-02v, `collectCreditPostcheck` (unresolved post-credit confirmation
+ * diffs per app, ledger's read-only port). Since B1-04zy only the api passes `collectTaobaoSearch` (union's in-process
  * search counter, read at scrape time).
  * Not on the Nest application, not in the OAS.
  */
@@ -330,6 +334,7 @@ async function openMetrics(
         readonly collectWaterLow: () => Promise<WaterLowSnapshot>;
         readonly collectAgentTraceMissing: () => Promise<AgentTraceMissingSnapshot>;
         readonly collectWaterStale: () => Promise<WaterStaleSnapshot>;
+        readonly collectCreditPostcheck: () => Promise<CreditPostcheckSnapshot>;
       }
     | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot },
 ): Promise<MetricsServer | undefined> {
@@ -553,6 +558,12 @@ async function start(
           // way; a failed read fails the scrape (no 0 in its place) and is read again next time.
           collectWaterStale: cacheWaterStaleCollector(
             () => readPayoutWaterStale(dbHandles.db, clock),
+            clock,
+          ),
+          // The open post-credit diffs gauge (B2-02v; BR-FUND-19): ledger's read-only port, cached
+          // 30 seconds; a failed read fails the scrape (no 0 in its place) and is read again next time.
+          collectCreditPostcheck: cacheCreditPostcheckCollector(
+            () => readCreditPostcheckOpen(dbHandles.db),
             clock,
           ),
         });

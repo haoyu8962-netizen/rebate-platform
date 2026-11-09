@@ -104,6 +104,15 @@ groups:
         annotations:
           summary: 'Approved enterprise Alipay withdrawals are waiting while W is missing or older than 2 hours'
           description: 'couli_payout_water_stale is 1 for an app with APPROVED enterprise Alipay withdrawals waiting to be executed and no fresh W: no W row, or the latest one is stale by the same judgement EXECUTE uses (BR-WDR-18 ②). EXECUTE refuses those withdrawals until W is entered again; re-enter W on the payout console. Apps without waiting Alipay withdrawals have no sample.'
+      - alert: CouliCreditPostcheckMismatch
+        expr: 'couli_credit_postcheck_mismatch_open > 0'
+        for: '1m'
+        labels:
+          severity: critical
+          fund: 'true'
+        annotations:
+          summary: 'A credit voucher does not match its commission snapshot; the withdrawals of the account are on hold'
+          description: 'couli_credit_postcheck_mismatch_open counts the unresolved (open or processing) post-credit confirmation diffs of an app (BR-FUND-19): the voucher amount differs from the share recomputed from the commission snapshot, and the account that received it had its withdrawals put on hold. On the admin console, check the recon diff (差错单, ledger_mismatch, ref_id credit_postcheck:<voucher id>) against the voucher and the snapshot; closing the diff releases the withdrawal hold of that account. Apps without such diffs have no sample.'
       - alert: CouliAutoPayoutDailyNearCap
         expr: 'couli_auto_payout_daily_total_fen / couli_auto_payout_daily_cap_fen >= 0.8'
         for: '5m'

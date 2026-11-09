@@ -99,7 +99,10 @@ it('[AC-B1-01zzi#4] couli-fund.yaml 结构：每条规则 alert 唯一（也不�
     expect(rule.labels['fund'], `${rule.alert}.labels.fund`).toBe('true');
     expect(rule.summary, `${rule.alert}.annotations.summary`).toEqual(expect.any(String));
     expect((rule.summary as string).trim().length, `${rule.alert} summary`).toBeGreaterThan(0);
-    expect(rule.for, `${rule.alert}.for`).toBe('5m');
+    // B2-02v (D10-1185): BR-FUND-19 alerts within 5 minutes, so this one rule holds for exactly 1m.
+    expect(rule.for, `${rule.alert}.for`).toBe(
+      rule.alert === 'CouliCreditPostcheckMismatch' ? '1m' : '5m',
+    );
   }
   // Night routing pages only fund alerts: B1-01zzh's queue / sync / Redis rules are not fund.
   for (const rule of base) expect(rule.labels['fund'], rule.alert).toBeUndefined();
@@ -147,6 +150,7 @@ it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：
     ...REVIEW_OVERDUE_METRIC_NAMES,
     'couli_payout_water_low',
     'couli_payout_water_stale',
+    'couli_credit_postcheck_mismatch_open',
   ];
   expect(named.filter((name) => !allowed.includes(name))).toEqual([]);
   for (const metric of FUND_METRIC_NAMES) {

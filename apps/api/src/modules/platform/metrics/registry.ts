@@ -6,6 +6,7 @@
 // overdue gauge (B2-05o) likewise, filled by `collectReviewOverdue`. The Taobao search counter
 // (B1-04zy) only on the api, filled by `collectTaobaoSearch` from union's in-process counter.
 // The agent trace missing gauge (B3-08za) only on the worker, filled by `collectAgentTraceMissing`.
+// The open post-credit diffs gauge (B2-02v) only on the worker, filled by `collectCreditPostcheck`.
 // The text exposition format 0.0.4 is written here from Node built-ins only: the client library
 // cannot be loaded in the test environment (its @opentelemetry/api dependency resolves to an ESM
 // build Node cannot import), so no third-party metrics library is used at runtime.
@@ -17,6 +18,7 @@ import {
 } from './agent-trace-missing.ts';
 import type { AutoPayoutDailySnapshot } from './auto-payout.ts';
 import type { WorkerCollection, WorkerMetricsSnapshot } from './collect.ts';
+import { CREDIT_POSTCHECK_GAUGE, type CreditPostcheckSnapshot } from './credit-postcheck.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
 import { pddServiceFeeMissingTotal } from './pdd-service-fee.ts';
 import { serviceFeeMissingSamples } from './service-fee-missing.ts';
@@ -43,6 +45,8 @@ export interface MetricsRegistryOptions {
   readonly collectAgentTraceMissing?: () => Promise<AgentTraceMissingSnapshot>;
   /** The stale W gauge (B2-09ze). Used only on 'worker'; called once per render(). */
   readonly collectWaterStale?: () => Promise<WaterStaleSnapshot>;
+  /** The open post-credit diffs gauge (B2-02v). Used only on 'worker'; called once per render(). */
+  readonly collectCreditPostcheck?: () => Promise<CreditPostcheckSnapshot>;
   /** couli_taobao_search_total (B1-04zy). Used only on 'api', never 'worker'; once per render(). */
   readonly collectTaobaoSearch?: () => TaobaoSearchMetricsSnapshot;
 }
@@ -374,6 +378,21 @@ function waterStaleFamilies(snapshot: WaterStaleSnapshot): Family[] {
   ];
 }
 
+/** The open post-credit diffs gauge (B2-02v): only this snapshot's app_ids, an app without any has none. */
+function creditPostcheckFamilies(snapshot: CreditPostcheckSnapshot): Family[] {
+  return [
+    {
+      name: CREDIT_POSTCHECK_GAUGE.name,
+      help: CREDIT_POSTCHECK_GAUGE.help,
+      type: 'gauge',
+      samples: Object.entries(snapshot.open).map(([appId, value]) => ({
+        labels: { [CREDIT_POSTCHECK_GAUGE.label]: appId },
+        value,
+      })),
+    },
+  ];
+}
+
 /** The review overdue gauge (B2-05o): always exported, 0 included (the rule compares with > 0). */
 function reviewOverdueFamilies(snapshot: ReviewOverdueSnapshot): Family[] {
   return [
@@ -409,6 +428,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
   const collectWaterLow = worker ? options.collectWaterLow : undefined;
   const collectAgentTraceMissing = worker ? options.collectAgentTraceMissing : undefined;
   const collectWaterStale = worker ? options.collectWaterStale : undefined;
+  const collectCreditPostcheck = worker ? options.collectCreditPostcheck : undefined;
   const collectTaobaoSearch = options.entry === 'api' ? options.collectTaobaoSearch : undefined;
   return {
     contentType: CONTENT_TYPE,
@@ -416,26 +436,37 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
       // Business, fund, auto-payout and review overdue values first, then the process values of
       // the same scrape. Any collection rejecting (or throwing synchronously) rejects the whole
       // render.
-      const [business, fund, autoPayout, reviewOverdue, waterLow, agentTraceMissing, waterStale] =
-        await Promise.all([
-          collect === undefined ? [] : collect().then(businessFamilies),
-          collectFund === undefined ? [] : collectFund().then(fundFamilies),
-          collectAutoPayout === undefined
-            ? []
-            : Promise.resolve().then(collectAutoPayout).then(autoPayoutFamilies),
-          collectReviewOverdue === undefined
-            ? []
-            : Promise.resolve().then(collectReviewOverdue).then(reviewOverdueFamilies),
-          collectWaterLow === undefined
-            ? []
-            : Promise.resolve().then(collectWaterLow).then(waterLowFamilies),
-          collectAgentTraceMissing === undefined
-            ? []
-            : Promise.resolve().then(collectAgentTraceMissing).then(agentTraceMissingFamilies),
-          collectWaterStale === undefined
-            ? []
-            : Promise.resolve().then(collectWaterStale).then(waterStaleFamilies),
-        ]);
+      const [
+        business,
+        fund,
+        autoPayout,
+        reviewOverdue,
+        waterLow,
+        agentTraceMissing,
+        waterStale,
+        creditPostcheck,
+      ] = await Promise.all([
+        collect === undefined ? [] : collect().then(businessFamilies),
+        collectFund === undefined ? [] : collectFund().then(fundFamilies),
+        collectAutoPayout === undefined
+          ? []
+          : Promise.resolve().then(collectAutoPayout).then(autoPayoutFamilies),
+        collectReviewOverdue === undefined
+          ? []
+          : Promise.resolve().then(collectReviewOverdue).then(reviewOverdueFamilies),
+        collectWaterLow === undefined
+          ? []
+          : Promise.resolve().then(collectWaterLow).then(waterLowFamilies),
+        collectAgentTraceMissing === undefined
+          ? []
+          : Promise.resolve().then(collectAgentTraceMissing).then(agentTraceMissingFamilies),
+        collectWaterStale === undefined
+          ? []
+          : Promise.resolve().then(collectWaterStale).then(waterStaleFamilies),
+        collectCreditPostcheck === undefined
+          ? []
+          : Promise.resolve().then(collectCreditPostcheck).then(creditPostcheckFamilies),
+      ]);
       const taobaoSearch =
         collectTaobaoSearch === undefined ? [] : taobaoSearchFamilies(collectTaobaoSearch());
       return [
@@ -446,6 +477,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...waterLow,
         ...agentTraceMissing,
         ...waterStale,
+        ...creditPostcheck,
         ...taobaoSearch,
         pddServiceFeeFamily(),
         serviceFeeMissingFamily(),
