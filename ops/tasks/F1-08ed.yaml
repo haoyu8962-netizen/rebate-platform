@@ -1,0 +1,25 @@
+id: F1-08ed
+repo: rebate-platform
+title: 后台备注 / 原因输入框长度按 Unicode 码点计（【核销】WriteOffModal 起，同类备注框一并改）：校验与字数显示 trim 后按码点、不截断合法输入，与各接口服务端计数一致（编排 21:17，F1-08ec r1 S1 同类）
+type: impl
+# 2026-11-09 入账（前端线 f1-frontend-7，编排 21:17：「按 F1-08ec r1 S1 的改法按码点计，后台其他带长度上限的备注框一并看一眼，同样的问题一起改，别的不扩」）。
+# 问题：antd maxLength / count.max 与 `.length` 按 UTF-16 码元计，含扩展汉字（如「𠮷」）的合法 200 字备注被误拒或被截断；契约写「N characters」，服务端多处按码点计（如 admin-accounts-write.ts `[...trimmed].length`、audit-log-view.ts codePoints）。claims 的 noteLength（Array.from(note.trim()).length）、F1-08ec 的 ClawbackModal 已是正确写法。
+# 只读盘点（主干）需改的备注 / 原因框：recon WriteOffModal（:37 / :101）、CloseModal（:27 / :85）；config-center BatchDrawer、ItemDrawer；exports ReasonModal 与 model.validReason；kill-switches ConfirmModal 与 KillSwitchesPage:691；pay-orders RefundModal；risk ConfirmModal 与 RulesTab:434；settle-bills WriteDialogs（:334 / :354 / :383）；unions ActivateDialog、AlertPhones、CredentialDialog（仅 reason）、PidFormDialog、ReauthDialog、RetireDialog；users ExportUsers、ReasonModal、RiskStateActions、UnionBindingActions、model.validReason、relations/parts.tsx。**不扩**：凭据、订单号、查询框、SMS 签名 / 模板 / 预览、URL 等非备注字段不在本单。
+# 做法：新增共用 apps/admin/src/text-length.ts（trim 后按码点计数，供校验与 antd count.strategy 共用），各备注框改用；antd 的 maxLength 不再按码元截断（改用 count.max + strategy 或自行校验）。**每个接口先核服务端计数口径**（contracts/openapi.yaml 描述与 apps/api 实现）：服务端按码点的才改；若某接口服务端按 UTF-16 计，不改前端、在 notes 列出，报编排另开后端单。
+# 风险级按工具判定（pages 下含 pay-orders、settle-bills 等资金相关页的备注框，只改长度校验）；规则测试新鲜独立 Claude，评审 Codex（money 或 general 按工具），当次失败才退独立 Claude 并写真实报错。
+refs: []
+refs_hash: {}
+deps: [F1-08ec]
+paths:
+  - 'apps/admin/src/pages/**'
+  - 'apps/admin/src/text-length.ts'
+  - 'apps/admin/src/texts/**'
+test_paths:
+  - 'test/spec/frontend/admin-note-length/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-note-length/**'
+status: todo
+pr: null
