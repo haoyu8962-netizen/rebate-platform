@@ -718,7 +718,13 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "带 order_id 为该订单的订单申诉，不带为账户申诉；不另设申诉类型参数"
+          }
+        },
         "required": []
       },
       "entry": ["in_app", "push"]

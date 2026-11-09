@@ -353,7 +353,10 @@ export interface components {
         RoutePrivacyCenterParams: Record<string, never>;
         RouteDeleteAccountParams: Record<string, never>;
         RouteRiskNoticeParams: Record<string, never>;
-        RouteAppealParams: Record<string, never>;
+        RouteAppealParams: {
+            /** @description 带 order_id 为该订单的订单申诉，不带为账户申诉；不另设申诉类型参数 */
+            order_id?: string;
+        };
         RouteDataCopyParams: Record<string, never>;
         RouteForceUpdateParams: Record<string, never>;
         RouteHomePreviewParams: {

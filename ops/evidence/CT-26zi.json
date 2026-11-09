@@ -1,0 +1,37 @@
+{
+  "risk_note": "Contract only (D10-1182; design/specs/app-appeal-order.md §7 gap). contracts/routes.json route Appeal (native) gets an optional param order_id ({type: string, minLength: 1}, same as OrderDetail's) with a one-line description: with order_id it is the order appeal of that order, without it the account appeal; no target_type param. required stays [], additionalProperties false. Regenerated packages/contracts-ts/src/bridge.gen.ts (RouteAppealParams Record<string, never> -> { order_id?: string }); Appeal was already in RouteWithOptionalParams. Consumers checked: hot-words route-table reads routes.json at runtime (Ajv), frozen hot-words route-target tests stay valid (still no required params), order-vectors buttons carry no params. Host: contracts:check 0, contracts-ts unit 392/392. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-26zi/review-codex-contract-r1.json, no findings."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-26zi",
+  "spec_commit": "63945c9a57ffa3c13a2cb3dd638ff40f87866f42",
+  "spec_ref": "03383a10b26e6a9f0b154e495214a4d6555bafce",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3f37c7e85d51c14095e8bf0a14cb6a08f302fe8a",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}
