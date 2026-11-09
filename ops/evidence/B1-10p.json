@@ -1,0 +1,102 @@
+{
+  "risk_note": "RV2 identity and orders admin write responses (FU-ADMIN-WRITE-READBACK-BLANK; contract text in CT-24zzd). The details that hold, unhold, assign, set-reason-sub and edit-profile answer with are blanked exactly as their read endpoints are: no order.view → last_hold_note, commission_rate_bp and commission_split.reserve_bp null; no risk.* point → risk.reason null; a non-super actor without permissions is blanked. It reuses B1-10o's blank functions in the controllers only: who is let in, step-up, writes and audit are untouched. Claim approve / reject need no change (they require order.claim, the same point as the read). Assign's guard.run lives outside the task's paths, so a per-request wrapping guard hands the actor over. Integration lookup-blank-write-readback plus the frozen admin-orders-read, admin-profile and reason-sub-manual set directories 188/188. CI on the first head found one frozen test the local run had not covered: [AC-B1-10m#18] (spec/orders/admin-mounts) read last_hold_note with only order.hold, the very case this task blanks; its fixture now also grants order.view, one line, assertions unchanged (modify_existing, D10-1048; orchestrator 2026-11-09 10:24). The re-run integration includes admin-mounts and admin-assign: 298/298.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (D10-1075, medium) over the whole implementation from the last rule-test commit: pass with no findings. Static, nothing executed by Codex. The assign wrapping guard keeps the actor per request. couli-runs/B1-10p/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, approvals 36), spec-test by a fresh independent Claude (D10-848, D10-1080): pass, one out-of-scope S2. Red: red/3 ok, problems 0, exempt 0, 9 red, run with one vitest worker (COULI_VERIFY_VITEST_MAX_WORKERS=1): red/1 and red/2 lost users.int.test.ts to a worker SIGKILL under memory pressure (load 61, swap 20 GB); the file run alone locally failed on assertions, as it should. Round 2 (the frozen-fixture change, written by a fresh independent Claude) is also the read-only re-check the orchestrator asked for: the diff is exactly one line, kit GRANTS unchanged, no other frozen case asserts these fields on the write responses, and order.hold-only blanking stays pinned by [AC-B1-10p#1]: pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: test/properties is unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/orders/admin-mounts/ports.int.test.ts",
+      "test": "[AC-B1-10m#18] hold 经真实 rebate 命令：hold 与原因写入、row_version + 1、返利状态不变；响应带最新暂停记录",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-10m#18] hold 经真实 rebate 命令：hold 与原因写入、row_version + 1、返利状态不变；响应带最新暂停记录', async () => {\n  const s = await setup(h, { grants: GRANTS.hold });\n  const order = await attributedOrder(s);\n  const response = await s.post(orderPath(order.order_id, 'hold'), {\n    reason_code: 'CS',\n    note: NOTE,\n    expected_row_version: order.row_version,\n  });\n  expect(await accepted(response, ANSWER.hold)).toMatchObject({\n    order_id: order.order_id,\n    hold_reason: 'CS',\n    flags: { hold: true },\n    last_hold_by: s.admin.id,\n    last_hold_by_name: ADMIN_NAME,\n    last_hold_note: NOTE,\n  });\n  expect(await orderNow(s, order.order_id)).toMatchObject({\n    hold: true,\n    hold_reason: 'CS',\n    rebate_status: 'ESTIMATED',\n    row_version: order.row_version + 1,\n  });\n}, 120_000);",
+      "after": "it('[AC-B1-10m#18] hold 经真实 rebate 命令：hold 与原因写入、row_version + 1、返利状态不变；响应带最新暂停记录', async () => {\n  const s = await setup(h, { grants: [...GRANTS.hold, 'order.view'] });\n  const order = await attributedOrder(s);\n  const response = await s.post(orderPath(order.order_id, 'hold'), {\n    reason_code: 'CS',\n    note: NOTE,\n    expected_row_version: order.row_version,\n  });\n  expect(await accepted(response, ANSWER.hold)).toMatchObject({\n    order_id: order.order_id,\n    hold_reason: 'CS',\n    flags: { hold: true },\n    last_hold_by: s.admin.id,\n    last_hold_by_name: ADMIN_NAME,\n    last_hold_note: NOTE,\n  });\n  expect(await orderNow(s, order.order_id)).toMatchObject({\n    hold: true,\n    hold_reason: 'CS',\n    rebate_status: 'ESTIMATED',\n    row_version: order.row_version + 1,\n  });\n}, 120_000);",
+      "mutation": [
+        {
+          "mutant": "blankAdminOrderDetail ignores order.view and always blanks",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "B1-10p",
+  "spec_commit": "d6e08c93064ecb0ee00783741bdca0c7b5b0f64b",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "red_tests": [
+    "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#1] adminHoldOrder 只持 order.hold：响应的 last_hold_note、commission_rate_bp、commission_split.reserve_bp 为 null，金额、状态、hold_reason 照常，库里 hold 生效、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+    "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#2] adminUnholdOrder 只持 order.hold：响应三个内部字段为 null，其余照常，库里解除暂停、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+    "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#3] adminReassignOrder 只持 order.assign（带动态码）：响应三个内部字段为 null，归属、orders.reason 照常，库里指派生效、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+    "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#4] adminSetOrderReasonSub 只持 order.claim：响应三个内部字段为 null，reason、reason_sub 照常，库里子原因生效、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+    "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#5] 只有 order.view 算数：四个写接口加持 user.lookup、order.claim、risk.*、fund.view 仍置空",
+    "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#6] 置空不改写操作的动态码：adminReassignOrder 不带 X-Step-Up-Token 仍 10003、什么都不写；带有效 token 成功且响应置空；同一 token 已消耗，再用仍 10003",
+    "test/spec/admin/lookup-blank-write-readback/users.int.test.ts > [AC-B1-10p#7] adminEditUserProfile 只持 user.phone_change：改昵称、改手机号的响应 risk.reason 为 null，reason_category、union_bindings 与其余字段照常，库里生效、审计照写；对照：加持 risk.* 与超管拿到真实值；只持 risk.* 与 user.lookup 仍 10403",
+    "test/spec/admin/lookup-blank-write-readback/users.int.test.ts > [AC-B1-10p#8] 四个 risk.* 点任持其一都拿到真实 risk.reason；其他业务权限点不算，加持 user.lookup、order.view、pii.reveal_phone 等仍置空",
+    "test/spec/admin/lookup-blank-write-readback/users.int.test.ts > [AC-B1-10p#9] 置空不改写操作的动态码：adminEditUserProfile 不带 X-Step-Up-Token 仍 10003、什么都不写；带有效 token 成功且响应置空；同一 token 已消耗，再用仍 10003"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d6e08c93064ecb0ee00783741bdca0c7b5b0f64b",
+      "tree": "5c84286701bda46b7e97d6ce5dd80e6d27de7796",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T04:10:33Z",
+      "finished_at": "2026-11-09T04:11:04Z",
+      "red_tests": [
+        "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#1] adminHoldOrder 只持 order.hold：响应的 last_hold_note、commission_rate_bp、commission_split.reserve_bp 为 null，金额、状态、hold_reason 照常，库里 hold 生效、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+        "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#2] adminUnholdOrder 只持 order.hold：响应三个内部字段为 null，其余照常，库里解除暂停、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+        "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#3] adminReassignOrder 只持 order.assign（带动态码）：响应三个内部字段为 null，归属、orders.reason 照常，库里指派生效、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+        "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#4] adminSetOrderReasonSub 只持 order.claim：响应三个内部字段为 null，reason、reason_sub 照常，库里子原因生效、审计照写；对照：加持 order.view、超管拿到真实值；只持 order.view 仍 10403",
+        "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#5] 只有 order.view 算数：四个写接口加持 user.lookup、order.claim、risk.*、fund.view 仍置空",
+        "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts > [AC-B1-10p#6] 置空不改写操作的动态码：adminReassignOrder 不带 X-Step-Up-Token 仍 10003、什么都不写；带有效 token 成功且响应置空；同一 token 已消耗，再用仍 10003",
+        "test/spec/admin/lookup-blank-write-readback/users.int.test.ts > [AC-B1-10p#7] adminEditUserProfile 只持 user.phone_change：改昵称、改手机号的响应 risk.reason 为 null，reason_category、union_bindings 与其余字段照常，库里生效、审计照写；对照：加持 risk.* 与超管拿到真实值；只持 risk.* 与 user.lookup 仍 10403",
+        "test/spec/admin/lookup-blank-write-readback/users.int.test.ts > [AC-B1-10p#8] 四个 risk.* 点任持其一都拿到真实 risk.reason；其他业务权限点不算，加持 user.lookup、order.view、pii.reveal_phone 等仍置空",
+        "test/spec/admin/lookup-blank-write-readback/users.int.test.ts > [AC-B1-10p#9] 置空不改写操作的动态码：adminEditUserProfile 不带 X-Step-Up-Token 仍 10003、什么都不写；带有效 token 成功且响应置空；同一 token 已消耗，再用仍 10003"
+      ],
+      "expected": [
+        "test/spec/admin/lookup-blank-write-readback/orders.int.test.ts",
+        "test/spec/admin/lookup-blank-write-readback/users.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "40213b4f82a76128078826bbf99ccf49e1e287c68f7bc7ec4cf41c0fb421c53d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3532223fa7a48e43b4f54109f9451ac3497d9b37",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  }
+}

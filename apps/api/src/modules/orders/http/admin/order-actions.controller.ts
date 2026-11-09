@@ -9,12 +9,21 @@
 // order-assign.http.ts). Each use case writes its change and audit record in one transaction, so a
 // failing audit rolls the change back (50001). Without the database or the event bus the routes
 // still register and every call fails closed (50001).
+//
+// B1-10p (D10-1048 ②): the order detail these writes answer with is blanked like adminGetOrder's
+// for an account without order.view. Only the answer narrows: who is let in, the step-up, the write
+// and its audit are as before.
 import { Body, Controller, HttpCode, Inject, Param, Post, Req, Res } from '@nestjs/common';
 import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
-import { AdminOperationGuard, contractRouteSchema } from '../../../platform/index.ts';
+import {
+  AdminOperationGuard,
+  contractRouteSchema,
+  type AdminActor,
+} from '../../../platform/index.ts';
 import { holdOrder, unholdOrder } from '../../application/admin-hold.ts';
 import { setOrderReasonSub } from '../../application/admin-reason-sub.ts';
+import { blankAdminOrderDetail } from '../../domain/admin-order-view.ts';
 import { AdminOrderAssignHttp, type AdminAssignBody } from './order-assign.http.ts';
 import {
   ADMIN_WRITE_DEPS,
@@ -69,8 +78,23 @@ export class AdminOrderActionsController {
     reply.header('Cache-Control', 'no-store');
     const deps = this.#deps;
     if (deps === null) return this.unavailable(request, 'order.assign');
-    const http = new AdminOrderAssignHttp({ guard: this.#guard, assign: deps.assign });
-    return http.reassign(request, orderId, body);
+    // The handler owns its guard call: asking for the points and keeping the actor happen here.
+    let authorised: AdminActor | undefined;
+    const http = new AdminOrderAssignHttp({
+      guard: {
+        run: (input, business) =>
+          this.#guard.run({ ...input, withPermissions: true }, (actor) => {
+            authorised = actor;
+            return business(actor);
+          }),
+      },
+      assign: deps.assign,
+    });
+    const response = await http.reassign(request, orderId, body);
+    if (authorised === undefined) {
+      throw new Error('orders: admin guard returned without an answer');
+    }
+    return { ...response, data: blankAdminOrderDetail(response.data, authorised) };
   }
 
   async reasonSub(
@@ -83,21 +107,25 @@ export class AdminOrderActionsController {
     const deps = this.#deps;
     if (deps === null) return this.unavailable(request, 'order.claim');
     let response: Detail | undefined;
-    await this.#guard.run({ request, permission: 'order.claim' }, async (actor) => {
-      const outcome = await setOrderReasonSub(
-        deps.hold,
-        { appId: actor.appId, adminId: actor.adminId, ip: request.ip ?? null },
-        {
-          orderId,
-          reason_sub: body.reason_sub,
-          expected_row_version: body.expected_row_version,
-        },
-      );
-      if (outcome.code === 20001) throw fieldsRefusal(outcome.data.fields, request.id);
-      if (outcome.code === 20902) throw conflictRefusal(outcome.data.resource, request.id);
-      response = { code: 0, msg: '', data: outcome.data, trace_id: request.id };
-      return { statusCode: 200, body: response };
-    });
+    await this.#guard.run(
+      { request, permission: 'order.claim', withPermissions: true },
+      async (actor) => {
+        const outcome = await setOrderReasonSub(
+          deps.hold,
+          { appId: actor.appId, adminId: actor.adminId, ip: request.ip ?? null },
+          {
+            orderId,
+            reason_sub: body.reason_sub,
+            expected_row_version: body.expected_row_version,
+          },
+        );
+        if (outcome.code === 20001) throw fieldsRefusal(outcome.data.fields, request.id);
+        if (outcome.code === 20902) throw conflictRefusal(outcome.data.resource, request.id);
+        const data = blankAdminOrderDetail(outcome.data, actor);
+        response = { code: 0, msg: '', data, trace_id: request.id };
+        return { statusCode: 200, body: response };
+      },
+    );
     if (response === undefined) throw new Error('orders: admin guard returned without an answer');
     return response;
   }
@@ -113,27 +141,31 @@ export class AdminOrderActionsController {
     const deps = this.#deps;
     if (deps === null) return this.unavailable(request, 'order.hold');
     let response: Detail | undefined;
-    await this.#guard.run({ request, permission: 'order.hold' }, async (actor) => {
-      const outcome = await (mode === 'hold' ? holdOrder : unholdOrder)(
-        deps.hold,
-        {
-          appId: actor.appId,
-          adminId: actor.adminId,
-          isSuper: actor.isSuper,
-          ip: request.ip ?? null,
-        },
-        {
-          orderId,
-          reason_code: body.reason_code,
-          note: body.note,
-          expected_row_version: body.expected_row_version,
-        },
-      );
-      if (outcome.code === 20001) throw fieldsRefusal(outcome.data.fields, request.id);
-      if (outcome.code === 20902) throw conflictRefusal(outcome.data.resource, request.id);
-      response = { code: 0, msg: '', data: outcome.data, trace_id: request.id };
-      return { statusCode: 200, body: response };
-    });
+    await this.#guard.run(
+      { request, permission: 'order.hold', withPermissions: true },
+      async (actor) => {
+        const outcome = await (mode === 'hold' ? holdOrder : unholdOrder)(
+          deps.hold,
+          {
+            appId: actor.appId,
+            adminId: actor.adminId,
+            isSuper: actor.isSuper,
+            ip: request.ip ?? null,
+          },
+          {
+            orderId,
+            reason_code: body.reason_code,
+            note: body.note,
+            expected_row_version: body.expected_row_version,
+          },
+        );
+        if (outcome.code === 20001) throw fieldsRefusal(outcome.data.fields, request.id);
+        if (outcome.code === 20902) throw conflictRefusal(outcome.data.resource, request.id);
+        const data = blankAdminOrderDetail(outcome.data, actor);
+        response = { code: 0, msg: '', data, trace_id: request.id };
+        return { statusCode: 200, body: response };
+      },
+    );
     if (response === undefined) throw new Error('orders: admin guard returned without an answer');
     return response;
   }

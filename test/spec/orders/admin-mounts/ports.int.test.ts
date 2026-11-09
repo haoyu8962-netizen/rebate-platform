@@ -239,7 +239,7 @@ it('[AC-B1-10m#17] 指定归属的目标用户冻结 → 照常指派（BR-ATTR-
 }, 120_000);
 
 it('[AC-B1-10m#18] hold 经真实 rebate 命令：hold 与原因写入、row_version + 1、返利状态不变；响应带最新暂停记录', async () => {
-  const s = await setup(h, { grants: GRANTS.hold });
+  const s = await setup(h, { grants: [...GRANTS.hold, 'order.view'] });
   const order = await attributedOrder(s);
   const response = await s.post(orderPath(order.order_id, 'hold'), {
     reason_code: 'CS',

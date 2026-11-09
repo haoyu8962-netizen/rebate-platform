@@ -3,7 +3,8 @@
 // verified the admin_token and the route schema the body before this runs; the operation guard
 // checks the account, user.phone_change and its totp step-up, and consumes the step-up token only
 // after a 200 with code 0. The answer is the user as GET /admin/v1/users/{user_id} returns it after
-// the save (AdminUsers.detail), phone number masked.
+// the save (AdminUsers.detail), phone number masked, risk.reason blanked like that read for an
+// account holding no risk point (B1-10p, D10-1048 ①; only the answer narrows).
 //
 // The route schema is the contract's, except that the body's `minProperties: 2` is checked here
 // (before the guard, like a schema failure): the generic validator would name the whole body,
@@ -33,6 +34,7 @@ import {
   AdminProfileEdit,
   type AdminProfileEditResult,
 } from '../../application/admin-profile-edit.ts';
+import { blankAdminUserDetail } from '../../application/admin-user-view.ts';
 import { AdminUsers, AdminUsersFieldsError } from '../../application/admin-users.ts';
 
 interface ProfileRequest extends CheckedRequest {
@@ -86,31 +88,34 @@ export class AdminUserProfileController {
       throw refusal(fieldsErrorEnvelope(['phone', 'nickname'], request.id));
     }
     let response: EditResponse | undefined;
-    await this.#guard.run({ request, permission: PERMISSION }, async (actor) => {
-      const result = await this.#profiles.edit({
-        appId: actor.appId,
-        adminId: actor.adminId,
-        ip: typeof request.ip === 'string' && request.ip.length > 0 ? request.ip : null,
-        userId,
-        body: {
-          reason: body.reason,
-          ...(body.phone === undefined ? {} : { phone: body.phone }),
-          ...(body.nickname === undefined ? {} : { nickname: body.nickname }),
-        },
-      });
-      if (result.code !== 0) throw rejected(result, request.id);
-      let data: Schema<'AdminUserDetail'>;
-      try {
-        data = await this.#users.detail(actor.appId, userId);
-      } catch (error) {
-        if (error instanceof AdminUsersFieldsError) {
-          throw refusal(fieldsErrorEnvelope(error.fields, request.id));
+    await this.#guard.run(
+      { request, permission: PERMISSION, withPermissions: true },
+      async (actor) => {
+        const result = await this.#profiles.edit({
+          appId: actor.appId,
+          adminId: actor.adminId,
+          ip: typeof request.ip === 'string' && request.ip.length > 0 ? request.ip : null,
+          userId,
+          body: {
+            reason: body.reason,
+            ...(body.phone === undefined ? {} : { phone: body.phone }),
+            ...(body.nickname === undefined ? {} : { nickname: body.nickname }),
+          },
+        });
+        if (result.code !== 0) throw rejected(result, request.id);
+        let data: Schema<'AdminUserDetail'>;
+        try {
+          data = blankAdminUserDetail(await this.#users.detail(actor.appId, userId), actor);
+        } catch (error) {
+          if (error instanceof AdminUsersFieldsError) {
+            throw refusal(fieldsErrorEnvelope(error.fields, request.id));
+          }
+          throw error;
         }
-        throw error;
-      }
-      response = { code: 0, msg: '', data, trace_id: request.id };
-      return { statusCode: 200, body: response };
-    });
+        response = { code: 0, msg: '', data, trace_id: request.id };
+        return { statusCode: 200, body: response };
+      },
+    );
     if (response === undefined) {
       throw new Error('identity: admin guard returned without an answer');
     }
