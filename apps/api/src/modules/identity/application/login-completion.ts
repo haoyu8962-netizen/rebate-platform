@@ -34,6 +34,21 @@ export interface LoginCommand {
   /** withdraw.dormant_reverify_days, read before the transaction (reverify-activity.ts); absent: off. */
   readonly dormantReverifyDays?: number | undefined;
 }
+/**
+ * The session of an account merge (BR-ID-06 细则「并号时的其余记录」; B1-20c merge-account.ts): one
+ * login of the phone account on this device — login_merge, login_logs (method merge), the BR-INV-09
+ * review and the session as for any login — without the login page's two user-level consents
+ * (the merge request carries none; consenting on the login page is not this action) and without
+ * the BR-WDR-01 judgement, which the merge has already made, and the activity values written,
+ * before the identities moved (BR-WDR-01 细则「并号」).
+ */
+export interface MergeLoginCommand {
+  readonly merge: true;
+  readonly app_id: string;
+  readonly device_id: string;
+  readonly platform: ClientPlatform;
+  readonly client_ip: string;
+}
 /** B1-11 supplies the review; identity selects landing-bound users with no login_logs.
  * Invoke on App platforms only, in the same transaction as the first successful login log.
  * This port cannot create a relationship. Absence means no work (no landing binds exist yet).
@@ -69,14 +84,14 @@ function instantAt(like: Date, ms: number): Date {
 /** Login-page consents, login_merge, login log, first-App-login review and the session. */
 export async function completeLogin(
   trx: Transaction<DB>,
-  command: LoginCommand,
+  command: LoginCommand | MergeLoginCommand,
   account: LoginAccount,
   scope: SessionScope,
   method: LoginMethod,
   options: LoginCompletionOptions,
 ): Promise<Schema<'TokenPair'>> {
   const { clock, crypto, tokens } = options;
-  const { app_id: appId, device_id: deviceId, body } = command;
+  const { app_id: appId, device_id: deviceId } = command;
   const userId = account.id;
   // BR-INV-09 candidate, decided before any lock is waited for: a landing-bound account with no
   // login_logs yet, logging in on an App platform with the review assembled.
@@ -104,25 +119,28 @@ export async function completeLogin(
   // BR-ID-12: one user's logins on several devices merge one after another (lockUserConsents).
   await lockUserConsents(trx, appId, userId);
   const now = clock.now();
-  // consent_at is a contract date-time (client clock), stored as reported.
-  const clientAt = instantAt(now, Date.parse(body.consent_at));
-  // BR-ID-04: two user-level records of the login page, version as reported by the client.
-  await insertConsentRecords(
-    trx,
-    LOGIN_PAGE_TYPES.map((type): NewConsentRecord => ({
-      app_id: appId,
-      subject_type: 'user',
-      user_id: userId,
-      device_id: null,
-      type,
-      version: body.legal_versions[type],
-      channel: LOGIN_PAGE_CHANNEL,
-      accepted: true,
-      client_at: clientAt,
-      server_at: now,
-      created_at: now,
-    })),
-  );
+  if (!('merge' in command)) {
+    const { body } = command;
+    // consent_at is a contract date-time (client clock), stored as reported.
+    const clientAt = instantAt(now, Date.parse(body.consent_at));
+    // BR-ID-04: two user-level records of the login page, version as reported by the client.
+    await insertConsentRecords(
+      trx,
+      LOGIN_PAGE_TYPES.map((type): NewConsentRecord => ({
+        app_id: appId,
+        subject_type: 'user',
+        user_id: userId,
+        device_id: null,
+        type,
+        version: body.legal_versions[type],
+        channel: LOGIN_PAGE_CHANNEL,
+        accepted: true,
+        client_at: clientAt,
+        server_at: now,
+        created_at: now,
+      })),
+    );
+  }
   // BR-ID-12 login_merge: this installation's device-level current states.
   const copies = loginMergeCopies(
     await deviceConsentRecords(trx, appId, deviceId),
@@ -164,14 +182,17 @@ export async function completeLogin(
   if (review !== undefined && reviewCandidate && firstLogin) {
     await review.review(trx, { app_id: appId, user_id: userId, device_id_hash: deviceIdHash });
   }
-  // BR-WDR-01 细则「判定」: every login method passes here.
-  await recordLoginActivity(trx, {
-    app_id: appId,
-    user_id: userId,
-    deviceHash,
-    now,
-    days: command.dormantReverifyDays,
-  });
+  // BR-WDR-01 细则「判定」: every login method passes here (a merge has judged before it moved the
+  // identities, merge-account.ts).
+  if (!('merge' in command)) {
+    await recordLoginActivity(trx, {
+      app_id: appId,
+      user_id: userId,
+      deviceHash,
+      now,
+      days: command.dormantReverifyDays,
+    });
+  }
   const pushTokens = options.pushTokens;
   const session = await createSession(
     trx,

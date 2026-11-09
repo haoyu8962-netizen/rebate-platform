@@ -61,6 +61,9 @@ interface Scenario {
   readonly request?: 'cooling' | 'processing' | null;
   readonly claims?: boolean;
   readonly ledger?: boolean;
+  /** D10-1099 Q-3 / Q-4 (merge-conditions.ts). */
+  readonly adjustments?: boolean;
+  readonly disabledBindings?: boolean;
 }
 
 interface Run {
@@ -79,7 +82,15 @@ async function run(scenario: Scenario): Promise<Run> {
     }
     if (text.includes('"user_oauth"')) return [];
     if (text.includes('from "app"."users"') && text.endsWith('for update')) {
-      return [{ phone_hmac: null, register_method: 'wechat', parent_id: null, row_version: 1 }];
+      return [
+        {
+          phone_hmac: null,
+          register_method: 'wechat',
+          parent_id: null,
+          status: 'normal',
+          row_version: 1,
+        },
+      ];
     }
     if (text.includes('from "app"."users"') && text.includes('"parent_id" =')) return [];
     if (text.includes('from "app"."users"') && text.includes('"phone_hmac" =')) {
@@ -136,6 +147,16 @@ async function run(scenario: Scenario): Promise<Run> {
     blocklist: null,
     risk: { isBanned: () => Promise.resolve(false) },
     assets,
+    barriers: {
+      hasAdjustments: (_db, account) => {
+        assetCalls.push({ port: 'hasAdjustments', account });
+        return Promise.resolve(scenario.adjustments ?? false);
+      },
+      hasDisabledBindings: (_db, account) => {
+        assetCalls.push({ port: 'hasDisabledBindings', account });
+        return Promise.resolve(scenario.disabledBindings ?? false);
+      },
+    },
   });
   const result = await db.transaction().execute((trx) =>
     service.bind(trx, {
@@ -166,6 +187,8 @@ it('[B1-20e] 条件全满足 → 30411 + mergeable + merge_ticket；在同一事
     { port: 'countOrders', account },
     { port: 'hasClaims', account },
     { port: 'hasLedgerEntries', account },
+    { port: 'hasAdjustments', account },
+    { port: 'hasDisabledBindings', account },
   ]);
 });
 
@@ -194,4 +217,16 @@ it('[B1-20e] 整个判定只发 SELECT，不写、不改', async () => {
   for (const query of queries) {
     expect(query.sql).toMatch(/^select /);
   }
+});
+
+it('[B1-20c] D10-1099 Q-3 当前账号有调账单 → 只回 30411（无 data、不发 ticket）', async () => {
+  const { result, tickets } = await run({ adjustments: true });
+  expect(result).toEqual({ code: 30411 });
+  expect(tickets).toBe(0);
+});
+
+it('[B1-20c] D10-1099 Q-4 当前账号有 admin_disable 的联盟绑定 → 只回 30411（无 data、不发 ticket）', async () => {
+  const { result, tickets } = await run({ disabledBindings: true });
+  expect(result).toEqual({ code: 30411 });
+  expect(tickets).toBe(0);
 });

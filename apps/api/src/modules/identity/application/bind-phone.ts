@@ -16,6 +16,8 @@
 // target account is status 'normal', is not banned (readRiskState fresh; appealing after banned
 // counts as banned), is not in the deletion process (identity's deletion stage: cooling or
 // processing refuses; B1-20e) and has no user_oauth row of a provider the account itself has.
+// B1-20c (D10-1099 Q-3 / Q-4): nor any admin_adjustments row or blocked(admin_disable) binding of
+// the account. The whole judgement lives in merge-conditions.ts, shared with POST /v1/auth/merge.
 // The ticket (at least 128 random bits) is stored in Redis namespace `merge_ticket`, key the SHA-256 hex of
 // the ticket, value JSON {app_id, uid, phone_hmac}, 300 seconds; Redis unavailable → 50001.
 // Nothing logs a phone number, a code or a ticket.
@@ -29,7 +31,7 @@
 // Also compiled by the `test` project: erasable syntax only, `import type` for types.
 import { createHash, randomBytes } from 'node:crypto';
 import type { DB } from '@couli/db';
-import { sql, type Kysely, type Transaction } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import {
   RedisUnavailableError,
   type Clock,
@@ -39,27 +41,13 @@ import {
 import type { BlocklistService } from '../../risk/index.ts';
 import { normalize_phone } from '../domain/normalize-phone.ts';
 import { PHONE_BLIND_INDEX_CONTEXT, PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
-import { createDeletionStageReader } from '../ports/deletion-stage.ts';
+import {
+  mergeConditionsHold,
+  type AccountAssetsPort,
+  type AccountRiskPort,
+  type MergeBarrierPort,
+} from './merge-conditions.ts';
 import type { SmsCodeService } from './sms-codes.ts';
-
-/** One account of one app. */
-export interface AccountRef {
-  readonly app_id: string;
-  readonly user_id: string;
-}
-
-/**
- * Read-only footprint of an account outside identity (BR-ID-06 merge conditions), assembled by
- * app.module (IdentityModule.forRoot option `accountAssets`). `db` is the caller's executor.
- */
-export interface AccountAssetsPort {
-  /** Rows of app.orders whose user_id is the account, whatever their status. */
-  countOrders(db: Kysely<DB>, account: AccountRef): Promise<number>;
-  /** True when the account has any order claim (找回申请) as the applicant, whatever its status. */
-  hasClaims(db: Kysely<DB>, account: AccountRef): Promise<boolean>;
-  /** True when the account's balance has any ledger entry (entries netting to zero included). */
-  hasLedgerEntries(db: Kysely<DB>, account: AccountRef): Promise<boolean>;
-}
 
 /** The verified request: uid, app and device come from the token and the signed device only. */
 export interface BindPhoneCommand {
@@ -85,6 +73,10 @@ export type BindPhoneResult =
   | { readonly code: 10003 }
   | { readonly code: 50001 };
 
+// The ports shared with the merge live in merge-conditions.ts (no import cycle); re-exported here,
+// where app.module and the tests have always found them.
+export type { AccountAssetsPort, AccountRef, AccountRiskPort } from './merge-conditions.ts';
+
 export interface BindPhoneOptions {
   readonly clock: Clock;
   readonly crypto: FieldCrypto;
@@ -93,11 +85,8 @@ export interface BindPhoneOptions {
   readonly blocklist: BlocklistService | null;
   readonly risk: AccountRiskPort;
   readonly assets: AccountAssetsPort;
-}
-
-/** Assembled through risk's public reader, including the pre-appeal ban state. */
-export interface AccountRiskPort {
-  isBanned(db: Transaction<DB>, account: AccountRef): Promise<boolean>;
+  /** D10-1099 Q-3 / Q-4 (merge-conditions.ts), assembled by app.module as `accountMerge`. */
+  readonly barriers: MergeBarrierPort;
 }
 
 export interface BindPhoneService {
@@ -116,12 +105,21 @@ export class BindPhoneBlocked extends Error {
   }
 }
 
+/** Redis namespace of merge tickets; shared with the merge (merge-account.ts). */
+export const MERGE_TICKET_NAMESPACE = 'merge_ticket';
+/** A ticket's key in MERGE_TICKET_NAMESPACE: the SHA-256 hex of the ticket (02 §18「并号」). */
+export function mergeTicketKey(ticket: string): string {
+  return createHash('sha256').update(ticket).digest('hex');
+}
+/** Seconds a merge ticket lives (BR-ID-06: 5 分钟有效). */
+export const MERGE_TICKET_TTL_SECONDS = 300;
+
 const TICKET_SCRIPT = `
 return redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[1] * 1000, 'NX')
 `;
 
 export function createBindPhoneService(options: BindPhoneOptions): BindPhoneService {
-  const { clock, crypto, redis, sms, blocklist, assets, risk } = options;
+  const { clock, crypto, redis, sms, blocklist, assets, risk, barriers } = options;
   return {
     async bind(transaction, command) {
       const trx = transaction.withSchema('app');
@@ -129,7 +127,7 @@ export function createBindPhoneService(options: BindPhoneOptions): BindPhoneServ
       // Serialize first bindings by this user, even with different idempotency keys.
       const current = await trx
         .selectFrom('users')
-        .select(['phone_hmac', 'register_method', 'parent_id', 'row_version'])
+        .select(['phone_hmac', 'register_method', 'parent_id', 'status', 'row_version'])
         .where('app_id', '=', account.app_id)
         .where('id', '=', account.user_id)
         .forUpdate()
@@ -176,56 +174,21 @@ export function createBindPhoneService(options: BindPhoneOptions): BindPhoneServ
         .where('status', '<>', 'deleted')
         .executeTakeFirst();
       if (target !== undefined) {
+        // BR-ID-06 merge conditions, the same judgement the merge applies again (merge-conditions.ts).
         if (
-          !['wechat', 'apple', 'huawei'].includes(current.register_method) ||
-          current.parent_id !== null ||
-          target.status !== 'normal'
-        )
-          return { code: 30411 };
-        // BR-ID-06: a target in the deletion process (cooling period or processing) is not merged.
-        const stages = await createDeletionStageReader({ db: trx }).read(trx, {
-          appId: account.app_id,
-          userIds: [target.id],
-        });
-        const stage = stages.get(target.id) ?? 'none';
-        if (stage === 'cooling' || stage === 'processing') return { code: 30411 };
-        if (
-          (await assets.countOrders(trx, account)) !== 0 ||
-          (await assets.hasClaims(trx, account)) ||
-          (await assets.hasLedgerEntries(trx, account))
-        )
-          return { code: 30411 };
-        const child = await trx
-          .selectFrom('users')
-          .select('id')
-          .where('app_id', '=', account.app_id)
-          .where('parent_id', '=', account.user_id)
-          .executeTakeFirst();
-        if (child !== undefined) return { code: 30411 };
-        const collision = await trx
-          .selectFrom('user_oauth as source')
-          .innerJoin('user_oauth as target', (join) =>
-            join
-              .onRef('source.app_id', '=', 'target.app_id')
-              .onRef('source.provider', '=', 'target.provider'),
-          )
-          .select('source.provider')
-          .where('source.app_id', '=', account.app_id)
-          .where('source.user_id', '=', account.user_id)
-          .where('target.user_id', '=', target.id)
-          .executeTakeFirst();
-        if (
-          collision !== undefined ||
-          (await risk.isBanned(trx, {
-            app_id: account.app_id,
-            user_id: target.id,
-          }))
+          !(await mergeConditionsHold(
+            trx,
+            account.app_id,
+            { ...current, id: account.user_id },
+            target,
+            { assets, risk, barriers },
+          ))
         )
           return { code: 30411 };
         const ticket = randomBytes(32).toString('hex');
         try {
-          const stored = await redis.namespace('merge_ticket').eval(TICKET_SCRIPT, {
-            keys: [createHash('sha256').update(ticket).digest('hex')],
+          const stored = await redis.namespace(MERGE_TICKET_NAMESPACE).eval(TICKET_SCRIPT, {
+            keys: [mergeTicketKey(ticket)],
             args: [
               JSON.stringify({
                 app_id: account.app_id,
@@ -233,7 +196,7 @@ export function createBindPhoneService(options: BindPhoneOptions): BindPhoneServ
                 phone_hmac: phoneHmac,
               }),
             ],
-            ttlSeconds: 300,
+            ttlSeconds: MERGE_TICKET_TTL_SECONDS,
           });
           if (stored !== 'OK') return { code: 50001 };
         } catch (error) {

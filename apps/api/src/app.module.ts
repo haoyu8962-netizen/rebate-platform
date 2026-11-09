@@ -132,6 +132,7 @@ import {
   createRegistrationInviteBinding,
   createGrowthHistory,
   detachChildrenOfDeleted,
+  lockRelationWrites,
   readPersonalDataCopyInvite,
   type ParentRelationReader,
   type InviteBinder,
@@ -224,6 +225,7 @@ import {
   type DeletionStageChecks,
   type PrivacyConsentOptions,
   type AccountAssetsPort,
+  type AccountMergePort,
   type AccountRiskPort,
   type MeReadPorts,
   type MeUnionBindingStatus,
@@ -345,6 +347,8 @@ import {
   needsTaobaoReauth,
   blockForDeletion,
   createLandingLinks,
+  hasAdminDisabledBinding,
+  releaseForMerge,
 } from './modules/linking/index.ts';
 import {
   FeedbackAdminModule,
@@ -1253,6 +1257,28 @@ function identityModule(contentReader: SharedContentReader): DynamicModule {
                 }
               },
             },
+    },
+    // B1-20c (BR-ID-06 并号; D10-1099): the merge's cross-module ports. Q-3 reads app.admin_adjustments
+    // (any row of the account, whatever its status) read only on the caller's transaction, as the
+    // order count above; Q-4 and the release are linking's, the relation lock growth's.
+    accountMerge: {
+      useFactory: (): AccountMergePort => ({
+        async hasAdjustments(db, account) {
+          const row = await db
+            .withSchema('app')
+            .selectFrom('admin_adjustments')
+            .select('adjust_id')
+            .where('app_id', '=', account.app_id)
+            .where('user_id', '=', account.user_id)
+            .limit(1)
+            .executeTakeFirst();
+          return row !== undefined;
+        },
+        hasDisabledBindings: (db, account) =>
+          hasAdminDisabledBinding(db, { appId: account.app_id, userId: account.user_id }),
+        lockRelationWrites: (trx, appId) => lockRelationWrites(trx, appId),
+        releaseBindings: (trx, input) => releaseForMerge(trx, input),
+      }),
     },
     thirdPartyIdentity: {
       inject: [APP_CONFIG, ROOT_LOGGER],

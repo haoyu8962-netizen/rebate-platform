@@ -187,6 +187,12 @@ export type { BindingRiskInput } from './application/binding-risk.ts';
 // assembled by app.module. Rule tests: test/spec/linking/deletion-cleanup/**.
 export { blockForDeletion } from './application/deletion-cleanup.ts';
 export type { BlockForDeletionInput } from './application/deletion-cleanup.ts';
+// B1-20c: identity's merge port (BR-ID-06: the source account's bindings released without
+// cooling), assembled by app.module; and the merge condition D10-1099 Q-4 (a blocked(admin_disable)
+// binding of the source refuses the merge offer and the merge). Rule tests:
+// test/spec/linking/merge-release/**.
+export { hasAdminDisabledBinding, releaseForMerge } from './application/merge-release.ts';
+export type { ReleaseForMergeInput } from './application/merge-release.ts';
 export { LinkingAdminModule } from './linking-admin.module.ts';
 export type { LinkingAdminOptions, LinkingAuditWriterFactory } from './linking-admin.module.ts';
 // B1-08n: orders' relation_id binding reader (every status, raw instants), assembled by app.module.

@@ -28,6 +28,11 @@
 // B1-06zi (BR-ID-22 「授权状态按 (user_id, pid) 记录」): an authorized answer whose activation leaves
 // the binding active also records the queried self_buy slot's filing (app.union_pdd_pid_filings,
 // insert-if-absent, filed_at = the clock) in that same transaction; blocked / banned write no row.
+// B1-20c (D10-1099 T-7; D10-1097): the activation transaction takes the bindings' user lock and
+// reads the account's status before it writes: a tombstone (a merge committed while the query was
+// in flight) gets neither an active binding nor a filing row (the filings stay as the merge left
+// them); nothing is written, a warn is logged, the page answers as stored.
+import { lockBindingUser, userTombstonedOn } from './binding-lock.ts';
 import type { PddAuthLinkOpenOptions } from './link-open-pdd-auth.ts';
 import {
   PDD,
@@ -84,9 +89,15 @@ export function createUnionBindingsWithPddQuery(
       );
       if (authorized !== true) return;
       const custom = JSON.stringify(identity.custom_parameters);
-      await db.transaction().execute(async (trx) => {
+      const tombstone = await db.transaction().execute(async (trx) => {
+        // B1-20c (D10-1099 T-7): the bindings' user lock first (activatePddBinding takes it again,
+        // a no-op), then the account's status: a merge committed while the query was in flight
+        // left a tombstone, which gets no active binding and no filing.
+        // A missing user reads as no tombstone; activatePddBinding then refuses it as before.
+        await lockBindingUser(trx, appId, userId);
+        if (await userTombstonedOn(trx, appId, userId)) return true;
         const written = await activatePddBinding(trx, clock, { appId, userId, accountId, custom });
-        if (written.kind !== 'active') return;
+        if (written.kind !== 'active') return false;
         await recordPddPidFiling(trx, {
           appId,
           userId,
@@ -94,7 +105,9 @@ export function createUnionBindingsWithPddQuery(
           unionAccountId: accountId,
           filedAt: clock.now(),
         });
+        return false;
       });
+      if (tombstone) skipped('user_deleted', appId, traceId);
     } catch (error) {
       skipped('pdd_refresh_failed', appId, traceId, {
         error_name: error instanceof Error ? error.name : typeof error,

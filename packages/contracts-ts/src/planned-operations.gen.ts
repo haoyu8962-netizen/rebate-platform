@@ -14,7 +14,6 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "bindOauthIdentity",
   "listAgentSessionMessages",
   "loginByHuawei",
-  "mergeAccount",
   "reportAgentMessage",
   "setAgentMessageFeedback",
 ]);

@@ -175,6 +175,7 @@ import {
   LOGOUT,
   ME,
   ME_READ_PORTS,
+  MERGE_ACCOUNT,
   NICKNAME_REVIEW,
   OAUTH_ATTEMPTS,
   REALNAME_VERIFIER,
@@ -196,6 +197,12 @@ import {
 } from './application/tokens.ts';
 import { ConsentsController } from './http/public/consents.controller.ts';
 import { BindPhoneController } from './http/public/bind-phone.controller.ts';
+import { MergeAccountController } from './http/public/merge-account.controller.ts';
+import {
+  createMergeAccountService,
+  type MergeAccountService,
+} from './application/merge-account.ts';
+import type { AccountMergePort } from './application/merge-conditions.ts';
 import { DevicesController } from './http/public/devices.controller.ts';
 import { H5TokenController } from './http/public/h5-token.controller.ts';
 import { OauthAttemptsController } from './http/public/oauth-attempts.controller.ts';
@@ -252,6 +259,14 @@ export interface IdentityModuleOptions extends DeletionRequestModuleOptions {
   readonly tokens?: 'sign' | 'verify';
   readonly accountAssets?: Omit<FactoryProvider<AccountAssetsPort>, 'provide'>;
   readonly accountRisk?: Omit<FactoryProvider<AccountRiskPort | null>, 'provide'>;
+  /**
+   * The cross-module ports of the account merge (B1-20c, application/merge-conditions.ts): the
+   * D10-1099 Q-3 / Q-4 reads (admin_adjustments, linking's admin_disable bindings) that the merge
+   * offer of POST /v1/me/phone judges too, growth's relation write lock and linking's
+   * releaseForMerge, assembled by app.module so identity imports none of them. Absent or null:
+   * POST /v1/me/phone and POST /v1/auth/merge have no service (as without accountAssets).
+   */
+  readonly accountMerge?: Omit<FactoryProvider<AccountMergePort | null>, 'provide'>;
   /**
    * Builds the identity configuration port (IdentityConfigReader): content's reader, assembled by
    * app.module (content implements the port's shape and imports nothing of identity). Null when
@@ -451,6 +466,7 @@ const INVITE_BINDING = Symbol('IDENTITY_INVITE_BINDING');
 const FIRST_APP_LOGIN_REVIEW = Symbol('IDENTITY_FIRST_APP_LOGIN_REVIEW');
 const ACCOUNT_ASSETS = Symbol('IDENTITY_ACCOUNT_ASSETS');
 const ACCOUNT_RISK = Symbol('IDENTITY_ACCOUNT_RISK');
+const ACCOUNT_MERGE = Symbol('IDENTITY_ACCOUNT_MERGE');
 const LABOR_AGREEMENT_CONFIG = Symbol('IDENTITY_LABOR_AGREEMENT_CONFIG');
 /** The payout-account configuration port (IdentityModuleOptions.payoutAccountConfig), or null. */
 const PAYOUT_ACCOUNT_CONFIG = Symbol('IDENTITY_PAYOUT_ACCOUNT_CONFIG');
@@ -546,6 +562,7 @@ export class IdentityModule {
       module: IdentityModule,
       controllers: [
         BindPhoneController,
+        MergeAccountController,
         DevicesController,
         SmsCodesController,
         LandingSmsCodesController,
@@ -614,6 +631,9 @@ export class IdentityModule {
         options.accountRisk === undefined
           ? { provide: ACCOUNT_RISK, useValue: null }
           : { ...options.accountRisk, provide: ACCOUNT_RISK },
+        options.accountMerge === undefined
+          ? { provide: ACCOUNT_MERGE, useValue: null }
+          : { ...options.accountMerge, provide: ACCOUNT_MERGE },
         options.landingInvite === undefined
           ? { provide: LANDING_INVITE, useValue: null }
           : { ...options.landingInvite, provide: LANDING_INVITE },
@@ -628,6 +648,7 @@ export class IdentityModule {
             BLOCKLIST_SERVICE,
             ACCOUNT_ASSETS,
             ACCOUNT_RISK,
+            ACCOUNT_MERGE,
             { token: FIELD_CRYPTO, optional: true },
             { token: REDIS, optional: true },
           ],
@@ -637,16 +658,78 @@ export class IdentityModule {
             blocklist: BlocklistService | null,
             assets: AccountAssetsPort | null,
             risk: AccountRiskPort | null,
+            barriers: AccountMergePort | null,
             crypto?: FieldCrypto,
             redis?: RedisHandle,
           ): BindPhoneService | null =>
             sms === null ||
             assets === null ||
             risk === null ||
+            barriers === null ||
             crypto === undefined ||
             redis === undefined
               ? null
-              : createBindPhoneService({ clock, sms, blocklist, assets, risk, crypto, redis }),
+              : createBindPhoneService({
+                  clock,
+                  sms,
+                  blocklist,
+                  assets,
+                  risk,
+                  barriers,
+                  crypto,
+                  redis,
+                }),
+        },
+        {
+          // POST /v1/auth/merge (B1-20c, BR-ID-06): the same ports as the merge offer, growth's
+          // relation lock and linking's release (accountMerge), the login completion's.
+          provide: MERGE_ACCOUNT,
+          inject: [
+            CLOCK,
+            ROOT_LOGGER,
+            TOKEN_SERVICE,
+            ACCOUNT_ASSETS,
+            ACCOUNT_RISK,
+            ACCOUNT_MERGE,
+            PUSH_TOKENS,
+            FIRST_APP_LOGIN_REVIEW,
+            { token: FIELD_CRYPTO, optional: true },
+            { token: REDIS, optional: true },
+            { token: DB, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            tokens: TokenService,
+            assets: AccountAssetsPort | null,
+            risk: AccountRiskPort | null,
+            merge: AccountMergePort | null,
+            pushTokens: SessionPushTokens | null,
+            firstAppLoginReview: FirstAppLoginReview | null,
+            crypto?: FieldCrypto,
+            redis?: RedisHandle,
+            db?: Kysely<Database>,
+          ): MergeAccountService | null =>
+            assets === null ||
+            risk === null ||
+            merge === null ||
+            crypto === undefined ||
+            redis === undefined ||
+            db === undefined
+              ? null
+              : createMergeAccountService({
+                  db,
+                  clock,
+                  logger,
+                  crypto,
+                  tokens,
+                  redis,
+                  assets,
+                  risk,
+                  merge,
+                  ...(pushTokens === null ? {} : { pushTokens }),
+                  ...(firstAppLoginReview === null ? {} : { firstAppLoginReview }),
+                }),
         },
         {
           // B1-02zzi (BR-ID-09 细则, D10-1034 ②): the specs seeds are read once while the entry

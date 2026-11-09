@@ -295,7 +295,12 @@ export interface paths {
          *     ticket that is expired, used or whose conditions no longer hold is only 30411; the ticket
          *     store being unavailable is 50001 and nothing is merged. A retry with the same
          *     Idempotency-Key after a lost response finds the source session revoked and gets 10002: the
-         *     token check comes before the idempotent replay (BR-ID-06 细则). Version gate: applied.
+         *     token check comes before the idempotent replay (BR-ID-06 细则). A phone account flagged
+         *     for re-verification (旧号加验, BR-WDR-01 细则) on a device that is not one of its re-verified
+         *     devices → 10010 with the method of the Reverify page; it is judged before any identity
+         *     moves, nothing is merged and the ticket stays valid, so the same ticket merges once this
+         *     device is re-verified (BR-ID-06 细则「待加验账号」). 10010 is a 1xxxx code: no idempotency
+         *     result is stored. Version gate: applied.
          */
         post: operations["mergeAccount"];
         delete?: never;

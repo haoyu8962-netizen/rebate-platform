@@ -81,7 +81,12 @@ import {
   type RootLogger,
 } from '../../platform/index.ts';
 import { canTransitionBinding } from '../domain/binding-status-transitions.ts';
-import { lockBindingUser, nextBindingRowVersion, userBannedOn } from './binding-lock.ts';
+import {
+  lockBindingUser,
+  nextBindingRowVersion,
+  userBannedOn,
+  userTombstonedOn,
+} from './binding-lock.ts';
 import {
   recordBindingConflict,
   resolveBindingConflictsOnActive,
@@ -519,7 +524,9 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     if (!(await lockBindingUser(trx, appId, userId))) {
       throw new Error('linking: the bound user does not exist');
     }
-    if (await userBannedOn(trx, appId, userId)) {
+    // B1-20c (D10-1099 T-7): an account merged meanwhile is a tombstone whose sessions are over;
+    // no binding is written for it (the same answer as a session that ended, rolled back as a ban).
+    if ((await userBannedOn(trx, appId, userId)) || (await userTombstonedOn(trx, appId, userId))) {
       await sql`ROLLBACK TO SAVEPOINT union_binding_write`.execute(trx);
       return result(10001, traceId);
     }

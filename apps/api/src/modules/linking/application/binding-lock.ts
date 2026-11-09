@@ -17,6 +17,13 @@
 // - user_risk_state is risk's table; linking only reads it here, on the same transaction right
 //   after the lock, so a ban committed while it waited is seen (READ COMMITTED). risk/index.ts has
 //   no export that reads on a caller's transaction.
+// - B1-20c (D10-1099 T-7): an account merged into a phone account is a tombstone (users.status
+//   deleted, deleted_reason merged; identity's merge holds this same row lock while it writes it).
+//   The user's own writers (the taobao authorization, the pdd filing refresh) read the status with
+//   userTombstonedOn right after the lock and write no active binding for a tombstone, so a
+//   submission that passed every earlier check before the merge committed never gives the
+//   tombstone a binding the merge already released. The console, the ban ports and the deletion
+//   cleanup keep acting on such users as before.
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 
@@ -60,4 +67,22 @@ export function nextBindingRowVersion(rows: readonly { readonly row_version: num
   let max = -1;
   for (const row of rows) if (row.row_version > max) max = row.row_version;
   return max + 1;
+}
+
+/**
+ * B1-20c (D10-1099 T-7): true when the user is a finished account (users.status deleted: a merge
+ * tombstone or a completed deletion), read on the caller's transaction after lockBindingUser.
+ */
+export async function userTombstonedOn(
+  trx: Kysely<DB>,
+  appId: string,
+  userId: string,
+): Promise<boolean> {
+  const row = await trx
+    .selectFrom('users')
+    .select('status')
+    .where('app_id', '=', appId)
+    .where('id', '=', userId)
+    .executeTakeFirst();
+  return row?.status === 'deleted';
 }
