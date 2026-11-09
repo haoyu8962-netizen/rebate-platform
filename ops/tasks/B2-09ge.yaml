@@ -1,0 +1,20 @@
+id: B2-09ge
+repo: rebate-platform
+title: B2-09ge：R12 补快照的收紧单（D10-1135，D10-828 形态）——作废期间同步把 commission_version 推到 1、没有快照的 VOID 单，恢复后补快照、结算不抛错
+type: test-change
+# 2026-11-09 withdraw 入账（编排 D10-1135；B2-09gd money r1 S1 ① 只在实现里修，规则测试轮已用完，由本单补）。轮次从 1 计。
+# 只新增 test/spec/settlement/order-appeal-restore-tighten/**，不改已有文件、不动实现；新鲜独立 Claude 写。须在含 B2-09gd 的主干上跑绿；
+# 变异实跑（把补快照的判断改回 commission_version ≥ 1）必红，结果写进 PR。另一位只读复核。
+refs: [BR-CALC-10, BR-FUND-22]
+refs_hash:
+  BR-CALC-10: 93337079f138
+  BR-FUND-22: c9930aaf2459
+deps: [B2-09gd]
+paths:
+  - 'test/spec/settlement/order-appeal-restore-tighten/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
