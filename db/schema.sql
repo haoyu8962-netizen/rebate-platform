@@ -5417,7 +5417,7 @@ CREATE TABLE app.recon_diffs (
     CONSTRAINT recon_diffs_resolution_check CHECK ((jsonb_typeof(resolution) = 'object'::text)),
     CONSTRAINT recon_diffs_source_check CHECK ((source = ANY (ARRAY['R1'::text, 'R2'::text, 'R3'::text, 'R4'::text]))),
     CONSTRAINT recon_diffs_status_check CHECK ((status = ANY (ARRAY['open'::text, 'processing'::text, 'adjusted'::text, 'written_off'::text, 'closed'::text]))),
-    CONSTRAINT recon_diffs_type_check CHECK ((type = ANY (ARRAY['union_mismatch'::text, 'channel_mismatch'::text, 'ledger_mismatch'::text, 'platform_restore'::text, 'month_end_unbalanced'::text, 'settle_amount_mismatch'::text, 'settle_missing'::text, 'appeal_restore'::text, 'estimate_changed_after_credit'::text, 'pay_mismatch'::text, 'pay_anomaly'::text])))
+    CONSTRAINT recon_diffs_type_check CHECK ((type = ANY (ARRAY['union_mismatch'::text, 'channel_mismatch'::text, 'ledger_mismatch'::text, 'platform_restore'::text, 'month_end_unbalanced'::text, 'settle_amount_mismatch'::text, 'settle_missing'::text, 'appeal_restore'::text, 'estimate_changed_after_credit'::text, 'pay_mismatch'::text, 'pay_anomaly'::text, 'blacklist_after_credit'::text])))
 );
 
 

@@ -1,0 +1,37 @@
+{
+  "task": "B2-04zzlt",
+  "spec_ref": "b1410c4f5b0910562f03f8119f3fb0f0949aba0d",
+  "spec_commit": "57228da846b95fccf7f8b4b5045d895a446e2dc9",
+  "red_tests": [],
+  "risk_note": "RV2 db (B2-04zzlt; D10-1101, D10-1120, D10-1137). Migration 0136 rebuilds recon_diffs_type_check NOT VALID under the same name with the 0081 values plus blacklist_after_credit; 0137 validates it. It only widens; no existing row or writer changes; registered by hash in APPROVED_GUARD_CHANGES (#2949). schema.sql changes that one CHECK line. No test files here: the frozen pay-types comparison and the admin-recon fixture were changed by the preceding test-change PR #2993. No business logic.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base origin/main (D10-1120): pass, no findings, on the earlier shape of this branch, which held these same migration and schema bytes plus the two test files now moved to #2993; the orchestrator kept that conclusion (D10-1137, 0136 bytes unchanged). The hash pin of 0136 had its own two reviews in #2949. tester: none, so there is no rule-test review or red run for this task."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "341f1e478b2e566771050ff2cc8274629bbe2dd9",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
