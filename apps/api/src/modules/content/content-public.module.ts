@@ -21,6 +21,7 @@ import {
   DB,
   getLinkPatterns,
   getMaterialChannels,
+  kmsAccessOf,
   loadConfigSignKey,
   ROOT_LOGGER,
   type AppConfig,
@@ -105,8 +106,9 @@ const BRIDGE_ORIGINS_SIGNING = Symbol('BRIDGE_ORIGINS_SIGNING');
 
 /**
  * F1-02zzzb: the bridge_origins signer of this process, built from platform's configuration signing
- * key (read once while the providers are created). A refused key (staging / prod without
- * CONFIG_SIGN_KEY_*, an unreadable or non-P-256 file) fails Nest's init, so the api entry refuses
+ * key (read once while the providers are created: the mounted file, or B1-01zzt the KMS secret
+ * through platform's KMS access). A refused key (staging / prod without CONFIG_SIGN_KEY_*, an
+ * unreadable KMS secret or file, a non-P-256 key) fails Nest's init, so the api entry refuses
  * to start before it listens; until then nothing is signed. The error text names the variables
  * only.
  */
@@ -120,7 +122,7 @@ async function bridgeOriginsSigning(config: AppConfig): Promise<BridgeOriginsSig
   let refusal: unknown = null;
   try {
     signer = new BridgeOriginsSigner(
-      await loadConfigSignKey(config.appEnv, config.configSignKey ?? null),
+      await loadConfigSignKey(config.appEnv, config.configSignKey ?? null, kmsAccessOf(config)),
     );
   } catch (error) {
     refusal = error;

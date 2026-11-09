@@ -27,7 +27,8 @@ export type KmsSecretName =
   | 'union/pdd/client-secret'
   | 'union/taobao/app-secret'
   | 'union/jd/app-secret'
-  | 'union/dataoke/app-secret';
+  | 'union/dataoke/app-secret'
+  | 'config/sign-private-key';
 
 export const KMS_SECRETS = Object.freeze({
   pay: Object.freeze({
@@ -45,6 +46,11 @@ export const KMS_SECRETS = Object.freeze({
     taobaoAppSecret: 'union/taobao/app-secret',
     jdAppSecret: 'union/jd/app-secret',
     dataokeAppSecret: 'union/dataoke/app-secret',
+  }),
+  // B1-01zzt: the api entry's configuration signing key (bridge_origins), see
+  // ../config/config-sign-key.ts.
+  config: Object.freeze({
+    signPrivateKey: 'config/sign-private-key',
   }),
 } as const);
 

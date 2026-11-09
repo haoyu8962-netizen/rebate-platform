@@ -1,0 +1,108 @@
+{
+  "red_tests": [
+    "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#10] staging：content 公共模块：只配 ID + KMS 时从 KMS 读一次 couli/<appEnv>/config/sign-private-key，bridge_origins 用读出的钥签、kid 为配置值；改配 FILE / ID 一对后读文件、不再读 KMS",
+    "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#10] prod：content 公共模块：只配 ID + KMS 时从 KMS 读一次 couli/<appEnv>/config/sign-private-key，bridge_origins 用读出的钥签、kid 为配置值；改配 FILE / ID 一对后读文件、不再读 KMS",
+    "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#11] staging：content 公共模块：KMS 读失败或读出的不是 P-256 PKCS#8 PEM 时启动被拒（ConfigSignKeyError），错误与日志不带 SDK 原文和钥内容",
+    "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#11] prod：content 公共模块：KMS 读失败或读出的不是 P-256 PKCS#8 PEM 时启动被拒（ConfigSignKeyError），错误与日志不带 SDK 原文和钥内容",
+    "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#1] staging：只配 CONFIG_SIGN_KEY_ID 且 KMS 四项齐 → loadConfig 通过，configSignKey 来源 KMS、kid 为配置值、没有文件路径",
+    "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#1] prod：只配 CONFIG_SIGN_KEY_ID 且 KMS 四项齐 → loadConfig 通过，configSignKey 来源 KMS、kid 为配置值、没有文件路径",
+    "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#2] staging：KMS 没配或没配齐时只配 ID 仍拒绝；只配 FILE（有无 KMS）仍拒绝；ID 不合语法仍拒绝；问题只提变量名不回显值",
+    "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#2] prod：KMS 没配或没配齐时只配 ID 仍拒绝；只配 FILE（有无 KMS）仍拒绝；ID 不合语法仍拒绝；问题只提变量名不回显值",
+    "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#3] local / test：设了 KMS_* 照旧被 kms 配置拒绝，只配 ID 也不放行；FILE / ID 一对照旧收为 {file, kid}",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#4] staging：来源 KMS 时从 KMS 读 config/sign-private-key 一次，kid 为 CONFIG_SIGN_KEY_ID，私钥能签、公钥能验同一签名",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#4] prod：来源 KMS 时从 KMS 读 config/sign-private-key 一次，kid 为 CONFIG_SIGN_KEY_ID，私钥能签、公钥能验同一签名",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#5] KMS_SECRETS 登记了配置签名私钥 config/sign-private-key",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#6] staging：KMS 读失败（KmsError kms_read_failed，或带 SDK 原文的错误）→ ConfigSignKeyError 拒绝启动，不是 key_invalid，不带 SDK 原文、密钥内容与 cause",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#6] prod：KMS 读失败（KmsError kms_read_failed，或带 SDK 原文的错误）→ ConfigSignKeyError 拒绝启动，不是 key_invalid，不带 SDK 原文、密钥内容与 cause",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#7] staging：KMS 交回的不是 P-256 PKCS#8 PEM（空串、垃圾、RSA、P-384、加密 PEM、公钥、SEC1）或 KmsError secret_invalid → key_invalid，错误不回显内容",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#7] prod：KMS 交回的不是 P-256 PKCS#8 PEM（空串、垃圾、RSA、P-384、加密 PEM、公钥、SEC1）或 KmsError secret_invalid → key_invalid，错误不回显内容",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#8] staging：FILE / ID 一对时即使 KMS 已配置也读文件、不调 KMS；只配 KMS 没配签名钥变量时拒绝且不调 KMS",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#8] prod：FILE / ID 一对时即使 KMS 已配置也读文件、不调 KMS；只配 KMS 没配签名钥变量时拒绝且不调 KMS",
+    "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#9] 回归：FILE / ID 一对照旧读文件（无 KMS）；local / test 未配是临时钥（kid ephemeral-）且不调 KMS；staging / prod 什么都没配拒绝"
+  ],
+  "risk_note": "RV2 (platform config / KMS + content wiring; no migration, no contract change). D10-1155 ④, prod-wiring-gaps item 23 (code half): the configuration signing key (ES256 for /v1/config bridge_origins, 规划/02 §12.6) was read only from CONFIG_SIGN_KEY_FILE / ID. Now KMS_SECRETS has config/sign-private-key; in staging / prod with only CONFIG_SIGN_KEY_ID and all four KMS_* set the config is {source: kms, kid} and loadConfigSignKey(appEnv, config, kms) reads that secret once through readStartupKmsSecret (read failure → ConfigSignKeyError key_kms_unavailable; KMS secret_invalid or a non P-256 PKCS#8 PEM → key_invalid); a FILE / ID pair is still read from the file and KMS is never called (an explicit mount wins — the owner may keep a file mount in prod); only FILE, or only ID without KMS, or nothing → refused as before; local / test unchanged (no KMS, ephemeral key). Errors name variables only, no path / key / SDK text, no cause, nothing logged. content-public.module passes kmsAccessOf(config). Frozen test/spec/content/bridge-origins/key-loading.test.ts unchanged and green. Verified only with synthetic keys and a KMS test double — no real key, .env or ~/.couli read, no real KMS call; the real connection waits for the owner to open KMS. Full verification is the required CI checks (approvals 21).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, 0 findings, 0 out_of_scope (couli-runs/B1-01zzt/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude via claude-run.sh (attempt 1, 19 unit tests with a KMS test double and synthetic keys, no skeleton). Gate spec-test by Codex: r1 pass, 0 findings (couli-runs/B1-01zzt/review-spec-r1.json). Red: 19 rule tests red for the right reason, 0 problems, 0 exemptions; on the implementation the local container ran all 19 green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "9b7bcedef6c2cea5f8f3bf14a2b22f987c62ade2",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  },
+  "task": "B1-01zzt",
+  "spec_commit": "222f87e3c4da9f08e6065fe9cc54c60e0da4bd62",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "222f87e3c4da9f08e6065fe9cc54c60e0da4bd62",
+      "tree": "1894327d4f1f6af48425dae3114fae7d72092211",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T05:18:35Z",
+      "finished_at": "2026-11-09T05:18:58Z",
+      "red_tests": [
+        "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#10] staging：content 公共模块：只配 ID + KMS 时从 KMS 读一次 couli/<appEnv>/config/sign-private-key，bridge_origins 用读出的钥签、kid 为配置值；改配 FILE / ID 一对后读文件、不再读 KMS",
+        "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#10] prod：content 公共模块：只配 ID + KMS 时从 KMS 读一次 couli/<appEnv>/config/sign-private-key，bridge_origins 用读出的钥签、kid 为配置值；改配 FILE / ID 一对后读文件、不再读 KMS",
+        "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#11] staging：content 公共模块：KMS 读失败或读出的不是 P-256 PKCS#8 PEM 时启动被拒（ConfigSignKeyError），错误与日志不带 SDK 原文和钥内容",
+        "test/spec/platform/config-sign-key-kms/content-wiring.test.ts > [AC-B1-01zzt#11] prod：content 公共模块：KMS 读失败或读出的不是 P-256 PKCS#8 PEM 时启动被拒（ConfigSignKeyError），错误与日志不带 SDK 原文和钥内容",
+        "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#1] staging：只配 CONFIG_SIGN_KEY_ID 且 KMS 四项齐 → loadConfig 通过，configSignKey 来源 KMS、kid 为配置值、没有文件路径",
+        "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#1] prod：只配 CONFIG_SIGN_KEY_ID 且 KMS 四项齐 → loadConfig 通过，configSignKey 来源 KMS、kid 为配置值、没有文件路径",
+        "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#2] staging：KMS 没配或没配齐时只配 ID 仍拒绝；只配 FILE（有无 KMS）仍拒绝；ID 不合语法仍拒绝；问题只提变量名不回显值",
+        "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#2] prod：KMS 没配或没配齐时只配 ID 仍拒绝；只配 FILE（有无 KMS）仍拒绝；ID 不合语法仍拒绝；问题只提变量名不回显值",
+        "test/spec/platform/config-sign-key-kms/load-config.test.ts > [AC-B1-01zzt#3] local / test：设了 KMS_* 照旧被 kms 配置拒绝，只配 ID 也不放行；FILE / ID 一对照旧收为 {file, kid}",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#4] staging：来源 KMS 时从 KMS 读 config/sign-private-key 一次，kid 为 CONFIG_SIGN_KEY_ID，私钥能签、公钥能验同一签名",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#4] prod：来源 KMS 时从 KMS 读 config/sign-private-key 一次，kid 为 CONFIG_SIGN_KEY_ID，私钥能签、公钥能验同一签名",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#5] KMS_SECRETS 登记了配置签名私钥 config/sign-private-key",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#6] staging：KMS 读失败（KmsError kms_read_failed，或带 SDK 原文的错误）→ ConfigSignKeyError 拒绝启动，不是 key_invalid，不带 SDK 原文、密钥内容与 cause",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#6] prod：KMS 读失败（KmsError kms_read_failed，或带 SDK 原文的错误）→ ConfigSignKeyError 拒绝启动，不是 key_invalid，不带 SDK 原文、密钥内容与 cause",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#7] staging：KMS 交回的不是 P-256 PKCS#8 PEM（空串、垃圾、RSA、P-384、加密 PEM、公钥、SEC1）或 KmsError secret_invalid → key_invalid，错误不回显内容",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#7] prod：KMS 交回的不是 P-256 PKCS#8 PEM（空串、垃圾、RSA、P-384、加密 PEM、公钥、SEC1）或 KmsError secret_invalid → key_invalid，错误不回显内容",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#8] staging：FILE / ID 一对时即使 KMS 已配置也读文件、不调 KMS；只配 KMS 没配签名钥变量时拒绝且不调 KMS",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#8] prod：FILE / ID 一对时即使 KMS 已配置也读文件、不调 KMS；只配 KMS 没配签名钥变量时拒绝且不调 KMS",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts > [AC-B1-01zzt#9] 回归：FILE / ID 一对照旧读文件（无 KMS）；local / test 未配是临时钥（kid ephemeral-）且不调 KMS；staging / prod 什么都没配拒绝"
+      ],
+      "expected": [
+        "test/spec/platform/config-sign-key-kms/content-wiring.test.ts",
+        "test/spec/platform/config-sign-key-kms/load-config.test.ts",
+        "test/spec/platform/config-sign-key-kms/load-key.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "c3e5649d4bd3a77ac5e965fc272c0911be64c36fb5c517caa2afb0b9c71ba077"
+        }
+      ]
+    }
+  ]
+}
