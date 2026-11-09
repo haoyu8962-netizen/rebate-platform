@@ -60,6 +60,8 @@ const BUSINESS_QUEUES = [
   'evt.settlement-blacklist-after-credit',
   // Event queue of risk's appeal.resolved consumer (B1-03z, BR-FUND-22); events/types.ts.
   'evt.risk-appeal-restore',
+  // Event queue of settlement's appeal.resolved consumer (B2-09gd, BR-FUND-22); events/types.ts.
+  'evt.settlement-order-appeal-restore',
   // Event queue of payout's withdrawal.created consumer (B2-11c, BR-WDR-30); events/types.ts.
   'evt.payout-auto-payout',
   // Event queue of payout's account.went_negative consumer (B2-05e, BR-WDR-05 (a)); events/types.ts.

@@ -89,6 +89,12 @@ export type {
   CommissionSnapshotPortResult,
   SnapshotOutcome,
 } from './application/commission-snapshot-step.ts';
+export { createRestoreSnapshot } from './application/commission-snapshot-step-restore.ts';
+export type {
+  RestoreSnapshot,
+  RestoreSnapshotDeps,
+  RestoreSnapshotOutcome,
+} from './application/commission-snapshot-step-restore.ts';
 export { matchOrderSource, parseLinkCode } from './domain/source-backfill.ts';
 export type {
   ExactLink,

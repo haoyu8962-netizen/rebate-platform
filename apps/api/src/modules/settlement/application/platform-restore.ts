@@ -49,7 +49,7 @@ import {
   type PostingVoucher,
   type ReconDiffRestoreRow,
 } from '../../ledger/index.ts';
-import { lockOrderKey } from '../../orders/index.ts';
+import { lockOrderKey, type RestoreSnapshot } from '../../orders/index.ts';
 import {
   fieldsErrorEnvelope,
   type AuditPort,
@@ -90,7 +90,10 @@ import {
 
 /** The data.reason of a 20001 [recon_diff_id] of a platform restore. */
 export type PlatformRestoreRefusal =
-  'restore_not_supported' | 'restore_platform_invalid' | 'restore_commission_zero';
+  | 'restore_not_supported'
+  | 'restore_platform_invalid'
+  | 'restore_commission_zero'
+  | 'restore_snapshot_unavailable';
 
 /** commission's readCommissionAttribution (structural): ratios, reserve and share states. */
 export interface PlatformRestoreSnapshot {
@@ -109,6 +112,8 @@ export interface PlatformRestoreSnapshot {
 }
 
 export interface PlatformRestoreDeps {
+  /** B2-09gd: orders' snapshot of an R12 (createRestoreSnapshot); the admin assembly always passes it. */
+  readonly restoreSnapshot?: RestoreSnapshot;
   readonly clock: Clock;
   readonly logger: Pick<RootLogger, 'warn'>;
   readonly auditOn: (trx: Transaction<DB>) => AuditPort;
@@ -246,7 +251,22 @@ export async function restorePlatformDiff(
     return guardRefusal('restore_platform_invalid', traceId);
   }
 
-  const located: Located = { ref, order, row };
+  let current = order;
+  if (from === 'VOID' && deps.restoreSnapshot !== undefined) {
+    // B2-09gd (BR-CALC-10, D10-1093): the snapshot R12 needs, before anything else is written.
+    const snapshot = await deps.restoreSnapshot(trx, order, deps.clock.now());
+    if (snapshot === 'unavailable') return guardRefusal('restore_snapshot_unavailable', traceId);
+    // paid_at_source may have moved row_version.
+    const reread = await readRebateOrder(trx, {
+      appId,
+      orderId: locator.order_id,
+      attrAt: locator.attr_at,
+    });
+    if (reread === undefined)
+      throw new Error('settlement platform restore: order not found for app');
+    current = reread;
+  }
+  const located: Located = { ref, order: current, row };
   let outcome: Outcome;
   if (from === 'VOID') {
     outcome = await restoreVoid(deps, trx, located);

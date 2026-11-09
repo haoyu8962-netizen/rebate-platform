@@ -401,6 +401,7 @@ import {
   type OrdersWorkerOptions,
   readExistingOrderKeys,
   readOwnTaobaoOrderNos,
+  createRestoreSnapshot,
 } from './modules/orders/index.ts';
 import {
   ParsingError,
@@ -2290,6 +2291,60 @@ const orderEstimateSource = {
 };
 
 /**
+ * B2-09gd: the scene of an order's pid for an R12's snapshot, on the restore's transaction. orders
+ * keeps no union_account_id, so the pid is looked up by app and platform; none, or two accounts
+ * with different scenes, is null (the scene cannot be read).
+ */
+async function readOrderPidScene(
+  trx: Transaction<Database>,
+  input: { readonly appId: string; readonly platform: string; readonly pid: string },
+): Promise<string | null> {
+  const rows = await trx
+    .withSchema('app')
+    .selectFrom('union_pids')
+    .select('pid_scene')
+    .distinct()
+    .where('app_id', '=', input.appId)
+    .where('platform', '=', input.platform)
+    .where('pid', '=', input.pid)
+    .execute();
+  return rows.length === 1 ? (rows[0]?.pid_scene ?? null) : null;
+}
+
+/** B2-09gd: whether the order has its immutable commission_splits row (BR-CALC-10). */
+async function hasCommissionSplit(
+  trx: Transaction<Database>,
+  input: { readonly appId: string; readonly orderId: string },
+): Promise<boolean> {
+  const row = await trx
+    .withSchema('app')
+    .selectFrom('commission_splits')
+    .select('order_id')
+    .where('app_id', '=', input.appId)
+    .where('order_id', '=', input.orderId)
+    .limit(1)
+    .executeTakeFirst();
+  return row !== undefined;
+}
+
+/** B2-09gd: whether the app has any published, unrevoked rule version (BR-CALC-10, D10-1093). */
+async function hasPublishedRuleVersion(
+  trx: Transaction<Database>,
+  appId: string,
+): Promise<boolean> {
+  const row = await trx
+    .withSchema('app')
+    .selectFrom('commission_rule_versions')
+    .select('rule_version_id')
+    .where('app_id', '=', appId)
+    .where('status', '=', 'published')
+    .where('revoked_at', 'is', null)
+    .limit(1)
+    .executeTakeFirst();
+  return row !== undefined;
+}
+
+/**
  * B1-08w: orders' commission snapshot port (BR-ATTR-01 ⑥, BR-CALC-10) — commission's
  * createCommissionSnapshotPort over the B2-03p beneficiary resolver (growth's level / parent
  * history, identity's users.status deletion reader), with the worker's CLOCK and ROOT_LOGGER. The
@@ -3980,7 +4035,7 @@ function settlementWorkerModule(): DynamicModule {
     systemAudit: (clock) => createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
   };
   // B2-04zzl: only this entry consumes order.blacklist_hit_after_credit.
-  return SettlementModule.forWorker(ports, { blacklistReview: true });
+  return SettlementModule.forWorker(ports, { blacklistReview: true, orderAppealRestore: true });
 }
 
 type InviteRewardOrderFacts = ReturnType<typeof createInviteRewardOrderFacts>;
@@ -5169,6 +5224,15 @@ export class AppModule {
                 riskState: (db) => createRiskStateBatchReader({ db }),
                 minors: (crypto) => createMinorStatusBatchReader({ crypto }),
                 readRestoreSnapshot: readCommissionAttribution,
+                // B2-09gd: the commission snapshot an R12 makes up (BR-CALC-10, D10-1093).
+                restoreSnapshot: (db, clock, logger) =>
+                  createRestoreSnapshot({
+                    snapshots: orderSnapshotPort(db, clock, logger),
+                    pidScene: readOrderPidScene,
+                    hasPublishedVersion: hasPublishedRuleVersion,
+                    hasSnapshot: hasCommissionSplit,
+                    logger: logger.child({ module: 'settlement' }),
+                  }),
                 appendBeneficiaryEvent,
                 // B2-04zzl: the confirmed blacklist clawback runs the worker's own R8.
                 blacklistClawback: orderClawback,

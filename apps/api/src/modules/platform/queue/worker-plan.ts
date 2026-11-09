@@ -33,6 +33,8 @@ export const WORKER_LANES: readonly (readonly [string, number, number])[] = Obje
   Object.freeze(['evt.settlement-blacklist-after-credit', 1, 2] as const),
   // B1-03z: appeal_restore differences of revoked ban appeals, one slot, serially.
   Object.freeze(['evt.risk-appeal-restore', 1, 2] as const),
+  // B2-09gd: the restore difference of a revoked order appeal, one slot, serially.
+  Object.freeze(['evt.settlement-order-appeal-restore', 1, 2] as const),
   // B2-11c: one decision per withdrawal under the users / balance / daily-total locks, serially.
   Object.freeze(['evt.payout-auto-payout', 1, 2] as const),
   // One worker: the member's withdrawals are re-checked under the users lock, serially.

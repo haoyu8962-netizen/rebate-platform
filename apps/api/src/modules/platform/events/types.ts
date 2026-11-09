@@ -125,6 +125,12 @@ export const EVENT_SUBSCRIPTIONS: readonly EventSubscription[] = Object.freeze([
     consumer: 'risk-appeal-restore',
     events: Object.freeze(['appeal.resolved']),
   }),
+  // settlement-order-appeal-restore: the restore difference of a revoked order appeal (B2-09gd,
+  // BR-FUND-22 申诉恢复 ①).
+  Object.freeze({
+    consumer: 'settlement-order-appeal-restore',
+    events: Object.freeze(['appeal.resolved']),
+  }),
   // payout-went-negative: the negative balance handling of withdrawals (B2-05e, BR-WDR-05 (a)).
   Object.freeze({
     consumer: 'payout-went-negative',

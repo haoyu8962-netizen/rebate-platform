@@ -48,7 +48,7 @@ import {
   type PostingVoucher,
   type ReconDiffRestoreRow,
 } from '../../ledger/index.ts';
-import { lockOrderKey } from '../../orders/index.ts';
+import { lockOrderKey, type RestoreSnapshot as OrderRestoreSnapshot } from '../../orders/index.ts';
 import {
   fieldsErrorEnvelope,
   type AuditPort,
@@ -67,6 +67,7 @@ import type {
 } from '../credit/beneficiary-gate.ts';
 import { readOrderLocator } from '../credit/credit-store.ts';
 import { readRebateOrder } from '../rebate/infra/rebate-store.ts';
+import { ORDER_APPEAL_RESTORE_REASON } from './order-appeal-restore.ts';
 import {
   restorePlatformDiff,
   type PlatformRestoreRefusal,
@@ -105,6 +106,12 @@ type AppendRestoreEvent = (
 
 /** What app.module hands in: identity's and commission's ports (settlement imports neither). */
 export interface AdminReconRestorePorts {
+  /** B2-09gd: orders' snapshot of an R12 (orders createRestoreSnapshot over commission's port). */
+  readonly restoreSnapshot: (
+    db: Kysely<DB>,
+    clock: Clock,
+    logger: RootLogger,
+  ) => OrderRestoreSnapshot;
   /** Binds the audit port to a transaction handle (app.module: admin's createAuditWriter). */
   readonly auditWriter: (db: Kysely<DB>, clock: Clock) => AuditPort;
   /** identity lockUsersForUpdate. */
@@ -137,6 +144,8 @@ export interface RestoreAdminReconDiffDeps {
   readonly auditOn: (trx: Transaction<DB>) => AuditPort;
   readonly gate: BeneficiaryGate;
   readonly readRestoreSnapshot: ReadRestoreSnapshot;
+  /** B2-09gd: the commission snapshot an R12 makes up. */
+  readonly restoreSnapshot?: OrderRestoreSnapshot;
   readonly appendBeneficiaryEvent: AppendRestoreEvent;
   readonly ledger: Ledger;
 }
@@ -229,6 +238,14 @@ interface RestoreTarget {
   readonly roles: readonly RestoreRole[];
 }
 
+/** B2-09gd: the order-appeal restore difference (R12), handled as a platform restore of a VOID order. */
+function isOrderAppealRestore(row: ReconDiffRestoreRow): boolean {
+  return (
+    row.type === RESTORE_TYPE &&
+    asObject(row.resolution)?.['reason_code'] === ORDER_APPEAL_RESTORE_REASON
+  );
+}
+
 /** The account-appeal restore a difference stands for; null for any other difference. */
 function restoreTargetOf(row: ReconDiffRestoreRow): RestoreTarget | null {
   const stored = asObject(row.resolution);
@@ -316,7 +333,7 @@ export function restoreAdminReconDiff(
       const seen = await readReconDiffForRestore(trx, appId, reconDiffId);
       if (seen === undefined) return fieldsRefusal(['recon_diff_id'], traceId);
       if (!isOpen(seen)) return conflictRefusal(traceId);
-      if (seen.type === PLATFORM_RESTORE_TYPE) {
+      if (seen.type === PLATFORM_RESTORE_TYPE || isOrderAppealRestore(seen)) {
         return restorePlatformDiff(deps, trx, {
           appId,
           adminId,

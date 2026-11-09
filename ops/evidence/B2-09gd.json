@@ -1,0 +1,113 @@
+{
+  "task": "B2-09gd",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "spec_commit": "0736964ee5f2ced3557bb281f7a95f29451fa47f",
+  "red_tests": [
+    "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#1] 撤销的订单申诉登记一张差错单：type appeal_restore、source R3、period 为处理时刻的中国月份、ref_type order、ref_id `{order_key}#RESTORE#{entry_id}`、expected_fen 为有效联盟佣金正数部分（结算额优先于预估，负数记 0）、actual 0、diff 同 expected、open、dedupe_key `appeal_restore:order:{app_id}:{order_key}:{entry_id}`、resolution 六键；订单、状态历史、受益人事件、分录、余额、审计都不变；消费者记 processed_events",
+    "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#2] 不登记也不算失败：账户申诉、upheld、被拦截请求申诉直接确认；订单已不是 VOID、VOID 而 reason 不是 BLACKLIST 记 warn order_appeal_restore_skipped 并确认。拒绝（重试后死信，不记 processed_events）：载荷错、订单不存在（含别的应用的订单）、订单没有进入 VOID 的历史行",
+    "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#3] 幂等按进入 VOID 的历史行：同一事件重投、新 event id、第二次申诉撤销同一次作废（跨月，新的 period 也不再开一张）都只有一张，原行不变；订单再次作废后又撤销，是新的 entry_id、新的一张，period 取当时月份",
+    "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#13] 锁内重读（订单先被改走）：另一事务持订单 advisory 锁并把订单改离 VOID、尚未提交时，撤销事件的消费者在这把锁上等待；锁释放后按最新状态跳过登记，记 warn order_appeal_restore_skipped 并确认，没有差错单",
+    "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#13] 锁内重读（订单后进入 VOID）：另一事务持订单 advisory 锁并把 ESTIMATED 的订单改成 VOID / BLACKLIST、尚未提交时，消费者在这把锁上等待；锁释放后按最新状态登记一张差错单，entry_id 是这次新进入 VOID 的历史行",
+    "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#13] 相反顺序（消费者先拿到锁）：消费者持订单 advisory 锁、登记尚未提交时，要改走订单的事务在这把锁上等待；消费者提交后差错单按改走之前的 VOID 登记，那个事务才把订单改走",
+    "test/spec/settlement/order-appeal-restore/restore.int.test.ts > [AC-B2-09gd#4] 处理：账户申诉路径回归不变（补发 85）；订单申诉（BLACKLIST）走 R12 回 ESTIMATED / WAITING（settle_period 按 received_at），不写分录、余额不变，差错单 adjusted，审计 recon_diff_restore 一条，响应带 rebate_status_after，经状态机迁移 row_version + 1、历史恰新增一行",
+    "test/spec/settlement/order-appeal-restore/restore.int.test.ts > [AC-B2-09gd#10] 处理时再核（BR-FUND-22）：平台状态又 INVALID → 20001 restore_platform_invalid；订单又被作废过（entry_id 不符）、订单已不是 VOID → 20902 order；ref_id 解析不了或 reason_code 不是 BLACKLIST → 20001 restore_not_supported；都不改订单、差错单仍 open",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#5] 主线：首次入库就被黑名单作废的已结算单（从未有快照，commission_version 0）申诉恢复后在 R12 事务内补快照（commission_version 1），之后走 worker 真实 settle 入口能入账：N 1000、预留 1500 → B 850，self 5000 → 425 入账、平台 575；比例按 paid_at 选规则版本（早单第一版、晚单与按观测时刻取 paid_at 的单第二版：预留 1000、N 800 → B 720，比例 3000）",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#5] RECEIVED 缺快照：已归因、platform_status RECEIVED、无快照的订单恢复后回 WAITING，同事务按 paid_at 的规则版本补快照（N 1000、预留 1500 → B 850，self 5000），commission_version 0 → 1；settle_period 取 received_at 的中国月份 2026-10，不是处理时刻的 2026-11，也不是 UTC 月份 2026-09",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#6] 「生成不了」三类都不恢复（BR-CALC-10，D10-1093、D10-1105、D10-1117）：选不出任何已发布版本（只有草稿或已撤销的版本，或一个都没有）；规则齐全而付款时刻取不到（platform_modified；platform 而 paid_at 为空；observed 而没有首次付款记录；来源未识别）；淘宝推广位场景经 pids 端口取不到 → 20001 restore_snapshot_unavailable，不存幂等结果，订单仍 VOID、差错单 open、无快照、无待处理行；推广位场景取得到的淘宝单照常生成（非淘礼金）",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#7] 佣金未回传照常恢复且同事务写快照类待处理行（京东 AMOUNT_PARSE_FAILED、拼多多无服务费 SERVICE_FEE_RATE_MISSING），重试扫描在佣金回传后捡到它并生成快照；版本里缺平台预留或规则的也恢复，写 RULE_VERSION_PLATFORM_MISSING，都不生成快照",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#8] 不需要补的照常恢复且不动快照：未归因回 UNATTRIBUTED、定金阶段（DEPOSIT_PAID）回 ESTIMATED，都不生成快照、不写待处理行；已有快照的不重写（commission_version 不变）",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#9] 平台恢复路径的 R12 同样补快照（BR-FUND-22）：首次入库即 INVALID、后被平台恢复的已付款单，处理后有 commission_splits，commission_version 1；生成不了的同样 20001 restore_snapshot_unavailable",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#12] 同事务：审计写失败时快照与待处理行随 R12 一起回滚（5xx，订单仍 VOID、差错单 open、无快照），修好后重试恢复一次并生成快照；已处理的差错单再处理 20902",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#12] 同事务（待处理分支）：佣金未回传（est 为空）的恢复，审计写失败时待处理行随 R12 一起回滚（5xx，订单仍 VOID、差错单 open、无快照、无待处理行）；修好后重试恢复一次，恰有一条 AMOUNT_PARSE_FAILED 待处理行",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#13] 没有已发布版本优先于佣金未回传（D10-1131）：已归因、PAID、VOID、无快照、est 与 settle 都为空，且应用没有任何已发布规则版本（一个都没有，或只有草稿和已撤销的）→ 20001 restore_snapshot_unavailable，不按佣金未回传恢复：订单仍 VOID、差错单 open、无快照、没有新增快照类待处理行（京东 AMOUNT_PARSE_FAILED、拼多多 SERVICE_FEE_RATE_MISSING 两种口径）",
+    "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#14] 付款时间早于首个已发布版本的 effective_from（paid_at 2026-08-19，首版 2026-08-20）不算生成不了（BR-CALC-11，D10-1131）：恢复回 ESTIMATED，快照按首版而不是后一版（N 1000、预留 2000 → B 800，self 4000），paid_at 保持原值，commission_version 1，无待处理行；有指向首版的 PAID_AT_BEFORE_FIRST_RULE_VERSION 告警",
+    "test/spec/settlement/order-appeal-restore/wiring.test.ts > [AC-B2-09gd#11] 装配：appeal.resolved 有生产订阅 settlement-order-appeal-restore，事件队列 evt.settlement-order-appeal-restore 为目录默认值的 standard 队列（死信 .dead），只由 worker 以并发 1、轮询 2 秒消费；真 AppModule 只在 worker 入口注册一次处理器，其余入口不注册；装配不查库、不发消息"
+  ],
+  "risk_note": "RV2, settlement order-appeal R12 (BR-FUND-22 申诉恢复 ①) plus the commission snapshot R12 makes up (BR-CALC-10; orchestrator rulings D10-1091, D10-1093, D10-1105, D10-1117, D10-1131, D10-1135, D10-1136; written back by couli #315, #316). New consumer settlement-order-appeal-restore registers one appeal_restore difference per VOID entry under the order key's lock; registering writes no order, no ledger entry, no audit. admin-recon-restore dispatches it into the existing R12. R12, also for platform restores, makes the missing snapshot on its own transaction when the order is attributed and PAID or later and has no commission_splits row: no published rule version, an unrecoverable paid time or an unreadable taobao scene refuse with restore_snapshot_unavailable and write nothing; a commission not reported or a version without the platform's rule restores and leaves the usual snapshot retry row. Depends on CT-24zzg (#3027), B1-03zk (#2958), B2-09gc (#2960), B2-09gf (#2996), B2-04zzr (#3037). Known gap per D10-1135: no regression case yet for a VOID order whose commission_version the sync moved to 1 without a snapshot; follow-up B2-09ge after this merges. Real PostgreSQL: 160/160 for the new directory with platform-restore, admin-recon-restore, risk/appeal-restore and notification/appeal-result-message. Test-machine full verify not run (AWS runners disabled, D10-555; CI is the full verification).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "0736964ee5f2ced3557bb281f7a95f29451fa47f",
+      "tree": "76454c5f9b214168b2977a423018ed825485a4f2",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-09T09:22:44Z",
+      "finished_at": "2026-11-09T09:24:42Z",
+      "red_tests": [
+        "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#1] 撤销的订单申诉登记一张差错单：type appeal_restore、source R3、period 为处理时刻的中国月份、ref_type order、ref_id `{order_key}#RESTORE#{entry_id}`、expected_fen 为有效联盟佣金正数部分（结算额优先于预估，负数记 0）、actual 0、diff 同 expected、open、dedupe_key `appeal_restore:order:{app_id}:{order_key}:{entry_id}`、resolution 六键；订单、状态历史、受益人事件、分录、余额、审计都不变；消费者记 processed_events",
+        "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#2] 不登记也不算失败：账户申诉、upheld、被拦截请求申诉直接确认；订单已不是 VOID、VOID 而 reason 不是 BLACKLIST 记 warn order_appeal_restore_skipped 并确认。拒绝（重试后死信，不记 processed_events）：载荷错、订单不存在（含别的应用的订单）、订单没有进入 VOID 的历史行",
+        "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#3] 幂等按进入 VOID 的历史行：同一事件重投、新 event id、第二次申诉撤销同一次作废（跨月，新的 period 也不再开一张）都只有一张，原行不变；订单再次作废后又撤销，是新的 entry_id、新的一张，period 取当时月份",
+        "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#13] 锁内重读（订单先被改走）：另一事务持订单 advisory 锁并把订单改离 VOID、尚未提交时，撤销事件的消费者在这把锁上等待；锁释放后按最新状态跳过登记，记 warn order_appeal_restore_skipped 并确认，没有差错单",
+        "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#13] 锁内重读（订单后进入 VOID）：另一事务持订单 advisory 锁并把 ESTIMATED 的订单改成 VOID / BLACKLIST、尚未提交时，消费者在这把锁上等待；锁释放后按最新状态登记一张差错单，entry_id 是这次新进入 VOID 的历史行",
+        "test/spec/settlement/order-appeal-restore/producer.int.test.ts > [AC-B2-09gd#13] 相反顺序（消费者先拿到锁）：消费者持订单 advisory 锁、登记尚未提交时，要改走订单的事务在这把锁上等待；消费者提交后差错单按改走之前的 VOID 登记，那个事务才把订单改走",
+        "test/spec/settlement/order-appeal-restore/restore.int.test.ts > [AC-B2-09gd#4] 处理：账户申诉路径回归不变（补发 85）；订单申诉（BLACKLIST）走 R12 回 ESTIMATED / WAITING（settle_period 按 received_at），不写分录、余额不变，差错单 adjusted，审计 recon_diff_restore 一条，响应带 rebate_status_after，经状态机迁移 row_version + 1、历史恰新增一行",
+        "test/spec/settlement/order-appeal-restore/restore.int.test.ts > [AC-B2-09gd#10] 处理时再核（BR-FUND-22）：平台状态又 INVALID → 20001 restore_platform_invalid；订单又被作废过（entry_id 不符）、订单已不是 VOID → 20902 order；ref_id 解析不了或 reason_code 不是 BLACKLIST → 20001 restore_not_supported；都不改订单、差错单仍 open",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#5] 主线：首次入库就被黑名单作废的已结算单（从未有快照，commission_version 0）申诉恢复后在 R12 事务内补快照（commission_version 1），之后走 worker 真实 settle 入口能入账：N 1000、预留 1500 → B 850，self 5000 → 425 入账、平台 575；比例按 paid_at 选规则版本（早单第一版、晚单与按观测时刻取 paid_at 的单第二版：预留 1000、N 800 → B 720，比例 3000）",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#5] RECEIVED 缺快照：已归因、platform_status RECEIVED、无快照的订单恢复后回 WAITING，同事务按 paid_at 的规则版本补快照（N 1000、预留 1500 → B 850，self 5000），commission_version 0 → 1；settle_period 取 received_at 的中国月份 2026-10，不是处理时刻的 2026-11，也不是 UTC 月份 2026-09",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#6] 「生成不了」三类都不恢复（BR-CALC-10，D10-1093、D10-1105、D10-1117）：选不出任何已发布版本（只有草稿或已撤销的版本，或一个都没有）；规则齐全而付款时刻取不到（platform_modified；platform 而 paid_at 为空；observed 而没有首次付款记录；来源未识别）；淘宝推广位场景经 pids 端口取不到 → 20001 restore_snapshot_unavailable，不存幂等结果，订单仍 VOID、差错单 open、无快照、无待处理行；推广位场景取得到的淘宝单照常生成（非淘礼金）",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#7] 佣金未回传照常恢复且同事务写快照类待处理行（京东 AMOUNT_PARSE_FAILED、拼多多无服务费 SERVICE_FEE_RATE_MISSING），重试扫描在佣金回传后捡到它并生成快照；版本里缺平台预留或规则的也恢复，写 RULE_VERSION_PLATFORM_MISSING，都不生成快照",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#8] 不需要补的照常恢复且不动快照：未归因回 UNATTRIBUTED、定金阶段（DEPOSIT_PAID）回 ESTIMATED，都不生成快照、不写待处理行；已有快照的不重写（commission_version 不变）",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#9] 平台恢复路径的 R12 同样补快照（BR-FUND-22）：首次入库即 INVALID、后被平台恢复的已付款单，处理后有 commission_splits，commission_version 1；生成不了的同样 20001 restore_snapshot_unavailable",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#12] 同事务：审计写失败时快照与待处理行随 R12 一起回滚（5xx，订单仍 VOID、差错单 open、无快照），修好后重试恢复一次并生成快照；已处理的差错单再处理 20902",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#12] 同事务（待处理分支）：佣金未回传（est 为空）的恢复，审计写失败时待处理行随 R12 一起回滚（5xx，订单仍 VOID、差错单 open、无快照、无待处理行）；修好后重试恢复一次，恰有一条 AMOUNT_PARSE_FAILED 待处理行",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#13] 没有已发布版本优先于佣金未回传（D10-1131）：已归因、PAID、VOID、无快照、est 与 settle 都为空，且应用没有任何已发布规则版本（一个都没有，或只有草稿和已撤销的）→ 20001 restore_snapshot_unavailable，不按佣金未回传恢复：订单仍 VOID、差错单 open、无快照、没有新增快照类待处理行（京东 AMOUNT_PARSE_FAILED、拼多多 SERVICE_FEE_RATE_MISSING 两种口径）",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts > [AC-B2-09gd#14] 付款时间早于首个已发布版本的 effective_from（paid_at 2026-08-19，首版 2026-08-20）不算生成不了（BR-CALC-11，D10-1131）：恢复回 ESTIMATED，快照按首版而不是后一版（N 1000、预留 2000 → B 800，self 4000），paid_at 保持原值，commission_version 1，无待处理行；有指向首版的 PAID_AT_BEFORE_FIRST_RULE_VERSION 告警",
+        "test/spec/settlement/order-appeal-restore/wiring.test.ts > [AC-B2-09gd#11] 装配：appeal.resolved 有生产订阅 settlement-order-appeal-restore，事件队列 evt.settlement-order-appeal-restore 为目录默认值的 standard 队列（死信 .dead），只由 worker 以并发 1、轮询 2 秒消费；真 AppModule 只在 worker 入口注册一次处理器，其余入口不注册；装配不查库、不发消息"
+      ],
+      "expected": [
+        "test/spec/settlement/order-appeal-restore/producer.int.test.ts",
+        "test/spec/settlement/order-appeal-restore/restore.int.test.ts",
+        "test/spec/settlement/order-appeal-restore/snapshot.int.test.ts",
+        "test/spec/settlement/order-appeal-restore/wiring.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "dc70f23ab5c763ba43ee2ada0375077cb4239f64272020ed436292d58ad2baf8"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "72af320eb661cb5c51fa1895cfc2f0c602926eda0a5412a01f34ae8de6032294"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 3,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Money review (RV2) by Codex, effort medium, per D10-1091 and D10-1075. r1 fail, three S1: commission_version used instead of the commission_splits row, fixed; the contract and the pinned BR-CALC-10 lagging, closed by CT-24zzg and the SPEC_REF upgrades. r2 fail, one S1: a successful INVALID_AFTER_SETTLE after the difference was registered was not refused; D10-1134 gave that re-check to B2-04zzr on the shared path, not repeated here. r3, scoped to that closure after the rebase onto B2-04zzr: pass, no findings; the re-check runs before the snapshot and any write for an order-appeal restore too. Code rounds 3/3. Rebase conflict review (D10-1148, not a new failed round, no bump): the rebase onto B2-04zzl (#3026) conflicted in settlement.module.ts on module-level constants only; both sides kept, no business change. Codex read-only over that file: pass; both consumers register with their own tokens on the worker entry only and forAdmin's restoreSnapshot is still wired. One S2 from the resolution, registerEventConsumer imported twice by the two sides, was removed. Assembly fix (D10-1178, reviewed under D10-1148, not a new failed round, no bump): CI went red on frozen [AC-B2-04ze#22], forWorker may register only the settle queue, so the order-appeal consumer moved behind options.orderAppealRestore as options.blacklistReview does, passed only by app.module's worker entry; frozen test unchanged, no business change. Local: test/spec/settlement/worker and order-appeal-restore unit 14/14 and integration 51/51. Codex read-only over that increment: pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claudes (claude-opus-5-5 via claude-run.sh, tester claude-independent, test 4: the third annotations only per D10-1129, the fourth two new cases only per D10-1131, approvals 60). Spec-test by Codex: r1 fail, three S1 (order-lock barriers, RECEIVED without a snapshot, the pending row's rollback), fixed in test 2; r2 pass. r3 (D10-1129 exception, no bump) was meant to be incremental but ran as a full review because the tool found no previous round and no base was set to the prior head: fail on two S1 outside that increment, one of them a real implementation defect then fixed. D10-1131 granted test 4 and r4, incremental with --base the r3 head: pass, no findings."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c532355d33e489674ec41d249943737753b8345b",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

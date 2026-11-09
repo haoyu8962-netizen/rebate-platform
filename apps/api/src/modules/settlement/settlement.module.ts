@@ -17,6 +17,10 @@ import {
   type QueueRuntime,
   type RootLogger,
 } from '../platform/index.ts';
+import {
+  createOrderAppealRestoreHandler,
+  type OrderAppealRestoreConsumer,
+} from './application/order-appeal-restore.ts';
 import type {
   AdminReconRestorePorts,
   RestoreAdminReconDiffDeps,
@@ -82,6 +86,8 @@ const SETTLE_WORKER = Symbol('SETTLEMENT_SETTLE_WORKER');
 const SETTLE_QUEUE = 'settle';
 /** The consumer of order.blacklist_hit_after_credit on the worker entry (registered at build). */
 const BLACKLIST_AFTER_CREDIT_WORKER = Symbol('SETTLEMENT_BLACKLIST_AFTER_CREDIT_WORKER');
+const ORDER_APPEAL_RESTORE_CONSUMER_TOKEN = Symbol('SETTLEMENT_ORDER_APPEAL_RESTORE_CONSUMER');
+const ORDER_APPEAL_RESTORE_CONSUMER: OrderAppealRestoreConsumer = 'settlement-order-appeal-restore';
 
 interface SettleWorkerLifecycle {
   onApplicationBootstrap(): void;
@@ -129,10 +135,12 @@ export class SettlementModule {
    * B2-04zzl: options.blacklistReview (only app.module's worker entry passes true) also registers
    * the consumer of order.blacklist_hit_after_credit; left out, the module registers the settle
    * queue alone.
+   * B2-09gd (D10-1178): options.orderAppealRestore, the same way, registers the consumer of
+   * appeal.resolved for revoked order appeals.
    */
   static forWorker(
     ports: SettlementWorkerPorts,
-    options?: { blacklistReview?: boolean },
+    options?: { blacklistReview?: boolean; orderAppealRestore?: boolean },
   ): DynamicModule {
     return {
       module: SettlementModule,
@@ -167,6 +175,44 @@ export class SettlementModule {
                     db,
                     logger: consumerLogger,
                     handler: createBlacklistAfterCreditHandler({ clock, logger: consumerLogger }),
+                  });
+                  return true;
+                },
+              },
+            ]
+          : []),
+        ...(options?.orderAppealRestore === true
+          ? [
+              {
+                // B2-09gd: appeal.resolved → the restore difference of a revoked order appeal.
+                provide: ORDER_APPEAL_RESTORE_CONSUMER_TOKEN,
+                inject: [
+                  CLOCK,
+                  ROOT_LOGGER,
+                  { token: DB_TOKEN, optional: true },
+                  { token: JOB_QUEUE, optional: true },
+                ],
+                useFactory: (
+                  clock: Clock,
+                  logger: RootLogger,
+                  db?: Kysely<DB>,
+                  queue?: QueueRuntime,
+                ): boolean => {
+                  if (db === undefined || queue === undefined) {
+                    logger.info(
+                      { consumer: ORDER_APPEAL_RESTORE_CONSUMER },
+                      'order_appeal_restore_disabled',
+                    );
+                    return false;
+                  }
+                  registerEventConsumer(queue, {
+                    consumer: ORDER_APPEAL_RESTORE_CONSUMER,
+                    db,
+                    logger,
+                    handler: createOrderAppealRestoreHandler({
+                      clock,
+                      logger: logger.child({ consumer: ORDER_APPEAL_RESTORE_CONSUMER }),
+                    }),
                   });
                   return true;
                 },
@@ -335,6 +381,7 @@ export class SettlementAdminModule {
                     minors: ports.minors(crypto),
                   }),
                   readRestoreSnapshot: ports.readRestoreSnapshot,
+                  restoreSnapshot: ports.restoreSnapshot(db, clock, logger),
                   appendBeneficiaryEvent: ports.appendBeneficiaryEvent,
                   ledger: ports.ledger({ clock, eventBus }),
                 },
