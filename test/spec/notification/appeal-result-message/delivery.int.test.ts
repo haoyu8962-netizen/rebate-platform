@@ -99,7 +99,11 @@ it.each(variants)(
       code: 'APPEAL_RESULT',
       title: '申诉结果',
       body: row.body,
-      route: null,
+      // B1-12ze (D10-1183): order rows land on OrderDetail{order_id: target_id}; account rows null.
+      route:
+        row.target_type === 'order'
+          ? { route: 'OrderDetail', params: { order_id: received.payload.target_id } }
+          : null,
       read_at: null,
     });
     expect(logs).toHaveLength(1);

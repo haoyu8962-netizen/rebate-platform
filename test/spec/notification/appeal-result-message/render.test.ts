@@ -5,14 +5,19 @@ import { payload, variants } from './fixtures.ts';
 it.each(variants)(
   '[AC-B1-12p#1] $target_type / $status 使用逐字默认文案、服务类别、仅站内与空路由',
   (row) => {
-    expect(renderAppealResultMessage(payload(row), null)).toStrictEqual({
+    const input = payload(row);
+    expect(renderAppealResultMessage(input, null)).toStrictEqual({
       code: 'APPEAL_RESULT',
       variant: row.variant,
       category: 'service',
       channels: ['inbox'],
       title: '申诉结果',
       body: row.body,
-      route: null,
+      // B1-12ze (D10-1183): an order appeal lands on its order; an account appeal has no route.
+      route:
+        row.target_type === 'order'
+          ? { route: 'OrderDetail', params: { order_id: input.target_id } }
+          : null,
     });
   },
 );

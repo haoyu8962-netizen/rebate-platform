@@ -27,6 +27,12 @@ export interface AppealResultOverride {
   readonly body_override: string | null;
 }
 
+/** B1-12ze (D10-1183): an order appeal's result lands on that order's detail. */
+export interface AppealResultRoute {
+  readonly route: 'OrderDetail';
+  readonly params: { readonly order_id: string };
+}
+
 export interface AppealResultMessage {
   readonly code: 'APPEAL_RESULT';
   readonly variant: AppealResultVariant;
@@ -34,7 +40,8 @@ export interface AppealResultMessage {
   readonly channels: readonly ['inbox'];
   readonly title: string;
   readonly body: string;
-  readonly route: null;
+  /** OrderDetail for an order appeal; an account appeal has no landing. */
+  readonly route: AppealResultRoute | null;
 }
 
 /** The consumer name of EVENT_SUBSCRIPTIONS; its queue is `evt.notification-appeal-result`. */
@@ -80,7 +87,11 @@ export function renderAppealResultMessage(
     channels: ['inbox'],
     title,
     body,
-    route: null,
+    // The landing comes from the payload only; a template never overrides it (B1-12ze, D10-1183).
+    route:
+      payload.target_type === 'order'
+        ? { route: 'OrderDetail', params: { order_id: payload.target_id } }
+        : null,
   };
 }
 
@@ -155,7 +166,7 @@ async function deliver(
       code: CODE,
       title: message.title,
       body: message.body,
-      route: null,
+      route: message.route === null ? null : JSON.stringify(message.route),
       created_at: now,
       updated_at: now,
     })

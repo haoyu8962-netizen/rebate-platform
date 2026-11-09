@@ -26,9 +26,18 @@ it.each(variants)(
       title_override: '申诉处理结果',
       body_override: '申诉已经处理。',
     });
-    await f.deliver(f.event({ target_type: row.target_type, status: row.status }));
+    const received = f.event({ target_type: row.target_type, status: row.status });
+    await f.deliver(received);
     expect((await f.rows()).inbox).toMatchObject([
-      { title: '申诉处理结果', body: '申诉已经处理。', route: null },
+      {
+        title: '申诉处理结果',
+        body: '申诉已经处理。',
+        // B1-12ze (D10-1183): order rows land on OrderDetail{order_id: target_id}; account rows null.
+        route:
+          row.target_type === 'order'
+            ? { route: 'OrderDetail', params: { order_id: received.payload.target_id } }
+            : null,
+      },
     ]);
     expect((await f.rows()).logs).toHaveLength(1);
     expect(await other.rows()).toEqual({ inbox: [], logs: [] });
@@ -91,9 +100,12 @@ it.each(variants.flatMap((row) => [true, false].map((need_reauth) => ({ ...row, 
       title_override: '处理结果',
       body_override: '申诉已经处理。',
     });
-    await f.deliver(
-      f.event({ target_type: row.target_type, status: row.status, need_reauth: row.need_reauth }),
-    );
+    const received = f.event({
+      target_type: row.target_type,
+      status: row.status,
+      need_reauth: row.need_reauth,
+    });
+    await f.deliver(received);
     const rows = await f.rows();
     expect(rows.inbox).toMatchObject([
       {
@@ -102,7 +114,12 @@ it.each(variants.flatMap((row) => [true, false].map((need_reauth) => ({ ...row, 
           row.variant === 'account_revoked' && row.need_reauth
             ? '申诉已经处理。购物前需重新完成淘宝授权。'
             : '申诉已经处理。',
-        route: null,
+        // B1-12ze (D10-1183): the template's Wallet route never applies; order rows land on
+        // OrderDetail{order_id: target_id}, account rows stay null.
+        route:
+          row.target_type === 'order'
+            ? { route: 'OrderDetail', params: { order_id: received.payload.target_id } }
+            : null,
       },
     ]);
     expect(rows.logs.map(({ channel, status }) => ({ channel, status }))).toEqual([
