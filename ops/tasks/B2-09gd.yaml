@@ -36,5 +36,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/order-appeal-restore/**'
-status: todo
-pr: null
+status: done
+pr: 3048
