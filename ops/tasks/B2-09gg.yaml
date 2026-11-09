@@ -1,0 +1,27 @@
+id: B2-09gg
+repo: rebate-platform
+title: 订单申诉撤销的 R13（BR-FUND-22 申诉恢复 ②）——可申诉订单放开到 BLACKLIST_CONFIRMED 扣回的 CLAWED_BACK，生产方登记 appeal_restore，处理走现有 R13
+type: impl
+# 2026-11-09 funds 入账（编排 D10-1180、D10-1181；方案 couli-runs/FUNDS-quote/fu-r13-blacklist-plan.md）。开关 order.blacklist_clawback.enabled 打开的前置。
+# voidedOrderOwner（app.module.ts）口径放开：VOID + BLACKLIST 或 CLAWED_BACK + BLACKLIST（reason=BLACKLIST 的 CLAWED_BACK 只来自 R8 BLACKLIST_CONFIRMED）。
+# 生产方 order-appeal-restore.ts：register() 接受 CLAWED_BACK + BLACKLIST，entry 取 CLAWED_BACK 那一行，ref_id / dedupe_key 同 R12，resolution.rebate_status 写实际值。
+# 处理侧：isOrderAppealRestore 已走平台恢复路径，R13 记账不改；只在需要时改注释。用户自己提交订单申诉另归 identity（B1-03zl，D10-1181），本单不做。
+# 规则测试要钉：净额与 B{id} 凭证的关系、处理时再核（D10-1134）、二次申诉去重。RV2，规则测试新鲜独立 Claude，money Codex medium。
+refs: [BR-FUND-22, BR-ID-36]
+refs_hash:
+  BR-FUND-22: c9930aaf2459
+  BR-ID-36: 2758a53910fa
+deps: [CT-24zzh, B2-09gd]
+paths:
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/settlement/application/order-appeal-restore*.ts'
+  - 'apps/api/src/modules/settlement/application/admin-recon-restore.ts'
+  - 'apps/api/src/modules/risk/application/admin-appeals-write.ts'
+test_paths:
+  - 'test/spec/settlement/order-appeal-restore-r13/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/order-appeal-restore-r13/**'
+status: todo
