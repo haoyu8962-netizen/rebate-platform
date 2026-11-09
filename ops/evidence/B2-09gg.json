@@ -1,0 +1,104 @@
+{
+  "task": "B2-09gg",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "efa99f247c7d68782a79b04370954d69e376a5b0",
+  "red_tests": [
+    "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#9] 处理时再核（D10-1134）：差错单登记后（含同一时刻）有成功的 INVALID_AFTER_SETTLE 记录 → 20001 restore_platform_invalid，什么都不写，差错单仍 open；登记之前就成功的记录不算，该单照常恢复",
+    "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#10] 处理时再核：登记之后有效佣金的正数部分变为 0（结算佣金 0；结算佣金 −50）→ 20001 restore_commission_zero，什么都不写，差错单仍 open",
+    "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#11] 过期差错单：订单经 R13 恢复后再次被黑名单确认扣回（新的历史行），旧差错单处理 → 20902 data.resource=order，什么都不写、仍 open；新一轮撤销登记新差错单（entry_id 不同），处理后恢复",
+    "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#12] 多租户：别的 app 的处理人拿本 app 的差错单 id → 20001 data.fields=[recon_diff_id]，差错单不变；本 app 处理后恢复，只动本 app——别的 app 用不同 sub_order_id 的 CLAWED_BACK 订单、差错单、账务、审计一律不变",
+    "test/spec/settlement/order-appeal-restore-r13/producer.int.test.ts > [AC-B2-09gg#3] 撤销的订单申诉（CLAWED_BACK + BLACKLIST）登记一张差错单：appeal_restore、R3、period 为处理时刻的中国月份、ref_type order、ref_id `{order_key}#RESTORE#{entry_id}`、expected_fen 为当前有效佣金正数部分（结算额 1000；结算额改成 777 取 777；结算额 −50 记 0）、actual 0、diff 同 expected、open、dedupe_key、resolution 七键（reason_code BLACKLIST、rebate_status CLAWED_BACK）；订单、状态历史、分录、余额、审计都不变，事件确认",
+    "test/spec/settlement/order-appeal-restore-r13/producer.int.test.ts > [AC-B2-09gg#4] 不登记也不算失败：维持（upheld）的 CLAWED_BACK + BLACKLIST 不登记、事件确认；退款扣回的 CLAWED_BACK（原因不是 BLACKLIST）撤销也不登记，只记一行 order_appeal_restore_skipped、事件确认；同一单随后撤销才登记",
+    "test/spec/settlement/order-appeal-restore-r13/producer.int.test.ts > [AC-B2-09gg#5] 去重按进入 CLAWED_BACK 的历史行：同一事件重投、新事件 id、第二次申诉撤销同一次扣回（跨月，新的 period 也不再开一张）都落同一张差错单，原行不变（appeal_id 仍是第一次的）",
+    "test/spec/settlement/order-appeal-restore-r13/register-scope.int.test.ts > [AC-B2-09gg#13] 跨 app 隔离：两个 app 各有一笔真实黑名单确认扣回的订单（sub_order_id 不同），一方的客服登记另一方的订单 → 20001 data.fields=[target_id]，两边的申诉、审计、订单、账务都不变；同样的两笔订单在各自 app 里受理（证明被拒是因为租户，不是因为订单不可申诉）",
+    "test/spec/settlement/order-appeal-restore-r13/register-scope.int.test.ts > [AC-B2-09gg#14] 订单申诉不改账户风险状态（BR-ID-36、OPS-07）：所属用户因别的原因 banned，对真实黑名单扣回的订单登记、撤销结案、维持结案、事件投递之后 user_risk_state 整行原样（不变 appealing、撤销也不解封），appeals.prev_risk_state 为空；撤销照常登记差错单，维持不登记",
+    "test/spec/settlement/order-appeal-restore-r13/register-scope.int.test.ts > [AC-B2-09gg#15] 订单申诉不改账户风险状态（BR-ID-36、OPS-07）：所属用户因别的原因 frozen 且带 frozen_until，对真实黑名单扣回的订单登记、撤销结案、维持结案、事件投递之后 user_risk_state 整行原样（state、reason、frozen_until 都不变，撤销也不解冻），appeals.prev_risk_state 为空；撤销照常登记差错单，维持不登记",
+    "test/spec/settlement/order-appeal-restore-r13/register.int.test.ts > [AC-B2-09gg#1] 全链路：真实入账、真实黑名单确认扣回（CLAWED_BACK / BLACKLIST）的订单，客服代登记申诉受理为处理中，撤销结案，事件日志里的 appeal.resolved（信封 data）投递给 worker 的消费者后登记一张差错单：appeal_restore、R3、ref_type order、ref_id `{order_key}#RESTORE#{entry_id}`（进入 CLAWED_BACK 的历史行）、resolution 带真实 appeal_id、rebate_status CLAWED_BACK",
+    "test/spec/settlement/order-appeal-restore-r13/register.int.test.ts > [AC-B2-09gg#2] 受理范围：退款扣回的 CLAWED_BACK（原因不是 BLACKLIST）、已入账未扣回的订单、不存在的订单仍 20001 data.fields=[target_id]；VOID + BLACKLIST 照旧受理；CLAWED_BACK + BLACKLIST 受理",
+    "test/spec/settlement/order-appeal-restore-r13/restore.int.test.ts > [AC-B2-09gg#6] 处理走通（真实 step-up）：真实黑名单扣回（425 / 85 / 42，平台 448）后结算佣金变为 2000，撤销登记的差错单经 restore 走 R13：CLAWED_BACK → CREDITED；按当前有效佣金 B 1700 重算，ADMIN_ADJUST（RESTORE）本人 850、直推 170、间推 85、平台 895，键 `{order_key}:{user_id}:{role}:RESTORE:{id}` 与 `{order_key}:PLATFORM:RESTORE:{id}`；恢复后净额逐受益人等于重算应得；同事务 booked_base_fen 1700、booked_n_fen 2000、refunded_quantity_r9_baseline = 当时 refunded_quantity（2），refunded_quantity_at_credit 不动；响应 restored_fen 1105、rebate_status_after CREDITED；原 `B{id}` 凭证与分录不变",
+    "test/spec/settlement/order-appeal-restore-r13/restore.int.test.ts > [AC-B2-09gg#7] 扣回前有过部分退款（差额按净额算，不是按首次入账）：首次入账 425 / 85 / 42、平台 448，部分退款 N 1000 → 600 先扣到 255 / 51 / 25、平台 269（R9），确认扣回把这些净额清零；撤销后 R13 按当前有效佣金 600（B 510）写 255 / 51 / 25、平台 269，恢复后净额逐受益人等于重算应得，不是首次入账额；booked_base_fen 510、booked_n_fen 600",
+    "test/spec/settlement/order-appeal-restore-r13/restore.int.test.ts > [AC-B2-09gg#8] 幂等：同一 Idempotency-Key 同一请求体回放返回第一次的应答，不重复记账、不再写审计、不再改订单"
+  ],
+  "risk_note": "RV2 settlement + risk (B2-09gg; BR-FUND-22 申诉恢复 ②, BR-ID-36 ②; D10-1180, D10-1181). An order clawed back by BLACKLIST_CONFIRMED (CLAWED_BACK, reason BLACKLIST, only ever written by that R8) can now be the target of a registered order appeal, and a revoked appeal registers the same appeal_restore difference as the R12 path, with the rebate-history row that entered CLAWED_BACK. Handling goes through the existing platform-restore R13 unchanged. No new posting logic, no migration. Users submitting order appeals themselves is a separate identity task (B1-03zl).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "efa99f247c7d68782a79b04370954d69e376a5b0",
+      "tree": "2a7d5acf26cf760595296ab9789e18ee912e5188",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-09T13:13:46Z",
+      "finished_at": "2026-11-09T13:14:05Z",
+      "red_tests": [
+        "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#9] 处理时再核（D10-1134）：差错单登记后（含同一时刻）有成功的 INVALID_AFTER_SETTLE 记录 → 20001 restore_platform_invalid，什么都不写，差错单仍 open；登记之前就成功的记录不算，该单照常恢复",
+        "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#10] 处理时再核：登记之后有效佣金的正数部分变为 0（结算佣金 0；结算佣金 −50）→ 20001 restore_commission_zero，什么都不写，差错单仍 open",
+        "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#11] 过期差错单：订单经 R13 恢复后再次被黑名单确认扣回（新的历史行），旧差错单处理 → 20902 data.resource=order，什么都不写、仍 open；新一轮撤销登记新差错单（entry_id 不同），处理后恢复",
+        "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts > [AC-B2-09gg#12] 多租户：别的 app 的处理人拿本 app 的差错单 id → 20001 data.fields=[recon_diff_id]，差错单不变；本 app 处理后恢复，只动本 app——别的 app 用不同 sub_order_id 的 CLAWED_BACK 订单、差错单、账务、审计一律不变",
+        "test/spec/settlement/order-appeal-restore-r13/producer.int.test.ts > [AC-B2-09gg#3] 撤销的订单申诉（CLAWED_BACK + BLACKLIST）登记一张差错单：appeal_restore、R3、period 为处理时刻的中国月份、ref_type order、ref_id `{order_key}#RESTORE#{entry_id}`、expected_fen 为当前有效佣金正数部分（结算额 1000；结算额改成 777 取 777；结算额 −50 记 0）、actual 0、diff 同 expected、open、dedupe_key、resolution 七键（reason_code BLACKLIST、rebate_status CLAWED_BACK）；订单、状态历史、分录、余额、审计都不变，事件确认",
+        "test/spec/settlement/order-appeal-restore-r13/producer.int.test.ts > [AC-B2-09gg#4] 不登记也不算失败：维持（upheld）的 CLAWED_BACK + BLACKLIST 不登记、事件确认；退款扣回的 CLAWED_BACK（原因不是 BLACKLIST）撤销也不登记，只记一行 order_appeal_restore_skipped、事件确认；同一单随后撤销才登记",
+        "test/spec/settlement/order-appeal-restore-r13/producer.int.test.ts > [AC-B2-09gg#5] 去重按进入 CLAWED_BACK 的历史行：同一事件重投、新事件 id、第二次申诉撤销同一次扣回（跨月，新的 period 也不再开一张）都落同一张差错单，原行不变（appeal_id 仍是第一次的）",
+        "test/spec/settlement/order-appeal-restore-r13/register-scope.int.test.ts > [AC-B2-09gg#13] 跨 app 隔离：两个 app 各有一笔真实黑名单确认扣回的订单（sub_order_id 不同），一方的客服登记另一方的订单 → 20001 data.fields=[target_id]，两边的申诉、审计、订单、账务都不变；同样的两笔订单在各自 app 里受理（证明被拒是因为租户，不是因为订单不可申诉）",
+        "test/spec/settlement/order-appeal-restore-r13/register-scope.int.test.ts > [AC-B2-09gg#14] 订单申诉不改账户风险状态（BR-ID-36、OPS-07）：所属用户因别的原因 banned，对真实黑名单扣回的订单登记、撤销结案、维持结案、事件投递之后 user_risk_state 整行原样（不变 appealing、撤销也不解封），appeals.prev_risk_state 为空；撤销照常登记差错单，维持不登记",
+        "test/spec/settlement/order-appeal-restore-r13/register-scope.int.test.ts > [AC-B2-09gg#15] 订单申诉不改账户风险状态（BR-ID-36、OPS-07）：所属用户因别的原因 frozen 且带 frozen_until，对真实黑名单扣回的订单登记、撤销结案、维持结案、事件投递之后 user_risk_state 整行原样（state、reason、frozen_until 都不变，撤销也不解冻），appeals.prev_risk_state 为空；撤销照常登记差错单，维持不登记",
+        "test/spec/settlement/order-appeal-restore-r13/register.int.test.ts > [AC-B2-09gg#1] 全链路：真实入账、真实黑名单确认扣回（CLAWED_BACK / BLACKLIST）的订单，客服代登记申诉受理为处理中，撤销结案，事件日志里的 appeal.resolved（信封 data）投递给 worker 的消费者后登记一张差错单：appeal_restore、R3、ref_type order、ref_id `{order_key}#RESTORE#{entry_id}`（进入 CLAWED_BACK 的历史行）、resolution 带真实 appeal_id、rebate_status CLAWED_BACK",
+        "test/spec/settlement/order-appeal-restore-r13/register.int.test.ts > [AC-B2-09gg#2] 受理范围：退款扣回的 CLAWED_BACK（原因不是 BLACKLIST）、已入账未扣回的订单、不存在的订单仍 20001 data.fields=[target_id]；VOID + BLACKLIST 照旧受理；CLAWED_BACK + BLACKLIST 受理",
+        "test/spec/settlement/order-appeal-restore-r13/restore.int.test.ts > [AC-B2-09gg#6] 处理走通（真实 step-up）：真实黑名单扣回（425 / 85 / 42，平台 448）后结算佣金变为 2000，撤销登记的差错单经 restore 走 R13：CLAWED_BACK → CREDITED；按当前有效佣金 B 1700 重算，ADMIN_ADJUST（RESTORE）本人 850、直推 170、间推 85、平台 895，键 `{order_key}:{user_id}:{role}:RESTORE:{id}` 与 `{order_key}:PLATFORM:RESTORE:{id}`；恢复后净额逐受益人等于重算应得；同事务 booked_base_fen 1700、booked_n_fen 2000、refunded_quantity_r9_baseline = 当时 refunded_quantity（2），refunded_quantity_at_credit 不动；响应 restored_fen 1105、rebate_status_after CREDITED；原 `B{id}` 凭证与分录不变",
+        "test/spec/settlement/order-appeal-restore-r13/restore.int.test.ts > [AC-B2-09gg#7] 扣回前有过部分退款（差额按净额算，不是按首次入账）：首次入账 425 / 85 / 42、平台 448，部分退款 N 1000 → 600 先扣到 255 / 51 / 25、平台 269（R9），确认扣回把这些净额清零；撤销后 R13 按当前有效佣金 600（B 510）写 255 / 51 / 25、平台 269，恢复后净额逐受益人等于重算应得，不是首次入账额；booked_base_fen 510、booked_n_fen 600",
+        "test/spec/settlement/order-appeal-restore-r13/restore.int.test.ts > [AC-B2-09gg#8] 幂等：同一 Idempotency-Key 同一请求体回放返回第一次的应答，不重复记账、不再写审计、不再改订单"
+      ],
+      "expected": [
+        "test/spec/settlement/order-appeal-restore-r13/guards.int.test.ts",
+        "test/spec/settlement/order-appeal-restore-r13/producer.int.test.ts",
+        "test/spec/settlement/order-appeal-restore-r13/register-scope.int.test.ts",
+        "test/spec/settlement/order-appeal-restore-r13/register.int.test.ts",
+        "test/spec/settlement/order-appeal-restore-r13/restore.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "060dcdafe709cd55108477aa467e094feba768c73f47313350231623b47740de"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base the spec commit: pass, no findings, all checklist items ok. Before pushing, on a real local PostgreSQL (Colima, single worker): the new rule tests and the related frozen groups, 327 tests with 325 passed; the two timeouts at 60 s ([AC-B1-03ze#47] and [AC-B2-04zzl#32], neither touching this change) passed when their files were rerun alone."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by a fresh independent Claude in 2 attempts. Codex spec-test r1 fail (2 S1: cross-app isolation of the widened order lookup, account risk state unchanged by an order appeal), r2 pass, no findings."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "70f10de061950a56d037e0be3e67ba0d33e96af8",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

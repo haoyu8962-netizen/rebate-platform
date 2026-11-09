@@ -2531,9 +2531,10 @@ function adminAppealReadPorts(db: Kysely<Database>, crypto: FieldCrypto): AdminA
   };
 }
 /**
- * B1-03ze: risk's appeal console write port — the owner of a sub-order of this app whose rebate
- * risk control voided (rebate_status VOID, reason BLACKLIST; BR-ATTR-26), the order target of a
- * registered appeal. Building it reads nothing.
+ * B1-03ze, B2-09gg: risk's appeal console write port — the owner of a sub-order of this app whose
+ * rebate risk control voided or clawed back (rebate_status VOID or CLAWED_BACK, reason BLACKLIST;
+ * BR-ATTR-26, BR-FUND-22 申诉恢复 ①②, D10-1180), the order target of a registered appeal. Building
+ * it reads nothing.
  */
 function adminAppealWritePorts(db: Kysely<Database>): AdminAppealsWritePorts {
   return {
@@ -2544,7 +2545,7 @@ function adminAppealWritePorts(db: Kysely<Database>): AdminAppealsWritePorts {
         .select('user_id')
         .where('app_id', '=', appId)
         .where('order_id', '=', orderId)
-        .where('rebate_status', '=', 'VOID')
+        .where('rebate_status', 'in', ['VOID', 'CLAWED_BACK'])
         .where('reason', '=', 'BLACKLIST')
         .executeTakeFirst();
       return row?.user_id ?? null;

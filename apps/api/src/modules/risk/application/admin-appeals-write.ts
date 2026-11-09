@@ -127,8 +127,9 @@ export interface AdminAppealsWriteActor extends AdminAppealsActor {
 /** Reads of other modules' tables, built by app.module (risk imports none of those modules). */
 export interface AdminAppealsWritePorts {
   /**
-   * orders: the owner (user_id) of this app's sub-order whose rebate risk control voided
-   * (rebate_status VOID, reason BLACKLIST; BR-ATTR-26), or null when there is no such order.
+   * orders: the owner (user_id) of this app's sub-order whose rebate risk control voided or clawed
+   * back (rebate_status VOID or CLAWED_BACK, reason BLACKLIST; BR-ATTR-26, D10-1180), or null when
+   * there is no such order.
    */
   voidedOrderOwner(appId: string, orderId: string): Promise<string | null>;
 }
