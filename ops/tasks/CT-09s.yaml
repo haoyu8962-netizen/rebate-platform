@@ -7,7 +7,7 @@ type: contract
 refs: [BR-TEXT-10, BR-TEXT-14]
 refs_hash:
   BR-TEXT-10: 585ad9a61b27
-  BR-TEXT-14: 085c79c572ad
+  BR-TEXT-14: 154af0ecc5d7
 deps: []
 paths:
   - 'specs/ui-states.yaml'
