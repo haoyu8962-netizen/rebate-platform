@@ -1,0 +1,25 @@
+id: B2-04zzs
+repo: rebate-platform
+title: 扣回 / 作废的订单原因码对齐 BR-TEXT-05 写入来源 ①（淘宝结算后维权、退到 0、维权被结算额 0 回应）（FU-CLAWBACK-REASON-CHECK）
+type: impl
+# 2026-11-09 be 入账（编排 D10-1126 ①、07:41 更正；be 只读深核见 notices 07:23）。只改 orders.reason / reason_sub（及随之的 order.clawed_back 事件 reason），不改金额、幂等键、sub_type、恢复资格。a) 淘宝维权（orders/jobs/rights-sync.ts 现一律 type RIGHTS、不读适配器已解析的 earning_at）：维权时已结算（earning_time 有值）→ REFUND / AFTER_SETTLE；确认收货前 → REFUND / IN_SALE；收货后结算前 → RIGHTS / AFTER_SALE（BR-TEXT-05 细则「写入来源」①，负责人 11-07）。只改 reason / 上下文，不借 REFUND_AFTER_SETTLE 这个 cause（clawback-order.ts FULL_CAUSES 会强制 N_new=0，部分维权变全额扣回）。b①) 退款到剩余数量 0 走 PARTIAL_REFUND → R8：reason 由 COMMISSION_ZERO 改 REFUND（05_CALC BR-CALC-15 + 06_FUND BR-FUND-08 表）；「退一部分、佣金降到 0」保持 COMMISSION_ZERO。b②) 等待中的维权被结算额 0 回应走 settleDiff 转 R8：reason 按全额维权行——淘宝取 REFUND / AFTER_SETTLE（已入账的淘宝单维权时必然已结算），其他平台取 RIGHTS；sub_type 保持 FULL（D10-1133 ④）。依赖 B2-04zzr（同改 settlement/clawback、rebate、rights，排在其后）。
+refs: [BR-TEXT-05, BR-FUND-08]
+refs_hash:
+  BR-TEXT-05: e22ebfe2491e
+  BR-FUND-08: 4135d1b47230
+deps: [B2-04zzr]
+paths:
+  - 'apps/api/src/modules/orders/jobs/rights-sync.ts'
+  - 'apps/api/src/modules/orders/application/rights-sync.ts'
+  - 'apps/api/src/modules/settlement/rights/**'
+  - 'apps/api/src/modules/settlement/clawback/**'
+  - 'apps/api/src/modules/settlement/rebate/**'
+  - 'test/spec/settlement/clawback-reason/**'
+test_paths:
+  - 'test/spec/settlement/clawback-reason/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
