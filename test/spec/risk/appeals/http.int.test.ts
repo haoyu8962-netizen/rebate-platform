@@ -147,7 +147,6 @@ for (const body of [
   { target_type: 'account', content: '伪造身份', user_id: randomUUID() },
   { target_type: 'account', content: '伪造品牌', app_id: 'another_app' },
   { target_type: 'order', content: '无订单 id' },
-  { target_type: 'order', target_id: randomUUID(), content: '订单未接入' },
 ]) {
   it(`[AC-B1-03i#19] 非法或未支持请求 ${JSON.stringify(body)} 返回 20001 且无业务写入`, async () => {
     const c = await client(f);

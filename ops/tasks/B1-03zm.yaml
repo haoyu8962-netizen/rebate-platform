@@ -1,0 +1,18 @@
+id: B1-03zm
+repo: rebate-platform
+title: test-change B1-03zl 前置：冻结 [AC-B1-03i#19] 参数表删去「target_type=order + target_id + 订单未接入」一行（B1-03i 的过渡口径，未知订单现应 30701，已由 B1-03zl 新目录更严的用例覆盖），其余不动
+type: test-change
+# 2026-11-09 identity 入账（编排 D10-1191 ①，D10-1188 / D10-1190 作废）。那行是 B1-03i 台账写明的「B1-09 之前按 20001 拒绝」过渡口径；B1-03zl 实现 target_type=order 后它会变红。
+# B1-03zl 的 test/spec/risk/order-appeals/** 已钉「不存在 / 非本人 order_id → 30701、无写入」，比原行更严，不减覆盖。缺 target_id 的 order 行（仍 20001）与其他行一字不动。
+# 新鲜独立 Claude 改、另一位只读复核；台账同 PR（同 B1-04zzzu 先例，tester none）；改第一类保护路径，按 #24 由编排加标签。不涉及资金。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/risk/appeals/http.int.test.ts'
+  - 'ops/tasks/B1-03zm.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
