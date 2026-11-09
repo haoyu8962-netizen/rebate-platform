@@ -7,6 +7,7 @@ type: impl
 # 实际后果（规则测试要钉）：BR-FUND-19 ⑧（db/invariants/ledger/08_invalid-still-credited.sql）据这一行发现「P7 后又成 CREDITED」的单（P7 时未入账被作废、之后经 R12 恢复再入账）。R13（CLAWED_BACK→CREDITED）⑧ 要不要报不进本单（D10-1125，编排记待回写）。三张 status-map 现无 PLATFORM_PUNISH 码，处罚经测试替身的 source.event 钉。
 # 不进本单：淘宝结算后维权的原因、结算后整单退款原因码（FU-CLAWBACK-REASON-CHECK，本单开出后先只读深核）。
 # 2026-11-09 补（D10-1126 ② ③、D10-1133）：⑧ 不算合法恢复之后的单——按 db/invariants 只增不改，新增替代文件 10_invalid-still-credited-since-restore.sql，superseded.json 登记旧 08 被替代（照 B2-02l 先例）；最后一次恢复取 app.order_status_history（field rebate、event ADMIN_RESTORE、from_status VOID / CLAWED_BACK）的 max(at)，只计 order_rights.created_at 不早于它的成功 INVALID_AFTER_SETTLE。P7 行 platform_rights_no 取事件标识 'P' || 事件进入时的 row_version（与 BR-FUND-08 同值），重放不多写、恢复后再失效写新行。处理时再核（settlement/application/platform-restore.ts，R12 / R13）：差错单登记（recon_diffs.created_at）之后写入的成功 INVALID_AFTER_SETTLE 视为平台又失效、不恢复；ledger 的 ReconDiffRestoreRow 补 created_at。
+# 2026-11-09 补（D10-1140）：⑧ 由 10_invalid-still-credited-since-restore.sql 替代旧 08 后，两个冻结夹具写死的旧文件名照 D10-327 与 03→09 先例改成新文件名——test/spec/ledger/daily-check-execute/kit.ts:66（FILES['08']）与 test/spec/settlement/admin-union-receipts/kit.ts:97（INVARIANT_FILES），只改这两处，由新鲜独立 Claude 改、另一位只读复审「只改这两处」；合并时编排按 #24 核后加标签。
 refs: [BR-FUND-01, BR-FUND-02, BR-FUND-19, BR-FUND-22]
 refs_hash:
   BR-FUND-01: de36644cdd41
@@ -23,8 +24,12 @@ paths:
   - 'db/invariants/ledger/10_invalid-still-credited-since-restore.sql'
   - 'db/invariants/ledger/superseded.json'
   - 'test/spec/settlement/sync-order-rights/**'
+  - 'test/spec/ledger/daily-check-execute/kit.ts'
+  - 'test/spec/settlement/admin-union-receipts/kit.ts'
 test_paths:
   - 'test/spec/settlement/sync-order-rights/**'
+  - 'test/spec/ledger/daily-check-execute/kit.ts'
+  - 'test/spec/settlement/admin-union-receipts/kit.ts'
 impl: claude
 tester: claude-independent
 accept:
