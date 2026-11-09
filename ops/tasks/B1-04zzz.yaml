@@ -18,4 +18,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/orders/rescan-config-wiring/**'
-status: todo
+status: done
+pr: 2746

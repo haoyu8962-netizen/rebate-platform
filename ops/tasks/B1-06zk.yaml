@@ -21,4 +21,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/merge-pdd-open-tombstone/**'
-status: todo
+status: done
+pr: 3023

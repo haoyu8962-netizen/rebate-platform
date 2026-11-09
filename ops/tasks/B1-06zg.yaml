@@ -34,4 +34,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/shop-open/**'
-status: todo
+status: done
+pr: 2745

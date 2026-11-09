@@ -26,4 +26,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/pdd-pid-filings/**'
-status: todo
+status: done
+pr: 2983
