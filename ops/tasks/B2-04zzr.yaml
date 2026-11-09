@@ -6,16 +6,22 @@ type: impl
 # 做法（实现自定细节，留记录）：order_rights 仍只经 settlement 写（BR-FUND-01）；在 settlement 处理订单同步更新的同一事务内，按 source.event 写这一行（P7：event PLATFORM_INVALID 且 from_status SETTLED；处罚：event PLATFORM_PUNISH），不论 rebate_status（已入账、未入账、已作废都写），platform_rights_no 为 null，幂等落在 order_rights_dedupe_key（app_id, order_id, type, platform_rights_no NULLS NOT DISTINCT）——同一事件重放不多写；rights_pending 照 BR-FUND-01 在同一事务重算（SUCCEEDED 不使其为 true）。已入账的扣回（R8，P{row_version} 键、CLAWBACK 凭证、原因码）、未入账的作废（R6）、金额与状态迁移都不变；这一行不得再触发第二次扣回（rights.record 的成功扣回路径不经过这里）。
 # 实际后果（规则测试要钉）：BR-FUND-19 ⑧（db/invariants/ledger/08_invalid-still-credited.sql）据这一行发现「P7 后又成 CREDITED」的单（P7 时未入账被作废、之后经 R12 恢复再入账）。R13（CLAWED_BACK→CREDITED）⑧ 要不要报不进本单（D10-1125，编排记待回写）。三张 status-map 现无 PLATFORM_PUNISH 码，处罚经测试替身的 source.event 钉。
 # 不进本单：淘宝结算后维权的原因、结算后整单退款原因码（FU-CLAWBACK-REASON-CHECK，本单开出后先只读深核）。
-refs: [BR-FUND-01, BR-FUND-02, BR-FUND-19]
+# 2026-11-09 补（D10-1126 ② ③、D10-1133）：⑧ 不算合法恢复之后的单——按 db/invariants 只增不改，新增替代文件 10_invalid-still-credited-since-restore.sql，superseded.json 登记旧 08 被替代（照 B2-02l 先例）；最后一次恢复取 app.order_status_history（field rebate、event ADMIN_RESTORE、from_status VOID / CLAWED_BACK）的 max(at)，只计 order_rights.created_at 不早于它的成功 INVALID_AFTER_SETTLE。P7 行 platform_rights_no 取事件标识 'P' || 事件进入时的 row_version（与 BR-FUND-08 同值），重放不多写、恢复后再失效写新行。处理时再核（settlement/application/platform-restore.ts，R12 / R13）：差错单登记（recon_diffs.created_at）之后写入的成功 INVALID_AFTER_SETTLE 视为平台又失效、不恢复；ledger 的 ReconDiffRestoreRow 补 created_at。
+refs: [BR-FUND-01, BR-FUND-02, BR-FUND-19, BR-FUND-22]
 refs_hash:
-  BR-FUND-01: c03344713dbf
+  BR-FUND-01: de36644cdd41
   BR-FUND-02: 382c4075d2cb
   BR-FUND-19: e6205ee4fcc1
+  BR-FUND-22: 075baebf41f3
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/clawback/**'
   - 'apps/api/src/modules/settlement/rebate/**'
   - 'apps/api/src/modules/settlement/rights/**'
+  - 'apps/api/src/modules/settlement/application/platform-restore.ts'
+  - 'apps/api/src/modules/ledger/application/admin-recon-diff-restore.ts'
+  - 'db/invariants/ledger/10_invalid-still-credited-since-restore.sql'
+  - 'db/invariants/ledger/superseded.json'
   - 'test/spec/settlement/sync-order-rights/**'
 test_paths:
   - 'test/spec/settlement/sync-order-rights/**'
