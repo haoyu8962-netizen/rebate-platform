@@ -28,12 +28,17 @@ const RELEASED_AT = new Date('2026-08-01T00:00:00.000Z');
 /**
  * A scripted connection: every statement is recorded, and the answer is chosen by the table it
  * reads. The user's only pdd row is an old released one at row_version 3; `banned` sets the
- * committed risk state.
+ * committed risk state; `tombstoned` sets users.status deleted (B1-06zk).
  */
-function scripted(banned = false): { readonly db: Kysely<DB>; readonly statements: string[] } {
+function scripted(
+  banned = false,
+  tombstoned = false,
+): { readonly db: Kysely<DB>; readonly statements: string[] } {
   const statements: string[] = [];
   const rowsFor = (sql: string): unknown[] => {
-    if (sql.includes('from "users"')) return [{ id: USER }];
+    if (sql.includes('from "users"')) {
+      return [{ id: USER, status: tombstoned ? 'deleted' : 'active' }];
+    }
     if (sql.includes('from "user_risk_state"')) return banned ? [{ state: 'banned' }] : [];
     if (sql.startsWith('insert into "union_bindings"')) {
       return [{ id: '0199a3b4-5c6d-7000-8000-0000000000c2', union_account_id: ACCOUNT }];
@@ -103,6 +108,31 @@ describe('activatePddBinding user lock (F1-07c, BR-ID-20 / BR-ID-31)', () => {
     expect(statements[0]).toContain('for no key update');
     expect(statements.some((s) => s.includes('from "union_auth_sessions"'))).toBe(false);
     expect(statements.some((s) => s.startsWith('insert into "union_bindings"'))).toBe(true);
+  });
+
+  it('[AC-B1-06zk unit] a tombstone read after the lock and the ban read gets banned; nothing written', async () => {
+    const { db, statements } = scripted(false, true);
+    const written = await activatePddBinding(db, clock, input);
+    expect(written).toEqual({ kind: 'banned' });
+    expect(statements[0]).toContain('for no key update');
+    const risk = statements.findIndex((s) => s.includes('from "user_risk_state"'));
+    const status = statements.findIndex((s, i) => i > 0 && s.includes('from "users"'));
+    expect(risk).toBeGreaterThan(0);
+    expect(status).toBeGreaterThan(risk);
+    expect(statements.some((s) => s.includes('from "union_bindings"'))).toBe(false);
+    expect(statements.some((s) => s.startsWith('insert'))).toBe(false);
+    expect(statements.some((s) => s.startsWith('update'))).toBe(false);
+    expect(statements.some((s) => s.includes('SAVEPOINT'))).toBe(false);
+  });
+
+  it('[AC-B1-06zk unit] a user who is not a tombstone activates as before, after the status read', async () => {
+    const { db, statements } = scripted(false, false);
+    const written = await activatePddBinding(db, clock, input);
+    expect(written.kind).toBe('active');
+    const status = statements.findIndex((s, i) => i > 0 && s.includes('from "users"'));
+    const insert = statements.findIndex((s) => s.startsWith('insert into "union_bindings"'));
+    expect(status).toBeGreaterThan(0);
+    expect(insert).toBeGreaterThan(status);
   });
 });
 

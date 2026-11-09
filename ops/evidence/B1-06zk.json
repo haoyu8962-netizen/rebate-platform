@@ -1,0 +1,97 @@
+{
+  "task": "B1-06zk",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "spec_commit": "da22ee945db4bb7a5777e84168c06152a5d4aa84",
+  "red_tests": [
+    "test/spec/linking/merge-pdd-open-tombstone/lock-wait.int.test.ts > [AC-B1-06zk#3] 自己的拼多多 open 与并号争用同一用户锁：absent 绑定、查询答已备案，并号持 users FOR UPDATE 写墓碑（deleted_reason=merged）未提交，open 等锁后并号提交 → 10001，不写 active 绑定、不写备案、不转链",
+    "test/spec/linking/merge-pdd-open-tombstone/lock-wait.int.test.ts > [AC-B1-06zk#3] 自己的拼多多 open 与并号争用同一用户锁：invalid 绑定、查询答已备案，并号持 users FOR UPDATE 写墓碑（deleted_reason=merged）未提交，open 等锁后并号提交 → 10001，不写 active 绑定、不写备案、不转链",
+    "test/spec/linking/merge-pdd-open-tombstone/lock-wait.int.test.ts > [AC-B1-06zk#3] 自己的拼多多 open 与并号争用同一用户锁：pending_auth 绑定、查询答已备案，并号持 users FOR UPDATE 写墓碑（deleted_reason=account_deleted）未提交，open 等锁后并号提交 → 10001，不写 active 绑定、不写备案、不转链",
+    "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：absent 绑定、查询答已备案，用户在激活前已是墓碑（before_request，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+    "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：absent 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+    "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：unbound 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+    "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：pending_auth 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+    "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：invalid 绑定、查询答已备案，用户在激活前已是墓碑（before_request，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+    "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：released 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=account_deleted）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+    "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：absent 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案",
+    "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：unbound 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案",
+    "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：pending_auth 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案",
+    "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：invalid 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=account_deleted）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案"
+  ],
+  "risk_note": "RV2 by path (linking). activatePddBinding now also reads userTombstonedOn (B1-20c) after lockBindingUser and userBannedOn on the same transaction: a tombstone (users.status deleted, e.g. a merged-away account) gets the banned result, so the Pinduoduo open and share creation write no active binding and no filing row and answer 10001 as for a banned user. Nothing is read before the lock. The GET refresh caller check from B1-20c stays. No money, ledger, contract or migration change.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "da22ee945db4bb7a5777e84168c06152a5d4aa84",
+      "tree": "5bd7d603378163b3daff531f1a930e621da3f026",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-09T04:45:55Z",
+      "finished_at": "2026-11-09T04:46:23Z",
+      "red_tests": [
+        "test/spec/linking/merge-pdd-open-tombstone/lock-wait.int.test.ts > [AC-B1-06zk#3] 自己的拼多多 open 与并号争用同一用户锁：absent 绑定、查询答已备案，并号持 users FOR UPDATE 写墓碑（deleted_reason=merged）未提交，open 等锁后并号提交 → 10001，不写 active 绑定、不写备案、不转链",
+        "test/spec/linking/merge-pdd-open-tombstone/lock-wait.int.test.ts > [AC-B1-06zk#3] 自己的拼多多 open 与并号争用同一用户锁：invalid 绑定、查询答已备案，并号持 users FOR UPDATE 写墓碑（deleted_reason=merged）未提交，open 等锁后并号提交 → 10001，不写 active 绑定、不写备案、不转链",
+        "test/spec/linking/merge-pdd-open-tombstone/lock-wait.int.test.ts > [AC-B1-06zk#3] 自己的拼多多 open 与并号争用同一用户锁：pending_auth 绑定、查询答已备案，并号持 users FOR UPDATE 写墓碑（deleted_reason=account_deleted）未提交，open 等锁后并号提交 → 10001，不写 active 绑定、不写备案、不转链",
+        "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：absent 绑定、查询答已备案，用户在激活前已是墓碑（before_request，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+        "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：absent 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+        "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：unbound 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+        "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：pending_auth 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+        "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：invalid 绑定、查询答已备案，用户在激活前已是墓碑（before_request，deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+        "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts > [AC-B1-06zk#1] 自己的拼多多 open：released 绑定、查询答已备案，用户在激活前已是墓碑（during_query，deleted_reason=account_deleted）→ 10001，不写 active 绑定、不写备案、不转链；对照：正常用户同样场景照常激活并写备案",
+        "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：absent 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案",
+        "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：unbound 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案",
+        "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：pending_auth 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案",
+        "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts > [AC-B1-06zk#2] 拼多多分享创建：invalid 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=account_deleted）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案"
+      ],
+      "expected": [
+        "test/spec/linking/merge-pdd-open-tombstone/lock-wait.int.test.ts",
+        "test/spec/linking/merge-pdd-open-tombstone/open.int.test.ts",
+        "test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "de29f7242515858b0f99217e0d5de3587b31618cd3e25994cc3a93da4dd781d3"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 at effort medium (D10-1075): pass with no findings; static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude in 3 attempts. spec-test r1 (fresh independent Claude) fail: no lock-wait case; r2 (fresh independent Claude) pass after the lock-wait case was added. After B1-20c (#3014) merged, the 8 refresh-path cases were green on main (B1-20c guards the refresh caller), so attempt 3 only deleted them; the spec-test attempts were exhausted, and orchestrator ruling D10-1151 granted an uncounted read-only Codex spec-test (medium): pass — deletions clean, kept cases consistent (r2 text not available for a verbatim check), and it noted that B1-20c's [AC-B1-20c#47] lacks a refresh lock-wait case and a filings-unchanged assertion (reported to the orchestrator). Red run on the new main: 13/13 red for the right reason."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "66cd7ad6d3d3ccbdb9641daecb92b3ce6bc4e2f7",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

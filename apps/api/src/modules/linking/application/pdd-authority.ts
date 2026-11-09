@@ -38,6 +38,11 @@
 // whose query answers filed and whose activation leaves the binding active records the queried
 // pid's row (the open, the refresh, the share creation); the open of an active binding looks the
 // row of its current slot up before it goes on (link-open-pdd-auth.ts).
+// B1-06zk (D10-1123, B1-20c T-7): after the user lock and the ban read, activatePddBinding reads
+// users.status on the same transaction (userTombstonedOn); a tombstone (status deleted: a merged or
+// a finished account) is answered `banned` like a banned user, with no binding and no filing
+// written, so an open or a share creation that passed the earlier checks before a merge committed
+// answers as for a banned user. Nothing is read before the lock.
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import { newUuidV7, type Clock } from '../../platform/index.ts';
@@ -48,7 +53,12 @@ import type { AttrCodeReader } from '../ports.ts';
 import { LinkingUnionIdentity, type LinkConversionOptions } from './link-open-conversion.ts';
 import { attrCodeOf } from './link-registration.ts';
 import { UNRELEASED } from './union-auth-reads.ts';
-import { lockBindingUser, nextBindingRowVersion, userBannedOn } from './binding-lock.ts';
+import {
+  lockBindingUser,
+  nextBindingRowVersion,
+  userBannedOn,
+  userTombstonedOn,
+} from './binding-lock.ts';
 
 export const PDD = 'pdd';
 const ATTR_CODE = /^[0-9a-z]{8}$/;
@@ -81,7 +91,10 @@ type Warn = LinkConversionOptions['logger'];
 export type PddActivation =
   | { readonly kind: 'active'; readonly id: string; readonly accountId: string }
   | { readonly kind: 'blocked' }
-  /** F1-07c: the user is banned (read after the user lock); nothing written. */
+  /**
+   * F1-07c: the user is banned (read after the user lock); nothing written. B1-06zk: also a
+   * tombstone (users.status deleted, read after the lock), answered as a banned user.
+   */
   | { readonly kind: 'banned' }
   | { readonly kind: 'retry' };
 
@@ -360,7 +373,7 @@ async function activateOnce(
  * Writes the user's pdd binding active (the filing is valid). `executor` must be a transaction:
  * each attempt runs under its own savepoint, so a lost unique race undoes only that attempt and
  * the next one reads what won. Returns active (written now or found), blocked or banned (nothing
- * written). The user lock is taken first, before any savepoint, and held by the caller's
+ * written; a tombstone answers banned too). The user lock is taken first, before any savepoint, and held by the caller's
  * transaction.
  */
 export async function activatePddBinding(
@@ -378,6 +391,8 @@ export async function activatePddBinding(
     throw new Error('linking: the pdd binding user does not exist');
   }
   if (await userBannedOn(executor, appId, userId)) return { kind: 'banned' };
+  // B1-06zk: a tombstone (merged or deleted) committed while the lock was awaited is seen here.
+  if (await userTombstonedOn(executor, appId, userId)) return { kind: 'banned' };
   for (let attempt = 1; ; attempt += 1) {
     let decision: PddActivation;
     await sql`SAVEPOINT pdd_binding_activate`.execute(executor);
