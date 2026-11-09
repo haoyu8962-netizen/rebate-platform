@@ -8507,8 +8507,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Handle an account-appeal restore or a platform restore difference (申诉恢复 / 平台恢复处理, ADMIN_RESTORE)
-         * @description The ADMIN_RESTORE of BR-FUND-22 for two kinds of difference. (a) BR-FUND-22 ③ (拍板第二批
+         * Handle an account-appeal restore, an order-appeal restore or a platform restore difference (申诉恢复 / 平台恢复处理, ADMIN_RESTORE)
+         * @description The ADMIN_RESTORE of BR-FUND-22 for three kinds of difference. (a) BR-FUND-22 ③ (拍板第二批
          *     FUND-14; 编排裁定 D10-468 ①): an account (ban)
          *     appeal was revoked, and the shares of the member forfeited for `banned` during the ban
          *     (BR-CALC-13) and kept as platform revenue are paid back. The difference is the
@@ -8519,7 +8519,12 @@ export interface paths {
          *     `{order_key}#RESTORE#{entry_id}` where `entry_id` is the rebate-history row by which the
          *     order entered its current VOID or CLAWED_BACK; `resolution` holds `reason_code`,
          *     `rebate_status` (VOID or CLAWED_BACK when registered), `trigger` (`status` or `commission`)
-         *     and `platform_status`). The list and the detail are
+         *     and `platform_status`). (c) R12 of BR-FUND-22 申诉恢复 ① (编排裁定 D10-1091, D10-1093): an
+         *     order voided by the blocklist (`reason` BLACKLIST) whose order appeal was revoked; the
+         *     difference is the order-appeal restore: an `appeal_restore` the system registered when the
+         *     appeal closed (source R3, `ref_type=order`, `ref_id` of the same form as above;
+         *     `resolution` holds `reason_code` BLACKLIST, `appeal_id`, `order_id`, `order_key`, `user_id`,
+         *     `rebate_status` VOID and `platform_status`, and no `shares`). The list and the detail are
          *     GET /admin/v1/recon-diffs and GET /admin/v1/recon-diffs/{recon_diff_id}. Permission point
          *     `order.restore` (04 §11.2; one person can complete it, ADD-05). Step-up: totp tier
          *     (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
@@ -8534,14 +8539,17 @@ export interface paths {
          *     or one of source R4 is 20001 with `data.fields=[recon_diff_id]` (no 404) → a difference
          *     already `adjusted`, `written_off` or `closed` is 20902 with `data.resource=recon_diff` →
          *     a difference whose `type` is neither `appeal_restore` nor `platform_restore`, or an
-         *     `appeal_restore` that is not an account-appeal restore (its `resolution.reason_code` is not
-         *     `APPEAL_RESTORE`, or it has no `user_id` or `shares` there), or a `platform_restore` whose
+         *     `appeal_restore` that is neither an account-appeal restore (`resolution.reason_code`
+         *     `APPEAL_RESTORE`, with `user_id` and `shares`) nor an order-appeal restore
+         *     (`resolution.reason_code` BLACKLIST with a `ref_id` of the form above naming an order of the
+         *     app), or a `platform_restore` whose
          *     `ref_id` does not have the form above or names no order of the app, is 20001 with
          *     `data.fields=[recon_diff_id]` and `data.reason=restore_not_supported`. That covers the
-         *     order-appeal R12 and R13 of BR-FUND-22 (申诉恢复 ① and ②): their producer is not built
-         *     yet, and handling them is left to a later step (D10-973). The checks then go by type.
+         *     order-appeal R13 of BR-FUND-22 (申诉恢复 ②): its producer is not built yet, and handling it
+         *     is left to a later step (D10-973, D10-1091). The checks then go by type; an order-appeal
+         *     restore goes as a `platform_restore` does on a VOID order.
          *
-         *     For an `appeal_restore`, the member has been
+         *     For an account-appeal restore, the member has been
          *     deleted: 20001 with `data.fields=[recon_diff_id]` and `data.reason=restore_user_deleted`;
          *     the difference is ended with POST .../close instead (D10-469 ①, default filled in by the
          *     agent).
@@ -8560,9 +8568,15 @@ export interface paths {
          *     after the order lock and before anything is written, `restore_platform_invalid` first. In
          *     both cases the handler can end the difference with POST .../close instead, nothing is
          *     written, and the difference stays `open` (both reasons: default filled in by the agent,
-         *     D10-973, D10-986).
+         *     D10-973, D10-986). A VOID order that needs its commission snapshot generated now (R12 below)
+         *     and for which it cannot be generated (no published rule version can be selected; or the
+         *     paid time is not recoverable; or a taobao order's promotion-spot scene cannot be read, so
+         *     its rebate mode is unknown, D10-1105) is not restored either: 20001 with
+         *     `data.fields=[recon_diff_id]` and `data.reason=restore_snapshot_unavailable`, checked after
+         *     `restore_platform_invalid`; nothing is written, the difference stays `open`, and the handler
+         *     can end it with POST .../close (BR-FUND-22, BR-CALC-10, D10-1093).
          *
-         *     Effects of an `appeal_restore`, in one transaction, for each role listed in
+         *     Effects of an account-appeal restore, in one transaction, for each role listed in
          *     `resolution.shares` (BR-FUND-22 ③):
          *     an `active` beneficiary event is appended for the member's role, so that later adjustments
          *     of the order count the re-split share as owed (the appeal-restore exception of BR-CALC-09).
@@ -8591,6 +8605,9 @@ export interface paths {
          *     hold is released (an `appeal_restore` difference carries none, BR-FUND-19). The response
          *     has no `rebate_status_after`.
          *
+         *     Effects of an order-appeal restore: those of a `platform_restore` on a VOID order (R12)
+         *     below, and the closing paragraph for both R12 and R13 applies to it too.
+         *
          *     Effects of a `platform_restore` on a VOID order (R12), in one transaction: the order's
          *     `rebate_status` returns, by its current `platform_status`, to ESTIMATED (DEPOSIT_PAID or
          *     PAID) or WAITING (RECEIVED or SETTLED; `settle_period` taken from `received_at`, and when
@@ -8598,7 +8615,13 @@ export interface paths {
          *     period's batch, BR-FUND-04; without a `received_at` it returns to ESTIMATED and moves on as
          *     R4 does, default filled in by the agent); an order with no `user_id` (unattributed)
          *     returns to UNATTRIBUTED (the unattributed pool, BR-ATTR-16). No ledger entry is written,
-         *     and `restored_fen` is 0.
+         *     and `restored_fen` is 0. The commission snapshot (BR-CALC-10, D10-1093): an order that is
+         *     attributed, whose `platform_status` is PAID, RECEIVED or SETTLED and that has no snapshot
+         *     gets it in this transaction, by the rule version, levels and uplines at `paid_at`
+         *     (BR-CALC-11, BR-CALC-12). An order that is unattributed or DEPOSIT_PAID is restored as usual
+         *     and gets its snapshot at the usual moment of BR-CALC-10. A commission not reported yet, or
+         *     a selected rule version without that platform's rule or reserve, is no refusal: the order
+         *     is restored and stays in the existing snapshot retry.
          *
          *     Effects of a `platform_restore` on a CLAWED_BACK order (R13), in one transaction: the
          *     order's `rebate_status` becomes CREDITED. The new base is the current effective union
@@ -19828,13 +19851,14 @@ export interface components {
             recon_diff: components["schemas"]["AdminReconDiffDetail"];
             /**
              * Format: int64
-             * @description For an `appeal_restore`, the total this call paid to the member over all roles; 0 when nothing was posted (D10-469 ③, D10-482). For a `platform_restore`, the total credited to beneficiaries' `available` by this call (R13; the platform's part and deferred obligations are not counted), 0 for R12. Never `expected_fen` taken as is.
+             * @description For an `appeal_restore`, the total this call paid to the member over all roles; 0 when nothing was posted (D10-469 ③, D10-482). For a `platform_restore`, the total credited to beneficiaries' `available` by this call (R13; the platform's part and deferred obligations are not counted), 0 for R12 and for an order-appeal restore. Never `expected_fen` taken as is.
              */
             restored_fen: number;
             /**
-             * @description Only for a `platform_restore` (always present there; absent for an `appeal_restore`):
-             *     the order's `rebate_status` after the restore — ESTIMATED, WAITING or UNATTRIBUTED
-             *     for R12, CREDITED for R13 (BR-FUND-22, D10-973).
+             * @description Only for a `platform_restore` or an order-appeal restore (always present there; absent
+             *     for an account-appeal restore): the order's `rebate_status` after the restore —
+             *     ESTIMATED, WAITING or UNATTRIBUTED for R12, CREDITED for R13 (BR-FUND-22, D10-973,
+             *     D10-1093).
              */
             rebate_status_after?: components["schemas"]["AdminOrderRebateStatus"];
         };

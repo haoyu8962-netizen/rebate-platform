@@ -1,0 +1,37 @@
+{
+  "task": "CT-24zzg",
+  "spec_ref": "deaba4fbff14d3908268498342eaa942af0db138",
+  "spec_commit": "b86ed7c4b66412ac916f8ac8129553333cbd185b",
+  "red_tests": [],
+  "risk_note": "RV1, contract only (openapi description, error-codes, generated types, the catalog sub-reason list); no field added, one 20001 sub-reason added (withdraw lane, model Claude Opus 5.5; orchestrator rulings D10-1091, D10-1093 with the 23:56, 00:05 and 00:36 corrections, D10-1105; BR-FUND-22, BR-CALC-10 written back by couli #315). restore_not_supported narrows so the order-appeal R12 is handled; the order-appeal R13 stays refused. Implementation is B2-09gd. oasdiff runs in CI (not available locally).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 3,
+      "review_type": "contract",
+      "checklist_complete": true,
+      "note": "Contract review by Codex per D10-1075. r1 fail on one S1: the 20001 catalog text in contracts/error-codes.yaml still refused order-appeal restores ① and ②, against the new openapi text; fixed so only ② (R13) stays refused. r2 incremental pass, no findings. r3 incremental, after D10-1105 widened restore_snapshot_unavailable to an unrecoverable paid time and an unreadable taobao promotion-spot scene, was output as fail with one S1: those two conditions go beyond BR-CALC-10 at the pinned SPEC_REF d5713bf. Orchestrator ruling D10-1106: the finding is the orchestrator's late write-back of D10-1105 into 08; the S1 closes with that write-back and the SPEC_REF upgrade, no further round (as D10-1065, D10-1102). Rounds 3/3."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3532223fa7a48e43b4f54109f9451ac3497d9b37",
+    "specs": "971a7a9cd9995be0ca4a252ede133b843f04e755"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

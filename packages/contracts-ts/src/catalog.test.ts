@@ -174,6 +174,8 @@ it('identity codes of 08 §13.11 (功能对照补缺 1–3 批) carry their data
     // CT-24zz: admin-only platform restore refusals (BR-FUND-22 R12 / R13, D10-973).
     'restore_platform_invalid',
     'restore_commission_zero',
+    // CT-24zzg: R12 needs the commission snapshot and it cannot be generated (BR-CALC-10, D10-1093, D10-1105).
+    'restore_snapshot_unavailable',
     // CT-24zzf: admin-only blacklist clawback refusals (BR-ATTR-26, BR-FUND-08, D10-1095).
     'blacklist_clawback_not_supported',
     'blacklist_clawback_disabled',
