@@ -1,0 +1,20 @@
+id: DSX-48f
+repo: rebate-platform
+title: H5 手感两处小修：邀请海报失败标记在同一地址再次加载成功后复原（A→B→A）；条件挂载即 open 的弹层首次打开也有进场动效（DSX-48c / DSX-48d 跟进，编排 D10-1159）
+type: impl
+# 2026-11-09 入账（前端线 f1-frontend-7，编排 D10-1159；跟进清单 followups-f103.md 两条 S2，负责人在意手感）。已读代码确认复现：
+# ① apps/h5/src/entries/app/pages/invite/invite-page.tsx:230–283 failedPoster 只在 AsyncImage onError 时写入、从不清除——海报地址 A 失败 → 换 B → 换回 A 且这次加载成功，posterFailed 仍为真，卡片仍 aria-disabled、点不开预览。修法：图片加载成功时清除失败标记（AsyncImage 加可选 onLoad，或按「本次加载」记失败），换地址后状态以本次加载结果为准。
+# ② apps/h5/src/components/base/ModalFrame.tsx:275 `appear` 初值为 !open，组件以 open=true 挂载时没有 data-appear，首次打开无进场动效（DSX-48d 当时为兼容冻结 h5-components 里「挂载即 open 后立即读位置」的用例而取舍）。修法：条件挂载即 open 时也播进场，但须保证冻结用例（h5-components VISUAL#2 / LAYOUT#1、h5-transitions 全部）仍绿——如进场完成后再测量已由冻结用例的等待覆盖则直接改；不能兼容就停下报编排，不改测试。
+# 小改：tester none（冻结 h5-image / h5-transitions / h5-components 即回归网），实现新鲜 Claude 补单元断言，Codex general（当次失败才退独立 Claude 并写真实报错）。包体每条路由增量 ≤ 3 KiB。
+refs: []
+refs_hash: {}
+deps: [DSX-48e]
+paths:
+  - 'apps/h5/src/components/base/**'
+  - 'apps/h5/src/entries/app/pages/invite/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
