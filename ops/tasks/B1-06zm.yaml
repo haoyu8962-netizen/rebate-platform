@@ -1,0 +1,35 @@
+id: B1-06zm
+repo: rebate-platform
+title: linking 改用生成的 union_binding transition()（CT-10a）——union-bindings / binding-risk / admin-union-bindings / deletion-cleanup / merge-release 与 domain/binding-status-transitions 换掉手写迁移判定，删 TODO（approvals #26），行为不变
+type: impl
+# 2026-11-10 入账（identity，编排 D10-1225：规划/05 CT-10）。approvals #26：CT-10 合并前 union_bindings.status 以 linking 领域层纯判定为唯一入口，合并后改用生成的 transition()、本条随之作废。
+# 现状：六处 TODO(规划/11 §4.5)「换用生成的 transition() — blocked on CT-10 状态机生成器（approvals #26）」。做法：各写入点在 row_version CAS 前经 @couli/domain 生成的 union-binding transition() 判定，
+# domain/binding-status-transitions.ts 删除或改为对生成物的薄转发（不再自带迁移表）；对外行为、错误码、并发控制（单一写者 linking + CAS）不变。
+refs: [BR-ID-19, BR-ID-20, BR-ID-21]
+refs_hash:
+  BR-ID-19: c723317bb2fe
+  BR-ID-20: 1ffd995f311a
+  BR-ID-21: 7f093e1d3e7c
+deps: [CT-10a]
+paths:
+  - 'apps/api/src/modules/linking/domain/**'
+  - 'apps/api/src/modules/linking/application/union-bindings.ts'
+  - 'apps/api/src/modules/linking/application/union-bindings.test.ts'
+  - 'apps/api/src/modules/linking/application/binding-risk.ts'
+  - 'apps/api/src/modules/linking/application/binding-risk.test.ts'
+  - 'apps/api/src/modules/linking/application/admin-union-bindings.ts'
+  - 'apps/api/src/modules/linking/application/admin-union-bindings.test.ts'
+  - 'apps/api/src/modules/linking/application/deletion-cleanup.ts'
+  - 'apps/api/src/modules/linking/application/deletion-cleanup.test.ts'
+  - 'apps/api/src/modules/linking/application/merge-release.ts'
+  - 'apps/api/src/modules/linking/application/merge-release.test.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.ts'
+  - 'apps/api/src/modules/linking/application/pdd-authority.test.ts'
+test_paths:
+  - 'test/spec/linking/binding-transition/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/binding-transition/**'
+status: todo

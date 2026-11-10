@@ -1,0 +1,26 @@
+id: CT-10a
+repo: rebate-platform
+title: 状态机（联盟绑定）：specs/state-machines/union-binding.yaml（union_bindings.status：unbound / pending_auth / active / invalid / released / blocked，按 04 §4.4 与 BR-ID-19 / 20 / 21 转写），复用 CT-04a 生成器生成 union-binding.gen.ts 与一致性测试
+type: contract
+# 2026-11-10 入账（identity，编排 D10-1225：规划/05 CT-10 其余状态机）。CT-10 的 claim 已由 CT-04e（#752）、deletion 由 B1-15b 覆盖，本单只做 union_binding。
+# 依据：04 §4.4（union_binding_status 枚举行、状态机表 4.4 行文件名 union-binding.yaml）、BR-ID-19（唯一与冷却，pending_auth 不产生）、BR-ID-20（blocked / 注销释放 / 重置授权 / 停用与恢复返利）、BR-ID-21（巡检失效）。
+# 迁移边与现行唯一入口 apps/api/src/modules/linking/domain/binding-status-transitions.ts（approvals #26 例外）逐边一致：null / unbound → active；pending_auth → active | blocked；
+# active → invalid | blocked | released；invalid → active | blocked | released；blocked → invalid | released；released → active；同状态不是迁移。写法约定照 CT-04a 编排口径 D10-26。
+# 换用生成的 transition() 是后续 B1-06zm，本单不改 apps/**。
+refs: [BR-ID-19, BR-ID-20, BR-ID-21]
+refs_hash:
+  BR-ID-19: c723317bb2fe
+  BR-ID-20: 1ffd995f311a
+  BR-ID-21: 7f093e1d3e7c
+deps: [CT-04a]
+paths:
+  - 'specs/state-machines/union-binding.yaml'
+  - 'packages/domain/**'
+test_paths:
+  - 'test/spec/state-machines/union-binding/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/state-machines/union-binding/**'
+status: todo
