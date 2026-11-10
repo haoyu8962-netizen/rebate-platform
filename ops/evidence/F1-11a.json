@@ -1,0 +1,112 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#1] 有 tpwd_ticket 时显示【复制淘口令】，点击前页面不含口令也不取口令",
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#2] 点【复制淘口令】凭票据调 tpwd 接口，口令写入剪贴板并提示已复制",
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#3] 剪贴板写入失败时把口令显示在页面上供手动复制，不提示已复制",
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#4] tpwd_ticket 为 null 时不显示【复制淘口令】，也不调 tpwd 接口",
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-APP#1] 浏览器内 open_in_app_url 非 null 时显示【在 App 中打开】，链接即该地址",
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-APP#2] open_in_app_url 为 null 时不显示【在 App 中打开】",
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-WECHAT#1] 微信内显示「在浏览器打开」引导，代替【在 App 中打开】与【复制淘口令】（BR-TEXT-14）",
+    "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-WECHAT#2] 微信外不显示「在浏览器打开」引导",
+    "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#1] 落地页按地址里的 link_id 匿名调 getSharePage（GET、h5 公共头、不带 Authorization）",
+    "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#2] 成功时显示商品卡：标题、商品图与券后价（BR-TEXT-10 金额格式）",
+    "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#3] 【去购买】是指向 jump_url 原样地址的链接",
+    "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#4] 页面上的链接只有服务端给的 jump_url 与 open_in_app_url，没有下载链接",
+    "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-QUOTE#1] 报价降级（stale）时按 +08:00 显示取价时间 HH:mm（BR-PRICE-11）",
+    "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-QUOTE#2] quoted_at 为 null 时不显示任何取价时间",
+    "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#1] 30144（链接不存在 / 非分享 link）显示失效空态，不重试、不给购买入口",
+    "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#2] 30102 + reason=sharer_auth_invalid 显示分享失效空态，不引导打开者授权",
+    "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#2] 30111 + reason=sharer_auth_invalid 显示分享失效空态，不引导打开者授权",
+    "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#3] 淘宝与拼多多的分享者授权失效显示同一句空态文案（error-codes 30102 / 30111 action）",
+    "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#4] 网络失败显示【重试】，点重试重新取同一 link_id 并显示商品卡",
+    "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#5] 地址里没有 link_id 时直接显示失效空态，不发请求"
+  ],
+  "risk_note": "F1-11a (orchestrator D10-1225, planning/05 F1-11 doable part). H5 landing share page replaces the placeholder: reads link_id from /<link_id>, calls getSharePage (anonymous, X-App-Id, X-Platform h5, X-App-Version from apps/h5/package.json inlined at build time), shows the shared product card and the quote time (only when degraded, BR-PRICE-11), buy link to jump_url, copy-token via POST tpwd only outside WeChat when tpwd_ticket is non-null (re-fetches the page once for a fresh ticket on 20001 ticket expiry), open-in-app only outside WeChat when open_in_app_url is non-null, WeChat shows the open-in-browser hint only; 30102 / 30111 sharer_auth_invalid and 30144 show one expired state without purchase or authorization; network failure can retry. Missing build config keeps the old placeholder shell. No download entry, no download guide page, no domain monitoring. Plain DOM, own fetch and media-origin allowlist inside the landing entry (no bridge-sdk, landing first screen within the 60 KiB budget). Dictionary keys only; two borrowed keys (link_landing.invalid, earnings.as_of) pending content keys. Rule tests by an independent Claude (claude-run.sh); Codex spec-test r1 pass; red on couli-ci (20 tests, right reason). Implementation by Opus 5.5 in two rounds: final tree fast (verify-fast/4) and browser (browser/3) green on couli-ci, run.ts static 10/10. Codex general review r1 fail (S1 missing X-App-Version, S2 stale tpwd ticket not refreshed) -> r2 pass. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 2,
+      "note": "Codex general r1 fail (S1 X-App-Version, S2 tpwd ticket refresh) -> r2 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass (one out-of-scope S1: expired-state text pinned by structure only until the content key exists); tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-11a",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "f45f56674cc7747553b462d6e6dfac6409c0e433",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f45f56674cc7747553b462d6e6dfac6409c0e433",
+      "tree": "3f064998fe667e5f11857086045272b9c3d4617c",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-10T13:32:38Z",
+      "finished_at": "2026-11-10T13:33:04Z",
+      "red_tests": [
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#1] 有 tpwd_ticket 时显示【复制淘口令】，点击前页面不含口令也不取口令",
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#2] 点【复制淘口令】凭票据调 tpwd 接口，口令写入剪贴板并提示已复制",
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#3] 剪贴板写入失败时把口令显示在页面上供手动复制，不提示已复制",
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-TPWD#4] tpwd_ticket 为 null 时不显示【复制淘口令】，也不调 tpwd 接口",
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-APP#1] 浏览器内 open_in_app_url 非 null 时显示【在 App 中打开】，链接即该地址",
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-APP#2] open_in_app_url 为 null 时不显示【在 App 中打开】",
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-WECHAT#1] 微信内显示「在浏览器打开」引导，代替【在 App 中打开】与【复制淘口令】（BR-TEXT-14）",
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts > [AC-F1-11a-WECHAT#2] 微信外不显示「在浏览器打开」引导",
+        "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#1] 落地页按地址里的 link_id 匿名调 getSharePage（GET、h5 公共头、不带 Authorization）",
+        "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#2] 成功时显示商品卡：标题、商品图与券后价（BR-TEXT-10 金额格式）",
+        "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#3] 【去购买】是指向 jump_url 原样地址的链接",
+        "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-CARD#4] 页面上的链接只有服务端给的 jump_url 与 open_in_app_url，没有下载链接",
+        "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-QUOTE#1] 报价降级（stale）时按 +08:00 显示取价时间 HH:mm（BR-PRICE-11）",
+        "test/spec/frontend/h5-share-landing/share-landing-card.test.ts > [AC-F1-11a-QUOTE#2] quoted_at 为 null 时不显示任何取价时间",
+        "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#1] 30144（链接不存在 / 非分享 link）显示失效空态，不重试、不给购买入口",
+        "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#2] 30102 + reason=sharer_auth_invalid 显示分享失效空态，不引导打开者授权",
+        "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#2] 30111 + reason=sharer_auth_invalid 显示分享失效空态，不引导打开者授权",
+        "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#3] 淘宝与拼多多的分享者授权失效显示同一句空态文案（error-codes 30102 / 30111 action）",
+        "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#4] 网络失败显示【重试】，点重试重新取同一 link_id 并显示商品卡",
+        "test/spec/frontend/h5-share-landing/share-landing-states.test.ts > [AC-F1-11a-STATE#5] 地址里没有 link_id 时直接显示失效空态，不发请求"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-share-landing/share-landing-actions.test.ts",
+        "test/spec/frontend/h5-share-landing/share-landing-card.test.ts",
+        "test/spec/frontend/h5-share-landing/share-landing-states.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "50f69bdef6076cfee9450765894d1b6c94205547d6d056ae8f4abccc9f089c84"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "de7419b3cee64bc61fcb3ae48d29fe852661ae22",
+    "specs": "d95019b21fafbf4fd5e7554d8d4b214dc074b707"
+  }
+}
