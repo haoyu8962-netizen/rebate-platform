@@ -1,0 +1,21 @@
+id: B1-18a
+repo: rebate-platform
+title: 联盟映射文档补齐：新建 specs/union/taobao.md，specs/union/pdd.md 补成与 jd.md 同结构（B1-18 规格资产之一）
+type: impl
+# 2026-11-10 union 入账（D10-1225 认领规划/05 B1-18）。核查：jd.md、三平台 order-status-map csv、permissions.yaml 已由 B1-04zb / B1-04zg / B1-04zgc / B1-04zzb / F1-06l 覆盖；首批录制在 rebate-private/cap-tests（字段形状摘要），公开仓库只写私有路径引用、不放原文。
+# 本单只写文档与只读一致性规则测试（文档列出的报文字段在对应适配器源码里确有映射、映射表三平台齐全），不改运行时代码。依据只取已合并代码、台账注释、08、09 与录制形状；09 未验证的能力标「未实测」，不写成承诺。验收「人签字」在合并后请负责人过目。
+refs: [BR-CALC-03]
+refs_hash:
+  BR-CALC-03: f2d8ebebbc0c
+deps: [B1-04zzb, B1-08zh]
+paths:
+  - 'specs/union/taobao.md'
+  - 'specs/union/pdd.md'
+  - 'test/spec/union/spec-docs/**'
+test_paths:
+  - 'test/spec/union/spec-docs/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
