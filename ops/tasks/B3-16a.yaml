@@ -2,7 +2,7 @@ id: B3-16a
 repo: rebate-platform
 title: 只读收益工具 get_my_earnings（规划/05 B3-16 第一张，D32）：无参数工具注册并加入 allowlist、只下发给已绑手机主体，读 ledger/read.ts 与 payout/read.ts 出 earnings_summary 卡，模型只拿卡片引用、文本替换 agent.earnings.summary
 type: impl
-# 2026-11-10 agent2 入账（编排 D10-1225；核查见 notices 15:5x）。启动条件已满足：B2-04y（#1304）ledger/read.ts 导出 getWalletSummary，B2-05f payout/read.ts 导出 listWithdrawalsForUser。 做法：新 agent/tools/earnings/（无参数、audience 已绑手机）；收益读取放 tools/registry 之外，只从 ledger/read.ts、payout/read.ts 具名导入（BR-AI-02 ③）；earnings_summary 卡数字与钱包接口逐字段一致，提现只放主状态标题与申请金额；返回模型只有卡片引用，模型文本替换 agent.earnings.summary，fallback_text 用 agent.earnings.fallback；历史接口与 trace 不含金额；earnings_query 有工具时走工具；开关 agent.tools.get_my_earnings.enabled（通配已登记）。 不在本单：只读入口导出检查与 denylist 扫描（B3-16b）。 RV2（specs/** 不在白名单）。独立 Claude 写测试，Opus 实现，money Codex medium。D10-1234 / D10-1239：冻结测试 7→8 工具改断言不改标题，modify_existing 一条（allowlist.test.ts；其余用例体未改、只随 kit 变，按红检判多余已删）、red_exempt 四条；app.module.ts 接钱包依赖。
+# 2026-11-10 agent2 入账（编排 D10-1225；核查见 notices 15:5x）。启动条件已满足：B2-04y（#1304）ledger/read.ts 导出 getWalletSummary，B2-05f payout/read.ts 导出 listWithdrawalsForUser。 做法：新 agent/tools/earnings/（无参数、audience 已绑手机）；收益读取放 tools/registry 之外，只从 ledger/read.ts、payout/read.ts 具名导入（BR-AI-02 ③）；earnings_summary 卡数字与钱包接口逐字段一致，提现只放主状态标题与申请金额；返回模型只有卡片引用，模型文本替换 agent.earnings.summary，fallback_text 用 agent.earnings.fallback；历史接口与 trace 不含金额；earnings_query 有工具时走工具；开关 agent.tools.get_my_earnings.enabled（通配已登记）。 不在本单：只读入口导出检查与 denylist 扫描（B3-16b）。 RV2（specs/** 不在白名单）。独立 Claude 写测试，Opus 实现，money Codex medium。D10-1234 / D10-1239：冻结测试 7→8 工具改断言不改标题，modify_existing 一条（allowlist.test.ts；其余用例体未改、只随 kit 变，按红检判多余已删）、red_exempt 四条；app.module.ts 接钱包依赖。 D10-1244（#3134 CI：depcruise modules-only-via-index、[AC-B3-08k#1]）：取数挪到组装根，新文件 apps/api/src/agent-earnings-reads.ts 具名取两个读函数、只读 REPEATABLE READ 事务，组成不带句柄的端口交 agent；agent 不再导入 ledger / payout；第 4 次写测试见 approvals 71。
 # prettier-ignore
 refs: [BR-AI-01, BR-AI-02, BR-AI-04, BR-AI-05, BR-AI-07, BR-AI-19, BR-FUND-17, BR-FUND-18, BR-TEXT-06, BR-TEXT-22]
 refs_hash:
@@ -23,7 +23,7 @@ paths:
   - 'apps/api/src/modules/agent/stream/mount/**'
   - 'apps/api/src/modules/agent/http/**'
   - 'specs/agent-tools.allowlist'
-  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/{app.module,agent-earnings-reads}.ts'
 test_paths:
   - 'test/spec/agent/earnings-tool/**'
   - 'test/spec/agent/stream-assembly-orders/{scan,kit}.ts'
