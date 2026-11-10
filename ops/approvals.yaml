@@ -429,3 +429,9 @@ approvals:
     granted: true
     date: '2026-11-10'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动：不减少任何测试、不放宽任何判定，只是把同一组 int 测试拆到更多托管机并行；仓库公开，托管机不收费），事后已向负责人报告；D10-1221、D10-1222。'
+  - id: 69
+    row: 4
+    title: 'CT-05a：contracts.yml 新增只读作业 contracts-artifact（只在 push 到 main 时跑、ubuntu-latest、沿用工作流级 contents: read、不引用 secrets、不进 contracts-gate），把 manifest（提交号与 contracts/、specs/ 各文件 sha256）和原样快照传成 Actions 制品；tools/ops/contracts-tag.ts 本机打 contracts-v0.9.<n> 注解 tag 并推送；工具测试随之加；check-workflows「任何工作流不得申请写权限」不变，合并门槛与必需检查不变'
+    granted: true
+    date: '2026-11-10'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动：只增加一个只读作业，不放宽任何门禁；原方案 A 要放行写权限，编排否决改选 B，D10-1229），事后向负责人报告；D10-1225、D10-1229。'
