@@ -1,6 +1,7 @@
 // B3-08l · BR-AI-02 ① ②: specs/agent-tools.allowlist after search_rules is wired (static: no
 // database, no Nest). The production assembly's registered set is compared with the same file in
 // search.int.test.ts ([AC-B3-08l#1]).
+// 标题是 MVP 时 7 个的原文，按 D10-1234 断言已改为 8 个，标题待 FU-MODIFY-EXISTING-RETITLE 合并后更正。
 import { expect, it } from 'vitest';
 import { DENYLIST, allowlistNames, allowlistText } from '../stream-assembly-orders/scan.ts';
 import { TOOLS } from './kit.ts';
@@ -11,7 +12,6 @@ it('[AC-B3-08l#1][BR-AI-02] specs/agent-tools.allowlist 行集合 = 7 个 MVP �
   expect(names).toContain('search_rules');
   expect(new Set(names).size, 'no duplicate line').toBe(names.length);
   for (const name of [
-    'get_my_earnings',
     'parse_input',
     'resolve_link',
     'register_links',

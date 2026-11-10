@@ -26,6 +26,11 @@
 // app's active rows of app.agent_rule_chunks (agent's own table, createActiveRuleChunksReader over
 // context.db) and agent.rag.min_score through the same content reader (code default 0.2 when unset
 // or invalid, tools/rules), behind agent.tools.search_rules.enabled.
+// B3-16a (D32; rule tests: test/spec/agent/earnings-tool/**): get_my_earnings is always registered,
+// behind agent.tools.get_my_earnings.enabled, over ports.earningsReads (./earnings.ts
+// AgentEarningsProvidedPorts; built by the composition root with its own db, D10-1244, so no
+// database handle is handed to it here); without it, over createUnavailableEarningsReads (every
+// call 'unavailable', no card, nothing read, one warn).
 import { bridge, display_status as displayStatusEnum } from '@couli/contracts-ts';
 import type { CategoryCandidate } from '../../../catalog/index.ts';
 import type { ContentReader } from '../../../content/index.ts';
@@ -46,6 +51,7 @@ import {
   type AgentStreamBusinessPorts,
   type AgentStreamProvidedPorts,
 } from './assembly.ts';
+import { createUnavailableEarningsReads } from './earnings.ts';
 import { createOrderCardRefs, createOrderNoQuota } from './orders.ts';
 import { processPendingCards, withPendingCards } from './trace-retry.ts';
 import { agentDefaultTexts, agentText, agentTextIfPresent, platformDisplayName } from './texts.ts';
@@ -290,6 +296,7 @@ export function createProductionStreamAssembly(
     return ports.platforms.filter((_, index) => flags[index]);
   };
   const orderTools = orderToolPorts(context, ports, config);
+  const earnings = ports.earningsReads ?? createUnavailableEarningsReads(context.logger);
   const scheduler = context.scheduler ?? systemScheduler();
   const texts = productionRunTexts(searchPlatforms, context.logger);
   const safety = createStreamReview({
@@ -339,6 +346,7 @@ export function createProductionStreamAssembly(
         activeChunks: createActiveRuleChunksReader(context.db),
         config: async (appId, key) => (await config.configValue(appId, key))?.value,
       },
+      earnings,
     },
   });
   return { ...assembly, safety };

@@ -4,7 +4,7 @@
 // contract: its types, and the run-local record of template calls (ReplyTemplateCalls) that
 // core/run.ts keeps per AgentRun and turns into the template keys below.
 //
-// Template tools: list_my_orders, explain_order, search_rules (get_my_earnings joins with B3-16).
+// Template tools: list_my_orders, explain_order, search_rules, get_my_earnings (B3-16a, D32).
 //
 // Template call: one model tool call of a template tool whose name is among this run's offered
 //   definitions (tools.definitions of this run), whatever its outcome: ok, failed, rejected by the
@@ -42,8 +42,11 @@
 //   - rules (any search_rules call): agent.rule.found when some ok search_rules call's
 //     outcome.trace.matched is true (tools/rules), else agent.rule.not_found (no hit, failed or
 //     rejected).
-//   Order of the keys when both kinds were called: orders (then agent.order.lookup_limited), then
-//   rules. Each key is one
+//   - earnings (any get_my_earnings call, B3-16a · BR-AI-07 / BR-AI-01 细则「收益查询」):
+//     agent.earnings.summary when some ok get_my_earnings call's outcome.trace.earnings is 'shown'
+//     (tools/earnings), else agent.earnings.unavailable (read failed, rejected).
+//   Order of the keys when several kinds were called: orders (then agent.order.lookup_limited),
+//   then earnings, then rules (the intent port's order). Each key is one
 //   texts.text(appId, key) written as one ctx.text, through the run's output caps.
 //
 // Delivery rule (BR-AI-07「本 run 调用过订单类工具或 search_rules 时，模型生成的文本一律不下发」):
@@ -86,8 +89,9 @@
 //   place of the model's reply (BR-AI-07 细则「T6 与其他」); false or absent otherwise.
 import type { ToolTraceFragment } from './ports.ts';
 
-/** Template tool names the core recognises (get_my_earnings joins with B3-16). */
-export type ReplyTemplateTool = 'list_my_orders' | 'explain_order' | 'search_rules';
+/** Template tool names the core recognises (get_my_earnings since B3-16a). */
+export type ReplyTemplateTool =
+  'list_my_orders' | 'explain_order' | 'search_rules' | 'get_my_earnings';
 
 /** One order's template input, as tools/orders puts it on its ok outcome's trace. */
 export interface ReplyTemplateOrder {
@@ -112,9 +116,16 @@ export interface ReplyTemplateTrace extends ToolTraceFragment {
   readonly order_ids?: readonly string[];
   readonly lookup?: ReplyTemplateLookup;
   readonly matched?: boolean;
+  /** B3-16a: get_my_earnings showed its earnings_summary card (tools/earnings). */
+  readonly earnings?: 'shown';
 }
 
-const TEMPLATE_TOOLS: readonly string[] = ['list_my_orders', 'explain_order', 'search_rules'];
+const TEMPLATE_TOOLS: readonly string[] = [
+  'list_my_orders',
+  'explain_order',
+  'search_rules',
+  'get_my_earnings',
+];
 
 /** True for a template tool name (the caller still checks it was offered to this run). */
 export function isReplyTemplateTool(name: string): name is ReplyTemplateTool {
@@ -185,14 +196,17 @@ export class ReplyTemplateCalls {
   private rateLimited = false;
   private rulesCalled = false;
   private rulesMatched = false;
+  private earningsCalled = false;
+  private earningsShown = false;
 
   get any(): boolean {
-    return this.orderCalled || this.rulesCalled;
+    return this.orderCalled || this.rulesCalled || this.earningsCalled;
   }
 
   /** A template call was made (counted before it runs, whatever its outcome). */
   called(name: ReplyTemplateTool): void {
     if (name === 'search_rules') this.rulesCalled = true;
+    else if (name === 'get_my_earnings') this.earningsCalled = true;
     else this.orderCalled = true;
   }
 
@@ -201,6 +215,10 @@ export class ReplyTemplateCalls {
     this.called(name);
     if (name === 'search_rules') {
       if (isRecord(trace) && trace['matched'] === true) this.rulesMatched = true;
+      return;
+    }
+    if (name === 'get_my_earnings') {
+      if (isRecord(trace) && trace['earnings'] === 'shown') this.earningsShown = true;
       return;
     }
     for (const entry of ordersOf(trace)) {
@@ -220,7 +238,7 @@ export class ReplyTemplateCalls {
     }
   }
 
-  /** The template texts of the run, in order: orders, agent.order.lookup_limited, rules. */
+  /** The template texts of the run, in order: orders, agent.order.lookup_limited, earnings, rules. */
   texts(): readonly ReplyTemplateText[] {
     const out: ReplyTemplateText[] = [];
     if (this.orderCalled) {
@@ -234,6 +252,11 @@ export class ReplyTemplateCalls {
         out.push(key === 'order_list.summary' ? { key, count: 1 } : { key });
       }
       if (this.rateLimited) out.push({ key: 'agent.order.lookup_limited' });
+    }
+    if (this.earningsCalled) {
+      out.push({
+        key: this.earningsShown ? 'agent.earnings.summary' : 'agent.earnings.unavailable',
+      });
     }
     if (this.rulesCalled) {
       out.push({ key: this.rulesMatched ? 'agent.rule.found' : 'agent.rule.not_found' });

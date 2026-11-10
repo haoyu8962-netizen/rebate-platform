@@ -3,6 +3,7 @@
 // entry as [AC-B3-08g]). search_rules reads app.agent_rule_chunks' active rows of the caller's app
 // (agent's own table) and agent.rag.min_score through content's configuration (default 0.2).
 // Chunk rows are written directly here, as an earlier sync left them.
+// 标题是 MVP 时 7 个的原文，按 D10-1234 断言已改为 8 个，标题待 FU-MODIFY-EXISTING-RETITLE 合并后更正。
 import { createTestDatabase } from '@couli/db/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import {

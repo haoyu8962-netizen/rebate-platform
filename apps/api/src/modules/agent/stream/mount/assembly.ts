@@ -7,6 +7,8 @@
 // of a run that called search_rules or an order tool are decided by orchestrator/core
 // (core/reply-templates.ts) from that run's own tool outcomes, so the intent port is never asked
 // for them (its trace.calls stays empty by design).
+// B3-16a: with ports.earnings, get_my_earnings is registered too (a template tool of the core,
+// agent.earnings.summary / unavailable).
 import { randomUUID } from 'node:crypto';
 import type { StreamReviewOptions, StreamReviewPorts } from './review.ts';
 import type { DB } from '@couli/db';
@@ -37,6 +39,7 @@ import {
 } from '../../orchestrator/results/index.ts';
 import { createPgPreviousIntentReader } from '../../store/runs/index.ts';
 import { createPrefillClaimHandler, type ClaimDraftDeps } from '../../tools/claim/index.ts';
+import { createGetMyEarningsHandler, type EarningsReads } from '../../tools/earnings/index.ts';
 import { createHandoffHandler, type HandoffDeps } from '../../tools/handoff/index.ts';
 import type { MatchDeps } from '../../tools/match/index.ts';
 import {
@@ -65,6 +68,7 @@ import {
   createSearchProductsHandler,
   type SearchProductsDeps,
 } from '../../tools/search/index.ts';
+import type { AgentEarningsProvidedPorts } from './earnings.ts';
 import type { DailyCounter } from './orders.ts';
 
 /**
@@ -72,7 +76,7 @@ import type { DailyCounter } from './orders.ts';
  * parsing; agent imports none of their providers. The prohibited-word and category filters are
  * agent's own (createProductionStreamAssembly).
  */
-export interface AgentStreamProvidedPorts {
+export interface AgentStreamProvidedPorts extends AgentEarningsProvidedPorts {
   readonly platforms: SearchProductsDeps['platforms'];
   readonly searchProducts: SearchProductsDeps['searchProducts'];
   readonly readProduct: RebateQuoteDeps['catalog']['readProduct'];
@@ -135,6 +139,12 @@ export interface AgentStreamBusinessPorts {
    * search_rules is not registered.
    */
   readonly rules?: Pick<RulesDeps, 'activeChunks' | 'config'>;
+  /**
+   * B3-16a (D32): get_my_earnings' figures (production: ports.earningsReads, the composition
+   * root's createEarningsReads, or ./earnings.ts createUnavailableEarningsReads). Absent:
+   * get_my_earnings is not registered.
+   */
+  readonly earnings?: EarningsReads;
 }
 
 /** B3-08g: orders' read queries, linking's link_logs reader, card_id refs, by-number budget. */
@@ -308,6 +318,17 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
       createSearchRulesHandler({
         activeChunks: ports.rules.activeChunks,
         config: ports.rules.config,
+        texts: dictionary,
+        cardReference,
+      }),
+    );
+  }
+  if (ports.earnings !== undefined) {
+    // B3-16a · BR-AI-01 细则「收益查询」: read per call for the server-side caller only.
+    handlers.push(
+      createGetMyEarningsHandler({
+        reads: ports.earnings,
+        clock: deps.clock,
         texts: dictionary,
         cardReference,
       }),

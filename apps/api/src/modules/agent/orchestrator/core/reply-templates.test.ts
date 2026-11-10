@@ -73,3 +73,28 @@ it('[AC-B3-08m#3] a malformed trace never builds an arbitrary key', () => {
   junk.succeeded('search_rules', { matched: 'yes' });
   expect(junk.texts()).toEqual([{ key: 'order_list.empty' }, { key: 'agent.rule.not_found' }]);
 });
+
+it('[AC-B3-16a#11] get_my_earnings: shown by any call → summary, else unavailable; between orders and rules', () => {
+  expect(isReplyTemplateTool('get_my_earnings')).toBe(true);
+
+  const failed = new ReplyTemplateCalls();
+  failed.called('get_my_earnings');
+  expect(failed.any).toBe(true);
+  expect(failed.texts()).toEqual([{ key: 'agent.earnings.unavailable' }]);
+  failed.succeeded('get_my_earnings', { earnings: 'shown' });
+  expect(failed.texts()).toEqual([{ key: 'agent.earnings.summary' }]);
+
+  const junk = new ReplyTemplateCalls();
+  junk.succeeded('get_my_earnings', { earnings: 'yes' });
+  expect(junk.texts()).toEqual([{ key: 'agent.earnings.unavailable' }]);
+
+  const all = new ReplyTemplateCalls();
+  all.succeeded('search_rules', { matched: false });
+  all.succeeded('get_my_earnings', { earnings: 'shown' });
+  all.succeeded('list_my_orders', { orders: [WAITING] });
+  expect(all.texts()).toEqual([
+    { key: 'order_status.WAITING.summary' },
+    { key: 'agent.earnings.summary' },
+    { key: 'agent.rule.not_found' },
+  ]);
+});

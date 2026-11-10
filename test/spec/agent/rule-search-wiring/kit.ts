@@ -17,7 +17,11 @@ import { PUBLISHED_AT, bodyOf } from '../rag-chunks/kit.ts';
 
 export { NOW, PUBLISHED_AT, bodyOf } from '../rag-chunks/kit.ts';
 
-/** BR-AI-02 正文：MVP 注册表 = allowlist（get_my_earnings 随 B3-16，不在本段）。 */
+/**
+ * BR-AI-02 正文：MVP 注册表 = allowlist（get_my_earnings 随 B3-16 加入，D32，D10-1234）。
+ * 用到本集合的测试标题是 MVP 时 7 个的原文，按 D10-1234 断言已改为 8 个，标题待
+ * FU-MODIFY-EXISTING-RETITLE 合并后更正。
+ */
 export const TOOLS = [
   'search_products',
   'get_rebate_quote',
@@ -26,6 +30,7 @@ export const TOOLS = [
   'prefill_claim',
   'search_rules',
   'handoff_to_human',
+  'get_my_earnings',
 ] as const;
 
 /** What guests and unbound users are offered (audience all). */

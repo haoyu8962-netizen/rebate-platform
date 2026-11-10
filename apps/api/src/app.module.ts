@@ -42,6 +42,7 @@ import {
   type RuleSyncArticles,
   type StreamReviewOptions,
 } from './modules/agent/index.ts';
+import { createEarningsReads } from './agent-earnings-reads.ts';
 import {
   CatalogAdminModule,
   CatalogModule,
@@ -267,6 +268,7 @@ import {
 // B1-02zn: GET /v1/me's balance reads the wallet summary query through ledger's read-only entry.
 import { getWalletSummary } from './modules/ledger/read.ts';
 import { readOrder } from './modules/orders/infra/pipeline-store.ts';
+import { registerWithdrawalAccountDecrypt } from './modules/payout/application/withdrawal-reads.ts';
 import { PaymentModule } from './modules/payment/index.ts';
 import {
   readAlipayWaterLevel,
@@ -3461,6 +3463,13 @@ function agentStreamPorts(union: DynamicModule, source: UnionQuotaSource): Dynam
           if (crypto === undefined && appConfig.appEnv !== 'local' && appConfig.appEnv !== 'test') {
             throw new Error('agent: item_ref needs the field keyring outside local / test');
           }
+          // B3-16a (D32, D10-1240): get_my_earnings reads the latest withdrawal through
+          // payout/read.ts listWithdrawalsForUser, which masks with the process's registered payee
+          // decryption. The api entry registers it via PayoutModule.forRoot({ reads: payeeDecrypt });
+          // the stream entry has no PayoutModule, so the same decryption is registered here
+          // (idempotent; without the field keyring nothing is registered and the read fails).
+          const withdrawalDecrypt = payeeDecrypt.useFactory(crypto);
+          if (withdrawalDecrypt !== null) registerWithdrawalAccountDecrypt(withdrawalDecrypt);
           const union = governedUnion(registry, endpoints, { clock, logger, redis }, source);
           const config = createContentReader({ db, clock });
           const catalog = createCatalog({
@@ -3631,6 +3640,14 @@ function agentStreamPorts(union: DynamicModule, source: UnionQuotaSource): Dynam
             },
             claimEntries: { read: (input) => claimEntries.read(input) },
             dailyCounter: agentDailyCounter(clock, redis),
+            // B3-16a (D32; D10-1244): get_my_earnings' reads, built here over this entry's db and
+            // clock with the same owner ports as GET /v1/wallet/summary (agent-earnings-reads.ts),
+            // so agent neither imports ledger / payout nor hands its database handle to them.
+            earningsReads: createEarningsReads({
+              db,
+              clock,
+              wallet: walletSummaryDependencies(db, clock),
+            }),
           };
         },
       },

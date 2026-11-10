@@ -19,7 +19,9 @@ export const DENYLIST =
 
 /**
  * 注册表（= allowlist）的精确集合。B3-08l（D10-327 / D10-808）：加 search_rules，6 → 7；
- * get_my_earnings 仍不在。
+ * B3-16（D32，D10-1234）：加 get_my_earnings，7 → 8。
+ * 用到本集合的测试标题是 MVP 时 7 个的原文，按 D10-1234 断言已改为 8 个，标题待
+ * FU-MODIFY-EXISTING-RETITLE 合并后更正。
  */
 export const EXPECTED_TOOLS = [
   'search_products',
@@ -29,14 +31,14 @@ export const EXPECTED_TOOLS = [
   'prefill_claim',
   'handoff_to_human',
   'search_rules',
+  'get_my_earnings',
 ] as const;
 
 /** 本段新注册的四个工具（开关种子也是这四个）。 */
 export const NEW_TOOLS = ['handoff_to_human', 'prefill_claim', 'list_my_orders', 'explain_order'];
 
-/** 不得出现在下发定义里的名字：本段不注册的工具、内部步骤与意图（B3-08l 起 search_rules 已注册，移出）。 */
+/** 不得出现在下发定义里的名字：本段不注册的工具、内部步骤与意图（B3-08l 起 search_rules、B3-16 起 get_my_earnings 已注册，移出）。 */
 export const NEVER_OFFERED = [
-  'get_my_earnings',
   'parse_input',
   'resolve_link',
   'register_links',

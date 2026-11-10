@@ -106,6 +106,7 @@ export function failConfigRead(key: string): void {
  * every switch of NEW_TOOLS, of search_rules and of NEVER_OFFERED set to true for the caller's app
  * unless `switches` says otherwise, and the production assembly over stand-in order ports.
  * B3-08l: search_rules left NEVER_OFFERED (now registered); its switch is still seeded as before.
+ * B3-16（D10-1242）：get_my_earnings 移出 NEVER_OFFERED 后开关照旧种下。
  */
 export async function ordersFixture(
   db: Kysely<DB>,
@@ -116,7 +117,7 @@ export async function ordersFixture(
 ) {
   const f = await fixture(db, options.caller);
   const appId = f.caller.appId;
-  for (const name of [...NEW_TOOLS, 'search_rules', ...NEVER_OFFERED]) {
+  for (const name of [...NEW_TOOLS, 'search_rules', 'get_my_earnings', ...NEVER_OFFERED]) {
     const state = options.switches?.[name] ?? 'on';
     const key = switchKey(name);
     if (state === 'on') await setConfig(db, appId, key, true);
