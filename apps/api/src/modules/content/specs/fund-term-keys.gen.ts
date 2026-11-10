@@ -264,6 +264,7 @@ export const FUND_TERM_KEYS = {
       "agent.notice.relaxed_spec",
       "agent.notice.search_disabled",
       "agent.notice.title_based",
+      "agent.notice.tlj_none",
       "agent.notice.tlj_taobao_only",
       "agent.order.lookup_limited",
       "agent.refuse.advice",

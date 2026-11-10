@@ -56,6 +56,7 @@
     "agent.notice.relaxed_spec": "已放宽规格条件。",
     "agent.notice.search_disabled": "{platform_name}暂不提供搜索，可以把商品链接发给我查返利。",
     "agent.notice.title_based": "以上只根据商品标题判断，具体以商品详情为准。",
+    "agent.notice.tlj_none": "暂无淘礼金活动",
     "agent.notice.tlj_taobao_only": "淘礼金仅支持淘宝。",
     "agent.order.lookup_limited": "查询次数较多，请到订单页查看或稍后再试。",
     "agent.refuse.advice": "这类问题请咨询医生、律师等专业人士。想买相关商品的话，直接告诉我商品名。",

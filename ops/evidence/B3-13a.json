@@ -1,0 +1,37 @@
+{
+  "task": "B3-13a",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "c1523bc8a85c6289df1e2ffefde9b281d75f3752",
+  "red_tests": [],
+  "risk_note": "One default text only (D10-1225, 规划/05 B3-13 wrap-up). The 96 agent.* copy keys B3-13 asks for (refusals, need login / phone, timeout, degraded, page guide agent.guide.*, earnings agent.earnings.*) were already in contracts/texts.default.json (CT-16e #54, CT-16f #1114 and later) and classified; the only key 08 names that was missing is agent.notice.tlj_none = 暂无淘礼金活动 (BR-TEXT-15 判定 6, BR-AI-17 细则, verbatim, no full stop as in 08). Added in alphabetical place, classified ordinary in specs/fund-term-keys.yaml next to its sibling agent.notice.tlj_taobao_only (no amount variable, none of the BR-TEXT-12 fund keywords, so no exempt entry), fund-term-keys.gen.ts regenerated. No code emits the notice yet (search_products has no benefits parameter; reported to the orchestrator as a separate gap). Host: generate-text-specs --verify 0, contracts:check 0, codegen with no other drift, contracts-ts tests 0, apps/api content unit tests 873 passed, prettier 0. Full verification by the required CI checks.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh (run first this round, succeeded), couli-runs/B3-13a/review-codex-contract1.json, no findings."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ebae41e5bd2f4bbd030d97b9a6973413f5dd8fc3",
+    "specs": "f5503d0a7dd2489381f651ec5c96e288f64749b1"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
