@@ -3,6 +3,7 @@ repo: rebate-platform
 title: search_products 补 04 §8.5 参数：benefits[]（coupon / taolijin）、brand、category_hint、exclude_keywords[]；服务端过滤，淘礼金首版关闭分支只出 notice agent.notice.tlj_none、限定非淘宝另出 tlj_taobao_only（BR-AI-17）
 type: impl
 # 2026-11-10 agent 线入账（编排 D10-1227 ②，承 D10-1225 B3-13 核对）。现 agent/tools/search/schema.ts 只有 q / platforms / sort / 价格 / spec / page / limit，缺 04 §8.5 的 benefits[] 等四参数，tlj_none（B3-13a #3110 补键）与 tlj_taobao_only 发不出，BR-AI-21 权益过滤无从实现。
+# 补 paths（Codex general r1 S1）：结果编排 orchestrator/results/tools.ts 对空结果会放宽并追加 no_result，须照禁售先例把淘礼金关闭结果原样返回。
 # 口径（方案 couli-runs/B3-04k/plan.md，08 未写全处为本线默认、已报编排）：benefits 首版只收 coupon（⇔ coupon_fen>0，同卡片「有券」）与 taolijin；taolijin + tlj.enabled=off 不搜索、只出 tlj_none、不出替代卡；coupon 服务端再过滤、不放宽；brand / category_hint 只拼进检索词；exclude_keywords 按标题去掉。字段名 q 与 04 的 keyword 不一致，不改名，待规划回写。
 refs: [BR-AI-17, BR-AI-24, BR-AI-08]
 refs_hash:
@@ -12,6 +13,7 @@ refs_hash:
 deps: []
 paths:
   - 'apps/api/src/modules/agent/tools/search/**'
+  - 'apps/api/src/modules/agent/orchestrator/results/**'
 test_paths:
   - 'test/spec/agent/search-benefits/**'
 impl: claude
