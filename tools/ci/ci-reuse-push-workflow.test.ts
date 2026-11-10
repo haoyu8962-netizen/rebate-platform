@@ -2,7 +2,7 @@
 // .github/workflows/ci.yml reuses the passes of the pull request that produced the pushed commit,
 // read from the real file.
 //
-// Reuse holds only when ALL of these hold, for every one of the twelve heavy verify jobs:
+// Reuse holds only when ALL of these hold, for every one of the sixteen verify jobs (verify-int-1 … -6 since CT-06zzzzq):
 //   1. `repos/<repo>/commits/<pushed sha>/pulls` lists exactly one pull request, and it is merged,
 //      its base is main and its head repository (`head.repo.full_name`) is this repository;
 //   2. a ci.yml run of event pull_request on that pull request's final head H, whose
@@ -60,6 +60,10 @@ const VERIFY_JOBS = [
   'verify-props-sha-3',
   'verify-int-1',
   'verify-int-2',
+  'verify-int-3',
+  'verify-int-4',
+  'verify-int-5',
+  'verify-int-6',
 ] as const;
 type VerifyJob = (typeof VERIFY_JOBS)[number];
 
@@ -1460,7 +1464,7 @@ function expectFullRun(r: PushRun): void {
 
 // --- 2. reuse on a push to main ----------------------------------------------------------------
 
-it('[CT-06zzzzf] push to main: one merged own-repo PR whose final-head ci.yml pull_request run passed all twelve jobs on this very tree -> reuse=true, without waiting', () => {
+it('[CT-06zzzzf] push to main: one merged own-repo PR whose final-head ci.yml pull_request run passed all sixteen jobs on this very tree -> reuse=true, without waiting', () => {
   const r = runPush(good());
   expect(r.status, r.out).toBe(0);
   expect(r.reuse, r.out).toBe('true');
@@ -1636,6 +1640,21 @@ const FULL_RUN_CASES: Case[] = [
       labelRun(5002),
     ]),
   },
+  // CT-06zzzzq: each of the four added int shards is checked like the others.
+  ...(['verify-int-3', 'verify-int-4', 'verify-int-5', 'verify-int-6'] as const).map((job) => ({
+    name: `c: only the artifact of ${job} is missing`,
+    make: withRuns(() => [
+      codeRun(5001, { artifacts: verified(undefined, { [job]: { missing: true } }) }),
+      labelRun(5002),
+    ]),
+  })),
+  ...(['verify-int-3', 'verify-int-6'] as const).map((job) => ({
+    name: `d: the latest attempt of ${job} is failure (its artifact is there)`,
+    make: withRuns(() => [
+      codeRun(5001, { attempts: [jobsAll('success', { [job]: 'failure' })] }),
+      labelRun(5002),
+    ]),
+  })),
   // d. a job that did not pass
   ...(['failure', 'cancelled', 'skipped'] as const).map((c) => ({
     name: `d: the latest attempt of verify-spec-2 is ${c} (its artifact is there)`,
@@ -1691,7 +1710,7 @@ const FULL_RUN_CASES: Case[] = [
   },
   // g. all or nothing
   {
-    name: 'g: six jobs qualify, the other six each fail one condition',
+    name: 'g: ten jobs qualify, the other six each fail one condition',
     make: withRuns(() => [
       codeRun(5001, {
         attempts: [
@@ -1711,7 +1730,7 @@ const FULL_RUN_CASES: Case[] = [
     ]),
   },
   {
-    name: 'g: eleven jobs qualify, verify-static has no artifact',
+    name: 'g: fifteen jobs qualify, verify-static has no artifact',
     make: withRuns(() => [
       codeRun(5001, { artifacts: verified(undefined, { 'verify-static': { missing: true } }) }),
       labelRun(5002),
@@ -1768,6 +1787,10 @@ const GATE_VARS: [string, VerifyJob][] = [
   ['PROPSSHA3', 'verify-props-sha-3'],
   ['INT1', 'verify-int-1'],
   ['INT2', 'verify-int-2'],
+  ['INT3', 'verify-int-3'],
+  ['INT4', 'verify-int-4'],
+  ['INT5', 'verify-int-5'],
+  ['INT6', 'verify-int-6'],
 ];
 // Spelled from its parts: test-guard (no-skip-only) matches the dot-only text.
 const LEDGER_OUTPUT = ['needs.ledger-only-detect.outputs', 'only'].join('.');

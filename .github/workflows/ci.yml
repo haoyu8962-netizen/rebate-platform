@@ -16,7 +16,7 @@
 # Ledger-only fast path (D10-935, CT-06zzzv; docs/** too since D10-1024 E, CT-06zzzze): on a pull
 # request whose base...head changes nothing but task ledgers (ops/tasks/<id>.yaml) or docs
 # (docs/**), as decided by ledger-only-detect from the base copy of tools/ci/ledger-only.ts, the
-# eleven heavy verify jobs are skipped; verify-static (with the task ledger check) and guard-git
+# fifteen heavy verify jobs are skipped; verify-static (with the task ledger check) and guard-git
 # still run, and ci-gate accepts those skips only when the detection itself succeeded and said
 # only=true.
 name: ci
@@ -47,7 +47,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # 2026-11-01 (CT-06zzv): `tsc -b` (verify-static typecheck) and `pnpm build` (verify-unit and
-# verify-int, now verify-int-1 / -2) ran out of the default Node heap (about 4 GB): #2109 logged
+# verify-int, now verify-int-1 … -6) ran out of the default Node heap (about 4 GB): #2109 logged
 # "FATAL ERROR: heap out of memory", and #2108 / #2110 / #2111 failed the same way at once; the
 # same trunk passes tsc with 8 GB locally.
 # ubuntu-latest for a public repository has 4 vCPUs and 16 GB, and the flag is only a ceiling.
@@ -62,8 +62,8 @@ jobs:
     # verify-spec-2 (the four jobs that replaced verify-fast, CT-06zx), verify-props-1,
     # verify-props-2, verify-props-3, verify-props-sha-1, verify-props-sha-2, verify-props-sha-3
     # (the fixed-seed and commit-SHA-seed passes, three shards each, that replaced verify-props,
-    # CT-06zxa, D10-902 / CT-06zzzr), verify-int-1 and
-    # verify-int-2 (the two shards that replaced verify-int, CT-06zzb), an
+    # CT-06zxa, D10-902 / CT-06zzzr), and verify-int-1 … verify-int-6 (the shards that replaced
+    # verify-int: two since CT-06zzb, six since CT-06zzzzq / D10-1222), an
     # earlier run of this workflow file (ci.yml) for the same PR head SHA has that job's latest
     # attempt concluded `success` AND carries the artifact `verified-<job>-<tree>` that the job
     # uploads only after all of its steps passed, <tree> being the tree it tested. The tree of
@@ -96,7 +96,7 @@ jobs:
     # wait, right after the run-list query: so once more when nothing is left unfinished (before
     # deciding) and before giving up at the limit. When it answers a head other than this event's
     # head.sha, the step logs "PR #<n> head moved from <old> to <new>", writes moved=true and
-    # exits 1 at once (no further sleep or query, never reuse=true). verify-static and the eleven
+    # exits 1 at once (no further sleep or query, never reuse=true). verify-static and the fifteen
     # heavy jobs then skip by `needs.verify-reuse.outputs.moved != 'true'` in their `if` (GitHub
     # keeps the outputs a step wrote before it failed, and passes a failed job's outputs on), and
     # ci-gate is red, on the old head only; the new head has a run of its own. A failed query (gh
@@ -113,7 +113,7 @@ jobs:
     # pull_request whose head_repository.full_name is this repository has the job's latest attempt
     # concluded `success`; (3) that same run carries an unexpired artifact
     # `verified-<job>-<tree>` whose <tree> is exactly (string equality, no prefix) the tree of the
-    # pushed commit's checkout. All twelve jobs must be found, or reuse=false and every job runs.
+    # pushed commit's checkout. All sixteen jobs must be found, or reuse=false and every job runs.
     # Every run on H is looked at, not only the newest (a label run on H has its verify jobs
     # skipped and no artifacts). A fork, a different tree, an expired or missing artifact, a job
     # whose latest attempt did not pass, zero or several matching pull requests, or any API error:
@@ -153,7 +153,7 @@ jobs:
               echo "reuse=false" >> "$GITHUB_OUTPUT"
               exit 0
             }
-            jobs='verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2'
+            jobs='verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2 verify-int-3 verify-int-4 verify-int-5 verify-int-6'
             # (1) exactly one merged pull request into main of this repository, from this repository.
             prs=$(gh api "repos/$REPO/commits/$PUSH_SHA/pulls?per_page=100" \
               --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .base.repo.full_name == \"$REPO\" and .head.repo != null and .head.repo.full_name == \"$REPO\") | \"\(.number) \(.head.sha)\"") ||
@@ -208,7 +208,7 @@ jobs:
               done
               full "push to main"
             fi
-            echo "all twelve jobs passed on this tree in PR #$pr: reused"
+            echo "all sixteen jobs passed on this tree in PR #$pr: reused"
             echo "reuse=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -251,7 +251,7 @@ jobs:
           runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
             --jq ".workflow_runs[] | select(.id != $RUN_ID) | .id")
           reuse=true
-          for job in verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2; do
+          for job in verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2 verify-int-3 verify-int-4 verify-int-5 verify-int-6; do
             found=''
             for run in $runs; do
               ok=$(gh api "repos/$REPO/actions/runs/$run/jobs?filter=latest&per_page=100" \
@@ -287,9 +287,9 @@ jobs:
     # but task ledgers, and twenty of them open at once queued behind the heavy jobs of each other
     # for one to two hours. This job decides whether base...head (the merge-base diff) changes only
     # ops/tasks/<id>.yaml, or since D10-1024 E (CT-06zzzze) also docs/** (only task ledgers or docs;
-    # both sides of a rename, deletions too, regular files only, at least one path); the eleven
+    # both sides of a rename, deletions too, regular files only, at least one path); the fifteen
     # heavy jobs (verify-unit, verify-spec-1 / -2, verify-props-1 / -2 / -3, verify-props-sha-1 /
-    # -2 / -3, verify-int-1 / -2) are then skipped, while verify-static (which runs
+    # -2 / -3, verify-int-1 … -6) are then skipped, while verify-static (which runs
     # `node tools/ops/task.ts check`) and guard-git run as always. ops/evidence, any other ops/ file,
     # tools, test, apps, .github, a docs/ outside the top level, or a top-level file such as
     # README.md is never ledger-only. Which paths count is decided only in that script, never by a
@@ -822,14 +822,27 @@ jobs:
 
   # D10-692 follow-up (CT-06zzb, 2026-11-06): test:int alone took 4198–4409 s (70–73 minutes) in
   # the last green main runs against the 90-minute cap; 1618 of its 1624 files are @couli/spec-tests.
-  # It is split into two parallel jobs by file, the same way as verify-spec-1 / -2: each runs the
-  # root `test:int` (turbo, the three packages concurrently) as `pnpm test:int -- --shard=i/2`, the
-  # shard passed through to every package's `vitest run`; vitest sorts each package's files by the SHA-1 of their path and
-  # cuts them into contiguous ranges, so the two shards are disjoint and their union is the whole
-  # set. Each shard starts its own one-shot PostgreSQL (Testcontainers) and Redis (service).
-  # Both shards are skipped when ledger-only-detect says only=true (D10-935, CT-06zzzv).
-  # verify-int-1 also runs the browser tests, the build smoke and db:check as before; verify-int-2
-  # runs only its shard. No test is dropped, nothing is allowed to fail.
+  # CT-06zzb split it into two jobs by `pnpm test:int -- --shard=i/2`; the two shards stayed
+  # uneven (58:42 of the test time, verify-int-1 about 51 minutes, the long pole of the round).
+  # D10-1222 (CT-06zzzzq, 2026-11-10; couli-runs/CI-shard/plan.md): six jobs, listed one by one
+  # (not a matrix: verify-reuse matches each job by its name and its `verified-<job>-<tree>`
+  # artifact, and ci-gate needs the result of each one, as with verify-props-1 / -2 / -3):
+  #   verify-int-1 … -6  `pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=i/6`
+  #   verify-int-4       also `pnpm test:int --log-order=stream --filter='!@couli/spec-tests'` once,
+  #                      unsharded, plus the browser tests, the build smoke and db:check
+  # Only @couli/spec-tests is sharded: its vitest sorts the files by the SHA-1 of their path and
+  # cuts them into contiguous ranges, so for the same N the shards i/N (i = 1..N) are disjoint and
+  # their union is the whole set (vitest BaseSequencer.shard). The other packages with test:int
+  # (@couli/api with 5 int files, @couli/db with 2, and any package added later) are not: a shard
+  # of 6 over 2 or 5 files leaves some shard empty, and with passWithNoTests false an empty shard
+  # fails. They run once, together, by the negated filter, in verify-int-4, the lightest shard in
+  # the simulation of the plan (§2.2: 45 / 38 / 30 / 25 / 29 / 28 minutes of test time), so the
+  # tail (about 2.2 minutes) and the other packages (about 0.5) do not make it the long pole.
+  # Each shard starts its own one-shot PostgreSQL (Testcontainers) and Redis (service).
+  # All six are skipped when ledger-only-detect says only=true (D10-935, CT-06zzzv).
+  # No test is dropped, nothing is allowed to fail. The local `pnpm verify`
+  # (tools/ops/verify-container.sh) still runs the whole root test:int once, unsharded.
+  # Balancing the shards by test time is FU-CI-SHARD-BALANCE, not done here.
   verify-int-1:
     # Needs Docker (Testcontainers starts the one-shot PostgreSQL): ubuntu-latest, never ubuntu-slim.
     # The one-shot Redis of the integration tests (TEST_REDIS_URL) is a service container with
@@ -848,9 +861,254 @@ jobs:
     # 1283 files / 13760 tests; green runs on 10-30/31 took 35–59 minutes (four of eight sampled at
     # 58–59) and #2010 (run 41175931885) was cancelled at 60 after 56 minutes of passing test:int.
     # 90 is the 59-minute maximum with a 1.5× margin; splitting test:int into shards is CT-06zzb.
-    # 90 → 60 (2026-11-06, CT-06zzb): with test:int halved each shard is expected near 37 minutes
-    # plus about 5 of setup (and about 3 of browser tests, smoke and db:check in this job).
-    timeout-minutes: 60
+    # 90 → 60 (2026-11-06, CT-06zzb): with test:int halved each shard was expected near 37 minutes
+    # plus about 5 of setup (and about 3 of browser tests, smoke and db:check in that job).
+    # 60 → 40 (2026-11-10, CT-06zzzzq, D10-1222): six shards; the heaviest (this one) is expected
+    # at about 22.5 minutes on a median runner and 24.7 on a slow one (plan §2.2, 4 minutes of
+    # setup included), and verify-int-4 with its tail at about 17–18. 40 is 25 minutes with a
+    # 1.5× margin (37.5), rounded up to a multiple of 5; the same for all six shards.
+    timeout-minutes: 40
+    services:
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --tmpfs /data
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # A service container takes no command, so the redis-server settings of
+      # infra/local/compose.yaml (no RDB, no AOF, noeviction with an explicit limit;
+      # ADR-0001 §4.2 #17) are applied at run time.
+      - name: Configure the one-shot Redis
+        run: |
+          reply="$(docker exec "$REDIS_ID" redis-cli CONFIG SET save '' appendonly no maxmemory 256mb maxmemory-policy noeviction)"
+          if [ "$reply" != OK ]; then
+            echo "::error::CONFIG SET on the one-shot Redis replied: ${reply}"
+            exit 1
+          fi
+          # From the runner, the way the tests connect (TEST_REDIS_URL): the published port answers.
+          pong=''
+          if exec 3<>/dev/tcp/127.0.0.1/6379; then
+            printf 'PING\r\n' >&3
+            IFS= read -r -t 5 pong <&3 || true
+            exec 3>&-
+          fi
+          if [ "${pong%$'\r'}" != '+PONG' ]; then
+            echo "::error::the one-shot Redis does not answer PING on 127.0.0.1:6379 (got: ${pong})"
+            exit 1
+          fi
+        env:
+          REDIS_ID: ${{ job.services.redis.id }}
+      # PROP_RUNS (D10-210, CT-06zg): the property cases inside the integration tests read their run
+      # count from PROP_RUNS (some scale it, e.g. test/spec/agent/stream-finalize/model.prop.int.test.ts
+      # runs max(20, PROP_RUNS / 100)). 2000 is the long-run tier of their design (PR 200 / long run
+      # 2000, test/spec/ledger/posting/properties.int.test.ts). Unset, they fell to the
+      # @couli/testing default of 10000, which was not a choice ([AC-B2-02f#23] alone took 783 s).
+      # verify-props and longrun-props keep their own run counts.
+      # The root `test:int` script (`turbo run test:int --env-mode=loose`), limited by turbo's
+      # --filter to @couli/spec-tests; turbo appends what follows `--` (the shard) to that
+      # package's script, `vitest run` (CT-06zzb; one package only since CT-06zzzzq, see above).
+      # --log-order=stream (CT-06zzzj, orchestrator 11-06 14:29): the output reaches the log line
+      # by line instead of when the package finishes, so a cancelled or timed-out shard still
+      # shows where it was.
+      - run: pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=1/6
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          PROP_RUNS: '2000'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-int-1-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-int-2:
+    # Same as verify-int-1, shard 2/6 of @couli/spec-tests only (CT-06zzzzq, D10-1222); the
+    # other packages, the browser tests, the build smoke and db:check are in verify-int-4.
+    # Skipped only when verify-reuse found a success of this very job on the same tested tree
+    # (D10-242), when the PR head moved, or on a ledger-only pull request.
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    runs-on: ubuntu-latest
+    # As verify-int-1 (CT-06zzzzq).
+    timeout-minutes: 40
+    services:
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --tmpfs /data
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # A service container takes no command, so the redis-server settings of
+      # infra/local/compose.yaml (no RDB, no AOF, noeviction with an explicit limit;
+      # ADR-0001 §4.2 #17) are applied at run time.
+      - name: Configure the one-shot Redis
+        run: |
+          reply="$(docker exec "$REDIS_ID" redis-cli CONFIG SET save '' appendonly no maxmemory 256mb maxmemory-policy noeviction)"
+          if [ "$reply" != OK ]; then
+            echo "::error::CONFIG SET on the one-shot Redis replied: ${reply}"
+            exit 1
+          fi
+          # From the runner, the way the tests connect (TEST_REDIS_URL): the published port answers.
+          pong=''
+          if exec 3<>/dev/tcp/127.0.0.1/6379; then
+            printf 'PING\r\n' >&3
+            IFS= read -r -t 5 pong <&3 || true
+            exec 3>&-
+          fi
+          if [ "${pong%$'\r'}" != '+PONG' ]; then
+            echo "::error::the one-shot Redis does not answer PING on 127.0.0.1:6379 (got: ${pong})"
+            exit 1
+          fi
+        env:
+          REDIS_ID: ${{ job.services.redis.id }}
+      # PROP_RUNS as in verify-int-1 (D10-210, CT-06zg); the command as in verify-int-1, shard 2/6.
+      - run: pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=2/6
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          PROP_RUNS: '2000'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-int-2-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-int-3:
+    # Same as verify-int-1, shard 3/6 of @couli/spec-tests only (CT-06zzzzq, D10-1222); the
+    # other packages, the browser tests, the build smoke and db:check are in verify-int-4.
+    # Skipped only when verify-reuse found a success of this very job on the same tested tree
+    # (D10-242), when the PR head moved, or on a ledger-only pull request.
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    runs-on: ubuntu-latest
+    # As verify-int-1 (CT-06zzzzq).
+    timeout-minutes: 40
+    services:
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --tmpfs /data
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # A service container takes no command, so the redis-server settings of
+      # infra/local/compose.yaml (no RDB, no AOF, noeviction with an explicit limit;
+      # ADR-0001 §4.2 #17) are applied at run time.
+      - name: Configure the one-shot Redis
+        run: |
+          reply="$(docker exec "$REDIS_ID" redis-cli CONFIG SET save '' appendonly no maxmemory 256mb maxmemory-policy noeviction)"
+          if [ "$reply" != OK ]; then
+            echo "::error::CONFIG SET on the one-shot Redis replied: ${reply}"
+            exit 1
+          fi
+          # From the runner, the way the tests connect (TEST_REDIS_URL): the published port answers.
+          pong=''
+          if exec 3<>/dev/tcp/127.0.0.1/6379; then
+            printf 'PING\r\n' >&3
+            IFS= read -r -t 5 pong <&3 || true
+            exec 3>&-
+          fi
+          if [ "${pong%$'\r'}" != '+PONG' ]; then
+            echo "::error::the one-shot Redis does not answer PING on 127.0.0.1:6379 (got: ${pong})"
+            exit 1
+          fi
+        env:
+          REDIS_ID: ${{ job.services.redis.id }}
+      # PROP_RUNS as in verify-int-1 (D10-210, CT-06zg); the command as in verify-int-1, shard 3/6.
+      - run: pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=3/6
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          PROP_RUNS: '2000'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-int-3-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-int-4:
+    # Same as verify-int-1, shard 4/6 of @couli/spec-tests (CT-06zzzzq, D10-1222), and the
+    # lightest one, so it also runs the test:int of every other package once, unsharded (the
+    # negated filter), then the browser tests, the build smoke and db:check that were in
+    # verify-int-1 before. Skipped only when verify-reuse found a success of this very job on
+    # the same tested tree (D10-242), when the PR head moved, or on a ledger-only pull request.
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    runs-on: ubuntu-latest
+    # As verify-int-1 (CT-06zzzzq; the history of this limit is there): 40 minutes, about 17–18
+    # expected here with the tail and the other packages.
+    timeout-minutes: 40
     services:
       redis:
         image: redis:7.4.11-alpine
@@ -927,7 +1185,7 @@ jobs:
       # nothing for 30 s is dropped and retried up to 5 times (a slow but moving download is not
       # cut by this; the prefetch wrapper below, the cache and the step limit bound it). The step has
       # its own 10-minute limit so a mirror that stays slow fails the job early (rerun it) instead of
-      # eating the job's 60 minutes: a run where this step alone took 10–25 minutes used to pass and
+      # eating the job's time limit: a run where this step alone took 10–25 minutes used to pass and
       # now fails, by design; `apt-get update` is not cached and counts against the same 10 minutes.
       # The job limit and the tests are unchanged.
       - name: Install Chromium and the CJK fonts for the browser tests
@@ -1045,11 +1303,19 @@ jobs:
       # 2000, test/spec/ledger/posting/properties.int.test.ts). Unset, they fell to the
       # @couli/testing default of 10000, which was not a choice ([AC-B2-02f#23] alone took 783 s).
       # verify-props and longrun-props keep their own run counts.
-      # The root `test:int` script (`turbo run test:int --env-mode=loose`); pnpm passes `-- --shard`
-      # on to turbo, which appends it to each package's script (CT-06zzb). --log-order=stream
-      # (CT-06zzzj, orchestrator 11-06 14:29): each package's output reaches the log line by line instead of when the
-      # package finishes, so a cancelled or timed-out shard still shows where it was.
-      - run: pnpm test:int --log-order=stream -- --shard=1/2
+      # The root `test:int` script (`turbo run test:int --env-mode=loose`), limited by turbo's
+      # --filter to @couli/spec-tests; turbo appends what follows `--` (the shard) to that
+      # package's script, `vitest run` (CT-06zzb; one package only since CT-06zzzzq, see above).
+      # --log-order=stream (CT-06zzzj, orchestrator 11-06 14:29): the output reaches the log line
+      # by line instead of when the package finishes, so a cancelled or timed-out shard still
+      # shows where it was.
+      - run: pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=4/6
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          PROP_RUNS: '2000'
+      # The same root script for every package but @couli/spec-tests (turbo's negated --filter):
+      # @couli/api, @couli/db and any package added later, once and with no shard (CT-06zzzzq).
+      - run: pnpm test:int --log-order=stream --filter='!@couli/spec-tests'
         env:
           TEST_REDIS_URL: redis://127.0.0.1:6379/0
           PROP_RUNS: '2000'
@@ -1107,21 +1373,23 @@ jobs:
       - run: pnpm db:check
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: verified-verify-int-1-${{ steps.tested.outputs.tree }}
+          name: verified-verify-int-4-${{ steps.tested.outputs.tree }}
           # The artifact name is the record (job and tested tree); the file only holds the tree id,
           # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
           path: ${{ runner.temp }}/verified-tree.txt
           retention-days: 7
           if-no-files-found: error
 
-  verify-int-2:
-    # Same as verify-int-1, other shard (CT-06zzb): its half of the test:int files only; the
-    # browser tests, the build smoke and db:check stay in verify-int-1. Skipped only when
-    # verify-reuse found a success of this very job on the same tested tree (D10-242).
+  verify-int-5:
+    # Same as verify-int-1, shard 5/6 of @couli/spec-tests only (CT-06zzzzq, D10-1222); the
+    # other packages, the browser tests, the build smoke and db:check are in verify-int-4.
+    # Skipped only when verify-reuse found a success of this very job on the same tested tree
+    # (D10-242), when the PR head moved, or on a ledger-only pull request.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # As verify-int-1 (CT-06zzzzq).
+    timeout-minutes: 40
     services:
       redis:
         image: redis:7.4.11-alpine
@@ -1174,14 +1442,90 @@ jobs:
           fi
         env:
           REDIS_ID: ${{ job.services.redis.id }}
-      # PROP_RUNS as in verify-int-1 (D10-210, CT-06zg).
-      - run: pnpm test:int --log-order=stream -- --shard=2/2
+      # PROP_RUNS as in verify-int-1 (D10-210, CT-06zg); the command as in verify-int-1, shard 5/6.
+      - run: pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=5/6
         env:
           TEST_REDIS_URL: redis://127.0.0.1:6379/0
           PROP_RUNS: '2000'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: verified-verify-int-2-${{ steps.tested.outputs.tree }}
+          name: verified-verify-int-5-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-int-6:
+    # Same as verify-int-1, shard 6/6 of @couli/spec-tests only (CT-06zzzzq, D10-1222); the
+    # other packages, the browser tests, the build smoke and db:check are in verify-int-4.
+    # Skipped only when verify-reuse found a success of this very job on the same tested tree
+    # (D10-242), when the PR head moved, or on a ledger-only pull request.
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    runs-on: ubuntu-latest
+    # As verify-int-1 (CT-06zzzzq).
+    timeout-minutes: 40
+    services:
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --tmpfs /data
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # A service container takes no command, so the redis-server settings of
+      # infra/local/compose.yaml (no RDB, no AOF, noeviction with an explicit limit;
+      # ADR-0001 §4.2 #17) are applied at run time.
+      - name: Configure the one-shot Redis
+        run: |
+          reply="$(docker exec "$REDIS_ID" redis-cli CONFIG SET save '' appendonly no maxmemory 256mb maxmemory-policy noeviction)"
+          if [ "$reply" != OK ]; then
+            echo "::error::CONFIG SET on the one-shot Redis replied: ${reply}"
+            exit 1
+          fi
+          # From the runner, the way the tests connect (TEST_REDIS_URL): the published port answers.
+          pong=''
+          if exec 3<>/dev/tcp/127.0.0.1/6379; then
+            printf 'PING\r\n' >&3
+            IFS= read -r -t 5 pong <&3 || true
+            exec 3>&-
+          fi
+          if [ "${pong%$'\r'}" != '+PONG' ]; then
+            echo "::error::the one-shot Redis does not answer PING on 127.0.0.1:6379 (got: ${pong})"
+            exit 1
+          fi
+        env:
+          REDIS_ID: ${{ job.services.redis.id }}
+      # PROP_RUNS as in verify-int-1 (D10-210, CT-06zg); the command as in verify-int-1, shard 6/6.
+      - run: pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=6/6
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          PROP_RUNS: '2000'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-int-6-${{ steps.tested.outputs.tree }}
           # The artifact name is the record (job and tested tree); the file only holds the tree id,
           # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
           path: ${{ runner.temp }}/verified-tree.txt
@@ -1259,8 +1603,8 @@ jobs:
     # CT-06zx: verify-static, verify-unit, verify-spec-1 and verify-spec-2 replace verify-fast;
     # each must pass (or be reused) on its own; so must verify-props-1 / -2 / -3 and
     # verify-props-sha-1 / -2 / -3 (CT-06zxa, split into one pass per job by D10-902 / CT-06zzzr),
-    # and verify-int-1 and verify-int-2 (CT-06zzb).
-    # D10-935 (CT-06zzzv): a skipped heavy job (all eleven but verify-static) also passes when
+    # and verify-int-1 … verify-int-6 (two shards since CT-06zzb, six since CT-06zzzzq / D10-1222).
+    # D10-935 (CT-06zzzv): a skipped heavy job (all fifteen but verify-static) also passes when
     # ledger-only-detect itself succeeded on a pull_request event and said exactly only=true: the
     # pull request changes nothing but task ledgers or docs (docs/**, D10-1024 E). A failed, cancelled or skipped detection, or
     # any other output, never lets a skip pass; verify-static and guard-git are not covered by it.
@@ -1279,6 +1623,10 @@ jobs:
       - verify-props-sha-3
       - verify-int-1
       - verify-int-2
+      - verify-int-3
+      - verify-int-4
+      - verify-int-5
+      - verify-int-6
       - guard-git
       - verify-reuse
       - ledger-only-detect
@@ -1287,7 +1635,7 @@ jobs:
     steps:
       - name: Summarise
         run: |
-          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE} ledger-only-detect=${LEDGER_RESULT}/${LEDGER_ONLY}"
+          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} verify-int-3=${INT3} verify-int-4=${INT4} verify-int-5=${INT5} verify-int-6=${INT6} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE} ledger-only-detect=${LEDGER_RESULT}/${LEDGER_ONLY}"
           # A verify job passes when it succeeded, or (label event, D10-242; push to main,
           # D10-1024 B2) when verify-reuse itself succeeded and found its success on the same
           # tested tree, so it was skipped.
@@ -1311,6 +1659,10 @@ jobs:
           [ "$PROPSSHA3" = success ] || reused "$PROPSSHA3" || ledger_only "$PROPSSHA3" || exit 1
           [ "$INT1" = success ] || reused "$INT1" || ledger_only "$INT1" || exit 1
           [ "$INT2" = success ] || reused "$INT2" || ledger_only "$INT2" || exit 1
+          [ "$INT3" = success ] || reused "$INT3" || ledger_only "$INT3" || exit 1
+          [ "$INT4" = success ] || reused "$INT4" || ledger_only "$INT4" || exit 1
+          [ "$INT5" = success ] || reused "$INT5" || ledger_only "$INT5" || exit 1
+          [ "$INT6" = success ] || reused "$INT6" || ledger_only "$INT6" || exit 1
           if [ "$EVENT" = pull_request ]; then
             [ "$GUARD" = success ] || exit 1
           else
@@ -1329,6 +1681,10 @@ jobs:
           PROPSSHA3: ${{ needs.verify-props-sha-3.result }}
           INT1: ${{ needs.verify-int-1.result }}
           INT2: ${{ needs.verify-int-2.result }}
+          INT3: ${{ needs.verify-int-3.result }}
+          INT4: ${{ needs.verify-int-4.result }}
+          INT5: ${{ needs.verify-int-5.result }}
+          INT6: ${{ needs.verify-int-6.result }}
           GUARD: ${{ needs.guard-git.result }}
           REUSE_RESULT: ${{ needs.verify-reuse.result }}
           REUSE: ${{ needs.verify-reuse.outputs.reuse }}

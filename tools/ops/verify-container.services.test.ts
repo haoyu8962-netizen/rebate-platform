@@ -830,12 +830,22 @@ it('Redis has one image and one configuration in the verify container, CI and th
   expect(ci).toContain('if exec 3<>/dev/tcp/127.0.0.1/6379; then\n');
   expect(ci).toContain("printf 'PING\\r\\n' >&3\n");
   expect(ci).toContain(`if [ "\${pong%$'\\r'}" != '+PONG' ]; then\n`);
-  // CT-06zzb: verify-int is split into verify-int-1 / -2 (CT-06zzzj: turbo streams its log); each shard connects the same way.
-  for (const shard of ['1/2', '2/2']) {
+  // CT-06zzb: verify-int is split into shards (CT-06zzzj: turbo streams its log); CT-06zzzzq: six
+  // jobs verify-int-1 … -6 shard @couli/spec-tests, and the lightest one also runs the other
+  // packages' test:int unsharded. Every one of these commands connects the same way.
+  const intCommands = [
+    ...[1, 2, 3, 4, 5, 6].map(
+      (i) =>
+        `pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=${String(i)}/6`,
+    ),
+    "pnpm test:int --log-order=stream --filter='!@couli/spec-tests'",
+  ];
+  for (const command of intCommands) {
     expect(ci).toContain(
-      `      - run: pnpm test:int --log-order=stream -- --shard=${shard}\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n`,
+      `      - run: ${command}\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n`,
     );
   }
+  expect(ci).not.toContain('pnpm test:int --log-order=stream -- --shard=');
 });
 
 // --- host services (COULI_VERIFY_HOST_SERVICES=1, the AWS test machine) -------------------------

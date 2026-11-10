@@ -49,6 +49,10 @@ const VERIFY_JOBS = [
   'verify-props-sha-3',
   'verify-int-1',
   'verify-int-2',
+  'verify-int-3',
+  'verify-int-4',
+  'verify-int-5',
+  'verify-int-6',
 ] as const;
 
 // --- line-based YAML helpers (as in ci-ledger-only-workflow.test.ts) ----------------------------
@@ -1389,6 +1393,18 @@ it('[CT-06zzzze] verify-reuse waits for the run in progress; when it completes w
   expect(r.sleeps).toBeLessThanOrEqual(pending + 2);
   expect(r.statusQueries).toBeGreaterThan(pending);
 });
+
+it.each(['verify-int-3', 'verify-int-4', 'verify-int-5', 'verify-int-6'])(
+  '[CT-06zzzzq] verify-reuse on a label event: a completed run whose %s failed (every other job passed, every artifact there) -> reuse=false',
+  (job) => {
+    const r = runReuse(
+      [...noiseRuns(), codeRun(5001, 0, allJobs('success', { [job]: 'failure' }))],
+      2,
+    );
+    expect(r.status, r.out).toBe(0);
+    expect(r.reuse, r.out).toEqual(['reuse=false']);
+  },
+);
 
 it('[CT-06zzzze] verify-reuse stops at the wait limit when a run never finishes: reuse=false, exit 0', () => {
   const r = runReuse([...noiseRuns(), codeRun(5001, null, allJobs('success'))], 2);

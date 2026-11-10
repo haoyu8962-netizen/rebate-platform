@@ -1,0 +1,25 @@
+id: CT-06zzzzq
+repo: rebate-platform
+title: CI 集成测试拆 6 片：verify-int-1…6 只对 @couli/spec-tests 的 test:int 分 6 片（--shard=i/6），api / db 等其余包的 test:int 与浏览器、smoke、db:check 尾巴放最轻那片不分片跑一次；verify-reuse、ci-gate 与相关工具测试跟着改；本地容器校验照旧一次跑完
+type: guard-change
+# 2026-11-10 be 入账（编排 D10-1221 / D10-1222；调研 couli-runs/CI-shard/plan.md：现 2 片 58:42 不均、整轮约 51 分钟，6 片最重一片约 22.5 分钟，整轮预计约 23～25 分钟）。
+# 分片命令（逐字固定）：spec-tests 第 i 片 `pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=i/6`（i=1..6，各一次）；最轻那片另跑一次 `pnpm test:int --log-order=stream --filter='!@couli/spec-tests'`（api、db 及以后新增的含 test:int 的包）。不能直接改 i/2 为 i/6：passWithNoTests false，@couli/db 只有 2 个、@couli/api 只有 5 个 int 文件，片数多于文件数会报错。
+# 覆盖：vitest 同一 N 的 i/N（i=1..N）互不相交、并集为全集；工具测试钉住 ci.yml 里恰有 1/6…6/6 各一条且其余参数一致、取反过滤那条恰有一次；本地 verify-container 照旧 `pnpm test:int` 一次全量，不受影响（它的两个测试只核对 ci.yml 里 int 作业的命令与环境，跟着改为 6 片）。
+# 跟着改：ci.yml 的 verify-reuse 两处作业名单、ci-gate 的 needs / 判定 / env 与注释；tools/ci 下引用作业名单的工作流测试；tools/ops/verify-container.services.test.ts 与 verify-container.test.ts。ops/branch-protection.json 不动（必需检查只有 ci-gate 等，不含 verify-int-*）。按耗时均衡切片另登 FU-CI-SHARD-BALANCE，本单不做。
+# 门禁类改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general；门禁判定部分按 contract 口径看）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ci/**'
+  - 'tools/ops/verify-container.services.test.ts'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzq.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null

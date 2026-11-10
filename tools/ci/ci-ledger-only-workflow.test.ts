@@ -1,6 +1,6 @@
 // CT-06zzzv (FU-CI-LEDGER-ONLY-FAST, D10-935): the structure of .github/workflows/ci.yml around
 // the ledger-only fast path, read from the real file. The job ledger-only-detect runs the BASE
-// copy of tools/ci/ledger-only.ts against the PR checkout; the eleven heavy verify jobs are skipped
+// copy of tools/ci/ledger-only.ts against the PR checkout; the fifteen heavy verify jobs are skipped
 // when it says only=true; verify-static and guard-git always run; ci-gate accepts those skips only
 // when the detection itself succeeded and said only=true.
 //
@@ -31,6 +31,10 @@ const HEAVY = [
   'verify-props-sha-3',
   'verify-int-1',
   'verify-int-2',
+  'verify-int-3',
+  'verify-int-4',
+  'verify-int-5',
+  'verify-int-6',
 ] as const;
 // The output key is spelled from its parts: test-guard (no-skip-only) matches the dot-only text.
 const ONLY_OUTPUT = ['outputs', 'only'].join('.');
@@ -546,7 +550,7 @@ it('[CT-06zzzze] no job decides docs/** by path in ci.yml; verify-static and gua
   }
 });
 
-// --- 2. the eleven heavy jobs ------------------------------------------------------------------
+// --- 2. the fifteen heavy jobs (verify-int-1 … -6 since CT-06zzzzq) -------------------------
 
 it.each(HEAVY)('[CT-06zzzv] %s needs ledger-only-detect and is skipped when only=true', (id) => {
   const needs = jobNeeds(id);
@@ -658,7 +662,7 @@ const ONLY_OK = { result: 'success', output: 'true' } as const;
 const GATE_CASES: [string, Gate, number][] = [
   // The ledger-only fast path.
   [
-    'only=true, 11 heavy skipped, static and guard success',
+    'only=true, 15 heavy skipped, static and guard success',
     { detect: ONLY_OK, heavy: 'skipped' },
     0,
   ],
@@ -723,6 +727,26 @@ const GATE_CASES: [string, Gate, number][] = [
     { detect: ONLY_OK, heavyDefault: 'skipped', heavy: { 'verify-int-1': 'failure' } },
     1,
   ],
+  // CT-06zzzzq: the four int shards added to verify-int-1 / -2 count like every other heavy job.
+  ...([3, 4, 5, 6] as const).flatMap((i): [string, Gate, number][] => [
+    [
+      `only=true but verify-int-${String(i)} failed`,
+      {
+        detect: ONLY_OK,
+        heavyDefault: 'skipped',
+        heavy: { [`verify-int-${String(i)}`]: 'failure' },
+      },
+      1,
+    ],
+    [
+      `only=false, verify-int-${String(i)} skipped, the rest success`,
+      {
+        detect: { result: 'success', output: 'false' },
+        heavy: { [`verify-int-${String(i)}`]: 'skipped' },
+      },
+      1,
+    ],
+  ]),
   [
     'only=true but one heavy job cancelled',
     { detect: ONLY_OK, heavyDefault: 'skipped', heavy: { 'verify-spec-2': 'cancelled' } },
@@ -736,7 +760,7 @@ const GATE_CASES: [string, Gate, number][] = [
   ],
   ['a full run: everything success, only=true', { detect: ONLY_OK }, 0],
   [
-    'label event reuse: all twelve verify jobs skipped, reuse success/true',
+    'label event reuse: all sixteen verify jobs skipped, reuse success/true',
     {
       detect: { result: 'success', output: 'false' },
       reuse: { result: 'success', reuse: 'true' },

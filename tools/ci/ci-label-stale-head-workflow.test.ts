@@ -10,7 +10,7 @@
 //      reached), before it decides. As soon as it reads a head other than H1, the find step (the
 //      step that outputs `reuse`) exits non-zero, logs one line with `head moved` and both heads,
 //      never outputs reuse=true, and makes no further sleep and no further runs / jobs /
-//      artifacts query. Under the outputs the failed job leaves, the eleven heavy jobs are
+//      artifacts query. Under the outputs the failed job leaves, the fifteen heavy jobs are
 //      skipped by their `if:`, and ci-gate fails: red on the old head only.
 //   2. Head unchanged. pulls/<number> keeps answering H1: the wait and the reuse decision are
 //      exactly those of ci-concurrency-workflow.test.ts.
@@ -64,8 +64,12 @@ const VERIFY_JOBS = [
   'verify-props-sha-3',
   'verify-int-1',
   'verify-int-2',
+  'verify-int-3',
+  'verify-int-4',
+  'verify-int-5',
+  'verify-int-6',
 ] as const;
-/** The eleven heavy jobs: every verify job but verify-static. */
+/** The fifteen heavy jobs: every verify job but verify-static (verify-int-1 … -6, CT-06zzzzq). */
 const HEAVY = VERIFY_JOBS.filter((j) => j !== 'verify-static');
 
 /** While the steps of a job run: whether an earlier step failed (for success() / failure()). */

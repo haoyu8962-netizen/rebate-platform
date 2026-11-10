@@ -224,12 +224,22 @@ it(
     }
     // The same number as the verify-int job (D10-210).
     const ci = readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8');
-    // CT-06zzb: verify-int is split into verify-int-1 / -2 (CT-06zzzj: turbo streams its log); each shard carries the same env.
-    for (const shard of ['1/2', '2/2']) {
+    // CT-06zzb: verify-int is split into shards (CT-06zzzj: turbo streams its log); CT-06zzzzq: six
+    // jobs verify-int-1 … -6 shard @couli/spec-tests, and the lightest one also runs the other
+    // packages' test:int unsharded. Every one of these commands carries the same env.
+    const intCommands = [
+      ...[1, 2, 3, 4, 5, 6].map(
+        (i) =>
+          `pnpm test:int --log-order=stream --filter=@couli/spec-tests -- --shard=${String(i)}/6`,
+      ),
+      "pnpm test:int --log-order=stream --filter='!@couli/spec-tests'",
+    ];
+    for (const command of intCommands) {
       expect(ci).toContain(
-        `      - run: pnpm test:int --log-order=stream -- --shard=${shard}\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n          PROP_RUNS: '2000'\n`,
+        `      - run: ${command}\n        env:\n          TEST_REDIS_URL: redis://127.0.0.1:6379/0\n          PROP_RUNS: '2000'\n`,
       );
     }
+    expect(ci).not.toContain('pnpm test:int --log-order=stream -- --shard=');
     expect(existsSync(join(runs, 'V1-06'))).toBe(false);
   },
   CLI_TIMEOUT,
