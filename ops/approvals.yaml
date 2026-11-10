@@ -423,3 +423,9 @@ approvals:
     granted: true
     date: '2026-11-10'
     note: '负责人 2026-11-09 在对话中确认「启用 CI 分流」，ADR-0004 已采纳（zora4523-bot/couli#311），外部 PR 审批策略已由负责人改为 all_external_contributors；编排按 approvals 16 / 24 核 diff 后加标签；D10-1196、D10-1206。'
+  - id: 68
+    row: 4
+    title: 'CT-06zzzzq：CI 的 verify-int 由 2 片拆为 6 片（只对 @couli/spec-tests 的 test:int 分 --shard=i/6，其余包与浏览器、smoke、db:check 在最轻的第 4 片不分片跑一次），verify-reuse 名单与 ci-gate 的 needs / 判定随之扩到 int-1…6（任一片 failure / cancelled 或非复用、非台账的 skipped 都判失败），每片 timeout 60→40；工具测试随之改；本地 verify-container 仍一次全量；合并门槛、必需检查与 branch-protection.json 不变'
+    granted: true
+    date: '2026-11-10'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动：不减少任何测试、不放宽任何判定，只是把同一组 int 测试拆到更多托管机并行；仓库公开，托管机不收费），事后已向负责人报告；D10-1221、D10-1222。'
