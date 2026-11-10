@@ -115,6 +115,7 @@ import { HealthModule } from './modules/health/index.ts';
 import { PRIOR_IDENTITY_FIELD_CRYPTO } from './modules/platform/config/index.ts';
 import { SMS_CODE_LIFETIME_SECONDS } from './modules/identity/domain/sms-limits.ts';
 import {
+  GrowthAdminModule,
   GrowthModule,
   appendLevelChange,
   createFirstAppLoginReview,
@@ -5047,6 +5048,16 @@ export class AppModule {
                 ports: adminClaimPorts,
                 orderPorts: adminOrderPorts,
                 writePorts: adminOrderWritePorts,
+              }),
+            ]
+          : []),
+        // growth's /admin/v1 invite reward reads (B2-16d; BR-INV-24 ④, BR-ID-33): guarded by
+        // AdminOperationGuard (fund.view, read only, no step-up); the parties' masked phones through
+        // identity's port (decrypted and masked there). Reads only, no audit row.
+        ...(options.entry === 'admin'
+          ? [
+              GrowthAdminModule.forAdmin({
+                phones: (db, crypto) => createMaskedPhoneReader(db, crypto),
               }),
             ]
           : []),

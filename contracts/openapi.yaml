@@ -10633,7 +10633,6 @@ paths:
         limits themselves are config items (`growth.invite_reward.*`, GET /admin/v1/config-items).
         There is no write operation: no re-issue and no change of a result (04 §6.6).
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -10770,7 +10769,6 @@ paths:
         /admin/v1/users/{user_id}/reveal (`pii.reveal_phone`). An invitee without a record
         (unknown, of another app, or never qualified) → 30701. No write operation (04 §6.6).
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403

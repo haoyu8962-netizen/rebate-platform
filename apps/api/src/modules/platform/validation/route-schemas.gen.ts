@@ -10536,6 +10536,102 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       "additionalProperties": false
     }
   },
+  "adminListInviteRewards": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "querystring": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "default": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20
+        },
+        "invitee_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "inviter_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of an invite reward record (enum invite_reward_status; meanings only in BR-INV-24\n细则「资格记录与状态」): qualified → deferred → processed, with the end states voided and\nexpired (no qualifying own order within the locked eligibility days, BR-INV-24「有效期」).\n",
+          "enum": [
+            "qualified",
+            "deferred",
+            "processed",
+            "voided",
+            "expired"
+          ]
+        },
+        "qualified_from": {
+          "type": "string",
+          "format": "date"
+        },
+        "qualified_to": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "adminGetInviteReward": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "invitee_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "invitee_id"
+      ],
+      "additionalProperties": false
+    }
+  },
   "adminLookupUser": {
     "headers": {
       "type": "object",

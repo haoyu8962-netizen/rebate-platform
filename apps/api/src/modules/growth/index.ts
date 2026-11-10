@@ -2,6 +2,14 @@
 // only from here. B1-11e: the Nest module with POST /v1/me/inviter, assembled by app.module.
 export { GrowthModule } from './growth.module.ts';
 export type { GrowthModuleOptions } from './growth.module.ts';
+// B2-16d: the console's invite reward reads (GET /admin/v1/invite-rewards[/{invitee_id}]), admin entry.
+export { GrowthAdminModule } from './growth-admin.module.ts';
+export type { GrowthAdminModuleOptions } from './growth-admin.module.ts';
+export { createAdminInviteRewardsReader } from './application/admin-invite-rewards.ts';
+export type {
+  AdminInviteRewardsReader,
+  InviteRewardPhoneReader,
+} from './application/admin-invite-rewards.ts';
 // B1-35: the invite reward campaign (BR-INV-24): qualification, budget port, trigger, payout,
 // daily expiry, scanner and the worker loop.
 export {
