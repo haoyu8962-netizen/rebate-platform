@@ -23,6 +23,28 @@ export function maxSpecLength(): number {
   return 50;
 }
 
+/** B3-04k · 04 §8.5 / BR-AI-17: the only benefits the server can check (coupon ⇔ coupon_fen > 0;
+ * taolijin per BR-AI-17). Subsidy, free shipping, flagship store have no data field yet. */
+export type SearchBenefit = 'coupon' | 'taolijin';
+
+export function searchBenefits(): readonly SearchBenefit[] {
+  return ['coupon', 'taolijin'];
+}
+
+/** B3-04k · 04 §8.5 exclude_keywords: at most 5 words of 1–20 characters each. */
+export function maxExcludeKeywords(): number {
+  return 5;
+}
+
+export function maxExcludeKeywordLength(): number {
+  return 20;
+}
+
+/** B3-04k: brand / category_hint length guard; 08 sets no cap, same as q. */
+export function maxHintLength(): number {
+  return 100;
+}
+
 /** BR-AI-08: 0 < price ≤ 10,000,000 fen. */
 export function maxPriceFen(): number {
   return 10_000_000;
@@ -35,7 +57,9 @@ export function searchProductsDefinition(platforms: readonly string[]): ToolDefi
     description:
       'Search products on the enabled shopping platforms. Prices are integer fen and compare ' +
       'with the final price; sort is one of the listed values (default relevance). Put a ' +
-      'spec word (size, count, volume) in spec, not in q; page asks for the next batch.',
+      'spec word (size, count, volume) in spec, not in q; page asks for the next batch. ' +
+      'benefits keeps only items with that benefit; brand and category_hint narrow the search ' +
+      'words; exclude_keywords drops items whose title contains any of them.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -56,6 +80,20 @@ export function searchProductsDefinition(platforms: readonly string[]): ToolDefi
         spec: { type: 'string', minLength: 1, maxLength: maxSpecLength() },
         // BR-AI-05: the page for "换一批" (page+1); omitted means the first page.
         page: { type: 'integer', minimum: 1, maximum: maxSearchPage() },
+        // B3-04k · 04 §8.5: benefit conditions, checked on the server after the upstream answer.
+        benefits: {
+          type: 'array',
+          uniqueItems: true,
+          items: { type: 'string', enum: [...searchBenefits()] },
+        },
+        // B3-04k: brand / category_hint only join the upstream search words; they filter nothing.
+        brand: { type: 'string', minLength: 1, maxLength: maxHintLength() },
+        category_hint: { type: 'string', minLength: 1, maxLength: maxHintLength() },
+        exclude_keywords: {
+          type: 'array',
+          maxItems: maxExcludeKeywords(),
+          items: { type: 'string', minLength: 1, maxLength: maxExcludeKeywordLength() },
+        },
       },
     },
   };

@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { platform as PLATFORM_CODES } from '@couli/contracts-ts';
 import type { Platform } from '@couli/contracts-ts';
 import type { UnnumberedCard } from '../../stream/run/index.ts';
-import { maxPriceFen, searchSorts } from '../../tools/search/schema.ts';
-import type { SearchSort } from '../../tools/search/schema.ts';
+import { maxPriceFen, searchBenefits, searchSorts } from '../../tools/search/schema.ts';
+import type { SearchBenefit, SearchSort } from '../../tools/search/schema.ts';
 import type { OrchestratorToolCall, ToolOutcome } from '../core/ports.ts';
 import type { ClarifySlot, IntentDeps } from '../intents/types.ts';
 import { createMemoryResultSetStore } from './store.ts';
@@ -108,6 +108,25 @@ function isSort(value: unknown): value is SearchSort {
   return typeof value === 'string' && (searchSorts() as readonly string[]).includes(value);
 }
 
+function isBenefit(value: unknown): value is SearchBenefit {
+  return typeof value === 'string' && (searchBenefits() as readonly string[]).includes(value);
+}
+
+function nonEmptyText(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
+/** B3-04k: a non-empty array whose every element passes `item` (the registry checked the rest). */
+function listOf<T>(value: unknown, item: (v: unknown) => v is T): value is readonly T[] {
+  return Array.isArray(value) && value.length > 0 && value.every(item);
+}
+
+/** B3-04k · BR-AI-17: conditions of a taolijin request; every continuation of such a chain stays
+ * on the taolijin branch (the closed notice), never a product_list. */
+export function asksTaolijin(conditions: SearchConditions | null | undefined): boolean {
+  return conditions?.benefits?.includes('taolijin') === true;
+}
+
 /** BR-AI-08: an integer number of fen, 0 < value ≤ 10,000,000. */
 export function validPrice(value: unknown): value is number {
   return (
@@ -137,6 +156,10 @@ export function conditionsOf(
   const max = args['price_max_fen'];
   const spec = args['spec'];
   const page = args['page'];
+  const benefits = args['benefits'];
+  const brand = args['brand'];
+  const categoryHint = args['category_hint'];
+  const exclude = args['exclude_keywords'];
   return {
     q,
     ...(Array.isArray(platforms) && platforms.every(isPlatform)
@@ -147,6 +170,11 @@ export function conditionsOf(
     ...(validPrice(max) ? { price_max_fen: max } : {}),
     ...(typeof spec === 'string' ? { spec } : {}),
     ...(Number.isSafeInteger(page) ? { page: page as number } : {}),
+    // B3-04k: the 04 §8.5 conditions travel with the chain like the others (BR-AI-05 / BR-AI-17).
+    ...(listOf(benefits, isBenefit) ? { benefits: [...new Set(benefits)] } : {}),
+    ...(nonEmptyText(brand) ? { brand } : {}),
+    ...(nonEmptyText(categoryHint) ? { category_hint: categoryHint } : {}),
+    ...(listOf(exclude, nonEmptyText) ? { exclude_keywords: [...exclude] } : {}),
     chain_id: chainId,
   };
 }

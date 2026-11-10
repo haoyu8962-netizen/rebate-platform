@@ -10,6 +10,7 @@ import type { ClarifySlot, IntentDeps, IntentOutput, IntentRequest } from '../in
 import { openServerCall } from './references.ts';
 import {
   argsOf,
+  asksTaolijin,
   clarifyOptions,
   currentChain,
   isRecord,
@@ -253,6 +254,15 @@ export function createRefinement(
     const conditions = intent.conditions;
 
     if ('cheaper' in conditions) {
+      // B3-04k · BR-AI-17: on a taolijin chain 再便宜点 stays on the taolijin branch (the closed
+      // notice), never the products of an earlier chain.
+      const current = await latestSearch(request);
+      if (current !== null && asksTaolijin(current)) {
+        return runSearch(deps, request, ctx, argsOf(current), {
+          kind: 'cheaper',
+          chainId: current.chain_id,
+        });
+      }
       // 再便宜点 depends on the cards actually shown (BR-AI-05 细则 / BR-PRICE-15).
       const latest = await store.latestWithProducts(
         request.input.caller.appId,

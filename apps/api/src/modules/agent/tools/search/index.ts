@@ -8,12 +8,23 @@ import type { UnnumberedCard } from '../../stream/run/index.ts';
 import type { ToolCallContext, ToolHandler } from '../registry/index.ts';
 import type { AgentProductCard } from './card.ts';
 import type { SearchProductsDeps } from './types.ts';
-import { runSearch, enabledPlatforms, type Platform, type SearchRequest } from './pipeline.ts';
+import {
+  runSearch,
+  enabledPlatforms,
+  upstreamKeyword,
+  type Platform,
+  type SearchRequest,
+} from './pipeline.ts';
 import {
   defaultPageSize,
+  maxExcludeKeywordLength,
+  maxExcludeKeywords,
+  maxHintLength,
   maxSearchPage,
   maxSpecLength,
+  searchBenefits,
   searchProductsDefinition,
+  type SearchBenefit,
   type SearchSort,
 } from './schema.ts';
 
@@ -45,8 +56,39 @@ async function fallbackText(deps: SearchProductsDeps, appId: string, key: string
   }
 }
 
+const CLOSED_BENEFIT = 'closed_benefit';
+
+/**
+ * B3-04k · BR-AI-17: whether a search_products trace is the closed taolijin answer (tlj_none and
+ * maybe tlj_taobao_only), which the results decorator returns exactly as built.
+ */
+export function isTaolijinClosed(trace: unknown): boolean {
+  return (
+    typeof trace === 'object' &&
+    trace !== null &&
+    (trace as Readonly<Record<string, unknown>>)[CLOSED_BENEFIT] === 'taolijin'
+  );
+}
+
+/** BR-AI-17 / BR-TEXT-15 判定 6: no taolijin activity (default “暂无淘礼金活动”). */
+function tljNoneKey(): string {
+  return 'agent.notice.tlj_none';
+}
+
+/** BR-AI-17: the user named a non-taobao platform with taolijin (“淘礼金仅支持淘宝”). */
+function tljTaobaoOnlyKey(): string {
+  return 'agent.notice.tlj_taobao_only';
+}
+
 async function prohibitedNotice(deps: SearchProductsDeps, appId: string): Promise<UnnumberedCard> {
-  const key = prohibitedKey();
+  return notice(deps, appId, prohibitedKey());
+}
+
+async function notice(
+  deps: SearchProductsDeps,
+  appId: string,
+  key: string,
+): Promise<UnnumberedCard> {
   return {
     type: 'notice',
     schema_version: 1,
@@ -101,6 +143,53 @@ function searchTrace(cards: readonly AgentProductCard[], request: SearchRequest)
   };
 }
 
+/**
+ * BR-AI-17 (D7): taolijin is closed in the first version and no pool exists, so whatever
+ * tlj.enabled reads, a taolijin request never searches the union (the taobao-only platform
+ * override has nothing to search), delivers no product card and no coupon substitute: only the
+ * tlj_none notice, plus tlj_taobao_only when the user named a platform other than taobao.
+ * TODO(规划/11 §2.3): 淘礼金池查询 — blocked on 淘礼金后续接入（BR-AI-17 D7）
+ */
+async function taolijinOutcome(
+  deps: SearchProductsDeps,
+  appId: string,
+  request: SearchRequest,
+): Promise<ToolOutcome> {
+  const keys = [tljNoneKey()];
+  if (request.platforms !== undefined && request.platforms.some((p) => p !== 'taobao')) {
+    keys.push(tljTaobaoOnlyKey());
+  }
+  const cards: UnnumberedCard[] = [];
+  for (const key of keys) cards.push(await notice(deps, appId, key));
+  // Nothing was searched with a spec, so the orchestrator has no spec step to relax. Built apart
+  // so the extra members pass ToolTraceFragment (see searchTrace). closed_benefit tells the
+  // results decorator this is a final answer, like a refusal: no relaxation, retry, no_result
+  // notice or suggestion is added (B3-04k r2); it is trace only, never in modelView.
+  const trace = {
+    link_registrations: [],
+    search_params: { spec: null, page: request.page },
+    [CLOSED_BENEFIT]: 'taolijin',
+  };
+  return {
+    kind: 'ok',
+    // BR-AI-05: the model learns the notices by name only, as the orchestrator's server notices.
+    modelView: {
+      items: [],
+      server_notices: keys.map((key) => key.slice(key.lastIndexOf('.') + 1)),
+    },
+    cards,
+    trace,
+  };
+}
+
+function boundedText(value: unknown, max: number): string | undefined {
+  return typeof value === 'string' && value !== '' && [...value].length <= max ? value : undefined;
+}
+
+function stringList(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : undefined;
+}
+
 function optionalInt(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) ? value : undefined;
 }
@@ -112,6 +201,15 @@ function requestFromArgs(args: Readonly<Record<string, unknown>>): SearchRequest
   const limit = optionalInt(args['limit']);
   const page = optionalInt(args['page']);
   const spec = args['spec'];
+  const benefits = stringList(args['benefits'])?.filter((b): b is SearchBenefit =>
+    searchBenefits().includes(b as SearchBenefit),
+  );
+  const brand = boundedText(args['brand'], maxHintLength());
+  const categoryHint = boundedText(args['category_hint'], maxHintLength());
+  const excludeKeywords = stringList(args['exclude_keywords'])
+    ?.map((word) => boundedText(word, maxExcludeKeywordLength()))
+    .filter((word): word is string => word !== undefined)
+    .slice(0, maxExcludeKeywords());
   return {
     q: typeof args['q'] === 'string' ? args['q'] : '',
     ...(Array.isArray(platforms)
@@ -135,6 +233,12 @@ function requestFromArgs(args: Readonly<Record<string, unknown>>): SearchRequest
     ...(typeof spec === 'string' && spec !== '' && [...spec].length <= maxSpecLength()
       ? { spec }
       : {}),
+    ...(benefits === undefined || benefits.length === 0
+      ? {}
+      : { benefits: [...new Set(benefits)] }),
+    ...(brand === undefined ? {} : { brand }),
+    ...(categoryHint === undefined ? {} : { categoryHint }),
+    ...(excludeKeywords === undefined || excludeKeywords.length === 0 ? {} : { excludeKeywords }),
   };
 }
 
@@ -177,6 +281,18 @@ export function createSearchProductsHandler(deps: SearchProductsDeps): ToolHandl
         request.priceMinFen > request.priceMaxFen
       ) {
         return { kind: 'ok', modelView: priceRangeInvalidView(), cards: [] };
+      }
+      if (request.benefits?.includes('taolijin') === true) {
+        // BR-AI-18 still first: a prohibited query is refused, not answered with a tlj notice.
+        if (await deps.prohibited(ctx.appId, upstreamKeyword(request))) {
+          return {
+            kind: 'ok',
+            modelView: { items: [], refused: 'prohibited' },
+            cards: [await prohibitedNotice(deps, ctx.appId)],
+            trace: { link_registrations: [] },
+          };
+        }
+        return taolijinOutcome(deps, ctx.appId, request);
       }
       const run = await runSearch(deps, request, ctx);
       // Every searched platform failed (upstream, assembly or registration): a tool failure,

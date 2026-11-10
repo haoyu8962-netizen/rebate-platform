@@ -13,7 +13,7 @@ import {
   type AgentProductCard,
   type AgentUnlinkedCard,
 } from './card.ts';
-import type { SearchSort } from './schema.ts';
+import type { SearchBenefit, SearchSort } from './schema.ts';
 
 export type Platform = SearchProductsQuery['platform'];
 
@@ -32,6 +32,16 @@ export interface SearchRequest {
    * and filters nothing here; the spec judgement on the card belongs to B3-04d.
    */
   readonly spec?: string;
+  /**
+   * B3-04k · 04 §8.5: benefit conditions re-checked on the server (coupon ⇔ coupon_fen > 0).
+   * taolijin never reaches this pipeline (BR-AI-17, handled by the handler). Never relaxed.
+   */
+  readonly benefits?: readonly SearchBenefit[];
+  /** B3-04k: joined into the upstream search words only (brand, q, category_hint). */
+  readonly brand?: string;
+  readonly categoryHint?: string;
+  /** B3-04k: a card whose title contains any of these (NFKC, case-insensitive) is dropped. */
+  readonly excludeKeywords?: readonly string[];
 }
 
 export type PlatformStatus = 'ok' | 'failed' | 'disabled';
@@ -133,10 +143,40 @@ function inPriceRange(card: AgentUnlinkedCard, request: SearchRequest): boolean 
   return true;
 }
 
+/** B3-04k: brand / category_hint only narrow the search words, in the order brand, q, hint. */
+export function upstreamKeyword(request: SearchRequest): string {
+  return [request.brand, request.q, request.categoryHint]
+    .filter((part): part is string => part !== undefined && part !== '')
+    .join(' ');
+}
+
+/** B3-04k: NFKC then lower case, for exclude-keyword matching. */
+function foldText(text: string): string {
+  return text.normalize('NFKC').toLowerCase();
+}
+
+/**
+ * B3-04k: the server-side benefit and exclude-word conditions, applied in the same step as the
+ * price range. coupon reads the final card's coupon_fen, the same judgement as the 有券 tag.
+ */
+function meetsConditions(
+  card: AgentUnlinkedCard,
+  candidate: AgentSearchCandidate,
+  request: SearchRequest,
+): boolean {
+  if (request.benefits?.includes('coupon') === true && !(card.coupon_fen > 0)) return false;
+  const words = (request.excludeKeywords ?? []).map(foldText).filter((word) => word !== '');
+  if (words.length === 0) return true;
+  const titles = [card.title, candidate.item.title]
+    .filter((title): title is string => typeof title === 'string')
+    .map(foldText);
+  return !titles.some((title) => words.some((word) => title.includes(word)));
+}
+
 function upstreamQuery(platform: Platform, request: SearchRequest): SearchProductsQuery {
   return {
     platform,
-    q: request.q,
+    q: upstreamKeyword(request),
     // BR-AI-09: the upstream is asked for an order without commission weight; final-price and
     // rebate orders are computed here over the relevance candidates.
     sort: request.sort === 'sales_desc' ? 'sales_desc' : 'relevance',
@@ -166,8 +206,8 @@ export async function runSearch(
   const { appId } = ctx;
   const status = new Map<Platform, PlatformStatus>();
 
-  // BR-AI-18: a prohibited model keyword never reaches the upstream.
-  if (await deps.prohibited(appId, request.q)) {
+  // BR-AI-18: a prohibited model keyword never reaches the upstream (brand and hint included).
+  if (await deps.prohibited(appId, upstreamKeyword(request))) {
     return { prohibited: true, allFailed: false, status, cards: [] };
   }
 
@@ -238,7 +278,13 @@ export async function runSearch(
         loginToView: loginToView.has(candidate.item.platform),
       });
       const hideRebate = loginToView.has(candidate.item.platform);
-      if (card === null || !inPriceRange(card, request)) return null;
+      if (
+        card === null ||
+        !inPriceRange(card, request) ||
+        !meetsConditions(card, candidate, request)
+      ) {
+        return null;
+      }
       const linked = result.kind === 'card' ? result.card : null;
       const commit =
         linked === null && result.kind === 'prepared'

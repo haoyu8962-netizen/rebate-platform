@@ -417,3 +417,61 @@ describe('link registration failure counts as a platform failure', () => {
     expect(outcome.kind === 'ok' && listKeys(outcome.cards)).toEqual(['jd:synthetic-b']);
   });
 });
+
+describe('B3-04k benefits / brand / exclude_keywords', () => {
+  it('taolijin with a prohibited query is refused, not answered with a tlj notice', async () => {
+    const h = setup([candidate('tb:synthetic-a', 'taobao')], new Set());
+    const outcome = await createSearchProductsHandler({
+      ...h.deps,
+      prohibited: async () => true,
+    }).run({ q: '合成商品', benefits: ['taolijin'] }, ctx());
+    expect(outcome).toMatchObject({
+      kind: 'ok',
+      modelView: { items: [], refused: 'prohibited' },
+      cards: [{ type: 'notice', data: { text_key: 'agent.refuse.prohibited' } }],
+    });
+    expect(h.searchProducts).not.toHaveBeenCalled();
+  });
+
+  it('taolijin notices are named for the model and carry no spec to relax', async () => {
+    const h = setup([candidate('tb:synthetic-a', 'taobao')], new Set());
+    const outcome = await createSearchProductsHandler(h.deps).run(
+      { q: '合成商品', benefits: ['taolijin'], platforms: ['jd'], spec: '24盒', page: 2 },
+      ctx(),
+    );
+    expect(outcome).toMatchObject({
+      kind: 'ok',
+      modelView: { items: [], server_notices: ['tlj_none', 'tlj_taobao_only'] },
+      trace: { search_params: { spec: null, page: 2 } },
+    });
+    expect(h.registered).toEqual([]);
+  });
+
+  it('brand joins the prohibited check and the upstream words; blank parts are skipped', async () => {
+    const h = setup([candidate('tb:synthetic-a', 'taobao')], new Set());
+    const prohibited = vi.fn<SearchProductsDeps['prohibited']>(async () => false);
+    await createSearchProductsHandler({ ...h.deps, prohibited }).run(
+      { q: '合成商品', brand: '合成品牌' },
+      ctx(),
+    );
+    expect(prohibited).toHaveBeenCalledWith('synthetic-app', '合成品牌 合成商品');
+    expect(h.searchProducts.mock.calls.map(([query]) => query.q)).toEqual([
+      '合成品牌 合成商品',
+      '合成品牌 合成商品',
+    ]);
+  });
+
+  it('exclude_keywords also matches the assembled card title', async () => {
+    const h = setup(
+      [candidate('tb:synthetic-a', 'taobao'), candidate('tb:synthetic-b', 'taobao')],
+      new Set(),
+      { patch: { 'tb:synthetic-a': { title: '合成 SAMPLE 装' } } },
+    );
+    const outcome = await createSearchProductsHandler(h.deps).run(
+      { q: '合成商品', exclude_keywords: ['sample'] },
+      ctx(),
+    );
+    expect(outcome.kind === 'ok' && listKeys(outcome.cards)).toEqual(['tb:synthetic-b']);
+    expect(h.registered).toEqual(['tb:synthetic-b']);
+  });
+});

@@ -2,7 +2,7 @@
 import type { Platform } from '@couli/contracts-ts';
 import type { UnnumberedCard } from '../../stream/run/index.ts';
 import type { MatchDeps } from '../../tools/match/index.ts';
-import type { SearchSort } from '../../tools/search/schema.ts';
+import type { SearchBenefit, SearchSort } from '../../tools/search/schema.ts';
 import type {
   AgentRunTexts,
   OrchestratorLimits,
@@ -20,6 +20,11 @@ export type SearchConditions = {
   readonly price_max_fen?: number;
   readonly spec?: string;
   readonly page?: number;
+  /** B3-04k: kept so 换一批 / 再便宜点 / 换平台 continue with the same benefit and word filters. */
+  readonly benefits?: readonly SearchBenefit[];
+  readonly brand?: string;
+  readonly category_hint?: string;
+  readonly exclude_keywords?: readonly string[];
   readonly chain_id: string;
 };
 

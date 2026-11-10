@@ -12,7 +12,7 @@
 // follow-ups continue the query the user just asked, but its page never runs ahead of the batch
 // shown (D10-333); 再便宜点 without result still records nothing.
 import type { AgentProductCard } from '../../tools/search/index.ts';
-import { priceRangeInvalidView } from '../../tools/search/index.ts';
+import { isTaolijinClosed, priceRangeInvalidView } from '../../tools/search/index.ts';
 import { assignMatchTags } from '../../tools/match/index.ts';
 import type { MatchConditions } from '../../tools/match/index.ts';
 import type { UnnumberedCard } from '../../stream/run/index.ts';
@@ -61,9 +61,14 @@ function isPriceRangeInvalid(outcome: ToolOutcome): boolean {
   );
 }
 
-/** BR-AI-18: a prohibited query or result set is returned exactly as the handler built it. */
+/** A final handler answer, returned exactly as the handler built it: no relaxation, retry,
+ * no_result / relaxed_* notice or suggestion. BR-AI-18: a prohibited query or result set;
+ * B3-04k · BR-AI-17: the closed taolijin notices (tlj_none, tlj_taobao_only). */
 function isRefused(outcome: Ok): boolean {
-  return isRecord(outcome.modelView) && outcome.modelView['refused'] === 'prohibited';
+  return (
+    (isRecord(outcome.modelView) && outcome.modelView['refused'] === 'prohibited') ||
+    isTaolijinClosed(outcome.trace)
+  );
 }
 
 /** The model-visible name of a notice key, e.g. agent.notice.relaxed_spec → relaxed_spec. */
