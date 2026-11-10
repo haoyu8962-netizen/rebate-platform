@@ -32,4 +32,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/binding-transition/**'
-status: todo
+status: done
+pr: 3123
