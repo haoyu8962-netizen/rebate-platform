@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV0 docs only (D10-1225; 05 QA-12, 03 §10.5, 10 AC-S1-158; covers DSX-139's QA-12 half). New docs/qa/QA-12-读屏与无障碍检查清单.md: WCAG 2.2 AA criteria × page set (06 Q-E5's 7 key pages Home / Search / ProductDetail / AgentChat / OrderList / Wallet / Withdraw, plus Login and ProductShare) × three native screen readers × evidence layout, the five special checks of 05 QA-12, design-spec conventions with file references, DSX-14 / DSX-90 pointer items (listed, not verified), AC mapping. Gaps recorded: no design-review screen-reader list in the planning repo, no Login spec, ProductShare not live, HarmonyOS screen-reader details undocumented; points marked 待编排确认 / 待原生线确认. No code, contract or rule change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 2,
+      "note": "Codex via codex-run.sh: r1 pass with 1 S2 (a not-live page's n.a. let AC-S1-158 be recorded pass without the copy-announcement step) fixed in 6bcca89f6; r2 incremental pass, no findings."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "QA-12a",
+  "spec_commit": "c1523bc8a85c6289df1e2ffefde9b281d75f3752",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ebae41e5bd2f4bbd030d97b9a6973413f5dd8fc3",
+    "specs": "d7a0ce050f08b4585d3fcd4ba7cbd30269e81b5f"
+  }
+}
