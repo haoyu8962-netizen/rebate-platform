@@ -796,8 +796,10 @@ export const FUND_TERM_KEYS = {
       "share_hub.title",
       "share_page.copy_tpwd",
       "share_page.copy_tpwd.done",
+      "share_page.invalid",
       "share_page.open_in_app",
       "share_page.open_in_browser_hint",
+      "share_page.quote_time",
       "shop.a11y",
       "shop.a11y.enter",
       "shop.enter",
@@ -882,6 +884,10 @@ export const FUND_TERM_KEYS = {
     {
       "key": "link_landing.invalid",
       "reason": "「已失效」说的是链接（08 BR-TEXT-12 细则的例子）"
+    },
+    {
+      "key": "share_page.invalid",
+      "reason": "「已失效」说的是分享链接，不说金额、提现状态或有没有返利（同 link_landing.invalid，08 BR-TEXT-12 细则的例子）"
     },
     {
       "key": "perm.push.card_hint",

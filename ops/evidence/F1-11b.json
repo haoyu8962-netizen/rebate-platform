@@ -1,0 +1,93 @@
+{
+  "risk_note": "Texts only (D10-1246). contracts/texts.default.json gets two share-page keys replacing the ones F1-11a borrowed: share_page.invalid = 分享链接已失效，请联系分享者重新分享 (verbatim 08 BR-ATTR-05 细则 l.271) and share_page.quote_time = 取价 {time} · 价格可能已变化，以下单页为准 (verbatim 08 BR-PRICE-11 with HH:mm as {time}); alphabetical places. specs/fund-term-keys.yaml classifies both as ordinary key by key (BR-TEXT-12 细则; invalid's 「已失效」 is about the link, exempted like link_landing.invalid); fund-term-keys.gen.ts regenerated. apps/h5 switches keys separately (fe). Host: share-page-texts + text-guard 2074, contracts-ts texts / fund-term-keys 17, contracts:check 0, generate-text-specs --verify 0.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/F1-11b/review-codex-money-r1.json, no findings; specs/** is outside the risk map (RV2), so the money type is used."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh): test/spec/content/share-page-texts/**, container red 12; Codex spec-test r1 pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#7] 两个新键在 fund-term-keys.yaml 的 ordinary.keys 里各列一次，不落资金术语段",
+    "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#8] 链接失效句命中「已失效」，例外表有它一条理由，说明「已失效」说的是链接",
+    "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#9] 取价时间句不命中关键词核对，也不进例外表",
+    "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#10] 加入新键后资金术语清单整体核对（每键恰好一段、例外表）无问题",
+    "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#11] 生成的 fund-term-keys.gen.ts 与 YAML 同步含两个新键与失效句的例外理由",
+    "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#12] 两句过禁用词守卫，且不带返利、红包等利益表述（中间页不显示返利）",
+    "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#1] 两个分享页专用键在 texts.default.json 里，逐字是 08 的原句",
+    "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#2] 新键加入后 texts 的键仍严格按字母序、不重复",
+    "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#3] 取价时间句恰好含一个 {time} 变量，没有别的变量与占位残留",
+    "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#4] 取价时间句代入 formatQuoteTime 的两种格式，得到 BR-PRICE-11 的降级显示原句",
+    "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#5] 链接失效句不带任何变量、没有占位残留",
+    "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#6] 两个新键是专用键：不同于暂借的 link_landing.invalid、earnings.as_of，暂借键原样保留"
+  ],
+  "task": "F1-11b",
+  "spec_commit": "f96374e32684470e2404daa8b79a73ebeae54ea2",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f96374e32684470e2404daa8b79a73ebeae54ea2",
+      "tree": "7cb07215bcf44e89f3074ff20098c5b1bfa20dbf",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-10T14:54:53Z",
+      "finished_at": "2026-11-10T14:54:56Z",
+      "red_tests": [
+        "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#7] 两个新键在 fund-term-keys.yaml 的 ordinary.keys 里各列一次，不落资金术语段",
+        "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#8] 链接失效句命中「已失效」，例外表有它一条理由，说明「已失效」说的是链接",
+        "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#9] 取价时间句不命中关键词核对，也不进例外表",
+        "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#10] 加入新键后资金术语清单整体核对（每键恰好一段、例外表）无问题",
+        "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#11] 生成的 fund-term-keys.gen.ts 与 YAML 同步含两个新键与失效句的例外理由",
+        "test/spec/content/share-page-texts/classification.test.ts > [AC-F1-11b#12] 两句过禁用词守卫，且不带返利、红包等利益表述（中间页不显示返利）",
+        "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#1] 两个分享页专用键在 texts.default.json 里，逐字是 08 的原句",
+        "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#2] 新键加入后 texts 的键仍严格按字母序、不重复",
+        "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#3] 取价时间句恰好含一个 {time} 变量，没有别的变量与占位残留",
+        "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#4] 取价时间句代入 formatQuoteTime 的两种格式，得到 BR-PRICE-11 的降级显示原句",
+        "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#5] 链接失效句不带任何变量、没有占位残留",
+        "test/spec/content/share-page-texts/texts.test.ts > [AC-F1-11b#6] 两个新键是专用键：不同于暂借的 link_landing.invalid、earnings.as_of，暂借键原样保留"
+      ],
+      "expected": [
+        "test/spec/content/share-page-texts/classification.test.ts",
+        "test/spec/content/share-page-texts/texts.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "c6165fc5efe65d0bf65c81135be05017033ab4b7c3cc0b73e3d5c24685e025fc"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "63c23e8075f95b2d70f1e0b925a4cd317895ffb0",
+    "specs": "2a53dcdfd2725b21fd757f6320459ac031411e03"
+  }
+}
