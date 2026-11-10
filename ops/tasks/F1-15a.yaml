@@ -1,0 +1,25 @@
+id: F1-15a
+repo: rebate-platform
+title: 后台邀请奖励配置（F1-15 第一段）：配置中心给 growth.invite_reward.* 六项分组、名称与金额 / 天数 / 小时格式，紧急开关页给 growth.invite_reward.enabled 名称与「暂停后」说明；发放记录与已用 / 剩余预算待后端接口（编排 D10-1225）
+type: impl
+# 2026-11-10 入账（前端线 f1-frontend-7，编排 D10-1225 认领 05 F1-15）。核过已覆盖：H5 InviteShare 按 reward_enabled 切换奖励句与规则摘要（invite/model.ts，F1-02zm 一组）、余额流水 REWARD 显示与字典键；后端 B1-35 / B2-04zzc，契约 CT-25a–f；growth.invite_reward.enabled 已在后端 switch-registry，紧急开关页按注册表列出。
+# 本单：配置中心（GET /admin/v1/config-items，行由后端给）给 growth.invite_reward.amount_fen / daily_budget_fen / total_budget_fen / min_paid_fen（金额，整数分按后台金额格式显示与编辑）、ip_window_hours（小时）、eligibility_days（天）中文名称、所属分组（与邀请相关项同组）与输入格式；紧急开关页给 growth.invite_reward.enabled 中文名与「暂停后：……」说明（照 growth.invite_bind.enabled 写法，取值含义按 BR-INV-24）。现状两处均缺，只显示原键。依据：规划/05 F1-15（F-ADM-27、BR-INV-18 / 24、AC-S2-112）、db/seeds 0001 config-defaults 的 growth.invite_reward.* 六项。
+# 不做（阻塞，已报编排）：发放记录只读列表与已用 / 剩余预算——adminListInviteRewards / adminGetInviteReward 契约 x-implementation: planned，后端未实现；后端合并后另开 F1-15b。活动规则全文待 06 Q-F4。
+# 非资金逻辑（只是配置项的显示与编辑格式），风险级按工具判定；规则测试新鲜独立 Claude，评审 Codex。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/pages/config-center/**'
+  - 'apps/admin/src/pages/kill-switches/**'
+  - 'apps/admin/src/texts/config-center.ts'
+  - 'apps/admin/src/texts/kill-switches.ts'
+test_paths:
+  - 'test/spec/frontend/admin-invite-reward-config/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-invite-reward-config/**'
+status: todo
+pr: null

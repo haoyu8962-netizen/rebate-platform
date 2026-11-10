@@ -1,0 +1,24 @@
+id: F1-11a
+repo: rebate-platform
+title: 分享中间页前端（F1-11 第一段）：H5 landing 入口按 getSharePage 渲染商品卡与报价时间、【去购买】、取口令（有 tpwd_ticket 时）、微信内引导用浏览器打开、【在 App 中打开】（仅服务端给出 open_in_app_url 时）与失效 / 授权失效空态；下载入口与下载引导页待下载地址、域名检测待负责人另定（编排 D10-1225）
+type: impl
+# 2026-11-10 入账（前端线 f1-frontend-7，编排 D10-1225 认领 05 F1-11）。核过：后端 GET /v1/share-pages/{link_id}、POST /v1/share-pages/{link_id}/tpwd 已合并（B1-15u / B1-15y，契约 CT-02h 含「分享者授权失效」），routes LinkLanding（CT-17c）；apps/h5/src/entries/landing 现只是「页面待上线」占位壳。
+# 依据：规划/05 F1-11（F-SHARE-07，功能对照 G-03）、AC-SHARE-04、AC-S1-71（① ②）、BR-ATTR-05 / BR-ATTR-10 细则「分享页与分享赚入口页」、契约 SharePageData（product_card、quoted_at、jump_url、tpwd_ticket、open_in_app_url——后者 share.open_in_app.enabled 关时为 null）、02 §3.4 分享页主机 s.couliapp.cn。
+# 不做（阻塞，已报编排）：未拉起时的**下载入口与下载引导页**——契约与配置都没有下载地址（06 G-85 待定），不臆造；**域名可访问性检测与告警**——需外部探测服务，属负责人决定、后端 / 运维范围。【在 App 中打开】只按服务端给的链接显示，CAP-X-03 未验证前不在页面上承诺能拉起。视觉按现有令牌，v2 改版归 DSX-138。
+# 包体：冻结 h5-shell landing 首屏 ≤ 60 KiB、不得引 bridge-sdk；文案只取字典键，缺键报 content。非资金；规则测试新鲜独立 Claude，评审 Codex。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/entries/landing/**'
+  - 'apps/h5/src/shared/api/anonymous.ts'
+  - 'apps/h5/src/shared/styles/**'
+test_paths:
+  - 'test/spec/frontend/h5-share-landing/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-share-landing/**'
+status: todo
+pr: null
