@@ -1,0 +1,19 @@
+id: QA-11a
+repo: rebate-platform
+title: QA-11 字号、方向与大屏适配检查：三端检查清单与现有截图审查（只读，缺陷按端开 FU 交原生线；D10-1225）
+type: impl
+# 2026-11-10 w1 入账即 done（D10-1225、D10-1230；05 QA-11，03 §10.4；兼做 DSX-139 的 QA-11 半边）。只读审查，不改代码与规则，产物在运行目录不入库：
+#   清单与自动化方案 couli-runs/B1-lane/qa-11-checklist-20261110.md（页面 P1–P12 × 档位 A–H × 判据 1–11 × 三端补档做法）；
+#   审查明细 couli-runs/B1-lane/qa-11-audit-ios-20261110.md、qa-11-audit-android-20261110.md；按端结论 couli-runs/B1-lane/qa-11-fu-20261110.md。
+# 缺陷按 D10-1230 以 notices 编号为准、不在本仓库开原生台账：FU-IOS-NUM-WRAP、FU-IOS-ADAPT-CHECK、FU-AND-NUM-WRAP、FU-AND-ADAPT-CHECK；鸿蒙批 1 冻结后按清单 §2 补拍交 w1 审。各端修完由 w1 复审截图。
+# 未决：DSX-14（10 视觉验收用例）未入账，用例编号待补；鸿蒙最大字号口径（CAP-X-18、关怀模式封顶 A / B）待负责人，先按 200%。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'docs/qa/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: done
