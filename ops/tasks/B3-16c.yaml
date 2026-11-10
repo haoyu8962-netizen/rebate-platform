@@ -1,0 +1,22 @@
+id: B3-16c
+repo: rebate-platform
+title: B3-16c：get_my_earnings 取数口收紧——同一取数口对同一用户不缓存（数据变了再读见新值、读失败如实拒绝不拿旧值），且组装根确实把 earningsReads 交给 stream 入口（D10-1242 ② 收紧单，补 B3-16a spec-test r4 S2）
+type: test-change
+# 2026-11-11 agent2 入账（编排 D10-1242 ②：B3-16a 写测试次数用满，按用户缓存的杀伤用例转收紧单；B3-16a spec-test r4 S2：没有规则测试钉住 app.module 接 earningsReads，一并补）。
+# ① apps/api/src/agent-earnings-reads.ts createEarningsReads 的同一实例、同一用户：先读一次，改钱包 / 提现数据后再读，卡上数字须是新值；先成功、再让读取失败，须 reject（不返回上次的值）。变异：在 createEarningsReads 里按 appId + userId 加 Map 缓存 → 应红。
+# ② 组装根接线：app.module.ts 给 stream 入口的 AgentEarningsProvidedPorts 提供 earningsReads，且来自 ./agent-earnings-reads.ts 的 createEarningsReads（静态扫描或可行的装配检查，由测试作者定）。变异：删掉 earningsReads 一项（生产退回 createUnavailableEarningsReads）→ 应红。
+# 只新增 test/spec/agent/earnings-tool-tighten/**，不改已有文件、不动实现；须在 B3-16a（#3134）合并后的主干上跑绿，两条变异实跑各红（先例 B3-08n、B2-09zk，D10-799）。
+# 分工：新鲜独立 Claude 写，评审 Codex 优先（不可用时另一位新鲜独立 Claude）；非 task 分支、不带证据文件，标签由编排核后加。RV2。
+refs: [BR-AI-01, BR-AI-04]
+refs_hash:
+  BR-AI-01: 502e051e2593
+  BR-AI-04: 7add9471a0f6
+deps: [B3-16a]
+paths:
+  - 'test/spec/agent/earnings-tool-tighten/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

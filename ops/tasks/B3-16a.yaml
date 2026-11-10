@@ -55,5 +55,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/earnings-tool/**'
-status: todo
-pr: null
+status: done
+pr: 3134
