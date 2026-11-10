@@ -1,0 +1,31 @@
+id: B2-16d
+repo: rebate-platform
+title: 后台邀请奖励只读接口——adminListInviteRewards（GET /admin/v1/invite-rewards，分页、按受邀人 / 邀请人 / 状态 / 资格日筛选，带今日与累计已用预算）与 adminGetInviteReward（GET /admin/v1/invite-rewards/{invitee_id}，无记录 30701）；fund.view，手机号 3+4 脱敏；落地去掉 x-implementation planned
+type: impl
+# 2026-11-10 入账（identity，编排 D10-1228 ②；契约 CT-25 系列已合并，两接口 x-implementation: planned）。fe 待本单合并后开 F1-15b（后台发放记录与预算）。
+# 数据：app.invite_rewards（每受邀人一行，BR-INV-24 细则「资格记录与状态」）、app.invite_reward_budgets（period=YYYY-MM-DD 当日已发、period=total 累计预留与已发，BR-INV-24 ④）；
+# 只读，无审计、无写；不出 bind_ip_hmac 与 voucher id；手机号经 identity 的 MaskedPhoneReader（identity/ports/masked-phones.ts，B1-10j）3+4 脱敏（BR-ID-33）；
+# budget 不受筛选影响，「今日」按 +08:00 日历日（packages/domain 的日历函数）。路由放 growth 的 http/admin，装配在 app.module。
+refs: [BR-INV-24, BR-ID-33]
+refs_hash:
+  BR-INV-24: 8c11043a392c
+  BR-ID-33: 01b25f773b29
+deps: [CT-25a, CT-25b, CT-25e, B2-16c, B1-10j]
+paths:
+  - 'apps/api/src/modules/growth/**'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/planned-operations.gen.ts'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/growth/admin-invite-rewards/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/growth/admin-invite-rewards/**'
+status: todo
