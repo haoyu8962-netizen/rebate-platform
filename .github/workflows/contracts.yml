@@ -13,6 +13,14 @@
 # failing fails the job; contracts-detect, the comparison (oasdiff range, how the base is taken,
 # leaving out planned operations, --fail-on ERR) and contracts-gate are unchanged, and no `if:` or
 # `continue-on-error` lets the comparison be skipped while the job stays green.
+#
+# CT-05a (05 CT-05, plan B, D10-1229): on every push to main the job contracts-artifact builds the
+# contracts distribution artifact with tools/ci/contracts-artifact.ts (manifest.json with the
+# commit and the sha256 of every tracked file under contracts/ and specs/ of that commit, plus a
+# byte-for-byte snapshot) and uploads it as an Actions artifact named after the commit. It stays
+# read-only (the workflow-level contents: read, no secrets) and is not part of contracts-gate or
+# the required checks. The contracts-v0.9.<n> tag is not made here: no workflow may ask for write
+# permission (check-workflows), so the orchestrator runs tools/ops/contracts-tag.ts locally.
 name: contracts
 
 on:
@@ -164,3 +172,30 @@ jobs:
           DETECT: ${{ needs.contracts-detect.result }}
           CHANGED: ${{ needs.contracts-detect.outputs.changed }}
           CHECK: ${{ needs.contracts-check.result }}
+
+  contracts-artifact:
+    # CT-05a: read-only distribution artifact for main; not needed by contracts-gate.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Build the contracts artifact for this commit
+        run: |
+          set -euo pipefail
+          node tools/ci/contracts-artifact.ts --commit "${GITHUB_SHA}" \
+            --out "$RUNNER_TEMP/contracts-artifact" --repo .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: contracts-${{ github.sha }}
+          path: ${{ runner.temp }}/contracts-artifact
+          # contracts/ holds dot-files (.redocly.lint-ignore.yaml); upload-artifact skips them by
+          # default, and the snapshot must hold every tracked file the manifest lists.
+          include-hidden-files: true
+          if-no-files-found: error

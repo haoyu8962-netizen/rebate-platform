@@ -1,0 +1,29 @@
+id: CT-05a
+repo: rebate-platform
+title: 契约分发制品与本机打 tag（05 CT-05 拆出，方案 B）：main 上每次推送由 contracts 工作流的只读作业生成 manifest（提交号 + contracts/、specs/ 各文件 sha256）与原样快照，传成 Actions 制品；tools/ops/contracts-tag.ts 在本机给 origin/main 上的契约提交打 contracts-v0.9.<n> 注解 tag 并推送，契约与上一个 tag 无差异时不打
+type: guard-change
+# 2026-11-10 be 入账（编排 D10-1225 认领 05 CT-05；D10-1229 选方案 B：不放宽 check-workflows「任何工作流不得申请写权限」，CI 只出只读制品，tag 由编排在本机推）。核对与方案见 couli-runs/CT-05/plan.md。
+# 已覆盖、本单不做：contract.lock（三端已有）、契约落后告警（CT-11d #2400、DSX-42 #2426）、鸿蒙生成器样例接口编译（鸿蒙 common/generated）。自动向三端开 PR（CT-05b）按 D10-1229 先不做，登记 FU-CT05B-CLIENT-PULL。
+# 制品（tools/ci/contracts-artifact.ts，只用 Node 内置模块）：输入一个提交号，按 `git ls-files` 取该提交 contracts/ 与 specs/ 下的全部跟踪文件，内容一律经 `git show <提交>:<路径>` 读（不读工作区）；输出目录里 manifest.json = {commit, files: {路径: sha256}}（键按字典序、2 空格缩进、末尾换行，同一提交两次生成逐字节相同）与 snapshot/<原路径>（原样字节，不转格式；三端仍用各自 sync.sh 转 JSON）。
+# 工作流：contracts.yml 新增作业 contracts-artifact，只在 push 到 main 时跑，ubuntu-latest，沿用工作流级 contents: read、不引用 secrets；生成后用已钉版本的 actions/upload-artifact 上传，制品名带提交号。不进 contracts-gate、不改必需检查；check-workflows 规则不动并须照常通过。
+# 打 tag（tools/ops/contracts-tag.ts，编排落地契约改动后在本机跑）：默认目标 origin/main，可传提交号但必须是 origin/main 的祖先；已有 contracts-v* tag 指向该提交 → 打印并退出 0；该提交与最近一个 contracts-v* tag 的提交在 contracts/、specs/ 下无差异 → 不打、退出 0；否则 tag 名 = contracts-v0.9.<已有最大 n + 1>（一个都没有时 n=0，只认 contracts-v0.9.<非负整数> 形状），注解里写提交号与 manifest.json 的 sha256（与制品同一生成函数），推 refs/tags/<名>；--dry-run 只打印不建不推。tag 推送失败如实退出非零，不重试改名。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）。门禁类改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/contracts.yml'
+  - 'tools/ci/contracts-artifact.ts'
+  - 'tools/ci/contracts-artifact.test.ts'
+  - 'tools/ops/contracts-tag.ts'
+  - 'tools/ops/contracts-tag.test.ts'
+  - 'tools/ci/**'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-05a.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
