@@ -435,3 +435,9 @@ approvals:
     granted: true
     date: '2026-11-10'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动：只增加一个只读作业，不放宽任何门禁；原方案 A 要放行写权限，编排否决改选 B，D10-1229），事后向负责人报告；D10-1225、D10-1229。'
+  - id: 70
+    row: 4
+    title: '第 26 条（union_bindings.status 例外：状态机合并前以 linking 领域层 canTransitionBinding 为唯一入口）随 union_binding 状态机落地失效：CT-10a（#3111）生成 union-binding 状态机，B1-06zm（#3123）linking 六处改用生成的 transition()，第 26 条按其原文「随之作废」；第 26 条原文保留不改'
+    granted: true
+    date: '2026-11-10'
+    note: '编排登记（approvals 只追加不改，所以用新条目记作废）；D10-1225、D10-1228，identity 11-10 19:29 / 20:11 提请。'
