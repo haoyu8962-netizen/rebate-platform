@@ -1,0 +1,101 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#1] 六项邀请奖励配置都有各自的中文名称，不以原始键作名称",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#2] 六项同在名称含「邀请」的分组，不落入「其他」，IP 时长也不归风控阈值",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#3] 四个金额项按后台金额格式显示（整数分→元），预算 0 不写成不限",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#4] IP 时长按小时、资格有效期按天显示",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#5] 每方奖励金额以元输入 12.34，提交整数分 1234",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#6] 每日预算以元输入 0，提交整数分 0（0 即未填，前端不拒）",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#7] 总预算以元输入 5000.5，提交整数分 500050",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#8] 首单实付下限以元输入 0.01，提交整数分 1",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#9] 金额项三位小数或负数被拒，不取整、不确认、不写入",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#10] IP 时长按小时编辑，输入 48 提交整数 48",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#11] 资格有效期按天编辑，输入 45 提交整数 45",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#12] IP 时长输入 0、-1、1.5 被拒（须正整数），不确认、不写入",
+    "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#13] 资格有效期输入 0、-1、1.5 被拒（须正整数），不确认、不写入",
+    "test/spec/frontend/admin-invite-reward-config/switch.test.ts > [AC-F1-15a-SWITCH#1] 邀请奖励开关显示中文名称与「暂停后：」说明（只停新增资格，已有资格不撤销）",
+    "test/spec/frontend/admin-invite-reward-config/switch.test.ts > [AC-F1-15a-SWITCH#2] 打开邀请奖励开关的确认框用中文名称并带说明，取消不写入"
+  ],
+  "risk_note": "F1-15a (orchestrator D10-1225, planning/05 F1-15 doable part). Admin config center: the six growth.invite_reward.* items (amount_fen, daily_budget_fen, total_budget_fen, min_paid_fen, ip_window_hours, eligibility_days) get Chinese names, descriptions and scopes, sit in the invite-code rules group (checked before the risk-threshold group), money items show and edit in yuan via the existing parseYuan / @couli/money path (integer fen sent), hours / days items accept positive integers only; budget 0 is not shown as unlimited. Kill switches: growth.invite_reward.enabled gets a name and an impact line per 08 BR-INV-24 (turning it off stops new eligibility, existing eligibility still pays; stopping payouts is payout_paused). ValueField now wraps validation errors in a role=alert element (antd ErrorList has none), for every config item. Reward records list and budget usage are out of scope until the backend implements adminListInviteRewards. Rule tests by an independent Claude (claude-run.sh); Codex spec-test r1 pass; red on couli-ci (15 tests, right reason). Implementation by Opus 5.5: couli-ci fast run 4 green (15 rule tests and every frozen admin test), run.ts static 10/10; the couli-ci browser runs were killed by test-machine OOM (admin-unions page crash), admin-config-center / admin-kill-switches browser tests passed there and on the host. Codex general review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex general r1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-15a",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "3fa93f9bdd9c3b94d34dcd2e01c7a2f575145c58",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "3fa93f9bdd9c3b94d34dcd2e01c7a2f575145c58",
+      "tree": "0a242ba19b244910b440b4223ea7c55b1ab4bc5c",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-10T12:37:02Z",
+      "finished_at": "2026-11-10T12:37:11Z",
+      "red_tests": [
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#1] 六项邀请奖励配置都有各自的中文名称，不以原始键作名称",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#2] 六项同在名称含「邀请」的分组，不落入「其他」，IP 时长也不归风控阈值",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#3] 四个金额项按后台金额格式显示（整数分→元），预算 0 不写成不限",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#4] IP 时长按小时、资格有效期按天显示",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#5] 每方奖励金额以元输入 12.34，提交整数分 1234",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#6] 每日预算以元输入 0，提交整数分 0（0 即未填，前端不拒）",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#7] 总预算以元输入 5000.5，提交整数分 500050",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#8] 首单实付下限以元输入 0.01，提交整数分 1",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#9] 金额项三位小数或负数被拒，不取整、不确认、不写入",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#10] IP 时长按小时编辑，输入 48 提交整数 48",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#11] 资格有效期按天编辑，输入 45 提交整数 45",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#12] IP 时长输入 0、-1、1.5 被拒（须正整数），不确认、不写入",
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts > [AC-F1-15a-CONFIG#13] 资格有效期输入 0、-1、1.5 被拒（须正整数），不确认、不写入",
+        "test/spec/frontend/admin-invite-reward-config/switch.test.ts > [AC-F1-15a-SWITCH#1] 邀请奖励开关显示中文名称与「暂停后：」说明（只停新增资格，已有资格不撤销）",
+        "test/spec/frontend/admin-invite-reward-config/switch.test.ts > [AC-F1-15a-SWITCH#2] 打开邀请奖励开关的确认框用中文名称并带说明，取消不写入"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-invite-reward-config/config.test.ts",
+        "test/spec/frontend/admin-invite-reward-config/switch.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "74fd2ead41c0a020f165ba8969b85262ed17e5a60835e119d7af6bdf0157859e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5a3964bb53c3733efe1d3c5064197992ec6bd8df",
+    "specs": "d95019b21fafbf4fd5e7554d8d4b214dc074b707"
+  }
+}

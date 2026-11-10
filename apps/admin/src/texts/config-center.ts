@@ -123,6 +123,7 @@ export const configCenterTexts = {
     required: '请输入新值',
     number: '请输入有效的数字',
     integer: '请输入整数',
+    positiveInteger: '请输入正整数（至少 1）',
     moneyFormat: '请输入有效金额（元），如 3000 或 12.34',
     moneyDecimals: '金额最多两位小数（精确到分）',
     moneyNegative: '金额不能为负数',
@@ -205,6 +206,7 @@ export const configCenterTexts = {
     seconds: '秒',
     minutes: '分钟',
     hours: '小时',
+    days: '天',
     months: '个月',
     bp: 'bp',
   },
@@ -224,6 +226,12 @@ export const configCenterTexts = {
     'agent.page_guide.routes': 'AI 页面引导可去页面',
     external_hosts: '外部域名清单',
     'favorites.max_per_user': '每人收藏上限',
+    'growth.invite_reward.amount_fen': '邀请奖励每方金额',
+    'growth.invite_reward.daily_budget_fen': '邀请奖励每日预算',
+    'growth.invite_reward.total_budget_fen': '邀请奖励总预算',
+    'growth.invite_reward.min_paid_fen': '邀请奖励首单实付下限',
+    'growth.invite_reward.ip_window_hours': '邀请奖励同 IP 判定时长',
+    'growth.invite_reward.eligibility_days': '邀请奖励资格有效期',
   } as Readonly<Record<string, string>>,
   descriptions: {
     'withdraw.min_amount_fen': '每笔提现申请的金额下限（含）。低于下限的申请被拒绝。',
@@ -237,6 +245,16 @@ export const configCenterTexts = {
     'withdraw.payout_account_verify_per_day': '每个会员每日可发起的收款账号付费核验次数上限。',
     'agent.page_guide.routes': 'AI 页面引导可以带用户去的页面；编辑器上线前只读。',
     external_hosts: '允许打开的外部域名清单；编辑器上线前只读。',
+    'growth.invite_reward.amount_fen':
+      '被邀请人首单确认收货并入账后，邀请人与被邀请人各得的奖励金额；开关打开时须至少 1 分。',
+    'growth.invite_reward.daily_budget_fen':
+      '每个自然日可发放的邀请奖励总额。0 表示未填，未填时不能打开邀请奖励开关。',
+    'growth.invite_reward.total_budget_fen':
+      '活动累计可发放的邀请奖励总额。0 表示未填，未填时不能打开邀请奖励开关。',
+    'growth.invite_reward.min_paid_fen': '被邀请人首单实付达到该金额（含）才计奖；0 表示不设下限。',
+    'growth.invite_reward.ip_window_hours': '该时长内与邀请人同一 IP 的被邀请人不计奖。',
+    'growth.invite_reward.eligibility_days':
+      '绑定后取得的奖励资格在该天数内有效，按被邀请人子订单的下单时间算。',
   } as Readonly<Record<string, string>>,
   scopes: {
     'withdraw.min_amount_fen': '全部会员 · 全部收款方式',
@@ -249,6 +267,12 @@ export const configCenterTexts = {
     'withdraw.payout_account_verify_per_day': '每个会员',
     'withdraw.auto_payout.max_amount_fen': '提现审核',
     'favorites.max_per_user': '每个会员',
+    'growth.invite_reward.amount_fen': '邀请人与被邀请人各一份',
+    'growth.invite_reward.daily_budget_fen': '邀请奖励活动 · 每日',
+    'growth.invite_reward.total_budget_fen': '邀请奖励活动 · 累计',
+    'growth.invite_reward.min_paid_fen': '被邀请人首单',
+    'growth.invite_reward.ip_window_hours': '邀请奖励活动',
+    'growth.invite_reward.eligibility_days': '新取得的奖励资格',
   } as Readonly<Record<string, string>>,
   scopeDefault: '全局',
   /** Values the owner has yet to confirm (08): marked 待负责人确认. */
@@ -260,4 +284,9 @@ export const configCenterTexts = {
     'withdraw.payout_account_verify_per_day',
   ] as readonly string[],
   itemKeys: ['favorites.max_per_user'] as readonly string[],
+  /** Numbers that must be whole and at least 1 (hours and days of the invite reward). */
+  positiveIntegerKeys: [
+    'growth.invite_reward.ip_window_hours',
+    'growth.invite_reward.eligibility_days',
+  ] as readonly string[],
 } as const;

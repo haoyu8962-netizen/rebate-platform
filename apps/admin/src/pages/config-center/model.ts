@@ -32,7 +32,7 @@ export function itemUrl(key: string): string {
 export function groupOf(row: ConfigRow): GroupId {
   const key = row.key;
   if (/^(?:withdraw|payout)\./.test(key)) return 'withdraw';
-  if (/^invite\./.test(key)) return 'invite';
+  if (/^(?:invite|growth\.invite_reward)\./.test(key)) return 'invite';
   if (/^(?:model\.|agent\.model)/.test(key)) return 'model';
   if (/^agent\.(?:example|sample|suggest)/.test(key)) return 'examples';
   if (/^(?:agent|budget)\./.test(key)) return 'agent';
@@ -75,6 +75,7 @@ export function unitOf(key: string): string {
   if (key.endsWith('_sec')) return t.units.seconds;
   if (key.endsWith('_minutes')) return t.units.minutes;
   if (key.endsWith('_hours')) return t.units.hours;
+  if (key.endsWith('_days')) return t.units.days;
   if (key.endsWith('_months')) return t.units.months;
   if (key.endsWith('_bp')) return t.units.bp;
   return '';
@@ -182,13 +183,24 @@ function parseNumber(text: string): Parsed {
   return { ok: true, value };
 }
 
+/** Whole number of at least 1 (hours, days): 0, a sign or a decimal is refused, never rounded. */
+function parsePositiveInteger(text: string): Parsed {
+  const trimmed = text.trim();
+  if (trimmed === '') return fail(t.validation.required);
+  if (!/^\d+$/.test(trimmed)) return fail(t.validation.positiveInteger);
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value) || value < 1) return fail(t.validation.positiveInteger);
+  return { ok: true, value };
+}
+
 /** The value to send for what the operator entered, or the message to show. */
 export function parseInput(row: ConfigRow, raw: FieldValue): Parsed {
   switch (row.value_type) {
     case 'number': {
       if (raw === null || raw === undefined || typeof raw !== 'string')
         return fail(t.validation.required);
-      return isMoney(row) ? parseYuan(raw) : parseNumber(raw);
+      if (isMoney(row)) return parseYuan(raw);
+      return t.positiveIntegerKeys.includes(row.key) ? parsePositiveInteger(raw) : parseNumber(raw);
     }
     case 'boolean':
       return typeof raw === 'boolean' ? { ok: true, value: raw } : fail(t.validation.required);

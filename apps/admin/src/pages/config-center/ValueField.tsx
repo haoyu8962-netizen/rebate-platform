@@ -37,6 +37,16 @@ function hintOf(row: ConfigRow, raw: FieldValue): string {
 }
 
 /**
+ * A refused value: antd lists field errors without a role, so the message is rendered as an
+ * alert element (the form shows an element message as is) and screen readers announce it.
+ */
+function refusal(text: string): Error {
+  const error = new Error(text);
+  Object.defineProperty(error, 'message', { value: <span role="alert">{text}</span> });
+  return error;
+}
+
+/**
  * Select over the registered options only: typed text never filters, adds or keeps a value, and
  * the arrow keys open the list (as the mouse does).
  */
@@ -70,9 +80,9 @@ export function ValueField({
       validator: (_: unknown, raw: FieldValue): Promise<void> => {
         if (optional && unchangedInput(row, raw)) return Promise.resolve();
         const parsed = parseInput(row, raw);
-        if (!parsed.ok) return Promise.reject(new Error(parsed.message));
+        if (!parsed.ok) return Promise.reject(refusal(parsed.message));
         if (!optional && sameValue(parsed.value, row.value))
-          return Promise.reject(new Error(t.validation.same));
+          return Promise.reject(refusal(t.validation.same));
         return Promise.resolve();
       },
     },

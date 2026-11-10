@@ -104,6 +104,7 @@ export const killSwitchesTexts = {
     'jev.enabled': 'TypeSafe Jev 结果核对',
     'tlj.enabled': '淘礼金',
     'growth.invite_bind.enabled': '邀请绑定',
+    'growth.invite_reward.enabled': '邀请奖励',
   } as Readonly<Record<string, string>>,
   patternNames: {
     convert: (platform: string): string => `${platform}转链`,
@@ -133,6 +134,8 @@ export const killSwitchesTexts = {
     'order_sync.promo_mode': '开启后：订单同步按大促频率运行',
     'jev.enabled': '未开启时：结果核对按规则进行，文案预检跳过',
     'growth.invite_bind.enabled': '暂停后：新的邀请关系不再绑定；后台改上级不受影响',
+    'growth.invite_reward.enabled':
+      '暂停后：不再新增邀请奖励资格；已取得的资格不撤销，奖励照常发放（停发用邀请奖励暂停发放开关）',
   } as Readonly<Record<string, string>>,
   patternImpacts: {
     convert: (platform: string): string =>
