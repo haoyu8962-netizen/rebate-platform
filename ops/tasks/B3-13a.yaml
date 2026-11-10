@@ -1,0 +1,21 @@
+id: B3-13a
+repo: rebate-platform
+title: Agent 固定话术补键（规划/05 B3-13 收尾）：contracts/texts.default.json 加 agent.notice.tlj_none「暂无淘礼金活动」（BR-TEXT-15 判定 6、BR-AI-17），specs/fund-term-keys.yaml 归 ordinary，生成物同步
+type: contract
+# 2026-11-10 agent 线入账（编排 D10-1225：规划/05 B3-13 认领）。核对结论：B3-13 要的拒答、需要登录 / 绑手机、出错、降级、页面引导、收益卡等 96 个 agent.* 键已由 CT-16e #54、CT-16f #1114 等落进字典并归类；08 提到的 agent 话术键只缺 tlj_none。
+# 归类：与同组 agent.notice.tlj_taobao_only 一样归 ordinary（默认文案不含 BR-TEXT-12 资金关键词；BR-TEXT-12 细则未单列，按认定规则）。本单只补键，发出该 notice 的找货 benefits 分支不在本单（另报编排）。负责人过目（AI-21 / AI-22）另行处理。先例 CT-26zh（只加文案键，tester none）。
+refs: [BR-TEXT-15, BR-TEXT-12]
+refs_hash:
+  BR-TEXT-15: de8d5a3a0b48
+  BR-TEXT-12: c76df8c4f66d
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
