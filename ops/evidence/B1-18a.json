@@ -1,0 +1,94 @@
+{
+  "risk_note": "RV2 by path default (specs/** not in the risk map), docs only. D10-1225 (union lane claims 05 B1-18): new specs/union/taobao.md (128 lines) and specs/union/pdd.md expanded from 20 to 122 lines in the shape of specs/union/jd.md (order / goods / link sections; order field table DTO | wire | note; amounts per BR-CALC-03: Taobao est = pub_share_pre_fee_for_commission − alimm_tech_service_pre_fee, settle = pub_share_fee_for_commission − alimm_tech_service_fee read only at tk_status 3, fee from alimm_share_info_dto with alimama_share_fee fallback; PDD est = promotion_amount − duo_id_service_fee, settle null). Content taken only from merged adapter source, ledger comments and 08 / 09; unverified items marked 未实测 / 待录制核对, not promised. First-batch recordings exist in rebate-private/cap-tests (field-shape summaries); the docs cite them by private path only, no payload copied. No runtime code, migration or test outside test/spec/union/spec-docs changed. Rule tests by fresh independent Claude (attempt 2 after spec-test r1 S1s), container red/2 PASS (14 tests); host vitest 14/14 green on the implementation.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review (effort medium) round 1 pass, no findings, on implementation dfd63416869c: checked every mapping, formula, read-timing, fallback and constant in the two docs against infra/taobao/orders.ts and infra/pdd/orders.ts; no unverified capability promised; no secret or private-recording payload."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test (effort medium): round 1 fail with three S1 — amount section checked names only (a '+' formula passed), empty note column passed, base64 leak rule required all three character classes; test attempt 2 (fresh independent Claude) added [AC-B1-18a#6] subtraction-on-one-line and [AC-B1-18a#7] non-empty notes / null-reason, widened the base64 rule with a file-path exemption; red/2 PASS 14 tests; Codex round 2 pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#1] specs/union/taobao.md：有且仅有一个一级标题含「订单映射」的段，其下 ## 字段对照 表头依次为 DTO 字段 | 报文字段 | 说明",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#1] specs/union/pdd.md：有且仅有一个一级标题含「订单映射」的段，其下 ## 字段对照 表头依次为 DTO 字段 | 报文字段 | 说明",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#2] specs/union/taobao.md：字段对照的 DTO 字段列覆盖平台无关字段（attr_params 展开为点路径）、UnionOrder 自身字段与 TaobaoOrderFields 全部字段，清单读自 types.ts",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#2] specs/union/pdd.md：字段对照的 DTO 字段列覆盖平台无关字段（attr_params 展开为点路径）、UnionOrder 自身字段与 PddOrderFields 全部字段，清单读自 types.ts",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#3] specs/union/taobao.md：报文字段列里反引号括起的每个字段名都在 apps/api/src/modules/union/infra/taobao… 里以字符串或属性名出现",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#3] specs/union/pdd.md：报文字段列里反引号括起的每个字段名都在 apps/api/src/modules/union/infra/pdd/or… 里以字符串或属性名出现",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#4] specs/union/taobao.md：订单映射段有 ## 金额 小节，按 BR-CALC-03 写明 N 的取数字段；其中的报文字段都在 apps/api/src/modules/union/infra/taobao… 里",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#4] specs/union/pdd.md：订单映射段有 ## 金额 小节，按 BR-CALC-03 写明 N 的取数字段；其中的报文字段都在 apps/api/src/modules/union/infra/pdd/or… 里",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#5] specs/union/taobao.md：补齐的订单映射文档不泄密：无推广位 / PID 值、长十六进制或 base64 串、secret 取值、```json 报文，录制只以 rebate-private/cap-tests/... 引用",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#5] specs/union/pdd.md：补齐的订单映射文档不泄密：无推广位 / PID 值、长十六进制或 base64 串、secret 取值、```json 报文，录制只以 rebate-private/cap-tests/... 引用",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#6] specs/union/taobao.md：## 金额 里每个 N 公式在同一行写明「佣金字段 扣减 服务费字段」（−、-、减、扣除、扣减），口径同 apps/api/src/modules/union/infra/taobao…；不得出现佣金与服务费相加；恒为 null 的 N 写明恒为 null",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#6] specs/union/pdd.md：## 金额 里每个 N 公式在同一行写明「佣金字段 扣减 服务费字段」（−、-、减、扣除、扣减），口径同 apps/api/src/modules/union/infra/pdd/or…；不得出现佣金与服务费相加；恒为 null 的 N 写明恒为 null",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#7] specs/union/taobao.md：字段对照每一行的说明列非空；报文字段列没有反引号字段名的行（不映射、恒为 null、平台不给），说明含「恒为 null」「不给」或「不映射」",
+    "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#7] specs/union/pdd.md：字段对照每一行的说明列非空；报文字段列没有反引号字段名的行（不映射、恒为 null、平台不给），说明含「恒为 null」「不给」或「不映射」"
+  ],
+  "task": "B1-18a",
+  "spec_commit": "fa2d06bff3452ef607beb58f4f17247d85eae579",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "fa2d06bff3452ef607beb58f4f17247d85eae579",
+      "tree": "b4747bb21f04b31d890b125e21a56f391517017b",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-10T08:10:35Z",
+      "finished_at": "2026-11-10T08:10:38Z",
+      "red_tests": [
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#1] specs/union/taobao.md：有且仅有一个一级标题含「订单映射」的段，其下 ## 字段对照 表头依次为 DTO 字段 | 报文字段 | 说明",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#1] specs/union/pdd.md：有且仅有一个一级标题含「订单映射」的段，其下 ## 字段对照 表头依次为 DTO 字段 | 报文字段 | 说明",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#2] specs/union/taobao.md：字段对照的 DTO 字段列覆盖平台无关字段（attr_params 展开为点路径）、UnionOrder 自身字段与 TaobaoOrderFields 全部字段，清单读自 types.ts",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#2] specs/union/pdd.md：字段对照的 DTO 字段列覆盖平台无关字段（attr_params 展开为点路径）、UnionOrder 自身字段与 PddOrderFields 全部字段，清单读自 types.ts",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#3] specs/union/taobao.md：报文字段列里反引号括起的每个字段名都在 apps/api/src/modules/union/infra/taobao… 里以字符串或属性名出现",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#3] specs/union/pdd.md：报文字段列里反引号括起的每个字段名都在 apps/api/src/modules/union/infra/pdd/or… 里以字符串或属性名出现",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#4] specs/union/taobao.md：订单映射段有 ## 金额 小节，按 BR-CALC-03 写明 N 的取数字段；其中的报文字段都在 apps/api/src/modules/union/infra/taobao… 里",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#4] specs/union/pdd.md：订单映射段有 ## 金额 小节，按 BR-CALC-03 写明 N 的取数字段；其中的报文字段都在 apps/api/src/modules/union/infra/pdd/or… 里",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#5] specs/union/taobao.md：补齐的订单映射文档不泄密：无推广位 / PID 值、长十六进制或 base64 串、secret 取值、```json 报文，录制只以 rebate-private/cap-tests/... 引用",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#5] specs/union/pdd.md：补齐的订单映射文档不泄密：无推广位 / PID 值、长十六进制或 base64 串、secret 取值、```json 报文，录制只以 rebate-private/cap-tests/... 引用",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#6] specs/union/taobao.md：## 金额 里每个 N 公式在同一行写明「佣金字段 扣减 服务费字段」（−、-、减、扣除、扣减），口径同 apps/api/src/modules/union/infra/taobao…；不得出现佣金与服务费相加；恒为 null 的 N 写明恒为 null",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#6] specs/union/pdd.md：## 金额 里每个 N 公式在同一行写明「佣金字段 扣减 服务费字段」（−、-、减、扣除、扣减），口径同 apps/api/src/modules/union/infra/pdd/or…；不得出现佣金与服务费相加；恒为 null 的 N 写明恒为 null",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#7] specs/union/taobao.md：字段对照每一行的说明列非空；报文字段列没有反引号字段名的行（不映射、恒为 null、平台不给），说明含「恒为 null」「不给」或「不映射」",
+        "test/spec/union/spec-docs/order-mapping.test.ts > [AC-B1-18a#7] specs/union/pdd.md：字段对照每一行的说明列非空；报文字段列没有反引号字段名的行（不映射、恒为 null、平台不给），说明含「恒为 null」「不给」或「不映射」"
+      ],
+      "expected": ["test/spec/union/spec-docs/order-mapping.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "8cbf334d0ae69437aa3c3f7d1b8e5da189ba3179b95fae0bf3c62975857e12e0"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "637de2447302e76821b23600149d84fe39c7058a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a96756cdabca87845aff9674859a1d46420bf07d",
+    "specs": "0f6813fb13d5707ab376717068093f6d0300a15f"
+  }
+}
