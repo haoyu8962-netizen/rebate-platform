@@ -10,13 +10,12 @@
 // - Runs on identity's cleanup transaction (users row already locked) and is re-entrant: a second
 //   call changes nothing. Rule tests: test/spec/linking/deletion-cleanup/**.
 // - Takes the bindings' user lock (binding-lock.ts) like every other writer, then one set-based
-//   UPDATE whose source statuses come from canTransitionBinding (no per-row compare-and-set: a
-//   writer without the user lock, such as the inspection turning active into invalid, is waited
-//   for by the row lock and the row is re-evaluated against the status set, so it is never
-//   silently skipped).
+//   UPDATE whose source statuses come from canTransitionBinding, i.e. the generated union-binding
+//   transition() (CT-10a U8, asked at every call; no per-row compare-and-set: a writer without
+//   the user lock, such as the inspection turning active into invalid, is waited for by the row
+//   lock and the row is re-evaluated against the status set, so it is never silently skipped).
 // - B1-06zi: app.union_pdd_pid_filings rows are kept (insert-only facts under the tombstoned
 //   user_id; migration 0135 header): usability is gated by the binding, blocked here.
-// TODO(规划/11 §4.5): 换用生成的 transition() — blocked on CT-10 状态机生成器（approvals #26）
 import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';
 import { canTransitionBinding, type BindingStatus } from '../domain/binding-status-transitions.ts';
@@ -38,10 +37,10 @@ const STATUSES: readonly BindingStatus[] = [
   'released',
 ];
 
-/** The statuses a binding may leave for blocked (the transition table decides). */
-const BLOCKABLE: readonly BindingStatus[] = Object.freeze(
-  STATUSES.filter((from) => canTransitionBinding(from, 'blocked')),
-);
+/** The statuses a binding may leave for blocked (the generated transition() decides, per call). */
+function blockable(): readonly BindingStatus[] {
+  return STATUSES.filter((from) => canTransitionBinding(from, 'blocked'));
+}
 
 /** identity's DeletionCleanupStep for linking, on the caller's transaction. */
 export async function blockForDeletion(
@@ -50,6 +49,8 @@ export async function blockForDeletion(
 ): Promise<void> {
   const { appId, userId, at } = input;
   if (!(await lockBindingUser(trx, appId, userId))) return;
+  const sources = blockable();
+  if (sources.length === 0) return;
   await trx
     .updateTable('union_bindings')
     .set((eb) => ({
@@ -60,6 +61,6 @@ export async function blockForDeletion(
     }))
     .where('app_id', '=', appId)
     .where('user_id', '=', userId)
-    .where('status', 'in', [...BLOCKABLE])
+    .where('status', 'in', [...sources])
     .execute();
 }

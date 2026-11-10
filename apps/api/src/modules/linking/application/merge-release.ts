@@ -9,13 +9,13 @@
 // - blocked, released and unbound rows are not touched.
 // - Takes the bindings' user lock (binding-lock.ts) like every other writer, on the caller's
 //   transaction only; re-entrant (a second call changes nothing).
-// - One set-based UPDATE whose source statuses are checked against canTransitionBinding (as the
-//   deletion cleanup does): a writer without the user lock (the inspection turning active into
-//   invalid) is waited for by the row lock and the row re-evaluated against the status set.
+// - One set-based UPDATE whose source statuses are checked against canTransitionBinding, i.e. the
+//   generated union-binding transition() (CT-10a U9, asked at every call; as the deletion cleanup
+//   does): a writer without the user lock (the inspection turning active into invalid) is waited
+//   for by the row lock and the row re-evaluated against the status set.
 // hasAdminDisabledBinding is the merge condition D10-1099 Q-4 (a source with a blocked
 // (admin_disable) binding is not merged: releasing it without cooling would wash the console's
 // penalty off the relation id); read only, on the caller's executor.
-// TODO(规划/11 §4.5): 换用生成的 transition() — blocked on CT-10 状态机生成器（approvals #26）
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
 import { canTransitionBinding, type BindingStatus } from '../domain/binding-status-transitions.ts';
@@ -29,10 +29,10 @@ export interface ReleaseForMergeInput {
   readonly at: Date;
 }
 
-/** The statuses a merge releases (BR-ID-06); each must be a legal change to released. */
-const RELEASABLE: readonly BindingStatus[] = Object.freeze(
-  (['active', 'invalid'] as const).filter((from) => canTransitionBinding(from, 'released')),
-);
+/** The statuses a merge releases (BR-ID-06); each must be a legal change to released (per call). */
+function releasable(): readonly BindingStatus[] {
+  return (['active', 'invalid'] as const).filter((from) => canTransitionBinding(from, 'released'));
+}
 
 /** Releases the source's bindings without cooling, on the caller's transaction. */
 export async function releaseForMerge(
@@ -41,6 +41,8 @@ export async function releaseForMerge(
 ): Promise<void> {
   const { appId, userId, at } = input;
   if (!(await lockBindingUser(trx, appId, userId))) return;
+  const sources = releasable();
+  if (sources.length === 0) return;
   await trx
     .updateTable('union_bindings')
     .set((eb) => ({
@@ -52,7 +54,7 @@ export async function releaseForMerge(
     }))
     .where('app_id', '=', appId)
     .where('user_id', '=', userId)
-    .where('status', 'in', [...RELEASABLE])
+    .where('status', 'in', [...sources])
     .execute();
 }
 

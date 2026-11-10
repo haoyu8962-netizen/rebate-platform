@@ -7,8 +7,8 @@
 // - queryPddAuthority: UnionAdapter.queryPddAuthority (an idempotent governed read); missing,
 //   failing or a malformed answer → null, logged, nothing written.
 // - activatePddBinding: under a savepoint of the caller's transaction, the stored binding judged
-//   by canTransitionBinding then written active by a row_version compare-and-set (approvals #26:
-//   single entry, single writer linking): the unreleased pending_auth / invalid row in place (its
+//   by canTransitionBinding (the generated union-binding transition(), CT-10a U1–U4) then written
+//   active by a row_version compare-and-set (single writer linking): the unreleased pending_auth / invalid row in place (its
 //   account kept), else a stored `unbound` row, else a new active row of the account used;
 //   released history untouched; blocked never overwritten. A write that makes the binding active
 //   resolves the user's unresolved pdd conflict rows in the same savepoint, after the write

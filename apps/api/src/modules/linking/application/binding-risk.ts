@@ -14,9 +14,10 @@
 //   admin_disable comes back only through the console's enable, deletion only through the daily
 //   release task.
 // Both take the user lock (binding-lock.ts) first, on the caller's transaction; each change is
-// judged by canTransitionBinding and written by a compare-and-set on the row_version read with it
-// (a writer without the lock, such as the inspection, winning the race → read again).
-// TODO(规划/11 §4.5): 换用生成的 transition() — blocked on CT-10 状态机生成器（approvals #26）
+// judged by canTransitionBinding (the generated union-binding transition(), CT-10a: ban U8, unban
+// U7 then on another union U4) and written by a compare-and-set on the row_version read with it
+// (a writer without the lock, such as the inspection, winning the race → read again); a refused
+// step throws, so the caller's transaction rolls the whole operation back.
 import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';
 import type { Clock } from '../../platform/index.ts';

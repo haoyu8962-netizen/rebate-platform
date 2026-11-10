@@ -27,10 +27,10 @@
 // The two partial unique indexes stay the arbiter of concurrent writes: a unique violation
 // re-reads and decides again (30151 or success), never a 500 and never an application lock.
 // Every status written (the new active row, invalid → active, the user's cooling released row →
-// active) is first judged by canTransitionBinding (../domain/binding-status-transitions.ts, the
-// single entry for union_bindings.status, approvals #26); an existing row's change is then a
+// active) is first judged by canTransitionBinding (../domain/binding-status-transitions.ts, a thin
+// forwarder to the generated union-binding transition(), CT-10a U1 / U4 / U5); an existing row's
+// change is then a
 // compare-and-set on the row_version read with it; losing it re-reads and decides again.
-// TODO(规划/11 §4.5): 换用生成的 transition() — blocked on CT-10 状态机生成器（approvals #26）
 //
 // Atomicity with the key (Codex money review r1): the submission runs in platform idempotency's
 // transactional mode. Everything after the key is claimed reads on that transaction except the
@@ -194,7 +194,7 @@ function result(code: number, traceId: string, data?: Record<string, unknown>): 
   };
 }
 
-/** Throws on a status change the transition table does not allow (never written, 50001). */
+/** Throws on a status change the generated transition() refuses (never written, 50001). */
 function assertTransition(from: string | null, to: string): void {
   if (!canTransitionBinding(from, to)) {
     throw new Error(`union_bindings: illegal status transition ${String(from)} → ${to}`);

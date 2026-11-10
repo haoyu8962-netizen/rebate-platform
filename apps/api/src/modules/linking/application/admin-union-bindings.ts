@@ -18,15 +18,16 @@
 //   now + bind.rebind_cooldown_days, default 30); disable → blocked(admin_disable); enable → on
 //   Taobao invalid (the user authorizes again), on another union active at once, written in two
 //   steps blocked → invalid → active on the same transaction (binding-risk.ts restoreSteps: only
-//   existing edges). canTransitionBinding judges every step, each written by a compare-and-set on
-//   the row_version read (or just written); an enable that ends active resolves the user's 30151
-//   rows of the platform as any activation does; reason is stored on the row;
+//   existing edges). canTransitionBinding (the generated union-binding transition(), CT-10a: reset
+//   U9, disable U8, enable U7 then on another union U4) judges every step, each written by a
+//   compare-and-set on the row_version read (or just written); an enable that ends active
+//   resolves the user's 30151 rows of the platform as any activation does; reason is stored on
+//   the row;
 // - one audit row (union_binding_<action>, before / after status and the reason) on the same
 //   transaction, through admin's audit writer bound to it.
 // After the commit a reset clears the user's cached converted links (BR-AI-04 细则「转链缓存」);
 // a cache failure is logged, the reset stands (the open answers 30101 from the binding before any
 // cached jump is read).
-// TODO(规划/11 §4.5): 换用生成的 transition() — blocked on CT-10 状态机生成器（approvals #26）
 import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely, Selectable } from 'kysely';
