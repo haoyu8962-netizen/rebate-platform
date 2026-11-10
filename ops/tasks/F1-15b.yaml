@@ -1,0 +1,25 @@
+id: F1-15b
+repo: rebate-platform
+title: 后台邀请奖励发放记录与预算用量（F1-15 第二段）：配置中心邀请奖励分组显示今日 / 累计已用与剩余预算，子页 /invite-rewards 只读发放记录列表（按被邀请人、邀请人、状态、日期查，两方结果与不发原因）与单条详情（编排 2026-11-10，B2-16d #3141 合并后）
+type: impl
+# 2026-11-10 入账（前端线 f1-frontend-7）。后端 B2-16d（#3141）已实现 adminListInviteRewards / adminGetInviteReward（权限点 fund.view，只读，无 step-up；列表响应带 budget：today.granted_fen、total.reserved_fen / granted_fen，不随筛选变）。依据：规划/01 F-ADM-27、05 F1-15、04 §6.6 invite-rewards、08 BR-INV-24（状态、两方结果、不发 / 作废原因的含义只在 BR-INV-24）。
+# 位置（技术取舍，已报编排）：不新增侧栏菜单——冻结 admin-shell 测试钉死了菜单清单，新增菜单要改冻结测试且会让主干先红；照「导出记录挂在操作日志下」的先例，记录页作配置中心的子页（面包屑归配置中心），配置中心邀请奖励分组里显示预算用量并给「发放记录」入口。没有 fund.view 的账号不显示预算块与入口，直达子页显示无权限。
+# 剩余预算 = 配置项上限 − 已用（今日：daily_budget_fen − today.granted_fen；累计：total_budget_fen − total.reserved_fen − total.granted_fen），金额整数分只经 @couli/money 运算与格式化；上限为 0 时按 BR-INV-24 显示（不显示为「不限」）。手机号只显示接口给的脱敏值；不提供补发或改结果。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/pages/invite-rewards/**'
+  - 'apps/admin/src/pages/config-center/**'
+  - 'apps/admin/src/texts/invite-rewards.ts'
+  - 'apps/admin/src/texts/config-center.ts'
+  - 'apps/admin/src/App.tsx'
+test_paths:
+  - 'test/spec/frontend/admin-invite-rewards/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-invite-rewards/**'
+status: todo
+pr: null

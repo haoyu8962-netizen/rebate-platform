@@ -1,0 +1,19 @@
+id: F1-11c
+repo: rebate-platform
+title: 分享中间页换用专用文案键：失效空态 share_page.invalid、取价时间 share_page.quote_time，替换 F1-11a 借用的 link_landing.invalid、earnings.as_of（编排 2026-11-10，F1-11b #3142 合并后）
+type: impl
+# 2026-11-10 入账（前端线 f1-frontend-7）。只改 apps/h5 landing 的文案引用，不改行为；取价时间句按 BR-PRICE-11 仍只在报价降级时显示。规则测试补上 F1-11a Codex spec-test 记的范围外一条：30102 / 30111 sharer_auth_invalid、30144 空态显示 share_page.invalid 全文，取价时间显示 share_page.quote_time 带 {time}。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/entries/landing/**'
+test_paths:
+  - 'test/spec/frontend/h5-share-landing-texts/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-share-landing-texts/**'
+status: todo
+pr: null
