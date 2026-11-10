@@ -1,0 +1,32 @@
+id: CT-26zj
+repo: rebate-platform
+title: 契约：getSharePage / getShareTpwd 的 X-App-Version 在 X-Platform=h5 时可省（与 08 最低版本拦截「h5 不判版本」一致），服务端放开；bridge.schema.json share_page_paths 按实际路由填 path_pattern（D10-1246，照 D10-1232）
+type: contract
+# 2026-11-10 content 入账（D10-1246，承 D10-1232 ①②；契约槽排在 B2-16d 之后，land 前等叫号）。
+# ① 两接口参数改用一个 required=false 的版本参数（说明：X-Platform=h5 可省；三端 App 必带，缺省按低于最低版本处理），重生成 route-schemas 等生成物；服务端若对这两接口另有必填头校验一并放开（linking/http/public/share-page.controller.ts、risk/application/minimum-version.ts 视实际）。规则测试钉：h5 不带头 200；ios / android / harmony 不带头照旧按低于最低版本（08 BR 10_ID 最低支持版本拦截「判定」）。
+# ② product_share：`/<link_id>`（H5 landing share-format.ts linkIdFromPath；links.link_id 为 uuid，契约 LinkId → Id）；invite_landing：`/i/<invite_code>`（growth/application/my-invite.ts landing_url，邀请码格式照契约）；download_guide：主干无路由，保持 null 并注明，已报编排。规则测试钉：实际生成的分享 / 邀请链接路径能匹配，非分享页路径不匹配（BR-ATTR-29 细则）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/bridge.schema.json'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/minimum-version.ts'
+  - 'apps/api/src/modules/risk/application/minimum-version.test.ts'
+  - 'apps/api/src/modules/linking/http/public/share-page.controller.ts'
+  - 'apps/api/src/modules/linking/http/public/share-page.controller.test.ts'
+test_paths:
+  - 'test/spec/linking/share-page-app-version/**'
+  - 'test/spec/contracts/share-page-paths/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/share-page-app-version/**'
+  - 'test/spec/contracts/share-page-paths/**'
+status: todo

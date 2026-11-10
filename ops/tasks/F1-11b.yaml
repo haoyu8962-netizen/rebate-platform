@@ -1,0 +1,20 @@
+id: F1-11b
+repo: rebate-platform
+title: 文案：分享中间页专用两键——链接失效句与取价时间句，替换 F1-11a 借用的 link_landing.invalid、earnings.as_of；按 08 BR-TEXT 起草、过禁用词与资金术语归类（D10-1246）
+type: impl
+# 2026-11-10 content 入账（D10-1246 ②）。只改 contracts/texts.default.json（新增两键，键名以 share_page. 为前缀，取价时间句带 {time} 变量）与 specs/fund-term-keys.yaml 归类；措辞取 08 BR-TEXT 已有口径（失效同 BR-ATTR / BR-TEXT 的分享失效说法，取价时间同 BR-PRICE-11 的「取价时间」），不臆造新规则。合并后通知 fe 在 apps/h5 landing share-page.ts 换键（不在本单）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+test_paths:
+  - 'test/spec/content/share-page-texts/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/share-page-texts/**'
+status: todo
