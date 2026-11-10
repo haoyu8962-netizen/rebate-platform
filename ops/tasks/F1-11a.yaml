@@ -20,5 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/h5-share-landing/**'
-status: todo
-pr: null
+status: done
+pr: 3136
