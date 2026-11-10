@@ -106,3 +106,15 @@ export type {
   BadDebtWriteoffTransitionResult,
   BadDebtWriteoffTransitionRow,
 } from './bad-debt-writeoff.gen.ts';
+export {
+  UNION_BINDING_EVENTS,
+  UNION_BINDING_STATES,
+  UNION_BINDING_TRANSITIONS,
+  transitionUnionBinding,
+} from './union-binding.gen.ts';
+export type {
+  UnionBindingState,
+  UnionBindingEvent,
+  UnionBindingTransitionResult,
+  UnionBindingTransitionRow,
+} from './union-binding.gen.ts';
