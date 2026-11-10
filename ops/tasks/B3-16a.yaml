@@ -26,7 +26,7 @@ paths:
   - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/agent/earnings-tool/**'
-  - 'test/spec/agent/stream-assembly-orders/scan.ts'
+  - 'test/spec/agent/stream-assembly-orders/{scan,kit}.ts'
   - 'test/spec/agent/stream-assembly-orders/registry.int.test.ts'
   - 'test/spec/agent/rule-search-wiring/kit.ts'
   - 'test/spec/agent/rule-search-wiring/allowlist.test.ts'
