@@ -5,6 +5,7 @@ type: impl
 # 2026-11-10 union 入账（D10-1225 认领规划/05 B1-18，B1-18a 之后第二张）。BR-CALC-03 要求映射写在 specs/attribution.md 并附录制报文：首批录制在 rebate-private/cap-tests（字段形状摘要），公开仓库只写私有路径引用、不抄原文。
 # 内容：京东 / 淘宝 / 拼多多各一节，写 est / settle 的报文字段与公式（服务费扣除、回退、取值时机）、补贴类佣金拆分（BR-CALC-18）落在哪、实现文件、录制形状路径、核对状态。BR-CALC-03 的「与联盟后台同一订单推广者收入逐单核对」要真实订单与后台账号，本单只写「未核对」并留证据栏，不代做。
 # 只写文档与只读一致性规则测试，不改运行时代码；依据只取已合并源码、台账注释、08、09。
+# 完成 2026-11-10（#3120，头 d66b0704d7eb）：specs/attribution.md 新建；规则测试 3 次（D10-1233）+ D10-1235 机械修去 describe，spec-test r3 pass，money r1 pass。规则缺口（BR-CALC-18 拆分、service_fee_bp 回退、京东净额未实测、后台逐单核对）已报编排。
 refs: [BR-CALC-03, BR-CALC-18]
 refs_hash:
   BR-CALC-03: f2d8ebebbc0c
@@ -19,4 +20,5 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3120
