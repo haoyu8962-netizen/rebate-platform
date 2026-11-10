@@ -2,7 +2,7 @@ id: B3-16a
 repo: rebate-platform
 title: 只读收益工具 get_my_earnings（规划/05 B3-16 第一张，D32）：无参数工具注册并加入 allowlist、只下发给已绑手机主体，读 ledger/read.ts 与 payout/read.ts 出 earnings_summary 卡，模型只拿卡片引用、文本替换 agent.earnings.summary
 type: impl
-# 2026-11-10 agent2 入账（编排 D10-1225；核查见 notices 15:5x）。启动条件已满足：B2-04y（#1304）ledger/read.ts 导出 getWalletSummary，B2-05f payout/read.ts 导出 listWithdrawalsForUser。 做法：新 agent/tools/earnings/（无参数、audience 已绑手机）；收益读取放 tools/registry 之外，只从 ledger/read.ts、payout/read.ts 具名导入（BR-AI-02 ③）；earnings_summary 卡数字与钱包接口逐字段一致，提现只放主状态标题与申请金额；返回模型只有卡片引用，模型文本替换 agent.earnings.summary，fallback_text 用 agent.earnings.fallback；历史接口与 trace 不含金额；earnings_query 有工具时走工具；开关 agent.tools.get_my_earnings.enabled（通配已登记）。 不在本单：只读入口导出检查与 denylist 扫描（B3-16b）。 RV2（specs/** 不在白名单）。独立 Claude 写测试，Opus 实现，money Codex medium。D10-1234 / D10-1239：冻结测试 7→8 工具改断言不改标题，modify_existing 五条、red_exempt 四条；app.module.ts 接钱包依赖。
+# 2026-11-10 agent2 入账（编排 D10-1225；核查见 notices 15:5x）。启动条件已满足：B2-04y（#1304）ledger/read.ts 导出 getWalletSummary，B2-05f payout/read.ts 导出 listWithdrawalsForUser。 做法：新 agent/tools/earnings/（无参数、audience 已绑手机）；收益读取放 tools/registry 之外，只从 ledger/read.ts、payout/read.ts 具名导入（BR-AI-02 ③）；earnings_summary 卡数字与钱包接口逐字段一致，提现只放主状态标题与申请金额；返回模型只有卡片引用，模型文本替换 agent.earnings.summary，fallback_text 用 agent.earnings.fallback；历史接口与 trace 不含金额；earnings_query 有工具时走工具；开关 agent.tools.get_my_earnings.enabled（通配已登记）。 不在本单：只读入口导出检查与 denylist 扫描（B3-16b）。 RV2（specs/** 不在白名单）。独立 Claude 写测试，Opus 实现，money Codex medium。D10-1234 / D10-1239：冻结测试 7→8 工具改断言不改标题，modify_existing 一条（allowlist.test.ts；其余用例体未改、只随 kit 变，按红检判多余已删）、red_exempt 四条；app.module.ts 接钱包依赖。
 # prettier-ignore
 refs: [BR-AI-01, BR-AI-02, BR-AI-04, BR-AI-05, BR-AI-07, BR-AI-19, BR-FUND-17, BR-FUND-18, BR-TEXT-06, BR-TEXT-22]
 refs_hash:
@@ -37,26 +37,6 @@ modify_existing:
     reason: tighten_only
     ruling: D10-1234
     note: '随 B3-16 落地 7 工具改为 8 工具（加 get_my_earnings），删去「不含 get_my_earnings」；仍钉死整套集合，其余断言一字不改'
-  - file: test/spec/agent/rule-search-wiring/search.int.test.ts
-    test: '[AC-B3-08l#1][BR-AI-02] 生产流装配（与 [AC-B3-08g] 同一入口）注册的工具集合 = specs/agent-tools.allowlist 行集合（7 个，含 search_rules）；游客与未绑手机也见 search_rules（audience all）'
-    reason: tighten_only
-    ruling: D10-1234
-    note: '随 B3-16 落地 7 工具改为 8 工具（加 get_my_earnings），删去「不含 get_my_earnings」；仍钉死整套集合，其余断言一字不改'
-  - file: test/spec/agent/rule-search-wiring/search.int.test.ts
-    test: '[AC-B3-08l#1][BR-AI-02] agent.tools.search_rules.enabled 为 %s → 不下发 search_rules、其余 6 个不变；改为 true 后重新装配 → 7 个'
-    reason: tighten_only
-    ruling: D10-1234
-    note: '随 B3-16 落地 7 工具改为 8 工具（加 get_my_earnings），删去「不含 get_my_earnings」；仍钉死整套集合，其余断言一字不改'
-  - file: test/spec/agent/stream-assembly-orders/registry.int.test.ts
-    test: '[AC-B3-08g#1][BR-AI-02] 生产装配注册的工具集合与 specs/agent-tools.allowlist 行集合精确相等（7 个），无重复；含 search_rules；不含 get_my_earnings 与内部步骤、意图'
-    reason: tighten_only
-    ruling: D10-1234
-    note: '随 B3-16 落地 7 工具改为 8 工具（加 get_my_earnings），删去「不含 get_my_earnings」；仍钉死整套集合，其余断言一字不改'
-  - file: test/spec/agent/stream-assembly-orders/registry.int.test.ts
-    test: '[AC-B3-08g#3][BR-AI-01][BR-AI-02] 下发 = 注册 ∩ 开启 ∩ 主体：游客与未绑手机只见 handoff_to_human、search_rules 与商品两工具，已绑手机见全部 7 个；对未绑主体直接调用订单类工具 → rejected 且不触达任何订单端口'
-    reason: tighten_only
-    ruling: D10-1234
-    note: '标题与断言「已绑手机见全部 7 个」→ 8 个（游客与未绑手机所见集合不变）；其余一字不改'
 red_exempt:
   - file: test/spec/agent/rule-search-wiring/search.int.test.ts
     test: '[AC-B3-08l#2][BR-AI-03][BR-AI-07] 真库检索：只出本 app active 块的 rule_ref 卡（≤3 张、按得分降序、字段取自块）；本 app 退役块与他 app 块不出；他 app 用户只见他 app 的块；参数伪造 app → rejected'
