@@ -35,3 +35,13 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
 status: todo
+red_exempt:
+  - file: test/spec/orders/subsidy-itemized/registry.test.ts
+    test: '[AC-B1-18c#8][BR-CALC-25] union.taobao.subsidy_itemized 登记为 boolean 配置项，只登记一次；true / false 合法，字符串与数字不合法'
+    reason: '原登记三键已由前置 B1-18ct（#3168，D10-1253）合入主干，本用例在基线上按设计已绿；断言未改'
+  - file: test/spec/orders/subsidy-itemized/registry.test.ts
+    test: '[AC-B1-18c#8][BR-CALC-25] union.jd.subsidy_itemized 登记为 boolean 配置项，只登记一次；true / false 合法，字符串与数字不合法'
+    reason: '原登记三键已由前置 B1-18ct（#3168，D10-1253）合入主干，本用例在基线上按设计已绿；断言未改'
+  - file: test/spec/orders/subsidy-itemized/registry.test.ts
+    test: '[AC-B1-18c#8][BR-CALC-25] union.pdd.subsidy_itemized 登记为 boolean 配置项，只登记一次；true / false 合法，字符串与数字不合法'
+    reason: '原登记三键已由前置 B1-18ct（#3168，D10-1253）合入主干，本用例在基线上按设计已绿；断言未改'
