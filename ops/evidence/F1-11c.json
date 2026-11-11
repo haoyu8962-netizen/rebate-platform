@@ -1,0 +1,82 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#1] 30144 的失效空态文字等于字典 share_page.invalid 全文，不再用 link_landing.invalid",
+    "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#1] 30102 的失效空态文字等于字典 share_page.invalid 全文，不再用 link_landing.invalid",
+    "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#1] 30111 的失效空态文字等于字典 share_page.invalid 全文，不再用 link_landing.invalid",
+    "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#2] 地址里没有 link_id 时的失效空态同样是 share_page.invalid 全文",
+    "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-QUOTE#1] 报价降级（stale=true）时显示 share_page.quote_time 套入取价时间的整句，不再用 earnings.as_of",
+    "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-QUOTE#1] 报价降级（age_sec=301）时显示 share_page.quote_time 套入取价时间的整句，不再用 earnings.as_of",
+    "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-QUOTE#2] 未降级（stale=false、age_sec=300）不显示取价句，越过阈值（301）才显示"
+  ],
+  "risk_note": "F1-11c (orchestrator 2026-11-10, after content F1-11b #3142). The H5 share landing page uses the dedicated dictionary keys share_page.invalid (expired state for 30102 / 30111 sharer_auth_invalid and 30144) and share_page.quote_time (quote time, still only when the quote is degraded per BR-PRICE-11) instead of the borrowed link_landing.invalid and earnings.as_of; behaviour unchanged, one file. Rule tests by an independent Claude (claude-run.sh) pin the full sentences (closing the out-of-scope note of F1-11a's spec-test review); Codex spec-test r1 pass; red on couli-ci (7 tests, right reason). Implementation by Opus 5.5: couli-ci browser run 1 green; the couli-ci fast runs stopped at the unrelated tools/ci/contracts-artifact.test.ts CT-05a#13 (the test machine's container has no git repository) after the h5 unit tests passed, reported to the orchestrator; run.ts static 10/10. Codex general review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex general r1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-11c",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "626698e9ab6f27b2ebd7921edaa56a545e68d53e",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "626698e9ab6f27b2ebd7921edaa56a545e68d53e",
+      "tree": "4c4bdcefa35ee24dabcc3579fd9098b33e34d044",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-10T16:54:54Z",
+      "finished_at": "2026-11-10T16:55:07Z",
+      "red_tests": [
+        "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#1] 30144 的失效空态文字等于字典 share_page.invalid 全文，不再用 link_landing.invalid",
+        "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#1] 30102 的失效空态文字等于字典 share_page.invalid 全文，不再用 link_landing.invalid",
+        "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#1] 30111 的失效空态文字等于字典 share_page.invalid 全文，不再用 link_landing.invalid",
+        "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-INVALID#2] 地址里没有 link_id 时的失效空态同样是 share_page.invalid 全文",
+        "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-QUOTE#1] 报价降级（stale=true）时显示 share_page.quote_time 套入取价时间的整句，不再用 earnings.as_of",
+        "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-QUOTE#1] 报价降级（age_sec=301）时显示 share_page.quote_time 套入取价时间的整句，不再用 earnings.as_of",
+        "test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts > [AC-F1-11c-QUOTE#2] 未降级（stale=false、age_sec=300）不显示取价句，越过阈值（301）才显示"
+      ],
+      "expected": ["test/spec/frontend/h5-share-landing-texts/share-landing-texts.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d9138570b41956321af9c21540721eae23b0225be0a1787169e4c7f2492473a4"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8caa90b20fa65c5a08e2fb2e229a4f839f7b28fd",
+    "specs": "ff08c2a76837dfdd35c368488891e91767aee77d"
+  }
+}

@@ -79,8 +79,7 @@ function quoteLine(page: SharePageData, now: number): string | null {
   const degraded = card.stale || (typeof card.age_sec === 'number' && card.age_sec > 300);
   if (!degraded || page.quoted_at === null) return null;
   const time = formatQuoteTime(page.quoted_at, now);
-  // TODO(规划/11 §7.1): dedicated share-page quote key — blocked on content adding it to 08.
-  return time === null ? null : t('earnings.as_of', { time });
+  return time === null ? null : t('share_page.quote_time', { time });
 }
 
 export function mountSharePage(container: HTMLElement, deps: SharePageDeps): void {
@@ -93,9 +92,7 @@ export function mountSharePage(container: HTMLElement, deps: SharePageDeps): voi
 
   function showInvalid(): void {
     const main = el(doc, 'main', CENTERED);
-    // TODO(规划/11 §7.1): share-page invalid sentence (error-codes 30102 action) — blocked on
-    // content adding a key; link_landing.invalid is the closest existing text.
-    main.append(el(doc, 'p', 'text-couli-body leading-couli-body', t('link_landing.invalid')));
+    main.append(el(doc, 'p', 'text-couli-body leading-couli-body', t('share_page.invalid')));
     show(main);
   }
 
