@@ -1,0 +1,19 @@
+id: CT-05c
+repo: rebate-platform
+title: 修 [CT-05a#13]：collectFiles 对真实契约树的比对改用 .tmp/ 下的夹具 git 仓库（复制本仓库 contracts/、specs/ 工作区后提交），不再要求测试所在目录是 git 仓库——couli-ci 容器里没有 .git，原写法 git rev-parse HEAD 失败，挡住各线 verify:fast
+type: guard-change
+# 2026-11-11 be 入账（fe 11-11 00:53 报：couli-ci 容器 verify:fast 红在 tools/ci/contracts-artifact.test.ts [CT-05a#13]，容器里 not a git repository，turbo 随即中止其余包；#3114 引入，本线修）。
+# 只改这一条测试：用例编号与标题意图不变（真实 contracts/、specs/ 全集下 collectFiles 与 git ls-tree 一致、含 contracts/openapi.yaml）；数据从本仓库工作区复制进 .tmp/ 夹具仓库并提交，比对在夹具仓库上做。实现与其余用例不动。tools 测试不是第一类保护路径；改法属前后都绿的 flake_fix（GitHub CI 与本机有 .git 时原本就绿）。
+# 改测试由新鲜 Claude 子代理做（不是 CT-05a 的实现方），Codex 对抗评审（general）。门禁类改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+refs: []
+refs_hash: {}
+deps: [CT-05a]
+paths:
+  - 'tools/ci/contracts-artifact.test.ts'
+  - 'ops/tasks/CT-05c.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null

@@ -9,6 +9,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -297,21 +298,19 @@ it('[CT-05a#12] collectFiles throws InputError for a commit that does not exist'
 });
 
 it('[CT-05a#13] collectFiles on this repository lists the same contracts/ and specs/ files as git ls-tree at HEAD', () => {
-  const head = git(REPO, ['rev-parse', 'HEAD']);
-  const tracked = git(REPO, [
-    'ls-tree',
-    '-r',
-    '--name-only',
-    '-z',
-    head,
-    '--',
-    'contracts',
-    'specs',
-  ])
+  // The real contracts/ and specs/ trees, copied from this checkout's working tree (dot files
+  // included) into a fixture repository and committed there, so the test does not need this
+  // checkout itself to be a git repository (the CI container copy has no .git).
+  const dir = newRepo();
+  for (const root of ARTIFACT_ROOTS) {
+    cpSync(join(REPO, root), join(dir, root), { recursive: true });
+  }
+  const head = commit(dir, {});
+  const tracked = git(dir, ['ls-tree', '-r', '--name-only', '-z', head, '--', 'contracts', 'specs'])
     .split('\0')
     .filter(Boolean)
     .sort();
-  const files = collectFiles(REPO, head);
+  const files = collectFiles(dir, head);
   expect(files.map((f) => f.path)).toEqual(tracked);
   expect(tracked).toContain('contracts/openapi.yaml');
 });
