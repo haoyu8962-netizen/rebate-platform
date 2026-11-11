@@ -6,7 +6,7 @@ type: impl
 # **撤销**（2026-11-11，编排 D10-1266 选 (b)）：契约 AdminOrderCommissionSplit 即首次快照（BR-CALC-10 写一次），返回冻结补贴按契约正确；只换一个字段会把 v1 与当前版本混在一个对象里。当前版本合计的露出登记 FU-ADMIN-ORDER-CURRENT-TOTALS（等毛利报表 / R1 再定）。attribution.md 的 share_relative_rate 一句并进 B1-18i。未实现、未开 PR。
 refs: [BR-CALC-27]
 refs_hash:
-  BR-CALC-27: 14c76a30d85e
+  BR-CALC-27: 5109dc794005
 deps: [B1-18f]
 paths:
   - 'apps/api/src/modules/orders/application/admin-orders.ts'

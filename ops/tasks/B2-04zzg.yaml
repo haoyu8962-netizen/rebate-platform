@@ -7,7 +7,7 @@ type: impl
 # 规则测试钉：开：剩余 0 → VOID、无分录、order.invalidated 一条、reason 编码；关：只告警、状态与钱不变；非京东同样数量不受开关影响；已入账单不走本路；重放不重复；下游失败回滚；app 隔离。tester 新鲜独立 Claude；money 评审 Codex（D10-823）。与 identity 的 B2-04zzf（clawback）文件不同，不互等。
 refs: [BR-CALC-15, BR-FUND-07, BR-FUND-01]
 refs_hash:
-  BR-CALC-15: f60233d3a4ac
+  BR-CALC-15: 89a3ea7d428c
   BR-FUND-07: b61cfed0a77b
   BR-FUND-01: 681de36ba809
 deps: [B1-08zi]

@@ -15,7 +15,7 @@ refs_hash:
   BR-CALC-11: 0bdd7a33eb83
   BR-CALC-12: 9d2db9a9f415
   BR-CALC-13: 54c06125032c
-  BR-CALC-27: 14c76a30d85e
+  BR-CALC-27: 5109dc794005
 deps: [B2-01g, B2-03c]
 paths:
   - 'apps/api/src/modules/commission/**'

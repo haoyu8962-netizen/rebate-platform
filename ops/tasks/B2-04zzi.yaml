@@ -7,7 +7,7 @@ type: impl
 # 不在本单：导入即无效、从未有预估的单 v1 无行（P13，冻结 flow.int.test.ts 有意钉 amounts()==[]），编排按「从未生成预估的单不适用该不变式」在规划补例外。deps B2-04zzg（#2708 同改 rebate.ts），在它之后变基。临时复现用例与回归日志：couli-runs/FU-R6-VERSION-ROW/。
 refs: [BR-CALC-15]
 refs_hash:
-  BR-CALC-15: f60233d3a4ac
+  BR-CALC-15: 89a3ea7d428c
 deps: [B2-04zzg]
 paths:
   - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'

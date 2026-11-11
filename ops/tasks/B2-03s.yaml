@@ -6,9 +6,9 @@ type: impl
 # D10-655：[AC-B2-04zp#12]、[#18] 按 D10-578 ② 改为基数随结算推到 900、按 STATEMENT 900 入批、不登记差错、R5 按 900 入账；只动这两个 it 块（D10-327）。 D10-663：[AC-B1-08i#10] 拆表，已结算单 est 变化三行搬进新块期望 7，原块只留 null、789n 两行，待 red_exempt_rows（CT-06zzze）。
 refs: [BR-CALC-15, BR-CALC-02, BR-CALC-27, BR-FUND-03, BR-CALC-23]
 refs_hash:
-  BR-CALC-15: f60233d3a4ac
+  BR-CALC-15: 89a3ea7d428c
   BR-CALC-02: 0ffe8a4d0b65
-  BR-CALC-27: 14c76a30d85e
+  BR-CALC-27: 5109dc794005
   BR-FUND-03: 07f194a70033
   BR-CALC-23: 617aabea160e
 deps: [B1-08zh, B2-04zj]
