@@ -43,6 +43,10 @@
 //   union_settled_at（BR-FUND-04 ①）：报文给了 settled_at 就写，不看平台状态与结算额，空值不覆盖。
 // - 版本推进（B2-03s，BR-CALC-15，D10-578）：commission_version 只由 planOrderSyncColumns 在这条 CAS 里 +1；
 //   change.commission_moved 就是这次写动没动版本，settlement 只看它，不比前后佣金。
+// - 补贴类佣金（B1-18c，BR-CALC-18）：适配器输出该字段（淘宝）时按本次报文原样写（null 即 NULL，同服务费口径），
+//   与库内值不同才并入同一条 CAS UPDATE；适配器不输出（京东、拼多多，字段缺省）时沿用库内值。本次生成快照
+//   （首次跨入与补偿重试）都用这个更新后的值，不用库内旧值。
+//   credit_requires_settle 只由首次入库写，这里不碰。
 // - 返利状态、hold、order_rights、order_settlements 只由 settlement 经端口决定；本模块不写这些列。
 //   端口除 change / info 外另带本次报文的来源（映射事件与原始码），settlement 据此区分维权与处罚（P8）。
 // 日志只打平铺字段（platform、app_id、reason、outcome、rule、event），不打子订单号与买家参数。
@@ -409,6 +413,16 @@ export function createOrderUpdateStep(
     const unionSettledAt = incoming.settled_at ?? null;
     if (unionSettledAt !== null) Object.assign(set, { union_settled_at: unionSettledAt });
 
+    // B1-18c（BR-CALC-18）：补贴类佣金按本次报文（字段缺省 = 适配器不输出，沿用库内值）；不进 OrderSyncColumns，
+    // 不影响 N 与 commission_version。
+    const subsidyFen =
+      incoming.subsidy_commission_fen === undefined
+        ? current.subsidy_commission_fen
+        : incoming.subsidy_commission_fen;
+    if (subsidyFen !== current.subsidy_commission_fen) {
+      Object.assign(set, { subsidy_commission_fen: subsidyFen });
+    }
+
     // B1-08zi（D10-814 ② ③）：件数与已退件数不进 OrderSyncColumns，同一条 CAS 写入；没给沿用、变小不写并告警；
     // 不影响 commission_version。refunded_quantity_at_credit 不由同步写（只在入账 CAS 定格）。
     const quantities = planOrderQuantities(current, incoming);
@@ -580,7 +594,7 @@ export function createOrderUpdateStep(
           deposit_paid_at: columns.deposit_paid_at,
           est_commission_fen: columns.est_commission_fen,
           settle_commission_fen: columns.settle_commission_fen,
-          subsidy_commission_fen: current.subsidy_commission_fen,
+          subsidy_commission_fen: subsidyFen,
         },
         incoming: {
           modified_at: incoming.modified_at ?? null,
@@ -728,7 +742,7 @@ export function createOrderUpdateStep(
               activity_type: current.activity_type,
               est_commission_fen: columns.est_commission_fen,
               settle_commission_fen: columns.settle_commission_fen,
-              subsidy_commission_fen: current.subsidy_commission_fen,
+              subsidy_commission_fen: subsidyFen,
             },
             ownerUserId,
             paid,

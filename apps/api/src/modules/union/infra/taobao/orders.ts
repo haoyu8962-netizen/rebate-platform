@@ -21,7 +21,11 @@
 //   est_commission_fen = pub_share_pre_fee_for_commission − 预估服务费；
 //   settle_commission_fen = pub_share_fee_for_commission − 结算服务费，只在 tk_status=3 读（BR-FUND-02），
 //   不看 tk_earning_time。两边各自 floor 到分再减，可为负。*_for_commission、*_for_sdy 是官方字段；补贴
-//   （*_for_sdy）不进 N，这里不读。pub_share_pre_fee 含补贴，值不用，仍是必需字段；pub_share_fee 不读。
+//   （*_for_sdy）不进 N。pub_share_pre_fee 含补贴，值不用，仍是必需字段；pub_share_fee 不读。
+// - 补贴类佣金（B1-18c，BR-CALC-18「分字段返回时直接映射」）：subsidy_commission_fen 取值时机同 est / settle——
+//   tk_status=3 取 pub_share_fee_for_sdy，其余取 pub_share_pre_fee_for_sdy（另一个不读）；同一套 BR-CALC-26 元转分，
+//   只收非负。缺键、JSON null、「--」、空串 → null；非法 → null 加告警，不拒行、不影响别的字段。不扣服务费
+//   （补贴部分是否另扣待核实，不臆造），不并入 est / settle / commission_fen。
 // - 服务费：dto（alimm_share_info_dto）的金额字段（预估 alimm_tech_service_pre_fee，结算 alimm_tech_service_fee）；
 //   dto 或字段没有值取 alimama_share_fee；dto 字段非法、dto 不是对象都不回退，结果 null；都没有也是 null，绝不按 0。
 //   service_fee_fen 写实际扣的那个数（tk_status=3 是结算服务费，其余是预估服务费）。
@@ -109,6 +113,9 @@ const ADZONE_FIELD = 'adzone_id';
 const TK_STATUS_SETTLED = 3;
 const EST_COMMISSION_FIELD = 'pub_share_pre_fee_for_commission';
 const SETTLE_COMMISSION_FIELD = 'pub_share_fee_for_commission';
+/** B1-18c（BR-CALC-18）：补贴类佣金的官方字段，预估（未结算行）与结算（tk_status=3）。 */
+const EST_SUBSIDY_FIELD = 'pub_share_pre_fee_for_sdy';
+const SETTLE_SUBSIDY_FIELD = 'pub_share_fee_for_sdy';
 const PRE_FEE_FIELD = 'alimm_share_info_dto.alimm_tech_service_pre_fee';
 const SETTLE_FEE_FIELD = 'alimm_share_info_dto.alimm_tech_service_fee';
 
@@ -942,6 +949,9 @@ function mapRow(
   const estFen = f.net(estGross, preFee, EST_COMMISSION_FIELD);
   const settleFen = f.net(settleGross, settleFee, SETTLE_COMMISSION_FIELD);
   const settledAt = f.time('tk_earning_time');
+  // B1-18c：补贴类佣金按结算与否取一个字段；空串同没有值（不告警）。
+  const subsidyField = settled ? SETTLE_SUBSIDY_FIELD : EST_SUBSIDY_FIELD;
+  const subsidyFen = row[subsidyField] === '' ? null : f.fen(subsidyField);
   if (strict) {
     // B1-04zzh：tk_status 是已结算的唯一判据（D10-588），缺失或非法不按未结算放行。
     if (tkStatus === null) throw new Skip('tk_status');
@@ -978,6 +988,7 @@ function mapRow(
     modified_at: f.time('modified_time'),
     est_commission_fen: estFen,
     settle_commission_fen: settleFen,
+    subsidy_commission_fen: subsidyFen,
     service_fee_fen: settled ? settleFee : preFee,
     raw_payload_id: meta.rawPayloadId,
     // TaobaoOrderFields（官方同名字段原样；不是归因 N，D10-488）。

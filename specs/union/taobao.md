@@ -54,6 +54,7 @@
 | `est_commission_fen` | `pub_share_pre_fee_for_commission` − `alimm_share_info_dto.alimm_tech_service_pre_fee` | 净额，见「金额」 |
 | `settle_commission_fen` | `pub_share_fee_for_commission` − `alimm_share_info_dto.alimm_tech_service_fee` | 净额，只在 `tk_status` 为 3 时读，见「金额」 |
 | `service_fee_fen` | `alimm_share_info_dto.alimm_tech_service_pre_fee` / `alimm_share_info_dto.alimm_tech_service_fee` / `alimama_share_fee` | 实际扣的那个数：`tk_status` 为 3 是结算服务费，其余是预估服务费 |
+| `subsidy_commission_fen` | `pub_share_pre_fee_for_sdy` / `pub_share_fee_for_sdy` | 补贴类佣金（BR-CALC-18），取值时机同 est / settle：`tk_status` 为 3 取结算字段，其余取预估字段；元转分非负，不扣服务费，不进 N；缺键、null、「--」、空串、非法为 null，不拒行 |
 | `raw_payload_id` | 无 | 不映射报文字段：取归档传输挂在响应上的元数据（该页归档行 id），不读报文里的同名值 |
 | `shop_id` | 无 | 不给（不加此键）：订单接口没有与商品侧同口径的店铺 ID |
 | `tk_status` | `tk_status` | JSON 整数原样 |

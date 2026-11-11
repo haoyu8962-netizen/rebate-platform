@@ -29,6 +29,9 @@
 //   ports.suffixVoidEnabled; absent → false, the 08 default (suffix hits only recorded for review).
 //   Without rebate.onBlacklistHit (a runtime built without ports.rebate) an uncredited hit is
 //   recorded as manual_review with a P1 warning and the order is left unchanged.
+// - B1-18c: ports.subsidyItemized (app.module, content's union.<platform>.subsidy_itemized of the
+//   order's App, BR-CALC-25) goes to the pipeline; built here, read on use. Absent → the pipeline's
+//   fallback for unassembled callers (it reads config_items in its own transaction).
 // - B1-09n: ports.rebate (app.module's factory over settlement) gives the one rebate port of the
 //   sync: the pipeline and the update step get the same object. Absent → NO_REBATE_PORT below.
 // - B1-08zc: when ports.platformRestore is given (ledger's registerReconDiffOnce as orders' port, from
@@ -207,6 +210,15 @@ export interface OrderSyncReadPorts {
     clock: Clock,
   ) => (appId: string) => Promise<boolean>;
   /**
+   * B1-18c (BR-CALC-25): union.<platform>.subsidy_itemized of one App, unset = true (08 default);
+   * false → new orders of that platform are imported with credit_requires_settle. Called once at
+   * assembly and reading nothing until used.
+   */
+  readonly subsidyItemized?: (
+    db: Kysely<DB>,
+    clock: Clock,
+  ) => (appId: string, platform: RegisteredPlatform) => Promise<boolean>;
+  /**
    * B1-08zc: ledger's recon diff registration as the platform-restore port (BR-FUND-22), called once
    * at assembly with the worker's clock and reading nothing until used. Absent → the update step
    * registers no platform_restore diff (the P9 warning stays).
@@ -366,6 +378,8 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
           suffixVoidEnabled: deps.ports.suffixVoidEnabled?.(db, clock) ?? (async () => false),
         };
   const platformRestore = deps.ports.platformRestore?.(clock);
+  // B1-18c: the subsidy_itemized reader (built here, read on use); the pipeline passes its trx.
+  const readSubsidyItemized = deps.ports.subsidyItemized?.(db, clock);
   // B1-09n: one rebate object for both steps (built here, read on use).
   const rebate = deps.ports.rebate?.({ db, clock, logger, events }) ?? NO_REBATE_PORT;
   const updateStep = createOrderUpdateStep({
@@ -397,6 +411,12 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
     ...(sources === undefined ? {} : { sources }),
     ...(snapshots === undefined ? {} : { snapshots }),
     ...(blacklist === undefined ? {} : { blacklist }),
+    ...(readSubsidyItemized === undefined
+      ? {}
+      : {
+          subsidyItemized: (_trx: unknown, appId: string, platform: RegisteredPlatform) =>
+            readSubsidyItemized(appId, platform),
+        }),
   });
 
   const handler = { access, cursors, registry, pipeline, logger };

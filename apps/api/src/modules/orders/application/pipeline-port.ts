@@ -24,6 +24,9 @@
 //   （application/row-quarantine.ts），解决写失败整事务回滚；丢弃、app_conflict、stale、整条拒收都不解决。
 // - B2-04zj（BR-FUND-01 P12、BR-FUND-09）：首次入库即已结算且报文给了结算额 → 随 INSERT 写结算佣金列，紧接着同事务
 //   经 rebate.settlements 记一条 API 记录；首次入库没有 STATEMENT 可读。union_settled_at 报文给了就写（BR-FUND-04 ①）。
+// - B1-18c（BR-CALC-18、BR-CALC-25）：orders.subsidy_commission_fen 写适配器给的补贴类佣金（没给为 NULL），快照入参取
+//   同一个值；判定阶段读 union.<platform>.subsidy_itemized（注入 subsidyItemized 端口，未注入时本事务读该 App 的
+//   config_items，未设值按 true），为 false 时随 INSERT 置 credit_requires_settle=true。不设 hold、不改 N。
 // 日志只打平铺字段（platform、app_id、reason、outcome），不打子订单号与买家参数。
 import { accountingDate } from '@couli/domain';
 import type { DB } from '@couli/db';
@@ -51,6 +54,7 @@ import {
   insertImportedOrder,
   readOrder,
   readOrderKey,
+  readSubsidyItemized,
   recordDrop,
   upsertPending,
   type OrderKeyRow,
@@ -93,9 +97,21 @@ export function createOrderPipeline(
   deps: OrderPipelineDeps & {
     /** B2-04zj：更新步用的同一个 rebate 对象；settlements 见 OrderUpdateDeps。 */
     readonly rebate: Pick<OrderUpdateDeps['rebate'], 'settlements'>;
+    /**
+     * B1-18c（BR-CALC-25）：该 App 该平台的 union.<platform>.subsidy_itemized（未设值 true）；只读，在本事务内调用。
+     * 生产经 worker-runtime 的 ports.subsidyItemized（app.module 经 content 的配置读取入口）注入。未注入的回退
+     * （infra/pipeline-store.ts readSubsidyItemized，本事务直读 config_items）只供未装配场景：直接搭流水线的
+     * 调用方与规则测试（test/spec/orders/subsidy-itemized 不注入端口而期望配置生效）。
+     */
+    readonly subsidyItemized?: (
+      trx: Transaction<DB>,
+      appId: string,
+      platform: RegisteredPlatform,
+    ) => Promise<boolean>;
   },
 ): OrderPipeline {
   const log = deps.logger;
+  const subsidyItemized = deps.subsidyItemized ?? readSubsidyItemized;
   const onBlacklistHit = deps.rebate.onBlacklistHit;
 
   async function drop(
@@ -329,6 +345,8 @@ export function createOrderPipeline(
     // 本次入库即 PAID+ 时首条已付历史就是本事务写的，时刻为 now。未注入端口整步跳过。
     const paidNow = isPaidOrLater(plan.platform_status);
     const settleFen = reportedSettleFen(order, plan);
+    // B1-18c（BR-CALC-18）：补贴类佣金按适配器给的值（淘宝 *_for_sdy；京东、拼多多不给 → NULL），不进 N。
+    const subsidyFen = order.subsidy_commission_fen ?? null;
     const snapshotInput: PlanCommissionSnapshotInput = {
       before: null,
       after: {
@@ -347,7 +365,7 @@ export function createOrderPipeline(
         deposit_paid_at: order.deposit_paid_at ?? null,
         est_commission_fen: order.est_commission_fen ?? null,
         settle_commission_fen: settleFen,
-        subsidy_commission_fen: null,
+        subsidy_commission_fen: subsidyFen,
       },
       incoming: {
         modified_at: order.modified_at ?? null,
@@ -364,6 +382,8 @@ export function createOrderPipeline(
       snapshotPlan === null ? null : snapshotPaidAtSource(snapshotInput, snapshotPlan);
 
     const unionSettledAt = order.settled_at ?? null;
+    // BR-CALC-25：该平台补贴类佣金未单列（配置 false）→ 入账须等联盟结算值（只在首次入库置 true，不设 hold）。
+    const creditRequiresSettle = !(await subsidyItemized(trx, ctx.app_id, platform));
 
     // —— 判定完成，开始写库 ——
     const row: Omit<Insertable<DB['orders']>, 'rebate_status'> = {
@@ -378,6 +398,7 @@ export function createOrderPipeline(
       pay_amount_fen: order.paid_fen,
       est_commission_fen: order.est_commission_fen ?? null,
       settle_commission_fen: settleFen,
+      subsidy_commission_fen: subsidyFen,
       // B1-08v：联盟报文的平台服务费（拼多多 duo_id_service_fee；淘宝自 B1-04zz 起给实际扣的服务费；京东不给）
       // 按本次报文原样写，缺失为 NULL；未归因订单同样写。
       service_fee_fen: order.service_fee_fen ?? null,
@@ -405,6 +426,8 @@ export function createOrderPipeline(
       raw_payload_id: payloadId,
       ...(source === null ? {} : sourceColumns(source)),
       ...(paidAtSource === null ? {} : { paid_at_source: paidAtSource }),
+      // 库默认 false；只写 true（库触发器拒绝 true → false）。
+      ...(creditRequiresSettle ? { credit_requires_settle: true } : {}),
     };
     await insertImportedOrder(
       trx,

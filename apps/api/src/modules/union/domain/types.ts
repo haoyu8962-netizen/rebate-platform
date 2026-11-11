@@ -494,6 +494,11 @@ export interface UnionOrder
   /** PDD: promotion_amount，毛额，含软件服务费，不是可分配基数；净额在适配器算进
    * est_commission_fen（B1-08zh）。subsidy_* 不并入此金额。 */
   readonly commission_fen: bigint;
+  /**
+   * B1-18c（BR-CALC-18）：补贴类佣金（整数分），不计入 B，不进 est / settle。淘宝取 *_for_sdy（取值时机同
+   * est / settle）；报文分不开补贴的平台（京东、拼多多）为 null 或不给。没有值是 null，不是 0。
+   */
+  readonly subsidy_commission_fen?: bigint | null;
 }
 
 export interface OrderInput extends ItemRef {

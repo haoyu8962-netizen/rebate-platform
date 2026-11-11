@@ -46,6 +46,7 @@
 | `service_fee_fen` | `duo_id_service_fee` | 按本次报文原样；缺失为 null |
 | `est_commission_fen` | `promotion_amount` − `duo_id_service_fee` | 净额，见「金额」 |
 | `settle_commission_fen` | 无 | 恒为 null，见「金额」 |
+| `subsidy_commission_fen` | 无 | 不给（不加此键）：报文未单列补贴类佣金（BR-CALC-18）；未单列的处理按 BR-CALC-25 走配置 union.pdd.subsidy_itemized |
 | `goods_price_fen` | `goods_price` | 非负整数分 |
 | `platform_discount_fen` | `platform_discount` | 非负整数分 |
 | `sep_market_fee_fen` | `sep_market_fee` | 非负整数分 |

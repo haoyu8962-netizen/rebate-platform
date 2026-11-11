@@ -2049,6 +2049,8 @@ const ORDER_SYNC_APP_ID = 'couli';
  * entry's field keyring (`keyring` answers undefined only in local / test without one, and step ③
  * is then skipped); suffixVoidEnabled, content's attr.blacklist.order_suffix_void_enabled of the
  * order's App, anything but true being off (08's default; BR-ATTR-26).
+ * B1-18c: subsidyItemized, content's union.<platform>.subsidy_itemized of the order's App, anything
+ * but false being on (08's default; BR-CALC-25).
  * B1-10n: `rightsImports`, what the rights_import job needs; see orderSyncWorker.
  * B1-04zza: `rightsSync`, settlement's rights.record for the refund / punishment sync; see
  * orderSyncWorker.
@@ -2083,6 +2085,15 @@ function orderSyncPorts(
           'attr.blacklist.order_suffix_void_enabled',
         )
       )?.value === true,
+    // B1-18c (BR-CALC-25): union.<platform>.subsidy_itemized of the order's App; only JSON false is
+    // off, unset or any other value is true (08's default).
+    subsidyItemized: (db, clock) => async (appId, platform) =>
+      (
+        await createContentReader({ db, clock }).configValue(
+          appId,
+          `union.${platform}.subsidy_itemized`,
+        )
+      )?.value !== false,
     rescanConfig: (db, clock) => ({
       get: async (key) =>
         (await createContentReader({ db, clock }).configValue(ORDER_SYNC_APP_ID, key))?.value,

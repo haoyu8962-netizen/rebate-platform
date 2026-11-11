@@ -68,7 +68,10 @@ function rawAdapter(platform: RegisteredPlatform): UnionAdapter {
 
 function setup(
   sources?: OrderSyncReadPorts['sources'],
-  extra: Pick<OrderSyncReadPorts, 'blocklist' | 'suffixVoidEnabled' | 'rebate'> = {},
+  extra: Pick<
+    OrderSyncReadPorts,
+    'blocklist' | 'suffixVoidEnabled' | 'rebate' | 'subsidyItemized'
+  > = {},
   rightsImports?: OrderRightsImportDeps,
   options: {
     readonly endpointPlatforms?: readonly RegisteredPlatform[];
@@ -282,6 +285,30 @@ it('[AC-B1-09b#u2] 注入尾号开关读法：按 App 读；未注入 blocklist 
   setup(undefined, { suffixVoidEnabled: suffix });
   expect('blacklist' in makePipeline.mock.calls[0]![0]).toBe(false);
   expect('blacklist' in makeUpdate.mock.calls[0]![0]).toBe(false);
+});
+
+it('[AC-B1-18c#u1] 注入 subsidyItemized：工厂在装配时调一次（db、clock），装配不查库；流水线按 App 与平台读，未注入时不带此端口', async () => {
+  const makePipeline = vi.spyOn(pipelinePort, 'createOrderPipeline');
+  const read = vi.fn(
+    async (appId: string, platform: RegisteredPlatform) => !(appId === 'off' && platform === 'jd'),
+  );
+  const factory = vi.fn(() => read);
+  const s = setup(undefined, { subsidyItemized: factory });
+  expect(factory.mock.calls).toEqual([[s.db, s.clock]]);
+  expect(s.queries).toEqual([]);
+  expect(read).not.toHaveBeenCalled();
+  const port = makePipeline.mock.calls[0]![0].subsidyItemized;
+  expect(port).toBeDefined();
+  const trx = {} as Parameters<NonNullable<typeof port>>[0];
+  expect(await port?.(trx, 'off', 'jd')).toBe(false);
+  expect(await port?.(trx, 'off', 'pdd')).toBe(true);
+  expect(read.mock.calls).toEqual([
+    ['off', 'jd'],
+    ['off', 'pdd'],
+  ]);
+  makePipeline.mockClear();
+  setup();
+  expect('subsidyItemized' in makePipeline.mock.calls[0]![0]).toBe(false);
 });
 
 const RIGHTS_IMPORT_JOB = {

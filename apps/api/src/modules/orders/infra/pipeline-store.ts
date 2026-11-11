@@ -338,3 +338,29 @@ export async function insertImportedOrder(
       .execute();
   }
 }
+
+/** B1-18c（BR-CALC-25 细则）：配置键 union.<platform>.subsidy_itemized。 */
+export function subsidyItemizedKey(platform: string): string {
+  return `union.${platform}.subsidy_itemized`;
+}
+
+/**
+ * B1-18c（BR-CALC-25 细则「按平台配置 union.<platform>.subsidy_itemized（boolean，默认 true）」）：本事务内读该
+ * App 的配置值（content 的 config_items，只读，不写）。只有 JSON false 算「未单列」；未设值与其他值都按 true
+ * （08 默认）。只供未装配场景（流水线未注入 subsidyItemized 端口：直接搭流水线的调用方与规则测试）；生产经
+ * worker-runtime 的 ports.subsidyItemized 走 content 的配置读取入口。
+ */
+export async function readSubsidyItemized(
+  trx: Trx,
+  appId: string,
+  platform: string,
+): Promise<boolean> {
+  const row = await trx
+    .withSchema('app')
+    .selectFrom('config_items')
+    .select('value')
+    .where('app_id', '=', appId)
+    .where('key', '=', subsidyItemizedKey(platform))
+    .executeTakeFirst();
+  return row?.value !== false;
+}
