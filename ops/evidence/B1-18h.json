@@ -1,0 +1,89 @@
+{
+  "risk_note": "RV2 money (commission rule publication trial). D10-1258 (BR-CALC-22 细则, new SPEC_REF 7c4694f9): a version written only because the subsidy commission changed (BR-CALC-27 细则「仅补贴变化的版本」, every share identical) must not count as a sample change. commission/domain/rule-trial.ts sampleDigest now hashes, per order, only the latest commission version's share rows (userId, role, baseFen, amountFen) without the version number, sorted by (orderId, role, userId); splits unchanged; canonical format v 1 → 2 (a trial digest stored in the old format no longer matches → publication reports TRIAL_SAMPLE_CHANGED and the trial is re-run: conservative, never a false pass). Any share change still changes the digest, including a share restored to an earlier value (v1 555 → v2 444 → v3 555). rule-publication.ts unchanged. The splits part still carries commission_splits.subsidy_commission_fen, which no code updates. Host: tsc 0, eslint 0; rule tests 7 green; commission unit 59; spec/commission int 26 files 282 (incl. publish [AC-B2-03k#21] #22).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review (effort medium) round 1 pass, no findings, on implementation abb1b4608e93: per-order latest shares only, identical-share new versions ignored, share changes and restorations detected, old-format digests force a re-run."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Test attempt 1's container red failed on [AC-B1-18h#5] (publication threw RulePublicationError, not an assertion) → attempt 2 wrote that call in assertion form, red/2 PASS 5; Codex spec-test round 1 fail with one S1 (an implementation that de-duplicates share rows across all historical versions would pass: v1 555 → v2 444 → v3 555) → attempt 3 (3 of 3) added [AC-B1-18h#6] / #7 only (restored share is a sample change), red/3 PASS 7 tests in 4 files; round 2 pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/commission/trial-digest-shares/digest.test.ts > [AC-B1-18h#1] BR-CALC-22 样本单只多出各方份额逐项相同的新版本（仅补贴变化），摘要不变",
+    "test/spec/commission/trial-digest-shares/digest.test.ts > [AC-B1-18h#2] BR-CALC-22 各单分别取自己的最新版本：仅补贴变化的单不改变、也不掩盖别的单的份额变化",
+    "test/spec/commission/trial-digest-shares/digest.test.ts > [AC-B1-18h#3] BR-CALC-22 仅补贴变化的版本插在份额变化前后，摘要都只随份额变化",
+    "test/spec/commission/trial-digest-shares/publication.int.test.ts > [AC-B1-18h#4] BR-CALC-22 试算后样本单只因补贴变化写了新版本：重跑摘要不变，原试算报告照常发布",
+    "test/spec/commission/trial-digest-shares/publication.int.test.ts > [AC-B1-18h#5] BR-CALC-22 份额变化仍须重跑试算；重跑后再有仅补贴变化的版本不妨碍发布",
+    "test/spec/commission/trial-digest-shares/restored-share.int.test.ts > [AC-B1-18h#7] BR-CALC-22 试算后份额改回旧值（v2 444 → v3 555）仍须重跑试算；重跑后仅补贴变化的版本不妨碍发布",
+    "test/spec/commission/trial-digest-shares/restored-share.test.ts > [AC-B1-18h#6] BR-CALC-22 份额改回旧值（v1 555 → v2 444 → v3 555）也是样本变化：只比最新版本，不对历史版本份额去重"
+  ],
+  "task": "B1-18h",
+  "spec_commit": "da05ee44195343d41b86d016a02d1c3b5f668d17",
+  "spec_ref": "7c4694f9f83698c2b76ec5a99e3c5d1ea511369a",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "da05ee44195343d41b86d016a02d1c3b5f668d17",
+      "tree": "6bba8e5916743d43f806b5177dc8248111ca5400",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-11T13:32:00Z",
+      "finished_at": "2026-11-11T13:32:09Z",
+      "red_tests": [
+        "test/spec/commission/trial-digest-shares/digest.test.ts > [AC-B1-18h#1] BR-CALC-22 样本单只多出各方份额逐项相同的新版本（仅补贴变化），摘要不变",
+        "test/spec/commission/trial-digest-shares/digest.test.ts > [AC-B1-18h#2] BR-CALC-22 各单分别取自己的最新版本：仅补贴变化的单不改变、也不掩盖别的单的份额变化",
+        "test/spec/commission/trial-digest-shares/digest.test.ts > [AC-B1-18h#3] BR-CALC-22 仅补贴变化的版本插在份额变化前后，摘要都只随份额变化",
+        "test/spec/commission/trial-digest-shares/publication.int.test.ts > [AC-B1-18h#4] BR-CALC-22 试算后样本单只因补贴变化写了新版本：重跑摘要不变，原试算报告照常发布",
+        "test/spec/commission/trial-digest-shares/publication.int.test.ts > [AC-B1-18h#5] BR-CALC-22 份额变化仍须重跑试算；重跑后再有仅补贴变化的版本不妨碍发布",
+        "test/spec/commission/trial-digest-shares/restored-share.int.test.ts > [AC-B1-18h#7] BR-CALC-22 试算后份额改回旧值（v2 444 → v3 555）仍须重跑试算；重跑后仅补贴变化的版本不妨碍发布",
+        "test/spec/commission/trial-digest-shares/restored-share.test.ts > [AC-B1-18h#6] BR-CALC-22 份额改回旧值（v1 555 → v2 444 → v3 555）也是样本变化：只比最新版本，不对历史版本份额去重"
+      ],
+      "expected": [
+        "test/spec/commission/trial-digest-shares/digest.test.ts",
+        "test/spec/commission/trial-digest-shares/publication.int.test.ts",
+        "test/spec/commission/trial-digest-shares/restored-share.int.test.ts",
+        "test/spec/commission/trial-digest-shares/restored-share.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "453a54cb8d32d9809fca568a7687da6256e2fe92ef7efda038c374aa3a7d5651"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ac1a20c47c71115f3a0a8671e21582aaf777198d592ca0f2408ef5b132611062"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ecd31d9c69ceacb55c758483cadda14e601ba9f3",
+    "specs": "af7efaddd4306f0bd3d0bc4c3bb243fdf3464e1b"
+  }
+}

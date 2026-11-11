@@ -216,9 +216,29 @@ function compare(a: string, b: string): number {
 }
 
 /**
- * Deterministic digest of the sample: the window, every snapshot row of the window and every
- * amount version of those orders (a new commission_version changes it, BR-CALC-22). Input order
- * does not matter; bigint fen are written as decimal strings.
+ * The amount rows of each order's latest commission_version only (orders without amount rows
+ * contribute none). Older versions are history: BR-CALC-22 compares the shares as they now stand.
+ */
+function latestAmounts(amounts: readonly DigestAmount[]): DigestAmount[] {
+  const latest = new Map<string, number>();
+  for (const a of amounts) {
+    const seen = latest.get(a.orderId);
+    if (seen === undefined || a.commissionVersion > seen)
+      latest.set(a.orderId, a.commissionVersion);
+  }
+  return amounts.filter((a) => a.commissionVersion === latest.get(a.orderId));
+}
+
+/**
+ * Deterministic digest of the sample: the window, every snapshot row of the window and, per
+ * order, the share rows (user, role, base, amount) of its latest amount version only, without the
+ * version number. BR-CALC-22 (2026-11-11, D10-1258): a new version whose shares equal the previous
+ * one item by item (subsidy only, BR-CALC-27) leaves the digest unchanged; any share change, also
+ * one back to an older value, changes it. Input order does not matter; bigint fen are written as
+ * decimal strings.
+ *
+ * Format v2 (v1 listed every version with its number): a trial stored under v1 never matches a v2
+ * recomputation, so such a trial is conservatively treated as a changed sample and must be rerun.
  */
 export function sampleDigest(input: {
   readonly fromMs: number;
@@ -227,15 +247,12 @@ export function sampleDigest(input: {
   readonly amounts: readonly DigestAmount[];
 }): string {
   const splits = [...input.splits].sort((a, b) => compare(a.orderId, b.orderId));
-  const amounts = [...input.amounts].sort(
+  const amounts = latestAmounts(input.amounts).sort(
     (a, b) =>
-      compare(a.orderId, b.orderId) ||
-      a.commissionVersion - b.commissionVersion ||
-      compare(a.role, b.role) ||
-      compare(a.userId, b.userId),
+      compare(a.orderId, b.orderId) || compare(a.role, b.role) || compare(a.userId, b.userId),
   );
   const canonical = JSON.stringify({
-    v: 1,
+    v: 2,
     window: [input.fromMs, input.toMs],
     splits: splits.map((s) => [
       s.orderId,
@@ -257,7 +274,6 @@ export function sampleDigest(input: {
     ]),
     amounts: amounts.map((a) => [
       a.orderId,
-      a.commissionVersion,
       a.userId,
       a.role,
       a.baseFen.toString(),
