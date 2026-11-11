@@ -1,0 +1,24 @@
+id: B3-16b
+repo: rebate-platform
+title: B3-16b：只读入口导出检查（BR-AI-02 ④）——登记 specs/agent-read-exports.yaml，ledger/read.ts、payout/read.ts 的导出恰为登记项且只用 export { 原名 } from '<登记声明文件>'；取数方对两入口只用具名导入（规划/05 B3-16 第二张，D32、D10-1226）
+type: impl
+# 2026-11-11 agent2 入账（编排 D10-1226、11-11 B3-16c 合并后入账：做成仓库内规则测试，随 verify 必跑，不碰 tools/** 与 .github；05「加 CI 第四项」的写法下批规划回写时改）。
+# ④ (a) 两入口导出符号集合 = specs/agent-read-exports.yaml（每项：入口、导出名、声明文件、声明处原名）；(b) 入口只许 export { 名 } from '<登记声明文件>'，无 as 改名、export *、默认导出、命名空间、本地定义或包装，经 TS 编译器解析落到登记声明；(c) 取数方（B3-16a 后为组装根 apps/api/src/agent-earnings-reads.ts；agent/** 对两入口零依赖）只用具名导入，无命名空间 / 默认 / 动态 import / require。
+# 负面用例（05 验收 AC-S1-150）：内存样例覆盖 08 细则 ④ 所举各种违例（加导出写命令、as 改名伪装、import * 再导出、export *、agent 侧 import *）均判失败，正常写法通过。② (b) 最终工具定义扫描已由 [AC-B3-08g#2] 覆盖（生产装配全开关 8 个工具），本单不重复。
+# 分工：新鲜独立 Claude 写规则测试，Opus 写登记清单（入口文件主干已合规，预期只新增 yaml）；评审 Codex 优先。RV2（specs/** 不在白名单）。
+# prettier-ignore
+refs: [BR-AI-02]
+refs_hash:
+  BR-AI-02: 40bc4f6f4109
+deps: [B3-16a]
+paths:
+  - 'specs/agent-read-exports.yaml'
+test_paths:
+  - 'test/spec/agent/read-exports/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/read-exports/**'
+status: todo
+pr: null
