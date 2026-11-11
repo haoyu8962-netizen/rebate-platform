@@ -29,4 +29,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/linking/share-page-app-version/**'
   - 'test/spec/contracts/share-page-paths/**'
-status: todo
+status: done
+pr: 3165
