@@ -6,6 +6,7 @@ type: impl
 # 2026-11-11 D10-1266：B1-18j 撤销，specs/attribution.md 淘宝节「未核实」补一句（同一官方文档嵌套 dto 已废弃字段 share_relative_rate 示例 "0.10"）并进本单，只改文档。
 # 2026-11-12 union：实现需 commission 估值端口（ports/estimates.ts）新增两样——只读取当前版本合计行记的补贴（NULL 回退分佣快照补贴），与「仅补贴变化」新版本写入（金额行照抄最新版本、合计行只重算三项、经 insertVersion 查询构造器写）；orders / settlement 不能直读写 commission 版本表（模块边界、单一写者），故加入 paths，连同该端口单元测试。新方法在 RebateDependencies.estimates 上为可选（冻结夹具手写 { bases, refresh }）。
 # 2026-11-12 union：paths 补两份同目录单元测试（update-plan.test.ts：补贴推版本判定与 platform_modified_at 只进不退的回归，Codex money r1 S1；rebate.test.ts：仅补贴版本只调 refreshSubsidy、不改状态不记账）；#3203 guard-git path-guard 报 outside paths。
+# 2026-11-12 done：#3203 合并（头 abecac9bc913）。规则测试 3 次（D10-1269 末次只改角色名）；spec-test r2 + 不计次门禁记录 pass（D10-1267 SQL 文本不采、D10-1268 终态记 FU-TERMINAL-VERSION-ROWS）；Codex money r2 pass（r1 S1 → platform_modified_at 只进不退，D10-1270 接受）。
 refs: [BR-CALC-15, BR-CALC-27]
 refs_hash:
   BR-CALC-15: f60233d3a4ac
@@ -27,4 +28,5 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3203
