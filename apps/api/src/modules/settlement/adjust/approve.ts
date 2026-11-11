@@ -11,7 +11,8 @@
 //       candidates no longer pending because another call decided them → already_decided;
 //       voided by a clawback before approval → voided_by_clawback (nothing written);
 //       current settlement seq ≠ the candidates' settle_seq → voided_stale_seq (decided_at the
-//       Clock, nothing written);
+//       Clock, nothing written); a commission_version other than the order's is not a reason to
+//       void (BR-FUND-09 ⑤, D10-1258);
 //       otherwise recompute from orders.settle_commission_fen (B_settle with the snapshot
 //       reserve_bp) and the current nets (BR-FUND-08), beneficiary states read after the locks
 //       (BR-CALC-09: frozen / appealing → a deferred obligation, banned / deleting / deleted /
@@ -538,11 +539,9 @@ function makeDecider(deps: SettleAdjustDecisionDeps) {
       if (order === undefined) throw new Error('settlement adjust: order not found for app');
       const candidateSeq = pending[0]!.settle_seq;
       const seq = await readLatestSettleSeq(trx, appId, orderId);
-      if (
-        seq !== candidateSeq ||
-        pending.some((r) => r.settle_seq !== candidateSeq) ||
-        pending.some((r) => r.commission_version !== order.commission_version)
-      ) {
+      // BR-FUND-09 ⑤ (D10-1258): the candidates' commission_version differing from the order's is
+      // no reason to void them; only the settlement seq is.
+      if (seq !== candidateSeq || pending.some((r) => r.settle_seq !== candidateSeq)) {
         await decide(trx, appId, pending, { status: step('VOID_STALE_SEQ'), decided_at: now });
         return { ...none, outcome: 'voided_stale_seq' };
       }

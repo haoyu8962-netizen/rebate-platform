@@ -1,0 +1,87 @@
+{
+  "risk_note": "RV2 money (settlement adjust candidates). D10-1258 / D10-1261 (08 BR-FUND-09 细则「正差批准的默认」⑤ as narrowed in couli #323, SPEC_REF 25a07f85): candidates of one sub-order and seq are compared on per-beneficiary differences ONLY when the order's commission_version differs from the seq's latest candidate group; same differences → nothing (pending kept, approved / rejected not regenerated, no superseding audit); different → as D10-780, the pending old-version candidates are set voided_stale_seq (superseded_by_version) with the audit in the same transaction, then new-version candidates are written (the key's version differs, so the unique constraint settle_adjustments_candidate_key is untouched — no migration, D10-1261). Same-version reruns are unchanged (skip); a beneficiary status change without a version change is handled at approval recompute (D10-770). approve.ts no longer voids a candidate because its commission_version differs from the order's; seq change → voided_stale_seq, recompute, zero difference approved without a voucher (D10-770 ①–④) unchanged. Differences: aligned by (user_id, role), the platform row counts as a party, bigint exact equality, row sets must match. Prerequisite tightening B1-18gk (#3192, merged) pinned the same-version keep and the approval beneficiary-row lock on main. Host: tsc 0, eslint 0; settlement/adjust unit 3; int settle-adjust-keep / generate / dedupe-diff / approve 24 files 92 green after the rebase; earlier also tighten 51, settle-adjusted-event + 2 notification suites 32.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review (effort medium) round 1 pass on the D10-1261 implementation (implementation diff unchanged by the later rebases): difference comparison, approval recompute, transaction idempotency. One S2 recorded, not blocking: with a non-advancing FixedClock two rejected groups of the same seq can share created_at, so 'latest group' may pick the older one and regenerate an already rejected group after a difference-neutral version bump; needs a deliberately frozen clock and repeated generate / reject, not confirmed reachable in normal operation."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests (fresh independent Claude): attempt 1 rewrote four frozen settle-adjust cases in place (D10-1259, none deleted) and added settle-adjust-dedupe-diff/approve.int; container red needed red_exempt + red_exempt_outside for the unchanged '[AC-B2-09zb#8] 一单写到一半失败' block of atomic.int.test.ts (ledger patches #3185, #3187; the file's own import / constant changed). Codex spec-test r1 fail 2×S1: ① same seq + same version, difference changed — attempt 2 added same-version.int [AC-B1-18g#9]; ② approval account-row lock — out_of_scope per D10-1260 (existing behaviour, green on base). r2 pass. Then D10-1261 narrowed ⑤ (same version is not regenerated): attempt 3 rewrote #9 to the new rule, which is main's behaviour and was green on base, so D10-1262 deleted that file mechanically (not counted). Gate record (not counted) after the SPEC_REF rebase raised one S1 (no test pinned same-version keep) → D10-1263 landed tightening B1-18gk (#3192) adding [AC-B1-18gk#1] same-version keep and #2 approval lock on main; the next gate record (not counted) passed and confirmed the red_exempt test body is identical to the base. Not adopted: r1 S1 ① under D10-1261; S1 ② recorded per D10-1260 and covered by B1-18gk."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/settlement/settle-adjust-dedupe-diff/approve.int.test.ts > [AC-B1-18g#6] 候选生成后订单换了佣金版本（v1 → v2）而各方差额不变：再跑生成不动候选（仍 v1、pending、原批次）；批准照常重算并记账——self +33、直推 +7、平台 +26，booked=1300/1300，候选已批准（批准人、时间，候选上的版本仍为 1），answer approved / credited_fen 40",
+    "test/spec/settlement/settle-adjust-dedupe-diff/approve.int.test.ts > [AC-B1-18g#7] 一个批次三单都在生成后换了佣金版本（差额不变）：A 只换版本 → approved / 40 并记账；B 又来新结算记录（seq 变）→ 仍 voided_stale_seq、什么都不写；C 当前结算额回到已入账值 1234（seq 未变）→ approved_zero、候选记已批准、不写凭证；批次确认",
+    "test/spec/settlement/settle-adjust-dedupe-diff/approve.int.test.ts > [AC-B1-18g#8] 批次被驳回后订单换了佣金版本（差额不变）再跑生成：不重新生成候选、不建批次；驳回的候选与驳回理由原样保留，不记账（BR-CALC-23「驳回则不记账并保留候选与驳回理由」）",
+    "test/spec/settlement/settle-adjust-generate/atomic.int.test.ts > [AC-B2-09zb#8] [AC-B1-18g#5] 写换候选审计失败：换版本而差额不变时根本不写该审计（注入不触发、运行不报错、行不变）；换版本且差额变了时注入同一审计写失败——运行报错，该单的旧行不作废、新行不写（同一事务回滚），审计也不留；故障解除后再跑照常作废并重建",
+    "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#1] 同 seq 已有 v1 的 pending，佣金版本变成 v2 而各方差额不变（如仅补贴变化）再跑：待审候选原样（仍 v1、pending、原批次），不新增、不作废、无审计、不建批次",
+    "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#2] v1 的 pending 经过一次差额不变的换版本（v2）仍原样；再换到 v3 且各方差额变了（本人被封禁，份额并入平台）：v1 旧行 voided_stale_seq（reason superseded_by_version、decided_at 为当时时钟、无审批人），按新差额生成 v3 pending（直推 +7、平台 +59）；superseded 3，一条系统审计（单号、旧版本 1、新版本 3）",
+    "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#3] 上两种情形之后同 seq 再跑（含再换一次差额不变的版本 v4）：不再新增、不再作废、审计条数不变、不建批次",
+    "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#4] 旧版本的行已批准 / 已拒绝：换版本而差额不变——都不动，已拒绝的不重新生成、已批准的也不重生成，无作废、无审计、不建批次；再换版本且差额变了（本人被封禁）——旧行仍不动，按新差额生成新候选（直推 +7、平台 +59），无作废、无审计"
+  ],
+  "task": "B1-18g",
+  "spec_commit": "fc50957b6ed54a508e176d6dcdc07f5e74edcb1f",
+  "spec_ref": "25a07f858b57b9800014db1ecbacf078892ef39b",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "fc50957b6ed54a508e176d6dcdc07f5e74edcb1f",
+      "tree": "78a356c5530f9eef4792f4a9b4f1085054256b0e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-11T16:02:45Z",
+      "finished_at": "2026-11-11T16:02:55Z",
+      "red_tests": [
+        "test/spec/settlement/settle-adjust-dedupe-diff/approve.int.test.ts > [AC-B1-18g#6] 候选生成后订单换了佣金版本（v1 → v2）而各方差额不变：再跑生成不动候选（仍 v1、pending、原批次）；批准照常重算并记账——self +33、直推 +7、平台 +26，booked=1300/1300，候选已批准（批准人、时间，候选上的版本仍为 1），answer approved / credited_fen 40",
+        "test/spec/settlement/settle-adjust-dedupe-diff/approve.int.test.ts > [AC-B1-18g#7] 一个批次三单都在生成后换了佣金版本（差额不变）：A 只换版本 → approved / 40 并记账；B 又来新结算记录（seq 变）→ 仍 voided_stale_seq、什么都不写；C 当前结算额回到已入账值 1234（seq 未变）→ approved_zero、候选记已批准、不写凭证；批次确认",
+        "test/spec/settlement/settle-adjust-dedupe-diff/approve.int.test.ts > [AC-B1-18g#8] 批次被驳回后订单换了佣金版本（差额不变）再跑生成：不重新生成候选、不建批次；驳回的候选与驳回理由原样保留，不记账（BR-CALC-23「驳回则不记账并保留候选与驳回理由」）",
+        "test/spec/settlement/settle-adjust-generate/atomic.int.test.ts > [AC-B2-09zb#8] [AC-B1-18g#5] 写换候选审计失败：换版本而差额不变时根本不写该审计（注入不触发、运行不报错、行不变）；换版本且差额变了时注入同一审计写失败——运行报错，该单的旧行不作废、新行不写（同一事务回滚），审计也不留；故障解除后再跑照常作废并重建",
+        "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#1] 同 seq 已有 v1 的 pending，佣金版本变成 v2 而各方差额不变（如仅补贴变化）再跑：待审候选原样（仍 v1、pending、原批次），不新增、不作废、无审计、不建批次",
+        "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#2] v1 的 pending 经过一次差额不变的换版本（v2）仍原样；再换到 v3 且各方差额变了（本人被封禁，份额并入平台）：v1 旧行 voided_stale_seq（reason superseded_by_version、decided_at 为当时时钟、无审批人），按新差额生成 v3 pending（直推 +7、平台 +59）；superseded 3，一条系统审计（单号、旧版本 1、新版本 3）",
+        "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#3] 上两种情形之后同 seq 再跑（含再换一次差额不变的版本 v4）：不再新增、不再作废、审计条数不变、不建批次",
+        "test/spec/settlement/settle-adjust-generate/version.int.test.ts > [AC-B2-09zb#7] [AC-B1-18g#4] 旧版本的行已批准 / 已拒绝：换版本而差额不变——都不动，已拒绝的不重新生成、已批准的也不重生成，无作废、无审计、不建批次；再换版本且差额变了（本人被封禁）——旧行仍不动，按新差额生成新候选（直推 +7、平台 +59），无作废、无审计"
+      ],
+      "expected": [
+        "test/spec/settlement/settle-adjust-dedupe-diff/approve.int.test.ts",
+        "test/spec/settlement/settle-adjust-generate/atomic.int.test.ts",
+        "test/spec/settlement/settle-adjust-generate/version.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "ff2604a6ec13784f329aa92bdc1493716d376a9aef60750f64d60fe84007f845"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "80b2b82fe1f9b9ae258e41658abb6844302de759",
+    "specs": "af7efaddd4306f0bd3d0bc4c3bb243fdf3464e1b"
+  }
+}

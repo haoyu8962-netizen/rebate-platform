@@ -19,11 +19,17 @@
 //     current one; a frozen / appealing beneficiary's row as usual; a banned or deleting / deleted
 //     beneficiary's share is in the platform row) and one platform row (user_id, role null) when
 //     its difference is not 0; no voucher, no balance, no booked pair, no event;
-//   - D10-780: pending rows of the same order and seq at another commission_version become
-//     voided_stale_seq (reason superseded_by_version, decided_at the Clock) on the same transaction
-//     before the new rows, with one system audit record (action
-//     settle_adjust_candidate_superseded: the order, the old and the new version); pending rows of
-//     the same version, and approved / rejected rows of the same version, make the order a skip.
+//   - BR-FUND-09 细则「正差批准的默认」⑤ (D10-1258, narrowed by D10-1261 / D10-1262): pending,
+//     approved or rejected rows of the same order, seq and current commission_version make the
+//     order a skip (a rerun within one version never generates again; a beneficiary-state change
+//     is left to the approval's recomputation, D10-770). Only when the order's version differs
+//     from the seq's latest set (its pending rows, else its latest approved / rejected set) are
+//     the differences compared, party by party (members and the platform row): the same → the
+//     order is a skip (pending rows stay, decided ones are not generated again, no audit);
+//     changed → D10-780: the seq's pending rows become voided_stale_seq (reason
+//     superseded_by_version, decided_at the Clock) on the same transaction before the new rows,
+//     with one system audit record (action settle_adjust_candidate_superseded: the order, the old
+//     and the new version); approved / rejected rows are left alone and the new rows are written.
 // Result: batchId (null when nothing was written), orders (orders that got candidates), candidates
 // (rows written), superseded (rows voided by a version change).
 import { randomUUID } from 'node:crypto';
@@ -105,7 +111,7 @@ export interface SettleAdjustGenerator {
 
 /** 决-10 A switch (default on): only false / 'false' / 'off' turn it off. */
 const VOID_ON_CLAWBACK = 'settle.adjust.void_on_clawback.enabled';
-/** D10-780: the reason a pending row is voided when the order's commission_version moved on. */
+/** D10-780 / D10-1258: the reason a pending row is voided when the seq's differences changed. */
 const SUPERSEDED_REASON = 'superseded_by_version';
 const SUPERSEDED_ACTION = 'settle_adjust_candidate_superseded';
 const SYSTEM_ACTOR = 'system:settlement';
@@ -149,6 +155,55 @@ interface CandidateRow {
   readonly userId: string | null;
   readonly role: CreditRole | null;
   readonly diffFen: bigint;
+}
+
+interface StoredCandidate {
+  readonly id: string;
+  readonly batch_id: string;
+  readonly user_id: string | null;
+  readonly role: string | null;
+  readonly diff_fen: bigint;
+  readonly commission_version: number;
+  readonly status: string;
+  readonly row_version: number;
+  readonly created_at: Date;
+}
+
+function partyKey(userId: string | null, role: string | null): string {
+  return userId === null ? '\u0000platform' : identity(userId, role ?? '');
+}
+
+/**
+ * The seq's live candidate set (BR-FUND-09 ⑤): its pending rows when there are any (one live
+ * pending set per seq), else its latest approved / rejected set (one generation: same batch and
+ * created_at). Voided rows never count.
+ */
+function referenceSet(stored: readonly StoredCandidate[]): StoredCandidate[] {
+  const pending = stored.filter((r) => r.status === 'pending');
+  if (pending.length > 0) return pending;
+  const decided = stored.filter((r) => r.status === 'approved' || r.status === 'rejected');
+  let latest: StoredCandidate | undefined;
+  for (const r of decided) {
+    if (latest === undefined || r.created_at.getTime() > latest.created_at.getTime()) latest = r;
+  }
+  if (latest === undefined) return [];
+  const { batch_id: batchId, created_at: at } = latest;
+  return decided.filter((r) => r.batch_id === batchId && r.created_at.getTime() === at.getTime());
+}
+
+/** Every party's difference equal, party by party (members and the platform row; fen as bigint). */
+function sameDifferences(
+  stored: readonly StoredCandidate[],
+  fresh: readonly CandidateRow[],
+): boolean {
+  if (stored.length !== fresh.length) return false;
+  const before = new Map<string, bigint>();
+  for (const r of stored) {
+    const key = partyKey(r.user_id, r.role);
+    if (before.has(key)) return false;
+    before.set(key, r.diff_fen);
+  }
+  return fresh.every((r) => before.get(partyKey(r.userId, r.role)) === r.diffFen);
 }
 
 type OrderOutcome =
@@ -314,30 +369,31 @@ export function createSettleAdjustGenerator(
         }
       }
 
-      const pending = await trx
+      // The seq's live candidates. Within one commission_version a rerun never generates again
+      // (pending, approved or rejected rows of the current version make the order a skip; a
+      // beneficiary-state change is left to the approval's recomputation, D10-770 / D10-1261).
+      const existing: StoredCandidate[] = await trx
         .withSchema('app')
         .selectFrom('settle_adjustments')
-        .select(['id', 'commission_version', 'row_version'])
+        .select([
+          'id',
+          'batch_id',
+          'user_id',
+          'role',
+          'diff_fen',
+          'commission_version',
+          'status',
+          'row_version',
+          'created_at',
+        ])
         .where('app_id', '=', appId)
         .where('order_id', '=', orderId)
         .where('settle_seq', '=', seq)
-        .where('status', '=', 'pending')
+        .where('status', 'in', ['pending', 'approved', 'rejected'])
         .execute();
-      if (pending.some((r) => r.commission_version === order.commission_version)) {
+      if (existing.some((r) => r.commission_version === order.commission_version)) {
         return { kind: 'skipped' };
       }
-      const decided = await trx
-        .withSchema('app')
-        .selectFrom('settle_adjustments')
-        .select('id')
-        .where('app_id', '=', appId)
-        .where('order_id', '=', orderId)
-        .where('settle_seq', '=', seq)
-        .where('commission_version', '=', order.commission_version)
-        .where('status', 'in', ['approved', 'rejected'])
-        .limit(1)
-        .executeTakeFirst();
-      if (decided !== undefined) return { kind: 'skipped' };
 
       const key = orderKey(locator.platform, locator.sub_order_id);
       const userIds = [...new Set(snapshot.beneficiaries.map((b) => b.userId))].sort();
@@ -372,8 +428,14 @@ export function createSettleAdjustGenerator(
       const rows = rowsOf(beneficiaries, plan, baseGrew);
       if (rows.length === 0) return { kind: 'skipped' };
 
+      // BR-FUND-09 ⑤ (D10-1261 / D10-1262): the version moved on; the seq's latest set with the same
+      // differences (party by party) stays as it is and is not generated again.
+      const reference = referenceSet(existing);
+      if (reference.length > 0 && sameDifferences(reference, rows)) return { kind: 'skipped' };
+      const pending = reference.filter((r) => r.status === 'pending');
+
       const now = clock.now();
-      // D10-780: an older commission_version's pending rows of the same seq give way.
+      // Differences changed (D10-780 kept on this branch): the seq's pending rows give way.
       let superseded = 0;
       if (pending.length > 0) {
         const step = transitionSettleAdjustment('pending', 'VOID_STALE_SEQ');
