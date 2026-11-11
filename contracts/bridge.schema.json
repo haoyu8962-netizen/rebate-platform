@@ -826,14 +826,14 @@
       "note": "content.type=link: content.url is first normalised (standard URL parsing; unparsable, non-https or with user info → 90403; host lower-cased, trailing dot removed, port 443 removed; path percent-decoded exactly once), then checked in order, each step final: (1) matches any category of link_patterns → 90403; (2) host in /v1/config.share_domains (full host match) → only the share page paths of share_page_paths pass, a non-default port or any other path → 90403 without going on; (3) any other https address passes. On 90403 no share panel is shown. Normalisation and order are kept only in BR-ATTR-29 细则「桥方法不留没有归因的打开入口」. A WeChat channel when WeChat is not installed opens a panel of the available channels with a hint instead of an error (BR-ID-04 细则「未安装微信时」)",
       "whitelist_90403": "content.url outside the allowed range (link_patterns hit, or a non-share-page path on a share domain; BR-ATTR-29 细则)",
       "share_page_paths": {
-        "$comment": "Path patterns of the three share pages on share_domains, registered once here and taken by the generators into the three apps (04 §9 方法的补充约束; BR-ATTR-29 细则). path_pattern is an anchored regular expression over the normalised path; null = not fixed yet: 规划/01 §4.2 gives these pages no route or path, so the values come with the pages' routes.",
+        "$comment": "Path patterns of the three share pages on share_domains, registered once here and taken by the generators into the three apps (04 §9 方法的补充约束; BR-ATTR-29 细则). path_pattern is an anchored regular expression over the normalised path, taken from the routes the server issues (D10-1232, D10-1246): product_share is /<link_id>, link_id the server-issued lower-case canonical UUID of links.link_id (contract LinkId); invite_landing is /i/<invite_code> (growth MyInvite.landing_url; invite_code 6 characters of the BR-INV-01 alphabet, contract MyInvite.invite_code ^[2-9A-HJ-NP-Z]{6}$). null = not fixed yet: download_guide has no route on trunk, 待 G-85 与下载引导页上线后补（FU-SHARE-PATH-DOWNLOAD-GUIDE）.",
         "product_share": {
           "page": "商品分享中间页 (path carries the server-issued link_id)",
-          "path_pattern": null
+          "path_pattern": "^/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
         "invite_landing": {
           "page": "邀请落地页",
-          "path_pattern": null
+          "path_pattern": "^/i/[2-9A-HJ-NP-Z]{6}$"
         },
         "download_guide": {
           "page": "下载引导页",

@@ -77,7 +77,7 @@ it('the methods with their own 90403 whitelist rejection are exactly those of 03
   expect(bridge.bridgeErrorCodes).toContain(90403);
 });
 
-it('share.open registers the three share page path patterns once (04 §9; values not fixed yet)', () => {
+it('share.open registers the three share page path patterns once (04 §9; D10-1246: product_share and invite_landing filled, download_guide not fixed yet)', () => {
   expect(Object.keys(bridge.sharePagePaths).sort()).toEqual([
     'download_guide',
     'invite_landing',
@@ -85,8 +85,16 @@ it('share.open registers the three share page path patterns once (04 §9; values
   ]);
   for (const entry of Object.values(bridge.sharePagePaths)) {
     expect(entry.page.length).toBeGreaterThan(0);
-    expect(entry.path_pattern).toBeNull();
   }
+  const product = new RegExp(String(bridge.sharePagePaths.product_share.path_pattern));
+  expect(product.test('/0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70')).toBe(true);
+  expect(product.test('/0199A3B4-5C6D-7E8F-9A0B-1C2D3E4F5A70')).toBe(false);
+  expect(product.test('/i/K7M2QX')).toBe(false);
+  const invite = new RegExp(String(bridge.sharePagePaths.invite_landing.path_pattern));
+  expect(invite.test('/i/K7M2QX')).toBe(true);
+  expect(invite.test('/i/K0M2QX')).toBe(false);
+  expect(invite.test('/0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a70')).toBe(false);
+  expect(bridge.sharePagePaths.download_guide.path_pattern).toBeNull();
 });
 
 it('auth.getH5Token returns its scope; perm.request offers no camera in MVP (04 §9)', () => {

@@ -1,7 +1,11 @@
 import { Controller, Get, HttpCode, HttpException, Inject, Post, Req, Res } from '@nestjs/common';
 import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
-import { contractRouteSchema } from '../../../platform/index.ts';
+import {
+  contractRouteSchema,
+  fieldsErrorEnvelope,
+  isVersionGatedPlatform,
+} from '../../../platform/index.ts';
 import { SharePageService } from '../../application/share-page.ts';
 
 type SharePageResponse = Schema<'SharePageResponse'>;
@@ -38,6 +42,21 @@ function userAgent(request: SharePageHttpRequest): string | null {
 }
 
 /**
+ * X-App-Version of the share page operations is optional in the contract (AppVersionH5Optional;
+ * D10-1232 / D10-1246, 规划/08 BR-ID-01 「最低支持版本拦截」: h5 and admin are not judged by
+ * version). The three apps (X-Platform ios / android / harmony) must still send it: a missing one
+ * is refused exactly as the route schema of every other operation refuses it (400, 20001,
+ * data.fields=[x-app-version], trace_id = the request id). A value that is sent was already
+ * format-checked by the route schema on every platform.
+ */
+function requireAppVersionOnApps(request: SharePageHttpRequest): void {
+  if (!isVersionGatedPlatform(header(request, 'x-platform'))) return;
+  if (header(request, 'x-app-version') !== '') return;
+  const { statusCode, body } = fieldsErrorEnvelope(['x-app-version'], request.id);
+  throw new HttpException(body, statusCode);
+}
+
+/**
  * Contract operations `getSharePage` and `getShareTpwd` (B1-15u; BR-ATTR-10 细则「中间页的口令按
  * 打开环境区分」, BR-ATTR-05 细则): x-auth none, not signed, no X-Device-Id, not idempotent. The app
  * is the request's X-App-Id (route schema checked); no identity is read. Every answer of both,
@@ -56,6 +75,7 @@ export class SharePageController {
 
   async get(request: SharePageHttpRequest, reply: HeaderReply): Promise<SharePageResponse> {
     reply.header('Cache-Control', 'no-store');
+    requireAppVersionOnApps(request);
     const result = await this.#pages.get({
       appId: header(request, 'x-app-id'),
       linkId: request.params.link_id,
@@ -71,6 +91,7 @@ export class SharePageController {
 
   async tpwd(request: ShareTpwdHttpRequest, reply: HeaderReply): Promise<ShareTpwdResponse> {
     reply.header('Cache-Control', 'no-store');
+    requireAppVersionOnApps(request);
     const result = await this.#pages.tpwd({
       appId: header(request, 'x-app-id'),
       linkId: request.params.link_id,

@@ -1,0 +1,86 @@
+{
+  "risk_note": "Contract + linking controller (D10-1246 ①, after D10-1232). openapi: new components/parameters/AppVersionH5Optional (X-App-Version, required false, same SemVer schema) used only by getSharePage and getShareTpwd: may be omitted when X-Platform is h5 / admin (08 BR-ID-01 判定: only ios / android / harmony are version-judged); the shared AppVersion stays required. route-schemas.gen.ts regenerated (x-app-version leaves required for these two only); share-page.controller.ts keeps the App platforms' missing-version answer as before (400 20001 data.fields=[x-app-version], the route schema's answer on trunk) via isVersionGatedPlatform. bridge.schema.json share_page_paths: product_share ^/<lowercase uuid>$ (links.link_id is uuid; H5 landing /<link_id>), invite_landing ^/i/[2-9A-HJ-NP-Z]{6}$ (growth my-invite landing_url, contract MyInvite.invite_code / BR-INV-01), download_guide null with 待 G-85 与下载引导页上线后补（FU-SHARE-PATH-DOWNLOAD-GUIDE）; bridge.gen.ts regenerated. Host: share-page-app-version int 2/2, share-page regression int 36/36, share-page-paths unit, contracts-ts 392, apps/api share-page + validation unit 20, contracts:check 0. The local container verify:fast was OOM-killed in tsc -b (host Docker); full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-26zj/review-codex-money-r1.json, no findings; linking is RV2, so the money type is used."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh): test/spec/linking/share-page-app-version/** and test/spec/contracts/share-page-paths/**; red/1 PASS, spec-test r1 pass. Round 2 after the implementation: [AC-CT-26zj#1] compared two reads whose product_card.item_ref is encrypted under a random IV on every read; a fresh independent Claude changed only kit.ts stable() to mask item_ref (presence kept); red/2 PASS (6), spec-test r2 pass. The implementation was set aside as a patch and re-applied unchanged."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/share-page-paths/share-page-paths.test.ts > [AC-CT-26zj#4] product_share.path_pattern 是锚定 ^/…$ 的正则：匹配服务端签发的 /<link_id>（uuid），不匹配根路径、多段路径、邀请落地页与非 uuid",
+    "test/spec/contracts/share-page-paths/share-page-paths.test.ts > [AC-CT-26zj#5] invite_landing.path_pattern 是锚定 ^/…$ 的正则：匹配 /i/<邀请码>（6 位，BR-INV-01 字符集），不匹配其他路径、错长度、字符集外与商品分享页",
+    "test/spec/contracts/share-page-paths/share-page-paths.test.ts > [AC-CT-26zj#6] download_guide 主干无路由仍为 null；三页仍各有 page 名；生成的 bridge.gen.ts sharePagePaths 与 bridge.schema.json 一致",
+    "test/spec/linking/share-page-app-version/app-version.int.test.ts > [AC-CT-26zj#1] getSharePage：X-Platform=h5 不带 X-App-Version 照常出页（与带版本号时同一结果，含 30144）；三端 App 不带仍按主干拒绝（400 20001 fields=[x-app-version]），带合法版本号照旧 200",
+    "test/spec/linking/share-page-app-version/app-version.int.test.ts > [AC-CT-26zj#2] getShareTpwd：X-Platform=h5 不带 X-App-Version 照常换口令（票据规则不变：微信 UA 仍 20001 fields=[ticket]）；三端 App 不带仍按主干拒绝（400 20001 fields=[x-app-version]），带合法版本号照旧换得口令",
+    "test/spec/linking/share-page-app-version/contract.test.ts > [AC-CT-26zj#3] 契约：getSharePage、getShareTpwd 仍声明 X-App-Version（同一 SemVer 格式）但不再 required；共用的 AppVersion 参数与其他接口的 X-App-Version 仍 required（openapi 与生成的路由校验一致）"
+  ],
+  "task": "CT-26zj",
+  "spec_commit": "5a643d965715b0621d7c9a27e9595ad5330728e0",
+  "spec_ref": "1cd6763f9b513e79a6ca273a4631eb172e06aa91",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5a643d965715b0621d7c9a27e9595ad5330728e0",
+      "tree": "6553a0da3e78fd7604a03cccd31d661a1ec7f08f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-11T07:55:21Z",
+      "finished_at": "2026-11-11T07:55:34Z",
+      "red_tests": [
+        "test/spec/contracts/share-page-paths/share-page-paths.test.ts > [AC-CT-26zj#4] product_share.path_pattern 是锚定 ^/…$ 的正则：匹配服务端签发的 /<link_id>（uuid），不匹配根路径、多段路径、邀请落地页与非 uuid",
+        "test/spec/contracts/share-page-paths/share-page-paths.test.ts > [AC-CT-26zj#5] invite_landing.path_pattern 是锚定 ^/…$ 的正则：匹配 /i/<邀请码>（6 位，BR-INV-01 字符集），不匹配其他路径、错长度、字符集外与商品分享页",
+        "test/spec/contracts/share-page-paths/share-page-paths.test.ts > [AC-CT-26zj#6] download_guide 主干无路由仍为 null；三页仍各有 page 名；生成的 bridge.gen.ts sharePagePaths 与 bridge.schema.json 一致",
+        "test/spec/linking/share-page-app-version/app-version.int.test.ts > [AC-CT-26zj#1] getSharePage：X-Platform=h5 不带 X-App-Version 照常出页（与带版本号时同一结果，含 30144）；三端 App 不带仍按主干拒绝（400 20001 fields=[x-app-version]），带合法版本号照旧 200",
+        "test/spec/linking/share-page-app-version/app-version.int.test.ts > [AC-CT-26zj#2] getShareTpwd：X-Platform=h5 不带 X-App-Version 照常换口令（票据规则不变：微信 UA 仍 20001 fields=[ticket]）；三端 App 不带仍按主干拒绝（400 20001 fields=[x-app-version]），带合法版本号照旧换得口令",
+        "test/spec/linking/share-page-app-version/contract.test.ts > [AC-CT-26zj#3] 契约：getSharePage、getShareTpwd 仍声明 X-App-Version（同一 SemVer 格式）但不再 required；共用的 AppVersion 参数与其他接口的 X-App-Version 仍 required（openapi 与生成的路由校验一致）"
+      ],
+      "expected": [
+        "test/spec/contracts/share-page-paths/share-page-paths.test.ts",
+        "test/spec/linking/share-page-app-version/app-version.int.test.ts",
+        "test/spec/linking/share-page-app-version/contract.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "7a46e0bd2e554b1677e056deb329af6543f82d3d360ad72bab3059ebd8a3ced6"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "e522667686ba6535b73c084f9370360a789fa45fbfd4a8f534ebcb9d84b4adcd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "57febf7992fd986340bae81c65e8a4c7fa32082e",
+    "specs": "c9850b2a29481a17a07e93fa30169a0e2e85371f"
+  }
+}

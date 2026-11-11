@@ -880,11 +880,11 @@ export const bridgeErrorCodes = [90001,90002,90003,90004,90401,90403,90404,90500
 export const sharePagePaths = {
   "product_share": {
     "page": "商品分享中间页 (path carries the server-issued link_id)",
-    "path_pattern": null
+    "path_pattern": "^/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
   },
   "invite_landing": {
     "page": "邀请落地页",
-    "path_pattern": null
+    "path_pattern": "^/i/[2-9A-HJ-NP-Z]{6}$"
   },
   "download_guide": {
     "page": "下载引导页",

@@ -7416,7 +7416,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/AppId'
         - $ref: '#/components/parameters/Platform'
-        - $ref: '#/components/parameters/AppVersion'
+        - $ref: '#/components/parameters/AppVersionH5Optional'
         - $ref: '#/components/parameters/Build'
         - $ref: '#/components/parameters/Channel'
         - $ref: '#/components/parameters/TraceId'
@@ -7495,7 +7495,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/AppId'
         - $ref: '#/components/parameters/Platform'
-        - $ref: '#/components/parameters/AppVersion'
+        - $ref: '#/components/parameters/AppVersionH5Optional'
         - $ref: '#/components/parameters/Build'
         - $ref: '#/components/parameters/Channel'
         - $ref: '#/components/parameters/TraceId'
@@ -30266,6 +30266,21 @@ components:
       in: header
       required: true
       description: SemVer, the same number on all three apps (拍板第二批 TECH-07).
+      schema:
+        type: string
+        pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        maxLength: 32
+    AppVersionH5Optional:
+      name: X-App-Version
+      in: header
+      required: false
+      description: |
+        SemVer, the same number on all three apps (拍板第二批 TECH-07), as AppVersion. May be
+        omitted when X-Platform is h5 or admin, which are not judged by version (规划/08 BR-ID-01
+        「最低支持版本拦截」判定：h5、admin 不判版本; D10-1232, D10-1246). X-Platform ios / android /
+        harmony must send it: a missing one is refused as by the request check of every other
+        operation (20001, data.fields=[x-app-version]). A value that is sent must match the format
+        on every platform.
       schema:
         type: string
         pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'

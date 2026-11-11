@@ -21639,6 +21639,15 @@ export interface components {
         Platform: components["schemas"]["ClientPlatformCode"];
         /** @description SemVer, the same number on all three apps (拍板第二批 TECH-07). */
         AppVersion: string;
+        /**
+         * @description SemVer, the same number on all three apps (拍板第二批 TECH-07), as AppVersion. May be
+         *     omitted when X-Platform is h5 or admin, which are not judged by version (规划/08 BR-ID-01
+         *     「最低支持版本拦截」判定：h5、admin 不判版本; D10-1232, D10-1246). X-Platform ios / android /
+         *     harmony must send it: a missing one is refused as by the request check of every other
+         *     operation (20001, data.fields=[x-app-version]). A value that is sent must match the format
+         *     on every platform.
+         */
+        AppVersionH5Optional: string;
         /** @description Build number of the client. */
         Build: string;
         /** @description Install channel of the app package (enum install_channel); absent for H5. */
@@ -28395,8 +28404,15 @@ export interface operations {
                 "X-App-Id": components["parameters"]["AppId"];
                 /** @description Client platform (enum client_platform, 03 §4.2). */
                 "X-Platform": components["parameters"]["Platform"];
-                /** @description SemVer, the same number on all three apps (拍板第二批 TECH-07). */
-                "X-App-Version": components["parameters"]["AppVersion"];
+                /**
+                 * @description SemVer, the same number on all three apps (拍板第二批 TECH-07), as AppVersion. May be
+                 *     omitted when X-Platform is h5 or admin, which are not judged by version (规划/08 BR-ID-01
+                 *     「最低支持版本拦截」判定：h5、admin 不判版本; D10-1232, D10-1246). X-Platform ios / android /
+                 *     harmony must send it: a missing one is refused as by the request check of every other
+                 *     operation (20001, data.fields=[x-app-version]). A value that is sent must match the format
+                 *     on every platform.
+                 */
+                "X-App-Version"?: components["parameters"]["AppVersionH5Optional"];
                 /** @description Build number of the client. */
                 "X-Build"?: components["parameters"]["Build"];
                 /** @description Install channel of the app package (enum install_channel); absent for H5. */
@@ -28474,8 +28490,15 @@ export interface operations {
                 "X-App-Id": components["parameters"]["AppId"];
                 /** @description Client platform (enum client_platform, 03 §4.2). */
                 "X-Platform": components["parameters"]["Platform"];
-                /** @description SemVer, the same number on all three apps (拍板第二批 TECH-07). */
-                "X-App-Version": components["parameters"]["AppVersion"];
+                /**
+                 * @description SemVer, the same number on all three apps (拍板第二批 TECH-07), as AppVersion. May be
+                 *     omitted when X-Platform is h5 or admin, which are not judged by version (规划/08 BR-ID-01
+                 *     「最低支持版本拦截」判定：h5、admin 不判版本; D10-1232, D10-1246). X-Platform ios / android /
+                 *     harmony must send it: a missing one is refused as by the request check of every other
+                 *     operation (20001, data.fields=[x-app-version]). A value that is sent must match the format
+                 *     on every platform.
+                 */
+                "X-App-Version"?: components["parameters"]["AppVersionH5Optional"];
                 /** @description Build number of the client. */
                 "X-Build"?: components["parameters"]["Build"];
                 /** @description Install channel of the app package (enum install_channel); absent for H5. */

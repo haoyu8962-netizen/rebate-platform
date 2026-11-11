@@ -9031,8 +9031,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       },
       "required": [
         "x-app-id",
-        "x-platform",
-        "x-app-version"
+        "x-platform"
       ]
     },
     "params": {
@@ -9101,8 +9100,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       },
       "required": [
         "x-app-id",
-        "x-platform",
-        "x-app-version"
+        "x-platform"
       ]
     },
     "params": {
