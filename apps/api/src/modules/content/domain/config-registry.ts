@@ -384,6 +384,14 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   ...SHOP_ENTRY_PLATFORMS.map((platform) =>
     spec(`union.${platform}.subsidy_itemized`, 'boolean', 'config.business'),
   ),
+  // B1-18e (BR-CALC-03): the service fee rate the union adapter falls back to when an order's
+  // payload has neither a fee amount nor a fee rate. Only Taobao and Pinduoduo deduct a fee from a
+  // gross commission (JD's payload is already net). The value is an object keyed by order type,
+  // each entry with its bp and source (an unverified value is marked 待核实), checked by union on
+  // read, like tech_fee_bp. No seed rows; unset = no fallback (the order goes to pending, never 0).
+  // Registration only.
+  spec('union.taobao.service_fee_bp', 'object', 'config.business'),
+  spec('union.pdd.service_fee_bp', 'object', 'config.business'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

@@ -514,6 +514,18 @@ export const SUBSIDY_ITEMIZED_UNSEEDED: readonly string[] = [
   'union.jd.subsidy_itemized',
   'union.pdd.subsidy_itemized',
 ];
+// B1-18e (D10-1250 ②, BR-CALC-03): then union.taobao / pdd.service_fee_bp, in this order;
+// editable config.business objects right after SUBSIDY_ITEMIZED, options null. Not part of
+// expectedNow() either.
+export const SERVICE_FEE_BP: readonly Expected[] = [
+  row('union.taobao.service_fee_bp', 'object', 'config.business'),
+  row('union.pdd.service_fee_bp', 'object', 'config.business'),
+];
+/** B1-18e: unset = no fallback through the reader, hence no seed rows. */
+export const SERVICE_FEE_BP_UNSEEDED: readonly string[] = [
+  'union.taobao.service_fee_bp',
+  'union.pdd.service_fee_bp',
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -547,6 +559,7 @@ export const expectedOf = (key: string): Expected => {
     ...DEVICE,
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
+    ...SERVICE_FEE_BP,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

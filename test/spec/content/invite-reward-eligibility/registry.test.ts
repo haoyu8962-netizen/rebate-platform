@@ -173,6 +173,8 @@ const SUBSIDY_ITEMIZED_KEYS = [
   'union.jd.subsidy_itemized',
   'union.pdd.subsidy_itemized',
 ];
+// B1-18e (D10-1250 ②, BR-CALC-03): union.taobao / pdd.service_fee_bp follow them, in this order, now ending the tail.
+const SERVICE_FEE_BP_KEYS = ['union.taobao.service_fee_bp', 'union.pdd.service_fee_bp'];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -212,6 +214,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...DEVICE_KEYS,
     ...BLACKLIST_CLAWBACK_KEYS,
     ...SUBSIDY_ITEMIZED_KEYS,
+    ...SERVICE_FEE_BP_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);
