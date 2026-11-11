@@ -44,6 +44,7 @@ import { ConfigCenterPage } from './pages/config-center/index.ts';
 import { DashboardPage, dashboardTargetOf } from './pages/dashboard/index.ts';
 import { ExportsPage } from './pages/exports/index.ts';
 import { FundLedgerPage } from './pages/fund-ledger/index.ts';
+import { InviteRewardsPage } from './pages/invite-rewards/index.ts';
 import { HomeConfigPage } from './pages/home-config/index.ts';
 import { KillSwitchesPage } from './pages/kill-switches/index.ts';
 import { MessagesPage } from './pages/messages/index.ts';
@@ -88,6 +89,7 @@ import { appVersionsTexts } from './texts/app-versions.ts';
 import { claimsTexts } from './texts/claims.ts';
 import { auditLogsTexts } from './texts/audit-logs.ts';
 import { exportsTexts } from './texts/exports.ts';
+import { inviteRewardsTexts } from './texts/invite-rewards.ts';
 import { ordersTexts } from './texts/orders.ts';
 import { payOrdersTexts } from './texts/pay-orders.ts';
 import { settleBillsTexts } from './texts/settle-bills.ts';
@@ -164,6 +166,9 @@ const AUDIT_LOGS_MENU_ID = 'audit-logs';
 const EXPORTS_ROUTE = 'exports';
 const AUDIT_LOG_DETAIL = /^audit-logs\/([^/]+)$/;
 const UNIONS_MENU_ID = 'unions';
+const CONFIG_MENU_ID = 'config';
+/** 邀请奖励发放记录: no sidebar item; a subpage of 配置中心 (reached from its invite group). */
+const INVITE_REWARDS_ROUTE = 'invite-rewards';
 /** 联盟 OAuth 回调页: no sidebar item; a subpage of 联盟账号与推广位 (the union redirects here). */
 const UNION_CALLBACK_ROUTE = 'unions/oauth-callback';
 
@@ -534,8 +539,16 @@ function ShellFrame({
         ? exportsTexts.title
         : undefined;
   const unionCallback = path === UNION_CALLBACK_ROUTE;
+  // 邀请奖励发放记录 (/invite-rewards) is a subpage of 配置中心 (sidebar, crumbs).
+  const inviteRewardsRoute = path === INVITE_REWARDS_ROUTE;
   const menuId =
-    auditSubpage !== undefined ? AUDIT_LOGS_MENU_ID : unionCallback ? UNIONS_MENU_ID : path;
+    auditSubpage !== undefined
+      ? AUDIT_LOGS_MENU_ID
+      : unionCallback
+        ? UNIONS_MENU_ID
+        : inviteRewardsRoute
+          ? CONFIG_MENU_ID
+          : path;
   const searchUser = menuId === USERS_MENU_ID ? searchUserOf(location.state) : undefined;
   // A claim's review page (/claims/<claim_id>) belongs to the claims menu (sidebar, crumbs).
   const claimId = claimIdOf(menuId);
@@ -571,6 +584,7 @@ function ShellFrame({
   if (match !== undefined && orderId !== undefined) subpage = ordersTexts.detail.crumb;
   if (match !== undefined && withdrawalId !== undefined) subpage = withdrawalsTexts.detail.crumb;
   if (match !== undefined && unionCallback) subpage = unionsTexts.callback.crumb;
+  if (match !== undefined && inviteRewardsRoute) subpage = inviteRewardsTexts.crumb;
   if (match !== undefined && appVersionEdit) subpage = appVersionsTexts.editor.crumb;
   if (match !== undefined && settleBillId !== undefined) subpage = settleBillsTexts.detail.crumb;
   if (match !== undefined && payOrderId !== undefined) subpage = payOrdersTexts.detail.crumb;
@@ -632,6 +646,9 @@ function ShellFrame({
       content = <AuditLogDetailPage key={auditLogId} id={auditLogId} access={access} />;
     } else if (match !== undefined && exportsRoute) {
       content = <ExportsPage access={access} clock={options.clock} />;
+    } else if (match !== undefined && inviteRewardsRoute) {
+      // Read only; fund.view reads, otherwise the page says so and sends nothing.
+      content = <InviteRewardsPage access={access} />;
     } else if (match !== undefined && unionCallback) {
       // The union's OAuth redirect: posts state and code (or error) once, then shows the result.
       content = <UnionOAuthCallbackPage access={access} clock={options.clock} />;
@@ -680,7 +697,7 @@ function ShellFrame({
       content = <AppVersionsPage access={access} />;
     } else if (match !== undefined && match.item.id === 'switches') {
       content = <KillSwitchesPage access={access} />;
-    } else if (match !== undefined && match.item.id === 'config') {
+    } else if (match !== undefined && match.item.id === CONFIG_MENU_ID) {
       content = <ConfigCenterPage access={access} />;
     } else if (match !== undefined && match.item.id === 'risk') {
       // 风控: the 规则清单 tab needs config.risk on top of the risk.* keys that show the menu.
@@ -734,6 +751,10 @@ function ShellFrame({
       // A direct address to /withdrawals without the menu (fund.view alone reads; no read key at
       // all: the page itself says so and sends nothing).
       content = <WithdrawalsPage access={access} />;
+    } else if (inviteRewardsRoute && (snapshot.isSuper || snapshot.permissions.length > 0)) {
+      // A direct address without the 配置中心 menu (fund.view alone reads; without it the page
+      // itself says so and sends nothing).
+      content = <InviteRewardsPage access={access} />;
     } else if (menuId === DASHBOARD_MENU_ID) {
       // The workbench without dashboard.view: the first permitted menu instead (never a request).
       content = <Navigate to={fallback} replace />;

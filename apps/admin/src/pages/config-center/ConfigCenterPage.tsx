@@ -32,6 +32,7 @@ import { AdminApiError } from '../../providers/data/index.ts';
 import { configCenterTexts as t } from '../../texts/config-center.ts';
 import { BatchDrawer } from './BatchDrawer.tsx';
 import { ConfirmModal } from './ConfirmModal.tsx';
+import { InviteBudgetCard } from './InviteBudgetCard.tsx';
 import { ItemDrawer } from './ItemDrawer.tsx';
 import {
   GROUP_IDS,
@@ -90,6 +91,8 @@ interface BatchResponse extends Record<string, unknown> {
 
 const NO_KEYS: ReadonlySet<string> = new Set();
 const PAGE_SIZE = 200;
+/** The invite reward record subpage (App.tsx routes it under 配置中心). */
+const INVITE_REWARDS_PATH = '/invite-rewards';
 
 export function ConfigCenterPage({ access }: ConfigCenterPageProps): ReactElement {
   const getProvider = useDataProvider();
@@ -670,6 +673,13 @@ export function ConfigCenterPage({ access }: ConfigCenterPageProps): ReactElemen
               </Flex>
             </Flex>
           </Card>
+          {group === 'invite' && access.can('fund.view') ? (
+            // Budget used and the record subpage: fund.view only (BR-INV-24 ④, F-ADM-27).
+            <InviteBudgetCard
+              rows={groupRows}
+              onOpenRecords={() => void navigate(INVITE_REWARDS_PATH)}
+            />
+          ) : null}
           {group === 'withdraw' ? (
             <Alert
               role="note"

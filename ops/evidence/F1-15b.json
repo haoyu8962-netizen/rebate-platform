@@ -1,0 +1,124 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#1] 有 fund.view：邀请奖励分组显示今日已发、今日剩余、累计已占用、累计已发、累计剩余（上限取配置项）",
+    "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#2] 已用超过上限时剩余显示 0.00 不显示负数；总预算上限 0 照算为 0.00，不写成不限",
+    "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#3] 非超管有 fund.view 与配置权限：同样显示预算用量与「发放记录」入口",
+    "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#4] 从邀请奖励分组的「发放记录」入口进入子页：地址 /invite-rewards，面包屑与侧栏归配置中心",
+    "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#5] 无 fund.view：配置中心不显示预算块与入口、不请求发放记录；直达 /invite-rewards 显示无权限",
+    "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#1] 详情按 invitee_id 读单条，抽屉显示两方手机号、金额、有效期天数、来源、触发订单、两方结果与不发原因",
+    "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#2] 详情显示单条接口的最新结果，而不是列表行里的旧状态",
+    "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#3] 单条读到 30701 显示无记录空态，不自动重发",
+    "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#4] 详情里两方结果与不发原因各归各方：邀请人不发（风控受限）、被邀请人已发，互换显示即不过",
+    "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#5] 详情里两方结果与不发原因各归各方：邀请人已发、被邀请人不发（未满 18 周岁），互换显示即不过",
+    "test/spec/frontend/admin-invite-rewards/errors.test.ts > [AC-F1-15b-ERROR#1] 列表遇 10403 显示无权限，不列出记录、不自动重发",
+    "test/spec/frontend/admin-invite-rewards/errors.test.ts > [AC-F1-15b-ERROR#2] 网络失败显示可重试，点【重试】重新读取并列出记录",
+    "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#1] 按被邀请人与状态（作废）查询：请求带 invitee_id 与 status=voided、回第 1 页，只列出该条",
+    "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#2] 按邀请人查询：请求只带 inviter_id，列出该邀请人的记录",
+    "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#3] 按取得资格日期起止查询：发 qualified_from / qualified_to 日历日（含两端）",
+    "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#4] 起日晚于止日：不发该请求或显示 20001 字段错误，总有提示，不自动重发",
+    "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#5] 翻页带 page=2 与原筛选，改筛选后回第 1 页",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#1] 直达 /invite-rewards：首次只带 page 与 page_size 请求发放记录，面包屑与侧栏高亮归配置中心，侧栏菜单清单不变",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#2] 表头含被邀请人、邀请人、金额、来源、资格、触发、状态、结果、原因与到账时间",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#3] 已处理一行：脱敏手机号原样、每方金额按后台金额格式、北京时间、触发订单、来源与两方结果、不发原因中文名",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#4] 作废、双方不发、待触发、顺延、已过期各行显示状态与原因的中文名，页面不出现任何原始枚举码",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#5] 只读：页面没有补发、修改、作废等写操作按钮，浏览只发 GET",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#6] 列表按服务端顺序（取得资格时间新的在前）逐行显示，六条都在",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#7] 两方结果与不发原因各归各方：按表头或单元格内的邀请人、被邀请人标注取每方内容，两方互换显示即不过",
+    "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#8] 到账时间列显示 granted_at 而不是触发时间；granted_at 为空时显示不含时间的占位"
+  ],
+  "risk_note": "F1-15b (orchestrator 2026-11-10, after backend B2-16d #3141; planning/01 F-ADM-27). Admin, read only, permission fund.view: a config-center subpage /invite-rewards lists invite reward records (filters invitee / inviter / status / qualified dates, page / page_size; masked phones as given; per-party results and skip / void reasons labelled per party, enum names in Chinese; amount fen shown as yuan; granted_at in its own column with a placeholder when null) with a detail drawer (adminGetInviteReward, 30701 empty state). The config center's invite group shows the budget used and remaining (today: daily_budget_fen minus today.granted_fen; total: total_budget_fen minus reserved minus granted; negative shown as 0.00; limits from the config rows), money only through parseFen / subFen / formatYuanAdmin. No new sidebar menu (the frozen admin-shell menu list is unchanged): the page is a config-center subpage like exports under audit logs. Without fund.view neither the budget block nor the entry shows and the subpage shows no permission. No write operation. Rule tests by an independent Claude in two rounds (r1 had 32 TS2345 on nullable masked phones; r2 fixed them and pinned per-party results and granted_at, closing Codex spec-test r1's two out-of-scope notes); Codex spec-test r1 pass, r2 pass; red on couli-ci (25 tests, right reason). Implementation by Opus 5.5: couli-ci browser green; the couli-ci fast run stopped at the unrelated tools/ci/contracts-artifact.test.ts CT-05a#13 (test machine container has no git repository, reported), so the six related admin rule-test directories were run on the host: 21 files, 214 tests passed; run.ts static 10/10. The review tool classifies the task as RV2: Codex money review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass (two out-of-scope notes), tests r2 fixed TS2345 and pinned both, r2 pass; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-15b",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "08e015ee2a82f45ce6ee2f89493d68d2f13ec25d",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "08e015ee2a82f45ce6ee2f89493d68d2f13ec25d",
+      "tree": "6ae127152fb80baae12c6d7a272a41c154e0a3e1",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-10T17:55:09Z",
+      "finished_at": "2026-11-10T17:57:31Z",
+      "red_tests": [
+        "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#1] 有 fund.view：邀请奖励分组显示今日已发、今日剩余、累计已占用、累计已发、累计剩余（上限取配置项）",
+        "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#2] 已用超过上限时剩余显示 0.00 不显示负数；总预算上限 0 照算为 0.00，不写成不限",
+        "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#3] 非超管有 fund.view 与配置权限：同样显示预算用量与「发放记录」入口",
+        "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#4] 从邀请奖励分组的「发放记录」入口进入子页：地址 /invite-rewards，面包屑与侧栏归配置中心",
+        "test/spec/frontend/admin-invite-rewards/budget.test.ts > [AC-F1-15b-BUDGET#5] 无 fund.view：配置中心不显示预算块与入口、不请求发放记录；直达 /invite-rewards 显示无权限",
+        "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#1] 详情按 invitee_id 读单条，抽屉显示两方手机号、金额、有效期天数、来源、触发订单、两方结果与不发原因",
+        "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#2] 详情显示单条接口的最新结果，而不是列表行里的旧状态",
+        "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#3] 单条读到 30701 显示无记录空态，不自动重发",
+        "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#4] 详情里两方结果与不发原因各归各方：邀请人不发（风控受限）、被邀请人已发，互换显示即不过",
+        "test/spec/frontend/admin-invite-rewards/detail.test.ts > [AC-F1-15b-DETAIL#5] 详情里两方结果与不发原因各归各方：邀请人已发、被邀请人不发（未满 18 周岁），互换显示即不过",
+        "test/spec/frontend/admin-invite-rewards/errors.test.ts > [AC-F1-15b-ERROR#1] 列表遇 10403 显示无权限，不列出记录、不自动重发",
+        "test/spec/frontend/admin-invite-rewards/errors.test.ts > [AC-F1-15b-ERROR#2] 网络失败显示可重试，点【重试】重新读取并列出记录",
+        "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#1] 按被邀请人与状态（作废）查询：请求带 invitee_id 与 status=voided、回第 1 页，只列出该条",
+        "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#2] 按邀请人查询：请求只带 inviter_id，列出该邀请人的记录",
+        "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#3] 按取得资格日期起止查询：发 qualified_from / qualified_to 日历日（含两端）",
+        "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#4] 起日晚于止日：不发该请求或显示 20001 字段错误，总有提示，不自动重发",
+        "test/spec/frontend/admin-invite-rewards/filters.test.ts > [AC-F1-15b-FILTER#5] 翻页带 page=2 与原筛选，改筛选后回第 1 页",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#1] 直达 /invite-rewards：首次只带 page 与 page_size 请求发放记录，面包屑与侧栏高亮归配置中心，侧栏菜单清单不变",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#2] 表头含被邀请人、邀请人、金额、来源、资格、触发、状态、结果、原因与到账时间",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#3] 已处理一行：脱敏手机号原样、每方金额按后台金额格式、北京时间、触发订单、来源与两方结果、不发原因中文名",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#4] 作废、双方不发、待触发、顺延、已过期各行显示状态与原因的中文名，页面不出现任何原始枚举码",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#5] 只读：页面没有补发、修改、作废等写操作按钮，浏览只发 GET",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#6] 列表按服务端顺序（取得资格时间新的在前）逐行显示，六条都在",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#7] 两方结果与不发原因各归各方：按表头或单元格内的邀请人、被邀请人标注取每方内容，两方互换显示即不过",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts > [AC-F1-15b-LIST#8] 到账时间列显示 granted_at 而不是触发时间；granted_at 为空时显示不含时间的占位"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-invite-rewards/budget.test.ts",
+        "test/spec/frontend/admin-invite-rewards/detail.test.ts",
+        "test/spec/frontend/admin-invite-rewards/errors.test.ts",
+        "test/spec/frontend/admin-invite-rewards/filters.test.ts",
+        "test/spec/frontend/admin-invite-rewards/list.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "12c0b6e2caaf51ed44311f23959906cae9f7a32460e842d00fbf49681f46faae"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b389bb4ab165bfbb714b48e1c0ed3664cb291d3a",
+    "specs": "ff08c2a76837dfdd35c368488891e91767aee77d"
+  }
+}

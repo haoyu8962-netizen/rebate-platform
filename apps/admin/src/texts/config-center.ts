@@ -275,6 +275,26 @@ export const configCenterTexts = {
     'growth.invite_reward.eligibility_days': '新取得的奖励资格',
   } as Readonly<Record<string, string>>,
   scopeDefault: '全局',
+  /**
+   * Invite reward budget used (BR-INV-24 ④), shown in the invite group to fund.view accounts.
+   * Remaining = limit − used, never below zero; a limit not written counts as 0 (未填).
+   */
+  inviteBudget: {
+    title: '邀请奖励预算用量',
+    todayOf: (date: string): string => `今日为 ${date}（北京时间）`,
+    note: '每日预算只计当日实际发放；累计剩余 = 总预算 − 累计已占用 − 累计已发，已用超过上限时按零显示。',
+    todayGranted: '今日已发',
+    todayLeft: '今日剩余',
+    reserved: '累计已占用',
+    totalGranted: '累计已发',
+    totalLeft: '累计剩余',
+    records: '发放记录',
+    loading: '正在读取预算用量…',
+    failed: '预算用量读取失败',
+    forbidden: '无权限查看预算用量（需 fund.view）',
+    retry: '重新读取',
+    dash: '—',
+  },
   /** Values the owner has yet to confirm (08): marked 待负责人确认. */
   pendingOwnerKeys: ['withdraw.payee_daily_count'] as readonly string[],
   countKeys: [
