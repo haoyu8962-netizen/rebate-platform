@@ -4,6 +4,7 @@ title: test-change（B1-18c 前置）：配置键 union.taobao / jd / pdd.subsid
 type: test-change
 # 2026-11-11 union 入账（D10-1250 ①，B1-18c #3163 CI 红）。先例 B2-04zzlt（#2933）/ B1-02zzh / B2-02ta：新配置键先由前置 test-change 登记并在冻结清单末尾只追加，主干保持绿，实现单再变基。#3163 红在 6 个冻结文件（test/spec/content/config-items/{registry.test,read.int.test}.ts、config-settle/{registry.test,writes.int.test}.ts、invite-reward-config/registry.test.ts、invite-reward-eligibility/registry.test.ts），都是钉死配置键全序清单。
 # 做法：照 D10-327，新鲜独立 Claude 只在这些冻结清单末尾按 taobao、jd、pdd 顺序追加三键（含 config-items/kit.ts 的期望表），不改其他断言；另一位只读复审「只追加这三键」。config-registry.ts 在本单登记三键（boolean、config.business、可编辑），content 两条单元测试条目数 145 → 148。不写种子行（未设值按 true，照 08 BR-CALC-25 细则）。B1-18c 变基后去掉这两处重复改动。
+# 完成 2026-11-11（#3168，头 140ab08056ab）：三键登记、7 个冻结文件只追加；新鲜 Claude 改，只读复审 Claude pass、Codex money pass（D10-1253）。
 refs: [BR-CALC-25]
 refs_hash:
   BR-CALC-25: 09e4036b8042
@@ -20,4 +21,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3168
