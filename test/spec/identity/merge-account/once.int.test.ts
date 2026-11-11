@@ -88,13 +88,17 @@ it('[AC-B1-20c#13] 同一 ticket 两个幂等键同时确认 → 只成一笔；
   const winner = responses.find((response) => response.statusCode === 200)!;
   merged(kit, winner, s.target);
   // The loser met either the consumed ticket (30411) or, arriving after the commit, the revoked
-  // source session (10002); neither carries a merge offer.
+  // source session (10002); neither carries a merge offer. Meeting the winner's commit after
+  // check ② but before check ⑥, the source account is already a tombstone, so the ⑥ deletion
+  // check refuses it with 10007 (403, stage=processing) — BR-ID-01 check order, BR-ID-06, BR-ID-28.
   const loser = responses.find((response) => response !== winner)!;
-  expect([401, 422]).toContain(loser.statusCode);
   const body = loser.json<Envelope>();
-  expect([10002, 30411]).toContain(body.code);
-  expect(body.data?.['reason']).toBeUndefined();
-  expect(body.data?.['merge_ticket']).toBeUndefined();
+  const msg = `loser ${String(loser.statusCode)} ${JSON.stringify(body)}`;
+  expect([401, 403, 422], msg).toContain(loser.statusCode);
+  expect([10002, 10007, 30411], msg).toContain(body.code);
+  if (body.code === 10007) expect(body.data?.['stage'], msg).toBe('processing');
+  expect(body.data?.['reason'], msg).toBeUndefined();
+  expect(body.data?.['merge_ticket'], msg).toBeUndefined();
   expect(await s.rows.sessions(s.target)).toEqual([
     expect.objectContaining({ login_method: 'merge', revoked_at: null }),
   ]);
