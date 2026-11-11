@@ -29,6 +29,22 @@
 // - 服务费：dto（alimm_share_info_dto）的金额字段（预估 alimm_tech_service_pre_fee，结算 alimm_tech_service_fee）；
 //   dto 或字段没有值取 alimama_share_fee；dto 字段非法、dto 不是对象都不回退，结果 null；都没有也是 null，绝不按 0。
 //   service_fee_fen 写实际扣的那个数（tk_status=3 是结算服务费，其余是预估服务费）。
+// - 服务费率回退（B1-18e，BR-CALC-03）：某一边（预估 / 结算）的 dto 金额与 alimama_share_fee 都没有值（dto 字段
+//   缺键、JSON null、「--」；alimama_share_fee 只算 JSON null、「--」，它缺键已按 field_invalid 告警，同非法；
+//   非法不算没有值）时，按费率扣：服务费 = ceil(毛额 × bp / 10000)（向上取整，N 取保守值），
+//   N = 毛额 − 服务费，service_fee_fen 写这个服务费。费率先取 dto 的 alimm_tech_service_rate（百分数，同其他
+//   比例字段经 pctStrToBp → bp；「0」是合法的 0 bp；非法 → null 加告警，不往下回退）；没有值再取配置
+//   union.taobao.service_fee_bp（TaobaoOrderPageMeta.serviceFeeBp，键取报文 order_type 原文，没有该键用 "*"，
+//   见 chooseServiceFeeBp；形状不合法 → 当作没有配置并告警；verified=false 照常使用并告警）；都没有 → null，
+//   绝不按 0。毛额为负（D10-572）时同一公式取数学上的 ceil（服务费 ≤ 0，N 仍取较小值）。
+//   alimm_tech_service_rate 的单位按百分数读（与本文件其他比例字段同一换算），未核实。出处：① 官方字段手册
+//   （私有库 rebate-private/docs-mirror/taobao/aff-open-docs/server-api/tbk-server-api.json，
+//   taobao.tbk.order.details.get 的 alimm_share_info_dto.alimm_tech_service_rate）只写「技术服务费比率」、BigDecimal、
+//   示例 0，没写单位；同一响应的其他比率字段（pub_share_rate、tk_total_rate、subsidy_rate）是百分数；② 私有库录制
+//   rebate-private/cap-tests/2026-10-31/dataoke/orders-shapes.json（大淘客 get-order-details，26 行）里该字段是两位数
+//   的 JSON 整数，同行 alimama_rate 是百分数字符串，量级与百分数一致（bp 应为四位）。录制只有形状，没有与服务费金额
+//   配对的值，故未核实；用到报文费率的行发 taobao_order_service_fee_from_rate。
+//   TODO(规划/11 §4.5): alimm_tech_service_rate 按百分数读未核实（需同一订单的费率与服务费金额配对） — blocked on CAP-TB-04 实测
 // - 算不出 N（BR-CALC-03）：est 为 null 时 commission_fen 是毛额（佣金字段收到非负，同拼多多），佣金字段也没有
 //   才是 0。CallCtx.rowErrors 下佣金字段拿不到、已结算行拿不到结算额都进 rejected；否则 null 加告警。
 // - 负数（BR-CALC-26、D10-522、D10-572，与京东同一套）：只有 pub_share_pre_fee_for_commission、
@@ -38,9 +54,18 @@
 // - 不映射大淘客自算字段（income、income_by_one、price_by_one、day）。
 // TODO(规划/11 §4.5): N 字段映射 verified=false，真实口径待核对 — blocked on 测试单
 // TODO(规划/11 §4.5): results 列表键与翻页结束条件按文档字段写，待大淘客订单录制复核 — blocked on 大淘客录制
-import { InvalidAmount, InvalidRatio, pctStrToBp, subFen, yuanStrToFen } from '@couli/money';
+import {
+  InvalidAmount,
+  InvalidRatio,
+  mulDivCeil,
+  mulDivFloor,
+  pctStrToBp,
+  subFen,
+  yuanStrToFen,
+} from '@couli/money';
 import { makeUnionOrder } from '../../domain/dto.ts';
 import {
+  chooseServiceFeeBp,
   UnionError,
   type CallCtx,
   type OrderQueryOpt,
@@ -70,12 +95,21 @@ export type TaobaoOrderSlotReader = (ctx: CallCtx) => Promise<readonly string[]>
  *   (`count` is how many were left out);
  * - taobao_order_no_slots: the slot reader gave no usable PID; nothing was requested and
  *   listOrders throws (B1-04zzh).
+ * - taobao_order_service_fee_unverified (B1-18e, BR-CALC-03): a union.taobao.service_fee_bp value
+ *   marked verified: false (待核实) was used; the amounts are as with a verified one.
+ * - taobao_order_service_fee_config_invalid (B1-18e): union.taobao.service_fee_bp was needed but its
+ *   value has an invalid shape; it counts as no configuration (never as 0).
+ * - taobao_order_service_fee_from_rate (B1-18e): a row had no service fee amount and its fee was
+ *   taken from alimm_tech_service_rate (read as a percentage, unverified); at most once per row.
  */
 export type TaobaoOrderWarningEvent =
   | 'taobao_order_field_invalid'
   | 'taobao_order_row_skipped'
   | 'taobao_order_foreign_slot'
-  | 'taobao_order_no_slots';
+  | 'taobao_order_no_slots'
+  | 'taobao_order_service_fee_unverified'
+  | 'taobao_order_service_fee_config_invalid'
+  | 'taobao_order_service_fee_from_rate';
 
 export interface TaobaoOrderWarning {
   readonly event: TaobaoOrderWarningEvent;
@@ -117,6 +151,9 @@ const SETTLE_COMMISSION_FIELD = 'pub_share_fee_for_commission';
 const EST_SUBSIDY_FIELD = 'pub_share_pre_fee_for_sdy';
 const SETTLE_SUBSIDY_FIELD = 'pub_share_fee_for_sdy';
 const PRE_FEE_FIELD = 'alimm_share_info_dto.alimm_tech_service_pre_fee';
+/** B1-18e（BR-CALC-03）：dto 的服务费率（按百分数读，未核实；出处见文件头）。 */
+const FEE_RATE_FIELD = 'alimm_share_info_dto.alimm_tech_service_rate';
+const BP_DENOMINATOR = 10_000n;
 const SETTLE_FEE_FIELD = 'alimm_share_info_dto.alimm_tech_service_fee';
 
 type Warn = ((event: TaobaoOrderWarning) => void) | undefined;
@@ -618,6 +655,11 @@ export function requireTaobaoSlotOrder(
 export interface TaobaoOrderPageMeta {
   readonly rawPayloadId: string | null;
   readonly like: Date;
+  /**
+   * B1-18e（BR-CALC-03）：本次读到的 union.taobao.service_fee_bp 原值（见 ServiceFeeBpReader）；
+   * 缺省 / null = 没有配置。只在报文既无服务费金额、也无 alimm_tech_service_rate 时使用。
+   */
+  readonly serviceFeeBp?: unknown;
 }
 
 class Skip {
@@ -666,6 +708,18 @@ class Reader {
     if (typeof value === 'string') return value;
     if (value instanceof TaobaoRawNumber) return value.text;
     return null;
+  }
+
+  /** B1-18e: a percentage of the wire (no sign) → bp, or null when invalid (pctStrToBp). */
+  static bp(value: unknown): bigint | null {
+    const text = Reader.text(value);
+    if (text === null || text.startsWith('-') || text.startsWith('+')) return null;
+    try {
+      return pctStrToBp(text);
+    } catch (error) {
+      if (error instanceof InvalidRatio || error instanceof InvalidAmount) return null;
+      throw error;
+    }
   }
 
   static fen(value: unknown): bigint | null {
@@ -732,15 +786,12 @@ class Reader {
 
   bp(field: string): bigint | null {
     if (this.#absent(field)) return null;
-    const value = this.#row[field];
-    const text = Reader.text(value);
-    if (text === null || text.startsWith('-') || text.startsWith('+')) return this.#bad(field);
-    try {
-      return pctStrToBp(text);
-    } catch (error) {
-      if (error instanceof InvalidRatio || error instanceof InvalidAmount) return this.#bad(field);
-      throw error;
-    }
+    return Reader.bp(this.#row[field]) ?? this.#bad(field);
+  }
+
+  /** B1-18e: a present percentage outside the top level (a dto field) → bp, or null plus a warning. */
+  bpOf(value: unknown, field: string): bigint | null {
+    return Reader.bp(value) ?? this.#bad(field);
   }
 
   integer(field: string): number | null {
@@ -917,6 +968,52 @@ function atLeastZero(fen: bigint): bigint {
   return fen < 0n ? 0n : fen;
 }
 
+/**
+ * B1-18e（BR-CALC-03）：ceil(gross × bp / 10000)，只经 @couli/money；负毛额（D10-572）取同一式的数学 ceil，
+ * 即 −floor(−gross × bp / 10000)。
+ */
+function ceilFee(gross: bigint, bp: bigint): bigint | null {
+  try {
+    return gross < 0n
+      ? -mulDivFloor(-gross, bp, BP_DENOMINATOR)
+      : mulDivCeil(gross, bp, BP_DENOMINATOR);
+  } catch (error) {
+    // 只有 int64 最小值取反越界会到这里：算不出服务费即没有 N，不抛出整页。
+    if (error instanceof InvalidAmount) return null;
+    throw error;
+  }
+}
+
+/**
+ * B1-18e（BR-CALC-03）：没有服务费金额时的费率：dto 的 alimm_tech_service_rate（有值就用它，非法 → null 加
+ * taobao_order_field_invalid，不往下回退）；没有值再取配置（键 order_type 原文，没有该键用 "*"）。配置形状
+ * 不合法 → null 加 taobao_order_service_fee_config_invalid；verified=false → 照常用，加
+ * taobao_order_service_fee_unverified。都没有 → null（绝不按 0）。
+ */
+function fallbackBp(
+  row: Record<string, unknown>,
+  shareFields: Record<string, unknown>,
+  meta: TaobaoOrderPageMeta,
+  f: Reader,
+  warn: Warn,
+): bigint | null {
+  const rate = shareFields.alimm_tech_service_rate;
+  if (!Reader.absent(rate)) {
+    const bp = f.bpOf(rate, FEE_RATE_FIELD);
+    // 用到报文费率（单位未核实）：每行至多一次，不带单号、金额。
+    if (bp !== null) warn?.({ event: 'taobao_order_service_fee_from_rate' });
+    return bp;
+  }
+  const choice = chooseServiceFeeBp(meta.serviceFeeBp, Reader.text(row.order_type));
+  if (choice.kind === 'invalid') {
+    warn?.({ event: 'taobao_order_service_fee_config_invalid' });
+    return null;
+  }
+  if (choice.kind === 'none') return null;
+  if (!choice.verified) warn?.({ event: 'taobao_order_service_fee_unverified' });
+  return choice.bp;
+}
+
 function mapRow(
   row: Record<string, unknown>,
   meta: TaobaoOrderPageMeta,
@@ -941,11 +1038,31 @@ function mapRow(
   // 非法不是缺失：dto 字段非法（tech 已是 null）或 dto 本身非法都不回退 alimama_share_fee。
   const feeOf = (value: unknown, tech: bigint | null): bigint | null =>
     shareInvalid || !Reader.absent(value) ? tech : alimamaFen;
-  const preFee = feeOf(shareFields.alimm_tech_service_pre_fee, techPreFee);
-  const settleFee = feeOf(shareFields.alimm_tech_service_fee, techFee);
   const estGross = f.signedFen(EST_COMMISSION_FIELD);
   // 未结算行的结算字段常为 0 或「--」，不读，也不告警。
   const settleGross = settled ? f.signedFen(SETTLE_COMMISSION_FIELD) : null;
+  // B1-18e（BR-CALC-03）：这一边没有任何服务费金额（dto 字段与 alimama_share_fee 都没有值）才按费率扣。
+  // alimama_share_fee 是每行都带的字段（EXPECTED_FIELDS）：缺键已按 field_invalid 告警，同非法，不回退
+  // （B1-04zz#23）；只有它在、值为 JSON null 或「--」才算没有值。
+  const alimamaAbsent =
+    Object.hasOwn(row, 'alimama_share_fee') && Reader.absent(row.alimama_share_fee);
+  const amountAbsent = (value: unknown): boolean =>
+    !shareInvalid && Reader.absent(value) && alimamaAbsent;
+  // 费率每行至多取一次（预估、结算共用；告警也只一次）。
+  let rate: { readonly bp: bigint | null } | undefined;
+  const fallbackFee = (gross: bigint | null): bigint | null => {
+    if (gross === null) return null;
+    rate ??= { bp: fallbackBp(row, shareFields, meta, f, warn) };
+    return rate.bp === null ? null : ceilFee(gross, rate.bp);
+  };
+  const preFee = amountAbsent(shareFields.alimm_tech_service_pre_fee)
+    ? fallbackFee(estGross)
+    : feeOf(shareFields.alimm_tech_service_pre_fee, techPreFee);
+  const settleFee = amountAbsent(shareFields.alimm_tech_service_fee)
+    ? settled
+      ? fallbackFee(settleGross)
+      : null
+    : feeOf(shareFields.alimm_tech_service_fee, techFee);
   const estFen = f.net(estGross, preFee, EST_COMMISSION_FIELD);
   const settleFen = f.net(settleGross, settleFee, SETTLE_COMMISSION_FIELD);
   const settledAt = f.time('tk_earning_time');

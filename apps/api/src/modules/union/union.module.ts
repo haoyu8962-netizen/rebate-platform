@@ -25,7 +25,12 @@ import {
   type TaobaoPriceConfigReader,
 } from './application/taobao-price-settings.ts';
 import type { TaobaoPriceSettingsReader, TaobaoPriceWarning } from './domain/taobao-price.ts';
-import { UnionError, type CallCtx, type UnionEndpoint } from './domain/types.ts';
+import {
+  UnionError,
+  type CallCtx,
+  type ServiceFeeConfigReader,
+  type UnionEndpoint,
+} from './domain/types.ts';
 import { createArchivingTransport } from './infra/archive.ts';
 import type { DataokeWarning } from './infra/dataoke/dataoke-client.ts';
 import { loadUnionEndpoints } from './infra/endpoints.ts';
@@ -195,6 +200,22 @@ function logPddWarning(logger: RootLogger, warning: PddWarning): void {
     logger.warn(
       { event: warning.event, alert: warning.event, platform: 'pdd', method: warning.type },
       'pinduoduo failed or punished order still carries commission',
+    );
+    return;
+  }
+  // B1-18e（BR-CALC-03）：union.pdd.service_fee_bp 待核实 / 形状不合法（adapter 只给告警名与接口名）。
+  if (
+    warning.error_code === 'pdd_service_fee_unverified' ||
+    warning.error_code === 'pdd_service_fee_config_invalid'
+  ) {
+    logger.warn(
+      {
+        event: warning.error_code,
+        alert: warning.error_code,
+        platform: 'pdd',
+        method: warning.type,
+      },
+      'pinduoduo service fee configuration warning',
     );
     return;
   }
@@ -490,6 +511,27 @@ function taobaoPriceSettings(
 }
 
 /**
+ * B1-18e (BR-CALC-03): the registry's service fee configuration read (UnionRegistryOptions
+ * .serviceFeeConfig) over the same configuration port as the price settings (content's reader, from
+ * app.module), read with ctx.appId; the registry decides the key per platform. The port answers
+ * `{ value, version }` or null: the stored value is handed on, null / undefined mean no
+ * configuration. An answer of another shape is handed on as `false`, which the adapters count as an
+ * invalid configuration (warned, never a fee of 0). Before the port is built, or without a database,
+ * every key reads as not configured. A failed read is not caught: listOrders rejects with it and the
+ * order sync retries that window.
+ */
+function serviceFeeConfig(source: PriceConfigSource): ServiceFeeConfigReader {
+  return async (key, ctx) => {
+    const reader = source.reader;
+    if (reader === undefined) return null;
+    const answer: unknown = await reader.configValue(ctx.appId, key);
+    if (answer === null || answer === undefined) return null;
+    if (typeof answer !== 'object' || !Object.hasOwn(answer, 'value')) return false;
+    return (answer as { readonly value: unknown }).value;
+  };
+}
+
+/**
  * B1-04p: a live HTTPS transport (pdd; taobao since B1-04k, jd since B1-04ze, one per platform)
  * wrapped in the raw payload archive. The database is read from the same optional source per
  * request: without one the request goes straight through, no row and no log (startup and calls
@@ -561,7 +603,11 @@ async function startUnionRegistry(
     warn: (warning: TaobaoPriceWarning) => logPriceWarning(logger, warning),
     ...(priceConfig === undefined
       ? {}
-      : { taobaoPriceSettings: taobaoPriceSettings(priceConfig, logger) }),
+      : {
+          taobaoPriceSettings: taobaoPriceSettings(priceConfig, logger),
+          // B1-18e: union.<platform>.service_fee_bp for the live taobao / pdd adapters.
+          serviceFeeConfig: serviceFeeConfig(priceConfig),
+        }),
   };
   const pdd = endpoints.find((endpoint) => endpoint.platform === 'pdd');
   const taobao = endpoints.find((endpoint) => endpoint.platform === 'taobao');

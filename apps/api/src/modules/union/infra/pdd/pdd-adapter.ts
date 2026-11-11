@@ -20,6 +20,7 @@ import {
   type PddAuthorityUrl,
   type ResolvedLink,
   type SearchQuery,
+  type ServiceFeeBpReader,
   type TimeWindow,
   type UnionAdapter,
   type UnionEndpoint,
@@ -105,6 +106,11 @@ export interface PddAdapterOptions {
    * （union.module.ts）只读 ctx.appId 取该 app 的 active 查询推广位，custom_parameters 来自服务端配置。
    */
   readonly queryIdentity?: (ctx: CallCtx) => Promise<PddQueryIdentity>;
+  /**
+   * B1-18e（BR-CALC-03）：union.pdd.service_fee_bp，订单行没有 duo_id_service_fee 时的服务费率（只用键 "*"）。
+   * 没有它即没有配置：缺服务费的行 est 仍为 null，绝不按 0 扣。
+   */
+  readonly serviceFeeBp?: ServiceFeeBpReader;
 }
 
 /** 公共参数名；业务参数不得占用（4_PDD_附 §3.2）。 */
@@ -143,9 +149,12 @@ export function pddArchiveKind(method: string): string {
 function orderRows(
   rows: readonly unknown[],
   source: PddOrderSource,
-  meta: PddOrderPage,
+  page: PddOrderPage,
   ctx: CallCtx,
+  serviceFeeBp: unknown,
 ): Pick<OrderPage, 'items' | 'rejected'> {
+  // B1-18e：本次 listOrders 读到的 union.pdd.service_fee_bp 随页元数据交给映射。
+  const meta: PddOrderPage = { ...page, serviceFeeBp };
   const map = (row: unknown): UnionOrder => mapPddOrder(row, source, meta);
   return ctx?.rowErrors === 'collect'
     ? collectOrderRows(rows, meta.rawPayloadId, map, pddRowIdentity)
@@ -183,6 +192,7 @@ export class PddUnionAdapter implements UnionAdapter {
   readonly #endpoint: UnionEndpoint;
   readonly #warn: ((event: PddWarning) => void) | undefined;
   readonly #queryIdentity: ((ctx: CallCtx) => Promise<PddQueryIdentity>) | undefined;
+  readonly #serviceFeeBp: ServiceFeeBpReader | undefined;
 
   constructor(options: PddAdapterOptions) {
     if (options.endpoint.platform !== 'pdd') {
@@ -194,6 +204,15 @@ export class PddUnionAdapter implements UnionAdapter {
     this.#endpoint = options.endpoint;
     this.#warn = options.warn;
     this.#queryIdentity = options.queryIdentity;
+    this.#serviceFeeBp = options.serviceFeeBp;
+  }
+
+  /**
+   * B1-18e（BR-CALC-03）：union.pdd.service_fee_bp，每次 listOrders / getPddOrderDetail 以该次 ctx 读一次
+   * （请求之前）；没有读取端口即没有配置（null）。读失败不吞：调用带着它失败，订单同步重试。
+   */
+  async #readServiceFeeBp(ctx: CallCtx): Promise<unknown> {
+    return this.#serviceFeeBp === undefined ? null : await this.#serviceFeeBp(ctx);
   }
 
   /**
@@ -253,6 +272,11 @@ export class PddUnionAdapter implements UnionAdapter {
     return {
       warn(fields) {
         const alert = fields['alert'];
+        // B1-18e：服务费配置的两个告警只带告警名（error_code）、platform 与拉单接口名。
+        if (alert === 'pdd_service_fee_unverified' || alert === 'pdd_service_fee_config_invalid') {
+          warn({ error_code: alert, platform: 'pdd', type: method });
+          return;
+        }
         if (alert !== 'order_reason_sub_unmapped' && alert !== 'pdd_invalid_with_commission')
           return;
         const failReason = fields['fail_reason'];
@@ -540,12 +564,15 @@ export class PddUnionAdapter implements UnionAdapter {
    */
   async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage> {
     const mode = opt?.queryMode ?? 'increment';
-    const send = this.#orderSender(ctx);
-    if (mode === 'pay_time') return await this.#listByPayTime(win, opt.cursor, send, ctx);
-    if (mode !== 'increment') {
+    if (mode !== 'pay_time' && mode !== 'increment') {
       throw new UnionError('invalid_dto', 'pdd listOrders: unknown queryMode', 'pdd');
     }
-    return await this.#listIncrement(win, opt?.cursor, send, ctx);
+    const send = this.#orderSender(ctx);
+    const serviceFeeBp = await this.#readServiceFeeBp(ctx);
+    if (mode === 'pay_time') {
+      return await this.#listByPayTime(win, opt.cursor, send, ctx, serviceFeeBp);
+    }
+    return await this.#listIncrement(win, opt?.cursor, send, ctx, serviceFeeBp);
   }
 
   /**
@@ -570,6 +597,7 @@ export class PddUnionAdapter implements UnionAdapter {
     cursor: string | undefined,
     send: OrderSender,
     ctx: CallCtx,
+    serviceFeeBp: unknown,
   ): Promise<OrderPage> {
     const window = incrementWindow(win, this.#clock.now().getTime());
     // 缓存的是该页实际取回的那次响应：行与那次响应的归档行 id 一起，命中时不重新计量。
@@ -592,7 +620,7 @@ export class PddUnionAdapter implements UnionAdapter {
       return result;
     };
     const pageOf = (page: number, result: FetchedPage): OrderPage => ({
-      ...orderRows(result.rows, 'increment', result.meta, ctx),
+      ...orderRows(result.rows, 'increment', result.meta, ctx, serviceFeeBp),
       nextCursor: page > 1 ? incrementCursor(page - 1) : null,
     });
 
@@ -636,6 +664,7 @@ export class PddUnionAdapter implements UnionAdapter {
     cursor: string | undefined,
     send: OrderSender,
     ctx: CallCtx,
+    serviceFeeBp: unknown,
   ): Promise<OrderPage> {
     const window = rangeWindow(win);
     const token = cursor === undefined ? undefined : parseRangeCursor(cursor);
@@ -648,7 +677,7 @@ export class PddUnionAdapter implements UnionAdapter {
     // 空批、没有迭代器、或迭代器原样不变都结束，避免死循环。空批看报文行数：一批全坏时 items 也是空的。
     const done = rows.length === 0 || next === null || next === token;
     return {
-      ...orderRows(rows, 'range', page, ctx),
+      ...orderRows(rows, 'range', page, ctx, serviceFeeBp),
       nextCursor: done ? null : rangeCursor(next),
     };
   }
@@ -658,12 +687,13 @@ export class PddUnionAdapter implements UnionAdapter {
     if (typeof orderSn !== 'string' || orderSn.trim() === '') {
       throw new UnionError('invalid_dto', 'pdd getPddOrderDetail: order_sn is blank', 'pdd');
     }
+    const serviceFeeBp = await this.#readServiceFeeBp(ctx);
     const { envelope, page } = await this.#requestOrders(
       PDD_ORDER_DETAIL,
       { order_sn: orderSn },
       ctx?.signal,
       archiveContext(PDD_ORDER_DETAIL, ctx),
     );
-    return mapPddOrder(envelope, 'detail', page);
+    return mapPddOrder(envelope, 'detail', { ...page, serviceFeeBp });
   }
 }

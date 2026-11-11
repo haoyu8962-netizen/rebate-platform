@@ -64,6 +64,7 @@ import {
   type RefundQueryOpt,
   type ResolvedLink,
   type SearchQuery,
+  type ServiceFeeBpReader,
   type ShopConvertReq,
   type ShopConvertResult,
   type ShopConvertSources,
@@ -302,6 +303,12 @@ export interface TaobaoAdapterOptions {
   readonly orderSlots?: TaobaoOrderSlotReader;
   /** B1-04f: order mapping and slot-filter warnings (see TaobaoOrderWarning in orders.ts). */
   readonly orderWarn?: (event: TaobaoOrderWarning) => void;
+  /**
+   * B1-18e (BR-CALC-03): union.taobao.service_fee_bp for listOrders, the last fallback of the
+   * service fee (after the dto amounts, alimama_share_fee and alimm_tech_service_rate). Without it
+   * there is no configuration: a row with none of those keeps a null N, never a fee of 0.
+   */
+  readonly serviceFeeBp?: ServiceFeeBpReader;
   /** B1-04z: refund mapping warnings (see TaobaoRefundWarning in refunds.ts). */
   readonly refundWarn?: (event: TaobaoRefundWarning) => void;
   /**
@@ -395,6 +402,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   readonly #officialItemIdCache: TaobaoItemIdCache;
   readonly #orderSlots: TaobaoOrderSlotReader | undefined;
   readonly #orderWarn: ((event: TaobaoOrderWarning) => void) | undefined;
+  readonly #serviceFeeBp: ServiceFeeBpReader | undefined;
   readonly #refundWarn: ((event: TaobaoRefundWarning) => void) | undefined;
   readonly #punishWarn: ((event: TaobaoPunishWarning) => void) | undefined;
   readonly #ownOrders: TaobaoOwnOrderReader | undefined;
@@ -468,6 +476,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#officialItemIdCache = createTaobaoItemIdCache(options.clock);
     this.#orderSlots = options.orderSlots;
     this.#orderWarn = options.orderWarn;
+    this.#serviceFeeBp = options.serviceFeeBp;
     this.#refundWarn = options.refundWarn;
     this.#punishWarn = options.punishWarn;
     this.#ownOrders = options.ownOrders;
@@ -1014,6 +1023,9 @@ export class TaobaoUnionAdapter implements UnionAdapter {
         'taobao',
       );
     }
+    // B1-18e（BR-CALC-03）：union.taobao.service_fee_bp 每次 listOrders 以该次 ctx 读一次（请求之前，读失败不扣
+    // 配额）；没有读取端口即没有配置。读失败不吞：listOrders 带着它失败，订单同步重试该窗口。
+    const serviceFeeBp = this.#serviceFeeBp === undefined ? null : await this.#serviceFeeBp(ctx);
     const response = await this.#exchangeOrderData(
       source,
       TAOBAO_ORDER_PATH,
@@ -1029,6 +1041,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     const meta = {
       rawPayloadId: typeof id === 'string' && /^[0-9]+$/.test(id) ? id : null,
       like: this.#clock.now(),
+      serviceFeeBp,
     };
     const rows = ourRows(page.rows, adzones, this.#orderWarn);
     if (ctx?.rowErrors === 'collect') {

@@ -3,9 +3,11 @@
 // 即使出现在报文里也不读、不校验、不进 DTO；从不 spread 整份报文。金额 / 费率 / 时间都是 JSON 整数，
 // 非安全整数或非整数一律 invalid_dto（不舍入）；金额经 @couli/money 的 parseFen。
 // 状态映射（specs/order-status-map/pdd.csv）、可分配基数扣减、时间窗拆分都不在这里。
-import { InvalidAmount, parseFen, subFen } from '@couli/money';
+import { InvalidAmount, mulDivCeil, parseFen, subFen } from '@couli/money';
 import { makeUnionOrder } from '../../domain/dto.ts';
 import {
+  chooseServiceFeeBp,
+  SERVICE_FEE_ANY_ORDER_TYPE,
   UnionError,
   type TimeWindow,
   type UnionOrder,
@@ -369,6 +371,9 @@ function subsidyList(value: unknown): readonly null[] | null {
  * B1-04zgc（D10-1069）：拼多多订单映射的告警出口，形状同 pino logger 的 warn（平铺字段 + 消息）。
  * 只给 order_status 4（审核失败）/ 10（已处罚）的订单用：alert order_reason_sub_unmapped（platform pdd、
  * fail_reason 原值），以及有佣金时的 alert pdd_invalid_with_commission；都不带单号、金额、用户。
+ * B1-18e（BR-CALC-03）：另有 alert pdd_service_fee_unverified（用了 verified: false 的
+ * union.pdd.service_fee_bp）与 pdd_service_fee_config_invalid（要用配置而形状不合法，当作没有配置），
+ * 都带 platform pdd，同样不带单号、金额、用户。
  */
 export interface PddOrderLogger {
   warn(fields: Readonly<Record<string, unknown>>, message: string): void;
@@ -383,6 +388,11 @@ export interface PddOrderPage {
   readonly rawPayloadId: string | null;
   readonly like: Date;
   readonly logger?: PddOrderLogger;
+  /**
+   * B1-18e（BR-CALC-03）：本次读到的 union.pdd.service_fee_bp 原值（见 ServiceFeeBpReader，只用键 "*"）；
+   * 缺省 / null = 没有配置。只在报文没有 duo_id_service_fee 时使用。
+   */
+  readonly serviceFeeBp?: unknown;
 }
 
 /** B1-04zv：被拒的行还能读出的单号与状态码；读不出就是 null，这里不抛错。 */
@@ -411,6 +421,9 @@ export function pddRowIdentity(input: unknown): OrderRowIdentity {
  * custom_parameters，raw_status = String(order_status)，五个时刻由秒转 Date，
  * settle = null）；raw_payload_id 由调用方给出该页报文的归档行 id，没有为 null。
  * B1-08p：shop_id = mall_id 的十进制字符串（缺失或不合格为 null，见 shopId）。
+ * B1-18e（BR-CALC-03）：duo_id_service_fee 没有值（缺失 / JSON null）时取配置 union.pdd.service_fee_bp
+ * （page.serviceFeeBp，只用键 "*"；拼多多报文没有服务费率字段）：服务费 = ceil(promotion_amount × bp / 10000)，
+ * est = promotion_amount − 服务费，service_fee_fen 写这个服务费；没有配置仍为 null，见 configuredServiceFee。
  */
 export function mapPddOrder(
   input: unknown,
@@ -442,7 +455,10 @@ export function mapPddOrder(
   const receiveTime = f.seconds('order_receive_time');
   const settleTime = f.seconds('order_settle_time');
   const modifyAt = f.seconds('order_modify_at');
-  const serviceFeeFen = f.fen('duo_id_service_fee');
+  const reportedFeeFen = f.fen('duo_id_service_fee');
+  // B1-18e（BR-CALC-03）：报文没有服务费金额才按配置费率扣（向上取整）；都没有仍为 null，绝不按 0。
+  const serviceFeeFen =
+    reportedFeeFen ?? configuredServiceFee(base.commission_fen, page.serviceFeeBp, page.logger);
   const failReason = f.text('fail_reason');
   const order = Object.freeze({
     ...base,
@@ -496,6 +512,34 @@ export function mapPddOrder(
   // 映射成功后才告警：collect 模式下被拒的行不打（它进 rejected，由表外流程处理）。
   alertInvalidStatus(page.logger, orderStatus, failReason, base.commission_fen);
   return order;
+}
+
+/**
+ * B1-18e（BR-CALC-03）：按 union.pdd.service_fee_bp 的 "*" 算服务费 ceil(gross × bp / 10000)（经 @couli/money）。
+ * 没有配置或没有 "*" → null；形状不合法 → null 并告警 pdd_service_fee_config_invalid；verified=false →
+ * 照常用并告警 pdd_service_fee_unverified。告警只带 alert 与 platform，不带单号、金额。
+ */
+function configuredServiceFee(
+  grossFen: bigint,
+  raw: unknown,
+  logger: PddOrderLogger | undefined,
+): bigint | null {
+  const choice = chooseServiceFeeBp(raw, SERVICE_FEE_ANY_ORDER_TYPE);
+  if (choice.kind === 'invalid') {
+    logger?.warn(
+      { alert: 'pdd_service_fee_config_invalid', platform: 'pdd' },
+      'pdd service fee configuration is invalid',
+    );
+    return null;
+  }
+  if (choice.kind === 'none') return null;
+  if (!choice.verified) {
+    logger?.warn(
+      { alert: 'pdd_service_fee_unverified', platform: 'pdd' },
+      'pdd service fee configuration is unverified',
+    );
+  }
+  return mulDivCeil(grossFen, choice.bp, 10_000n);
 }
 
 /** B1-04zgc（D10-1069）：specs/order-status-map/pdd.csv 里按失效处理的 4（审核失败）、10（已处罚）。 */

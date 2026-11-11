@@ -32,6 +32,7 @@ import {
   UnionError,
   type CallCtx,
   type RegisteredPlatform,
+  type ServiceFeeConfigReader,
   type UnionAdapter,
 } from '../domain/types.ts';
 import {
@@ -153,6 +154,13 @@ export interface UnionRegistryOptions extends DemoUnionRegistryOptions {
   readonly pddLive?: PddLiveOptions;
   readonly taobaoLive?: TaobaoLiveOptions;
   readonly jdLive?: JdLiveOptions;
+  /**
+   * B1-18e (BR-CALC-03): the configuration read behind the service fee fallback. The real taobao
+   * adapter gets it as `serviceFeeBp` over the key union.taobao.service_fee_bp, the real pdd
+   * adapter over union.pdd.service_fee_bp; never the other platform's key. Absent: no
+   * configuration (a row without a fee amount or rate keeps a null N, never a fee of 0).
+   */
+  readonly serviceFeeConfig?: ServiceFeeConfigReader;
 }
 
 export interface UnionRegistration {
@@ -194,6 +202,10 @@ function unimplementedAdapter(platform: RegisteredPlatform): UnionAdapter {
   });
 }
 
+/** B1-18e (BR-CALC-03): the per-platform service fee configuration keys (registered by B1-18et). */
+export const TAOBAO_SERVICE_FEE_BP_KEY = 'union.taobao.service_fee_bp';
+export const PDD_SERVICE_FEE_BP_KEY = 'union.pdd.service_fee_bp';
+
 /**
  * Exactly jd, pdd and taobao registered. Without options every call rejects
  * `adapter_unimplemented`; with options, mode=demo endpoints get a demo adapter, and a pdd
@@ -207,6 +219,7 @@ export function createUnionRegistry(options?: UnionRegistryOptions): UnionRegist
   let taobaoLive: UnionAdapter | undefined;
   let jdLive: UnionAdapter | undefined;
   if (options !== undefined) {
+    const serviceFeeConfig = options.serviceFeeConfig;
     // Same validation as startup: incomplete sets, and demo / replay in prod, are refused.
     for (const endpoint of parseUnionEndpoints(options.endpoints, options.environment)) {
       if (endpoint.mode === 'demo') demoPlatforms.add(endpoint.platform);
@@ -219,6 +232,10 @@ export function createUnionRegistry(options?: UnionRegistryOptions): UnionRegist
           endpoint,
           ...(live.warn === undefined ? {} : { warn: live.warn }),
           ...(live.queryIdentity === undefined ? {} : { queryIdentity: live.queryIdentity }),
+          // B1-18e: only the pdd key, read with the call's ctx.
+          ...(serviceFeeConfig === undefined
+            ? {}
+            : { serviceFeeBp: (ctx: CallCtx) => serviceFeeConfig(PDD_SERVICE_FEE_BP_KEY, ctx) }),
         });
       }
       if (endpoint.platform === 'taobao' && endpoint.mode === 'live' && options.taobaoLive) {
@@ -263,6 +280,12 @@ export function createUnionRegistry(options?: UnionRegistryOptions): UnionRegist
           ...(live.orderWarn === undefined ? {} : { orderWarn: live.orderWarn }),
           // B1-04zzu: the refund archive's own-order lookup as it is.
           ...(live.ownOrders === undefined ? {} : { ownOrders: live.ownOrders }),
+          // B1-18e: only the taobao key, read with the call's ctx.
+          ...(serviceFeeConfig === undefined
+            ? {}
+            : {
+                serviceFeeBp: (ctx: CallCtx) => serviceFeeConfig(TAOBAO_SERVICE_FEE_BP_KEY, ctx),
+              }),
         });
       }
       if (endpoint.platform === 'jd' && endpoint.mode === 'live' && options.jdLive) {

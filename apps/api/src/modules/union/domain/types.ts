@@ -149,6 +149,75 @@ export interface CallCtx {
 /** B1-04w: see CallCtx.gateUpstream. The request receives the signal of its own attempt. */
 export type UpstreamGate = <T>(request: (signal: AbortSignal) => Promise<T>) => Promise<T>;
 
+/**
+ * B1-18e（BR-CALC-03）：配置 union.<platform>.service_fee_bp 的读取（淘宝、拼多多适配器的 serviceFeeBp），
+ * 以该次 listOrders 的 CallCtx 调用。给出配置原值；没有配置为 null 或 undefined。形状由适配器校验：object，
+ * 键为订单类型（淘宝取报文 order_type 原文，找不到该键用 "*"；拼多多只用 "*"），值见 ServiceFeeBpEntry。
+ * 形状不合法当作没有配置并告警，绝不按 0。
+ */
+export type ServiceFeeBpReader = (ctx: CallCtx) => Promise<unknown>;
+
+/**
+ * B1-18e：注册表的配置读取（UnionRegistryOptions.serviceFeeConfig）：以配置键与该次 listOrders 的 CallCtx
+ * 调用，给出配置原值（同 ServiceFeeBpReader；没有配置为 null 或 undefined）。注册表给淘宝适配器的
+ * serviceFeeBp 只读 union.taobao.service_fee_bp，给拼多多适配器的只读 union.pdd.service_fee_bp，不串平台。
+ */
+export type ServiceFeeConfigReader = (key: string, ctx: CallCtx) => Promise<unknown>;
+
+/** B1-18e：union.<platform>.service_fee_bp 里一个订单类型的取值（每个取值附来源，08 BR-CALC-03）。 */
+export interface ServiceFeeBpEntry {
+  /** 服务费率，0..10000 的整数 bp；服务费 = ceil(gross × bp / 10000)。 */
+  readonly bp: number;
+  /** 取值来源，非空。 */
+  readonly source: string;
+  /** false =「待核实」：照常使用，另发一次告警（不影响金额）。 */
+  readonly verified: boolean;
+}
+
+/**
+ * B1-18e：从 union.<platform>.service_fee_bp 原值里选出一个订单类型的费率。
+ * - none：没有配置（null / undefined），或配置里既没有该订单类型、也没有 "*"；
+ * - invalid：形状不合法（不是普通 object，或任一取值不是 ServiceFeeBpEntry：bp 不是 0..10000 的整数、
+ *   source 不是非空字符串、verified 不是布尔）——整份配置当作没有，调用方告警；
+ * - entry：选中的取值（bp 已转 bigint）。
+ * 选键：orderType 是字符串且配置里有这个键就用它，否则用 "*"。纯函数，不告警、不抛错。
+ */
+export type ServiceFeeBpChoice =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'entry'; readonly bp: bigint; readonly verified: boolean };
+
+/** 配置里兜底的订单类型键。 */
+export const SERVICE_FEE_ANY_ORDER_TYPE = '*';
+
+function isServiceFeeBpEntry(value: unknown): value is ServiceFeeBpEntry {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const { bp, source, verified } = value as Record<string, unknown>;
+  return (
+    typeof bp === 'number' &&
+    Number.isInteger(bp) &&
+    bp >= 0 &&
+    bp <= 10000 &&
+    typeof source === 'string' &&
+    source.trim() !== '' &&
+    typeof verified === 'boolean'
+  );
+}
+
+export function chooseServiceFeeBp(raw: unknown, orderType: string | null): ServiceFeeBpChoice {
+  if (raw === null || raw === undefined) return { kind: 'none' };
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { kind: 'invalid' };
+  const prototype: unknown = Object.getPrototypeOf(raw);
+  if (prototype !== Object.prototype && prototype !== null) return { kind: 'invalid' };
+  const config = raw as Readonly<Record<string, unknown>>;
+  if (!Object.values(config).every(isServiceFeeBpEntry)) return { kind: 'invalid' };
+  const key =
+    orderType !== null && Object.hasOwn(config, orderType) ? orderType : SERVICE_FEE_ANY_ORDER_TYPE;
+  if (!Object.hasOwn(config, key)) return { kind: 'none' };
+  const chosen = config[key] as ServiceFeeBpEntry;
+  return { kind: 'entry', bp: BigInt(chosen.bp), verified: chosen.verified };
+}
+
 export interface Page<T> {
   readonly items: readonly T[];
   readonly nextCursor: string | null;
