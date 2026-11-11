@@ -1,0 +1,30 @@
+id: B1-18c
+repo: rebate-platform
+title: 补贴类佣金拆分（BR-CALC-18）与未单列平台默认处理（BR-CALC-25）：淘宝按 *_for_sdy 输出 subsidy_commission_fen，subsidy_itemized=false 的平台入库置 credit_requires_settle
+type: impl
+# 2026-11-11 union 入账（D10-1250 ①，B1-18 剩余项）。核重叠（只引用不重做）：B1-04zz 已把淘宝 N 改净额、*_for_sdy 不进 N、缺服务费走 SERVICE_FEE_RATE_MISSING；FU-TB-SUBSIDY-COLUMN（写 orders.subsidy_commission_fen）当时留下、无跟进单，并入本单。orders.credit_requires_settle 列已在 0007（true→false 触发器拒绝），全仓无写者无读者；R5 月结批次项按结算行生成（settle_batch_items.settle_seq，bill-source 只收有结算值的行），「settle 为空不入账」结构上已成立，本单不改 settlement，只写标志供后续守卫与展示用。funds 线无相关在途单。
+# 做法：union 订单 DTO 加 subsidy_commission_fen；淘宝（官方字段 pub_share_pre_fee_for_sdy / pub_share_fee_for_sdy，docs-mirror 有说明，补贴部分是否另扣服务费待核实，不臆造）按 est / settle 同一取值时机映射；京东、拼多多报文分不开 → 不输出（null）。n_base 沿用 est / settle（已不含补贴），不加 n_base_fen 列。流水线 pipeline-port / update-step / snapshot-retry 把 subsidy_commission_fen 写进 orders 与快照入参。配置 union.<platform>.subsidy_itemized（boolean，默认 true，照 08；改 false 待 09 结论，本单不改取值）；为 false 的平台订单首次入库置 credit_requires_settle=true。09 表「补贴类佣金未单列」在规划仓库，由编排回写。credit.enabled.<platform> 不动。
+refs: [BR-CALC-18, BR-CALC-25]
+refs_hash:
+  BR-CALC-18: bb50f68578f7
+  BR-CALC-25: 09e4036b8042
+deps: [B1-04zz, B1-18b]
+paths:
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/infra/taobao/orders.ts'
+  - 'apps/api/src/modules/orders/application/pipeline-port.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+  - 'apps/api/src/modules/orders/domain/snapshot-retry.ts'
+  - 'apps/api/src/modules/orders/infra/pipeline-store.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'specs/attribution.md'
+  - 'test/spec/union/subsidy-split/**'
+  - 'test/spec/orders/subsidy-itemized/**'
+test_paths:
+  - 'test/spec/union/subsidy-split/**'
+  - 'test/spec/orders/subsidy-itemized/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo

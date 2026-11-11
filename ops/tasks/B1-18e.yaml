@@ -1,0 +1,24 @@
+id: B1-18e
+repo: rebate-platform
+title: 服务费率回退（BR-CALC-03）：报文无服务费金额时按报文费率、再按配置 union.<platform>.service_fee_bp 算 N = gross − ceil(gross × fee_bp / 10000)，都没有才进待处理
+type: impl
+# 2026-11-11 union 入账（D10-1250 ②，B1-18 剩余项）。核重叠（只引用不重做）：「两处都没有 → 待处理并告警、不按 0」已由 B1-04zz / B1-08zh / B1-08k（order_sync_pending 原因 SERVICE_FEE_RATE_MISSING，orders/domain/commission-snapshot.ts、snapshot-retry.ts）与 B1-08zy（couli_service_fee_missing_total{platform}）实现，本单沿用；缺的是中间两级回退。
+# 做法：只对报文给毛额、需扣服务费的平台（淘宝、拼多多；京东报文为净额不适用，见 specs/attribution.md）。淘宝顺序：服务费金额（alimm_share_info_dto，缺值回退 alimama_share_fee，B1-04zz 现状）→ 报文费率 alimm_tech_service_rate → 配置 service_fee_bp；拼多多：duo_id_service_fee → 配置。fee = ceil(gross × fee_bp / 10000)（服务费向上取整、N 取保守值），金额只用 packages/money。配置 union.<platform>.service_fee_bp 只注册、默认不设值（08 未给取值；填值须附来源，未核实标「待核实」），本单不填任何费率。service_fee_fen 写实际扣的数。依赖 B1-18c（同改 taobao/orders.ts 与流水线，先后做）。
+refs: [BR-CALC-03]
+refs_hash:
+  BR-CALC-03: f2d8ebebbc0c
+deps: [B1-18c, B1-08zh]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/orders.ts'
+  - 'apps/api/src/modules/union/infra/pdd/orders.ts'
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'specs/attribution.md'
+  - 'test/spec/union/service-fee-fallback/**'
+test_paths:
+  - 'test/spec/union/service-fee-fallback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
