@@ -20,6 +20,9 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
 status: todo
+red_exempt_outside:
+  - file: test/spec/settlement/settle-adjust-generate/atomic.int.test.ts
+    reason: '用例外只在文件顶部 import 增加 SUPERSEDED_ACTION、新增顶层常量 AUDIT_INSERT 与注释（供改写的 [AC-B2-09zb#8] 换候选审计那条用，D10-1259）；未改的 [AC-B2-09zb#8] 一单写到一半失败块与基线逐字相同'
 red_exempt:
   - file: test/spec/settlement/settle-adjust-generate/atomic.int.test.ts
     test: '[AC-B2-09zb#8] 一单写到一半失败（注入故障）：该单的行全不留，另一单照常生成；批次只有成功的单；故障解除后再跑补上失败的单'
