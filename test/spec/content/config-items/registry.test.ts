@@ -56,6 +56,8 @@
 // DEVICE), config.risk object, with no seed row (DEVICE_UNSEEDED; D-7 / D-8, [AC-F1-02a#42]).
 // B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095): order.blacklist_clawback.enabled follows it
 // (kit BLACKLIST_CLAWBACK), unset (off) by default with no seed row (BLACKLIST_CLAWBACK_UNSEEDED).
+// B1-18c (D10-1250 ①, BR-CALC-25): then union.taobao / jd / pdd.subsidy_itemized, in this order (kit
+// SUBSIDY_ITEMIZED), unset (= true) by default with no seed rows (SUBSIDY_ITEMIZED_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -85,6 +87,8 @@ import {
   DEVICE_UNSEEDED,
   BLACKLIST_CLAWBACK,
   BLACKLIST_CLAWBACK_UNSEEDED,
+  SUBSIDY_ITEMIZED,
+  SUBSIDY_ITEMIZED_UNSEEDED,
   EXPECTED,
   FEEDBACK,
   FUND_FLAGS,
@@ -169,6 +173,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...CREDIT_POSTCHECK_UNSEEDED,
         ...DEVICE_UNSEEDED,
         ...BLACKLIST_CLAWBACK_UNSEEDED,
+        ...SUBSIDY_ITEMIZED_UNSEEDED,
       ]),
     ]),
   );
@@ -190,6 +195,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...CREDIT_POSTCHECK_UNSEEDED,
     ...DEVICE_UNSEEDED,
     ...BLACKLIST_CLAWBACK_UNSEEDED,
+    ...SUBSIDY_ITEMIZED_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -233,6 +239,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...MINOR,
         ...DEVICE,
         ...BLACKLIST_CLAWBACK,
+        ...SUBSIDY_ITEMIZED,
       ].map((entry) => entry.key),
     ),
   );
@@ -285,7 +292,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       PRICE_TAOBAO_UNSEEDED.length -
       CREDIT_POSTCHECK_UNSEEDED.length -
       DEVICE_UNSEEDED.length -
-      BLACKLIST_CLAWBACK_UNSEEDED.length,
+      BLACKLIST_CLAWBACK_UNSEEDED.length -
+      SUBSIDY_ITEMIZED_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -440,6 +448,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...MINOR,
     ...DEVICE,
     ...BLACKLIST_CLAWBACK,
+    ...SUBSIDY_ITEMIZED,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -509,6 +518,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...MINOR,
     ...DEVICE,
     ...BLACKLIST_CLAWBACK,
+    ...SUBSIDY_ITEMIZED,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -586,6 +596,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...MINOR,
       ...DEVICE,
       ...BLACKLIST_CLAWBACK,
+      ...SUBSIDY_ITEMIZED,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -614,6 +625,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...MINOR,
     ...DEVICE,
     ...BLACKLIST_CLAWBACK,
+    ...SUBSIDY_ITEMIZED,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({

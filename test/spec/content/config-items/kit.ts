@@ -500,6 +500,20 @@ export const BLACKLIST_CLAWBACK: readonly Expected[] = [
 ];
 /** B2-04zzlt: off by default through the reader (unset = off), hence no seed row. */
 export const BLACKLIST_CLAWBACK_UNSEEDED: readonly string[] = ['order.blacklist_clawback.enabled'];
+// B1-18c (D10-1250 ①, BR-CALC-25): then union.taobao / jd / pdd.subsidy_itemized, in this order;
+// editable config.business booleans right after BLACKLIST_CLAWBACK, options null. Not part of
+// expectedNow() either.
+export const SUBSIDY_ITEMIZED: readonly Expected[] = [
+  row('union.taobao.subsidy_itemized', 'boolean', 'config.business'),
+  row('union.jd.subsidy_itemized', 'boolean', 'config.business'),
+  row('union.pdd.subsidy_itemized', 'boolean', 'config.business'),
+];
+/** B1-18c: unset = true through the reader (`value !== false`), hence no seed rows. */
+export const SUBSIDY_ITEMIZED_UNSEEDED: readonly string[] = [
+  'union.taobao.subsidy_itemized',
+  'union.jd.subsidy_itemized',
+  'union.pdd.subsidy_itemized',
+];
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -532,6 +546,7 @@ export const expectedOf = (key: string): Expected => {
     ...MINOR,
     ...DEVICE,
     ...BLACKLIST_CLAWBACK,
+    ...SUBSIDY_ITEMIZED,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

@@ -54,6 +54,7 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // B1-02zzf (D10-1034 ①, BR-ID-26) appends minor.min_realname_age after it.
 // B1-02zzh (D10-1034 ②, BR-ID-09) appends device.invalid_hashes after that.
 // B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095) appends order.blacklist_clawback.enabled after it.
+// B1-18c (D10-1250 ①, BR-CALC-25) appends union.taobao / jd / pdd.subsidy_itemized after it, in this order.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
   const i = keys.indexOf('settle.statement.grace_days');
@@ -158,6 +159,9 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'minor.min_realname_age',
     'device.invalid_hashes',
     'order.blacklist_clawback.enabled',
+    'union.taobao.subsidy_itemized',
+    'union.jd.subsidy_itemized',
+    'union.pdd.subsidy_itemized',
   ]);
 });
 

@@ -377,6 +377,13 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // blacklist clawback, config.business, editable. No seed row; unset = off (`value === true`): BR-FUND-01 R8
   // reads 「默认处理，待财务确认」, so turning it on takes the owner's confirmation. Registration only.
   spec('order.blacklist_clawback.enabled', 'boolean', 'config.business'),
+  // B1-18c (BR-CALC-25 细则): whether the platform's order API itemizes the subsidy commission
+  // (09's verdict), config.business, editable. No seed rows; unset = true, the orders pipeline's
+  // default (`value !== false`), which is 08's value. false: that platform's new orders are
+  // imported with credit_requires_settle. Registration only.
+  ...SHOP_ENTRY_PLATFORMS.map((platform) =>
+    spec(`union.${platform}.subsidy_itemized`, 'boolean', 'config.business'),
+  ),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

@@ -53,6 +53,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
   // B1-02zzf (D10-1034 ①, BR-ID-26): then minor.min_realname_age;
   // B1-02zzh (D10-1034 ②, BR-ID-09): then device.invalid_hashes;
   // B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095): then order.blacklist_clawback.enabled;
+  // B1-18c (D10-1250 ①, BR-CALC-25): then union.taobao / jd / pdd.subsidy_itemized, in this order;
   // nothing else may follow.
   presentOf(INVITE_CFG, 'growth.invite_reward.*');
   const invite = inviteNow();
@@ -154,6 +155,9 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'minor.min_realname_age',
     'device.invalid_hashes',
     'order.blacklist_clawback.enabled',
+    'union.taobao.subsidy_itemized',
+    'union.jd.subsidy_itemized',
+    'union.pdd.subsidy_itemized',
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),
