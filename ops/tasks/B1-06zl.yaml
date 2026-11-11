@@ -10,7 +10,7 @@ type: impl
 refs: [BR-PROD-10, BR-TEXT-14]
 refs_hash:
   BR-PROD-10: 2a77fcf983e8
-  BR-TEXT-14: c083ae1a7960
+  BR-TEXT-14: 675e5daec95a
 deps: []
 paths:
   - 'apps/api/src/modules/linking/application/**'
