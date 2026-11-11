@@ -32,7 +32,7 @@ interface OrdersPorts {
 interface CommissionPorts {
   readNotifyBeneficiaries(
     db: Kysely<DB>,
-    input: { app_id: string; order_id: string },
+    input: { app_id: string; order_id: string; exclude_terminal?: boolean },
   ): Promise<readonly { readonly user_id: string; readonly amount_fen: bigint }[]>;
 }
 
@@ -152,7 +152,11 @@ function readPayload(appId: string, data: JobPayload): ClaimResultMessagePayload
   return value as ClaimResultMessagePayload;
 }
 
-/** Sum of the applicant's own current-version shares over the approved items' orders. */
+/**
+ * Sum of the applicant's own current-version shares over the approved items' orders.
+ * B1-18kn（D10-1274；BR-TEXT-09、BR-CALC-15）：只计发送那一刻不在终态（VOID、CLAWED_BACK）的订单，
+ * 终态订单按 0 计；全部终态时得 0，照发「预估返 ¥0」，不吞通知。
+ */
 async function applicantRebate(
   trx: Transaction<DB>,
   appId: string,
@@ -170,6 +174,7 @@ async function applicantRebate(
     const shares = await commission.readNotifyBeneficiaries(trx, {
       app_id: appId,
       order_id: orderId,
+      exclude_terminal: true,
     });
     for (const share of shares) {
       if (share.user_id === applicant) total = addFen(total, share.amount_fen);

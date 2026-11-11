@@ -1,0 +1,75 @@
+{
+  "risk_note": "RV2 (claim-result notification amount). D10-1274 (split from B1-18k money r1 S1): CLAIM_RESULT {rebate} counts only the applicant's current-version shares of approved orders that are NOT terminal (VOID, CLAWED_BACK) at send time; terminal orders count 0; all-terminal still sends '预估返 ¥0' (no swallowing); template text and the rejected branch unchanged. commission/ports/notify-beneficiaries.ts readNotifyBeneficiaries gains optional exclude_terminal (true → `o.rebate_status not in ('VOID','CLAWED_BACK')` on the existing orders join); default (absent / false) compiles to the identical SQL and parameters, so the frozen trade-read-ports/beneficiaries.int stays and future ORDER_INVALID / CLAWBACK fan-outs can still read terminal beneficiaries. notification/application/claim-result-message.ts applicantRebate passes exclude_terminal: true. Closes the existing gap (orders voided with N unchanged keep positive v1 rows) and the one B1-18k widens (terminal versions written while terminal). No ledger / balance path touched. Host: tsc -b test apps/api 0; eslint / prettier 0; claim-result-terminal 4; notification + commission int 94 files 933; apps/api unit 5133.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review (effort medium) round 1 pass: terminal filter, current-version share sum, zero-amount notice, default read behaviour unchanged."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by fresh independent Claude (claim-result-terminal/terminal.int, 4 cases: VOID, CLAWED_BACK, mixed in-flight ESTIMATED / WAITING + CREDITED + VOID + CLAWED_BACK). Container red red/1 4 red for the right reason; before review also verified green on a throwaway copy with a one-line terminal filter. spec-test r1 pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#1] [BR-TEXT-09] [BR-CALC-15] 延迟消费时已通过订单已 VOID 而当前版本本人份额为正：预估返按 0 计，照发不吞",
+    "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#2] [BR-TEXT-09] [BR-CALC-15] 延迟消费时已通过订单已 CLAWED_BACK 而当前版本本人份额为正：预估返按 0 计，照发不吞",
+    "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#3] [BR-TEXT-09] [BR-CALC-15] 多单混合（在途 ESTIMATED、CREDITED、VOID、CLAWED_BACK）：只计在途与已入账两单的本人份额之和",
+    "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#3] [BR-TEXT-09] [BR-CALC-15] 多单混合（在途 WAITING、CREDITED、VOID、CLAWED_BACK）：只计在途与已入账两单的本人份额之和"
+  ],
+  "task": "B1-18kn",
+  "spec_commit": "9a49559dbe782e95766e97e0443748d251812f95",
+  "spec_ref": "3b5122e6200ccdb978e85369e4c004d7e0bcfebb",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9a49559dbe782e95766e97e0443748d251812f95",
+      "tree": "a8135fb9697785902c503025536fdb6fdc2a1616",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-11T23:07:42Z",
+      "finished_at": "2026-11-11T23:07:52Z",
+      "red_tests": [
+        "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#1] [BR-TEXT-09] [BR-CALC-15] 延迟消费时已通过订单已 VOID 而当前版本本人份额为正：预估返按 0 计，照发不吞",
+        "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#2] [BR-TEXT-09] [BR-CALC-15] 延迟消费时已通过订单已 CLAWED_BACK 而当前版本本人份额为正：预估返按 0 计，照发不吞",
+        "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#3] [BR-TEXT-09] [BR-CALC-15] 多单混合（在途 ESTIMATED、CREDITED、VOID、CLAWED_BACK）：只计在途与已入账两单的本人份额之和",
+        "test/spec/notification/claim-result-terminal/terminal.int.test.ts > [AC-B1-18kn#3] [BR-TEXT-09] [BR-CALC-15] 多单混合（在途 WAITING、CREDITED、VOID、CLAWED_BACK）：只计在途与已入账两单的本人份额之和"
+      ],
+      "expected": ["test/spec/notification/claim-result-terminal/terminal.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "7818b9d60522011792c6580c5ed93076b12488e4ae4586e446db95f66c4a1145"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ec713bfa58556a180d81fdf0d7e6077327bc21e2",
+    "specs": "d5eef657b79155258219cac13f1db8fbcaed035e"
+  }
+}

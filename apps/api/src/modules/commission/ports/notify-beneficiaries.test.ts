@@ -79,3 +79,37 @@ it('[AC-B1-12j-UNIT#2] 行原样返回：零份额保留、bigint 不转换、�
   const { db } = setup(rows.map((r) => ({ ...r, base_fen: 1n })));
   expect(await readNotifyBeneficiaries(db, INPUT)).toEqual(rows);
 });
+
+it('[AC-B1-18kn-UNIT#1] exclude_terminal 为真：终态过滤加在 orders 内连接上（not in VOID、CLAWED_BACK），其余语句不变', async () => {
+  const { db, statements } = setup([]);
+  expect(await readNotifyBeneficiaries(db, { ...INPUT, exclude_terminal: true })).toEqual([]);
+  expect(statements).toHaveLength(1);
+  const sql = statements[0]?.sql ?? '';
+  expect(sql).toContain(
+    'inner join "app"."orders" as "o" on "o"."app_id" = "a"."app_id" and "o"."order_id" = "a"."order_id" and "o"."commission_version" = "a"."commission_version" and "o"."rebate_status" not in ($1, $2)',
+  );
+  expect(sql).toContain('"a"."app_id" = $3');
+  expect(sql).toContain('"a"."order_id" = $4');
+  expect(sql).toContain('"o"."app_id" = $5');
+  expect(sql).toContain('"o"."order_id" = $6');
+  expect(sql).toContain('order by "a"."role", "a"."user_id"');
+  expect(sql).not.toMatch(/for (update|share)/i);
+  expect(statements[0]?.parameters).toEqual([
+    'VOID',
+    'CLAWED_BACK',
+    INPUT.app_id,
+    INPUT.order_id,
+    INPUT.app_id,
+    INPUT.order_id,
+  ]);
+});
+
+it('[AC-B1-18kn-UNIT#2] 默认不变：不传与 exclude_terminal 为假编出的语句和参数与旧口径完全相同，不看 rebate_status', async () => {
+  const plain = setup([]);
+  const off = setup([]);
+  await readNotifyBeneficiaries(plain.db, INPUT);
+  await readNotifyBeneficiaries(off.db, { ...INPUT, exclude_terminal: false });
+  expect(plain.statements[0]?.sql).not.toContain('rebate_status');
+  expect(off.statements[0]?.sql).toBe(plain.statements[0]?.sql);
+  expect(off.statements[0]?.parameters).toEqual(plain.statements[0]?.parameters);
+});
