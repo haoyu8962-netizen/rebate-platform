@@ -9,7 +9,7 @@ type: impl
 refs: [BR-INV-24, BR-FUND-03]
 refs_hash:
   BR-INV-24: 8c11043a392c
-  BR-FUND-03: 0a35db902f66
+  BR-FUND-03: 07f194a70033
 deps: [B1-08zi]
 paths:
   - 'apps/api/src/modules/orders/ports/invite-reward.ts'

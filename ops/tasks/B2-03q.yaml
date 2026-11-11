@@ -10,7 +10,7 @@ refs: [BR-FUND-01, BR-CALC-02, BR-CALC-15]
 refs_hash:
   BR-FUND-01: 681de36ba809
   BR-CALC-02: 0ffe8a4d0b65
-  BR-CALC-15: e18291194b6e
+  BR-CALC-15: f60233d3a4ac
 deps: [B2-04j]
 paths:
   - 'apps/api/src/modules/commission/application/**'

@@ -7,7 +7,7 @@ type: migration
 # couli_app 只 SELECT、INSERT；couli_readonly 只读。约束索引具名。两段式（db/AGENTS.md）；同步 tools/ci/lint-migrations.test.ts 资金表锁定清单。
 refs: [BR-CALC-22]
 refs_hash:
-  BR-CALC-22: 6cfba44a0f45
+  BR-CALC-22: 02766d307e18
 deps: []
 paths:
   - 'db/migrations/**'

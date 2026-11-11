@@ -9,7 +9,7 @@ refs: [BR-FUND-04, BR-FUND-06, BR-CALC-15]
 refs_hash:
   BR-FUND-04: 497806f6f068
   BR-FUND-06: f903ec00076a
-  BR-CALC-15: e18291194b6e
+  BR-CALC-15: f60233d3a4ac
 deps: [B2-03s]
 paths:
   - 'apps/api/src/modules/settlement/bill/job.ts'

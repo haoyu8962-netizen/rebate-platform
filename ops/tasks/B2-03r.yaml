@@ -6,13 +6,13 @@ type: impl
 # 冻结 [AC-B2-04l] expectR7 的夹具有结算记录，按方案 refresh 调用不变，预计不用改；[AC-B2-03q#23、#28] 预计不用改；以完整 verify 为准，红了按 D10-327 报编排补 test_paths。
 refs: [BR-FUND-03, BR-FUND-06, BR-FUND-07, BR-FUND-18, BR-CALC-02, BR-CALC-15, BR-CALC-27]
 refs_hash:
-  BR-FUND-03: 0a35db902f66
+  BR-FUND-03: 07f194a70033
   BR-FUND-06: f903ec00076a
   BR-FUND-07: b61cfed0a77b
   BR-FUND-18: c7ebd23ee75e
   BR-CALC-02: 0ffe8a4d0b65
-  BR-CALC-15: e18291194b6e
-  BR-CALC-27: ff78446ad011
+  BR-CALC-15: f60233d3a4ac
+  BR-CALC-27: a30d5625d06a
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'

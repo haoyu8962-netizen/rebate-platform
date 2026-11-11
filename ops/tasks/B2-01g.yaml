@@ -10,7 +10,7 @@ type: migration
 refs: [BR-CALC-10, BR-CALC-27]
 refs_hash:
   BR-CALC-10: 93337079f138
-  BR-CALC-27: ff78446ad011
+  BR-CALC-27: a30d5625d06a
 deps: [B2-01d]
 paths:
   - 'db/migrations/**'

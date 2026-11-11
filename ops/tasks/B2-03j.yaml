@@ -8,7 +8,7 @@ type: impl
 refs: [BR-CALC-11, BR-CALC-22]
 refs_hash:
   BR-CALC-11: 0bdd7a33eb83
-  BR-CALC-22: 6cfba44a0f45
+  BR-CALC-22: 02766d307e18
 deps: []
 paths:
   - 'specs/state-machines/commission-rule-version.yaml'

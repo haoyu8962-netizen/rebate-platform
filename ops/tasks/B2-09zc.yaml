@@ -6,7 +6,7 @@ type: impl
 # 拒绝：reason，不动账。每次调用一条审计（settle_adjust_batch_approve / reject / settle_adjust_run_request 进 audit-log-view RULES）。RV2；规则测试新鲜独立 Claude（D10-775），money 评审 Codex（D10-823，档位 medium，D10-884）。 2026-11-07 补 paths app.module.ts：列表成员按 AdminWithdrawalUser 要 identity 的 createMaskedPhoneReader（手机号解密脱敏），由 app.module 注入 settlement admin 端口（同 B2-09zb #2593）。
 refs: [BR-FUND-09, BR-CALC-02, BR-CALC-09, BR-FUND-15]
 refs_hash:
-  BR-FUND-09: 3162bdea830e
+  BR-FUND-09: 58db02033a52
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-09: 2414ed15d885
   BR-FUND-15: 849cd1eab9f2

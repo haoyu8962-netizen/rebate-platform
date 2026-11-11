@@ -6,9 +6,9 @@ type: impl
 # 不放进 OrderSyncColumns（冻结 [AC-B1-08i#14] 列集合）。邀请奖励 invite-reward clawedBack 用同一比较，开关关时一并不据此作废（paths 含它，报编排核）。实现排 #2575 合并后。RV2，独立 Claude 写测试、money 评审。
 refs: [BR-FUND-03, BR-FUND-07, BR-CALC-15, BR-FUND-01, BR-FUND-05]
 refs_hash:
-  BR-FUND-03: 0a35db902f66
+  BR-FUND-03: 07f194a70033
   BR-FUND-07: b61cfed0a77b
-  BR-CALC-15: e18291194b6e
+  BR-CALC-15: f60233d3a4ac
   BR-FUND-01: 681de36ba809
   BR-FUND-05: 972b05594c07
 deps: [B2-04zi, B1-08zit]
