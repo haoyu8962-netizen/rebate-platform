@@ -10,7 +10,7 @@ type: impl
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
   BR-FUND-04: 497806f6f068
-  BR-TEXT-09: 374a555d9753
+  BR-TEXT-09: f65fc659a6f3
 deps: [B2-04ze, B2-04zfa]
 paths:
   - 'apps/api/src/modules/settlement/batch/**'
