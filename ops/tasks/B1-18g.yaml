@@ -20,3 +20,7 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
 status: todo
+red_exempt:
+  - file: test/spec/settlement/settle-adjust-generate/atomic.int.test.ts
+    test: '[AC-B2-09zb#8] 一单写到一半失败（注入故障）：该单的行全不留，另一单照常生成；批次只有成功的单；故障解除后再跑补上失败的单'
+    reason: '冻结用例测试体未改；本单只在同文件顶部加 import 与常量（改写同文件另一条 #8），同文件被整体判定（D10-1259）'
