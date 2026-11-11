@@ -1,0 +1,20 @@
+id: B1-18h
+repo: rebate-platform
+title: 规则发布试算样本校验只看份额相关字段（BR-CALC-22 细则：仅补贴变化的版本不算样本变化）
+type: impl
+# 2026-11-11 union 入账（D10-1258 第 3 步）。commission/domain/rule-trial.ts sampleDigest 只纳入影响份额的字段（各方 amount、base、reserve、比例等），不纳入 commission_version 本身与 n_total / pre_base_deduct / platform_est_profit；份额变化仍让 rule-publication 抛 TRIAL_SAMPLE_CHANGED（[AC-B2-03k#21] #22 照常绿）。只读核对：无冻结用例钉摘要字段，不需前置。
+refs: [BR-CALC-22]
+refs_hash:
+  BR-CALC-22: 02766d307e18
+deps: []
+paths:
+  - 'apps/api/src/modules/commission/domain/rule-trial.ts'
+  - 'apps/api/src/modules/commission/application/rule-publication.ts'
+  - 'test/spec/commission/trial-digest-shares/**'
+test_paths:
+  - 'test/spec/commission/trial-digest-shares/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo

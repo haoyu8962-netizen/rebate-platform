@@ -1,0 +1,22 @@
+id: B1-18i
+repo: rebate-platform
+title: 补贴类佣金单独变化让 commission_version +1（BR-CALC-15、BR-CALC-27「仅补贴变化的版本」：空值与 0 相同、旧报文与重投不写）
+type: impl
+# 2026-11-11 union 入账（D10-1258 第 3 步，排在 B1-18f / B1-18g / B1-18h 都入主干之后）。orders update-plan 在有效 N 不变而补贴与当前版本记录的补贴不同（两边 ?? 0n 比较）时也 +1，WHERE commission_version 乐观锁照旧；报文平台更新时间早于订单当前记录的不因补贴 +1（相等而内容不同照常）；同一报文重投不写。新版本份额、base 与上一版逐项相同，只重算三段；不改 rebate_status、不写分录、不发通知、不生成补差候选、不扣回。规则测试照方案第 6 条清单钉。
+refs: [BR-CALC-15, BR-CALC-27]
+refs_hash:
+  BR-CALC-15: f60233d3a4ac
+  BR-CALC-27: a30d5625d06a
+deps: [B1-18f, B1-18g, B1-18h]
+paths:
+  - 'apps/api/src/modules/orders/domain/update-plan.ts'
+  - 'apps/api/src/modules/orders/application/update-step.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'test/spec/orders/subsidy-version/**'
+test_paths:
+  - 'test/spec/orders/subsidy-version/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo

@@ -1,0 +1,22 @@
+id: B1-18g
+repo: rebate-platform
+title: 补差候选按结算记录序号与各受益人差额判重（BR-FUND-09 细则「正差批准的默认」⑤、BR-CALC-23 细则指针）
+type: impl
+# 2026-11-11 union 入账（D10-1258 第 3 步）。generate：同单同 seq 版本变而差额不变 → pending 不动、已拒绝的不重新生成、不写换版本审计；差额变了 → 仍照 D10-780 把 pending 旧候选置 voided_stale_seq 再生成新候选。approve：不再因候选与订单 commission_version 不同而作废；逐单重算、seq 变即作废、重算差额为 0 记已批准不写凭证（D10-770）一字不动。DB 唯一键 settle_adjustments_candidate_key 若含版本需评估是否保留（不改则同 seq 差额不变不新增行即可）。D10-1259：不删冻结资金用例（删除属 approvals 24 例外）。冻结 settle-adjust-generate/version.int.test.ts 的 [AC-B2-09zb#7] 三条与 atomic.int.test.ts 的 [AC-B2-09zb#8] 由本单新鲜独立 Claude 原地改写成新口径、强度不降：差额变了仍把 pending 旧候选置 voided_stale_seq 再生成新候选（及其审计与写失败原子性）、差额没变 pending 不动不写审计、已批准 / 已拒绝的不重新生成。测试体有改动 → spec 提交上红、实现后绿，按 red-check「base 上已存在文件」口径判（不用 modify_existing）；标题若要变按 renames 声明；kit / harness 若须改（造差额不同的新版本）导致整文件判定，未改用例补 red_exempt。门禁走不通即停报编排，一条不删。
+refs: [BR-FUND-09, BR-CALC-23]
+refs_hash:
+  BR-FUND-09: 58db02033a52
+  BR-CALC-23: 3954f640d28a
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/adjust/**'
+  - 'test/spec/settlement/settle-adjust-dedupe-diff/**'
+  - 'test/spec/settlement/settle-adjust-generate/**'
+test_paths:
+  - 'test/spec/settlement/settle-adjust-dedupe-diff/**'
+  - 'test/spec/settlement/settle-adjust-generate/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo

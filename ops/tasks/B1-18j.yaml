@@ -1,0 +1,20 @@
+id: B1-18j
+repo: rebate-platform
+title: 后台订单详情的补贴读当前版本合计行（BR-CALC-27），不再显示首版冻结值；顺带 specs/attribution.md 补 share_relative_rate 说明
+type: impl
+# 2026-11-11 union 入账（D10-1258 第 3 步）。orders/application/admin-orders.ts 现读 commission_splits 的冻结补贴（:389），改为读当前版本 commission_split_totals.subsidy_commission_fen（B1-18f 新列，NULL 回退冻结值），与四段一致。顺带编排 11-11：specs/attribution.md 淘宝节「未核实」补一句同一官方文档嵌套 dto 已废弃字段 share_relative_rate 示例 "0.10"（只改文档）。
+refs: [BR-CALC-27]
+refs_hash:
+  BR-CALC-27: a30d5625d06a
+deps: [B1-18f]
+paths:
+  - 'apps/api/src/modules/orders/application/admin-orders.ts'
+  - 'specs/attribution.md'
+  - 'test/spec/orders/admin-subsidy-current/**'
+test_paths:
+  - 'test/spec/orders/admin-subsidy-current/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo

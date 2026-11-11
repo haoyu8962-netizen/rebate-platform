@@ -1,0 +1,28 @@
+id: B1-18f
+repo: rebate-platform
+title: 合计表加补贴列（迁移 0138）+ 新版本取订单当时补贴 + storedN 修正（BR-CALC-27「仅补贴变化的版本」前置的缺陷修复）
+type: impl
+# 2026-11-11 union 入账（D10-1258 第 3 步，方案 couli-runs/UNION-lane/d10-1257-subsidy-version-plan.md 3''）。迁移 0138 给 app.commission_split_totals 加 subsidy_commission_fen（bigint，可空；NULL = 本列之前写的旧行，读时回退该版本 commission_splits 的冻结补贴），新版本写入当时订单的补贴；storedN = n_total − 该版本补贴（列值，NULL 回退冻结值），修 R7 维权重定价误判 nChanged 与 revalue 把补贴写回冻结值；EstimateOrder / readOrder 带订单当前 subsidy_commission_fen；planVersion 与所有 refresh 路径（含 orders commission-snapshot-step settleVersion、clawback repriced）用当前补贴。本单**不改版本触发条件**（补贴单独变化 +1 在 B1-18i）。各方份额与 base 不变。前置 B1-18ft。D10-1259：冻结 [AC-B2-03g#1]（snapshot.int.test.ts）由本单规则测试作者把 totals 整行期望改为 11 列（只多 subsidy_commission_fen 及其值），保持 selectAll 整行恰好相等——测试体有改动，spec 提交上红、实现后绿，按 red-check「base 上已存在文件」口径只要求改动用例有效红（不用 modify_existing：它只适用前后都绿的用例）；同文件未改用例可绿，若因 kit 改动整文件判定再补 red_exempt。
+refs: [BR-CALC-27, BR-CALC-15]
+refs_hash:
+  BR-CALC-27: a30d5625d06a
+  BR-CALC-15: f60233d3a4ac
+deps: [B1-18ft]
+paths:
+  - 'db/migrations/0138_*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'apps/api/src/modules/commission/**'
+  - 'apps/api/src/modules/orders/application/commission-snapshot-step*.ts'
+  - 'apps/api/src/modules/settlement/application/clawback-order.ts'
+  - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'
+  - 'test/spec/commission/subsidy-current/**'
+  - 'test/spec/commission/snapshot/snapshot.int.test.ts'
+test_paths:
+  - 'test/spec/commission/subsidy-current/**'
+  - 'test/spec/commission/snapshot/snapshot.int.test.ts'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo

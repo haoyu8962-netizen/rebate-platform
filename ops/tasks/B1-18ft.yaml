@@ -1,0 +1,18 @@
+id: B1-18ft
+repo: rebate-platform
+title: test-change（B1-18f 前置）：补贴改取订单当前值前，冻结用例让订单当前补贴等于冻结值，主干上仍绿（D10-1259 缩小）
+type: test-change
+# 2026-11-11 union 入账（D10-1258 第 3 步）。开工前只读核对：estimate-port kit 只把补贴写进 commission_splits、orders.subsidy_commission_fen 为 NULL；B1-18f 改为取订单当前补贴后，[AC-B2-03q#15]（refresh.int:91）、#21（:239）、#51（properties.int:40）、[AC-B2-03s#32]（version-rule/refresh.int:70）会因当前补贴为 0 而红；[AC-B2-03g#1]（snapshot.int:110）对 selectAll 的 totals 行 toEqual 写死 10 列，加列即红。
+# 做法：新鲜 Claude 只改 kit 让这些用例的订单当前补贴等于冻结值（新旧口径下金额相同、主干仍绿）；[AC-B2-03g#1] 不在本单动（D10-1259：整行相等钉「无多余列」，留 B1-18f 改成 11 列）；另一位只读复核（Codex 优先）。合并后 B1-18f 的新列为可空、NULL 回退冻结补贴，其余手写 totals 行的 kit 不用动。
+refs: [BR-CALC-27]
+refs_hash:
+  BR-CALC-27: a30d5625d06a
+deps: []
+paths:
+  - 'test/spec/commission/estimate-port/**'
+  - 'test/spec/commission/version-rule/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
