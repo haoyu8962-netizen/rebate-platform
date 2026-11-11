@@ -1,0 +1,16 @@
+id: B1-15ya
+repo: rebate-platform
+title: test-change：share-page-no-store 冻结用例 [AC-B1-15y#5 / #6 / #7] 的「缺 X-App-Version」三处请求改为 App 端（x-platform ios），为 CT-26zj（h5 可省 X-App-Version，D10-1232）铺路；断言不动
+type: test-change
+# 2026-11-11 content 入账（D10-1247 后续）。#3154（chore/test-change-CT-26zj）的 evidence-check 拒：改到 linking（归属实现路径）时 owner 标签不免证据文件，chore 分支无法走。拆成两步：本单先把冻结 test/spec/platform/http/share-page-no-store/entries.test.ts 三处「缺 X-App-Version」请求补 'x-platform': 'ios'（夹具默认 h5）——主干上 App 缺版本号本就在路由层 400，改前改后都绿；合并后 CT-26zj 回 task/CT-26zj 分支、不再改冻结文件，照常带证据落地。
+# 改动同 #3154 已复核的那一提交（新鲜 Claude 改、Codex 只读复核 pass），其余行、断言、[AC-B1-15y#8] 的 /v1/links 行不动；按 #24 加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/platform/http/share-page-no-store/entries.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
