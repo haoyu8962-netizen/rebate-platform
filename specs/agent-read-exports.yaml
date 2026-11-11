@@ -1,0 +1,13 @@
+# Agent 只读入口导出登记清单（规划/08 BR-AI-02 ④；D32）。
+# 「我的收益」只读工具只能经两个只读入口读账务与提现：ledger/read.ts、payout/read.ts。
+# 入口里只放本清单登记的函数，原名转出、不改名；改入口必须同步改本清单。
+# 规则测试 test/spec/agent/read-exports/** 用编译器核对入口与本清单逐项一致。
+exports:
+  - entry: apps/api/src/modules/ledger/read.ts
+    name: getWalletSummary
+    declared_in: apps/api/src/modules/ledger/application/wallet-summary.ts
+    original: getWalletSummary
+  - entry: apps/api/src/modules/payout/read.ts
+    name: listWithdrawalsForUser
+    declared_in: apps/api/src/modules/payout/application/withdrawal-reads.ts
+    original: listWithdrawalsForUser

@@ -1,0 +1,81 @@
+{
+  "task": "B3-16b",
+  "spec_ref": "1eb08a722e2415a1966de823cdf01f372a7f0c38",
+  "spec_commit": "f2db0602888533c7c861c81c375fe305801e4641",
+  "red_tests": [
+    "test/spec/agent/read-exports/consumers.test.ts > [AC-B3-16b#5][BR-AI-02] ④(c) apps/api/src/**（测试文件除外）里引到 ledger/read.ts、payout/read.ts 的地方只有组装根 agent-earnings-reads.ts（两入口都引）与 app.module.ts（只引 ledger/read.ts，GET /v1/me 余额）；全部是具名值导入且只导入清单登记的名字，没有命名空间 / 默认 / 副作用 / 类型导入、动态 import()、require、import = require 或转出；agent/** 一处也没有",
+    "test/spec/agent/read-exports/consumers.test.ts > [AC-B3-16b#6][BR-AI-02] ④(c) 取数方扫描先用内存样例自证（AC-S1-150）：import * as L（含 .js 写法）、默认导入、动态 import()（含无后缀写法）、require、import = require、转出、类型导入、副作用或空导入、导入未登记名字、agent/** 或名单外文件的导入全部判失败且原因对；读者名单内的具名值导入（含别名）判通过，名字相近的非入口文件不算引到入口；自证后再查真实仓库：用真实清单登记的名字扫描 apps/api/src/**（测试文件除外）无问题",
+    "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#1][BR-AI-02] ④(a)(b) 登记清单 specs/agent-read-exports.yaml 存在且按 kit 契约严格解析，只列 ledger/read.ts、payout/read.ts 两个入口：前者恰登记 getWalletSummary（GET /v1/wallet/summary 背后的函数）、后者恰登记 listWithdrawalsForUser（GET /v1/withdrawals 背后的函数）；两入口经编译器得出的导出集合恰等于清单，每个导出只用 export { 原名 } from '<登记声明文件>'，经编译器解析落到登记声明文件里的同名值声明",
+    "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#2][BR-AI-02] ④(a) 以真实清单为底，多列一项（任一入口多登记一个它不导出的名字）或少列一项（删去任一登记项）时，对真实入口的检查都失败",
+    "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#3][BR-AI-02] ④(a)(b) 检查函数先用内存样例自证（AC-S1-150）：入口多导出写命令、as 改名伪装、import * as 后再导出、export *、export * as、本地包装或定义、本地绑定转出、默认导出、经中转文件、export type、另有 import、少导出、清单多列 / 少列一项全部判失败且原因对；正常 export { 原名 } from '<登记声明文件>' 判通过；自证后再查真实仓库：真实清单对真实两入口的同一检查判通过",
+    "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#4][BR-AI-02] ④(a) 清单按 kit 契约严格解析：合规清单（含注释、plain 或引号值）解析出逐项登记；空文件、顶层形状不对、yaml-lite 不收的写法、少键多键、非字符串或带空格的值、两个入口以外的入口、导出名与原名不同或非标识符或 default、声明文件不在入口所在模块或是入口本身 / index.ts / .d.ts / 测试文件、重复项、漏列入口一律判失败且原因对；自证后再查真实仓库：真实 specs/agent-read-exports.yaml 按契约严格解析成功，恰为两项、两入口各一项"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f2db0602888533c7c861c81c375fe305801e4641",
+      "tree": "02a252c14725ef8af1d7617f7f0e25a5492de923",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-11T06:54:40Z",
+      "finished_at": "2026-11-11T06:54:44Z",
+      "red_tests": [
+        "test/spec/agent/read-exports/consumers.test.ts > [AC-B3-16b#5][BR-AI-02] ④(c) apps/api/src/**（测试文件除外）里引到 ledger/read.ts、payout/read.ts 的地方只有组装根 agent-earnings-reads.ts（两入口都引）与 app.module.ts（只引 ledger/read.ts，GET /v1/me 余额）；全部是具名值导入且只导入清单登记的名字，没有命名空间 / 默认 / 副作用 / 类型导入、动态 import()、require、import = require 或转出；agent/** 一处也没有",
+        "test/spec/agent/read-exports/consumers.test.ts > [AC-B3-16b#6][BR-AI-02] ④(c) 取数方扫描先用内存样例自证（AC-S1-150）：import * as L（含 .js 写法）、默认导入、动态 import()（含无后缀写法）、require、import = require、转出、类型导入、副作用或空导入、导入未登记名字、agent/** 或名单外文件的导入全部判失败且原因对；读者名单内的具名值导入（含别名）判通过，名字相近的非入口文件不算引到入口；自证后再查真实仓库：用真实清单登记的名字扫描 apps/api/src/**（测试文件除外）无问题",
+        "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#1][BR-AI-02] ④(a)(b) 登记清单 specs/agent-read-exports.yaml 存在且按 kit 契约严格解析，只列 ledger/read.ts、payout/read.ts 两个入口：前者恰登记 getWalletSummary（GET /v1/wallet/summary 背后的函数）、后者恰登记 listWithdrawalsForUser（GET /v1/withdrawals 背后的函数）；两入口经编译器得出的导出集合恰等于清单，每个导出只用 export { 原名 } from '<登记声明文件>'，经编译器解析落到登记声明文件里的同名值声明",
+        "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#2][BR-AI-02] ④(a) 以真实清单为底，多列一项（任一入口多登记一个它不导出的名字）或少列一项（删去任一登记项）时，对真实入口的检查都失败",
+        "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#3][BR-AI-02] ④(a)(b) 检查函数先用内存样例自证（AC-S1-150）：入口多导出写命令、as 改名伪装、import * as 后再导出、export *、export * as、本地包装或定义、本地绑定转出、默认导出、经中转文件、export type、另有 import、少导出、清单多列 / 少列一项全部判失败且原因对；正常 export { 原名 } from '<登记声明文件>' 判通过；自证后再查真实仓库：真实清单对真实两入口的同一检查判通过",
+        "test/spec/agent/read-exports/exports.test.ts > [AC-B3-16b#4][BR-AI-02] ④(a) 清单按 kit 契约严格解析：合规清单（含注释、plain 或引号值）解析出逐项登记；空文件、顶层形状不对、yaml-lite 不收的写法、少键多键、非字符串或带空格的值、两个入口以外的入口、导出名与原名不同或非标识符或 default、声明文件不在入口所在模块或是入口本身 / index.ts / .d.ts / 测试文件、重复项、漏列入口一律判失败且原因对；自证后再查真实仓库：真实 specs/agent-read-exports.yaml 按契约严格解析成功，恰为两项、两入口各一项"
+      ],
+      "expected": [
+        "test/spec/agent/read-exports/consumers.test.ts",
+        "test/spec/agent/read-exports/exports.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "413a34c1bab78e22f55673489f27bf1be83031b72ddb871359a78f58364dc920"
+        }
+      ]
+    }
+  ],
+  "risk_note": "RV2 (specs/** not in the risk-map allowlist; planning/05 B3-16 second card, D32; D10-1226). BR-AI-02 ④ read-entry export check as an in-repo rule test that runs with verify (no tools/** or .github change, D10-1226). The implementation only adds specs/agent-read-exports.yaml registering ledger/read.ts getWalletSummary (declared in ledger/application/wallet-summary.ts) and payout/read.ts listWithdrawalsForUser (declared in payout/application/withdrawal-reads.ts); both entry files on main already meet ④(b), so no source changes. Rule tests test/spec/agent/read-exports/** (TypeScript compiler API, manifest parsed with tools/lib/yaml-lite.ts): (a) the entries' export sets equal the manifest; (b) entries only `export { name } from '<registered declaration file>'`; (c) readers in apps/api/src/** are only the composition root agent-earnings-reads.ts (both entries) and app.module.ts (ledger/read.ts, GET /v1/me balance, found by the test author on main), named value imports only, nothing in agent/**; in-memory negative samples for every violation 08 ④ lists (AC-S1-150) then the same checks on the real repository. ② (b) final tool-definition scan is already pinned by [AC-B3-08g#2]. Host: guard git (protected-paths, test-guard, ledger-overwrite, migration-sequence) and static pass, depcruise 0, prettier / eslint / tsc -b test 0, read-exports 6 / 6 with the manifest; full verification is the required CI checks (approvals #21). Follow-up: a composition-root relay `export { x }` without a module specifier is not scanned (spec-test r1 S2).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex money (medium) r1 pass, no findings (couli-runs/B3-16b/review-codex-money-r1.json)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "396edcb7b6560c4a4a612aebaad5f31c7354d474",
+    "specs": "c9850b2a29481a17a07e93fa30169a0e2e85371f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claude contexts in 3 attempts: 1 wrote the checker and 6 cases; 2 fixed the in-memory compiler host (sample folders not reported as existing, so every sample's './service.ts' failed to resolve and the allowed sample was misjudged; found by the orchestrator's host run with a correct temporary manifest); 3 made the three self-proving cases (#3 #4 #6) also check the real repository with the real manifest after container red/1 judged them green on main (handoff.test.ts precedent). red/2 PASS (6 red, all for the missing manifest). Spec-test r1 full review by another fresh independent Claude: pass, one S2 (composition-root relay export without a module specifier not scanned) (couli-runs/B3-16b/review-claude-spectest-r1.json)."
+  }
+}
