@@ -1,0 +1,23 @@
+id: B1-18et
+repo: rebate-platform
+title: test-change（B1-18e 前置）：配置键 union.taobao.service_fee_bp、union.pdd.service_fee_bp（object，按订单类型、每项附来源，无种子行）登记，冻结配置清单只追加
+type: test-change
+# 2026-11-11 union 入账（D10-1250 ②；照 D10-1253 与记忆「登记配置键先拆前置单」：开工前 grep 过 test/spec/content 钉清单的冻结用例）。先例 B1-18ct（#3168）。只登记淘宝、拼多多（京东报文为净额，不扣服务费，见 specs/attribution.md）。值形状照 tech_fee_bp（object，读时由 union 校验）：按订单类型给 bp，每项附来源，未核实标「待核实」（08 BR-CALC-03）；本单不写种子行、不填任何费率。
+# 做法：新鲜 Claude 只在 test/spec/content 冻结清单末尾（紧跟 subsidy_itemized 三键之后）按 taobao、pdd 追加两键，另一位只读复核（Codex 优先）；config-registry.ts 本单登记，content 两条单元测试条目数 148 → 150。
+refs: [BR-CALC-03]
+refs_hash:
+  BR-CALC-03: f2d8ebebbc0c
+deps: [B1-18ct]
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'test/spec/content/config-items/**'
+  - 'test/spec/content/config-settle/**'
+  - 'test/spec/content/invite-reward-config/**'
+  - 'test/spec/content/invite-reward-eligibility/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
