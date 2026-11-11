@@ -3,6 +3,7 @@ repo: rebate-platform
 title: test-change（B1-18c 前置）：把 B1-18c 规则测试 test/spec/orders/subsidy-itemized/registry.test.ts 原样先合入主干（[AC-B1-18c#8] 三行，三键已由 B1-18ct 登记，主干上绿）
 type: test-change
 # 2026-11-11 union 入账（D10-1256，取代 D10-1254 的 red_exempt：red-check 不认新文件的豁免）。该文件只有 [AC-B1-18c#8] 一个 .each（taobao / jd / pdd），与 Codex spec-test r3 审过的版本字节一致（PR 写 git blob 号比对）；主干上三键已由 B1-18ct（#3168）登记，所以在主干即绿，不需先红。变异实跑（去掉一个键的登记 → 红）写进 PR 说明。合并后 B1-18c 变基不再含此文件，先红只判 mapping / pipeline。
+# 完成 2026-11-11（#3174，头 580c67e79ffd）：registry.test.ts 原样入主干（blob fff7289ac95c 与 r3 所审一致），主干绿、变异红。
 refs: [BR-CALC-25]
 refs_hash:
   BR-CALC-25: 09e4036b8042
@@ -13,4 +14,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3174
