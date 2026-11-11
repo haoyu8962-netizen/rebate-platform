@@ -3,6 +3,7 @@ repo: rebate-platform
 title: 找回结果通知（CLAIM_RESULT）的「预估返」只计发送时不在终态（VOID、CLAWED_BACK）的订单，终态按 0 计、照发不吞（BR-TEXT-09、BR-CALC-15）
 type: impl
 # 2026-11-12 union 入账（编排 D10-1274；B1-18k money r1 S1 拆出，B1-18kn 先落、B1-18k 后落）。commission/ports/notify-beneficiaries.ts 只按 orders.commission_version 内连接、不看 rebate_status，唯一调用方 notification/application/claim-result-message.ts 的 applicantRebate 把终态单的当前版本份额算进「预估返」（主干既有：PLATFORM_INVALID / REFUND 作废而 N 不变的单 v1 金额为正；B1-18k 终态照推版本写行后来源扩大）。改法：readNotifyBeneficiaries 加可选入参（默认行为不变，冻结 [trade-read-ports/beneficiaries.int] 不动；将来 ORDER_INVALID / CLAWBACK 扇出仍可读终态单受益人），claim-result-message 传入「只计非终态订单」；通过的订单全在终态时照发「预估返 ¥0」，模板文字不改。08 回写由编排做（BR-TEXT-09 细则）。
+# 2026-11-12 done：#3211 合并（头 c0cab90bcc75，主干 d1ca69ea34a9）。规则测试 1 次（claim-result-terminal 4 条，先红 4 条）；Codex spec-test r1 pass、money r1 pass。readNotifyBeneficiaries 加可选 exclude_terminal（默认语句不变），找回结果通知传 true。本条 done 台账由编排代补：账号 4 当日被要求验证，union 线停着。
 refs: [BR-TEXT-09, BR-CALC-15]
 refs_hash:
   BR-TEXT-09: f65fc659a6f3
@@ -20,4 +21,5 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3211
