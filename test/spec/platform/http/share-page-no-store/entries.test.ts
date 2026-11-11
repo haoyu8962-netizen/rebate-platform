@@ -54,8 +54,12 @@ interface Refusal {
 
 const PAGE_REFUSALS: readonly Refusal[] = [
   {
-    what: '缺 X-App-Version',
-    request: { method: 'GET', url: pageUrl(LINK), headers: { 'x-app-version': undefined } },
+    what: '缺 X-App-Version（App 端）',
+    request: {
+      method: 'GET',
+      url: pageUrl(LINK),
+      headers: { 'x-platform': 'ios', 'x-app-version': undefined },
+    },
     status: 400,
     code: 20001,
   },
@@ -197,11 +201,11 @@ const TPWD_REFUSALS: readonly Refusal[] = [
     code: 20001,
   },
   {
-    what: '缺 X-App-Version',
+    what: '缺 X-App-Version（App 端）',
     request: {
       method: 'POST',
       url: tpwdUrl(LINK),
-      headers: { 'x-app-version': undefined },
+      headers: { 'x-platform': 'ios', 'x-app-version': undefined },
       payload: ticketBody('synthetic-ticket'),
     },
     status: 400,
@@ -328,7 +332,11 @@ it('[AC-B1-15y#7] 进入处理器的成功与错误响应照旧只带一个 no-s
   // Control on the same routes: refused before the controller, still no-store.
   for (const request of [
     { method: 'POST', url: tpwdUrl(LINK), payload: ticketBody('') },
-    { method: 'GET', url: pageUrl(LINK), headers: { 'x-app-version': undefined } },
+    {
+      method: 'GET',
+      url: pageUrl(LINK),
+      headers: { 'x-platform': 'ios', 'x-app-version': undefined },
+    },
   ] as const) {
     const response = await entry.request(request);
     await expectNoStoreClientError(response, `${request.method} 先拒`, {
