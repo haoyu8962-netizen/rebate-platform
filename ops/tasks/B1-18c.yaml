@@ -6,6 +6,7 @@ type: impl
 # 做法：union 订单 DTO 加 subsidy_commission_fen；淘宝（官方字段 pub_share_pre_fee_for_sdy / pub_share_fee_for_sdy，docs-mirror 有说明，补贴部分是否另扣服务费待核实，不臆造）按 est / settle 同一取值时机映射；京东、拼多多报文分不开 → 不输出（null）。n_base 沿用 est / settle（已不含补贴），不加 n_base_fen 列。流水线 pipeline-port / update-step / snapshot-retry 把 subsidy_commission_fen 写进 orders 与快照入参。配置 union.<platform>.subsidy_itemized（boolean，默认 true，照 08；改 false 待 09 结论，本单不改取值）；为 false 的平台订单首次入库置 credit_requires_settle=true。09 表「补贴类佣金未单列」在规划仓库，由编排回写。credit.enabled.<platform> 不动。
 # 2026-11-11 台账补丁（实现后发现）：DTO 新增 subsidy_commission_fen 使冻结 [AC-B1-18a#2] 要求 taobao.md / pdd.md 字段对照补行；登记 3 个配置键使 content 两条单元测试条目数 145 → 148；配置读端口在 orders worker-runtime 声明、app.module.ts orderSyncPorts() 经 content 读取入口装配（orders 不得导入 content 运行时），不在流水线里跨模块直读 config_items。
 # 2026-11-11 D10-1256：撤销 #3172 的 red_exempt（red-check 不认新文件豁免），registry.test.ts 改由前置 B1-18cu 原样先合主干，本单 test_paths 收窄到 pipeline.int.test.ts（mapping 仍在 test/spec/union/subsidy-split/**）。
+# 完成 2026-11-11（#3163，头 3129db065b56）：淘宝 subsidy_commission_fen、流水线首插 / 更新 / 重试、subsidy_itemized → credit_requires_settle；前置 B1-18ct（#3168）、B1-18cu（#3174）；money r1 pass，spec-test r3 + D10-1255 门禁 pass。
 refs: [BR-CALC-18, BR-CALC-25]
 refs_hash:
   BR-CALC-18: bb50f68578f7
@@ -35,4 +36,5 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3163
