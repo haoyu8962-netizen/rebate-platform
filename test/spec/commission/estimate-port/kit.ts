@@ -473,6 +473,9 @@ export async function fixture(db: Kysely<DB>, appId: string = `estimate-${random
         rebate_status: input.rebateStatus ?? 'ESTIMATED',
         est_commission_fen: input.estFen === undefined ? n : input.estFen,
         settle_commission_fen: input.settleFen ?? null,
+        // The order's current subsidy equals the subsidy frozen into the v1 split below, so a
+        // refresh reads the same amount whether it takes the frozen or the current subsidy.
+        subsidy_commission_fen: input.subsidyFen ?? null,
         commission_version: input.commissionVersion ?? 1,
         quantity: 2,
         refunded_quantity: 0,
