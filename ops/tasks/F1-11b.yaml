@@ -17,4 +17,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/content/share-page-texts/**'
-status: todo
+status: done
+pr: 3142
