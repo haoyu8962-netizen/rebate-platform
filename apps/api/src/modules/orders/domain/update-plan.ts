@@ -232,24 +232,92 @@ export function reportedSettleFen(
   return plan.platform_status === 'SETTLED' ? (incoming.settle_commission_fen ?? null) : null;
 }
 
+/** 本次写库后的预估与结算两列（planOrderSyncColumns 与 commissionNMoved 共用同一取值）。 */
+function plannedCommission(
+  current: Pick<OrderSyncColumns, 'est_commission_fen' | 'settle_commission_fen'>,
+  incoming: UnionOrder,
+  plan: OrderUpdatePlan,
+  statementFen: bigint | null,
+): { readonly est: bigint | null; readonly settle: bigint | null } {
+  // BR-FUND-07：预估佣金缺失不覆盖，预估变化总是存档。
+  const est = incoming.est_commission_fen ?? current.est_commission_fen;
+  // BR-FUND-09：最新 STATEMENT，否则本次算数的结算额（列即最新 API 记录），都没有保留库内值。
+  const settle = statementFen ?? reportedSettleFen(incoming, plan) ?? current.settle_commission_fen;
+  return { est, settle };
+}
+
+/**
+ * BR-CALC-15（D10-578）：有效联盟佣金 N（BR-CALC-02，结算优先）在本次写库后与库内值不同；0 与负数都是已知值，
+ * 结算后只来新预估不算变。
+ */
+export function commissionNMoved(
+  current: Pick<OrderSyncColumns, 'est_commission_fen' | 'settle_commission_fen'>,
+  incoming: UnionOrder,
+  plan: OrderUpdatePlan,
+  statementFen: bigint | null = null,
+): boolean {
+  const { est, settle } = plannedCommission(current, incoming, plan, statementFen);
+  return (settle ?? est) !== (current.settle_commission_fen ?? current.est_commission_fen);
+}
+
+export interface SubsidyVersionInput {
+  /** 本次报文的补贴类佣金；undefined = 适配器不输出（沿用库内值，不算变化）。 */
+  readonly incomingSubsidyFen: bigint | null | undefined;
+  /** 本次报文的平台更新时间。 */
+  readonly incomingModifiedAt: Date | null | undefined;
+  /** 订单当前记录的平台更新时间（orders.platform_modified_at，planOrderSyncColumns 保证只前进不倒退）。 */
+  readonly currentModifiedAt: Date | null;
+  /**
+   * 当前版本合计行记的补贴（为空时已回退该单分佣快照的补贴，由 commission 给出）；undefined = 没有可比的版本
+   * （未生成快照、还没有版本行或端口未注入）。
+   */
+  readonly recordedSubsidyFen: bigint | undefined;
+}
+
+/**
+ * B1-18i（BR-CALC-15、BR-CALC-27「仅补贴变化的版本」）：有效 N 不变时，本次报文的补贴与当前版本记录的补贴不同
+ * 也让 commission_version +1。空值与 0 相同；报文缺省补贴字段不算变化；报文平台更新时间早于订单当前记录的不因
+ * 补贴推版本（相等照常）；同一报文重投时记录的补贴已是新值，自然不推。调用方只在 N 不变时问它。
+ */
+export function subsidyMovesVersion(input: SubsidyVersionInput): boolean {
+  const reported = input.incomingSubsidyFen;
+  if (reported === undefined || input.recordedSubsidyFen === undefined) return false;
+  const at = input.incomingModifiedAt ?? null;
+  if (
+    at !== null &&
+    input.currentModifiedAt !== null &&
+    at.getTime() < input.currentModifiedAt.getTime()
+  ) {
+    return false;
+  }
+  return (reported ?? 0n) !== input.recordedSubsidyFen;
+}
+
+/** 两个时刻取晚的；一方为空取另一方。 */
+function latestTime(a: Date | null, b: Date | null): Date | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a.getTime() < b.getTime() ? b : a;
+}
+
 /**
  * Returns resolved values of sync-owned data columns; CAS/status/attribution are applied separately.
  * statementFen: the order's latest STATEMENT amount (BR-FUND-09); it wins over the report.
+ * subsidyMoved（B1-18i）：subsidyMovesVersion 的判定；N 不变而补贴变了也 +1，N 与补贴同变只 +1 一次。
+ * 补贴本身不进返回的列集合（B1-08i 冻结的同步列，[AC-B1-08i#14]）。
  */
 export function planOrderSyncColumns(
   current: OrderSyncColumns,
   incoming: UnionOrder,
   plan: OrderUpdatePlan,
   statementFen: bigint | null = null,
+  subsidyMoved = false,
 ): OrderSyncColumns {
-  // BR-FUND-07：预估佣金缺失不覆盖，预估变化总是存档。
-  const est = incoming.est_commission_fen ?? current.est_commission_fen;
-  // BR-FUND-09：最新 STATEMENT，否则本次算数的结算额（列即最新 API 记录），都没有保留库内值。
-  const settle = statementFen ?? reportedSettleFen(incoming, plan) ?? current.settle_commission_fen;
-  // BR-CALC-15（D10-578）：有效联盟佣金（BR-CALC-02，结算优先）变了才 commission_version+1，
-  // 0 与负数都是已知值；结算后只来新预估不算变。
+  const { est, settle } = plannedCommission(current, incoming, plan, statementFen);
+  // BR-CALC-15（D10-578、D10-1258）：有效 N 变了，或 N 不变而补贴与当前版本记录的不同，commission_version+1。
   const commissionMoved =
-    (settle ?? est) !== (current.settle_commission_fen ?? current.est_commission_fen);
+    (settle ?? est) !== (current.settle_commission_fen ?? current.est_commission_fen) ||
+    subsidyMoved;
   // BR-FUND-02：received_at 一旦写入不再覆盖；后到的不同收货时间另存 platform_received_at。
   const incomingReceived = incoming.received_at ?? null;
   const laterReceived =
@@ -270,7 +338,9 @@ export function planOrderSyncColumns(
     deposit_paid_at: incoming.deposit_paid_at ?? current.deposit_paid_at,
     paid_at: incoming.paid_at ?? current.paid_at,
     settled_at: incoming.settled_at ?? current.settled_at,
-    platform_modified_at: incoming.modified_at ?? current.platform_modified_at,
+    // B1-18i（Codex money r1 S1）：只前进不倒退。旧报文（早于库内记录）不把它拉回去，否则连续旧报文与交错重投会让
+    // 重投的旧报文显得「不早于」库内值，subsidyMovesVersion 误推版本；与开启乱序判定时丢弃旧报文的口径一致。
+    platform_modified_at: latestTime(incoming.modified_at ?? null, current.platform_modified_at),
     // 同 B1-08h 取值；商品号全空时保留库内值（首次入库才回退为 ''）。
     parent_order_id: incoming.parent_order_id ?? null,
     raw_item_id: itemId === '' ? current.raw_item_id : itemId,

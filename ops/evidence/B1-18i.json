@@ -1,0 +1,92 @@
+{
+  "risk_note": "RV2 money (commission versions). BR-CALC-15 / BR-CALC-27 细则「仅补贴变化的版本」(D10-1258): orders bumps commission_version when the effective N is unchanged but the subsidy commission differs from the subsidy recorded on the CURRENT version's totals row (NULL → the order's commission_splits snapshot subsidy); null ≡ 0; an absent subsidy field keeps the stored value; a payload whose platform modified time is earlier than the order's is not bumped for the subsidy (equal time → bumped); re-delivery writes nothing; N and subsidy moving together bump once (existing N path, B1-18f current subsidy). The bump rides the existing row_version CAS UPDATE (conflict → re-read and re-plan; D10-1267: this is the optimistic lock of 08's 'WHERE commission_version', SQL shape not pinned). Commission estimates port (ledger patch #3202) gains recordedSubsidy (read) and refreshSubsidy (write): the new version copies the previous version's amount rows and base_fen per (user_id, role) — preserving an R7-repriced version — and recomputes only n_total = stored N + new subsidy, pre_base_deduct, platform_est_profit, writing the subsidy column; both through insertVersion (query builder) in the sync transaction. rebate: a subsidy-only version only calls refreshSubsidy (ESTIMATED / WAITING / CREDITED): no COMMISSION_CHANGED, rebate_status unchanged, no ledger entry, notification, adjust candidate or clawback. Terminal VOID / CLAWED_BACK keep the existing locked_noop for both N and subsidy paths (D10-1268, FU-TERMINAL-VERSION-ROWS). Money r1 S1 fix: planOrderSyncColumns writes platform_modified_at as max(stored, payload) so an older payload no longer rewinds the stale-check basis (changes main's column semantics: an older payload no longer overwrites this column; no frozen case pins the old overwrite; with mtimeOrdering on, older payloads were already dropped). New ports/new methods are optional on RebateDependencies.estimates (frozen kits hand-write { bases, refresh }); subsidy is not in OrderSyncColumns' keys ([AC-B1-08i#14]). specs/attribution.md: taobao 未核实 note adds the deprecated share_relative_rate \"0.10\" example (pointer to rebate-private docs-mirror only, D10-1266). Host: tsc -b test apps/api 0; eslint / prettier 0; orders int 222 files 1910 green (incl. subsidy-version 11); commission + settlement int 134 files 901; test/spec unit 29709; apps/api unit 5128.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review (effort medium). r1 fail 1×S1: production has no mtimeOrdering, an older payload rewound platform_modified_at so an interleaved re-delivery of an older subsidy payload was judged newer and wrote a subsidy version; fixed in 30022030d (platform_modified_at monotonic, unit regressions A→B→re-deliver A). r2 pass, no new findings; terminal branch has no special case (D10-1268)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by fresh independent Claude. Attempt 1 (subsidy-version.int, 6 red). r1 fail 4×S1 (basis = current version's recorded subsidy incl. NULL fallback; R7-repriced shares kept per beneficiary; subsidy-branch conflict re-read; same-transaction rollback) → attempt 2 version-basis.int (11 red). r2 fail 1×S1 (pin WHERE commission_version SQL) → D10-1267 not adopted (row_version CAS). Gate record (not counted) raised VOID / CLAWED_BACK coverage → D10-1268 out_of_scope, FU-TERMINAL-VERSION-ROWS (existing N-path behaviour). Gate record 2 pass. The implementation showed two version-basis cases red at the v1 precondition (owner share row role written 'self', actual 'share') — red-check had accepted them red at the wrong assertion; D10-1269 attempt 3 changed only those 6 role literals; red/3 then red after the subsidy sync (:329, :408). Gate record 3 (not counted) pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#1][AC-B1-18i#2][AC-B1-18i#5][BR-CALC-15][BR-CALC-27] WAITING：N 不变（结算 1000 = 预估）、补贴 200 → 350 → commission_version 变 2；v2 合计行补贴 350、① 1350 ② 350 ④ 850，份额与 base 与 v1 逐项相同；返利状态不变，无分录、通知、补差候选；同一报文重投不再 +1",
+    "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#1][AC-B1-18i#2][AC-B1-18i#5][BR-CALC-15][BR-CALC-27] ESTIMATED：N 不变（结算 1000 = 预估）、补贴 200 → 350 → commission_version 变 2；v2 合计行补贴 350、① 1350 ② 350 ④ 850，份额与 base 与 v1 逐项相同；返利状态不变，无分录、通知、补差候选；同一报文重投不再 +1",
+    "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 补贴空值与 0 相同：null ↔ 0n 来回变不 +1；变成 350 才 +1（v2 补贴 350、① 1350），再变为空 +1（v3 补贴记 0、① 1000），之后 0 ↔ 空仍不 +1",
+    "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 补贴空值与 0 相同：0n ↔ null 来回变不 +1；变成 350 才 +1（v2 补贴 350、① 1350），再变为空 +1（v3 补贴记 0、① 1000），之后 0 ↔ 空仍不 +1",
+    "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#4][BR-CALC-27][BR-FUND-02] 平台更新时间与订单当前记录相等、只补贴不同 → 照常 +1；N 与补贴同变只 +1 一次（取当时补贴）；更早的报文只补贴不同 → 不 +1",
+    "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#6][AC-B1-18i#2][BR-CALC-15][BR-CALC-27][BR-CALC-23] CREDITED：已入账单 N 不变、补贴 200 → 350 → commission_version 变 2，份额与 base 与 v1 相同，v2 补贴 350、① 1350 ④ 850；仍 CREDITED、入账基数不变，无分录、扣回、补差候选、通知，余额不变",
+    "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#5][BR-CALC-15][BR-CALC-27] 比较基准是当前版本合计行记的补贴，不是订单列：v1 合计行补贴 200、订单列已是 350（B1-18c 只写列不推版本，SQL 造）、N 1000；收到补贴 350 的报文 → 按 v1 的 200 判定，commission_version 变 2，v2 合计行补贴 350、① 1350 ② 350 ④ 850，份额与 base 同 v1；同一报文重投不再 +1",
+    "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 当前版本合计行补贴为空（B1-18f 加列前写的 v2，N 1200，SQL 造）→ 回退该单分佣快照的补贴 200 参与判定，不按订单列 350、也不按 0：N 不变、报文补贴 200 不 +1；补贴 350 才 +1，v3 份额与 base 同 v2（1200 / 600），合计行补贴 350、① 1550 ② 350 ④ 950，v2 行原样",
+    "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#7][BR-CALC-27][BR-CALC-15][BR-FUND-01] 份额逐项沿用上一版本，不按订单佣金重分：两位受益人（本人 50 %、直推 10 %），经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、300 / 60，订单佣金列仍 1000；再 N 不变、补贴 200 → 350 → v3 各受益人 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（不是 1000 / 500 / 100），合计行 ① 950 ② 350 ④ 590；R7 的同 N 判定不误判",
+    "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][BR-CALC-15][BR-CALC-27] 补贴分支的乐观锁：同步读到 v1 之后、写入之前，另一路径（R7 形状：N 1000 → 600，补贴 200）已把版本推到 v2 → 第一次 CAS 落空，重读后按 v2 重算：版本到 3，v3 份额与 base 同 v2（600 / 300），合计行补贴 350、① 950 ② 350 ④ 650；每个版本恰好一行金额、一行合计，订单补贴列 350",
+    "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#2][BR-CALC-27][BR-CALC-15] 同一事务：仅补贴变化的新版本合计行写入失败（只在这次同步里注入）→ 同步报错，订单补贴列、commission_version、新版本金额行与合计行、order.updated 一起回滚；去掉故障后重投同一报文 → 恰好生成一套完整 v2（一行金额、一行合计，补贴 350）"
+  ],
+  "task": "B1-18i",
+  "spec_commit": "bbc0982af5448c3a8087e42b32b57dc0fad23d42",
+  "spec_ref": "25a07f858b57b9800014db1ecbacf078892ef39b",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "bbc0982af5448c3a8087e42b32b57dc0fad23d42",
+      "tree": "ac31ecc1ab7a330be3381f328a2921ebc7325b98",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-11T18:55:49Z",
+      "finished_at": "2026-11-11T18:55:59Z",
+      "red_tests": [
+        "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#1][AC-B1-18i#2][AC-B1-18i#5][BR-CALC-15][BR-CALC-27] WAITING：N 不变（结算 1000 = 预估）、补贴 200 → 350 → commission_version 变 2；v2 合计行补贴 350、① 1350 ② 350 ④ 850，份额与 base 与 v1 逐项相同；返利状态不变，无分录、通知、补差候选；同一报文重投不再 +1",
+        "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#1][AC-B1-18i#2][AC-B1-18i#5][BR-CALC-15][BR-CALC-27] ESTIMATED：N 不变（结算 1000 = 预估）、补贴 200 → 350 → commission_version 变 2；v2 合计行补贴 350、① 1350 ② 350 ④ 850，份额与 base 与 v1 逐项相同；返利状态不变，无分录、通知、补差候选；同一报文重投不再 +1",
+        "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 补贴空值与 0 相同：null ↔ 0n 来回变不 +1；变成 350 才 +1（v2 补贴 350、① 1350），再变为空 +1（v3 补贴记 0、① 1000），之后 0 ↔ 空仍不 +1",
+        "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 补贴空值与 0 相同：0n ↔ null 来回变不 +1；变成 350 才 +1（v2 补贴 350、① 1350），再变为空 +1（v3 补贴记 0、① 1000），之后 0 ↔ 空仍不 +1",
+        "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#4][BR-CALC-27][BR-FUND-02] 平台更新时间与订单当前记录相等、只补贴不同 → 照常 +1；N 与补贴同变只 +1 一次（取当时补贴）；更早的报文只补贴不同 → 不 +1",
+        "test/spec/orders/subsidy-version/subsidy-version.int.test.ts > [AC-B1-18i#6][AC-B1-18i#2][BR-CALC-15][BR-CALC-27][BR-CALC-23] CREDITED：已入账单 N 不变、补贴 200 → 350 → commission_version 变 2，份额与 base 与 v1 相同，v2 补贴 350、① 1350 ④ 850；仍 CREDITED、入账基数不变，无分录、扣回、补差候选、通知，余额不变",
+        "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#5][BR-CALC-15][BR-CALC-27] 比较基准是当前版本合计行记的补贴，不是订单列：v1 合计行补贴 200、订单列已是 350（B1-18c 只写列不推版本，SQL 造）、N 1000；收到补贴 350 的报文 → 按 v1 的 200 判定，commission_version 变 2，v2 合计行补贴 350、① 1350 ② 350 ④ 850，份额与 base 同 v1；同一报文重投不再 +1",
+        "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 当前版本合计行补贴为空（B1-18f 加列前写的 v2，N 1200，SQL 造）→ 回退该单分佣快照的补贴 200 参与判定，不按订单列 350、也不按 0：N 不变、报文补贴 200 不 +1；补贴 350 才 +1，v3 份额与 base 同 v2（1200 / 600），合计行补贴 350、① 1550 ② 350 ④ 950，v2 行原样",
+        "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#7][BR-CALC-27][BR-CALC-15][BR-FUND-01] 份额逐项沿用上一版本，不按订单佣金重分：两位受益人（本人 50 %、直推 10 %），经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、300 / 60，订单佣金列仍 1000；再 N 不变、补贴 200 → 350 → v3 各受益人 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（不是 1000 / 500 / 100），合计行 ① 950 ② 350 ④ 590；R7 的同 N 判定不误判",
+        "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][BR-CALC-15][BR-CALC-27] 补贴分支的乐观锁：同步读到 v1 之后、写入之前，另一路径（R7 形状：N 1000 → 600，补贴 200）已把版本推到 v2 → 第一次 CAS 落空，重读后按 v2 重算：版本到 3，v3 份额与 base 同 v2（600 / 300），合计行补贴 350、① 950 ② 350 ④ 650；每个版本恰好一行金额、一行合计，订单补贴列 350",
+        "test/spec/orders/subsidy-version/version-basis.int.test.ts > [AC-B1-18i#1][AC-B1-18i#2][BR-CALC-27][BR-CALC-15] 同一事务：仅补贴变化的新版本合计行写入失败（只在这次同步里注入）→ 同步报错，订单补贴列、commission_version、新版本金额行与合计行、order.updated 一起回滚；去掉故障后重投同一报文 → 恰好生成一套完整 v2（一行金额、一行合计，补贴 350）"
+      ],
+      "expected": [
+        "test/spec/orders/subsidy-version/subsidy-version.int.test.ts",
+        "test/spec/orders/subsidy-version/version-basis.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "eaf740df755c5677f4212c193440e52ff2273ad06ed4e7a4cb0b19d66e91abaa"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3f9a94761cabd88106adae035bff78e749258f78",
+    "specs": "d5eef657b79155258219cac13f1db8fbcaed035e"
+  }
+}

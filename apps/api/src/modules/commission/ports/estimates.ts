@@ -6,13 +6,20 @@
 // B1-18f (BR-CALC-27 存储, BR-CALC-15; D10-1258): a new version's totals carry the order's subsidy
 // when it is written (orders.subsidy_commission_fen through readOrder, null as 0), and the stored N is
 // n_total_fen minus the subsidy of that version's totals row (null: the frozen subsidy).
+// B1-18i (BR-CALC-15, BR-CALC-27「仅补贴变化的版本」; D10-1258): recordedSubsidy answers the subsidy the
+// latest version was written with (null: the frozen one), for orders' version decision; refreshSubsidy
+// writes a version that only the subsidy moved: every amount row and B copied from the latest
+// version, the totals' n_total / pre_base_deduct / platform_est_profit recomputed on its stored N and
+// the order's current subsidy.
 import type { DB } from '@couli/db';
+import { addFen, subFen } from '@couli/money';
 import type { Transaction } from 'kysely';
 import {
   frozenBase,
   planVersion,
   storedN,
   type FrozenTerms,
+  type PlannedTotals,
 } from '../application/estimate-plan.ts';
 import { readShareStates } from '../application/forfeited-state-read.ts';
 import {
@@ -87,6 +94,41 @@ export interface CommissionEstimates {
     input: EstimateOrderRef,
     value?: EstimateRefreshValue,
   ): Promise<void>;
+  /**
+   * B1-18i: the subsidy the latest version's totals row records (a row written before 0138 has none:
+   * the snapshot's frozen subsidy). undefined: no snapshot, or no version written yet.
+   */
+  recordedSubsidy(trx: Transaction<DB>, input: EstimateOrderRef): Promise<bigint | undefined>;
+  /**
+   * B1-18i: writes orders' current commission_version as a subsidy-only version (see
+   * subsidyOnlyTotals); once, like refresh. Nothing without a snapshot or a stored version.
+   */
+  refreshSubsidy(trx: Transaction<DB>, input: EstimateOrderRef): Promise<void>;
+}
+
+/**
+ * B1-18i (BR-CALC-27「仅补贴变化的版本」): the totals of a version only the subsidy moved. B, the user
+ * shares and the redpacket stay the latest version's; ① = its stored N + the new subsidy (null as
+ * 0), ② = ① − B, ④ = ① − Σ shares − redpacket (unknown redpacket: unknown ④, as planVersion).
+ */
+export function subsidyOnlyTotals(
+  latest: Pick<TotalsRow, 'base_fen' | 'user_share_total_fen' | 'tlj_redpacket_fen'>,
+  n: bigint,
+  subsidyFen: bigint | null,
+): PlannedTotals {
+  const subsidy = subsidyFen ?? 0n;
+  const nTotal = addFen(n, subsidy);
+  const redpacket = latest.tlj_redpacket_fen;
+  return {
+    n_total_fen: nTotal,
+    pre_base_deduct_fen: subFen(nTotal, latest.base_fen),
+    base_fen: latest.base_fen,
+    user_share_total_fen: latest.user_share_total_fen,
+    tlj_redpacket_fen: redpacket,
+    platform_est_profit_fen:
+      redpacket === null ? null : subFen(subFen(nTotal, latest.user_share_total_fen), redpacket),
+    subsidy_commission_fen: subsidy,
+  };
 }
 
 function frozenTerms(split: SplitRow): FrozenTerms {
@@ -221,6 +263,40 @@ export function createCommissionEstimates(
       // Unknown N: a credited order still needs this version's rows (the clawback reads them); before
       // credit nothing is written, like a pending snapshot.
       if (order.rebate_status === 'CREDITED') await copyLatest(trx, input, version, split, latest);
+    },
+
+    async recordedSubsidy(trx, input) {
+      const split = await findSplit(trx, input.appId, input.orderId);
+      if (split === undefined) return undefined;
+      const latest = await selectLatestTotals(trx, input.appId, input.orderId);
+      if (latest === undefined) return undefined;
+      return latest.subsidy_commission_fen ?? split.subsidy_commission_fen;
+    },
+
+    async refreshSubsidy(trx, input) {
+      const order = await orderOf(trx, input);
+      const version = order.commission_version;
+      if (version < 1) return;
+      const split = await findSplit(trx, input.appId, input.orderId);
+      if (split === undefined) return;
+      const latest = await selectLatestTotals(trx, input.appId, input.orderId);
+      if (latest === undefined) throw new Error('commission: snapshot has no amount version');
+      // At-least-once delivery: this version is written once, by whichever call came first.
+      if (latest.commission_version >= version) return;
+      // The shares and B of the latest version as they stand (it may be an R7 repricing), not a
+      // fresh split of the order's commission.
+      const amounts = await selectVersionAmounts(
+        trx,
+        input.appId,
+        input.orderId,
+        latest.commission_version,
+      );
+      const n = storedN(frozenTerms(split), latest);
+      await insertVersion(
+        trx,
+        { appId: input.appId, orderId: input.orderId, version, createdAt: deps.clock.now() },
+        { amounts, totals: subsidyOnlyTotals(latest, n, order.subsidy_commission_fen) },
+      );
     },
   };
 }

@@ -166,6 +166,17 @@ export interface RebateDependencies {
       input: RebateOrderRef,
       value?: { readonly commissionFen: bigint },
     ): Promise<void>;
+    /**
+     * B1-18i (BR-CALC-27「仅补贴变化的版本」): the subsidy the latest version records (a row without
+     * one: the snapshot's); undefined when there is no version to compare. Optional with
+     * refreshSubsidy: a port without both never moves a version on the subsidy alone.
+     */
+    recordedSubsidy?(trx: Transaction<DB>, input: RebateOrderRef): Promise<bigint | undefined>;
+    /**
+     * B1-18i: writes orders' current version as a subsidy-only one: the latest version's amount rows
+     * and B as they are, only the totals recomputed on the new subsidy. Once per version, like refresh.
+     */
+    refreshSubsidy?(trx: Transaction<DB>, input: RebateOrderRef): Promise<void>;
   };
   /**
    * System-actor audit must commit/roll back with hold. Existing AuditPort accepts admin UUIDs
@@ -192,6 +203,8 @@ interface Draft {
   readonly guards: { unheld?: boolean; unlocked?: boolean; commissionVersion?: number };
   refresh: boolean;
   refreshValue: EstimateRefreshValue | null;
+  /** B1-18i: orders moved the version on the subsidy alone; its rows follow the previous version. */
+  subsidyRefresh: boolean;
   invalidated: VoidReason | null;
   audit: RebateHoldAudit | null;
 }
@@ -212,6 +225,7 @@ interface Plan {
   readonly guards: RebateCasGuards;
   readonly refresh: boolean;
   readonly refreshValue: EstimateRefreshValue | null;
+  readonly subsidyRefresh: boolean;
   readonly invalidated: VoidReason | null;
   readonly audit: RebateHoldAudit | null;
 }
@@ -224,6 +238,7 @@ function draft(state: OrderRebateState | null): Draft {
     guards: {},
     refresh: false,
     refreshValue: null,
+    subsidyRefresh: false,
     invalidated: null,
     audit: null,
   };
@@ -248,7 +263,7 @@ function finish(d: Draft, stored: string): Plan | null {
   const write =
     d.steps.length > 0 &&
     !(d.steps.length === 1 && d.steps[0]?.from === null && d.state === stored);
-  if (d.steps.length === 0 && !d.refresh) return null;
+  if (d.steps.length === 0 && !d.refresh && !d.subsidyRefresh) return null;
   const set: RebateSet = write && d.state !== null ? { ...d.set, rebate_status: d.state } : d.set;
   return {
     steps: d.steps,
@@ -257,6 +272,7 @@ function finish(d: Draft, stored: string): Plan | null {
     guards: d.guards,
     refresh: d.refresh,
     refreshValue: d.refreshValue,
+    subsidyRefresh: d.subsidyRefresh,
     invalidated: d.invalidated,
     audit: d.audit,
   };
@@ -361,6 +377,9 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
           payload: { order_id: row.order_id, platform: row.platform, reason: plan.invalidated },
         });
       }
+      // B1-18i: a subsidy-only version first, so a refresh planned for another reason in the same
+      // sync finds this version written and leaves it (the shares follow the previous version).
+      if (plan.subsidyRefresh) await deps.estimates.refreshSubsidy?.(trx, ref);
       if (plan.refresh) {
         if (plan.refreshValue === null) await deps.estimates.refresh(trx, ref);
         else await deps.estimates.refresh(trx, ref, plan.refreshValue);
@@ -500,6 +519,13 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       rule: change.rule,
       event: source.event,
     };
+    // B1-18i (BR-CALC-15, BR-CALC-27「仅补贴变化的版本」): a version moved on the subsidy alone only
+    // gets its rows (the previous version's shares and B, the totals on the new subsidy). It is no
+    // change of N: no COMMISSION_CHANGED, no status, no entry, notice, candidate or clawback here.
+    // A terminal (locked) order takes the same path as an N change (D10-1268): no rows here, left to
+    // FU-TERMINAL-VERSION-ROWS for both paths.
+    const subsidyOnly = change.commission_moved === true && change.subsidy_only === true;
+    const nMoved = change.commission_moved === true && !subsidyOnly;
     if (state === 'CREDITED') {
       // TODO(规划/11 §4.2): 入账后扣回 / 补差路由 — blocked on B2-04s / B2-04t。
       logger.info({ ...base, outcome: 'credited_noop' }, 'credited order update not routed yet');
@@ -507,7 +533,8 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       // BR-CALC-23 (a): the rows follow the new N, booked and ledger stay; the clawback and R10 read
       // the current version and run after this.
       const archived = draft(state);
-      archived.refresh = true;
+      if (subsidyOnly) archived.subsidyRefresh = true;
+      else archived.refresh = true;
       return finish(archived, row.rebate_status);
     }
     if (isLocked(state)) {
@@ -523,6 +550,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       return null;
     }
     const d = draft(state);
+    d.subsidyRefresh = subsidyOnly;
     if (state === 'UNATTRIBUTED' && change.attributed_now) {
       if (row.locked || row.user_id === null) {
         throw illegal(row, 'SYNC_ATTRIBUTED', 'orders.locked=true or user_id empty');
@@ -536,14 +564,14 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       advance(d, reverse);
       // BR-CALC-15（B2-03q，同 BASE_ZERO）：无效 / 处罚报文若也让 orders 推了佣金版本，该版本仍要有金额行；
       // advance 到带原因的 VOID 会清掉 refresh，所以补在其后。R6 照样不记账。
-      if (change.commission_moved === true) d.refresh = true;
+      if (nMoved) d.refresh = true;
       return finish(d, row.rebate_status);
     }
     // B2-04zzg：京东单本次同步后剩余数量 ≤ 0（两列由 orders 在同一事务写入，这里读锁内重读的行）。
     if (await jdRemainingZeroVoids(row, base)) {
       advance(d, 'PLATFORM_INVALID');
       // BR-CALC-15（同 BASE_ZERO）：同一报文若也让 orders 推了佣金版本，该版本仍要有金额行；R6 照样不记账。
-      if (change.commission_moved === true) d.refresh = true;
+      if (nMoved) d.refresh = true;
       return finish(d, row.rebate_status);
     }
     // BR-FUND-03 / 07：有效基数 = 有结算佣金用结算佣金、否则用预估。本次报文后有结算佣金就一律经估值端口
@@ -581,7 +609,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
         advance(d, 'BASE_ZERO');
         // BR-CALC-15: the version moved to the zero / negative N, so its rows must exist for a later
         // ADMIN_RESTORE to read; R6 still books nothing.
-        if (change.commission_moved === true) d.refresh = true;
+        if (nMoved) d.refresh = true;
         return finish(d, row.rebate_status);
       }
       if (outcome === 'recalc' && (d.state === 'ESTIMATED' || d.state === 'WAITING')) {
@@ -590,7 +618,7 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       }
     }
     // BR-CALC-15: the column plan moved the version, so it needs rows, even with the same B.
-    if (change.commission_moved === true && (d.state === 'ESTIMATED' || d.state === 'WAITING')) {
+    if (nMoved && (d.state === 'ESTIMATED' || d.state === 'WAITING')) {
       d.refresh = true;
     }
     if (
@@ -766,6 +794,13 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
   return {
     // B2-04zj: the sync reaches the settlement records through this one port (BR-FUND-09).
     settlements,
+
+    // B1-18i: orders' version decision reads the subsidy the latest version records (commission's).
+    async recordedSubsidy(trx, ref) {
+      const { recordedSubsidy, refreshSubsidy } = deps.estimates;
+      if (recordedSubsidy === undefined || refreshSubsidy === undefined) return undefined;
+      return recordedSubsidy.call(deps.estimates, trx, ref);
+    },
 
     async onImported(trx: Transaction<DB>, order: ImportedOrder): Promise<void> {
       await execute(trx, refOf(order), 'sync', (row, now) => decideImport(row, now));

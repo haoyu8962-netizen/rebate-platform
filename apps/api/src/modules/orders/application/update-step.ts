@@ -43,6 +43,12 @@
 //   union_settled_at（BR-FUND-04 ①）：报文给了 settled_at 就写，不看平台状态与结算额，空值不覆盖。
 // - 版本推进（B2-03s，BR-CALC-15，D10-578）：commission_version 只由 planOrderSyncColumns 在这条 CAS 里 +1；
 //   change.commission_moved 就是这次写动没动版本，settlement 只看它，不比前后佣金。
+// - 仅补贴变化的版本（B1-18i，BR-CALC-15、BR-CALC-27，D10-1258）：有效 N 不变、报文给了补贴字段时，CAS 之前
+//   同事务经 rebate.recordedSubsidy 取当前版本合计行记的补贴（空回退分佣快照的补贴），按 domain
+//   subsidyMovesVersion 判定（空值与 0 相同，报文平台更新时间早于库内的不推——库内 platform_modified_at 只前进不倒退，连续旧报文
+//   与交错重投都比不过它——重投时已相等不推）；推则同一条 CAS
+//   +1，change 另带 subsidy_only: true（只在为真时出现），settlement 只按新补贴写该版本的金额与合计行。CAS 落空
+//   重读后整套重新判定。N 与补贴同变走 N 变化路径，只 +1 一次。
 // - 补贴类佣金（B1-18c，BR-CALC-18）：适配器输出该字段（淘宝）时按本次报文原样写（null 即 NULL，同服务费口径），
 //   与库内值不同才并入同一条 CAS UPDATE；适配器不输出（京东、拼多多，字段缺省）时沿用库内值。本次生成快照
 //   （首次跨入与补偿重试）都用这个更新后的值，不用库内旧值。
@@ -78,10 +84,12 @@ import {
 } from '../domain/source-shop.ts';
 import type { PlatformStatusEvent } from '../domain/status-map.ts';
 import {
+  commissionNMoved,
   planOrderQuantities,
   planOrderSyncColumns,
   planOrderUpdate,
   reportedSettleFen,
+  subsidyMovesVersion,
   type OrderUpdatePlan,
 } from '../domain/update-plan.ts';
 import { casUpdateOrder, type OrderUpdateSet } from '../infra/order-update-store.ts';
@@ -154,6 +162,11 @@ export interface OrderUpdateChange {
    * 可选只为不带它的替身，缺失等于 false。
    */
   readonly commission_moved?: boolean;
+  /**
+   * B1-18i：这次 +1 只因补贴类佣金与当前版本记录的不同（有效 N 未变，BR-CALC-27「仅补贴变化的版本」）；只在为真时
+   * 出现（与 commission_moved: true 同时），其余情况不带此字段。
+   */
+  readonly subsidy_only?: true;
   /**
    * B1-08k 第 ⑥ 步本次的快照结果（P2 / R3a 的预估由 settlement 据此与快照表决定）；只在注入 snapshots 时出现，
    * 未注入时不带此字段（与 B1-08i 的 change 逐字段一致）。
@@ -239,6 +252,14 @@ export interface OrderUpdateDeps extends Pick<
      * 没有时不读 STATEMENT、不写记录。
      */
     readonly settlements?: OrderSettlementRecordsPort;
+    /**
+     * B1-18i（BR-CALC-27）：当前版本合计行记的补贴（为空回退该单分佣快照的补贴）；没有可比的版本为 undefined。
+     * 生产由 createRebatePort 经 commission 估值端口给出；没有时补贴不推版本。调用方事务、订单锁内，只读。
+     */
+    recordedSubsidy?(
+      trx: Transaction<DB>,
+      ref: { readonly appId: string; readonly orderId: string; readonly attrAt: Date },
+    ): Promise<bigint | undefined>;
   };
   /** 第 ③ 步黑名单（B1-09b）；同 OrderPipelineDeps.blacklist，未注入时整步跳过。 */
   readonly blacklist?: OrderBlacklistDeps;
@@ -398,7 +419,25 @@ export function createOrderUpdateStep(
     const settlements = rebatePort.settlements;
     const orderRef = { appId: current.app_id, orderId: current.order_id };
     const statementFen = (await settlements?.latestStatementFen(trx, orderRef)) ?? null;
-    const columns = planOrderSyncColumns(current, incoming, plan, statementFen);
+    // B1-18i：有效 N 不变时，补贴与当前版本记录的补贴不同也 +1（判定先于写库，同一条 CAS）。
+    let subsidyOnly = false;
+    if (
+      incoming.subsidy_commission_fen !== undefined &&
+      rebatePort.recordedSubsidy !== undefined &&
+      !commissionNMoved(current, incoming, plan, statementFen)
+    ) {
+      const recorded = await rebatePort.recordedSubsidy(trx, {
+        ...orderRef,
+        attrAt: current.attr_at,
+      });
+      subsidyOnly = subsidyMovesVersion({
+        incomingSubsidyFen: incoming.subsidy_commission_fen,
+        incomingModifiedAt: incoming.modified_at,
+        currentModifiedAt: current.platform_modified_at,
+        recordedSubsidyFen: recorded,
+      });
+    }
+    const columns = planOrderSyncColumns(current, incoming, plan, statementFen, subsidyOnly);
     const now = deps.clock.now();
     const set: OrderUpdateSet = {
       ...columns,
@@ -414,7 +453,7 @@ export function createOrderUpdateStep(
     if (unionSettledAt !== null) Object.assign(set, { union_settled_at: unionSettledAt });
 
     // B1-18c（BR-CALC-18）：补贴类佣金按本次报文（字段缺省 = 适配器不输出，沿用库内值）；不进 OrderSyncColumns，
-    // 不影响 N 与 commission_version。
+    // 不影响 N。版本是否因补贴 +1 由上面的 subsidyOnly 判定（B1-18i），与这一列同一条 CAS 写入。
     const subsidyFen =
       incoming.subsidy_commission_fen === undefined
         ? current.subsidy_commission_fen
@@ -799,6 +838,7 @@ export function createOrderUpdateStep(
         settle_commission_fen: columns.settle_commission_fen,
         attributed_now: attributedNow,
         commission_moved: columns.commission_version !== current.commission_version,
+        ...(subsidyOnly ? { subsidy_only: true as const } : {}),
         ...(snapshot === undefined ? {} : { snapshot }),
       },
       source,
