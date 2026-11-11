@@ -1,0 +1,19 @@
+id: B3-16d
+repo: rebate-platform
+title: B3-16d：只读入口取数方扫描收紧——组装根等读者先导入入口函数、再用不带来源的 export { x } 转出也判失败（FU-B316B-RELAY，B3-16b spec-test r1 S2）
+type: test-change
+# 2026-11-11 agent2 入账（编排 11-11 15:36：B3-16b r1 的 S2 登记成后续单）。B3-16b 的 consumerScan 只认带模块来源的引用；读者 agent-earnings-reads.ts 写 import { getWalletSummary } from './modules/ledger/read.ts' 再加 export { getWalletSummary }（无 moduleSpecifier）时扫描不记录，别的文件可经组装根拿到 ledger 的函数，[AC-B3-16b#5] 仍绿。
+# 只新增 test/spec/agent/read-exports-relay/**，不改已有文件、不动实现：读者文件里由入口导入的绑定，再经无来源的 export { x } / export { x as y } / export default x 转出，一律判失败；内存样例自证后对真实仓库同样跑，主干现状（无此类转出）须绿。变异实跑：在 agent-earnings-reads.ts 末尾加 export { getWalletSummary } → 应红（先例 B3-08n、B3-16c）。
+# 分工：新鲜 Claude 写，评审 Codex 优先；非 task 分支、不带证据文件，标签由编排核后加。RV2。
+refs: [BR-AI-02]
+refs_hash:
+  BR-AI-02: 40bc4f6f4109
+deps: [B3-16b]
+paths:
+  - 'test/spec/agent/read-exports-relay/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
