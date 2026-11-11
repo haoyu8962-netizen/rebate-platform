@@ -12,7 +12,7 @@ refs_hash:
   BR-FUND-18: c7ebd23ee75e
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-15: f60233d3a4ac
-  BR-CALC-27: a30d5625d06a
+  BR-CALC-27: 14c76a30d85e
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/rebate/application/rebate.ts'

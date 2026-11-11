@@ -5,7 +5,7 @@ type: impl
 # 2026-11-11 union 入账（D10-1258 第 3 步）。orders/application/admin-orders.ts 现读 commission_splits 的冻结补贴（:389），改为读当前版本 commission_split_totals.subsidy_commission_fen（B1-18f 新列，NULL 回退冻结值），与四段一致。顺带编排 11-11：specs/attribution.md 淘宝节「未核实」补一句同一官方文档嵌套 dto 已废弃字段 share_relative_rate 示例 "0.10"（只改文档）。
 refs: [BR-CALC-27]
 refs_hash:
-  BR-CALC-27: a30d5625d06a
+  BR-CALC-27: 14c76a30d85e
 deps: [B1-18f]
 paths:
   - 'apps/api/src/modules/orders/application/admin-orders.ts'
