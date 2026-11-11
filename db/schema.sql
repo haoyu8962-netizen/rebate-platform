@@ -3136,6 +3136,7 @@ CREATE TABLE app.commission_split_totals (
     tlj_redpacket_fen bigint,
     platform_est_profit_fen bigint,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    subsidy_commission_fen bigint,
     CONSTRAINT commission_split_totals_base_fen_check CHECK ((base_fen >= 0)),
     CONSTRAINT commission_split_totals_commission_version_check CHECK ((commission_version >= 1)),
     CONSTRAINT commission_split_totals_platform_est_profit_fen_check CHECK ((((tlj_redpacket_fen IS NULL) AND (platform_est_profit_fen IS NULL)) OR ((tlj_redpacket_fen IS NOT NULL) AND (platform_est_profit_fen IS NOT NULL) AND (platform_est_profit_fen = ((n_total_fen - user_share_total_fen) - tlj_redpacket_fen))))),
@@ -3143,6 +3144,13 @@ CREATE TABLE app.commission_split_totals (
     CONSTRAINT commission_split_totals_tlj_redpacket_fen_check CHECK (((tlj_redpacket_fen IS NULL) OR (tlj_redpacket_fen >= 0))),
     CONSTRAINT commission_split_totals_user_share_total_fen_check CHECK (((user_share_total_fen >= 0) AND (user_share_total_fen <= base_fen)))
 );
+
+
+--
+-- Name: COLUMN commission_split_totals.subsidy_commission_fen; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON COLUMN app.commission_split_totals.subsidy_commission_fen IS 'BR-CALC-27: subsidy commission this version was valued on (n_total_fen = N + this); NULL = row written before 0138, read as commission_splits.subsidy_commission_fen';
 
 
 --

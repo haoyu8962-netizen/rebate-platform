@@ -600,6 +600,10 @@ export interface CommissionSplitTotals {
   order_id: string;
   platform_est_profit_fen: ColumnType<bigint, bigint, bigint> | null;
   pre_base_deduct_fen: ColumnType<bigint, bigint, bigint>;
+  /**
+   * BR-CALC-27: subsidy commission this version was valued on (n_total_fen = N + this); NULL = row written before 0138, read as commission_splits.subsidy_commission_fen
+   */
+  subsidy_commission_fen: ColumnType<bigint, bigint, bigint> | null;
   tlj_redpacket_fen: ColumnType<bigint, bigint, bigint> | null;
   user_share_total_fen: ColumnType<bigint, bigint, bigint>;
 }

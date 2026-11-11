@@ -28,7 +28,7 @@ it('[AC-B2-03q] frozenBase：负 N 为 0，不受没收影响', () => {
 });
 
 it('[AC-B2-03q] planVersion：行序按本人、直推、间推，没收份额 0 且不计入利润扣减', () => {
-  const plan = planVersion(terms, 2000n, 50n, (b) => b.role === 'direct');
+  const plan = planVersion(terms, 2000n, null, 50n, (b) => b.role === 'direct');
   expect(plan.amounts.map((a) => [a.role, a.base_fen, a.amount_fen])).toEqual([
     ['self', 1700n, 850n],
     ['direct', 1700n, 0n],
@@ -41,11 +41,12 @@ it('[AC-B2-03q] planVersion：行序按本人、直推、间推，没收份额 0
     user_share_total_fen: 935n,
     tlj_redpacket_fen: 50n,
     platform_est_profit_fen: 1015n,
+    subsidy_commission_fen: 0n,
   });
 });
 
 it('[AC-B2-03s#U4] planVersion：负 N 把 B 夹到 0，份额 0，四段金额保留负的 N', () => {
-  const plan = planVersion(terms, -100n, 0n, () => false);
+  const plan = planVersion(terms, -100n, 0n, 0n, () => false);
   expect(plan.amounts.map((a) => [a.role, a.base_fen, a.amount_fen])).toEqual([
     ['self', 0n, 0n],
     ['direct', 0n, 0n],
@@ -58,11 +59,12 @@ it('[AC-B2-03s#U4] planVersion：负 N 把 B 夹到 0，份额 0，四段金额�
     user_share_total_fen: 0n,
     tlj_redpacket_fen: 0n,
     platform_est_profit_fen: -100n,
+    subsidy_commission_fen: 0n,
   });
 });
 
 it('[AC-B2-03q] planVersion：面额 null 时利润也是 null', () => {
-  expect(planVersion(terms, 2000n, null, () => false).totals).toMatchObject({
+  expect(planVersion(terms, 2000n, 0n, null, () => false).totals).toMatchObject({
     tlj_redpacket_fen: null,
     platform_est_profit_fen: null,
   });
@@ -77,8 +79,39 @@ it('[AC-B2-03q] 快照缺本人或角色重复：抛错，不猜', () => {
   ).toThrow('repeats role');
 });
 
-it('[AC-B2-03r-UNIT#4] storedN：去掉冻结补贴，还原版本的 N，可为负', () => {
-  expect(storedN({ ...terms, subsidyCommissionFen: 111n }, 1111n)).toBe(1000n);
-  expect(storedN({ ...terms, subsidyCommissionFen: 0n }, 1000n)).toBe(1000n);
-  expect(storedN({ ...terms, subsidyCommissionFen: 111n }, 100n)).toBe(-11n);
+it('[AC-B2-03r-UNIT#4] storedN：合计行没有补贴（0138 之前的行）时去掉冻结补贴，还原版本的 N，可为负', () => {
+  const old = (n: bigint) => ({ n_total_fen: n, subsidy_commission_fen: null });
+  expect(storedN({ ...terms, subsidyCommissionFen: 111n }, old(1111n))).toBe(1000n);
+  expect(storedN({ ...terms, subsidyCommissionFen: 0n }, old(1000n))).toBe(1000n);
+  expect(storedN({ ...terms, subsidyCommissionFen: 111n }, old(100n))).toBe(-11n);
+});
+
+it('[AC-B1-18f-UNIT#1] storedN：合计行记了补贴就去掉该版本的补贴，不用冻结值；0 也是记了', () => {
+  const frozen = { ...terms, subsidyCommissionFen: 111n };
+  expect(storedN(frozen, { n_total_fen: 2350n, subsidy_commission_fen: 350n })).toBe(2000n);
+  expect(storedN(frozen, { n_total_fen: 2000n, subsidy_commission_fen: 0n })).toBe(2000n);
+  expect(storedN(frozen, { n_total_fen: 300n, subsidy_commission_fen: 350n })).toBe(-50n);
+});
+
+it('[AC-B1-18f-UNIT#2] planVersion：补贴取传入的当时值（空当 0），只进四段金额，不进 B 与份额', () => {
+  const frozen = { ...terms, subsidyCommissionFen: 111n };
+  const plan = planVersion(frozen, 2000n, 350n, 0n, () => false);
+  expect(plan.amounts.map((a) => [a.role, a.base_fen, a.amount_fen])).toEqual([
+    ['self', 1700n, 850n],
+    ['direct', 1700n, 170n],
+    ['indirect', 1700n, 85n],
+  ]);
+  expect(plan.totals).toEqual({
+    n_total_fen: 2350n,
+    pre_base_deduct_fen: 650n,
+    base_fen: 1700n,
+    user_share_total_fen: 1105n,
+    tlj_redpacket_fen: 0n,
+    platform_est_profit_fen: 1245n,
+    subsidy_commission_fen: 350n,
+  });
+  expect(planVersion(frozen, 2000n, null, 0n, () => false).totals).toMatchObject({
+    n_total_fen: 2000n,
+    subsidy_commission_fen: 0n,
+  });
 });

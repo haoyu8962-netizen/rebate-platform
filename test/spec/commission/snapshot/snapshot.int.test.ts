@@ -118,6 +118,7 @@ it('[AC-B2-03g#1] BR-CALC-10/27 快照、v1 金额、初始事件、四段金额
         user_share_total_fen: 801n,
         tlj_redpacket_fen: 0n,
         platform_est_profit_fen: 433n,
+        subsidy_commission_fen: 0n,
         created_at: CREATED_AT,
       },
     ]);

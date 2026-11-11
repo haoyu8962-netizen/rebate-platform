@@ -1,0 +1,95 @@
+{
+  "risk_note": "RV2 money (commission snapshot versions, migration). D10-1258 (BR-CALC-27 细则 last sentence and the totals subsidy column; BR-CALC-15). Migration 0138 adds commission_split_totals.subsidy_commission_fen bigint, nullable, no default, no backfill (append-only table; a version row written before the column reads the order's frozen snapshot subsidy, D10-1259 ③; 08 now says so); lock / statement timeouts as in 0133; table-level grants from 0036 cover it. v1 writes the snapshot subsidy; every later version (refresh / revalue, settleVersion, R7 repricing, clawback repricing — all through the commission estimates port) takes the order's CURRENT orders.subsidy_commission_fen (null → 0) for n_total / pre_base_deduct / platform_est_profit and the new column; every party's amount and base are unchanged (N and frozen ratios). storedN = n_total − that version's column (NULL → frozen subsidy), so R7 / refresh at the same N no longer sees a false nChanged nor rolls the subsidy back. copyLatest copies the previous version's subsidy with its n_total. The version trigger is unchanged (subsidy-only bump is B1-18i). Prerequisite B1-18ft (#3184) made the estimate-port kit's order current subsidy equal its frozen subsidy. Frozen [AC-B2-03g#1] now expects 11 columns (only subsidy_commission_fen: 0n added, whole-row equality kept, D10-1259 ②). schema.sql / db.gen.ts from pnpm db:snapshot, db:check clean. Host: tsc apps/api 0, tsc test 0, eslint 0, lint:migrations 0; commission unit 61; int commission 291, db 1936, settlement 1519; orders: 3 admin permission tests failed in one full-directory run and passed 58/58 on rerun of those files (load flake, no commission code involved).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review (effort medium) round 1 pass, no findings, on implementation 53ab99382405: current-subsidy sourcing, NULL fallback for pre-column rows, storedN consistency, CREDITED recompute, migration safety, call chain."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Codex spec-test (effort medium): round 1 fail with one S1 — only ESTIMATED / WAITING orders used a current subsidy different from the frozen one, so a CREDITED branch still using the frozen subsidy would pass → test attempt 2 (fresh independent Claude) added only [AC-B1-18f#10] (CREDITED: frozen 111, current 350, settle 2000 → v2 subsidy 350, n_total 2350, profit 1245), red/2 PASS 13 tests (44 unchanged tests of snapshot.int.test.ts exempt as unchanged since the base); round 2 pass (also confirmed [AC-B2-03g#1] only gained subsidy_commission_fen: 0n with whole-row equality kept)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/commission/snapshot/snapshot.int.test.ts > [AC-B2-03g#1] BR-CALC-10/27 快照、v1 金额、初始事件、四段金额同事务落库并保留元数据",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#1][BR-CALC-27] 迁移后合计表有补贴列：bigint、可空、无默认值（空 = 加列前写的旧行）",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#2][BR-CALC-27][BR-CALC-10] 快照 v1 的合计行补贴列等于快照冻结补贴（补贴 200）",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#2][BR-CALC-27][BR-CALC-10] 快照 v1 的合计行补贴列等于快照冻结补贴（补贴 0）",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#3][BR-CALC-27][BR-CALC-15] ESTIMATED：v1 冻结补贴 111、订单当前补贴 350，N 变 2000 → v2 用 350（不是 111），n_total 2350；份额与 base 只按 N 与冻结比例",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#3][BR-CALC-27][BR-CALC-15] WAITING：v1 冻结补贴 111、订单当前补贴 350，N 变 2000 → v2 用 350（不是 111），n_total 2350；份额与 base 只按 N 与冻结比例",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#4][BR-CALC-15][BR-CALC-27] storedN 用该版本合计行的补贴：v2（N 2000、补贴 350）之后同 N 不判变化，订单补贴再变也不影响判断；旧行（列为空）回退快照冻结补贴；此后 N 变写 v3 取当时补贴",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#5][BR-CALC-15][BR-CALC-27] R7 带 { commissionFen } 的 refresh 也取订单当时补贴；同 N 再问不判变化，同版本重放不再写",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#6][BR-CALC-27] orders 快照步的端口 refresh（settleVersion 走的那条）同样取订单当时补贴",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#7][BR-CALC-27][BR-CALC-18] 订单当前补贴为空当 0：v2 补贴列记 0，n_total 就是 N；同 N 不判变化",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#8][BR-CALC-27][BR-CALC-19] 预留、淘礼金扣除与红包面额照冻结值，只有补贴取当时值：n_total、基数前扣除与利润按 350",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#9][BR-CALC-27][BR-CALC-02] 负 N：基数与份额为 0，n_total 是负 N 加当时补贴（−50 + 350），同 N 不判变化",
+    "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#10][BR-CALC-27][BR-CALC-23][BR-CALC-15] CREDITED：v1 冻结补贴 111、订单当前补贴 350，结算佣金变 2000 推版本 → v2 用 350，n_total 2350；份额与 base 只按 N，入账与账本不动"
+  ],
+  "task": "B1-18f",
+  "spec_commit": "d3fad4b1e8960152d06aef22d69a008c1d5c613a",
+  "spec_ref": "25a07f858b57b9800014db1ecbacf078892ef39b",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d3fad4b1e8960152d06aef22d69a008c1d5c613a",
+      "tree": "072766eef3af65e876810f6930119b5f20c357b4",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-11T14:40:47Z",
+      "finished_at": "2026-11-11T14:40:55Z",
+      "red_tests": [
+        "test/spec/commission/snapshot/snapshot.int.test.ts > [AC-B2-03g#1] BR-CALC-10/27 快照、v1 金额、初始事件、四段金额同事务落库并保留元数据",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#1][BR-CALC-27] 迁移后合计表有补贴列：bigint、可空、无默认值（空 = 加列前写的旧行）",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#2][BR-CALC-27][BR-CALC-10] 快照 v1 的合计行补贴列等于快照冻结补贴（补贴 200）",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#2][BR-CALC-27][BR-CALC-10] 快照 v1 的合计行补贴列等于快照冻结补贴（补贴 0）",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#3][BR-CALC-27][BR-CALC-15] ESTIMATED：v1 冻结补贴 111、订单当前补贴 350，N 变 2000 → v2 用 350（不是 111），n_total 2350；份额与 base 只按 N 与冻结比例",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#3][BR-CALC-27][BR-CALC-15] WAITING：v1 冻结补贴 111、订单当前补贴 350，N 变 2000 → v2 用 350（不是 111），n_total 2350；份额与 base 只按 N 与冻结比例",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#4][BR-CALC-15][BR-CALC-27] storedN 用该版本合计行的补贴：v2（N 2000、补贴 350）之后同 N 不判变化，订单补贴再变也不影响判断；旧行（列为空）回退快照冻结补贴；此后 N 变写 v3 取当时补贴",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#5][BR-CALC-15][BR-CALC-27] R7 带 { commissionFen } 的 refresh 也取订单当时补贴；同 N 再问不判变化，同版本重放不再写",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#6][BR-CALC-27] orders 快照步的端口 refresh（settleVersion 走的那条）同样取订单当时补贴",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#7][BR-CALC-27][BR-CALC-18] 订单当前补贴为空当 0：v2 补贴列记 0，n_total 就是 N；同 N 不判变化",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#8][BR-CALC-27][BR-CALC-19] 预留、淘礼金扣除与红包面额照冻结值，只有补贴取当时值：n_total、基数前扣除与利润按 350",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#9][BR-CALC-27][BR-CALC-02] 负 N：基数与份额为 0，n_total 是负 N 加当时补贴（−50 + 350），同 N 不判变化",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts > [AC-B1-18f#10][BR-CALC-27][BR-CALC-23][BR-CALC-15] CREDITED：v1 冻结补贴 111、订单当前补贴 350，结算佣金变 2000 推版本 → v2 用 350，n_total 2350；份额与 base 只按 N，入账与账本不动"
+      ],
+      "expected": [
+        "test/spec/commission/snapshot/snapshot.int.test.ts",
+        "test/spec/commission/subsidy-current/subsidy-current.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "c689fea39431a1a6eef78d5af640bff8b566f3103daf1e8bcd94c9f10cbe231b"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3fd9f01c0bb73edd1f13ce6bad2ad3458c82efd1",
+    "specs": "af7efaddd4306f0bd3d0bc4c3bb243fdf3464e1b"
+  }
+}

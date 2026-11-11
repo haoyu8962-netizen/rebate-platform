@@ -203,6 +203,8 @@ export async function insertSnapshot(
         user_share_total_fen: plan.user_share_total_fen,
         tlj_redpacket_fen: plan.tlj_redpacket_fen,
         platform_est_profit_fen: plan.platform_est_profit_fen,
+        // BR-CALC-27 (B1-18f): version 1 is valued on the frozen subsidy.
+        subsidy_commission_fen: w.subsidyCommissionFen,
         created_at: w.createdAt,
       })
       .execute();

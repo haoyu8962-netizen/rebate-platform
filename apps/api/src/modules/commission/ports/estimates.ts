@@ -3,6 +3,9 @@
 // amount and totals rows of orders' current commission_version on the caller's transaction.
 // Commission does not read the orders table: the columns come through deps.readOrder, the owner's
 // read on the same transaction.
+// B1-18f (BR-CALC-27 存储, BR-CALC-15; D10-1258): a new version's totals carry the order's subsidy
+// when it is written (orders.subsidy_commission_fen through readOrder, null as 0), and the stored N is
+// n_total_fen minus the subsidy of that version's totals row (null: the frozen subsidy).
 import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';
 import {
@@ -57,6 +60,8 @@ export interface EstimateOrder {
   readonly rebate_status: string;
   readonly est_commission_fen: bigint | null;
   readonly settle_commission_fen: bigint | null;
+  /** The order's current subsidy class commission (BR-CALC-18); null counts as 0. */
+  readonly subsidy_commission_fen: bigint | null;
 }
 
 export interface CommissionEstimatesDependencies {
@@ -112,6 +117,7 @@ export function createCommissionEstimates(
     trx: Transaction<DB>,
     ref: EstimateOrderRef,
     version: number,
+    split: SplitRow,
     latest: TotalsRow,
   ): Promise<void> {
     const amounts = await selectVersionAmounts(
@@ -132,6 +138,8 @@ export function createCommissionEstimates(
           user_share_total_fen: latest.user_share_total_fen,
           tlj_redpacket_fen: latest.tlj_redpacket_fen,
           platform_est_profit_fen: latest.platform_est_profit_fen,
+          // The copied n_total_fen keeps the subsidy it was valued on; a pre-0138 row's is the frozen one.
+          subsidy_commission_fen: latest.subsidy_commission_fen ?? split.subsidy_commission_fen,
         },
       },
     );
@@ -143,6 +151,7 @@ export function createCommissionEstimates(
     ref: EstimateOrderRef,
     version: number,
     n: bigint,
+    subsidyFen: bigint | null,
     split: SplitRow,
     latest: TotalsRow,
   ): Promise<void> {
@@ -151,6 +160,7 @@ export function createCommissionEstimates(
     const plan = planVersion(
       terms,
       n,
+      subsidyFen,
       latest.tlj_redpacket_fen,
       (b) =>
         shares.forfeitedEvents.some((e) => e.userId === b.userId && e.role === b.role) ||
@@ -187,7 +197,7 @@ export function createCommissionEstimates(
         after: n === null ? null : frozenBase(terms, n),
       };
       if (input.compareN !== true || n === null || latest === undefined) return bases;
-      return { ...bases, nChanged: n !== storedN(terms, latest.n_total_fen) };
+      return { ...bases, nChanged: n !== storedN(terms, latest) };
     },
 
     async refresh(trx, input, value) {
@@ -205,12 +215,12 @@ export function createCommissionEstimates(
           ? (order.settle_commission_fen ?? order.est_commission_fen)
           : value.commissionFen;
       if (n !== null) {
-        await revalue(trx, input, version, n, split, latest);
+        await revalue(trx, input, version, n, order.subsidy_commission_fen, split, latest);
         return;
       }
       // Unknown N: a credited order still needs this version's rows (the clawback reads them); before
       // credit nothing is written, like a pending snapshot.
-      if (order.rebate_status === 'CREDITED') await copyLatest(trx, input, version, latest);
+      if (order.rebate_status === 'CREDITED') await copyLatest(trx, input, version, split, latest);
     },
   };
 }
