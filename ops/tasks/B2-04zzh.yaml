@@ -7,8 +7,8 @@ type: impl
 # 规则测试钉：开关开时入账批次里剩余 0 的 WAITING 京东单不入账、VOID、无分录、余额不变、一条 order.invalidated、批次项 skipped + 新原因；剩余 > 0 照常入账；开关关照常入账并告警；非京东不受影响；重评入口开关开作废、关只列清单、重跑幂等、app 隔离；入账事务失败整体回滚。tester 新鲜独立 Claude；money 评审 Codex（D10-823）。生产在本单落地前不开此开关（D10-923，编排上线清单）。
 refs: [BR-CALC-15, BR-FUND-01, BR-FUND-04, BR-FUND-07]
 refs_hash:
-  BR-CALC-15: 89a3ea7d428c
-  BR-FUND-01: 681de36ba809
+  BR-CALC-15: dec05fa8363f
+  BR-FUND-01: 71daaebae9bd
   BR-FUND-04: 497806f6f068
   BR-FUND-07: b61cfed0a77b
 deps: [B2-04zzg]

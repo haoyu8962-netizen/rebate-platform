@@ -6,8 +6,8 @@ type: impl
 # 完成 2026-11-11（#3190，头 a61b48b608e2）：迁移 0138 合计表补贴列（可空）、新版本取订单当时补贴、storedN 修正；[AC-B2-03g#1] 改 11 列；规则测试 2 次，spec-test r2 pass，money r1 pass。
 refs: [BR-CALC-27, BR-CALC-15]
 refs_hash:
-  BR-CALC-27: 5109dc794005
-  BR-CALC-15: 89a3ea7d428c
+  BR-CALC-27: 45de21c98df0
+  BR-CALC-15: dec05fa8363f
 deps: [B1-18ft]
 paths:
   - 'db/migrations/0138_*.sql'

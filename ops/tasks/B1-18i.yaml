@@ -9,8 +9,8 @@ type: impl
 # 2026-11-12 done：#3203 合并（头 abecac9bc913）。规则测试 3 次（D10-1269 末次只改角色名）；spec-test r2 + 不计次门禁记录 pass（D10-1267 SQL 文本不采、D10-1268 终态记 FU-TERMINAL-VERSION-ROWS）；Codex money r2 pass（r1 S1 → platform_modified_at 只进不退，D10-1270 接受）。
 refs: [BR-CALC-15, BR-CALC-27]
 refs_hash:
-  BR-CALC-15: 89a3ea7d428c
-  BR-CALC-27: 5109dc794005
+  BR-CALC-15: dec05fa8363f
+  BR-CALC-27: 45de21c98df0
 deps: [B1-18f, B1-18g, B1-18h]
 paths:
   - 'apps/api/src/modules/orders/domain/update-plan.ts'
