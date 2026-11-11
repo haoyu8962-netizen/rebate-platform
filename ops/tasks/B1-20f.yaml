@@ -1,0 +1,21 @@
+id: B1-20f
+repo: rebate-platform
+title: test-change [AC-B1-20c#13] 败者期望集合补 403 / 10007（并号赢家提交于败者 ② 与 ⑥ 之间时，源账号已是墓碑，按 BR-ID-01 固定判定顺序在 ⑥ 注销判定被拒），码为 10007 时断言 data.stage=processing，败者响应体进断言消息；其余断言不动
+type: test-change
+# 2026-11-11 identity 入账（编排 D10-1264；来源 #3190 verify-int-4 偶发红，identity 23:14 只读核查）。
+# 只改 test/spec/identity/merge-account/once.int.test.ts 约 93、95 两行期望：状态 [401, 403, 422]、码 [10002, 10007, 30411]；10007 时 data.stage === 'processing'；断言消息带败者响应体。
+# 依据：BR-ID-01 判定顺序（⑤封禁 → ⑥注销，10_ID:184）、BR-ID-06 并号置墓碑并吊销源会话（含细则「并号响应丢失」）、BR-ID-28 墓碑 status=deleted；实现见 deletion-guard.ts（x-idempotent 在 post-miss 判 ⑥，done → 10007 stage=processing）、merge-account.ts 文件头第 7、8 步与第 47 行。
+# 新鲜 Claude 改、另一位只读复核（Codex 优先）；改第一类保护路径，按 #24 由编排加标签。不涉及资金。本机循环跑撞出 403 以确认码值，撞不出如实写「未复现，按代码路径推定」。
+refs: [BR-ID-01, BR-ID-06, BR-ID-28]
+refs_hash:
+  BR-ID-01: 5884d69e6b20
+  BR-ID-06: 379a6a53b315
+  BR-ID-28: 205ab4bdd1d4
+deps: [B1-20c]
+paths:
+  - 'test/spec/identity/merge-account/once.int.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
