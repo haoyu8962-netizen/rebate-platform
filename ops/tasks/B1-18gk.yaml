@@ -4,6 +4,7 @@ title: test-change（收紧，D10-1263）：补差候选同版本状态变化保
 type: test-change
 # 2026-11-11 union 入账（D10-1263；并入 D10-1260 登记的 FU-SETTLE-ADJUST-ACCOUNT-LOCK-TEST）。B1-18g 门禁记录 S1：没有用例钉「同 seq 同版本、受益人状态变了重跑 → 候选原样保留」；D10-1260：批准流程账户行锁无用例。两者都是主干已有行为，作收紧单先落。
 # ① 同 seq 同版本已有 pending（本人 +33、直推 +7、平台 +26），本人被封禁后重跑生成 → 原三行原样、不作废、不新增、不写审计；变异「同版本差额变了就作废重建」应红。② 两个订单同时向同一受益人批准补差（双连接屏障）→ 账户余额与分录串行正确；变异「去掉批准流程的账户行锁」应红。新鲜独立 Claude 写，Codex 只读评审；主干绿与变异红的实跑结果写进 PR 说明。② 写不稳先只落 ①。不碰 settle-adjust-generate/**。
+# 完成 2026-11-11（#3192，头 1e34ad3012bd）：[AC-B1-18gk#1] 同版本状态变化保留候选、#2 两单并发批准同一受益人（受益人行锁处交错）；主干 3 次绿、两条变异各红；Codex money 只读复核 pass。
 refs: [BR-FUND-09]
 refs_hash:
   BR-FUND-09: bbb8b69cddee
@@ -14,4 +15,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3192
