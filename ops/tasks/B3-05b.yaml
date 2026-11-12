@@ -16,7 +16,7 @@ type: impl
 refs: [BR-AI-06, BR-AI-14]
 refs_hash:
   BR-AI-06: bf97647decbd
-  BR-AI-14: c009637e9cb0
+  BR-AI-14: a24a409d186b
 deps: [B3-02c, B3-03b, B3-06a]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/core/**'

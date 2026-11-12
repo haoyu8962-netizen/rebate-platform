@@ -11,7 +11,7 @@ type: impl
 # 分工：清单外新台账，Codex 先写规则测试，Opus 实现，Codex 评审。风险 RV1。
 refs: [BR-AI-14, BR-AI-21]
 refs_hash:
-  BR-AI-14: c009637e9cb0
+  BR-AI-14: a24a409d186b
   BR-AI-21: c569f8bb74db
 deps: [B3-05b, B3-02d]
 paths:

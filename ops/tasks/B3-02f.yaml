@@ -9,7 +9,7 @@ type: impl
 # B3-02e 已于 PR #256 合并（远端 main 可查），旧台账 todo 不代表未完成。
 refs: [BR-AI-14]
 refs_hash:
-  BR-AI-14: c009637e9cb0
+  BR-AI-14: a24a409d186b
 deps: [B3-02e]
 paths:
   - 'apps/api/src/modules/agent/model-gateway/vendors/gateway.ts'

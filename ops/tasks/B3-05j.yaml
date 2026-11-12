@@ -6,7 +6,7 @@ type: impl
 # B3-05e 只断言帧与链接登记，T1 gradeCase 全过移到本任务验收。分工：Codex 写规则测试，Claude Opus 5.5 实现，Codex 评审。风险 RV1。
 refs: [BR-AI-14, BR-AI-21]
 refs_hash:
-  BR-AI-14: c009637e9cb0
+  BR-AI-14: a24a409d186b
   BR-AI-21: c569f8bb74db
 deps: [B3-05e, B3-05c, B3-01e]
 paths:

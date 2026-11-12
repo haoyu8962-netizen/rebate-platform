@@ -6,7 +6,7 @@ type: impl
 # 契约里 target_type 是自由文本，不改契约；只改 modules/admin 的推导表。
 refs: [BR-AI-19, BR-ID-15]
 refs_hash:
-  BR-AI-19: 966f895b4033
+  BR-AI-19: 3c0c40a3ed93
   BR-ID-15: ae5b8c769d84
 deps: [CT-24zzi]
 paths:

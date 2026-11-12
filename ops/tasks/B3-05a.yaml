@@ -13,8 +13,8 @@ type: impl
 # refs_hash 入账前用 node tools/ops/task.ts hash B3-05a 生成并替换下行。
 refs: [BR-AI-14, BR-AI-19]
 refs_hash:
-  BR-AI-14: c009637e9cb0
-  BR-AI-19: 966f895b4033
+  BR-AI-14: a24a409d186b
+  BR-AI-19: 3c0c40a3ed93
 deps: [B1-07a]
 paths:
   - 'apps/api/src/modules/agent/preprocess/redact/**'

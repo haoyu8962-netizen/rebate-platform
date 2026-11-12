@@ -14,7 +14,7 @@ refs_hash:
   BR-AI-03: 2131432de5c6
   BR-AI-04: 34cc76da510c
   BR-AI-05: 2ac35e2cd8ef
-  BR-AI-14: c009637e9cb0
+  BR-AI-14: a24a409d186b
 deps: [B3-03f, B3-04d, B3-04e, B3-04h, B3-05e, B3-05f, B3-05k]
 paths:
   - 'apps/api/src/app.module.ts'

@@ -12,7 +12,7 @@ type: impl
 # refs 保留核心 BR（台账评审 GT-23b S1：删 refs 会使规则测试评审把该 BR 的发现移出范围）；连一跳引用的任务书超 24KB，编排者手工生成任务书（brief.ts 去掉一跳引用后补 BR 全文指针），不经 dispatch.sh；评审范围由 refs 与 paths 决定，不以摘录为界。
 refs: [BR-AI-14]
 refs_hash:
-  BR-AI-14: c009637e9cb0
+  BR-AI-14: a24a409d186b
 # agent 目录的 risk-map 行随门禁 PR（approvals 第 23 条）合并，不另立 B3-02r。
 deps: []
 paths:

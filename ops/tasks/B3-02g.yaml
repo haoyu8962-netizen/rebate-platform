@@ -10,7 +10,7 @@ type: impl
 # 只用合成正文声明来源来测许可分支；不读取真实改写样本，不调用真实厂商，不冒充私有 Agent 冒烟。
 refs: [BR-AI-14]
 refs_hash:
-  BR-AI-14: c009637e9cb0
+  BR-AI-14: a24a409d186b
 deps: [B3-02c, B3-01d]
 paths:
   - 'packages/evals/src/replay.ts'

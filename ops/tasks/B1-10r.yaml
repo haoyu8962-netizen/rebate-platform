@@ -6,8 +6,8 @@ type: impl
 # ① 排序键：created_at 升序 → user 在 assistant 前 → id；夹具按线上写法（同一轮两行同一 created_at、助手 id 小于用户 id）。② 只在后台明细读出时遮 claim_draft 卡的 order_no（留后 4 位），库里与用户侧不变。③ 审计端口写失败 → 50001、响应不带会话内容。④ #15 收紧：created_at 既不单调增也不单调减。
 refs: [BR-AI-14, BR-AI-19]
 refs_hash:
-  BR-AI-14: c009637e9cb0
-  BR-AI-19: 966f895b4033
+  BR-AI-14: a24a409d186b
+  BR-AI-19: 3c0c40a3ed93
 deps: [B1-10q]
 paths:
   - 'apps/api/src/modules/agent/application/admin-traces*.ts'
