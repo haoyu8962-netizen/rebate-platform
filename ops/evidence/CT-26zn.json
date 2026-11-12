@@ -1,0 +1,95 @@
+{
+  "risk_note": "Texts only (C4b, D10-1315 ②(a) / D10-1354; planning write-back batch 8 couli#331, SPEC_REF 62b5c99338f8). contracts/texts.default.json gets the 53 AI-assistant page keys of the 15 new rows of 08 BR-TEXT-14 表 C (from 「AI 助手·对话页骨架」 to 「AI 助手·举报半屏的校验与操作失败」), wording verbatim, alphabetical places, version unchanged; no other keys, no server fields. specs/fund-term-keys.yaml: the 52 ordinary keys listed one by one in ordinary.keys (BR-TEXT-12 细则「资金术语键」); agent.earnings.updated_at is a fund term through the existing agent.earnings. prefix (listing it singly is rejected by checkFundTermDoc as covered by a prefix). fund-term-keys.gen.ts regenerated (generate-text-specs --verify 0). Host: agent-ui-texts + text-guard + share-page-texts + order-copy-texts 2229 pass, api content 897 pass, contracts:check 0.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex unavailable until 11-17 (approvals 36): fresh independent Claude via claude-run.sh, contract r1 pass, no findings (couli-runs/CT-26zn/review-claude-contract-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh): test/spec/content/agent-ui-texts/**, container red 13; reviewed by another fresh independent Claude context (approvals 36): spec-test r1 pass, no findings (couli-runs/CT-26zn/review-claude-spec-test-r1.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#8] 52 个普通键在 fund-term-keys.yaml 的 ordinary.keys 里各列一次，不落资金术语段、不靠前缀",
+    "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#9] agent.earnings.updated_at 入字典后由 agent.earnings. 前缀归资金术语，不单列、不落普通段",
+    "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#10] 52 句普通文案都不命中关键词核对、不带金额说法，也不进例外表",
+    "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#11] 加入 53 个新键后资金术语清单整体核对（每键恰好一段、例外表）无问题",
+    "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#12] 重新生成的 fund-term-keys.gen.ts 与 YAML 同步，含 52 个普通键与 agent.earnings. 前缀",
+    "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#13] 53 句都过禁用词守卫",
+    "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#1] 表 C 第八批 15 行展开成 53 个键，逐字是表 C 的原句",
+    "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#2] 新键加入后 texts 的键仍严格按字母序、不重复",
+    "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#3] 只有 agent.search_q 带 {q}、agent.earnings.updated_at 带 {time}，其余 51 句不带变量、没有花括号",
+    "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#4] 后台改写时变量集合须与默认一致：去掉或换名 {q}、{time}，或给不带变量的句子加变量，都被拒绝",
+    "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#5] 代入变量后得到界面上的整句：去搜索「关键词」、更新于 HH:mm",
+    "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#6] 次数用完与举报补充说明超长的句子不写数字，输入超长句只写上限 500",
+    "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#7] 53 句没有占位残留、分隔符或草稿键名，字典里也不另留 agent.draft.* 键"
+  ],
+  "task": "CT-26zn",
+  "spec_commit": "1f7367e2f36b7f1a9f182afa9fd71ddc70016924",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1f7367e2f36b7f1a9f182afa9fd71ddc70016924",
+      "tree": "100c9782a3383cf447f2ae26009a0222428220dd",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T15:04:32Z",
+      "finished_at": "2026-11-12T15:04:35Z",
+      "red_tests": [
+        "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#8] 52 个普通键在 fund-term-keys.yaml 的 ordinary.keys 里各列一次，不落资金术语段、不靠前缀",
+        "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#9] agent.earnings.updated_at 入字典后由 agent.earnings. 前缀归资金术语，不单列、不落普通段",
+        "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#10] 52 句普通文案都不命中关键词核对、不带金额说法，也不进例外表",
+        "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#11] 加入 53 个新键后资金术语清单整体核对（每键恰好一段、例外表）无问题",
+        "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#12] 重新生成的 fund-term-keys.gen.ts 与 YAML 同步，含 52 个普通键与 agent.earnings. 前缀",
+        "test/spec/content/agent-ui-texts/classification.test.ts > [AC-CT-26zn#13] 53 句都过禁用词守卫",
+        "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#1] 表 C 第八批 15 行展开成 53 个键，逐字是表 C 的原句",
+        "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#2] 新键加入后 texts 的键仍严格按字母序、不重复",
+        "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#3] 只有 agent.search_q 带 {q}、agent.earnings.updated_at 带 {time}，其余 51 句不带变量、没有花括号",
+        "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#4] 后台改写时变量集合须与默认一致：去掉或换名 {q}、{time}，或给不带变量的句子加变量，都被拒绝",
+        "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#5] 代入变量后得到界面上的整句：去搜索「关键词」、更新于 HH:mm",
+        "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#6] 次数用完与举报补充说明超长的句子不写数字，输入超长句只写上限 500",
+        "test/spec/content/agent-ui-texts/texts.test.ts > [AC-CT-26zn#7] 53 句没有占位残留、分隔符或草稿键名，字典里也不另留 agent.draft.* 键"
+      ],
+      "expected": [
+        "test/spec/content/agent-ui-texts/classification.test.ts",
+        "test/spec/content/agent-ui-texts/texts.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "76d9bc0d0aae451a9b35a9d7005bf8deb0bcfc91689054dfdb4a7e1490c8a92d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "84578fc71483faa9872aaf0fc0147abd583bb566",
+    "specs": "89ba75719133fbb0c92629b83a402eb22b170492"
+  }
+}

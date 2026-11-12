@@ -56,6 +56,9 @@
 # CT-26zl：08 BR-TEXT-12 细则（2026-11-12 Agent 设计补全）写明 agent.reply.empty、agent.suggest.empty.*、agent.product_list、
 # agent.card.claim_draft.submit、agent.notice.quote_failed、agent.notice.search_disabled.<platform> 归普通，逐键列出、不加前缀；
 # agent.notice.search_disabled.<platform> 与 agent.notice.search_disabled 同句含「查返利」，照它进 exempt。
+# CT-26zn：08 BR-TEXT-12 细则（2026-11-12 裁定回写第八批，D10-1315）写明 BR-TEXT-14 表 C 补登的 52 个 AI 助手页界面键
+# （agent.new_chat 至 agent.action_failed）归普通，逐键列出、不加 agent.report.、agent.quota. 一类前缀；同批的
+# agent.earnings.updated_at 在已有的 agent.earnings. 前缀内归 fund_terms，不再单列。
 fund_terms:
   prefixes:
     - order_status.
@@ -290,17 +293,29 @@ ordinary:
     - admin_dict.union_pids.status.active
     - admin_dict.union_pids.status.pending
     - admin_dict.union_pids.status.retired
+    - agent.action_failed
+    - agent.back_to_bottom
+    - agent.bind_phone
+    - agent.cancelled
     - agent.card.auth_required.title_bind_phone
     - agent.card.auth_required.title_login
     - agent.card.claim_draft.open_times
+    - agent.card.claim_draft.order_no
     - agent.card.claim_draft.paid_date
     - agent.card.claim_draft.submit
     - agent.card.claim_draft.title
     - agent.card.handoff.desc
     - agent.card.handoff.title
+    - agent.chip.orders
+    - agent.context.order
+    - agent.context.product
+    - agent.coupon_gone
     - agent.degraded
     - agent.degraded.empty
     - agent.disclaimer.commission
+    - agent.disconnected
+    - agent.disconnected_hint
+    - agent.examples_title
     - agent.guide.AuthManage
     - agent.guide.InviteShare
     - agent.guide.Messages
@@ -310,6 +325,13 @@ ordinary:
     - agent.guide.account.phone_off
     - agent.guide.open
     - agent.guide.unavailable
+    - agent.history.earlier
+    - agent.history.failed
+    - agent.history.none
+    - agent.incomplete
+    - agent.input_placeholder
+    - agent.limited
+    - agent.login
     - agent.match.matched
     - agent.match.relaxed
     - agent.match.spec_unconfirmed
@@ -317,6 +339,7 @@ ordinary:
     - agent.name
     - agent.need_login
     - agent.need_phone
+    - agent.new_chat
     - agent.notice.link_limit
     - agent.notice.more_orders
     - agent.notice.no_cheaper
@@ -335,7 +358,13 @@ ordinary:
     - agent.notice.tlj_none
     - agent.notice.tlj_taobao_only
     - agent.order.lookup_limited
+    - agent.order.title
     - agent.product_list
+    - agent.quota.guest_hint
+    - agent.quota.input_disabled
+    - agent.quota.phone_hint
+    - agent.refresh
+    - agent.refresh_batch
     - agent.refuse.advice
     - agent.refuse.out_of_scope
     - agent.refuse.output_blocked
@@ -344,8 +373,32 @@ ordinary:
     - agent.refuse.safety_unavailable
     - agent.refuse.unsafe
     - agent.reply.empty
+    - agent.report.close
+    - agent.report.entry
+    - agent.report.reason.illegal
+    - agent.report.reason.infringe
+    - agent.report.reason.misleading
+    - agent.report.reason.other
+    - agent.report.reason.vulgar
+    - agent.report.reason_error
+    - agent.report.reported
+    - agent.report.submit
+    - agent.report.subtitle
+    - agent.report.supplement
+    - agent.report.title
+    - agent.report.toast
+    - agent.report.too_long
     - agent.rule.found
     - agent.rule.not_found
+    - agent.rule.view
+    - agent.search
+    - agent.search_hint
+    - agent.search_q
+    - agent.send
+    - agent.stop
+    - agent.stopped
+    - agent.stopping
+    - agent.streaming_hint
     - agent.suggest.empty.1
     - agent.suggest.empty.2
     - agent.suggest.empty.3
@@ -353,6 +406,8 @@ ordinary:
     - agent.suggest.no_result.2
     - agent.suggest.no_result.3
     - agent.timeout
+    - agent.too_long
+    - agent.unavailable_hint
     - agent.welcome
     - ai_label
     - appeal.form.current_status
