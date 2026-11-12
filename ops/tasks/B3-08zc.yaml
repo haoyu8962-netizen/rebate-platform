@@ -5,7 +5,7 @@ type: impl
 # 2026-11-12 agent2 入账（规划会话 11-12 → 编排 D10-1287，变更记录 docs/changes/20261112-Agent模型路径与缺口补全.md §2.9、§3.1 A1；SPEC_REF a36eb9360fda）。
 # 现状：admit.ts 受理时插一行 text NULL 的助手消息，之后无人回写；卡片经 stream/mount/trace.ts 异步写 agent_cards，订单卡引用先读进程内待写卡（trace-retry withPendingCards / sharePendingCards）再读库；历史接口契约 planned。
 # 做法：过滤后的文字与卡片在 stream/run/manager.ts 的 ctx.text / 卡片下发处累积（不改 orchestrator/**），finalize 的终态事务里写 agent_messages.text / card_ids 与 agent_cards；断线后跑完的照写，崩溃由别的请求收尾的这条回复文字为空、不带卡片、结束原因照实；历史与下一轮卡片引用只读已提交数据。历史接口：形状照契约，收益卡走历史投影不带金额，非所有者 30504，过期只读，用户消息返回落库的脱敏形式。
-# 契约（去 planned、用户文本改脱敏形式）归 content 的 A9，接口部分以 A9 合并为前置；落库部分不依赖。stream/mount/** 与 agent 线 B3-05n（A4）有交叠，先后在 notices 约。验收 10 AC-S1-190 ③。RV1，独立 Claude 写测试，Opus 实现，Codex 评审。 D10-1297：钉旧做法的冻结测试并进本单——trace-retry/pending.test.ts、card-refs.int.test.ts（[AC-B3-08y#7] 进程内待写卡，11 条）随实现删除；[AC-B3-08q#5]、[AC-B3-08y#1/#5/#8] 只改卡片断言（卡片在终态提交时恰好落一次、与 trace 写者无关），工具调用部分不动；退役对照表在 PR 说明。
+# 契约（去 planned、用户文本改脱敏形式）归 content 的 A9，接口部分以 A9 合并为前置；落库部分不依赖。stream/mount/** 与 agent 线 B3-05n（A4）有交叠，先后在 notices 约。验收 10 AC-S1-190 ③。RV1，独立 Claude 写测试，Opus 实现，Codex 评审。 D10-1297：钉旧做法的冻结测试并进本单——trace-retry/pending.test.ts、card-refs.int.test.ts（[AC-B3-08y#7] 进程内待写卡，11 条）随实现删除；[AC-B3-08q#5]、[AC-B3-08y#1/#5/#8] 只改卡片断言（卡片在终态提交时恰好落一次、与 trace 写者无关），工具调用部分不动；第 2 次写测试又查出 [AC-B3-08q#5] 写者抛错两条、写者挂起一条与 [AC-B3-08y#6] 注销一条同样钉旧做法，一并改；退役对照表在 PR 说明。
 # prettier-ignore
 refs: [BR-AI-19, BR-AI-20, BR-AI-23, BR-AI-14, BR-AI-05]
 refs_hash:
@@ -22,7 +22,7 @@ paths:
 test_paths:
   - 'test/spec/agent/reply-persist/**'
   - 'test/spec/agent/session-history/**'
-  - 'test/spec/agent/trace-persist/async-model.int.test.ts'
+  - 'test/spec/agent/trace-persist/{async-model,async}.int.test.ts'
   - 'test/spec/agent/trace-retry/**'
 impl: claude
 tester: claude-independent
@@ -54,5 +54,28 @@ modify_existing:
     reason: tighten_only
     ruling: D10-1297
     note: '卡片改随终态同事务写；工具调用断言不动'
+  - file: test/spec/agent/trace-persist/async-model.int.test.ts
+    test: '[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products 出卡的 run，写者的 recordToolCalls 与 recordCards 都被调用且都失败；帧序列与 finish stop 与正常 run 一致，run 不变成 error；只记一条 warn agent_trace_write_failed（带 run_id），无未处理的拒绝，之后的 run 照常落库'
+    retitle_to: '[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products 出卡的 run，写者的 recordToolCalls 被调用且失败、卡片随终态落库与写者无关；帧序列与 finish stop 与正常 run 一致，run 不变成 error；只记一条 warn agent_trace_write_failed（带 run_id），无未处理的拒绝，之后的 run 照常落库'
+    reason: tighten_only
+    ruling: D10-1297
+    note: '同上：卡片随终态同事务写；工具调用断言不动'
+  - file: test/spec/agent/trace-persist/async.int.test.ts
+    test: '[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；只记一条 warn（agent_trace_write_failed，带 run_id，不含卡片与用户文本），该 run 不落卡'
+    retitle_to: '[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；只记一条 warn（agent_trace_write_failed，带 run_id，不含卡片与用户文本），该 run 的卡随终态落库、与写者无关'
+    reason: tighten_only
+    ruling: D10-1297
+    note: '卡片随终态同事务写，写者失败不再影响卡片'
+  - file: test/spec/agent/trace-persist/async.int.test.ts
+    test: '[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；写入放行后该 run 的卡才落库'
+    retitle_to: '[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；该 run 的卡在终态时已落库、不等写入放行'
+    reason: tighten_only
+    ruling: D10-1297
+    note: '卡片随终态同事务写、不等 trace 写入放行'
+  - file: test/spec/agent/trace-retry/erased.int.test.ts
+    test: '[AC-B3-08y#6][BR-AI-22][BR-AI-19] 首次写入失败后完成注销清理：队列再写时不写入任何 agent_cards / agent_tool_calls 行，不记 lost，记一条 info agent_trace_skipped_erased（run_id），之后不再写'
+    reason: tighten_only
+    ruling: D10-1297
+    note: '卡片已随终态落库并由注销清理处理；队列再写不新增卡片行（只改卡片断言的基准）'
 status: todo
 pr: null
