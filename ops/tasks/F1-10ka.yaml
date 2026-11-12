@@ -20,5 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-agent-traces/**'
-status: todo
-pr: null
+status: done
+pr: 3255

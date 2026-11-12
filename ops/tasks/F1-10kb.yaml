@@ -1,0 +1,19 @@
+id: F1-10kb
+repo: rebate-platform
+title: 后台紧急开关页补 agent.degraded.route_intents 的名称与「暂停后」说明（编排 D10-1322 / D10-1329；等 B1-22y #3258 登记该开关后做）
+type: impl
+# 2026-11-12 入账（前端线 f1-frontend-7）。只改 apps/admin/src/texts/kill-switches.ts：给 agent.degraded.route_intents 中文名与暂停效果一句。含义照 08 BR-AI-14 细则「无模型降级」的开关一句（off 时不按问法分流、不抽条件，回到「链接口令以外一律关键词搜索」；检索词修正三处不随开关回退），不另定口径。写法照同文件 growth.invite_bind.enabled、growth.invite_reward.enabled。前置：B1-22y（#3258）把该开关登记进后端开关注册表与冻结开关清单。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/texts/kill-switches.ts'
+test_paths:
+  - 'test/spec/frontend/admin-agent-route-intents-switch/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-agent-route-intents-switch/**'
+status: todo
+pr: null
