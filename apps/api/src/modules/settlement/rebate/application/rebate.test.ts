@@ -32,13 +32,18 @@ interface Rights {
   answered_at: Date | null;
 }
 
-function database(records: readonly SettlementRow[], rights: Rights, log: string[] = []) {
+function database(
+  records: readonly SettlementRow[],
+  rights: Rights,
+  log: string[] = [],
+  rebateStatus = 'WAITING',
+) {
   const order = {
     app_id: APP,
     order_id: ORDER,
     attr_at: ATTR_AT,
     platform: 'taobao',
-    rebate_status: 'WAITING',
+    rebate_status: rebateStatus,
     platform_status: 'SETTLED',
     rights_pending: false,
     commission_version: 1,
@@ -223,3 +228,72 @@ it('[AC-B1-18i#U5] recordedSubsidy：估值端口缺 recordedSubsidy 或 refresh
     expect(await full.recordedSubsidy?.(trx, ref)).toBe(200n);
   });
 });
+
+/** B1-18k (D10-1272): a terminal order's sync; moved / subsidyOnly say what orders did to the version. */
+async function terminalSync(
+  status: 'VOID' | 'CLAWED_BACK',
+  moved: { readonly commission_moved?: true; readonly subsidy_only?: true },
+) {
+  const log: string[] = [];
+  const calls: string[] = [];
+  const events: string[] = [];
+  const db = database([], { updated_at: at(3), answered_at: null }, log, status);
+  const port = createRebatePort({
+    ...deps,
+    estimates: {
+      bases: () => Promise.resolve({ before: 1000n, after: 800n }),
+      refresh: (_trx, _ref, value) => {
+        calls.push(value === undefined ? 'refresh' : 'refresh(value)');
+        return Promise.resolve();
+      },
+      recordedSubsidy: () => Promise.resolve(200n),
+      refreshSubsidy: () => {
+        calls.push('refreshSubsidy');
+        return Promise.resolve();
+      },
+    },
+    events: {
+      publish: (_trx: unknown, event: { name: string }) => {
+        events.push(event.name);
+        return Promise.resolve();
+      },
+    } as unknown as RebateDependencies['events'],
+  });
+  const input: OrderUpdateChange = {
+    ...change(800n),
+    est_before: 1000n,
+    est_after: 800n,
+    ...moved,
+  };
+  const source = { event: null, raw_status: 'SETTLED' } as unknown as Parameters<
+    typeof port.onUpdated
+  >[2];
+  await db.transaction().execute((trx) => port.onUpdated(trx, input, source));
+  const statusWrites = log.filter(
+    (sql) => sql.startsWith('update "app"."orders"') || sql.includes('order_status_history'),
+  );
+  return { calls, events, statusWrites };
+}
+
+for (const status of ['VOID', 'CLAWED_BACK'] as const) {
+  it(`[AC-B1-18k#U1] ${status} 且 N 变化推了版本：只按新 N 调 refresh，不改返利状态、不写历史、不发事件`, async () => {
+    const r = await terminalSync(status, { commission_moved: true });
+    expect(r.calls).toEqual(['refresh']);
+    expect(r.statusWrites).toEqual([]);
+    expect(r.events).toEqual([]);
+  });
+
+  it(`[AC-B1-18k#U2] ${status} 且仅补贴变化推了版本：只调 refreshSubsidy，不按 N 重算、不改返利状态`, async () => {
+    const r = await terminalSync(status, { commission_moved: true, subsidy_only: true });
+    expect(r.calls).toEqual(['refreshSubsidy']);
+    expect(r.statusWrites).toEqual([]);
+    expect(r.events).toEqual([]);
+  });
+
+  it(`[AC-B1-18k#U3] ${status} 且版本未推进：无计划，不调任何估值写入`, async () => {
+    const r = await terminalSync(status, {});
+    expect(r.calls).toEqual([]);
+    expect(r.statusWrites).toEqual([]);
+    expect(r.events).toEqual([]);
+  });
+}

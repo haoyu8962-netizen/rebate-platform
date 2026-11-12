@@ -1,0 +1,97 @@
+{
+  "risk_note": "RV2 money (commission versions of terminal orders). D10-1272 (FU-TERMINAL-VERSION-ROWS, option (b); BR-CALC-15 一览 terminal branch and BR-CALC-27 'including VOID / CLAWED_BACK', SPEC_REF since 3b5122e6): an order already VOID or CLAWED_BACK whose effective N or subsidy changes keeps bumping commission_version (orders, unchanged) and now gets that version's amount rows and four totals in the same transaction — rebate.ts locked branch returns a plan with only refresh (N path, same algorithm on the new N) or subsidyRefresh (subsidy-only path, previous version's shares and base copied, three totals recomputed); no status transition, history, event, ledger entry, notification, adjust candidate or clawback. Before: the version moved without rows, so after R12 / R13 restore the order figures, wallet summary (app-wide scan), bill, adjust and clawback threw 'expected commission_version K is not the current version K-1', and terminal subsidy baselines never advanced (D10-1270 ③). Readers checked (implementer + Codex money): pending-earnings / earnings / asset snapshot read ESTIMATED(PAID) / WAITING (/ CREDITED counts); bill classification takes WAITING candidates only; adjust generate / approve and clawback only CREDITED; self-rebate and withdraw-risk callers source WAITING / CREDITED orders; forfeited-shares and rule-trial are not money; notify-beneficiaries (claim-result 'expected rebate') — money r1 S1 — fixed first by B1-18kn (#3211, exclude_terminal), confirmed closed in r2 on this tree. Backfill of existing rows-less versions is FU-TERMINAL-VERSION-ROWS-BACKFILL (ops), not here. Host: tsc -b test apps/api 0; eslint / prettier 0; terminal-version-rows 12 + claim-result 35 green after the rebase; implementer before rebase: settlement + orders + commission int 511 files 3740, apps/api unit 5134.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review (effort medium). r1 fail 1×S1: a delayed claim-result notification summed a terminal order's current-version share as '预估返' (notify-beneficiaries ignored rebate_status; existing gap widened by this task) → D10-1274 split B1-18kn (#3211, landed first); r2 on the rebased tree: S1 closed, no new findings. D10-1272 ④ checklist: terminal rows never count as earned / pending / clawable / adjustable (status filters per reader), R12 / R13 restores readable with no bill difference, terminal subsidy-equal reports no longer bump and subsidy-only copies the previous shares (refreshSubsidy)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by fresh independent Claude, 3 attempts (cap). Attempt 1: n-change / subsidy / restore (7 red). r1 fail 4×S1 (same-transaction rollback; non-zero shares on subsidy-only; verbatim re-delivery — folded in as side assertions; N 801 rounding) → attempt 2 adds rollback.int (11 red). r2 fail 1×S1 (subsidy-only case could not tell refreshSubsidy from plain refresh) → D10-1273 attempt 3 adds subsidy-repriced.int (R7 600 / 300 → VOID → subsidy-only copies 600 / 300), red/3 12 red, the new case red at its own assertion with preconditions holding. Verified on throwaway copies: option (b) patch turns all 12 green; mutation 'terminal subsidy-only calls plain refresh' turns only the new case red (at the shares-equal assertion). Gate record (not counted) pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/settlement/terminal-version-rows/n-change.int.test.ts > [AC-B1-18k#1][BR-CALC-15][BR-CALC-27][BR-FUND-01] VOID（WAITING 单结算 -100 → BASE_ZERO，v2）后结算 -200：commission_version 3 且 v3 有金额行与合计行（B 0、金额 0，n_total -200）；再回正 800：v4 有行（B 800、本人 400、① 800 ④ 400）；仍 VOID、reason 不变，无分录、通知、补差候选、扣回",
+    "test/spec/settlement/terminal-version-rows/n-change.int.test.ts > [AC-B1-18k#2][BR-CALC-15][BR-CALC-27][BR-FUND-01] CLAWED_BACK（入账后结算 0 → R8，v2）后结算 -50：commission_version 3 且 v3 有行（B 0、金额 0，n_total -50）；再回正 800：v4 有行（B 800、本人 400）；仍 CLAWED_BACK、reason 与入账基数不变，无分录、通知、补差候选、扣回，余额不变",
+    "test/spec/settlement/terminal-version-rows/restore.int.test.ts > [AC-B1-18k#4][BR-CALC-15][BR-CALC-27][BR-FUND-22][BR-FUND-04] VOID（WAITING 单结算 -100 → BASE_ZERO）后结算回正 801（v3，取整边界），经真实入口 R12 回到 WAITING：订单页 b_est 801、本人 400（向下取整），钱包 400，当前版本行 B 801、400，① 801 ② 0 ④ 401；账单 b_settle 801 与当前 base 一致，不出差错单",
+    "test/spec/settlement/terminal-version-rows/restore.int.test.ts > [AC-B1-18k#4][BR-CALC-15][BR-CALC-27][BR-FUND-22] VOID（PAID 单预估 0 → BASE_ZERO）后预估回正 800（v3），经真实入口 R12 回到 ESTIMATED：订单页 b_est 800、本人 400，钱包 400，当前版本行 B 800、400",
+    "test/spec/settlement/terminal-version-rows/restore.int.test.ts > [AC-B1-18k#5][BR-CALC-15][BR-CALC-27][BR-FUND-22] CLAWED_BACK（入账后结算 0 → R8）后结算回正 800（v3），经真实入口 R13 回到 CREDITED：订单页金额可读，当前版本有行（B 800、本人 400）",
+    "test/spec/settlement/terminal-version-rows/rollback.int.test.ts > [AC-B1-18k#1][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：VOID（WAITING 单结算 -100 → BASE_ZERO，v2）后结算 -200，v3 金额行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单行整行、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（一行金额 0 / 0、一行合计 ① -200 ② -200 ④ -200），仍 VOID、reason 不变，不记账、不通知",
+    "test/spec/settlement/terminal-version-rows/rollback.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：CLAWED_BACK（补贴 200，入账后结算 0 → R8，v2）后仅补贴 200 → 350，v3 合计行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单补贴列、commission_version、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（份额与 base 同 v2，合计行补贴 350、① 350 ② 350 ④ 350），仍 CLAWED_BACK，余额不变",
+    "test/spec/settlement/terminal-version-rows/subsidy-repriced.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] VOID：预估 1000 的单经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、本人 300，订单佣金列仍 1000；平台失效（拼多多 4，R6 → VOID，不推版本）；再 N 不变、补贴 200 → 350 → commission_version 3，v3 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（600 / 300，不是 1000 / 500），合计行补贴 350、① 950 ② 350 ③ 600 ④ 650；仍 VOID、reason 不变，无分录、通知、补差候选、扣回",
+    "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] VOID：N 不变（结算仍 0）、补贴 200 → 350 → commission_version 3，v3 份额与 base 与 v2 逐项相同，合计行补贴 350、① 350 ② 350 ④ 350；状态与 reason 不变，无分录、通知、补差候选、扣回；之后补贴仍 350、平台更新时间更晚的报文不再 +1",
+    "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] CLAWED_BACK：N 不变（结算仍 0）、补贴 200 → 350 → commission_version 3，v3 份额与 base 与 v2 逐项相同，合计行补贴 350、① 350 ② 350 ④ 350；状态与 reason 不变，无分录、通知、补差候选、扣回；之后补贴仍 350、平台更新时间更晚的报文不再 +1",
+    "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] VOID：终态期间结算回正 800（v3 B 800、本人 400，仍终态）后 N 不变、补贴 200 → 350 → commission_version 4，v4 各受益人 (user_id, role, base_fen, amount_fen) 与 v3 整行相同（800 / 400），合计行补贴 350、① 1150 ② 350 ③ 800 ④ 750；状态与 reason 不变，无分录、通知、补差候选、扣回；原样重投不再 +1",
+    "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] CLAWED_BACK：终态期间结算回正 800（v3 B 800、本人 400，仍终态）后 N 不变、补贴 200 → 350 → commission_version 4，v4 各受益人 (user_id, role, base_fen, amount_fen) 与 v3 整行相同（800 / 400），合计行补贴 350、① 1150 ② 350 ③ 800 ④ 750；状态与 reason 不变，无分录、通知、补差候选、扣回；原样重投不再 +1"
+  ],
+  "task": "B1-18k",
+  "spec_commit": "1840f36a801613711c6d05018d3138f6c9adfee5",
+  "spec_ref": "fd92f360e7b8a33c7fb999c9b9a2be88e60f2577",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1840f36a801613711c6d05018d3138f6c9adfee5",
+      "tree": "0b55b5a4a2eabf9303fe8e5346719ba80b33cb72",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T02:07:42Z",
+      "finished_at": "2026-11-12T02:07:57Z",
+      "red_tests": [
+        "test/spec/settlement/terminal-version-rows/n-change.int.test.ts > [AC-B1-18k#1][BR-CALC-15][BR-CALC-27][BR-FUND-01] VOID（WAITING 单结算 -100 → BASE_ZERO，v2）后结算 -200：commission_version 3 且 v3 有金额行与合计行（B 0、金额 0，n_total -200）；再回正 800：v4 有行（B 800、本人 400、① 800 ④ 400）；仍 VOID、reason 不变，无分录、通知、补差候选、扣回",
+        "test/spec/settlement/terminal-version-rows/n-change.int.test.ts > [AC-B1-18k#2][BR-CALC-15][BR-CALC-27][BR-FUND-01] CLAWED_BACK（入账后结算 0 → R8，v2）后结算 -50：commission_version 3 且 v3 有行（B 0、金额 0，n_total -50）；再回正 800：v4 有行（B 800、本人 400）；仍 CLAWED_BACK、reason 与入账基数不变，无分录、通知、补差候选、扣回，余额不变",
+        "test/spec/settlement/terminal-version-rows/restore.int.test.ts > [AC-B1-18k#4][BR-CALC-15][BR-CALC-27][BR-FUND-22][BR-FUND-04] VOID（WAITING 单结算 -100 → BASE_ZERO）后结算回正 801（v3，取整边界），经真实入口 R12 回到 WAITING：订单页 b_est 801、本人 400（向下取整），钱包 400，当前版本行 B 801、400，① 801 ② 0 ④ 401；账单 b_settle 801 与当前 base 一致，不出差错单",
+        "test/spec/settlement/terminal-version-rows/restore.int.test.ts > [AC-B1-18k#4][BR-CALC-15][BR-CALC-27][BR-FUND-22] VOID（PAID 单预估 0 → BASE_ZERO）后预估回正 800（v3），经真实入口 R12 回到 ESTIMATED：订单页 b_est 800、本人 400，钱包 400，当前版本行 B 800、400",
+        "test/spec/settlement/terminal-version-rows/restore.int.test.ts > [AC-B1-18k#5][BR-CALC-15][BR-CALC-27][BR-FUND-22] CLAWED_BACK（入账后结算 0 → R8）后结算回正 800（v3），经真实入口 R13 回到 CREDITED：订单页金额可读，当前版本有行（B 800、本人 400）",
+        "test/spec/settlement/terminal-version-rows/rollback.int.test.ts > [AC-B1-18k#1][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：VOID（WAITING 单结算 -100 → BASE_ZERO，v2）后结算 -200，v3 金额行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单行整行、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（一行金额 0 / 0、一行合计 ① -200 ② -200 ④ -200），仍 VOID、reason 不变，不记账、不通知",
+        "test/spec/settlement/terminal-version-rows/rollback.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：CLAWED_BACK（补贴 200，入账后结算 0 → R8，v2）后仅补贴 200 → 350，v3 合计行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单补贴列、commission_version、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（份额与 base 同 v2，合计行补贴 350、① 350 ② 350 ④ 350），仍 CLAWED_BACK，余额不变",
+        "test/spec/settlement/terminal-version-rows/subsidy-repriced.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] VOID：预估 1000 的单经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、本人 300，订单佣金列仍 1000；平台失效（拼多多 4，R6 → VOID，不推版本）；再 N 不变、补贴 200 → 350 → commission_version 3，v3 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（600 / 300，不是 1000 / 500），合计行补贴 350、① 950 ② 350 ③ 600 ④ 650；仍 VOID、reason 不变，无分录、通知、补差候选、扣回",
+        "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] VOID：N 不变（结算仍 0）、补贴 200 → 350 → commission_version 3，v3 份额与 base 与 v2 逐项相同，合计行补贴 350、① 350 ② 350 ④ 350；状态与 reason 不变，无分录、通知、补差候选、扣回；之后补贴仍 350、平台更新时间更晚的报文不再 +1",
+        "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] CLAWED_BACK：N 不变（结算仍 0）、补贴 200 → 350 → commission_version 3，v3 份额与 base 与 v2 逐项相同，合计行补贴 350、① 350 ② 350 ④ 350；状态与 reason 不变，无分录、通知、补差候选、扣回；之后补贴仍 350、平台更新时间更晚的报文不再 +1",
+        "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] VOID：终态期间结算回正 800（v3 B 800、本人 400，仍终态）后 N 不变、补贴 200 → 350 → commission_version 4，v4 各受益人 (user_id, role, base_fen, amount_fen) 与 v3 整行相同（800 / 400），合计行补贴 350、① 1150 ② 350 ③ 800 ④ 750；状态与 reason 不变，无分录、通知、补差候选、扣回；原样重投不再 +1",
+        "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts > [AC-B1-18k#3][BR-CALC-15][BR-CALC-27] CLAWED_BACK：终态期间结算回正 800（v3 B 800、本人 400，仍终态）后 N 不变、补贴 200 → 350 → commission_version 4，v4 各受益人 (user_id, role, base_fen, amount_fen) 与 v3 整行相同（800 / 400），合计行补贴 350、① 1150 ② 350 ③ 800 ④ 750；状态与 reason 不变，无分录、通知、补差候选、扣回；原样重投不再 +1"
+      ],
+      "expected": [
+        "test/spec/settlement/terminal-version-rows/n-change.int.test.ts",
+        "test/spec/settlement/terminal-version-rows/restore.int.test.ts",
+        "test/spec/settlement/terminal-version-rows/rollback.int.test.ts",
+        "test/spec/settlement/terminal-version-rows/subsidy-repriced.int.test.ts",
+        "test/spec/settlement/terminal-version-rows/subsidy.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "958af85263ac3d89ccf983f6415e487134f289efcc4c3fa08dd5c6ae435c91d3"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "726d32c720c2228b3a07dab80ee6a6930cae5437",
+    "specs": "cef2c767d3fe1b5686c8f361ae988b790c9f1da2"
+  }
+}

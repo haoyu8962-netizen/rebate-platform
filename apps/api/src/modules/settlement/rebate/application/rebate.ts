@@ -100,6 +100,7 @@ export interface RebateHoldAudit extends RebateOrderRef {
  * Re-read by app_id/order_id/attr_at; decide before writing; transitionOrderRebate + CAS
  * (old rebate_status AND row_version), re-read after a zero-row CAS. Never open a transaction.
  * CREDITED updates only log, plus a refresh when the version moved. No ledger calls. Imports arrive with DB default UNATTRIBUTED.
+ * VOID / CLAWED_BACK（终态，D10-1272、BR-CALC-15 终态一路）同样只在版本推进时补写该版本金额行，不迁移状态。
  * R1/R2 history starts at null, not that storage default. R2/R3a may chain R4 or R6.
  */
 /**
@@ -522,8 +523,9 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
     // B1-18i (BR-CALC-15, BR-CALC-27「仅补贴变化的版本」): a version moved on the subsidy alone only
     // gets its rows (the previous version's shares and B, the totals on the new subsidy). It is no
     // change of N: no COMMISSION_CHANGED, no status, no entry, notice, candidate or clawback here.
-    // A terminal (locked) order takes the same path as an N change (D10-1268): no rows here, left to
-    // FU-TERMINAL-VERSION-ROWS for both paths.
+    // D10-1272（BR-CALC-15 终态一路、BR-CALC-27「含终态订单」）：VOID / CLAWED_BACK 的订单版本照推，
+    // 该版本的金额行与四段金额在同一事务写出（N 变化走 refresh、仅补贴变化走 refreshSubsidy，
+    // 与在途订单同一算法）；不迁移状态，不写分录、通知、补差候选、扣回。
     const subsidyOnly = change.commission_moved === true && change.subsidy_only === true;
     const nMoved = change.commission_moved === true && !subsidyOnly;
     if (state === 'CREDITED') {
@@ -547,7 +549,12 @@ export function createRebatePort(deps: RebateDependencies): RebatePort {
       } else {
         logger.info({ ...base, outcome: 'locked_noop' }, 'locked order update ignored');
       }
-      return null;
+      if (change.commission_moved !== true) return null;
+      // D10-1272：终态订单只补写当前版本的金额行，状态不动（无步骤即 write=false、不写历史）。
+      const terminal = draft(state);
+      if (subsidyOnly) terminal.subsidyRefresh = true;
+      else terminal.refresh = true;
+      return finish(terminal, row.rebate_status);
     }
     const d = draft(state);
     d.subsidyRefresh = subsidyOnly;
