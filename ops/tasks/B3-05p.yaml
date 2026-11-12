@@ -1,0 +1,28 @@
+id: B3-05p
+repo: rebate-platform
+title: B3-05o 跟进（D10-1378，须在模型路径启用 B3-03k 之前合并）：agent_tool_calls 加 initiator 列并随写库落「服务端发起」；比较提示补「最近对话只有报价卡」；{q_short} 只在检索词是本条用户消息的子串时填；订单工具部分关闭时同全关出 OrderList 引导卡
+type: impl
+# 2026-11-13 agent 线入账（编排 D10-1378；#3294 事后评审 couli-runs/B3-05o/orch-postmerge-review-3294.md）。① 08 BR-AI-01 细则「意图兜底」要求留痕标明服务端发起：现在只在内存留痕（core/run.ts），stream/mount/trace.ts 的 toolCallRecords 与 store/results 写库都不带，表无此列——新迁移加列（默认 model、取值 model / server），写库带上，补落库断言；04 的表形状由规划随后回写。② BR-AI-18 细则「比较与适用性的提示」条件含最近对话里的报价卡。③ {q_short} 防止把模型生成的检索词放进快捷问法。④ 部分订单工具关闭的情形规则未写，按编排补全同全关出 OrderList 卡（规划下次小修）。
+# store/results/** 与 db 改动在 agent2 的地盘：只动 agent_tool_calls 写入那一处，落地前在 notices 与 agent2 约先后；迁移槽请编排排。不空回复计数接 /metrics 改 platform，另记 FU-EMPTY-REPLY-METRIC，不在本单。
+refs: [BR-AI-01, BR-AI-18, BR-AI-19]
+refs_hash:
+  BR-AI-01: 8162dc4297fb
+  BR-AI-18: 81915a2d5a19
+  BR-AI-19: 3c0c40a3ed93
+deps: [B3-05o]
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/store/results/**'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/**'
+test_paths:
+  - 'test/spec/agent/intent-fallback-followup/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/intent-fallback-followup/**'
+status: todo
+pr: null
