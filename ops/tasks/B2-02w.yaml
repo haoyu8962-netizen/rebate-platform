@@ -1,0 +1,24 @@
+id: B2-02w
+repo: rebate-platform
+title: 工作台卡片 recon_diff_open 的按 app 计数（ledger 只读导出）——与后台差错单列表 status=open 共用同一判定（D10-1401）
+type: impl
+# 2026-11-13 funds 入账（编排 D10-1401；方案 couli-runs/DASHBOARD/plan-20261113.md）。契约 AdminDashboardTodo.count = 该卡列表页待处理数，卡片 route 的筛选是 status=open。
+# 列表 listAdminReconDiffs 已经用 countAdminReconDiffs(db, filter) 算 total；计数函数直接复用这个判定（filter 只给 appId 与 status=open），不另写条件。只数 R1–R3，与列表一致。
+# 不含 processing：列表筛选是单值 status=open，含了就与 route 不等；processing 现在没有写入方，两者结果相同。用索引 recon_diffs_status_idx (app_id, status, created_at)。
+# 不改列表行为与契约。RV2 ledger，规则测试新鲜独立 Claude，money Codex medium。
+refs: [BR-FUND-22]
+refs_hash:
+  BR-FUND-22: c9930aaf2459
+deps: []
+paths:
+  - 'apps/api/src/modules/ledger/application/admin-recon-diffs*.ts'
+  - 'apps/api/src/modules/ledger/infra/*recon-diff*.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+test_paths:
+  - 'test/spec/ledger/dashboard-recon-diff-count/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/dashboard-recon-diff-count/**'
+status: todo
