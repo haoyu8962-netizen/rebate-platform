@@ -1,0 +1,23 @@
+id: CT-13a
+repo: rebate-platform
+title: 规格：specs/events.yaml 登记四个客户端 Agent 流诊断事件 agent_stream_seq_gap / agent_stream_frame_too_large / agent_stream_limit / agent_stream_unknown_event，字段照 03 §4.7「agent_* 事件的字段」（C4 第三项，D10-1315）；agent_output_filtered 不登记
+type: impl
+# 2026-11-12 be 入账（编排 D10-1315 / D10-1330 / 本轮派工；变更记录 20261112 §3.4 C4 第三项）。字段只认 SPEC_REF ea7850e2f45f 上 03 §4.7「agent_* 事件的字段」两张表：
+#   共有：run_id（string，可缺，本轮 meta 帧给的值，未收到 meta 时不带）、message_id（同上）、schema_version / bridge_version / config_version / h5_release（string，必填，这四个事件填 "unknown" 或取不到填 "unknown"，见表）；
+#   各自：seq_gap 带 expected、received（integer，必填）；frame_too_large 只有共有字段；limit 带 kind（enum：text / cards / frames，必填）；unknown_event 带 type（string，必填，超过 64 字符只取前 64，不带 data；同一 run 同一 type 只记一条——客户端行为，03 §7.2，写进 note）。
+# agent_output_filtered 不登记（出站过滤命中只记服务端留痕，BR-AI-06）。version 递增；文件头 TODO 里去掉 agent_*。登记草稿 couli-runs/PLANNING-b7/research/C-client-events.json proposed_edits 最后一条只作参考，以 03 §4.7 为准。
+# 规则测试由独立 Claude 写（先红），Opus 实现，Codex contract 评审。C4b（界面文案键）等下一批回写，不在本单。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'specs/events.yaml'
+test_paths:
+  - 'test/spec/contracts/agent-stream-events/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/agent-stream-events/**'
+status: todo
+pr: null
