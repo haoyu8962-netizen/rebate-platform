@@ -1,0 +1,25 @@
+id: CT-24zzk
+repo: rebate-platform
+title: 契约：工作台 adminGetDashboard 的 yesterday 改为可空——还没有任何聚合行（新 app、从未聚合成功）时返回 null，不返回假的 0；描述补「不晚于昨天的最新一行，date 与 as_of 如实」（D10-1403 Q3）
+type: contract
+# 2026-11-13 收款线入账（编排 D10-1403 ③；原放 B1-34q，B1-34q 的任务书超 24KB，按 规划/11 §5.3 拆出）。只改 AdminDashboard.yesterday 的可空性与 adminGetDashboard 描述里 yesterday 一句，AdminDashboardYesterday 字段不变；重生成生成物。前端处理空值由 fe 跟（编排合并后拉）。契约槽等编排叫号。
+refs: []
+refs_hash: {}
+contract_sections: ['6.6']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/admin-dashboard-yesterday/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
