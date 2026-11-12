@@ -3914,3 +3914,177 @@ it('[CT-06zzzzi] B2-09ze shape without declarations: held to the red rule exactl
     outsideOnlyFiles([ALERT], alertRead(), [], [], ALERT_OUTSIDE, alertDeclared()),
   ).toHaveLength(1);
 });
+
+// CT-06zzzzr (FU-MODIFY-EXISTING-RETITLE, D10-1278 ②, after B3-16a): a modify_existing entry with
+// `retitle_to` renames its test; the red run runs the head, so its report has the new name.
+const RC_OLD = '[AC-2] late';
+const RC_NEW = '[AC-2] callback after closing';
+const RC_HEAD = file(
+  spec('[AC-1] a'),
+  spec(RC_NEW, 'f.send = () => expect.fail("sent");'),
+  spec('[AC-3] c'),
+  spec('[AC-4] new'),
+);
+const RC_ONLY = file(
+  spec('[AC-1] a'),
+  spec(RC_NEW, 'f.send = () => expect.fail("sent");'),
+  spec('[AC-3] c'),
+);
+const rcDeclared = () => modDeclared([RC_OLD]).map((d) => ({ ...d, retitle_to: RC_NEW }));
+const RC_TESTS: RedTest[] = [
+  ['[AC-1] a', 'passed'],
+  [RC_NEW, 'passed'],
+  ['[AC-3] c', 'passed'],
+  ['[AC-4] new', 'failed', 'AssertionError: expected 1 to be 2'],
+];
+
+it('[CT-06zzzzr] a renamed declared frozen test is matched in the report by retitle_to and may pass green; the note names the old and the new title', () => {
+  const b = modBaselines(RC_HEAD, rcDeclared());
+  expect(b.get(MOD)).toMatchObject({
+    kind: 'tests',
+    modified: {
+      ok: true,
+      blocks: [{ test: RC_OLD, headTest: RC_NEW, found: true, changed: true }],
+      outside: expect.any(String),
+    },
+  });
+  const result = checkRedReports([redReport(MOD, RC_TESTS)], [MOD], ROOT, b, [], [], rcDeclared());
+  expect(result.problems).toEqual([]);
+  expect(result.ok).toBe(true);
+  expect(result.red).toEqual([`${MOD} > [AC-4] new`]);
+  expect(result.exempt).toContainEqual({
+    file: MOD,
+    test: RC_NEW,
+    status: 'passed',
+    declared: true,
+    reason: MOD_NOTE,
+    modified: true,
+  });
+  const note = result.notes.find((n) => n.startsWith(`${MOD} > ${RC_NEW}:`));
+  expect(note).toBeDefined();
+  expect(note).toContain('modify_existing');
+  expect(note).toContain(RC_OLD);
+  expect(note).toContain(RC_NEW);
+  // Red on the skeleton is fine too (a declared change may be either).
+  const red = checkRedReports(
+    [
+      redReport(
+        MOD,
+        RC_TESTS.map((t): RedTest =>
+          t[0] === RC_NEW ? [RC_NEW, 'failed', 'AssertionError: expected 1 to be 2'] : t,
+        ),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    rcDeclared(),
+  );
+  expect(red.problems).toEqual([]);
+  expect(red.red).toEqual([`${MOD} > ${RC_NEW}`, `${MOD} > [AC-4] new`]);
+});
+
+it('[CT-06zzzzr] the report has only the old title of a renamed declared test: the declaration matches no test of the report (a note), and the old-named green test is judged as before', () => {
+  const b = modBaselines(RC_HEAD, rcDeclared());
+  const result = checkRedReports(
+    [
+      redReport(
+        MOD,
+        RC_TESTS.map((t): RedTest => (t[0] === RC_NEW ? [RC_OLD, t[1]] : t)),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    rcDeclared(),
+  );
+  expect(result.ok).toBe(false);
+  const notes = result.notes.filter((n) =>
+    n.startsWith(`${MOD}: the declared change of a frozen test (modify_existing)`),
+  );
+  expect(notes).toHaveLength(1);
+  expect(notes[0]).toContain('matches no test of the report');
+  // The old name is no test of the head: green, it has no teeth.
+  expect(result.problems).toContainEqual({ file: MOD, test: RC_OLD, reason: NO_TEETH });
+  expect(result.exempt?.some((e) => e.modified === true) ?? false).toBe(false);
+});
+
+it('[CT-06zzzzr] a declared rename the head did not make (old title kept, or copied) does not apply: a problem, the test must be red', () => {
+  // The head changed the block in place and kept the old title.
+  const kept = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(MOD_HEAD, rcDeclared()),
+    [],
+    [],
+    rcDeclared(),
+  );
+  expect(kept.ok).toBe(false);
+  expect(kept.problems).toContainEqual({
+    file: MOD,
+    test: expect.stringMatching(/\[AC-2\] /),
+    reason: expect.stringMatching(
+      /^declared in modify_existing, but the declaration does not apply: /,
+    ),
+  });
+  expect(kept.problems).toContainEqual({ file: MOD, test: RC_OLD, reason: NO_TEETH });
+  // The old block kept, a copy under the new name next to it.
+  const copied = file(
+    spec('[AC-1] a'),
+    spec(RC_OLD, 'await waitFor(60_000);'),
+    spec(RC_NEW, 'f.send = () => expect.fail("sent");'),
+    spec('[AC-3] c'),
+    spec('[AC-4] new'),
+  );
+  const copy = checkRedReports(
+    [redReport(MOD, [...RC_TESTS, [RC_OLD, 'passed']])],
+    [MOD],
+    ROOT,
+    modBaselines(copied, rcDeclared()),
+    [],
+    [],
+    rcDeclared(),
+  );
+  expect(copy.ok).toBe(false);
+  expect(copy.problems).toContainEqual({
+    file: MOD,
+    test: expect.stringMatching(/\[AC-2\] /),
+    reason: expect.stringMatching(
+      /^declared in modify_existing, but the declaration does not apply: /,
+    ),
+  });
+  expect(copy.problems).toContainEqual({ file: MOD, test: RC_NEW, reason: NO_TEETH });
+});
+
+it('[CT-06zzzzr] a file whose only change is the declared renamed block is left out of the expected list (modifiedOnlyFiles passes retitle_to); with a new test it stays expected', () => {
+  const read = (head: string) => reader({ [MOD]: MOD_BASE }, { [MOD]: head });
+  const left = modifiedOnlyFiles([MOD], read(RC_ONLY), rcDeclared());
+  expect(left.map((r) => r.file)).toEqual([MOD]);
+  expect(left[0]?.tests).toHaveLength(1);
+  expect(modifiedOnlyFiles([MOD], read(RC_HEAD), rcDeclared())).toEqual([]);
+  // Without retitle_to the same file is not left out (the old name is gone at the head).
+  expect(modifiedOnlyFiles([MOD], read(RC_ONLY), modDeclared([RC_OLD]))).toEqual([]);
+  // Nothing shown red when the renamed block is all that changed and the file is judged anyway.
+  const nothing = checkRedReports(
+    [redReport(MOD, RC_TESTS.slice(0, 3))],
+    [MOD],
+    ROOT,
+    modBaselines(RC_ONLY, rcDeclared()),
+    [],
+    [],
+    rcDeclared(),
+  );
+  expect(nothing.problems).toEqual([
+    {
+      file: MOD,
+      test: null,
+      reason:
+        'existed at the base and every test is unchanged or a declared change of a frozen test (modify_existing): nothing is shown red (3 test(s))',
+    },
+  ]);
+});

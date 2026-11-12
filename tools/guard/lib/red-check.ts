@@ -242,6 +242,11 @@
 // red-check has no way to the owner's approval label (it runs in the verify container, offline):
 // evidence-check requires the label for any ledger with modify_existing, and the evidence record
 // of each block before and after (tools/ci/evidence-check.ts).
+// A renamed declared test (CT-06zzzzr; orchestrator ruling D10-1278 ②): an entry with `retitle_to`
+// is located by its `test` at the base and its `retitle_to` at the head (compareModifiedBlocks'
+// headNames); the red run runs the head, so the report is matched by `retitle_to`, and the note
+// names both titles. A report with only the old title: the entry matches no test (a note), and
+// the old-named test is judged as any other.
 import { matchesAny } from '../../lib/glob.ts';
 import type { Change } from '../../lib/git.ts';
 import { RED_EXEMPT_REASON_MIN } from '../../lib/task-file.ts';
@@ -717,8 +722,15 @@ export function modifiedOnlyFiles(
     const before = read.base(file);
     const after = read.head(file);
     if (before === null || after === null || !COMPARABLE.test(file)) continue;
-    const names = modified.filter((d) => d.file === file).map((d) => d.test);
-    const compared = compareModifiedBlocks(before, after, names);
+    const here = modified.filter((d) => d.file === file);
+    const names = here.map((d) => d.test);
+    // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
+    const compared = compareModifiedBlocks(
+      before,
+      after,
+      names,
+      here.map((d) => d.retitle_to),
+    );
     if (!compared.ok || compared.outside !== null) continue;
     if (!compared.blocks.every((b) => b.found && b.changed)) continue;
     out.push({ file, tests: names });
@@ -925,9 +937,15 @@ export function ruleTestBaselines(
       }
     }
     // CT-06zzzg (D10-701): for a file the ledger's modify_existing name, which block each name is.
-    const modifiedHere = modified.filter((d) => d.file === file).map((d) => d.test);
-    if (modifiedHere.length > 0) {
-      modifiedState = compareModifiedBlocks(comparedBase, after, modifiedHere);
+    const modifiedDeclared = modified.filter((d) => d.file === file);
+    if (modifiedDeclared.length > 0) {
+      // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
+      modifiedState = compareModifiedBlocks(
+        comparedBase,
+        after,
+        modifiedDeclared.map((d) => d.test),
+        modifiedDeclared.map((d) => d.retitle_to),
+      );
     }
     const others = [...support].filter((s) => s !== file).sort();
     const closure =
@@ -1657,7 +1675,8 @@ export function checkRedReports(
                 "declared in modify_existing, but its block is the base's: the entry is redundant (remove it from the ledger)",
             });
           } else {
-            modifiable.set(d.test, d);
+            // CT-06zzzzr (D10-1278 ②): the report runs the head, so a renamed test has its new name.
+            modifiable.set(d.retitle_to ?? d.test, d);
           }
         });
       }
@@ -1721,7 +1740,7 @@ export function checkRedReports(
               : { file, test: name, status, declared: true, reason: declaration.reason };
       const exemptNote = (how: string): string =>
         modifiedEntry !== null
-          ? `${file} > ${name}: a changed frozen test declared in modify_existing (${modifiedEntry.reason}, ${modifiedEntry.ruling}; ${how}; note: ${modifiedEntry.note}), not held to the red rule; ${modifiedConfirmation}`
+          ? `${file} > ${name}: a changed frozen test declared in modify_existing (${modifiedEntry.reason}, ${modifiedEntry.ruling}; ${modifiedEntry.retitle_to === undefined ? '' : `renamed from "${modifiedEntry.test}" to "${modifiedEntry.retitle_to}" (retitle_to); `}${how}; note: ${modifiedEntry.note}), not held to the red rule; ${modifiedConfirmation}`
           : row !== null
             ? `${file} > ${name}: a kept row of an .each table whose title template, callback and rows are the base's (rows removed only), exempt by the task's red_exempt_rows declaration (${how}; reason: ${row.reason}); ${rowConfirmation}`
             : declaration === null
@@ -1804,7 +1823,9 @@ export function checkRedReports(
     for (const d of modifiable.values()) {
       if (!modifiedMatched.has(d)) {
         notes.push(
-          `${file}: the declared change of a frozen test (modify_existing) "${d.test}" matches no test of the report (the full name must be exactly the red reporter's)`,
+          d.retitle_to === undefined
+            ? `${file}: the declared change of a frozen test (modify_existing) "${d.test}" matches no test of the report (the full name must be exactly the red reporter's)`
+            : `${file}: the declared change of a frozen test (modify_existing) "${d.test}", renamed to "${d.retitle_to}" (retitle_to), matches no test of the report by its new name (the full name must be exactly the red reporter's)`,
         );
       }
     }

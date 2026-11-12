@@ -2255,11 +2255,20 @@ export function compareEachRows(base: string, head: string): (EachRows | null)[]
 //   text followed by `\n// .each row <k> of <n>: <the row's raw text>` (an inline row from the
 //   block, a named table's row from its declaration); it is changed when the shared part or its
 //   own row changed.
+// - A renamed test (CT-06zzzzr; orchestrator ruling D10-1278 ②, after B3-16a, whose frozen title
+//   counted the tools): `headNames[i]`, when given, is the name of `names[i]` at the head (the
+//   ledger's `retitle_to`); the block is looked up by `names[i]` at the base and by `headNames[i]`
+//   at the head, and `headTest` says the head's name. Only a plain block may be renamed (a static
+//   title and describes on both sides, no `.each` / `.for` call), the old name must name no block
+//   of the head (not kept, not copied), the new name no block of the base, and the block changed.
+//   Its place and describes are judged as any declared block's: a rename never moves a block.
 
 /** One declared name and its block at the base and the head (compareModifiedBlocks). */
 export type ModifiedBlock =
   | {
       test: string;
+      /** The name the block was found by at the head: `test` itself unless renamed (CT-06zzzzr). */
+      headTest: string;
       found: true;
       /** The block's source at the base: from its first token to its last (its `;` included). */
       before: string;
@@ -2284,6 +2293,11 @@ type BlockView = {
   pattern: RegExp;
   title: string;
   static: boolean;
+  /**
+   * CT-06zzzzr (Codex r1 S1): the callee chain has `.each` / `.for` (a table call, whatever its
+   * title): such a block is never plain for a rename, even when its title is a static literal.
+   */
+  eachCall: boolean;
   /** Place in the shared rest and describes (the key without the block text). */
   place: string;
   key: string;
@@ -2307,10 +2321,17 @@ function blockViews(source: string): {
     const from = first.start ?? 0;
     const to = (last.start ?? 0) + last.text.length;
     const parts = b.key.split('\u0000');
+    let eachCall = false;
+    for (let k = c.start; k < c.open; k += 1) {
+      const t = tokens[k] as Token;
+      if (t.kind === 'id' && (t.text === 'each' || t.text === 'for') && tokens[k - 1]?.text === '.')
+        eachCall = true;
+    }
     return {
       pattern: b.pattern,
       title: b.title,
       static: !c.title.includes(null) && around.every((s) => !s.title.includes(null)),
+      eachCall,
       place: `${parts[0] ?? ''}\u0000${parts[1] ?? ''}`,
       key: b.key,
       raw: source.slice(from, to),
@@ -2327,6 +2348,7 @@ export function compareModifiedBlocks(
   base: string,
   head: string,
   names: readonly string[],
+  headNames?: readonly (string | undefined)[],
 ): ModifiedComparison {
   let before: ReturnType<typeof blockViews>;
   let after: ReturnType<typeof blockViews>;
@@ -2376,10 +2398,21 @@ export function compareModifiedBlocks(
   // Row entries by head block: the base block, and the entry indexes with their row.
   const groups = new Map<number, { base: number; entries: { at: number; row: number }[] }>();
   const blocks = names.map((test, at): ModifiedBlock => {
+    const headTest = headNames?.[at] ?? test;
+    const renamed = headTest !== test;
     const b = locate(before, test, 'base');
     if (!('index' in b)) return { test, found: false, reason: b.reason };
-    const h = locate(after, test, 'head');
+    const h = locate(after, headTest, 'head');
     if (!('index' in h)) {
+      if (renamed) {
+        return {
+          test,
+          found: false,
+          reason: h.reason.startsWith('no test block')
+            ? `the new name (retitle_to) "${headTest}" names no test block of the head`
+            : `the new name (retitle_to) "${headTest}": ${h.reason}`,
+        };
+      }
       return {
         test,
         found: false,
@@ -2390,6 +2423,44 @@ export function compareModifiedBlocks(
     }
     const x = before.blocks[b.index] as BlockView;
     const y = after.blocks[h.index] as BlockView;
+    // CT-06zzzzr (D10-1278 ②): a rename only of a plain block, the old name gone from the head,
+    // the new one absent from the base.
+    if (renamed) {
+      // Codex r1 S1: row null is not proof of a plain block (an .each / .for call whose title has
+      // no placeholder is read as static); the call itself decides, on both sides.
+      if (
+        b.row !== null ||
+        h.row !== null ||
+        x.eachCall ||
+        y.eachCall ||
+        before.each[b.index] != null ||
+        after.each[h.index] != null
+      ) {
+        return {
+          test,
+          found: false,
+          reason:
+            'only a plain block with a static title and static describes may be renamed (an .each / .for block or row may not)',
+        };
+      }
+      if (after.blocks.some((v) => v.pattern.test(test))) {
+        return {
+          test,
+          found: false,
+          reason: `the old name still names a test block of the head (not renamed, or copied as "${headTest}")`,
+        };
+      }
+      if (before.blocks.some((v) => v.pattern.test(headTest))) {
+        return {
+          test,
+          found: false,
+          reason: `the new name (retitle_to) "${headTest}" already names a test block of the base`,
+        };
+      }
+      if (x.key === y.key) {
+        return { test, found: false, reason: 'the renamed block is unchanged' };
+      }
+    }
     if (b.row === null || h.row === null) {
       if (b.row !== h.row) {
         return {
@@ -2403,7 +2474,14 @@ export function compareModifiedBlocks(
       }
       plainBase.add(b.index);
       pairs.set(h.index, b.index);
-      return { test, found: true, before: x.raw, after: y.raw, changed: x.key !== y.key };
+      return {
+        test,
+        headTest,
+        found: true,
+        before: x.raw,
+        after: y.raw,
+        changed: x.key !== y.key,
+      };
     }
     if (b.row !== h.row) {
       return { test, found: false, reason: 'the row moved in the .each / .for table' };
@@ -2455,6 +2533,7 @@ export function compareModifiedBlocks(
         why === null
           ? {
               test,
+              headTest: test,
               found: true,
               before: `${x.raw}${rowTag(eb, row)}`,
               after: `${y.raw}${rowTag(eh, row)}`,

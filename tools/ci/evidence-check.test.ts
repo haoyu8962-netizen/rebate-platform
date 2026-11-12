@@ -2959,3 +2959,130 @@ it('[CT-06zzzk] the B2-04zx shape: every row of both .each tables declared, only
     "modify_existing[3].after: must be the block's text at the head, character for character",
   );
 });
+
+// CT-06zzzzr (FU-MODIFY-EXISTING-RETITLE, D10-1278 ②, after B3-16a): a modify_existing entry with
+// `retitle_to` renames its test; the evidence record repeats retitle_to as the ledger has it, and
+// before / after are the blocks of the old name at the merge base and the new name at the head.
+const EV_NEW_TITLE = '[AC-B2-09t#35] late callback, never resent';
+const EV_RETITLED = modTest(EV_NEW_TITLE, "f.send = () => expect.fail('sent');");
+const evTrusted = (name: string): string => {
+  const dir = modTrusted(name, 'tighten_only');
+  write(dir, {
+    'ops/tasks/B2-09v.yaml': modLedger('tighten_only').replace(
+      `    test: '${MOD_TEST}'\n`,
+      `    test: '${MOD_TEST}'\n    retitle_to: '${EV_NEW_TITLE}'\n`,
+    ),
+  });
+  return dir;
+};
+const evRecord = (extra: Evidence = {}): Evidence =>
+  modRecord({ retitle_to: EV_NEW_TITLE, after: EV_RETITLED, ...extra });
+
+it('[CT-06zzzzr] a renamed frozen test: with the label, the record carrying the ledger retitle_to and the blocks of the old name at the base and the new at the head, the change after spec_commit passes', () => {
+  const trusted = evTrusted('trusted-retitle');
+  expect(readFileSync(join(trusted, 'ops/tasks/B2-09v.yaml'), 'utf8')).toContain(
+    `retitle_to: '${EV_NEW_TITLE}'`,
+  );
+  const head = modBranch('retitle-good', modSource(EV_RETITLED), modEvidence([evRecord()]));
+  const ok = modCheck(head, trusted, approved(head));
+  expect(ok.problems).toEqual([]);
+  expect(ok).toMatchObject({ ok: true, task: 'B2-09v', approval_wanted: true });
+  // before / after are checked by the new name at the head: the old-titled text is not the head's.
+  const oldAfter = modBranch(
+    'retitle-old-after',
+    modSource(EV_RETITLED),
+    modEvidence([evRecord({ after: MOD_NEW })]),
+  );
+  expect(modCheck(oldAfter, trusted, approved(oldAfter)).problems.join('\n')).toContain(
+    "modify_existing[0].after: must be the block's text at the head, character for character",
+  );
+  const newBefore = modBranch(
+    'retitle-new-before',
+    modSource(EV_RETITLED),
+    modEvidence([evRecord({ before: modTest(EV_NEW_TITLE, 'await waitFor(60_000);') })]),
+  );
+  expect(modCheck(newBefore, trusted, approved(newBefore)).problems.join('\n')).toContain(
+    "modify_existing[0].before: must be the block's text at the merge base, character for character",
+  );
+  // The record's test stays the ledger's (old) name.
+  const newTest = modBranch(
+    'retitle-new-test',
+    modSource(EV_RETITLED),
+    modEvidence([evRecord({ test: EV_NEW_TITLE })]),
+  );
+  expect(modCheck(newTest, trusted, approved(newTest)).problems.join('\n')).toContain(
+    `modify_existing[0].test: must be "${MOD_TEST}" (ledger order)`,
+  );
+});
+
+it('[CT-06zzzzr] the record retitle_to must be the ledger value, character for character: missing or different is refused; without a ledger retitle_to it may not appear', () => {
+  const trusted = evTrusted('trusted-retitle');
+  const want = `modify_existing[0].retitle_to: must be "${EV_NEW_TITLE}" (ledger)`;
+  const missing = modBranch(
+    'retitle-missing',
+    modSource(EV_RETITLED),
+    modEvidence([
+      Object.fromEntries(Object.entries(evRecord()).filter(([k]) => k !== 'retitle_to')),
+    ]),
+  );
+  const m = modCheck(missing, trusted, approved(missing));
+  expect(m.ok).toBe(false);
+  expect(m.problems.join('\n')).toContain(want);
+  const cases: [string, unknown][] = [
+    ['other', '[AC-B2-09t#35] late callback, never sent'],
+    ['spaced', `${EV_NEW_TITLE} `],
+    ['empty', ''],
+    ['number', 35],
+  ];
+  for (const [name, value] of cases) {
+    const head = modBranch(
+      `retitle-${name}`,
+      modSource(EV_RETITLED),
+      modEvidence([evRecord({ retitle_to: value })]),
+    );
+    const report = modCheck(head, trusted, approved(head));
+    expect(report.ok, name).toBe(false);
+    expect(report.problems.join('\n'), name).toContain(want);
+  }
+  // The ledger has no retitle_to (a plain change in place): a record with one is refused.
+  const plain = modBranch(
+    'retitle-not-in-ledger',
+    modSource(MOD_NEW),
+    modEvidence([modRecord({ retitle_to: EV_NEW_TITLE })]),
+  );
+  const p = modCheck(plain, modTrusted('trusted-modify', 'tighten_only'), approved(plain));
+  expect(p.ok).toBe(false);
+  expect(p.problems.join('\n')).toMatch(/modify_existing\[0\]\.retitle_to: /);
+});
+
+it('[CT-06zzzzr] a ledger rename the head did not make (old title kept, or the old block kept beside a copy) stays refused after spec_commit', () => {
+  const trusted = evTrusted('trusted-retitle');
+  // Changed in place under the old title.
+  const kept = modBranch(
+    'retitle-kept-old',
+    modSource(MOD_NEW),
+    modEvidence([evRecord({ after: MOD_NEW })]),
+  );
+  const k = modCheck(kept, trusted, approved(kept));
+  expect(k.ok).toBe(false);
+  expect(k.problems.join('\n')).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${MOD_FILE} (M) [declared in modify_existing, but`,
+  );
+  expect(k.problems.join('\n')).toContain(
+    'modify_existing[0]: the declared block cannot be located',
+  );
+  // The old block kept, the renamed one added beside it.
+  const copied = modBranch(
+    'retitle-copied',
+    modSource(`${MOD_OLD}\n${EV_RETITLED}`),
+    modEvidence([evRecord()]),
+  );
+  const c = modCheck(copied, trusted, approved(copied));
+  expect(c.ok).toBe(false);
+  expect(c.problems.join('\n')).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${MOD_FILE} (M) [declared in modify_existing, but`,
+  );
+  // The positive control: the plain rename passes with the same ledger.
+  const good = modBranch('retitle-good-2', modSource(EV_RETITLED), modEvidence([evRecord()]));
+  expect(modCheck(good, trusted, approved(good)).problems).toEqual([]);
+});

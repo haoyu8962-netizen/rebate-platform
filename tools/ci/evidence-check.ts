@@ -118,6 +118,11 @@
 //              lies in its declared blocks, each found and changed, is left out of the expected
 //              list (red-check.ts modifiedOnlyFiles, as outsideOnlyFiles); a file that also adds a
 //              test, or whose blocks cannot be compared, stays expected.
+//              A renamed declared test (CT-06zzzzr, D10-1278 ②): a ledger entry with `retitle_to`
+//              (the new full name) is located by its `test` at the base and its `retitle_to` at the
+//              head (compareModifiedBlocks' headNames), here, after spec_commit and for the
+//              expected list alike; its record repeats `retitle_to` exactly as the ledger has it
+//              (an entry without one: a record with one is refused), `test` staying the old name.
 //              CI records (`mode: ci`) in the evidence file are refused (CR2-06): nothing a copied
 //              record says can be checked against a run; the CI checks count by themselves.
 //              Owner waiver (owner decision 2026-10-02, ops/approvals.yaml id 12): on a branch
@@ -523,7 +528,8 @@ function modifiedHitProblem(
   hit: { path: string; status: string },
   modify: ModifyRequirement | undefined,
 ): string | null {
-  const names = (modify?.entries ?? []).filter((e) => e.file === hit.path).map((e) => e.test);
+  const declared = (modify?.entries ?? []).filter((e) => e.file === hit.path);
+  const names = declared.map((e) => e.test);
   if (modify === undefined || names.length === 0) return '';
   if (modifyApprovalProblem(modify, head) !== null) {
     return 'declared in modify_existing, but without the owner approval label';
@@ -532,7 +538,13 @@ function modifiedHitProblem(
   const before = showOrNull(prDir, from, hit.path);
   const after = showOrNull(prDir, head, hit.path);
   if (before === null || after === null) return 'declared in modify_existing, but unreadable';
-  const compared = compareModifiedBlocks(before, after, names);
+  // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
+  const compared = compareModifiedBlocks(
+    before,
+    after,
+    names,
+    declared.map((e) => e.retitle_to),
+  );
   if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
   const missing = compared.blocks.find((b) => !b.found);
   if (missing !== undefined && !missing.found) {
@@ -572,7 +584,7 @@ function modifyRecordProblems(
   }
   const cache = new Map<string, ModifiedComparison | string>();
   const actual = (file: string): ModifiedComparison | string => {
-    const names = modify.entries.filter((e) => e.file === file).map((e) => e.test);
+    const declared = modify.entries.filter((e) => e.file === file);
     let got = cache.get(file);
     if (got === undefined) {
       const before = showOrNull(prDir, modify.base, file);
@@ -582,7 +594,13 @@ function modifyRecordProblems(
           ? 'the file does not exist at the merge base'
           : after === null
             ? 'the file is gone at the head (a removal is not a change of a frozen test)'
-            : compareModifiedBlocks(before, after, names);
+            : compareModifiedBlocks(
+                before,
+                after,
+                declared.map((e) => e.test),
+                // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
+                declared.map((e) => e.retitle_to),
+              );
       cache.set(file, got);
     }
     return got;
@@ -595,9 +613,17 @@ function modifyRecordProblems(
       return;
     }
     const extra = entry.reason === 'tighten_only' ? 'mutation' : 'loops';
+    // CT-06zzzzr (D10-1278 ②): retitle_to only for an entry that renames its test.
+    const allowed = ['file', 'test', 'reason', 'before', 'after', 'note', extra];
+    if (entry.retitle_to !== undefined) allowed.push('retitle_to');
     for (const key of Object.keys(record)) {
-      if (!['file', 'test', 'reason', 'before', 'after', 'note', extra].includes(key)) {
-        at(`${where}.${key}`, `unknown field for a ${entry.reason} record`);
+      if (!allowed.includes(key)) {
+        at(
+          `${where}.${key}`,
+          key === 'retitle_to'
+            ? 'unknown field: the ledger entry does not rename its test (no retitle_to)'
+            : `unknown field for a ${entry.reason} record`,
+        );
       }
     }
     if (record['file'] !== entry.file)
@@ -605,6 +631,9 @@ function modifyRecordProblems(
     if (record['test'] !== entry.test)
       at(`${where}.test`, `must be "${entry.test}" (ledger order)`);
     if (record['reason'] !== entry.reason) at(`${where}.reason`, `must be "${entry.reason}"`);
+    if (entry.retitle_to !== undefined && record['retitle_to'] !== entry.retitle_to) {
+      at(`${where}.retitle_to`, `must be "${entry.retitle_to}" (ledger)`);
+    }
     const found = actual(entry.file);
     const block =
       typeof found === 'string' || !found.ok

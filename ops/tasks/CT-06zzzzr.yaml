@@ -1,0 +1,31 @@
+id: CT-06zzzzr
+repo: rebate-platform
+title: CT-06zzzzr：modify_existing 支持同一用例改标题——条目可选 retitle_to（改后的完整名），基线按 test、头按 retitle_to 找块；red-check 按新标题找用例，evidence-check 逐字核对新旧标题（FU-MODIFY-EXISTING-RETITLE，D10-1278 ②）
+type: guard-change
+# 2026-11-12 ops 入账（编排 D10-1278 ②）。起因：B3-16a（D10-1234）把冻结用例的「7 个 MVP 工具」改成 8 个，标题里的数字也得改；
+#   现在 compareModifiedBlocks 用同一个名字在基线和头上找块，改了标题的用例在头上找不到，被判为删除，只能留着错标题。
+# 条目可选 retitle_to：只对普通（非 .each / .for 行）、标题与 describe 都是静态字面量的块；与 test 不同；两者的 [AC-…] 编号序列逐字相同；
+#   describe 前缀与块的位置不变（不能借改标题挪块、挪 describe）；新标题在基线上不存在、旧标题在头上不再存在；同一文件里不与别的条目的 test / retitle_to 重名。
+# red-check：先红报告里按 retitle_to 找用例（报告跑的是头上的测试）；evidence-check：证据 modify_existing 记录带 retitle_to，须与台账逐字相同，
+#   改前 / 改后块原文按旧 / 新标题对基线 / 头机械核对。其余口径（owner 标签、tighten_only / flake_fix、与 red_exempt 共用上限）不变。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+# 合并后通知 agent2 开小单，把 B3-16a 那几条标题由 7 个改为 8 个（D10-1278 ②）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzr.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

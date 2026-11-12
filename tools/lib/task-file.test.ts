@@ -445,6 +445,177 @@ describe('parseTaskFile', () => {
     );
   });
 
+  // CT-06zzzzr (FU-MODIFY-EXISTING-RETITLE, D10-1278 ②): an entry may rename its test once,
+  // `retitle_to` the new full name (the head's), its [AC-…] ids exactly the old name's.
+  const RT_FILE = 'test/spec/agent/allowlist.test.ts';
+  const RT_OLD = '[AC-B3-16a#2] allowlist 行集合 = 7 个 MVP 工具';
+  const RT_NEW = '[AC-B3-16a#2] allowlist 行集合 = 8 个 MVP 工具';
+  const rtDeclared = (entries: string): string =>
+    EXAMPLE.replace('tester: claude', `tester: claude\nmodify_existing:${entries}`);
+  const rtEntry = (test: string, fields: Record<string, string> = {}): string => {
+    const all: Record<string, string> = {
+      file: RT_FILE,
+      test: `'${test}'`,
+      reason: 'tighten_only',
+      ruling: 'D10-1278',
+      note: "'工具从 7 个变成 8 个，标题里的数字跟着改'",
+      ...fields,
+    };
+    const lines = Object.entries(all)
+      .filter(([, v]) => v !== '')
+      .map(([k, v], i) => `${i === 0 ? '  - ' : '    '}${k}: ${v}`);
+    return `\n${lines.join('\n')}`;
+  };
+  /** A problem of the retitle_to field itself (not the old "unknown field" refusal). */
+  const RETITLE_PROBLEM = (i: number): RegExp =>
+    new RegExp(`modify_existing\\[${i}\\]\\.retitle_to: (?!unknown field)`);
+
+  it('[CT-06zzzzr] modify_existing retitle_to: optional, the new full name kept as written; without it the entry has no retitle_to key', () => {
+    const one = rtDeclared(rtEntry(RT_OLD, { retitle_to: `'${RT_NEW}'` }));
+    expect(parseTaskFile(one, 'B2-02a.yaml').modify_existing).toEqual([
+      {
+        file: RT_FILE,
+        test: RT_OLD,
+        reason: 'tighten_only',
+        ruling: 'D10-1278',
+        note: '工具从 7 个变成 8 个，标题里的数字跟着改',
+        retitle_to: RT_NEW,
+      },
+    ]);
+    // Several [AC-…] ids, in the same order, with other words changed: accepted.
+    const two = rtDeclared(
+      rtEntry('d > [AC-1] [AC-2#3] 旧说法', { retitle_to: "'d > [AC-1] 新说法 [AC-2#3]'" }),
+    );
+    expect(parseTaskFile(two, 'B2-02a.yaml').modify_existing[0]).toMatchObject({
+      test: 'd > [AC-1] [AC-2#3] 旧说法',
+      retitle_to: 'd > [AC-1] 新说法 [AC-2#3]',
+    });
+    // A test without any [AC-…] id renamed to one without any: the sequences are both empty.
+    const none = rtDeclared(rtEntry('old words', { retitle_to: "'new words'" }));
+    expect(parseTaskFile(none, 'B2-02a.yaml').modify_existing[0]).toMatchObject({
+      test: 'old words',
+      retitle_to: 'new words',
+    });
+    // Without retitle_to: no key at all (not an empty string, not undefined).
+    const plain = parseTaskFile(rtDeclared(rtEntry(RT_OLD)), 'B2-02a.yaml').modify_existing;
+    expect(plain).toHaveLength(1);
+    expect(Object.hasOwn(plain[0] as object, 'retitle_to')).toBe(false);
+    // A mix: only the entry that renames has the key.
+    const mixed = parseTaskFile(
+      rtDeclared(rtEntry(RT_OLD, { retitle_to: `'${RT_NEW}'` }) + rtEntry('[AC-B3-16a#3] other')),
+      'B2-02a.yaml',
+    ).modify_existing;
+    expect(mixed.map((e) => Object.hasOwn(e, 'retitle_to'))).toEqual([true, false]);
+  });
+
+  it('[CT-06zzzzr] modify_existing retitle_to refused: not a string, blank, the same as test, [AC-…] ids changed, added, removed or reordered', () => {
+    const cases: [string, string][] = [
+      ['a number', rtDeclared(rtEntry(RT_OLD, { retitle_to: '7' }))],
+      ['null', rtDeclared(rtEntry(RT_OLD, { retitle_to: 'null' }))],
+      ['a list', rtDeclared(rtEntry(RT_OLD, { retitle_to: `['${RT_NEW}']` }))],
+      ['empty', rtDeclared(rtEntry(RT_OLD, { retitle_to: "''" }))],
+      ['blank', rtDeclared(rtEntry(RT_OLD, { retitle_to: "'   '" }))],
+      ['the same as test', rtDeclared(rtEntry(RT_OLD, { retitle_to: `'${RT_OLD}'` }))],
+      [
+        'an id changed',
+        rtDeclared(
+          rtEntry(RT_OLD, { retitle_to: "'[AC-B3-16a#3] allowlist 行集合 = 8 个 MVP 工具'" }),
+        ),
+      ],
+      [
+        'an id added',
+        rtDeclared(
+          rtEntry(RT_OLD, {
+            retitle_to: "'[AC-B3-16a#2] [AC-B3-16a#9] allowlist 行集合 = 8 个 MVP 工具'",
+          }),
+        ),
+      ],
+      [
+        'an id removed',
+        rtDeclared(rtEntry(RT_OLD, { retitle_to: "'allowlist 行集合 = 8 个 MVP 工具'" })),
+      ],
+      [
+        'ids reordered',
+        rtDeclared(rtEntry('[AC-1] [AC-2] x', { retitle_to: "'[AC-2] [AC-1] y'" })),
+      ],
+      ['an id written otherwise', rtDeclared(rtEntry('[AC-1] x', { retitle_to: "'[AC-01] y'" }))],
+    ];
+    for (const [name, text] of cases) {
+      expect(messageOf(text, 'B2-02a.yaml'), name).toMatch(RETITLE_PROBLEM(0));
+    }
+    // The index is the entry's own.
+    expect(
+      messageOf(
+        rtDeclared(rtEntry('[AC-1] ok') + rtEntry(RT_OLD, { retitle_to: `'${RT_OLD}'` })),
+        'B2-02a.yaml',
+      ),
+    ).toMatch(RETITLE_PROBLEM(1));
+    // Any other unknown field is still refused, with or without retitle_to.
+    expect(
+      messageOf(
+        rtDeclared(`${rtEntry(RT_OLD, { retitle_to: `'${RT_NEW}'` })}\n    extra: x`),
+        'B2-02a.yaml',
+      ),
+    ).toContain('modify_existing[0].extra: unknown field');
+    expect(
+      messageOf(rtDeclared(rtEntry(RT_OLD, { retitle: `'${RT_NEW}'` })), 'B2-02a.yaml'),
+    ).toContain('modify_existing[0].retitle: unknown field');
+    // And the well-formed one parses.
+    expect(
+      messageOf(rtDeclared(rtEntry(RT_OLD, { retitle_to: `'${RT_NEW}'` })), 'B2-02a.yaml'),
+    ).toBe('');
+  });
+
+  it('[CT-06zzzzr] modify_existing retitle_to: in one file it may not be another entry’s test or another entry’s retitle_to; across files it may', () => {
+    const SAME_PROBLEM = /modify_existing\[\d+\]: /;
+    // Entry 0 renames to the name entry 1 has at the base.
+    const intoTest = rtDeclared(
+      rtEntry('[AC-1] a', { retitle_to: "'[AC-1] b'" }) + rtEntry('[AC-1] b'),
+    );
+    expect(messageOf(intoTest, 'B2-02a.yaml')).toMatch(SAME_PROBLEM);
+    // The same, the renaming entry second.
+    const intoEarlier = rtDeclared(
+      rtEntry('[AC-1] b') + rtEntry('[AC-1] a', { retitle_to: "'[AC-1] b'" }),
+    );
+    expect(messageOf(intoEarlier, 'B2-02a.yaml')).toMatch(SAME_PROBLEM);
+    // Two entries rename to one name.
+    const together = rtDeclared(
+      rtEntry('[AC-1] a', { retitle_to: "'[AC-1] c'" }) +
+        rtEntry('[AC-1] b', { retitle_to: "'[AC-1] c'" }),
+    );
+    expect(messageOf(together, 'B2-02a.yaml')).toMatch(SAME_PROBLEM);
+    // A swap (a → b, b → a) is a clash too: each new name is the other entry's test.
+    const swap = rtDeclared(
+      rtEntry('[AC-1] a', { retitle_to: "'[AC-1] b'" }) +
+        rtEntry('[AC-1] b', { retitle_to: "'[AC-1] a'" }),
+    );
+    expect(messageOf(swap, 'B2-02a.yaml')).toMatch(SAME_PROBLEM);
+    // The old "file + test twice" refusal is unchanged.
+    expect(
+      messageOf(
+        rtDeclared(
+          rtEntry('[AC-1] a', { retitle_to: "'[AC-1] x'" }) +
+            rtEntry('[AC-1] a', { retitle_to: "'[AC-1] y'" }),
+        ),
+        'B2-02a.yaml',
+      ),
+    ).toContain(`modify_existing[1]: "${RT_FILE} > [AC-1] a" is declared twice`);
+    // Another file: the same names do not clash.
+    const OTHER = 'test/spec/agent/other.test.ts';
+    const across = rtDeclared(
+      rtEntry('[AC-1] a', { retitle_to: "'[AC-1] b'" }) + rtEntry('[AC-1] b', { file: OTHER }),
+    );
+    expect(parseTaskFile(across, 'B2-02a.yaml').modify_existing).toMatchObject([
+      { file: RT_FILE, test: '[AC-1] a', retitle_to: '[AC-1] b' },
+      { file: OTHER, test: '[AC-1] b' },
+    ]);
+    const acrossBoth = rtDeclared(
+      rtEntry('[AC-1] a', { retitle_to: "'[AC-1] c'" }) +
+        rtEntry('[AC-1] b', { file: OTHER, retitle_to: "'[AC-1] c'" }),
+    );
+    expect(parseTaskFile(acrossBoth, 'B2-02a.yaml').modify_existing).toHaveLength(2);
+  });
+
   it('[CT-06zxc] renames: quoted name literals, optional, every malformed entry refused', () => {
     const declared = (entries: string): string =>
       EXAMPLE.replace('tester: claude', `tester: claude\nrenames:${entries}`);

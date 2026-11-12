@@ -171,7 +171,18 @@ export type ModifyExistingDeclaration = {
   ruling: string;
   /** Why the test is changed (at least RED_EXEMPT_REASON_MIN characters). */
   note: string;
+  /**
+   * The test's new full name at the head when the change also renames it (CT-06zzzzr, D10-1278):
+   * the same `describe > … > title` form as `test`, different from it, with the same [AC-…] ids in
+   * the same order. Absent (no key) when the test keeps its name.
+   */
+  retitle_to?: string;
 };
+
+/** The [AC-…] ids of a test name, in order (CT-06zzzzr: a rename keeps them character for character). */
+export function acIdsOf(name: string): string[] {
+  return name.match(/\[AC-[^\]]*\]/g) ?? [];
+}
 
 /** One declared literal rename (CT-06zxc, D10-347): every `from` of a base becomes `to`. */
 export type RenameDeclaration = {
@@ -509,18 +520,23 @@ function redExemptOutsideList(value: unknown, problems: string[]): RedExemptOuts
  * The `modify_existing` list (CT-06zzzg, D10-701): a list of mappings with exactly `file` / `test`
  * / `reason` / `ruling` / `note`, the file a repository-relative path, the test a non-empty full
  * name, the reason one of MODIFY_EXISTING_REASONS, the ruling RULING_PATTERN, the note at least
- * RED_EXEMPT_REASON_MIN characters once trimmed, and no file + test named twice. The cap shared
- * with red_exempt and whether the file is a rule-test file of the task that exists at the base
- * are checked by parseTaskFile and tools/ops/task.ts.
+ * RED_EXEMPT_REASON_MIN characters once trimmed, and no file + test named twice. An entry may
+ * also carry `retitle_to` (CT-06zzzzr, D10-1278): the new full name, non-empty, not the test's own,
+ * with the test's [AC-…] ids (acIdsOf) unchanged, and in one file never another entry's test or
+ * retitle_to. The cap shared with red_exempt and whether the file is a rule-test file of the task
+ * that exists at the base are checked by parseTaskFile and tools/ops/task.ts.
  */
 function modifyExistingList(value: unknown, problems: string[]): ModifyExistingDeclaration[] {
   const label = 'modify_existing';
   const fields = ['file', 'test', 'reason', 'ruling', 'note'];
+  // CT-06zzzzr: retitle_to is optional; the messages keep naming the five required fields.
+  const allowed = [...fields, 'retitle_to'];
   if (!Array.isArray(value)) {
     problems.push(`${label}: must be a list of mappings (${fields.join(' / ')})`);
     return [];
   }
   const out: ModifyExistingDeclaration[] = [];
+  const indexes: number[] = [];
   const seen = new Set<string>();
   value.forEach((item, index) => {
     const at = `${label}[${index}]`;
@@ -529,7 +545,7 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
       return;
     }
     for (const key of Object.keys(item)) {
-      if (!fields.includes(key)) problems.push(`${at}.${key}: unknown field`);
+      if (!allowed.includes(key)) problems.push(`${at}.${key}: unknown field`);
     }
     const file = item['file'];
     const test = item['test'];
@@ -565,6 +581,24 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
       );
       ok = false;
     }
+    const hasRetitle = Object.hasOwn(item, 'retitle_to');
+    const retitle = item['retitle_to'];
+    if (hasRetitle) {
+      if (typeof retitle !== 'string' || retitle.trim() === '') {
+        problems.push(`${at}.retitle_to: must be the test's new full name (non-empty)`);
+        ok = false;
+      } else if (typeof test === 'string') {
+        if (retitle === test) {
+          problems.push(`${at}.retitle_to: must differ from test (it is the new name)`);
+          ok = false;
+        } else if (acIdsOf(retitle).join('\u0000') !== acIdsOf(test).join('\u0000')) {
+          problems.push(
+            `${at}.retitle_to: must keep the [AC-…] ids of test, character for character and in order (${JSON.stringify(acIdsOf(test))}, not ${JSON.stringify(acIdsOf(retitle))})`,
+          );
+          ok = false;
+        }
+      }
+    }
     if (!ok) return;
     const key = `${file as string}\u0000${test as string}`;
     if (seen.has(key)) {
@@ -572,13 +606,32 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
       return;
     }
     seen.add(key);
-    out.push({
+    const entry: ModifyExistingDeclaration = {
       file: file as string,
       test: test as string,
       reason: reason as ModifyExistingDeclaration['reason'],
       ruling: ruling as string,
       note: note as string,
-    });
+    };
+    if (hasRetitle) entry.retitle_to = retitle as string;
+    out.push(entry);
+    indexes.push(index);
+  });
+  // CT-06zzzzr: in one file a new name is never another entry's test nor another entry's new name
+  // (a swap, a merge or a rename onto a declared test would make the blocks ambiguous).
+  out.forEach((entry, k) => {
+    if (entry.retitle_to === undefined) return;
+    const clash = out.find(
+      (other, j) =>
+        j !== k &&
+        other.file === entry.file &&
+        (other.test === entry.retitle_to || other.retitle_to === entry.retitle_to),
+    );
+    if (clash !== undefined) {
+      problems.push(
+        `${label}[${indexes[k]}]: "${entry.file} > ${entry.retitle_to}" (retitle_to) is also ${clash.test === entry.retitle_to ? 'the test' : 'the retitle_to'} of another entry of the file`,
+      );
+    }
   });
   return out;
 }

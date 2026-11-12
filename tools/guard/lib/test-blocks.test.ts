@@ -2986,7 +2986,8 @@ it('[CT-06zzzf] formatEachTitle and formatObjectTitle name a BigInt as Vitest do
 it('[CT-06zzzg] compareModifiedBlocks: a declared block changed in place, its raw text both sides, nothing else changed', () => {
   const base = src(test('[AC-1] a'), '', test('[AC-2] b', 'expect(2).toBe(2); // two'));
   const head = src(test('[AC-1] a'), '', test('[AC-2] b', 'expect(2).toStrictEqual(2); // two'));
-  expect(compareModifiedBlocks(base, head, ['[AC-2] b'])).toEqual({
+  // CT-06zzzzr: a found block also says `headTest` (asserted exactly in the CT-06zzzzr tests below).
+  expect(compareModifiedBlocks(base, head, ['[AC-2] b'])).toMatchObject({
     ok: true,
     blocks: [
       {
@@ -3737,4 +3738,282 @@ it('[CT-06zzzzi] compareEachRows unchanged: an imported table still refuses ② 
     null,
     { ok: false, reason: '② the base table is not an inline array of literal rows' },
   ]);
+});
+
+// CT-06zzzzr (FU-MODIFY-EXISTING-RETITLE, D10-1278 ②, after B3-16a): a modify_existing entry may
+// rename its test (`retitle_to`): compareModifiedBlocks takes a fourth, optional argument, the
+// head's names aligned with `names` (undefined: the same name), finds the block by the old name at
+// the base and the new one at the head, and says the head's name in `headTest`. The cast keeps
+// this file compiling against the three-argument signature until the implementation adds it.
+const compareRetitled = compareModifiedBlocks as (
+  base: string,
+  head: string,
+  names: readonly string[],
+  headNames?: readonly (string | undefined)[],
+) => ReturnType<typeof compareModifiedBlocks>;
+const RT_OLD = '[AC-B3-16a#2] allowlist 行集合 = 7 个 MVP 工具';
+const RT_NEW = '[AC-B3-16a#2] allowlist 行集合 = 8 个 MVP 工具';
+const RT_OLD_BLOCK = test(RT_OLD, 'expect(tools).toHaveLength(7);');
+const RT_NEW_BLOCK = test(RT_NEW, 'expect(tools).toHaveLength(8);');
+const RT_BASE = src(test('[AC-1] a'), RT_OLD_BLOCK, test('[AC-3] c'));
+const RT_HEAD = src(test('[AC-1] a'), RT_NEW_BLOCK, test('[AC-3] c'));
+/** 'found' or the reason, per name. */
+const retitledOf = (
+  base: string,
+  head: string,
+  names: readonly string[],
+  headNames?: readonly (string | undefined)[],
+): string[] => {
+  const got = compareRetitled(base, head, names, headNames);
+  if (!got.ok) throw new Error(got.reason);
+  return got.blocks.map((b) => (b.found ? 'found' : b.reason));
+};
+/** The control every refusal below is set against: the plain rename is found. */
+const expectPlainRetitleFound = (): void => {
+  expect(retitledOf(RT_BASE, RT_HEAD, [RT_OLD], [RT_NEW])).toEqual(['found']);
+};
+
+it('[CT-06zzzzr] compareModifiedBlocks with headNames: a renamed plain block is found by the old name at the base and the new one at the head, headTest the new name, changed, nothing outside', () => {
+  expect(compareRetitled(RT_BASE, RT_HEAD, [RT_OLD], [RT_NEW])).toEqual({
+    ok: true,
+    blocks: [
+      {
+        test: RT_OLD,
+        headTest: RT_NEW,
+        found: true,
+        before: RT_OLD_BLOCK,
+        after: RT_NEW_BLOCK,
+        changed: true,
+      },
+    ],
+    outside: null,
+  });
+  // Only the title changed: the block changed all the same.
+  const titleOnly = src(
+    test('[AC-1] a'),
+    test(RT_NEW, 'expect(tools).toHaveLength(7);'),
+    test('[AC-3] c'),
+  );
+  expect(compareRetitled(RT_BASE, titleOnly, [RT_OLD], [RT_NEW])).toMatchObject({
+    ok: true,
+    blocks: [{ test: RT_OLD, headTest: RT_NEW, found: true, changed: true }],
+    outside: null,
+  });
+  // Inside a describe, the full names with its title; the describe kept.
+  const inDescribe = (block: string): string =>
+    src(`describe('allowlist', () => {\n  ${test('[AC-1] a')}\n  ${block}\n});`);
+  const nested = compareRetitled(
+    inDescribe(RT_OLD_BLOCK),
+    inDescribe(RT_NEW_BLOCK),
+    [`allowlist > ${RT_OLD}`],
+    [`allowlist > ${RT_NEW}`],
+  );
+  expect(nested).toMatchObject({
+    ok: true,
+    blocks: [
+      {
+        test: `allowlist > ${RT_OLD}`,
+        headTest: `allowlist > ${RT_NEW}`,
+        found: true,
+        changed: true,
+      },
+    ],
+    outside: null,
+  });
+  const [one] = nested.ok ? nested.blocks : [];
+  expect(one?.found === true ? one.before : '').toContain(RT_OLD);
+  expect(one?.found === true ? one.after : '').toContain(RT_NEW);
+  // A rename next to a plain declared change (headNames[i] undefined: the same name).
+  const both = src(test('[AC-1] a', 'expect(1).toStrictEqual(1);'), RT_NEW_BLOCK, test('[AC-3] c'));
+  expect(compareRetitled(RT_BASE, both, ['[AC-1] a', RT_OLD], [undefined, RT_NEW])).toMatchObject({
+    ok: true,
+    blocks: [
+      { test: '[AC-1] a', headTest: '[AC-1] a', found: true, changed: true },
+      { test: RT_OLD, headTest: RT_NEW, found: true, changed: true },
+    ],
+    outside: null,
+  });
+});
+
+it('[CT-06zzzzr] compareModifiedBlocks without headNames (or with undefined) behaves as before; every found block says headTest, the same name', () => {
+  // No fourth argument: the renamed block is gone at the head, as before.
+  const gone = [
+    'the test is gone at the head (removed or renamed: a removal is not a change of a frozen test)',
+  ];
+  expect(retitledOf(RT_BASE, RT_HEAD, [RT_OLD])).toEqual(gone);
+  expect(retitledOf(RT_BASE, RT_HEAD, [RT_OLD], [undefined])).toEqual(gone);
+  expect(retitledOf(RT_BASE, RT_HEAD, [RT_OLD], [])).toEqual(gone);
+  // A plain declared change: headTest is the name itself.
+  const base = src(test('[AC-1] a'), test('[AC-2] b'));
+  const head = src(test('[AC-1] a'), test('[AC-2] b', 'expect(2).toStrictEqual(2);'));
+  expect(compareModifiedBlocks(base, head, ['[AC-2] b'])).toEqual({
+    ok: true,
+    blocks: [
+      {
+        test: '[AC-2] b',
+        headTest: '[AC-2] b',
+        found: true,
+        before: test('[AC-2] b'),
+        after: test('[AC-2] b', 'expect(2).toStrictEqual(2);'),
+        changed: true,
+      },
+    ],
+    outside: null,
+  });
+  expect(compareRetitled(base, head, ['[AC-2] b'], [undefined])).toEqual(
+    compareModifiedBlocks(base, head, ['[AC-2] b']),
+  );
+  // Rows of an .each table: headTest is the row's name.
+  const eachBase = src(EACH_ROWS('expect(code).toBeTruthy();'));
+  const eachHead = src(EACH_ROWS('expect(code).toBe(code);'));
+  expect(compareModifiedBlocks(eachBase, eachHead, ROWS_45)).toMatchObject({
+    ok: true,
+    blocks: ROWS_45.map((name) => ({ test: name, headTest: name, found: true, changed: true })),
+    outside: null,
+  });
+});
+
+it('[CT-06zzzzr] a rename whose new name is not at the head is not found', () => {
+  expectPlainRetitleFound();
+  // The block kept its old title (changed in place): the new name names nothing at the head.
+  const kept = src(
+    test('[AC-1] a'),
+    test(RT_OLD, 'expect(tools).toHaveLength(8);'),
+    test('[AC-3] c'),
+  );
+  expect(retitledOf(RT_BASE, kept, [RT_OLD], [RT_NEW])).not.toEqual(['found']);
+  // Renamed to a third name.
+  const other = src(test('[AC-1] a'), test('[AC-B3-16a#2] something else'), test('[AC-3] c'));
+  expect(retitledOf(RT_BASE, other, [RT_OLD], [RT_NEW])).not.toEqual(['found']);
+  // Two blocks of the new name at the head.
+  const twice = src(test('[AC-1] a'), RT_NEW_BLOCK, RT_NEW_BLOCK);
+  expect(retitledOf(RT_BASE, twice, [RT_OLD], [RT_NEW])).not.toEqual(['found']);
+});
+
+it('[CT-06zzzzr] a rename whose old name is still a block at the head (not renamed, or copied) is not found', () => {
+  expectPlainRetitleFound();
+  // A copy: the old block kept, a new one with the new name next to it.
+  const copied = src(test('[AC-1] a'), RT_OLD_BLOCK, RT_NEW_BLOCK, test('[AC-3] c'));
+  expect(retitledOf(RT_BASE, copied, [RT_OLD], [RT_NEW])).not.toEqual(['found']);
+  // Another block took the old name.
+  const took = src(test(RT_OLD), RT_NEW_BLOCK, test('[AC-3] c'));
+  expect(retitledOf(RT_BASE, took, [RT_OLD], [RT_NEW])).not.toEqual(['found']);
+});
+
+it('[CT-06zzzzr] a rename whose new name already is a block at the base is not found', () => {
+  expectPlainRetitleFound();
+  // At the base a block has the new name; at the head it is renamed away and the declared block
+  // takes its name.
+  const base = src(test(RT_NEW, 'expect(0).toBe(0);'), RT_OLD_BLOCK, test('[AC-3] c'));
+  const head = src(test('[AC-1] moved away', 'expect(0).toBe(0);'), RT_NEW_BLOCK, test('[AC-3] c'));
+  expect(retitledOf(base, head, [RT_OLD], [RT_NEW])).not.toEqual(['found']);
+});
+
+it('[CT-06zzzzr] a rename of an .each / .for row, or between a plain block and a row, is not found (plain blocks only)', () => {
+  expectPlainRetitleFound();
+  const table = (title: string, call = 'it.each'): string =>
+    `${call}(['14', '15'] as const)('${title}', async (code) => {\n  expect(code).toBeTruthy();\n});`;
+  const base = src(test('[AC-1] a'), table('[AC-45] closed with %s, then succeeded'));
+  const head = src(test('[AC-1] a'), table('[AC-45] closed with %s, then paid'));
+  // Each row renamed with its table (every row declared).
+  expect(
+    retitledOf(base, head, ROWS_45, [
+      '[AC-45] closed with 14, then paid',
+      '[AC-45] closed with 15, then paid',
+    ]),
+  ).toEqual(expect.not.arrayContaining(['found']));
+  // A .for table likewise.
+  const forBase = src(test('[AC-1] a'), table('[AC-45] closed with %s, then succeeded', 'it.for'));
+  const forHead = src(test('[AC-1] a'), table('[AC-45] closed with %s, then paid', 'it.for'));
+  expect(
+    retitledOf(forBase, forHead, ROWS_45, [
+      '[AC-45] closed with 14, then paid',
+      '[AC-45] closed with 15, then paid',
+    ]),
+  ).toEqual(expect.not.arrayContaining(['found']));
+  // A plain block at the base renamed to a row at the head.
+  const plainBase = src(test('[AC-1] a'), test('[AC-45] closed with 14, then succeeded'));
+  expect(
+    retitledOf(
+      plainBase,
+      head,
+      ['[AC-45] closed with 14, then succeeded'],
+      ['[AC-45] closed with 14, then paid'],
+    ),
+  ).not.toEqual(['found']);
+});
+
+it('[CT-06zzzzr] a rename of an .each / .for block whose title has no placeholder is not found either (the call decides, not the title; Codex r1 S1)', () => {
+  expectPlainRetitleFound();
+  const noPlaceholder = (title: string, call: string, check = 'toBeGreaterThan(0)'): string =>
+    `${call}([1, 2])('${title}', (n) => {\n  expect(n).${check};\n});`;
+  for (const call of ['it.each', 'it.for', 'test.each']) {
+    const base = src(test('[AC-1] a'), noPlaceholder('[AC-7] every row is positive', call));
+    const head = src(test('[AC-1] a'), noPlaceholder('[AC-7] every row is above zero', call));
+    expect(
+      retitledOf(base, head, ['[AC-7] every row is positive'], ['[AC-7] every row is above zero']),
+      call,
+    ).not.toEqual(['found']);
+    // Without a rename the same block keeps today's reading (a change in place is still declarable).
+    const tightened = src(
+      test('[AC-1] a'),
+      noPlaceholder('[AC-7] every row is positive', call, 'toBeGreaterThan(0.5)'),
+    );
+    expect(retitledOf(base, tightened, ['[AC-7] every row is positive']), call).toEqual(
+      retitledOf(base, tightened, ['[AC-7] every row is positive'], [undefined]),
+    );
+  }
+});
+
+it('[CT-06zzzzr] a rename may not move the block or change its describe: outside is said', () => {
+  expectPlainRetitleFound();
+  // Moved to the front.
+  const moved = src(RT_NEW_BLOCK, test('[AC-1] a'), test('[AC-3] c'));
+  const m = compareRetitled(RT_BASE, moved, [RT_OLD], [RT_NEW]);
+  expect(m.ok).toBe(true);
+  expect(m.ok ? m.outside : null).not.toBeNull();
+  // Moved to the end.
+  const last = src(test('[AC-1] a'), test('[AC-3] c'), RT_NEW_BLOCK);
+  const l = compareRetitled(RT_BASE, last, [RT_OLD], [RT_NEW]);
+  expect(l.ok ? l.outside : null).not.toBeNull();
+  // The describe title changed with the test title.
+  const within = (describe: string, block: string): string =>
+    src(`describe('${describe}', () => {\n  ${test('[AC-1] a')}\n  ${block}\n});`);
+  const kept = compareRetitled(
+    within('allowlist', RT_OLD_BLOCK),
+    within('allowlist', RT_NEW_BLOCK),
+    [`allowlist > ${RT_OLD}`],
+    [`allowlist > ${RT_NEW}`],
+  );
+  expect(kept).toMatchObject({ ok: true, blocks: [{ found: true }], outside: null });
+  const renamed = compareRetitled(
+    within('allowlist', RT_OLD_BLOCK),
+    within('agent allowlist', RT_NEW_BLOCK),
+    [`allowlist > ${RT_OLD}`],
+    [`agent allowlist > ${RT_NEW}`],
+  );
+  expect(renamed.ok).toBe(true);
+  expect(renamed.ok ? renamed.outside : null).not.toBeNull();
+  // Moved out of its describe into another one.
+  const two = (first: string, second: string): string =>
+    src(
+      `describe('allowlist', () => {\n  ${test('[AC-1] a')}\n  ${first}\n});`,
+      `describe('other', () => {\n  ${test('[AC-3] c')}\n  ${second}\n});`,
+    );
+  const across = compareRetitled(
+    two(RT_OLD_BLOCK, ''),
+    two('', RT_NEW_BLOCK),
+    [`allowlist > ${RT_OLD}`],
+    [`other > ${RT_NEW}`],
+  );
+  expect(across.ok).toBe(true);
+  expect(across.ok ? across.outside : null).not.toBeNull();
+});
+
+it('[CT-06zzzzr] two entries on one block stay refused with headNames', () => {
+  expectPlainRetitleFound();
+  // The same block declared twice, once by its old name renamed, once by the new name.
+  const got = retitledOf(RT_BASE, RT_HEAD, [RT_OLD, RT_OLD], [RT_NEW, RT_NEW]);
+  expect(got[0]).toBe('found');
+  expect(got[1]).not.toBe('found');
 });

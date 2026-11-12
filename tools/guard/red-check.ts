@@ -36,8 +36,9 @@
 // The trusted ledger's `modify_existing` (CT-06zzzg, D10-701) declare changed frozen tests that
 // stay green (flake_fix / tighten_only): such a test may pass green when its block is located on
 // both sides by lib/test-blocks.ts compareModifiedBlocks and changed; a declared block that is the
-// base's, cannot be located (removed, renamed, ambiguous) or lies in a file that is not expected is
-// a problem. This check has no way to the owner's approval label (the container is offline):
+// base's, cannot be located (removed, renamed without the entry's `retitle_to`, ambiguous) or lies
+// in a file that is not expected is a problem. An entry with `retitle_to` (CT-06zzzzr, D10-1278 ②)
+// is located by its new name at the head and matched by it in the report (lib/red-check.ts). This check has no way to the owner's approval label (the container is offline):
 // evidence-check requires the label for such a ledger, and the record of each block.
 // A file whose every change against the base lies in its declared blocks is left out of the
 // expected list (D10-701 ②, modifiedOnlyFiles), here and with --print-expected, as a
