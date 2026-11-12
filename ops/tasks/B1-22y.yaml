@@ -6,6 +6,7 @@ type: test-change
 # 内测名单入口 = agent.whitelist_user_ids 后台可改；agent.whitelist_only 仍不可改（04 §10.2：改 off 须校验备案，BR-AI-12）。agent.tools.get_my_earnings.enabled 补种子 true（04 §10.2 默认 on，与 0003–0005 同法）。agent.enabled、agent.page_guide.enabled 登记默认（04 写 on）与运行时缺行按关的不一致待编排定，本单先不改。
 # 做法照 B1-18et / D10-1253：config-registry.ts 登记、content 两条单元测试条数；6 个冻结配置清单只在末尾追加，新鲜 Claude 改、另一位只读复核，#24 标签。不改 Agent 模块代码。
 # 2026-11-12 补丁（D10-1314）：开关 agent.degraded.route_intents 须在冻结 test/spec/content/switch-read/** 清单末尾追加一行（[AC-F1-10b#1] 逐项钉开关表），照 D10-1253 只追加，并进本单；get_my_earnings 种子移出本单，另开 B1-22z。
+# 完成 2026-11-12（#3258，头 f9b86726b512）实际做法：登记 26 个 Agent 配置键（权限点照 D10-1307，另 D10-1329：require_phone 归 config.risk、context.max_turns 下限 0 = 不带历史），开关 agent.degraded.route_intents（默认 on）照 B1-05zj 在冻结 switch-read 清单的注册表对应位置插入一行；冻结配置清单只末尾追加，整数键范围钉进 [AC-F1-10e#58] 逐键循环。get_my_earnings 种子不在本单（拆到 B1-22z，#3257）；标题受 ledger-overwrite 约束未改。agent.enabled / page_guide.enabled 种子另开（D10-1333）。
 refs: []
 refs_hash: {}
 deps: []
@@ -24,4 +25,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3258
