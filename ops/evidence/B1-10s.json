@@ -1,0 +1,74 @@
+{
+  "risk_note": "RV2 by the risk map (modules/admin). Registers the two Agent console audit actions in the read-side derivation table apps/api/src/modules/admin/domain/audit-log-view.ts (D10-1341 ③, #3256 review S2): agent_trace_view -> target_type agent_session, prefix agent_sessions:, permission agent.trace (written by B1-10q on every successful session detail read); agent_report_handle -> agent_message, prefix agent_messages:, agent.report (its writer is D1 part 2, which must write agent_messages:<message_id>). Same rule as the other fixed-point actions: a target with the wrong prefix derives no target_type / target_id, the permission follows the action (orchestrator ruling). No contract change (target_type is free text). Host: eslint / prettier / tsc 0, admin domain unit 25 pass; the integration groups (audit-view-agent, audit-query) were not run on the host (the local heavy lock was held by another lane for 30 minutes and the test machine's --tests / --related are not yet available), so the required CI verify-int checks are the integration evidence.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (RV2; D10-1075, medium). Round 1: pass, no findings (amount items not applicable). couli-runs/B1-10s/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests in test/spec/admin/audit-view-agent/** by a fresh independent Claude (claude-run.sh, tester claude-independent, approvals #36; D10-1080), two attempts: 1 new tests; 2 per the orchestrator's rulings (wrong prefix: only target_type / target_id null, the permission follows the action; the main-green 'other actions unchanged' case folded into [AC-B1-10s#1], since a new test cannot be red-exempt). spec-test r1 (fresh independent Claude): pass; its one out-of-scope S1 is that agent_report_handle has no writer yet (D1 part 2). Container red/1 ok, problems 0, 4 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#1] agent_trace_view 与 agent_report_handle 在列表与详情里推出会话、消息与权限点，且别的已登记 action 推导不变",
+    "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#2] 按 target_type + target_id 与按 agent.trace / agent.report 筛选只命中对应记录",
+    "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#3] 前缀不符或无对象时 target_type、target_id 为 null 且不被对象筛选命中",
+    "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#5] 后台真实查看会话明细写下的 agent_trace_view 在审计台推出会话与 agent.trace"
+  ],
+  "task": "B1-10s",
+  "spec_commit": "413b7760728f5a2297c19f7b81ecdd09fd2bb9af",
+  "spec_ref": "ea7850e2f45ff38d11dbbde41cea2a832cb6e6a8",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "413b7760728f5a2297c19f7b81ecdd09fd2bb9af",
+      "tree": "2d1845be94697d3095a53ca92b1ccfbce955dde0",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T14:10:09Z",
+      "finished_at": "2026-11-12T14:10:29Z",
+      "red_tests": [
+        "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#1] agent_trace_view 与 agent_report_handle 在列表与详情里推出会话、消息与权限点，且别的已登记 action 推导不变",
+        "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#2] 按 target_type + target_id 与按 agent.trace / agent.report 筛选只命中对应记录",
+        "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#3] 前缀不符或无对象时 target_type、target_id 为 null 且不被对象筛选命中",
+        "test/spec/admin/audit-view-agent/derive.int.test.ts > [AC-B1-10s#5] 后台真实查看会话明细写下的 agent_trace_view 在审计台推出会话与 agent.trace"
+      ],
+      "expected": ["test/spec/admin/audit-view-agent/derive.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "6a2489677261f3079c04c083291afcf6c64ab6397852c7db771a48ac0231fc38"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5a8d2d9dae369c6a32621c4dd3b026d2cf885bbb",
+    "specs": "97bc5e480c676cf2433a6878d43aa99af587a3c6"
+  }
+}

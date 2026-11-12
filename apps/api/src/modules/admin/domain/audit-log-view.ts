@@ -224,6 +224,10 @@ const RULES: readonly ActionRule[] = Object.freeze([
   // B2-09zc (money r4): a share the approval gave the platform whose reason no voucher carries,
   // recorded in the order's transaction; target `orders:<order_id>`.
   ...rules(['settle_adjust_share_forfeited'], 'order', 'orders:', fixed('fund.settle_adjust')),
+  // agent (application/admin-traces.ts, B1-10q): every successful read of a session's detail.
+  ...rules(['agent_trace_view'], 'agent_session', 'agent_sessions:', fixed('agent.trace')),
+  // agent (D1 second part, not yet written): marking an AI report handled, target the message.
+  ...rules(['agent_report_handle'], 'agent_message', 'agent_messages:', fixed('agent.report')),
 ]);
 
 const BY_ACTION: ReadonlyMap<string, ActionRule> = new Map(
