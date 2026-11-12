@@ -7,6 +7,7 @@ type: guard-change
 # 取值：COULI_VERIFY_MEMORY 为 <正整数><m|g>（例如 9g、512m，正则 ^[1-9][0-9]{0,5}[mg]$），不设或为空时不加任何内存参数（与现在相同）；不合法时 exit 2、什么都不跑。
 # 只加在跑测试的容器上（--red 各组、--browser、--fast、完整 verify 的 run 容器），pnpm fetch、PostgreSQL、Redis 容器不加；--memory 与 --memory-swap 同值。
 # 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+# 2026-11-12 ops 置 done：#3237 已合并（787c58da5）；Codex general r1、变基后 r2 pass；approvals 75；lan-run 改传 COULI_VERIFY_MEMORY、撤 lan-memcap 在 couli-runs 内另做。
 refs: []
 refs_hash: {}
 deps: []
@@ -19,4 +20,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify:fast'
-status: todo
+status: done
+pr: 3237

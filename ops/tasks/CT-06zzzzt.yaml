@@ -8,6 +8,7 @@ type: guard-change
 #   只在 stderr 记一行提示、照常往下跑；test-guard 自身跑不起来或输出不是 JSON 也 exit 2。--dry-run 的计划 JSON 增加 test_guard（两类的条数）。--fast / 完整 verify / --browser 不变。
 # 第二条（先红抓不到全局冻结清单，D10-1253）另写方案报编排（couli-runs/OPS-lane/red-runs-frozen-lists-plan.md），不在本单。
 # 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+# 2026-11-12 ops 置 done：#3231 已合并（af0187b7c）；Codex general r1、r2 pass；approvals 74。
 refs: []
 refs_hash: {}
 deps: []
@@ -20,4 +21,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify:fast'
-status: todo
+status: done
+pr: 3231
