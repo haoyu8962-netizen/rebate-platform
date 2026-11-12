@@ -83,6 +83,7 @@ import {
 import { bridgeOriginsSaveCheck } from './application/bridge-origins-save-check.ts';
 import { defaultAvatarSaveCheck } from './application/default-avatar-save-check.ts';
 import { laborAgreementSaveCheck } from './application/labor-agreement-save-check.ts';
+import { aiConsentVersionSaveCheck } from './application/ai-consent-version-save-check.ts';
 import { AdminConfigItemsController } from './http/admin/config-items.controller.ts';
 import { createKyselyConfigItemStore } from './infra/kysely-config-item-store.ts';
 import { PagePreviewService, type PagePreviewStore } from './application/page-preview.ts';
@@ -233,11 +234,17 @@ const monotonicMs = (): number => performance.now();
 
 /**
  * F1-02zzzb: content's own save checks run first (bridge_origins, then B2-03w's
- * me.default_avatar_url, then B2-03x's six labor agreement keys), then the assembler's checks.
+ * me.default_avatar_url, then B2-03x's six labor agreement keys, then B1-22zb's
+ * legal.ai_third_party.version), then the assembler's checks.
  */
 function withContentSaveChecks(checks: ConfigItemAdminChecks | undefined): ConfigItemAdminChecks {
   const save = checks?.save;
-  const own = [bridgeOriginsSaveCheck(), defaultAvatarSaveCheck(), laborAgreementSaveCheck()];
+  const own = [
+    bridgeOriginsSaveCheck(),
+    defaultAvatarSaveCheck(),
+    laborAgreementSaveCheck(),
+    aiConsentVersionSaveCheck(),
+  ];
   return {
     ...checks,
     save:

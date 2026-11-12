@@ -18,6 +18,11 @@ import {
 } from '../domain/invite-reward.ts';
 
 type Json = DB['config_items']['value'];
+/**
+ * B1-22zb: the key whose saves take the per-app lock. Kept here, not imported from
+ * ai-consent-version-save-check.ts, which imports this module (no-circular).
+ */
+const AI_CONSENT_VERSION_KEY = 'legal.ai_third_party.version';
 type Item = Schema<'AdminConfigItem'>;
 type Entry = Schema<'AdminConfigItemBatchEntry'>;
 export type ConfigPageQuery = { readonly page?: number; readonly page_size?: number };
@@ -54,6 +59,13 @@ export interface ConfigItemTx {
   history(input: ConfigItemWrite, version: number): Promise<void>;
   /** F1-02zn: the invite reward campaign's transaction lock (shared with kill-switch writes). */
   lockInviteReward(appId: string): Promise<void>;
+  /**
+   * B1-22zb: the transaction lock of one app's legal.ai_third_party.version saves, taken first in
+   * the transaction (before its current value is read), so two saves of that key queue even when
+   * no row exists yet to lock, and the later one compares against the earlier one's commit.
+   * Optional only for fakes that never write that key: a write of it fails without the lock.
+   */
+  lockAiConsentVersion?(appId: string): Promise<void>;
   /** Current values of the named keys (full keys); a missing row is absent. */
   values(appId: string, keys: readonly string[]): Promise<ReadonlyMap<string, Json>>;
   audit(input: AuditInput): Promise<void>;
@@ -262,6 +274,7 @@ export class ConfigItemAdmin {
     if (!configValueFits(spec, body.value)) throw new ConfigItemFieldsError(['value']);
     const zeroed = inviteRewardZeroedKeys([{ key, value: body.value }]);
     const result = await this.#store.transaction(async (tx) => {
+      await this.#lockAiConsentVersion(tx, actor.appId, [key]);
       // Campaign lock first, then the row lock: the same order as the switch write.
       if (zeroed.length > 0) await tx.lockInviteReward(actor.appId);
       if (this.#saveChecked([key])) {
@@ -283,6 +296,11 @@ export class ConfigItemAdmin {
     configBatchPermission(body.items);
     const zeroed = inviteRewardZeroedKeys(body.items);
     const results = await this.#store.transaction(async (tx) => {
+      await this.#lockAiConsentVersion(
+        tx,
+        actor.appId,
+        body.items.map((item) => item.key),
+      );
       // The whole batch is refused, before any write, when it zeroes a guarded key while the
       // invite reward campaign is on; fields name every such key.
       if (zeroed.length > 0) {
@@ -319,6 +337,7 @@ export class ConfigItemAdmin {
     // The restored value is only known inside the transaction: lock for every guarded key.
     const guarded = inviteRewardGuardedKey(key);
     const result = await this.#store.transaction(async (tx) => {
+      await this.#lockAiConsentVersion(tx, actor.appId, [key]);
       if (guarded) await tx.lockInviteReward(actor.appId);
       const saveChecked = this.#saveChecked([key]);
       if (saveChecked) await this.#lockSaveKeys(tx, actor.appId);
@@ -351,6 +370,24 @@ export class ConfigItemAdmin {
     });
     this.#alert(actor, result);
     return itemOf(key, result.row);
+  }
+
+  /**
+   * B1-22zb: the per-app lock of legal.ai_third_party.version saves, only when the write touches
+   * that key (other keys' saves take no extra lock). First in the transaction: before any row lock
+   * and before the current value is read. The kill-switch write never takes it, so its order
+   * relative to the invite reward campaign lock cannot invert.
+   */
+  async #lockAiConsentVersion(
+    tx: ConfigItemTx,
+    appId: string,
+    keys: readonly string[],
+  ): Promise<void> {
+    if (!keys.includes(AI_CONSENT_VERSION_KEY)) return;
+    if (tx.lockAiConsentVersion === undefined) {
+      throw new Error('config item: the store cannot lock legal.ai_third_party.version saves');
+    }
+    await tx.lockAiConsentVersion(appId);
   }
 
   /** B2-11d: whether a write of `keys` touches the configuration the save check reads. */

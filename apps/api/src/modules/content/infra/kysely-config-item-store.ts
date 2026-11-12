@@ -8,6 +8,14 @@ import type {
 } from '../application/config-item-admin.ts';
 import { currentConfigValues, lockInviteReward } from './invite-reward-guard.ts';
 
+/**
+ * B1-22zb: namespace of the per-app transaction lock of legal.ai_third_party.version saves
+ * (pg_advisory_xact_lock(hashtextextended(namespace || app_id, 0))). Distinct from the invite
+ * reward campaign lock ('content.invite_reward:' || app_id) and every other text key in the code
+ * base. Inlined as a literal so the lock statement names config_items, the table it guards.
+ */
+const AI_CONSENT_VERSION_LOCK = 'content.config_items.legal.ai_third_party.version:';
+
 const COLUMNS = ['key', 'value', 'version', 'updated_by', 'updated_at'] as const;
 
 // Only the matching current version establishes an admin author. Seed/system rows
@@ -118,6 +126,12 @@ function writeTx(trx: Kysely<DB>, audit: AuditPort): ConfigItemTx {
     },
 
     lockInviteReward: (appId) => lockInviteReward(trx, appId),
+
+    async lockAiConsentVersion(appId) {
+      await sql`SELECT pg_advisory_xact_lock(hashtextextended(${sql.lit(AI_CONSENT_VERSION_LOCK)} || ${appId}::text, 0))`.execute(
+        trx,
+      );
+    },
 
     values: (appId, keys) => currentConfigValues(trx, appId, keys),
 

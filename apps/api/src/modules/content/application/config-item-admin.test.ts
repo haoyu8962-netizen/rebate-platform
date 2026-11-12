@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import type { AuditInput, Clock } from '../../platform/index.ts';
+import { aiConsentVersionSaveCheck } from './ai-consent-version-save-check.ts';
 import {
   ConfigItemAdmin,
   ConfigItemFieldsError,
@@ -26,14 +27,24 @@ interface Fake {
   readonly writes: ConfigItemWrite[];
   readonly audits: AuditInput[];
   readonly alerts: unknown[];
+  /** Transaction calls in order: `ai-lock`, `lock:<key>`, `values:<keys>`, `write:<key>`. */
+  readonly calls: string[];
 }
 
-function fake(rows: Record<string, ConfigItemRow>, history: Record<string, unknown> = {}): Fake {
+function fake(
+  rows: Record<string, ConfigItemRow>,
+  history: Record<string, unknown> = {},
+  options: { readonly aiLock?: boolean } = {},
+): Fake {
+  const calls: string[] = [];
   const writes: ConfigItemWrite[] = [];
   const audits: AuditInput[] = [];
   const alerts: unknown[] = [];
   const tx: ConfigItemTx = {
-    lock: (_app, key) => Promise.resolve(rows[key]),
+    lock: (_app, key) => {
+      calls.push(`lock:${key}`);
+      return Promise.resolve(rows[key]);
+    },
     version: (_app, key, version) => {
       const id = `${key}@${version}`;
       return Promise.resolve(
@@ -41,6 +52,7 @@ function fake(rows: Record<string, ConfigItemRow>, history: Record<string, unkno
       );
     },
     change: (input) => {
+      calls.push(`write:${input.key}`);
       writes.push(input);
       return Promise.resolve({
         key: input.key,
@@ -52,10 +64,20 @@ function fake(rows: Record<string, ConfigItemRow>, history: Record<string, unkno
     },
     history: () => Promise.resolve(),
     lockInviteReward: () => Promise.resolve(),
-    values: (_app, keys) =>
-      Promise.resolve(
+    ...(options.aiLock === false
+      ? {}
+      : {
+          lockAiConsentVersion: (app: string) => {
+            calls.push(`ai-lock:${app}`);
+            return Promise.resolve();
+          },
+        }),
+    values: (_app, keys) => {
+      calls.push(`values:${keys.join(',')}`);
+      return Promise.resolve(
         new Map(keys.flatMap((key) => (rows[key] === undefined ? [] : [[key, rows[key].value]]))),
-      ),
+      );
+    },
     audit: (input) => {
       audits.push(input);
       return Promise.resolve();
@@ -68,7 +90,7 @@ function fake(rows: Record<string, ConfigItemRow>, history: Record<string, unkno
     transaction: (work) => work(tx),
   };
   const admin = new ConfigItemAdmin(store, clock, { warn: (obj: unknown) => alerts.push(obj) });
-  return { admin, writes, audits, alerts };
+  return { admin, writes, audits, alerts, calls };
 }
 
 function row(key: string, value: ConfigItemRow['value'], version: number): ConfigItemRow {
@@ -176,4 +198,91 @@ it('[AC-B1-05m] combined save checks run only for their own written keys and rea
     ['b', 'c'],
   ]);
   expect(combined.refusals(stored, new Map([['z', 0]]))).toEqual([]);
+});
+
+const AI = 'legal.ai_third_party.version';
+const GUEST = 'agent.guest_daily_quota';
+const AI_LOCK = `ai-lock:${actor.appId}`;
+
+it('[AC-B1-22zb unit] single update of the AI consent version takes its lock first, before the current value is read', async () => {
+  const f = fake({ [AI]: row(AI, 3, 1) });
+  const admin = f.admin.withChecks({ save: aiConsentVersionSaveCheck() });
+  expect(await fieldsOf(admin.update(actor, AI, { value: 2, expected_version: 1 }))).toStrictEqual([
+    'value',
+  ]);
+  expect(f.calls).toStrictEqual([AI_LOCK, `lock:${AI}`, `values:${AI}`]);
+  expect(f.writes).toStrictEqual([]);
+  f.calls.length = 0;
+  // A first write (no row yet) takes the same lock.
+  const first = fake({});
+  await first.admin
+    .withChecks({ save: aiConsentVersionSaveCheck() })
+    .update(actor, AI, { value: 1, expected_version: 0 });
+  expect(first.calls[0]).toBe(AI_LOCK);
+  expect(first.calls.filter((call) => call === AI_LOCK)).toHaveLength(1);
+  expect(first.writes).toHaveLength(1);
+});
+
+it('[AC-B1-22zb unit] a batch with the AI consent version takes its lock first, once', async () => {
+  const f = fake({ [AI]: row(AI, 3, 1), [GUEST]: row(GUEST, 20, 1) });
+  const admin = f.admin.withChecks({ save: aiConsentVersionSaveCheck() });
+  expect(
+    await fieldsOf(
+      admin.batch(actor, {
+        items: [
+          { key: GUEST, value: 10, expected_version: 1 },
+          { key: AI, value: 2, expected_version: 1 },
+        ],
+      }),
+    ),
+  ).toStrictEqual([AI]);
+  expect(f.calls).toStrictEqual([AI_LOCK, `lock:${AI}`, `values:${AI}`]);
+  expect(f.writes).toStrictEqual([]);
+  f.calls.length = 0;
+  await admin.batch(actor, { items: [{ key: AI, value: 4, expected_version: 1 }] });
+  expect(f.calls).toStrictEqual([
+    AI_LOCK,
+    `lock:${AI}`,
+    `values:${AI}`,
+    `lock:${AI}`,
+    `write:${AI}`,
+  ]);
+});
+
+it('[AC-B1-22zb unit] a rollback of the AI consent version takes its lock first', async () => {
+  const f = fake({ [AI]: row(AI, 3, 3) }, { [`${AI}@1`]: 5, [`${AI}@2`]: 2 });
+  const admin = f.admin.withChecks({ save: aiConsentVersionSaveCheck() });
+  expect(
+    await fieldsOf(admin.rollback(actor, AI, { to_version: 2, expected_version: 3 })),
+  ).toStrictEqual(['to_version']);
+  expect(f.calls[0]).toBe(AI_LOCK);
+  expect(f.calls.indexOf(AI_LOCK)).toBeLessThan(f.calls.indexOf(`values:${AI}`));
+  expect(f.writes).toStrictEqual([]);
+  f.calls.length = 0;
+  const item = await admin.rollback(actor, AI, { to_version: 1, expected_version: 3 });
+  expect(item.value).toBe(5);
+  expect(f.calls[0]).toBe(AI_LOCK);
+});
+
+it('[AC-B1-22zb unit] saves of other keys take no AI consent lock on any path', async () => {
+  const f = fake({ [GUEST]: row(GUEST, 20, 2) }, { [`${GUEST}@1`]: 5 });
+  const admin = f.admin.withChecks({ save: aiConsentVersionSaveCheck() });
+  await admin.update(actor, GUEST, { value: 30, expected_version: 2 });
+  await admin.batch(actor, { items: [{ key: GUEST, value: 40, expected_version: 2 }] });
+  await admin.rollback(actor, GUEST, { to_version: 1, expected_version: 2 });
+  expect(f.writes).toHaveLength(3);
+  expect(f.calls.filter((call) => call.startsWith('ai-lock'))).toStrictEqual([]);
+});
+
+it('[AC-B1-22zb unit] a store without the AI consent lock refuses to write the key at all', async () => {
+  const f = fake({}, {}, { aiLock: false });
+  const admin = f.admin.withChecks({ save: aiConsentVersionSaveCheck() });
+  await expect(admin.update(actor, AI, { value: 1, expected_version: 0 })).rejects.toThrow(
+    'cannot lock',
+  );
+  await expect(
+    admin.batch(actor, { items: [{ key: AI, value: 1, expected_version: 0 }] }),
+  ).rejects.toThrow('cannot lock');
+  expect(f.writes).toStrictEqual([]);
+  expect(f.calls).toStrictEqual([]);
 });
