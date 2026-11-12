@@ -5,6 +5,7 @@ import type { Platform } from '@couli/contracts-ts';
 import type { UnnumberedCard } from '../../stream/run/index.ts';
 import { maxPriceFen, searchBenefits, searchSorts } from '../../tools/search/schema.ts';
 import type { SearchBenefit, SearchSort } from '../../tools/search/schema.ts';
+import { qShort } from '../core/intent-fallback.ts';
 import type { OrchestratorToolCall, ToolOutcome } from '../core/ports.ts';
 import type { ClarifySlot, IntentDeps } from '../intents/types.ts';
 import { createMemoryResultSetStore } from './store.ts';
@@ -32,7 +33,8 @@ export const resultKeys = {
 /** How a server-built call (refinement, clarification answer) asks the decorator to behave.
  * Carried on the call object under a symbol, so model arguments can never forge it. */
 export interface ServerCall {
-  readonly kind: 'cheaper' | 'refine';
+  /** B3-05o 'keyword': the intent fallback's search (BR-AI-14 细则 ⑥: no clarify, no relaxation). */
+  readonly kind: 'cheaper' | 'refine' | 'keyword';
   readonly chainId: string;
 }
 
@@ -221,6 +223,27 @@ export async function suggestionItems(
   const items: { readonly text: string; readonly send_text: string }[] = [];
   for (const key of keys) {
     const text = await texts.text(appId, key);
+    items.push({ text, send_text: text });
+  }
+  return items;
+}
+
+/**
+ * BR-AI-08 / BR-TEXT-22: agent.suggest.no_result.1–3 for the search term `q`. {q_short} in the
+ * second one is the first 8 code points of q (B3-05o); without a search term (null, empty or
+ * blank) the second one is left out. text = send_text.
+ */
+export async function noResultSuggestions(
+  texts: IntentDeps['texts'],
+  appId: string,
+  q: string | null,
+): Promise<{ readonly text: string; readonly send_text: string }[]> {
+  const term = q === null || q.trim() === '' ? null : qShort(q);
+  const items: { readonly text: string; readonly send_text: string }[] = [];
+  for (const n of [1, 2, 3]) {
+    if (n === 2 && term === null) continue;
+    const raw = await texts.text(appId, resultKeys.noResultSuggestion(n));
+    const text = term === null ? raw : raw.replaceAll('{q_short}', term);
     items.push({ text, send_text: text });
   }
   return items;

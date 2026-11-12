@@ -35,7 +35,7 @@ import {
   readSearchParams,
   resultKeys,
   setChain,
-  suggestionItems,
+  noResultSuggestions,
   validPrice,
   withServerNotices,
   without,
@@ -209,6 +209,9 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     const notices: string[] = [];
     let requested: Args = args;
     let outcome: ToolOutcome;
+    // B3-05o: the intent fallback's keyword search (BR-AI-14 细则 ⑥) never asks and never relaxes.
+    const keyword = server?.kind === 'keyword';
+    const term = typeof args['q'] === 'string' ? args['q'] : null;
 
     const askPrice = async () => {
       if (attempt) {
@@ -222,17 +225,17 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
 
     if (priceInvalid(args)) {
       // BR-AI-08: never search with an invalid price; ask once per chain, then drop it.
-      if (await deps.store.takeOnce(scope, 'price')) return askPrice();
+      if (!keyword && (await deps.store.takeOnce(scope, 'price'))) return askPrice();
       requested = without(args, 'price_min_fen', 'price_max_fen');
       notices.push(resultKeys.priceUnrecognized);
       outcome = await inner.execute(forward(call, requested), ctx);
     } else {
       outcome = await inner.execute(forward(call, args), ctx);
       if (isPriceRangeInvalid(outcome)) {
-        if (await deps.store.takeOnce(scope, 'price')) return askPrice();
+        if (!keyword && (await deps.store.takeOnce(scope, 'price'))) return askPrice();
         requested = without(args, 'price_min_fen', 'price_max_fen');
         notices.push(resultKeys.priceUnrecognized);
-        if (!take()) return unshown(await noResult(ctx, outcome, notices));
+        if (!take()) return unshown(await noResult(ctx, outcome, notices, term));
         outcome = await inner.execute(forward(call, requested, 'without-price'), ctx);
       }
     }
@@ -242,8 +245,9 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
       return finish(ctx, chainId, tried, outcome, requested, requested, notices, false);
     // BR-AI-08 ①: 再便宜点 never relaxes.
     if (server?.kind === 'cheaper') {
-      return withNotices(ctx, outcome, [...notices, resultKeys.noCheaper], false);
+      return withNotices(ctx, outcome, [...notices, resultKeys.noCheaper], false, term);
     }
+    if (keyword) return unshown(await noResult(ctx, outcome, notices, term));
 
     // BR-AI-08 relaxation: the handler's effective spec decides whether step 1 applies.
     let working: Args = requested;
@@ -270,7 +274,7 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
       if (hasProducts(outcome))
         return finish(ctx, chainId, tried, outcome, requested, working, notices, true);
     }
-    return unshown(await noResult(ctx, outcome, notices));
+    return unshown(await noResult(ctx, outcome, notices, term));
   }
 
   async function clarifyPrice(appId: string): Promise<ToolOutcome> {
@@ -286,10 +290,11 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     ctx: ToolContext,
     last: ToolOutcome,
     notices: readonly string[],
+    term: string | null,
   ): Promise<ToolOutcome> {
     const base: Ok =
       last.kind === 'ok' ? last : { kind: 'ok', modelView: { items: [] }, cards: [] };
-    return withNotices(ctx, base, [...notices, resultKeys.noResult], true);
+    return withNotices(ctx, base, [...notices, resultKeys.noResult], true, term);
   }
 
   /** Server notices first, then the handler's own cards; the trailing no-result notice last. */
@@ -298,6 +303,7 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     outcome: Ok,
     keys: readonly string[],
     suggest: boolean,
+    term: string | null,
   ): Promise<ToolOutcome> {
     const appId = ctx.subject.appId;
     const tail = keys.at(-1);
@@ -306,13 +312,8 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     for (const key of head) cards.push(await noticeCard(deps.texts, appId, key));
     cards.push(...outcome.cards);
     if (tail !== undefined) cards.push(await noticeCard(deps.texts, appId, tail));
-    const suggestions = suggest
-      ? await suggestionItems(
-          deps.texts,
-          appId,
-          [1, 2, 3].map((n) => resultKeys.noResultSuggestion(n)),
-        )
-      : undefined;
+    // BR-TEXT-22: {q_short} from this search's term (B3-05o).
+    const suggestions = suggest ? await noResultSuggestions(deps.texts, appId, term) : undefined;
     const { suggestions: own, ...rest } = outcome;
     void own;
     const moved = shifted(ctx, outcome, head.length);

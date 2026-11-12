@@ -56,6 +56,8 @@ export class RunOutput {
   private textUsed = 0;
   private suggestionsSent = 0;
   private hit = false;
+  /** B3-05o: a non-blank text, a card or suggestions was written (不空回复). */
+  private answered = false;
   private readonly ctx: RunContext;
   private readonly limits: OrchestratorLimits;
 
@@ -66,6 +68,11 @@ export class RunOutput {
 
   get limitHit(): boolean {
     return this.hit;
+  }
+
+  /** B3-05o: something the user can read went out (tool.status and blank text do not count). */
+  get delivered(): boolean {
+    return this.answered;
   }
 
   get aborted(): boolean {
@@ -120,6 +127,7 @@ export class RunOutput {
     const size = codePoints(delta);
     const kept = size > room ? Array.from(delta).slice(0, room).join('') : delta;
     this.ctx.text(kept);
+    if (kept.trim() !== '') this.answered = true;
     this.frames += 1;
     this.textUsed += size > room ? room : size;
     if (size > room) this.hit = true;
@@ -147,6 +155,7 @@ export class RunOutput {
     }
     this.cards += cost;
     this.frames += 1;
+    this.answered = true;
     let cardId: string | null = null;
     // Typed locally so that a context declared without the callback still works (fail closed).
     const write: CardWithReceipt = this.ctx.card.bind(this.ctx);
@@ -164,6 +173,7 @@ export class RunOutput {
     if (this.closed || items.length === 0 || room <= 0 || !this.frameRoom()) return false;
     const kept = items.slice(0, room);
     this.ctx.suggestions(kept);
+    this.answered = true;
     this.suggestionsSent += kept.length;
     this.frames += 1;
     this.settle();

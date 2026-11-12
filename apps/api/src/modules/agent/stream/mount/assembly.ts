@@ -382,7 +382,8 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
   const match: MatchDeps = { provider: async () => 'rules', scheduler: deps.scheduler };
   const resultsDeps: ResultsDeps = { store, texts, limits, match, chains: keywordResults };
   const results = createResultsTools(inner, resultsDeps);
-  const continuation = { ...resultsDeps, tools: results };
+  // B3-05o: the intent fallback's configuration and clock (core/intent-fallback.ts).
+  const continuation = { ...resultsDeps, tools: results, fallback: { config, clock: deps.clock } };
   const previousIntents = createPgPreviousIntentReader({ db: deps.db });
   // B3-08w · BR-AI-01 判定顺序②: the intent of this session's run just before this one; a failed
   // read is one warn line and null (拿不准按查收益). B3-05n: the no-model path's 承接 too.

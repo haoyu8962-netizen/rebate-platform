@@ -22,6 +22,7 @@ import {
   type GuideRoute,
   type MessageText,
 } from './classify.ts';
+import { calendarDay } from './calendar.ts';
 import { extractSearchTerms, platformsIn } from './extract.ts';
 import type { DegradedPathDeps } from './index.ts';
 import { createDegradedPath, reportTrace, runKeywordPlan, stopped, toolContext } from './index.ts';
@@ -103,22 +104,6 @@ function positiveDays(value: unknown, fallback: number): number {
 
 const MS_PER_DAY = 86_400_000;
 const PLUS_EIGHT_MS = 8 * 3_600_000;
-
-/** `YYYY-MM-DD` of a day number since 1970-01-01 (H. Hinnant's civil_from_days). */
-export function calendarDay(days: number): string {
-  const z = days + 719_468;
-  const era = Math.floor(z / 146_097);
-  const doe = z - era * 146_097;
-  const yoe = Math.floor(
-    (doe - Math.floor(doe / 1_460) + Math.floor(doe / 36_524) - Math.floor(doe / 146_096)) / 365,
-  );
-  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
-  const mp = Math.floor((5 * doy + 2) / 153);
-  const day = doy - Math.floor((153 * mp + 2) / 5) + 1;
-  const month = mp < 10 ? mp + 3 : mp - 9;
-  const year = yoe + era * 400 + (month <= 2 ? 1 : 0);
-  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
 
 function plusEightToday(clock: Clock): number {
   return Math.floor((clock.now().getTime() + PLUS_EIGHT_MS) / MS_PER_DAY);
@@ -366,7 +351,7 @@ class RoutedRun {
   }
 
   private async orders(): Promise<RunBodyResult> {
-    const orderNo = orderNumberOf(this.message.trusted, MAX_ORDER_NO);
+    const orderNo = orderNumberOf(this.message, MAX_ORDER_NO);
     if (orderNo !== null && (await this.offers('explain_order'))) {
       if (this.aborted) return stopped();
       const platform = namedPlatform(platformsIn(this.message.trusted));

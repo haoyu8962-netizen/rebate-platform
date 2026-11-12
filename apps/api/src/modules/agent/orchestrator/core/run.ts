@@ -30,8 +30,12 @@ import { ReplyTemplateCalls, isReplyTemplateTool } from './reply-templates.ts';
 import type { CardWrite } from './output.ts';
 import { openDegradedRoute } from './degraded-intent.ts';
 import type { DegradedRoute } from './degraded-intent.ts';
+import { copyOf } from '../degraded/replies.ts';
+import { bindServerCalls } from './intent-fallback.ts';
+import type { ServerToolCallResult, ServerToolCalls } from './intent-fallback.ts';
 import type {
   AgentRunBodyDeps,
+  OrchestratorToolCall,
   DeliveredProductReceipt,
   InputProceed,
   OrchestratorTrace,
@@ -255,6 +259,19 @@ class AgentRun {
   private templatesWritten = false;
   /** B3-08p: held text or templates were settled before a capping write; the run ends there. */
   private capSettled = false;
+  /** B3-05o: tool calls of the run (the model's and the server's), against limits.toolCalls. */
+  private toolCalls = 0;
+  /** B3-05o: names of this run's offered definitions. */
+  private known: ReadonlySet<string> = new Set();
+  /** B3-05o: tool names the model asked for in this run (requested, run or not). */
+  private readonly requested = new Set<string>();
+  /** B3-05o: model explanation text (non-blank) was written through the guard. */
+  private explained = false;
+  /**
+   * B3-05o r2 · BR-AI-07: earlier rounds' held text while the IntentPort runs (texts resolved),
+   * written at the port's first write or non-template server call, dropped by a template one.
+   */
+  private pendingHeld: readonly { readonly text: string; readonly model: boolean }[] | null = null;
 
   constructor(deps: AgentRunBodyDeps, input: RunBodyInput, ctx: RunContext) {
     this.deps = deps;
@@ -277,11 +294,43 @@ class AgentRun {
       return done('stop');
     }
     try {
-      return await this.main();
+      return await this.neverEmpty(await this.main());
     } finally {
       this.release();
       this.recordTrace();
     }
+  }
+
+  /**
+   * B3-05o 不空回复 (intent-fallback.ts rule 3): a run ending done stop or done limit that delivered
+   * no text, card or suggestions gets agent.reply.empty and agent.suggest.empty.1–3, one
+   * EmptyReplyPort call. Cancellation, errors, the time limit and safety endings are left alone.
+   */
+  private async neverEmpty(result: RunBodyResult): Promise<RunBodyResult> {
+    if (result.kind !== 'done') return result;
+    const reason = result.finishReason;
+    if (reason !== 'stop' && reason !== 'limit') return result;
+    if (this.signal.aborted || this.out.delivered) return result;
+    const texts = this.deps.texts;
+    const pending = Promise.all([
+      copyOf(texts, this.appId, 'agent.reply.empty'),
+      ...[1, 2, 3].map((n) => copyOf(texts, this.appId, `agent.suggest.empty.${String(n)}`)),
+    ]);
+    const copies = await this.wait(pending);
+    if (copies === ABORTED) return done('stop');
+    const [text, ...chips] = copies;
+    this.out.text(text ?? '');
+    this.out.suggestions(chips.map((chip) => ({ text: chip, send_text: chip })));
+    try {
+      this.deps.emptyReplies?.filled({
+        appId: this.appId,
+        runId: this.input.runId,
+        finishReason: reason,
+      });
+    } catch {
+      // Logging and counting never change the run.
+    }
+    return result;
   }
 
   private release(): void {
@@ -466,6 +515,7 @@ class AgentRun {
     const tools = await this.wait(this.deps.tools.definitions(this.appId, this.input.caller));
     if (tools === ABORTED) return done('stop');
     const known = new Set(tools.map((tool) => tool.name));
+    this.known = known;
     // B3-08m: a template tool on offer may be called in any later round (reply-templates.ts).
     this.holding = tools.some((tool) => isReplyTemplateTool(tool.name));
     const clock = this.deps.modelClock();
@@ -473,7 +523,6 @@ class AgentRun {
     const review = this.deps.outputReview?.forRun(this.appId, this.signal) ?? this.deps.review;
     this.guard = createOutputGuard({ review });
     const messages: ChatMessage[] = [{ role: 'user', content: proceed.modelText }];
-    let toolCalls = 0;
     for (let round = 1; ; round += 1) {
       const outcome = await this.wait(
         this.deps.model.complete(
@@ -509,6 +558,7 @@ class AgentRun {
       }
       const roundText = deltas.join('');
       if (calls.length === 0) return this.finalRound(proceed, deltas, roundText);
+      for (const call of calls) this.requested.add(call.function.name);
       // B3-08m: after a template call no model text is delivered; it never reaches the guard.
       const templatedBefore = this.templated;
       // B3-08p 请求即算 (gate review r1 S1): counted before anything of this round can be settled
@@ -527,8 +577,8 @@ class AgentRun {
       if (round >= this.deps.limits.modelRounds) return this.finishText('limit');
       messages.push({ role: 'assistant', content: roundText || null, tool_calls: calls });
       for (const call of calls) {
-        if (toolCalls >= this.deps.limits.toolCalls) return this.finishText('limit');
-        toolCalls += 1;
+        if (this.toolCalls >= this.deps.limits.toolCalls) return this.finishText('limit');
+        this.toolCalls += 1;
         const step = await this.runTool(call, known);
         if (!('view' in step)) return step;
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(step.view) });
@@ -550,17 +600,33 @@ class AgentRun {
       if (intent === undefined && !blank && isStructuredText(text)) this.formatInvalid = true;
       return this.finishText('stop');
     }
-    // Earlier rounds' held text goes out first, as it did when it was written at once.
-    const settled = await this.settleHeld();
-    if (settled !== null) return settled;
     const intents = this.deps.intents;
     if (intents !== undefined && !blank) {
-      const handled = await this.wait(
-        intents.handle({ text, input: this.input, proceed }, this.pathContext()),
-      );
+      // B3-05o r2 · BR-AI-07: earlier rounds' held text waits for the port: a server-initiated
+      // template call (order_query, rule_qa, earnings_query) drops it; any other first write of
+      // the port, or the port's end without one, writes it first, as when written at once.
+      const prepared = await this.prepareHeld();
+      if (prepared !== null) return prepared;
+      // B3-05o: the port's context carries this run's server-initiated calls (intent fallback).
+      const ctx = this.releasingContext(this.pathContext());
+      bindServerCalls(ctx, this.serverCalls());
+      const handled = await this.wait(intents.handle({ text, input: this.input, proceed }, ctx));
       if (handled === ABORTED) return done('stop');
-      if (handled !== null) return this.final(handled);
-    } else if (intent !== undefined) {
+      if (this.templated) this.pendingHeld = null;
+      else this.releaseHeld();
+      if (handled === null && this.out.limitHit) return done('limit');
+      if (handled !== null) {
+        // B3-05o: a server-initiated template call answers with the BR-AI-07 templates.
+        if (handled.kind === 'done' && this.templated)
+          return this.writeTemplates(handled.finishReason);
+        return this.final(handled);
+      }
+    } else {
+      // Earlier rounds' held text goes out first, as it did when it was written at once.
+      const settled = await this.settleHeld();
+      if (settled !== null) return settled;
+    }
+    if (intents === undefined && intent !== undefined) {
       // U-7: without an IntentPort every intent output is out_of_scope; model text is dropped.
       if (!(await this.fixed('agent.refuse.out_of_scope')) && this.signal.aborted) {
         return done('stop');
@@ -568,9 +634,109 @@ class AgentRun {
       return this.final(done('stop'));
     }
     if (isStructuredText(text)) return this.invalidFormat(proceed);
-    const pushed = await this.pushText(deltas);
-    if (pushed !== null) return pushed;
-    return this.finishText('stop');
+    // B3-05o: blank model text delivers nothing (white space never goes out as an answer).
+    if (!blank) {
+      const pushed = await this.pushText(deltas);
+      if (pushed !== null) return pushed;
+    }
+    return this.titleBased(await this.finishText('stop'));
+  }
+
+  /**
+   * B3-05o · BR-AI-18 细则「比较与适用性的提示」 (intent-fallback.ts rule 4): the model asked for no
+   * tool and gave no intent object (this is the ordinary-text end), its explanation text was
+   * actually written, and the session has product cards in context → agent.notice.title_based
+   * after the text. Any other end is returned unchanged.
+   */
+  private async titleBased(result: RunBodyResult): Promise<RunBodyResult> {
+    if (result.kind !== 'done' || result.finishReason !== 'stop') return result;
+    if (this.requested.size > 0 || !this.explained || this.intent !== null) return result;
+    if (this.signal.aborted || this.out.limitHit) return result;
+    const port = this.deps.sessionProducts;
+    if (port === undefined) return result;
+    let inContext: boolean | Aborted;
+    try {
+      inContext = await this.wait(
+        port.inContext(this.appId, this.input.sessionId).catch(() => false),
+      );
+    } catch {
+      inContext = false;
+    }
+    if (inContext === ABORTED) return done('stop');
+    if (inContext !== true) return result;
+    const key = 'agent.notice.title_based';
+    const fallback = await this.wait(copyOf(this.deps.texts, this.appId, key));
+    if (fallback === ABORTED) return done('stop');
+    const notice: UnnumberedCard = {
+      type: 'notice',
+      schema_version: 1,
+      data: { level: 'info', text_key: key, actions: [] },
+      fallback_text: fallback,
+    };
+    if ((await this.card(notice)) === ABORTED) return done('stop');
+    return this.final(result);
+  }
+
+  /** B3-05o: this run's server-initiated calls, for the IntentPort (intent-fallback.ts). */
+  private serverCalls(): ServerToolCalls {
+    return {
+      offered: (name) => this.known.has(name),
+      calledByModel: (name) => this.requested.has(name),
+      call: (call) => this.serverCall(call),
+    };
+  }
+
+  /**
+   * B3-05o (intent-fallback.ts rule 2): one server-initiated call, run like a model call (status,
+   * card references, template bookkeeping, cards and receipts through the run's caps) and counted
+   * toward limits.toolCalls; traced with initiator 'server'.
+   */
+  private async serverCall(call: OrchestratorToolCall): Promise<ServerToolCallResult> {
+    const ended = (result: RunBodyResult): ServerToolCallResult => ({ kind: 'ended', result });
+    if (this.traced || this.signal.aborted) return ended(done('stop'));
+    const name = call.name;
+    if (!this.known.has(name)) return { kind: 'unavailable' };
+    if (this.toolCalls >= this.deps.limits.toolCalls) return { kind: 'exhausted' };
+    this.toolCalls += 1;
+    const template = isReplyTemplateTool(name) ? name : null;
+    if (template !== null) {
+      this.templateCalls.called(template);
+      this.held = [];
+      // B3-05o r2 · BR-AI-07: the earlier rounds' held text is never delivered in this run.
+      this.pendingHeld = null;
+    } else {
+      this.releaseHeld();
+    }
+    const platform = platformOf(call.args);
+    const texts = this.deps.texts;
+    const start = await this.wait(texts.toolDisplay(this.appId, name, 'start', platform));
+    if (start === ABORTED) return ended(done('stop'));
+    this.out.status(name, 'start', start);
+    const placeholders = Object.freeze({ ...this.placeholders });
+    const refs = openCardCall(call.id, placeholders);
+    try {
+      const executed = await this.wait(
+        this.deps.tools.execute(call, this.toolContext(placeholders)),
+      );
+      if (executed === ABORTED) return ended(done('stop'));
+      const outcome = executed;
+      refs.close();
+      const phase = outcome.kind === 'ok' ? 'end' : 'failed';
+      const display = await this.wait(texts.toolDisplay(this.appId, name, phase, platform));
+      if (display === ABORTED) return ended(done('stop'));
+      this.out.status(name, phase, display);
+      this.traceCall(name, call.args, outcome.kind, true);
+      if (template !== null && outcome.kind === 'ok') {
+        this.templateCalls.succeeded(template, outcome.trace);
+      }
+      if (outcome.kind === 'ok') {
+        const stop = await this.toolOutput(outcome, refs);
+        if (stop !== null) return ended(stop);
+      }
+      return { kind: 'called', outcome };
+    } finally {
+      refs.close();
+    }
   }
 
   /**
@@ -654,6 +820,69 @@ class AgentRun {
     return this.writeEmits(emits, guard);
   }
 
+  /**
+   * B3-05o r2: moves the held emits to pendingHeld with their texts resolved, so that they can be
+   * written synchronously at the IntentPort's first write; a result means the run ends here.
+   */
+  private async prepareHeld(): Promise<RunBodyResult | null> {
+    const emits = this.held;
+    this.held = [];
+    const pending: { text: string; model: boolean }[] = [];
+    for (const emit of emits) {
+      if (emit.kind === 'text') {
+        pending.push({ text: emit.text, model: true });
+        continue;
+      }
+      const fixed = await this.wait(this.deps.texts.text(this.appId, emit.key));
+      if (fixed === ABORTED) return done('stop');
+      pending.push({ text: fixed, model: false });
+    }
+    this.pendingHeld = pending.length === 0 ? null : pending;
+    return null;
+  }
+
+  /** B3-05o r2: writes pendingHeld (once); the run's caps and final() decide the end. */
+  private releaseHeld(): void {
+    const pending = this.pendingHeld;
+    this.pendingHeld = null;
+    if (pending === null) return;
+    for (const { text, model } of pending) {
+      if (this.out.limitHit || this.signal.aborted) return;
+      if (this.out.text(text)) {
+        this.delivered = true;
+        if (model && text.trim() !== '') this.explained = true;
+      }
+    }
+  }
+
+  /** B3-05o r2: the IntentPort's context; its first write releases pendingHeld before it. */
+  private releasingContext(ctx: RunContext): RunContext {
+    return {
+      runId: ctx.runId,
+      sessionId: ctx.sessionId,
+      signal: ctx.signal,
+      get cardsDelivered() {
+        return ctx.cardsDelivered;
+      },
+      text: (delta) => {
+        this.releaseHeld();
+        ctx.text(delta);
+      },
+      toolStatus: (tool, phase, display) => {
+        this.releaseHeld();
+        ctx.toolStatus(tool, phase, display);
+      },
+      card: (card, delivered) => {
+        this.releaseHeld();
+        return ctx.card(card, delivered);
+      },
+      suggestions: (items) => {
+        this.releaseHeld();
+        ctx.suggestions(items);
+      },
+    };
+  }
+
   /** Held model text at an end of the run: dropped in a template run, else written. */
   private async settleHeld(): Promise<RunBodyResult | null> {
     if (this.templated) {
@@ -676,6 +905,7 @@ class AgentRun {
   /** The template texts, once per run (B3-08p: possibly before a capping card); stop on abort. */
   private async writeTemplateTexts(): Promise<RunBodyResult | null> {
     this.held = [];
+    this.pendingHeld = null;
     this.replaced = true;
     if (this.templatesWritten) return null;
     this.templatesWritten = true;
@@ -719,7 +949,10 @@ class AgentRun {
         if (fixed === ABORTED) return done('stop');
         text = fixed;
       }
-      if (this.out.text(text)) this.delivered = true;
+      if (this.out.text(text)) {
+        this.delivered = true;
+        if (emit.kind === 'text' && text.trim() !== '') this.explained = true;
+      }
       if (emit.kind === 'fixed' && emit.key === 'agent.refuse.output_blocked') {
         return done('safety');
       }
@@ -729,7 +962,7 @@ class AgentRun {
     return guard.stopped ? done('safety') : null;
   }
 
-  private traceCall(name: string, args: unknown, status: ToolStatus): void {
+  private traceCall(name: string, args: unknown, status: ToolStatus, server = false): void {
     let masked: unknown;
     try {
       masked = this.deps.traceMask(args, this.placeholders);
@@ -737,7 +970,7 @@ class AgentRun {
       // Never fall back to the unmasked arguments.
       masked = null;
     }
-    this.toolTrace.push({ name, args: masked, status });
+    this.toolTrace.push({ name, args: masked, status, ...(server ? { initiator: 'server' } : {}) });
   }
 
   private async runTool(

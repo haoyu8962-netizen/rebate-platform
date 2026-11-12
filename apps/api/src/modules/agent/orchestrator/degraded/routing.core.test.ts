@@ -195,3 +195,10 @@ it('[AC-B3-05n][BR-AI-14] 开关 agent.degraded.route_intents 关：不分流，
   expect((await s.ask('查一下我的订单')).intent).toBe('search');
   expect(s.called()).not.toContain('list_my_orders');
 });
+
+it('[AC-B3-05o][BR-AI-14] r2 降级 ③ 按单号查：「订单 ID <num_1>」只取 <num_1>，空白前的 ID 不带上', async () => {
+  const s = session();
+  expect((await s.ask('帮我查京东订单 ID <num_1>')).intent).toBe('order_query');
+  const calls = s.execute.mock.calls.map(([call]) => [call.name, call.args]);
+  expect(calls).toEqual([['explain_order', { order_no: '<num_1>', platform: 'jd' }]]);
+});

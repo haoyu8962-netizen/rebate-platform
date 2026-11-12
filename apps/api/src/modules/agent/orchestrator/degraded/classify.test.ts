@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { wrapUntrusted } from '../../guard/index.ts';
 import { classifyDegraded, greetingOnly, orderNumberOf, readMessage } from './classify.ts';
 import { extractSearchTerms as extractFree } from './extract.ts';
-import { calendarDay } from './routing.ts';
+import { calendarDay } from './calendar.ts';
 
 function extractSearchTerms(text: string) {
   return extractFree(readMessage(text).free);
@@ -74,9 +74,17 @@ it('[AC-B3-05n] 只有问候语才算问候', () => {
 });
 
 it('[AC-B3-05n] 单号取第一个占位符连同紧挨的字母数字与连接符，过长只取占位符', () => {
-  expect(orderNumberOf('订单AB-<num_1>-X和<num_2>', 64)).toBe('AB-<num_1>-X');
-  expect(orderNumberOf('没有单号', 64)).toBeNull();
-  expect(orderNumberOf(`${'A'.repeat(70)}<num_1>`, 64)).toBe('<num_1>');
+  expect(orderNumberOf(readMessage('订单AB-<num_1>-X和<num_2>'), 64)).toBe('AB-<num_1>-X');
+  expect(orderNumberOf(readMessage('没有单号'), 64)).toBeNull();
+  expect(orderNumberOf(readMessage(`${'A'.repeat(70)}<num_1>`), 64)).toBe('<num_1>');
+});
+
+it('[AC-B3-05o] r2 单号只带紧挨占位符的字母数字与连接符，空白隔开的不算', () => {
+  expect(orderNumberOf(readMessage('订单 ID <num_1>'), 64)).toBe('<num_1>');
+  expect(orderNumberOf(readMessage('帮我查京东订单 ID <num_1>'), 64)).toBe('<num_1>');
+  expect(orderNumberOf(readMessage('订单A1-<num_1>'), 64)).toBe('A1-<num_1>');
+  expect(orderNumberOf(readMessage('订单A1-<num_1> 已付款'), 64)).toBe('A1-<num_1>');
+  expect(orderNumberOf(readMessage('订单 <num_1>\u3000AB'), 64)).toBe('<num_1>');
 });
 
 it('[AC-B3-05n] 付款日按日序号换算成日历日（闰年与跨年）', () => {

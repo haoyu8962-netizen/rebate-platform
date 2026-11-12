@@ -159,7 +159,8 @@ export interface DeterministicPath {
 }
 
 export interface IntentPort {
-  /** Final-round text only. null means ordinary explanation; otherwise the port owns output. */
+  /** Final-round text only. null means ordinary explanation; otherwise the port owns output.
+   * B3-05o: `ctx` carries this run's server-initiated calls (intent-fallback.ts serverCallsOf). */
   handle(
     request: PathInput & { readonly text: string },
     ctx: RunContext,
@@ -198,6 +199,8 @@ export interface OrchestratorTrace extends ToolTraceFragment {
      * Core does not restore placeholders or implement masking rules. */
     readonly args: unknown;
     readonly status: 'ok' | 'failed' | 'rejected';
+    /** B3-05o: present only on a server-initiated call (intent-fallback.ts rule 2). */
+    readonly initiator?: 'server';
   }[];
   readonly output_filtered: boolean;
   readonly filter_hits: readonly FilterHit[];
@@ -303,6 +306,27 @@ export interface AgentRunBodyDeps {
   /** B3-03p: the per-app output review (RunSentenceReviewPort); absent, every run's OutputGuard
    * uses `review` as before (B3-05b runs). */
   readonly outputReview?: RunSentenceReviewPort;
+  /** B3-05o 不空回复 (intent-fallback.ts rule 3): told once per run the core filled with
+   * agent.reply.empty (the stream entry: one log line and EmptyReplyCounter.record()). Absent, the
+   * run is still filled; nothing is logged or counted. */
+  readonly emptyReplies?: EmptyReplyPort;
+  /** B3-05o 比较提示 (intent-fallback.ts rule 4): whether the session has product cards in
+   * context (its current result set). Absent, or a failed read: no title-based notice. */
+  readonly sessionProducts?: SessionProductsPort;
+}
+
+/** B3-05o: one call per run filled with agent.reply.empty. */
+export interface EmptyReplyPort {
+  filled(fields: {
+    readonly appId: string;
+    readonly runId: string;
+    readonly finishReason: 'stop' | 'limit';
+  }): void;
+}
+
+/** B3-05o: the session's product cards in context (BR-AI-18 细则「比较与适用性的提示」). */
+export interface SessionProductsPort {
+  inContext(appId: string, sessionId: string): Promise<boolean>;
 }
 
 export interface RunLabelsDeps {

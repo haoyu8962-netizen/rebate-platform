@@ -26,6 +26,8 @@ export interface MessageText {
   readonly trusted: string;
   /** The same with whitespace kept, not normalized (search_rules' question). */
   readonly trustedRaw: string;
+  /** The same NFKC with whitespace kept (order numbers: white space never joins, B3-05o r2). */
+  readonly trustedSpaced: string;
   /** Every block's text unwrapped, no delimiter tag, no placeholder, no angle bracket, NFKC. */
   readonly free: string;
 }
@@ -48,6 +50,7 @@ export function readMessage(modelText: string): MessageText {
   return {
     trusted: own.normalize('NFKC').replace(/\s+/gu, ''),
     trustedRaw: own.trim(),
+    trustedSpaced: own.normalize('NFKC'),
     free: cleanSearchText(unwrapped),
   };
 }
@@ -166,9 +169,11 @@ export function classifyDegraded(trusted: string): DegradedReading {
 }
 
 /** BR-AI-01 细则「意图兜底与不空回复」: the string around the first placeholder, with the digits,
- * letters and hyphens right next to it; null without a placeholder. */
-export function orderNumberOf(trusted: string, maxLength: number): string | null {
-  const match = /[A-Za-z0-9-]*<num_[1-9]\d*>[A-Za-z0-9-]*/u.exec(trusted);
+ * letters and hyphens right next to it; null without a placeholder. Read on the whitespace-kept
+ * text (MessageText.trustedSpaced): characters across white space are not next to it (B3-05o r2;
+ * the intent fallback and degraded step ③ alike). */
+export function orderNumberOf(message: MessageText, maxLength: number): string | null {
+  const match = /[A-Za-z0-9-]*<num_[1-9]\d*>[A-Za-z0-9-]*/u.exec(message.trustedSpaced);
   if (match === null) return null;
   if ([...match[0]].length <= maxLength) return match[0];
   return /<num_[1-9]\d*>/u.exec(match[0])?.[0] ?? null;

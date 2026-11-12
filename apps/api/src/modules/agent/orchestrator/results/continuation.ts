@@ -7,6 +7,7 @@ import { maxSearchPage } from '../../tools/search/schema.ts';
 import type { RunBodyResult, RunContext } from '../../stream/run/index.ts';
 import type { PathInput, ToolContext, ToolOutcome } from '../core/ports.ts';
 import type { ClarifySlot, IntentDeps, IntentOutput, IntentRequest } from '../intents/types.ts';
+import { isFallbackIntent, serveIntentFallback, serverCallsOf } from '../core/intent-fallback.ts';
 import { openServerCall } from './references.ts';
 import {
   argsOf,
@@ -19,7 +20,7 @@ import {
   priceInvalid,
   resultKeys,
   setChain,
-  suggestionItems,
+  noResultSuggestions,
   without,
   SERVER_CALL,
   type InternalToolCall,
@@ -228,10 +229,8 @@ export function createRefinement(
   async function notice(request: IntentRequest, ctx: RunContext, key: string, suggest: boolean) {
     const appId = request.input.caller.appId;
     await ctx.card(await noticeCard(deps.texts, appId, key));
-    if (suggest) {
-      const keys = [1, 2, 3].map((n) => resultKeys.noResultSuggestion(n));
-      ctx.suggestions(await suggestionItems(deps.texts, appId, keys));
-    }
+    // Nothing was searched on these paths: no search term, so no 「只搜{q_short}」 (BR-TEXT-22).
+    if (suggest) ctx.suggestions(await noResultSuggestions(deps.texts, appId, null));
     return done();
   }
 
@@ -338,8 +337,24 @@ export function createRefinement(
         case 'ref_ordinal':
           return ordinal(intent.ordinal, request, ctx);
         default:
-          // Other continuations (orders, rules, earnings …) are routed elsewhere by the
-          // composition root; this port produces nothing for them.
+          // B3-05o · BR-AI-01 细则「意图兜底与不空回复」: an intent whose tool the model did not
+          // call is served by the server, through the core's server calls of this run.
+          const server = serverCallsOf(ctx);
+          if (deps.fallback !== undefined && server !== null) {
+            if (isFallbackIntent(intent.agent_intent)) {
+              return serveIntentFallback(intent.agent_intent, request, server, ctx, {
+                ...deps.fallback,
+                texts: deps.texts,
+                enabledSearchPlatforms: (appId) => deps.tools.enabledSearchPlatforms(appId),
+                keywordCall: (call) =>
+                  serverCall(call.name, isRecord(call.args) ? call.args : {}, {
+                    kind: 'keyword',
+                    chainId: newChainId(),
+                  }),
+              });
+            }
+          }
+          // Other continuations produce nothing here.
           return done();
       }
     },

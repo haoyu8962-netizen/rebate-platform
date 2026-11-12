@@ -9,6 +9,7 @@ import type {
   OrchestratorTools,
   QuotedScope,
 } from '../core/ports.ts';
+import type { IntentFallbackDeps } from '../core/intent-fallback.ts';
 import type { ClarificationScope, ClarifySlot, IntentDeps } from '../intents/types.ts';
 
 /** Server-owned conditions; chain_id is never accepted from model tool arguments. */
@@ -119,4 +120,7 @@ export interface ResultsDeps {
 /** tools is the decorated port, sharing store with clarification and refinement. */
 export interface ResultsContinuationDeps extends ResultsDeps {
   readonly tools: OrchestratorTools;
+  /** B3-05o: configuration and clock of the intent fallback (core/intent-fallback.ts). Absent,
+   * an intent without its tool call gets nothing from this port (as before). */
+  readonly fallback?: Pick<IntentFallbackDeps, 'config' | 'clock'>;
 }

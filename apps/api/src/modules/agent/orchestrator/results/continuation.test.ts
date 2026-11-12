@@ -223,7 +223,8 @@ it('[AC-B3-05g#3][BR-AI-08] 会话里既无追问链也无结果集时，refine 
   );
   expect(h.execute).not.toHaveBeenCalled();
   expect(noticeKeys(out.cards)).toEqual(['agent.notice.no_result']);
-  expect(out.suggestions).toHaveLength(3);
+  // B3-05o · BR-TEXT-22: nothing was searched, so no 「只搜{q_short}」 (the first and third only).
+  expect(out.suggestions).toHaveLength(2);
 });
 
 it('[AC-B3-05g#7][BR-PRICE-15] 再便宜点仍依赖已下发商品：只有追问链、没有已下发商品时不检索', async () => {

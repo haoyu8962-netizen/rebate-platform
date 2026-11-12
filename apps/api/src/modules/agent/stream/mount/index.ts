@@ -88,6 +88,9 @@
 //   wrapper of options.assembly) may keep receiving the context with db, for agent's own stores:
 //   the assembly app.module hands in must resolve to agent's own function with a body
 //   (createProductionStreamAssembly), which the rule test proves from app.module's source.
+// B3-05o: with a business assembly the body, labels and traceMask come from createStreamAgentBody
+//   (./agent-body.ts) over that assembly (seams.tools / seams.inputCheck still win), so production
+//   and the rule tests share one composition; its 不空回复 counter is a process-local counter here.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports,
 // relative imports with `.ts`, no process.env, no import of identity.
@@ -114,8 +117,7 @@ import {
   type OrchestratorTools,
   type AgentRunTexts,
 } from '../../orchestrator/index.ts';
-import type { DeliveryReceiptPort } from '../../orchestrator/core/ports.ts';
-import { keepsQuoted, type ResultSetStore } from '../../orchestrator/results/index.ts';
+import type { AgentRunBodyDeps } from '../../orchestrator/core/ports.ts';
 import { createRunModelClock, type ResolvedRoute } from '../../model-gateway/routing/index.ts';
 import { createAgentRedactor } from '../../preprocess/redact/index.ts';
 import { agentSessionDefaults, createPgAgentSessionStore } from '../../store/index.ts';
@@ -149,10 +151,15 @@ import {
   type AgentContentReader,
 } from './config.ts';
 import { agentDefaultTexts, agentText } from './texts.ts';
-import type { AgentStreamAssemblyFactory, AgentStreamProvidedPorts } from './assembly.ts';
+import type {
+  AgentStreamAssembly,
+  AgentStreamAssemblyFactory,
+  AgentStreamProvidedPorts,
+} from './assembly.ts';
 import { agentStreamPortsToken } from './production.ts';
 import type { StreamReviewOptions } from './review.ts';
 import { createAgentBodyAssembly } from './body.ts';
+import { createEmptyReplyCounter, createStreamAgentBody } from './agent-body.ts';
 import { createRunTraceRecorder } from './trace.ts';
 import { createTraceRedoQueue, sharePendingCards, unrefScheduler } from './trace-retry.ts';
 export { createAgentStreamAssembly } from './assembly.ts';
@@ -323,40 +330,16 @@ export function agentStreamProvider(
   };
 }
 
-/**
- * B3-03n · BR-AI-05: the business assembly's result store as the core's delivery receipt port. A
- * failed record is logged (flat fields, no card or price) and rejected again; the core keeps the
- * run going without it.
- */
-function deliveryReceipts(store: ResultSetStore, logger: RootLogger): DeliveryReceiptPort {
-  const failed = (fields: Record<string, string | number>, error: unknown): void => {
-    logger.warn(
-      { ...fields, error_name: error instanceof Error ? error.name : typeof error },
-      'agent_result_receipt_failed',
-    );
-  };
-  const port: DeliveryReceiptPort = {
-    async recordDelivered(resultSetId, items) {
-      try {
-        await store.recordDelivered(resultSetId, items);
-      } catch (error) {
-        failed({ result_set_id: resultSetId, cards: items.length }, error);
-        throw error;
-      }
-    },
-  };
-  // B3-03p: quoted products, when the store keeps them (memory store; the PG store since B3-03q).
-  if (!keepsQuoted(store)) return port;
+/** A test seam's tools in place of the assembly's, on the model and the no-model path alike. */
+function withSeamTools(
+  business: AgentStreamAssembly,
+  tools: OrchestratorTools | undefined,
+): AgentStreamAssembly {
+  if (tools === undefined) return business;
   return {
-    ...port,
-    async recordQuoted(scope, items) {
-      try {
-        await store.recordQuoted(scope, items);
-      } catch (error) {
-        failed({ run_id: scope.runId, cards: items.length }, error);
-        throw error;
-      }
-    },
+    ...business,
+    tools,
+    ...(business.degraded === undefined ? {} : { degraded: { ...business.degraded, tools } }),
   };
 }
 
@@ -437,45 +420,46 @@ export function createAgentStreamRuntime(
     dropped: [],
   });
   const prompt = { current: async () => null };
-  const { body, traceMask, labels } = createAgentBodyAssembly({
-    tools,
-    inputCheck: seams?.inputCheck ?? business?.safety?.inputCheck ?? failClosedInputCheck(),
-    errorMsg: async (_appId, code) => texts.errorMsg(code),
-    ...(business === undefined
-      ? {}
-      : {
-          deterministic: business.deterministic,
-          intents: business.intents,
-          results: deliveryReceipts(business.results, logger),
-        }),
-    // B3-05n: the routed no-model path (BR-AI-14 细则「无模型降级」), over the assembly's ports;
-    // a test seam's tools still replace the assembly's.
-    ...(business?.degraded === undefined
-      ? {}
-      : {
-          config: business.degraded.config,
-          clock: business.degraded.clock,
-          routes: business.degraded.routes,
-          previousIntent: business.degraded.previousIntent,
-          degradedTools: seams?.tools ?? business.degraded.tools,
-        }),
-    model: {
-      complete: async () => {
-        await route();
-        return { kind: 'degraded', reason: 'route_no_model', attempts: [] };
-      },
+  const model: AgentRunBodyDeps['model'] = {
+    complete: async () => {
+      await route();
+      return { kind: 'degraded', reason: 'route_no_model', attempts: [] };
     },
-    modelClock: () => createRunModelClock(timings.runMaxMs),
-    trace: trace.sink,
-    review: business?.safety?.review ?? { review: async () => 'timeout' },
-    // B3-03p: the per-app output review, when the assembly's safety ports carry one.
-    ...(business?.safety?.outputReview === undefined
-      ? {}
-      : { outputReview: business.safety.outputReview }),
-    texts: runTexts,
-    prompt,
-    route,
-  });
+  };
+  const modelClock = () => createRunModelClock(timings.runMaxMs);
+  const errorMsg = async (_appId: string, code: number) => texts.errorMsg(code);
+  const fallbackReview: AgentRunBodyDeps['review'] = { review: async () => 'timeout' };
+  // B3-05o: with a business assembly the body is built by createStreamAgentBody (./agent-body.ts),
+  // the one composition shared with the rule tests; a test seam's tools replace the assembly's on
+  // both paths. Without one, the minimal B3-03f mount.
+  const { body, traceMask, labels } =
+    business === undefined
+      ? createAgentBodyAssembly({
+          tools,
+          inputCheck: seams?.inputCheck ?? failClosedInputCheck(),
+          errorMsg,
+          model,
+          modelClock,
+          trace: trace.sink,
+          review: fallbackReview,
+          texts: runTexts,
+          prompt,
+          route,
+        })
+      : createStreamAgentBody({
+          business: withSeamTools(business, seams?.tools),
+          model,
+          modelClock,
+          prompt,
+          inputCheck: seams?.inputCheck ?? business.safety?.inputCheck ?? failClosedInputCheck(),
+          review: business.safety?.review ?? fallbackReview,
+          trace: trace.sink,
+          route,
+          errorMsg,
+          logger,
+          // TODO(规划/11 §2.3): 不空回复计数接入 /metrics — blocked on platform 指标注册表开放给 stream 入口（platform 另单）
+          emptyReplies: createEmptyReplyCounter(),
+        });
 
   let stopping = false;
   let closing: Promise<void> | undefined;
