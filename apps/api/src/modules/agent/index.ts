@@ -56,3 +56,7 @@ export type {
   AgentTraceMissingRow,
   PgAgentTraceMissingPortDeps,
 } from './store/trace-missing/index.ts';
+// B1-10u: the AI reply report overdue rule (BR-ID-15 ④) shared by the report list and the
+// workbench card agent_report_overdue.
+export { countOverdueAgentReports, isAgentReportOverdue } from './application/report-overdue.ts';
+export type { AgentReportOverdueInput } from './application/report-overdue.ts';
