@@ -4,6 +4,7 @@ title: 后台保存 legal.ai_third_party.version 只增不减：改值、批量�
 type: impl
 # 2026-11-12 content 入账（D10-1329 (a)，第七批回写 couli#330，SPEC_REF ea7850e2f45f）。做法同 labor-agreement-save-check（B2-03x）：content/application 新增一个 ConfigItemSaveCheck，只管这一个键，现值取存储行（缺行按首版 1，同 BR-AI-13 细则「未配置按首版」），新值低于现值拒绝；等于或高于放行；在 content-admin.module.ts 与其他自有校验并列接上。规则测试独立写、先红；Agent 对内测名单以外开放前必须落地。
 # 2026-11-12 补丁（D10-1349 ③）：校验加按 app 的事务级咨询锁（照 lockInviteReward），首次写入无行时也互斥；锁要经配置保存的 store 端口接进 config-item-admin 与 kysely-config-item-store，故 paths 补这两处。写入值不合法时本校验自己拒。
+# 完成 2026-11-13（#3274，头 ccaa5a1bdeb9）实际做法：拒绝时 fields 单值改为 [value]、批量保存为 [该键]、回滚为 [to_version]（标题受 ledger-overwrite 约束未改）。存储值不是 1..2147483647 的整数按 1；写入值不合法由本校验自拒；按 app 事务级咨询锁 lockAiConsentVersion 在三条路写到该键时事务内先取。键名常量在 config-item-admin 本地定义以免循环依赖。规则测试独立 Claude 写 5 轮，red/5 PASS 54；money r1 Codex、r2 独立 Claude 均 pass。
 refs: [BR-AI-13]
 refs_hash:
   BR-AI-13: 6309509106ac
@@ -22,4 +23,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/content/ai-consent-version-save-check/**'
-status: todo
+status: done
+pr: 3274
