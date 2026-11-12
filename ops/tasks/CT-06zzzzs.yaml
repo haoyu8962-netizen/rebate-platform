@@ -9,6 +9,7 @@ type: guard-change
 #   或以 / 开头的绝对路径（至少两段）。同一行里在路径外还有命中就照样拒；规划原文扫描（--spec）与 allow 清单都不变。
 # 同一选项下，全大写、带连字符的编号记号（如 FU-B316B-RELAY，正则 ^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$）里的命中也不算：端到端核对时 B3-16d 的任务书标题含该编号仍被拒。
 # 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+# 2026-11-12 ops 置 done：#3224 已合并（dc0801378）；Codex general r1、r2 pass；端到端 B3-16d 任务书可生成。
 refs: []
 refs_hash: {}
 deps: []
@@ -24,4 +25,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify:fast'
-status: todo
+status: done
+pr: 3224
