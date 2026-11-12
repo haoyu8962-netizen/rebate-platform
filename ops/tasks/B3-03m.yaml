@@ -12,8 +12,8 @@ type: impl
 # 2026-10-23：paths 加 platform/config/{config,agent-review,index}.ts——凭据与 endpoint 照 PDD_*（pdd.ts、B1-04t）经 loadConfig 读进 AppConfig，app.module 不直接读 process.env（第 1 次实现时暴露）。
 refs: [BR-AI-18, BR-AI-01]
 refs_hash:
-  BR-AI-18: 01b60e6ca170
-  BR-AI-01: 502e051e2593
+  BR-AI-18: 20e1500ad932
+  BR-AI-01: f4d453462e15
 deps: [B3-03j, B3-05d, B3-06b]
 paths:
   - 'apps/api/src/app.module.ts'

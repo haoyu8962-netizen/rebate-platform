@@ -8,7 +8,7 @@ type: impl
 # 复用 B1-12d 的 MessagesController / NotificationModule 装配；静态路径 read、unread-count 不得被 :message_id 吞掉。
 refs: [BR-ID-10]
 refs_hash:
-  BR-ID-10: 9426ad18d2c5
+  BR-ID-10: c574b92360bb
 deps: [B1-12d, CT-02t]
 paths:
   - 'apps/api/src/modules/notification/**'

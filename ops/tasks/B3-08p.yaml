@@ -9,9 +9,9 @@ type: impl
 # 风险 RV1（orchestrator/core）。新鲜独立 Claude 写规则测试，Opus 实现，Codex 评审（medium）。
 refs: [BR-AI-07, BR-AI-06, BR-AI-14]
 refs_hash:
-  BR-AI-07: 0da3ace82049
-  BR-AI-06: 3912ea460436
-  BR-AI-14: e8ed6052e898
+  BR-AI-07: a704165181b4
+  BR-AI-06: bf97647decbd
+  BR-AI-14: c009637e9cb0
 deps: [B3-08m]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/core/run.ts'

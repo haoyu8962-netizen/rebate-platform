@@ -9,8 +9,8 @@ type: impl
 # 2026-10-22 agent-acct4：paths 加 stream/mount/**——生产 body 装配写死在 createAgentStreamRuntime 内且未导出；本任务把它抽成共享工厂，生产与评测调同一份（行为不变，stream 冻结测试保持绿），不在 eval/** 复制装配。
 refs: [BR-AI-21, BR-AI-14]
 refs_hash:
-  BR-AI-21: 7e5eb4e48745
-  BR-AI-14: e8ed6052e898
+  BR-AI-21: c569f8bb74db
+  BR-AI-14: c009637e9cb0
 deps: [B3-01h, B3-03f]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/eval/**'

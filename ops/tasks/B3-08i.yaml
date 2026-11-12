@@ -10,8 +10,8 @@ type: impl
 # 不涉及用户问句外发与新供应商（BR-AI-14 不触发）。风险 RV2（content/**）。分工：Codex 先写规则测试，Opus 实现，Codex 评审。
 refs: [BR-AI-07, BR-AI-04]
 refs_hash:
-  BR-AI-07: 0da3ace82049
-  BR-AI-04: 7add9471a0f6
+  BR-AI-07: a704165181b4
+  BR-AI-04: 34cc76da510c
 deps: [B3-08e]
 paths:
   - 'apps/api/src/modules/agent/rag/chunks/**'

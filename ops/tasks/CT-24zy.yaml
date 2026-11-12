@@ -8,8 +8,8 @@ type: contract
 # 2026-11-08 D10-941 选 (a)：PRICE_COMPARE.summary 照拼法「比价订单，详情见卡片。」，该键加进 banned-words.yaml「比价」allow_keys；paths 加该文件与生成物（同 CT-26p），refs 加 BR-TEXT-13。contract r2 S2：补键使 B3-08m 单测 template-texts.test.ts「契约无 REFUND summary」前提过期，paths 加该文件、去掉用不到的 oasdiff-accepted.txt。
 refs: [BR-AI-07, BR-TEXT-22, BR-TEXT-05, BR-TEXT-02, BR-TEXT-13]
 refs_hash:
-  BR-AI-07: 0da3ace82049
-  BR-TEXT-22: 1daceeac3c5f
+  BR-AI-07: a704165181b4
+  BR-TEXT-22: 8a3aa03c38b2
   BR-TEXT-05: 34a6ab7e2ca2
   BR-TEXT-02: 6a9e76de47ef
   BR-TEXT-13: 225ce1a6f17e

@@ -11,8 +11,8 @@ type: impl
 # 规则测试经相对路径引用 packages/evals/src，测试阶段不改 test/package.json 与锁文件；实现阶段建包并更新 pnpm-lock.yaml。
 refs: [BR-AI-21, BR-AI-19]
 refs_hash:
-  BR-AI-21: 7e5eb4e48745
-  BR-AI-19: 49ef9e9ca65d
+  BR-AI-21: c569f8bb74db
+  BR-AI-19: 533bd70d3d18
 deps: []
 paths:
   - 'packages/evals/**'

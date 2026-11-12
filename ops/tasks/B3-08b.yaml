@@ -10,7 +10,7 @@ type: impl
 # 不进 allowlist、不接线（B3-08g）。风险 RV1（agent/**）。分工：Codex 先写规则测试，Opus 实现，Codex 评审。
 refs: [BR-AI-07]
 refs_hash:
-  BR-AI-07: 0da3ace82049
+  BR-AI-07: a704165181b4
 deps: [B3-04a, B3-05i, B3-08c, B3-08e]
 paths:
   - 'apps/api/src/modules/agent/tools/rules/**'

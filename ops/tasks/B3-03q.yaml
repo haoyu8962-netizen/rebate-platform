@@ -9,7 +9,7 @@ type: impl
 # 当前生产固定 no_model，均不可达；B3-03k 启用模型前须合并。分工：独立 Claude 写规则测试（Codex 至 10-30 不可用，approvals #36；恢复后可改回 codex），Claude Opus 5.5 实现，独立 Claude / Codex 评审。风险 RV1。
 refs: [BR-AI-05]
 refs_hash:
-  BR-AI-05: ee8fd647fd43
+  BR-AI-05: 1e8f6bba94a4
 deps: [B3-03p]
 paths:
   - 'apps/api/src/modules/agent/store/results/**'

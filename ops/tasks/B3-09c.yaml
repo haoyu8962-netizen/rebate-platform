@@ -7,7 +7,7 @@ type: impl
 # 结果集只存条件（含用户给的价格上下限）与卡片引用，不存卡片价格字段。分工：Codex 写规则测试，Claude Opus 5.5 实现，Codex 评审。风险 RV1。
 refs: [BR-AI-05, BR-AI-23]
 refs_hash:
-  BR-AI-05: ee8fd647fd43
+  BR-AI-05: 1e8f6bba94a4
   BR-AI-23: 5ebdbaff580d
 deps: [B3-05g, B3-09b, B3-09d, B3-05k]
 paths:

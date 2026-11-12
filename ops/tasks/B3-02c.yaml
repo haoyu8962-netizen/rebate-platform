@@ -12,7 +12,7 @@ type: impl
 # refs 保留 BR-AI-14；连一跳引用任务书超 24KB，编排者手工生成任务书并补 BR-AI-16、BR-AI-21 的相关句摘录，不经 dispatch.sh。
 refs: [BR-AI-14]
 refs_hash:
-  BR-AI-14: e8ed6052e898
+  BR-AI-14: c009637e9cb0
 deps: [B3-02b, B3-02d]
 paths:
   - 'apps/api/src/modules/agent/model-gateway/routing/**'

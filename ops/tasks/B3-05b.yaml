@@ -15,8 +15,8 @@ type: impl
 # refs 连一跳引用超 24KB，编排者手工生成任务书（B3-03c、B3-06a 先例）。refs_hash 入账前用 node tools/ops/task.ts hash B3-05b 生成并替换下行。
 refs: [BR-AI-06, BR-AI-14]
 refs_hash:
-  BR-AI-06: 3912ea460436
-  BR-AI-14: e8ed6052e898
+  BR-AI-06: bf97647decbd
+  BR-AI-14: c009637e9cb0
 deps: [B3-02c, B3-03b, B3-06a]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/core/**'

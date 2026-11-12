@@ -10,8 +10,8 @@ type: migration
 # 两段式（db/AGENTS.md）：Opus 只写迁移 SQL，编排者在测试机跑 remote-snapshot 生成 schema.sql 与 db.gen.ts；迁移号落地时取主干最大 +1，按 D10-116 在 notices 占迁移槽；规则测试不写死迁移号。风险 RV2（db/**）。
 refs: [BR-AI-07, BR-AI-04]
 refs_hash:
-  BR-AI-07: 0da3ace82049
-  BR-AI-04: 7add9471a0f6
+  BR-AI-07: a704165181b4
+  BR-AI-04: 34cc76da510c
 deps: [B3-09a]
 paths:
   - 'db/migrations/**'

@@ -11,7 +11,7 @@ type: contract
 refs: [BR-AI-23, BR-AI-14]
 refs_hash:
   BR-AI-23: 5ebdbaff580d
-  BR-AI-14: e8ed6052e898
+  BR-AI-14: c009637e9cb0
 contract_sections: ['8.1', '8.2']
 deps: [CT-08b]
 paths:

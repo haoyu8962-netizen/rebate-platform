@@ -10,8 +10,8 @@ type: impl
 # 分工：独立 Claude 写规则测试（Codex 至 10-30 不可用，approvals #36；恢复后可改回 codex），Claude Opus 5.5 实现，独立 Claude / Codex 评审。风险 RV1（agent/**）。
 refs: [BR-AI-05, BR-AI-18]
 refs_hash:
-  BR-AI-05: ee8fd647fd43
-  BR-AI-18: 01b60e6ca170
+  BR-AI-05: 1e8f6bba94a4
+  BR-AI-18: 20e1500ad932
 deps: [B3-03n]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/core/**'

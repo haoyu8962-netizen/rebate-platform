@@ -10,7 +10,7 @@ type: impl
 # 分工：Codex 写规则测试，Claude 新子代理过审，Opus 5.5 实现，Codex 评审。风险 RV1。排在 B3-09c 之后。
 refs: [BR-AI-21]
 refs_hash:
-  BR-AI-21: 7e5eb4e48745
+  BR-AI-21: c569f8bb74db
 deps: [B3-01b, B3-01d]
 paths:
   - 'packages/evals/src/**'

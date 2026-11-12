@@ -10,7 +10,7 @@ type: impl
 # 分工按规划/11 §1.1（2026-10-05）：Codex 先写规则测试（test/spec/evals-malformed/**，先红），Claude 新子代理过审，Opus 5.5 实现。
 refs: [BR-AI-21]
 refs_hash:
-  BR-AI-21: 7e5eb4e48745
+  BR-AI-21: c569f8bb74db
 deps: [B3-01c]
 paths:
   - 'packages/evals/**'

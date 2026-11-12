@@ -16,10 +16,10 @@ type: impl
 # docs/changes/20261006-出站过滤角位从严.md）。按新规则由 Codex 补规则测试（先红）后重新实现，轮次随负责人决定重新计（couli-runs/B3-06a/blocked.md）。
 refs: [BR-AI-06, BR-AI-05, BR-AI-03, BR-AI-18]
 refs_hash:
-  BR-AI-06: 3912ea460436
-  BR-AI-05: ee8fd647fd43
+  BR-AI-06: bf97647decbd
+  BR-AI-05: 1e8f6bba94a4
   BR-AI-03: 2131432de5c6
-  BR-AI-18: 01b60e6ca170
+  BR-AI-18: 20e1500ad932
 deps: []
 paths:
   - 'apps/api/src/modules/agent/guard/**'

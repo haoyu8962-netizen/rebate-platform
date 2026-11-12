@@ -7,7 +7,7 @@ type: test-change
 # 只新增 test/spec/agent/core-reply-templates-tighten/**，不改已有文件、不动实现；须在现行主干上跑绿，变异实跑（把 B3-08m 的 S1-1 / S1-2 修正各自改回）应各红（先例 B2-09zf / B2-09zd、D10-799）。分工：新鲜独立 Claude 写，评审用 Codex（D10-823）；非 task 分支、不带证据文件，标签由编排核对后加。RV2。
 refs: [BR-AI-07]
 refs_hash:
-  BR-AI-07: 0da3ace82049
+  BR-AI-07: a704165181b4
 deps: [B3-08m]
 paths:
   - 'test/spec/agent/core-reply-templates-tighten/**'

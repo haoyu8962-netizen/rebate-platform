@@ -7,8 +7,8 @@ type: impl
 # 合并后在公告通知 native（iOS FU-IOS-A11Y 升契约锁、删本地 fallback）；安卓、鸿蒙账号停到 11-17，恢复后各自接。规则测试由独立 Claude 写（先红），Opus 实现，Codex contract 评审。
 refs: [BR-TEXT-14, BR-TEXT-12]
 refs_hash:
-  BR-TEXT-14: 675e5daec95a
-  BR-TEXT-12: 199e70f7af35
+  BR-TEXT-14: b0057ff772e9
+  BR-TEXT-12: a6d954db6626
 deps: []
 paths:
   - 'contracts/texts.default.json'

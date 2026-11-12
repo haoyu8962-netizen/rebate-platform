@@ -9,7 +9,7 @@ type: impl
 # B3-02 整行首发例外（approvals 23），完整验证和长跑看真实 CI；私有 Agent smoke 未就绪时保持 draft。
 refs: [BR-AI-14]
 refs_hash:
-  BR-AI-14: e8ed6052e898
+  BR-AI-14: c009637e9cb0
 deps: [B3-02b, B3-02e]
 paths:
   - 'apps/api/src/modules/agent/model-gateway/openai-compat/sse.ts'

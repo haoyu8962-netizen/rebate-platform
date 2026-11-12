@@ -8,7 +8,7 @@ type: impl
 # 规则测试钉：池大小 N（测试用小池）、同实例并发 N 个独立收尾且上限缓存已过期 → 全部在限定时间内完成、不卡死；每个 run 的结局（final_event、settle_result、quota_left）与额度扣减和串行收尾时一致；读上限失败仍不写库、返回 rolled_back。tester 新鲜独立 Claude；评审独立 Claude（Codex 额度用尽至 11-15，D10-956 / D10-972）。
 refs: [BR-AI-15, BR-AI-23]
 refs_hash:
-  BR-AI-15: 205067c74dda
+  BR-AI-15: d3070a739c03
   BR-AI-23: 5ebdbaff580d
 deps: [B3-03g]
 paths:

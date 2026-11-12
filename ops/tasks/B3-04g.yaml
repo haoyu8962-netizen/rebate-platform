@@ -12,8 +12,8 @@ type: impl
 # 分工：Codex 写规则测试，Claude Opus 5.5 实现，Codex 评审（approvals #34、#27）。
 refs: [BR-AI-01, BR-AI-04]
 refs_hash:
-  BR-AI-01: 502e051e2593
-  BR-AI-04: 7add9471a0f6
+  BR-AI-01: f4d453462e15
+  BR-AI-04: 34cc76da510c
 deps: [B3-04f, B3-04h, B3-04i, B3-04j, B3-05e]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/deterministic/**'

@@ -12,7 +12,7 @@ type: impl
 # refs 两条同列任务书约 26KB：编排者手工生成任务书（去一跳引用），不经 dispatch.sh。
 refs: [BR-AI-15, BR-AI-23]
 refs_hash:
-  BR-AI-15: 205067c74dda
+  BR-AI-15: d3070a739c03
   BR-AI-23: 5ebdbaff580d
 deps: []
 paths:

@@ -13,7 +13,7 @@ type: impl
 # 不在本段：路由与熔断（B3-02c）、无模型降级（B3-02d）、脱敏（B3-05 Preprocessor）、Orchestrator 工具循环（B3-05）。
 refs: [BR-AI-14]
 refs_hash:
-  BR-AI-14: e8ed6052e898
+  BR-AI-14: c009637e9cb0
 deps: [B3-02a]
 paths:
   - 'apps/api/src/modules/agent/model-gateway/openai-compat/**'

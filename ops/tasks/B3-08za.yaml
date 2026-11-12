@@ -9,7 +9,7 @@ type: test-change
 # 2026-11-08 补 paths（编排 D10-1087，照 B2-02tb：登记与冻结清单追加同单，主干不红）：couli.yaml 只追加 CouliAgentTraceMissing；platform/metrics registry 登记 collectAgentTraceMissing，采集经注入的只读端口，未接时只这一项报错、不编 0、不让整个 /metrics 失败（照现有 collector 错误隔离）；实际查询端口与语义测试留 B3-08z。
 refs: [BR-AI-19]
 refs_hash:
-  BR-AI-19: 49ef9e9ca65d
+  BR-AI-19: 533bd70d3d18
 deps: [B3-08y]
 paths:
   - 'infra/monitoring/rules/couli.yaml'
