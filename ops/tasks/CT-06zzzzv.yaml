@@ -1,0 +1,27 @@
+id: CT-06zzzzv
+repo: rebate-platform
+title: CT-06zzzzv：verify-container 新模式 --related——在 PR 头代码上对改动的非测试源文件跑 spec 单元项目的 vitest related，结果另记 related/N/related.json、单独退出码，不改 --red（FU-RED-RUNS-TEST-GUARD 第二条，D10-1253 / D10-1292 第 1 步）
+type: guard-change
+# 2026-11-12 ops 入账（编排 D10-1292 选 B，第 1 步单元层面）。起因：先红只在基线上跑本任务的规则测试，实现改动撞上别处钉全局清单的冻结用例要到 CI 才红（B1-18c 等）。
+# 回放（couli-runs/OPS-lane/related-tests-design.md）：B1-18c、B2-02t、B3-08s、B1-22 当时撞上的冻结单元测试 4/4、4/4、5/5、4/4 都以断言红报出；B2-04zzl 单元层面无可撞。
+# tools/ops/related-sources.ts：改动文件 → 源文件（去掉测试文件、test/**、ops/**、docs/**、*.md）；tools/ops/related-report.ts：vitest JSON 报告 → related.json 摘要（文件数、用时、红用例全名、加载失败的文件）。
+# verify-container.sh --related [--base]：无源文件改动时不起容器、记 skipped、退出 0；否则与 --fast 同一断网容器、离线安装，跑 test/ 下 vitest related <源文件> --run（单元配置），
+#   全部相关文件都跑（第 1 步不按上限缩小范围；超过参考上限只记 over_cap），写 related/N/related.json 与 result.json；退出 0 全绿、1 有红（stdout 列全名）、2 用法 / 环境错误。--red 一字不变。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。land / rebase-verify 的接线在 couli-runs 内另做。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/related-sources.ts'
+  - 'tools/ops/related-sources.test.ts'
+  - 'tools/ops/related-report.ts'
+  - 'tools/ops/related-report.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzv.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

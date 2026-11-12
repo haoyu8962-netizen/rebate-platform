@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Out-of-sandbox verification (规划/11 §2.3 steps 3, 5 and 7, §4.1, §9.3 #6; ADR-0001 §4.2 #9, §7).
 #
-#   verify-container.sh <id> [--worktree <path>] [--fast | --red [--base <ref>] | --browser]
+#   verify-container.sh <id> [--worktree <path>]
+#                           [--fast | --red [--base <ref>] | --related [--base <ref>] | --browser]
 #                           [--dry-run]
 #
 #   (default)  `pnpm verify` — the task's verification; it alone decides the task. verify/<n>/
@@ -25,7 +26,24 @@
 #              base (CT-06zzzzt): a static finding stops the run (exit 2, guard-git fails on it in
 #              CI whatever the owner label); add-only findings (changed frozen test assets) are
 #              noted on stderr and the run goes on.
-#   --browser  the browser tests: every browser project of red-projects.json, in its order, in one
+#   --related  the tests related to the branch's source changes, on the PR head (CT-06zzzzv,
+#              FU-RED-RUNS-TEST-GUARD, D10-1292 step 1, round 2 D10-1337; --red is unchanged): the
+#              files changed from the branch point with --base (default as for --red) to the
+#              snapshot tree that runs (uncommitted and untracked files included), without test
+#              files, test/**, ops/**, docs/** and *.md (tools/ops/related-sources.ts, from the
+#              trusted root) go to `vitest related <files> --run --passWithNoTests` of the unit
+#              project (test/vitest.config.ts; no integration tests), in the same container as
+#              --fast (no network, offline install, same limits). The Vitest JSON report stays in
+#              related/<n>/out/ (written by untrusted code: only regular files, no links, are
+#              read); tools/ops/related-report.ts (trusted) sums it up in related/<n>/related.json
+#              (sources, related files, tests, duration, over_cap, the failed tests "file > full
+#              name", the files that failed to load, status green | red | no_related_tests, and
+#              data_sources, removed_or_renamed, force_all: what vitest related cannot see). No
+#              source change: no container, related.json says skipped, exit 0. Exit code 0 green
+#              or no related test, 1 red (each red test and load-error file printed on stdout,
+#              escaped, at most 200 lines), 2 usage or environment (stop; never a pass).
+#              Does not take the verify slot (as --red); never evidence of verification.
+#   --browser the browser tests: every browser project of red-projects.json, in its order, in one
 #              container with `--network none` (loopback only) and the image's headless Chromium:
 #              spec-browser (F1-01j: every test/spec/**/*.browser.test.{ts,tsx}, Vitest browser
 #              mode) and build-smoke (F1-01k: builds the H5 entries and the admin console, serves
@@ -37,8 +55,8 @@
 #              1 when all passed but no screenshot was exported. Like --fast an implementer's own
 #              check, never
 #              evidence of verification (tools/ci/evidence-check.ts accepts verify and red only).
-#   --dry-run  prints what would run (script, commit, tree, red files, test_guard counts) as one
-#              JSON line and starts nothing; no run directory is created.
+#   --dry-run  prints what would run (script, commit, tree, red files, test_guard counts; --related:
+#              base and sources) as one JSON line and starts nothing; no run directory is created.
 #
 # There is no host fallback (CR-01; 规划/11 §4.1, §8): every test or task file runs only in this
 # container. `--host` is refused; without Docker the script stops (exit 2) and the run goes to CI.
@@ -57,10 +75,11 @@
 # Exit code = the exit code of the script run (124 = time limit); --red: red-check's. Exit code
 # 2 = usage or infrastructure error (no result.json is written in that case).
 #
-# Output: <runs>/<id>/{verify,verify-fast,red,browser}/<n>/log.txt and result.json
-#   { mode: container, script: verify|verify:fast|red|browser, exit_code, commit, tree,
+# Output: <runs>/<id>/{verify,verify-fast,red,related,browser}/<n>/log.txt and result.json
+#   { mode: container, script: verify|verify:fast|red|related|browser, exit_code, commit, tree,
 #     prop_seed, prop_runs, started_at, finished_at }  — red adds red_tests, expected and reports
-#     (path + sha256); browser leaves its screenshots and report in out/.
+#     (path + sha256); related writes related.json beside it; browser leaves its screenshots and
+#     report in out/.
 # `tree` is the git tree of the work tree as verified (uncommitted changes included). The tree
 # is exported once into an immutable snapshot and that snapshot is what gets verified, so the
 # hash and the exit code always describe the same files; git-ignored paths never reach it.
@@ -83,6 +102,7 @@
 #   before any docker call or run directory). Every container that runs tests (the --red groups,
 #   --browser, --fast, pnpm verify) starts with `--memory <value> --memory-swap <value>` (no swap);
 #   pnpm fetch, PostgreSQL, Redis and the image build get no limit. --dry-run prints it as `memory`.
+#   (--related runs in the --fast container and gets the same limit.)
 #   PROP_SEED (default 20261001) reaches every run. PROP_RUNS has no default here (D10-499): it is
 #   passed only when the caller sets it, and result.json records it as prop_runs (null when unset).
 #   Unset, the pure property tests keep the 10000 of @couli/testing (规划/11 §4.2) and the integration
@@ -172,7 +192,7 @@ DEFAULT_PROP_SEED=20261001
 
 log() { printf '%s\n' "$*" >&2; }
 die() { log "verify-container: $*"; exit 2; }
-usage() { log "usage: verify-container.sh <id> [--worktree <path>] [--fast | --red [--base <ref>] | --browser] [--dry-run]"; exit 2; }
+usage() { log "usage: verify-container.sh <id> [--worktree <path>] [--fast | --red [--base <ref>] | --related [--base <ref>] | --browser] [--dry-run]"; exit 2; }
 
 sha256_stdin() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1
@@ -199,7 +219,7 @@ SCRIPT='verify'
 BASE_ARG=''
 DRY_RUN=0
 set_script() {
-  [ "$SCRIPT" = verify ] || die "give at most one of --fast, --red and --browser"
+  [ "$SCRIPT" = verify ] || die "give at most one of --fast, --red and --browser (or --related)"
   SCRIPT="$1"
 }
 while [ $# -gt 0 ]; do
@@ -214,6 +234,10 @@ while [ $# -gt 0 ]; do
       ;;
     --browser)
       set_script 'browser'
+      shift
+      ;;
+    --related)
+      set_script 'related'
       shift
       ;;
     --base)
@@ -245,7 +269,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$ID" ] || usage
 if ! [[ "$ID" =~ ^[A-Z][A-Z0-9]*-[0-9]+[a-z]*$ ]]; then die "invalid task id: $ID"; fi
-if [ -n "$BASE_ARG" ] && [ "$SCRIPT" != red ]; then die "--base applies to --red only"; fi
+if [ -n "$BASE_ARG" ] && [ "$SCRIPT" != red ] && [ "$SCRIPT" != related ]; then die "--base applies to --red and --related only"; fi
 if [ -n "$BASE_ARG" ] && ! [[ "$BASE_ARG" =~ ^[A-Za-z0-9][A-Za-z0-9._/@^~-]*$ ]]; then die "invalid --base: $BASE_ARG"; fi
 
 # Same layout rule as tools/lib/paths.ts (findRunsDir, D10-222): the couli-runs directory that
@@ -386,15 +410,16 @@ RED_PLAN=''
 RED_BROWSER=0
 TG_FINDINGS=0
 TG_ADD_ONLY=0
+# Without --base, --red and --related take the branch point with origin/main (or main).
+if { [ "$SCRIPT" = red ] || [ "$SCRIPT" = related ]; } && [ -z "$BASE_ARG" ]; then
+  for candidate in origin/main main; do
+    if git -C "$WT" rev-parse --verify --quiet "$candidate^{commit}" >/dev/null 2>&1; then
+      BASE_ARG="$(git -C "$WT" merge-base HEAD "$candidate" 2>/dev/null || true)"
+      [ -z "$BASE_ARG" ] || break
+    fi
+  done
+fi
 if [ "$SCRIPT" = red ]; then
-  if [ -z "$BASE_ARG" ]; then
-    for candidate in origin/main main; do
-      if git -C "$WT" rev-parse --verify --quiet "$candidate^{commit}" >/dev/null 2>&1; then
-        BASE_ARG="$(git -C "$WT" merge-base HEAD "$candidate" 2>/dev/null || true)"
-        [ -z "$BASE_ARG" ] || break
-      fi
-    done
-  fi
   [ -n "$BASE_ARG" ] || die "--red needs a base (no origin/main or main in $WT): pass --base <ref>"
   RED_FILES="$(cd "$TRUSTED" && node tools/guard/red-check.ts --task "$ID" --cwd "$WT" --base "$BASE_ARG" --print-expected)" ||
     die "cannot list the task's rule-test files (trusted ledger, test_paths)"
@@ -483,20 +508,63 @@ if [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$WT" ]; then IS_TOP=1; fi
 head=''
 if [ "$IS_TOP" = 1 ]; then head="$(git -C "$WT" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null || true)"; fi
 
+# --related (CT-06zzzzv): the source files of the tree that will run — the snapshot tree of the
+# work tree (tree_of_worktree: uncommitted and untracked files included; result.json records the
+# same tree) against the branch point with the base (trusted tools/ops/related-sources.ts,
+# read-only git), checked as the red files are; beside them what vitest related cannot see
+# (data_sources, removed_or_renamed, force_all: recorded in related.json only; round 2 ④ ⑥).
+RELATED_SOURCES=''
+RELATED_CLASSES='{"data_sources":[],"removed_or_renamed":[],"force_all":false}'
+RELATED_TREE=''
+RUN_NOTE='' # --related: the counts for the closing line (finish)
+if [ "$SCRIPT" = related ]; then
+  [ -n "$BASE_ARG" ] || die "--related needs a base (no origin/main or main in $WT): pass --base <ref>"
+  [ "$IS_TOP" = 1 ] && [ -n "$head" ] || die "--related needs a worktree that is the top of its own git work tree, with a commit: $WT"
+  mkdir -p "$RUNS"
+  RELATED_TREE="$(tree_of_worktree "$RUNS/.related-index.$ID.$$")"
+  related_doc="$(cd "$TRUSTED" && node tools/ops/related-sources.ts --base "$BASE_ARG" --tree "$RELATED_TREE" --cwd "$WT" --json)" ||
+    die "cannot list the source files changed against $BASE_ARG (tools/ops/related-sources.ts)"
+  RELATED_SOURCES="$(node -e '
+    const doc = JSON.parse(process.argv[1]);
+    if (!Array.isArray(doc.sources) || !doc.sources.every((s) => typeof s === "string")) throw new Error("sources");
+    process.stdout.write(doc.sources.join("\n"));
+  ' "$related_doc")" || die "related-sources.ts printed no source list"
+  RELATED_CLASSES="$(node -e '
+    const doc = JSON.parse(process.argv[1]);
+    const list = (v) => Array.isArray(v) && v.every((s) => typeof s === "string");
+    if (!list(doc.data_sources) || !list(doc.removed_or_renamed) || typeof doc.force_all !== "boolean") throw new Error("classes");
+    const { data_sources, removed_or_renamed, force_all } = doc;
+    process.stdout.write(JSON.stringify({ data_sources, removed_or_renamed, force_all }));
+  ' "$related_doc")" || die "related-sources.ts printed no data_sources / removed_or_renamed / force_all"
+  if [ -n "$RELATED_SOURCES" ]; then
+    while IFS= read -r f; do
+      [[ "$f" =~ ^[A-Za-z0-9_./@-]+$ ]] && [[ "$f" != *..* ]] || die "unexpected source path: $f"
+    done <<<"$RELATED_SOURCES"
+  fi
+fi
+
 if [ "$DRY_RUN" = 1 ]; then
   mkdir -p "$RUNS"
   dry_tree='null'
-  if [ "$IS_TOP" = 1 ]; then dry_tree="\"$(tree_of_worktree "$RUNS/.dry-index.$ID.$$")\""; fi
+  if [ -n "$RELATED_TREE" ]; then
+    dry_tree="\"$RELATED_TREE\""
+  elif [ "$IS_TOP" = 1 ]; then
+    dry_tree="\"$(tree_of_worktree "$RUNS/.dry-index.$ID.$$")\""
+  fi
   node -e '
-    const [script, commit, tree, files, plan, tgFindings, tgAddOnly, memory] = process.argv.slice(1);
+    const [script, commit, tree, files, plan, tgFindings, tgAddOnly, memory, base, sources] = process.argv.slice(1);
     const out = { script, commit: commit === "" ? null : commit, tree: JSON.parse(tree), memory: memory === "" ? null : memory };
     if (script === "red") {
       out.red_files = files.split("\n").filter((l) => l !== "");
       out.red_plan = JSON.parse(plan).groups;
       out.test_guard = { findings: Number(tgFindings), add_only_violations: Number(tgAddOnly) };
     }
+    if (script === "related") {
+      out.base = base;
+      out.sources = sources.split("\n").filter((l) => l !== "");
+    }
     process.stdout.write(JSON.stringify(out) + "\n");
-  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY" "$VERIFY_MEMORY"
+  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY" "$VERIFY_MEMORY" "$BASE_ARG" "$RELATED_SOURCES"
   exit 0
 fi
 
@@ -813,6 +881,7 @@ case "$SCRIPT" in
   verify) VBASE="$RUN/verify" ;;
   verify:fast) VBASE="$RUN/verify-fast" ;;
   red) VBASE="$RUN/red" ;;
+  related) VBASE="$RUN/related" ;;
   browser) VBASE="$RUN/browser" ;;
 esac
 mkdir -p "$VBASE"
@@ -846,6 +915,10 @@ if [ "$IS_TOP" = 1 ]; then
   [ -z "$head" ] || COMMIT="\"$head\""
   # A throwaway index: the real index (the orchestrator's staging area) is not touched.
   tree="$(tree_of_worktree "$VDIR/index.tmp")"
+  # --related: the sources were listed against RELATED_TREE; the snapshot must be that tree.
+  if [ "$SCRIPT" = related ] && [ "$tree" != "$RELATED_TREE" ]; then
+    die "the worktree changed after its source files were listed (tree $RELATED_TREE, now $tree): run --related again"
+  fi
   TREE="\"$tree\""
   # Export exactly that tree object (deterministic: the archive is built from the object
   # database, not from the live files; .gitattributes sets no export-ignore).
@@ -920,10 +993,92 @@ finish() {
   write_result "$1"
   # The snapshot is identified by `tree` in result.json; the copy itself is not kept.
   rm -rf "$SRC"
-  log "verify-container: $ID run $N ($MODE, $SCRIPT) exit $1; log: $LOG"
+  log "verify-container: $ID run $N ($MODE, $SCRIPT) exit $1${RUN_NOTE:+ ($RUN_NOTE)}; log: $LOG"
   cat "$RESULT"
   exit "$1"
 }
+
+# --related: related/<n>/related.json — the base, the commit, the related-report summary in the file
+# $1 (or, without $1, the record of a run that had no source file to run) and the three lists of
+# what vitest related cannot see (RELATED_CLASSES).
+related_record() {
+  node -e '
+    const fs = require("node:fs");
+    const [out, summaryFile, base, commit, classes] = process.argv.slice(1);
+    const head = { base, commit: commit === "" ? null : commit };
+    const doc =
+      summaryFile === ""
+        ? { status: "skipped", reason: "no source change", ...head, sources: [] }
+        : { ...head, ...JSON.parse(fs.readFileSync(summaryFile, "utf8")) };
+    Object.assign(doc, JSON.parse(classes));
+    fs.writeFileSync(`${out}.tmp`, JSON.stringify(doc, null, 2) + "\n");
+    fs.renameSync(`${out}.tmp`, out);
+  ' "$VDIR/related.json" "${1:-}" "$BASE_ARG" "$head" "$RELATED_CLASSES"
+}
+# A small file the container left in out/ (a directory the tests' code can write): read only when
+# it is a regular file and not a symbolic link (a FIFO, a device or a link fails), at most 32
+# bytes, whitespace removed. Fails otherwise.
+related_small() {
+  [ ! -L "$1" ] && [ -f "$1" ] || return 1
+  head -c 32 "$1" | tr -d '[:space:]'
+}
+# --related, after its container (exit code $1): the trusted related-report.ts judges Vitest's JSON
+# report; related.json and result.json get its verdict (0 green or no_related_tests, 1 red).
+# Anything that leaves no trustworthy report (the container failed, the time limit, an out/ file
+# that is missing or not a regular file, a report related-report rejects, Vitest failing while its
+# report shows nothing red) is an environment error: exit 2, no result.json. Red: the red tests
+# ("file > full name") and load-error files are printed on stdout, cleaned by related-report
+# (one escaped line each, at most 500 characters, at most 200 lines). The closing line carries
+# "<N> file(s), <M> test(s)".
+related_judge() {
+  local out="$VDIR/out" vrc secs why counts rr=0
+  local summary="$VDIR/related-summary.json.tmp" errs="$VDIR/related-report.err.tmp"
+  [ "$1" = 0 ] || die "the related run stopped before Vitest had a result (exit $1), see $LOG"
+  vrc="$(related_small "$out/vitest.exit")" || die "out/vitest.exit is missing or not a regular file, see $LOG"
+  [[ "$vrc" =~ ^[0-9]{1,3}$ ]] || die "the related run left no Vitest exit code, see $LOG"
+  [ "$vrc" != 124 ] || die "vitest related ran past the time limit of ${TIMEOUT_SECS}s (no result), see $LOG"
+  secs="$(related_small "$out/vitest.seconds")" || die "out/vitest.seconds is missing or not a regular file, see $LOG"
+  [[ "$secs" =~ ^[0-9]{1,9}$ ]] || die "the related run left no duration, see $LOG"
+  [ ! -L "$out/vitest-report.json" ] && [ -f "$out/vitest-report.json" ] ||
+    die "vitest related wrote no report (exit $vrc), or out/vitest-report.json is not a regular file, see $LOG"
+  # related-report checks it again (lstat, at most 256 MiB) before it reads it.
+  (cd "$TRUSTED" && node tools/ops/related-report.ts --report "$out/vitest-report.json" \
+    --sources "$VDIR/sources.txt" --duration "$secs" --root /work/repo) >"$summary" 2>"$errs" || rr=$?
+  if [ "$rr" != 0 ] && [ "$rr" != 1 ]; then
+    # Its message may quote the report: control characters out, short.
+    why="$(head -n 5 "$errs" 2>/dev/null | LC_ALL=C tr -d '\000-\011\013-\037\177' | cut -c1-500 || true)"
+    rm -f "$summary" "$errs"
+    die "related-report rejected the Vitest report (exit $rr): $why"
+  fi
+  if [ "$rr" = 0 ] && [ "$vrc" != 0 ]; then
+    rm -f "$summary" "$errs"
+    die "vitest related exited $vrc but its report has no failed test and no file that failed to load (an unhandled error?), see $LOG"
+  fi
+  counts="$(node -e '
+    const s = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+    process.stdout.write(`${s.status}: ${s.related_files} file(s), ${s.tests} test(s)`);
+  ' "$summary")" || die "cannot read the related-report summary"
+  related_record "$summary" || die "cannot write $VDIR/related.json"
+  RUN_NOTE="related $counts"
+  step "related tests $counts (related-report exit $rr; $VDIR/related.json)"
+  if [ "$rr" = 1 ]; then
+    cat "$errs" >>"$LOG"
+    log "verify-container: related tests red against $BASE_ARG (see $VDIR/related.json):"
+    cat "$errs"
+  fi
+  rm -f "$summary" "$errs"
+  finish "$rr"
+}
+if [ "$SCRIPT" = related ] && [ -z "$RELATED_SOURCES" ]; then
+  # Nothing for vitest related: no image, no store, no container (not even docker version).
+  printf '[verify-container %s] %s\n' "$(now_utc)" "no source file changed against $BASE_ARG: nothing to run (skipped)" >>"$LOG"
+  related_record || die "cannot write $VDIR/related.json"
+  write_result 0
+  rm -rf "$SRC"
+  log "verify-container: $ID run $N ($MODE, related) exit 0: no source file changed against $BASE_ARG, skipped (0 file(s), 0 test(s)); $VDIR/related.json"
+  cat "$RESULT"
+  exit 0
+fi
 
 # --- container mode ----------------------------------------------------------
 [ -f "$SRC/pnpm-lock.yaml" ] || die "no pnpm-lock.yaml in $WT"
@@ -1769,21 +1924,79 @@ if [ "$SCRIPT" = browser ]; then
   finish "$rc"
 fi
 
-if [ "$SCRIPT" = 'verify:fast' ]; then
+# --related inside the --fast container (CT-06zzzzv): the same copy and offline install as the
+# entrypoint's prepare_repo, then `vitest related` of the unit project in test/ on the source files
+# given as arguments (checked again here), its JSON report to /out/vitest-report.json. The test
+# outcome is not this script's exit code: Vitest's exit code goes to /out/vitest.exit and its
+# duration to /out/vitest.seconds; the host judges the report. Any other failure exits non-zero.
+IFS= read -r -d '' RELATED_SH <<'SH' || true
+set -euo pipefail
+limit="${VERIFY_TIMEOUT_SECS:?VERIFY_TIMEOUT_SECS is required}"
+mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+[ -d /out ] && [ -w /out ] || { echo "[related] /out is not mounted writable" >&2; exit 2; }
+files=()
+for f in "$@"; do
+  if ! [[ "$f" =~ ^[A-Za-z0-9_./@-]+$ ]] || [[ "$f" == *..* ]] || [[ "$f" == /* ]]; then
+    echo "[related] not a plain relative path: $f" >&2
+    exit 2
+  fi
+  files+=("../$f")
+done
+[ "${#files[@]}" -gt 0 ] || { echo "[related] no source file given" >&2; exit 2; }
+mkdir -p /work/repo
+tar -C /src \
+  --exclude=node_modules --exclude=.git --exclude=dist --exclude=.turbo --exclude=.tmp \
+  --exclude='*.tsbuildinfo' \
+  -cf - . | tar -C /work/repo -xf -
+cd /work/repo
+echo "[related] pnpm install --offline --frozen-lockfile"
+pnpm install --offline --frozen-lockfile --store-dir /store
+cd /work/repo/test
+echo "[related] vitest related --config vitest.config.ts (limit ${limit}s): $*"
+started=$(date +%s)
+rc=0
+timeout --signal=TERM --kill-after=10 "$limit" pnpm exec vitest related "${files[@]}" \
+  --config vitest.config.ts --run --passWithNoTests \
+  --reporter=json --outputFile=/out/vitest-report.json || rc=$?
+elapsed=$(( $(date +%s) - started ))
+if [ "$rc" -eq 137 ] && [ "$elapsed" -ge "$limit" ]; then rc=124; fi
+echo "$rc" >/out/vitest.exit
+echo "$elapsed" >/out/vitest.seconds
+echo "[related] vitest related exited ${rc} after ${elapsed}s (the report decides red or green)"
+SH
+
+if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = related ]; then
   # verify:fast connects to no database and no network (规划/11 §4.1): no PostgreSQL, no
-  # Redis, no network at all.
-  step "running pnpm run verify:fast in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
-  FAST_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e "VERIFY_SCRIPT=verify:fast")
+  # Redis, no network at all. --related runs in the same container (CT-06zzzzv), with its output
+  # directory and its own command instead of the entrypoint.
+  FAST_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
+  FAST_OUT=()
+  if [ "$SCRIPT" = related ]; then
+    # As for --browser: the container (uid 1000) writes as "other", the owner reads the results.
+    mkdir -p "$VDIR/out"
+    chmod 1733 "$VDIR/out"
+    printf '%s\n' "$RELATED_SOURCES" >"$VDIR/sources.txt"
+    FAST_OUT=(-v "$VDIR/out:/out")
+    FAST_CMD=(bash -c "$RELATED_SH" couli-related)
+    while IFS= read -r f; do FAST_CMD+=("$f"); done <<<"$RELATED_SOURCES"
+    step "running vitest related (test/vitest.config.ts) on $(printf '%s\n' "$RELATED_SOURCES" | grep -c '') source file(s) against $BASE_ARG in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
+  else
+    FAST_ENV+=(-e "VERIFY_SCRIPT=verify:fast")
+    FAST_CMD=(couli-verify-entrypoint verify)
+    step "running pnpm run verify:fast in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
+  fi
   [ -z "${PROP_RUNS:-}" ] || FAST_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
   rc=0
   docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
     --network none \
     -v "$SRC:/src:ro" \
     -v "$STORE_VOL:/store:ro" \
+    ${FAST_OUT[@]+"${FAST_OUT[@]}"} \
     --tmpfs "/store/v10/projects:rw,nosuid,uid=1000,gid=1000,mode=0755" \
     ${SPEC_ARGS[@]+"${SPEC_ARGS[@]}"} \
     "${FAST_ENV[@]}" \
-    "$IMAGE" couli-verify-entrypoint verify >>"$LOG" 2>&1 </dev/null || rc=$?
+    "$IMAGE" "${FAST_CMD[@]}" >>"$LOG" 2>&1 </dev/null || rc=$?
+  if [ "$SCRIPT" = related ]; then related_judge "$rc"; fi
   finish "$rc"
 fi
 
