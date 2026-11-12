@@ -558,7 +558,7 @@ it(
 
 // --- CT-06zzzzz ⑤ (D10-1350): bidirectional controls and C1 controls are escaped too ---------------
 // U+202A–U+202E, U+2066–U+2069 (they reorder what a terminal shows) and U+0080–U+009F (C1; U+0085 is
-// a line break to some readers) become visible escapes like the existing ones: ‮, \x85.
+// a line break to some readers) become visible escapes like the existing ones: \u202e, \x85.
 
 const BIDI = [0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069].map((c) =>
   String.fromCharCode(c),
@@ -591,7 +591,7 @@ it('[CT-06zzzzz] printableLine escapes U+202A–U+202E, U+2066–U+2069 as \\uXX
 it(
   '[CT-06zzzzz] related-report CLI: a red test named with U+202E and U+0085 is one line on stderr, escaped, without the raw characters; the JSON keeps it',
   () => {
-    const title = 'evil‮desrever and\u0085next line ⁦iso⁩';
+    const title = 'evil\u202edesrever and\u0085next line \u2066iso\u2069';
     const res = cli(
       writeJson(
         'bidi-c1.json',
@@ -622,7 +622,7 @@ it(
       writeJson(
         'bidi-c1-load.json',
         report([
-          file('test/spec/bidi-load.test.ts', 'failed', [], 'Error: ‮kcatta\u0085 x\nsecond'),
+          file('test/spec/bidi-load.test.ts', 'failed', [], 'Error: \u202ekcatta\u0085 x\nsecond'),
         ]),
       ),
     );
