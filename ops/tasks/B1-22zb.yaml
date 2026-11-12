@@ -3,6 +3,7 @@ repo: rebate-platform
 title: 后台保存 legal.ai_third_party.version 只增不减：改值、批量保存、回滚三条路上新值低于现值一律按配置保存校验不通过拒绝（20001 fields=[该键]），不另定错误码（BR-AI-13 细则「当前版本的取值」③，D10-1329 (a)）
 type: impl
 # 2026-11-12 content 入账（D10-1329 (a)，第七批回写 couli#330，SPEC_REF ea7850e2f45f）。做法同 labor-agreement-save-check（B2-03x）：content/application 新增一个 ConfigItemSaveCheck，只管这一个键，现值取存储行（缺行按首版 1，同 BR-AI-13 细则「未配置按首版」），新值低于现值拒绝；等于或高于放行；在 content-admin.module.ts 与其他自有校验并列接上。规则测试独立写、先红；Agent 对内测名单以外开放前必须落地。
+# 2026-11-12 补丁（D10-1349 ③）：校验加按 app 的事务级咨询锁（照 lockInviteReward），首次写入无行时也互斥；锁要经配置保存的 store 端口接进 config-item-admin 与 kysely-config-item-store，故 paths 补这两处。写入值不合法时本校验自己拒。
 refs: [BR-AI-13]
 refs_hash:
   BR-AI-13: 6309509106ac
@@ -11,6 +12,9 @@ paths:
   - 'apps/api/src/modules/content/application/ai-consent-version-save-check.ts'
   - 'apps/api/src/modules/content/application/ai-consent-version-save-check.test.ts'
   - 'apps/api/src/modules/content/content-admin.module.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'apps/api/src/modules/content/infra/kysely-config-item-store.ts'
 test_paths:
   - 'test/spec/content/ai-consent-version-save-check/**'
 impl: claude
