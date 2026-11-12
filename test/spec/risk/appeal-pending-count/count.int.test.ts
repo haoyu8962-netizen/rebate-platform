@@ -1,6 +1,6 @@
 // B1-03zo / BR-ID-36, D10-1401: appeal_pending = this app's processing list total.
 // Real GET /admin/v1/appeals, with only risk.appeal and no step-up. Database/Redis
-// come from the existing kit (TEST_PG_ADMIN_URL); run only in the isolated runner.
+// come from the existing kit; run only in the isolated runner.
 // The exported count is deliberately called in every case: its NotImplemented is
 // the red signal, never a missing export or a setup-hook failure.
 import { expect, it } from 'vitest';
