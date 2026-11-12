@@ -1,0 +1,30 @@
+id: CT-24zzi
+repo: rebate-platform
+title: 契约：后台 Agent 留痕查询与 AI 举报处理（D1，资源 agent-traces，planned）——会话留痕列表与单会话明细（agent.trace，未勾 pii.* 脱敏，查看记审计）、举报列表带 48 小时超时标识（agent.trace）、标记已处理并填说明（agent.report，写审计）
+type: contract
+# 2026-11-12 admin 入账（编排 D10-1287 ⑤，规划变更记录 docs/changes/20261112-Agent模型路径与缺口补全.md §1.3 第 7 条、§3.4 D1；05 F1-10k；01 F-ADM-19）。依据 08 BR-ID-15 细则「举报的处理」、BR-AI-19、BR-AI-20、BR-AI-22；04 §3.2 agent_* 表、§6.6 agent-traces、§11.1 agent.trace / agent.report。
+# 字段只取主干已有列与 agent2 的 A1（回复落库）、A2（运行级字段）、A3（反馈与举报写入）落地的形状，不另建表；举报理由不设枚举（08 未定）。契约槽排在 content A9、be C4 之后，开 PR 前在公告报、等编排点名。页面归 fe（F1-10k）。RV1。
+refs: []
+refs_hash: {}
+contract_sections: ['6.6', '11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/**'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'specs/permissions.yaml'
+  - 'apps/api/src/modules/admin/domain/permissions.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/admin-agent-traces/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
