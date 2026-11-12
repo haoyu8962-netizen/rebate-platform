@@ -83,9 +83,12 @@ it('[AC-B1-10q#15] 明细 tool_calls 的顺序：run_id 大小与 accepted_at �
   );
   for (const index of [1, 2, 0]) await insertRun(f, session, runs[index]!);
   const [first, second, third] = [runs[0]!, runs[1]!, runs[2]!];
-  // The expected order; created_at descends along it, so ordering by created_at reverses it.
+  // The expected order; created_at is shuffled along it, neither ascending nor descending
+  // (seconds before `late`: 3, 0, 5, 1, 4, 2), so ordering by created_at either way — over the
+  // whole list or inside each run — does not give it.
   const late = plus(session.startedAt, 59 * 60_000);
-  const at = (index: number): Date => plus(late, -index * 1000);
+  const shuffled = [3, 0, 5, 1, 4, 2];
+  const at = (index: number): Date => plus(late, -(shuffled[index] ?? 0) * 1000);
   const calls: ToolCallRow[] = [
     {
       runId: first.id,

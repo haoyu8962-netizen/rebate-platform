@@ -241,7 +241,11 @@ export async function readTraceSession(
     ])
     .where('app_id', '=', appId)
     .where('session_id', '=', sessionId)
+    // One turn's question and answer are written by one statement with one created_at and two
+    // UUIDv7 ids of one millisecond (random rest), so the id alone would put either first: at one
+    // instant the user message goes before the assistant message, then id (B1-10r, D10-1341 ②).
     .orderBy('created_at', 'asc')
+    .orderBy(sql`(role = 'user')`, 'desc')
     .orderBy('id', 'asc')
     .execute();
 

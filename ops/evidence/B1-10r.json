@@ -1,0 +1,88 @@
+{
+  "risk_note": "RV1 (agent module only). Follow-up of B1-10q (D10-1341 ②, #3256 review): ① the admin session detail orders messages by created_at, then user before assistant at the same instant, then id (online a turn's user and assistant rows share one created_at and their UUIDv7 ids differ only in random bits, so the old created_at -> id order put the answer first about half the time); ② on the admin read only, a claim_draft card's data.order_no goes through maskForTrace (BR-AI-14: keep the last 4 digits, the same masking as the trace's tool arguments); other cards, other fields, the stored row and the user side are unchanged; ③ a failed audit write still answers 50001 with no session content (B1-10q behaviour, now pinned by a rule test); ④ the frozen [AC-B1-10q#15] tightened (modify_existing tighten_only, ruling D10-1341): its tool-call created_at values are shuffled so neither ascending nor descending created_at yields the expected order; expectation, assertions and title unchanged. Host: integration spec/agent/admin-traces-followup + spec/agent/admin-traces 16/16, apps/api agent unit + contract.test 480, foreign-db-handoff 19, eslint / prettier / tsc / depcruise 0.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "codex-run.sh review --review-type general (RV1; D10-1075, medium). Round 1: pass, no findings. couli-runs/B1-10r/review-general-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests in test/spec/agent/admin-traces-followup/** by a fresh independent Claude (claude-run.sh, tester claude-independent, approvals #36; D10-1080), with the [AC-B1-10q#15] fixture tightened in the same rule-test commit (only that block; the code outside is byte-identical to main). spec-test r1: pass, but its out-of-scope S1 (an id-descending tie-break also passed [AC-B1-10r#1]) and S2 (masking every card also passed [AC-B1-10r#2]) were taken in attempt 2 (an assistant-id-larger same-instant turn; >=11-digit values in other cards and fields asserted verbatim). spec-test r2: pass. Container red/1 ok, problems 0, 2 red; [AC-B1-10q#15] passes green as declared modify_existing."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/agent/admin-traces/detail-order.int.test.ts",
+      "test": "[AC-B1-10q#15] 明细 tool_calls 的顺序：run_id 大小与 accepted_at 顺序相反、工具调用乱序写入且 created_at 与目标顺序相反时，tool_calls 仍先按 run 的 accepted_at、再按 seq 排，不按 run_id、行写入顺序或 created_at",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-10q#15] 明细 tool_calls 的顺序：run_id 大小与 accepted_at 顺序相反、工具调用乱序写入且 created_at 与目标顺序相反时，tool_calls 仍先按 run 的 accepted_at、再按 seq 排，不按 run_id、行写入顺序或 created_at', async () => {\n  const f = fixture(s);\n  const session = await seedSession(f, { startedAt: ago(f, 600), lastActiveAt: ago(f, 500) });\n  // Run ids descend while accepted_at ascends.\n  const runIds = [randomUUID(), randomUUID(), randomUUID()].sort().reverse();\n  const runs = runIds.map((id, index) =>\n    doneRun(plus(session.startedAt, (index + 1) * 60_000), { id }),\n  );\n  for (const index of [1, 2, 0]) await insertRun(f, session, runs[index]!);\n  const [first, second, third] = [runs[0]!, runs[1]!, runs[2]!];\n  // The expected order; created_at descends along it, so ordering by created_at reverses it.\n  const late = plus(session.startedAt, 59 * 60_000);\n  const at = (index: number): Date => plus(late, -index * 1000);\n  const calls: ToolCallRow[] = [\n    {\n      runId: first.id,\n      seq: 1,\n      name: 'search_products',\n      args: { q: 'synthetic-query-1' },\n      status: 'ok',\n      latencyMs: 210,\n      createdAt: at(0),\n    },\n    {\n      runId: first.id,\n      seq: 2,\n      name: 'get_rebate_quote',\n      args: { item: 'synthetic-item-2' },\n      status: 'ok',\n      latencyMs: 90,\n      createdAt: at(1),\n    },\n    {\n      runId: second.id,\n      seq: 1,\n      name: 'search_rules',\n      args: null,\n      status: 'rejected',\n      latencyMs: null,\n      createdAt: at(2),\n    },\n    {\n      runId: third.id,\n      seq: 1,\n      name: 'get_my_earnings',\n      args: {},\n      status: 'ok',\n      latencyMs: 60,\n      createdAt: at(3),\n    },\n    {\n      runId: third.id,\n      seq: 2,\n      name: 'search_rules',\n      args: { q: 'synthetic-query-5' },\n      status: 'ok',\n      latencyMs: 75,\n      createdAt: at(4),\n    },\n    {\n      runId: third.id,\n      seq: 3,\n      name: 'search_products',\n      args: { q: 'synthetic-query-6' },\n      status: 'error',\n      latencyMs: 1500,\n      createdAt: at(5),\n    },\n  ];\n  for (const index of [5, 1, 3, 2, 4, 0]) await insertToolCall(f, session, calls[index]!);\n  await withTraceAdmin(f, async (h) => {\n    const data = await detailOf(await h.detail(session.id));\n    expect(data['runs']).toEqual(runs.map(runView));\n    const listed = data['tool_calls'] as Record<string, unknown>[];\n    expect(listed.map((call) => [call['run_id'], call['seq']])).toEqual([\n      [first.id, 1],\n      [first.id, 2],\n      [second.id, 1],\n      [third.id, 1],\n      [third.id, 2],\n      [third.id, 3],\n    ]);\n    expect(listed).toEqual(calls.map(toolCallView));\n    // Not by run_id: the run ids of the list descend.\n    expect(listed.map((call) => call['run_id'])).toEqual([\n      runIds[0],\n      runIds[0],\n      runIds[1],\n      runIds[2],\n      runIds[2],\n      runIds[2],\n    ]);\n    expect(data['messages']).toEqual([]);\n    expect(data['cards']).toEqual([]);\n  });\n});",
+      "after": "it('[AC-B1-10q#15] 明细 tool_calls 的顺序：run_id 大小与 accepted_at 顺序相反、工具调用乱序写入且 created_at 与目标顺序相反时，tool_calls 仍先按 run 的 accepted_at、再按 seq 排，不按 run_id、行写入顺序或 created_at', async () => {\n  const f = fixture(s);\n  const session = await seedSession(f, { startedAt: ago(f, 600), lastActiveAt: ago(f, 500) });\n  // Run ids descend while accepted_at ascends.\n  const runIds = [randomUUID(), randomUUID(), randomUUID()].sort().reverse();\n  const runs = runIds.map((id, index) =>\n    doneRun(plus(session.startedAt, (index + 1) * 60_000), { id }),\n  );\n  for (const index of [1, 2, 0]) await insertRun(f, session, runs[index]!);\n  const [first, second, third] = [runs[0]!, runs[1]!, runs[2]!];\n  // The expected order; created_at is shuffled along it, neither ascending nor descending\n  // (seconds before `late`: 3, 0, 5, 1, 4, 2), so ordering by created_at either way — over the\n  // whole list or inside each run — does not give it.\n  const late = plus(session.startedAt, 59 * 60_000);\n  const shuffled = [3, 0, 5, 1, 4, 2];\n  const at = (index: number): Date => plus(late, -(shuffled[index] ?? 0) * 1000);\n  const calls: ToolCallRow[] = [\n    {\n      runId: first.id,\n      seq: 1,\n      name: 'search_products',\n      args: { q: 'synthetic-query-1' },\n      status: 'ok',\n      latencyMs: 210,\n      createdAt: at(0),\n    },\n    {\n      runId: first.id,\n      seq: 2,\n      name: 'get_rebate_quote',\n      args: { item: 'synthetic-item-2' },\n      status: 'ok',\n      latencyMs: 90,\n      createdAt: at(1),\n    },\n    {\n      runId: second.id,\n      seq: 1,\n      name: 'search_rules',\n      args: null,\n      status: 'rejected',\n      latencyMs: null,\n      createdAt: at(2),\n    },\n    {\n      runId: third.id,\n      seq: 1,\n      name: 'get_my_earnings',\n      args: {},\n      status: 'ok',\n      latencyMs: 60,\n      createdAt: at(3),\n    },\n    {\n      runId: third.id,\n      seq: 2,\n      name: 'search_rules',\n      args: { q: 'synthetic-query-5' },\n      status: 'ok',\n      latencyMs: 75,\n      createdAt: at(4),\n    },\n    {\n      runId: third.id,\n      seq: 3,\n      name: 'search_products',\n      args: { q: 'synthetic-query-6' },\n      status: 'error',\n      latencyMs: 1500,\n      createdAt: at(5),\n    },\n  ];\n  for (const index of [5, 1, 3, 2, 4, 0]) await insertToolCall(f, session, calls[index]!);\n  await withTraceAdmin(f, async (h) => {\n    const data = await detailOf(await h.detail(session.id));\n    expect(data['runs']).toEqual(runs.map(runView));\n    const listed = data['tool_calls'] as Record<string, unknown>[];\n    expect(listed.map((call) => [call['run_id'], call['seq']])).toEqual([\n      [first.id, 1],\n      [first.id, 2],\n      [second.id, 1],\n      [third.id, 1],\n      [third.id, 2],\n      [third.id, 3],\n    ]);\n    expect(listed).toEqual(calls.map(toolCallView));\n    // Not by run_id: the run ids of the list descend.\n    expect(listed.map((call) => call['run_id'])).toEqual([\n      runIds[0],\n      runIds[0],\n      runIds[1],\n      runIds[2],\n      runIds[2],\n      runIds[2],\n    ]);\n    expect(data['messages']).toEqual([]);\n    expect(data['cards']).toEqual([]);\n  });\n});",
+      "mutation": [
+        {
+          "mutant": "store/admin-traces readTraceSession orders tool_calls by t.created_at desc instead of the run's accepted_at, run id, seq",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "red_tests": [
+    "test/spec/agent/admin-traces-followup/claim-draft-mask.int.test.ts > [AC-B1-10r#2] 明细 cards 里 claim_draft 卡的 order_no 只留后 4 位（BR-AI-14，与 trace 工具参数的 maskForTrace 遮法一致），响应全文查不到完整订单号；别的卡、claim_draft 的别的字段、消息与工具参数照库里原样，库里的卡片不变；非 claim_draft 卡里的 ≥11 位数字（product_list 的 item_ref、order_status 的 order_no）与 claim_draft 卡 fallback_text 里的 ≥11 位数字原样返回；审计写失败时回 50001、响应里没有任何会话内容（消息文本、卡片、工具参数都查不到），也不留审计记录",
+    "test/spec/agent/admin-traces-followup/message-order.int.test.ts > [AC-B1-10r#1] 明细 messages 顺序：同一轮的用户与助手消息同一 created_at、助手 id 小于用户 id（线上同一语句写入、UUIDv7 同毫秒）时用户在前、助手在后；另一轮问在前答在后的照常；整体按 created_at 升序 → user 先于 assistant → id，后一轮的用户消息不越过前一轮的助手消息；另一会话里同一 created_at、助手 id 大于用户 id 的一轮同样用户在前，同角色同 created_at 的两条按 id 升序"
+  ],
+  "task": "B1-10r",
+  "spec_commit": "ad10637b41596adb424741c567dab87872cf103f",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ad10637b41596adb424741c567dab87872cf103f",
+      "tree": "040528a3f63a53b9667e5310a41df204a73d81ce",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T16:50:29Z",
+      "finished_at": "2026-11-12T16:50:40Z",
+      "red_tests": [
+        "test/spec/agent/admin-traces-followup/claim-draft-mask.int.test.ts > [AC-B1-10r#2] 明细 cards 里 claim_draft 卡的 order_no 只留后 4 位（BR-AI-14，与 trace 工具参数的 maskForTrace 遮法一致），响应全文查不到完整订单号；别的卡、claim_draft 的别的字段、消息与工具参数照库里原样，库里的卡片不变；非 claim_draft 卡里的 ≥11 位数字（product_list 的 item_ref、order_status 的 order_no）与 claim_draft 卡 fallback_text 里的 ≥11 位数字原样返回；审计写失败时回 50001、响应里没有任何会话内容（消息文本、卡片、工具参数都查不到），也不留审计记录",
+        "test/spec/agent/admin-traces-followup/message-order.int.test.ts > [AC-B1-10r#1] 明细 messages 顺序：同一轮的用户与助手消息同一 created_at、助手 id 小于用户 id（线上同一语句写入、UUIDv7 同毫秒）时用户在前、助手在后；另一轮问在前答在后的照常；整体按 created_at 升序 → user 先于 assistant → id，后一轮的用户消息不越过前一轮的助手消息；另一会话里同一 created_at、助手 id 大于用户 id 的一轮同样用户在前，同角色同 created_at 的两条按 id 升序"
+      ],
+      "expected": [
+        "test/spec/agent/admin-traces-followup/claim-draft-mask.int.test.ts",
+        "test/spec/agent/admin-traces-followup/message-order.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "506cef4d793da39f00a6f834f5e09990f68b74205bf6e4a5746843a865407501"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "07eed804f578c69b8c5e5b392da321ced280fd64",
+    "specs": "89ba75719133fbb0c92629b83a402eb22b170492"
+  }
+}

@@ -8,7 +8,8 @@
 // read, carrying no message text or tool argument; an unknown session, a session of another app
 // or a malformed id is the same refusal (20001 [session_id]) and writes none. What is returned is
 // always the masked form stored at write time: no pii.* point changes anything, and no device id,
-// user_hash, app_id or user_text is ever selected.
+// user_hash, app_id or user_text is ever selected. B1-10r (D10-1341 ②): the one field stored
+// whole, a claim_draft card's data.order_no, is masked here on the way out (BR-AI-14).
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports,
 // relative imports with `.ts`.
@@ -17,6 +18,7 @@ import type { DB } from '@couli/db';
 import { fenToJsonNumber } from '@couli/money';
 import type { Kysely } from 'kysely';
 import type { AuditPort, Clock } from '../../platform/index.ts';
+import { maskForTrace } from '../preprocess/redact/index.ts';
 import {
   listTraceSessions,
   readTraceSession,
@@ -118,6 +120,25 @@ function header(session: TraceSessionRecord, now: Date) {
   };
 }
 
+/** The card type whose data.order_no is stored restored (whole) and shown masked here. */
+const CLAIM_DRAFT = 'claim_draft';
+
+/**
+ * BR-AI-14 (其他 ≥11 位连续数字……trace 存脱敏值（保留后 4 位）): a claim_draft card is stored with
+ * the whole order number restored into data.order_no; the admin detail shows that one field in the
+ * form the trace stores tool arguments in (maskForTrace). Every other card, every other field of
+ * the claim card (fallback_text included) and an order_no that is not a non-empty string are
+ * returned as stored. The stored row is not touched.
+ */
+export function adminCardData(type: string, data: unknown): unknown {
+  if (type !== CLAIM_DRAFT || data === null || typeof data !== 'object' || Array.isArray(data)) {
+    return data;
+  }
+  const orderNo = (data as Record<string, unknown>)['order_no'];
+  if (typeof orderNo !== 'string' || orderNo === '') return data;
+  return { ...(data as Record<string, unknown>), order_no: maskForTrace(orderNo) };
+}
+
 function iso(at: Date | null): string | null {
   return at === null ? null : at.toISOString();
 }
@@ -213,7 +234,7 @@ export async function getAgentTraceSession(
     card_id: c.cardId,
     type: c.type,
     schema_version: c.schemaVersion,
-    data: c.data as Card['data'],
+    data: adminCardData(c.type, c.data) as Card['data'],
     fallback_text: c.fallbackText,
   }));
   const detail: AdminAgentSessionDetail = {
