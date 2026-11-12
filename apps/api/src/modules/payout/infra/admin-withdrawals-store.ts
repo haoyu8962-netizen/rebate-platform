@@ -5,7 +5,7 @@
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports.
 import type { DB } from '@couli/db';
-import { sql, type Kysely, type Selectable } from 'kysely';
+import { sql, type ExpressionBuilder, type Kysely, type Selectable } from 'kysely';
 
 type WithdrawalRow = Selectable<DB['withdrawals']>;
 
@@ -32,6 +32,42 @@ export interface AdminWithdrawalFilter {
 
 const PAYER_SIDE = 'payer_side_after_transfer';
 
+/**
+ * B2-09zl: 「等待审核」of the BR-WDR-08 细则 table (display_status pending_review): PENDING_REVIEW,
+ * and APPROVED not held for a payer-side failure after a transfer. The one judgement the console
+ * list filter and the dashboard count (withdraw_review_pending) share; 08 counts the waiting
+ * number by the same rule.
+ */
+export function pendingReview(eb: ExpressionBuilder<DB, 'withdrawals'>) {
+  return eb.or([
+    eb('status', '=', 'PENDING_REVIEW'),
+    eb.and([
+      eb('status', '=', 'APPROVED'),
+      eb.or([eb('hold_reason', 'is', null), eb('hold_reason', '<>', PAYER_SIDE)]),
+    ]),
+  ]);
+}
+
+/**
+ * B2-09zl: the app's withdrawals waiting for review, the same rows as the console list filtered
+ * by display_status pending_review. Read only on the given handle; the partial index
+ * withdrawals_open_idx (app_id, user_id) WHERE status IN (PENDING_REVIEW, APPROVED, PAYING)
+ * covers the rows by its app_id prefix.
+ */
+export async function countPendingReviewWithdrawals(
+  db: Kysely<DB>,
+  appId: string,
+): Promise<number> {
+  const row = await db
+    .withSchema('app')
+    .selectFrom('withdrawals')
+    .where('app_id', '=', appId)
+    .where(pendingReview)
+    .select((eb) => eb.fn.countAll<string>().as('total'))
+    .executeTakeFirstOrThrow();
+  return Number(row.total);
+}
+
 function adminWithdrawalQuery(db: Kysely<DB>, filter: AdminWithdrawalFilter) {
   let query = db.withSchema('app').selectFrom('withdrawals').where('app_id', '=', filter.appId);
   if (filter.status !== undefined) query = query.where('status', '=', filter.status);
@@ -40,15 +76,7 @@ function adminWithdrawalQuery(db: Kysely<DB>, filter: AdminWithdrawalFilter) {
     case undefined:
       break;
     case 'pending_review':
-      query = query.where((eb) =>
-        eb.or([
-          eb('status', '=', 'PENDING_REVIEW'),
-          eb.and([
-            eb('status', '=', 'APPROVED'),
-            eb.or([eb('hold_reason', 'is', null), eb('hold_reason', '<>', PAYER_SIDE)]),
-          ]),
-        ]),
-      );
+      query = query.where(pendingReview);
       break;
     case 'pending_handle':
       query = query.where('status', '=', 'APPROVED').where('hold_reason', '=', PAYER_SIDE);

@@ -1,0 +1,74 @@
+{
+  "task": "B2-09zl",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "spec_commit": "e5e4594ea8c89458d033cfc71c5b929a0e23834b",
+  "red_tests": [
+    "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#1] 各状态混合：待审含受阻单和普通退回 APPROVED，排除转账后异常及其他状态；计数等于列表 total 且只读",
+    "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#2] 按 app 隔离：另一应用新增同批状态不改变本应用计数，两应用各自等于本应用列表 total",
+    "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#3] 新应用无提现数据时为数字 0，等于空列表 total，即使别的应用有待审单",
+    "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#4] 数据变化立即反映：待审改为驳回、APPROVED 改为转账后异常，计数与列表 total 逐次一起下降"
+  ],
+  "risk_note": "RV2 (payout, read only), dashboard card withdraw_review_pending (withdraw lane, model Claude Opus 5.5; orchestrator ruling D10-1401; plan couli-runs/DASHBOARD/plan-20261113.md). The display_status pending_review condition of the console withdrawal list (PENDING_REVIEW, or APPROVED not held for payer_side_after_transfer; 08 BR-WDR-08 细则「等待审核」, 「待审数量按同一口径计数」) becomes one function pendingReview in payout/infra/admin-withdrawals-store.ts, used by the list filter and by the new count countWithdrawReviewPending exported from payout/index.ts. List behaviour and contract unchanged; not readPayoutReviewOverdue (a worker metric). The count is one app-scoped COUNT on withdrawals, served by the partial index withdrawals_open_idx (app_id, user_id) WHERE status IN (PENDING_REVIEW, APPROVED, PAYING) through its app_id prefix. Real PostgreSQL: new directory 4/4 red on the skeleton, then 28/28 with the frozen admin-withdrawals and admin-withdrawals-lookup directories. Container --fast verify not run per D10-1184 (host root tsc and CI instead).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e5e4594ea8c89458d033cfc71c5b929a0e23834b",
+      "tree": "b620d3fede267df8d8c0da23503fec3e78c83d71",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T19:42:15Z",
+      "finished_at": "2026-11-12T19:42:27Z",
+      "red_tests": [
+        "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#1] 各状态混合：待审含受阻单和普通退回 APPROVED，排除转账后异常及其他状态；计数等于列表 total 且只读",
+        "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#2] 按 app 隔离：另一应用新增同批状态不改变本应用计数，两应用各自等于本应用列表 total",
+        "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#3] 新应用无提现数据时为数字 0，等于空列表 total，即使别的应用有待审单",
+        "test/spec/payout/withdraw-review-pending-count/count.int.test.ts > [AC-B2-09zl#4] 数据变化立即反映：待审改为驳回、APPROVED 改为转账后异常，计数与列表 total 逐次一起下降"
+      ],
+      "expected": ["test/spec/payout/withdraw-review-pending-count/count.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b0cb78e798f8a3e59d20126fb04e2eda4131bc0f40c4d9edab0dc35d58e79307"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Money review (RV2) by Codex, effort medium, per D10-1401 and D10-1362. Full diff from the fork point. Verdict pass, 0 findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (codex-run.sh impl --phase test, tester codex, test 1/3, D10-1362); spec-test r1 by a fresh independent Claude (claude-run.sh, a task whose rule tests Codex wrote is reviewed by Claude): pass, 0 findings."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7ae435504265ce94da68d0a9f15a0ce4166635b5",
+    "specs": "0ebd4dbae285ce00472e2def2f286eeafb2a3e7f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money or packages/domain.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

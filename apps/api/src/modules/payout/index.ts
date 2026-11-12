@@ -417,6 +417,8 @@ export type {
   ReviewOverdueSlot,
 } from './application/review-overdue.ts';
 export { createReviewOverdueJob, seedReviewOverdue } from './jobs/review-overdue-job.ts';
+// B2-09zl (D10-1401): the dashboard's withdraw_review_pending count, the console list's rule.
+export { countWithdrawReviewPending } from './application/withdraw-review-pending-count.ts';
 export type {
   ReviewOverdueJobName,
   ReviewOverdueJobOptions,
