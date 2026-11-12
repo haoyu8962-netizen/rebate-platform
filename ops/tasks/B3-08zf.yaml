@@ -1,0 +1,34 @@
+id: B3-08zf
+repo: rebate-platform
+title: B3-08zf：👍/👎 与举报接口（规划 11-12 A3）——setAgentMessageFeedback、reportAgentMessage 去未实现标记并挂路由；举报状态机 agent-report 与生成的 transition()；导出举报处理端口供后台 B1-10t 调用
+type: contract
+# 2026-11-13 agent2 入账（规划 11-12 A3，D10-1287；与 admin 11-12 13:50 约定、D10-1382：举报状态 report_status 只有 agent 一个写者，后台「标已处理」经本单导出的端口调同一个 transition）。实现排在 B3-08ze 之后、B3-08zd 之前。
+# 用户侧：feedback up/down（down 置 badcase，可改选，写 feedback_at），report 写 reported、reason、reported_at、report_status pending；只限本人会话里的助手消息（归属同历史接口，非本人 / 不存在 30504），注销后的会话同 B3-08zd (8)。重复举报：保留首次 reported_at 与原因、不改状态（08 未定，按幂等处理并在 PR 写明）。
+# 状态机 specs/state-machines/agent-report.yaml：field report_status，null --report--> pending --handle--> handled；生成 packages/domain/src/state-machines/agent-report.gen.ts。
+# 导出端口（agent/index.ts）：createAgentReportAdminPort(deps).handle(trx, {appId, messageId, handlerId, note, expectedRowVersion}) → {kind: 'handled', rowVersion, handledAt} | 'not_found' | 'not_reported' | 'already_handled' | 'cas_conflict'；在调用方事务里按 row_version CAS 写 report_status handled、report_handler_id、report_handled_at（注入 Clock）、report_note、row_version + 1；不抛冲突，调用方映射 20902（data.resource=agent_report）。note 的 1–500 字校验归调用方。
+# 契约去 planned 并重生成，占契约槽（与 B3-08ze 前后排）。RV1，新鲜独立 Claude 写测试，Opus 实现，Codex 评审。
+# prettier-ignore
+refs: [BR-AI-19, BR-ID-15, BR-AI-20]
+refs_hash:
+  BR-AI-19: 3c0c40a3ed93
+  BR-ID-15: ae5b8c769d84
+  BR-AI-20: ed15f04bab16
+deps: [B3-08zc]
+paths:
+  - 'specs/state-machines/agent-report.yaml'
+  - 'packages/domain/src/state-machines/**'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/**'
+  - 'apps/api/src/modules/platform/validation/**'
+  - 'apps/api/src/modules/platform/http/**'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/agent/{index.ts,http/**,store/**,stream/mount/**,application/**}'
+test_paths:
+  - 'test/spec/agent/message-feedback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/message-feedback/**'
+status: todo
+pr: null
