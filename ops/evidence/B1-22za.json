@@ -1,0 +1,81 @@
+{
+  "risk_note": "Seed only (D10-1333, owner chose A for Q-A14; 08 BR-AI-12 细则「/v1/config.agent.enabled 的派生」: default on written by the seed). New db/seeds/0007_agent-master-switches.sql: one INSERT … VALUES of couli agent.enabled and agent.page_guide.enabled = 'true'::jsonb, updated_by seed, ON CONFLICT (app_id, key) DO NOTHING (keeps an operator's false). Not a public opening: agent.whitelist_only stays unseeded (missing = on) and the internal list is empty (BR-AI-12). Before entry, the 4 integration files that run all seeds were green with 0007 added (rule-search-wiring 8, seeds-core-switches 6, stream-assembly-orders 2, db/content/config-seed 32). Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/B1-22za/review-codex-money-r1.json, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh) in test/spec/agent/master-switch-seeds/**: seeded true / operator false kept / static INSERT-only check; r1 S1 (one key present, the other missing: a whole-statement skip would pass) → round 2 added mixed.int.test.ts (both directions) and tightened the static check; red/2 PASS (6), spec-test r2 pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/agent/master-switch-seeds/mixed.int.test.ts > [AC-B1-22za#4][BR-AI-12] 已有人工写的 agent.enabled=false、agent.page_guide.enabled 无行 → 跑全部种子后 agent.enabled 整行不变（仍 false，version / updated_by 不变），agent.page_guide.enabled 补成 jsonb true、updated_by = seed",
+    "test/spec/agent/master-switch-seeds/mixed.int.test.ts > [AC-B1-22za#4][BR-AI-12] 反过来：已有人工写的 agent.page_guide.enabled=false、agent.enabled 无行 → 跑全部种子后 page_guide 整行不变，agent.enabled 补成 jsonb true、updated_by = seed",
+    "test/spec/agent/master-switch-seeds/mixed.int.test.ts > [AC-B1-22za#3][BR-AI-12] 静态检查 0007 收紧：只能是 INSERT INTO app.config_items (app_id, key, value, updated_by) VALUES 逐行列出两个键（couli、true::jsonb、seed）… ON CONFLICT (app_id, key) DO NOTHING；不得是 INSERT … SELECT / WHERE NOT EXISTS，无 UPDATE / DELETE / TRUNCATE",
+    "test/spec/agent/master-switch-seeds/seeds.int.test.ts > [AC-B1-22za#1][BR-AI-12] 新建库跑完全部种子后 couli 的 agent.enabled、agent.page_guide.enabled 都在，值为 jsonb 布尔 true，updated_by = seed；agent.whitelist_only 与内测名单不种",
+    "test/spec/agent/master-switch-seeds/seeds.int.test.ts > [AC-B1-22za#2][BR-AI-12] 两键先人工写成 false 再跑两遍全部种子 → 整行（值、version、updated_by）不变",
+    "test/spec/agent/master-switch-seeds/seeds.int.test.ts > [AC-B1-22za#3][BR-AI-12] 静态检查 0007：只有 INSERT INTO app.config_items … ON CONFLICT (app_id, key) DO NOTHING，无 UPDATE / DELETE / TRUNCATE，只写 app_id = couli 的 agent.enabled 与 agent.page_guide.enabled"
+  ],
+  "task": "B1-22za",
+  "spec_commit": "0ff0c20b000648d2fdba00ac9962b6dbffaaf4b2",
+  "spec_ref": "ea7850e2f45ff38d11dbbde41cea2a832cb6e6a8",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "0ff0c20b000648d2fdba00ac9962b6dbffaaf4b2",
+      "tree": "6e2e90abef2dcbf44b899b2ab7ff449ed0ed93cc",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T12:57:12Z",
+      "finished_at": "2026-11-12T12:57:20Z",
+      "red_tests": [
+        "test/spec/agent/master-switch-seeds/mixed.int.test.ts > [AC-B1-22za#4][BR-AI-12] 已有人工写的 agent.enabled=false、agent.page_guide.enabled 无行 → 跑全部种子后 agent.enabled 整行不变（仍 false，version / updated_by 不变），agent.page_guide.enabled 补成 jsonb true、updated_by = seed",
+        "test/spec/agent/master-switch-seeds/mixed.int.test.ts > [AC-B1-22za#4][BR-AI-12] 反过来：已有人工写的 agent.page_guide.enabled=false、agent.enabled 无行 → 跑全部种子后 page_guide 整行不变，agent.enabled 补成 jsonb true、updated_by = seed",
+        "test/spec/agent/master-switch-seeds/mixed.int.test.ts > [AC-B1-22za#3][BR-AI-12] 静态检查 0007 收紧：只能是 INSERT INTO app.config_items (app_id, key, value, updated_by) VALUES 逐行列出两个键（couli、true::jsonb、seed）… ON CONFLICT (app_id, key) DO NOTHING；不得是 INSERT … SELECT / WHERE NOT EXISTS，无 UPDATE / DELETE / TRUNCATE",
+        "test/spec/agent/master-switch-seeds/seeds.int.test.ts > [AC-B1-22za#1][BR-AI-12] 新建库跑完全部种子后 couli 的 agent.enabled、agent.page_guide.enabled 都在，值为 jsonb 布尔 true，updated_by = seed；agent.whitelist_only 与内测名单不种",
+        "test/spec/agent/master-switch-seeds/seeds.int.test.ts > [AC-B1-22za#2][BR-AI-12] 两键先人工写成 false 再跑两遍全部种子 → 整行（值、version、updated_by）不变",
+        "test/spec/agent/master-switch-seeds/seeds.int.test.ts > [AC-B1-22za#3][BR-AI-12] 静态检查 0007：只有 INSERT INTO app.config_items … ON CONFLICT (app_id, key) DO NOTHING，无 UPDATE / DELETE / TRUNCATE，只写 app_id = couli 的 agent.enabled 与 agent.page_guide.enabled"
+      ],
+      "expected": [
+        "test/spec/agent/master-switch-seeds/mixed.int.test.ts",
+        "test/spec/agent/master-switch-seeds/seeds.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "fb9d50f63da456d9c26797b8225f232c8687379924ab556653587fede114dad6"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "082af089a4e45bca79d069be8694b20b6b84f7f4",
+    "specs": "f78e529ad2f2d314556b8c6b89ba069325a3ff9f"
+  }
+}
