@@ -1,0 +1,26 @@
+id: B1-01zzu
+repo: rebate-platform
+title: staging 内容安全凭据同步脚本——infra/staging/sync-aliyun-review.sh 把本机 ~/.couli/aliyun-review.env 的三个 AGENT_REVIEW_ALIYUN_* 键经标准输入写进节点 /etc/couli/staging.env（只替换同名行、留备份、成功后删），带只检查不写入的模式；README 补一节（D10-1288 / D10-1290）
+type: impl
+# 2026-11-12 ops 入账（编排 D10-1290：负责人在编排对话确认「同意存本机、ops 同步」；要求照规划会话 13:09 原文加 D10-1288 ② 四点）。
+# 本地核对：文件存在、普通文件、权限 600；三个键 AGENT_REVIEW_ALIYUN_ACCESS_KEY_ID / _ACCESS_KEY_SECRET / AGENT_REVIEW_ALIYUN_ENDPOINT 各恰好一行；
+#   ID 与 Secret 只含字母数字（README 1.2 的 $ 展开）；接入点是 https 地址、不含空白与 $；文件里只许这三个键、空行与 # 注释。
+# --check：只报键名在不在、格式过不过（真假），不连节点。--apply <节点>：先做同样核对，再把三行经 ssh 的标准输入传给节点上的脚本；
+#   节点脚本要求目标文件已存在、属主与执行者相同（节点上即 root）、权限 600；写前留同权限备份，同名行原位替换、没有就追加、其余行逐字不动，
+#   临时文件同目录同权限、改名到位，成功后删备份；任何一步失败都不动目标文件。全程不 set -x，值不进命令行参数、进程列表、输出与日志。
+# 本单不运行同步、不读该文件内容；同步、重新部署、合成文本实测等合并后照 D10-1290 ② 做。规则测试由新鲜 Claude 子代理先写（Agent 工具，独立上下文），Codex 对抗评审。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'infra/staging/sync-aliyun-review.sh'
+  - 'infra/staging/README.md'
+  - 'ops/tasks/B1-01zzu.yaml'
+test_paths:
+  - 'test/spec/infra/staging-aliyun-review/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/infra/staging-aliyun-review/**'
+status: todo

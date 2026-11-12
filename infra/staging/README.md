@@ -16,7 +16,7 @@
 
 | 文件 | 给谁用 | 内容（只列变量名） |
 | --- | --- | --- |
-| `/etc/couli/staging.env` | api、stream、worker、admin | API_PORT / STREAM_PORT / ADMIN_PORT、DATABASE_URL、DATABASE_READ_URL、DATABASE_MAINT_URL、REDIS_URL、FIELD_KEY_PROVIDER、FIELD_KEYRING_FILE、FIELD_MASTER_KEY_FILE；可选 SMS_ACCESS_KEY_ID、SMS_ACCESS_KEY_SECRET、SMS_SIGN_NAME、SMS_TEMPLATE_VERIFY_CODE（见 1.6） |
+| `/etc/couli/staging.env` | api、stream、worker、admin | API_PORT / STREAM_PORT / ADMIN_PORT、DATABASE_URL、DATABASE_READ_URL、DATABASE_MAINT_URL、REDIS_URL、FIELD_KEY_PROVIDER、FIELD_KEYRING_FILE、FIELD_MASTER_KEY_FILE；可选 SMS_ACCESS_KEY_ID、SMS_ACCESS_KEY_SECRET、SMS_SIGN_NAME、SMS_TEMPLATE_VERIFY_CODE（见 1.6），AGENT_REVIEW_ALIYUN_ACCESS_KEY_ID、AGENT_REVIEW_ALIYUN_ACCESS_KEY_SECRET、AGENT_REVIEW_ALIYUN_ENDPOINT（见 1.13） |
 | `/etc/couli/staging-payout.env` | 只给 payout | payout 自己的 DATABASE_URL，以及同样的三个 FIELD_* 变量（payout 不连 Redis，ADR-0001 §4.2 第 20 项） |
 | `/etc/couli/staging-migrator.env` | 只给迁移步骤 | MIGRATOR_DATABASE_URL |
 
@@ -401,6 +401,45 @@ App 包里按环境带两把公钥（「现用」和「下一把」）。换钥�
 1. 生成新私钥（新文件名，例如 `es256-next.pem`，权限同上），导出公钥，连同新 kid 交给三端，作为「下一把」随新包发布；
 2. 等带新公钥的包覆盖到足够多的用户后，把 `staging.env` 里的 `CONFIG_SIGN_KEY_FILE` 改成新文件、`CONFIG_SIGN_KEY_ID` 改成新 kid，重新部署（第 3 节）。之后同一配置版本的签名会换一次（kid 变了），`/v1/config` 的 ETag 也随之变一次；
 3. 确认没有只认旧公钥的包在用之后，删掉旧私钥文件，三端在下一版里把旧公钥移出、新公钥变成「现用」。
+
+### 1.13 阿里云内容安全（Agent 审核）
+
+依据编排裁定 D10-1288 / D10-1290（B1-01zzu）。在 `/etc/couli/staging.env` 设下面三个变量，stream 入口的 Agent 输入审核与逐句审核就走阿里云内容安全。**三个齐全才启用**；缺任一（未设或空串）时维持现状（fail-closed）：每条消息都按「审核不可用」拒答，逐句审核一律按超时处理，不发任何网络请求。只设 ID 与 Secret 中的一个、或接入点不是 https 地址时，读 `staging.env` 的入口在启动时配置校验不过、拒绝启动（报错只写变量名）。
+
+| 变量 | 取值 |
+| --- | --- |
+| `AGENT_REVIEW_ALIYUN_ACCESS_KEY_ID` | 阿里云 AccessKey ID，只含字母和数字 |
+| `AGENT_REVIEW_ALIYUN_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret，只含字母和数字 |
+| `AGENT_REVIEW_ALIYUN_ENDPOINT` | 内容安全的 https 接入点，例如 `https://green-cip.cn-beijing.aliyuncs.com` |
+
+- 1.2 说过 `deploy.sh` 会对整个 `staging.env` 做 `$` 展开：三个值里都不能有 `$`；ID 与 Secret 只用字母和数字，接入点不含空白、`$` 与引号，都不加引号。
+- `APP_ENV` 为 local 或 test 时设了两个 AccessKey 变量中的任何一个都会拒绝启动；本地 `.env` 不放它们。
+- **应用没有专门的「审核已配置」启动日志**（不像 1.6 的 `sms_sender_live`）：启动日志看不出审核接没接通。接通与否只能部署后用合成文本实测：发一条普通的合成消息，能正常得到回答即已接通；仍按「审核不可用」拒答，说明三个变量没有齐全读到（或接入点、密钥不对）。
+
+#### 值放在哪里、谁来同步
+
+三个值只存在负责人本机的 `~/.couli/aliyun-review.env`（属主本人、权限 600，只放这三行，可以有空行和 `#` 注释），由 ops 用本目录的 `sync-aliyun-review.sh` 写进节点的 `/etc/couli/staging.env`。各开发线、评审与其他会话都不读这个文件，也不读节点上的 `staging.env`；值不进本仓库、不进任何日志与对话。
+
+脚本只用 shell 内建处理值：值不出现在任何命令的参数、进程列表、shell 历史与输出里，只经 ssh 的标准输入传到节点；节点上执行的是脚本里一段固定的命令（不含值），目标路径作为它的参数。脚本显式关闭命令跟踪，任何输出只有键名、yes/no、ok/bad、行号、步骤与原因。
+
+```sh
+infra/staging/sync-aliyun-review.sh --check
+infra/staging/sync-aliyun-review.sh --apply <staging 节点> [--identity <私钥文件>]
+```
+
+- `--check`：只在本机核对，不连节点。核对文件存在、是普通文件、权限恰好 600；三个键各恰好一行（写成「变量名=值」，等号前后不留空格）；除这三个键外只有空行和 `#` 开头的注释；ID 与 Secret 非空、只含字母和数字；接入点以 `https://` 开头、不含空白、`$` 与引号。每个键打印一行 `present=yes/no format=ok/bad`，文件打印一行 `exists / regular / mode600`，最后一行 `check: ok` 或 `check: failed`（失败退出码 1；格式不对的行只报行号）。
+- `--apply`：先做同样的核对，不过就不连节点；通过后以 `ssh [-i <私钥文件>] <节点>` 连到节点，以 root 执行。参数写错退出码 2，节点上的步骤没有完成退出码 3。
+
+节点上的步骤（任何一步失败都不动目标文件，不留新文件）：
+
+1. 要求 `/etc/couli/staging.env` 已存在、是普通文件（不是链接）、属主就是执行者（root）、权限 600；旁边不能有上次留下的备份 `staging.env.bak-sync-aliyun-review`（有就先人工核对再删）；
+2. 从标准输入读三行，只认这三个键、各一行、格式同上；目标文件里这三个键中任何一个出现多于一行时直接退出，先人工合并成一行；
+3. 在同一目录留备份 `staging.env.bak-sync-aliyun-review`（同属主、权限 600）；
+4. 在同一目录生成临时文件（权限 600）：逐行复制原文件，遇到这三个键的行原位换成新行，原来没有的键追加在末尾，其余行（注释、空行、别的变量）一字不动；原文件末行没有换行时补一个。写的过程中任何一处出错（例如磁盘满）都直接退出，删掉临时文件和备份，不改名；
+5. 改名之前先把临时文件与原文件逐行比对：行数等于原行数加追加数，其余行逐字相同，键行是对应的新行，末尾追加的恰好是原来缺的键；不符就退出、不改名。比对通过后把临时文件改名到 `staging.env`（原子替换），再核对三个键各一行、属主与权限 600 都对，然后删备份；这一步核对不过就用备份改名回去；
+6. 打印一行 `apply: <目标文件>: replaced <n>, added <m>, other lines unchanged; backup removed`。
+
+同步只改了文件，正在运行的进程不会读到新值。同步之后按第 3 节用**当前在跑的标签**重新部署一次（`deploy.sh <当前标签>`），再按上面的方法用合成文本实测。轮换密钥：本机文件换成新值后重跑 `--check`、`--apply`，再重新部署；停用：从 `staging.env` 删掉三行后重新部署，回到 fail-closed。
 
 ## 2. 在开发机构建并传到节点
 
