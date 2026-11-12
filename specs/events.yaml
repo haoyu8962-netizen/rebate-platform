@@ -16,9 +16,9 @@
 # 类别。本文件不设这类字段（字段名不得是 url、tpwd、pid、relation_id、promo_url 之类，校验会拒绝）。
 # 游客事件只带 device_id；登录后由服务端按 device_id 与登录时刻在报表层关联 user_id，不回写原事件。
 #
-# TODO(规划/05 CT-13): app_launch、page_view、exposure、click、search、convert、h5_white_screen 与 funnel_first_order.*、
-#   agent_* 两族的事件字段 — blocked on 用到它们的任务（首页、搜索、Agent、漏斗）给出字段；现在只登记名字与出处。
-version: '2'
+# TODO(规划/05 CT-13): app_launch、page_view、exposure、click、search、convert、h5_white_screen 与 funnel_first_order.*
+#   的事件字段 — blocked on 用到它们的任务（首页、搜索、漏斗）给出字段；现在只登记名字与出处。
+version: '3'
 common_fields:
   event_id:
     type: string
@@ -221,6 +221,135 @@ events:
       reason:
         type: string
         required: true
+  agent_stream_seq_gap:
+    description: 原生 Agent 页流诊断：text.delta 缺号（收到的 seq 大于本地已应用值 +1），本地结束该条消息（03 §7.2）；不带用户消息原文、输入框原文、帧的 data 与 delta、卡片内容和 fallback_text
+    source: 规划/03 §4.7「agent_* 事件的字段」、§7.2
+    fields:
+      run_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 run_id（04 §8.2）；还没收到 meta 帧时不带
+      message_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 message_id；还没收到 meta 帧时不带
+      schema_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；这四个事件不针对某一张卡，填 "unknown"
+      bridge_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7），按诊断字段一条取；取不到填 "unknown"
+      config_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7，来源见 04 §10.1）；/v1/config 还没拉到时填 "unknown"
+      h5_release:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；Agent 页是原生页，填 "unknown"
+      expected:
+        type: integer
+        required: true
+        note: 本地已应用的最大 seq 加 1
+      received:
+        type: integer
+        required: true
+        note: 这一帧实际带的 seq（大于 expected）
+  agent_stream_frame_too_large:
+    description: 原生 Agent 页流诊断：单帧 data 超过上限，按协议错误本地结束该条消息（03 §7.2）；只有共有字段，不带帧内容
+    source: 规划/03 §4.7「agent_* 事件的字段」、§7.2
+    fields:
+      run_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 run_id（04 §8.2）；还没收到 meta 帧时不带
+      message_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 message_id；还没收到 meta 帧时不带
+      schema_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；这四个事件不针对某一张卡，填 "unknown"
+      bridge_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7），按诊断字段一条取；取不到填 "unknown"
+      config_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7，来源见 04 §10.1）；/v1/config 还没拉到时填 "unknown"
+      h5_release:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；Agent 页是原生页，填 "unknown"
+  agent_stream_limit:
+    description: 原生 Agent 页流诊断：同一 run 的累计文本、卡片数或内容帧数超过输出上限，本地结束该条消息（03 §7.2；上限见 02 §9.2）
+    source: 规划/03 §4.7「agent_* 事件的字段」、§7.2
+    fields:
+      run_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 run_id（04 §8.2）；还没收到 meta 帧时不带
+      message_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 message_id；还没收到 meta 帧时不带
+      schema_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；这四个事件不针对某一张卡，填 "unknown"
+      bridge_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7），按诊断字段一条取；取不到填 "unknown"
+      config_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7，来源见 04 §10.1）；/v1/config 还没拉到时填 "unknown"
+      h5_release:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；Agent 页是原生页，填 "unknown"
+      kind:
+        type: enum
+        required: true
+        values: [text, cards, frames]
+        note: 超过的是哪一个上限：text 累计文本、cards 卡片数、frames 内容帧数（02 §9.2）
+  agent_stream_unknown_event:
+    description: 原生 Agent 页流诊断：收到不在 04 §8.2 表内的 event 类型，忽略该帧、不中断流（03 §7.2）
+    source: 规划/03 §4.7「agent_* 事件的字段」、§7.2
+    fields:
+      run_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 run_id（04 §8.2）；还没收到 meta 帧时不带
+      message_id:
+        type: string
+        required: false
+        note: 本轮 meta 帧给的 message_id；还没收到 meta 帧时不带
+      schema_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；这四个事件不针对某一张卡，填 "unknown"
+      bridge_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7），按诊断字段一条取；取不到填 "unknown"
+      config_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7，来源见 04 §10.1）；/v1/config 还没拉到时填 "unknown"
+      h5_release:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；Agent 页是原生页，填 "unknown"
+      type:
+        type: string
+        required: true
+        note: 那一帧 event 行的类型名，超过 64 个字符只取前 64 个；不带 data；同一 run 里同一个 type 只记一条（03 §7.2）
   app_launch:
     description: App 启动（字段待定）
     source: 规划/03 §4.7

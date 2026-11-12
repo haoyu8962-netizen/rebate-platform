@@ -1,0 +1,124 @@
+{
+  "risk_note": "Spec only (D10-1315 / D10-1330; C4 third item). specs/events.yaml registers agent_stream_seq_gap, agent_stream_frame_too_large, agent_stream_limit and agent_stream_unknown_event with the fields of 规划/03 §4.7「agent_* 事件的字段」at SPEC_REF ea7850e2f45f: run_id / message_id optional, schema_version / bridge_version / config_version / h5_release required (\"unknown\" per the table); seq_gap expected / received integer; limit kind enum text / cards / frames; unknown_event type string (first 64 characters, once per type per run). agent_output_filtered is not registered (BR-AI-06). version 2 → 3; header TODO no longer lists agent_*. No generated files; packages/contracts-ts checkEvents and lint pass.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-13a/review-codex-contract-r1.json, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh): test/spec/contracts/agent-stream-events/**, container red 29; Codex spec-test r1 pass, no findings (couli-runs/CT-13a/review-codex-spec-test-r1.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_seq_gap 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_frame_too_large 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_limit 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_unknown_event 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#2] agent_ 开头的事件恰好是这四个；agent_output_filtered 不登记，也没有 agent 族",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_seq_gap 的字段恰好是共有六项加自己的字段，不多不少",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_frame_too_large 的字段恰好是共有六项加自己的字段，不多不少",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_limit 的字段恰好是共有六项加自己的字段，不多不少",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_unknown_event 的字段恰好是共有六项加自己的字段，不多不少",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_seq_gap 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_frame_too_large 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_limit 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_unknown_event 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_seq_gap 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_frame_too_large 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_limit 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_unknown_event 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#6] agent_stream_seq_gap 自己的字段 expected、received 都是必填 integer",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#7] agent_stream_frame_too_large 只有共有字段",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#8] agent_stream_limit 的 kind 是必填 enum，取值恰好 text / cards / frames",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#9] agent_stream_unknown_event 的 type 是必填 string，note 写明只取前 64 个字符",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_seq_gap 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_frame_too_large 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_limit 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_unknown_event 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#11] 共有六项挂在四个事件上，不进 common_fields（诊断字段只给部分事件）",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#12] specs/events.yaml 的 version 递增（大于本任务前的 2）",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#13] 文件头 TODO 里去掉 agent_*",
+    "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#14] 登记四个事件后 events.yaml 仍通过 contracts:check 的事件表校验"
+  ],
+  "task": "CT-13a",
+  "spec_commit": "8ef48dc7fab4590ebd3c0c628aa502f62226301d",
+  "spec_ref": "ea7850e2f45ff38d11dbbde41cea2a832cb6e6a8",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8ef48dc7fab4590ebd3c0c628aa502f62226301d",
+      "tree": "3055df9a8bb58219ee031ba396794eaac8c7098d",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T12:41:48Z",
+      "finished_at": "2026-11-12T12:41:51Z",
+      "red_tests": [
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_seq_gap 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_frame_too_large 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_limit 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#1] agent_stream_unknown_event 登记在 events 下，事件名直接以 agent_ 开头、不带点，有 description 与 source",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#2] agent_ 开头的事件恰好是这四个；agent_output_filtered 不登记，也没有 agent 族",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_seq_gap 的字段恰好是共有六项加自己的字段，不多不少",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_frame_too_large 的字段恰好是共有六项加自己的字段，不多不少",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_limit 的字段恰好是共有六项加自己的字段，不多不少",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#3] agent_stream_unknown_event 的字段恰好是共有六项加自己的字段，不多不少",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_seq_gap 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_frame_too_large 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_limit 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#4] agent_stream_unknown_event 的共有字段：run_id / message_id 是可缺的 string，四个诊断字段是必填 string",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_seq_gap 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_frame_too_large 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_limit 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#5] agent_stream_unknown_event 的四个诊断字段在 note 里写明取不到时填 \"unknown\"",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#6] agent_stream_seq_gap 自己的字段 expected、received 都是必填 integer",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#7] agent_stream_frame_too_large 只有共有字段",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#8] agent_stream_limit 的 kind 是必填 enum，取值恰好 text / cards / frames",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#9] agent_stream_unknown_event 的 type 是必填 string，note 写明只取前 64 个字符",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_seq_gap 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_frame_too_large 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_limit 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#10] agent_stream_unknown_event 不带 card_id、帧 data / delta、用户原文、卡片内容与 fallback_text",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#11] 共有六项挂在四个事件上，不进 common_fields（诊断字段只给部分事件）",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#12] specs/events.yaml 的 version 递增（大于本任务前的 2）",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#13] 文件头 TODO 里去掉 agent_*",
+        "test/spec/contracts/agent-stream-events/agent-stream-events.test.ts > [AC-CT-13a#14] 登记四个事件后 events.yaml 仍通过 contracts:check 的事件表校验"
+      ],
+      "expected": ["test/spec/contracts/agent-stream-events/agent-stream-events.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "e4e18c44adcbd4fcaa34e8d63ef9d49b44b53c6f464d554990486595c3d76d67"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1253c9de9ef96aa22972bdacf76d801123194129",
+    "specs": "97bc5e480c676cf2433a6878d43aa99af587a3c6"
+  }
+}
