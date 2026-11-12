@@ -81,5 +81,8 @@ red_exempt:
   - file: test/spec/agent/trace-persist/async.int.test.ts
     test: '[AC-B3-08q#5][BR-AI-19] 同一卡 / 同一调用重复投递（写者每次都写两遍）：按唯一键幂等，agent_cards 每个 card_id 一行、agent_tool_calls 每个 seq 一行，不记 warn'
     reason: 冻结 B3-08q 用例，测试体未改，只因同文件另两条随 D10-1297 改写被整文件连坐（照 D10-752）
+red_exempt_outside:
+  - file: test/spec/agent/trace-persist/async.int.test.ts
+    reason: 用例外只改文件头注释（D10-1297 说明）、删去不再用的 eventually 导入、加 cardIdsOf / storedIdsOf 两个只读辅助函数，供改写的两条卡片断言用
 status: todo
 pr: null
