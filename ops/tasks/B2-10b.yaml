@@ -1,0 +1,22 @@
+id: B2-10b
+repo: rebate-platform
+title: 资损场景清单草稿 specs/loss-scenarios.md（资损场景 → 已有测试 ID 与核对规则，缺口如实列，待财务过目）
+type: impl
+# 2026-11-13 funds 入账（编排 D10-1369；规划/05 B2-10，验收「财务过目；每条场景有测试 ID」）。
+# 每条场景对到主干上已有的测试 ID（test/spec、test/properties、db/invariants）；找不到的列为缺口，不编测试 ID。文首标明「草稿，待财务过目」。
+# 只写这一个文件：不改任何资金计算与测试。首批真实录制到位后再补（规划/05 人工依赖），本单不等。
+# 规则测试只钉结构：文件存在、文首有草稿标注、清单里引用的每个测试 ID 在主干对应目录里真实存在、缺口条目不带测试 ID。
+refs: [BR-FUND-02]
+refs_hash:
+  BR-FUND-02: 382c4075d2cb
+deps: []
+paths:
+  - 'specs/loss-scenarios.md'
+test_paths:
+  - 'test/spec/settlement/loss-scenarios/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/loss-scenarios/**'
+status: todo

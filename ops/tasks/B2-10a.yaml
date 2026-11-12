@@ -1,0 +1,25 @@
+id: B2-10a
+repo: rebate-platform
+title: 可入账事件规格 specs/creditable-events.yaml 与接线（BR-FUND-02）——isCreditablePlatform 改读由规格生成的常量，行为不变
+type: impl
+# 2026-11-13 funds 入账（编排 D10-1369；规划/05 B2-10）。现状 rules.ts:55 四个平台写死，留 TODO「改为读 specs/creditable-events.yaml」。
+# 规格只照 08 BR-FUND-02 原文：taobao / jd / pdd = 确认收货，meituan = 订单完成或核销。P1 平台 vip、douyin、eleme 08 写了事件但「接入时经 09 实测确认后才写入该文件」，本单不写入。
+# 照 platform/specs 的 link-patterns：生成脚本把 YAML 渲染成 .gen.ts，运行时只读常量、不读 YAML；渲染函数接受显式输入，规则测试可用合成规格做反向验证。
+# 资金口径的落地方式改动，不是口径改动：发现要改某平台入账事件、或 08 与实现不一致，停下报编排。
+refs: [BR-FUND-02]
+refs_hash:
+  BR-FUND-02: 382c4075d2cb
+deps: []
+paths:
+  - 'specs/creditable-events.yaml'
+  - 'apps/api/src/modules/settlement/specs/**'
+  - 'apps/api/src/modules/settlement/rebate/domain/rules.ts'
+  - 'apps/api/src/modules/settlement/rebate/domain/rules.test.ts'
+test_paths:
+  - 'test/spec/settlement/creditable-events/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/creditable-events/**'
+status: todo
