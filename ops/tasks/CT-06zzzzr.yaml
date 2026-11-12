@@ -10,6 +10,7 @@ type: guard-change
 #   改前 / 改后块原文按旧 / 新标题对基线 / 头机械核对。其余口径（owner 标签、tighten_only / flake_fix、与 red_exempt 共用上限）不变。
 # 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
 # 合并后通知 agent2 开小单，把 B3-16a 那几条标题由 7 个改为 8 个（D10-1278 ②）。
+# 2026-11-12 ops 置 done：#3219 已合并（bb16a5486）；Codex general r1 S1（无占位符 .each 改名放行）已修、r2 pass；approvals 72；已通知 agent2。
 refs: []
 refs_hash: {}
 deps: []
@@ -28,4 +29,5 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify:fast'
-status: todo
+status: done
+pr: 3219
