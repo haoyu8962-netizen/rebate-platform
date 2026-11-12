@@ -1,0 +1,23 @@
+id: CT-13c
+repo: rebate-platform
+title: 规格：specs/events.yaml 的 sdui_card_error、bridge_call 补 03 §4.7 四项诊断字段 schema_version / bridge_version / config_version / h5_release（string，必填，取不到填 "unknown"），写法照 CT-13a（D10-1377）
+type: impl
+# 2026-11-13 content 入账（编排 D10-1377；CT-13b 时发现的缺口）。依据 SPEC_REF 62b5c99338f8 上 03 §4.7 诊断字段一条：agent_*、bridge_call、sdui_card_error 都另带这四项，
+#   四项必填、所在层不存在或尚未取到时填 "unknown"；CT-13a 只给四个 agent_stream_* 加了。03 §7.2：AI 助手页卡片解码失败的 schema_version 落在这四项里（填那张卡的 schema_version）。
+# 只给这两个事件各加四个字段（type string、required true），note 照 03 原文；version 递增；别的字段与事件不动。03 没写的不替它定，note 写「03 未定」并在 PR 里列出报编排：
+#   首页卡片（03 §6.2）的 schema_version 填卡片自带 version 转成的字符串还是 "unknown"；bridge_call 的 schema_version 取哪一版桥 schema；「H5 发出的事件由原生补这两项」指哪两项。
+# 动手前核过（D10-1377）：contracts/openapi.yaml 没有声明 POST /v1/events，apps/api 也没有收事件的路由，服务端现在不校验也不拒收这两个事件，契约收紧不会让未跟上的客户端被拒。
+# 规则测试由独立 Claude 写（先红），写法照 test/spec/contracts/agent-stream-events/**；Opus 实现，Codex contract 评审。依赖 CT-13b 先合并（同改 sdui_card_error 与 version）。
+refs: []
+refs_hash: {}
+deps: [CT-13b]
+paths:
+  - 'specs/events.yaml'
+test_paths:
+  - 'test/spec/contracts/card-bridge-diagnostic-fields/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/card-bridge-diagnostic-fields/**'
+status: todo
