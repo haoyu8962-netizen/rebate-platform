@@ -1,0 +1,24 @@
+id: QA-03b
+repo: rebate-platform
+title: 回放 E2E 第二段（05 QA-03）：在 QA-03a 驱动上接着推注入时钟——账单日出账（settle 队列 bill）→ 一致性校验 → 人工确认（自动化替身调应用层 confirmAdminSettleBill）→ 批次入账（batch_execute → creditOrder）；每段结束台账不变量与 BR-FUND-19 日终校验差异 0，声明最低业务量
+type: impl
+# 2026-11-13 be 入账（编排 D10-1369 / D10-1370 / D10-1422；方案 couli-runs/QA-03/plan.md）。驱动与场景都放 test/replay/qa-03b/**（只增不改），复用 test/replay/qa-03a/ 的驱动与合成订单流（显式传 orderStream）；只用合成数据，不写平台报文格式，provenance.json source synthetic，验收说法「合成数据回放绿」。
+# 出账：注入时钟推到 settle.bill_day（22–28，默认 24）的账单日，直接投递 / 调 settle 任务 bill；结算月只用 packages/domain（settlementBillPeriod）。确认：自动化替身调应用层 confirmAdminSettleBill（D10-1370 ③），场景说明写明权限点 settle.bill 与 TOTP 二次验证由哪几条既有用例覆盖。入账：settle 队列 batch_execute → batch executor → createCreditOrder。
+# 金额期望只按 08（refs）写，不用实现反推；对不上停下报编排。先红照 D10-1370 ④：若需要新实现（只限 settlement 模块；落在别处的先报编排补 paths），照常先红；主干上场景直接绿的，按 test-change、主干须绿、本段至少三处变异实跑各自变红代替先红，变异清单与结果进证据。
+# 场景与驱动由独立方写（Codex 先实跑，额度错按 approvals 36 换独立 Claude）；实现方不改断言。
+refs: [BR-FUND-02, BR-FUND-19]
+refs_hash:
+  BR-FUND-02: 382c4075d2cb
+  BR-FUND-19: 34f619112535
+deps: [QA-03a]
+paths:
+  - 'apps/api/src/modules/settlement/**'
+test_paths:
+  - 'test/replay/qa-03b/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/replay/qa-03b/**'
+status: todo
+pr: null
