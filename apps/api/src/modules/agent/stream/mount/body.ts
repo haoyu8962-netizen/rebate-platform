@@ -8,6 +8,10 @@
 // (followup 22), and the run labels over the same route and prompt (createRunLabels).
 // Production passes no onTrace: its run trace is the core's RunTraceSink (AgentRunBodyDeps.trace)
 // plus the written card frames (./trace.ts, B3-08q); the evaluation wires its toolTrace there.
+// B3-05n (BR-AI-14 细则「无模型降级」): with config, clock, routes and previousIntent (the business
+// assembly's, and optionally its own degradedTools), the degraded path is createRoutedDegradedPath
+// (按问法分流, switch agent.degraded.route_intents); without them, the keyword-only
+// createDegradedPath (with its three corrections), as for the minimal mount.
 import type { AgentRunLabels, RunBodyInput } from '../../http/index.ts';
 import {
   createAgentRunBody,
@@ -15,7 +19,15 @@ import {
   orchestratorLimitsDefaults,
 } from '../../orchestrator/index.ts';
 import { createDegradedPath } from '../../orchestrator/degraded/index.ts';
-import type { AgentRunBodyDeps, ToolTraceFragment } from '../../orchestrator/core/ports.ts';
+import {
+  createRoutedDegradedPath,
+  type RoutedDegradedPathDeps,
+} from '../../orchestrator/degraded/routing.ts';
+import type {
+  AgentRunBodyDeps,
+  OrchestratorTools,
+  ToolTraceFragment,
+} from '../../orchestrator/core/ports.ts';
 import type { ResolvedRoute } from '../../model-gateway/routing/index.ts';
 import { maskForTrace, restorePlaceholders } from '../../preprocess/redact/index.ts';
 import type { RunBody } from '../run/index.ts';
@@ -31,6 +43,15 @@ export interface AgentBodyAssemblyDeps extends Omit<
   onTrace?: (fragment: ToolTraceFragment) => void;
   /** The route the model port follows; the labels predict its first entry. */
   route(appId: string): Promise<ResolvedRoute>;
+  /** B3-05n: what the routed no-model path needs besides tools, texts and errorMsg. All four
+   * present: createRoutedDegradedPath; any missing: the keyword-only path. */
+  config?: RoutedDegradedPathDeps['config'];
+  clock?: RoutedDegradedPathDeps['clock'];
+  routes?: RoutedDegradedPathDeps['routes'];
+  previousIntent?: RoutedDegradedPathDeps['previousIntent'];
+  /** B3-05n: the tools of the degraded path when they differ from the model's (production: the
+   * registry without the model path's relaxation, so the no-model search is never relaxed). */
+  degradedTools?: OrchestratorTools;
 }
 
 export interface AgentBodyAssembly {
@@ -46,15 +67,32 @@ function noModelLabel(): string {
 }
 
 export function createAgentBodyAssembly(deps: AgentBodyAssemblyDeps): AgentBodyAssembly {
-  const { errorMsg, onTrace, route, ...ports } = deps;
+  const {
+    errorMsg,
+    onTrace,
+    route,
+    config,
+    clock,
+    routes,
+    previousIntent,
+    degradedTools,
+    ...ports
+  } = deps;
   const traceMask = (args: unknown, table: Readonly<Record<string, string>>): unknown =>
     maskForTrace(restorePlaceholders(args, table));
-  const degraded = createDegradedPath({
-    tools: ports.tools,
+  const shared = {
+    tools: degradedTools ?? ports.tools,
     texts: ports.texts,
     errorMsg,
     ...(onTrace === undefined ? {} : { onTrace }),
-  });
+  };
+  const degraded =
+    config !== undefined &&
+    clock !== undefined &&
+    routes !== undefined &&
+    previousIntent !== undefined
+      ? createRoutedDegradedPath({ ...shared, config, clock, routes, previousIntent })
+      : createDegradedPath(shared);
   const body = createAgentRunBody({
     ...ports,
     degraded,

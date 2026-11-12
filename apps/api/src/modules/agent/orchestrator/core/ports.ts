@@ -129,7 +129,24 @@ export interface PathInput {
   readonly proceed: InputProceed;
 }
 
-/** Receives a guarded RunContext: cancellation and all output limits still apply. */
+/** B3-05n · BR-AI-14 细则「无模型降级」: the intents the no-model path routes a message to
+ * (① page_guide, ② rule_qa, ③ order_query, ④ earnings_query, ⑤ handoff, ⑥ search). */
+export const DEGRADED_INTENTS = [
+  'page_guide',
+  'rule_qa',
+  'order_query',
+  'earnings_query',
+  'handoff',
+  'search',
+] as const;
+export type DegradedIntent = (typeof DEGRADED_INTENTS)[number];
+
+/**
+ * Receives a guarded RunContext: cancellation and all output limits still apply. The core calls
+ * `run` only. B3-05n: the path registers the intent it routed the message to on that same context
+ * (core/degraded-intent.ts routeDegradedIntent); without a registration the run's intent is
+ * `search`.
+ */
 export interface DegradedPath {
   run(
     request: PathInput & { readonly reason: DegradeReason },

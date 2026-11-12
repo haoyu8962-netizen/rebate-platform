@@ -4,6 +4,7 @@ import type { RedactedText } from '../../stream/admission/index.ts';
 import type { ModelOutcome } from '../../model-gateway/routing/index.ts';
 import type { RunContext, UnnumberedCard } from '../../stream/run/index.ts';
 import { cardReference } from './card-references.ts';
+import { routeDegradedIntent } from './degraded-intent.ts';
 import { createAgentRunBody, orchestratorLimitsDefaults } from './factories.ts';
 import type { AgentRunBodyDeps, OrchestratorTrace, ToolOutcome } from './ports.ts';
 import { intentOf, isStructuredText } from './run.ts';
@@ -486,3 +487,96 @@ it.each([
     for (const reference of issued) expect(exposed).not.toContain(reference);
   },
 );
+
+/** Degraded runs whose trace intent is under test; `run` is the path's one entry. */
+function routedDeps(run: AgentRunBodyDeps['degraded']['run']) {
+  const traces: OrchestratorTrace[] = [];
+  const execute = vi.fn(async (): Promise<ToolOutcome> => ({
+    kind: 'ok',
+    modelView: {},
+    cards: [],
+  }));
+  const deps: AgentRunBodyDeps = {
+    ...baseDeps([], execute),
+    prompt: { current: async () => null },
+    degraded: { run },
+    trace: { record: (_runId, trace) => traces.push(trace) },
+  };
+  return { deps, traces };
+}
+
+it('[AC-B3-05n][BR-AI-14] 降级路径在 core 交给 run 的上下文上登记意图：登记了记该意图，没登记仍是 search', async () => {
+  const contexts: RunContext[] = [];
+  const run = vi.fn<AgentRunBodyDeps['degraded']['run']>(async (_request, ctx) => {
+    contexts.push(ctx);
+    expect(routeDegradedIntent(ctx, 'order_query')).toBe(true);
+    return { kind: 'done', finishReason: 'stop' };
+  });
+  const routed = routedDeps(run);
+  expect(await createAgentRunBody(routed.deps)(input())(context().ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'stop',
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(routed.traces.at(-1)?.intent).toBe('order_query');
+  // The slot is closed with the trace: a late registration changes nothing.
+  expect(routeDegradedIntent(contexts[0]!, 'search')).toBe(false);
+  expect(routed.traces.at(-1)?.intent).toBe('order_query');
+
+  const plain = routedDeps(async () => ({ kind: 'done', finishReason: 'fallback' }));
+  await createAgentRunBody(plain.deps)(input())(context().ctx);
+  expect(plain.traces.at(-1)?.intent).toBe('search');
+
+  // An intent outside the no-model set, or a copy of the context, registers nothing.
+  const odd = routedDeps(async (_request, ctx) => {
+    expect(() => routeDegradedIntent(ctx, 'clarify' as never)).toThrow(RangeError);
+    expect(() => routeDegradedIntent({ ...ctx }, 'order_query')).toThrow();
+    return { kind: 'done', finishReason: 'stop' };
+  });
+  await createAgentRunBody(odd.deps)(input())(context().ctx);
+  expect(odd.traces.at(-1)?.intent).toBe('search');
+  // Not the context of a degraded run call.
+  expect(() => routeDegradedIntent(context().ctx, 'order_query')).toThrow();
+});
+
+it('[AC-B3-05n][BR-AI-14] 模型已给出意图后降级：降级路径登记的意图不改它', async () => {
+  const r = formatDeps([textRound(['{"agent_intent":"clarify"}'])]);
+  const registered: boolean[] = [];
+  const run = vi.fn<AgentRunBodyDeps['degraded']['run']>(async (_request, ctx) => {
+    registered.push(routeDegradedIntent(ctx, 'order_query'));
+    return { kind: 'done', finishReason: 'fallback' };
+  });
+  const handle = vi.fn(async () => null);
+  expect(
+    await createAgentRunBody({ ...r.deps, degraded: { run }, intents: { handle } })(input())(
+      context().ctx,
+    ),
+  ).toEqual({ kind: 'done', finishReason: 'fallback' });
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(registered).toEqual([false]);
+  expect(r.traces.at(-1)?.intent).toBe('clarify');
+});
+
+it('[AC-B3-05n][BR-AI-14] 登记意图后用户中途停止本轮（降级路径尚未返回）：留痕仍记该意图', async () => {
+  const controller = new AbortController();
+  let late: RunContext | undefined;
+  const run = vi.fn<AgentRunBodyDeps['degraded']['run']>(async (_request, ctx) => {
+    routeDegradedIntent(ctx, 'order_query');
+    late = ctx;
+    controller.abort('cancelled');
+    // The path never returns before the core gives up waiting.
+    return new Promise(() => undefined);
+  });
+  const routed = routedDeps(run);
+  const out = context();
+  const result = await createAgentRunBody(routed.deps)(input())({
+    ...out.ctx,
+    signal: controller.signal,
+  });
+  expect(result).toEqual({ kind: 'done', finishReason: 'stop' });
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(routed.traces).toHaveLength(1);
+  expect(routed.traces[0]?.intent).toBe('order_query');
+  expect(routeDegradedIntent(late!, 'earnings_query')).toBe(false);
+  expect(routed.traces[0]?.intent).toBe('order_query');
+});

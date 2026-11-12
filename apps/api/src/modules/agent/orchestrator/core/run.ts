@@ -28,6 +28,8 @@ import type { CardCall } from './card-references.ts';
 import { RunOutput } from './output.ts';
 import { ReplyTemplateCalls, isReplyTemplateTool } from './reply-templates.ts';
 import type { CardWrite } from './output.ts';
+import { openDegradedRoute } from './degraded-intent.ts';
+import type { DegradedRoute } from './degraded-intent.ts';
 import type {
   AgentRunBodyDeps,
   DeliveredProductReceipt,
@@ -50,7 +52,8 @@ const INVALID_FORMAT_REASON: DegradeReason = 'models_failed';
 const PLATFORMS: readonly string[] = platformEnum;
 /** B3-05j: intent of the link branch (deterministic path or its empty fallback). */
 const LINK_INTENT = 'find_by_link';
-/** B3-05j default: a degraded run without a model intent is a keyword search (BR-AI-14). */
+/** B3-05j default: a degraded run without a model intent is a keyword search (BR-AI-14); B3-05n:
+ * unless the degraded path registered the intent it routed the message to (./degraded-intent.ts). */
 const DEGRADED_INTENT = 'search';
 /** The tool the deterministic path reports, one start → end / failed pair per url link. */
 const QUOTE_TOOL = 'get_rebate_quote';
@@ -238,6 +241,8 @@ class AgentRun {
   private readonly linkRegistrations: LinkRegistration[] = [];
   /** Set once the trace is recorded: later path output never changes it. */
   private traced = false;
+  /** B3-05n: the degraded run call's intent slot, read when the trace is recorded. */
+  private routed: DegradedRoute | null = null;
   /** B3-08m: this run offers a template tool, so model text is held until the run's end. */
   private holding = false;
   /** Guard emits of model text not written yet (holding runs only), in guard order. */
@@ -440,11 +445,16 @@ class AgentRun {
   }
 
   private async degrade(proceed: InputProceed, reason: DegradeReason): Promise<RunBodyResult> {
-    // An intent the model already gave is kept; otherwise the no-model keyword search's.
-    if (this.intent === null) this.intent = DEGRADED_INTENT;
-    const result = await this.wait(
-      this.deps.degraded.run({ reason, input: this.input, proceed }, this.pathContext()),
-    );
+    // An intent the model already gave is kept; otherwise the intent the no-model path registers
+    // on the context of this run call (B3-05n · BR-AI-14 细则「无模型降级」 ①–⑥, so the next run's
+    // 承接 reads it), read when the trace is recorded (also after a stop), else the keyword
+    // search's. Nothing changes it once the trace is recorded (recordTrace closes the slot).
+    const modelIntent = this.intent !== null;
+    if (!modelIntent) this.intent = DEGRADED_INTENT;
+    const ctx = this.pathContext();
+    this.routed = openDegradedRoute(ctx, modelIntent);
+    const request = { reason, input: this.input, proceed };
+    const result = await this.wait(this.deps.degraded.run(request, ctx));
     return result === ABORTED ? done('stop') : this.final(result);
   }
 
@@ -883,6 +893,8 @@ class AgentRun {
 
   private recordTrace(): void {
     this.traced = true;
+    const routed = this.routed?.close() ?? null;
+    if (routed !== null) this.intent = routed;
     const sink = this.deps.trace;
     if (sink === undefined) return;
     const summary = this.guard?.summary();

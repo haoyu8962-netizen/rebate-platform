@@ -65,7 +65,7 @@ it('[AC-B3-05c#1][BR-AI-14] 只将模型形态剩余文本传入关键词计划�
   await path.run(request, f.ctx);
   expect(f.enabledSearchPlatforms).toHaveBeenCalledExactlyOnceWith('synthetic-other-app');
   expect(f.searchKeyword).toHaveBeenCalledExactlyOnceWith(
-    { q: '合成<num_1> 500ml 30元以内', platforms: ['taobao', 'jd'], sort: 'relevance' },
+    { q: '合成 500ml 30元以内', platforms: ['taobao', 'jd'], sort: 'relevance' },
     {
       subject: request.input.caller,
       context: request.input.context,
@@ -76,6 +76,11 @@ it('[AC-B3-05c#1][BR-AI-14] 只将模型形态剩余文本传入关键词计划�
     },
   );
   expect(JSON.stringify(f.searchKeyword.mock.calls[0]?.[0])).not.toContain('987654321012345678');
+  // createDegradedPath is the keyword path (agent.degraded.route_intents off): no condition is
+  // taken, but keeping placeholders out of q does not follow the switch (BR-AI-14 细则 开关).
+  expect(JSON.stringify(f.searchKeyword.mock.calls[0]?.[0])).not.toContain('<num_');
+  expect(f.searchKeyword.mock.calls[0]?.[0]).not.toHaveProperty('price_min_fen');
+  expect(f.searchKeyword.mock.calls[0]?.[0]).not.toHaveProperty('price_max_fen');
   expect(f.text).toHaveBeenCalledWith('synthetic-other-app', 'agent.degraded');
   expect(f.events.filter((e) => e.kind === 'suggestions')).toEqual([]);
 });
@@ -169,9 +174,31 @@ it.each(['no_platform', 'no_keyword'] as const)(
       },
       f.ctx,
     );
-    expect(result).toEqual({ kind: 'done', finishReason: 'budget' });
+    if (mode === 'no_platform') {
+      expect(result).toEqual({ kind: 'done', finishReason: 'budget' });
+      expect(f.searchKeyword).not.toHaveBeenCalled();
+      expect(f.events).toEqual([{ kind: 'card', card: notice('暂未找到相关商品。') }]);
+      expect(f.errorMsg).not.toHaveBeenCalled();
+      return;
+    }
+    // BR-AI-14 细则 ⑥: nothing left (punctuation only, no greeting) → no search, done stop,
+    // agent.reply.empty with agent.suggest.empty.1–3; not agent.welcome, not agent.degraded.empty.
+    expect(result).toEqual({ kind: 'done', finishReason: 'stop' });
     expect(f.searchKeyword).not.toHaveBeenCalled();
-    expect(f.events).toEqual([{ kind: 'card', card: notice('暂未找到相关商品。') }]);
+    expect(f.text.mock.calls.map(([, key]) => key)).toEqual([
+      'agent.reply.empty',
+      'agent.suggest.empty.1',
+      'agent.suggest.empty.2',
+      'agent.suggest.empty.3',
+    ]);
+    expect(f.text).not.toHaveBeenCalledWith('synthetic-app', 'agent.welcome');
+    expect(f.text).not.toHaveBeenCalledWith('synthetic-app', 'agent.degraded.empty');
+    const shortcut = { text: '暂未找到相关商品。', send_text: '暂未找到相关商品。' };
+    expect(f.events).toEqual([
+      { kind: 'text', text: '暂未找到相关商品。' },
+      { kind: 'suggestions', items: [shortcut, shortcut, shortcut] },
+    ]);
+    expect(f.events.filter((e) => e.kind === 'card')).toEqual([]);
     expect(f.errorMsg).not.toHaveBeenCalled();
   },
 );

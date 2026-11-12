@@ -46,7 +46,8 @@
 //   ?? emptyOrchestratorTools(), inputCheck:
 //   seams.inputCheck ?? failClosedInputCheck(), degraded: B3-05c createDegradedPath over the same
 //   tools and texts, without onTrace (its cards reach the run trace as written frames, B3-08q);
-//   no intents, no deterministic; review always answers timeout (B3-03j: with deps.assembly, its
+//   no intents, no deterministic (B3-05n: with the assembly's `degraded` ports, the routed
+//   createRoutedDegradedPath over them instead); review always answers timeout (B3-03j: with deps.assembly, its
 //   tools / texts / deterministic / intents replace the minimal ones; seams.tools still wins); the route is fixed to no_model; prompt
 //   always null; limits: orchestratorLimitsDefaults(); traceMask}). B3-03m: an assembly's safety
 //   ports (createStreamReview, ./review.ts) replace the fail-closed input check (seams.inputCheck
@@ -446,6 +447,17 @@ export function createAgentStreamRuntime(
           deterministic: business.deterministic,
           intents: business.intents,
           results: deliveryReceipts(business.results, logger),
+        }),
+    // B3-05n: the routed no-model path (BR-AI-14 细则「无模型降级」), over the assembly's ports;
+    // a test seam's tools still replace the assembly's.
+    ...(business?.degraded === undefined
+      ? {}
+      : {
+          config: business.degraded.config,
+          clock: business.degraded.clock,
+          routes: business.degraded.routes,
+          previousIntent: business.degraded.previousIntent,
+          degradedTools: seams?.tools ?? business.degraded.tools,
         }),
     model: {
       complete: async () => {

@@ -192,6 +192,8 @@ class ToolCallReferences implements CardCall {
 /**
  * Core only: opens the scope of one execute call. `table` must be a fresh object handed to that
  * call alone as ToolContext.placeholders; its identity binds cardReference to the call.
+ * B3-05n: also the no-model path's own tool calls (degraded/routing.ts), on the guarded context
+ * the core handed it, which numbers the cards it delivers.
  */
 export function openCardCall(callId: string, table: Readonly<Record<string, string>>): CardCall {
   if (scopes.has(table)) throw new Error('openCardCall: placeholders table already bound');

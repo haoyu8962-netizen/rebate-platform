@@ -23,6 +23,7 @@ import {
   type DeterministicPath,
   type IntentPort,
   type OrchestratorTools,
+  type ToolContext,
 } from '../../orchestrator/index.ts';
 import { cardReference } from '../../orchestrator/core/card-references.ts';
 import { createDeterministicPath } from '../../orchestrator/deterministic/index.ts';
@@ -37,6 +38,8 @@ import {
   type ResultSetStore,
   type ResultsDeps,
 } from '../../orchestrator/results/index.ts';
+import { conditionsOf, newChainId } from '../../orchestrator/results/shared.ts';
+import type { UnnumberedCard } from '../run/index.ts';
 import { createPgPreviousIntentReader } from '../../store/runs/index.ts';
 import { createPrefillClaimHandler, type ClaimDraftDeps } from '../../tools/claim/index.ts';
 import { createGetMyEarningsHandler, type EarningsReads } from '../../tools/earnings/index.ts';
@@ -170,9 +173,25 @@ export interface AgentStreamAssemblyDeps extends Omit<
   readonly results?: ResultSetStore;
 }
 
+/**
+ * B3-05n (BR-AI-14 细则「无模型降级」): what the routed no-model path needs from the business
+ * assembly. `tools` is the registry (and the keyword search with its result sets) without the
+ * model path's relaxation decorator: the no-model search is never relaxed; its product lists are
+ * saved as result sets with the conditions actually searched, like the keyword search's.
+ */
+export interface AgentDegradedPorts {
+  readonly tools: OrchestratorTools;
+  readonly config: CatalogConfigReader;
+  readonly clock: Clock;
+  readonly routes: IntentDeps['routes'];
+  readonly previousIntent: IntentDeps['continuation']['previousIntent'];
+}
+
 export interface AgentStreamAssembly {
   /** B3-03m: consumed by the runtime; absent on legacy assemblies. */
   readonly safety?: StreamReviewPorts;
+  /** B3-05n: the routed no-model path's ports; absent, the keyword-only degraded path. */
+  readonly degraded?: AgentDegradedPorts;
   readonly tools: OrchestratorTools;
   readonly deterministic: DeterministicPath;
   readonly intents: IntentPort;
@@ -275,10 +294,8 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
     references: createReferenceResolver({ store }),
   };
   const quoteDeps: RebateQuoteDeps = { ...runnerDeps, cardReference };
-  const handlers: ToolHandler[] = [
-    createSearchProductsHandler(searchDeps),
-    createRebateQuoteHandler(quoteDeps),
-  ];
+  const searchHandler = createSearchProductsHandler(searchDeps);
+  const handlers: ToolHandler[] = [searchHandler, createRebateQuoteHandler(quoteDeps)];
   // Identity reaches every port only from the server-built call context (BR-AI-03).
   const dictionary = (appId: string, key: string) => texts.text(appId, key);
   if (ports.orders !== undefined) {
@@ -367,6 +384,23 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
   const results = createResultsTools(inner, resultsDeps);
   const continuation = { ...resultsDeps, tools: results };
   const previousIntents = createPgPreviousIntentReader({ db: deps.db });
+  // B3-08w · BR-AI-01 判定顺序②: the intent of this session's run just before this one; a failed
+  // read is one warn line and null (拿不准按查收益). B3-05n: the no-model path's 承接 too.
+  const previousIntent: IntentDeps['continuation']['previousIntent'] = async (request) => {
+    const { caller, sessionId, runId } = request.input;
+    try {
+      return await previousIntents.previousIntent({ appId: caller.appId, sessionId, runId });
+    } catch (error) {
+      deps.logger.warn(
+        {
+          run_id: runId,
+          error_name: error instanceof Error ? error.name : typeof error,
+        },
+        'agent_previous_intent_failed',
+      );
+      return null;
+    }
+  };
 
   const intents = createIntentPort({
     routes: deps.routes,
@@ -391,23 +425,7 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
     },
     clarification: createClarification(continuation),
     continuation: {
-      // B3-08w · BR-AI-01 判定顺序②: the intent of this session's run just before this one; a
-      // failed read is one warn line and null (拿不准按查收益).
-      async previousIntent(request) {
-        const { caller, sessionId, runId } = request.input;
-        try {
-          return await previousIntents.previousIntent({ appId: caller.appId, sessionId, runId });
-        } catch (error) {
-          deps.logger.warn(
-            {
-              run_id: runId,
-              error_name: error instanceof Error ? error.name : typeof error,
-            },
-            'agent_previous_intent_failed',
-          );
-          return null;
-        }
-      },
+      previousIntent,
       run: createRefinement(continuation).run,
     },
   });
@@ -430,5 +448,94 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
     intents,
     results: receipts,
     texts,
+    degraded: {
+      tools: degradedTools(
+        inner,
+        degradedSearch(searchHandler, deps.logger),
+        store,
+        keywordResults,
+        deps.logger,
+      ),
+      config,
+      clock: deps.clock,
+      routes: deps.routes,
+      previousIntent,
+    },
+  };
+}
+
+/**
+ * B3-05n: the no-model path's search_products. The registry's own handler (the same instance the
+ * model path is offered) behind a registry of that one tool whose switch reads on: schema check,
+ * identity rejection, audience and the server-built call context are the registry's, only
+ * agent.tools.search_products.enabled is not asked. That switch is the model tool's; the no-model
+ * keyword search follows agent.degraded.route_intents and the platform switches (BR-AI-14 细则
+ * 「无模型降级」), so ⑥ keeps price, platforms, sort and exclusions when the model tool is off.
+ */
+function degradedSearch(
+  handler: ToolHandler,
+  logger: AgentStreamAssemblyDeps['logger'],
+): OrchestratorTools['execute'] {
+  const registry = createToolRegistry({
+    handlers: [handler],
+    switches: { get: async () => true },
+    logger,
+  });
+  return (call, ctx) => registry.execute(call, ctx);
+}
+
+/**
+ * B3-05n: the no-model path's tools. search_products goes to its handler without the model tool's
+ * switch (degradedSearch: no relaxation, no clarify, BR-AI-14 细则 ⑥); each product_list it
+ * returns is saved as a result set with the conditions searched and becomes the session's chain
+ * once written (the keyword batches' pending table, B3-03q), so 「换一批」「第 N 个」 continue
+ * from it. A failed save is one warn line; the run keeps its cards. Every other tool is the
+ * registry's, switches included.
+ */
+function degradedTools(
+  inner: OrchestratorTools,
+  search: OrchestratorTools['execute'],
+  store: ResultSetStore,
+  chains: ReturnType<typeof createKeywordResults>,
+  logger: AgentStreamAssemblyDeps['logger'],
+): OrchestratorTools {
+  async function save(args: unknown, ctx: ToolContext, cards: readonly UnnumberedCard[]) {
+    const ids = cards.flatMap((card) => {
+      const id = card.data['result_set_id'];
+      return card.type === 'product_list' && typeof id === 'string' && id !== '' ? [id] : [];
+    });
+    if (ids.length === 0 || !isRecord(args)) return;
+    const chainId = newChainId();
+    const conditions = conditionsOf(args, chainId);
+    if (conditions === null) return;
+    const appId = ctx.subject.appId;
+    for (const id of ids) {
+      await store.save({ id, appId, sessionId: ctx.sessionId, runId: ctx.runId, conditions });
+    }
+    chains.defer({
+      appId,
+      sessionId: ctx.sessionId,
+      chain: { chainId, conditions, status: 'has_products' },
+      resultSetIds: ids,
+    });
+  }
+  return {
+    definitions: (appId, subject) => inner.definitions(appId, subject),
+    enabledSearchPlatforms: (appId) => inner.enabledSearchPlatforms(appId),
+    searchKeyword: (plan, ctx) => inner.searchKeyword(plan, ctx),
+    async execute(call, ctx) {
+      if (call.name !== 'search_products') return inner.execute(call, ctx);
+      const outcome = await search(call, ctx);
+      if (outcome.kind !== 'ok') return outcome;
+      try {
+        await save(call.args, ctx, outcome.cards);
+      } catch (error) {
+        logger.warn(
+          { run_id: ctx.runId, error_name: error instanceof Error ? error.name : typeof error },
+          'agent_keyword_result_set_failed',
+        );
+      }
+      return outcome;
+    },
   };
 }
