@@ -1,0 +1,16 @@
+id: B1-22z
+repo: rebate-platform
+title: test-change：agent.tools.get_my_earnings.enabled 补种子 true（04 §10.2 工具开关默认 on，同 seeds 0003–0005），冻结 [AC-B3-08l#7] 的 UNSEEDED 清单删去这一项（D10-1314，照 D10-327）
+type: test-change
+# 2026-11-12 content 入账（D10-1314 ②，从 B1-22y 拆出；规划 docs/changes/20261112-Agent模型路径与缺口补全.md §3.1 A10「get_my_earnings 开关种子」）。冻结 test/spec/agent/rule-search-wiring/seeds.int.test.ts 的 UNSEEDED 写明「no seed writes them（… D32 get_my_earnings）」并断言无行——B3-16 合并前的口径。新鲜 Claude 只删 UNSEEDED 里这一项（其余项与断言不动），另一位只读复核，#24 标签；新种子文件照 0003–0005 写法（source seed、幂等、不覆盖人工写的值）。不动 agent.enabled / page_guide.enabled（D10-1307 ②）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'db/seeds/0006_agent-earnings-tool-switch.sql'
+  - 'test/spec/agent/rule-search-wiring/seeds.int.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
