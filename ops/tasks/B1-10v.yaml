@@ -1,0 +1,21 @@
+id: B1-10v
+repo: rebate-platform
+title: 工作台卡 claim_review_pending 的计数导出（D10-1401）——orders 模块按 app 计数待审找回（auto_matched + manual_review，带两类分项），复用后台找回列表 adminListClaims 的同一个按状态计数读口，从 orders/index.ts 导出
+type: impl
+# 2026-11-13 入账（admin-backend，编排 D10-1401；方案 couli-runs/DASHBOARD/plan-20261113.md）。只读、不写库；计数 = 后台找回列表同 app、不加别的筛选时 counts.auto_matched + counts.manual_review（契约 AdminDashboardTodo.count「等于该卡列表页的待处理数」），分项 breakdown 即这两个数。
+# 不碰工作台接口（另一张单，deps 本单）。判定只写一份：用 infra/admin-claim-reads.ts 已有的 counts，不另写 SQL 条件。
+refs: [BR-ATTR-18]
+refs_hash:
+  BR-ATTR-18: 84c119d737eb
+deps: []
+paths:
+  - 'apps/api/src/modules/orders/application/claim-review-count*.ts'
+  - 'apps/api/src/modules/orders/index.ts'
+test_paths:
+  - 'test/spec/orders/claim-review-count/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/claim-review-count/**'
+status: todo
