@@ -15,8 +15,21 @@ deps: []
 paths:
   - 'apps/api/src/modules/agent/orchestrator/degraded/**'
   - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/orchestrator/core/**'
 test_paths:
   - 'test/spec/agent/degraded-routing/**'
+  - 'test/spec/agent/orchestrator-degraded/degraded.test.ts'
+modify_existing:
+  - file: 'test/spec/agent/orchestrator-degraded/degraded.test.ts'
+    test: '[AC-B3-05c#1][BR-AI-14] 只将模型形态剩余文本传入关键词计划，不还原长数字或抽取条件'
+    reason: tighten_only
+    ruling: D10-1295
+    note: 'BR-AI-14 细则 ⑥：长数字占位符不进检索词、价格按 BR-AI-08 说法表取出；改钉新检索词原文与取出的价格条件'
+  - file: 'test/spec/agent/orchestrator-degraded/degraded.test.ts'
+    test: '[AC-B3-05c#5][BR-AI-14] %s：不搜索，出 empty notice，保留 budget 完成原因'
+    reason: tighten_only
+    ruling: D10-1295
+    note: 'BR-AI-14 细则 ⑥ 去掉之后什么都不剩：stop、agent.reply.empty / agent.welcome 与 agent.suggest.empty.1–3；只改 no_keyword 一例，no_platform 不动'
 impl: claude
 tester: codex
 accept:
