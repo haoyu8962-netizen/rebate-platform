@@ -3,13 +3,13 @@ repo: rebate-platform
 title: B3-08ze：会话历史接口上线——契约去掉 listAgentSessionMessages 的未实现标记、挂 GET /v1/agent/sessions/{id}/messages 路由、冻结 [AC-CT-08e#1] 改历史接口一行、补 HTTP 层用例（D10-1347）
 type: contract
 # 2026-11-12 agent2 入账（编排 D10-1347、D10-1293 ②：随 A1 拆出、占契约槽；三端联调 C3 等这张）。B3-08zc 已实现框架无关层与 runtime（createAgentHistoryRuntime.listMessages），本单只去 planned 并重生成（planned-operations.gen.ts、route-schemas.gen.ts 等）、controller.ts 挂 GET、HTTP 层用例（路由、鉴权与签名、契约形状、30501 / 10001 / 10005 / 10004 / 30504 / 20001）；冻结 test/spec/contracts/agent-history/http.test.ts [AC-CT-08e#1] 只改历史接口那一行（照 D10-327 / #24）；台账与代码注释里「等 A9」的说法改掉。
-# 排序：B3-08zd 的 (8)「注销后同设备游客归属」必须先合并，本单才挂路由。占契约槽，开工前在 notices 报。RV1，新鲜独立 Claude 写测试，Opus 实现，Codex 评审。
+# 排序：B3-08zd 的 (8)「注销后同设备游客不得当成所有者」并进本单（与挂路由同一张 PR，挂出前已生效）：store/index.ts 游客归属加 user_hash IS NULL（owned / current / ownsRun 一起），规则测试——会员在设备 D 开会话跑一轮、注销清理后 D 上的游客读历史 → 30504、sessions/current 不返回它。D10-1385：冻结 [AC-CT-08e#1] 拆出历史一行为单独 it（AC 号与其余断言不变、期望无未实现标记），.each 只留 feedback、report 两行不动、按展开全名 red_exempt。占契约槽，开工前在 notices 报。RV1，新鲜独立 Claude 写测试，Opus 实现，Codex 评审。
 # prettier-ignore
 refs: [BR-AI-20, BR-AI-19]
 refs_hash:
   BR-AI-20: ed15f04bab16
   BR-AI-19: 3c0c40a3ed93
-deps: [B3-08zc, B3-08zd]
+deps: [B3-08zc]
 paths:
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/src/**'
@@ -18,6 +18,7 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
   - 'apps/api/src/modules/agent/stream/mount/{controller,history,index}.ts'
   - 'apps/api/src/modules/agent/http/**'
+  - 'apps/api/src/modules/agent/store/index.ts'
 test_paths:
   - 'test/spec/agent/session-history-http/**'
   - 'test/spec/contracts/agent-history/http.test.ts'
@@ -26,5 +27,12 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/session-history-http/**'
+red_exempt:
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#1] post /v1/agent/messages/{message_id}/feedback（setAgentMessageFeedback）标注、设备头、版本闸门及 JSON 错误外壳'
+    reason: 冻结 CT-08e 用例，测试体未改，.each 表里只拿出历史接口一行（D10-1385），反馈接口仍 planned、由 B3-08zf 去
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#1] post /v1/agent/messages/{message_id}/report（reportAgentMessage）标注、设备头、版本闸门及 JSON 错误外壳'
+    reason: 冻结 CT-08e 用例，测试体未改，.each 表里只拿出历史接口一行（D10-1385），举报接口仍 planned、由 B3-08zf 去
 status: todo
 pr: null
