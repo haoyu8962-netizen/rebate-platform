@@ -1,0 +1,72 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-agent-route-intents-switch/switch.test.ts > [AC-F1-10kb-SWITCH#1] 无模型降级问法分流开关显示中文名称与「暂停后：」说明（不再分流，链接口令以外一律关键词搜索），其他开关的名称与说明不变",
+    "test/spec/frontend/admin-agent-route-intents-switch/switch.test.ts > [AC-F1-10kb-SWITCH#2] 暂停问法分流开关的确认框用中文名称并带说明，取消不写入"
+  ],
+  "risk_note": "F1-10kb (orchestrator D10-1322 / D10-1329, after B1-22y #3258 registered the switch). The admin kill-switch page names agent.degraded.route_intents (AI 无模型降级问法分流) and gives its impact line per 08 BR-AI-14 细则「无模型降级」: off means no routing by question type and no condition extraction, everything except links and tokens goes to keyword search; it does not read as the assistant closing or search stopping. One file, apps/admin/src/texts/kill-switches.ts; other switches unchanged. Rule tests by an independent Claude (claude-run.sh); tsc -b test 0 errors before commit; Codex spec-test r1 pass (one out-of-scope note: 不抽条件 not pinned, written into the implementation); red on couli-ci (2 tests, right reason). Implementation by Opus 5.5: couli-ci fast run 2 green (every frozen admin test), run.ts static 10/10. Codex general review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex general r1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass (one out-of-scope note); tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-10kb",
+  "spec_ref": "ea7850e2f45ff38d11dbbde41cea2a832cb6e6a8",
+  "spec_commit": "c0b52e82ade1a26a2bbb28ea9e947b7aa5e2aa9d",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c0b52e82ade1a26a2bbb28ea9e947b7aa5e2aa9d",
+      "tree": "e362e543449a6afc1266a0f975e0e9063744fb17",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-12T12:28:37Z",
+      "finished_at": "2026-11-12T12:28:45Z",
+      "red_tests": [
+        "test/spec/frontend/admin-agent-route-intents-switch/switch.test.ts > [AC-F1-10kb-SWITCH#1] 无模型降级问法分流开关显示中文名称与「暂停后：」说明（不再分流，链接口令以外一律关键词搜索），其他开关的名称与说明不变",
+        "test/spec/frontend/admin-agent-route-intents-switch/switch.test.ts > [AC-F1-10kb-SWITCH#2] 暂停问法分流开关的确认框用中文名称并带说明，取消不写入"
+      ],
+      "expected": ["test/spec/frontend/admin-agent-route-intents-switch/switch.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "988430ea33e565d9dee10a8c398b9bbd216ca12b94dc8dc25ae56f9ddcffec31"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "83cc880c0d1a910a3ffeb0230c94eac9ae9c84ea",
+    "specs": "f78e529ad2f2d314556b8c6b89ba069325a3ff9f"
+  }
+}

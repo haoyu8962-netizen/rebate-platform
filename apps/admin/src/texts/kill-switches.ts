@@ -93,6 +93,7 @@ export const killSwitchesTexts = {
     'agent.whitelist_only': 'AI 助手开放范围',
     'agent.model_route': 'AI 模型路由',
     'agent.page_guide.enabled': 'AI 页面引导',
+    'agent.degraded.route_intents': 'AI 无模型降级问法分流',
     'withdraw.enabled': '允许提现申请',
     'withdraw.auto_payout.enabled': '提现自动到账',
     'payout.enabled': '接口打款',
@@ -124,6 +125,8 @@ export const killSwitchesTexts = {
     'agent.whitelist_only': '改为全部用户前，系统先校验登记号与登记文案（BR-AI-12）',
     'agent.model_route': '可切换为备用模型，或无模型降级',
     'agent.page_guide.enabled': '暂停后：页面内不再显示 AI 引导入口',
+    'agent.degraded.route_intents':
+      '暂停后：无模型时不再按问法分流、不抽条件，链接与口令以外一律走关键词搜索',
     'withdraw.enabled': '暂停后：用户提交提现时提示暂停（30306）；已提交的单照常处理',
     'withdraw.auto_payout.enabled': '未开启时：全部提现单转人工审核',
     'payout.enabled': '暂停后：已审核的单保持已审核，不发起接口打款',
