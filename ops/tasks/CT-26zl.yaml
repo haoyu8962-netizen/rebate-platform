@@ -1,0 +1,25 @@
+id: CT-26zl
+repo: rebate-platform
+title: 契约（Agent A9，D10-1287）：会话历史 / 反馈 / 举报三接口去 planned、历史接口用户文本为脱敏形式；50401 补 Agent 事件流 error 帧的情形；texts 补 agent.reply.empty、agent.suggest.empty.1–3、agent.product_list、agent.card.claim_draft.submit、agent.notice.search_disabled.<platform>、agent.notice.quote_failed
+type: contract
+# 2026-11-12 content 入账（D10-1287，规划 docs/changes/20261112-Agent模型路径与缺口补全.md §3.1 A9；契约槽顺序 A9 → be C4 → admin D1）。先于 agent A4–A7、agent2 A1/A7 的实现合并（agent2：A1 不另改契约，13:32）。
+# 依据（SPEC_REF a36eb9360fda）：文案默认句 08 12_TEXT BR-TEXT-22 表（l.1676–1681）与 BR-TEXT-14 表 C（l.1228 claim_draft.submit「提交找回」）；search_disabled 按平台分键 taobao / jd / pdd、平台名写死（同 agent.tool_status.* 平台后缀键）；新键归普通（BR-TEXT-12 细则）。50401 照 08 13 §13.11 l.447（error 帧：每个链接都因服务端原因没出成卡、或无模型商品情境入口报价因服务端原因失败，本条退还，retryable=false，不拿同一 client_msg_id 重试）与 04 §7。历史接口用户文本照 04（agent_messages.text 脱敏）与变更记录 §2.9。只改契约、文案与生成物，不改实现。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
