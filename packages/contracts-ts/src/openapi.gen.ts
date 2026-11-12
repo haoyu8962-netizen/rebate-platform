@@ -3221,7 +3221,10 @@ export interface paths {
          *       shipped yet is left out exactly like a card without the point: the three fund cards
          *       (withdraw_review_pending, settle_bill_pending, recon_diff_open) appear once the fund
          *       line's console tasks ship. `route` is the console route the card opens, with its
-         *       filter; `oldest_at` (optional, nullable) is the earliest waiting item's time;
+         *       filter; settle_bill_pending opens `/settle-bills?awaiting_confirm=true` and its `count`
+         *       equals the `total` of GET /admin/v1/settle-bills with `awaiting_confirm=true` (bills
+         *       whose latest round has a DRAFT batch, AdminSettleBillAwaitingConfirm; 编排裁定
+         *       D10-1402); `oldest_at` (optional, nullable) is the earliest waiting item's time;
          *       `breakdown` (optional) splits the count by a card-specific sub-key (for
          *       claim_review_pending `auto_matched` and `manual_review`); clients ignore keys they do
          *       not know.
@@ -9848,11 +9851,16 @@ export interface paths {
          *     never by these totals. The differences found by the consistency check (差错单) are not
          *     listed by this resource; they are read through GET /admin/v1/recon-diffs.
          *
-         *     Filters combine with AND: `bill_from` and `bill_to` (bill months YYYY-MM, both inclusive)
-         *     and `status` (the derived status at response time). A value outside the enum or the
-         *     pattern is 20001 with `data.fields` naming the parameter; `bill_from` later than
-         *     `bill_to` is 20001 with `data.fields=[bill_from, bill_to]`. A filter set nothing matches
-         *     is an empty page (`items=[]`, `total=0`), not an error.
+         *     Filters combine with AND: `bill_from` and `bill_to` (bill months YYYY-MM, both inclusive),
+         *     `status` (the derived status at response time) and `awaiting_confirm` (true = only bills
+         *     whose latest round has a DRAFT batch, see AdminSettleBillAwaitingConfirm; 编排裁定
+         *     D10-1402). Given together, `status` and `awaiting_confirm` intersect, both decided by the
+         *     same read-time derivation (`status=issued` with `awaiting_confirm=true` is the
+         *     awaiting_confirm set; any other `status` with it is empty). A value outside the enum or
+         *     the pattern, or an `awaiting_confirm` that is not a boolean, is 20001 with `data.fields`
+         *     naming the parameter; `bill_from` later than `bill_to` is 20001 with
+         *     `data.fields=[bill_from, bill_to]`. A filter set nothing matches is an empty page
+         *     (`items=[]`, `total=0`), not an error.
          *
          *     Order: `bill_id` descending. Pages with `page` (as AdminPage; a page past the last one is
          *     `items=[]`) and `page_size` ≤ 200 (above 200 is 20001, as AdminPageSize); `total` is the
@@ -22418,6 +22426,18 @@ export interface components {
         AdminSettleBillTo: components["schemas"]["AdminSettleBillId"];
         /** @description Only bills whose derived status at response time is this one (enum admin_settle_bill_status, BR-FUND-04 细则「月结账单状态」); absent = all. */
         AdminSettleBillStatusFilter: components["schemas"]["AdminSettleBillStatus"];
+        /**
+         * @description true = only bills whose latest round (as defined in AdminSettleBillStatus) has a batch with
+         *     status DRAFT, waiting for confirmation: exactly the bills whose derived status is issued
+         *     through its branch "any batch of the round is DRAFT", not every issued bill (a bill whose
+         *     latest round has no batch left that is not CANCELLED does not count, and a bill still
+         *     generating, generated_at null, is generating, not issued, and does not count either). A
+         *     DRAFT batch outside the latest round does not count (编排裁定 D10-444). Derived at
+         *     response time, like `status`. false or absent = no such filter. Not a boolean → 20001
+         *     with data.fields=[awaiting_confirm]. The list of the workbench card settle_bill_pending
+         *     (编排裁定 D10-1402).
+         */
+        AdminSettleBillAwaitingConfirm: boolean;
         /** @description The bill month (settle_bills.bill_id, YYYY-MM); not matching the pattern, or no bill of the app → 20001 with data.fields=[bill_id]. */
         AdminSettleBillIdPath: components["schemas"]["AdminSettleBillId"];
         /** @description The settlement batch (settle_batches.batch_id) as a bill detail carries it; unknown or of another app → 20001 with data.fields=[batch_id]. */
@@ -42605,6 +42625,18 @@ export interface operations {
                 bill_to?: components["parameters"]["AdminSettleBillTo"];
                 /** @description Only bills whose derived status at response time is this one (enum admin_settle_bill_status, BR-FUND-04 细则「月结账单状态」); absent = all. */
                 status?: components["parameters"]["AdminSettleBillStatusFilter"];
+                /**
+                 * @description true = only bills whose latest round (as defined in AdminSettleBillStatus) has a batch with
+                 *     status DRAFT, waiting for confirmation: exactly the bills whose derived status is issued
+                 *     through its branch "any batch of the round is DRAFT", not every issued bill (a bill whose
+                 *     latest round has no batch left that is not CANCELLED does not count, and a bill still
+                 *     generating, generated_at null, is generating, not issued, and does not count either). A
+                 *     DRAFT batch outside the latest round does not count (编排裁定 D10-444). Derived at
+                 *     response time, like `status`. false or absent = no such filter. Not a boolean → 20001
+                 *     with data.fields=[awaiting_confirm]. The list of the workbench card settle_bill_pending
+                 *     (编排裁定 D10-1402).
+                 */
+                awaiting_confirm?: components["parameters"]["AdminSettleBillAwaitingConfirm"];
             };
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */

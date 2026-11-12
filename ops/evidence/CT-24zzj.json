@@ -1,0 +1,37 @@
+{
+  "task": "CT-24zzj",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "spec_commit": "eb8aa59f752fccd8c5dadc3a7d47202cb045dbe5",
+  "red_tests": [],
+  "risk_note": "RV1 contract (CT-24zzj; BR-FUND-04; D10-1401, D10-1402). listAdminSettleBills gains the optional boolean query parameter awaiting_confirm: true keeps only bills whose latest round has a DRAFT batch, the DRAFT branch of the derived status issued (bills with no batch left in the latest round, and bills still generating, do not count; DRAFT outside the latest round does not count, D10-444). It intersects with status. adminGetDashboard states that settle_bill_pending opens /settle-bills?awaiting_confirm=true and its count equals that filter's total. No response, error code or enum change; implementation and the count are a later task.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base origin/main: pass, no findings."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5726bb7ec47a48b3a51bdc9e61b7d77737065c21",
+    "specs": "0ebd4dbae285ce00472e2def2f286eeafb2a3e7f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "not re-run for this task: test/properties is unchanged from main; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

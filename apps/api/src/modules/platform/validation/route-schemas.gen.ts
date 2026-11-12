@@ -18539,6 +18539,9 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "settling",
             "settled"
           ]
+        },
+        "awaiting_confirm": {
+          "type": "boolean"
         }
       },
       "required": [],
