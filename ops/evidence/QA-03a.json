@@ -1,0 +1,87 @@
+{
+  "risk_note": "QA-03a (05 QA-03 first segment; D10-1369 / D10-1370 / D10-1372 / D10-1417). Production change only in apps/api/src/modules/union/infra/demo/**: the demo union adapter's listOrders yields a deterministic synthetic order stream only when an orderStream is passed explicitly at construction (unified domain DTO only, money via @couli/money, time from the injected Clock, paid -> received -> refunded); no stream keeps throwing adapter_unimplemented (frozen [AC-B1-04w-GOV#6] unchanged and passing); an explicitly empty stream returns an empty page with one outer quota token; APP_ENV=prod still refuses construction before the stream is read and the registry never passes a stream. Orders enter through the real order-sync window -> pipeline; no replay bypass. Synthetic data only (provenance.json source synthetic); acceptance wording is 「合成数据回放绿」, not a pass on real recordings. Post-implementation run on the test machine through the same --red execution path (replay group, real PostgreSQL): couli-runs/QA-03a/red/4, 9/9 passed incl. the scenario follow -> estimate -> receive with ledger invariants and the BR-FUND-19 daily check at zero difference per segment and minimum volumes met (verify-replay does not block merges yet, D10-1372).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/QA-03a/review-codex-money-r1.json, no findings; union is a money / attribution path (RV2). Implementation unchanged since r1 (only rebased for the D10-1419 test restructure); r1 reused."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests and replay driver by Codex (tester codex, 3 attempts: the 2nd fixed the driver's union_pids seed, the 3rd applied D10-1417): test/replay/qa-03a/**, container red red/3 (9 red for the right reason). D10-1419: a fresh independent Claude (not the author, not counted as a test attempt) then did one mechanical restructure for depcruise testcontainers-only-in-int-tests — the scenario renamed follow-estimate-receive.int.test.ts and the @couli/db/testing import moved into it, driver.ts receiving the handles from the caller; assertions, titles and AC numbers unchanged; re-red red/6 (same 9 tests red for the right reason); repo-wide depcruise 0 violations. Codex does not review its own tests: a fresh independent Claude (claude-run.sh) reviewed them, incl. that the driver's identity double / synthetic accounts do not bypass the order pipeline: spec-test r1 pass, no findings (couli-runs/QA-03a/review-claude-spec-test-r1.json); r2 on the D10-1419 increment only (--base d0429721d) pass, no findings (review-claude-spec-test-r2.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#1] 同种子、时钟与窗口重放及重建适配器均确定；跨页不丢单、不串 app，种子影响订单标识",
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#2] BR-FUND-02 合成下单→收货→全退序列：时间来自领域输入，收货不伪造结算佣金",
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#3] 半开窗口边界、注入时钟限制与跨窗口重试：未来收货不能提前出现",
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#6] pdd 显式空订单流返回成功空页，且只扣一次外层配额",
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#6] jd 显式空订单流返回成功空页，且只扣一次外层配额",
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#6] taobao 显式空订单流返回成功空页，且只扣一次外层配额",
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#5] jd 演示流同样只返回统一 DTO 与合成事件标签",
+    "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#5] taobao 演示流同样只返回统一 DTO 与合成事件标签",
+    "test/replay/qa-03a/follow-estimate-receive.int.test.ts > [AC-QA-03a#4] 合成数据回放：公共 HTTP 跟单→真实 window 同步预估→收货；每段台账与日终差异为零，业务量达标"
+  ],
+  "task": "QA-03a",
+  "spec_commit": "5a869f382337aa4652a6dabd96fd9cb12557b16d",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5a869f382337aa4652a6dabd96fd9cb12557b16d",
+      "tree": "9404a6923c44dd8ee04c7770b9e9e237fa5a6169",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T22:01:59Z",
+      "finished_at": "2026-11-12T22:02:09Z",
+      "red_tests": [
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#1] 同种子、时钟与窗口重放及重建适配器均确定；跨页不丢单、不串 app，种子影响订单标识",
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#2] BR-FUND-02 合成下单→收货→全退序列：时间来自领域输入，收货不伪造结算佣金",
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#3] 半开窗口边界、注入时钟限制与跨窗口重试：未来收货不能提前出现",
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#6] pdd 显式空订单流返回成功空页，且只扣一次外层配额",
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#6] jd 显式空订单流返回成功空页，且只扣一次外层配额",
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#6] taobao 显式空订单流返回成功空页，且只扣一次外层配额",
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#5] jd 演示流同样只返回统一 DTO 与合成事件标签",
+        "test/replay/qa-03a/demo-stream.test.ts > [AC-QA-03a#5] taobao 演示流同样只返回统一 DTO 与合成事件标签",
+        "test/replay/qa-03a/follow-estimate-receive.int.test.ts > [AC-QA-03a#4] 合成数据回放：公共 HTTP 跟单→真实 window 同步预估→收货；每段台账与日终差异为零，业务量达标"
+      ],
+      "expected": [
+        "test/replay/qa-03a/demo-stream.test.ts",
+        "test/replay/qa-03a/follow-estimate-receive.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/replay.json",
+          "sha256": "5388edcc62e213308006fa218ed3728595271db203849a53533105e54fef9709"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bd29c515408fad1c8d766f4a4f129a16b47b0d7e",
+    "specs": "8f76891b6e53531f480a4626a10b8dc9c1e82a28"
+  }
+}

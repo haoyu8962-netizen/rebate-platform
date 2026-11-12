@@ -3,6 +3,9 @@
 // domain/types.ts; it never imitates an upstream field name, signature, payload or error code,
 // and its data is never AC-LINK / AC-ORD evidence. Links are https://demo.invalid/… only.
 // APP_ENV=prod refuses to construct it (same rule as replay in infra/endpoints.ts).
+// QA-03a (D10-1417): listOrders serves only an explicitly supplied synthetic order stream
+// (demo-order-stream.ts); without one it stays adapter_unimplemented. The registry never supplies
+// one, so assembled demo endpoints keep refusing listOrders.
 import { createHash } from 'node:crypto';
 import { addFen, mulDivFloor, splitByBp, subFen } from '@couli/money';
 import { GovernanceError, type Clock } from '../../../platform/index.ts';
@@ -22,6 +25,7 @@ import {
   type IdentityClaims,
   type ItemRef,
   type MaterialReq,
+  type OrderPage,
   type OrderQueryOpt,
   type Page,
   type PddAuthority,
@@ -36,7 +40,6 @@ import {
   type UnionIdentity,
   type UnionItem,
   type UnionItemDetail,
-  type UnionOrder,
 } from '../../domain/types.ts';
 import {
   mapTaobaoPrice,
@@ -46,6 +49,7 @@ import {
   type TaobaoPromotion,
 } from '../../domain/taobao-price.ts';
 import { normalizeItemImages, type ItemImages } from '../../domain/item-images.ts';
+import { DemoOrderStream, type DemoOrderStreamOptions } from './demo-order-stream.ts';
 
 /** Internal demo scenarios in CallCtx.scenario; never vendor response codes or payloads.
  * timeout -> Error.code=timeout; rate_limit -> Error.code=quota_exceeded (both GovernanceError);
@@ -83,7 +87,7 @@ const TAOBAO_ONLY_SCENARIOS: readonly DemoScenario[] = ['price_anomaly', 'unknow
 /** B1-06v: the authority query answers "not filed" (only queryPddAuthority reads it). */
 const PDD_ONLY_SCENARIOS: readonly DemoScenario[] = ['pdd_unauthorized'];
 
-export interface DemoUnionOptions {
+export interface DemoUnionOptions extends Partial<DemoOrderStreamOptions> {
   readonly platform: RegisteredPlatform;
   readonly seed: string;
   readonly clock: Clock;
@@ -336,6 +340,8 @@ export class DemoUnionAdapter implements UnionAdapter {
   readonly #byLinkId: ReadonlyMap<string, CatalogEntry>;
   readonly #warn: ((warning: TaobaoPriceWarning) => void) | undefined;
   readonly #priceSettings: TaobaoPriceSettingsReader | undefined;
+  /** null when no orderStream was supplied: listOrders stays adapter_unimplemented. */
+  readonly #orders: DemoOrderStream | null;
 
   constructor(options: DemoUnionOptions) {
     const { platform, seed, clock, environment } = options;
@@ -359,6 +365,10 @@ export class DemoUnionAdapter implements UnionAdapter {
     // The feed walks the same catalog in a different order, so every feed item has a detail.
     this.#feed = Object.freeze([...this.#catalog].reverse());
     this.#byLinkId = new Map(this.#catalog.map((entry) => [entry.linkId, entry]));
+    // QA-03a: validated after the environment guard, so prod never reads a stream.
+    const { orderStream } = options;
+    this.#orders =
+      orderStream === undefined ? null : new DemoOrderStream(platform, seed, orderStream);
   }
 
   async searchItems(q: SearchQuery, ctx: CallCtx): Promise<Page<UnionItem>> {
@@ -557,16 +567,23 @@ export class DemoUnionAdapter implements UnionAdapter {
     });
   }
 
-  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<Page<UnionOrder>> {
-    void win;
-    void opt;
-    void ctx;
-    // TODO(规划/11 §4.5): 演示订单流 — blocked on 订单同步任务（不在 B1-04o 范围，演示数据也不得进入对账）
-    throw new UnionError(
-      'adapter_unimplemented',
-      `Demo union adapter for ${this.platform} has no order feed`,
-      this.platform,
-    );
+  /**
+   * QA-03a (D10-1417): the calling app's rows of the synthetic order stream
+   * (DemoOrderStreamOptions), cut by the window and the injected clock. No stream supplied at
+   * construction -> adapter_unimplemented, exactly as before; an explicitly empty stream -> an
+   * empty page. Scenarios timeout and rate_limit fail the call as elsewhere; rows are never
+   * refused, so `rejected` is never set.
+   */
+  async listOrders(win: TimeWindow, opt: OrderQueryOpt, ctx: CallCtx): Promise<OrderPage> {
+    if (this.#orders === null) {
+      throw new UnionError(
+        'adapter_unimplemented',
+        `Demo union adapter for ${this.platform} has no order feed`,
+        this.platform,
+      );
+    }
+    this.#scenario(ctx);
+    return this.#orders.list(win, opt, ctx.appId, this.#clock.now());
   }
 
   /**

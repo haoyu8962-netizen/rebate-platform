@@ -1,0 +1,10 @@
+{
+  "source": "synthetic",
+  "cap_ids": [],
+  "captured_at": null,
+  "original_sha256": null,
+  "redactor_version": null,
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "description": "领域 DTO 合成订单；不含平台报文，不证明真实平台能力。验收仅称合成数据回放绿。",
+  "minimum_volume": { "imported": 3, "estimated": 3, "received": 3 }
+}
