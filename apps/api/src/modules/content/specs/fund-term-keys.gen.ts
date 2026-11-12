@@ -641,6 +641,8 @@ export const FUND_TERM_KEYS = {
       "order_detail.copy.done",
       "order_detail.view_product",
       "order_list.claim_entry",
+      "order_list.copy_label",
+      "order_list.copy_spoken",
       "order_list.empty",
       "order_list.history_hint",
       "order_list.other_product",

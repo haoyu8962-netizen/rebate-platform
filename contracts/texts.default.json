@@ -613,6 +613,8 @@
     "order_detail.copy.done": "已复制订单号",
     "order_detail.view_product": "查看商品",
     "order_list.claim_entry": "未跟单？去找回",
+    "order_list.copy_label": "复制",
+    "order_list.copy_spoken": "复制订单号 {no}",
     "order_list.deposit_amount": "已付定金 {amount}",
     "order_list.empty": "没有找到符合条件的订单，可到订单页查看，或提交找回。",
     "order_list.filter.month": "月份",

@@ -1,0 +1,93 @@
+{
+  "risk_note": "Texts only (D10-1276). contracts/texts.default.json gets the order-row copy button keys: order_list.copy_label = 复制 and order_list.copy_spoken = 复制订单号 {no} (verbatim 08 BR-TEXT-14 表 C「订单行的复制按钮」at SPEC_REF fd92f36; {no} is the full order_no filled in by the client, no new server field); alphabetical places, version unchanged. specs/fund-term-keys.yaml classifies both as ordinary key by key (BR-TEXT-12 细则「资金术语键」lists them, D10-1275); fund-term-keys.gen.ts regenerated (generate-text-specs --verify 0). Host: order-copy-texts + share-page-texts 24 pass, test/spec/content + contracts 4585 pass, contracts:check 0.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-26zk/review-codex-contract-r1.json, no findings; contract review as D10-1276 asked."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, attempt 2; attempt 1 output was lost to a validator dependency error in the trusted copy): test/spec/content/order-copy-texts/**, container red 12; Codex spec-test r1 pass, no findings (couli-runs/CT-26zk/review-codex-spec-test-r1.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#8] 两个新键在 fund-term-keys.yaml 的 ordinary.keys 里各列一次，不落资金术语段",
+    "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#9] 两句都不命中关键词核对，也不进例外表",
+    "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#10] 加入新键后资金术语清单整体核对（每键恰好一段、例外表）无问题",
+    "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#11] 生成的 fund-term-keys.gen.ts 与 YAML 同步含两个新键",
+    "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#12] 两句过禁用词守卫",
+    "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#1] 两个复制按钮键在 texts.default.json 里，逐字是 08 表 C 的原句",
+    "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#2] 新键加入后 texts 的键仍严格按字母序、不重复",
+    "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#3] 看得见的按钮文字 copy_label 不带变量、没有占位残留",
+    "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#4] 读屏名称 copy_spoken 恰好含一个 {no} 变量，没有别的变量与占位残留",
+    "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#5] 读屏名称代入完整订单号后原样带出整串，不缩写、不脱敏",
+    "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#6] 后台改写 copy_spoken 必须保留 {no}，去掉或换名都被变量校验拒绝",
+    "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#7] 订单列表与订单详情共用 order_list. 两键，复制成功提示仍是原样的 order_detail.copy.done"
+  ],
+  "task": "CT-26zk",
+  "spec_commit": "79fb61b51f6c664cc6e71388e6ed051267fe661b",
+  "spec_ref": "fd92f360e7b8a33c7fb999c9b9a2be88e60f2577",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "79fb61b51f6c664cc6e71388e6ed051267fe661b",
+      "tree": "81ebc03f20b45e4c435e158a0f6426aa2d0a4a2e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T01:31:24Z",
+      "finished_at": "2026-11-12T01:31:26Z",
+      "red_tests": [
+        "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#8] 两个新键在 fund-term-keys.yaml 的 ordinary.keys 里各列一次，不落资金术语段",
+        "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#9] 两句都不命中关键词核对，也不进例外表",
+        "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#10] 加入新键后资金术语清单整体核对（每键恰好一段、例外表）无问题",
+        "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#11] 生成的 fund-term-keys.gen.ts 与 YAML 同步含两个新键",
+        "test/spec/content/order-copy-texts/classification.test.ts > [AC-CT-26zk#12] 两句过禁用词守卫",
+        "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#1] 两个复制按钮键在 texts.default.json 里，逐字是 08 表 C 的原句",
+        "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#2] 新键加入后 texts 的键仍严格按字母序、不重复",
+        "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#3] 看得见的按钮文字 copy_label 不带变量、没有占位残留",
+        "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#4] 读屏名称 copy_spoken 恰好含一个 {no} 变量，没有别的变量与占位残留",
+        "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#5] 读屏名称代入完整订单号后原样带出整串，不缩写、不脱敏",
+        "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#6] 后台改写 copy_spoken 必须保留 {no}，去掉或换名都被变量校验拒绝",
+        "test/spec/content/order-copy-texts/texts.test.ts > [AC-CT-26zk#7] 订单列表与订单详情共用 order_list. 两键，复制成功提示仍是原样的 order_detail.copy.done"
+      ],
+      "expected": [
+        "test/spec/content/order-copy-texts/classification.test.ts",
+        "test/spec/content/order-copy-texts/texts.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "8e3dffd9e5ade5c33aae55d75c7a92ac68e96cf949d08eacd3298b400cbefdfe"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "0668fa438ad89817d4c3efafea1c87b17f235fa7",
+    "specs": "cef2c767d3fe1b5686c8f361ae988b790c9f1da2"
+  }
+}
