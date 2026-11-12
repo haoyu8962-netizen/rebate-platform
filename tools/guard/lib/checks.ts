@@ -259,7 +259,10 @@ export function bannedTermsSpecCheck(
   ]);
 }
 
-/** Scans the given files (task briefs); allow entries apply by the path as given. */
+/**
+ * Scans the given files (task briefs); allow entries apply by the path as given. A term that
+ * only occurs inside repository paths on a line (`ignoreRepoPaths`) does not count.
+ */
 export function bannedTermsFilesCheck(files: readonly string[]): CheckResult {
   const { terms, allow } = loadTermConfig();
   const problems: string[] = [];
@@ -271,7 +274,7 @@ export function bannedTermsFilesCheck(files: readonly string[]): CheckResult {
       problems.push(`${file}: cannot be read`);
       continue;
     }
-    for (const hit of scanText(file, content, terms, allow)) {
+    for (const hit of scanText(file, content, terms, allow, { ignoreRepoPaths: true })) {
       problems.push(`${hit.file}:${hit.line}: banned term "${hit.term}": ${hit.excerpt}`);
     }
   }

@@ -1038,6 +1038,52 @@ describe('run.ts static and the single-purpose guards', () => {
     expect(guard('banned-terms.ts', ['--spec', '--file', 'x']).status).toBe(2);
   });
 
+  it('[CT-06zzzzs] banned-terms --file passes a brief whose only relay is inside repository paths', () => {
+    const dir = makeTree({
+      'brief.md': [
+        '# 任务 B3-16d',
+        '- test_paths：`test/spec/agent/read-exports-relay/**`',
+        "  - 'test/spec/agent/read-exports-relay/**'",
+        '- 只改 `tools/relay/x.ts` 与 ./apps/relay-x/y.ts',
+        '- worktree：/Users/a/couli-runs/worktrees/relay-1/b',
+        '',
+      ].join('\n'),
+    });
+    const res = guard('banned-terms.ts', ['--file', join(dir, 'brief.md')]);
+    expect(res.stderr).not.toContain('banned term');
+    expect(res.status).toBe(0);
+  });
+
+  it('[CT-06zzzzs] banned-terms --file still rejects relay in the text of a brief', () => {
+    const dir = makeTree({
+      'brief.md': [
+        '# 任务',
+        '- test_paths：`test/spec/agent/read-exports-relay/**`',
+        '- 另起 the relay process 转发事件',
+        '- 路径像 foo/relay/bar 的也算',
+        '',
+      ].join('\n'),
+    });
+    const res = guard('banned-terms.ts', ['--file', join(dir, 'brief.md')]);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('brief.md:3: banned term "relay"');
+    expect(res.stderr).toContain('brief.md:4: banned term "relay"');
+    expect(res.stderr).not.toContain('brief.md:2:');
+    expect(res.stdout).toBe('FAIL banned-terms (2 problems)\n');
+  });
+
+  it('[CT-06zzzzs] banned-terms --spec still counts relay inside repository paths', () => {
+    const spec = makeRepo({
+      '规划/03_任务.md': '# 任务\n测试放 test/spec/agent/read-exports-relay/**\n',
+    });
+    const root = makeTree({ SPEC_REF: `${spec.base}\n` });
+    const res = guard('banned-terms.ts', ['--spec', '--cwd', root], {
+      env: { COULI_SPEC_REPO: spec.root },
+    });
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('规划/03_任务.md:2: banned term "relay"');
+  });
+
   it('approvals --require answers from ops/approvals.yaml of the trusted root', () => {
     expect(guard('approvals.ts', ['--require', '0']).status).toBe(0);
     expect(guard('approvals.ts', ['--require', '1']).status).toBe(1);

@@ -106,3 +106,151 @@ describe('parsers', () => {
     expect(parseAllow('# comment\n\ndocs/**\tfoo.*bar\n')).toHaveLength(1);
   });
 });
+
+describe('ignoreRepoPaths (task briefs)', () => {
+  function briefHits(text: string, options?: { ignoreRepoPaths?: boolean }): string[] {
+    return scanText('brief.md', text, terms, allow, options).map((h) => `${h.line}:${h.term}`);
+  }
+
+  const inPaths = [
+    'test_paths: test/spec/agent/read-exports-relay/**',
+    "  - 'test/spec/agent/read-exports-relay/**'",
+    '- `test/spec/agent/read-exports-relay/**`',
+    '只改 `tools/relay/x.ts`',
+    'worktree：./apps/relay-x/y.ts',
+    '路径 /Users/a/couli-runs/worktrees/relay-1/b',
+  ];
+
+  it('[CT-06zzzzs] does not count relay that only appears inside repository paths', () => {
+    for (const line of inPaths) expect(briefHits(line, { ignoreRepoPaths: true })).toEqual([]);
+    expect(briefHits(inPaths.join('\n'), { ignoreRepoPaths: true })).toEqual([]);
+  });
+
+  it('[CT-06zzzzs] accepts every top-level directory, ./, globs, non-ASCII and quoting', () => {
+    const lines = [
+      'packages/relay/src/index.ts',
+      'db/migrations/0042_relay.sql',
+      'contracts/relay.yaml',
+      'specs/relay.csv',
+      'ops/tasks/relay.yaml',
+      'docs/relay/说明.md',
+      'infra/relay/main.tf',
+      'config/relay.json',
+      'fixtures/relay/a.json',
+      'lint/relay.ts',
+      '.github/workflows/relay.yml',
+      './test/relay/x.test.ts',
+      'packages/{relay,money}/**',
+      'apps/api/src/modules/*relay*/**',
+      '/Users/zhixing/我的项目/couli-runs/relay/x',
+      '"tools/relay/x.ts"',
+      '（见 tools/relay/x.ts）',
+      '「apps/relay/x」',
+      '[tools/relay/x.ts](tools/relay/x.ts)',
+      '<apps/relay/x>',
+      'tools/relay/a.ts 和 apps/relay/b.ts',
+      'tools/relay/relay.ts',
+    ];
+    for (const line of lines) expect(briefHits(line, { ignoreRepoPaths: true })).toEqual([]);
+  });
+
+  it('[CT-06zzzzs] a relative repository path is ASCII only: Chinese text glued after it is text, not path (an absolute path may hold non-ASCII)', () => {
+    const opts = { ignoreRepoPaths: true };
+    expect(briefHits('tools/x.ts的relay进程', opts)).toEqual(['1:relay']);
+    expect(briefHits('改 apps/api/src/x.ts里的relay', opts)).toEqual(['1:relay']);
+    // The ASCII part before the Chinese text still is a path.
+    expect(briefHits('test/spec/agent/read-exports-relay/的说明', opts)).toEqual([]);
+    expect(briefHits('/Users/zhixing/我的项目/couli-runs/worktrees/relay-1/b', opts)).toEqual([]);
+  });
+
+  it('[CT-06zzzzs] still counts relay in the text of a line that also has it in a path', () => {
+    expect(
+      briefHits('test/spec/agent/read-exports-relay/** 与 the relay process', {
+        ignoreRepoPaths: true,
+      }),
+    ).toEqual(['1:relay']);
+    expect(briefHits('the relay process 见 tools/relay/x.ts', { ignoreRepoPaths: true })).toEqual([
+      '1:relay',
+    ]);
+    expect(briefHits('tools/x.ts，relay 进程', { ignoreRepoPaths: true })).toEqual(['1:relay']);
+    expect(briefHits('[relay](tools/relay.md)', { ignoreRepoPaths: true })).toEqual(['1:relay']);
+    expect(
+      briefHits(['只改 tools/relay/x.ts', '不设 relay 进程'].join('\n'), {
+        ignoreRepoPaths: true,
+      }),
+    ).toEqual(['2:relay']);
+  });
+
+  it('[CT-06zzzzs] centres the excerpt on the occurrence outside the path', () => {
+    const line = `tools/relay/${'a'.repeat(80)}.ts 然后 the relay process`;
+    const hits = scanText('brief.md', line, terms, [], { ignoreRepoPaths: true });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.excerpt).toContain('the relay process');
+    expect(hits[0]?.excerpt).not.toContain('tools/relay');
+  });
+
+  it('[CT-06zzzzs] still counts path-like text that is not under a repository top-level directory', () => {
+    const opts = { ignoreRepoPaths: true };
+    expect(briefHits('relay/outbox', opts)).toEqual(['1:outbox', '1:relay']);
+    expect(briefHits('foo/relay/bar', opts)).toEqual(['1:relay']);
+    expect(briefHits('relay-x/y', opts)).toEqual(['1:relay']);
+    expect(briefHits('src/relay/x.ts', opts)).toEqual(['1:relay']);
+    expect(briefHits('myapps/relay/x.ts', opts)).toEqual(['1:relay']);
+    expect(briefHits('../tools/relay/x.ts', opts)).toEqual(['1:relay']);
+    expect(briefHits('tools 里的 relay', opts)).toEqual(['1:relay']);
+    expect(briefHits('/relay', opts)).toEqual(['1:relay']);
+    expect(briefHits('https://example.com/relay/x', opts)).toEqual(['1:relay']);
+  });
+
+  it('[CT-06zzzzs] applies the same rule to other terms (outbox, Prisma, queue Redis)', () => {
+    const opts = { ignoreRepoPaths: true };
+    expect(briefHits('事件写 outbox 表', opts)).toEqual(['1:outbox']);
+    expect(briefHits('用 Prisma 读库', opts)).toEqual(['1:Prisma']);
+    expect(briefHits('packages/outbox/x.ts', opts)).toEqual([]);
+    expect(briefHits('db/migrations/0001_outbox_events.sql', opts)).toEqual([]);
+    expect(briefHits('apps/prisma-demo/x.ts', opts)).toEqual([]);
+    expect(briefHits('apps/outbox/x.ts 与 outbox 表', opts)).toEqual(['1:outbox']);
+    expect(briefHits('apps/Prisma/x.ts 里用 Prisma', opts)).toEqual(['1:Prisma']);
+    // A term with whitespace can never lie inside one path token.
+    expect(briefHits('docs/queue Redis', opts)).toEqual(['1:queue Redis']);
+  });
+
+  it('[CT-06zzzzs] does not count a term inside an all-caps hyphenated identifier (a follow-up or task id such as FU-B316B-RELAY), with the same option', () => {
+    const opts = { ignoreRepoPaths: true };
+    // The B3-16d brief: its title names the follow-up FU-B316B-RELAY.
+    expect(
+      briefHits('export { x } 转出也判失败（FU-B316B-RELAY，B3-16b spec-test r1 S2）', opts),
+    ).toEqual([]);
+    expect(briefHits('FU-RELAY-OUTBOX', opts)).toEqual([]);
+    expect(briefHits('见 FU-B316B-RELAY的说明', opts)).toEqual([]);
+    // Not such an identifier: still a hit.
+    expect(briefHits('RELAY 进程', opts)).toEqual(['1:relay']);
+    expect(briefHits('FU-B316B-relay', opts)).toEqual(['1:relay']);
+    expect(briefHits('Relay-Service', opts)).toEqual(['1:relay']);
+    expect(briefHits('relay-FU', opts)).toEqual(['1:relay']);
+    expect(briefHits('FU-B316B-RELAY 和 relay 进程', opts)).toEqual(['1:relay']);
+    // Without the option the identifier still hits (the planning scan keeps its reading).
+    expect(briefHits('FU-B316B-RELAY')).toEqual(['1:relay']);
+  });
+
+  it('[CT-06zzzzs] keeps the old behaviour without the option or with ignoreRepoPaths: false', () => {
+    for (const line of inPaths) {
+      expect(briefHits(line)).toEqual(['1:relay']);
+      expect(briefHits(line, {})).toEqual(['1:relay']);
+      expect(briefHits(line, { ignoreRepoPaths: false })).toEqual(['1:relay']);
+    }
+    expect(briefHits('packages/outbox/x.ts', { ignoreRepoPaths: false })).toEqual(['1:outbox']);
+    expect(scanText('brief.md', 'tools/relay/x.ts', terms, [])).toHaveLength(1);
+  });
+
+  it('[CT-06zzzzs] still applies the allow list first', () => {
+    const prohibition =
+      '| 数据访问 | Kysely + pg | 不要引入 Prisma 或第二种数据访问方式；不要手改生成的类型 |';
+    expect(
+      scanText('规划/02_系统架构.md', `${prohibition} tools/x.ts`, terms, allow, {
+        ignoreRepoPaths: true,
+      }),
+    ).toEqual([]);
+    expect(briefHits(prohibition, { ignoreRepoPaths: true })).toEqual(['1:Prisma']);
+  });
+});

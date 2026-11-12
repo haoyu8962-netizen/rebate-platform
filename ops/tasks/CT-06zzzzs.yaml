@@ -1,0 +1,27 @@
+id: CT-06zzzzs
+repo: rebate-platform
+title: CT-06zzzzs：任务书禁用词检查不拿仓库路径去比——扫任务书（banned-terms --file）时，命中完全落在仓库路径里的不算，规划原文（--spec）口径不变（FU-BRIEF-PATH-DENYWORD，D10-1283 ①）
+type: guard-change
+# 2026-11-12 ops 入账（编排 D10-1283 ①；登记见 notices 2026-11-11 16:03）。起因：B3-16d 的 test_paths 是 test/spec/agent/read-exports-relay/**，
+#   banned-terms.txt 的 word:relay 在路径里按整词命中（两边是连字符），brief.ts 拒生成任务书，Codex 只能用手写的第 9 节。
+# 做法：scanText 加只给任务书用的选项，命中位置完全落在「仓库路径记号」里时不算。仓库路径记号：一段不含空白、引号、反引号、括号的连续字符，
+#   以仓库顶层目录加斜杠开头（apps/ packages/ test/ tools/ db/ contracts/ specs/ ops/ docs/ infra/ config/ fixtures/ lint/ .github/，可带前缀 ./），
+#   或以 / 开头的绝对路径（至少两段）。同一行里在路径外还有命中就照样拒；规划原文扫描（--spec）与 allow 清单都不变。
+# 同一选项下，全大写、带连字符的编号记号（如 FU-B316B-RELAY，正则 ^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$）里的命中也不算：端到端核对时 B3-16d 的任务书标题含该编号仍被拒。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/banned-terms.ts'
+  - 'tools/guard/lib/banned-terms.test.ts'
+  - 'tools/guard/lib/checks.ts'
+  - 'tools/guard/guard-cli.test.ts'
+  - 'tools/ops/brief.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzs.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
