@@ -14050,12 +14050,27 @@ export interface components {
             min_version?: number;
         };
         /**
-         * @description legal.privacy.version, legal.privacy.min_version, legal.agreement.version and the optional
-         *     legal.agreement.min_version (04 §10.1).
+         * @description legal.privacy.version, legal.privacy.min_version, legal.agreement.version, the optional
+         *     legal.agreement.min_version (04 §10.1) and legal.ai_third_party.version (BR-AI-13;
+         *     变更记录 20261112 §3.4 C4).
          */
         ConfigLegal: {
             privacy: components["schemas"]["ConfigLegalPrivacy"];
             agreement: components["schemas"]["ConfigLegalAgreement"];
+            /**
+             * @description The current AgentConsent version (BR-AI-13), from config key
+             *     legal.ai_third_party.version: the version POST /v1/consents records for
+             *     type=ai_third_party; after it is raised every subject must agree again. The server
+             *     sends it on every response with the effective version, the same one the agent consent
+             *     gate checks: the configured value when it is an int32 of at least 1, otherwise 1
+             *     (not configured, or configured with any other value). Delivered per app, the same for
+             *     guests and logged-in users. Optional in the schema only so that the change is
+             *     additive; clients ignore unknown keys of legal.
+             */
+            ai_third_party?: {
+                /** Format: int32 */
+                version: number;
+            };
         };
         ConfigInvite: {
             /** @description Must be false in the MVP (BR-INV-06). */
@@ -27569,6 +27584,9 @@ export interface operations {
                      *           },
                      *           "agreement": {
                      *             "version": 2
+                     *           },
+                     *           "ai_third_party": {
+                     *             "version": 1
                      *           }
                      *         },
                      *         "invite": {

@@ -78,6 +78,14 @@ export type {
   CurrentAgreement,
 } from './application/agreement-reader.ts';
 export { agreementTextUrl } from './domain/agreements/text-url.ts';
+// CT-26zm (BR-AI-13): the effective AgentConsent version, shared by the agent consent gate and
+// GET /v1/config's legal.ai_third_party.version.
+export { effectiveAiConsentVersion } from './domain/ai-consent-version.ts';
+export type {
+  AiConsentVersion,
+  AiConsentVersionEntry,
+  AiConsentVersionKey,
+} from './domain/ai-consent-version.ts';
 export type { AgreementType } from './domain/agreements/index.ts';
 // F1-09g: the cross-module reads app.module assembles for the page audience facts.
 export type { AudienceUnionPlatform, PageAudienceReads } from './application/page-audience.ts';

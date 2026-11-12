@@ -260,6 +260,28 @@ it('[AC-F1-02zr] a malformed legal.agreement.min_version is left out and reporte
   }
 });
 
+it('[AC-CT-26zm] legal.ai_third_party.version is always delivered: configured int32 >= 1, else 1', () => {
+  expect(CLIENT_CONFIG_KEYS).toContain('legal.ai_third_party.version');
+  const absent = build();
+  expect(absent.config!.legal.ai_third_party).toEqual({ version: 1 });
+  expect(absent.invalid).toEqual([]);
+  for (const value of [1, 4, 2_147_483_647]) {
+    const { config, invalid, missing } = build({ 'legal.ai_third_party.version': value });
+    expect(config!.legal.ai_third_party).toEqual({ version: value });
+    expect(invalid).toEqual([]);
+    expect(missing).toEqual([]);
+  }
+});
+
+it('[AC-CT-26zm] a malformed legal.ai_third_party.version gives 1 and is reported once', () => {
+  for (const value of [0, -1, 1.5, '2', null, false, 2_147_483_648, { version: 2 }, [2]]) {
+    const { config, invalid, missing } = build({ 'legal.ai_third_party.version': value });
+    expect(config!.legal.ai_third_party).toEqual({ version: 1 });
+    expect(invalid).toEqual(['legal.ai_third_party.version']);
+    expect(missing).toEqual([]);
+  }
+});
+
 it('[AC-F1-02h] a malformed lkg_max_age_sec falls back whole and is reported', () => {
   for (const value of [0, -1, 1.5, '3600', 2_147_483_648, null]) {
     const { config, invalid } = build({ 'config.lkg_max_age_sec': value });

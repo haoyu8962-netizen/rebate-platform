@@ -26,9 +26,11 @@
 //   30502; BR-ID-03). Any other guest_daily_quota value does not refuse here.
 //
 // createConsentVersionSource({reader, logger?})(appId) — plan G-2: the current AgentConsent version
-//   of the app, from config key `legal.ai_third_party.version`. A positive safe integer is
-//   returned as it is; a missing key or any other value gives 1 and one logger.warn naming the key
-//   (per call; as createQuotaLimitsSource); a reader rejection rejects (no default).
+//   of the app, from config key `legal.ai_third_party.version`. The value is decided by content's
+//   effectiveAiConsentVersion (CT-26zm, D10-1330; the same function GET /v1/config uses): an
+//   integer in [1, 2147483647] is returned as it is; a missing key or any other value gives 1 and
+//   one logger.warn naming the key (per call; as createQuotaLimitsSource); a reader rejection
+//   rejects (no default).
 //
 // createAgentConsentPort({consent, version}).check(caller) — ③ BR-AI-13: consent is identity's
 //   AiConsentReader (B1-02r), created with this same `version` source as its currentVersion (the
@@ -49,7 +51,7 @@
 // Rules for the implementation: also compiled by the `test` project: erasable syntax only,
 // `import type` for type-only imports, relative imports with `.ts`, no NestJS, no process.env.
 import type { RootLogger } from '../../../platform/index.ts';
-import type { ContentReader } from '../../../content/index.ts';
+import { effectiveAiConsentVersion, type ContentReader } from '../../../content/index.ts';
 import type { AgentAccessPort, AgentConsentPort, AgentIdentityPort } from '../../http/index.ts';
 import type { RunGuard, RunGuardTarget } from '../run/index.ts';
 
@@ -123,10 +125,11 @@ export function createAgentIdentityPort(deps: AgentConfigDeps): AgentIdentityPor
 export function createConsentVersionSource(deps: ConsentVersionSourceDeps): ConsentVersionSource {
   return async (appId) => {
     const key = 'legal.ai_third_party.version';
-    const value = (await deps.reader.configValue(appId, key))?.value;
-    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value;
-    deps.logger?.warn({ app_id: appId, config_key: key }, 'agent.consent_version_config_invalid');
-    return 1;
+    const answer = effectiveAiConsentVersion(await deps.reader.configValue(appId, key));
+    if (answer.source !== 'configured') {
+      deps.logger?.warn({ app_id: appId, config_key: key }, 'agent.consent_version_config_invalid');
+    }
+    return answer.version;
   };
 }
 

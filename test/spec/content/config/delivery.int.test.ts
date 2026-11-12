@@ -125,7 +125,11 @@ it('[AC-F1-02c#1] 最小有效配置下发所有约定键、规划缺省与完�
       search_status: Object.fromEntries(PLATFORMS.map((p) => [p, 'off'])),
     },
     texts: {},
-    legal: { privacy: { version: 7, min_version: 3 }, agreement: { version: 5 } },
+    legal: {
+      privacy: { version: 7, min_version: 3 },
+      agreement: { version: 5 },
+      ai_third_party: { version: 1 },
+    },
     invite: { required: false, backfill_hours: 168, bind_phone_guide: true, before_buy_tip: true },
     agent: {
       enabled: false,

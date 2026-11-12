@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import ajvFormats from 'ajv-formats';
 import type { Schema } from '@couli/contracts-ts';
 import { addFen, parseFen, subFen } from '@couli/money';
+import { effectiveAiConsentVersion, type AiConsentVersionKey } from './ai-consent-version.ts';
 import type { ConfigReport, ConfigValues } from './config-values.ts';
 import { isDedicatedConfigKey } from './dedicated-config-keys.ts';
 import { deriveInviteEligibilityDays } from './invite-eligibility.ts';
@@ -86,6 +87,9 @@ const OPTIONAL_CONFIG_KEYS = [
   'growth.invite_reward.eligibility_days',
   // F1-02zr (L24): delivered only when present and int32 >= 1; written by agreement publishing.
   'legal.agreement.min_version',
+  // CT-26zm (BR-AI-13; D10-1330): the AgentConsent version, the key agent's consent gate reads.
+  // Always delivered with effectiveAiConsentVersion's answer (1 when missing or invalid).
+  'legal.ai_third_party.version',
 ] as const;
 
 /** Every config_items key GET /v1/config reads (link_patterns is not one: platform's table). */
@@ -376,6 +380,13 @@ export function buildClientConfig(input: ClientConfigInput): ClientConfig | unde
     undefined,
   );
 
+  // CT-26zm (D10-1330): the one value function decides; only its `invalid` answer is reported.
+  const aiConsentKey: AiConsentVersionKey = 'legal.ai_third_party.version';
+  const aiConsent = effectiveAiConsentVersion(
+    values.has(aiConsentKey) ? { value: values.get(aiConsentKey) } : null,
+  );
+  if (aiConsent.source === 'invalid') report.invalid(aiConsentKey);
+
   // A null canary means "no canary" (not reported); any other wrong shape is reported.
   const canaryValue = values.get('h5_release.canary');
   const canary =
@@ -443,6 +454,7 @@ export function buildClientConfig(input: ClientConfigInput): ClientConfig | unde
         version: agreementVersion ?? 1,
         ...(agreementMin === undefined ? {} : { min_version: agreementMin }),
       },
+      ai_third_party: { version: aiConsent.version },
     },
     invite: {
       // Always false in the MVP (BR-INV-06); never read from config_items.
