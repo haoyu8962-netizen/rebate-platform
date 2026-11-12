@@ -1,0 +1,114 @@
+{
+  "risk_note": "RV2 by the risk map (apps/app.module.ts is outside the allow-list; the code is in the agent module, RV1). Admin Agent trace query, D1 part 1 (D10-1310): adminListAgentSessions and adminGetAgentSession leave planned (the two report operations stay planned). agent.trace only, no step-up; every successful detail read appends one audit agent_trace_view (target agent_sessions:<id>, before / after null, no message text or tool arguments); list, 10403 and 20001 write none. Every query filters by app_id; unknown, other-app and malformed session ids answer the same 20001 [session_id]. No phone, device_id, user_hash, app_id or user_text in either response; pii.* changes nothing. expired = expired_at set and <= now, or last_active_at + 24 h <= now (BR-AI-20), injected Clock. cost_mfen goes through fenToJsonNumber (BR-CALC-01, no silent rounding). Read-only: no new column, no migration; agent/stream/**, agent/http/index.ts, agent/store/index.ts, agent/store/results/**, agent.module.ts and modules/admin/** untouched (agreed with agent2). Host: integration spec/agent/admin-traces + spec/feedback/admin-product-feedbacks 23/23, test/spec/contracts 600/600, apps/api unit 5139 pass, tsc / contracts:check / depcruise 0. After the first CI run: the controller holds only agent-built reader functions, never the database handle (frozen [AC-B3-08k#1] green, 20/20); integration spec/agent/admin-traces re-run 14/14.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "codex-run.sh review --review-type money (RV2 refuses general; D10-1075, medium). Round 1: fail, S0 cost_mfen converted with Number() would silently change values above 2^53 - 1 - fixed with fenToJsonNumber (throws, the boundary answers 50001). Round 2 over the increment: pass, no findings. couli-runs/B1-10q/review-money-r1.json, review-money-r2.json. Round 3 over the increment after the first CI run: the frozen [AC-B3-08k#1] (BR-AI-02 ③, agent never hands its database handle to an external callee) flagged 13 places in the new controller (deps handed to a callback, the instance holding the handle under Nest's decorators); fixed with createAdminTraceReaders in application/admin-traces.ts closing over the database, the controller holding only the list / detail functions - pass, no findings. couli-runs/B1-10q/review-money-r3.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests in test/spec/agent/admin-traces/** by a fresh independent Claude (claude-run.sh, tester claude-independent, approvals #36; spec-test stays independent Claude per D10-1080); the frozen [AC-CT-24zzi#1] / [#2] / [#5] in test/spec/contracts/admin-agent-traces/registration.test.ts changed from planned to implemented inside their blocks only (precedent B1-28s), #3 / #4 / #6 red_exempt. spec-test r1 (fresh independent Claude): fail, S1 detail expired not pinned, S2 tool_calls order by accepted_at not pinned; attempt 2 added detail-order.int.test.ts ([AC-B1-10q#14] / [#15]). spec-test r2: pass, one S2 left (created_at descending would also pass #15). Container red/1 ok, problems 0, exempt 3, 18 red. The three red_exempt entries ([AC-CT-24zzi#3] / [#4] / [#6]) were confirmed by spec-test r1: 'the diff touches only the [AC-CT-24zzi#1], #2 and #5 blocks; the code outside the blocks is byte-identical to main, and #3, #4 and #6 are untouched'; r2 found registration.test.ts unchanged since r1.",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#1] 权限：持 agent.trace 的账号列表与明细都 200；只持 agent.report、什么都不持、只持别的点 → 两个操作都 10403 data.reason=admin_permission_denied（带上 step-up 令牌仍是 10403）；不需要 step-up：带有效的 totp / sms 令牌或乱写的令牌结果与不带完全一样；不带令牌 → 10001",
+    "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#2] 审计（BR-AI-19 查看 trace 记审计）：明细每次成功读取恰写一条 audit_logs，action agent_trace_view、操作人是当前后台账号、目标是该 session_id；连读两次 → 两条；别的账号读别的会话 → 第三条带它自己的操作人与会话；审计行里不出现消息文本、举报文本与工具参数",
+    "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#3] 只读：成功的列表（默认、带筛选、翻页过末页）与参数被拒的列表不写审计；10403、20001（不存在、别的 app 的会话）、10001 的明细请求不写审计；两个操作都不改任何 app 的 agent_sessions / agent_runs / agent_messages / agent_tool_calls / agent_cards 任何行",
+    "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#4] 脱敏：持 agent.trace 再加任何 pii.* 权限点（单个、全部，带或不带 totp step-up 令牌）或超管，明细与列表和只持 agent.trace 时完全一致，不解开任何内容；响应里查不到设备标识、手机号、user_text、app_id",
+    "test/spec/agent/admin-traces/contract.test.ts > [AC-B1-10q#13] 契约去 planned：GET /admin/v1/agent-traces/sessions（adminListAgentSessions）与 GET /admin/v1/agent-traces/sessions/{session_id}（adminGetAgentSession）不再标 x-implementation: planned，生成的 planned 清单不含这两个操作",
+    "test/spec/agent/admin-traces/detail-order.int.test.ts > [AC-B1-10q#14] 明细会话头的 expired 按 BR-AI-20：last_active_at 恰好在 now 前 24 小时 → true；expired_at 已设且已过 → true；last_active_at 在 now 前 23 小时 59 分、expired_at 为空 → false；每种情况明细的 expired 与列表里同一会话的 expired 相等",
+    "test/spec/agent/admin-traces/detail-order.int.test.ts > [AC-B1-10q#15] 明细 tool_calls 的顺序：run_id 大小与 accepted_at 顺序相反、工具调用乱序写入且 created_at 与目标顺序相反时，tool_calls 仍先按 run 的 accepted_at、再按 seq 排，不按 run_id、行写入顺序或 created_at",
+    "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#8] app 隔离与不探测：别的 app 的会话（会员或游客）不出现在列表、total 也不算，按它的 session_id / user_id 筛选得空；明细读别的 app 的会话与不存在的 session_id 都是 20001 data.fields=[session_id]，两者响应除 trace_id 外完全一致，不带对方任何内容",
+    "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#9] 明细会话头与消息：会话头与列表同口径（游客 user_id 为 null）；messages 只含本会话、按时间顺序、字段恰为契约所列，text 原样返回库里的（已脱敏）文本，card_ids、feedback、badcase 与举报四项照库；响应里查不到 user_text、设备标识、手机号、app_id、别的会话的文本",
+    "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#10] 用户数据删除后（BR-AI-22：user_id 换成 user_hash、文本与 report_reason 置空、行保留）：明细 user_id 为 null，消息行都在、text 为 null，被举报的回复 report_reason 为 null 而 report_status 等照旧，工具参数为 null，卡片照库；查不到 user_hash",
+    "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#11] 明细 runs：按 accepted_at 顺序（与 run_id 大小、写入顺序无关），字段恰为契约 14 个；未调模型的 run model / model_snapshot / cost_mfen / token 为 null，进行中的 run latency_ms / finish_reason / ended_at 为 null；filter_hits 照库；不带 user_text",
+    "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#12] 明细 tool_calls 与 cards：tool_calls 只含本会话的，按 run（accepted_at 顺序）再按 seq，args 原样（含 null）、status 与 latency_ms 照库；cards 只含本会话的，按发送顺序，形状同用户侧历史卡片（card_id、type、schema_version、data、fallback_text），收益卡只有 as_of 与 actions",
+    "test/spec/agent/admin-traces/list.int.test.ts > [AC-B1-10q#5] 列表字段：每项恰为契约 8 个字段；游客会话与注销后会话 user_id 为 null，登录用户会话带其 user_id；run_count = 该会话 agent_runs 行数、badcase_count = badcase 的回复数（踩与人工标记都算）、report_count = 被举报（pending 或 handled）的回复数；expired 按 last_active_at + 24 小时 ≤ now 或 expired_at 已到；整份 JSON 查不到手机号、device_id、user_hash、app_id、任何消息文本",
+    "test/spec/agent/admin-traces/list.int.test.ts > [AC-B1-10q#6] 列表筛选：user_id、session_id、badcase、reported 各自生效且可组合（AND）；from 含、to 不含（按 started_at，带 +08:00 或 Z 都行）；total 与筛选一致；from 不早于 to（相等也算）→ 20001 data.fields=[from, to]",
+    "test/spec/agent/admin-traces/list.int.test.ts > [AC-B1-10q#7] 列表排序与翻页：按 started_at 倒序；同一 started_at 的多行翻完所有页恰得全集、不重不漏（page_size 2 与 3）；末页之后 items 为空；每页 total 都是筛选后的总数、page / page_size 照回；带筛选翻页同样不重不漏",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#1] 登记 GET /admin/v1/agent-traces/sessions：adminListAgentSessions、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#2] 登记 GET /admin/v1/agent-traces/sessions/{session_id}：adminGetAgentSession、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单不含 #1 / #2 两个已实现（不再 planned）的操作，仍含 #3 / #4 两个操作"
+  ],
+  "task": "B1-10q",
+  "spec_commit": "08562e48b8dd4cbc70cd6923137e9e4d6bcccd1c",
+  "spec_ref": "ea7850e2f45ff38d11dbbde41cea2a832cb6e6a8",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "08562e48b8dd4cbc70cd6923137e9e4d6bcccd1c",
+      "tree": "c52a1c1a5f14c280efa0b77c7fe87283c407708c",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T12:22:30Z",
+      "finished_at": "2026-11-12T12:22:48Z",
+      "red_tests": [
+        "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#1] 权限：持 agent.trace 的账号列表与明细都 200；只持 agent.report、什么都不持、只持别的点 → 两个操作都 10403 data.reason=admin_permission_denied（带上 step-up 令牌仍是 10403）；不需要 step-up：带有效的 totp / sms 令牌或乱写的令牌结果与不带完全一样；不带令牌 → 10001",
+        "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#2] 审计（BR-AI-19 查看 trace 记审计）：明细每次成功读取恰写一条 audit_logs，action agent_trace_view、操作人是当前后台账号、目标是该 session_id；连读两次 → 两条；别的账号读别的会话 → 第三条带它自己的操作人与会话；审计行里不出现消息文本、举报文本与工具参数",
+        "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#3] 只读：成功的列表（默认、带筛选、翻页过末页）与参数被拒的列表不写审计；10403、20001（不存在、别的 app 的会话）、10001 的明细请求不写审计；两个操作都不改任何 app 的 agent_sessions / agent_runs / agent_messages / agent_tool_calls / agent_cards 任何行",
+        "test/spec/agent/admin-traces/access.int.test.ts > [AC-B1-10q#4] 脱敏：持 agent.trace 再加任何 pii.* 权限点（单个、全部，带或不带 totp step-up 令牌）或超管，明细与列表和只持 agent.trace 时完全一致，不解开任何内容；响应里查不到设备标识、手机号、user_text、app_id",
+        "test/spec/agent/admin-traces/contract.test.ts > [AC-B1-10q#13] 契约去 planned：GET /admin/v1/agent-traces/sessions（adminListAgentSessions）与 GET /admin/v1/agent-traces/sessions/{session_id}（adminGetAgentSession）不再标 x-implementation: planned，生成的 planned 清单不含这两个操作",
+        "test/spec/agent/admin-traces/detail-order.int.test.ts > [AC-B1-10q#14] 明细会话头的 expired 按 BR-AI-20：last_active_at 恰好在 now 前 24 小时 → true；expired_at 已设且已过 → true；last_active_at 在 now 前 23 小时 59 分、expired_at 为空 → false；每种情况明细的 expired 与列表里同一会话的 expired 相等",
+        "test/spec/agent/admin-traces/detail-order.int.test.ts > [AC-B1-10q#15] 明细 tool_calls 的顺序：run_id 大小与 accepted_at 顺序相反、工具调用乱序写入且 created_at 与目标顺序相反时，tool_calls 仍先按 run 的 accepted_at、再按 seq 排，不按 run_id、行写入顺序或 created_at",
+        "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#8] app 隔离与不探测：别的 app 的会话（会员或游客）不出现在列表、total 也不算，按它的 session_id / user_id 筛选得空；明细读别的 app 的会话与不存在的 session_id 都是 20001 data.fields=[session_id]，两者响应除 trace_id 外完全一致，不带对方任何内容",
+        "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#9] 明细会话头与消息：会话头与列表同口径（游客 user_id 为 null）；messages 只含本会话、按时间顺序、字段恰为契约所列，text 原样返回库里的（已脱敏）文本，card_ids、feedback、badcase 与举报四项照库；响应里查不到 user_text、设备标识、手机号、app_id、别的会话的文本",
+        "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#10] 用户数据删除后（BR-AI-22：user_id 换成 user_hash、文本与 report_reason 置空、行保留）：明细 user_id 为 null，消息行都在、text 为 null，被举报的回复 report_reason 为 null 而 report_status 等照旧，工具参数为 null，卡片照库；查不到 user_hash",
+        "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#11] 明细 runs：按 accepted_at 顺序（与 run_id 大小、写入顺序无关），字段恰为契约 14 个；未调模型的 run model / model_snapshot / cost_mfen / token 为 null，进行中的 run latency_ms / finish_reason / ended_at 为 null；filter_hits 照库；不带 user_text",
+        "test/spec/agent/admin-traces/detail.int.test.ts > [AC-B1-10q#12] 明细 tool_calls 与 cards：tool_calls 只含本会话的，按 run（accepted_at 顺序）再按 seq，args 原样（含 null）、status 与 latency_ms 照库；cards 只含本会话的，按发送顺序，形状同用户侧历史卡片（card_id、type、schema_version、data、fallback_text），收益卡只有 as_of 与 actions",
+        "test/spec/agent/admin-traces/list.int.test.ts > [AC-B1-10q#5] 列表字段：每项恰为契约 8 个字段；游客会话与注销后会话 user_id 为 null，登录用户会话带其 user_id；run_count = 该会话 agent_runs 行数、badcase_count = badcase 的回复数（踩与人工标记都算）、report_count = 被举报（pending 或 handled）的回复数；expired 按 last_active_at + 24 小时 ≤ now 或 expired_at 已到；整份 JSON 查不到手机号、device_id、user_hash、app_id、任何消息文本",
+        "test/spec/agent/admin-traces/list.int.test.ts > [AC-B1-10q#6] 列表筛选：user_id、session_id、badcase、reported 各自生效且可组合（AND）；from 含、to 不含（按 started_at，带 +08:00 或 Z 都行）；total 与筛选一致；from 不早于 to（相等也算）→ 20001 data.fields=[from, to]",
+        "test/spec/agent/admin-traces/list.int.test.ts > [AC-B1-10q#7] 列表排序与翻页：按 started_at 倒序；同一 started_at 的多行翻完所有页恰得全集、不重不漏（page_size 2 与 3）；末页之后 items 为空；每页 total 都是筛选后的总数、page / page_size 照回；带筛选翻页同样不重不漏",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#1] 登记 GET /admin/v1/agent-traces/sessions：adminListAgentSessions、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#2] 登记 GET /admin/v1/agent-traces/sessions/{session_id}：adminGetAgentSession、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单不含 #1 / #2 两个已实现（不再 planned）的操作，仍含 #3 / #4 两个操作"
+      ],
+      "expected": [
+        "test/spec/agent/admin-traces/access.int.test.ts",
+        "test/spec/agent/admin-traces/contract.test.ts",
+        "test/spec/agent/admin-traces/detail-order.int.test.ts",
+        "test/spec/agent/admin-traces/detail.int.test.ts",
+        "test/spec/agent/admin-traces/list.int.test.ts",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "469a66779393b5577d7c47179d99628aa7b97e978b055c00288fd3927b41354a"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ce0498a47918314631263ff3e0b88a6d474c1046ea7f94e8b4d28340a44f4ebd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2dc4295a7f19f6434017781938b4ce565e54efe1",
+    "specs": "f78e529ad2f2d314556b8c6b89ba069325a3ff9f"
+  }
+}

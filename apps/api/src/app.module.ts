@@ -42,6 +42,7 @@ import {
   type RuleSyncArticles,
   type StreamReviewOptions,
 } from './modules/agent/index.ts';
+import { AgentAdminModule } from './modules/agent/http/admin/index.ts';
 import { createEarningsReads } from './agent-earnings-reads.ts';
 import {
   CatalogAdminModule,
@@ -5028,6 +5029,11 @@ export class AppModule {
         // AdminOperationGuard (feedback.view, read only, no step-up, no audit row); reads only
         // feedback's own table, scoped to the console's app.
         ...(options.entry === 'admin' ? [FeedbackAdminModule.forAdmin()] : []),
+        // agent's /admin/v1 trace console (B1-10q, CT-24zzi; BR-AI-19): guarded by
+        // AdminOperationGuard (agent.trace, read only, no step-up); reads only agent's own tables,
+        // scoped to the console's app; each successful session read writes one agent_trace_view
+        // audit row (AUDIT_PORT), the list none.
+        ...(options.entry === 'admin' ? [AgentAdminModule.forAdmin()] : []),
         // risk's /admin/v1 appeal console reads (B1-03zd, CT-24r; BR-ID-36): guarded by
         // AdminOperationGuard (risk.appeal, read only); identity's masked phones, normaliser and
         // phone holders, admin's display names and orders' sub-order numbers through ports; only a

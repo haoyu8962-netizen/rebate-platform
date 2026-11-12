@@ -30254,7 +30254,6 @@ paths:
         Undeclared query parameters follow the global rule.
         The rows carry no device identifier, phone number or message text.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -30379,7 +30378,6 @@ paths:
         An earnings_summary card carries no amounts (earnings_summary_history only, as in the user's own history).
         Message reports (`reported_at`, `report_reason`, `report_status`, `report_note`) are null for a message that was never reported; handling a report is POST /admin/v1/agent-traces/reports/{message_id}/handle.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403

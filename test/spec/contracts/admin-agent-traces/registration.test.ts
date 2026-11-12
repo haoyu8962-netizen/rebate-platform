@@ -49,12 +49,82 @@ function registered(index: number): void {
   });
 }
 
-it('[AC-CT-24zzi#1] 登记 GET /admin/v1/agent-traces/sessions：adminListAgentSessions、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001', () => {
-  registered(0);
+it('[AC-CT-24zzi#1] 登记 GET /admin/v1/agent-traces/sessions：adminListAgentSessions、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001', () => {
+  // B1-10q 已实现：同 registered()，只把「x-implementation: planned」改为没有 planned。
+  const [method, path, operationId, permission, codes] = routes[0];
+  const doc = contract();
+  const operation = op(doc, path, method);
+  expect(operation).toBeDefined();
+  expect(operation).toMatchObject({ operationId, 'x-auth': 'admin' });
+  expect(operation['x-implementation']).not.toBe('planned');
+  expect(operation['security']).toEqual([{ adminBearerAuth: [] }]);
+  expect(list(operation['tags'])).toEqual([tag]);
+  for (const key of ['x-signed', 'x-idempotent', 'x-min-version-gate'])
+    expect([undefined, false], key).toContain(operation[key]);
+  expect(operation).not.toHaveProperty('x-step-up');
+  const names = rawParams(doc, path, method).map((raw) =>
+    text(resolve(doc, raw)['name']).toLowerCase(),
+  );
+  for (const name of ['x-step-up-token', 'idempotency-key', 'x-sign', 'x-app-id'])
+    expect(names, name).not.toContain(name);
+  expect(operation).not.toHaveProperty('requestBody');
+  const declared = list(operation['x-error-codes']);
+  expect(declared).toHaveLength(codes.length);
+  expect(declared).toEqual(expect.arrayContaining([...codes]));
+  const catalog = list(yaml('contracts/error-codes.yaml')['codes']).map(object);
+  for (const code of declared)
+    expect(
+      catalog.filter((entry) => entry['code'] === code),
+      String(code),
+    ).toHaveLength(1);
+  const desc = descOf(doc, path, method);
+  expect(desc).toContain(permission);
+  expect(desc).toContain('10403');
+  expect(desc).toMatch(noStepUp);
+  expect(permissionEntry(permission)).toEqual({
+    key: permission,
+    step_up_tier: null,
+    operations: [],
+  });
 });
 
-it('[AC-CT-24zzi#2] 登记 GET /admin/v1/agent-traces/sessions/{session_id}：adminGetAgentSession、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001', () => {
-  registered(1);
+it('[AC-CT-24zzi#2] 登记 GET /admin/v1/agent-traces/sessions/{session_id}：adminGetAgentSession、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001', () => {
+  // B1-10q 已实现：同 registered()，只把「x-implementation: planned」改为没有 planned。
+  const [method, path, operationId, permission, codes] = routes[1];
+  const doc = contract();
+  const operation = op(doc, path, method);
+  expect(operation).toBeDefined();
+  expect(operation).toMatchObject({ operationId, 'x-auth': 'admin' });
+  expect(operation['x-implementation']).not.toBe('planned');
+  expect(operation['security']).toEqual([{ adminBearerAuth: [] }]);
+  expect(list(operation['tags'])).toEqual([tag]);
+  for (const key of ['x-signed', 'x-idempotent', 'x-min-version-gate'])
+    expect([undefined, false], key).toContain(operation[key]);
+  expect(operation).not.toHaveProperty('x-step-up');
+  const names = rawParams(doc, path, method).map((raw) =>
+    text(resolve(doc, raw)['name']).toLowerCase(),
+  );
+  for (const name of ['x-step-up-token', 'idempotency-key', 'x-sign', 'x-app-id'])
+    expect(names, name).not.toContain(name);
+  expect(operation).not.toHaveProperty('requestBody');
+  const declared = list(operation['x-error-codes']);
+  expect(declared).toHaveLength(codes.length);
+  expect(declared).toEqual(expect.arrayContaining([...codes]));
+  const catalog = list(yaml('contracts/error-codes.yaml')['codes']).map(object);
+  for (const code of declared)
+    expect(
+      catalog.filter((entry) => entry['code'] === code),
+      String(code),
+    ).toHaveLength(1);
+  const desc = descOf(doc, path, method);
+  expect(desc).toContain(permission);
+  expect(desc).toContain('10403');
+  expect(desc).toMatch(noStepUp);
+  expect(permissionEntry(permission)).toEqual({
+    key: permission,
+    step_up_tier: null,
+    operations: [],
+  });
 });
 
 it('[AC-CT-24zzi#3] 登记 GET /admin/v1/agent-traces/reports：adminListAgentReports、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001', () => {
@@ -65,11 +135,13 @@ it('[AC-CT-24zzi#4] 登记 POST /admin/v1/agent-traces/reports/{message_id}/hand
   registered(3);
 });
 
-it('[AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单含这四个操作', () => {
+it('[AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单不含 #1 / #2 两个已实现（不再 planned）的操作，仍含 #3 / #4 两个操作', () => {
   const doc = contract();
   const tags = list(doc['tags']).map((entry) => text(at(entry)['name']));
   expect(tags).toContain(tag);
-  for (const [, , operationId] of routes)
+  for (const [, , operationId] of routes.slice(0, 2))
+    expect(plannedOperations.has(operationId), operationId).toBe(false);
+  for (const [, , operationId] of routes.slice(2))
     expect(plannedOperations.has(operationId), operationId).toBe(true);
 });
 
