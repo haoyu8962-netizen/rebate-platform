@@ -1,0 +1,26 @@
+id: CT-26zn
+repo: rebate-platform
+title: 契约文案（C4b）：08 BR-TEXT-14 表 C 第八批新增的 15 行、53 个 AI 助手页界面文案键入 contracts/texts.default.json（句子与表 C 逐字一致），specs/fund-term-keys.yaml 逐键归类（agent.earnings.updated_at 归资金术语，其余 52 个归普通）并重新生成 fund-term-keys.gen.ts（D10-1315 ②(a)、D10-1354）
+type: impl
+# 2026-11-12 be 入账（编排 D10-1354；规划回写第八批 couli#331，SPEC_REF 62b5c99338f8；变更记录 docs/changes/20261112-裁定回写第八批.md §1）。
+# 范围只认表 C 从「AI 助手·对话页骨架」到「AI 助手·举报半屏的校验与操作失败」这 15 行（键名用 `.xxx` 简写的沿用前一个键的前缀），共 53 个键，句子逐字照抄（｜ 只是分隔）；归类只认 BR-TEXT-12 细则「资金术语键」：agent.earnings.updated_at 归资金术语（fund_terms 已有 agent.earnings. 前缀，按 yaml 现有写法登记，不重复冲突），其余 52 个归普通。
+# 不入：客户端草稿表里没登记的键（AI 同意与撤回 18 个只建指针、收益卡资金术语与 earnings.title、读屏键、变更记录 §1.3 不登记的 10 个、ask_ai），不自拟键。texts.default.json 的 version 照同类单不改。服务端不新增字段。
+# Codex 到 11-17 不可用：规则测试与评审照 approvals 36 由独立 Claude（claude-run.sh，证据记 claude-independent）承担；Opus 实现。
+refs: [BR-TEXT-14, BR-TEXT-12]
+refs_hash:
+  BR-TEXT-14: a50d00dfc772
+  BR-TEXT-12: 8073a2f9cb65
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+test_paths:
+  - 'test/spec/content/agent-ui-texts/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/agent-ui-texts/**'
+status: todo
+pr: null
