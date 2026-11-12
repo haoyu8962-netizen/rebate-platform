@@ -1,5 +1,5 @@
-// 会话留痕明细抽屉（adminGetAgentSession）：只显示服务端给的内容——消息为存的脱敏文本（注销后 null
-// 显示占位）、角色、反馈与 badcase、举报时间 / 理由 / 状态 / 处理说明；run 的意图、模型、prompt 版本、
+// 会话留痕明细抽屉（adminGetAgentSession）：只显示服务端给的内容——消息为存的脱敏文本（null 一律显示
+// 中性占位「无文本」；注销清除的条件句说明只在会话 user_id 为 null 且有空文本时出现）、角色、反馈与 badcase、举报时间 / 理由 / 状态 / 处理说明；run 的意图、模型、prompt 版本、
 // 输入 / 输出 token（各自标注）、成本（整数毫分）、耗时、结束原因、输出过滤命中；工具调用（参数为存的
 // 脱敏形式）；卡片类型与降级文本。请求由页面在用户点开时发一次，这里不发请求。
 import {
@@ -202,10 +202,12 @@ function CardItem({ card }: { readonly card: TraceCard }): ReactElement {
 function Section({
   title,
   empty,
+  note,
   children,
 }: {
   readonly title: string;
   readonly empty: string;
+  readonly note?: string | undefined;
   readonly children: readonly ReactElement[];
 }): ReactElement {
   return (
@@ -213,6 +215,7 @@ function Section({
       <Typography.Title level={5} style={{ margin: 0 }}>
         {title}
       </Typography.Title>
+      {note === undefined ? null : <Typography.Text type="secondary">{note}</Typography.Text>}
       {children.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={empty} />
       ) : (
@@ -224,6 +227,11 @@ function Section({
 
 function TraceBody({ data }: { readonly data: SessionDetail }): ReactElement {
   const s = agentTracesTexts.sessions;
+  // 注销清除只可能发生在 user_id 已被置空的会话里；user_id 为空也可能是访客，所以只写条件句。
+  const gapNote =
+    data.user_id === null && data.messages.some((message) => message.text === null)
+      ? t.textGoneNote
+      : undefined;
   return (
     <Flex vertical gap={16}>
       <Descriptions
@@ -238,7 +246,7 @@ function TraceBody({ data }: { readonly data: SessionDetail }): ReactElement {
           { key: 'expired', label: t.expired, children: data.expired ? s.expired : s.live },
         ]}
       />
-      <Section title={t.messages} empty={t.noMessages}>
+      <Section title={t.messages} empty={t.noMessages} note={gapNote}>
         {data.messages.map((message) => (
           <MessageItem key={message.message_id} message={message} />
         ))}

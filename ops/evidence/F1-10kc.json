@@ -1,0 +1,74 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-agent-traces-empty-text/empty-text.test.ts > [AC-F1-10kc-EMPTY#1] user_id 非空的会话（夹具里文本已为 null 的那一个）：每条空文本消息显示「无文本」，不显示 null；抽屉里任何位置（含 aria-label / title）都不出现「注销」",
+    "test/spec/frontend/admin-agent-traces-empty-text/empty-text.test.ts > [AC-F1-10kc-EMPTY#2] 登录用户会话里回复文本为 null（进行中 / 崩溃后收尾）：有文本的提问照原样显示，每条空回复在原位置显示「无文本」，不显示 null 或空白，不出现「注销」",
+    "test/spec/frontend/admin-agent-traces-empty-text/empty-text.test.ts > [AC-F1-10kc-EMPTY#3] user_id 为 null 的会话里回复文本为 null：提问照原样，空回复显示「无文本」；若出现「注销」，所在那段文字须是条件句（含 若 / 如 / 可能），不能断言账号已注销"
+  ],
+  "risk_note": "F1-10kc (orchestrator D10-1341 / D10-1347). In the admin AI assistant record trace drawer (F1-10ka) a message whose text is null now shows the neutral placeholder （无文本） instead of claiming the text was cleared by account deletion, since an empty text may also be an unfinished reply or one closed after a crash. The deletion note appears only when the session's user_id is null and is worded conditionally (若账号已注销，文本已按规定清除；…), because a null user_id is also a guest session (BR-AI-20; BR-AI-22 for deletion); sessions with a user_id never show 注销. Two files under apps/admin/src/pages/agent-traces and texts/agent-traces.ts. Rule tests by an independent Claude (claude-run.sh); tsc -b test 0 errors before commit; Codex spec-test r1 pass; red on couli-ci (3 tests, right reason). Implementation by Opus 5.5: couli-ci fast run 2 green (the new tests and every frozen admin-agent-traces test), run.ts static 10/10. Codex money review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass; tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-10kc",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "spec_commit": "b5e1b32d84e677278b265766aa2b3d0962dc8877",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b5e1b32d84e677278b265766aa2b3d0962dc8877",
+      "tree": "9b64cd433d5dd8773927848fe7e76f3b19e38761",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-12T15:06:40Z",
+      "finished_at": "2026-11-12T15:06:48Z",
+      "red_tests": [
+        "test/spec/frontend/admin-agent-traces-empty-text/empty-text.test.ts > [AC-F1-10kc-EMPTY#1] user_id 非空的会话（夹具里文本已为 null 的那一个）：每条空文本消息显示「无文本」，不显示 null；抽屉里任何位置（含 aria-label / title）都不出现「注销」",
+        "test/spec/frontend/admin-agent-traces-empty-text/empty-text.test.ts > [AC-F1-10kc-EMPTY#2] 登录用户会话里回复文本为 null（进行中 / 崩溃后收尾）：有文本的提问照原样显示，每条空回复在原位置显示「无文本」，不显示 null 或空白，不出现「注销」",
+        "test/spec/frontend/admin-agent-traces-empty-text/empty-text.test.ts > [AC-F1-10kc-EMPTY#3] user_id 为 null 的会话里回复文本为 null：提问照原样，空回复显示「无文本」；若出现「注销」，所在那段文字须是条件句（含 若 / 如 / 可能），不能断言账号已注销"
+      ],
+      "expected": ["test/spec/frontend/admin-agent-traces-empty-text/empty-text.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b8a3aa289ac45aae57bfcb92565b00d570ef2e857eff44ae87856c340e8b20f0"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "89153ccd0ace61c096da8b525ddaa44a09c54bcf",
+    "specs": "97bc5e480c676cf2433a6878d43aa99af587a3c6"
+  }
+}

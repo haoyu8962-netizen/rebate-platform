@@ -1,7 +1,8 @@
 // 后台「AI 助手记录」页文案（菜单 agent-traces，规划/05 F1-10k 的 D1 页面，F1-10ka；契约 CT-24zzi
 // 的 adminListAgentSessions / adminGetAgentSession / adminListAgentReports / adminHandleAgentReport）。
 // 口径取契约说明：超时只看行里的 overdue 与 deadline_at；列表不显示对话文本；明细只显示服务端存的
-// 脱敏文本，注销后为 null 显示占位。错误措辞按 contracts/error-codes.yaml。
+// 脱敏文本，text 为 null 一律显示中性占位「无文本」（进行中、崩溃收尾、注销清除都可能为空）；注销清除的
+// 说明只在会话 user_id 为 null 时以条件句出现（user_id 为 null 也可能是访客会话）。错误措辞按 contracts/error-codes.yaml。
 export const agentTracesTexts = {
   title: 'AI 助手记录',
   dash: '—',
@@ -133,7 +134,8 @@ export const agentTracesTexts = {
       user: '用户',
       assistant: '助手',
     },
-    textGone: '（文本已随账号注销清除）',
+    textGone: '（无文本）',
+    textGoneNote: '若账号已注销，文本已按规定清除；空文本也可能是回复未写完或异常收尾。',
     feedback: {
       up: '赞',
       down: '踩',
