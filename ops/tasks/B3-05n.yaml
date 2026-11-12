@@ -26,10 +26,15 @@ modify_existing:
     ruling: D10-1295
     note: 'BR-AI-14 细则 ⑥：长数字占位符不进检索词、价格按 BR-AI-08 说法表取出；改钉新检索词原文与取出的价格条件'
   - file: 'test/spec/agent/orchestrator-degraded/degraded.test.ts'
-    test: '[AC-B3-05c#5][BR-AI-14] %s：不搜索，出 empty notice，保留 budget 完成原因'
+    test: '[AC-B3-05c#5][BR-AI-14] no_keyword：不搜索，出 empty notice，保留 budget 完成原因'
     reason: tighten_only
     ruling: D10-1295
-    note: 'BR-AI-14 细则 ⑥ 去掉之后什么都不剩：stop、agent.reply.empty / agent.welcome 与 agent.suggest.empty.1–3；只改 no_keyword 一例，no_platform 不动'
+    note: 'BR-AI-14 ⑥ 去掉之后什么都不剩：stop、agent.reply.empty、agent.suggest.empty.1–3（it.each 行逐行声明）'
+  - file: 'test/spec/agent/orchestrator-degraded/degraded.test.ts'
+    test: '[AC-B3-05c#5][BR-AI-14] no_platform：不搜索，出 empty notice，保留 budget 完成原因'
+    reason: tighten_only
+    ruling: D10-1295
+    note: '本行断言不变（D10-1295 no_platform 不动）；共用回调随 no_keyword 改动，按 CT-06zzzk 逐行声明'
 impl: claude
 tester: codex
 accept:
