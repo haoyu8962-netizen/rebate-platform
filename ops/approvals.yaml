@@ -465,3 +465,9 @@ approvals:
     granted: true
     date: '2026-11-12'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动）：只在先红之前多跑一项已有的检查，把 CI 才会报的问题提前到本机，属收紧，不放宽任何判定。测试文件夹具里的写法被 test-guard 自己扫到，ops 把字符串拆开拼接（夹具内容与断言不变），接受。编排按 approvals 16 / 24 核 diff 后加标签（#3231，头 6d8a1b5fd281；Codex 对抗评审 r1 通过、r2 增量通过）；事后向负责人报告；D10-1235、D10-1283、D10-1298。'
+  - id: 75
+    row: 4
+    title: 'CT-06zzzzu：verify-container 新增可选环境变量 COULI_VERIFY_MEMORY（正整数加 m 或 g，如 9g、512m）：设了值就给跑测试的容器（--red 各组、--browser、--fast、完整 verify，含宿主服务模式）在 docker run 上加 --memory 与 --memory-swap（同值、不用 swap），pnpm fetch、PostgreSQL、Redis 容器与镜像构建不加；不设或为空时与原来逐字相同；取值不合法时退出 2、什么都不跑；--dry-run 的计划带 memory 字段；工具测试随之增补'
+    granted: true
+    date: '2026-11-12'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动）：只给验证容器加一个可选的内存上限，默认不变，不改任何测试与判定；用途是让局域网测试机在启动时就带上限（原先 docker update 在启动之后才生效，留有空档，D10-1219）。编排按 approvals 16 / 24 核 diff 后加标签（#3237，头 844e585f5970；Codex 对抗评审 r1 通过，容器 verify:fast 通过）；事后向负责人报告；D10-1219、D10-1283、D10-1302。'
