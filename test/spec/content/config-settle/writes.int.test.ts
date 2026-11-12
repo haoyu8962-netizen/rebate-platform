@@ -229,6 +229,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
   // B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095): then order.blacklist_clawback.enabled.
   // B1-18c (D10-1250 ①, BR-CALC-25): then union.taobao / jd / pdd.subsidy_itemized, in this order.
   // B1-18e (D10-1250 ②, BR-CALC-03): then union.taobao / pdd.service_fee_bp, in this order.
+  // B1-22y (Agent A10, D10-1306 / D10-1307): then the 26 Agent keys, in this order.
   const keys = items.map((item) => item.key);
   const tail = [
     ...inviteNow().map((entry) => entry.key),
@@ -331,6 +332,32 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'union.pdd.subsidy_itemized',
     'union.taobao.service_fee_bp',
     'union.pdd.service_fee_bp',
+    'agent.member_daily_quota',
+    'agent.guest_daily_quota',
+    'agent.guest_ip_daily_quota',
+    'agent.explain_order.order_no_daily_max',
+    'agent.whitelist_user_ids',
+    'agent.safety.block_level.input',
+    'agent.safety.block_level.output',
+    'legal.ai_third_party.version',
+    'agent.result_check.provider',
+    'agent.guard.buffer_max_chars',
+    'agent.safety.timeout_ms',
+    'agent.daily_budget_fen',
+    'agent.budget.reserve_mfen_per_run',
+    'agent.context.max_turns',
+    'agent.context.max_chars',
+    'agent.orders.default_span_days',
+    'agent.orders.max_span_days',
+    'agent.model_timeout_ms',
+    'agent.search_cache_ttl_s',
+    'agent.rag.min_score',
+    'agent.guest_login_to_view.taobao',
+    'agent.guest_login_to_view.jd',
+    'agent.guest_login_to_view.pdd',
+    'agent.require_phone',
+    'agent.filing_text',
+    'agent.examples',
   ];
   const settleEnd = keys.length - tail.length;
   const settleStart = settleEnd - 16;

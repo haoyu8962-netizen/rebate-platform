@@ -28,7 +28,7 @@ function spec(key: string) {
 
 it('[AC-F1-02zj#2] settle.* items are appended after the 29 earlier items, editable config.business', () => {
   const registry = configRegistry();
-  expect(registry).toHaveLength(150);
+  expect(registry).toHaveLength(176);
   expect(registry[28]!.key).toBe('external_hosts');
   expect(registry.slice(29, 45).map((entry) => entry.key)).toStrictEqual(SETTLE_KEYS);
   for (const entry of registry.slice(29, 45)) {
@@ -127,4 +127,80 @@ it('[AC-F1-02zx#1] growth.invite_reward.eligibility_days is the last item, whole
   for (const value of [0, 3651, 30.5, '30', Number.NaN]) {
     expect(configValueFits(days, value), String(value)).toBe(false);
   }
+});
+
+// B1-22y (D10-1306 / D10-1307): the Agent keys, appended last in this order, all editable.
+const AGENT_A10: readonly (readonly [string, string, string, unknown])[] = [
+  ['agent.member_daily_quota', 'number', 'config.risk', [0, 2147483647]],
+  ['agent.guest_daily_quota', 'number', 'config.risk', [0, 2147483647]],
+  ['agent.guest_ip_daily_quota', 'number', 'config.risk', [0, 2147483647]],
+  ['agent.explain_order.order_no_daily_max', 'number', 'config.risk', [1, 2147483647]],
+  ['agent.whitelist_user_ids', 'object', 'config.risk', null],
+  ['agent.safety.block_level.input', 'enum', 'config.risk', ['low', 'medium', 'high']],
+  ['agent.safety.block_level.output', 'enum', 'config.risk', ['low', 'medium', 'high']],
+  ['legal.ai_third_party.version', 'number', 'config.risk', [1, 2147483647]],
+  ['agent.result_check.provider', 'enum', 'config.risk', ['rules', 'jev']],
+  ['agent.guard.buffer_max_chars', 'number', 'config.risk', [1, 2147483647]],
+  ['agent.safety.timeout_ms', 'number', 'config.risk', [1, 2147483647]],
+  ['agent.daily_budget_fen', 'number', 'config.business', [0, 2147483647]],
+  ['agent.budget.reserve_mfen_per_run', 'number', 'config.business', [0, 2147483647]],
+  ['agent.context.max_turns', 'number', 'config.general', [0, 2147483647]],
+  ['agent.context.max_chars', 'number', 'config.general', [1, 2147483647]],
+  ['agent.orders.default_span_days', 'number', 'config.general', [1, 2147483647]],
+  ['agent.orders.max_span_days', 'number', 'config.general', [1, 2147483647]],
+  ['agent.model_timeout_ms', 'number', 'config.general', [1, 2147483647]],
+  ['agent.search_cache_ttl_s', 'number', 'config.general', [0, 300]],
+  ['agent.rag.min_score', 'number', 'config.general', null],
+  ['agent.guest_login_to_view.taobao', 'boolean', 'config.general', null],
+  ['agent.guest_login_to_view.jd', 'boolean', 'config.general', null],
+  ['agent.guest_login_to_view.pdd', 'boolean', 'config.general', null],
+  ['agent.require_phone', 'boolean', 'config.risk', null],
+  ['agent.filing_text', 'string', 'config.general', null],
+  ['agent.examples', 'object', 'config.general', null],
+];
+
+it('[AC-B1-22y#1] the Agent keys are the last 26 items, editable, with their type, point and bounds or options', () => {
+  const registry = configRegistry();
+  expect(registry.slice(-AGENT_A10.length).map((entry) => entry.key)).toStrictEqual(
+    AGENT_A10.map(([key]) => key),
+  );
+  for (const [key, valueType, permission, extra] of AGENT_A10) {
+    const entry = spec(key);
+    expect([entry.valueType, entry.permission, entry.adminEditable], key).toStrictEqual([
+      valueType,
+      permission,
+      true,
+    ]);
+    if (valueType === 'enum') {
+      expect(entry.options, key).toStrictEqual(extra);
+    } else {
+      expect(entry.options, key).toBeNull();
+    }
+    if (valueType === 'number' && extra !== null) {
+      const [min, max] = extra as [number, number];
+      expect(entry.range, key).toStrictEqual({ integer: true, min, max });
+    } else {
+      expect('range' in entry, key).toBe(false);
+    }
+  }
+});
+
+it('[AC-B1-22y#2] Agent key values: integer bounds, enum options, the 0..300 cache cap, arrays as objects', () => {
+  expect(configValueFits(spec('agent.guest_daily_quota'), 0)).toBe(true);
+  expect(configValueFits(spec('agent.guest_daily_quota'), -1)).toBe(false);
+  expect(configValueFits(spec('agent.guest_daily_quota'), 2.5)).toBe(false);
+  expect(configValueFits(spec('agent.guest_daily_quota'), '3')).toBe(false);
+  expect(configValueFits(spec('agent.safety.timeout_ms'), 0)).toBe(false);
+  expect(configValueFits(spec('agent.context.max_turns'), 0)).toBe(true);
+  expect(configValueFits(spec('agent.search_cache_ttl_s'), 300)).toBe(true);
+  expect(configValueFits(spec('agent.search_cache_ttl_s'), 301)).toBe(false);
+  expect(configValueFits(spec('agent.safety.block_level.input'), 'medium')).toBe(true);
+  expect(configValueFits(spec('agent.safety.block_level.output'), 'none')).toBe(false);
+  expect(configValueFits(spec('agent.result_check.provider'), 'jev')).toBe(true);
+  expect(configValueFits(spec('agent.result_check.provider'), 'model')).toBe(false);
+  expect(configValueFits(spec('agent.rag.min_score'), 0.2)).toBe(true);
+  expect(configValueFits(spec('agent.whitelist_user_ids'), ['u1'])).toBe(true);
+  expect(configValueFits(spec('agent.whitelist_user_ids'), 'u1')).toBe(false);
+  expect(configValueFits(spec('agent.filing_text'), '')).toBe(true);
+  expect(configValueFits(spec('agent.require_phone'), 'true')).toBe(false);
 });

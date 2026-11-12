@@ -175,6 +175,35 @@ const SUBSIDY_ITEMIZED_KEYS = [
 ];
 // B1-18e (D10-1250 ②, BR-CALC-03): union.taobao / pdd.service_fee_bp follow them, in this order, now ending the tail.
 const SERVICE_FEE_BP_KEYS = ['union.taobao.service_fee_bp', 'union.pdd.service_fee_bp'];
+// B1-22y (Agent A10, D10-1306 / D10-1307): the 26 Agent keys follow them, in this order, now ending the tail.
+const AGENT_A10_KEYS = [
+  'agent.member_daily_quota',
+  'agent.guest_daily_quota',
+  'agent.guest_ip_daily_quota',
+  'agent.explain_order.order_no_daily_max',
+  'agent.whitelist_user_ids',
+  'agent.safety.block_level.input',
+  'agent.safety.block_level.output',
+  'legal.ai_third_party.version',
+  'agent.result_check.provider',
+  'agent.guard.buffer_max_chars',
+  'agent.safety.timeout_ms',
+  'agent.daily_budget_fen',
+  'agent.budget.reserve_mfen_per_run',
+  'agent.context.max_turns',
+  'agent.context.max_chars',
+  'agent.orders.default_span_days',
+  'agent.orders.max_span_days',
+  'agent.model_timeout_ms',
+  'agent.search_cache_ttl_s',
+  'agent.rag.min_score',
+  'agent.guest_login_to_view.taobao',
+  'agent.guest_login_to_view.jd',
+  'agent.guest_login_to_view.pdd',
+  'agent.require_phone',
+  'agent.filing_text',
+  'agent.examples',
+];
 
 it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项', () => {
   const registry = configRegistry();
@@ -215,6 +244,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...BLACKLIST_CLAWBACK_KEYS,
     ...SUBSIDY_ITEMIZED_KEYS,
     ...SERVICE_FEE_BP_KEYS,
+    ...AGENT_A10_KEYS,
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);

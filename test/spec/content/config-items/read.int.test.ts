@@ -19,6 +19,7 @@ import {
   BLACKLIST_CLAWBACK,
   SUBSIDY_ITEMIZED,
   SERVICE_FEE_BP,
+  AGENT_A10,
   FEEDBACK,
   KEYS,
   LABOR,
@@ -82,6 +83,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   // B1-02zzh: + device.invalid_hashes; B2-04zzlt: + order.blacklist_clawback.enabled.
   // B1-18c (D10-1250 ①, BR-CALC-25): + union.taobao / jd / pdd.subsidy_itemized, in this order.
   // B1-18e (D10-1250 ②, BR-CALC-03): + union.taobao / pdd.service_fee_bp, in this order.
+  // B1-22y (Agent A10, D10-1306 / D10-1307): + the 26 Agent keys, in this order.
   const tail = [
     ...PAYOUT,
     ...RISK_WITHDRAW,
@@ -114,6 +116,7 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AGENT_A10,
   ];
   expect(items).toHaveLength(expectedNow().length + tail.length);
   expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(

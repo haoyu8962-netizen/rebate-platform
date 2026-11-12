@@ -526,6 +526,52 @@ export const SERVICE_FEE_BP_UNSEEDED: readonly string[] = [
   'union.taobao.service_fee_bp',
   'union.pdd.service_fee_bp',
 ];
+// B1-22y (Agent A10, D10-1287 / D10-1306 / D10-1307): then the 26 Agent keys, in this order;
+// all editable, options null except the three config.risk enums. Admission, quota and safety
+// items config.risk (agent.require_phone too, though listed with the texts), the BR-AI-16 budget
+// config.business, the rest config.general. Each integer key carries its inclusive range
+// (agent.context.max_turns from 0 = 不带历史). Not part of expectedNow() either.
+export interface AgentExpected extends Expected {
+  /** B1-22y: the integer range of a number key; absent for the other keys (and rag.min_score). */
+  readonly range?: { readonly integer: true; readonly min: number; readonly max: number };
+}
+const agentInt = (
+  key: string,
+  permission: Permission,
+  min: number,
+  max = 2147483647,
+): AgentExpected => ({ ...row(key, 'number', permission), range: { integer: true, min, max } });
+const AGENT_LEVELS: readonly string[] = ['low', 'medium', 'high'];
+export const AGENT_A10: readonly AgentExpected[] = [
+  agentInt('agent.member_daily_quota', 'config.risk', 0),
+  agentInt('agent.guest_daily_quota', 'config.risk', 0),
+  agentInt('agent.guest_ip_daily_quota', 'config.risk', 0),
+  agentInt('agent.explain_order.order_no_daily_max', 'config.risk', 1),
+  row('agent.whitelist_user_ids', 'object', 'config.risk'),
+  { ...row('agent.safety.block_level.input', 'enum', 'config.risk'), options: AGENT_LEVELS },
+  { ...row('agent.safety.block_level.output', 'enum', 'config.risk'), options: AGENT_LEVELS },
+  agentInt('legal.ai_third_party.version', 'config.risk', 1),
+  { ...row('agent.result_check.provider', 'enum', 'config.risk'), options: ['rules', 'jev'] },
+  agentInt('agent.guard.buffer_max_chars', 'config.risk', 1),
+  agentInt('agent.safety.timeout_ms', 'config.risk', 1),
+  agentInt('agent.daily_budget_fen', 'config.business', 0),
+  agentInt('agent.budget.reserve_mfen_per_run', 'config.business', 0),
+  agentInt('agent.context.max_turns', 'config.general', 0),
+  agentInt('agent.context.max_chars', 'config.general', 1),
+  agentInt('agent.orders.default_span_days', 'config.general', 1),
+  agentInt('agent.orders.max_span_days', 'config.general', 1),
+  agentInt('agent.model_timeout_ms', 'config.general', 1),
+  agentInt('agent.search_cache_ttl_s', 'config.general', 0, 300),
+  row('agent.rag.min_score', 'number', 'config.general'),
+  row('agent.guest_login_to_view.taobao', 'boolean', 'config.general'),
+  row('agent.guest_login_to_view.jd', 'boolean', 'config.general'),
+  row('agent.guest_login_to_view.pdd', 'boolean', 'config.general'),
+  row('agent.require_phone', 'boolean', 'config.risk'),
+  row('agent.filing_text', 'string', 'config.general'),
+  row('agent.examples', 'object', 'config.general'),
+];
+/** B1-22y: unset = the agent readers' defaults (08 / 04), hence no seed rows. */
+export const AGENT_A10_UNSEEDED: readonly string[] = AGENT_A10.map((entry) => entry.key);
 export const expectedOf = (key: string): Expected => {
   const found = [
     ...expectedNow(),
@@ -560,6 +606,7 @@ export const expectedOf = (key: string): Expected => {
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AGENT_A10,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
   return found!;

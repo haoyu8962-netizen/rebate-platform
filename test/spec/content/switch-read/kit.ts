@@ -33,6 +33,9 @@
 //     join EXPECTED in table order after search.enabled.<platform>, so watch.enabled.<platform>
 //     stays EXPECTED's last row and the INVITE_SW pair stays last in the registry. feedback.enabled
 //     stays a config item (FU-FEEDBACK-SWITCH-TABLE) and is not listed here.
+//   - B1-22y (D10-1314): agent.degraded.route_intents (BR-AI-14 细则「无模型降级」, default on)
+//     joins EXPECTED right after agent.page_guide.enabled, matching its registry position; 04 at
+//     SPEC_REF names it among the §10.1 server keys, and 08 BR-AI-14 calls it a switch.
 import type { DB } from '@couli/db';
 import { expect } from 'vitest';
 import type {
@@ -127,6 +130,8 @@ export const EXPECTED: readonly ExpectedSwitch[] = [
   }),
   entry('agent.tools.<name>.enabled', 'agent.tools.get_my_earnings.enabled', BOOL, true, ALL),
   entry('agent.page_guide.enabled', 'agent.page_guide.enabled', BOOL, true, ALL),
+  // B1-22y（Agent A10，D10-1314）: BR-AI-14 细则「无模型降级」开关, default on, switch.all only.
+  entry('agent.degraded.route_intents', 'agent.degraded.route_intents', BOOL, true, ALL),
   entry('withdraw.enabled', 'withdraw.enabled', BOOL, true, PAYOUT),
   entry('withdraw.auto_payout.enabled', 'withdraw.auto_payout.enabled', BOOL, false, ALL),
   entry('payout.enabled', 'payout.enabled', BOOL, true, PAYOUT),

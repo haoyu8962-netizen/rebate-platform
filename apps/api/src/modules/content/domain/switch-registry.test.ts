@@ -50,3 +50,22 @@ it('[AC-B1-05zj-unit#3] 五项各登记一次，都排在 growth.invite_reward �
     'growth.invite_reward.payout_paused',
   ]);
 });
+
+// B1-22y（Agent A10，D10-1314）: BR-AI-14 细则「无模型降级」开关 agent.degraded.route_intents（默认 on）.
+it('[AC-B1-22y-unit#1] agent.degraded.route_intents：默认 on，布尔、只认 switch.all、可改、非系统写，紧跟 agent.page_guide.enabled 登记一次', () => {
+  expect(switchSpecOf('agent.degraded.route_intents')).toStrictEqual({
+    pattern: 'agent.degraded.route_intents',
+    valueType: { kind: 'boolean' },
+    defaultValue: true,
+    defaultOverrides: {},
+    permissions: ['switch.all'],
+    adminEditable: true,
+    systemWritten: false,
+  });
+  expect(switchSpecOf('agent.degraded.route_intents.x')).toBeNull();
+  const patterns = switchRegistry().map((spec) => spec.pattern);
+  expect(patterns.filter((p) => p === 'agent.degraded.route_intents')).toHaveLength(1);
+  expect(patterns.indexOf('agent.degraded.route_intents')).toBe(
+    patterns.indexOf('agent.page_guide.enabled') + 1,
+  );
+});

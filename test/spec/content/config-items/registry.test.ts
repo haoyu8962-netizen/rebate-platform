@@ -60,6 +60,8 @@
 // SUBSIDY_ITEMIZED), unset (= true) by default with no seed rows (SUBSIDY_ITEMIZED_UNSEEDED).
 // B1-18e (D10-1250 ②, BR-CALC-03): then union.taobao / pdd.service_fee_bp, in this order (kit
 // SERVICE_FEE_BP), unset (= no fallback) by default with no seed rows (SERVICE_FEE_BP_UNSEEDED).
+// B1-22y (Agent A10, D10-1287 / D10-1306 / D10-1307): then the 26 Agent keys, in this order (kit
+// AGENT_A10), unset (= the agent readers' defaults) with no seed rows (AGENT_A10_UNSEEDED).
 import { expect, it } from 'vitest';
 import {
   configItemSpecOf,
@@ -93,6 +95,8 @@ import {
   SUBSIDY_ITEMIZED_UNSEEDED,
   SERVICE_FEE_BP,
   SERVICE_FEE_BP_UNSEEDED,
+  AGENT_A10,
+  AGENT_A10_UNSEEDED,
   EXPECTED,
   FEEDBACK,
   FUND_FLAGS,
@@ -179,6 +183,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...BLACKLIST_CLAWBACK_UNSEEDED,
         ...SUBSIDY_ITEMIZED_UNSEEDED,
         ...SERVICE_FEE_BP_UNSEEDED,
+        ...AGENT_A10_UNSEEDED,
       ]),
     ]),
   );
@@ -202,6 +207,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...BLACKLIST_CLAWBACK_UNSEEDED,
     ...SUBSIDY_ITEMIZED_UNSEEDED,
     ...SERVICE_FEE_BP_UNSEEDED,
+    ...AGENT_A10_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -247,6 +253,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...BLACKLIST_CLAWBACK,
         ...SUBSIDY_ITEMIZED,
         ...SERVICE_FEE_BP,
+        ...AGENT_A10,
       ].map((entry) => entry.key),
     ),
   );
@@ -301,7 +308,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       DEVICE_UNSEEDED.length -
       BLACKLIST_CLAWBACK_UNSEEDED.length -
       SUBSIDY_ITEMIZED_UNSEEDED.length -
-      SERVICE_FEE_BP_UNSEEDED.length,
+      SERVICE_FEE_BP_UNSEEDED.length -
+      AGENT_A10_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -458,6 +466,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AGENT_A10,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
@@ -529,6 +538,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AGENT_A10,
   ];
   const head = keys.length - tail.length;
   expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
@@ -608,6 +618,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...BLACKLIST_CLAWBACK,
       ...SUBSIDY_ITEMIZED,
       ...SERVICE_FEE_BP,
+      ...AGENT_A10,
     ].map((entry) => entry.key),
   );
   for (const entry of [
@@ -673,6 +684,23 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       adminEditable: taxSpec.adminEditable,
     }).toStrictEqual({ ...entry, options: entry.options ?? null });
     expect(configItemSpecOf(entry.key), entry.key).toBe(taxSpec);
+    expect(switchSpecOf(entry.key), entry.key).toBeNull();
+  }
+  // B1-22y (D10-1306 / D10-1307): the 26 Agent keys, the three config.risk enums with their options,
+  // each integer key with its inclusive range (as F1-02zj / F1-02zn pin theirs).
+  for (const { range, ...entry } of AGENT_A10) {
+    const agentSpec = registered(entry.key);
+    expect({
+      key: agentSpec.key,
+      valueType: agentSpec.valueType,
+      options: agentSpec.options,
+      permission: agentSpec.permission,
+      adminEditable: agentSpec.adminEditable,
+    }).toStrictEqual({ ...entry, options: entry.options ?? null });
+    if (range !== undefined) {
+      expect(agentSpec.range, entry.key).toStrictEqual(range);
+    }
+    expect(configItemSpecOf(entry.key), entry.key).toBe(agentSpec);
     expect(switchSpecOf(entry.key), entry.key).toBeNull();
   }
   const spec = registered(key);

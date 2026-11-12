@@ -72,6 +72,29 @@ function riskInteger(key: string, min: number, max = INT4_MAX): ConfigItemSpec {
   });
 }
 
+/** B1-22y: an editable config.general integer item with inclusive bounds. */
+function generalInteger(key: string, min: number, max = INT4_MAX): ConfigItemSpec {
+  return Object.freeze({
+    key,
+    valueType: 'number' as const,
+    options: null,
+    permission: 'config.general' as const,
+    adminEditable: true,
+    range: Object.freeze({ integer: true as const, min, max }),
+  });
+}
+
+/** B1-22y: an editable config.risk enum item. */
+function riskEnum(key: string, options: readonly string[]): ConfigItemSpec {
+  return Object.freeze({
+    key,
+    valueType: 'enum' as const,
+    options: Object.freeze([...options]),
+    permission: 'config.risk' as const,
+    adminEditable: true,
+  });
+}
+
 /** F1-02zj: a config.business enum item (B2-11y: read only when adminEditable is false). */
 function businessEnum(
   key: string,
@@ -392,6 +415,49 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // Registration only.
   spec('union.taobao.service_fee_bp', 'object', 'config.business'),
   spec('union.pdd.service_fee_bp', 'object', 'config.business'),
+  // B1-22y（Agent A10，D10-1287 / D10-1306 / D10-1307）
+  // The Agent keys the agent module (and /v1/config) already reads, plus the ones 08 / 04 give
+  // without a reader yet, all editable, in this order: admission, quota and safety items
+  // config.risk, the BR-AI-16 budget config.business, the other run parameters and texts
+  // config.general. No seed rows; unset = the reader's default (08 BR-AI-05 / 07 / 11 / 12 / 14 /
+  // 15 / 16 / 18 细则, 04 §10.1): member / guest / guest IP daily quota 30 / 3 / 30, order number
+  // lookups 20 a day, whitelist [] (no one), block levels low, consent version 1, result check
+  // rules, guard buffer 2000 characters, safety timeout 1000 ms; budget 100000 fen, reservation
+  // 1000 mfen a run; context 8 turns / 6000 characters, order span 30 (default) / 90 (max) days,
+  // model wait 8000 ms, search cache 300 s (also the cap: configuration may only lower it), rule
+  // search min score 0.2 (0 to 1; the registry's ranges are integer only, so here any finite
+  // number, the reader keeps its check), guest login-to-view off per platform, require phone off,
+  // filing text '' and examples []. agent.whitelist_user_ids is the internal-beta allowlist entry
+  // (an array of user id strings); agent.whitelist_only itself stays a read-only switch.
+  // agent.require_phone is an admission item, so config.risk, though listed with the texts.
+  // Cross-key checks (default_span_days <= max_span_days) are not expressible here.
+  // Registration only.
+  riskInteger('agent.member_daily_quota', 0),
+  riskInteger('agent.guest_daily_quota', 0),
+  riskInteger('agent.guest_ip_daily_quota', 0),
+  riskInteger('agent.explain_order.order_no_daily_max', 1),
+  spec('agent.whitelist_user_ids', 'object', 'config.risk'),
+  riskEnum('agent.safety.block_level.input', ['low', 'medium', 'high']),
+  riskEnum('agent.safety.block_level.output', ['low', 'medium', 'high']),
+  riskInteger('legal.ai_third_party.version', 1),
+  riskEnum('agent.result_check.provider', ['rules', 'jev']),
+  riskInteger('agent.guard.buffer_max_chars', 1),
+  riskInteger('agent.safety.timeout_ms', 1),
+  businessInteger('agent.daily_budget_fen', 0),
+  businessInteger('agent.budget.reserve_mfen_per_run', 0),
+  generalInteger('agent.context.max_turns', 0), // 0 = 不带历史
+  generalInteger('agent.context.max_chars', 1),
+  generalInteger('agent.orders.default_span_days', 1),
+  generalInteger('agent.orders.max_span_days', 1),
+  generalInteger('agent.model_timeout_ms', 1),
+  generalInteger('agent.search_cache_ttl_s', 0, 300),
+  spec('agent.rag.min_score', 'number', 'config.general'),
+  ...SHOP_ENTRY_PLATFORMS.map((platform) =>
+    spec(`agent.guest_login_to_view.${platform}`, 'boolean', 'config.general'),
+  ),
+  spec('agent.require_phone', 'boolean', 'config.risk'),
+  spec('agent.filing_text', 'string', 'config.general'),
+  spec('agent.examples', 'object', 'config.general'),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(

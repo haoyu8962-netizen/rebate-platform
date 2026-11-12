@@ -114,6 +114,8 @@ const REGISTRY: readonly SwitchSpec[] = Object.freeze([
   }),
   spec('agent.tools.<name>.enabled', true, ALL),
   spec('agent.page_guide.enabled', true, ALL),
+  // B1-22y（Agent A10，D10-1314）
+  spec('agent.degraded.route_intents', true, ALL),
   spec('withdraw.enabled', true, PAYOUT),
   spec('withdraw.auto_payout.enabled', false, ALL),
   spec('payout.enabled', true, PAYOUT),
