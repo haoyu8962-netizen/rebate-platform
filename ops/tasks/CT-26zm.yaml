@@ -1,0 +1,28 @@
+id: CT-26zm
+repo: rebate-platform
+title: 契约 + content：GET /v1/config 下发 AI 第三方处理同意的当前版本 legal.ai_third_party.version（ConfigLegal 加可选 ai_third_party.version；读到正整数才下发，缺失不下发、形状不对按缺失并记 warn），让客户端按当前 AgentConsent 版本记同意（BR-AI-13；变更记录 20261112 §3.4 C4 第一项）
+type: impl
+# 2026-11-12 be 入账（D10-1287 ④ / D10-1308 的 C4 拆出第一项；另两项「约 110 个界面文案键」「客户端 agent_* 事件」无键表 / 字段表，已报编排等规划清单，不在本单）。
+# 依据：BR-AI-13 要求同意记录的 version 等于当前 AgentConsent 版本、版本 +1 后重新同意；服务端拒绝时已用 consent_type=ai_third_party（10004），读的是配置键 legal.ai_third_party.version（apps/api/src/modules/agent/stream/access/index.ts:125）；但 /v1/config 的下发白名单（content/domain/client-config.ts）只有 legal.privacy.*、legal.agreement.*，客户端拿不到版本，POST /v1/consents 带不出正确 version。
+# 做法：键名沿用代码已在读的 legal.ai_third_party.version，不另起；契约 ConfigLegal 加可选 ai_third_party {version}（int32 ≥ 1），与 legal.agreement.min_version 同口径——合法才下发、缺失不下发不记日志、形状不对按缺失并记 warn、不拦截；服务端已有的同意校验不改。响应新增可选字段，oasdiff 非破坏；三端解码 legal 时须忽略未知键（Android / 鸿蒙 C2「未知字段忽略」同批处理），PR 描述写明。04 §10.1 的 /v1/config 字段表待规划回写（同 F1-02zr 先例）。
+# 规则测试由独立 Claude 写（先红），Opus 实现，Codex contract 评审（content 模块按 RV2 一并看）。
+refs: [BR-AI-13]
+refs_hash:
+  BR-AI-13: 870069e3ab76
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/**'
+  - 'apps/api/src/modules/content/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/content/config-ai-consent-version/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/config-ai-consent-version/**'
+status: todo
+pr: null
