@@ -7,6 +7,7 @@ type: impl
 # 做法：键名沿用代码已在读的 legal.ai_third_party.version，不另起；契约 ConfigLegal 加可选 ai_third_party {version}（int32 ≥ 1），与 legal.agreement.min_version 同口径——合法才下发、缺失不下发不记日志、形状不对按缺失并记 warn、不拦截；服务端已有的同意校验不改。响应新增可选字段，oasdiff 非破坏；三端解码 legal 时须忽略未知键（Android / 鸿蒙 C2「未知字段忽略」同批处理），PR 描述写明。04 §10.1 的 /v1/config 字段表待规划回写（同 F1-02zr 先例）。
 # 2026-11-12 D10-1330（Jev，同意版本口径定）：未配置时生效版本为 1，/v1/config 总是下发 legal.ai_third_party {version}（取生效版本）；生效版本只有一个取值函数，闸门（agent/stream/access）与下发都调它；非法值（非整数、<1、>2147483647）按未配置取 1；闸门上界由安全整数收到 2147483647，补规则测试（2^31 到 2^53−1 → 1 并告警）。告警各按现有口径：闸门缺失与非法都告警（冻结 AC-B3-03i#11–#13、AC-B3-08k#3 不动），/v1/config 缺失不记、形状不对记 warn。登记表不登记此键（#3258 已登记）；「只增不减」保存校验归 content 另开。为此 paths 补 agent/stream/access、test_paths 补闸门上界规则测试目录。
 # 规则测试由独立 Claude 写（先红），Opus 实现，Codex contract 评审（content 模块按 RV2 一并看）。
+# 2026-11-12 D10-1351：冻结 [AC-F1-02c#1]（test/spec/content/config/delivery.int.test.ts，/v1/config 整包深相等）随本单改——BR-AI-13 细则「当前版本的取值」① 要求总是下发生效版本，只在其期望的 legal 里补 ai_third_party: { version: 1 }，仍整包深相等；改动放在规则测试提交里、改后先红（新鲜独立 Claude 改，另一位只读复核并反向验证）。同文件其余用例与 kit / fixtures 不动；红测按用例逐条判（tools/guard/lib/red-check.ts：只有因改了被引用的辅助文件而整体评判的文件才用 red_exempt），故不另写 red_exempt。
 refs: [BR-AI-13]
 refs_hash:
   BR-AI-13: 6309509106ac
@@ -22,6 +23,7 @@ paths:
 test_paths:
   - 'test/spec/content/config-ai-consent-version/**'
   - 'test/spec/agent/consent-version-bound/**'
+  - 'test/spec/content/config/delivery.int.test.ts'
 impl: claude
 tester: claude-independent
 accept:

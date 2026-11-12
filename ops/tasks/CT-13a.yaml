@@ -19,5 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/contracts/agent-stream-events/**'
-status: todo
-pr: null
+status: done
+pr: 3271
