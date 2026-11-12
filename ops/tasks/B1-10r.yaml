@@ -1,0 +1,29 @@
+id: B1-10r
+repo: rebate-platform
+title: 后台 Agent 留痕查询跟进（编排 D10-1341 ②，#3256 核对）——同一轮问答时间相同时用户消息在前；明细 claim_draft 卡的 order_no 只留后 4 位（BR-AI-14）；补「审计写失败不返回明细」用例；[AC-B1-10q#15] 夹具 created_at 打乱
+type: impl
+# 2026-11-12 入账（admin-backend，编排 D10-1341 ②；核对全文 couli-runs/B1-10q/orch-review-3256.json）。B1-10q 合并后做。只改 agent 模块里 B1-10q 新建的读路径，不碰 agent2 的 stream/**、http/index.ts、store/index.ts、store/results/**。
+# ① 排序键：created_at 升序 → user 在 assistant 前 → id；夹具按线上写法（同一轮两行同一 created_at、助手 id 小于用户 id）。② 只在后台明细读出时遮 claim_draft 卡的 order_no（留后 4 位），库里与用户侧不变。③ 审计端口写失败 → 50001、响应不带会话内容。④ #15 收紧：created_at 既不单调增也不单调减。
+refs: [BR-AI-14, BR-AI-19]
+refs_hash:
+  BR-AI-14: c009637e9cb0
+  BR-AI-19: 966f895b4033
+deps: [B1-10q]
+paths:
+  - 'apps/api/src/modules/agent/application/admin-traces*.ts'
+  - 'apps/api/src/modules/agent/store/admin-traces/**'
+test_paths:
+  - 'test/spec/agent/admin-traces-followup/**'
+  - 'test/spec/agent/admin-traces/detail-order.int.test.ts' # 只收紧 [AC-B1-10q#15] 一块（modify_existing）
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/admin-traces-followup/**'
+modify_existing:
+  - file: test/spec/agent/admin-traces/detail-order.int.test.ts
+    test: '[AC-B1-10q#15] 明细 tool_calls 的顺序：run_id 大小与 accepted_at 顺序相反、工具调用乱序写入且 created_at 与目标顺序相反时，tool_calls 仍先按 run 的 accepted_at、再按 seq 排，不按 run_id、行写入顺序或 created_at'
+    reason: tighten_only
+    ruling: D10-1341
+    note: '编排核对 #3256：六条工具调用的 created_at 沿期望顺序递减，按 created_at 倒序的实现也能过；打乱 created_at（既不单调增也不单调减），期望顺序与断言不变'
+status: todo
