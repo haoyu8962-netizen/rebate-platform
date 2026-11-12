@@ -1,0 +1,25 @@
+id: CT-26zk
+repo: rebate-platform
+title: 契约文案：订单行【复制】按钮两键 order_list.copy_label（复制）与 order_list.copy_spoken（复制订单号 {no}，读屏名称带本行完整订单号）入 texts.default.json，两键归普通并同步键级归类与生成物（03 §10.5 ②、D10-1248 ⑨、D10-1275 / D10-1276）
+type: impl
+# 2026-11-12 be 入账（编排 D10-1276：原归 content 的 D10-1275，账号 4 停摆改派 be）。取值与说明只认 SPEC_REF 上 08 BR-TEXT-14 表 C「订单行的复制按钮」行：copy_label =「复制」，copy_spoken =「复制订单号 {no}」；只在本人自购单出现（分享单无复制按钮，BR-TEXT-02 细则「订单号的显示」），列表与详情共用；{no} 是客户端代入的完整订单号 order_no，不缩写、不脱敏，服务端不为它新增任何字段；复制成功提示仍用已有的 order_detail.copy.done。
+# 归类：BR-TEXT-12 细则「资金术语键」普通键清单已列 order_list.copy_label、order_list.copy_spoken（D10-1275）→ specs/fund-term-keys.yaml ordinary 段逐键登记，重新生成 fund-term-keys.gen.ts。texts.default.json 的 version 照同类单（F1-11b #3142）不改。
+# 合并后在公告通知 native（iOS FU-IOS-A11Y 升契约锁、删本地 fallback）；安卓、鸿蒙账号停到 11-17，恢复后各自接。规则测试由独立 Claude 写（先红），Opus 实现，Codex contract 评审。
+refs: [BR-TEXT-14, BR-TEXT-12]
+refs_hash:
+  BR-TEXT-14: 675e5daec95a
+  BR-TEXT-12: 199e70f7af35
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+test_paths:
+  - 'test/spec/content/order-copy-texts/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/order-copy-texts/**'
+status: todo
+pr: null
