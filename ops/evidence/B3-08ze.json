@@ -1,0 +1,98 @@
+{
+  "task": "B3-08ze",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "spec_commit": "1ef9d285b6e6f157a727071369241eac1f20e5cd",
+  "red_tests": [
+    "test/spec/agent/session-history-http/contract.test.ts > [AC-B3-08ze#2][BR-AI-19][BR-AI-20] 契约状态：listAgentSessionMessages 不再带 x-implementation（契约原文），生成的 plannedOperations 不再含它，生成的路由请求模式含它且等于契约操作的 routeSchemaOf（path id、query cursor/limit、客户端头）",
+    "test/spec/agent/session-history-http/contract.test.ts > [AC-B3-08ze#1][BR-AI-20] 路由挂在 stream 入口：无库时 GET /v1/agent/sessions/{id}/messages 已注册（不是 404），回 JSON 50001 ErrorEnvelope（同另外四条 agent 路由）；api 入口不提供它（404）",
+    "test/spec/agent/session-history-http/deleted-member.int.test.ts > [AC-B3-08ze#3][BR-AI-20][BR-AI-22] 注销后同设备游客：会员在设备 D 开会话并跑一轮，注销清理（agent 清理步骤）后会话 user_id 为空、user_hash 已写、device_id 仍为 D；D 上不带 token 的游客（设备级已同意）——sessions/current 不返回该会话，向它发消息 30504 且不建 run，读它的历史 30504（无 data）",
+    "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20][BR-AI-19] 真实 stream 入口 + PG：GET /v1/agent/sessions/{id}/messages 可达——所有者读到两轮的用户消息（落库形式）与助手回复，按时间先后；200 application/json 过契约 AgentHistoryResponse，code 0、msg 空串、trace_id 为请求的 X-Trace-Id，expired=false、next_cursor=null",
+    "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：分页经查询串——limit=3 得最新 3 条（时间先后）且 next_cursor 为字符串；带该 cursor 再取得更早的 1 条且 next_cursor=null；两页拼起来等于不分页的结果",
+    "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：过期会话所有者仍 200 只读——最后受理 + 24 小时 − 1 毫秒 expired=false，+ 24 小时 expired=true，内容不变",
+    "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：别的账号拿到会话 id、不存在的会话、不是 UUID 的 id 一律 30504（HTTP 状态照 error-codes.yaml，ErrorEnvelope 无 data）；所有者照常 200",
+    "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20][BR-AI-23] 真实 stream 入口 + PG：GET 历史按 ①–④ 经 HTTP 逐项剥离（游客，无 token 带 X-Device-Id）：30501 → 10001 → 10004（consent_type=ai_third_party）→ 30504；所有者 200",
+    "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20][BR-AI-23] 真实 stream 入口 + PG：GET 历史按 ①–④ 经 HTTP 逐项剥离（已登录未绑手机）：30501 → 10005 → 10004（consent_type=ai_third_party）→ 30504；所有者 200",
+    "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：所有者的查询串不合法 → 20001（HTTP 400，data.fields 指明字段）：limit=0、limit=51、limit=abc → [limit]；不是本接口给出的 cursor → [cursor]；合法查询照常 200",
+    "test/spec/contracts/agent-history/http-history.test.ts > [AC-CT-08e#1][AC-CT-08e#2] get /v1/agent/sessions/{id}/messages（listAgentSessionMessages）标注、设备头、版本闸门及 JSON 错误外壳；覆盖归属与目标检查所需的有效错误码"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1ef9d285b6e6f157a727071369241eac1f20e5cd",
+      "tree": "2cef23596dced72efc60ab4209ddcd4bf2da489b",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T19:22:29Z",
+      "finished_at": "2026-11-12T19:22:48Z",
+      "red_tests": [
+        "test/spec/agent/session-history-http/contract.test.ts > [AC-B3-08ze#2][BR-AI-19][BR-AI-20] 契约状态：listAgentSessionMessages 不再带 x-implementation（契约原文），生成的 plannedOperations 不再含它，生成的路由请求模式含它且等于契约操作的 routeSchemaOf（path id、query cursor/limit、客户端头）",
+        "test/spec/agent/session-history-http/contract.test.ts > [AC-B3-08ze#1][BR-AI-20] 路由挂在 stream 入口：无库时 GET /v1/agent/sessions/{id}/messages 已注册（不是 404），回 JSON 50001 ErrorEnvelope（同另外四条 agent 路由）；api 入口不提供它（404）",
+        "test/spec/agent/session-history-http/deleted-member.int.test.ts > [AC-B3-08ze#3][BR-AI-20][BR-AI-22] 注销后同设备游客：会员在设备 D 开会话并跑一轮，注销清理（agent 清理步骤）后会话 user_id 为空、user_hash 已写、device_id 仍为 D；D 上不带 token 的游客（设备级已同意）——sessions/current 不返回该会话，向它发消息 30504 且不建 run，读它的历史 30504（无 data）",
+        "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20][BR-AI-19] 真实 stream 入口 + PG：GET /v1/agent/sessions/{id}/messages 可达——所有者读到两轮的用户消息（落库形式）与助手回复，按时间先后；200 application/json 过契约 AgentHistoryResponse，code 0、msg 空串、trace_id 为请求的 X-Trace-Id，expired=false、next_cursor=null",
+        "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：分页经查询串——limit=3 得最新 3 条（时间先后）且 next_cursor 为字符串；带该 cursor 再取得更早的 1 条且 next_cursor=null；两页拼起来等于不分页的结果",
+        "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：过期会话所有者仍 200 只读——最后受理 + 24 小时 − 1 毫秒 expired=false，+ 24 小时 expired=true，内容不变",
+        "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：别的账号拿到会话 id、不存在的会话、不是 UUID 的 id 一律 30504（HTTP 状态照 error-codes.yaml，ErrorEnvelope 无 data）；所有者照常 200",
+        "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20][BR-AI-23] 真实 stream 入口 + PG：GET 历史按 ①–④ 经 HTTP 逐项剥离（游客，无 token 带 X-Device-Id）：30501 → 10001 → 10004（consent_type=ai_third_party）→ 30504；所有者 200",
+        "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20][BR-AI-23] 真实 stream 入口 + PG：GET 历史按 ①–④ 经 HTTP 逐项剥离（已登录未绑手机）：30501 → 10005 → 10004（consent_type=ai_third_party）→ 30504；所有者 200",
+        "test/spec/agent/session-history-http/route.int.test.ts > [AC-B3-08ze#1][BR-AI-20] 真实 stream 入口 + PG：所有者的查询串不合法 → 20001（HTTP 400，data.fields 指明字段）：limit=0、limit=51、limit=abc → [limit]；不是本接口给出的 cursor → [cursor]；合法查询照常 200",
+        "test/spec/contracts/agent-history/http-history.test.ts > [AC-CT-08e#1][AC-CT-08e#2] get /v1/agent/sessions/{id}/messages（listAgentSessionMessages）标注、设备头、版本闸门及 JSON 错误外壳；覆盖归属与目标检查所需的有效错误码"
+      ],
+      "expected": [
+        "test/spec/agent/session-history-http/contract.test.ts",
+        "test/spec/agent/session-history-http/deleted-member.int.test.ts",
+        "test/spec/agent/session-history-http/route.int.test.ts",
+        "test/spec/contracts/agent-history/http-history.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "8117e40b12ce9ac95e17868c2e5f3f00ac21b8754148590d98c16c218e804b32"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "05709852fe91dbdf08ebc2c679a0ce9c087196617da632f87811b25299d9c62b"
+        }
+      ]
+    }
+  ],
+  "risk_note": "RV2 by path (contracts / platform generated routes; agent stream mount, http, store). Session history goes live (规划 11-12 A1 follow-up, D10-1347; D10-1385 / D10-1390): contracts/openapi.yaml drops x-implementation: planned from listAgentSessionMessages only (feedback / report stay planned for B3-08zf) and the generated files are regenerated (planned-operations.gen.ts, route-schemas.gen.ts); controller.ts registers GET sessions/:id/messages in the same loop and through the same #handle / AGENT_CALLER resolution (X-Device-Id included) as the other four agent routes, answering JSON 50001 without a runtime; stream/mount/index.ts builds runtime.history from B3-08zc's createAgentHistoryRuntime (the consent reader reused, one factory call per runtime). B3-08zd (8) folded in (user data ownership): store/index.ts guest ownership becomes user_id IS NULL AND user_hash IS NULL AND device_id = ? for owned / current / ownsRun / open, so after an account deletion a guest on the same device is not the owner (history 30504, sessions/current does not return it, a message gets 30504); member ownership unchanged. Frozen [AC-CT-08e#1] / [AC-CT-08e#2] history row (D10-1390): http.test.ts identical to the base; kit.ts endpoints drops the history row (exported separately as historyEndpoint, explicit tuple type so the frozen http.test.ts still type-checks); the row's #1 assertions (x-implementation now absent) and #2 assertions merged into one test in the new http-history.test.ts; the 17 untouched tests that read kit.ts are red_exempt. Two mechanical test-side fixes by fresh Claude, not counted (D10-1309): kit.ts types (TS2367) and the session-history-http kit's X-Trace-Id generator (the platform keeps only a 32 / 36-character UUID or hex trace id). Test machine: red at the spec commit (11 red, 0 problems); all task rule tests green at the implementation head 1171c70a; full verification is the required CI checks (approvals #21).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "Codex money r1 pass, no findings (a general review was refused: the task is RV2 by path). Must-checks given: guest ownership with user_hash IS NULL on every guest branch; the new route through the same caller resolution; only the history operation's planned removed; error codes as in the contract (couli-runs/B3-08ze/review-codex-money-r1.json)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "76c562ba611525c855ee4665cb7182f12634dfd0",
+    "specs": "0ebd4dbae285ce00472e2def2f286eeafb2a3e7f"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by a fresh independent Claude (1 attempt) plus mechanical restructures per D10-1385 / D10-1390 and two mechanical fixes (not counted). Spec-test r1 fail (one S1, caused by a brief generated before ledger patch 2: it judged the new file outside test_paths) → brief regenerated → r2 pass with one S2 (no HTTP case of a guest reading its own session → 200; made an implementation requirement and a review must-check). The 17 red_exempt tests read the changed kit.ts and are unchanged (http.test.ts identical to the base) (couli-runs/B3-08ze/review-claude-spectest-r1.json, -r2.json)."
+  }
+}

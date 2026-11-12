@@ -27,11 +27,12 @@ const { parseYamlLite } = testRequire('../../../../tools/lib/yaml-lite.ts') as {
 export const historyPath = '/v1/agent/sessions/{id}/messages';
 export const feedbackPath = '/v1/agent/messages/{message_id}/feedback';
 export const reportPath = '/v1/agent/messages/{message_id}/report';
-export const endpoints = [
-  ['get', historyPath, 'listAgentSessionMessages'],
+export type Endpoint = readonly ['get' | 'post', string, string];
+export const historyEndpoint: Endpoint = ['get', historyPath, 'listAgentSessionMessages'];
+export const endpoints: readonly Endpoint[] = [
   ['post', feedbackPath, 'setAgentMessageFeedback'],
   ['post', reportPath, 'reportAgentMessage'],
-] as const;
+];
 
 // 每次取字段先断言：缺接口或字段只能报 AssertionError，不能报 TypeError。
 export function object(value: unknown): Obj {

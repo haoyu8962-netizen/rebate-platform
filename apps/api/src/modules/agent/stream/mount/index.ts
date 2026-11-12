@@ -17,8 +17,8 @@
 //   signals?, assembly?, contentReader, consentReader}) (B3-08k: both readers from app.module; a
 //   DB handle without them is a wiring error and throws).
 //   The four routes of B3-03d (createAgentSession, getCurrentAgentSession, sendAgentMessage,
-//   cancelAgentRun) are registered either way; without a runtime each answers the JSON 50001
-//   envelope. On application shutdown runtime.close() resolves before the platform closes the
+//   cancelAgentRun) and B3-08ze's listAgentSessionMessages are registered either way; without a
+//   runtime each answers the JSON 50001 envelope. On application shutdown runtime.close() resolves before the platform closes the
 //   database handles (Nest lifecycle; entry.ts unchanged).
 // createAgentStreamRuntime(deps, seams?) → AgentStreamRuntime, built with nothing running (no
 //   timer, no query):
@@ -163,6 +163,8 @@ import { createAgentBodyAssembly } from './body.ts';
 import { createEmptyReplyCounter, createStreamAgentBody } from './agent-body.ts';
 import { createRunTraceRecorder } from './trace.ts';
 import { createTraceRedoQueue, unrefScheduler } from './trace-retry.ts';
+import { createAgentHistoryRuntime } from './history.ts';
+import type { AgentHistoryHttp } from '../../http/history.ts';
 export { createAgentStreamAssembly } from './assembly.ts';
 export type {
   AgentStreamAssembly,
@@ -238,6 +240,11 @@ export interface AgentStreamSeams {
 
 export interface AgentStreamRuntime {
   readonly http: AgentHttp;
+  /**
+   * B3-08ze: listAgentSessionMessages (GET /v1/agent/sessions/{id}/messages), B3-08zc's
+   * createAgentHistoryRuntime over this runtime's deps and its one consent reader.
+   */
+  readonly history: AgentHistoryHttp;
   readonly timings: RunTimings;
   readonly runConfig: RunConfig;
   /** The one QuotaLimitsSource of the HTTP layer and the PG ports. */
@@ -492,6 +499,15 @@ export function createAgentStreamRuntime(
     clock,
     logger,
   });
+  // B3-08ze: the history read side over the same deps; identity's consent reader factory is called
+  // once per runtime (B3-08k), so the history gets the reader built above.
+  const history = createAgentHistoryRuntime({
+    db: deps.db,
+    clock,
+    logger,
+    contentReader,
+    consentReader: () => consent,
+  });
   function tracked<T extends unknown[]>(
     operation: (...args: T) => Promise<void>,
     ...args: T
@@ -510,6 +526,7 @@ export function createAgentStreamRuntime(
     limits,
     texts,
     traceMask,
+    history,
     http: {
       ...http,
       sendMessage(caller, sessionId, message, reply) {

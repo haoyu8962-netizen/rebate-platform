@@ -6,9 +6,11 @@
 // and the semantics written here are the contract.
 //
 // Owner (BR-AI-20): kind 'user' (the caller has an access token) owns the sessions whose user_id is
-// that user, on any device; kind 'device' (a guest) owns the sessions whose user_id IS NULL and
-// whose device_id is that device. A user never falls back to the device's guest sessions, and a
-// guest never sees a user's session even on the same device. Every query is scoped by app_id.
+// that user, on any device; kind 'device' (a guest) owns the sessions whose user_id IS NULL, whose
+// user_hash IS NULL and whose device_id is that device (B3-08ze: a deleted member's session keeps
+// its device_id but carries user_hash; it is nobody's, never the device's guest). A user never
+// falls back to the device's guest sessions, and a guest never sees a user's session even on the
+// same device. Every query is scoped by app_id.
 // Expired (BR-AI-20): last_active_at + deps.idleMs ≤ now, where now = deps.clock.now() read once
 // per call (never the database clock); a set expired_at ≤ now is expired as well (the same test as
 // the admission re-check in ../stream/pg).
@@ -85,7 +87,10 @@ export function createPgAgentSessionStore(deps: PgAgentSessionStoreDeps): AgentS
     const query = connection.selectFrom('agent_sessions').where('app_id', '=', owner.appId);
     return owner.kind === 'user'
       ? query.where('user_id', '=', owner.userId)
-      : query.where('user_id', 'is', null).where('device_id', '=', owner.deviceId);
+      : query
+          .where('user_id', 'is', null)
+          .where('user_hash', 'is', null)
+          .where('device_id', '=', owner.deviceId);
   }
   function live(connection: Kysely<DB>, owner: AgentOwner, now: Date) {
     const cutoff = structuredClone(now);

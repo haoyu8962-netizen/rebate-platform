@@ -8,6 +8,9 @@ import { agentHttpReply, type StreamReply } from './reply.ts';
 import type { AgentStreamRuntime } from './index.ts';
 import { agentDefaultTexts } from './texts.ts';
 
+/** The Fastify request of the agent routes; GET history also reads its query string. */
+type AgentRouteRequest = AgentStreamRequest & { readonly query?: unknown };
+
 /** Called only by forStream; api/worker never register these routes or resolve their schemas. */
 export function agentStreamController(runtimeToken: symbol): typeof AgentStreamController {
   const prototype = AgentStreamController.prototype;
@@ -17,13 +20,15 @@ export function agentStreamController(runtimeToken: symbol): typeof AgentStreamC
     ['create', 'sessions', 'createAgentSession', Post],
     ['current', 'sessions/current', 'getCurrentAgentSession', Get],
     ['message', 'sessions/:id/messages', 'sendAgentMessage', Post],
+    // B3-08ze: the history read side (B3-08zc's createAgentHistoryRuntime), same caller resolver.
+    ['history', 'sessions/:id/messages', 'listAgentSessionMessages', Get],
     ['cancel', 'runs/:run_id/cancel', 'cancelAgentRun', Post],
   ] as const) {
     const descriptor = Object.getOwnPropertyDescriptor(prototype, method)!;
     Req()(prototype, method, 0);
     Res()(prototype, method, 1);
     decorator(path)(prototype, method, descriptor);
-    // The orchestrator's authorized mechanical contract-codegen commit adds these four IDs.
+    // The orchestrator's authorized mechanical contract-codegen commit adds these IDs.
     // Keep the runtime check: a missing generated schema must refuse startup, never skip validation.
     RouteSchema(contractRouteSchema(operation as ContractOperationId))(
       prototype,
@@ -59,6 +64,12 @@ class AgentStreamController {
   message(request: AgentStreamRequest, reply: StreamReply): Promise<void> {
     return this.#handle(request, reply, (runtime, caller, response) =>
       runtime.http.sendMessage(caller, request.params.id ?? '', request.body, response),
+    );
+  }
+
+  history(request: AgentRouteRequest, reply: StreamReply): Promise<void> {
+    return this.#handle(request, reply, (runtime, caller, response) =>
+      runtime.history.listMessages(caller, request.params.id ?? '', request.query, response),
     );
   }
 
