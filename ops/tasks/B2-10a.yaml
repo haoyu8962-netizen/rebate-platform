@@ -22,4 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/creditable-events/**'
-status: todo
+status: done
+pr: 3320
