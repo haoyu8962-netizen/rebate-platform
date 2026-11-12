@@ -1,0 +1,26 @@
+id: B1-03zo
+repo: rebate-platform
+title: 工作台卡片计数 appeal_pending——risk 导出按 app 的「申诉处理中」只读计数（权限点 risk.appeal），与后台申诉列表 status=processing 共用同一个判定函数；计数 = 列表页同筛选的 total
+type: impl
+# 2026-11-13 入账（identity，编排 D10-1401；方案 couli-runs/DASHBOARD/plan-20261113.md，协调人 admin）。
+# 列表页口径：adminListAppeals（risk/application/admin-appeals-read.ts list）——本 App、status='processing'，不分 target_type、无 q；卡片 route /risk/appeals?status=processing。
+# 做法：把「本 App 的处理中申诉」这一判定抽成一个函数，list 的 status=processing 筛选与头部 counts.processing、以及新计数共用；从 risk/index.ts 导出计数给工作台（admin 的工作台单组装）。
+# 不改列表页行为与契约。计数走部分索引 appeals_processing_deadline_idx（app_id, deadline_at）WHERE status='processing'。
+refs: [BR-ID-36]
+refs_hash:
+  BR-ID-36: 307e5d74ad54
+deps: [B1-03zd]
+paths:
+  - 'apps/api/src/modules/risk/application/admin-appeals-read.ts'
+  - 'apps/api/src/modules/risk/application/admin-appeals-read.test.ts'
+  - 'apps/api/src/modules/risk/application/appeal-pending-count.ts'
+  - 'apps/api/src/modules/risk/application/appeal-pending-count.test.ts'
+  - 'apps/api/src/modules/risk/index.ts'
+test_paths:
+  - 'test/spec/risk/appeal-pending-count/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/risk/appeal-pending-count/**'
+status: todo
