@@ -1531,3 +1531,42 @@ it('[CT-06zzzzz] --tests with a plan over 200 KiB runs: the plan reaches the con
   });
   expect(closingLine(res.stderr)).toMatch(closingPattern(0, 'green', 2 * BIG_COUNT, 2 * BIG_COUNT));
 }, 240_000);
+
+// --- round 3, S3 (D10-1388) -------------------------------------------------------------------------
+
+it('[CT-06zzzzz] TESTS_SH: the vitest run of each group reads /dev/null, not the here-string that feeds the group loop', () => {
+  const text = readFileSync(SCRIPT, 'utf8');
+  const start = text.indexOf("IFS= read -r -d '' TESTS_SH <<'SH'");
+  expect(start).toBeGreaterThan(-1);
+  const end = text.indexOf('\nSH\n', start);
+  expect(end).toBeGreaterThan(start);
+  const body = text.slice(start, end).split('\n');
+  // Logical lines: continuation lines joined.
+  const commands: string[] = [];
+  for (let i = 0; i < body.length; i += 1) {
+    let cmd = body[i] ?? '';
+    while (cmd.endsWith('\\') && i + 1 < body.length) {
+      i += 1;
+      cmd = `${cmd.slice(0, -1)} ${body[i] ?? ''}`;
+    }
+    commands.push(cmd);
+  }
+  const runs = commands.filter(
+    (c) => /\bvitest run\b/.test(c) && !c.trimStart().startsWith('#') && !/^\s*echo\b/.test(c),
+  );
+  expect(runs.length).toBeGreaterThan(0);
+  for (const c of runs) expect(c, c).toMatch(/<\s*\/dev\/null/);
+  // The loop still reads its groups from the here-string.
+  expect(text.slice(start, end)).toMatch(/done <<<"\$plan_lines"/);
+});
+
+it('[CT-06zzzzz] tools/ops/README.md: --tests takes no verify slot; large batches go through the test machine queue one at a time, never several at once on this machine', () => {
+  const readme = readFileSync(join(OPS_DIR, 'README.md'), 'utf8');
+  const at = readme.indexOf('指定测试');
+  expect(at).toBeGreaterThan(-1);
+  const section = readme.slice(at);
+  expect(section).toContain('不占全机验证槽');
+  expect(section).toMatch(/测试机轻量队列/);
+  expect(section).toContain('串行');
+  expect(section).toMatch(/不要在本机并发/);
+});

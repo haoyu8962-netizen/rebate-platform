@@ -85,7 +85,7 @@ function parseFile(v: unknown, i: number): FileResult {
 }
 
 /** The test file's path relative to the repository root of the report. */
-function relative(name: string, root: string): string {
+export function relative(name: string, root: string): string {
   const prefix = root.endsWith('/') ? root : `${root}/`;
   return name.startsWith(prefix) ? name.slice(prefix.length) : name;
 }

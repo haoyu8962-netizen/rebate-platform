@@ -20,9 +20,14 @@
 // status green or red. Exit codes: 0 green; 1 red (each red test "file > full name" and each file
 // that failed to load on stderr, cleaned as related-report.ts cleans them, at most 200 lines, then
 // "… and <N> more in tests.json"); 2 usage, a missing or irregular out/ file, a report of the
-// wrong shape, a group that ran past the time limit (exit 124, whatever its report says), or a
-// group whose Vitest exited non-zero while its report shows nothing red. Nothing is printed on
-// stdout with exit 2.
+// wrong shape, a group that ran past the time limit (exit 124, whatever its report says), a group
+// whose Vitest exited non-zero while its report shows nothing red, or a report that does not hold
+// exactly the group's planned files (D10-1388: the tree under test chooses the Vitest config, and
+// a narrowed include, passWithNoTests or a whole-file describe.skip must not read green): a planned
+// file (<dir>/<file>) missing from the report (at most MISSING_NAMED named, the rest as a count),
+// a test file in the report that the group did not plan, or a group with 0 tests and no file that
+// failed to load (a file that failed to load counts as run). Nothing is printed on stdout with
+// exit 2.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -30,8 +35,10 @@ import { runMain, UsageError } from './cli.ts';
 import {
   count,
   DEFAULT_MAX_REPORT_BYTES,
+  printableLine,
   readReport,
   redLines,
+  relative,
   summarizeRelated,
   type RelatedFailure,
   type RelatedLoadError,
@@ -44,8 +51,11 @@ const SMALL_MAX = 32;
 const GROUP_NAME = /^[a-z0-9][a-z0-9-]*$/;
 /** The exit code the container script records for a group that ran past the time limit. */
 const TIMED_OUT = 124;
+/** At most this many missing (or unplanned) files are named on stderr; the rest as a count. */
+const MISSING_NAMED = 20;
 
-type PlanGroup = { name: string; database: boolean };
+/** `files`: the group's planned test files relative to the repository root (<dir>/<file>). */
+type PlanGroup = { name: string; database: boolean; files: string[] };
 
 export type TestsGroup = {
   name: string;
@@ -90,22 +100,25 @@ function readPlan(file: string): PlanGroup[] {
   const seen = new Set<string>();
   return groups.map((g, i) => {
     const name = isRecord(g) ? g['name'] : undefined;
+    const dir = isRecord(g) ? g['dir'] : undefined;
     const files = isRecord(g) ? g['files'] : undefined;
     if (
       !isRecord(g) ||
       typeof name !== 'string' ||
       !GROUP_NAME.test(name) ||
+      typeof dir !== 'string' ||
+      dir === '' ||
       typeof g['database'] !== 'boolean' ||
       !Array.isArray(files) ||
       !files.every((f) => typeof f === 'string')
     ) {
       throw new UsageError(
-        `--plan ${file}: groups[${String(i)}] needs a plain name, a boolean database and files`,
+        `--plan ${file}: groups[${String(i)}] needs a plain name, a dir, a boolean database and files`,
       );
     }
     if (seen.has(name)) throw new UsageError(`--plan ${file}: group ${name} appears twice`);
     seen.add(name);
-    return { name, database: g['database'] };
+    return { name, database: g['database'], files: files.map((f: string) => `${dir}/${f}`) };
   });
 }
 
@@ -144,6 +157,25 @@ function readSmall(out: string, name: string): number {
   return Number(text);
 }
 
+/** "<n> <what>: a, b, … and <k> more", the names cleaned, at most MISSING_NAMED of them. */
+function nameFiles(files: readonly string[], what: string): string {
+  const named = files.slice(0, MISSING_NAMED).map((f) => printableLine(f));
+  const rest = files.length - named.length;
+  return `${String(files.length)} ${what}: ${named.join(', ')}${rest > 0 ? ` … and ${String(rest)} more` : ''}`;
+}
+
+/** The test files of a report (shape already checked by summarizeRelated), relative to `root`. */
+function reportFiles(report: unknown, root: string): Set<string> {
+  const results = isRecord(report) ? report['testResults'] : undefined;
+  const files = new Set<string>();
+  if (!Array.isArray(results)) return files;
+  for (const r of results) {
+    const name = isRecord(r) ? r['name'] : undefined;
+    if (typeof name === 'string') files.add(relative(name, root));
+  }
+  return files;
+}
+
 function judgeGroup(g: PlanGroup, out: string, root: string, maxBytes: number): TestsGroup {
   const exit = readSmall(out, `${g.name}.exit`);
   const seconds = readSmall(out, `${g.name}.seconds`);
@@ -178,11 +210,30 @@ function judgeGroup(g: PlanGroup, out: string, root: string, maxBytes: number): 
   } catch (err) {
     throw new OutError(`${reportName}: ${err instanceof Error ? err.message : String(err)}`);
   }
+  // Exactly the planned files ran (a file that failed to load counts as run): the tree under
+  // test chooses the Vitest config, which could leave planned files out or run others.
+  const ran = reportFiles(report, root);
+  const planned = new Set(g.files);
+  const missing = [...planned].filter((f) => !ran.has(f)).sort();
+  if (missing.length > 0) {
+    throw new OutError(
+      `group ${g.name}: ${nameFiles(missing, 'planned test file(s) not in its report (not run)')}`,
+    );
+  }
+  const unplanned = [...ran].filter((f) => !planned.has(f)).sort();
+  if (unplanned.length > 0) {
+    throw new OutError(
+      `group ${g.name}: ${nameFiles(unplanned, 'test file(s) in its report that it did not plan')}`,
+    );
+  }
   const red = s.failed.length > 0 || s.load_errors.length > 0;
   if (exit !== 0 && !red) {
     throw new OutError(
       `group ${g.name}: Vitest exited ${String(exit)} but its report has no failed test and no file that failed to load (an unhandled error?)`,
     );
+  }
+  if (s.tests === 0 && s.load_errors.length === 0) {
+    throw new OutError(`group ${g.name}: its report has 0 tests (and no file that failed to load)`);
   }
   return {
     name: g.name,

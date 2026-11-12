@@ -2167,7 +2167,7 @@ while read -r -a words; do
     echo "[tests] ${name}: vitest run --config ${config} in ${dir} (${left}s left): ${files[*]}"
     (cd "/work/repo/$dir" && timeout --signal=TERM --kill-after=10 "$left" pnpm exec vitest run \
       --config "$config" --reporter=json --outputFile="/out/${name}.vitest-report.json" \
-      "${files[@]}") || rc=$?
+      "${files[@]}" </dev/null) || rc=$?
   fi
   elapsed=$(( $(date +%s) - g_started ))
   if [ "$rc" -eq 137 ] && [ "$elapsed" -ge "$left" ]; then rc=124; fi

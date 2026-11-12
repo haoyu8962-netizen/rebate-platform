@@ -28,6 +28,8 @@ const UNIT: PlanGroup = {
   database: false,
   files: ['spec/alpha/one.test.ts', 'spec/alpha/two.test.ts'],
 };
+/** spec-unit planned with one.test.ts only: for the cases whose report lists just that file. */
+const UNIT_ONE: PlanGroup = { ...UNIT, files: ['spec/alpha/one.test.ts'] };
 const INT: PlanGroup = {
   name: 'spec-int',
   dir: 'test',
@@ -580,7 +582,7 @@ it(
         tests: [{ ancestors: ['s'], title, status: 'failed' }],
       },
     ]);
-    const res = cli(setup([UNIT], groupFiles('spec-unit', '1', '5', report)));
+    const res = cli(setup([UNIT_ONE], groupFiles('spec-unit', '1', '5', report)));
     expect(res.status, res.stderr).toBe(1);
     expect(hasRaw(res.stderr)).toBe(false);
     const printed = res.stderr
@@ -638,7 +640,7 @@ it(
         tests: [{ title, status: 'failed' }],
       },
     ]);
-    const res = cli(setup([UNIT], groupFiles('spec-unit', '1', '5', report)));
+    const res = cli(setup([UNIT_ONE], groupFiles('spec-unit', '1', '5', report)));
     expect(res.status, res.stderr).toBe(1);
     const printed = res.stderr
       .split('\n')
@@ -669,7 +671,7 @@ it(
         },
       ]);
     const many = cli(
-      setup([UNIT, TESTING], {
+      setup([UNIT_ONE, TESTING], {
         ...groupFiles('spec-unit', '1', '5', red('test/spec/alpha/one.test.ts', 150, 'u')),
         ...groupFiles('testing-unit', '1', '3', red('packages/testing/src/five.test.ts', 51, 't')),
       }),
@@ -687,7 +689,7 @@ it(
     expect((JSON.parse(many.stdout) as Summary).failed).toHaveLength(201);
 
     const exactly = cli(
-      setup([UNIT, TESTING], {
+      setup([UNIT_ONE, TESTING], {
         ...groupFiles('spec-unit', '1', '5', red('test/spec/alpha/one.test.ts', 150, 'u')),
         ...groupFiles('testing-unit', '1', '3', red('packages/testing/src/five.test.ts', 50, 't')),
       }),
@@ -696,6 +698,157 @@ it(
     const two = exactly.stderr.split('\n').filter((l) => l !== '');
     expect(two.filter((l) => l.includes(' > '))).toHaveLength(200);
     expect(two.filter((l) => l.startsWith('… and '))).toHaveLength(0);
+  },
+  CLI_TIMEOUT,
+);
+
+// --- round 3, S2 (D10-1388): every planned test file must have run, and nothing else -----------------
+// The tree under test chooses the Vitest config: a narrowed include, passWithNoTests or a
+// describe.skip of a whole file could leave planned files out while the run still reads green. Per
+// group, the report's test files (relative to --root) are compared with the plan's (dir/file).
+
+it(
+  "[CT-06zzzzz] tests-report CLI: a planned file missing from its group's report (exit 0) → exit 2 naming the group and the missing file",
+  () => {
+    const onlyOne = vitestReport([
+      {
+        rel: 'test/spec/alpha/one.test.ts',
+        status: 'passed',
+        tests: [{ title: '[AC-T-01] a', status: 'passed' }],
+      },
+    ]);
+    const res = cli(setup([UNIT], groupFiles('spec-unit', '0', '5', onlyOne)));
+    expect(res.status, res.stderr).toBe(2);
+    expect(res.stdout).toBe('');
+    expect(res.stderr).toContain('spec-unit');
+    expect(res.stderr).toContain('spec/alpha/two.test.ts');
+    // The file that did run is not named as missing.
+    expect(res.stderr).not.toContain('spec/alpha/one.test.ts');
+    // Also next to a green group, and whatever the other group did.
+    const mixed = cli(
+      setup([TESTING, UNIT], {
+        ...groupFiles('testing-unit', '0', '3', TESTING_GREEN),
+        ...groupFiles('spec-unit', '0', '5', onlyOne),
+      }),
+    );
+    expect(mixed.status, mixed.stderr).toBe(2);
+    expect(mixed.stderr).toContain('spec/alpha/two.test.ts');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] tests-report CLI: more than 20 planned files missing → at most 20 named, the rest as a count',
+  () => {
+    const planned = Array.from(
+      { length: 26 },
+      (_, i) => `spec/many/f${String(i).padStart(2, '0')}.test.ts`,
+    );
+    const group: PlanGroup = { ...UNIT, files: planned };
+    const report = vitestReport([
+      {
+        rel: `test/${planned[0] ?? ''}`,
+        status: 'passed',
+        tests: [{ title: 'ok', status: 'passed' }],
+      },
+    ]);
+    const res = cli(setup([group], groupFiles('spec-unit', '0', '5', report)));
+    expect(res.status, res.stderr).toBe(2);
+    expect(res.stdout).toBe('');
+    const named = planned.slice(1).filter((f) => res.stderr.includes(f));
+    expect(named.length).toBeGreaterThanOrEqual(1);
+    expect(named.length).toBeLessThanOrEqual(20);
+    // 25 missing: 20 named, 5 counted.
+    expect(res.stderr).toMatch(/\b5\b/);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] tests-report CLI: a group whose report has every planned file but 0 tests (and no load error) → exit 2 naming the group',
+  () => {
+    const empty = vitestReport([
+      { rel: 'test/spec/alpha/one.test.ts', status: 'passed', tests: [] },
+      { rel: 'test/spec/alpha/two.test.ts', status: 'passed', tests: [] },
+    ]);
+    const res = cli(
+      setup([UNIT, TESTING], {
+        ...groupFiles('spec-unit', '0', '5', empty),
+        ...groupFiles('testing-unit', '0', '3', TESTING_GREEN),
+      }),
+    );
+    expect(res.status, res.stderr).toBe(2);
+    expect(res.stdout).toBe('');
+    expect(res.stderr).toContain('spec-unit');
+    expect(res.stderr).not.toContain('testing-unit');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] tests-report CLI: a report with a test file the group did not plan → exit 2 naming that file',
+  () => {
+    const extra = vitestReport([
+      {
+        rel: 'test/spec/alpha/one.test.ts',
+        status: 'passed',
+        tests: [{ title: 'a', status: 'passed' }],
+      },
+      {
+        rel: 'test/spec/alpha/two.test.ts',
+        status: 'passed',
+        tests: [{ title: 'c', status: 'passed' }],
+      },
+      {
+        rel: 'test/spec/elsewhere/other.test.ts',
+        status: 'passed',
+        tests: [{ title: 'o', status: 'passed' }],
+      },
+    ]);
+    const res = cli(setup([UNIT], groupFiles('spec-unit', '0', '5', extra)));
+    expect(res.status, res.stderr).toBe(2);
+    expect(res.stdout).toBe('');
+    expect(res.stderr).toContain('spec/elsewhere/other.test.ts');
+    // Another group's planned file in this group's report is just as foreign.
+    const swapped = cli(
+      setup([UNIT, TESTING], {
+        ...groupFiles(
+          'spec-unit',
+          '0',
+          '5',
+          vitestReport([
+            {
+              rel: 'test/spec/alpha/one.test.ts',
+              status: 'passed',
+              tests: [{ title: 'a', status: 'passed' }],
+            },
+            {
+              rel: 'test/spec/alpha/two.test.ts',
+              status: 'passed',
+              tests: [{ title: 'c', status: 'passed' }],
+            },
+            {
+              rel: 'packages/testing/src/five.test.ts',
+              status: 'passed',
+              tests: [{ title: 'five', status: 'passed' }],
+            },
+          ]),
+        ),
+        ...groupFiles('testing-unit', '0', '3', TESTING_GREEN),
+      }),
+    );
+    expect(swapped.status, swapped.stderr).toBe(2);
+    expect(swapped.stderr).toContain('packages/testing/src/five.test.ts');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] tests-report CLI: a load error is still red (exit 1), not a missing file, even when its group then has 0 tests',
+  () => {
+    const res = cli(setup([INT], groupFiles('spec-int', '1', '5', INT_LOAD_ERROR)));
+    expect(res.status, res.stderr).toBe(1);
+    expect((JSON.parse(res.stdout) as Summary).status).toBe('red');
   },
   CLI_TIMEOUT,
 );
