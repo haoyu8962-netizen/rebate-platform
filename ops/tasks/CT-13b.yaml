@@ -1,0 +1,22 @@
+id: CT-13b
+repo: rebate-platform
+title: 规格：specs/events.yaml 的 sdui_card_error.page_version 改为可选——首页等配置化页面（03 §6.2）必带，AI 助手页的卡片（03 §7.2）不带；别的字段不动（D10-1376 ③）
+type: impl
+# 2026-11-13 content 入账（编排 D10-1376 ③）。起因：03 §7.2 规定 AI 助手页卡片解码失败也记 sdui_card_error，AI 助手页不是配置化页面、没有 page_version，
+#   而契约里 page_version 是 integer、required: true，三端没法按契约记——契约没跟上规划（04 管形状、摘要同步类），不改业务规则。
+# 只改 sdui_card_error.page_version：required: false，note 写清「首页等配置化页面（03 §6.2）必带；AI 助手页的卡片（03 §7.2）不带」；version 递增；其余字段与其他事件不动。
+#   事件没有入库的生成物（packages/contracts-ts/scripts/events.ts 只校验），codegen 不产出新文件。三端在本单合并前不自编 page_version。
+# 规则测试由独立 Claude 写（先红）：带 page_version 的首页事件照旧通过；不带 page_version 的 AI 助手页卡片事件通过；type、reason 等其他必填字段缺了仍拒。Opus 实现，Codex contract 评审。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'specs/events.yaml'
+test_paths:
+  - 'test/spec/contracts/sdui-card-error-page-version/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/sdui-card-error-page-version/**'
+status: todo
