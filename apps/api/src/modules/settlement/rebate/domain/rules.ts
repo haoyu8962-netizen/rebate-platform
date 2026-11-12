@@ -1,6 +1,7 @@
 // B2-04j：入账前返利迁移的纯判定（BR-FUND-01 R1–R7、BR-FUND-02、BR-FUND-03、BR-FUND-04 ②、BR-FUND-06、
 // BR-FUND-07）。不读库、不读时钟；状态合法性只经生成的 transitionOrderRebate。
 import { transitionOrderRebate, type OrderRebateEvent, type OrderRebateState } from '@couli/domain';
+import { CREDITABLE_EVENTS } from '../../specs/creditable-events.gen.ts';
 
 /** 订单原因码（orders.reason，BR-FUND-07 的 void 类编码）。 */
 export type VoidReason = 'REFUND' | 'RIGHTS' | 'PUNISH' | 'BLACKLIST' | 'COMMISSION_ZERO';
@@ -48,12 +49,12 @@ export function hasEstimate(platformStatus: string): boolean {
 }
 
 /**
- * BR-FUND-02 可入账事件已登记的平台（taobao、jd、pdd = 确认收货；meituan = 订单完成或核销）。P1 平台
- * （vip、douyin、eleme）未写入前不进入 WAITING。
- * TODO(规划/11 §4.2): 改为读 specs/creditable-events.yaml — blocked on 该文件尚未建立。
+ * BR-FUND-02：可入账事件由 specs/creditable-events.yaml 定义；运行时只读它的生成常量 CREDITABLE_EVENTS
+ * （B2-10a），不读 YAML。登记在规格里的平台才可入账；未写入的平台（含 P1）订单不进入 WAITING。
+ * 逐项严格比较平台名，不按对象键查找（避免原型链上的名字被误认作登记平台）。
  */
 export function isCreditablePlatform(platform: string): boolean {
-  return platform === 'taobao' || platform === 'jd' || platform === 'pdd' || platform === 'meituan';
+  return CREDITABLE_EVENTS.platforms.some((entry) => entry.platform === platform);
 }
 
 /** R4 的触发状态：平台已收货或已结算。 */

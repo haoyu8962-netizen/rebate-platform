@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { CREDITABLE_EVENTS } from '../../specs/creditable-events.gen.ts';
 import {
   commissionChangeOf,
   commissionOutcome,
@@ -66,6 +67,24 @@ it('[AC-B2-04j-UNIT#4] 可入账平台、结算周期取法与未映射状态 ho
   expect(unmappedHoldEnabled(undefined)).toBe(true);
   expect(unmappedHoldEnabled(true)).toBe(true);
   expect(unmappedHoldEnabled(false)).toBe(false);
+});
+
+it('[AC-B2-10a-UNIT#1] 可入账平台只取生成常量的登记项：逐项全等比较，原型链名字、大小写与空白变体都不可入账', () => {
+  for (const entry of CREDITABLE_EVENTS.platforms) {
+    expect(isCreditablePlatform(entry.platform), entry.platform).toBe(true);
+  }
+  for (const name of [
+    '',
+    'Taobao',
+    ' jd',
+    'pdd ',
+    '__proto__',
+    'constructor',
+    'toString',
+    'platforms',
+  ]) {
+    expect(isCreditablePlatform(name), JSON.stringify(name)).toBe(false);
+  }
 });
 
 const settled = { platformStatus: 'SETTLED', fromPlatformStatus: 'SETTLED' } as const;

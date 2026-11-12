@@ -1,0 +1,26 @@
+# 可入账事件规格（唯一一份；规划/08 BR-FUND-02「可入账事件由 specs/creditable-events.yaml 定义」）。
+# 用途：订单收货后能否按 BR-FUND-01 R4 进入 WAITING，只看平台是否登记在本文件里；
+# 运行时读生成常量 apps/api/src/modules/settlement/specs/creditable-events.gen.ts，不读本文件。
+# 改动本文件后在仓库根运行
+#   node apps/api/src/modules/settlement/specs/scripts/generate-creditable-events.ts
+# 重新生成常量并一起入库；规则测试核对两者逐字一致。
+#
+# 结构（生成脚本校验，不合法即失败）：
+#   version    字符串（加引号），每次改动递增
+#   platforms  列表，每项恰好 {platform, event}，同一平台只出现一次
+#     platform  contracts/enums/platform.yaml 的 platform
+#     event     confirm_receipt（确认收货）或 complete_or_verify（订单完成或核销）
+#
+# 取值只照 08 BR-FUND-02：taobao、jd、pdd = 确认收货；meituan = 订单完成或核销。
+# 未登记的 P1 平台，08 BR-FUND-02 原文：「P1 平台 vip、douyin = 确认收货，eleme = 订单完成或核销
+# （P1 平台接入时按 规划/09 实测结果确认后才写入该文件，未写入的平台订单不进入 WAITING）」。
+version: '1'
+platforms:
+  - platform: taobao
+    event: confirm_receipt
+  - platform: jd
+    event: confirm_receipt
+  - platform: pdd
+    event: confirm_receipt
+  - platform: meituan
+    event: complete_or_verify
