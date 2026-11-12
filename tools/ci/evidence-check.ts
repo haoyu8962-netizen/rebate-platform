@@ -99,7 +99,8 @@
 //              The expected list is unchanged by them (such a file still needs a red test).
 //              Declared changes of frozen tests (CT-06zzzg, D10-701): a trusted ledger with
 //              `modify_existing` (frozen tests the task only tightens or de-flakes, green before
-//              and after; red-check lets them pass green) needs, whatever its tester, ① the owner's
+//              and after, or rewrites for a changed BR, rule_change; red-check lets them pass
+//              green) needs, whatever its tester, ① the owner's
 //              approval label owner-approved-<head 12> on the PR head (the same label check as the
 //              waiver below, looked up only with --pr-number: without it, or when the lookup fails,
 //              the entries do not apply and the check fails); ② an evidence `modify_existing` list,
@@ -108,7 +109,11 @@
 //              for character with the blocks tools/guard/lib/test-blocks.ts compareModifiedBlocks
 //              finds (a block that is gone at the head, the base's or not found is refused), and
 //              for tighten_only `mutation` (at least one { mutant, result: killed }), for
-//              flake_fix `loops` ({ runs ≥ MODIFY_LOOPS_MIN, all_green: true, where }); a record
+//              flake_fix `loops` ({ runs ≥ MODIFY_LOOPS_MIN, all_green: true, where }), for
+//              rule_change (CT-06zzzzw, D10-1299 ③: the frozen test follows a changed BR) the
+//              same `mutation` as tighten_only — the reverse check, the implementation put back
+//              to the old rule turns the test red — and `br` exactly as the ledger entry's (same
+//              ids, same order), never `loops`; br on another reason's record is refused; a record
 //              too many or too few is refused. With the label, a listed file that changed after
 //              spec_commit (modified, not removed or renamed) is no longer a class 1 hit when every
 //              difference between its spec_commit and head content lies inside the declared
@@ -612,9 +617,16 @@ function modifyRecordProblems(
       if (i < value.length) at(where, 'must be an object');
       return;
     }
-    const extra = entry.reason === 'tighten_only' ? 'mutation' : 'loops';
+    // CT-06zzzzw (D10-1299 ③): a rule_change record has the reverse check in `mutation`, as
+    // tighten_only, and repeats the ledger's `br`; only flake_fix has `loops`.
+    const extra =
+      entry.reason === 'tighten_only'
+        ? ['mutation']
+        : entry.reason === 'rule_change'
+          ? ['mutation', 'br']
+          : ['loops'];
     // CT-06zzzzr (D10-1278 ②): retitle_to only for an entry that renames its test.
-    const allowed = ['file', 'test', 'reason', 'before', 'after', 'note', extra];
+    const allowed = ['file', 'test', 'reason', 'before', 'after', 'note', ...extra];
     if (entry.retitle_to !== undefined) allowed.push('retitle_to');
     for (const key of Object.keys(record)) {
       if (!allowed.includes(key)) {
@@ -633,6 +645,20 @@ function modifyRecordProblems(
     if (record['reason'] !== entry.reason) at(`${where}.reason`, `must be "${entry.reason}"`);
     if (entry.retitle_to !== undefined && record['retitle_to'] !== entry.retitle_to) {
       at(`${where}.retitle_to`, `must be "${entry.retitle_to}" (ledger)`);
+    }
+    if (entry.reason === 'rule_change') {
+      const want = entry.br ?? [];
+      const br = record['br'];
+      if (
+        !Array.isArray(br) ||
+        br.length !== want.length ||
+        br.some((id: unknown, k) => id !== want[k])
+      ) {
+        at(
+          `${where}.br`,
+          `must be ${JSON.stringify(want)}, the ledger entry's br character for character and in order`,
+        );
+      }
     }
     const found = actual(entry.file);
     const block =
@@ -662,7 +688,7 @@ function modifyRecordProblems(
         at(`${where}.after`, "must be the block's text at the head, character for character");
       }
     }
-    if (entry.reason === 'tighten_only') {
+    if (entry.reason === 'tighten_only' || entry.reason === 'rule_change') {
       const mutation = record['mutation'];
       const good =
         Array.isArray(mutation) &&
@@ -678,7 +704,9 @@ function modifyRecordProblems(
       if (!good) {
         at(
           `${where}.mutation`,
-          'a tighten_only record lists at least one { mutant, result: "killed" }: a mutant the tightened test kills and the old one did not',
+          entry.reason === 'tighten_only'
+            ? 'a tighten_only record lists at least one { mutant, result: "killed" }: a mutant the tightened test kills and the old one did not'
+            : 'a rule_change record lists at least one { mutant, result: "killed" }: the reverse check, the implementation put back to the old rule turns the changed test red',
         );
       }
     } else {

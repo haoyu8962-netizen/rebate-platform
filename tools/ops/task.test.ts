@@ -727,6 +727,73 @@ it('[CT-06zzzg] modify_existing names rule-test files of the task that exist at 
   ).toBe(2);
 });
 
+it('[CT-06zzzzw] modify_existing rule_change: every br id must be in the task refs; check names the entry and the BR id', () => {
+  const RULES = 'test/spec/demo/rules.test.ts';
+  const entry = (test: string, reason: string, br: string | null): string =>
+    `\n  - file: '${RULES}'\n    test: '${test}'\n    reason: ${reason}\n    ruling: D10-1297\n    note: the rule changed, the test follows the new rule${br === null ? '' : `\n    br: ${br}`}`;
+  const ledger = (id: string, entries: string): string =>
+    good({
+      id,
+      type: 'test-change',
+      impl: 'claude',
+      tester: 'none',
+      paths: `\n  - '${RULES}'`,
+      modify_existing: entries,
+    });
+  writeFiles(root, {
+    'tools/guard/protected-paths.json': JSON.stringify({
+      class1_add_only: ['test/spec/**', 'test/properties/**'],
+      class2_verify_config: [],
+      class3_gates: [],
+    }),
+    [RULES]: "import { it } from 'vitest';\n",
+    // Every br id in refs (refs: [BR-DEMO-01]), next to a tighten_only entry without br.
+    'ops/tasks/X1-02hw.yaml': ledger(
+      'X1-02hw',
+      entry('[AC-1] a', 'rule_change', '[BR-DEMO-01]') + entry('[AC-1] b', 'tighten_only', null),
+    ),
+    // One id in refs, one not.
+    'ops/tasks/X1-02hx.yaml': ledger(
+      'X1-02hx',
+      entry('[AC-1] a', 'rule_change', '[BR-DEMO-01, BR-DEMO-02]'),
+    ),
+    // The second entry's only id is not in refs.
+    'ops/tasks/X1-02hy.yaml': ledger(
+      'X1-02hy',
+      entry('[AC-1] a', 'rule_change', '[BR-DEMO-01]') +
+        entry('[AC-1] b', 'rule_change', '[BR-DEMO-03]'),
+    ),
+    // A task without refs at all.
+    'ops/tasks/X1-02hz.yaml': ledger('X1-02hz', entry('[AC-1] a', 'rule_change', '[BR-DEMO-01]'))
+      .replace('refs: [BR-DEMO-01]', 'refs: []')
+      .replace(`refs_hash:\n  BR-DEMO-01: ${HASH}`, 'refs_hash: {}'),
+  });
+  try {
+    expect(checkTask('X1-02hw', opts('RV1'))).toEqual([]);
+    expect(loadTask('X1-02hw', root).modify_existing).toMatchObject([
+      { test: '[AC-1] a', reason: 'rule_change', br: ['BR-DEMO-01'] },
+      { test: '[AC-1] b', reason: 'tighten_only' },
+    ]);
+    const one = checkTask('X1-02hx', opts('RV1'));
+    expect(one).toHaveLength(1);
+    expect(one[0]).toContain('modify_existing[0]');
+    expect(one[0]).toContain('BR-DEMO-02');
+    const second = checkTask('X1-02hy', opts('RV1'));
+    expect(second).toHaveLength(1);
+    expect(second[0]).toContain('modify_existing[1]');
+    expect(second[0]).toContain('BR-DEMO-03');
+    const noRefs = checkTask('X1-02hz', opts('RV1'));
+    expect(noRefs).toHaveLength(1);
+    expect(noRefs[0]).toContain('modify_existing[0]');
+    expect(noRefs[0]).toContain('BR-DEMO-01');
+  } finally {
+    for (const id of ['X1-02hw', 'X1-02hx', 'X1-02hy', 'X1-02hz']) {
+      removeDir(`${root}/ops/tasks/${id}.yaml`);
+    }
+    removeDir(`${root}/test`);
+  }
+});
+
 it('[ops/approvals.yaml id 19] test_paths stay inside the rule-test assets of a task with a tester', () => {
   writeFiles(root, {
     'tools/guard/protected-paths.json': JSON.stringify({

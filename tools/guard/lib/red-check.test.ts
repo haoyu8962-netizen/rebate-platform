@@ -33,6 +33,7 @@ import {
   smokeDiagnosticsVerdict,
   wrongRedReason,
 } from './red-check.ts';
+import type { ModifyExistingDeclaration } from '../../lib/task-file.ts';
 
 const ROOT = '/work/repo';
 
@@ -3338,7 +3339,11 @@ const modDeclared = (tests: string[] = ['[AC-2] late'], file = MOD) =>
     ruling: 'D10-701',
     note: MOD_NOTE,
   }));
-const modBaselines = (head = MOD_HEAD, declared = modDeclared(), base: string | null = MOD_BASE) =>
+const modBaselines = (
+  head = MOD_HEAD,
+  declared: readonly ModifyExistingDeclaration[] = modDeclared(),
+  base: string | null = MOD_BASE,
+) =>
   ruleTestBaselines(
     [MOD],
     [{ path: MOD, status: base === null ? 'A' : 'M' }],
@@ -4087,4 +4092,109 @@ it('[CT-06zzzzr] a file whose only change is the declared renamed block is left 
         'existed at the base and every test is unchanged or a declared change of a frozen test (modify_existing): nothing is shown red (3 test(s))',
     },
   ]);
+});
+
+// CT-06zzzzw (FU-MODIFY-EXISTING-RULE-CHANGE, D10-1299 ③, after B3-08zc): a frozen test changed
+// because its BR changed (reason rule_change, with the BR ids in `br`) is judged like the other
+// two reasons: green on the old code is accepted, red too; the note names rule_change and br.
+const RW_BR = ['BR-PAY-09', 'BR-PAY-11a'];
+const rwDeclared = (tests: string[] = ['[AC-2] late'], br: string[] = RW_BR) =>
+  modDeclared(tests).map((d) => ({ ...d, reason: 'rule_change' as const, ruling: 'D10-1297', br }));
+
+it('[CT-06zzzzw] a declared rule_change block may pass green on the old code, listed with modified: true; the note names rule_change and every br id', () => {
+  const b = modBaselines(MOD_HEAD, rwDeclared());
+  expect(b.get(MOD)).toMatchObject({
+    kind: 'tests',
+    modified: { ok: true, blocks: [{ test: '[AC-2] late', found: true, changed: true }] },
+  });
+  const result = checkRedReports([redReport(MOD, MOD_TESTS)], [MOD], ROOT, b, [], [], rwDeclared());
+  expect(result.problems).toEqual([]);
+  expect(result.ok).toBe(true);
+  expect(result.red).toEqual([`${MOD} > [AC-4] new`]);
+  expect(result.exempt).toContainEqual({
+    file: MOD,
+    test: '[AC-2] late',
+    status: 'passed',
+    declared: true,
+    reason: MOD_NOTE,
+    modified: true,
+  });
+  const note = result.notes.find((n) => n.startsWith(`${MOD} > [AC-2] late:`));
+  expect(note).toBeDefined();
+  expect(note).toContain('modify_existing');
+  expect(note).toContain('rule_change');
+  expect(note).toContain('D10-1297');
+  for (const id of RW_BR) expect(note).toContain(id);
+  // Red on the old code is accepted too (the old implementation usually fails the new rule).
+  const red = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.map((t): RedTest =>
+          t[0] === '[AC-2] late' ? [t[0], 'failed', 'AssertionError: expected 1 to be 2'] : t,
+        ),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    rwDeclared(),
+  );
+  expect(red.problems).toEqual([]);
+  expect(red.ok).toBe(true);
+  expect(red.red).toEqual([`${MOD} > [AC-2] late`, `${MOD} > [AC-4] new`]);
+});
+
+it('[CT-06zzzzw] rule_change changes nothing else: an undeclared changed test and the new test must be red; a renamed rule_change test is matched by retitle_to and its note names both titles and br', () => {
+  // [AC-1] changed too but is not declared: it must be red; the declared one may stay green.
+  const head = file(
+    spec('[AC-1] a', 'expect(2).toBe(2);'),
+    MOD_TIGHT,
+    spec('[AC-3] c'),
+    spec('[AC-4] new'),
+  );
+  const other = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(head, rwDeclared()),
+    [],
+    [],
+    rwDeclared(),
+  );
+  expect(other.problems).toEqual([{ file: MOD, test: '[AC-1] a', reason: NO_TEETH }]);
+  const otherNote = other.notes.find((n) => n.startsWith(`${MOD} > [AC-2] late:`));
+  expect(otherNote).toContain('rule_change');
+  expect(otherNote).toContain('BR-PAY-09');
+  // The new test green: no teeth, as before.
+  const green = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.map(([n]): RedTest => [n, 'passed']),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    modBaselines(MOD_HEAD, rwDeclared()),
+    [],
+    [],
+    rwDeclared(),
+  );
+  expect(green.problems).toEqual([{ file: MOD, test: '[AC-4] new', reason: NO_TEETH }]);
+  // With retitle_to (CT-06zzzzr): matched by the new title, the note names both titles and br.
+  const renamed = () =>
+    rwDeclared([RC_OLD], ['BR-PAY-09']).map((d) => ({ ...d, retitle_to: RC_NEW }));
+  const rb = modBaselines(RC_HEAD, renamed());
+  const result = checkRedReports([redReport(MOD, RC_TESTS)], [MOD], ROOT, rb, [], [], renamed());
+  expect(result.problems).toEqual([]);
+  expect(result.red).toEqual([`${MOD} > [AC-4] new`]);
+  const note = result.notes.find((n) => n.startsWith(`${MOD} > ${RC_NEW}:`));
+  expect(note).toBeDefined();
+  expect(note).toContain('rule_change');
+  expect(note).toContain('BR-PAY-09');
+  expect(note).toContain(RC_OLD);
+  expect(note).toContain(RC_NEW);
 });

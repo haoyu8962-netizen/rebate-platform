@@ -227,7 +227,10 @@
 // frozen [AC-B2-09t#35] went from red by timeout to red by assertion, and FU-B209R-FLAKE, a flaky
 // frozen test): a task that only tightens a frozen test or fixes its flakiness keeps it green on
 // the old code, where a changed block must be red. The trusted ledger names each such test
-// (`modify_existing`: file, full name, reason flake_fix / tighten_only, ruling D10-<n>, note;
+// (`modify_existing`: file, full name, reason flake_fix / tighten_only / rule_change, ruling
+// D10-<n>, note; a rule_change entry, CT-06zzzzw / D10-1299 ③, also names the BR ids it follows,
+// `br`, and is judged exactly as the other two — green on the old code accepted, red too — its
+// note naming the reason and br;
 // tools/lib/task-file.ts, tools/ops/task.ts). For a file it names, ruleTestBaselines asks
 // test-blocks.ts compareModifiedBlocks, against the same base the blocks were compared with,
 // which block each name is: exactly one block with a static title on each side. In
@@ -1740,7 +1743,7 @@ export function checkRedReports(
               : { file, test: name, status, declared: true, reason: declaration.reason };
       const exemptNote = (how: string): string =>
         modifiedEntry !== null
-          ? `${file} > ${name}: a changed frozen test declared in modify_existing (${modifiedEntry.reason}, ${modifiedEntry.ruling}; ${modifiedEntry.retitle_to === undefined ? '' : `renamed from "${modifiedEntry.test}" to "${modifiedEntry.retitle_to}" (retitle_to); `}${how}; note: ${modifiedEntry.note}), not held to the red rule; ${modifiedConfirmation}`
+          ? `${file} > ${name}: a changed frozen test declared in modify_existing (${modifiedEntry.reason}, ${modifiedEntry.ruling}; ${modifiedEntry.br === undefined ? '' : `follows ${modifiedEntry.br.join(', ')} (br); `}${modifiedEntry.retitle_to === undefined ? '' : `renamed from "${modifiedEntry.test}" to "${modifiedEntry.retitle_to}" (retitle_to); `}${how}; note: ${modifiedEntry.note}), not held to the red rule; ${modifiedConfirmation}`
           : row !== null
             ? `${file} > ${name}: a kept row of an .each table whose title template, callback and rows are the base's (rows removed only), exempt by the task's red_exempt_rows declaration (${how}; reason: ${row.reason}); ${rowConfirmation}`
             : declaration === null

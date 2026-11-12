@@ -3086,3 +3086,137 @@ it('[CT-06zzzzr] a ledger rename the head did not make (old title kept, or the o
   const good = modBranch('retitle-good-2', modSource(EV_RETITLED), modEvidence([evRecord()]));
   expect(modCheck(good, trusted, approved(good)).problems).toEqual([]);
 });
+
+// CT-06zzzzw (FU-MODIFY-EXISTING-RULE-CHANGE, D10-1299 ③, after B3-08zc): a frozen test changed
+// because its BR changed is declared with reason rule_change and br; its record carries the same
+// br, in the same order, and a non-empty `mutation` (the reverse check: the implementation put
+// back to the old rule turns the test red), never `loops`.
+const RW_BR = ['BR-PAY-09', 'BR-PAY-11a'];
+const rwLedger = (br: string[] = RW_BR): string =>
+  modLedger('tighten_only')
+    .replace(
+      'refs: []\nrefs_hash: {}\n',
+      `refs: [${br.join(', ')}]\nrefs_hash:\n${br.map((id, i) => `  ${id}: ${'0123456789abcdef'.slice(i, i + 12)}`).join('\n')}\n`,
+    )
+    .replace('    reason: tighten_only\n', `    reason: rule_change\n    br: [${br.join(', ')}]\n`)
+    .replace('    ruling: D10-701\n', '    ruling: D10-1297\n');
+const rwTrusted = (name: string): string => {
+  const dir = modTrusted(name, 'tighten_only');
+  write(dir, { 'ops/tasks/B2-09v.yaml': rwLedger() });
+  return dir;
+};
+const REVERSE = [
+  { mutant: 'the implementation put back to the old rule (BR-PAY-09 before)', result: 'killed' },
+];
+const rwRecord = (extra: Evidence = {}): Evidence =>
+  Object.fromEntries(
+    Object.entries(
+      modRecord({ reason: 'rule_change', br: [...RW_BR], mutation: REVERSE, ...extra }),
+    ).filter(([, v]) => v !== undefined),
+  );
+
+it('[CT-06zzzzw] a rule_change record with a non-empty mutation and the ledger br passes with the label after spec_commit', () => {
+  const trusted = rwTrusted('trusted-rule-change');
+  const ledger = readFileSync(join(trusted, 'ops/tasks/B2-09v.yaml'), 'utf8');
+  expect(ledger).toContain('    reason: rule_change\n    br: [BR-PAY-09, BR-PAY-11a]\n');
+  const head = modBranch('rw-good', modSource(MOD_NEW), modEvidence([rwRecord()]));
+  const ok = modCheck(head, trusted, approved(head));
+  expect(ok.problems).toEqual([]);
+  expect(ok).toMatchObject({ ok: true, risk: 'RV2', task: 'B2-09v', approval_wanted: true });
+  // A note is allowed as for the other reasons.
+  const noted = modBranch(
+    'rw-good-note',
+    modSource(MOD_NEW),
+    modEvidence([rwRecord({ note: 'old rule put back: the test turns red' })]),
+  );
+  expect(modCheck(noted, trusted, approved(noted)).problems).toEqual([]);
+  // Without the label the entries do not apply, as for the other reasons.
+  const local = modCheck(head, trusted);
+  expect(local.ok).toBe(false);
+  expect(local.problems.join('\n')).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${MOD_FILE} (M) [declared in modify_existing, but without the owner approval label]`,
+  );
+});
+
+it('[CT-06zzzzw] a rule_change record is refused without a non-empty mutation, with a br other than the ledger, with loops, or under another reason', () => {
+  const trusted = rwTrusted('trusted-rule-change');
+  const cases: [string, Evidence, RegExp][] = [
+    ['no mutation', { mutation: undefined }, /modify_existing\[0\]\.mutation: /],
+    ['empty mutation', { mutation: [] }, /modify_existing\[0\]\.mutation: /],
+    [
+      'survived',
+      { mutation: [{ mutant: 'old rule', result: 'survived' }] },
+      /modify_existing\[0\]\.mutation: /,
+    ],
+    [
+      'blank mutant',
+      { mutation: [{ mutant: ' ', result: 'killed' }] },
+      /modify_existing\[0\]\.mutation: /,
+    ],
+    ['mutation not a list', { mutation: REVERSE[0] }, /modify_existing\[0\]\.mutation: /],
+    ['no br', { br: undefined }, /modify_existing\[0\]\.br: /],
+    ['br reordered', { br: ['BR-PAY-11a', 'BR-PAY-09'] }, /modify_existing\[0\]\.br: /],
+    ['br one missing', { br: ['BR-PAY-09'] }, /modify_existing\[0\]\.br: /],
+    ['br one extra', { br: [...RW_BR, 'BR-PAY-12'] }, /modify_existing\[0\]\.br: /],
+    ['br written otherwise', { br: ['BR-PAY-9', 'BR-PAY-11a'] }, /modify_existing\[0\]\.br: /],
+    ['br a string', { br: 'BR-PAY-09, BR-PAY-11a' }, /modify_existing\[0\]\.br: /],
+    ['br empty', { br: [] }, /modify_existing\[0\]\.br: /],
+    ['loops', { loops: LOOPS }, /modify_existing\[0\]\.loops: unknown field/],
+    [
+      'loops instead of mutation',
+      { loops: LOOPS, mutation: undefined },
+      /modify_existing\[0\]\.(loops|mutation): /,
+    ],
+    [
+      'reason tighten_only',
+      { reason: 'tighten_only' },
+      /modify_existing\[0\]\.reason: must be "rule_change"/,
+    ],
+  ];
+  for (const [name, extra, want] of cases) {
+    const head = modBranch(
+      `rw-rec-${name.replace(/ /g, '-')}`,
+      modSource(MOD_NEW),
+      modEvidence([rwRecord(extra)]),
+    );
+    const report = modCheck(head, trusted, approved(head));
+    expect(report.ok, name).toBe(false);
+    expect(report.problems.join('\n'), name).toMatch(want);
+  }
+  // loops on a rule_change record is refused even next to a good mutation and br (the only fault).
+  const loops = modBranch(
+    'rw-loops-only',
+    modSource(MOD_NEW),
+    modEvidence([rwRecord({ loops: LOOPS })]),
+  );
+  expect(modCheck(loops, trusted, approved(loops)).problems).toEqual([
+    expect.stringMatching(
+      /^ops\/evidence\/B2-09v\.json: modify_existing\[0\]\.loops: unknown field/,
+    ),
+  ]);
+});
+
+it('[CT-06zzzzw] tighten_only and flake_fix records may not carry br (unknown field)', () => {
+  const tight = modBranch(
+    'rw-tight-br',
+    modSource(MOD_NEW),
+    modEvidence([modRecord({ br: ['BR-PAY-09'] })]),
+  );
+  const t = modCheck(tight, modTrusted('trusted-modify', 'tighten_only'), approved(tight));
+  expect(t.ok).toBe(false);
+  expect(t.problems.join('\n')).toMatch(/modify_existing\[0\]\.br: unknown field/);
+  const flake = modBranch(
+    'rw-flake-br',
+    modSource(MOD_NEW),
+    modEvidence([
+      Object.fromEntries(
+        Object.entries(
+          modRecord({ reason: 'flake_fix', mutation: undefined, loops: LOOPS, br: ['BR-PAY-09'] }),
+        ).filter(([, v]) => v !== undefined),
+      ),
+    ]),
+  );
+  const f = modCheck(flake, modTrusted('trusted-modify-flake', 'flake_fix'), approved(flake));
+  expect(f.ok).toBe(false);
+  expect(f.problems.join('\n')).toMatch(/modify_existing\[0\]\.br: unknown field/);
+});

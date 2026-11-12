@@ -154,8 +154,15 @@ export type RedExemptRowDeclaration = {
   reason: string;
 };
 
-/** Why a frozen test is changed while it stays green (CT-06zzzg, D10-701). */
-export const MODIFY_EXISTING_REASONS = ['flake_fix', 'tighten_only'] as const;
+/**
+ * Why a frozen test is changed (CT-06zzzg, D10-701): `flake_fix` and `tighten_only` stay green
+ * before and after; `rule_change` (CT-06zzzzw, D10-1299 ③) follows a BR that changed, so the old
+ * implementation is mostly red against it, and the entry names the BR ids (`br`).
+ */
+export const MODIFY_EXISTING_REASONS = ['flake_fix', 'tighten_only', 'rule_change'] as const;
+
+/** A business rule id of a rule_change entry's `br` (CT-06zzzzw): `BR-<DOMAIN>-<number>[a-z]`. */
+export const BR_ID_PATTERN = /^BR-[A-Z]+-[0-9]+[a-z]?$/;
 
 /** An orchestrator ruling id (CT-06zzzg): `D10-<number>`. */
 export const RULING_PATTERN = /^D10-[1-9][0-9]*$/;
@@ -177,6 +184,12 @@ export type ModifyExistingDeclaration = {
    * the same order. Absent (no key) when the test keeps its name.
    */
   retitle_to?: string;
+  /**
+   * The BR ids the changed test follows (CT-06zzzzw, D10-1299 ③): required for reason
+   * `rule_change` (a non-empty list of BR_ID_PATTERN ids, no duplicates, each in the task's refs:
+   * tools/ops/task.ts), refused for the other reasons. Absent (no key) when not written.
+   */
+  br?: string[];
 };
 
 /** The [AC-…] ids of a test name, in order (CT-06zzzzr: a rename keeps them character for character). */
@@ -523,14 +536,18 @@ function redExemptOutsideList(value: unknown, problems: string[]): RedExemptOuts
  * RED_EXEMPT_REASON_MIN characters once trimmed, and no file + test named twice. An entry may
  * also carry `retitle_to` (CT-06zzzzr, D10-1278): the new full name, non-empty, not the test's own,
  * with the test's [AC-…] ids (acIdsOf) unchanged, and in one file never another entry's test or
- * retitle_to. The cap shared with red_exempt and whether the file is a rule-test file of the task
- * that exists at the base are checked by parseTaskFile and tools/ops/task.ts.
+ * retitle_to. An entry with reason `rule_change` (CT-06zzzzw, D10-1299 ③) must carry `br`: a
+ * non-empty list of BR_ID_PATTERN ids without duplicates; the other reasons may not carry it. The
+ * cap shared with red_exempt, whether the file is a rule-test file of the task that exists at the
+ * base and whether every br id is in the task's refs are checked by parseTaskFile and
+ * tools/ops/task.ts.
  */
 function modifyExistingList(value: unknown, problems: string[]): ModifyExistingDeclaration[] {
   const label = 'modify_existing';
   const fields = ['file', 'test', 'reason', 'ruling', 'note'];
-  // CT-06zzzzr: retitle_to is optional; the messages keep naming the five required fields.
-  const allowed = [...fields, 'retitle_to'];
+  // CT-06zzzzr: retitle_to is optional; CT-06zzzzw: br goes with rule_change only. The messages
+  // keep naming the five required fields.
+  const allowed = [...fields, 'retitle_to', 'br'];
   if (!Array.isArray(value)) {
     problems.push(`${label}: must be a list of mappings (${fields.join(' / ')})`);
     return [];
@@ -599,6 +616,19 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
         }
       }
     }
+    // CT-06zzzzw (D10-1299 ③): br is the BR ids a rule_change entry follows, and only that.
+    const hasBr = Object.hasOwn(item, 'br');
+    const br = item['br'];
+    if (reason === 'rule_change') {
+      const brProblem = brListProblem(hasBr, br);
+      if (brProblem !== null) {
+        problems.push(`${at}.br: ${brProblem}`);
+        ok = false;
+      }
+    } else if (hasBr) {
+      problems.push(`${at}.br: only an entry with reason rule_change names the BR ids it follows`);
+      ok = false;
+    }
     if (!ok) return;
     const key = `${file as string}\u0000${test as string}`;
     if (seen.has(key)) {
@@ -614,6 +644,7 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
       note: note as string,
     };
     if (hasRetitle) entry.retitle_to = retitle as string;
+    if (reason === 'rule_change') entry.br = [...(br as string[])];
     out.push(entry);
     indexes.push(index);
   });
@@ -634,6 +665,23 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
     }
   });
   return out;
+}
+
+/** Why a rule_change entry's `br` is not a non-empty list of distinct BR ids (CT-06zzzzw), or null. */
+function brListProblem(present: boolean, value: unknown): string | null {
+  const want =
+    'a rule_change entry names the BR ids it follows: a non-empty list of BR-<DOMAIN>-<number> ids (e.g. BR-AI-14), each in the task refs';
+  if (!present) return `missing (${want})`;
+  if (!Array.isArray(value) || value.length === 0) return `must be ${want}`;
+  const seen = new Set<string>();
+  for (const id of value as unknown[]) {
+    if (typeof id !== 'string' || !BR_ID_PATTERN.test(id)) {
+      return `${JSON.stringify(id)} is not a BR id (BR-<DOMAIN>-<number>, an optional lower-case letter after the number)`;
+    }
+    if (seen.has(id)) return `"${id}" is listed twice`;
+    seen.add(id);
+  }
+  return null;
 }
 
 /** Why `value` is not one quoted name literal (RENAME_LITERAL), or null. */

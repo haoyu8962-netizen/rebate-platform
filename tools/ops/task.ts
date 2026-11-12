@@ -46,7 +46,8 @@ export function countedLines(text: string): number {
     // CT-06zzzc (D10-623): and the `red_exempt_outside` section (RED_EXEMPT_MAX entries of file /
     // reason); CT-06zzze (D10-657): and the `red_exempt_rows` section (RED_EXEMPT_MAX entries of
     // file / test / reason, as red_exempt); CT-06zzzg (D10-701): and the `modify_existing` section
-    // (RED_EXEMPT_MAX entries together with red_exempt, of file / test / reason / ruling / note).
+    // (RED_EXEMPT_MAX entries together with red_exempt, of file / test / reason / ruling / note,
+    // CT-06zzzzr / CT-06zzzzw: and the optional retitle_to / br).
     if (
       /^(red_exempt|red_exempt_outside|red_exempt_rows|modify_existing|renames|expected_values):/.test(
         line,
@@ -573,6 +574,17 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
         );
       }
     }
+    // CT-06zzzzw (D10-1299 ③): a rule_change entry follows BRs of the task itself: every br id is
+    // in its refs (the shape of br is checked by parseTaskFile).
+    task.modify_existing.forEach((d, i) => {
+      if (d.reason !== 'rule_change') return;
+      const missing = (d.br ?? []).filter((id) => !task.refs.includes(id));
+      if (missing.length > 0) {
+        problems.push(
+          `modify_existing[${i}].br: ${missing.join(', ')} not in the task's refs (a rule_change entry follows BRs the task refers to; add them to refs or fix br)`,
+        );
+      }
+    });
   }
 
   // CT-06zxe (D10-371): registered expected values name rule-test files of the task's own

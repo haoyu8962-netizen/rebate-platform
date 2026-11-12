@@ -1,0 +1,27 @@
+id: CT-06zzzzw
+repo: rebate-platform
+title: CT-06zzzzw：modify_existing 原因加 rule_change（规则变更）——必须带裁定号与所依据的 BR（br，须在任务 refs 内），证据与 tighten_only 一样要反向验证（mutation），免得再借 tighten_only 的名（FU-MODIFY-EXISTING-RULE-CHANGE，D10-1299 ③）
+type: guard-change
+# 2026-11-12 ops 入账（编排 D10-1299 ③、D10-1334 同意排上）。起因：B3-08zc 四条冻结用例因规则变更改写，只能借 tighten_only 落地（工具只认 flake_fix / tighten_only），证据 mutation 填 D10-1297 ④ 的两项反向验证。
+# 台账：MODIFY_EXISTING_REASONS 加 rule_change；reason 为 rule_change 时条目必须有 br（非空列表，每项形如 BR-<域>-<编号>，不重复），且每项都在任务 refs 里（tools/ops/task.ts check）；其他原因不得写 br。
+# red-check：rule_change 与另两种原因同样允许旧代码上为绿（规则变更后旧实现多半红，红也不拦）。evidence-check：rule_change 的记录与 tighten_only 一样必须有非空 mutation（反向验证：把实现改回旧规则，用例必须变红），并带 br 与台账逐字相同。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzw.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

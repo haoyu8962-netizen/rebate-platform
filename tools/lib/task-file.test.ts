@@ -6,6 +6,7 @@ import {
   EXPECTED_VALUE_LENGTH_MAX,
   EXPECTED_VALUE_SHAPE,
   EXPECTED_VALUES_MAX,
+  MODIFY_EXISTING_REASONS,
   RENAME_CONTENT_MIN,
   RENAMES_MAX,
   listTaskIds,
@@ -614,6 +615,152 @@ describe('parseTaskFile', () => {
         rtEntry('[AC-1] b', { file: OTHER, retitle_to: "'[AC-1] c'" }),
     );
     expect(parseTaskFile(acrossBoth, 'B2-02a.yaml').modify_existing).toHaveLength(2);
+  });
+
+  // CT-06zzzzw (FU-MODIFY-EXISTING-RULE-CHANGE, D10-1299 ③, after B3-08zc): a frozen test changed
+  // because its BR changed is declared with reason rule_change and the BR ids it follows (`br`).
+  const RW_FILE = 'test/spec/agent/intent.test.ts';
+  const RW_TEST = '[AC-B3-08zc#4] 意图路由按新规则';
+  const rwDeclared = (entries: string): string =>
+    EXAMPLE.replace('tester: claude', `tester: claude\nmodify_existing:${entries}`);
+  const rwEntry = (test: string, fields: Record<string, string> = {}): string => {
+    const all: Record<string, string> = {
+      file: RW_FILE,
+      test: `'${test}'`,
+      reason: 'rule_change',
+      ruling: 'D10-1297',
+      note: "'BR-AI-14 改了，用例跟着新规则改写'",
+      br: '[BR-AI-14]',
+      ...fields,
+    };
+    const lines = Object.entries(all)
+      .filter(([, v]) => v !== '')
+      .map(([k, v], i) => `${i === 0 ? '  - ' : '    '}${k}: ${v}`);
+    return `\n${lines.join('\n')}`;
+  };
+  /** A problem of the br field itself (not the old "unknown field" refusal). */
+  const BR_PROBLEM = (i: number): RegExp =>
+    new RegExp(`modify_existing\\[${i}\\]\\.br: (?!unknown field)`);
+
+  it('[CT-06zzzzw] modify_existing rule_change: accepted with br, the BR ids kept in order; the three reasons; without br the entry has no br key', () => {
+    expect([...MODIFY_EXISTING_REASONS]).toEqual(['flake_fix', 'tighten_only', 'rule_change']);
+    const one = rwDeclared(rwEntry(RW_TEST));
+    expect(messageOf(one, 'B2-02a.yaml')).toBe('');
+    expect(parseTaskFile(one, 'B2-02a.yaml').modify_existing).toEqual([
+      {
+        file: RW_FILE,
+        test: RW_TEST,
+        reason: 'rule_change',
+        ruling: 'D10-1297',
+        note: 'BR-AI-14 改了，用例跟着新规则改写',
+        br: ['BR-AI-14'],
+      },
+    ]);
+    // Several ids (one with a letter suffix), kept as written and in order.
+    const several = rwDeclared(rwEntry(RW_TEST, { br: '[BR-FUND-16a, BR-AI-14, BR-WDR-3]' }));
+    expect(parseTaskFile(several, 'B2-02a.yaml').modify_existing[0]).toMatchObject({
+      reason: 'rule_change',
+      br: ['BR-FUND-16a', 'BR-AI-14', 'BR-WDR-3'],
+    });
+    // A block list is the same list.
+    const block = rwDeclared(rwEntry(RW_TEST, { br: '\n      - BR-AI-14\n      - BR-AI-15' }));
+    expect(parseTaskFile(block, 'B2-02a.yaml').modify_existing[0]).toMatchObject({
+      br: ['BR-AI-14', 'BR-AI-15'],
+    });
+    // rule_change together with retitle_to.
+    const renamed = rwDeclared(
+      rwEntry(RW_TEST, { retitle_to: "'[AC-B3-08zc#4] 意图路由按新规则（改名）'" }),
+    );
+    expect(parseTaskFile(renamed, 'B2-02a.yaml').modify_existing[0]).toMatchObject({
+      reason: 'rule_change',
+      retitle_to: '[AC-B3-08zc#4] 意图路由按新规则（改名）',
+      br: ['BR-AI-14'],
+    });
+    // tighten_only and flake_fix without br: no key at all (not an empty list, not undefined).
+    const others = parseTaskFile(
+      rwDeclared(
+        rwEntry('[AC-1] a', { reason: 'tighten_only', br: '' }) +
+          rwEntry('[AC-1] b', { reason: 'flake_fix', br: '' }) +
+          rwEntry('[AC-1] c'),
+      ),
+      'B2-02a.yaml',
+    ).modify_existing;
+    expect(others.map((e) => e.reason)).toEqual(['tighten_only', 'flake_fix', 'rule_change']);
+    expect(others.map((e) => Object.hasOwn(e, 'br'))).toEqual([false, false, true]);
+  });
+
+  it('[CT-06zzzzw] modify_existing rule_change refused: br missing, empty, not a list, a malformed id, a duplicate', () => {
+    const cases: [string, string][] = [
+      ['missing', rwDeclared(rwEntry(RW_TEST, { br: '' }))],
+      ['empty list', rwDeclared(rwEntry(RW_TEST, { br: '[]' }))],
+      ['null', rwDeclared(rwEntry(RW_TEST, { br: 'null' }))],
+      ['a string', rwDeclared(rwEntry(RW_TEST, { br: 'BR-AI-14' }))],
+      ['a number in the list', rwDeclared(rwEntry(RW_TEST, { br: '[BR-AI-14, 7]' }))],
+      ['an empty string in the list', rwDeclared(rwEntry(RW_TEST, { br: "[BR-AI-14, '']" }))],
+      ['lower-case domain', rwDeclared(rwEntry(RW_TEST, { br: '[BR-ai-14]' }))],
+      ['no number', rwDeclared(rwEntry(RW_TEST, { br: '[BR-AI]' }))],
+      ['no prefix', rwDeclared(rwEntry(RW_TEST, { br: '[AI-14]' }))],
+      ['two suffix letters', rwDeclared(rwEntry(RW_TEST, { br: '[BR-AI-14ab]' }))],
+      ['upper-case suffix', rwDeclared(rwEntry(RW_TEST, { br: '[BR-AI-14A]' }))],
+      ['spaces around', rwDeclared(rwEntry(RW_TEST, { br: "[' BR-AI-14']" }))],
+      ['a ruling id', rwDeclared(rwEntry(RW_TEST, { br: '[D10-1297]' }))],
+      ['a duplicate', rwDeclared(rwEntry(RW_TEST, { br: '[BR-AI-14, BR-AI-15, BR-AI-14]' }))],
+    ];
+    for (const [name, text] of cases) {
+      const message = messageOf(text, 'B2-02a.yaml');
+      expect(message, name).toMatch(BR_PROBLEM(0));
+      // The reason itself is valid: only br is at fault.
+      expect(message, name).not.toContain('modify_existing[0].reason:');
+    }
+    // The index is the entry's own.
+    expect(
+      messageOf(
+        rwDeclared(rwEntry('[AC-1] ok') + rwEntry(RW_TEST, { br: '[BR-AI-14, BR-AI-14]' })),
+        'B2-02a.yaml',
+      ),
+    ).toMatch(BR_PROBLEM(1));
+    expect(
+      messageOf(rwDeclared(rwEntry('[AC-1] ok') + rwEntry(RW_TEST, { br: '' })), 'B2-02a.yaml'),
+    ).toMatch(BR_PROBLEM(1));
+  });
+
+  it('[CT-06zzzzw] modify_existing br on tighten_only or flake_fix is refused (br only goes with rule_change)', () => {
+    for (const reason of ['tighten_only', 'flake_fix']) {
+      const message = messageOf(rwDeclared(rwEntry(RW_TEST, { reason })), 'B2-02a.yaml');
+      expect(message, reason).toMatch(/modify_existing\[0\]\.br: /);
+      expect(message, reason).not.toContain('modify_existing[0].reason:');
+      // An empty list on another reason is refused too.
+      expect(
+        messageOf(rwDeclared(rwEntry(RW_TEST, { reason, br: '[]' })), 'B2-02a.yaml'),
+        reason,
+      ).toMatch(/modify_existing\[0\]\.br: /);
+    }
+    expect(
+      messageOf(
+        rwDeclared(rwEntry('[AC-1] ok') + rwEntry(RW_TEST, { reason: 'tighten_only' })),
+        'B2-02a.yaml',
+      ),
+    ).toMatch(/modify_existing\[1\]\.br: /);
+  });
+
+  it('[CT-06zzzzw] modify_existing messages keep the five-field list; the reasons list names rule_change; other unknown fields are still refused next to br', () => {
+    expect(messageOf(rwDeclared(' abc'), 'B2-02a.yaml')).toContain(
+      'modify_existing: must be a list of mappings (file / test / reason / ruling / note)',
+    );
+    expect(messageOf(rwDeclared('\n  - abc'), 'B2-02a.yaml')).toContain(
+      'modify_existing[0]: must be a mapping (file / test / reason / ruling / note)',
+    );
+    const loosen = messageOf(rwDeclared(rwEntry(RW_TEST, { reason: 'loosen' })), 'B2-02a.yaml');
+    expect(loosen).toMatch(/modify_existing\[0\]\.reason: must be one of [^\n]*rule_change/);
+    expect(loosen).toContain('flake_fix');
+    expect(loosen).toContain('tighten_only');
+    // br is a known field now: an extra field next to it is the only unknown one.
+    const extra = messageOf(rwDeclared(`${rwEntry(RW_TEST)}\n    extra: x`), 'B2-02a.yaml');
+    expect(extra).toContain('modify_existing[0].extra: unknown field');
+    expect(extra).not.toContain('modify_existing[0].br: unknown field');
+    expect(
+      messageOf(rwDeclared(rwEntry(RW_TEST, { brs: '[BR-AI-14]', br: '' })), 'B2-02a.yaml'),
+    ).toContain('modify_existing[0].brs: unknown field');
   });
 
   it('[CT-06zxc] renames: quoted name literals, optional, every malformed entry refused', () => {
