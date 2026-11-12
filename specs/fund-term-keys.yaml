@@ -53,6 +53,9 @@
 # CT-09s：08 BR-TEXT-12 细则（2026-11-06 DSX-01）写明：BR-TEXT-14 表 C 通用状态键 state.value_missing.a11y 单列归 fund_terms
 # （按 ③，出现在余额与返利金额的位置）；state.loading、state.load_failed.title / .desc、state.timeout、state.retry、
 # state.empty.default 逐键归 ordinary（不用 state. 整前缀，因两段不能同时以前缀与单列命中同一组）。
+# CT-26zl：08 BR-TEXT-12 细则（2026-11-12 Agent 设计补全）写明 agent.reply.empty、agent.suggest.empty.*、agent.product_list、
+# agent.card.claim_draft.submit、agent.notice.quote_failed、agent.notice.search_disabled.<platform> 归普通，逐键列出、不加前缀；
+# agent.notice.search_disabled.<platform> 与 agent.notice.search_disabled 同句含「查返利」，照它进 exempt。
 fund_terms:
   prefixes:
     - order_status.
@@ -291,6 +294,7 @@ ordinary:
     - agent.card.auth_required.title_login
     - agent.card.claim_draft.open_times
     - agent.card.claim_draft.paid_date
+    - agent.card.claim_draft.submit
     - agent.card.claim_draft.title
     - agent.card.handoff.desc
     - agent.card.handoff.title
@@ -320,13 +324,18 @@ ordinary:
     - agent.notice.ordinal_default
     - agent.notice.platform_unrecognized
     - agent.notice.price_unrecognized
+    - agent.notice.quote_failed
     - agent.notice.relaxed_price
     - agent.notice.relaxed_spec
     - agent.notice.search_disabled
+    - agent.notice.search_disabled.jd
+    - agent.notice.search_disabled.pdd
+    - agent.notice.search_disabled.taobao
     - agent.notice.title_based
     - agent.notice.tlj_none
     - agent.notice.tlj_taobao_only
     - agent.order.lookup_limited
+    - agent.product_list
     - agent.refuse.advice
     - agent.refuse.out_of_scope
     - agent.refuse.output_blocked
@@ -334,8 +343,12 @@ ordinary:
     - agent.refuse.safety_timeout
     - agent.refuse.safety_unavailable
     - agent.refuse.unsafe
+    - agent.reply.empty
     - agent.rule.found
     - agent.rule.not_found
+    - agent.suggest.empty.1
+    - agent.suggest.empty.2
+    - agent.suggest.empty.3
     - agent.suggest.no_result.1
     - agent.suggest.no_result.2
     - agent.suggest.no_result.3
@@ -899,6 +912,12 @@ exempt:
     reason: 实名同意弹层要点，只说收集姓名和身份证号用于提现前核验身份，不说金额、状态或有没有返利（08 表 C 原文，另归 content.agreement）
   - key: agent.notice.search_disabled
     reason: 只是请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）
+  - key: agent.notice.search_disabled.jd
+    reason: 同 agent.notice.search_disabled，只是按平台分开，请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）
+  - key: agent.notice.search_disabled.pdd
+    reason: 同 agent.notice.search_disabled，只是按平台分开，请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）
+  - key: agent.notice.search_disabled.taobao
+    reason: 同 agent.notice.search_disabled，只是按平台分开，请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）
   - key: agent.refuse.out_of_scope
     reason: 介绍助手能做的事（查返利、解答返利规则），不说金额、状态或有没有返利
   - key: agent.welcome

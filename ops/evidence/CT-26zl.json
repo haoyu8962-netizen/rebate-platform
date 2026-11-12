@@ -1,0 +1,37 @@
+{
+  "risk_note": "Contract + texts only (Agent A9, D10-1287; D10-1293 keeps planned on the three endpoints until their implementation PRs). openapi: listAgentSessionMessages description and AgentHistoryMessage.text say user text is the stored masked form (04 §6.5, BR-AI-19 细则, BR-AI-14 脱敏表); sendAgentMessage documents the 50401 error-frame case (BR-AI-15 细则, 08 13 §13.11: every link failed for server-side reasons or the no-model context-entry quote failed; refunded; retryable=false; no retry with the same client_msg_id). error-codes.yaml 50401 meaning / action per 08 13 §13.11 l.447, sources + BR-AI-15. texts.default.json adds agent.card.claim_draft.submit, agent.notice.quote_failed, agent.notice.search_disabled.taobao / jd / pdd, agent.product_list, agent.reply.empty, agent.suggest.empty.1-3 (08 BR-TEXT-22 l.1676-1681, BR-TEXT-14 table C l.1228 verbatim); fund-term-keys.yaml classifies them ordinary (BR-TEXT-12 细则), gen regenerated. Generated openapi.gen.ts / error-codes.gen.ts / fund-term-keys.gen.ts. Host: contracts:check 0, contracts-ts 392, agent-history / agent-accept / text-guard 2112, apps/api contract.test 8. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-26zl/review-codex-contract-r1.json, no findings."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-26zl",
+  "spec_commit": "dc0801378aa49241a9a931fd3fabaa0abbfa832b",
+  "spec_ref": "a36eb9360fdae7c0216e9d7f8aab4285d9f05b15",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "726d32c720c2228b3a07dab80ee6a6930cae5437",
+    "specs": "f78e529ad2f2d314556b8c6b89ba069325a3ff9f"
+  }
+}

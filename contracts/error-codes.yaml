@@ -1089,11 +1089,11 @@ codes:
     sources: [BR-PAY-03]
   - code: 50401
     http: 504
-    meaning: 依赖超时（Agent 发送消息：存储暂不可用或受理结果未知，不保证未计数，BR-AI-23 细则，2026-10-08）
-    action: 通用错误态 + trace_id 后 6 位；Agent 发送消息用同一 client_msg_id 重试
+    meaning: 依赖超时（Agent 发送消息返回 JSON：存储暂不可用或受理结果未知，不保证未计数，BR-AI-23 细则，2026-10-08；Agent 事件流的 error 帧：含链接或口令的消息每个链接都因服务端原因没出成卡，或无模型时商品情境入口的报价因服务端原因失败，这一条退还，帧上 `retryable` 为 false，BR-AI-15 细则，2026-11-12）
+    action: 通用错误态 + trace_id 后 6 位；Agent 发送消息返回 JSON 时用同一 client_msg_id 重试；出现在 Agent 事件流的 error 帧上时只显示错误条目，不拿同一 client_msg_id 重试，用户重新发送算一条新消息
     retry: 是
     retry_kind: immediate
-    sources: [BR-PROD-05, BR-ID-25, BR-AI-23]
+    sources: [BR-PROD-05, BR-ID-25, BR-AI-23, BR-AI-15]
 # JSBridge 专用码段，逐码定义在 规划/04 §9 与 contracts/bridge.schema.json（CT-03），HTTP 接口不返回。
 ranges:
   - from: 90001

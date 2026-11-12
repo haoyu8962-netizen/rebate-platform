@@ -10911,11 +10911,15 @@ export interface paths {
          *     Paging: the first page holds the newest `limit` messages; items[] inside a page are in time
          *     order, oldest first. next_cursor fetches the page of earlier (older) messages; null means
          *     there are no earlier messages.
-         *     Each item is one agent_messages row: role user (the text as the user sent it, cards [] and
-         *     finish_reason null) or assistant (the text after OutputGuard, possibly '' while nothing
-         *     has been written yet; finish_reason as in the done frame, contracts/enums agent_finish_reason,
-         *     null while the run has not ended). cards[] are the card frames as they were sent (card_id,
-         *     type, schema_version, data, fallback_text; the frame's seq is not kept); data follows
+         *     Each item is one agent_messages row: role user (the stored masked form of the message, not
+         *     the user's original text, which the server does not keep: 04 §6.5, BR-AI-19 细则「助手回复落库」,
+         *     2026-11-12; masked by the BR-AI-14 脱敏表, e.g. links and 口令 are kept, a phone number keeps
+         *     its first 3 and last 4 digits, other long numbers their last 4 (BR-AI-05 细则「上下文块」⑤:
+         *     落库的形式保留了链接、口令和长数字的后 4 位); cards [] and finish_reason null) or assistant (the
+         *     text after OutputGuard, possibly '' while nothing has been written yet; finish_reason as in
+         *     the done frame, contracts/enums agent_finish_reason, null while the run has not ended).
+         *     cards[] are the card frames as they were sent (card_id, type, schema_version, data,
+         *     fallback_text; the frame's seq is not kept); data follows
          *     contracts/agent-stream.schema.json card_<type>, and a client that does not know the type
          *     shows fallback_text (03 §7.4). One exception: earnings_summary keeps no amounts (BR-AI-19,
          *     BR-AI-01 细则「收益查询」), so its data is only the earnings_summary_history shape, as_of and
@@ -10955,9 +10959,15 @@ export interface paths {
          *     contracts/agent-stream.schema.json (`event:` / `id:` / `data:` lines, a `: ping` comment
          *     every 15 s); meta first, exactly one terminal frame (done or error) last. Failures after
          *     acceptance are error frames (30501 when the switch goes off, 10004 when the consent is
-         *     withdrawn, 50302 with fallback_q, 50001, 50401). No resume (02 §9): after a disconnect the
-         *     client reloads GET .../messages (03 §7.2). The client tells the two kinds of answer apart by
-         *     Content-Type.
+         *     withdrawn, 50302 with fallback_q, 50001, 50401). The error frame 50401 (BR-AI-15 细则,
+         *     08 §13.11, 2026-11-12) ends a run when, in a message with links or 口令, every link failed to
+         *     give a card for server-side reasons (upstream timeout, 5xx, circuit open), or, without a
+         *     model, when the quote of the product context entry failed for server-side reasons; this
+         *     message is refunded and the frame has retryable=false. Unlike the JSON 50401 above, the
+         *     client only shows the error entry and does not retry with the same client_msg_id (that would
+         *     only replay this terminal frame); the user sending again is a new message with a new
+         *     client_msg_id (03 §7.2). No resume (02 §9): after a disconnect the client reloads GET
+         *     .../messages (03 §7.2). The client tells the two kinds of answer apart by Content-Type.
          *     Repeated client_msg_id (⑥, 04 §8.1 重复消息; the body is not compared): when it is answered
          *     with a stream, 200 text/event-stream with two frames, ids from 1: meta (the original run's
          *     ids, duplicate=true) and the original terminal frame replayed (an original run with no
@@ -19143,7 +19153,7 @@ export interface components {
             role: "user" | "assistant";
             /** Format: date-time */
             created_at: string;
-            /** @description user, the text as sent; assistant, the text after OutputGuard ('' while nothing has been written). */
+            /** @description user, the stored masked form (BR-AI-14 脱敏表), not the original text (04 §6.5, BR-AI-19 细则「助手回复落库」); assistant, the text after OutputGuard ('' while nothing has been written). */
             text: string;
             /** @description Always empty for user. */
             cards: components["schemas"]["AgentHistoryCard"][];

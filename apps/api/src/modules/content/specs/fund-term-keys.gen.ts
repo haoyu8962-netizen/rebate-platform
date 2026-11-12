@@ -231,6 +231,7 @@ export const FUND_TERM_KEYS = {
       "agent.card.auth_required.title_login",
       "agent.card.claim_draft.open_times",
       "agent.card.claim_draft.paid_date",
+      "agent.card.claim_draft.submit",
       "agent.card.claim_draft.title",
       "agent.card.handoff.desc",
       "agent.card.handoff.title",
@@ -260,13 +261,18 @@ export const FUND_TERM_KEYS = {
       "agent.notice.ordinal_default",
       "agent.notice.platform_unrecognized",
       "agent.notice.price_unrecognized",
+      "agent.notice.quote_failed",
       "agent.notice.relaxed_price",
       "agent.notice.relaxed_spec",
       "agent.notice.search_disabled",
+      "agent.notice.search_disabled.jd",
+      "agent.notice.search_disabled.pdd",
+      "agent.notice.search_disabled.taobao",
       "agent.notice.title_based",
       "agent.notice.tlj_none",
       "agent.notice.tlj_taobao_only",
       "agent.order.lookup_limited",
+      "agent.product_list",
       "agent.refuse.advice",
       "agent.refuse.out_of_scope",
       "agent.refuse.output_blocked",
@@ -274,8 +280,12 @@ export const FUND_TERM_KEYS = {
       "agent.refuse.safety_timeout",
       "agent.refuse.safety_unavailable",
       "agent.refuse.unsafe",
+      "agent.reply.empty",
       "agent.rule.found",
       "agent.rule.not_found",
+      "agent.suggest.empty.1",
+      "agent.suggest.empty.2",
+      "agent.suggest.empty.3",
       "agent.suggest.no_result.1",
       "agent.suggest.no_result.2",
       "agent.suggest.no_result.3",
@@ -842,6 +852,18 @@ export const FUND_TERM_KEYS = {
     {
       "key": "agent.notice.search_disabled",
       "reason": "只是请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）"
+    },
+    {
+      "key": "agent.notice.search_disabled.jd",
+      "reason": "同 agent.notice.search_disabled，只是按平台分开，请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）"
+    },
+    {
+      "key": "agent.notice.search_disabled.pdd",
+      "reason": "同 agent.notice.search_disabled，只是按平台分开，请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）"
+    },
+    {
+      "key": "agent.notice.search_disabled.taobao",
+      "reason": "同 agent.notice.search_disabled，只是按平台分开，请用户改用发链接查返利，不说有没有返利（08 BR-TEXT-12 细则写明归普通）"
     },
     {
       "key": "agent.refuse.out_of_scope",
