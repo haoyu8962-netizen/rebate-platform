@@ -3,12 +3,12 @@ repo: rebate-platform
 title: 后台 AI 举报列表与处理实现（D1 第二段，CT-24zzi 的 adminListAgentReports / adminHandleAgentReport）——agent.trace 列表带 48 小时 deadline_at 与 overdue，agent.report 标记已处理（CAS、20902 agent_report、审计 agent_report_handle 目标 agent_messages:<id>），去 planned
 type: impl
 # 2026-11-13 入账（admin-backend，D10-1287 ⑤ D1、D10-1310 第二段；规划变更记录 20261112 §3.4 D1）。读写已有 agent_messages 举报列，不加列、不建表。审计目标格式按 B1-10s 已登记的 agent_messages:<message_id>。
-# report_status 只有一个写者：pending→handled 必须调 A3（agent2，13:50 约定）建的状态机生成的 transition()；A3 尚未入账——规则测试与先红现在做，实现等 A3 合并后接（届时台账补 deps）。超时告警（工作台卡 agent_report_overdue 在主干尚无实现）不在本单，另报编排。
+# report_status 只有一个写者：pending→handled 必须调 A3（agent2，13:50 约定）建的状态机生成的 transition()；A3 = B3-08zf（agent2 2026-11-13 01:53 公告端口；admin 02:49 请其另从模块内文件导出 port.handle 背后的函数，避开 [AC-B3-08k#1]）——规则测试与先红先做，实现等 B3-08zf 合并后接。超时告警（工作台卡 agent_report_overdue 在主干尚无实现）不在本单，另报编排。
 refs: [BR-ID-15, BR-AI-19]
 refs_hash:
   BR-ID-15: ae5b8c769d84
   BR-AI-19: 3c0c40a3ed93
-deps: [B1-10q, B1-10s]
+deps: [B1-10q, B1-10s, B3-08zf]
 paths:
   - 'apps/api/src/modules/agent/http/admin/**'
   - 'apps/api/src/modules/agent/application/admin-reports*.ts'
