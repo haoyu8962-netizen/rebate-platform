@@ -25,5 +25,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/intent-fallback/**'
-status: todo
-pr: null
+status: done
+pr: 3294
