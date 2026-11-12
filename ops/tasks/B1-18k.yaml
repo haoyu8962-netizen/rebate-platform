@@ -4,6 +4,7 @@ title: 终态订单（VOID / CLAWED_BACK）佣金或补贴再变化时照推版�
 type: impl
 # 2026-11-12 union 入账（编排 D10-1272，FU-TERMINAL-VERSION-ROWS 选方案 (b)；方案 couli-runs/UNION-lane/fu-terminal-version-rows-plan.md）。settlement rebate.ts 锁定分支：commission_moved 为真时返回只带 refresh（N 路径）或 subsidyRefresh（仅补贴路径）的计划，不迁移状态，不写分录、通知、补差候选、扣回；行的写法沿用现有两条路径（新 N 同一算法 / 「仅补贴变化的版本」），不另造算法。BR-FUND-01 终态段与锁定段的指针见 BR-CALC-15。补数另登记 FU-TERMINAL-VERSION-ROWS-BACKFILL（ops），不在本单。
 # 开工前主干实跑基线（临时探针，未提交）：VOID 后 N 变 / 回正推版本无行；CLAWED_BACK（R8 后）N 变与补贴变推版本无行；终态单补贴相同而内容不同的后续报文每条再 +1；R12 恢复后订单金额与钱包抛 expected commission_version K…——规则测试 1–4 在主干都应红；状态、分录、通知、补差不变等基线已绿的只作附带断言。
+# 2026-11-12 done：#3217 合并（头 9a637a5ff81d）。规则测试 3 次（D10-1273 末次加 R7 → VOID → 仅补贴一例）；spec-test r2 + 不计次门禁记录 pass；Codex money r1 S1（找回结果通知计终态金额）由 B1-18kn #3211 先修（D10-1274），money r2 pass。补数另见 FU-TERMINAL-VERSION-ROWS-BACKFILL（ops）。
 refs: [BR-CALC-15, BR-CALC-27]
 refs_hash:
   BR-CALC-15: dec05fa8363f
@@ -19,4 +20,5 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
+status: done
+pr: 3217
