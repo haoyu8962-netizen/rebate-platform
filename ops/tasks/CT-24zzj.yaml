@@ -1,0 +1,26 @@
+id: CT-24zzj
+repo: rebate-platform
+title: 契约：后台月结账单列表 listAdminSettleBills 加筛选 awaiting_confirm=true（最近一轮有待确认 DRAFT 批次）——工作台 settle_bill_pending 的列表口径（D10-1402）
+type: contract
+# 2026-11-13 funds 入账（编排 D10-1402 选 (c)）。现状：账单列表 status 只有 generating / issued / scheduled / settling / settled，issued 混着「最近一轮有 DRAFT 批次」与「最近一轮没有非 CANCELLED 批次（无候选）」两种。
+# 新增可选查询参数 awaiting_confirm（boolean）：true 时只返回最近一轮有 DRAFT 批次的账单；判定与 AdminSettleBillStatus 的 issued 的 DRAFT 分支是同一个（同一「最近一轮」定义），不另立口径；false 或缺省不筛。与 status 同时给时取交集。
+# 工作台卡片 settle_bill_pending 的 route 用 /settle-bills?awaiting_confirm=true，count = 该筛选的 total；无候选的 issued 账单不计。只加参数，响应与其他行为不变；实现与计数另开单。前端筛选项归 fe。
+refs: [BR-FUND-04]
+refs_hash:
+  BR-FUND-04: 497806f6f068
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
