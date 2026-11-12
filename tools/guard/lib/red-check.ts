@@ -230,7 +230,10 @@
 // (`modify_existing`: file, full name, reason flake_fix / tighten_only / rule_change, ruling
 // D10-<n>, note; a rule_change entry, CT-06zzzzw / D10-1299 ③, also names the BR ids it follows,
 // `br`, and is judged exactly as the other two — green on the old code accepted, red too — its
-// note naming the reason and br;
+// note naming the reason and br; green adds one more line of its own, CT-06zzzzzb / D10-1356 ④,
+// naming rule_change and br and asking to check that the rewrite really follows the changed rule,
+// the verdict unchanged; a changed expectation of a money or attribution test still needs the
+// owner's own confirmation, approvals #24, which no tool here grants;
 // tools/lib/task-file.ts, tools/ops/task.ts). For a file it names, ruleTestBaselines asks
 // test-blocks.ts compareModifiedBlocks, against the same base the blocks were compared with,
 // which block each name is: exactly one block with a static title on each side. In
@@ -739,6 +742,16 @@ export function modifiedOnlyFiles(
     out.push({ file, tests: names });
   }
   return out;
+}
+
+/**
+ * The separate line for a declared rule_change test green on the old code (CT-06zzzzzb, D10-1356
+ * ④): it follows a changed BR, so the old implementation should usually fail it; green is
+ * accepted (the verdict does not change) but asks for a check of the rewrite. Written after the
+ * test's exemption note, never for a red test or another reason.
+ */
+function ruleChangeGreenNote(file: string, name: string, d: ModifyExistingDeclaration): string {
+  return `${file} > ${name}: ATTENTION rule_change (br: ${(d.br ?? []).join(', ')}; ${d.ruling}) is green on the old code: check that the rewrite really follows the changed rule (a test that follows a changed BR is usually red on the old implementation; the verdict is unchanged)`;
 }
 
 /** The note that says a file was left out by modify_existing (CT-06zzzg, D10-701). */
@@ -1753,6 +1766,10 @@ export function checkRedReports(
         if (unchanged) {
           exempt.push(exemptEntry('passed'));
           notes.push(exemptNote('green'));
+          // CT-06zzzzzb (D10-1356 ④): a test that follows a changed BR is mostly red on the old
+          // code; green is accepted as before, but gets a line of its own for the orchestrator.
+          if (modifiedEntry?.reason === 'rule_change')
+            notes.push(ruleChangeGreenNote(file, name, modifiedEntry));
           continue;
         }
         problems.push({

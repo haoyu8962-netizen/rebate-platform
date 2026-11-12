@@ -2445,3 +2445,71 @@ describe('run.ts git: protected-paths and test-guard judge the changes since the
     );
   });
 });
+
+describe('red-check.ts: a trusted ledger whose rule_change br is not in its refs (CT-06zzzzzb, D10-1356 ②)', () => {
+  /** AUTHOR_TASK (refs: [BR-FUND-13]) with one rule_change entry following `br`. */
+  const ruleChangeTask = (id: string, br: string): string =>
+    AUTHOR_TASK.replace('id: B2-02b', `id: ${id}`).replace(
+      'test_paths:\n  - "test/spec/ledger/**"',
+      `test_paths:\n  - "test/spec/ledger/**"\nmodify_existing:\n  - file: test/spec/ledger/post.test.ts\n    test: posts\n    reason: rule_change\n    ruling: D10-1297\n    note: the rule changed, the test follows the new rule\n    br: ${br}`,
+    );
+
+  it('[CT-06zzzzzb] red-check refuses to read the ledger (internal error, exit 2) when a br id is not in refs; with every id in refs it runs', () => {
+    writeFiles(trusted, {
+      'ops/tasks/B2-02r.yaml': ruleChangeTask('B2-02r', '[BR-FUND-13, BR-FUND-14]'),
+      'ops/tasks/B2-02s.yaml': ruleChangeTask('B2-02s', '[BR-FUND-13]'),
+    });
+    const { root, base } = makeRepo({
+      'test/spec/ledger/post.test.ts': "it('posts', () => {});\n",
+    });
+    writeFiles(root, { 'test/spec/ledger/new.test.ts': "it('new', () => {});\n" });
+    fixtureGit(root, ['add', '-A']);
+    fixtureGit(root, ['commit', '-qm', 'test(spec): new']);
+    const list = join(root, '..', `expected-rule-change-${Date.now()}.txt`);
+    writeFileSync(list, 'test/spec/ledger/new.test.ts\n');
+    const reportFile = join(root, '..', `red-report-rule-change-${Date.now()}.json`);
+    writeFileSync(
+      reportFile,
+      JSON.stringify({
+        testResults: [
+          {
+            name: `${root}/test/spec/ledger/new.test.ts`,
+            assertionResults: [
+              { fullName: 'new', status: 'failed', failureMessages: ['Error: NotImplemented'] },
+            ],
+          },
+        ],
+      }),
+    );
+    const run = (task: string) =>
+      guard('red-check.ts', [
+        '--task',
+        task,
+        '--report',
+        reportFile,
+        '--expected-list',
+        list,
+        '--root',
+        root,
+        '--json',
+      ]);
+    const printed = (task: string) =>
+      guard('red-check.ts', ['--task', task, '--cwd', root, '--base', base, '--print-expected']);
+
+    // The control: every br id in refs, the ledger is read and the red run judged.
+    const ok = run('B2-02s');
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(json<{ ok: boolean }>(ok.stdout)).toMatchObject({ ok: true });
+    const okPrinted = printed('B2-02s');
+    expect(okPrinted.status, okPrinted.stderr).toBe(0);
+    expect(okPrinted.stdout).toBe('test/spec/ledger/new.test.ts\n');
+
+    // BR-FUND-14 is not in refs: the ledger is unreadable, nothing is judged or printed.
+    for (const res of [run('B2-02r'), printed('B2-02r')]) {
+      expect(res.status, res.stderr).toBe(2);
+      expect(res.stdout).toBe('');
+      expect(res.stderr).toContain('internal error: B2-02r.yaml: invalid task file');
+      expect(res.stderr).toMatch(/modify_existing\[0\]\.br: [^\n]*BR-FUND-14/);
+    }
+  });
+});

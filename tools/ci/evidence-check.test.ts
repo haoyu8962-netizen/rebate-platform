@@ -3220,3 +3220,86 @@ it('[CT-06zzzzw] tighten_only and flake_fix records may not carry br (unknown fi
   expect(f.ok).toBe(false);
   expect(f.problems.join('\n')).toMatch(/modify_existing\[0\]\.br: unknown field/);
 });
+
+// CT-06zzzzzb (D10-1356 ②): a trusted ledger whose rule_change br names an id outside its refs is
+// refused by parseTaskFile, so evidence-check cannot read it: as for any unreadable trusted ledger
+// (readTrustedLedger) no modify_existing applies, the change of the frozen test is refused and the
+// record has no ledger entry.
+it('[CT-06zzzzzb] a trusted ledger whose rule_change br is not in its refs cannot be read: the declared change does not apply', () => {
+  const trusted = rwTrusted('trusted-rule-change-br-outside');
+  const outside = rwLedger()
+    .replace('refs: [BR-PAY-09, BR-PAY-11a]\n', 'refs: [BR-PAY-09]\n')
+    .replace('  BR-PAY-11a: 123456789abc\n', '');
+  expect(outside).toContain('refs: [BR-PAY-09]\nrefs_hash:\n  BR-PAY-09: 0123456789ab\ndeps:');
+  expect(outside).toContain('    br: [BR-PAY-09, BR-PAY-11a]\n');
+  write(trusted, { 'ops/tasks/B2-09v.yaml': outside });
+  const head = modBranch('rw-br-outside', modSource(MOD_NEW), modEvidence([rwRecord()]));
+  const report = modCheck(head, trusted, approved(head));
+  expect(report.ok).toBe(false);
+  expect(report.approval_wanted).toBe(false);
+  const text = report.problems.join('\n');
+  expect(text).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${MOD_FILE} (M)`,
+  );
+  expect(text).not.toContain('[declared in modify_existing');
+  expect(text).toContain(
+    'modify_existing: the trusted ledger declares no modify_existing: a record without a ledger entry is refused',
+  );
+  // The positive control: the same head with the ledger's refs naming both ids passes.
+  const good = rwTrusted('trusted-rule-change-br-inside');
+  expect(modCheck(head, good, approved(head)).problems).toEqual([]);
+});
+
+// CT-06zzzzzb (D10-1356 ③): a rule_change record's before / after are held to the blocks at the
+// merge base and the head character for character, as for the other reasons.
+it('[CT-06zzzzzb] a rule_change record whose before or after differs from the actual block is refused', () => {
+  const trusted = rwTrusted('trusted-rule-change');
+  const cases: [string, Evidence, RegExp][] = [
+    [
+      'before is the head block',
+      { before: MOD_NEW },
+      /modify_existing\[0\]\.before: must be the block's text at the merge base/,
+    ],
+    [
+      'before with a trailing space',
+      { before: `${MOD_OLD} ` },
+      /modify_existing\[0\]\.before: must be the block's text at the merge base/,
+    ],
+    [
+      'after is the base block',
+      { after: MOD_OLD },
+      /modify_existing\[0\]\.after: must be the block's text at the head/,
+    ],
+    [
+      'after with a trailing space',
+      { after: `${MOD_NEW} ` },
+      /modify_existing\[0\]\.after: must be the block's text at the head/,
+    ],
+    [
+      'before and after swapped',
+      { before: MOD_NEW, after: MOD_OLD },
+      /modify_existing\[0\]\.(before|after): must be the block's text at the (merge base|head)/,
+    ],
+  ];
+  for (const [name, extra, want] of cases) {
+    const head = modBranch(
+      `rw-ba-${name.replace(/ /g, '-')}`,
+      modSource(MOD_NEW),
+      modEvidence([rwRecord(extra)]),
+    );
+    const report = modCheck(head, trusted, approved(head));
+    expect(report.ok, name).toBe(false);
+    expect(report.problems.join('\n'), name).toMatch(want);
+  }
+  // The only fault of a record whose after is off by one space: the after text.
+  const off = modBranch(
+    'rw-ba-only',
+    modSource(MOD_NEW),
+    modEvidence([rwRecord({ after: `${MOD_NEW} ` })]),
+  );
+  expect(modCheck(off, trusted, approved(off)).problems).toEqual([
+    expect.stringMatching(
+      /^ops\/evidence\/B2-09v\.json: modify_existing\[0\]\.after: must be the block's text at the head/,
+    ),
+  ]);
+});

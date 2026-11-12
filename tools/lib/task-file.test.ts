@@ -621,8 +621,15 @@ describe('parseTaskFile', () => {
   // because its BR changed is declared with reason rule_change and the BR ids it follows (`br`).
   const RW_FILE = 'test/spec/agent/intent.test.ts';
   const RW_TEST = '[AC-B3-08zc#4] 意图路由按新规则';
-  const rwDeclared = (entries: string): string =>
-    EXAMPLE.replace('tester: claude', `tester: claude\nmodify_existing:${entries}`);
+  // CT-06zzzzzb (D10-1356 ②): parseTaskFile wants every br id in the ledger's own refs, so the
+  // fixture's refs carry the well-formed ids these tests use (EXAMPLE_REFS below is EXAMPLE's own).
+  const RW_REFS =
+    'refs: [BR-FUND-13, BR-FUND-16, BR-FUND-19, BR-AI-14, BR-AI-15, BR-FUND-16a, BR-WDR-3]';
+  const rwDeclared = (entries: string, refs: string = RW_REFS): string =>
+    EXAMPLE.replace('tester: claude', `tester: claude\nmodify_existing:${entries}`).replace(
+      'refs: [BR-FUND-13, BR-FUND-16, BR-FUND-19]',
+      refs,
+    );
   const rwEntry = (test: string, fields: Record<string, string> = {}): string => {
     const all: Record<string, string> = {
       file: RW_FILE,
@@ -761,6 +768,107 @@ describe('parseTaskFile', () => {
     expect(
       messageOf(rwDeclared(rwEntry(RW_TEST, { brs: '[BR-AI-14]', br: '' })), 'B2-02a.yaml'),
     ).toContain('modify_existing[0].brs: unknown field');
+  });
+
+  // CT-06zzzzzb (D10-1356 ②): "every br id is in the task's refs" is checked by parseTaskFile
+  // itself, so every reader of the ledger (task.ts, red-check, evidence-check) refuses it whole.
+  const EXAMPLE_REFS = 'refs: [BR-FUND-13, BR-FUND-16, BR-FUND-19]';
+  /** The br problem lines of a parse message (one per refused entry). */
+  const brLines = (message: string, i: number): string[] =>
+    message.split('\n').filter((l) => l.includes(`modify_existing[${i}].br:`));
+
+  it('[CT-06zzzzzb] parseTaskFile refuses a rule_change entry whose br id is not in the ledger refs, naming the entry and the missing id', () => {
+    // One id in refs, one not: the entry is refused, the missing id named.
+    const partly = messageOf(
+      rwDeclared(rwEntry(RW_TEST, { br: '[BR-FUND-13, BR-AI-14]' }), EXAMPLE_REFS),
+      'B2-02a.yaml',
+    );
+    expect(partly).toContain('B2-02a.yaml: invalid task file');
+    expect(partly).toMatch(BR_PROBLEM(0));
+    expect(brLines(partly, 0)).toHaveLength(1);
+    expect(brLines(partly, 0)[0]).toContain('BR-AI-14');
+    expect(() =>
+      parseTaskFile(
+        rwDeclared(rwEntry(RW_TEST, { br: '[BR-FUND-13, BR-AI-14]' }), EXAMPLE_REFS),
+        'B2-02a.yaml',
+      ),
+    ).toThrow(/modify_existing\[0\]\.br: /);
+    // Every missing id is named.
+    const two = messageOf(
+      rwDeclared(rwEntry(RW_TEST, { br: '[BR-AI-14, BR-WDR-3]' }), EXAMPLE_REFS),
+      'B2-02a.yaml',
+    );
+    expect(brLines(two, 0)).toHaveLength(1);
+    expect(brLines(two, 0)[0]).toContain('BR-AI-14');
+    expect(brLines(two, 0)[0]).toContain('BR-WDR-3');
+    // A ledger without refs at all.
+    const none = messageOf(rwDeclared(rwEntry(RW_TEST), 'refs: []'), 'B2-02a.yaml');
+    expect(none).toMatch(BR_PROBLEM(0));
+    expect(brLines(none, 0)[0]).toContain('BR-AI-14');
+    // The index is the entry's own: the first entry's ids are all in refs, the second's is not.
+    const second = messageOf(
+      rwDeclared(
+        rwEntry('[AC-1] ok', { br: '[BR-FUND-16]' }) + rwEntry(RW_TEST, { br: '[BR-AI-15]' }),
+        EXAMPLE_REFS,
+      ),
+      'B2-02a.yaml',
+    );
+    expect(second).toMatch(BR_PROBLEM(1));
+    expect(brLines(second, 1)[0]).toContain('BR-AI-15');
+    expect(brLines(second, 0)).toEqual([]);
+    // The id must be in refs character for character (no prefix match, no case folding).
+    expect(
+      messageOf(rwDeclared(rwEntry(RW_TEST, { br: '[BR-FUND-16a]' }), EXAMPLE_REFS), 'B2-02a.yaml'),
+    ).toMatch(BR_PROBLEM(0));
+    expect(
+      messageOf(rwDeclared(rwEntry(RW_TEST, { br: '[BR-FUND-1]' }), EXAMPLE_REFS), 'B2-02a.yaml'),
+    ).toMatch(BR_PROBLEM(0));
+  });
+
+  it('[CT-06zzzzzb] parseTaskFile accepts a rule_change entry whose every br id is in refs; other reasons without br are not held to refs', () => {
+    const inRefs = rwDeclared(
+      rwEntry(RW_TEST, { br: '[BR-FUND-19, BR-FUND-13]' }) +
+        rwEntry('[AC-1] b', { reason: 'tighten_only', br: '' }),
+      EXAMPLE_REFS,
+    );
+    expect(messageOf(inRefs, 'B2-02a.yaml')).toBe('');
+    expect(parseTaskFile(inRefs, 'B2-02a.yaml').modify_existing).toMatchObject([
+      { test: RW_TEST, reason: 'rule_change', br: ['BR-FUND-19', 'BR-FUND-13'] },
+      { test: '[AC-1] b', reason: 'tighten_only' },
+    ]);
+    // tighten_only and flake_fix carry no br, so refs: [] does not matter to them.
+    expect(
+      messageOf(
+        rwDeclared(
+          rwEntry('[AC-1] a', { reason: 'tighten_only', br: '' }) +
+            rwEntry('[AC-1] b', { reason: 'flake_fix', br: '' }),
+          'refs: []',
+        ),
+        'B2-02a.yaml',
+      ),
+    ).toBe('');
+  });
+
+  it('[CT-06zzzzzb] parseTaskFile refuses a rule_change entry without ruling (or with a malformed one)', () => {
+    for (const [name, ruling] of [
+      ['missing', ''],
+      ['null', 'null'],
+      ['not a ruling id', 'D10-x'],
+      ['a BR id', 'BR-AI-14'],
+    ] as const) {
+      const message = messageOf(rwDeclared(rwEntry(RW_TEST, { ruling })), 'B2-02a.yaml');
+      expect(message, name).toContain('B2-02a.yaml: invalid task file');
+      expect(message, name).toContain(
+        'modify_existing[0].ruling: must be the orchestrator ruling id, D10-<number>',
+      );
+      // Only the ruling is at fault: reason and br are valid.
+      expect(message, name).not.toContain('modify_existing[0].reason:');
+      expect(message, name).not.toContain('modify_existing[0].br:');
+    }
+    // The index is the entry's own.
+    expect(
+      messageOf(rwDeclared(rwEntry('[AC-1] ok') + rwEntry(RW_TEST, { ruling: '' })), 'B2-02a.yaml'),
+    ).toContain('modify_existing[1].ruling: ');
   });
 
   it('[CT-06zxc] renames: quoted name literals, optional, every malformed entry refused', () => {

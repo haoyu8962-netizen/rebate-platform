@@ -158,6 +158,13 @@ export type RedExemptRowDeclaration = {
  * Why a frozen test is changed (CT-06zzzg, D10-701): `flake_fix` and `tighten_only` stay green
  * before and after; `rule_change` (CT-06zzzzw, D10-1299 ③) follows a BR that changed, so the old
  * implementation is mostly red against it, and the entry names the BR ids (`br`).
+ *
+ * rule_change may change a frozen test's expected values to follow the new rule. It does not
+ * reach the owner's four classes (approvals #24, CT-06zzzzzb / D10-1356 ①): changing the expected
+ * values of a money or attribution test (amount or order-attribution rules), or deleting or
+ * weakening a money test, still needs the owner's own confirmation first; a br list and a ruling
+ * id do not stand in for it. No tool here tells a rewrite that follows the rule from one that
+ * weakens it, so none of them grants that confirmation.
  */
 export const MODIFY_EXISTING_REASONS = ['flake_fix', 'tighten_only', 'rule_change'] as const;
 
@@ -186,8 +193,12 @@ export type ModifyExistingDeclaration = {
   retitle_to?: string;
   /**
    * The BR ids the changed test follows (CT-06zzzzw, D10-1299 ③): required for reason
-   * `rule_change` (a non-empty list of BR_ID_PATTERN ids, no duplicates, each in the task's refs:
-   * tools/ops/task.ts), refused for the other reasons. Absent (no key) when not written.
+   * `rule_change` (a non-empty list of BR_ID_PATTERN ids, no duplicates, each in the same
+   * ledger's refs: parseTaskFile, CT-06zzzzzb / D10-1356 ②, so every reader refuses the ledger
+   * whole), refused for the other reasons. Absent (no key) when not written. Naming the BRs does
+   * not approve the change: a changed expectation of a money or attribution test, or a weakened
+   * one, is still one of the owner's four classes (approvals #24) and needs the owner's own
+   * confirmation (MODIFY_EXISTING_REASONS).
    */
   br?: string[];
 };
@@ -537,12 +548,16 @@ function redExemptOutsideList(value: unknown, problems: string[]): RedExemptOuts
  * also carry `retitle_to` (CT-06zzzzr, D10-1278): the new full name, non-empty, not the test's own,
  * with the test's [AC-…] ids (acIdsOf) unchanged, and in one file never another entry's test or
  * retitle_to. An entry with reason `rule_change` (CT-06zzzzw, D10-1299 ③) must carry `br`: a
- * non-empty list of BR_ID_PATTERN ids without duplicates; the other reasons may not carry it. The
- * cap shared with red_exempt, whether the file is a rule-test file of the task that exists at the
- * base and whether every br id is in the task's refs are checked by parseTaskFile and
- * tools/ops/task.ts.
+ * non-empty list of BR_ID_PATTERN ids without duplicates, each in `refs` (the ledger's own refs,
+ * CT-06zzzzzb / D10-1356 ②: one problem per entry naming every missing id); the other reasons may
+ * not carry it. The cap shared with red_exempt is checked by parseTaskFile; whether the file is a
+ * rule-test file of the task that exists at the base by tools/ops/task.ts.
  */
-function modifyExistingList(value: unknown, problems: string[]): ModifyExistingDeclaration[] {
+function modifyExistingList(
+  value: unknown,
+  problems: string[],
+  refs: readonly string[],
+): ModifyExistingDeclaration[] {
   const label = 'modify_existing';
   const fields = ['file', 'test', 'reason', 'ruling', 'note'];
   // CT-06zzzzr: retitle_to is optional; CT-06zzzzw: br goes with rule_change only. The messages
@@ -624,6 +639,17 @@ function modifyExistingList(value: unknown, problems: string[]): ModifyExistingD
       if (brProblem !== null) {
         problems.push(`${at}.br: ${brProblem}`);
         ok = false;
+      } else {
+        // CT-06zzzzzb (D10-1356 ②): a rule_change entry follows BRs of the task itself. Checked
+        // here, not in tools/ops/task.ts alone, so red-check and evidence-check refuse the ledger
+        // too; one line per entry, naming every missing id.
+        const missing = (br as string[]).filter((id) => !refs.includes(id));
+        if (missing.length > 0) {
+          problems.push(
+            `${at}.br: ${missing.join(', ')} not in the task's refs (a rule_change entry follows BRs the task refers to; add them to refs or fix br)`,
+          );
+          ok = false;
+        }
       }
     } else if (hasBr) {
       problems.push(`${at}.br: only an entry with reason rule_change names the BR ids it follows`);
@@ -952,7 +978,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
     }
   }
   const modifyExisting = Object.hasOwn(doc, 'modify_existing')
-    ? modifyExistingList(doc['modify_existing'], problems)
+    ? modifyExistingList(doc['modify_existing'], problems, refs)
     : [];
   // CT-06zzzg (D10-701): modify_existing shares RED_EXEMPT_MAX with red_exempt; a test is either
   // an unchanged declared block (red_exempt, red_exempt_rows) or a changed one (modify_existing).

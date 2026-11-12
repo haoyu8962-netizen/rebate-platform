@@ -1,0 +1,30 @@
+id: CT-06zzzzzb
+repo: rebate-platform
+title: CT-06zzzzzb：rule_change 跟进（D10-1356 并入项）——注释与 README 写清资金 / 归属用例的期望改动仍须负责人本人确认；「br 在 refs 里」下沉到 parseTaskFile；补两条拒绝路径测试；先红报告里 rule_change 在旧代码上为绿时单独醒目说明
+type: guard-change
+# 2026-11-13 ops 入账（编排 D10-1356：#3285 CT-06zzzzw 评审通过时列的四条并入项，#3285 已合并）。
+# ① tools/README.md（modify_existing / red-check 一带）与 tools/lib/task-file.ts 的 MODIFY_EXISTING_REASONS、ModifyExistingDeclaration.br 注释写清：
+#    rule_change 可按新规则改期望值；资金 / 归属用例的期望改动或削弱仍属 #24 四类，须负责人本人确认（有 BR 和裁定号也不行）。
+# ② 「br 每一项在本任务 refs 里」从 tools/ops/task.ts check 下沉到 parseTaskFile：读台账的三个工具（task.ts、red-check、evidence-check）都对这种台账整份拒读；
+#    task.ts 里原来那段检查去掉或改为不重复报。
+# ③ 补两条测试：rule_change 的证据 before / after 与实际不符时 evidence-check 拒；rule_change 台账缺 ruling 时 parseTaskFile 拒。
+# ④ 先红（red-check）：rule_change 条目的用例在旧代码上为绿时，结果里单独出一条醒目说明（notes 一行，写明 rule_change、br 与「旧实现下为绿：核对改写是否真的跟随了新规则」），判定不变。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzzb.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

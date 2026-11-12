@@ -794,6 +794,69 @@ it('[CT-06zzzzw] modify_existing rule_change: every br id must be in the task re
   }
 });
 
+it('[CT-06zzzzzb] a rule_change br id not in refs is a parseTaskFile problem: check reports it once, as the invalid ledger, and loadTask refuses the ledger', () => {
+  const RULES = 'test/spec/demo/rules.test.ts';
+  const entry = (test: string, br: string): string =>
+    `\n  - file: '${RULES}'\n    test: '${test}'\n    reason: rule_change\n    ruling: D10-1297\n    note: the rule changed, the test follows the new rule\n    br: ${br}`;
+  const ledger = (id: string, entries: string): string =>
+    good({
+      id,
+      type: 'test-change',
+      impl: 'claude',
+      tester: 'none',
+      paths: `\n  - '${RULES}'`,
+      modify_existing: entries,
+    });
+  writeFiles(root, {
+    'tools/guard/protected-paths.json': JSON.stringify({
+      class1_add_only: ['test/spec/**', 'test/properties/**'],
+      class2_verify_config: [],
+      class3_gates: [],
+    }),
+    [RULES]: "import { it } from 'vitest';\n",
+    // refs: [BR-DEMO-01]; the entry also follows BR-DEMO-02.
+    'ops/tasks/X1-02ia.yaml': ledger('X1-02ia', entry('[AC-1] a', '[BR-DEMO-01, BR-DEMO-02]')),
+    // The second entry's only id is not in refs.
+    'ops/tasks/X1-02ib.yaml': ledger(
+      'X1-02ib',
+      entry('[AC-1] a', '[BR-DEMO-01]') + entry('[AC-1] b', '[BR-DEMO-03]'),
+    ),
+    // Every id in refs: a valid ledger.
+    'ops/tasks/X1-02ic.yaml': ledger('X1-02ic', entry('[AC-1] a', '[BR-DEMO-01]')),
+  });
+  const count = (text: string, needle: string): number => text.split(needle).length - 1;
+  try {
+    const one = checkTask('X1-02ia', opts('RV1'));
+    // One problem: the whole ledger is refused by parseTaskFile (check stops there).
+    expect(one).toHaveLength(1);
+    expect(one[0]).toContain('X1-02ia.yaml: invalid task file');
+    expect(one[0]).toContain('BR-DEMO-02');
+    // The br problem is said once, not once by parseTaskFile and again by check.
+    expect(count(one.join('\n'), 'modify_existing[0].br:')).toBe(1);
+    expect(one.join('\n')).not.toContain('modify_existing[1]');
+    expect(() => loadTask('X1-02ia', root)).toThrow(/modify_existing\[0\]\.br: [^\n]*BR-DEMO-02/);
+
+    const second = checkTask('X1-02ib', opts('RV1'));
+    expect(second).toHaveLength(1);
+    expect(second[0]).toContain('X1-02ib.yaml: invalid task file');
+    expect(count(second.join('\n'), 'modify_existing[1].br:')).toBe(1);
+    expect(second.join('\n')).not.toContain('modify_existing[0].br:');
+    expect(second[0]).toContain('BR-DEMO-03');
+    expect(() => loadTask('X1-02ib', root)).toThrow(/modify_existing\[1\]\.br: [^\n]*BR-DEMO-03/);
+
+    // The same ledger with every id in refs passes check and loads.
+    expect(checkTask('X1-02ic', opts('RV1'))).toEqual([]);
+    expect(loadTask('X1-02ic', root).modify_existing).toMatchObject([
+      { test: '[AC-1] a', reason: 'rule_change', br: ['BR-DEMO-01'] },
+    ]);
+  } finally {
+    for (const id of ['X1-02ia', 'X1-02ib', 'X1-02ic']) {
+      removeDir(`${root}/ops/tasks/${id}.yaml`);
+    }
+    removeDir(`${root}/test`);
+  }
+});
+
 it('[ops/approvals.yaml id 19] test_paths stay inside the rule-test assets of a task with a tester', () => {
   writeFiles(root, {
     'tools/guard/protected-paths.json': JSON.stringify({

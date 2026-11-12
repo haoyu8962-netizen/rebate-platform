@@ -549,7 +549,8 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
   // class 1 after spec_commit (spec_commit is the base for such a task) is what the entries open.
   // Such a task has no test_paths (above), so its files must lie inside its paths instead; a task
   // with a rule-test author names files of its test_paths. The shape, the note length, duplicates
-  // and the cap shared with red_exempt are checked by parseTaskFile.
+  // and the cap shared with red_exempt (and, CT-06zzzzzb, a rule_change br inside refs) are checked
+  // by parseTaskFile.
   if (task.modify_existing.length > 0) {
     const scope = task.tester === 'none' ? task.paths : task.test_paths;
     const scopeName = task.tester === 'none' ? 'paths (tester: none)' : 'test_paths';
@@ -574,17 +575,9 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
         );
       }
     }
-    // CT-06zzzzw (D10-1299 ③): a rule_change entry follows BRs of the task itself: every br id is
-    // in its refs (the shape of br is checked by parseTaskFile).
-    task.modify_existing.forEach((d, i) => {
-      if (d.reason !== 'rule_change') return;
-      const missing = (d.br ?? []).filter((id) => !task.refs.includes(id));
-      if (missing.length > 0) {
-        problems.push(
-          `modify_existing[${i}].br: ${missing.join(', ')} not in the task's refs (a rule_change entry follows BRs the task refers to; add them to refs or fix br)`,
-        );
-      }
-    });
+    // CT-06zzzzw (D10-1299 ③): a rule_change entry follows BRs of the task itself. Since
+    // CT-06zzzzzb (D10-1356 ②) parseTaskFile refuses a br id that is not in the ledger's refs, so
+    // red-check and evidence-check refuse such a ledger too and it never gets here.
   }
 
   // CT-06zxe (D10-371): registered expected values name rule-test files of the task's own

@@ -4198,3 +4198,153 @@ it('[CT-06zzzzw] rule_change changes nothing else: an undeclared changed test an
   expect(note).toContain(RC_OLD);
   expect(note).toContain(RC_NEW);
 });
+
+// CT-06zzzzzb (D10-1356 ④): a declared rule_change test green on the old code is accepted as
+// before, but the notes get one more line of its own: the old implementation should usually fail
+// a test that follows a changed rule, so green asks the orchestrator to check that the rewrite
+// really follows it. The line names rule_change and the entry's br; nothing else changes.
+const RW_GREEN_FLAG = 'check that the rewrite really follows the changed rule';
+const rwFlagged = (notes: readonly string[]): string[] =>
+  notes.filter((n) => n.includes(RW_GREEN_FLAG));
+const rwExemptNotes = (notes: readonly string[], test: string): string[] =>
+  notes.filter((n) =>
+    n.startsWith(`${MOD} > ${test}: a changed frozen test declared in modify_existing (`),
+  );
+
+it('[CT-06zzzzzb] a rule_change test green on the old code adds one separate note line naming rule_change and its br; the verdict is unchanged', () => {
+  const b = modBaselines(MOD_HEAD, rwDeclared());
+  const result = checkRedReports([redReport(MOD, MOD_TESTS)], [MOD], ROOT, b, [], [], rwDeclared());
+  // The same run declared tighten_only: no line (below), the verdict to compare with.
+  const tight = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(MOD_HEAD, modDeclared()),
+    [],
+    [],
+    modDeclared(),
+  );
+  // The verdict is unchanged: the same as tighten_only's, field by field.
+  expect(result.problems).toEqual([]);
+  expect(result.ok).toBe(true);
+  expect(result.red).toEqual([`${MOD} > [AC-4] new`]);
+  expect(result.exempt).toContainEqual({
+    file: MOD,
+    test: '[AC-2] late',
+    status: 'passed',
+    declared: true,
+    reason: MOD_NOTE,
+    modified: true,
+  });
+  expect(result.ok).toBe(tight.ok);
+  expect(result.problems).toEqual(tight.problems);
+  expect(result.red).toEqual(tight.red);
+  expect(result.exempt).toEqual(tight.exempt);
+  const flagged = rwFlagged(result.notes);
+  expect(flagged).toHaveLength(1);
+  const line = flagged[0] ?? '';
+  expect(line).toContain('rule_change');
+  expect(line).toMatch(/green on the old code/);
+  for (const id of RW_BR) expect(line).toContain(id);
+  // A line of its own: the exemption note is still there, once, and is not that line.
+  const exemptNotes = rwExemptNotes(result.notes, '[AC-2] late');
+  expect(exemptNotes).toHaveLength(1);
+  expect(exemptNotes[0]).not.toContain(RW_GREEN_FLAG);
+  expect(exemptNotes[0]).toContain('rule_change');
+  // Exactly one line more than the same run declared tighten_only.
+  expect(rwFlagged(tight.notes)).toEqual([]);
+  expect(result.notes).toHaveLength(tight.notes.length + 1);
+});
+
+it('[CT-06zzzzzb] the rule_change green line names each entry’s own br: two green entries, two lines; a red entry next to them, none', () => {
+  // [AC-1] and [AC-2] both changed, each declared rule_change with its own br.
+  const head = file(
+    spec('[AC-1] a', 'expect(2).toBe(2);'),
+    MOD_TIGHT,
+    spec('[AC-3] c'),
+    spec('[AC-4] new'),
+  );
+  const declared = (): ModifyExistingDeclaration[] => [
+    ...rwDeclared(['[AC-1] a'], ['BR-PAY-09']),
+    ...rwDeclared(['[AC-2] late'], ['BR-PAY-11a']),
+  ];
+  const b = modBaselines(head, declared());
+  const both = checkRedReports([redReport(MOD, MOD_TESTS)], [MOD], ROOT, b, [], [], declared());
+  expect(both.problems).toEqual([]);
+  expect(both.ok).toBe(true);
+  const flagged = rwFlagged(both.notes);
+  expect(flagged).toHaveLength(2);
+  const of = (id: string): string[] => flagged.filter((n) => n.includes(id));
+  expect(of('BR-PAY-09')).toHaveLength(1);
+  expect(of('BR-PAY-11a')).toHaveLength(1);
+  for (const n of flagged) expect(n).toContain('rule_change');
+  // [AC-1] red on the old code, [AC-2] green: one line, [AC-2]'s br only.
+  const mixed = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.map((t): RedTest =>
+          t[0] === '[AC-1] a' ? [t[0], 'failed', 'AssertionError: expected 1 to be 2'] : t,
+        ),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    declared(),
+  );
+  expect(mixed.problems).toEqual([]);
+  expect(mixed.ok).toBe(true);
+  expect(mixed.red).toEqual([`${MOD} > [AC-1] a`, `${MOD} > [AC-4] new`]);
+  const one = rwFlagged(mixed.notes);
+  expect(one).toHaveLength(1);
+  expect(one[0]).toContain('BR-PAY-11a');
+  expect(one[0]).not.toContain('BR-PAY-09');
+});
+
+it('[CT-06zzzzzb] no green line when the rule_change test is red on the old code, nor for a green tighten_only or flake_fix test', () => {
+  const b = modBaselines(MOD_HEAD, rwDeclared());
+  const red = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.map((t): RedTest =>
+          t[0] === '[AC-2] late' ? [t[0], 'failed', 'AssertionError: expected 1 to be 2'] : t,
+        ),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    rwDeclared(),
+  );
+  expect(red.problems).toEqual([]);
+  expect(red.ok).toBe(true);
+  expect(red.red).toEqual([`${MOD} > [AC-2] late`, `${MOD} > [AC-4] new`]);
+  expect(rwFlagged(red.notes)).toEqual([]);
+  expect(red.notes.join('\n')).not.toMatch(/green on the old code/);
+  // The exemption note of the red rule_change test is still written (red for a valid reason).
+  expect(rwExemptNotes(red.notes, '[AC-2] late')).toHaveLength(1);
+  for (const reason of ['tighten_only', 'flake_fix'] as const) {
+    const declared = (): ModifyExistingDeclaration[] =>
+      modDeclared().map((d) => ({ ...d, reason }));
+    const green = checkRedReports(
+      [redReport(MOD, MOD_TESTS)],
+      [MOD],
+      ROOT,
+      modBaselines(MOD_HEAD, declared()),
+      [],
+      [],
+      declared(),
+    );
+    expect(green.problems, reason).toEqual([]);
+    expect(green.ok, reason).toBe(true);
+    expect(rwFlagged(green.notes), reason).toEqual([]);
+    expect(green.notes.join('\n'), reason).not.toMatch(/green on the old code/);
+    expect(rwExemptNotes(green.notes, '[AC-2] late'), reason).toHaveLength(1);
+  }
+});
