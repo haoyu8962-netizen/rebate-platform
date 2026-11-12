@@ -1,0 +1,23 @@
+id: B1-10u
+repo: rebate-platform
+title: AI 举报超时判定与计数共用函数（D10-1382 / D10-1399 (a)，BR-ID-15 ④）——agent 模块抽出「是否超时」判定（待处理且当前时刻 ≥ reported_at + 48 小时）与按 app 计数，举报列表的 overdue 与工作台卡 agent_report_overdue 的计数共用，从 agent/index.ts 导出
+type: impl
+# 2026-11-13 入账（admin-backend，编排 D10-1382 ②、D10-1399 选 (a)）。不碰工作台接口（adminGetDashboard 另开一单，排在本单之后）；B1-10t 的举报列表改为调用这里的判定，不另写一份。
+# 时间只读注入的 Clock；计数只算本 app、仍待处理（report_status = pending）且已到期的举报；已处理、未被举报、别的 app 都不计。
+refs: [BR-ID-15]
+refs_hash:
+  BR-ID-15: ae5b8c769d84
+deps: [B1-10t]
+paths:
+  - 'apps/api/src/modules/agent/application/report-overdue*.ts'
+  - 'apps/api/src/modules/agent/application/admin-reports*.ts'
+  - 'apps/api/src/modules/agent/store/admin-reports/**'
+  - 'apps/api/src/modules/agent/index.ts'
+test_paths:
+  - 'test/spec/agent/report-overdue/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/report-overdue/**'
+status: todo
