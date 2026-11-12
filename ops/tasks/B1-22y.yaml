@@ -1,0 +1,26 @@
+id: B1-22y
+repo: rebate-platform
+title: test-change（Agent A10，D10-1287 / D10-1292 / D10-1306）：一次登记 Agent 配置键——14 个在读键、7 个设计补全新键、模型与预算键；内测名单入口；get_my_earnings 开关种子；冻结配置清单只追加
+type: test-change
+# 2026-11-12 content 入账。键单：编排 D10-1306 + AGENT-lane/audit-20261112/audit-A2-surface.md §4.3 + 08 13 §13.2 l.125。默认值照 08 / 04（BR-AI-05、14、15、16、18 细则，04 §10.2 / §11.2）；guest_daily_quota 默认 3（13 l.89 写明以 BR-ID-03 为准）。权限点：block_level.input / output 为 config.risk（04 §11.2 明写）；其余 08 / 04 未定，按 04 §11.2 各组说明代理补全并报编排确认（额度与准入类 config.risk、预算类 config.business、其余运行参数与文案 config.general）。
+# 内测名单入口 = agent.whitelist_user_ids 后台可改；agent.whitelist_only 仍不可改（04 §10.2：改 off 须校验备案，BR-AI-12）。agent.tools.get_my_earnings.enabled 补种子 true（04 §10.2 默认 on，与 0003–0005 同法）。agent.enabled、agent.page_guide.enabled 登记默认（04 写 on）与运行时缺行按关的不一致待编排定，本单先不改。
+# 做法照 B1-18et / D10-1253：config-registry.ts 登记、content 两条单元测试条数；6 个冻结配置清单只在末尾追加，新鲜 Claude 改、另一位只读复核，#24 标签。不改 Agent 模块代码。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/domain/switch-registry.ts'
+  - 'apps/api/src/modules/content/domain/switch-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'db/seeds/0006_agent-earnings-tool-switch.sql'
+  - 'test/spec/content/config-items/**'
+  - 'test/spec/content/config-settle/**'
+  - 'test/spec/content/invite-reward-config/**'
+  - 'test/spec/content/invite-reward-eligibility/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
