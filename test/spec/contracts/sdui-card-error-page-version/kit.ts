@@ -32,9 +32,13 @@ export const expectedCardErrorFields: Readonly<Record<string, FieldSpec>> = {
   version: { type: 'integer', required: false },
   page_version: { type: 'integer', required: false },
   reason: { type: 'string', required: true },
+  schema_version: { type: 'string', required: true },
+  bridge_version: { type: 'string', required: true },
+  config_version: { type: 'string', required: true },
+  h5_release: { type: 'string', required: true },
 };
 
-/** 本单不动的其他事件：抽查 bridge_call（03 §5.3）与四个 agent_stream_*（03 §4.7）的字段形状。 */
+/** 本单不动的其他事件：抽查 bridge_call（03 §5.3，已含 CT-13c 的四项诊断字段）与四个 agent_stream_*（03 §4.7）的字段形状。 */
 const agentShared: Readonly<Record<string, FieldSpec>> = {
   run_id: { type: 'string', required: false },
   message_id: { type: 'string', required: false },
@@ -47,6 +51,10 @@ export const untouchedEvents: Readonly<Record<string, Readonly<Record<string, Fi
   bridge_call: {
     method: { type: 'string', required: true },
     code: { type: 'integer', required: true },
+    schema_version: { type: 'string', required: true },
+    bridge_version: { type: 'string', required: true },
+    config_version: { type: 'string', required: true },
+    h5_release: { type: 'string', required: true },
   },
   agent_stream_seq_gap: {
     ...agentShared,
@@ -196,6 +204,10 @@ export function homeCardError(extra: Obj = {}): Obj {
     version: 2,
     page_version: 17,
     reason: 'missing_field',
+    schema_version: '2',
+    bridge_version: '3',
+    config_version: 'cfg-20261113-01',
+    h5_release: 'unknown',
     ...extra,
   };
 }
@@ -206,6 +218,10 @@ export function agentCardError(): Obj {
     ...commonPart('agent'),
     type: 'product_card',
     reason: 'type_mismatch',
+    schema_version: '1',
+    bridge_version: '3',
+    config_version: 'cfg-20261113-01',
+    h5_release: 'unknown',
   };
 }
 

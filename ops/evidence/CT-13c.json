@@ -1,0 +1,81 @@
+{
+  "risk_note": "Spec-only contract change (D10-1377 (a), D10-1381, D10-1392; 规划/03 §4.7 诊断字段, §7.2). specs/events.yaml: sdui_card_error and bridge_call each gain schema_version / bridge_version / config_version / h5_release (type string, required true; \"unknown\" when not available), written like CT-13a's agent_stream_*; notes follow D10-1381 (home card: the card's own version as a string; AI assistant card: its schema_version as a string; bridge_call: contracts/bridge.schema.json top-level version; bridge_version and config_version filled by native for H5 events; h5_release by H5); sources cite §4.7; file version 4 → 5; no other field or event changes. Frozen CT-13b rule-test helper test/spec/contracts/sdui-card-error-page-version/kit.ts changed in three places only (expected fields of both events + the two samples gain the four fields; D10-1392, ledger patch 1 #3327: test_paths + red_exempt for [AC-CT-13b#2]); its test file is unchanged. Events have no committed generated output (codegen:check up to date). No server event intake exists (no POST /v1/events in contracts/openapi.yaml, no route in apps/api), so no client event is rejected by this change. Host: CT-13c + CT-13b + CT-13a rule tests 39 green, prettier clean, codegen:check 0. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-13c/review-codex-contract-r1.json, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Round 1: 6 rule tests by a fresh independent Claude in test/spec/contracts/card-bridge-diagnostic-fields/**, red/1 PASS (1e265948f), Codex spec-test r1 pass. Round 2 (D10-1392): a fresh independent Claude changed only the three places in CT-13b's kit.ts (98abf8dd0), red/2 PASS; red-check does not count CT-13b's unchanged test file as expected (it only changed the helper), so the lane ran it on the spec commit by hand: [AC-CT-13b#1] / #3 / #4 red (field set / not in spec: the contract does not have the four fields yet), #2 green (red_exempt), log couli-runs/CT-13c/ct13b-on-spec.log; Codex spec-test r2 (incremental) pass, no findings. red_exempt [AC-CT-13b#2] confirmed by the Codex spec-test r2 reviewer (review-spec-test-r2.json summary: 「静态判断 CT-13b#1、#3、#4 会因旧规格缺少诊断字段而断言失败，#2 不受影响」), consistent with the lane's run on the spec commit (#2 green).",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#1] sdui_card_error 字段恰好是 type / version / page_version / reason 加四项诊断字段；原有字段形状照旧，schema_version / bridge_version / config_version / h5_release 是必填 string",
+    "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#2] bridge_call 字段恰好是 method / code 加四项诊断字段；method、code 照旧必填，四项诊断字段是必填 string",
+    "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#3] 两个事件的四项诊断字段各有非空 note，schema_version 的 note 写明取不到时填 \"unknown\"",
+    "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#4] 其他事件不动（抽查四个 agent_stream_* 与 link_jump）、仍通过 contracts:check 的事件表校验，specs/events.yaml 的 version 递增（大于本任务前的 4）",
+    "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#5] 按事件规格校验 sdui_card_error：首页卡片与 AI 助手页卡片带齐四项通过、四项填 \"unknown\" 通过、缺任一项或给了非字符串被拒；原有字段的校验照旧",
+    "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#6] 按事件规格校验 bridge_call：带齐四项通过、四项填 \"unknown\" 通过、缺任一项或给了非字符串被拒；method / code 的校验照旧"
+  ],
+  "task": "CT-13c",
+  "spec_commit": "06d42f0dcf8c9ce99a7258584d25f1a326b9ca1a",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "06d42f0dcf8c9ce99a7258584d25f1a326b9ca1a",
+      "tree": "7fb4786e919b504b7d930dde605830b4cc0b3165",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T19:23:34Z",
+      "finished_at": "2026-11-12T19:23:37Z",
+      "red_tests": [
+        "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#1] sdui_card_error 字段恰好是 type / version / page_version / reason 加四项诊断字段；原有字段形状照旧，schema_version / bridge_version / config_version / h5_release 是必填 string",
+        "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#2] bridge_call 字段恰好是 method / code 加四项诊断字段；method、code 照旧必填，四项诊断字段是必填 string",
+        "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#3] 两个事件的四项诊断字段各有非空 note，schema_version 的 note 写明取不到时填 \"unknown\"",
+        "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#4] 其他事件不动（抽查四个 agent_stream_* 与 link_jump）、仍通过 contracts:check 的事件表校验，specs/events.yaml 的 version 递增（大于本任务前的 4）",
+        "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#5] 按事件规格校验 sdui_card_error：首页卡片与 AI 助手页卡片带齐四项通过、四项填 \"unknown\" 通过、缺任一项或给了非字符串被拒；原有字段的校验照旧",
+        "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts > [AC-CT-13c#6] 按事件规格校验 bridge_call：带齐四项通过、四项填 \"unknown\" 通过、缺任一项或给了非字符串被拒；method / code 的校验照旧"
+      ],
+      "expected": [
+        "test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7b3897500dd2b96c7788589b9fd3504fb925be94af22a7ef761dee719abe6ae1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "eceba261120381ef15c5ce1c4273555926e62813",
+    "specs": "99b4b368af0d0405122733d6673ff57e2a6fb4a8"
+  }
+}

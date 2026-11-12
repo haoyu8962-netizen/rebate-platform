@@ -18,7 +18,7 @@
 #
 # TODO(规划/05 CT-13): app_launch、page_view、exposure、click、search、convert、h5_white_screen 与 funnel_first_order.*
 #   的事件字段 — blocked on 用到它们的任务（首页、搜索、漏斗）给出字段；现在只登记名字与出处。
-version: '4'
+version: '5'
 common_fields:
   event_id:
     type: string
@@ -193,7 +193,7 @@ events:
         note: 只记个数，不记参数名与值
   bridge_call:
     description: JSBridge 调用被拒（规划/03 §5.3；BR-ATTR-29 细则「桥方法不留没有归因的打开入口」）；当前只记拒绝，强更状态未知时以 90500 拒绝的调用要不要记待定
-    source: 规划/03 §5.3；08 BR-ATTR-29
+    source: 规划/03 §5.3、§4.7「诊断字段」；08 BR-ATTR-29
     fields:
       method:
         type: string
@@ -203,9 +203,25 @@ events:
         type: integer
         required: true
         note: 桥错误码（90001–90500）
+      schema_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；调用方打包时所依据的桥 schema（contracts/bridge.schema.json 顶层 version）转成的字符串；取不到填 "unknown"
+      bridge_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；取不到填 "unknown"；H5 发出的事件由原生补
+      config_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7，来源见 04 §10.1）；/v1/config 还没拉到时填 "unknown"；H5 发出的事件由原生补
+      h5_release:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；原生页没有 H5 时填 "unknown"；H5 发出的事件由 H5 自己填
   sdui_card_error:
     description: SDUI 卡片解码失败，只丢弃这一项（规划/03 §6 解码隔离）
-    source: 规划/03 §6、§7.2
+    source: 规划/03 §6、§7.2、§4.7「诊断字段」
     fields:
       type:
         type: string
@@ -221,6 +237,22 @@ events:
       reason:
         type: string
         required: true
+      schema_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；首页配置化卡片填卡片自带 version 转成的字符串，AI 助手页卡片（03 §7.2）填该卡 schema_version 转成的字符串；正是因为取不到版本而解码失败时填 "unknown"
+      bridge_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；取不到填 "unknown"；H5 发出的事件由原生补
+      config_version:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7，来源见 04 §10.1）；/v1/config 还没拉到时填 "unknown"；H5 发出的事件由原生补
+      h5_release:
+        type: string
+        required: true
+        note: 诊断字段（03 §4.7）；原生页（含 AI 助手页）没有 H5 时填 "unknown"；H5 发出的事件由 H5 自己填
   agent_stream_seq_gap:
     description: 原生 Agent 页流诊断：text.delta 缺号（收到的 seq 大于本地已应用值 +1），本地结束该条消息（03 §7.2）；不带用户消息原文、输入框原文、帧的 data 与 delta、卡片内容和 fallback_text
     source: 规划/03 §4.7「agent_* 事件的字段」、§7.2
