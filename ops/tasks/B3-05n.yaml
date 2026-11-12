@@ -47,5 +47,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/degraded-routing/**'
-status: todo
-pr: null
+status: done
+pr: 3253
