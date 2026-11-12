@@ -9,7 +9,8 @@
 // Read-only. Diffs (`git diff --name-status -z -M`) from the merge base of <ref> and HEAD in <dir>
 // to HEAD, or with --tree to that tree (verify-container passes the snapshot tree it runs, so
 // uncommitted and untracked files count; round 2 ④). Prints the source files, sorted, one per
-// line; --json prints { sources, data_sources, removed_or_renamed, force_all } instead.
+// line; --json prints { sources, data_sources, removed_or_renamed, force_all, fork_point } instead
+// (fork_point: the merge base the diff starts at, so that the caller records both ends; CT-06zzzzz ⑦).
 // Exit codes: 0 printed (possibly nothing), 2 usage or git error.
 import { parseArgs } from 'node:util';
 import { changedBetweenCommits, git } from '../lib/git.ts';
@@ -107,7 +108,8 @@ function main(argv: string[]): number {
   const entries = changedBetweenCommits(from, values.tree ?? 'HEAD', { cwd });
   const sources = relatedSources(entries.map((e) => e.path));
   if (values.json === true) {
-    process.stdout.write(`${JSON.stringify({ sources, ...classifySources(entries) })}\n`);
+    const doc = { sources, ...classifySources(entries), fork_point: from };
+    process.stdout.write(`${JSON.stringify(doc)}\n`);
   } else if (sources.length > 0) {
     process.stdout.write(`${sources.join('\n')}\n`);
   }

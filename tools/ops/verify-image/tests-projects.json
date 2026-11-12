@@ -1,0 +1,167 @@
+{
+  "//": "Where each test file of verify-container.sh --tests runs (CT-06zzzzz, D10-1319 / D10-1334; the same format as red-projects.json, read by tools/ops/red-plan.ts --projects). First every project of red-projects.json, unchanged and in its order (--red keeps using red-projects.json alone); then one project per Vitest config of the packages: apps/api and packages/db unit (vitest.config.ts) and integration (vitest.integration.config.ts, database: true), apps/admin, apps/h5, packages/bridge-sdk, contracts-ts, domain, money, ui-tokens and tools unit. include / exclude mirror each config with the defaults of unitConfig / integrationConfig in vitest.shared.ts, relative to `dir` (BASE_EXCLUDE left out, as in red-projects.json); unit projects leave *.int.test.ts out, so every file has one project. test/vitest.longrun.config.ts is not here. tools/ops/red-plan.test.ts fails when a config and this table disagree. A browser project stops --tests (browser tests run with --browser). `name` names the out/<name>.* files. Trusted file (protected path, class 3).",
+  "projects": [
+    {
+      "name": "spec-unit",
+      "dir": "test",
+      "config": "vitest.config.ts",
+      "include": ["properties/**/*.test.ts", "spec/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts", "spec/**/*.browser.test.{ts,tsx}", "spec/**/*.smoke.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "spec-int",
+      "dir": "test",
+      "config": "vitest.integration.config.ts",
+      "include": ["spec/**/*.int.test.ts", "acceptance/**/*.test.ts", "smoke/**/*.int.test.ts"],
+      "exclude": [],
+      "database": true,
+      "browser": false
+    },
+    {
+      "name": "spec-browser",
+      "dir": "test",
+      "config": "vitest.browser.config.ts",
+      "include": ["spec/**/*.browser.test.{ts,tsx}"],
+      "exclude": [],
+      "database": false,
+      "browser": true
+    },
+    {
+      "name": "build-smoke",
+      "dir": "test",
+      "config": "vitest.build-smoke.config.ts",
+      "include": ["spec/**/*.smoke.test.ts"],
+      "exclude": [],
+      "database": false,
+      "browser": true
+    },
+    {
+      "name": "testing-unit",
+      "dir": "packages/testing",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "replay",
+      "dir": "test",
+      "config": "vitest.replay.config.ts",
+      "include": ["replay/**/*.test.ts"],
+      "exclude": [],
+      "database": true,
+      "browser": false
+    },
+    {
+      "name": "api-unit",
+      "dir": "apps/api",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "api-int",
+      "dir": "apps/api",
+      "config": "vitest.integration.config.ts",
+      "include": ["src/**/*.int.test.ts"],
+      "exclude": [],
+      "database": true,
+      "browser": false
+    },
+    {
+      "name": "db-unit",
+      "dir": "packages/db",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "db-int",
+      "dir": "packages/db",
+      "config": "vitest.integration.config.ts",
+      "include": ["src/**/*.int.test.ts"],
+      "exclude": [],
+      "database": true,
+      "browser": false
+    },
+    {
+      "name": "admin-unit",
+      "dir": "apps/admin",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.{ts,tsx}"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "h5-unit",
+      "dir": "apps/h5",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.{ts,tsx}"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "bridge-sdk-unit",
+      "dir": "packages/bridge-sdk",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "contracts-ts-unit",
+      "dir": "packages/contracts-ts",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "domain-unit",
+      "dir": "packages/domain",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "money-unit",
+      "dir": "packages/money",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "ui-tokens-unit",
+      "dir": "packages/ui-tokens",
+      "config": "vitest.config.ts",
+      "include": ["src/**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    },
+    {
+      "name": "tools-unit",
+      "dir": "tools",
+      "config": "vitest.config.ts",
+      "include": ["**/*.test.ts"],
+      "exclude": ["**/*.int.test.ts"],
+      "database": false,
+      "browser": false
+    }
+  ]
+}

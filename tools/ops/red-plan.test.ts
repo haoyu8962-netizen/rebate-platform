@@ -1,11 +1,13 @@
 // The plan of the isolated red run (Codex review CR2-04).
-import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 import { matchesAny } from '../lib/glob.ts';
 import { repoRoot } from '../lib/paths.ts';
 import { loadRedProjects, planRed, type RedProject } from './red-plan.ts';
+import { CLI_TIMEOUT, removeDir, runCli, scratchDir } from './test-helpers.ts';
 
 const projects = loadRedProjects();
 
@@ -401,3 +403,373 @@ it('[CT-06zzzzza] a mixed plan keeps spec-int and replay as two database groups'
     ['spec-unit', false, ['spec/money/a.test.ts']],
   ]);
 });
+
+// --- CT-06zzzzz: the project table of verify-container.sh --tests (verify-image/tests-projects.json) --
+// Same format as red-projects.json: every red-projects.json project unchanged, then one project per
+// Vitest config of the packages (apps/api and packages/db: unit and integration; apps/admin, apps/h5,
+// packages/bridge-sdk, contracts-ts, domain, money, ui-tokens, tools: unit). include / exclude as
+// the configs (with the defaults of unitConfig / integrationConfig in vitest.shared.ts), relative to
+// `dir`; not test/vitest.longrun.config.ts. One file, one project. red-plan.ts --projects <file>
+// picks the table (default red-projects.json: --red does not change). Project names are the
+// implementation's: these tests find the projects by dir and config.
+
+const TESTS_TABLE = join(repoRoot(), 'tools', 'ops', 'verify-image', 'tests-projects.json');
+const RED_TABLE = join(repoRoot(), 'tools', 'ops', 'verify-image', 'red-projects.json');
+
+/** Loaded inside each test: until the table exists only the CT-06zzzzz tests fail. */
+function testsProjects(): RedProject[] {
+  return loadRedProjects(TESTS_TABLE);
+}
+
+function tracked(...patterns: string[]): string[] {
+  const res = spawnSync('git', ['-C', repoRoot(), 'ls-files', '-z', '--', ...patterns], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (res.status !== 0) throw new Error(`git ls-files failed: ${res.stderr}`);
+  return res.stdout.split('\0').filter((l) => l !== '');
+}
+
+/** Every project of `table` that takes `file` (planRed takes the first; the table must have one). */
+function takers(file: string, table: readonly RedProject[]): RedProject[] {
+  return table.filter((p) => {
+    if (!file.startsWith(`${p.dir}/`)) return false;
+    const rel = file.slice(p.dir.length + 1);
+    return matchesAny(rel, p.include) && !matchesAny(rel, p.exclude);
+  });
+}
+
+/** The package Vitest configs the --tests table must mirror (besides red-projects.json's). */
+const PACKAGE_CONFIGS: { dir: string; config: string; database: boolean }[] = [
+  { dir: 'apps/api', config: 'vitest.config.ts', database: false },
+  { dir: 'apps/api', config: 'vitest.integration.config.ts', database: true },
+  { dir: 'packages/db', config: 'vitest.config.ts', database: false },
+  { dir: 'packages/db', config: 'vitest.integration.config.ts', database: true },
+  { dir: 'apps/admin', config: 'vitest.config.ts', database: false },
+  { dir: 'apps/h5', config: 'vitest.config.ts', database: false },
+  { dir: 'packages/bridge-sdk', config: 'vitest.config.ts', database: false },
+  { dir: 'packages/contracts-ts', config: 'vitest.config.ts', database: false },
+  { dir: 'packages/domain', config: 'vitest.config.ts', database: false },
+  { dir: 'packages/money', config: 'vitest.config.ts', database: false },
+  { dir: 'packages/ui-tokens', config: 'vitest.config.ts', database: false },
+  { dir: 'tools', config: 'vitest.config.ts', database: false },
+];
+
+function project(
+  table: readonly RedProject[],
+  dir: string,
+  config: string,
+): RedProject | undefined {
+  return table.find((p) => p.dir === dir && p.config === config);
+}
+
+it('[CT-06zzzzz] tests-projects.json: every red-projects.json project unchanged, then one project per tracked Vitest config but the long-run one', () => {
+  const table = testsProjects();
+  // red-projects.json's projects, as they are, in their order (browser ones included).
+  const red = loadRedProjects(RED_TABLE);
+  expect(table.slice(0, red.length)).toEqual(red);
+  // One project per tracked vitest*.config.ts, the long-run tier excepted; nothing else.
+  const configs = tracked('*vitest*.config.ts')
+    .filter((f) => f !== 'test/vitest.longrun.config.ts')
+    .sort();
+  expect(table.map((p) => `${p.dir}/${p.config}`).sort()).toEqual(configs);
+  expect(table.some((p) => p.config.includes('longrun'))).toBe(false);
+  for (const c of PACKAGE_CONFIGS) {
+    expect(project(table, c.dir, c.config), `${c.dir}/${c.config}`).toBeDefined();
+  }
+  // Names and (dir, config) are unique; every name is a plain word (it names out/<name>.* files).
+  expect(new Set(table.map((p) => p.name)).size).toBe(table.length);
+  expect(new Set(table.map((p) => `${p.dir}/${p.config}`)).size).toBe(table.length);
+  for (const p of table) expect(p.name, p.name).toMatch(/^[a-z0-9][a-z0-9-]*$/);
+});
+
+it('[CT-06zzzzz] tests-projects.json mirrors include / exclude / database of each package Vitest config (the vitest.shared.ts defaults included)', () => {
+  const table = testsProjects();
+  const read = (path: string): string => readFileSync(join(repoRoot(), path), 'utf8');
+  const shared = read('vitest.shared.ts');
+  // The defaults the bare calls rely on.
+  expect(shared).toContain(
+    "  include: string[] = ['src/**/*.test.ts'],\n  exclude: string[] = [],",
+  );
+  expect(shared).toContain("exclude: [...BASE_EXCLUDE, '**/*.int.test.ts', ...exclude],");
+  expect(shared).toContain("include: opts.include ?? ['src/**/*.int.test.ts'],");
+  expect(shared).toMatch(
+    /export function integrationConfig\([\s\S]*?exclude: \[\.\.\.BASE_EXCLUDE\],/,
+  );
+  const list = (text: string | undefined): string[] =>
+    text === undefined ? [] : [...text.matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '');
+  for (const c of PACKAGE_CONFIGS) {
+    const where = `${c.dir}/${c.config}`;
+    const source = read(where);
+    const p = project(table, c.dir, c.config);
+    expect(p, where).toBeDefined();
+    expect(p?.database, where).toBe(c.database);
+    expect(p?.browser, where).toBe(false);
+    if (c.database) {
+      const call = /integrationConfig\(\{([\s\S]*?)\}\)/.exec(source)?.[1];
+      expect(call, where).toBeDefined();
+      const include = /include:\s*(\[[^\]]*\])/.exec(call ?? '')?.[1];
+      expect(p?.include, where).toEqual(
+        include === undefined ? ['src/**/*.int.test.ts'] : list(include),
+      );
+      expect(p?.exclude, where).toEqual([]);
+    } else {
+      const call = /unitConfig\(\s*(\[[^\]]*\])?\s*(?:,\s*(\[[^\]]*\]))?\s*\)/.exec(source);
+      expect(call, where).not.toBeNull();
+      expect(p?.include, where).toEqual(
+        call?.[1] === undefined ? ['src/**/*.test.ts'] : list(call[1]),
+      );
+      expect(p?.exclude, where).toEqual(['**/*.int.test.ts', ...list(call?.[2])]);
+    }
+  }
+  // As the configs read today (a change to one of them must change the table too).
+  expect(project(table, 'apps/admin', 'vitest.config.ts')?.include).toEqual([
+    'src/**/*.test.{ts,tsx}',
+  ]);
+  expect(project(table, 'apps/h5', 'vitest.config.ts')?.include).toEqual([
+    'src/**/*.test.{ts,tsx}',
+  ]);
+  expect(project(table, 'tools', 'vitest.config.ts')?.include).toEqual(['**/*.test.ts']);
+  expect(project(table, 'apps/api', 'vitest.integration.config.ts')?.include).toEqual([
+    'src/**/*.int.test.ts',
+  ]);
+});
+
+it('[CT-06zzzzz] tests-projects.json: every tracked test file (infra/ aside) is taken by exactly one project; *.int.test.ts only by a database project, the others only by one without', () => {
+  const table = testsProjects();
+  const files = tracked('*.test.ts', '*.test.tsx').filter((f) => !f.startsWith('infra/'));
+  expect(files.length).toBeGreaterThan(100);
+  const problems: string[] = [];
+  for (const f of files) {
+    const t = takers(f, table);
+    if (t.length !== 1) {
+      problems.push(`${f}: ${String(t.length)} projects (${t.map((p) => p.name).join(', ')})`);
+      continue;
+    }
+    const p = t[0] as RedProject;
+    // test/acceptance and test/replay (the replay project, CT-06zzzzza) run in the integration
+    // tier under any name.
+    const integration =
+      f.endsWith('.int.test.ts') ||
+      f.startsWith('test/acceptance/') ||
+      f.startsWith('test/replay/');
+    if (p.database !== integration) problems.push(`${f}: database ${String(p.database)}`);
+  }
+  expect(problems).toEqual([]);
+});
+
+it("[CT-06zzzzz] tests-projects.json: a real test file of each package goes to that package's project (unit or integration); red-projects.json still has none for it", () => {
+  const table = testsProjects();
+  const red = loadRedProjects(RED_TABLE);
+  for (const c of PACKAGE_CONFIGS) {
+    const under = c.dir === 'tools' ? 'tools/' : `${c.dir}/src/`;
+    const real = tracked(`${under}*.test.ts`, `${under}*.test.tsx`).filter(
+      (f) => f.endsWith('.int.test.ts') === c.database,
+    );
+    const where = `${c.dir}/${c.config}`;
+    expect(real.length, `${where}: a tracked test file`).toBeGreaterThan(0);
+    const file = real[0] ?? '';
+    const plan = planRed([file], table);
+    expect(plan.unrunnable, file).toEqual([]);
+    expect(plan.groups, file).toHaveLength(1);
+    expect(plan.groups[0], file).toMatchObject({
+      dir: c.dir,
+      config: c.config,
+      database: c.database,
+      browser: false,
+      files: [file.slice(c.dir.length + 1)],
+    });
+    // --red keeps its table.
+    expect(planRed([file], red).unrunnable, file).toEqual([file]);
+  }
+});
+
+it('[CT-06zzzzz] tests-projects.json: unit configs leave *.int.test.ts out; a .tsx test only where the config takes it; a file outside every config has none', () => {
+  const table = testsProjects();
+  const plan = planRed(
+    [
+      'apps/api/src/modules/a/a.test.ts',
+      'apps/api/src/modules/a/a.int.test.ts',
+      'packages/db/src/b.int.test.ts',
+      'apps/admin/src/c.test.tsx',
+      'apps/h5/src/d.test.tsx',
+      'tools/ops/e.test.ts',
+      'apps/api/src/f.test.tsx',
+      'tools/ops/g.int.test.ts',
+      'packages/money/h.test.ts',
+      'infra/release-scan/i.test.ts',
+    ],
+    table,
+  );
+  const where = new Map(
+    plan.groups.flatMap((g) => g.files.map((f) => [`${g.dir}/${f}`, g] as const)),
+  );
+  expect(where.get('apps/api/src/modules/a/a.test.ts')).toMatchObject({
+    dir: 'apps/api',
+    config: 'vitest.config.ts',
+    database: false,
+  });
+  expect(where.get('apps/api/src/modules/a/a.int.test.ts')).toMatchObject({
+    dir: 'apps/api',
+    config: 'vitest.integration.config.ts',
+    database: true,
+  });
+  expect(where.get('packages/db/src/b.int.test.ts')).toMatchObject({
+    dir: 'packages/db',
+    config: 'vitest.integration.config.ts',
+    database: true,
+  });
+  expect(where.get('apps/admin/src/c.test.tsx')).toMatchObject({ dir: 'apps/admin' });
+  expect(where.get('apps/h5/src/d.test.tsx')).toMatchObject({ dir: 'apps/h5' });
+  expect(where.get('tools/ops/e.test.ts')).toMatchObject({ dir: 'tools', database: false });
+  expect([...plan.unrunnable].sort()).toEqual([
+    'apps/api/src/f.test.tsx',
+    'infra/release-scan/i.test.ts',
+    'packages/money/h.test.ts',
+    'tools/ops/g.int.test.ts',
+  ]);
+});
+
+// --- red-plan.ts --projects <file> ---------------------------------------------------------------------
+
+let cliDir = '';
+beforeAll(() => {
+  cliDir = scratchDir('red-plan');
+});
+afterAll(() => removeDir(cliDir));
+
+function expectedFile(name: string, files: string[]): string {
+  const path = join(cliDir, name);
+  writeFileSync(path, files.map((f) => `${f}\n`).join(''));
+  return path;
+}
+
+it(
+  '[CT-06zzzzz] red-plan CLI without --projects keeps red-projects.json (an apps/api test has no entry, exit 1)',
+  () => {
+    const spec = runCli('red-plan.ts', [
+      '--expected',
+      expectedFile('spec.txt', ['test/spec/a/b.test.ts']),
+    ]);
+    expect(spec.status, spec.stderr).toBe(0);
+    expect(JSON.parse(spec.stdout)).toEqual({
+      groups: [
+        {
+          name: 'spec-unit',
+          dir: 'test',
+          config: 'vitest.config.ts',
+          database: false,
+          browser: false,
+          files: ['spec/a/b.test.ts'],
+        },
+      ],
+    });
+    const api = runCli('red-plan.ts', [
+      '--expected',
+      expectedFile('api.txt', ['apps/api/src/x.test.ts']),
+    ]);
+    expect(api.status).toBe(1);
+    expect(api.stderr).toContain('apps/api/src/x.test.ts');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] red-plan CLI --projects tests-projects.json plans apps/api unit and integration files and tools files',
+  () => {
+    const res = runCli('red-plan.ts', [
+      '--expected',
+      expectedFile('tests.txt', [
+        'apps/api/src/x.test.ts',
+        'apps/api/src/x.int.test.ts',
+        'tools/ops/y.test.ts',
+        'test/spec/a/b.test.ts',
+      ]),
+      '--projects',
+      TESTS_TABLE,
+    ]);
+    expect(res.status, res.stderr).toBe(0);
+    const groups = (JSON.parse(res.stdout) as { groups: Record<string, unknown>[] }).groups;
+    expect(groups.map((g) => [g['dir'], g['config'], g['database'], g['files']])).toEqual([
+      ['apps/api', 'vitest.config.ts', false, ['src/x.test.ts']],
+      ['apps/api', 'vitest.integration.config.ts', true, ['src/x.int.test.ts']],
+      ['tools', 'vitest.config.ts', false, ['ops/y.test.ts']],
+      ['test', 'vitest.config.ts', false, ['spec/a/b.test.ts']],
+    ]);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] red-plan CLI --projects <file> uses exactly that table; a missing or malformed table exits 2 naming it',
+  () => {
+    const table = join(cliDir, 'one.json');
+    writeFileSync(
+      table,
+      JSON.stringify({
+        projects: [
+          {
+            name: 'only-one',
+            dir: 'lib',
+            config: 'vitest.config.ts',
+            include: ['**/*.test.ts'],
+            exclude: [],
+            database: false,
+            browser: false,
+          },
+        ],
+      }),
+    );
+    const res = runCli('red-plan.ts', [
+      '--expected',
+      expectedFile('one.txt', ['lib/a/b.test.ts']),
+      '--projects',
+      table,
+    ]);
+    expect(res.status, res.stderr).toBe(0);
+    expect(JSON.parse(res.stdout)).toEqual({
+      groups: [
+        {
+          name: 'only-one',
+          dir: 'lib',
+          config: 'vitest.config.ts',
+          database: false,
+          browser: false,
+          files: ['a/b.test.ts'],
+        },
+      ],
+    });
+    // Not in that table: a test/spec file has no entry there.
+    const other = runCli('red-plan.ts', [
+      '--expected',
+      expectedFile('other.txt', ['test/spec/a/b.test.ts']),
+      '--projects',
+      table,
+    ]);
+    expect(other.status).toBe(1);
+
+    const missing = join(cliDir, 'no-such-table.json');
+    const gone = runCli('red-plan.ts', [
+      '--expected',
+      expectedFile('gone.txt', ['lib/a/b.test.ts']),
+      '--projects',
+      missing,
+    ]);
+    expect(gone.status).toBe(2);
+    expect(gone.stdout).toBe('');
+    expect(gone.stderr).toContain('no-such-table.json');
+
+    const bad = join(cliDir, 'bad.json');
+    writeFileSync(bad, JSON.stringify({ projects: [{ name: 'x', dir: 'lib' }] }));
+    const malformed = runCli('red-plan.ts', [
+      '--expected',
+      expectedFile('bad.txt', ['lib/a/b.test.ts']),
+      '--projects',
+      bad,
+    ]);
+    expect(malformed.status).toBe(2);
+    expect(malformed.stdout).toBe('');
+    expect(malformed.stderr).toContain('bad.json');
+  },
+  CLI_TIMEOUT,
+);

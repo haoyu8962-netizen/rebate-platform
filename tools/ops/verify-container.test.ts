@@ -791,6 +791,16 @@ it('[CT-06zzzzu] the variable is documented in the script header and in tools/op
 const RELATED_SOURCE = 'apps/api/src/modules/content/domain/config-registry.ts';
 const RELATED_TEST = 'test/spec/content/config-items/registry.test.ts';
 
+/** CT-06zzzzz ③: `git status --porcelain=v1 -z --untracked-files=all`, byte for byte (not trimmed). */
+function porcelain(repo: string): string {
+  const res = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {
+    cwd: repo,
+    encoding: 'utf8',
+  });
+  if (res.status !== 0) throw new Error(`git status failed: ${res.stderr}`);
+  return res.stdout;
+}
+
 function relatedRepo(
   name: string,
   changes: Record<string, string>,
@@ -983,6 +993,17 @@ it(
     for (const key of ['tree', 'prop_seed', 'prop_runs', 'started_at', 'finished_at']) {
       expect(Object.keys(result), key).toContain(key);
     }
+    // CT-06zzzzz ②: the closing line itself (the last line on stderr) carries the counts.
+    expect(closingLine(res.stderr)).toMatch(
+      /^verify-container: B1-02b run 1 \(container, related\) exit 0\b.*\b0 file\(s\), 0 test\(s\)/,
+    );
+    // CT-06zzzzz ⑦: the two ends of the diff — the fork point with main (40 hex) and the snapshot
+    // tree, the same tree as result.json.
+    expect(related['fork_point']).toBe(fx.mainCommit);
+    expect(related['fork_point']).toMatch(/^[0-9a-f]{40}$/);
+    expect(related['tree']).toMatch(/^[0-9a-f]{40}$/);
+    expect(related['tree']).toBe(result['tree']);
+    expect(related['tree']).toBe(fx.tree);
     // The snapshot (if any was made) is not kept.
     expect(existsSync(join(vdir, 'src'))).toBe(false);
 
@@ -1254,6 +1275,11 @@ function readJson(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
 }
 
+/** CT-06zzzzz ②: the closing line is the last line on stderr. */
+function closingLine(stderr: string): string {
+  return stderr.trimEnd().split('\n').at(-1) ?? '';
+}
+
 const RELATED_ARGS = (repo: string) => [
   'B1-02b',
   '--worktree',
@@ -1294,8 +1320,10 @@ it(
       exit_code: 0,
       commit: fx.head,
     });
-    // ⑤: the closing line carries the counts.
-    expect(`${res.stdout}\n${res.stderr}`).toContain('2 file(s), 3 test(s)');
+    // ⑤ (CT-06zzzzz ②): the closing line itself, the last line on stderr, carries the counts.
+    expect(closingLine(res.stderr)).toMatch(
+      /^verify-container: B1-02b run 1 \(container, related\) exit 0 .*\b2 file\(s\), 3 test\(s\)/,
+    );
 
     const container = testContainer(res.calls);
     expect(container, JSON.stringify(res.calls.map((c) => c.args[0]))).toBeDefined();
@@ -1331,7 +1359,10 @@ it(
       failed: [{ file: RELATED_TEST, test: 'registry > [BR-CONTENT-01] lists every key' }],
     });
     expect(readJson(join(vdir, 'result.json'))).toMatchObject({ script: 'related', exit_code: 1 });
-    expect(`${res.stdout}\n${res.stderr}`).toContain('1 file(s), 2 test(s)');
+    // CT-06zzzzz ②: on the closing line itself.
+    expect(closingLine(res.stderr)).toMatch(
+      /^verify-container: B1-02b run 1 \(container, related\) exit 1 .*\b1 file\(s\), 2 test\(s\)/,
+    );
   },
   JUDGE_TIMEOUT,
 );
@@ -1352,31 +1383,90 @@ it(
       tests: 0,
     });
     expect(readJson(join(vdir, 'result.json'))).toMatchObject({ script: 'related', exit_code: 0 });
-    expect(`${res.stdout}\n${res.stderr}`).toContain('0 file(s), 0 test(s)');
+    // CT-06zzzzz ②: on the closing line itself.
+    expect(closingLine(res.stderr)).toMatch(
+      /^verify-container: B1-02b run 1 \(container, related\) exit 0 .*\b0 file\(s\), 0 test\(s\)/,
+    );
   },
   JUDGE_TIMEOUT,
 );
 
 // Exit 2 and no result.json: nothing trustworthy came out of the container.
 const outsideDir = () => join(base, 'related-outside');
-const ENV_ERRORS: { what: string; spec: () => ContainerSpec; limitMs?: number }[] = [
-  { what: 'the container exits non-zero', spec: () => ({ ...out('0', GREEN_REPORT), exit: 3 }) },
+// CT-06zzzzz ① (D10-1350): every case also names the text only its branch of related_judge prints,
+// so that removing any one branch turns its case red.
+const ENV_ERRORS: {
+  what: string;
+  spec: () => ContainerSpec;
+  message: string;
+  limitMs?: number;
+  /** The cases CT-06zzzzz ① added carry its tag. */
+  tag?: string;
+}[] = [
+  {
+    what: 'the container exits non-zero',
+    spec: () => ({ ...out('0', GREEN_REPORT), exit: 3 }),
+    message: 'the related run stopped before Vitest had a result (exit 3)',
+  },
   {
     what: 'vitest.exit is missing',
+    message: 'out/vitest.exit is missing or not a regular file',
     spec: () => {
       const s = out('0', GREEN_REPORT);
       Reflect.deleteProperty(s.files, 'vitest.exit');
       return s;
     },
   },
-  { what: 'vitest.exit is 124 (time limit)', spec: () => out('124', GREEN_REPORT) },
-  { what: 'the report is missing', spec: () => out('0', null) },
-  { what: 'the report is not the expected shape', spec: () => out('1', '{"testResults":"x"}') },
-  { what: 'the report is not JSON', spec: () => out('1', '{ not json') },
-  { what: 'Vitest exited 1 but the report has nothing red', spec: () => out('1', GREEN_REPORT) },
+  {
+    what: 'vitest.exit is 124 (time limit)',
+    spec: () => out('124', GREEN_REPORT),
+    message: 'vitest related ran past the time limit',
+  },
+  // CT-06zzzzz ①: the time limit wins over a report that shows red (never judged red).
+  {
+    what: 'vitest.exit is 124 (time limit) and the report has a red test',
+    tag: '[CT-06zzzzz]',
+    spec: () => out('124', RED_REPORT),
+    message: 'vitest related ran past the time limit',
+  },
+  // CT-06zzzzz ①: an exit code file that is not a number.
+  {
+    what: 'vitest.exit is not a number (abc)',
+    tag: '[CT-06zzzzz]',
+    spec: () => out('abc', GREEN_REPORT),
+    message: 'the related run left no Vitest exit code',
+  },
+  {
+    what: 'vitest.seconds is not a number (abc)',
+    tag: '[CT-06zzzzz]',
+    spec: () => out('0', GREEN_REPORT, 'abc'),
+    message: 'the related run left no duration',
+  },
+  {
+    what: 'the report is missing',
+    spec: () => out('0', null),
+    message: 'vitest related wrote no report (exit 0)',
+  },
+  {
+    what: 'the report is not the expected shape',
+    spec: () => out('1', '{"testResults":"x"}'),
+    message: 'related-report rejected the Vitest report (exit 2)',
+  },
+  {
+    what: 'the report is not JSON',
+    spec: () => out('1', '{ not json'),
+    message: 'related-report rejected the Vitest report (exit 2)',
+  },
+  {
+    what: 'Vitest exited 1 but the report has nothing red',
+    spec: () => out('1', GREEN_REPORT),
+    message:
+      'vitest related exited 1 but its report has no failed test and no file that failed to load',
+  },
   // ②: out/ is written by untrusted code; the host reads only regular files there.
   {
     what: 'vitest.exit is a symbolic link (to a file that says 0)',
+    message: 'out/vitest.exit is missing or not a regular file',
     spec: () => {
       writeFiles(outsideDir(), { 'exit-zero': '0\n' });
       return {
@@ -1391,6 +1481,7 @@ const ENV_ERRORS: { what: string; spec: () => ContainerSpec; limitMs?: number }[
   },
   {
     what: 'vitest.exit is a FIFO (the host must not hang)',
+    message: 'out/vitest.exit is missing or not a regular file',
     limitMs: 20_000,
     spec: () => ({
       exit: 0,
@@ -1403,6 +1494,7 @@ const ENV_ERRORS: { what: string; spec: () => ContainerSpec; limitMs?: number }[
   },
   {
     what: 'vitest.exit is a directory',
+    message: 'out/vitest.exit is missing or not a regular file',
     spec: () => ({
       exit: 0,
       files: {
@@ -1414,6 +1506,7 @@ const ENV_ERRORS: { what: string; spec: () => ContainerSpec; limitMs?: number }[
   },
   {
     what: 'vitest.seconds is a symbolic link',
+    message: 'out/vitest.seconds is missing or not a regular file',
     spec: () => {
       writeFiles(outsideDir(), { seconds: '12\n' });
       return {
@@ -1428,6 +1521,7 @@ const ENV_ERRORS: { what: string; spec: () => ContainerSpec; limitMs?: number }[
   },
   {
     what: 'the report is a symbolic link (to a green report)',
+    message: 'out/vitest-report.json is not a regular file',
     spec: () => {
       writeFiles(outsideDir(), { 'green.json': GREEN_REPORT });
       return {
@@ -1444,13 +1538,15 @@ const ENV_ERRORS: { what: string; spec: () => ContainerSpec; limitMs?: number }[
 
 ENV_ERRORS.forEach((c, i) => {
   it(
-    `[CT-06zzzzv] --related: ${c.what} → exit 2, no result.json, never green`,
+    `${c.tag ?? '[CT-06zzzzv]'} --related: ${c.what} → exit 2, no result.json, never green`,
     async () => {
       const fx = relatedFixture();
       const runsDir = join(base, `rj-env-${String(i)}`);
       const res = await runStubbed(RELATED_ARGS(fx.repo), runsDir, c.spec(), c.limitMs);
       expect(res.timedOut, 'the run hung and was killed').toBe(false);
       expect(res.status, res.stderr).toBe(2);
+      // ①: the text of this case's own branch.
+      expect(res.stderr).toContain(c.message);
       const vdir = join(runsDir, 'B1-02b', 'related', '1');
       expect(existsSync(join(vdir, 'result.json'))).toBe(false);
       // The test container did run (the error is about what it left behind).
@@ -1568,14 +1664,16 @@ it(
       [RELATED_SOURCE]: "export const keys = ['new.key'];\n",
       'packages/money/src/new.ts': 'export const n = 1;\n',
     });
+    const before = porcelain(repo);
     const res = run(['B1-02b', '--worktree', repo, '--related', '--base', 'main', '--dry-run']);
     expect(res.status, res.stderr).toBe(0);
     const plan = JSON.parse(res.stdout) as { sources: string[]; tree: string };
     expect(plan.sources).toEqual([RELATED_SOURCE, 'packages/money/src/new.ts']);
     expect(plan.tree).not.toBe(fixtureGit(repo, ['rev-parse', 'HEAD^{tree}']));
-    // The real index is untouched.
-    // (Nothing staged: the uncommitted changes stay in the work tree only.)
-    expect(fixtureGit(repo, ['diff', '--cached', '--name-only'])).toBe('');
+    // CT-06zzzzz ③: the real index and the work tree are untouched — git status (porcelain v1,
+    // -z, every untracked file) is byte for byte the same before and after the run.
+    expect(before).toContain('?? packages/money/src/new.ts');
+    expect(porcelain(repo)).toBe(before);
     expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
   },
   CLI_TIMEOUT,
@@ -1620,4 +1718,50 @@ it('[CT-06zzzzv] tools/ops/README.md names the three related.json lists and no_r
   for (const word of ['data_sources', 'removed_or_renamed', 'force_all', 'no_related_tests']) {
     expect(readme, word).toContain(word);
   }
+});
+
+// --- CT-06zzzzz ④ ⑦ (D10-1350): the fork point is the start of the diff; related.json records both ends
+
+it(
+  "[CT-06zzzzz] --related: main moved on after the fork (a new source on main) — only the branch's changes are sources; related.json records fork_point and tree",
+  async () => {
+    const fx = relatedWorkspace('related-moved-main');
+    const forkPoint = fixtureGit(fx.repo, ['rev-parse', 'main']);
+    // main moves on after the fork: a new source file there.
+    fixtureGit(fx.repo, ['checkout', '-q', 'main']);
+    writeFiles(fx.repo, { 'packages/money/src/on-main.ts': 'export const m = 1;\n' });
+    fixtureGit(fx.repo, ['add', '-A']);
+    fixtureGit(fx.repo, ['commit', '-q', '-m', 'main moves on']);
+    const mainTip = fixtureGit(fx.repo, ['rev-parse', 'HEAD']);
+    fixtureGit(fx.repo, ['checkout', '-q', 'task']);
+    expect(mainTip).not.toBe(forkPoint);
+
+    const dry = run([...RELATED_ARGS(fx.repo), '--dry-run']);
+    expect(dry.status, dry.stderr).toBe(0);
+    expect(JSON.parse(dry.stdout)).toMatchObject({ sources: [RELATED_SOURCE] });
+
+    const runsDir = join(base, 'rj-moved-main');
+    const res = await runStubbed(RELATED_ARGS(fx.repo), runsDir, out('0', GREEN_REPORT));
+    expect(res.timedOut).toBe(false);
+    expect(res.status, res.stderr).toBe(0);
+    const vdir = join(runsDir, 'B1-02b', 'related', '1');
+    const related = readJson(join(vdir, 'related.json'));
+    const result = readJson(join(vdir, 'result.json'));
+    expect(related['sources']).toEqual([RELATED_SOURCE]);
+    expect(related['sources']).not.toContain('packages/money/src/on-main.ts');
+    // ⑦: the fork point (not main's tip) and the snapshot tree that ran.
+    expect(related['fork_point']).toBe(forkPoint);
+    expect(related['tree']).toMatch(/^[0-9a-f]{40}$/);
+    expect(related['tree']).toBe(result['tree']);
+    expect(related['tree']).toBe(fixtureGit(fx.repo, ['rev-parse', 'HEAD^{tree}']));
+  },
+  JUDGE_TIMEOUT,
+);
+
+it("[CT-06zzzzz] tools/ops/README.md: report the cleaned stdout lines, never copy related.json into a notice; the full integration suite is CI's (⑥, D10-1340)", () => {
+  const readme = readFileSync(join(OPS_DIR, 'README.md'), 'utf8');
+  expect(readme).toContain('stdout 上清洗过的行');
+  expect(readme).toContain('related.json 的原文不要转抄进公告');
+  expect(readme).not.toContain('原样报出');
+  expect(readme).toMatch(/完整集成测试套件以 CI 为准/);
 });

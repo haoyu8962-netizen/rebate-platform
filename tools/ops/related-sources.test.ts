@@ -247,6 +247,16 @@ it('[CT-06zzzzv] classifySources: nothing to report for TS-only modifications', 
 
 // --- CT-06zzzzv round 2 (D10-1337 ④): --tree <tree-ish> diffs the tree that actually runs ----------
 
+/** CT-06zzzzz ③: `git status --porcelain=v1 -z --untracked-files=all`, byte for byte (not trimmed). */
+function porcelain(cwd: string): string {
+  const res = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {
+    cwd,
+    encoding: 'utf8',
+  });
+  if (res.status !== 0) throw new Error(`git status failed: ${res.stderr}`);
+  return res.stdout;
+}
+
 /** The tree of the fixture's work tree, uncommitted and untracked files included (as verify-container). */
 function worktreeTree(cwd: string): string {
   const idx = join(dir, `index-${String(Date.now())}.tmp`);
@@ -284,6 +294,7 @@ it(
       'packages/money/src/a.test.ts': 'export {};\n',
     });
     const tree = worktreeTree(wt);
+    const before = porcelain(wt);
 
     const committedOnly = runCli('related-sources.ts', ['--base', forkPoint, '--cwd', wt]);
     expect(committedOnly.status, committedOnly.stderr).toBe(0);
@@ -292,9 +303,10 @@ it(
     const res = runCli('related-sources.ts', ['--base', forkPoint, '--tree', tree, '--cwd', wt]);
     expect(res.status, res.stderr).toBe(0);
     expect(lines(res.stdout)).toEqual(['db/seeds/0002_new.sql', 'packages/money/src/a.ts']);
-    // Read-only: the real index and the work tree are untouched.
-    // (Nothing staged: the uncommitted changes stay in the work tree only.)
-    expect(fixtureGit(wt, ['diff', '--cached', '--name-only'])).toBe('');
+    // Read-only: the real index and the work tree are untouched (CT-06zzzzz ③: git status, porcelain
+    // v1, -z, every untracked file, byte for byte the same before and after).
+    expect(before).toContain('?? db/seeds/0002_new.sql');
+    expect(porcelain(wt)).toBe(before);
   },
   CLI_TIMEOUT,
 );
@@ -319,6 +331,91 @@ it(
     expect(dash.status).toBe(2);
     expect(dash.stdout).toBe('');
     expect(dash.stderr).not.toMatch(/unknown option/i);
+  },
+  CLI_TIMEOUT,
+);
+
+// --- CT-06zzzzz ④ ⑦ (D10-1350): with --tree the diff still starts at the fork point; --json says which
+
+it(
+  "[CT-06zzzzz] related-sources CLI --tree: main moved on after the fork with a new source — not a source of the branch; only the branch's own changes are",
+  () => {
+    const wt = `${dir}/moved-main`;
+    writeFiles(wt, {
+      'package.json': '{"name":"fixture","private":true}\n',
+      'packages/money/src/a.ts': 'export const a = 1;\n',
+    });
+    fixtureGit(wt, ['init', '-q', '-b', 'main']);
+    fixtureGit(wt, ['add', '-A']);
+    fixtureGit(wt, ['commit', '-q', '-m', 'base']);
+    fixtureGit(wt, ['checkout', '-q', '-b', 'task']);
+    writeFiles(wt, { 'packages/money/src/a.ts': 'export const a = 2;\n' });
+    fixtureGit(wt, ['commit', '-q', '-am', 'task']);
+    // main moves on: a new source file there, after the fork.
+    fixtureGit(wt, ['checkout', '-q', 'main']);
+    writeFiles(wt, { 'packages/money/src/on-main.ts': 'export const m = 1;\n' });
+    fixtureGit(wt, ['add', '-A']);
+    fixtureGit(wt, ['commit', '-q', '-m', 'main moves on']);
+    fixtureGit(wt, ['checkout', '-q', 'task']);
+    // One uncommitted change of the branch too: --tree takes the snapshot.
+    writeFiles(wt, { 'packages/money/src/b.ts': 'export const b = 1;\n' });
+    const tree = worktreeTree(wt);
+
+    const res = runCli('related-sources.ts', ['--base', 'main', '--tree', tree, '--cwd', wt]);
+    expect(res.status, res.stderr).toBe(0);
+    expect(lines(res.stdout)).toEqual(['packages/money/src/a.ts', 'packages/money/src/b.ts']);
+    expect(res.stdout).not.toContain('on-main.ts');
+    const json = runCli('related-sources.ts', [
+      '--base',
+      'main',
+      '--tree',
+      tree,
+      '--cwd',
+      wt,
+      '--json',
+    ]);
+    expect(json.status, json.stderr).toBe(0);
+    const doc = JSON.parse(json.stdout) as { sources: string[]; removed_or_renamed: string[] };
+    expect(doc.sources).toEqual(['packages/money/src/a.ts', 'packages/money/src/b.ts']);
+    // main's new file is neither a source nor "removed" (the tree lacks it, but the diff starts at
+    // the fork point, which lacks it too).
+    expect(doc.removed_or_renamed).toEqual([]);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] related-sources CLI --json carries fork_point: the merge base of --base and HEAD (40 hex), with and without --tree',
+  () => {
+    // The shared fixture: main moved on after the branch forked.
+    const forkPoint = fixtureGit(repo, ['merge-base', 'main', 'HEAD']);
+    expect(forkPoint).not.toBe(fixtureGit(repo, ['rev-parse', 'main']));
+    const plain = runCli('related-sources.ts', ['--base', 'main', '--cwd', repo, '--json']);
+    expect(plain.status, plain.stderr).toBe(0);
+    const doc = JSON.parse(plain.stdout) as Record<string, unknown>;
+    expect(doc['fork_point']).toBe(forkPoint);
+    expect(doc['fork_point']).toMatch(/^[0-9a-f]{40}$/);
+    // The other fields stay.
+    expect(doc).toHaveProperty('sources');
+    expect(doc).toHaveProperty('data_sources');
+    expect(doc).toHaveProperty('removed_or_renamed');
+    expect(doc).toHaveProperty('force_all');
+
+    const tree = fixtureGit(repo, ['rev-parse', 'HEAD^{tree}']);
+    const withTree = runCli('related-sources.ts', [
+      '--base',
+      'main',
+      '--tree',
+      tree,
+      '--cwd',
+      repo,
+      '--json',
+    ]);
+    expect(withTree.status, withTree.stderr).toBe(0);
+    expect((JSON.parse(withTree.stdout) as Record<string, unknown>)['fork_point']).toBe(forkPoint);
+    // Without --json the output is still the bare list.
+    const bare = runCli('related-sources.ts', ['--base', 'main', '--cwd', repo]);
+    expect(bare.stdout).not.toContain('fork_point');
   },
   CLI_TIMEOUT,
 );

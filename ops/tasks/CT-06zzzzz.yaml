@@ -1,0 +1,36 @@
+id: CT-06zzzzz
+repo: rebate-platform
+title: CT-06zzzzz：verify-container --tests <路径>…——在 PR 头代码上跑指定的测试文件或目录（按可信项目表分组，单元组断网、集成组只连一次性 PG / Redis），汇总到 tests/<n>/tests.json，不写 result.json、不进证据；并收 #3263 评审的七条收紧项（D10-1319 / D10-1334 方案，D10-1350 ①–⑦）
+type: guard-change
+# 2026-11-12 ops 入账（编排：#3263 合并后开 --tests 的 PR，approvals 由编排排号）。方案见 couli-runs/OPS-lane/server-tests-plan.md 与 D10-1334（同意，附 (a)–(d) 四条）。
+# --tests：开发中的测试搬上测试机（scripts/test-run.sh → container-run 轻量队列 → lan-run → 本模式）。跑的是 worktree 的快照树（未提交、未跟踪的也算），
+#   给的文件或目录展开成测试文件，经可信 red-plan.ts 分组；单元组 --network none、不带库地址，集成组在内部网络上配一次性 PG / Redis（与 --red 相同的隔离），
+#   不取全机验证槽；结果 tests/<n>/（plan.json、files.txt、log.txt、out/、tests.json），不写 result.json，evidence-check 与 rebase-verify 都读不到；不判红绿门禁，只如实汇报。
+# 同单收 D10-1350 的 --related 收紧项：① 退出 2 的各分支断言报错文字，补「124 且有红报告」「退出码文件不是数字」；② 结束行本身断言文件数与用例数；
+#   ③ 「索引和工作树没被动过」改成比较运行前后的 git status；④ --tree 时起点是分叉点：补主干已前移的用例；⑤ 清洗补双向控制字符（U+202A–U+202E、U+2066–U+2069）与 C1 控制字符；
+#   ⑥ README 调用约定：报 stdout 上清洗过的行，related.json 原文不转抄进公告；⑦ related.json 记下实际求差的两端（分叉点提交号 fork_point、快照树 tree）。
+# 分组用新可信表 verify-image/tests-projects.json（red-projects.json 只收 test/** 与 packages/testing/**，跑不了 apps/*、packages/* 的单元与集成测试）；red-plan.ts 加 --projects，--red 用的表不变。
+# 另：README 写明完整集成套件以 CI 为准（D10-1340）。D10-1356 的 rule_change 并入项等 #3285 合并后另开小单，不在本单。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/verify-container.tests.test.ts'
+  - 'tools/ops/related-report.ts'
+  - 'tools/ops/related-report.test.ts'
+  - 'tools/ops/related-sources.ts'
+  - 'tools/ops/related-sources.test.ts'
+  - 'tools/ops/tests-report.ts'
+  - 'tools/ops/tests-report.test.ts'
+  - 'tools/ops/red-plan.ts'
+  - 'tools/ops/red-plan.test.ts'
+  - 'tools/ops/verify-image/tests-projects.json'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzz.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
