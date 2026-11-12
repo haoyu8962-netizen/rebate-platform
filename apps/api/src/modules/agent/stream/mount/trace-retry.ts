@@ -1,8 +1,12 @@
 // B3-08y · BR-AI-19「TraceWriter 写入失败时进本地重试队列，最多重试 24 小时，仍失败记告警
 // agent.trace_lost，不得静默丢弃」, BR-AI-22 (no trace written back into a session already detached
-// from its user), BR-AI-03 / BR-AI-07 (B3-08q S2: an order card delivered but not yet stored still
-// resolves by card_id in its own session). Rule tests: test/spec/agent/trace-retry/** (they import
-// this file by path: names, signatures and the semantics written here are the contract).
+// from its user). Rule tests: test/spec/agent/trace-retry/** (they import this file by path: names,
+// signatures and the semantics written here are the contract).
+// B3-08zc (BR-AI-19 细则「助手回复落库」, D10-1297): the stream runtime no longer hands cards to this
+// queue (they are written with the run's terminal state) and nothing reads its pending cards any
+// more: withPendingCards / processPendingCards / sharePendingCards are gone, card references read
+// committed agent_cards only. The queue itself still writes a record's cards when given some, and
+// keeps pendingCard as a queue method (its own rule tests, trace-retry/queue.test.ts).
 //
 // traceRedoDefaults(): a fresh {maxRuns: 5000, firstDelayMs: 1000, maxDelayMs: 300000,
 //   windowMs: 86400000} (agent's own injectable defaults, like runTimingsDefaults; not a content
@@ -50,28 +54,16 @@
 //     first attempts in flight), all bounded by boundMs on deps.scheduler; whatever is still
 //     unwritten then is lost (reason 'shutdown'). Resolves within boundMs; after it the writer is
 //     never called again by a timer. With nothing queued or in flight it resolves at once.
-// withPendingCards(refs, pending): OrderCardRefs. resolve(cardId, ctx) answers
-//   {kind: 'order', orderId} when pending.pendingCard(ctx.appId, ctx.sessionId, cardId) is an
-//   'order_status' card whose data.order_id is a non-empty string (app and session from ctx only,
-//   never a model argument); otherwise refs.resolve(cardId, ctx) (createOrderCardRefs(db) itself is
-//   unchanged).
 // The writer: createPgAgentTraceWriter (agent/store/results) locks the run's session row
 //   (FOR SHARE, exclusive with the deletion purge's FOR NO KEY UPDATE) in the write's transaction;
 //   a session detached from its user (user_id NULL with user_hash set) makes the write resolve
 //   'skipped' and write nothing; a guest session (no user_hash) is written as before.
-// Process-wide pending cards (B3-08y): the production assembly is built before (and apart from) the
-//   stream runtime, so the runtime shares its queue with sharePendingCards(queue) (undone at close)
-//   and createProductionStreamAssembly reads processPendingCards() through withPendingCards. The
-//   lookup is still by the tool context's app + session + card_id only.
-// TODO(规划/11 §2.3): S2 across processes (read PG once more after a short wait when the card is
-//   in neither this process nor PG) — blocked on 多实例部署 (one stream instance for now).
 import type { Clock, RootLogger, Scheduler } from '../../../platform/index.ts';
 import {
   AgentTraceRejected,
   isTraceSkipped,
   type ToolCallRecord,
 } from '../../store/results/index.ts';
-import type { OrderCardRefs } from '../../tools/orders/index.ts';
 import type { CardInput } from '../writer/index.ts';
 
 export type TraceLostReason = 'expired' | 'rejected' | 'overflow' | 'shutdown';
@@ -125,7 +117,7 @@ export interface TraceRedoQueueDeps {
   readonly onLost?: (reason: TraceLostReason) => void;
 }
 
-/** Cards delivered by this process and not yet confirmed stored. */
+/** Cards of a queued record not yet confirmed stored (the queue's own view; nothing reads it). */
 export interface PendingCardSource {
   pendingCard(appId: string, sessionId: string, cardId: string): CardInput | null;
 }
@@ -466,43 +458,6 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
       })();
       return closing;
     },
-  };
-}
-
-export function withPendingCards(refs: OrderCardRefs, pending: PendingCardSource): OrderCardRefs {
-  return {
-    async resolve(cardId, ctx) {
-      // App and session from the tool context only (server side, BR-AI-03).
-      const card = pending.pendingCard(ctx.appId, ctx.sessionId, cardId);
-      if (card !== null && card.type === 'order_status') {
-        const orderId = card.data['order_id'];
-        if (typeof orderId === 'string' && orderId !== '') return { kind: 'order', orderId };
-      }
-      return refs.resolve(cardId, ctx);
-    },
-  };
-}
-
-const shared = new Set<PendingCardSource>();
-
-/** This process's pending cards: every shared queue's, by app + session + card_id. */
-export function processPendingCards(): PendingCardSource {
-  return {
-    pendingCard(appId, sessionId, cardId) {
-      for (const source of shared) {
-        const card = source.pendingCard(appId, sessionId, cardId);
-        if (card !== null) return card;
-      }
-      return null;
-    },
-  };
-}
-
-/** Adds `source` to processPendingCards(); the returned function takes it out again. */
-export function sharePendingCards(source: PendingCardSource): () => void {
-  shared.add(source);
-  return () => {
-    shared.delete(source);
   };
 }
 

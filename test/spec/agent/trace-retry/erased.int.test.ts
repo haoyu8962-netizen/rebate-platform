@@ -92,8 +92,13 @@ it('[AC-B3-08y#6][BR-AI-22][BR-AI-19] 首次写入失败后完成注销清理：
     x.writer.set('throw');
     const sessionId = await openSession(x.r, x.f.caller);
     const frames = await ask(x, x.f.caller, sessionId, SEARCH_ASK);
-    expect(cardFramesOf(frames).length).toBeGreaterThan(0);
+    const cardIds = cardFramesOf(frames).map((frame) => String(frame.data['card_id']));
+    expect(cardIds.length, 'the reply carried card frames').toBeGreaterThan(0);
     const runId = runIdOf(frames);
+    // B3-08zc (BR-AI-19 细则「助手回复落库」): the cards were committed with the ending, before
+    // any trace write and whatever the writer does — there at once (no polling), once each.
+    const ending = (await cardRowsOf(pg.db, 'run_id', runId)).map((row) => row.card_id).sort();
+    expect(ending, 'cards stored with the ending').toEqual([...cardIds].sort());
     await firstFailure(x, runId);
 
     const purged = await purgeUser(pg.db, {
@@ -114,7 +119,14 @@ it('[AC-B3-08y#6][BR-AI-22][BR-AI-19] 首次写入失败后完成注销清理：
       (seen) => seen.again > 0 && seen.skipped > 0,
     );
     await pause(300);
-    expect(await cardRowsOf(pg.db, 'run_id', runId)).toEqual([]);
+    // The write again adds no agent_cards row: the run's rows are those of the ending, no more.
+    const storedIds = async () =>
+      (await cardRowsOf(pg.db, 'run_id', runId)).map((row) => row.card_id).sort();
+    expect(await storedIds(), 'no card row added by the write again').toEqual(ending);
+    expect(
+      x.writer.of(runId).filter((call) => call.method === 'recordCards'),
+      'cards never go through the trace writer or its queue',
+    ).toEqual([]);
     expect(await toolCallRowsOf(pg.db, 'run_id', runId)).toEqual([]);
     const skipped = x.logs.of(SKIPPED);
     expect(skipped).toHaveLength(1);
@@ -123,7 +135,7 @@ it('[AC-B3-08y#6][BR-AI-22][BR-AI-19] 首次写入失败后完成注销清理：
     const calls = x.writer.of(runId).length;
     await letTimePass(x.time, HOUR);
     expect(x.writer.of(runId), 'not written again after the skip').toHaveLength(calls);
-    expect(await cardRowsOf(pg.db, 'run_id', runId)).toEqual([]);
+    expect(await storedIds(), 'still only the rows of the ending').toEqual(ending);
     expect(await toolCallRowsOf(pg.db, 'run_id', runId)).toEqual([]);
     expect(x.logs.of(LOST)).toEqual([]);
   } finally {

@@ -1,11 +1,13 @@
 // B3-08q · BR-AI-19「每个 run 都必须异步落 PG，不阻塞 SSE」on the MODEL path (review r1 S1 on
 // async.int.test.ts: its slow / failing writer only met degraded runs, which have no tool calls, so
 // recordToolCalls was never held or failed). A scripted model calls search_products and the run
-// delivers a product_list; with the writer held, the reply still ends (done 'stop') before anything
-// is written and both the card and the tool call land once released; with the writer throwing, the
-// frames and the finish reason are those of a normal run, the run row is not an error, exactly one
-// warn line (kit.ts TRACE_WARN, flat run_id) is logged, no promise rejection is left unhandled and
-// the runtime goes on serving. Production stream entry of [AC-B3-08g] over real PG; the writer is
+// delivers a product_list; with the writer held, the reply still ends (done 'stop') and the tool
+// call lands once released; with the writer throwing, the frames and the finish reason are those
+// of a normal run, the run row is not an error, exactly one warn line (kit.ts TRACE_WARN, flat
+// run_id) is logged, no promise rejection is left unhandled and the runtime goes on serving.
+// B3-08zc (BR-AI-19 细则「助手回复落库」, D10-1297): the cards no longer go through the writer at
+// all — they are committed with the run's ending, there at once (held or throwing writer alike),
+// once each. Production stream entry of [AC-B3-08g] over real PG; the writer is
 // the real one behind kit.ts controlWriter. Not here: the 24-hour local retry queue and
 // agent.trace_lost (another task).
 import { createTestDatabase } from '@couli/db/testing';
@@ -16,6 +18,7 @@ import {
   KEYWORD,
   TRACE_WARN,
   ask,
+  cardFramesOf,
   cardRowsOf,
   cardTypesOf,
   eventually,
@@ -54,7 +57,7 @@ function scripts(): Record<string, readonly Step[]> {
   };
 }
 
-it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products 出卡的 run，写者的 recordToolCalls 与 recordCards 都被调用且都失败；帧序列与 finish stop 与正常 run 一致，run 不变成 error；只记一条 warn agent_trace_write_failed（带 run_id），无未处理的拒绝，之后的 run 照常落库', async () => {
+it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products 出卡的 run，写者的 recordToolCalls 被调用且失败、卡片随终态落库与写者无关；帧序列与 finish stop 与正常 run 一致，run 不变成 error；只记一条 warn agent_trace_write_failed（带 run_id），无未处理的拒绝，之后的 run 照常落库', async () => {
   const unhandled: unknown[] = [];
   const onRejection = (reason: unknown): void => {
     unhandled.push(reason);
@@ -83,18 +86,27 @@ it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products �
     const runId = runIdOf(failing);
     expect(shapeOf(failing)).toEqual(shapeOf(normal));
     expect(finishOf(failing)).toBe('stop');
+    // BR-AI-19 细则「助手回复落库」: the cards were committed with the ending, whatever the writer
+    // does — there at once (no polling), once each, before any trace write could have run.
+    const cardIds = cardFramesOf(failing).map((frame) => String(frame.data['card_id']));
+    expect(cardIds.length, 'the reply carried card frames').toBeGreaterThan(0);
+    const atOnce = await cardRowsOf(pg.db, 'run_id', runId);
+    expect(
+      atOnce.map((row) => row.card_id).sort(),
+      'cards stored with the ending, once each, although every trace write rejects',
+    ).toEqual([...cardIds].sort());
+    await expectCardsStored(pg.db, { appId: x.appId, sessionId: failingSession, runId }, failing);
 
-    const reached = await eventually(
-      'the failing writer was asked for both the tool calls and the cards of this run',
+    await eventually(
+      'the failing writer was asked for the tool calls of this run',
       async () =>
         new Set(
           x.writer.calls
             .filter((call) => call.runId === runId && call.mode === 'throw')
             .map((call) => call.method),
         ),
-      (methods) => methods.has('recordToolCalls') && methods.has('recordCards'),
+      (methods) => methods.has('recordToolCalls'),
     );
-    expect([...reached].sort()).toEqual(['recordCards', 'recordToolCalls']);
     await eventually(
       'the trace warn line',
       async () => x.f.logs.of(TRACE_WARN),
@@ -111,11 +123,19 @@ it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products �
     }
     expect(unhandled, 'no unhandled rejection').toEqual([]);
 
-    // The run itself ended as a normal stop; the failed writes left no rows behind.
+    // The run itself ended as a normal stop; the failed tool-call write left no row behind, the
+    // cards are those of the ending, still once each, and none of them went through the writer.
     const row = await runRow(pg.db, runId);
     expect(row['finish_reason']).toBe('stop');
     expect(row['end_reason']).not.toBe('server_error');
-    expect(await cardRowsOf(pg.db, 'run_id', runId)).toEqual([]);
+    expect(
+      (await cardRowsOf(pg.db, 'run_id', runId)).map((card) => card.card_id).sort(),
+      'no card written twice, none removed',
+    ).toEqual([...cardIds].sort());
+    expect(
+      x.writer.calls.filter((call) => call.runId === runId && call.method === 'recordCards'),
+      'cards never go through the trace writer',
+    ).toEqual([]);
     expect(await toolCallRowsOf(pg.db, 'run_id', runId)).toEqual([]);
 
     // The runtime goes on: a later run with a working writer is stored as usual.
@@ -141,7 +161,7 @@ it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者抛错：search_products �
   }
 }, 120_000);
 
-it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者变慢（写入挂起）：search_products 出卡的 run，回复照常结束（done stop 不等写入完成），帧序列与正常 run 一致；写者的 recordToolCalls 与 recordCards 都在挂起中、此时该 run 无卡无调用行；放行后卡与调用（seq 1、search_products、ok、traceMask 参数）落库，不记 warn', async () => {
+it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者变慢（写入挂起）：search_products 出卡的 run，回复照常结束（done stop 不等写入完成），帧序列与正常 run 一致；卡片随终态提交恰好落一次、与写者无关；写者的 recordToolCalls 在挂起中、此时该 run 无调用行；放行后调用（seq 1、search_products、ok、traceMask 参数）落库、卡片不重复，不记 warn', async () => {
   const x = await productionRig(pg.db, { scripts: scripts() });
   let pending: Promise<unknown> | undefined;
   try {
@@ -168,27 +188,44 @@ it('[AC-B3-08q#5][BR-AI-19] 模型路径·trace 写者变慢（写入挂起）�
     expect(shapeOf(frames)).toEqual(shapeOf(normal));
     expect(finishOf(frames)).toBe('stop');
     const runId = runIdOf(frames);
+    // The cards were committed with the ending: there at once, once each, whatever the writer does.
+    const cardIds = frames
+      .filter((frame) => frame.event === 'card')
+      .map((frame) => String(frame.data['card_id']));
+    expect(cardIds.length, 'the reply carried card frames').toBeGreaterThan(0);
+    const atOnce = await cardRowsOf(pg.db, 'run_id', runId);
+    expect(
+      atOnce.map((row) => row.card_id).sort(),
+      'cards stored with the ending, once each, while the writer is held',
+    ).toEqual([...cardIds].sort());
+    await expectCardsStored(pg.db, { appId: x.appId, sessionId: heldSession, runId }, frames);
 
     await eventually(
-      'the held writer was asked for both the tool calls and the cards of this run',
+      'the held writer was asked for the tool calls of this run',
       async () =>
         new Set(
           x.writer.calls
             .filter((call) => call.runId === runId && call.mode === 'hold')
             .map((call) => call.method),
         ),
-      (methods) => methods.has('recordToolCalls') && methods.has('recordCards'),
+      (methods) => methods.has('recordToolCalls'),
     );
-    expect(await cardRowsOf(pg.db, 'run_id', runId), 'no card written while held').toEqual([]);
     expect(await toolCallRowsOf(pg.db, 'run_id', runId), 'no call written while held').toEqual([]);
 
     x.writer.release();
-    await expectCardsStored(pg.db, { appId: x.appId, sessionId: heldSession, runId }, frames);
     const calls = await toolCallsOnce(pg.db, runId, 1);
     expect(calls.map((call) => [call.seq, call.name, call.status, call.app_id])).toEqual([
       [1, 'search_products', 'ok', x.appId],
     ]);
     expect(calls[0]?.args).toEqual(x.r.runtime.traceMask(SEARCH_ARGS, {}));
+    const after = await cardRowsOf(pg.db, 'run_id', runId);
+    expect(after.map((row) => row.card_id).sort(), 'no card written twice').toEqual(
+      [...cardIds].sort(),
+    );
+    expect(
+      x.writer.calls.filter((call) => call.runId === runId && call.method === 'recordCards'),
+      'cards never go through the trace writer',
+    ).toEqual([]);
     expect(x.f.logs.of(TRACE_WARN)).toEqual([]);
   } finally {
     x.writer.release();

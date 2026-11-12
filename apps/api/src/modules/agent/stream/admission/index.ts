@@ -1,6 +1,6 @@
 // PG admission contracts and pure quota rules (BR-AI-15 / BR-AI-23).
 import { FixedClock } from '../../../platform/index.ts';
-import type { DoneData, ErrorData } from '../writer/index.ts';
+import type { CardInput, DoneData, ErrorData } from '../writer/index.ts';
 
 export type QuotaSubject =
   | { readonly tier: 'member'; readonly userId: string }
@@ -112,6 +112,23 @@ export interface RunOutcome {
   readonly cardsDelivered: number;
 }
 
+/**
+ * B3-08zc (BR-AI-19 细则「助手回复落库」): what the run that ends in this process delivered, written
+ * with its terminal state in one transaction: every text.delta in order (OutputGuard already
+ * applied; '' when none) and every numbered card of the run in delivery order (also those kept
+ * while the client was gone).
+ */
+export interface RunReply {
+  readonly text: string;
+  readonly cards: readonly CardInput[];
+  /**
+   * The card_ids of `cards` whose frame was not written (kept while the client was gone): they had
+   * no delivery receipt in the run, so the terminal transaction writes their delivery records for
+   * later rounds (absent: none).
+   */
+  readonly unframed?: readonly string[];
+}
+
 export interface SettleResult {
   readonly refunded: boolean;
   readonly quotaLeft: number;
@@ -123,6 +140,8 @@ export interface Admission {
     ticket: AdmissionTicket,
     outcome: RunOutcome,
     limits: AdmissionLimits,
+    /** B3-08zc: the reply stored with the terminal state (absent: the reply row is not touched). */
+    reply?: RunReply,
   ): Promise<SettleResult>;
 }
 

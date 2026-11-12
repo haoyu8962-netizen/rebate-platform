@@ -3,7 +3,8 @@ import type { AgentCaller, RunBodyInput } from '../../http/index.ts';
 import type { OrchestratorTrace } from '../../orchestrator/core/ports.ts';
 import type { RunBodyResult, RunContext } from '../run/index.ts';
 import type { CardInput } from '../writer/index.ts';
-import { createRunTraceRecorder, storedCard, toolCallRecords } from './trace.ts';
+import { storedCard } from '../pg/reply.ts';
+import { createRunTraceRecorder, toolCallRecords } from './trace.ts';
 import type { TraceRedoQueue } from './trace-retry.ts';
 
 const APP = 'synthetic-app';
@@ -54,12 +55,10 @@ function flushed(): Promise<void> {
 const DONE: RunBodyResult = { kind: 'done', finishReason: 'stop' };
 
 describe('createRunTraceRecorder', () => {
-  it('[AC-B3-08q#1] 体结束后把本 run 的卡与工具调用（seq 1..n，app / session / run 来自服务端上下文）交给队列', async () => {
+  it('[AC-B3-08q#1][AC-B3-08zc#1] 体结束后把本 run 的工具调用（seq 1..n，app / session / run 来自服务端上下文）交给队列，卡片不经留痕（cards 为空）', async () => {
     const q = queue();
     const recorder = createRunTraceRecorder({ queue: q });
     const body = recorder.body(input(), async () => {
-      recorder.cardWritten(RUN, card('c1'));
-      recorder.cardWritten(RUN, card('c2'));
       recorder.sink.record(
         RUN,
         trace([
@@ -76,7 +75,7 @@ describe('createRunTraceRecorder', () => {
       appId: APP,
       sessionId: SESSION,
       runId: RUN,
-      cards: [card('c1'), card('c2')],
+      cards: [],
       toolCalls: [
         {
           seq: 1,
@@ -109,7 +108,7 @@ describe('createRunTraceRecorder', () => {
     });
     const recorder = createRunTraceRecorder({ queue: q });
     const body = recorder.body(input(), async () => {
-      recorder.cardWritten(RUN, card('c1'));
+      recorder.sink.record(RUN, trace([{ name: 'search_products', args: {}, status: 'ok' }]));
       return DONE;
     });
     expect(await body(context())).toEqual(DONE);
@@ -119,22 +118,28 @@ describe('createRunTraceRecorder', () => {
     expect(q.persist).toHaveBeenCalledTimes(1);
   });
 
-  it('[AC-B3-08q#3] 体抛错也交出已下发的卡；体结束后到达的卡与别的 run 的卡不记', async () => {
+  it('[AC-B3-08q#3] 体抛错也交出已记的工具调用；体结束后到达的与别的 run 的不记', async () => {
     const q = queue();
     const recorder = createRunTraceRecorder({ queue: q });
     const body = recorder.body(input(), async () => {
-      recorder.cardWritten(RUN, card('c1'));
-      recorder.cardWritten('0192f3a1-7c00-7000-8000-00000000b999', card('c2'));
+      recorder.sink.record(RUN, trace([{ name: 'search_products', args: {}, status: 'ok' }]));
+      recorder.sink.record(
+        '0192f3a1-7c00-7000-8000-00000000b999',
+        trace([{ name: 'explain_order', args: {}, status: 'ok' }]),
+      );
       throw new Error('合成体错误');
     });
     await expect(body(context())).rejects.toThrow('合成体错误');
-    recorder.cardWritten(RUN, card('c3'));
+    recorder.sink.record(RUN, trace([{ name: 'list_my_orders', args: {}, status: 'ok' }]));
     await flushed();
     expect(q.persist).toHaveBeenCalledTimes(1);
-    expect(q.persist.mock.calls[0]?.[0]).toMatchObject({ cards: [card('c1')], toolCalls: [] });
+    expect(q.persist.mock.calls[0]?.[0]).toMatchObject({
+      cards: [],
+      toolCalls: [{ seq: 1, name: 'search_products' }],
+    });
   });
 
-  it('[AC-B3-08q#5] 无卡无调用的 run 不交给队列', async () => {
+  it('[AC-B3-08q#5] 无工具调用的 run 不交给队列', async () => {
     const q = queue();
     const recorder = createRunTraceRecorder({ queue: q });
     await recorder.body(input(), async () => DONE)(context());
@@ -155,7 +160,7 @@ it('[AC-B3-08q#1] toolCallRecords：非对象参数（traceMask 失败为 null�
   ]);
 });
 
-it('[AC-B3-08q#1][BR-AI-19] storedCard：earnings_summary 只存 as_of 与 actions（不存金额副本），其余卡原样', () => {
+it('[AC-B3-08q#1][AC-B3-08zc#1][BR-AI-19] storedCard（随终态写库）：earnings_summary 只存 as_of 与 actions（不存金额副本），其余卡原样', () => {
   const earnings: CardInput = {
     card_id: 'c1',
     type: 'earnings_summary',

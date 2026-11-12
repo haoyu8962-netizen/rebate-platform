@@ -196,13 +196,14 @@ export function buildPgRunPorts(deps: PgRunDeps): PgRunPorts {
     registry,
     admission: {
       admit: (req, limits) => port(() => admit(req, limits)),
-      settle: (ticket, outcome) =>
+      settle: (ticket, outcome, _limits, reply) =>
         port(async () => {
           const proposed = memo.get(ticket.runId) ?? {
             facts: outcome,
             draft: defaultDraft(outcome.ending, deps.texts),
           };
-          const out = await finalization.requireFinal(ticket.runId, proposed);
+          // B3-08zc: the reply is written in the terminal transaction itself.
+          const out = await finalization.requireFinal(ticket.runId, proposed, reply);
           return { refunded: out.refunded, quotaLeft: out.quotaLeft };
         }),
     },

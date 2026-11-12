@@ -83,6 +83,7 @@ function fixture() {
   const settle = vi.fn(async () => ({ refunded: false, quotaLeft: 7 }));
   const check = vi.fn<RunGuard['check']>(async () => null);
   const logger = { error: vi.fn() };
+  let reserved = 0;
   const manager = createRunManager({
     clock,
     scheduler,
@@ -94,7 +95,12 @@ function fixture() {
       },
       settle,
     },
-    cards: { reserve: async () => 1 },
+    cards: {
+      reserve: async (_sessionId, count) => {
+        reserved += count;
+        return reserved - count + 1;
+      },
+    },
     texts: { text: () => '本轮超时', errorMsg: (code) => `错误提示-${code}` },
     guard: { check },
     config: runConfigDefaults(),
@@ -208,4 +214,80 @@ it('[AC-B3-03b#3] 事实保存耗尽重试：记录独立诊断，结算仍完�
     ending: 'stop',
     cardsDelivered: 0,
   });
+});
+
+it('[AC-B3-08zc#1][AC-B3-08zc#4][BR-AI-19] 回复随结算交出：文字按序拼接，断线后（宽限内）的文字与卡片照样编号保留、不写帧、不计已下发，也没有回执', async () => {
+  const f = fixture();
+  let close!: () => void;
+  const chunks: string[] = [];
+  const start: RunStart = {
+    ...f.start,
+    sink: {
+      write: (chunk) => {
+        chunks.push(chunk);
+      },
+      onClose: (listener) => {
+        close = listener;
+      },
+    },
+  };
+  const notice = {
+    type: 'notice',
+    schema_version: 1,
+    data: { level: 'info', text_key: 'agent.degraded.empty', actions: [] },
+    fallback_text: '合成卡片',
+  };
+  const receipts: string[] = [];
+  const final = await f.manager.start(start, async (ctx) => {
+    ctx.text('第一段');
+    await ctx.card(notice, (id) => receipts.push(id));
+    close();
+    ctx.text('第二段');
+    await ctx.card({ ...notice, fallback_text: '断线后的卡片' }, (id) => receipts.push(id));
+    return { kind: 'done', finishReason: 'stop' };
+  });
+  expect(final.ending).toBe('stop');
+  expect(final.cardsDelivered).toBe(0);
+  expect(receipts).toEqual(['c1']);
+  expect(chunks.filter((chunk) => chunk.startsWith('event: card\n'))).toHaveLength(1);
+  expect(chunks.some((chunk) => chunk.includes('第二段'))).toBe(false);
+  const reply = (f.settle.mock.calls[0] as unknown[] | undefined)?.[3] as
+    { text: string; cards: { card_id: string; fallback_text: string }[] } | undefined;
+  expect(reply?.text).toBe('第一段第二段');
+  expect(reply?.cards.map((card) => [card.card_id, card.fallback_text])).toEqual([
+    ['c1', '合成卡片'],
+    ['c2', '断线后的卡片'],
+  ]);
+  // Only the card kept without a frame (and so without a receipt) gets delivery records at the
+  // ending; c1 had its receipt.
+  expect((reply as { unframed?: string[] } | undefined)?.unframed).toEqual(['c2']);
+});
+
+it('[AC-B3-08zc#2][BR-AI-19] 断线后不合法的卡片仍以 invalid_frame 拒绝，不进回复', async () => {
+  const f = fixture();
+  let close!: () => void;
+  const start: RunStart = {
+    ...f.start,
+    sink: {
+      write: () => undefined,
+      onClose: (listener) => {
+        close = listener;
+      },
+    },
+  };
+  let refused: unknown;
+  await f.manager.start(start, async (ctx) => {
+    close();
+    refused = await ctx
+      .card({ type: 'notice', schema_version: 1, data: {}, fallback_text: '' })
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    return { kind: 'done', finishReason: 'stop' };
+  });
+  expect(refused).toBeInstanceOf(Error);
+  const reply = (f.settle.mock.calls[0] as unknown[] | undefined)?.[3] as
+    { cards: unknown[] } | undefined;
+  expect(reply?.cards).toEqual([]);
 });

@@ -59,7 +59,13 @@
 //   ctx.card reserves numbers with cards.reserve(sessionId, used) and writes the numbered card; an
 //   invalid card rejects with StreamProtocolError('invalid_frame') and the run goes on. B3-08q:
 //   deps.onCardWritten, when given, gets (runId, the written card) right after each card frame
-//   write that succeeded (the stream mount's run trace, BR-AI-19); a throw there is ignored.
+//   write that succeeded; a throw there is ignored.
+//   B3-08zc (BR-AI-19 细则「助手回复落库」): the run keeps its reply — every text.delta (the timeout
+//   notice included) and every numbered card, in order — also after the client went away (within
+//   the grace the run goes on: its cards are still numbered and kept, not framed, not counted in
+//   cardsDelivered, and get no `delivered` receipt). The tail passes it to admission.settle as
+//   its fourth argument {text, cards}, which the PG finalization writes in the terminal
+//   transaction. Nothing is added to it after the ending was chosen.
 // cancel(runId, ownerKey) → registry.requestCancel (not owner, unknown or finished: 'not_found').
 //
 // createRedisRunRegistry: uses only RedisNamespace.get and set (no eval), every set with

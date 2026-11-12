@@ -69,7 +69,7 @@ async function storedOnce(x: TraceRig, sessionId: string, frames: readonly Frame
   ]);
 }
 
-it('[AC-B3-08y#1][BR-AI-19] 写者先失败后恢复：该 run 进本地队列，约 1 秒后再写，卡片与工具调用各只落一次；全过程只一条 agent_trace_write_failed；帧序列与结局与正常写入时一致；不记 lost', async () => {
+it('[AC-B3-08y#1][BR-AI-19] 写者先失败后恢复：该 run 进本地队列，约 1 秒后再写，工具调用只落一次、卡片随终态已落一次且不重复；全过程只一条 agent_trace_write_failed；帧序列与结局与正常写入时一致；不记 lost', async () => {
   const x = await traceRig(pg.db, { scripts: searchScripts() });
   try {
     const normalSession = await openSession(x.r, x.f.caller);
@@ -83,8 +83,14 @@ it('[AC-B3-08y#1][BR-AI-19] 写者先失败后恢复：该 run 进本地队列�
     expect(shapeOf(frames)).toEqual(shapeOf(normal));
     expect(finishOf(frames)).toBe('stop');
     const runId = runIdOf(frames);
+    // The cards were committed with the ending, before any trace write: there at once, once each.
+    const cardIds = cardFramesOf(frames).map((frame) => String(frame.data['card_id']));
+    expect(cardIds.length, 'the reply carried card frames').toBeGreaterThan(0);
+    const atOnce = await cardRowsOf(pg.db, 'run_id', runId);
+    expect(atOnce.map((row) => row.card_id).sort(), 'cards stored with the ending').toEqual(
+      [...cardIds].sort(),
+    );
     await firstFailure(x, runId);
-    expect(await cardRowsOf(pg.db, 'run_id', runId)).toEqual([]);
 
     x.writer.set('pass');
     await storedOnce(x, sessionId, frames);
@@ -95,6 +101,11 @@ it('[AC-B3-08y#1][BR-AI-19] 写者先失败后恢复：该 run 进本地队列�
     for (const frame of cardFramesOf(frames)) {
       expect(rows.filter((row) => row.card_id === frame.data['card_id'])).toHaveLength(1);
     }
+    expect(rows, 'no card besides the reply’s').toHaveLength(cardIds.length);
+    expect(
+      x.writer.of(runId).filter((call) => call.method === 'recordCards'),
+      'cards never go through the trace writer or its queue',
+    ).toEqual([]);
     expect(await toolCallRowsOf(pg.db, 'run_id', runId)).toHaveLength(1);
     expect(x.logs.of(WRITE_FAILED)).toHaveLength(1);
     expect(x.logs.of(LOST)).toEqual([]);
@@ -110,6 +121,13 @@ it('[AC-B3-08y#5][BR-AI-19] 停机时队列非空：runtime.close() 在 lockGrac
     const sessionId = await openSession(x.r, x.f.caller);
     const frames = await ask(x, x.f.caller, sessionId, ASKS[0]);
     const runId = runIdOf(frames);
+    // The cards were committed with the ending: nothing of them is left for the queue.
+    const cardIds = cardFramesOf(frames).map((frame) => String(frame.data['card_id']));
+    expect(cardIds.length, 'the reply carried card frames').toBeGreaterThan(0);
+    const atOnce = await cardRowsOf(pg.db, 'run_id', runId);
+    expect(atOnce.map((row) => row.card_id).sort(), 'cards stored with the ending').toEqual(
+      [...cardIds].sort(),
+    );
     await firstFailure(x, runId);
 
     x.writer.set('hold');
@@ -122,22 +140,30 @@ it('[AC-B3-08y#5][BR-AI-19] 停机时队列非空：runtime.close() 在 lockGrac
     expectLost(x.logs.all(), {
       run_id: runId,
       reason: 'shutdown',
-      cards: cardFramesOf(frames).length,
+      cards: 0,
       tool_calls: 1,
     });
+    expect(
+      x.writer.of(runId).filter((call) => call.method === 'recordCards'),
+      'shutdown writes no card: none went to the trace',
+    ).toEqual([]);
 
     const after = x.writer.of(runId).length;
     await letTimePass(x.time, HOUR);
     expect(x.writer.of(runId)).toHaveLength(after);
     expect(x.logs.of(LOST)).toHaveLength(1);
     expect(x.logs.of(WRITE_FAILED)).toHaveLength(1);
+    expect(
+      await cardRowsOf(pg.db, 'run_id', runId),
+      'the stored cards stay, once each',
+    ).toHaveLength(cardIds.length);
   } finally {
     x.writer.release();
     await x.r.runtime.close();
   }
 }, 120_000);
 
-it('[AC-B3-08y#8][BR-AI-19] 队列里的 run 正在再写（写者挂起）：新 run 的帧序列与结局与正常时一致、回复照常结束；放行后两个 run 的卡与工具调用都各落一次', async () => {
+it('[AC-B3-08y#8][BR-AI-19] 队列里的 run 正在再写（写者挂起）：新 run 的帧序列与结局与正常时一致、回复照常结束；两个 run 的卡片各在终态时落一次，放行后工具调用各落一次', async () => {
   const x = await traceRig(pg.db, { scripts: searchScripts() });
   let pending: Promise<unknown> | undefined;
   try {
@@ -149,6 +175,13 @@ it('[AC-B3-08y#8][BR-AI-19] 队列里的 run 正在再写（写者挂起）：�
     const queuedSession = await openSession(x.r, x.f.caller);
     const queued = await ask(x, x.f.caller, queuedSession, ASKS[1]);
     const queuedRun = runIdOf(queued);
+    // Cards come with the ending, never from the trace: there at once, once each.
+    const queuedCards = cardFramesOf(queued).map((frame) => String(frame.data['card_id']));
+    expect(queuedCards.length, 'the reply carried card frames').toBeGreaterThan(0);
+    const queuedAtOnce = await cardRowsOf(pg.db, 'run_id', queuedRun);
+    expect(queuedAtOnce.map((row) => row.card_id).sort(), 'queued run: cards at once').toEqual(
+      [...queuedCards].sort(),
+    );
     await firstFailure(x, queuedRun);
 
     x.writer.set('hold');
@@ -172,11 +205,31 @@ it('[AC-B3-08y#8][BR-AI-19] 队列里的 run 正在再写（写者挂起）：�
     const fresh = reply.frames ?? [];
     expect(shapeOf(fresh)).toEqual(shapeOf(normal));
     expect(finishOf(fresh)).toBe('stop');
+    const freshRun = runIdOf(fresh);
+    const freshCards = cardFramesOf(fresh).map((frame) => String(frame.data['card_id']));
+    expect(freshCards.length, 'the reply carried card frames').toBeGreaterThan(0);
+    const freshAtOnce = await cardRowsOf(pg.db, 'run_id', freshRun);
+    expect(
+      freshAtOnce.map((row) => row.card_id).sort(),
+      'new run: cards at once while the queued write is held',
+    ).toEqual([...freshCards].sort());
 
     x.writer.set('pass');
     x.writer.release();
     await storedOnce(x, queuedSession, queued);
     await storedOnce(x, freshSession, fresh);
+    for (const [runId, ids] of [
+      [queuedRun, queuedCards],
+      [freshRun, freshCards],
+    ] as const) {
+      expect(await cardRowsOf(pg.db, 'run_id', runId), `${runId}: no card twice`).toHaveLength(
+        ids.length,
+      );
+      expect(
+        x.writer.of(runId).filter((call) => call.method === 'recordCards'),
+        `${runId}: cards never go through the trace writer`,
+      ).toEqual([]);
+    }
     expect(x.logs.of(WRITE_FAILED)).toHaveLength(1);
     expect(x.logs.of(LOST)).toEqual([]);
   } finally {

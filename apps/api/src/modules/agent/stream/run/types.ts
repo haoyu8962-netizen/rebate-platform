@@ -39,7 +39,8 @@ export interface RunContext {
   text(delta: string): void;
   toolStatus(tool: string, phase: 'start' | 'end' | 'failed', displayText: string): void;
   /** `delivered`, when given, receives the frame's card_id once the numbered card was written
-   * (B3-05i: the orchestrator fills it into the tool's modelView); never when nothing was. */
+   * (B3-05i: the orchestrator fills it into the tool's modelView); never when nothing was (B3-08zc:
+   * a card kept for the stored reply while the client is gone gets no receipt either). */
   card(card: UnnumberedCard, delivered?: (cardId: string) => void): Promise<void>;
   suggestions(items: SuggestionsData['items']): void;
 }

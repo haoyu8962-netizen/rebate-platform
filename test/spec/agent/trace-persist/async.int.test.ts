@@ -31,7 +31,22 @@ afterEach(() => vi.restoreAllMocks());
 
 const SEARCH_ASK = '帮我找合成保温杯';
 
-it('[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；只记一条 warn（agent_trace_write_failed，带 run_id，不含卡片与用户文本），该 run 不落卡', async () => {
+it('[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；降级 run 没有工具调用，写者对该 run 不被调用、不记 warn；该 run 的卡随终态落库', async () => {
+  // B3-08zc (BR-AI-19 细则「助手回复落库」, D10-1297): the cards no longer go through the writer —
+  // they are committed with the run's ending, there at once whether the writer holds or throws,
+  // and never handed to the writer.
+  /** The card_ids of the reply's card frames (at least one). */
+  const cardIdsOf = (frames: readonly Frame[]): string[] => {
+    const ids = cardFramesOf(frames).map((frame) => String(frame.data['card_id']));
+    expect(ids.length, 'the reply carried card frames').toBeGreaterThan(0);
+    return ids;
+  };
+  /** The card_ids stored under the run right now (no polling), sorted. */
+  const storedIdsOf = async (runId: string): Promise<string[]> =>
+    (await cardRowsOf(pg.db, 'run_id', runId)).map((row) => row.card_id).sort();
+  // The import list stays as on main (D10-1309, the diff stays inside the declared blocks); eventually is no longer used since the cards are committed with the ending, LEVEL since a degraded run logs no warn line.
+  void eventually;
+  void LEVEL;
   const x = await productionRig(pg.db);
   try {
     // The same message once with a working writer (its cards are stored) …
@@ -52,34 +67,46 @@ it('[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与
     const runId = runIdOf(failing);
     expect(shapeOf(failing)).toEqual(shapeOf(normal));
     expect(finishOf(failing)).toBe('fallback');
+    // BR-AI-19 细则「助手回复落库」: the cards were committed with the ending, whatever the writer
+    // does — there at once (no polling), once each.
+    const cardIds = cardIdsOf(failing);
+    expect(await storedIdsOf(runId), 'cards stored with the ending, once each').toEqual(
+      [...cardIds].sort(),
+    );
+    await expectCardsStored(pg.db, { appId: x.appId, sessionId: failingSession, runId }, failing);
 
-    await eventually(
-      'the failing writer was reached for this run',
-      async () => x.writer.calls.filter((call) => call.runId === runId && call.mode === 'throw'),
-      (calls) => calls.length > 0,
-    );
-    await eventually(
-      'the trace warn line',
-      async () => x.f.logs.of(TRACE_WARN),
-      (lines) => lines.length > 0,
-    );
-    // Whatever else the failing trace would have written has had its time.
+    // Whatever the failing trace would have written or logged has had its time.
     await pause(500);
-    const lines = x.f.logs.of(TRACE_WARN);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ level: LEVEL.warn, run_id: runId });
-    const line = JSON.stringify(lines[0]);
-    expect(line).not.toContain(KEYWORD);
-    for (const field of ['card', 'cards', 'data', 'args', 'items', 'user_text', 'text']) {
-      expect(lines[0], field).not.toHaveProperty(field);
-    }
-    expect(await cardRowsOf(pg.db, 'run_id', runId)).toEqual([]);
+    const asked = x.writer.calls.filter((call) => call.runId === runId);
+    expect(
+      asked.filter((call) => call.method === 'recordCards'),
+      'cards never go through the trace writer',
+    ).toEqual([]);
+    // A degraded run makes no model tool call: the writer is never asked about it, so nothing of
+    // it fails and no warn line is logged.
+    expect(asked, 'the writer is not called for a degraded run').toEqual([]);
+    expect(x.f.logs.of(TRACE_WARN)).toEqual([]);
+    expect(await storedIdsOf(runId), 'no card written twice, none removed').toEqual(
+      [...cardIds].sort(),
+    );
   } finally {
     await x.r.runtime.close();
   }
 }, 120_000);
 
-it('[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；写入放行后该 run 的卡才落库', async () => {
+it('[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；该 run 的卡在终态时已落库、不等写入放行，写者对该 run 不被调用', async () => {
+  // B3-08zc (BR-AI-19 细则「助手回复落库」, D10-1297): the cards no longer go through the writer —
+  // they are committed with the run's ending, there at once whether the writer holds or throws,
+  // and never handed to the writer.
+  /** The card_ids of the reply's card frames (at least one). */
+  const cardIdsOf = (frames: readonly Frame[]): string[] => {
+    const ids = cardFramesOf(frames).map((frame) => String(frame.data['card_id']));
+    expect(ids.length, 'the reply carried card frames').toBeGreaterThan(0);
+    return ids;
+  };
+  /** The card_ids stored under the run right now (no polling), sorted. */
+  const storedIdsOf = async (runId: string): Promise<string[]> =>
+    (await cardRowsOf(pg.db, 'run_id', runId)).map((row) => row.card_id).sort();
   const x = await productionRig(pg.db);
   let pending: Promise<unknown> | undefined;
   try {
@@ -102,16 +129,29 @@ it('[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常�
     expect(shapeOf(frames)).toEqual(shapeOf(normal));
     expect(finishOf(frames)).toBe('fallback');
     const runId = runIdOf(frames);
-
-    await eventually(
-      'the held writer was reached for this run',
-      async () => x.writer.calls.filter((call) => call.runId === runId && call.mode === 'hold'),
-      (calls) => calls.length > 0,
-    );
-    expect(await cardRowsOf(pg.db, 'run_id', runId), 'nothing written while held').toEqual([]);
+    // The cards were committed with the ending: there at once (no polling) while every trace
+    // write is held, once each, as framed.
+    const cardIds = cardIdsOf(frames);
+    expect(
+      await storedIdsOf(runId),
+      'cards stored with the ending while the writer is held',
+    ).toEqual([...cardIds].sort());
+    await expectCardsStored(pg.db, { appId: x.appId, sessionId: heldSession, runId }, frames);
+    expect(
+      x.writer.calls.filter((call) => call.runId === runId && call.method === 'recordCards'),
+      'cards never go through the trace writer',
+    ).toEqual([]);
 
     x.writer.release();
-    await expectCardsStored(pg.db, { appId: x.appId, sessionId: heldSession, runId }, frames);
+    // Whatever the held trace would have written once released has had its time.
+    await pause(500);
+    expect(await storedIdsOf(runId), 'no card written twice after release').toEqual(
+      [...cardIds].sort(),
+    );
+    expect(
+      x.writer.calls.filter((call) => call.runId === runId),
+      'the writer is not called for a degraded run',
+    ).toEqual([]);
     expect(x.f.logs.of(TRACE_WARN)).toEqual([]);
   } finally {
     x.writer.release();

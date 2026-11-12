@@ -504,7 +504,8 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
 const JSON_HEADERS = { 'content-type': 'application/json' } as const;
 const SSE_HEADERS = { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' } as const;
 
-function ownerOf(caller: AgentCaller): AgentOwner {
+/** BR-AI-20 owner of a caller: the user with an access token, else the device (B3-08zc: shared). */
+export function ownerOf(caller: AgentCaller): AgentOwner {
   return caller.userId === null
     ? { kind: 'device', appId: caller.appId, deviceId: caller.deviceId }
     : { kind: 'user', appId: caller.appId, deviceId: caller.deviceId, userId: caller.userId };

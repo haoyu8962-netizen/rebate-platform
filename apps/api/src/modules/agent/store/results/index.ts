@@ -38,7 +38,7 @@
 // FOR SHARE is on agent_sessions only (couli_app holds column UPDATE grants there).
 import type { DB } from '@couli/db';
 import { fenToJsonNumber, parseFen } from '@couli/money';
-import type { Kysely, RawBuilder } from 'kysely';
+import type { Kysely } from 'kysely';
 import { sql } from 'kysely';
 import { chainProblem } from '../../orchestrator/results/store.ts';
 import type {
@@ -52,6 +52,7 @@ import type {
 } from '../../orchestrator/results/types.ts';
 import type { CardInput } from '../../stream/writer/index.ts';
 import { isUuid } from '../index.ts';
+import { advisoryLockSql, deliveriesLockKey, QUOTED_CONDITIONS, quotedSetId } from './keys.ts';
 
 export interface ToolCallRecord {
   readonly seq: number;
@@ -111,21 +112,8 @@ function deliveredOf(row: DeliveryRow): DeliveredProduct {
 }
 
 async function advisoryLock(connection: Kysely<DB>, key: readonly string[]): Promise<void> {
-  await sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(key)}, 0))`.execute(
-    connection,
-  );
+  await advisoryLockSql(key).execute(connection);
 }
-
-/**
- * B3-03q: the id of a run's quoted result set, computed by PG from the run id (an existing column
- * expression or a parameter). Product_list result sets get random v4 ids, so they never match.
- */
-function quotedSetId(runId: RawBuilder<unknown>): RawBuilder<string> {
-  return sql<string>`md5(${'agent.result.quoted:'}::text || (${runId})::uuid::text)::uuid`;
-}
-
-/** The conditions of a quoted result set: a marker only, never a search (BR-AI-05). */
-const QUOTED_CONDITIONS = JSON.stringify({ receipt: 'rebate_quote' });
 
 interface DeliveryOwner {
   readonly app_id: string;
@@ -143,7 +131,7 @@ async function appendDeliveries(
   resultSetId: string,
   items: readonly DeliveredProduct[],
 ): Promise<void> {
-  await advisoryLock(tx, ['agent.result.deliveries', owner.app_id, resultSetId]);
+  await advisoryLock(tx, deliveriesLockKey(owner.app_id, resultSetId));
   const last = await tx
     .selectFrom('agent_result_deliveries')
     .select((eb) => eb.fn.max('position').as('max'))

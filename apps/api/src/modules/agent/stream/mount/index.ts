@@ -56,18 +56,19 @@
 //   results store is also the body's delivery receipt port (core recordDelivered of written
 //   product cards); failures are logged and never end the run. No model transport is ever
 //   called. seams are test seams only (production passes none).
-//   B3-08q (BR-AI-19; rule tests test/spec/agent/trace-persist/**): every run's written card frames
-//   (RunManagerDeps.onCardWritten) and the core's tool calls (AgentRunBodyDeps.trace, the
-//   RunTraceSink) are written to app.agent_cards / app.agent_tool_calls by agent/store/results
-//   createPgAgentTraceWriter (obtained at build), after the run's body settled and apart from the
-//   stream (./trace.ts): a slow or failing writer changes no frame and no finish reason; a failure
-//   is one warn line agent_trace_write_failed with run_id.
+//   B3-08q (BR-AI-19; rule tests test/spec/agent/trace-persist/**): the core's tool calls
+//   (AgentRunBodyDeps.trace, the RunTraceSink) are written to app.agent_tool_calls by
+//   agent/store/results createPgAgentTraceWriter (obtained at build), after the run's body settled
+//   and apart from the stream (./trace.ts): a slow or failing writer changes no frame and no finish
+//   reason; a failure is one warn line agent_trace_write_failed with run_id.
+//   B3-08zc (BR-AI-19 细则「助手回复落库」; rule tests test/spec/agent/reply-persist/**): the reply's
+//   text and cards are not part of the trace: the RunManager hands them to admission.settle and
+//   the PG finalization writes them in the terminal transaction (../pg/reply.ts).
 //   B3-08y (BR-AI-19 / BR-AI-22; rule tests test/spec/agent/trace-retry/**): the records go through
 //   ONE createTraceRedoQueue (./trace-retry.ts) built here over that writer, on the runtime's Clock
 //   and scheduler (seams.schedule; without it an unref'd system scheduler) with traceRedoDefaults():
-//   a failed write is written again for up to 24 hours, agent.trace_lost when given up. The queue
-//   is shared with processPendingCards() (sharePendingCards) so the order tools' OrderCardRefs of
-//   createProductionStreamAssembly resolve this process's not-yet-stored order cards first.
+//   a failed write is written again for up to 24 hours, agent.trace_lost when given up. Nothing
+//   reads the queue's pending cards (B3-08zc: card references read committed agent_cards only).
 //   close(): stops accepting (a message after close() started is refused and opens no run), waits
 //   for the runs in progress to end (at most timings.runMaxMs plus a margin; a run still live after
 //   that is left to the worker's sweeper), then closes the trace queue within timings.lockGraceMs
@@ -161,7 +162,7 @@ import type { StreamReviewOptions } from './review.ts';
 import { createAgentBodyAssembly } from './body.ts';
 import { createEmptyReplyCounter, createStreamAgentBody } from './agent-body.ts';
 import { createRunTraceRecorder } from './trace.ts';
-import { createTraceRedoQueue, sharePendingCards, unrefScheduler } from './trace-retry.ts';
+import { createTraceRedoQueue, unrefScheduler } from './trace-retry.ts';
 export { createAgentStreamAssembly } from './assembly.ts';
 export type {
   AgentStreamAssembly,
@@ -185,6 +186,10 @@ export type { AgentBodyAssembly, AgentBodyAssemblyDeps } from './body.ts';
 
 export { agentContentReaderToken, createAgentConfigReader } from './config.ts';
 export type { AgentConfigReaderDeps, AgentContentReader } from './config.ts';
+
+// B3-08zc: the history read side (./history.ts; rule tests test/spec/agent/session-history/**).
+export { createAgentHistoryRuntime } from './history.ts';
+export type { AgentHistoryRuntimeDeps } from './history.ts';
 
 /**
  * identity's createAiConsentReader (B1-02r), bound by app.module to its own database handle and
@@ -359,8 +364,9 @@ export function createAgentStreamRuntime(
   // B3-08k: identity's reader is bound to app.module's handle; agent hands it the version only.
   const consent = deps.consentReader({ currentVersion: version });
   const limits = createQuotaLimitsSource({ reader: contentReader, logger });
-  // B3-08q · BR-AI-19: every run's written cards and tool calls go to PG apart from the stream
-  // (./trace.ts), through agent/store/results' trace writer obtained here, at build time.
+  // B3-08q · BR-AI-19: every run's tool calls go to PG apart from the stream (./trace.ts), through
+  // agent/store/results' trace writer obtained here, at build time (B3-08zc: cards go with the
+  // terminal state instead).
   // B3-08y: a failed write goes to the runtime's local queue (24 hours, agent.trace_lost).
   const traceQueue = createTraceRedoQueue({
     writer: createPgAgentTraceWriter({ db: deps.db, newId: () => newUuidV7(clock.now()) }),
@@ -368,7 +374,6 @@ export function createAgentStreamRuntime(
     scheduler: seams?.schedule ?? unrefScheduler(),
     logger,
   });
-  const unshareCards = sharePendingCards(traceQueue);
   const trace = createRunTraceRecorder({ queue: traceQueue });
   const pg = createPgRunPorts({
     db,
@@ -389,7 +394,6 @@ export function createAgentStreamRuntime(
     texts: { ...texts, text: agentText },
     guard: { check: async () => ({ code: 30501 }) },
     guardFor: createRunGuardFactory({ reader: switches, consent, version }),
-    onCardWritten: (runId, card) => trace.cardWritten(runId, card),
     cards: {
       async reserve(sessionId, count) {
         if (!Number.isSafeInteger(count) || count < 1) throw new RangeError('Invalid card count');
@@ -538,12 +542,8 @@ export function createAgentStreamRuntime(
             wait.abort();
           }
         }
-        // The runs' traces: one bounded last write, the rest lost 'shutdown' (never waits longer).
-        try {
-          await traceQueue.close(timings.lockGraceMs);
-        } finally {
-          unshareCards();
-        }
+        // The runs' traces (tool calls only): one bounded last write, the rest lost 'shutdown'.
+        await traceQueue.close(timings.lockGraceMs);
       })();
       return closing;
     },

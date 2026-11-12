@@ -57,6 +57,11 @@
 //   max(0, L_i − today's unrefunded runs of subject i) (today = dayKeyOf(now) of this
 //   finalization). F5 one UPDATE: settle_result, settled_at now, final_event =
 //   toStored(withQuota(draft, quotaLeft)), ended_at GREATEST(now, accepted_at), finish_reason.
+//   F5a (B3-08zc, BR-AI-19 细则「助手回复落库」) in the same transaction, live mode only (settle's
+//   reply, the 4th argument): the run's assistant row gets text and card_ids, its cards go to
+//   agent_cards (./reply.ts), and the cards kept while the client was gone (reply.unframed) get
+//   the delivery records their receipt would have written (./deliveries.ts); recovery writes no
+//   reply; agent_sessions.last_active_at is never touched here (BR-AI-20).
 //   F6 in the same transaction: clear the session lock when it holds this run. Deterministic
 //   failures (StoredFrameInvalid; 23514 / 23001 at F3 / F5) → rollback and finalize_hold
 //   ('stored_frame_invalid' | 'facts_inconsistent') in a new transaction.

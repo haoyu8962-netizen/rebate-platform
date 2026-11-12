@@ -1,5 +1,11 @@
 import { createFrameValidator, StreamProtocolError, StreamWriter } from '../writer/index.ts';
-import type { ErrorData, FinishReason, StreamEvent, StreamEventInput } from '../writer/index.ts';
+import type {
+  CardInput,
+  ErrorData,
+  FinishReason,
+  StreamEvent,
+  StreamEventInput,
+} from '../writer/index.ts';
 import type { RunEnding } from '../admission/index.ts';
 import { numberCard } from './cards.ts';
 import type {
@@ -57,6 +63,12 @@ async function run(
   let stopped = false;
   let connected = true;
   let cardsDelivered = 0;
+  // B3-08zc (BR-AI-19 细则「助手回复落库」): the reply as this run delivered it, stored with the
+  // terminal state by admission.settle — written or not (a client gone within the grace).
+  let replyText = '';
+  const replyCards: CardInput[] = [];
+  // Their card_ids whose frame was not written: no receipt now, delivery records at the ending.
+  const unframed: string[] = [];
   let cardQueue = Promise.resolve();
   let factsQueue = Promise.resolve();
   let endingSaved: Promise<void> | undefined;
@@ -98,7 +110,7 @@ async function run(
       },
       reason,
     );
-    if (reason === 'timeout') write('text.delta', { delta: deps.texts.text('agent.timeout') });
+    if (reason === 'timeout') say(deps.texts.text('agent.timeout'));
   }
 
   function background(work: () => Promise<void>): void {
@@ -131,6 +143,25 @@ async function run(
     }
   }
 
+  /** A text.delta of the reply: framed while connected, kept for the stored reply either way. */
+  function say(delta: string): void {
+    // A refused (invalid) frame throws before anything is kept.
+    write('text.delta', { delta });
+    replyText += delta;
+  }
+
+  /** Whether `card` would pass the writer's check as the next frame (it is not written). */
+  function frameable(card: CardInput): boolean {
+    const id = writer.seq + 1;
+    let data: Record<string, unknown>;
+    try {
+      data = { ...(JSON.parse(JSON.stringify(card)) as Record<string, unknown>), seq: id };
+    } catch {
+      return false;
+    }
+    return validator({ event: 'card', id, data }).ok;
+  }
+
   function live(): boolean {
     if (!stopped && deps.clock.now().getTime() >= deadline) interrupt('timeout');
     return !stopped;
@@ -160,7 +191,7 @@ async function run(
       return cardsDelivered;
     },
     text(delta): void {
-      if (live()) write('text.delta', { delta });
+      if (live()) say(delta);
     },
     toolStatus(tool, phase, displayText): void {
       if (live()) write('tool.status', { tool, phase, display_text: displayText });
@@ -169,23 +200,36 @@ async function run(
       if (live()) write('suggestions', { items });
     },
     async card(input, delivered): Promise<void> {
-      if (!live() || !connected) return;
+      if (!live()) return;
       // Detach before awaiting a reservation. Serialize reservations and delivery so card ids
       // remain in delivery order even when the body calls card() concurrently.
       const snapshot = numberCard(input, 1);
       const pending = cardQueue.then(async () => {
-        if (!live() || !connected) return;
+        if (!live()) return;
         const first = await deps.cards.reserve(sessionId, snapshot.used);
-        if (!live() || !connected) return;
+        if (!live()) return;
         const numbered = numberCard(snapshot.card, first);
-        if (!write('card', numbered.card)) return;
+        const written = write('card', numbered.card);
+        // B3-08zc: a card not framed (the client is gone) is still numbered and stored with the
+        // reply, but only a valid one (a written frame was checked by the writer).
+        if (!written && !frameable(numbered.card)) {
+          throw new StreamProtocolError('invalid_frame', 'Invalid card');
+        }
+        replyCards.push(structuredClone(numbered.card));
+        // Kept for the stored reply only: no receipt (B3-05i: the model never references a card
+        // whose frame was not written), not counted as delivered. The terminal transaction writes
+        // its delivery records, so later rounds can reference it (BR-AI-19, the reply is stored).
+        if (!written) {
+          unframed.push(numbered.card.card_id);
+          return;
+        }
         // Notices are delivered as card frames but do not count toward quota refund eligibility.
         if (numbered.card.type !== 'notice') cardsDelivered += 1;
-        // B3-08q: the run trace's copy of the written frame (best effort, never ends the run).
+        // B3-08q: told of the written frame (best effort, never ends the run).
         try {
           deps.onCardWritten?.(runId, numbered.card);
         } catch {
-          // The trace never changes the run.
+          // An observer never changes the run.
         }
         // B3-05i: the receipt, only for a frame actually written.
         delivered?.(numbered.card.card_id);
@@ -313,7 +357,13 @@ async function run(
     // are logged, but must not prevent the admission gate releasing the lock. The draft keeps
     // the complete chosen result recoverable if this process dies after settle, before finish.
     await saveFacts(outcome, draft);
-    const settled = await deps.admission.settle(ticket, outcome, start.limits);
+    // B3-08zc: the reply goes into the terminal transaction (nothing is added after the ending).
+    const reply = {
+      text: replyText,
+      cards: replyCards.map((card) => structuredClone(card)),
+      unframed: [...unframed],
+    };
+    const settled = await deps.admission.settle(ticket, outcome, start.limits, reply);
     const terminal: TerminalFrame =
       draft.event === 'done'
         ? {

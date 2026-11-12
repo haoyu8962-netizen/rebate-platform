@@ -5,13 +5,14 @@ import {
   dayKeyOf,
   shouldRefund,
 } from '../admission/index.ts';
-import type { AdmissionLimits, RunEnding } from '../admission/index.ts';
+import type { AdmissionLimits, RunEnding, RunReply } from '../admission/index.ts';
 import type { TerminalFrame } from '../run/types.ts';
 import { createFrameValidator } from '../writer/index.ts';
 import type { FinalizeHold, FinalizeOutcome, PgRunDeps } from './types.ts';
 import { defaultDraft, decideEnding } from './ending.ts';
 import type { EndingMemo } from './ending.ts';
 import { fromStored, StoredFrameInvalid, toStored, withQuota } from './frames.ts';
+import { writeReply } from './reply.ts';
 import { dailyUsage, isRunning, lockSession, lockSubjects, readRun, remaining } from './store.ts';
 import type { RunRow, SessionRow } from './store.ts';
 import { errorCode, retryable, TransactionFailure, unavailable } from './transaction.ts';
@@ -58,6 +59,7 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     now: Date,
     limits: AdmissionLimits,
     live?: EndingMemo,
+    reply?: RunReply,
   ): Promise<FinalizeOutcome> {
     let row = initial;
     try {
@@ -109,6 +111,9 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
         ended_at = GREATEST(${now}, accepted_at),
         finish_reason = COALESCE(finish_reason, ${frame.event === 'done' ? frame.data.finish_reason : 'error'})
         WHERE app_id = ${row.app_id} AND id = ${row.id} AND final_event IS NULL`);
+      // B3-08zc (BR-AI-19 细则「助手回复落库」): the reply of the process that ran the run, in this
+      // same transaction — committed with the terminal state or not at all.
+      if (reply !== undefined) await writeReply(q, row, session, reply, now, deps.logger);
       await q.query(sql`UPDATE app.agent_sessions SET run_lock_run_id = NULL, run_lock_expires_at = NULL
         WHERE app_id = ${row.app_id} AND id = ${row.session_id} AND run_lock_run_id = ${row.id}`);
       return result(frame, refunded, quotaLeft, true);
@@ -155,7 +160,11 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     }
   }
 
-  async function independent(runId: string, live?: EndingMemo): Promise<FinalizeOutcome> {
+  async function independent(
+    runId: string,
+    live?: EndingMemo,
+    reply?: RunReply,
+  ): Promise<FinalizeOutcome> {
     const step = live ? 'settle' : 'finalize';
     for (let attempt = 0; ; attempt += 1) {
       try {
@@ -179,7 +188,7 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
             ) {
               deps.logger?.warn({ run_id: runId }, 'agent.deadline_mismatch');
             }
-            return finalizeRun(q, session, row, now, limits, live);
+            return finalizeRun(q, session, row, now, limits, live, live ? reply : undefined);
           },
           async (q) => {
             // F0 precedes BEGIN: the limits were read before the connection was leased (a failed
@@ -206,8 +215,8 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     }
   }
 
-  async function requireFinal(runId: string, live: EndingMemo) {
-    const out = await independent(runId, live);
+  async function requireFinal(runId: string, live: EndingMemo, reply?: RunReply) {
+    const out = await independent(runId, live, reply);
     if (out.kind === 'held') throw new AdmissionHeldError(out.reason);
     if (out.kind !== 'final') throw new AdmissionUnavailableError('rolled_back');
     return out;
