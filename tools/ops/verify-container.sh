@@ -125,6 +125,11 @@
 #                                  that outlives it is killed and counts as failed (CT-06zzzzb)
 # The slot is taken before the run directory, the snapshot and the first docker call and released
 # however the script ends (see slot_acquire / slot_release below; tools/ops/README.md).
+# CT-06zzzzy (D10-1365): the owner file is put in place with ln (never over another run's owner)
+# and read back; a run whose owner is not the one read back did not get the slot ("lost the verify
+# slot while taking it") and waits again. Before the services and the verify container start, a
+# run holding the slot checks once more that the owner token is still its own; when it is not
+# ("the verify slot is no longer this run's"), it exits 2 without starting them, no result.json.
 #
 # Host services (owner 2026-10-08/09: no Docker on the orchestrating Mac; runs go to the AWS test
 # machine, and the test database does not run in Docker there — plan A of 2026-10-09). With
@@ -590,8 +595,16 @@ fi
 #     SLOT_ORPHAN_SECS, is stale: it is renamed to a name of this run's own, and removed only when
 #     the renamed directory is the one found stale (same inode, mtime and owner text); otherwise
 #     it is put back (see slot_gate_reap; tools/ops/README.md for the window left).
+# CT-06zzzzy (D10-1365):
+#   - after the mkdir the owner is written to owner.tmp.<pid> and put in place with ln (a hard
+#     link: it fails when an owner exists, so it never replaces another run's, as mv would), the
+#     temporary file is removed and the owner read back: its token must be this run's. Otherwise
+#     (the temporary file or the ln failed, or another owner is there) this run did not get the
+#     slot: it holds nothing (its release leaves the lock alone), says so and waits again;
+#   - slot_check, before the services and the verify container of a run holding the slot: the
+#     owner token is still this run's, or the run exits 2 without starting them.
 SLOT_PS_EVERY=5 # seconds between two docker ps checks of the same stale holder
-SLOT_STATE=0 # 0 nothing held, 1 slot.lock created (owner not written yet), 2 owner written
+SLOT_STATE=0 # 0 nothing held, 1 slot.lock created (owner not in place / not read back yet), 2 owner read back as this run's
 SLOT_GATE_HELD=0
 SLOT_DIR=''
 SLOT_LOCK=''
@@ -755,12 +768,14 @@ slot_release() {
     fi
     sleep 0.1
   done
+  # Interrupted while taking the slot: this run's temporary owner file, wherever it is now.
+  if [ "$SLOT_STATE" = 1 ]; then rm -f "$SLOT_LOCK/owner.tmp.$$" 2>/dev/null || true; fi
   owner="$(slot_owner "$SLOT_LOCK")"
   tok="$(slot_field "$owner" token)"
   if [ -n "$tok" ] && [ "$tok" = "$SLOT_TOKEN" ]; then
     rm -rf "$SLOT_LOCK" 2>/dev/null || log "verify-container: cannot remove the verify slot $SLOT_LOCK"
   elif [ "$SLOT_STATE" = 1 ] && [ -d "$SLOT_LOCK" ] && [ -z "$owner" ]; then
-    # Interrupted between the mkdir and the owner file: the directory is still this run's.
+    # Interrupted between the mkdir and the ln of the owner file: the directory is still this run's.
     rm -rf "$SLOT_LOCK" 2>/dev/null || true
   elif [ -d "$SLOT_LOCK" ]; then
     log "verify-container: the verify slot is no longer this run's (now $(slot_who "$owner")): left to its holder"
@@ -788,12 +803,24 @@ slot_acquire() {
   while :; do
     if mkdir "$SLOT_LOCK" 2>/dev/null; then
       SLOT_STATE=1
-      # Written aside and renamed: a reader never sees half an owner file.
-      slot_owner_text >"$SLOT_LOCK/owner.tmp.$$" && mv "$SLOT_LOCK/owner.tmp.$$" "$SLOT_LOCK/owner" ||
-        die "cannot write the owner of the verify slot $SLOT_LOCK"
-      SLOT_STATE=2
-      if [ "$waited" -gt 0 ]; then log "verify-container: took the verify slot after ${waited}s"; fi
-      return 0
+      # Written aside and linked into place: a reader never sees half an owner file, and ln (no
+      # -f) fails when an owner is already there, so another run's owner is never replaced (the
+      # directory may have been removed as an orphan and taken by another run meanwhile).
+      if slot_owner_text >"$SLOT_LOCK/owner.tmp.$$" 2>/dev/null; then
+        ln "$SLOT_LOCK/owner.tmp.$$" "$SLOT_LOCK/owner" 2>/dev/null || true
+      fi
+      rm -f "$SLOT_LOCK/owner.tmp.$$" 2>/dev/null || true
+      # Read back: only an owner carrying this run's token makes the slot this run's.
+      owner="$(slot_owner "$SLOT_LOCK")"
+      if [ "$(slot_field "$owner" token)" = "$SLOT_TOKEN" ]; then
+        SLOT_STATE=2
+        if [ "$waited" -gt 0 ]; then log "verify-container: took the verify slot after ${waited}s"; fi
+        return 0
+      fi
+      # Not this run's: it holds nothing (the release leaves this lock alone) and waits again,
+      # still bounded from the start of the wait.
+      SLOT_STATE=0
+      log "verify-container: lost the verify slot while taking it (now $(slot_who "$owner")): waiting again"
     fi
     owner="$(slot_owner "$SLOT_LOCK")"
     pid="$(slot_field "$owner" pid)"
@@ -873,6 +900,19 @@ slot_acquire() {
     fi
     sleep 0.2
   done
+}
+# CT-06zzzzy: <what is about to start, for the log>. Only for a run that takes the slot (--fast
+# and the default pnpm verify; a no-op otherwise): right before its services and its verify
+# container start, the owner token must still be this run's. When it is not (another owner, no
+# owner file, no lock), the run stops with exit 2 before starting them: no result.json, and the
+# release on exit leaves the other holder's lock alone (it checks the token).
+slot_check() {
+  [ "$SLOT_NEEDED" = 1 ] || return 0
+  local owner
+  owner="$(slot_owner "$SLOT_LOCK")"
+  if [ "$SLOT_STATE" != 2 ] || [ "$(slot_field "$owner" token)" != "$SLOT_TOKEN" ]; then
+    die "the verify slot is no longer this run's (now $(slot_who "$owner")): not starting $1"
+  fi
 }
 if [ "$SLOT_NEEDED" = 1 ]; then slot_acquire; fi
 
@@ -1986,6 +2026,7 @@ if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = related ]; then
     step "running pnpm run verify:fast in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
   fi
   [ -z "${PROP_RUNS:-}" ] || FAST_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
+  slot_check 'the verify container'
   rc=0
   docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
     --network none \
@@ -2001,6 +2042,7 @@ if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = related ]; then
 fi
 
 VERIFY_NET=(--network "$NET")
+slot_check 'the services'
 if [ "$HOST_SVC" = 1 ]; then
   start_host_services 'pnpm verify'
   VERIFY_NET=("${EXT_RUN[@]}")
@@ -2012,6 +2054,7 @@ step "running pnpm verify in $IMAGE (limit ${TIMEOUT_SECS}s)"
 ENV_ARGS=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e TEST_PG_ADMIN_URL -e TEST_REDIS_URL
   -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
 [ -z "${PROP_RUNS:-}" ] || ENV_ARGS+=(-e "PROP_RUNS=$PROP_RUNS")
+slot_check 'the verify container'
 rc=0
 svc_run docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
   "${VERIFY_NET[@]}" \

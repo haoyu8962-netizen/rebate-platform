@@ -76,12 +76,17 @@ const RESULT_KEYS = [
 // STUB_DOCKER_PS_EXIT=<code> makes every docker ps fail with that code.
 // STUB_DOCKER_PS_HANG=<s> makes every docker ps hang that long first (a stuck daemon); with
 // STUB_DOCKER_PS_PIDS=<dir> each such ps writes its pid as a file name there before it hangs.
+// CT-06zzzzy: with STUB_DOCKER_REPLACE_LOCK_ON=<first argument> (e.g. `version`) the lock is
+// replaced by STUB_DOCKER_REPLACE_LOCK in every docker call whose first argument is that, and no
+// longer in the verify container; unset, STUB_DOCKER_REPLACE_LOCK acts in the verify container as
+// before.
 const STUB = String.raw`'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 const slotDir = process.env.STUB_SLOT_DIR || '';
 const entry = args.includes('couli-verify-entrypoint');
+const replaceOn = process.env.STUB_DOCKER_REPLACE_LOCK_ON || '';
 const call = { args, at: Date.now(), end: null, slot: null };
 function slot() {
   if (slotDir === '' || !fs.existsSync(slotDir)) return { entries: [], owner: null };
@@ -93,15 +98,17 @@ function slot() {
   }
   return { entries: fs.readdirSync(slotDir).sort(), owner };
 }
+function replaceLock() {
+  const lock = path.join(slotDir, 'slot.lock');
+  fs.rmSync(lock, { recursive: true, force: true });
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, 'owner'), process.env.STUB_DOCKER_REPLACE_LOCK);
+}
+if (process.env.STUB_DOCKER_REPLACE_LOCK && replaceOn !== '' && args[0] === replaceOn) replaceLock();
 if (entry) {
   call.slot = slot();
   if (process.env.STUB_DOCKER_STARTED) fs.writeFileSync(process.env.STUB_DOCKER_STARTED, 'started\n');
-  if (process.env.STUB_DOCKER_REPLACE_LOCK) {
-    const lock = path.join(slotDir, 'slot.lock');
-    fs.rmSync(lock, { recursive: true, force: true });
-    fs.mkdirSync(lock, { recursive: true });
-    fs.writeFileSync(path.join(lock, 'owner'), process.env.STUB_DOCKER_REPLACE_LOCK);
-  }
+  if (process.env.STUB_DOCKER_REPLACE_LOCK && replaceOn === '') replaceLock();
   const secs = Number(process.env.STUB_DOCKER_SLEEP || '0');
   if (secs > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, secs * 1000);
   call.end = Date.now();
@@ -139,6 +146,27 @@ if (entry) answer('', Number(process.env.STUB_DOCKER_RUN_EXIT || '0'));
 answer('', 0);
 `;
 
+// Stand-in for ln (CT-06zzzzy), first on PATH like the stub docker. With STUB_LN_STEAL=<text> set
+// and the file STUB_LN_ONCE present, an ln whose target (its last argument) ends in
+// /slot.lock/owner removes STUB_LN_ONCE (so it acts once) and first writes that text to the target:
+// another holder's owner file appeared before this run's. Then, and in every other case, the real
+// /bin/ln runs with the same arguments.
+const LN_STUB = [
+  '#!/bin/sh',
+  'if [ -n "${STUB_LN_STEAL:-}" ] && [ -n "${STUB_LN_ONCE:-}" ] && [ -f "$STUB_LN_ONCE" ]; then',
+  '  last=',
+  '  for a in "$@"; do last="$a"; done',
+  '  case "$last" in',
+  '    */slot.lock/owner)',
+  '      rm -f "$STUB_LN_ONCE"',
+  '      printf \'%s\' "$STUB_LN_STEAL" >"$last"',
+  '      ;;',
+  '  esac',
+  'fi',
+  'exec /bin/ln "$@"',
+  '',
+].join('\n');
+
 type Slot = { entries: string[]; owner: string | null };
 type Call = { args: string[]; at: number; end: number | null; slot: Slot | null };
 type Run = {
@@ -167,6 +195,9 @@ beforeAll(() => {
     `#!/bin/sh\nexec '${process.execPath}' '${join(bin, 'docker-stub.cjs')}' "$@"\n`,
   );
   chmodSync(docker, 0o755);
+  const ln = join(bin, 'ln');
+  writeFileSync(ln, LN_STUB);
+  chmodSync(ln, 0o755);
 });
 afterAll(() => removeDir(base));
 
@@ -320,6 +351,10 @@ function start(args: string[], slot: string | null, env: Record<string, string> 
       COULI_VERIFY_SLOT_PS_TIMEOUT_SECS: undefined,
       STUB_DOCKER_PS_HANG: undefined,
       STUB_DOCKER_PS_PIDS: undefined,
+      STUB_DOCKER_REPLACE_LOCK: undefined,
+      STUB_DOCKER_REPLACE_LOCK_ON: undefined,
+      STUB_LN_STEAL: undefined,
+      STUB_LN_ONCE: undefined,
       STUB_DOCKER_LOG: log,
       STUB_SLOT_DIR: slot ?? join(runs, 'verify-slot'),
       ...env,
@@ -367,16 +402,25 @@ function entrypointCall(calls: readonly Call[]): Call | undefined {
   return calls.find((c) => c.args.includes('couli-verify-entrypoint'));
 }
 
-/** The lock the verify container saw is this run's own: pid, task, mode, start, token. */
-function expectOwnLock(call: Call | undefined, pid: number, task: string, mode: string): string {
-  expect(call?.slot?.entries).toContain(LOCK);
-  expect(call?.slot?.entries).not.toContain(GATE);
+/**
+ * The lock the verify container saw is this run's own: pid, task, mode, start, token. `context`
+ * (optional, CT-06zzzzy) is added to the message of every assertion that fails.
+ */
+function expectOwnLock(
+  call: Call | undefined,
+  pid: number,
+  task: string,
+  mode: string,
+  context?: string,
+): string {
+  expect(call?.slot?.entries, context).toContain(LOCK);
+  expect(call?.slot?.entries, context).not.toContain(GATE);
   const owner = parseOwner(call?.slot?.owner);
-  expect(owner['pid']).toBe(String(pid));
-  expect(owner['task']).toBe(task);
-  expect(owner['mode']).toBe(mode);
-  expect(owner['started_at']).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
-  expect(owner['token']).toMatch(/^[0-9A-Za-z]{16,}$/);
+  expect(owner['pid'], context).toBe(String(pid));
+  expect(owner['task'], context).toBe(task);
+  expect(owner['mode'], context).toBe(mode);
+  expect(owner['started_at'], context).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  expect(owner['token'], context).toMatch(/^[0-9A-Za-z]{16,}$/);
   return owner['token'] ?? '';
 }
 
@@ -579,17 +623,25 @@ it(
     expect(rb.status, rb.stderr).toBe(0);
     const ca = entrypointCall(ra.calls);
     const cb = entrypointCall(rb.calls);
-    const tokenA = expectOwnLock(ca, ra.pid, 'V5-07', 'verify:fast');
-    const tokenB = expectOwnLock(cb, rb.pid, 'V5-08', 'verify:fast');
-    expect(tokenA).not.toBe(tokenB);
+    // CT-06zzzzy: what both runs said and when their containers ran, in every failure message
+    // below (the CI failure of D10-1365 could not be told apart without it).
+    const context = [
+      `A V5-07 (pid ${String(ra.pid)}, exit ${String(ra.status)}, ${String(ra.elapsed)} ms): container ${String(ca?.at)}..${String(ca?.end)}, slot ${JSON.stringify(ca?.slot)}`,
+      `B V5-08 (pid ${String(rb.pid)}, exit ${String(rb.status)}, ${String(rb.elapsed)} ms): container ${String(cb?.at)}..${String(cb?.end)}, slot ${JSON.stringify(cb?.slot)}`,
+      `--- A stderr ---\n${ra.stderr}`,
+      `--- B stderr ---\n${rb.stderr}`,
+    ].join('\n');
+    const tokenA = expectOwnLock(ca, ra.pid, 'V5-07', 'verify:fast', context);
+    const tokenB = expectOwnLock(cb, rb.pid, 'V5-08', 'verify:fast', context);
+    expect(tokenA, context).not.toBe(tokenB);
     const [first, second, firstTask, secondRun] =
       (ca?.at ?? 0) <= (cb?.at ?? 0) ? [ca, cb, 'V5-07', rb] : [cb, ca, 'V5-08', ra];
     // The second container started only after the first had ended.
-    expect(second?.at ?? 0).toBeGreaterThanOrEqual(first?.end ?? Number.POSITIVE_INFINITY);
+    expect(second?.at ?? 0, context).toBeGreaterThanOrEqual(first?.end ?? Number.POSITIVE_INFINITY);
     // The one that waited said whom it waited for.
-    expect(secondRun.stderr).toContain(WAITING);
-    expect(secondRun.stderr).toContain(firstTask);
-    expect(leftIn(slot)).toEqual([]);
+    expect(secondRun.stderr, context).toContain(WAITING);
+    expect(secondRun.stderr, context).toContain(firstTask);
+    expect(leftIn(slot), context).toEqual([]);
   },
   CLI_TIMEOUT,
 );
@@ -1237,6 +1289,223 @@ it(
     expect(noResult('V6-17')).toBe(true);
     const text = readFileSync(SCRIPT, 'utf8');
     expect(text).toMatch(/SLOT_PS_TIMEOUT_SECS[^\n]*\b10\b/);
+  },
+  CLI_TIMEOUT,
+);
+
+// CT-06zzzzy (D10-1365). What these tests fix in addition:
+//   - taking the slot: after the mkdir the owner file is written aside and put in place with ln (a
+//     hard link that never replaces an existing owner); the run then reads it back and its token
+//     must be this run's. When the ln fails or the owner read back is someone else's, this run did
+//     not get the slot: it removes only its own temporary file (no owner.tmp.* is left), leaves the
+//     lock and the other owner alone, says `lost the verify slot while taking it` with the holder
+//     on stderr and waits again (the wait limit and the wait reports as before);
+//   - before each container a slot-holding run starts (--fast: the verify container; the default
+//     pnpm verify: the services, then the verify container) the owner token is checked again; when
+//     the slot is no longer this run's, stderr says `the verify slot is no longer this run's (now
+//     <holder>): not starting <the verify container | the services>` and the run exits 2: that
+//     container is not started, no result.json, the other holder's lock is left as it is;
+//   - --red, --browser, --related and --dry-run take no slot and make no such check.
+// The stub `ln` (STUB_LN_STEAL / STUB_LN_ONCE) makes another owner appear between this run's mkdir
+// and its ln; the stub docker (STUB_DOCKER_REPLACE_LOCK_ON) replaces the lock after the slot was
+// taken and before any container started.
+
+/** The entries inside the lock directory (nothing when it does not exist). */
+function insideLock(dir: string): string[] {
+  return leftIn(join(dir, LOCK));
+}
+
+it(
+  "[CT-06zzzzy] another owner appears between this run's mkdir and its ln: it is not overwritten; --fast says it lost the slot, waits again without any docker call, and runs as itself once the slot is free",
+  async () => {
+    const slot = slotDir('ln-lost');
+    const once = join(base, 'ln-lost-once');
+    writeFileSync(once, 'once\n');
+    const foreign = ownerText({ pid: process.pid, task: 'X9-20', token: 'x9-20:foreign:ln' });
+    const started = start(['V7-01', '--worktree', workspace('ln-lost'), '--fast'], slot, {
+      COULI_VERIFY_SLOT_WAIT_SECS: '30',
+      COULI_VERIFY_SLOT_REPORT_SECS: '1',
+      STUB_LN_STEAL: foreign,
+      STUB_LN_ONCE: once,
+    });
+    try {
+      // The run put its owner in place with ln (the stub fired), or it went on to docker instead.
+      expect(
+        await until(() => !existsSync(once) || readCalls(started.log).length > 0, 15_000),
+      ).toBe(true);
+      expect(existsSync(once), 'the owner file was not put in place with ln').toBe(false);
+      await pause(1000);
+      // Lost: waiting, no docker call; the other owner as it appeared, nothing of this run's left in
+      // the lock.
+      expect(readCalls(started.log)).toEqual([]);
+      expect(readOwner(slot)).toBe(foreign);
+      expect(insideLock(slot)).toEqual(['owner']);
+      // The other holder releases the slot.
+      removeDir(join(slot, LOCK));
+      const res = await started.done;
+      expect(res.status, res.stderr).toBe(0);
+      expect(
+        linesWith(res.stderr, 'lost the verify slot while taking it', 'X9-20').length,
+        res.stderr,
+      ).toBeGreaterThanOrEqual(1);
+      // The wait is reported as before, naming the other holder.
+      expect(linesWith(res.stderr, WAITING, 'X9-20').length, res.stderr).toBeGreaterThanOrEqual(1);
+      // It then ran with the slot as its own, and released it: nothing is left (no owner.tmp.*).
+      expectOwnLock(entrypointCall(res.calls), res.pid, 'V7-01', 'verify:fast', res.stderr);
+      expect(leftIn(slot)).toEqual([]);
+      const result = resultOf('V7-01', 'verify-fast');
+      expect(Object.keys(result)).toEqual(RESULT_KEYS);
+      expect(result).toMatchObject({ mode: 'container', script: 'verify:fast', exit_code: 0 });
+    } finally {
+      started.kill('SIGTERM');
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzy] after losing the slot while taking it, the run holds nothing: at COULI_VERIFY_SLOT_WAIT_SECS it exits 2 naming the other holder, whose lock and owner stay as they are; no docker call, no result.json',
+  async () => {
+    const slot = slotDir('ln-lost-limit');
+    const once = join(base, 'ln-lost-limit-once');
+    writeFileSync(once, 'once\n');
+    const foreign = ownerText({ pid: process.pid, task: 'X9-21', token: 'x9-21:foreign:ln' });
+    const res = await run(['V7-02', '--worktree', workspace('ln-lost-limit'), '--fast'], slot, {
+      COULI_VERIFY_SLOT_WAIT_SECS: '2',
+      COULI_VERIFY_SLOT_REPORT_SECS: '1',
+      STUB_LN_STEAL: foreign,
+      STUB_LN_ONCE: once,
+    });
+    expect(existsSync(once), 'the owner file was not put in place with ln').toBe(false);
+    expect(res.status, res.stderr).toBe(2);
+    expect(
+      linesWith(res.stderr, 'lost the verify slot while taking it', 'X9-21').length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    // The usual end of a bounded wait, naming the other holder.
+    const last = res.stderr.trim().split('\n').at(-1) ?? '';
+    expect(last, res.stderr).toContain('verify slot');
+    expect(last).toContain('X9-21');
+    expect(last).toContain(String(process.pid));
+    expect(res.calls).toEqual([]);
+    expect(noResult('V7-02')).toBe(true);
+    // The release did not take the other holder's lock for this run's own (this run held nothing,
+    // so it had nothing to leave to anyone either).
+    expect(res.stderr).not.toContain('left to its holder');
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(insideLock(slot)).toEqual(['owner']);
+    expect(readOwner(slot)).toBe(foreign);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  "[CT-06zzzzy] --fast: the slot replaced after it was taken (at docker version) → exit 2 before the verify container, `no longer this run's` naming the new holder, no result.json, the new holder's lock untouched",
+  async () => {
+    const slot = slotDir('recheck-fast');
+    const other = ownerText({ pid: process.pid, task: 'X9-22', token: 'x9-22:other:recheck' });
+    const res = await run(['V7-03', '--worktree', workspace('recheck-fast'), '--fast'], slot, {
+      STUB_DOCKER_REPLACE_LOCK: other,
+      STUB_DOCKER_REPLACE_LOCK_ON: 'version',
+    });
+    expect(res.status, res.stderr).toBe(2);
+    // The lock was replaced where intended: at docker version, after the slot was taken.
+    expect(res.calls.some((c) => c.args[0] === 'version')).toBe(true);
+    expect(entrypointCall(res.calls), res.stderr).toBeUndefined();
+    expect(
+      linesWith(res.stderr, "no longer this run's", 'not starting the verify container', 'X9-22')
+        .length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    expect(noResult('V7-03')).toBe(true);
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(readOwner(slot)).toBe(other);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  "[CT-06zzzzy] pnpm verify: the slot replaced after it was taken (at docker version) → exit 2 before the services start (no docker run -d) and before the verify container, `no longer this run's` naming the new holder, no result.json, the lock untouched",
+  async () => {
+    const slot = slotDir('recheck-verify');
+    const other = ownerText({ pid: process.pid, task: 'X9-23', token: 'x9-23:other:recheck' });
+    const res = await run(['V7-04', '--worktree', workspace('recheck-verify')], slot, {
+      STUB_DOCKER_REPLACE_LOCK: other,
+      STUB_DOCKER_REPLACE_LOCK_ON: 'version',
+    });
+    expect(res.status, res.stderr).toBe(2);
+    expect(res.calls.some((c) => c.args[0] === 'version')).toBe(true);
+    expect(
+      runCalls(res.calls).filter((c) => c.args.includes('-d')),
+      res.stderr,
+    ).toEqual([]);
+    expect(entrypointCall(res.calls), res.stderr).toBeUndefined();
+    expect(
+      linesWith(res.stderr, "no longer this run's", 'not starting the services', 'X9-23').length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    expect(noResult('V7-04')).toBe(true);
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(readOwner(slot)).toBe(other);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  "[CT-06zzzzy] pnpm verify: the slot replaced while the services start (at docker exec, the readiness checks) → exit 2 before the verify container, `no longer this run's` naming the new holder, no result.json, the lock untouched",
+  async () => {
+    const slot = slotDir('recheck-verify-services');
+    const other = ownerText({ pid: process.pid, task: 'X9-24', token: 'x9-24:other:recheck' });
+    const res = await run(['V7-05', '--worktree', workspace('recheck-verify-services')], slot, {
+      STUB_DOCKER_REPLACE_LOCK: other,
+      STUB_DOCKER_REPLACE_LOCK_ON: 'exec',
+    });
+    expect(res.status, res.stderr).toBe(2);
+    // The services did start (the slot was still this run's then), and their readiness was asked.
+    expect(
+      runCalls(res.calls).filter((c) => c.args.includes('-d')).length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    expect(res.calls.some((c) => c.args[0] === 'exec')).toBe(true);
+    expect(entrypointCall(res.calls), res.stderr).toBeUndefined();
+    expect(
+      linesWith(res.stderr, "no longer this run's", 'not starting the verify container', 'X9-24')
+        .length,
+      res.stderr,
+    ).toBeGreaterThanOrEqual(1);
+    expect(noResult('V7-05')).toBe(true);
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(readOwner(slot)).toBe(other);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzy] --browser takes no slot and makes no slot check: with the lock replaced at docker version it runs exactly as before',
+  async () => {
+    const slot = slotDir('recheck-browser');
+    const other = ownerText({ pid: process.pid, task: 'X9-25', token: 'x9-25:other:browser' });
+    const res = await run(
+      [
+        'V7-06',
+        '--worktree',
+        workspace('recheck-browser', lockWithPlaywright('1.56.1')),
+        '--browser',
+      ],
+      slot,
+      { STUB_DOCKER_REPLACE_LOCK: other, STUB_DOCKER_REPLACE_LOCK_ON: 'version' },
+    );
+    const browser = entrypointCall(res.calls);
+    expect(browser?.args.slice(-2), res.stderr).toEqual(['couli-verify-entrypoint', 'browser']);
+    // The replacement came first (at docker version): the browser container saw the other lock.
+    expect(browser?.slot?.owner).toBe(other);
+    // As before: a green browser run that exported no screenshot counts as failed (exit 1).
+    expect(res.status, res.stderr).toBe(1);
+    expect(resultOf('V7-06', 'browser')).toMatchObject({ script: 'browser', exit_code: 1 });
+    expect(res.stderr).not.toContain("no longer this run's");
+    expect(res.stderr).not.toContain(WAITING);
+    expect(leftIn(slot)).toEqual([LOCK]);
+    expect(readOwner(slot)).toBe(other);
   },
   CLI_TIMEOUT,
 );

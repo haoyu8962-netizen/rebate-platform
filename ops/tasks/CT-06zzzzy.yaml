@@ -1,0 +1,26 @@
+id: CT-06zzzzy
+repo: rebate-platform
+title: CT-06zzzzy：全机验证槽补两道核对——写 owner 不覆盖别人（ln，写完核 token，不是自己的就回去排队），起每个 verify 容器前再核一次槽仍是自己的（不是就退出 2、不起容器）；槽位用例的断言信息带上两个运行的 stderr（D10-1365，FU-FLAKE-CT06ZZZX-SLOT-WAIT 第二条）
+type: guard-change
+# 2026-11-12 ops 入账（编排 D10-1365）。#3273 的 CI verify-unit（run 43222696109 第 2 次）红在
+#   「[CT-06zzzx] two --fast runs started together never run their containers at the same time」：expected '64805' to be '64802'（expectOwnLock，
+#   A 的容器起来那一刻 slot.lock/owner 是 B 的 pid）。用例只用了 1831 ms，而两个各睡 1 s 的容器顺序跑至少 2 s（平时 3.2–3.4 s）：两次运行的容器重叠了，
+#   是槽没互斥住（D10-1365 的 (b)），不是测试把运行对错（每个运行的 docker 调用日志各自独立）。默认孤儿时限 30 s，这条用例里孤儿路径不该触发；
+#   具体路径未钉住（本机与测试机加压共 440 次未复现），所以先把后果挡住、把漏洞堵上、把下次的现场留下：
+#   ① 取槽：mkdir 成功后先写临时文件，再用 ln（硬链接，不覆盖已有 owner）放成 owner，读回核对 token；ln 失败或读回不是自己的 → 本次没拿到，删自己的临时文件，回去排队（等待上限照旧从开始算）。
+#   ② 起容器前：--fast 与完整验证在起 verify 容器（完整验证另在起服务）之前各核一次 owner 的 token，不是自己的就退出 2（不起容器、不写 result.json、不动别人的锁）。
+#   ③ 两条槽位用例（pair、以及新增用例）断言失败时把两个运行的 stderr 带进信息，断言不放宽。
+# 不动：陈旧接管与孤儿回收的判定、闸门、等待报告的格式；--red / --browser / --related / --dry-run 不取槽，不受影响。#3295（同文件「a live holder」用例）不在本单内，不改那条用例。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container-slot.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzy.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
