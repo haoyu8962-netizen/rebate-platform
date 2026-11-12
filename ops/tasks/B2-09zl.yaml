@@ -1,0 +1,27 @@
+id: B2-09zl
+repo: rebate-platform
+title: 工作台卡片计数 withdraw_review_pending——payout 导出按 app 的「提现待审」只读计数（权限点 withdraw.review），与后台提现列表 display_status=pending_review 共用同一个判定；计数 = 列表页同筛选的 total
+type: impl
+# 2026-11-13 入账（withdraw，编排 D10-1401；方案 couli-runs/DASHBOARD/plan-20261113.md，协调人 admin）。
+# 列表页口径：listAdminWithdrawals 的 display_status=pending_review（payout/infra/admin-withdrawals-store.ts）——本 App、status=PENDING_REVIEW，或 APPROVED 且 hold_reason 不是 payer_side_after_transfer；
+#   与 08 BR-WDR-08 细则「等待审核」两类一致（「待审数量按同一口径计数」）。不用 readPayoutReviewOverdue（worker 指标，口径不同）。
+# 做法：把 pending_review 条件抽成一个函数，列表筛选与新计数共用；从 payout/index.ts 导出计数给工作台（admin 的工作台单组装）。不改列表页行为与契约。
+# 计数走部分索引 withdrawals_open_idx（app_id, user_id）WHERE status IN (PENDING_REVIEW, APPROVED, PAYING)，按 app_id 前缀扫。资金模块，RV2，money 评审 Codex medium。
+refs: [BR-WDR-08]
+refs_hash:
+  BR-WDR-08: 8c55a3ce6b57
+deps: [B2-09c]
+paths:
+  - 'apps/api/src/modules/payout/infra/admin-withdrawals-store.ts'
+  - 'apps/api/src/modules/payout/application/withdraw-review-pending-count.ts'
+  - 'apps/api/src/modules/payout/application/withdraw-review-pending-count.test.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+test_paths:
+  - 'test/spec/payout/withdraw-review-pending-count/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/withdraw-review-pending-count/**'
+status: todo
+pr: null
