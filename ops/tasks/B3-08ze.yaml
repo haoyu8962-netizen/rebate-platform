@@ -3,7 +3,7 @@ repo: rebate-platform
 title: B3-08ze：会话历史接口上线——契约去掉 listAgentSessionMessages 的未实现标记、挂 GET /v1/agent/sessions/{id}/messages 路由、冻结 [AC-CT-08e#1] 改历史接口一行、补 HTTP 层用例（D10-1347）
 type: contract
 # 2026-11-12 agent2 入账（编排 D10-1347、D10-1293 ②：随 A1 拆出、占契约槽；三端联调 C3 等这张）。B3-08zc 已实现框架无关层与 runtime（createAgentHistoryRuntime.listMessages），本单只去 planned 并重生成（planned-operations.gen.ts、route-schemas.gen.ts 等）、controller.ts 挂 GET、HTTP 层用例（路由、鉴权与签名、契约形状、30501 / 10001 / 10005 / 10004 / 30504 / 20001）；冻结 test/spec/contracts/agent-history/http.test.ts [AC-CT-08e#1] 只改历史接口那一行（照 D10-327 / #24）；台账与代码注释里「等 A9」的说法改掉。
-# 排序：B3-08zd 的 (8)「注销后同设备游客不得当成所有者」并进本单（与挂路由同一张 PR，挂出前已生效）：store/index.ts 游客归属加 user_hash IS NULL（owned / current / ownsRun 一起），规则测试——会员在设备 D 开会话跑一轮、注销清理后 D 上的游客读历史 → 30504、sessions/current 不返回它。D10-1385：冻结 [AC-CT-08e#1] 拆出历史一行为单独 it（AC 号与其余断言不变、期望无未实现标记），.each 只留 feedback、report 两行不动、按展开全名 red_exempt。占契约槽，开工前在 notices 报。RV1，新鲜独立 Claude 写测试，Opus 实现，Codex 评审。
+# 排序：B3-08zd 的 (8)「注销后同设备游客不得当成所有者」并进本单（与挂路由同一张 PR，挂出前已生效）：store/index.ts 游客归属加 user_hash IS NULL（owned / current / ownsRun 一起），规则测试——会员在设备 D 开会话跑一轮、注销清理后 D 上的游客读历史 → 30504、sessions/current 不返回它。D10-1385：冻结 [AC-CT-08e#1] 拆出历史一行为单独 it（AC 号与其余断言不变、期望无未实现标记），.each 只留 feedback、report 两行不动、按展开全名 red_exempt。D10-1390：改为 http.test.ts 一字不动、只改 kit.ts（endpoints 去掉历史行、另导出 historyEndpoint），历史一行与 [AC-CT-08e#2] 的历史部分合成新文件 http-history.test.ts 一条；读 kit.ts 被整体评判的 17 条未改用例 red_exempt。占契约槽，开工前在 notices 报。RV1，新鲜独立 Claude 写测试，Opus 实现，Codex 评审。
 # prettier-ignore
 refs: [BR-AI-20, BR-AI-19]
 refs_hash:
@@ -21,7 +21,7 @@ paths:
   - 'apps/api/src/modules/agent/store/index.ts'
 test_paths:
   - 'test/spec/agent/session-history-http/**'
-  - 'test/spec/contracts/agent-history/http.test.ts'
+  - 'test/spec/contracts/agent-history/**'
 impl: claude
 tester: claude-independent
 accept:
@@ -30,9 +30,54 @@ accept:
 red_exempt:
   - file: test/spec/contracts/agent-history/http.test.ts
     test: '[AC-CT-08e#1] post /v1/agent/messages/{message_id}/feedback（setAgentMessageFeedback）标注、设备头、版本闸门及 JSON 错误外壳'
-    reason: 冻结 CT-08e 用例，测试体未改，.each 表里只拿出历史接口一行（D10-1385），反馈接口仍 planned、由 B3-08zf 去
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
   - file: test/spec/contracts/agent-history/http.test.ts
     test: '[AC-CT-08e#1] post /v1/agent/messages/{message_id}/report（reportAgentMessage）标注、设备头、版本闸门及 JSON 错误外壳'
-    reason: 冻结 CT-08e 用例，测试体未改，.each 表里只拿出历史接口一行（D10-1385），举报接口仍 planned、由 B3-08zf 去
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#2] post /v1/agent/messages/{message_id}/feedback（setAgentMessageFeedback）覆盖归属与目标检查所需的有效错误码'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#2] post /v1/agent/messages/{message_id}/report（reportAgentMessage）覆盖归属与目标检查所需的有效错误码'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#7] feedback 只接受必填 up/down，拒绝撤销值和多余字段'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#8] reason 是必填的 1–200 字自由文本，封闭且不自造原因枚举'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#7][AC-CT-08e#8] /v1/agent/messages/{message_id}/feedback 成功响应复用 EmptyResponse'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#7][AC-CT-08e#8] /v1/agent/messages/{message_id}/report 成功响应复用 EmptyResponse'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#8][AC-CT-08e#9] 新举报契约使用 reason，废弃草稿的三个枚举均不出现'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/history.test.ts
+    test: '[AC-CT-08e#3] 历史复用 Cursor/Limit，limit 允许 50，拒绝 51 和小数'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/history.test.ts
+    test: '[AC-CT-08e#3] 历史 data 只有必填 items/next_cursor/expired（BR-AI-20），不接纳旧草稿字段'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/history.test.ts
+    test: '[AC-CT-08e#4] 历史逐条消息六字段必填且封闭，支持空文本与两个角色'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/history.test.ts
+    test: '[AC-CT-08e#4] finish_reason 接受现行枚举或 null，且实际字段登记 ENUM_BINDINGS'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/history.test.ts
+    test: '[AC-CT-08e#4] 历史卡片五字段封闭，不带 seq，未知类型仍可按 fallback_text 降级'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/history.test.ts
+    test: '[AC-CT-08e#6] 历史说明交代归属、过期只读、更早游标和收益卡留存投影'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/examples.test.ts
+    test: '[AC-CT-08e#5] 全部历史示例过 schema、消息正序，覆盖双方、两种游标和带卡的终态回复'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
+  - file: test/spec/contracts/agent-history/examples.test.ts
+    test: '[AC-CT-08e#5] 示例逐卡按流协议校验，收益卡仅保留 as_of/actions 且拒绝实时金额'
+    reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
 status: todo
 pr: null
