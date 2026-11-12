@@ -7,6 +7,7 @@ export type {
   PendingBatch,
   PendingChains,
   QuotedReceiptStore,
+  RecentQuoteReader,
   ResultSetInput,
   ResultSetStore,
   ResultsContinuationDeps,
@@ -15,7 +16,7 @@ export type {
   SessionChain,
   StoredResultSet,
 } from './types.ts';
-export { createMemoryResultSetStore, keepsQuoted } from './store.ts';
+export { createMemoryResultSetStore, keepsQuoted, readsRecentQuotes } from './store.ts';
 export { readSearchParams } from './shared.ts';
 export { createKeywordResults, type KeywordResults } from './keyword.ts';
 export { createResultsTools } from './tools.ts';

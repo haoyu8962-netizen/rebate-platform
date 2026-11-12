@@ -4,6 +4,8 @@
 // 1..n in call order) through agent/store/results createPgAgentTraceWriter.
 // B3-08zc (BR-AI-19 细则「助手回复落库」): cards no longer go through the trace; the reply's cards are
 // written with the run's terminal state (../pg/reply.ts), so a record here carries no card.
+// B3-05p: each tool call row carries its initiator (model / server, BR-AI-01 细则「意图兜底与不空回复」
+// 「标明由服务端发起」).
 //
 // createRunTraceRecorder({queue}):
 //   sink — the core's RunTraceSink (AgentRunBodyDeps.trace): the run's tool calls, kept for its run
@@ -50,7 +52,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** The core's masked tool calls as agent_tool_calls rows: seq 1..n in call order. */
+/** The core's masked tool calls as agent_tool_calls rows: seq 1..n in call order. B3-05p: initiator
+ * 'server' for a call the core marked server-initiated, 'model' for every other call. */
 export function toolCallRecords(calls: OrchestratorTrace['tool_calls']): ToolCallRecord[] {
   return calls.map((call, index) => ({
     seq: index + 1,
@@ -60,7 +63,22 @@ export function toolCallRecords(calls: OrchestratorTrace['tool_calls']): ToolCal
     result_digest: null,
     status: call.status,
     latency_ms: null,
+    initiator: call.initiator === 'server' ? 'server' : 'model',
   }));
+}
+
+/**
+ * B3-05p (BR-AI-01 细则「意图兜底与不空回复」「标明由服务端发起」): the run's tool calls with their
+ * initiator. A run no model answered (trace.model null: the deterministic link path's
+ * get_rebate_quote, the no-model path) never made a model-requested call, so every call it traced
+ * was made on the server's own initiative and is marked 'server'; otherwise each call keeps the
+ * core's own mark (intent-fallback.ts rule 2). The core's trace entries are never changed.
+ */
+export function initiatedCalls(trace: OrchestratorTrace): OrchestratorTrace['tool_calls'] {
+  if (trace.model !== null) return [...trace.tool_calls];
+  return trace.tool_calls.map((call) =>
+    call.initiator === 'server' ? call : { ...call, initiator: 'server' as const },
+  );
 }
 
 export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceRecorder {
@@ -85,7 +103,7 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
     sink: {
       record(runId, trace) {
         const run = open.get(runId);
-        if (run !== undefined) run.toolCalls = [...trace.tool_calls];
+        if (run !== undefined) run.toolCalls = initiatedCalls(trace);
       },
     },
     body(input, inner) {

@@ -5,6 +5,7 @@
 import { agent_intent as AGENT_INTENTS } from '@couli/contracts-ts';
 import type { PageGuideRejectReason } from '@couli/contracts-ts';
 import type { IntentPort } from '../core/ports.ts';
+import { fallbackOrderTool, serverCallsOf } from '../core/intent-fallback.ts';
 import type { RunBodyResult, RunContext, UnnumberedCard } from '../../stream/run/index.ts';
 import { createTextClassifier, guideTargets, intentTextPatterns } from './classify.ts';
 import type { GuideTargets, TextClass, TextClassifier } from './classify.ts';
@@ -299,7 +300,10 @@ class IntentHandler {
       this.record(request, { intent, replaced: true });
       return done('auth_required');
     }
-    if (await this.anyToolAvailable(request, spec.tools)) {
+    if (
+      (await this.anyToolAvailable(request, spec.tools)) &&
+      this.fallbackToolOffered(request, ctx, intent, spec.tools)
+    ) {
       this.record(request, { intent, replaced: false });
       return this.deps.continuation.run(model ?? personalIntent(intent, topic), request, ctx);
     }
@@ -310,6 +314,24 @@ class IntentHandler {
           ? this.targets.withdrawRecords
           : this.targets.wallet;
     return this.guide(request, ctx, intent, route, false);
+  }
+
+  /**
+   * B3-05p · 判定顺序④ (D10-1378): an order_query the server serves itself (intent fallback: this
+   * run's server calls are bound and the model called no order tool) needs one order tool
+   * (fallbackOrderTool); when that one is not offered the query degrades as with both off. Anything
+   * else (earnings, no server calls, the model's own order call) is unchanged.
+   */
+  private fallbackToolOffered(
+    request: IntentRequest,
+    ctx: RunContext,
+    intent: PersonalIntent,
+    tools: readonly string[],
+  ): boolean {
+    if (intent !== 'order_query') return true;
+    const server = serverCallsOf(ctx);
+    if (server === null || tools.some((tool) => server.calledByModel(tool))) return true;
+    return server.offered(fallbackOrderTool(request));
   }
 
   private async anyToolAvailable(
@@ -456,7 +478,8 @@ function personalIntent(intent: PersonalIntent, topic: EarningsTopic): IntentOut
 /** Implements B3-05b IntentPort: ordinary text returns null; all consumed intents return done.
  * BR-AI-01 classification checks user text + preceding context: personal order > personal
  * earnings > page location > generic rules. Input flags prohibit guides, not auth_required.
- * Identity precedes availability. Orders degrade only when both read tools are unavailable.
+ * Identity precedes availability. Orders degrade when both read tools are unavailable, or (B3-05p)
+ * when the server would serve the query itself and the one order tool it needs is unavailable.
  * Guide checks use current configuration intersected with contract metadata; no hardcoded
  * candidate list. Source rejection takes priority over fields, switches and route membership.
  * Successful guides emit only one card; rejected guides only fixed text; neither emits chips.

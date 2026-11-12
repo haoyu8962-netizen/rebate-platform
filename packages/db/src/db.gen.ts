@@ -263,6 +263,10 @@ export interface AgentToolCalls {
   args: Json | null;
   created_at: Generated<Timestamp>;
   id: string;
+  /**
+   * BR-AI-01: model = the model asked for the call; server = the server made it on its own initiative
+   */
+  initiator: Generated<string>;
   latency_ms: number | null;
   name: string;
   result_digest: string | null;

@@ -6,7 +6,8 @@
 // 1. Intent fallback. The model's final round is an intent object and this run made no call of the
 //    tool behind that intent: the server serves the intent itself, identity first, then the tool's
 //    availability (BR-AI-01 判定顺序 ③④ unchanged: guest → auth_required(login), not phone-bound →
-//    auth_required(bind_phone), tool off → page guide card):
+//    auth_required(bind_phone), tool off → page guide card; B3-05p: for order_query the one order
+//    tool this message needs (fallbackOrderTool) decides, so one order tool off is like both off):
 //      order_query    → list_my_orders, date_from = today − agent.orders.default_span_days (30, never
 //                       above agent.orders.max_span_days), date_to = today, both +08:00 calendar days
 //                       of the injected Clock; when the message holds a long-number placeholder
@@ -35,8 +36,9 @@
 //    safety endings keep their own wording and get nothing added.
 // 4. Title-based notice. The model called no tool this run, gave no intent object, and text of its
 //    explanation was actually delivered, while the session has product cards in context (its
-//    current result set, or the scenario entry's product card): the notice agent.notice.title_based
-//    follows the text (server-built; the model never writes it).
+//    current result set, or the scenario entry's product card; B3-05p: or a rebate_quote card of
+//    one of the session's latest agent.context.max_turns runs, default 8): the notice
+//    agent.notice.title_based follows the text (server-built; the model never writes it).
 // 5. {q_short}. agent.suggest.no_result.2 has {q_short} replaced by the first 8 characters (Unicode
 //    code points) of this search's q, in text and send_text alike; with no search term the second
 //    suggestion is left out. No delivered text or suggestion keeps a brace placeholder.
@@ -263,7 +265,10 @@ class Fallback {
   private async orders(): Promise<RunBodyResult> {
     const trusted = this.message.trusted;
     const orderNo = orderNumberOf(this.message, MAX_ORDER_NO);
-    if (orderNo !== null && this.server.offered('explain_order')) {
+    // B3-05p: only the tool this message needs (fallbackOrderTool); the IntentPort has already
+    // answered with the page guide when it is not offered, so this never falls back to the other.
+    if (orderNo !== null) {
+      if (!this.server.offered('explain_order')) return stop();
       const platform = namedPlatform(platformsIn(trusted));
       return this.single('explain_order', {
         order_no: orderNo,
@@ -329,6 +334,17 @@ class Fallback {
     }
     return stop();
   }
+}
+
+/**
+ * B3-05p · BR-AI-01 判定顺序④ (D10-1378): the one order tool rule 1 calls for this message —
+ * explain_order when it holds a long-number placeholder, else list_my_orders. When that tool is not
+ * offered the IntentPort answers as with both order tools off (the OrderList page guide, or only
+ * agent.guide.unavailable when the guide is rejected); the other order tool is never called instead.
+ */
+export function fallbackOrderTool(request: PathInput): 'explain_order' | 'list_my_orders' {
+  const message = readMessage(request.proceed.modelText);
+  return orderNumberOf(message, MAX_ORDER_NO) === null ? 'list_my_orders' : 'explain_order';
 }
 
 /**

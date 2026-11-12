@@ -6,6 +6,7 @@ import type { ClarificationScope, ClarifySlot } from '../intents/types.ts';
 import type {
   DeliveredProduct,
   QuotedReceiptStore,
+  RecentQuoteReader,
   ResultSetInput,
   ResultSetStore,
   SessionChain,
@@ -46,7 +47,14 @@ export function keepsQuoted<T extends object>(store: T): store is T & QuotedRece
   return typeof (store as Partial<QuotedReceiptStore>).recordQuoted === 'function';
 }
 
-export function createMemoryResultSetStore(): Required<ResultSetStore> & QuotedReceiptStore {
+/** Whether `store` can read the recent quotes of a session (the memory and PG stores can). */
+export function readsRecentQuotes<T extends object>(store: T): store is T & RecentQuoteReader {
+  return typeof (store as Partial<RecentQuoteReader>).quotedRecently === 'function';
+}
+
+export function createMemoryResultSetStore(): Required<ResultSetStore> &
+  QuotedReceiptStore &
+  RecentQuoteReader {
   // Save order is the recency order; a re-save of the same id keeps its place and receipts.
   const rows: Row[] = [];
   const byId = new Map<string, Row>();
@@ -55,9 +63,22 @@ export function createMemoryResultSetStore(): Required<ResultSetStore> & QuotedR
   const chains = new Map<string, SessionChain>();
   // B3-03p: quoted products (rebate_quote cards) by app/session; outside every result set.
   const quoted = new Map<string, DeliveredProduct[]>();
+  // B3-05p: the runs of each app/session in the order this store first saw them (a result set
+  // saved or a quote recorded; the memory store has no run table, so a run that stored nothing is
+  // not counted here, unlike the PG store's agent_runs), and the runs that recorded a quote.
+  const sessionRuns = new Map<string, string[]>();
+  const quotedRuns = new Set<string>();
+
+  function seen(appId: string, sessionId: string, runId: string): void {
+    const key = chainKey(appId, sessionId);
+    const list = sessionRuns.get(key) ?? [];
+    if (!list.includes(runId)) list.push(runId);
+    sessionRuns.set(key, list);
+  }
 
   return {
     async save(value) {
+      seen(value.appId, value.sessionId, value.runId);
       const existing = byId.get(value.id);
       if (existing !== undefined) {
         existing.input = value;
@@ -80,12 +101,26 @@ export function createMemoryResultSetStore(): Required<ResultSetStore> & QuotedR
     },
 
     async recordQuoted(scope, items) {
+      seen(scope.appId, scope.sessionId, scope.runId);
+      if (items.length > 0) {
+        quotedRuns.add(JSON.stringify([scope.appId, scope.sessionId, scope.runId]));
+      }
       const key = chainKey(scope.appId, scope.sessionId);
       const list = quoted.get(key) ?? [];
       for (const item of items) {
         if (!list.some((entry) => entry.card_id === item.card_id)) list.push(item);
       }
       quoted.set(key, list);
+    },
+
+    async quotedRecently(scope, turns) {
+      if (!Number.isSafeInteger(turns) || turns <= 0) return false;
+      const runs = (sessionRuns.get(chainKey(scope.appId, scope.sessionId)) ?? []).filter(
+        (runId) => runId !== scope.runId,
+      );
+      return runs
+        .slice(-turns)
+        .some((runId) => quotedRuns.has(JSON.stringify([scope.appId, scope.sessionId, runId])));
     },
 
     async latestWithProducts(appId, sessionId) {

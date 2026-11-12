@@ -4,7 +4,7 @@ import type { OrchestratorTrace } from '../../orchestrator/core/ports.ts';
 import type { RunBodyResult, RunContext } from '../run/index.ts';
 import type { CardInput } from '../writer/index.ts';
 import { storedCard } from '../pg/reply.ts';
-import { createRunTraceRecorder, toolCallRecords } from './trace.ts';
+import { createRunTraceRecorder, initiatedCalls, toolCallRecords } from './trace.ts';
 import type { TraceRedoQueue } from './trace-retry.ts';
 
 const APP = 'synthetic-app';
@@ -30,10 +30,13 @@ function card(cardId: string): CardInput {
   };
 }
 
-function trace(calls: OrchestratorTrace['tool_calls']): OrchestratorTrace {
+function trace(
+  calls: OrchestratorTrace['tool_calls'],
+  model: string | null = 'synthetic-model',
+): OrchestratorTrace {
   return {
     intent: null,
-    model: null,
+    model,
     attempts: [],
     prompt_version: 'none',
     tool_calls: calls,
@@ -84,6 +87,7 @@ describe('createRunTraceRecorder', () => {
           result_digest: null,
           status: 'ok',
           latency_ms: null,
+          initiator: 'model',
         },
         {
           seq: 2,
@@ -92,6 +96,7 @@ describe('createRunTraceRecorder', () => {
           result_digest: null,
           status: 'rejected',
           latency_ms: null,
+          initiator: 'model',
         },
       ],
     });
@@ -157,6 +162,62 @@ it('[AC-B3-08q#1] toolCallRecords：非对象参数（traceMask 失败为 null�
   ).toEqual([
     [1, null],
     [2, null],
+  ]);
+});
+
+it('[AC-B3-05p#1] toolCallRecords：服务端代调记 initiator server，其余（含没有标记的）记 model', () => {
+  expect(
+    toolCallRecords([
+      { name: 'search_products', args: { q: '合成' }, status: 'ok' },
+      { name: 'handoff_to_human', args: {}, status: 'ok', initiator: 'server' },
+      { name: 'get_rebate_quote', args: { link_index: 1 }, status: 'failed', initiator: 'server' },
+    ]).map((record) => [record.seq, record.name, record.initiator]),
+  ).toEqual([
+    [1, 'search_products', 'model'],
+    [2, 'handoff_to_human', 'server'],
+    [3, 'get_rebate_quote', 'server'],
+  ]);
+});
+
+it('[AC-B3-05p#9] initiatedCalls：没有模型答过的 run（确定性链接路径）每个调用记 server；模型答过的保留核心自己的标记', () => {
+  const quote = { name: 'get_rebate_quote', args: { link_index: 1 }, status: 'ok' } as const;
+  const calls: OrchestratorTrace['tool_calls'] = [
+    quote,
+    { name: 'handoff_to_human', args: {}, status: 'ok', initiator: 'server' },
+  ];
+  expect(toolCallRecords(initiatedCalls(trace(calls, null))).map((r) => r.initiator)).toEqual([
+    'server',
+    'server',
+  ]);
+  expect(toolCallRecords(initiatedCalls(trace(calls))).map((r) => r.initiator)).toEqual([
+    'model',
+    'server',
+  ]);
+  // The core's own entries are never changed.
+  expect(calls[0]).toEqual(quote);
+});
+
+it('[AC-B3-05p#9] 记录器：没有模型答过的 run 交给队列的工具调用记 server', async () => {
+  const q = queue();
+  const recorder = createRunTraceRecorder({ queue: q });
+  await recorder.body(input(), async () => {
+    recorder.sink.record(
+      RUN,
+      trace([{ name: 'get_rebate_quote', args: { link_index: 1 }, status: 'ok' }], null),
+    );
+    return DONE;
+  })(context());
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].toolCalls).toEqual([
+    {
+      seq: 1,
+      name: 'get_rebate_quote',
+      args: { link_index: 1 },
+      result_digest: null,
+      status: 'ok',
+      latency_ms: null,
+      initiator: 'server',
+    },
   ]);
 });
 

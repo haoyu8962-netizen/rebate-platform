@@ -645,7 +645,8 @@ class AgentRun {
   /**
    * B3-05o · BR-AI-18 细则「比较与适用性的提示」 (intent-fallback.ts rule 4): the model asked for no
    * tool and gave no intent object (this is the ordinary-text end), its explanation text was
-   * actually written, and the session has product cards in context → agent.notice.title_based
+   * actually written, and the session has product cards in context (its current result set, or
+   * B3-05p a rebate_quote card in the recent conversation) → agent.notice.title_based
    * after the text. Any other end is returned unchanged.
    */
   private async titleBased(result: RunBodyResult): Promise<RunBodyResult> {
@@ -657,7 +658,7 @@ class AgentRun {
     let inContext: boolean | Aborted;
     try {
       inContext = await this.wait(
-        port.inContext(this.appId, this.input.sessionId).catch(() => false),
+        port.inContext(this.appId, this.input.sessionId, this.input.runId).catch(() => false),
       );
     } catch {
       inContext = false;

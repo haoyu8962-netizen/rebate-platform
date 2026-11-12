@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 import type { AgentCaller } from '../../http/index.ts';
 import type { RedactedText } from '../../stream/admission/index.ts';
 import type { RunContext, UnnumberedCard } from '../../stream/run/index.ts';
+import { bindServerCalls, type ServerToolCalls } from '../core/intent-fallback.ts';
 import { createIntentPort } from './index.ts';
 import type { IntentDeps, IntentRequest, TemplateCall } from './index.ts';
 
@@ -59,11 +60,15 @@ function request(
   };
 }
 
-function harness(disabled: readonly string[] = [], calls: readonly TemplateCall[] = []) {
+function harness(
+  disabled: readonly string[] = [],
+  calls: readonly TemplateCall[] = [],
+  configured: readonly string[] = CONFIGURED,
+) {
   const off = new Set(disabled);
   const unused = () => Promise.reject(new Error('synthetic: clarification not expected'));
   const deps: IntentDeps = {
-    routes: { configured: async () => CONFIGURED, contract: () => bridge.routes },
+    routes: { configured: async () => configured, contract: () => bridge.routes },
     flags: { enabled: async (_app, key) => !off.has(key) },
     tools: { registered: () => true },
     texts: { text: async (_app, key) => copy(key) },
@@ -87,7 +92,7 @@ function harness(disabled: readonly string[] = [], calls: readonly TemplateCall[
   const port = createIntentPort(deps);
   return {
     deps,
-    async run(req: IntentRequest) {
+    async run(req: IntentRequest, server?: ServerToolCalls) {
       const cards: UnnumberedCard[] = [];
       const texts: string[] = [];
       const ctx: RunContext = {
@@ -104,6 +109,7 @@ function harness(disabled: readonly string[] = [], calls: readonly TemplateCall[
         suggestions: vi.fn(),
         toolStatus: vi.fn(),
       };
+      if (server !== undefined) bindServerCalls(ctx, server);
       return { result: await port.handle(req, ctx), cards, texts, ctx };
     },
   };
@@ -411,3 +417,70 @@ it.each<[readonly TemplateCall[], readonly string[]]>([
 ])('[B3-05f][BR-AI-07][BR-AI-01] 收益与规则同样按本 run 全部调用汇总 %#', async (calls, keys) => {
   expect(await templateTexts(calls)).toEqual(keys.map(copy));
 });
+
+/** B3-05p: this run's server calls with only `offered` order tools on offer. */
+function serverCalls(offered: readonly string[], calledByModel: readonly string[] = []) {
+  const server: ServerToolCalls = {
+    offered: (name) => offered.includes(name),
+    calledByModel: (name) => calledByModel.includes(name),
+    call: vi.fn<ServerToolCalls['call']>(),
+  };
+  return server;
+}
+
+const RECENT = '帮我看看最近的单';
+const BY_NUMBER = '帮我查订单<num_1>返了没';
+const LIST_OFF = ['agent.tools.list_my_orders.enabled'];
+const EXPLAIN_OFF = ['agent.tools.explain_order.enabled'];
+
+it.each([
+  [RECENT, LIST_OFF, ['explain_order']],
+  [BY_NUMBER, EXPLAIN_OFF, ['list_my_orders']],
+] as const)(
+  '[B3-05p][BR-AI-01] 判定顺序④：服务端代调需要的那个订单工具关着（%s）→ 同全关出 OrderList 引导卡，不交给代调',
+  async (text, disabled, offered) => {
+    const h = harness(disabled);
+    const server = serverCalls(offered);
+    const output = await h.run(request({ agent_intent: 'order_query' }, text, MEMBER), server);
+    expect(output.result).toEqual({ kind: 'done', finishReason: 'stop' });
+    expect(output.cards).toEqual([guideCard('OrderList')]);
+    expect(output.texts).toEqual([]);
+    expect(h.deps.continuation.run).not.toHaveBeenCalled();
+    expect(server.call).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  ['页面引导关闭', [...LIST_OFF, 'agent.page_guide.enabled'], CONFIGURED],
+  ['OrderList 不在配置里', LIST_OFF, CONFIGURED.filter((route) => route !== 'OrderList')],
+] as const)(
+  '[B3-05p][BR-AI-01] 判定顺序④：订单工具部分关闭且%s → 只出 agent.guide.unavailable 文本，不出卡',
+  async (_label, disabled, configured) => {
+    const h = harness(disabled, [], configured);
+    const output = await h.run(
+      request({ agent_intent: 'order_query' }, RECENT, MEMBER),
+      serverCalls(['explain_order']),
+    );
+    expect(output.result).toEqual({ kind: 'done', finishReason: 'stop' });
+    expect(output.cards).toEqual([]);
+    expect(output.texts).toEqual([copy('agent.guide.unavailable')]);
+    expect(h.deps.continuation.run).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  ['需要的工具在', RECENT, LIST_OFF, ['explain_order', 'list_my_orders'], []],
+  ['按单号且 explain_order 在', BY_NUMBER, LIST_OFF, ['explain_order'], []],
+  ['模型自己调过订单工具', RECENT, LIST_OFF, ['explain_order'], ['explain_order']],
+] as const)(
+  '[B3-05p][BR-AI-01] 判定顺序④：%s → 照旧交给续接（代调或模型自己的调用）',
+  async (_label, text, disabled, offered, called) => {
+    const h = harness(disabled);
+    const output = await h.run(
+      request({ agent_intent: 'order_query' }, text, MEMBER),
+      serverCalls(offered, called),
+    );
+    expect(output.cards).toEqual([]);
+    expect(h.deps.continuation.run).toHaveBeenCalledTimes(1);
+  },
+);

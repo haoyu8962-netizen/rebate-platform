@@ -1,0 +1,97 @@
+{
+  "task": "B3-05p",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "spec_commit": "36290ec869c4cacefb972028263a922b4b0ff376",
+  "red_tests": [
+    "test/spec/agent/intent-fallback-followup/initiator-production.int.test.ts > [AC-B3-05p#6][BR-AI-01][BR-AI-19] 生产流装配·模型路径：模型调 search_products、再只给 handoff 意图由服务端代调 handoff_to_human，agent_tool_calls 两行的 initiator 依次为 model、server",
+    "test/spec/agent/intent-fallback-followup/initiator-schema.int.test.ts > [AC-B3-05p#3][BR-AI-19] 迁移后 app.agent_tool_calls 有 initiator 列：text、NOT NULL、默认 model",
+    "test/spec/agent/intent-fallback-followup/initiator-schema.int.test.ts > [AC-B3-05p#4][BR-AI-19] 不写 initiator 时落 model；只收 model / server，别的值与 NULL 被约束拒绝",
+    "test/spec/agent/intent-fallback-followup/initiator-schema.int.test.ts > [AC-B3-05p#5][BR-AI-01][BR-AI-19] 写库器经 toolCallRecords 落库：模型调用记 model、服务端代调记 server，重复写入仍各一行",
+    "test/spec/agent/intent-fallback-followup/initiator.test.ts > [AC-B3-05p#1] 留痕记录带 initiator：模型自己调的记 model，服务端代调的记 server；seq、名称、参数、状态不变",
+    "test/spec/agent/intent-fallback-followup/initiator.test.ts > [AC-B3-05p#2] 服务端代调排在模型调用之前、之间或失败时同样记 server；没有标记的调用一律记 model",
+    "test/spec/agent/intent-fallback-followup/order-tools-partial.test.ts > [AC-B3-05p#13][BR-AI-01] explain_order 开、list_my_orders 关：「最近的单」不带单号、模型只给 order_query → 与订单工具全关时一样出 OrderList 引导卡，不是空回复",
+    "test/spec/agent/intent-fallback-followup/order-tools-partial.test.ts > [AC-B3-05p#14][BR-AI-01] list_my_orders 开、explain_order 关：按单号问、模型只给 order_query → 与订单工具全关时一样出 OrderList 引导卡，不改查订单列表、不扣按单号次数",
+    "test/spec/agent/intent-fallback-followup/title-based-quote.test.ts > [AC-B3-05p#7][BR-AI-18] 本会话没有商品结果集、最近对话只出过一张报价卡，模型只给说明文字（未调工具、无意图）：文字之后附 agent.notice.title_based",
+    "test/spec/agent/intent-fallback-followup/title-based-quote.test.ts > [AC-B3-05p#8][BR-AI-18] 另一个会话的报价卡不算：那个会话里不附 title_based，出过报价卡的本会话照附"
+  ],
+  "risk_note": "RV2（db/migrations + store/results；不碰资金路径）。B3-05o（#3294）事后评审跟进 D10-1378，范围按 D10-1384 缩为 ①②④（③ {q_short} 子串条件撤回，冻结 [AC-B3-05o#48]–[#51]、[#53] 不动）。① 迁移 0139_agent-tool-calls-initiator（编号 D10-1380）：app.agent_tool_calls 加 initiator text NOT NULL DEFAULT 'model' + CHECK (model / server)（NOT VALID，已有行都是默认值），GRANT SELECT (initiator) TO couli_readonly（表按列授权，冻结 [AC-B3-09a#54] 要求只读角色能读全部非私有列，同 0023 做法）；ToolCallRecord.initiator 可选（冻结夹具不带），stream/mount/trace.ts 带上，store/results 写库写这一列；没有模型答过的 run（确定性链接路径）留痕调用一律记 server；db:snapshot 生成 schema.sql 与 db.gen.ts。② BR-AI-18 比较提示：本会话（按 app 与 session 过滤）最近 agent.context.max_turns（默认 8）轮内出过报价卡也算有商品卡，当前这一轮自己不算，PG 与内存结果库各实现。④ 订单工具只开一个、本条需要的那个关着时同全关出 OrderList 引导卡，页面引导关闭或路由不在配置里时只出 agent.guide.unavailable。",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "36290ec869c4cacefb972028263a922b4b0ff376",
+      "tree": "ce7327bfff8d704f5b1a7100d7710cbd6454623f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T18:23:11Z",
+      "finished_at": "2026-11-12T18:23:27Z",
+      "red_tests": [
+        "test/spec/agent/intent-fallback-followup/initiator-production.int.test.ts > [AC-B3-05p#6][BR-AI-01][BR-AI-19] 生产流装配·模型路径：模型调 search_products、再只给 handoff 意图由服务端代调 handoff_to_human，agent_tool_calls 两行的 initiator 依次为 model、server",
+        "test/spec/agent/intent-fallback-followup/initiator-schema.int.test.ts > [AC-B3-05p#3][BR-AI-19] 迁移后 app.agent_tool_calls 有 initiator 列：text、NOT NULL、默认 model",
+        "test/spec/agent/intent-fallback-followup/initiator-schema.int.test.ts > [AC-B3-05p#4][BR-AI-19] 不写 initiator 时落 model；只收 model / server，别的值与 NULL 被约束拒绝",
+        "test/spec/agent/intent-fallback-followup/initiator-schema.int.test.ts > [AC-B3-05p#5][BR-AI-01][BR-AI-19] 写库器经 toolCallRecords 落库：模型调用记 model、服务端代调记 server，重复写入仍各一行",
+        "test/spec/agent/intent-fallback-followup/initiator.test.ts > [AC-B3-05p#1] 留痕记录带 initiator：模型自己调的记 model，服务端代调的记 server；seq、名称、参数、状态不变",
+        "test/spec/agent/intent-fallback-followup/initiator.test.ts > [AC-B3-05p#2] 服务端代调排在模型调用之前、之间或失败时同样记 server；没有标记的调用一律记 model",
+        "test/spec/agent/intent-fallback-followup/order-tools-partial.test.ts > [AC-B3-05p#13][BR-AI-01] explain_order 开、list_my_orders 关：「最近的单」不带单号、模型只给 order_query → 与订单工具全关时一样出 OrderList 引导卡，不是空回复",
+        "test/spec/agent/intent-fallback-followup/order-tools-partial.test.ts > [AC-B3-05p#14][BR-AI-01] list_my_orders 开、explain_order 关：按单号问、模型只给 order_query → 与订单工具全关时一样出 OrderList 引导卡，不改查订单列表、不扣按单号次数",
+        "test/spec/agent/intent-fallback-followup/title-based-quote.test.ts > [AC-B3-05p#7][BR-AI-18] 本会话没有商品结果集、最近对话只出过一张报价卡，模型只给说明文字（未调工具、无意图）：文字之后附 agent.notice.title_based",
+        "test/spec/agent/intent-fallback-followup/title-based-quote.test.ts > [AC-B3-05p#8][BR-AI-18] 另一个会话的报价卡不算：那个会话里不附 title_based，出过报价卡的本会话照附"
+      ],
+      "expected": [
+        "test/spec/agent/intent-fallback-followup/initiator-production.int.test.ts",
+        "test/spec/agent/intent-fallback-followup/initiator-schema.int.test.ts",
+        "test/spec/agent/intent-fallback-followup/initiator.test.ts",
+        "test/spec/agent/intent-fallback-followup/order-tools-partial.test.ts",
+        "test/spec/agent/intent-fallback-followup/title-based-quote.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e5f9534f2d0e4c7523a63f40fa6854c8f7ba6a04fa89c172ab72277a1dc40ae3"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d2eec44915330d60d76c045990c344eefcf0805f0c49d1506d10247f57c9b399"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money --full, effort medium, at the head after the snapshot commit: pass, no findings, checklist 7/7 (review-codex-money1.json). Codex was run first and succeeded."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests written by a fresh independent Claude (ledger tester claude-independent) via claude-run.sh: 6 files, red/1 PASS 14 cases; per D10-1384 the ③ file q-short-substring.test.ts was then dropped from the unmerged rule-test commit (amend), leaving 5 files (initiator unit + two integration: column and CHECK, production write model / server; title-based-quote; order-tools-partial). Spec-test r1 (another fresh Claude): pass, 4 S2 folded into the implementation brief (PG store filters by session; only the last max_turns runs count; page guide off → unavailable text only; deterministic link path calls traced as server). Mechanical fix folded into the rule-test commit before review of the implementation (D10-206 kind): title-based-quote.test.ts lines 40 and 42 assigned ProductCard's nullable product_key / final_price_fen to the non-null DeliveredProduct — now `as string` / `as number`, assertions unchanged (tsc -b failed otherwise; vitest was green either way). Related integration tests run locally serially: 42 files / 301 cases (the B3-05o list, trace-persist, store-results, db/agent/agent-tables, this task's two) all green."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "46ede9738b4447fd60739ffabe8bb82c685ead54",
+    "specs": "89ba75719133fbb0c92629b83a402eb22b170492"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

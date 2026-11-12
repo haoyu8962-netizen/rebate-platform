@@ -11,11 +11,12 @@ import type { KeywordSearchPlan } from '../../model-gateway/degraded/index.ts';
 import type { UnnumberedCard } from '../../stream/run/index.ts';
 import type { ToolContext } from '../core/ports.ts';
 import { chainPort, conditionsOf, newChainId, setChain } from './shared.ts';
-import { keepsQuoted } from './store.ts';
+import { keepsQuoted, readsRecentQuotes } from './store.ts';
 import type {
   PendingBatch,
   PendingChains,
   QuotedReceiptStore,
+  RecentQuoteReader,
   ResultSetStore,
   SessionChain,
 } from './types.ts';
@@ -50,7 +51,7 @@ export interface KeywordResults extends PendingChains {
    */
   receipts(
     onChainError: (error: unknown, resultSetId: string) => void,
-  ): ResultSetStore & Partial<QuotedReceiptStore>;
+  ): ResultSetStore & Partial<QuotedReceiptStore> & Partial<RecentQuoteReader>;
 }
 
 export function createKeywordResults(store: ResultSetStore): KeywordResults {
@@ -113,7 +114,7 @@ export function createKeywordResults(store: ResultSetStore): KeywordResults {
     },
 
     receipts(onChainError) {
-      const wrapped: ResultSetStore & Partial<QuotedReceiptStore> = {
+      const wrapped: ResultSetStore & Partial<QuotedReceiptStore> & Partial<RecentQuoteReader> = {
         save: (value) => store.save(value),
         async recordDelivered(resultSetId, items) {
           try {
@@ -138,6 +139,10 @@ export function createKeywordResults(store: ResultSetStore): KeywordResults {
         chains.appendChain(appId, sessionId, chain);
       if (keepsQuoted(store)) {
         wrapped.recordQuoted = (scope, items) => store.recordQuoted(scope, items);
+      }
+      // B3-05p: the title_based notice's recent quotes (agent-body sessionProducts).
+      if (readsRecentQuotes(store)) {
+        wrapped.quotedRecently = (scope, turns) => store.quotedRecently(scope, turns);
       }
       return wrapped;
     },

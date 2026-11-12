@@ -2568,9 +2568,17 @@ CREATE TABLE app.agent_tool_calls (
     status text NOT NULL,
     latency_ms integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    initiator text DEFAULT 'model'::text NOT NULL,
     CONSTRAINT agent_tool_calls_latency_check CHECK ((latency_ms >= 0)),
     CONSTRAINT agent_tool_calls_seq_check CHECK ((seq >= 1))
 );
+
+
+--
+-- Name: COLUMN agent_tool_calls.initiator; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON COLUMN app.agent_tool_calls.initiator IS 'BR-AI-01: model = the model asked for the call; server = the server made it on its own initiative';
 
 
 --
@@ -7010,6 +7018,14 @@ ALTER TABLE ONLY app.agent_sessions
 
 ALTER TABLE ONLY app.agent_sessions
     ADD CONSTRAINT agent_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: agent_tool_calls agent_tool_calls_initiator_check; Type: CHECK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE app.agent_tool_calls
+    ADD CONSTRAINT agent_tool_calls_initiator_check CHECK ((initiator = ANY (ARRAY['model'::text, 'server'::text]))) NOT VALID;
 
 
 --
@@ -13949,6 +13965,13 @@ GRANT SELECT(latency_ms) ON TABLE app.agent_tool_calls TO couli_readonly;
 --
 
 GRANT SELECT(created_at) ON TABLE app.agent_tool_calls TO couli_readonly;
+
+
+--
+-- Name: COLUMN agent_tool_calls.initiator; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(initiator) ON TABLE app.agent_tool_calls TO couli_readonly;
 
 
 --

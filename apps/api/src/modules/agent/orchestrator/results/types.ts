@@ -83,6 +83,19 @@ export interface QuotedReceiptStore {
   recordQuoted(scope: QuotedScope, items: readonly DeliveredProduct[]): Promise<void>;
 }
 
+/**
+ * B3-05p · BR-AI-18 细则「比较与适用性的提示」(「或最近对话里的报价卡」): a store that can tell whether
+ * the recent conversation of a session showed a rebate_quote card.
+ */
+export interface RecentQuoteReader {
+  /**
+   * True when one of the latest `turns` runs of `scope`'s app and session, other than scope.runId
+   * (the run asking), recorded a quoted product (QuotedReceiptStore.recordQuoted); runs are taken
+   * newest first. Another app's or session's quotes never count; turns ≤ 0 (no history) → false.
+   */
+  quotedRecently(scope: QuotedScope, turns: number): Promise<boolean>;
+}
+
 /** B3-03r · BR-AI-05: a batch's chain, waiting for a delivery receipt of one of its lists. */
 export interface PendingBatch {
   readonly appId: string;

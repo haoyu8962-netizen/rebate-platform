@@ -20,6 +20,9 @@
 //     at least one delivery and is not a quoted set (the id test survives a purge clearing
 //     conditions), with its deliveries in delivery order (position, then created_at, card_id).
 //     Never ordered by price.
+//   quotedRecently (B3-05p, BR-AI-18 细则「比较与适用性的提示」) — whether one of the session's latest
+//     `turns` runs (agent_runs of the app and session, accepted_at desc, id desc, the asking run
+//     excluded) has a delivery in its quoted result set; turns ≤ 0 or a non-UUID session → false.
 //   findDelivered — the session's delivery of a card_id (session-wide unique), any round.
 //   takeOnce — INSERT agent_clarify_asks … ON CONFLICT DO NOTHING RETURNING: one winner per key.
 //   currentChain / appendChain — agent_result_chains, the largest seq is current; appends take
@@ -27,6 +30,8 @@
 //     chains are rejected by chainProblem first (the table CHECKs are the backstop).
 // createPgAgentTraceWriter — agent_cards / agent_tool_calls records (idempotent by their unique
 // keys; a run outside the given app / session rejects with AgentTraceRejected and writes nothing).
+// B3-05p: each agent_tool_calls row stores its record's initiator ('server' only when the record
+// says so, else 'model'; migration 0139).
 // B3-08y (BR-AI-22, 04 §3.2「防止异步 trace 回填」): each write is ONE transaction that first locks
 // the run's session row FOR SHARE (exclusive with the deletion purge's FOR NO KEY UPDATE), then
 // checks the run and inserts, holding the lock until the insert commits. A session detached from
@@ -45,6 +50,7 @@ import type {
   ChainStatus,
   DeliveredProduct,
   QuotedReceiptStore,
+  RecentQuoteReader,
   ResultSetStore,
   SearchConditions,
   SessionChain,
@@ -61,7 +67,13 @@ export interface ToolCallRecord {
   readonly result_digest: string | null;
   readonly status: 'ok' | 'failed' | 'rejected';
   readonly latency_ms: number | null;
+  /** B3-05p (BR-AI-01 细则「意图兜底与不空回复」, migration 0139): who started the call; absent is
+   * 'model' (the column default). */
+  readonly initiator?: ToolCallInitiator;
 }
+
+/** app.agent_tool_calls.initiator (0139): the model asked for the call, or the server made it. */
+export type ToolCallInitiator = 'model' | 'server';
 
 /**
  * Both methods resolve undefined once written and the string TRACE_SKIPPED when the session is
@@ -164,7 +176,7 @@ async function appendDeliveries(
 
 export function createPgResultSetStore(deps: {
   db: Kysely<DB>;
-}): Required<ResultSetStore> & QuotedReceiptStore {
+}): Required<ResultSetStore> & QuotedReceiptStore & RecentQuoteReader {
   const db = deps.db.withSchema('app');
 
   async function deliveries(
@@ -308,6 +320,25 @@ export function createPgResultSetStore(deps: {
         delivered: await deliveries(db, row.app_id, row.id),
       };
       return result;
+    },
+
+    async quotedRecently(scope, turns) {
+      if (!Number.isSafeInteger(turns) || turns <= 0 || !isUuid(scope.sessionId)) return false;
+      // The asking run never counts (it is already in agent_runs since its acceptance).
+      const other = isUuid(scope.runId) ? sql`AND r.id <> ${scope.runId}::uuid` : sql``;
+      const result = await sql<{ quoted: boolean }>`SELECT EXISTS (
+          SELECT 1
+          FROM (
+            SELECT r.id FROM app.agent_runs r
+            WHERE r.app_id = ${scope.appId} AND r.session_id = ${scope.sessionId}::uuid ${other}
+            ORDER BY r.accepted_at DESC, r.id DESC
+            LIMIT ${turns}
+          ) recent
+          JOIN app.agent_result_deliveries d
+            ON d.app_id = ${scope.appId} AND d.session_id = ${scope.sessionId}::uuid
+            AND d.run_id = recent.id AND d.result_set_id = ${quotedSetId(sql.ref('recent.id'))}
+        ) AS quoted`.execute(deps.db);
+      return result.rows[0]?.quoted === true;
     },
 
     async findDelivered(appId, sessionId, cardId) {
@@ -494,6 +525,7 @@ export function createPgAgentTraceWriter(deps: {
               result_digest: call.result_digest,
               status: call.status,
               latency_ms: call.latency_ms,
+              initiator: call.initiator === 'server' ? 'server' : 'model',
             })),
           )
           .onConflict((oc) => oc.columns(['app_id', 'run_id', 'seq']).doNothing())

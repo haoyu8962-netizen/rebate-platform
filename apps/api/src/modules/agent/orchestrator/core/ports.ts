@@ -199,7 +199,9 @@ export interface OrchestratorTrace extends ToolTraceFragment {
      * Core does not restore placeholders or implement masking rules. */
     readonly args: unknown;
     readonly status: 'ok' | 'failed' | 'rejected';
-    /** B3-05o: present only on a server-initiated call (intent-fallback.ts rule 2). */
+    /** B3-05o: present only on a server-initiated call (intent-fallback.ts rule 2). B3-05p: stored
+     * as agent_tool_calls.initiator; a run no model answered (model null) has only server-initiated
+     * calls and the stream trace (stream/mount/trace.ts initiatedCalls) marks them so. */
     readonly initiator?: 'server';
   }[];
   readonly output_filtered: boolean;
@@ -326,7 +328,8 @@ export interface EmptyReplyPort {
 
 /** B3-05o: the session's product cards in context (BR-AI-18 细则「比较与适用性的提示」). */
 export interface SessionProductsPort {
-  inContext(appId: string, sessionId: string): Promise<boolean>;
+  /** B3-05p: `runId` is the run asking (its own quotes never count as the recent conversation). */
+  inContext(appId: string, sessionId: string, runId: string): Promise<boolean>;
 }
 
 export interface RunLabelsDeps {
