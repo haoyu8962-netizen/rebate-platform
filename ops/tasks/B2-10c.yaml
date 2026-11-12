@@ -1,0 +1,20 @@
+id: B2-10c
+repo: rebate-platform
+title: test-change（FU-LOSS-LS17-STATIC-TEST）：拼多多状态 4 / 10 带正数佣金照样按失效并告警，补一条静态标题的规则测试供资损清单 LS-17 引用
+type: test-change
+# 2026-11-13 funds 入账（编排 D10-1398）。规则与覆盖都已有：test/spec/orders/pdd-invalid-codes/alerts.test.ts [AC-B1-04zgc#7]（以及 adapter #11、commission-gross #14），但都是 flatMap 生成的参数化标题，B2-10b 的结构测试不收。
+# 只新增一个文件，刻画现有行为、主干上须绿；用反向验证代替先红（D10-799）：把 mapPddOrder 的对应告警或失效映射改坏一处，新用例必须红，还原后 git status 干净。
+# 同一 PR 把 specs/loss-scenarios.md 的 LS-17 从缺口改为引用新用例（结构测试跟着过），省一张单；编排要分开就拆。
+# 新鲜独立 Claude 写、另一位只读复核，Codex 评审；冻结文件一个不改。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/orders/pdd-invalid-codes/static-titles.test.ts'
+  - 'specs/loss-scenarios.md'
+  - 'ops/tasks/B2-10c.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
