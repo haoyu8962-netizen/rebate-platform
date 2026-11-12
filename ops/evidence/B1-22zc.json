@@ -1,0 +1,73 @@
+{
+  "risk_note": "RV2 (union, read-only). D10-1401 dashboard card union_auth_expiring: union exports countUnionAuthPending(db, appId) = number of the app's union_accounts with auth_status IN (expiring, expired). auth_status is the stored column the daily check writes from union.auth_alert_days (expiring) and on expiry / an authorization-failure probe or call (expired); timeouts and rate limits do not change it (BR-ID-24 ①④), so 01 F-ADM-26 'about to expire or probe-invalid' is exactly this set and last_probe_ok is not read. The judgement lives once in union/domain/auth-pending.ts (UNION_AUTH_PENDING_STATUSES, isUnionAuthPending); adminListUnionAccounts is unpaged and unfiltered, its behaviour and contract unchanged (admin-accounts.ts only documents that its pending rows use the same judgement). Query: app_id = $1 AND auth_status IN ($2, $3), served by union_accounts_app_id_id_key (app_id prefix). Host: tsc -b test apps/api 0; eslint / prettier 0; union int 54 files 696 (incl. auth-pending-count 3, admin-accounts); union unit 40 files 385.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review (effort medium) round 1 pass: only the app's expiring / expired accounts counted; paused, null-expiry and non-authorization probe failures handled per BR-ID-24; no isolation issue."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by fresh independent Claude (test/spec/union/auth-pending-count, 3 cases: count = rows of the real GET /admin/v1/union-accounts with auth_status expiring / expired and a hand-worked value; other apps not counted; 0 when empty or all active) with a NotImplemented skeleton. Container red red/1 3 red for the right reason; before review verified green on a throwaway copy with a real count. spec-test r1 pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/auth-pending-count/count.int.test.ts > [AC-B1-22zc#1][BR-ID-24] 计数等于后台联盟账号列表里 auth_status 为 expiring / expired 的行数",
+    "test/spec/union/auth-pending-count/count.int.test.ts > [AC-B1-22zc#2][BR-ID-24] 只数本 app：别的 app 的 expiring / expired 账号不计入",
+    "test/spec/union/auth-pending-count/count.int.test.ts > [AC-B1-22zc#3][BR-ID-24] 本 app 没有联盟账号或全是 active（含探测非授权类失败）时计数为 0"
+  ],
+  "task": "B1-22zc",
+  "spec_commit": "0835b50f4a61ccd976ef965a7ee7cf7493db76c5",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "0835b50f4a61ccd976ef965a7ee7cf7493db76c5",
+      "tree": "2d302fe238aadd68975849e425fdf1a7065d11a4",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T19:47:09Z",
+      "finished_at": "2026-11-12T19:47:25Z",
+      "red_tests": [
+        "test/spec/union/auth-pending-count/count.int.test.ts > [AC-B1-22zc#1][BR-ID-24] 计数等于后台联盟账号列表里 auth_status 为 expiring / expired 的行数",
+        "test/spec/union/auth-pending-count/count.int.test.ts > [AC-B1-22zc#2][BR-ID-24] 只数本 app：别的 app 的 expiring / expired 账号不计入",
+        "test/spec/union/auth-pending-count/count.int.test.ts > [AC-B1-22zc#3][BR-ID-24] 本 app 没有联盟账号或全是 active（含探测非授权类失败）时计数为 0"
+      ],
+      "expected": ["test/spec/union/auth-pending-count/count.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a65ae1a3886cd4813be9fa40ef78dd0d8213b3fc3154472ab0bcb30aea447e9e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "82c9d358c2c2c432d2e57eab862215c2663d8ffb",
+    "specs": "0ebd4dbae285ce00472e2def2f286eeafb2a3e7f"
+  }
+}

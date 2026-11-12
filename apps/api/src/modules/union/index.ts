@@ -126,6 +126,10 @@ export type {
 export type { UnionRegistration, UnionRegistry } from './infra/registry.ts';
 export { loadUnionEndpoints, parseUnionEndpoints } from './infra/endpoints.ts';
 export { createGovernedAdapter } from './application/governed-adapter.ts';
+// B1-22zc: dashboard card union_auth_expiring (auth_status IN (expiring, expired), D10-1401).
+export { countUnionAuthPending } from './application/auth-pending-count.ts';
+export { UNION_AUTH_PENDING_STATUSES, isUnionAuthPending } from './domain/auth-pending.ts';
+export type { UnionAuthPendingStatus } from './domain/auth-pending.ts';
 // B1-22v: the union quota bucket shared by every process (Redis); without REDIS the entry's one
 // platform fallback (D10-460: in-process in local / test, refused in staging / prod).
 export { UNION_QUOTA_NAMESPACE, createUnionQuotaSource } from './application/shared-quota.ts';

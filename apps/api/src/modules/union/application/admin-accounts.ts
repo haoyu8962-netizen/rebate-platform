@@ -9,6 +9,9 @@
 //   (the injected SiteReauth.reauthMode, the platform registry of B1-22c — no second switch here),
 //   alert_phones_configured (union.auth_alert_phones decodes to a non-empty list) and
 //   auth_expires_estimated as stored; never alert_stage or a credential.
+//   列表页的「待处理」口径（B1-22zc，D10-1401）是 domain/auth-pending.ts 的 isUnionAuthPending
+//   （auth_status ∈ {expiring, expired}）；list 原样返回全部行，不按它筛选，工作台卡
+//   union_auth_expiring 的计数（auth-pending-count.ts）用同一判定。
 // - start / result / callback: B1-22c createSiteReauth; SiteReauthError and the callback's
 //   `invalid` are mapped to the contract's 20001 (data.fields, data.reason=manual_mode). The
 //   callback only finishes a session of the signed-in admin of the same app; a session that is no
