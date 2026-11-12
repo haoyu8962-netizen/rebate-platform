@@ -30,8 +30,8 @@ accept:
   - 'pnpm verify'
   - 'test/spec/content/config-ai-consent-version/**'
   - 'test/spec/agent/consent-version-bound/**'
-status: todo
-pr: null
+status: done
+pr: 3272
 red_exempt:
   - file: test/spec/content/config/delivery.int.test.ts
     test: '[AC-F1-02c#2] 有效非缺省配置按键读取，不遗漏 free-form、字典及后增字段'
