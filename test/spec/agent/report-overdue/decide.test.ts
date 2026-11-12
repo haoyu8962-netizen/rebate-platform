@@ -5,6 +5,7 @@
 // exactly 48 hours is overdue, 1 ms short is not; handled and never reported are always false.
 // The answer depends only on the arguments (the `now` given, never the system clock). No database.
 // Top-level it() only (规划/11 §4.3).
+import { propParams } from '@couli/testing';
 import fc from 'fast-check';
 import { expect, it } from 'vitest';
 import {
@@ -119,7 +120,8 @@ it('[AC-B1-10u#4][BR-ID-15] 性质：任意提交时刻与任意 now，结果 = 
       );
       expect(got).toBe(expectedOverdue(status, status === null ? null : reportedAt, now));
       expect(got).toBe(status === 'pending' && deltaMs >= DEADLINE_MS);
+      return true;
     }),
-    { numRuns: 500 },
+    propParams(),
   );
 });
