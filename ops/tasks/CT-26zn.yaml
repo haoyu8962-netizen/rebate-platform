@@ -22,5 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/content/agent-ui-texts/**'
-status: todo
-pr: null
+status: done
+pr: 3291
