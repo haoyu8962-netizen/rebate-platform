@@ -1,6 +1,5 @@
 // The plan of the isolated red run (Codex review CR2-04).
-import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -421,14 +420,47 @@ function testsProjects(): RedProject[] {
   return loadRedProjects(TESTS_TABLE);
 }
 
-function tracked(...patterns: string[]): string[] {
-  const res = spawnSync('git', ['-C', repoRoot(), 'ls-files', '-z', '--', ...patterns], {
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (res.status !== 0) throw new Error(`git ls-files failed: ${res.stderr}`);
-  return res.stdout.split('\0').filter((l) => l !== '');
+/**
+ * Generated or tool directories the file walk skips (CT-06zzzzz round 2, S1: no Git — verify:fast
+ * and --tests run on an exported snapshot without .git). Hidden directories (.git, .github, .turbo,
+ * .tmp …) are skipped as well; Vitest's globs do not enter them either.
+ */
+const SKIPPED_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'coverage',
+  'reports',
+  'build',
+  'playwright-report',
+  'test-results',
+]);
+
+let repoFileList: string[] | null = null;
+
+/** Every file of the repository's work tree (relative, sorted), read from the file system. */
+function repoFiles(): string[] {
+  if (repoFileList !== null) return repoFileList;
+  const root = repoRoot();
+  const out: string[] = [];
+  const walk = (rel: string): void => {
+    for (const entry of readdirSync(rel === '' ? root : join(root, rel), { withFileTypes: true })) {
+      const path = rel === '' ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith('.') || SKIPPED_DIRS.has(entry.name)) continue;
+        walk(path);
+      } else if (entry.isFile()) {
+        out.push(path);
+      }
+      // Symbolic links (a linked node_modules, say) are not followed.
+    }
+  };
+  walk('');
+  repoFileList = out.sort();
+  return repoFileList;
 }
+
+const TEST_FILE = /\.test\.tsx?$/;
+const VITEST_CONFIG = /(^|\/)[^/]*vitest[^/]*\.config\.ts$/;
 
 /** Every project of `table` that takes `file` (planRed takes the first; the table must have one). */
 function takers(file: string, table: readonly RedProject[]): RedProject[] {
@@ -463,14 +495,14 @@ function project(
   return table.find((p) => p.dir === dir && p.config === config);
 }
 
-it('[CT-06zzzzz] tests-projects.json: every red-projects.json project unchanged, then one project per tracked Vitest config but the long-run one', () => {
+it('[CT-06zzzzz] tests-projects.json: every red-projects.json project unchanged, then one project per Vitest config of the repository but the long-run one', () => {
   const table = testsProjects();
   // red-projects.json's projects, as they are, in their order (browser ones included).
   const red = loadRedProjects(RED_TABLE);
   expect(table.slice(0, red.length)).toEqual(red);
-  // One project per tracked vitest*.config.ts, the long-run tier excepted; nothing else.
-  const configs = tracked('*vitest*.config.ts')
-    .filter((f) => f !== 'test/vitest.longrun.config.ts')
+  // One project per vitest*.config.ts of the repository, the long-run tier excepted; nothing else.
+  const configs = repoFiles()
+    .filter((f) => VITEST_CONFIG.test(f) && f !== 'test/vitest.longrun.config.ts')
     .sort();
   expect(table.map((p) => `${p.dir}/${p.config}`).sort()).toEqual(configs);
   expect(table.some((p) => p.config.includes('longrun'))).toBe(false);
@@ -535,9 +567,9 @@ it('[CT-06zzzzz] tests-projects.json mirrors include / exclude / database of eac
   ]);
 });
 
-it('[CT-06zzzzz] tests-projects.json: every tracked test file (infra/ aside) is taken by exactly one project; *.int.test.ts only by a database project, the others only by one without', () => {
+it('[CT-06zzzzz] tests-projects.json: every test file of the repository (infra/ aside) is taken by exactly one project; *.int.test.ts only by a database project, the others only by one without', () => {
   const table = testsProjects();
-  const files = tracked('*.test.ts', '*.test.tsx').filter((f) => !f.startsWith('infra/'));
+  const files = repoFiles().filter((f) => TEST_FILE.test(f) && !f.startsWith('infra/'));
   expect(files.length).toBeGreaterThan(100);
   const problems: string[] = [];
   for (const f of files) {
@@ -563,11 +595,11 @@ it("[CT-06zzzzz] tests-projects.json: a real test file of each package goes to t
   const red = loadRedProjects(RED_TABLE);
   for (const c of PACKAGE_CONFIGS) {
     const under = c.dir === 'tools' ? 'tools/' : `${c.dir}/src/`;
-    const real = tracked(`${under}*.test.ts`, `${under}*.test.tsx`).filter(
-      (f) => f.endsWith('.int.test.ts') === c.database,
+    const real = repoFiles().filter(
+      (f) => f.startsWith(under) && TEST_FILE.test(f) && f.endsWith('.int.test.ts') === c.database,
     );
     const where = `${c.dir}/${c.config}`;
-    expect(real.length, `${where}: a tracked test file`).toBeGreaterThan(0);
+    expect(real.length, `${where}: a test file of the repository`).toBeGreaterThan(0);
     const file = real[0] ?? '';
     const plan = planRed([file], table);
     expect(plan.unrunnable, file).toEqual([]);
@@ -773,3 +805,13 @@ it(
   },
   CLI_TIMEOUT,
 );
+
+it('[CT-06zzzzz] the tests-projects.json checks walk the file system (no Git: verify:fast runs on a snapshot without .git), skipping generated and hidden directories', () => {
+  const files = repoFiles();
+  expect(files).toContain('tools/vitest.config.ts');
+  expect(files).toContain('tools/ops/red-plan.test.ts');
+  const dirs = (f: string): string[] => f.split('/').slice(0, -1);
+  expect(
+    files.filter((f) => dirs(f).some((d) => d.startsWith('.') || SKIPPED_DIRS.has(d))),
+  ).toEqual([]);
+});

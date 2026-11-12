@@ -60,6 +60,9 @@
 #              and no database URL; both mount only /src, /store and /out and run a trusted inline
 #              script (TESTS_SH) instead of the entrypoint: `vitest run --config <config>
 #              --reporter=json` per group, one time limit shared by the groups of a container.
+#              The list and the plan travel in files only (files.txt, plan.json; each container's
+#              part as out/tests-plan.<database|offline>.json, written before it starts), never as
+#              one argument or environment string (Linux: 128 KiB each).
 #              tools/ops/tests-report.ts (trusted) sums the reports up in tests/<n>/tests.json
 #              (with commit, tree and the paths as given). No test-guard, no red-check, no --base,
 #              no verify slot, never result.json: never evidence of verification, no gate. Exit code
@@ -618,14 +621,22 @@ fi
 # --tests (CT-06zzzzz): the test files of the snapshot tree under the given paths, and the plan of
 # the trusted red-plan.ts with verify-image/tests-projects.json. Before the run directory and any
 # docker call: a path not in the tree, one without test files, a file no project takes or a browser
-# group stops the run (exit 2).
+# group stops the run (exit 2). The list and the plan travel in files only (round 2, S2: a plan of a
+# few thousand files is larger than one argument or environment string may be — Linux,
+# MAX_ARG_STRLEN 128 KiB): TESTS_FILES_TMP and TESTS_PLAN_TMP until the run directory exists (then
+# files.txt and plan.json there), removed however the script ends before that.
 TESTS_TREE=''
-TESTS_FILES=''
-TESTS_PLAN=''
+TESTS_FILES_TMP=''
+TESTS_PLAN_TMP=''
 if [ "$SCRIPT" = tests ]; then
   [ "$IS_TOP" = 1 ] && [ -n "$head" ] || die "--tests needs a worktree that is the top of its own git work tree, with a commit: $WT"
   mkdir -p "$RUNS"
+  TESTS_FILES_TMP="$RUNS/.tests-files.$ID.$$"
+  TESTS_PLAN_TMP="$RUNS/.tests-plan.$ID.$$"
+  tests_err="$RUNS/.tests-plan-err.$ID.$$"
+  trap 'rm -f "$TESTS_FILES_TMP" "$TESTS_PLAN_TMP" "$tests_err"' EXIT
   TESTS_TREE="$(tree_of_worktree "$RUNS/.tests-index.$ID.$$")"
+  tests_found=''
   for p in ${TESTS_PATHS[@]+"${TESTS_PATHS[@]}"}; do
     # -z: names as they are (not C-quoted), so that an unusual test file name stops the run instead
     # of being left out.
@@ -640,21 +651,22 @@ if [ "$SCRIPT" = tests ]; then
     done < <(git -C "$WT" ls-tree -r -z --name-only "$TESTS_TREE" -- "$p")
     [ "$in_tree" = 1 ] || die "--tests: $p is not in the snapshot tree of $WT (tree $TESTS_TREE; git-ignored paths never are)"
     [ -n "$found" ] || die "--tests: $p holds no *.test.ts / *.test.tsx file"
-    TESTS_FILES="${TESTS_FILES:+$TESTS_FILES
+    tests_found="${tests_found:+$tests_found
 }$found"
   done
-  TESTS_FILES="$(printf '%s\n' "$TESTS_FILES" | LC_ALL=C sort -u)"
-  tests_list="$RUNS/.tests-files.$ID.$$"
-  printf '%s\n' "$TESTS_FILES" >"$tests_list"
+  # printf is a shell builtin: the whole list reaches sort on its standard input, not as arguments.
+  printf '%s\n' "$tests_found" | LC_ALL=C sort -u >"$TESTS_FILES_TMP"
+  tests_found=''
   tests_rc=0
-  TESTS_PLAN="$(cd "$TRUSTED" && node tools/ops/red-plan.ts --expected "$tests_list" \
-    --projects "$TRUSTED/tools/ops/verify-image/tests-projects.json" 2>&1)" || tests_rc=$?
-  rm -f "$tests_list"
-  [ "$tests_rc" = 0 ] || die "--tests cannot run every test file (red-plan.ts exit $tests_rc): $TESTS_PLAN"
+  (cd "$TRUSTED" && node tools/ops/red-plan.ts --expected "$TESTS_FILES_TMP" \
+    --projects "$TRUSTED/tools/ops/verify-image/tests-projects.json") >"$TESTS_PLAN_TMP" 2>"$tests_err" || tests_rc=$?
+  [ "$tests_rc" = 0 ] ||
+    die "--tests cannot run every test file (red-plan.ts exit $tests_rc): $(cat "$TESTS_PLAN_TMP" "$tests_err" 2>/dev/null)"
   tests_browser="$(node -e '
-    const groups = JSON.parse(process.argv[1]).groups;
+    const fs = require("node:fs");
+    const groups = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).groups;
     process.stdout.write(groups.filter((g) => g.browser).map((g) => g.name).join(" "));
-  ' "$TESTS_PLAN")" || die "--tests: red-plan.ts printed no plan"
+  ' "$TESTS_PLAN_TMP")" || die "--tests: red-plan.ts printed no plan"
   [ -z "$tests_browser" ] ||
     die "--tests does not run browser tests (project $tests_browser): browser tests run with --browser"
 fi
@@ -682,11 +694,13 @@ if [ "$DRY_RUN" = 1 ]; then
       out.sources = sources.split("\n").filter((l) => l !== "");
     }
     if (script === "tests") {
-      out.files = testsFiles.split("\n").filter((l) => l !== "");
-      out.plan = JSON.parse(testsPlan).groups;
+      // The list and the plan from their files (never as an argument: round 2, S2).
+      const fs = require("node:fs");
+      out.files = fs.readFileSync(testsFiles, "utf8").split("\n").filter((l) => l !== "");
+      out.plan = JSON.parse(fs.readFileSync(testsPlan, "utf8")).groups;
     }
     process.stdout.write(JSON.stringify(out) + "\n");
-  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY" "$VERIFY_MEMORY" "$BASE_ARG" "$RELATED_SOURCES" "$TESTS_FILES" "$TESTS_PLAN"
+  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY" "$VERIFY_MEMORY" "$BASE_ARG" "$RELATED_SOURCES" "$TESTS_FILES_TMP" "$TESTS_PLAN_TMP"
   exit 0
 fi
 
@@ -1052,6 +1066,12 @@ VDIR="$VBASE/$N"
 LOG="$VDIR/log.txt"
 RESULT="$VDIR/result.json"
 : >"$LOG"
+# --tests: the expanded list and the plan become files.txt and plan.json of the run.
+if [ "$SCRIPT" = tests ]; then
+  mv -f "$TESTS_FILES_TMP" "$VDIR/files.txt" || die "cannot write $VDIR/files.txt"
+  mv -f "$TESTS_PLAN_TMP" "$VDIR/plan.json" || die "cannot write $VDIR/plan.json"
+  rm -f "$tests_err"
+fi
 
 # What exactly is being verified. The worktree is exported ONCE into an immutable snapshot
 # (SRC); the tree hash is computed from that snapshot and the snapshot — never the live
@@ -1975,19 +1995,33 @@ fi
 # containers (Codex review of F1-01j, S1): the groups that need PostgreSQL run in one with the
 # one-shot PostgreSQL and Redis on the internal network; every other group (unit, browser) runs in
 # another with no network at all and no database URL — also when the same run has both kinds.
-# Both get the plan as RED_PLAN. --red runs the entrypoint's red command with the trusted red
-# reporter (and /spec when SPEC_REF resolves); --tests runs the trusted inline TESTS_SH and mounts
-# nothing but /src, /store and /out.
+# --red runs the entrypoint's red command with the trusted red reporter (and /spec when SPEC_REF
+# resolves) and gets its plan as RED_PLAN; --tests runs the trusted inline TESTS_SH, mounts nothing
+# but /src, /store and /out, and gets its plan as a file the host wrote in out/ before the
+# container starts (round 2, S2: no plan in an argument or environment string — Linux limits one
+# to 128 KiB; TESTS_SH reads it before any test code runs).
 if [ "$SCRIPT" = red ] || [ "$SCRIPT" = tests ]; then
-  red_part() { # <1: groups with a database, 0: the others> <plan>; prints the plan of those groups or ''
+  # <1: groups with a database, 0: the others> <plan file> [<output file>]: the plan of those
+  # groups, printed or (with an output file) written there, read-only; nothing when there is none.
+  red_part() {
     node -e '
-      const want = process.argv[2] === "1";
-      const groups = JSON.parse(process.argv[1]).groups.filter((g) => g.database === want);
-      if (groups.length > 0) process.stdout.write(JSON.stringify({ groups }));
-    ' "$2" "$1"
+      const fs = require("node:fs");
+      const [planFile, which, outFile] = process.argv.slice(1);
+      const want = which === "1";
+      const groups = JSON.parse(fs.readFileSync(planFile, "utf8")).groups.filter((g) => g.database === want);
+      if (groups.length > 0) {
+        const text = JSON.stringify({ groups });
+        if (outFile === undefined) process.stdout.write(text);
+        else fs.writeFileSync(outFile, text + "\n", { flag: "wx", mode: 0o444 });
+      }
+    ' "$2" "$1" ${3+"$3"}
   }
-  red_container() { # <container name> <plan> <1: database network, 0: no network>
-    local env=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e RED_PLAN)
+  # <container name> <plan: --red the plan itself, --tests its file in out/> <1: database network,
+  # 0: no network>
+  red_container() {
+    local env=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
+    [ "$SCRIPT" = tests ] || env+=(-e RED_PLAN)
+    local plan_env="$2"
     [ -z "${PROP_RUNS:-}" ] || env+=(-e "PROP_RUNS=$PROP_RUNS")
     local net=(--network none)
     local wrap=()
@@ -2006,10 +2040,11 @@ if [ "$SCRIPT" = red ] || [ "$SCRIPT" = tests ]; then
     if [ "$SCRIPT" = tests ]; then
       reporter=()
       spec=()
-      cmd=(bash -c "$TESTS_SH" couli-tests)
+      plan_env=''
+      cmd=(bash -c "$TESTS_SH" couli-tests "/out/${2##*/}")
     fi
     local red_rc=0
-    RED_PLAN="$2" svc_run docker run --rm --name "$1" "${LABELS[@]}" "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
+    RED_PLAN="$plan_env" svc_run docker run --rm --name "$1" "${LABELS[@]}" "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
       "${net[@]}" \
       -v "$SRC:/src:ro" \
       -v "$STORE_VOL:/store:ro" \
@@ -2033,8 +2068,8 @@ if [ "$SCRIPT" = red ]; then
   printf '%s\n' "$RED_PLAN" >"$VDIR/plan.json"
   mkdir -p "$VDIR/out"
   chmod 0777 "$VDIR/out"
-  red_db_plan="$(red_part 1 "$RED_PLAN")"
-  red_offline_plan="$(red_part 0 "$RED_PLAN")"
+  red_db_plan="$(red_part 1 "$VDIR/plan.json")"
+  red_offline_plan="$(red_part 0 "$VDIR/plan.json")"
   if [ -n "$red_db_plan" ]; then
     if [ "$HOST_SVC" = 1 ]; then
       start_host_services 'integration rule tests'
@@ -2069,9 +2104,10 @@ if [ "$SCRIPT" = red ]; then
   finish "$rc"
 fi
 
-# --tests inside its containers (CT-06zzzzz): the same copy and offline install as the entrypoint's
-# prepare_repo, then per group of RED_PLAN (checked again here: plain names and relative paths,
-# test files only) `vitest run --config <config> --reporter=json` on the group's files in
+# --tests inside its containers (CT-06zzzzz): first the plan file the host wrote in /out ($1; round
+# 2, S2: never an argument or environment string), read whole and checked before anything else
+# (plain names and relative paths, test files only); then the same copy and offline install as the
+# entrypoint's prepare_repo, then per group `vitest run --config <config> --reporter=json` on the group's files in
 # /work/repo/<dir>, the JSON report to /out/<group>.vitest-report.json, Vitest's exit code to
 # /out/<group>.exit and its duration to /out/<group>.seconds. The groups of one container share one
 # time limit (what is left of VERIFY_TIMEOUT_SECS); past it a group records 124. The test outcome
@@ -2084,8 +2120,11 @@ mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_DA
 plain() { # a repository-relative path without `..`, not starting with / or -
   [[ "$1" =~ ^[A-Za-z0-9_./@-]+$ ]] && [[ "$1" != *..* ]] && [[ "$1" != /* ]] && [[ "$1" != -* ]]
 }
+plan_file="${1:-}"
+[[ "$plan_file" =~ ^/out/tests-plan\.[a-z]+\.json$ ]] && [ -f "$plan_file" ] && [ ! -L "$plan_file" ] ||
+  { echo "[tests] no plan file in /out" >&2; exit 2; }
 plan_lines="$(node -e '
-  const plan = JSON.parse(process.env.RED_PLAN ?? "");
+  const plan = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
   const ok = (s) => typeof s === "string" && /^[A-Za-z0-9_.\/@-]+$/.test(s) && !s.includes("..");
   if (!Array.isArray(plan.groups) || plan.groups.length === 0) throw new Error("no groups");
   for (const g of plan.groups) {
@@ -2093,7 +2132,7 @@ plan_lines="$(node -e '
     if (![g.name, g.dir, g.config, ...g.files].every(ok)) throw new Error("bad plan entry");
     console.log([g.name, g.dir, g.config, ...g.files].join(" "));
   }
-')" || { echo "[tests] RED_PLAN is missing or invalid" >&2; exit 2; }
+' "$plan_file")" || { echo "[tests] the plan file $plan_file is invalid" >&2; exit 2; }
 while read -r -a words; do
   [ "${#words[@]}" -ge 4 ] || { echo "[tests] a plan group without files" >&2; exit 2; }
   [[ "${words[0]}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "[tests] not a plain group name: ${words[0]}" >&2; exit 2; }
@@ -2186,12 +2225,17 @@ tests_judge() {
 if [ "$SCRIPT" = tests ]; then
   # The plan of the trusted red-plan.ts (tests-projects.json) in at most two containers (red_part,
   # red_container above). The containers (uid 1000) write out/ as "other": 1733 as for --related.
-  printf '%s\n' "$TESTS_FILES" >"$VDIR/files.txt"
-  printf '%s\n' "$TESTS_PLAN" >"$VDIR/plan.json"
+  # files.txt and plan.json are in VDIR since it was made. Each container's part of the plan goes
+  # to a read-only file in out/ before any container starts (group names are plain words, so
+  # these names are not those of a group's files).
   mkdir -p "$VDIR/out"
   chmod 1733 "$VDIR/out"
-  tests_db_plan="$(red_part 1 "$TESTS_PLAN")"
-  tests_offline_plan="$(red_part 0 "$TESTS_PLAN")"
+  tests_db_plan="$VDIR/out/tests-plan.database.json"
+  tests_offline_plan="$VDIR/out/tests-plan.offline.json"
+  red_part 1 "$VDIR/plan.json" "$tests_db_plan" || die "cannot write $tests_db_plan"
+  red_part 0 "$VDIR/plan.json" "$tests_offline_plan" || die "cannot write $tests_offline_plan"
+  [ -f "$tests_db_plan" ] || tests_db_plan=''
+  [ -f "$tests_offline_plan" ] || tests_offline_plan=''
   if [ -n "$tests_db_plan" ]; then
     if [ "$HOST_SVC" = 1 ]; then
       start_host_services 'integration tests (--tests)'

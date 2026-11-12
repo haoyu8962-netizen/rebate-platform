@@ -144,6 +144,16 @@ args.forEach((a, i) => {
   else env[a.slice(0, eq)] = a.slice(eq + 1);
 });
 fs.appendFileSync(process.env.STUB_DOCKER_LOG, JSON.stringify({ args, env }) + '\n');
+// STUB_ARG_LIMIT=<bytes>: Linux's MAX_ARG_STRLEN — an argument or environment string longer than
+// that makes the exec fail ("Argument list too long", 126), whatever the platform runs the tests.
+const argLimit = Number(process.env.STUB_ARG_LIMIT || '0');
+if (argLimit > 0) {
+  const strings = [...args, ...Object.entries(process.env).map(([k, v]) => k + '=' + v)];
+  if (strings.some((a) => Buffer.byteLength(a) + 1 > argLimit)) {
+    process.stderr.write('docker: Argument list too long\n');
+    process.exit(126);
+  }
+}
 function answer(text, code) {
   if (text !== '') fs.writeSync(1, text + '\n');
   process.exit(code);
@@ -275,6 +285,8 @@ function run(args: string[], extra: Record<string, string> = {}, runsDir = runs)
     env: scriptEnv(runsDir, log, extra),
     timeout: 60_000,
     killSignal: 'SIGKILL',
+    // The large-plan --dry-run prints more than spawnSync's default 1 MiB.
+    maxBuffer: 64 * 1024 * 1024,
   });
   return {
     status: res.status ?? -1,
@@ -1174,9 +1186,12 @@ ENV_ERRORS.forEach((c, i) => {
     async () => {
       const ws = sharedWorkspace();
       const runsDir = join(base, `r-env-${String(i)}`);
-      const res = await runStubbed(testsArgs(ws.repo, T.one, T.two), runsDir, c.spec(), {
-        limitMs: c.limitMs,
-      });
+      const res = await runStubbed(
+        testsArgs(ws.repo, T.one, T.two),
+        runsDir,
+        c.spec(),
+        c.limitMs === undefined ? {} : { limitMs: c.limitMs },
+      );
       expect(res.timedOut, 'the run hung and was killed').toBe(false);
       expect(res.status, res.stderr).toBe(2);
       for (const m of c.messages) expect(res.stderr).toMatch(m);
@@ -1357,3 +1372,160 @@ it(
   },
   JUDGE_TIMEOUT,
 );
+
+// --- round 2, S2 (Codex general r1): a plan larger than one argument or environment string may be -----
+// Linux limits one argument or environment string to 128 KiB (MAX_ARG_STRLEN). A plan of a few
+// thousand files is larger: it must reach red-plan's consumers and the containers through files
+// (plan.json on the host; a file in out/ written before the containers start), never as one argument
+// or a RED_PLAN variable. `node` and `docker` are wrapped here so that a string over the limit fails
+// as it would on Linux, also on macOS (whose limit is the total, 1 MiB).
+
+const ARG_LIMIT = 128 * 1024;
+let argmaxBin = '';
+
+/** A `node` first on PATH that refuses (126) an argument or environment string over STUB_ARG_LIMIT. */
+function argmaxNode(): string {
+  if (argmaxBin !== '') return argmaxBin;
+  argmaxBin = join(base, 'argmax-bin');
+  writeFiles(argmaxBin, {
+    'node-argmax.cjs': String.raw`'use strict';
+const { spawnSync } = require('node:child_process');
+const limit = Number(process.env.STUB_ARG_LIMIT || '0');
+const args = process.argv.slice(2);
+const strings = [...args, ...Object.entries(process.env).map(([k, v]) => k + '=' + v)];
+const big = strings.find((a) => limit > 0 && Buffer.byteLength(a) + 1 > limit);
+if (big !== undefined) {
+  process.stderr.write('node: Argument list too long (a string of ' + Buffer.byteLength(big) + ' bytes)\n');
+  process.exit(126);
+}
+const res = spawnSync(process.execPath, args, { stdio: 'inherit' });
+if (res.error) throw res.error;
+process.exit(res.status === null ? 128 : res.status);
+`,
+  });
+  const node = join(argmaxBin, 'node');
+  writeFileSync(
+    node,
+    `#!/bin/sh\nexec '${process.execPath}' '${join(argmaxBin, 'node-argmax.cjs')}' "$@"\n`,
+  );
+  chmodSync(node, 0o755);
+  return argmaxBin;
+}
+
+const BIG_COUNT = 700;
+const BIG_MARK = 'bigplan-';
+const bigName = (i: number): string =>
+  `test/spec/big/${BIG_MARK}${'x'.repeat(180)}-${String(i).padStart(4, '0')}`;
+
+let bigFx: { repo: string; head: string; tree: string } | null = null;
+function bigWorkspace(): { repo: string; head: string; tree: string } {
+  if (bigFx !== null) return bigFx;
+  const ws = workspace('tests-big');
+  const files: Record<string, string> = {};
+  for (let i = 0; i < BIG_COUNT; i += 1) {
+    files[`${bigName(i)}.test.ts`] = "it('u', () => {});\n";
+    files[`${bigName(i)}.int.test.ts`] = "it('i', () => {});\n";
+  }
+  writeFiles(ws.repo, files);
+  fixtureGit(ws.repo, ['add', '-A']);
+  fixtureGit(ws.repo, ['commit', '-q', '-m', 'many long test files']);
+  bigFx = {
+    repo: ws.repo,
+    head: fixtureGit(ws.repo, ['rev-parse', 'HEAD']),
+    tree: fixtureGit(ws.repo, ['rev-parse', 'HEAD^{tree}']),
+  };
+  return bigFx;
+}
+
+function argLimitEnv(): Record<string, string> {
+  return {
+    PATH: `${argmaxNode()}:${stubDocker()}:${process.env['PATH'] ?? ''}`,
+    STUB_ARG_LIMIT: String(ARG_LIMIT),
+  };
+}
+
+/** Every regular file below `dir`, recursively (relative paths). */
+function filesBelow(dir: string, rel = ''): string[] {
+  return readdirSync(rel === '' ? dir : join(dir, rel), { withFileTypes: true }).flatMap((e) => {
+    const path = rel === '' ? e.name : `${rel}/${e.name}`;
+    if (e.isDirectory()) return filesBelow(dir, path);
+    return e.isFile() ? [path] : [];
+  });
+}
+
+it(
+  '[CT-06zzzzz] --tests --dry-run with a plan over 200 KiB (two groups each over 128 KiB): no argument or environment string carries it',
+  () => {
+    const ws = bigWorkspace();
+    const res = run([...testsArgs(ws.repo, 'test/spec/big'), '--dry-run'], argLimitEnv());
+    expect(res.stderr).not.toContain('Argument list too long');
+    expect(res.status, res.stderr.slice(0, 2000)).toBe(0);
+    const plan = JSON.parse(res.stdout) as { files: string[]; plan: Group[] };
+    expect(plan.files).toHaveLength(2 * BIG_COUNT);
+    const byName = new Map(plan.plan.map((g) => [g.name, g]));
+    expect(byName.get('spec-unit')?.files).toHaveLength(BIG_COUNT);
+    expect(byName.get('spec-int')?.files).toHaveLength(BIG_COUNT);
+    // Big enough: the whole plan over 200 KiB, each group over the 128 KiB of one string.
+    expect(Buffer.byteLength(JSON.stringify({ groups: plan.plan }))).toBeGreaterThan(200 * 1024);
+    for (const g of plan.plan) {
+      expect(Buffer.byteLength(JSON.stringify({ groups: [g] })), g.name).toBeGreaterThan(ARG_LIMIT);
+    }
+  },
+  JUDGE_TIMEOUT,
+);
+
+it('[CT-06zzzzz] --tests with a plan over 200 KiB runs: the plan reaches the containers through a file in out/, never a docker argument or environment variable (RED_PLAN)', async () => {
+  const ws = bigWorkspace();
+  const runsDir = join(base, 'r-big');
+  const res = await runStubbed(
+    testsArgs(ws.repo, 'test/spec/big'),
+    runsDir,
+    { exit: 0, files: {}, auto: true },
+    { env: argLimitEnv(), limitMs: 150_000 },
+  );
+  expect(res.timedOut).toBe(false);
+  expect(res.stderr).not.toContain('Argument list too long');
+  expect(res.status, res.stderr.slice(-3000)).toBe(0);
+
+  const containers = testContainers(res.calls);
+  expect(containers).toHaveLength(2);
+  // Not one docker argument or environment value carries the plan (or any of its file names).
+  for (const c of res.calls) {
+    for (const a of c.args) expect(a.includes(BIG_MARK), a.slice(0, 200)).toBe(false);
+    for (const [k, v] of Object.entries(c.env)) {
+      expect((v ?? '').includes(BIG_MARK), k).toBe(false);
+    }
+    expect(Object.keys(c.env)).not.toContain('RED_PLAN');
+  }
+  // Still only /src, /store and /out.
+  for (const c of containers) expectIsolated(c);
+
+  const vdir = join(realpathSync(runsDir), ID, 'tests', '1');
+  const planText = readFileSync(join(vdir, 'plan.json'), 'utf8');
+  expect(Buffer.byteLength(planText)).toBeGreaterThan(200 * 1024);
+  const planned = (JSON.parse(planText) as { groups: Group[] }).groups;
+  // The containers' plan is a file in out/ (written by the host before they start): together,
+  // the plan files there hold every group of plan.json, unchanged.
+  const handed = new Map<string, Group>();
+  for (const f of filesBelow(join(vdir, 'out'))) {
+    let doc: unknown;
+    try {
+      doc = JSON.parse(readFileSync(join(vdir, 'out', f), 'utf8'));
+    } catch {
+      continue;
+    }
+    const groups = (doc as { groups?: unknown } | null)?.groups;
+    if (!Array.isArray(groups)) continue;
+    for (const g of groups as Group[]) handed.set(g.name, g);
+  }
+  for (const g of planned) expect(handed.get(g.name), g.name).toEqual(g);
+
+  const summary = readJson(join(vdir, 'tests.json'));
+  expect(summary).toMatchObject({
+    status: 'green',
+    files: 2 * BIG_COUNT,
+    tests: 2 * BIG_COUNT,
+    paths: ['test/spec/big'],
+  });
+  expect(closingLine(res.stderr)).toMatch(closingPattern(0, 'green', 2 * BIG_COUNT, 2 * BIG_COUNT));
+}, 240_000);
