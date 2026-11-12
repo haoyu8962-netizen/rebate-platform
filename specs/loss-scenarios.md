@@ -117,8 +117,8 @@
 ### LS-17 拼多多处罚类状态仍带正数佣金
 
 - 风险：拼多多 order_status 4 或 10 按失效处理，但联盟仍回传正数佣金，可能是口径误判，导致少付用户或错过联盟应收。
-- 测试：缺口
-- 说明：主干其实已有覆盖：test/spec/orders/pdd-invalid-codes/alerts.test.ts 的 AC-B1-04zgc#7（以及 adapter.test.ts 的 #11、commission-gross.test.ts 的 #14）对状态 4、10 与各报文来源断言保留原状态码与正数佣金、照样按失效，并恰有一条 pdd_invalid_with_commission 告警；但这几条都是参数化标题、数据源由 flatMap 生成，本清单的结构测试（B2-10b §10）只接受静态或同文件字面量表的编号，无法确认后引用，所以测试行只能写缺口（要引用须给它们补静态标题的用例）。真正未覆盖的部分：该告警只写日志、不带单号与金额，无法逐单对账；BR-FUND-02 的「待录制核对」没有真实录制样本可测。
+- 测试：[AC-B2-10c#1], [AC-B2-10c#2], [AC-B2-10c#3], [AC-B2-10c#4]
+- 说明：test/spec/orders/pdd-invalid-codes/static-titles.test.ts 用静态标题刻画同一行为（与参数化的 AC-B1-04zgc#7、adapter #11、commission-gross #14 同口径）：列表与详情报文的状态 4、10 带正数佣金时原码与佣金照给、按 pdd.csv 映为失效，并恰有一条 pdd_invalid_with_commission 告警；佣金为 0 时不打这条告警。告警只写日志，逐单对账仍靠下面的核对规则。
 - 核对规则：每日统计拼多多 order_status 为 4 或 10 且佣金字段大于 0 的子订单数，大于 0 时当日日志里 pdd_invalid_with_commission 告警至少一条，且这些子订单的 platform_status 均为 INVALID、rebate_status 不为 CREDITED（与 LS-11 同口径）。
 
 ## 提现与打款
