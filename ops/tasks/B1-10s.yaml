@@ -1,0 +1,21 @@
+id: B1-10s
+repo: rebate-platform
+title: 审计查询登记 Agent 后台两个动作（编排 D10-1341 ③）——audit-log-view 推导表加 agent_trace_view（目标会话、权限点 agent.trace）与 agent_report_handle（目标被举报的消息、权限点 agent.report）
+type: impl
+# 2026-11-12 入账（admin-backend，编排 D10-1341 ③；#3256 核对 S2：agent_trace_view 不在推导表里，审计台看不到被查看的会话、不能按会话号或 agent.trace 筛）。agent_trace_view 由 B1-10q 写（target agent_sessions:<id>）；agent_report_handle 由 D1 第二段写，target 口径以本单定的前缀为准。
+# 契约里 target_type 是自由文本，不改契约；只改 modules/admin 的推导表。
+refs: [BR-AI-19, BR-ID-15]
+refs_hash:
+  BR-AI-19: 966f895b4033
+  BR-ID-15: ae5b8c769d84
+deps: [CT-24zzi]
+paths:
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+test_paths:
+  - 'test/spec/admin/audit-view-agent/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/audit-view-agent/**'
+status: todo
