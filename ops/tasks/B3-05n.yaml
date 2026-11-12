@@ -1,0 +1,26 @@
+id: B3-05n
+repo: rebate-platform
+title: 无模型降级先按问法分流（A4，BR-AI-14 细则「无模型降级」）：偏严判别 ①页面 ②一般规则 ③本人订单 ④本人收益 ⑤人工 ⑥搜索（取价格、平台、排序、排除词）；三处修正（检索词无定界标签与占位符、无商品词不搜索、全被禁售用禁售话术）；开关 agent.degraded.route_intents
+type: impl
+# 2026-11-12 agent 线入账（规划 couli #329、变更记录 §2.5 / §3.1 A4；编排 D10-1287）。现状 orchestrator/degraded/index.ts 把非链接文字取前 30 字去搜（A1 §6.4、§7.3、§7.19）。
+# 做法：分流与取词另写在 orchestrator/degraded/**，不复用 intents/classify.ts（规划评审 r1 S1-1、r2 N1），不改 model-gateway/degraded（agent2 区）；装配只动 stream/mount 给降级路径传依赖的部分。开关读不到按 on，登记进 content 开关表由 content A10 做；新文案键 agent.reply.empty / agent.suggest.empty.* 由 content A9 入，按键取、取不到用回落。
+refs: [BR-AI-14, BR-AI-08, BR-AI-09, BR-AI-01, BR-AI-18]
+refs_hash:
+  BR-AI-14: c009637e9cb0
+  BR-AI-08: e932a052720f
+  BR-AI-09: b0aaba683658
+  BR-AI-01: f4d453462e15
+  BR-AI-18: 20e1500ad932
+deps: []
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/degraded/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+test_paths:
+  - 'test/spec/agent/degraded-routing/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/degraded-routing/**'
+status: todo
+pr: null
