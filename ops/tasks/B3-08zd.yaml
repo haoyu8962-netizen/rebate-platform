@@ -1,0 +1,35 @@
+id: B3-08zd
+repo: rebate-platform
+title: B3-08zd：B3-08zc 收紧单——历史接口与助手回复落库的九处缺口（白名单、事务故障、同进程回滚后引用、注销中收尾、别的 app、断线卡下一轮引用、翻页、注销后同设备游客归属、断线补写结果链保序）
+type: impl
+# 2026-11-12 agent2 入账（编排 D10-1314、D10-1347、D10-1361；B3-08zc spec-test r2、编排复核 #3269、Codex r3–r5）。合并在 A2（B3-08t）之前；(8) 须在 B3-08ze 挂 GET 路由之前合并。
+# (1) 不在内测名单的会员读历史 → 30501；(2) 回复写入与终态之间注入故障，两次提交的实现须红；(3) 同进程终态事务失败后下一轮引用该 card_id 不得解析，并删掉 TraceRedoQueue.pendingCard、PendingCardSource、onCardWritten 钩子与 trace-retry/kit.ts 文件头的 withPendingCards 描述（queue.test.ts 四处随之改）；
+# (4) 注销清理发生在 run 进行中、随后收尾 → 不回写文字、卡片与下发记录；(5) 别的 app 拿同一会话号读历史 → 30504；(6) 断线后的商品卡 / 报价卡下一轮可按 card_id 引用（B3-08zc 实现侧连库用例升为规则测试）；
+# (7) 历史翻页真库逐页翻到底、同一轮时间相同时用户在前（造助手 id 小于用户 id 的轮）、不属于本会话的游标 → 20001；个人信息副本里的 Agent 对话同样「时间相同时用户在前」；(8) 注销后同一设备上的游客不得被当成该会话所有者（游客归属加 user_hash IS NULL，owned / current / ownsRun 一起），读历史 → 30504、sessions/current 不返回；
+# (9) 断线补写结果链（保序，D10-1361）：终态才补写会丢掉列表与搜索尝试之间的先后，须在列表产生时按序登记，或给结果集与尝试带同轮序号、终态按序重放；规则测试先红至少五串——单次搜索、同轮两次不同搜索、awaiting_price 同词不同价格上限、断线期间无列表、先出列表再有一次无结果搜索——每串与正常送达写出的 agent_result_chains 逐行相同、当前条件相同（B3-08zc 第 4 轮留档 couli-runs/B3-08zc/backfill-chain-r4.patch 可接着用）。
+# 分工：新鲜独立 Claude 写规则测试，Opus 实现，Codex 评审。RV1。
+# prettier-ignore
+refs: [BR-AI-19, BR-AI-20, BR-AI-22, BR-AI-23, BR-AI-05]
+refs_hash:
+  BR-AI-19: 3c0c40a3ed93
+  BR-AI-20: ed15f04bab16
+  BR-AI-22: d412bc8a631a
+  BR-AI-23: 5ebdbaff580d
+  BR-AI-05: 2ac35e2cd8ef
+deps: [B3-08zc]
+paths:
+  - 'apps/api/src/modules/agent/stream/**'
+  - 'apps/api/src/modules/agent/store/**'
+  - 'apps/api/src/modules/agent/http/**'
+  - 'apps/api/src/modules/agent/orchestrator/results/**'
+  - 'apps/api/src/modules/agent/application/personal-data-copy-read.ts'
+test_paths:
+  - 'test/spec/agent/reply-persist-tighten/**'
+  - 'test/spec/agent/trace-retry/{kit.ts,queue.test.ts}'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/reply-persist-tighten/**'
+status: todo
+pr: null
