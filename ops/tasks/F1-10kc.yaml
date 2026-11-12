@@ -1,0 +1,20 @@
+id: F1-10kc
+repo: rebate-platform
+title: 后台 AI 助手记录：留痕明细里空文本改中性占位「无文本」，注销清除的说明只在会话 user_id 为空时出现（编排 D10-1341 / D10-1347）
+type: impl
+# 2026-11-12 入账（前端线 f1-frontend-7）。F1-10ka 把 text 为 null 的消息一律显示「文本已随账号注销清除」，但库里文本为空还有别的原因（进行中的回复、崩溃后由别的请求收尾的回复）。改为：text 为 null 一律显示中性占位「无文本」；注销清除的说明只在该会话 user_id 为 null 时显示，且写成条件句（契约 user_id 为 null 也表示访客会话，BR-AI-20；注销后清空文本、保留行见 BR-AI-22），不对 user_id 非空的会话出现。其他行为不变；冻结 admin-agent-traces 全绿（TRACE#3 已接受「无文本」）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/pages/agent-traces/**'
+  - 'apps/admin/src/texts/agent-traces.ts'
+test_paths:
+  - 'test/spec/frontend/admin-agent-traces-empty-text/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-agent-traces-empty-text/**'
+status: todo
+pr: null
