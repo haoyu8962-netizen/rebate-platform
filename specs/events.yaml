@@ -18,7 +18,7 @@
 #
 # TODO(规划/05 CT-13): app_launch、page_view、exposure、click、search、convert、h5_white_screen 与 funnel_first_order.*
 #   的事件字段 — blocked on 用到它们的任务（首页、搜索、漏斗）给出字段；现在只登记名字与出处。
-version: '3'
+version: '4'
 common_fields:
   event_id:
     type: string
@@ -205,7 +205,7 @@ events:
         note: 桥错误码（90001–90500）
   sdui_card_error:
     description: SDUI 卡片解码失败，只丢弃这一项（规划/03 §6 解码隔离）
-    source: 规划/03 §6
+    source: 规划/03 §6、§7.2
     fields:
       type:
         type: string
@@ -216,8 +216,8 @@ events:
         note: 卡片自带的版本；正是因为缺它而解码失败时不带
       page_version:
         type: integer
-        required: true
-        note: 页面配置的 version（整数，规划/03 §6）
+        required: false
+        note: 页面配置的 version（整数）；首页等配置化页面（规划/03 §6.2）必带；AI 助手页的卡片（03 §7.2）不带（AI 助手页不是配置化页面）
       reason:
         type: string
         required: true

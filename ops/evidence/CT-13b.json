@@ -1,0 +1,76 @@
+{
+  "risk_note": "Spec-only contract change (D10-1376 ③ / D10-1377 (a); 规划/03 §6.2, §7.2 at SPEC_REF 62b5c99338f8). specs/events.yaml: sdui_card_error.page_version stays integer but becomes required: false; its note says configured pages such as the home page (03 §6.2) must carry it and AI assistant page cards (03 §7.2) do not; source adds §7.2; file version 3 → 4. No other field or event changes; the four diagnostic fields are CT-13c. Events have no committed generated output (packages/contracts-ts/scripts/events.ts only checks; codegen:check up to date). No server event intake exists yet (no POST /v1/events in contracts/openapi.yaml, no route in apps/api), so no client event is rejected by this change. Host: checkEvents(loadEnums()) = [], CT-13b + CT-13a rule tests 33 green, prettier clean. Full verification by the required CI checks.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-13b/review-codex-contract-r1.json, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by a fresh independent Claude (claude-run.sh, attempt 2: attempt 1 was refused by the position assertion because the lane created another branch during the run; its output is archived, not used) in test/spec/contracts/sdui-card-error-page-version/**; red/1 PASS: 4 rule tests in 1 file red for the right reason (spec 02c2da769); Codex spec-test r1 pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#1] sdui_card_error 字段恰好是 type / version / page_version / reason；type、reason 必填 string、version 可缺 integer 照旧，page_version 改为可缺 integer",
+    "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#2] page_version 的 note 同时写到首页等配置化页面（03 §6.2）必带与 AI 助手页卡片（03 §7.2）不带",
+    "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#3] 其他事件不动（抽查 bridge_call 与四个 agent_stream_*）、仍通过 contracts:check 的事件表校验，specs/events.yaml 的 version 递增（大于本任务前的 3）",
+    "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#4] 按事件规格校验：首页卡片事件带 page_version 照旧通过，缺 type / reason 或 page_version 不是整数照旧被拒；AI 助手页卡片事件不带 page_version 也通过"
+  ],
+  "task": "CT-13b",
+  "spec_commit": "be7a87a7bf7af30a46fa68cd082fd7626da1f812",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "be7a87a7bf7af30a46fa68cd082fd7626da1f812",
+      "tree": "090a7b71e355cb6f048caa1a00e6e4f8e21a8845",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T17:41:27Z",
+      "finished_at": "2026-11-12T17:41:30Z",
+      "red_tests": [
+        "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#1] sdui_card_error 字段恰好是 type / version / page_version / reason；type、reason 必填 string、version 可缺 integer 照旧，page_version 改为可缺 integer",
+        "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#2] page_version 的 note 同时写到首页等配置化页面（03 §6.2）必带与 AI 助手页卡片（03 §7.2）不带",
+        "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#3] 其他事件不动（抽查 bridge_call 与四个 agent_stream_*）、仍通过 contracts:check 的事件表校验，specs/events.yaml 的 version 递增（大于本任务前的 3）",
+        "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts > [AC-CT-13b#4] 按事件规格校验：首页卡片事件带 page_version 照旧通过，缺 type / reason 或 page_version 不是整数照旧被拒；AI 助手页卡片事件不带 page_version 也通过"
+      ],
+      "expected": [
+        "test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4b696bbaad7bba535744ee5eca02fc059294c53ff0d5b875f64cb9d816027a5a"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ee6df217e3e296bc9e2c2dfccd1f4c049a6314db",
+    "specs": "3c926006a0370ace01f276a39fcfce6f62bfc047"
+  }
+}
