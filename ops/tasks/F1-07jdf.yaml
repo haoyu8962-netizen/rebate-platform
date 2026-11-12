@@ -1,0 +1,31 @@
+id: F1-07jdf
+repo: rebate-platform
+title: 后台两条浏览器冻结用例的偶发红（FU-FLAKE-F107JD-BROWSER2）——对话框 toBeVisible 一过就点里面的控件，正撞 antd 打开动画，点击丢失；改为先等打开动画结束再点，期望不变
+type: test-change
+# 2026-11-13 前端线 f1-frontend-7 入账（编排 23:0x，FU-FLAKE-F107JD-BROWSER2，按 flake_fix）。诊断：CI 运行 43234392321 第 1 次 verify-int-4 的失败快照——页面上没有「二次验证 · 动态码」对话框，原因框仍开着，五个原因类别一个都没选中并出现「请选择原因类别」，即选类别那一下没生效、提交被前端校验拦下、动态码对话框从未打开；StepUpModal 的 inert 隔离被快照排除（body 子元素无 inert / aria-hidden）。
+# 机制：对话框 toBeVisible 通过时 antd zoom 打开动画还在进行，按下与松开之间框体被缩放挪开，click 落到共同祖先，单选未激活。同文件 #1 在点击前先 screenshot()（会等动画结束）所以不受影响。admin-risk-rules 的 [AC-F1-10fa-BROWSER#2] 同样在确认框 toBeVisible 后立即点确认，同类报错（F1-11a land 时一次），一并登记。
+# 改法：只在这两条用例块内，点对话框里的控件前先等打开动画结束（document.getAnimations() 全部完成且 .ant-modal 不带动画类，同 screenshot() 的等法）；07jd 选完类别补一句单选已选中的断言，让丢点击当场报出。期望、夹具、帮手的已有行为不变；实现代码不动。由新鲜独立 Claude 改，证据记本机加压循环全绿。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/frontend/admin-user-risk-state/pages.browser.test.ts'
+  - 'test/spec/frontend/admin-risk-rules/pages.browser.test.ts'
+  - 'ops/tasks/F1-07jdf.yaml'
+modify_existing:
+  - file: 'test/spec/frontend/admin-user-risk-state/pages.browser.test.ts'
+    test: '[AC-F1-07jd-BROWSER#2] 超管看无风控行的正常用户：【封禁】→ 选原因类别、填原因 → 动态码 → 一次 PUT（ban，expected_row_version null），标题行变已封禁、只剩【解封】'
+    reason: flake_fix
+    ruling: D10-1374
+    note: 点类别单选（或下拉）前先等原因框打开动画结束，选完断言该单选已选中；其余步骤与断言不变
+  - file: 'test/spec/frontend/admin-risk-rules/pages.browser.test.ts'
+    test: '[AC-F1-10fa-BROWSER#2] 浏览器连续停用和启用都弹动态码，确认后才带各自凭据写入'
+    reason: flake_fix
+    ruling: D10-1374
+    note: 每轮在确认框可见后、点确认前先等打开动画结束；其余步骤与断言不变
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

@@ -208,6 +208,13 @@ it('[AC-F1-07jd-BROWSER#2] 超管看无风控行的正常用户：【封禁】�
 
   const dialog = page.getByRole('dialog');
   await expect.element(dialog, FIRST).toBeVisible();
+  // Let the dialog's opening animation finish before clicking inside it: a click while the box
+  // is still zooming in can land beside the moved control and be lost.
+  await Promise.all(
+    document.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
+  );
+  const shell = dialog.element().closest('.ant-modal') ?? dialog.element();
+  await expect.element(page.elementLocator(shell), FIRST).not.toHaveClass(MOTION);
   const category = categoryShown('malicious_rights');
   const radioLabel = Array.from(dialog.element().querySelectorAll('label')).find(
     (label) =>
@@ -216,6 +223,8 @@ it('[AC-F1-07jd-BROWSER#2] 超管看无风控行的正常用户：【封禁】�
   );
   if (radioLabel !== undefined) {
     await page.elementLocator(radioLabel).click();
+    const radio = radioLabel.querySelector<HTMLInputElement>('input[type="radio"]')!;
+    await expect.poll(() => radio.checked, FIRST).toBe(true);
   } else {
     await dialog.getByRole('combobox').click();
     // The open select's list (rc-select renders it with its visible options).
@@ -227,6 +236,12 @@ it('[AC-F1-07jd-BROWSER#2] 超管看无风控行的正常用户：【封禁】�
     ).find((node) => category.test(squash(node.textContent)));
     expect(option, 'the category among the options').toBeDefined();
     await page.elementLocator(option!).click();
+    await expect
+      .poll(
+        () => squash(dialog.element().querySelector('.ant-select-selection-item')?.textContent),
+        FIRST,
+      )
+      .toMatch(category);
   }
   await dialog.getByRole('textbox', { name: /原因/ }).fill(REASON);
   expect(server.requests('PUT'), 'nothing sent before the submit').toEqual([]);

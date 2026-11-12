@@ -161,6 +161,16 @@ it('[AC-F1-10fa-BROWSER#2] 浏览器连续停用和启用都弹动态码，确�
     await named.or(toggle).click();
     let modal = page.getByRole('dialog');
     await expect.element(modal, FIRST).toBeVisible();
+    // Let the dialog's opening animation finish before clicking inside it: a click while the
+    // box is still zooming in can land beside the moved button and be lost.
+    await Promise.all(
+      document.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
+    );
+    await expect
+      .element(page.elementLocator(modal.element().closest('.ant-modal') ?? modal.element()), FIRST)
+      .not.toHaveClass(
+        /(?:^|\s)ant-(?:zoom|fade|move|slide)\b|-(?:appear|enter|leave)(?:-|\s|$)|-motion\b|-motion-/,
+      );
     if (modal.getByLabelText('动态码', { exact: true }).elements().length === 0) {
       await modal.getByRole('button', { name: /确认|验证并|继续/ }).click();
     }
