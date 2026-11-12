@@ -1,0 +1,40 @@
+id: B1-10q
+repo: rebate-platform
+title: 后台 Agent 留痕查询实现（D1 第一段，CT-24zzi 的 adminListAgentSessions / adminGetAgentSession）——agent 模块只读查询与后台 controller，agent.trace，明细每次查看写审计 agent_trace_view，去 planned
+type: impl
+# 2026-11-12 入账（admin-backend，编排 D10-1310：D1 拆两段，举报列表与处理等 agent2 公告 A3 编号与端口后另入账）。读已有 agent_sessions / agent_messages / agent_runs / agent_tool_calls / agent_cards，不加列、不建表；A1（B3-08zc）、A2（B3-08t）未落地的列按可能为空处理。
+# 与 agent2 约定（公告 2026-11-12 13:50）：不碰 agent/stream/**、agent/http/index.ts、agent/store/index.ts、agent/store/results/**。别的 app 或不存在的会话回 20001 [session_id]；列表不带文本与手机号；明细恒为脱敏形式。
+refs: [BR-AI-19, BR-AI-20, BR-AI-22]
+refs_hash:
+  BR-AI-19: 533bd70d3d18
+  BR-AI-20: ed15f04bab16
+  BR-AI-22: d412bc8a631a
+deps: [CT-24zzi]
+paths:
+  - 'apps/api/src/modules/agent/http/admin/**'
+  - 'apps/api/src/modules/agent/application/admin-traces*.ts'
+  - 'apps/api/src/modules/agent/store/admin-traces/**'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/*.gen.ts'
+  - 'apps/api/src/modules/platform/**/*.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/agent/admin-traces/**'
+  - 'test/spec/contracts/admin-agent-traces/registration.test.ts' # CT-24zzi 的 #1 / #2 / #5 钉「仍是 planned」，去 planned 后改为已实现（先例 B1-28s）
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/admin-traces/**'
+red_exempt:
+  - file: test/spec/contracts/admin-agent-traces/registration.test.ts
+    test: '[AC-CT-24zzi#3] 登记 GET /admin/v1/agent-traces/reports：adminListAgentReports、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001'
+    reason: '冻结 CT-24zzi 契约用例，测试体未改；本任务只把同文件的 [AC-CT-24zzi#1] / [#2] / [#5] 从 planned 改成已实现（先例 B1-28s、B1-10n）。同文件被整体判定'
+  - file: test/spec/contracts/admin-agent-traces/registration.test.ts
+    test: '[AC-CT-24zzi#4] 登记 POST /admin/v1/agent-traces/reports/{message_id}/handle：adminHandleAgentReport、admin、planned、agent.report、无 step-up 与 Idempotency-Key、错误码恰为 10001/10403/20001/20902'
+    reason: '冻结 CT-24zzi 契约用例，测试体未改；本任务只把同文件的 [AC-CT-24zzi#1] / [#2] / [#5] 从 planned 改成已实现（先例 B1-28s、B1-10n）。同文件被整体判定'
+  - file: test/spec/contracts/admin-agent-traces/registration.test.ts
+    test: '[AC-CT-24zzi#6] 错误码目录 20902 的 data.resource 登记 agent_report'
+    reason: '冻结 CT-24zzi 契约用例，测试体未改；本任务只把同文件的 [AC-CT-24zzi#1] / [#2] / [#5] 从 planned 改成已实现（先例 B1-28s、B1-10n）。同文件被整体判定'
+status: todo
