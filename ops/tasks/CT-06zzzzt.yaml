@@ -1,0 +1,23 @@
+id: CT-06zzzzt
+repo: rebate-platform
+title: CT-06zzzzt：容器先红顺带跑 test-guard——verify-container --red 起容器前用可信根的 test-guard --base 查一遍，静态问题直接拒，改动已有测试资产（add-only）只记提示（FU-RED-RUNS-TEST-GUARD 第一条，D10-1235 / D10-1283 ②）
+type: guard-change
+# 2026-11-12 ops 入账（编排 D10-1283 ②；登记 D10-1235：#3120 的 test-guard 红要到 CI 才发现，容器先红不跑 test-guard）。
+# 做法：--red 算出本任务规则测试清单（RED_FILES）之后、建运行目录和起任何容器之前，在可信根跑 node tools/guard/test-guard.ts --base <先红基点> --cwd <worktree> --json：
+#   findings（静态问题，CI 的 guard-git 不因 owner 标签放行）非空就 exit 2、报出每一条、什么都不跑；add_only_violations（改动已有测试资产，CI 带 owner 标签放行）
+#   只在 stderr 记一行提示、照常往下跑；test-guard 自身跑不起来或输出不是 JSON 也 exit 2。--dry-run 的计划 JSON 增加 test_guard（两类的条数）。--fast / 完整 verify / --browser 不变。
+# 第二条（先红抓不到全局冻结清单，D10-1253）另写方案报编排（couli-runs/OPS-lane/red-runs-frozen-lists-plan.md），不在本单。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzt.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

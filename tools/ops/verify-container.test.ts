@@ -2,7 +2,7 @@
 // refusals and the --dry-run plan (commit, tree). The container path itself is exercised by
 // tools/ops/verify-container.selftest.sh (run by hand, see tools/ops/README.md).
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -380,6 +380,172 @@ it(
         files: ['spec/identity/devices.browser.test.ts'],
       },
     ]);
+  },
+  CLI_TIMEOUT,
+);
+
+// CT-06zzzzt (FU-RED-RUNS-TEST-GUARD, D10-1235 / D10-1283 ②): --red runs the trusted test-guard
+// against its base before anything else, as guard-git does in CI. A fixture repository on `main`
+// (committed `baseFiles`), with `head` written on top and `removed` deleted, both uncommitted.
+// B1-02b (legacy ledger) gives test/spec/identity/** to the red run, as in [CR3-01].
+function redRepo(
+  name: string,
+  baseFiles: Record<string, string>,
+  head: Record<string, string>,
+  removed: string[] = [],
+): string {
+  const repo = fixture(name, 'node -e "process.exit(0)"');
+  writeFiles(repo, baseFiles);
+  fixtureGit(repo, ['init', '-q', '-b', 'main']);
+  fixtureGit(repo, ['add', '-A']);
+  fixtureGit(repo, ['commit', '-q', '-m', 'fixture']);
+  writeFiles(repo, head);
+  for (const rel of removed) rmSync(join(repo, rel));
+  return repo;
+}
+
+// Two static findings of test-guard in a new rule-test file: describe() (rule-tests-top-level-it,
+// the #3120 case) on line 2 and a focused test (no-skip-only) on line 3. The focus modifier is
+// spelt in two pieces so that test-guard does not flag this file itself.
+const STATIC_PROBLEMS = {
+  'test/spec/identity/devices.test.ts': [
+    "import { describe, it } from 'vitest';",
+    "describe('devices', () => {",
+    '  it.' + 'only' + "('[BR-ID-05] x', () => {});",
+    '});',
+    '',
+  ].join('\n'),
+};
+
+type RedDryPlan = {
+  red_files?: string[];
+  test_guard?: { findings: number; add_only_violations: number };
+};
+
+it(
+  '[CT-06zzzzt] --red: static test-guard findings stop the run before anything runs (exit 2, every finding listed)',
+  () => {
+    const repo = redRepo('red-tg-findings', {}, STATIC_PROBLEMS);
+    const res = run(['B1-02b', '--worktree', repo, '--red', '--base', 'main', '--dry-run']);
+    expect(res.status, res.stderr).toBe(2);
+    // No plan is printed: the run stops before the dry-run plan.
+    expect(res.stdout).toBe('');
+    const head = res.stderr
+      .split('\n')
+      .find((l) => l.startsWith('verify-container: test-guard (trusted, against main):'));
+    expect(head, res.stderr).toBeDefined();
+    // The count of findings is in the message.
+    expect(head).toMatch(/\b2\b/);
+    // Each finding is listed.
+    expect(res.stderr).toContain('test/spec/identity/devices.test.ts');
+    expect(res.stderr).toContain('no-skip-only');
+    expect(res.stderr).toContain('rule-tests-top-level-it');
+    // Never "add-only": the owner label does not let these through.
+    expect(res.stderr).not.toContain('add-only finding(s)');
+    expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzt] --red --dry-run: a clean test-guard goes on, the plan carries test_guard with zero counts',
+  () => {
+    const repo = redRepo(
+      'red-tg-clean',
+      {},
+      { 'test/spec/identity/devices.test.ts': "it('[BR-ID-05] x', () => {});\n" },
+    );
+    const res = run(['B1-02b', '--worktree', repo, '--red', '--base', 'main', '--dry-run']);
+    expect(res.status, res.stderr).toBe(0);
+    const plan = JSON.parse(res.stdout) as RedDryPlan;
+    expect(plan.red_files).toEqual(['test/spec/identity/devices.test.ts']);
+    expect(plan.test_guard).toEqual({ findings: 0, add_only_violations: 0 });
+    expect(res.stderr).not.toContain('add-only finding(s)');
+    expect(res.stderr).not.toContain('test-guard (trusted');
+    expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzt] --red: add-only findings alone (changed frozen test assets) are noted on stderr and the run goes on; with a static finding too it stops',
+  () => {
+    const frozen = {
+      'test/spec/identity/sessions.test.ts': "it('[BR-ID-05] a', () => {});\n",
+      'test/spec/identity/tokens.test.ts': "it('[BR-ID-05] b', () => {});\n",
+    };
+    // One frozen file modified, one deleted: two add-only violations, no static finding.
+    const repo = redRepo(
+      'red-tg-add-only',
+      frozen,
+      {
+        'test/spec/identity/sessions.test.ts': "it('[BR-ID-05] a changed', () => {});\n",
+        'test/spec/identity/devices.test.ts': "it('[BR-ID-05] x', () => {});\n",
+      },
+      ['test/spec/identity/tokens.test.ts'],
+    );
+    const res = run(['B1-02b', '--worktree', repo, '--red', '--base', 'main', '--dry-run']);
+    expect(res.status, res.stderr).toBe(0);
+    expect(res.stderr).toContain(
+      'verify-container: test-guard: 2 add-only finding(s) (changed frozen test assets): CI lets them through only with the owner approval label',
+    );
+    expect(res.stderr).not.toContain('test-guard (trusted');
+    const plan = JSON.parse(res.stdout) as RedDryPlan;
+    expect(plan.red_files).toContain('test/spec/identity/devices.test.ts');
+    expect(plan.test_guard).toEqual({ findings: 0, add_only_violations: 2 });
+
+    // The same branch with a static finding as well: the findings decide, exit 2.
+    writeFiles(repo, STATIC_PROBLEMS);
+    const both = run(['B1-02b', '--worktree', repo, '--red', '--base', 'main', '--dry-run']);
+    expect(both.status, both.stderr).toBe(2);
+    expect(both.stdout).toBe('');
+    expect(both.stderr).toContain('verify-container: test-guard (trusted, against main):');
+    expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzt] --red: a test-guard that cannot run (no JSON) stops the run with exit 2 naming test-guard',
+  () => {
+    const repo = redRepo(
+      'red-tg-broken',
+      {},
+      { 'test/spec/identity/devices.test.ts': "it('[BR-ID-05] x', () => {});\n" },
+    );
+    // A file test-guard must read but cannot: it ends with an internal error (EACCES) and prints
+    // no JSON; red-check --print-expected still lists the file (it only reads git).
+    const locked = join(repo, 'test', 'spec', 'identity', 'locked.test.ts');
+    writeFileSync(locked, "it('[BR-ID-05] y', () => {});\n");
+    chmodSync(locked, 0o000);
+    try {
+      const res = run(['B1-02b', '--worktree', repo, '--red', '--base', 'main', '--dry-run']);
+      expect(res.status, res.stderr).toBe(2);
+      expect(res.stdout).toBe('');
+      const line = res.stderr.split('\n').find((l) => l.startsWith('verify-container:')) ?? '';
+      expect(line, res.stderr).toContain('test-guard');
+      // The first lines of test-guard's stderr are quoted.
+      expect(res.stderr).toContain('EACCES');
+      expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
+    } finally {
+      chmodSync(locked, 0o644);
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzt] test-guard runs for --red only: verify, --fast and --browser dry-runs are unchanged',
+  () => {
+    const repo = redRepo('red-tg-other-modes', {}, STATIC_PROBLEMS);
+    for (const extra of [[], ['--fast'], ['--browser']]) {
+      const res = run(['B1-02b', '--worktree', repo, ...extra, '--dry-run']);
+      expect(res.status, `${extra.join(' ')}: ${res.stderr}`).toBe(0);
+      const plan = JSON.parse(res.stdout) as Record<string, unknown>;
+      expect(Object.keys(plan).sort(), extra.join(' ')).toEqual(['commit', 'script', 'tree']);
+      expect(res.stderr, extra.join(' ')).not.toContain('test-guard');
+    }
+    expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
   },
   CLI_TIMEOUT,
 );

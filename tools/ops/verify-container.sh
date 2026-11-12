@@ -21,6 +21,10 @@
 #              internal network; all other groups run in a container with no network and no
 #              database URL. A browser rule test (project `browser: true`, spec-browser) needs an
 #              image with Playwright's browser: without playwright in the lockfile the run stops.
+#              Before anything runs, the trusted test-guard checks the worktree against the same
+#              base (CT-06zzzzt): a static finding stops the run (exit 2, guard-git fails on it in
+#              CI whatever the owner label); add-only findings (changed frozen test assets) are
+#              noted on stderr and the run goes on.
 #   --browser  the browser tests: every browser project of red-projects.json, in its order, in one
 #              container with `--network none` (loopback only) and the image's headless Chromium:
 #              spec-browser (F1-01j: every test/spec/**/*.browser.test.{ts,tsx}, Vitest browser
@@ -33,8 +37,8 @@
 #              1 when all passed but no screenshot was exported. Like --fast an implementer's own
 #              check, never
 #              evidence of verification (tools/ci/evidence-check.ts accepts verify and red only).
-#   --dry-run  prints what would run (script, commit, tree, red files) as one JSON line and
-#              starts nothing; no run directory is created.
+#   --dry-run  prints what would run (script, commit, tree, red files, test_guard counts) as one
+#              JSON line and starts nothing; no run directory is created.
 #
 # There is no host fallback (CR-01; 规划/11 §4.1, §8): every test or task file runs only in this
 # container. `--host` is refused; without Docker the script stops (exit 2) and the run goes to CI.
@@ -364,6 +368,8 @@ fi
 RED_FILES=''
 RED_PLAN=''
 RED_BROWSER=0
+TG_FINDINGS=0
+TG_ADD_ONLY=0
 if [ "$SCRIPT" = red ]; then
   if [ -z "$BASE_ARG" ]; then
     for candidate in origin/main main; do
@@ -380,8 +386,42 @@ if [ "$SCRIPT" = red ]; then
   while IFS= read -r f; do
     [[ "$f" =~ ^[A-Za-z0-9_./@-]+$ ]] && [[ "$f" != *..* ]] || die "unexpected rule-test path: $f"
   done <<<"$RED_FILES"
-  # Which trusted Vitest project runs each file (CR2-04); a file without one stops the run.
+  # CT-06zzzzt (FU-RED-RUNS-TEST-GUARD, D10-1235): the trusted test-guard against the same base,
+  # as guard-git runs it in CI, before the plan, the run directory and any docker call. Its static
+  # findings fail guard-git whatever the owner label says: they stop the run. Add-only violations
+  # (changed frozen test assets) pass CI only with the owner approval label: noted, the run goes
+  # on. test-guard exits 1 on any finding and still prints its JSON; no JSON = it did not run.
   mkdir -p "$RUNS"
+  tg_err="$RUNS/.test-guard-err.$ID.$$"
+  tg_rc=0
+  tg_out="$(cd "$TRUSTED" && node tools/guard/test-guard.ts --base "$BASE_ARG" --cwd "$WT" --json 2>"$tg_err")" || tg_rc=$?
+  tg_stderr="$(head -n 5 "$tg_err" 2>/dev/null || true)"
+  rm -f "$tg_err"
+  tg_report=''
+  if [ "$tg_rc" = 0 ] || [ "$tg_rc" = 1 ]; then
+    tg_report="$(node -e '
+      const doc = JSON.parse(process.argv[1]);
+      if (doc === null || typeof doc !== "object" || !Array.isArray(doc.findings) || !Array.isArray(doc.add_only_violations)) {
+        throw new Error("findings / add_only_violations are not arrays");
+      }
+      const lines = [`${doc.findings.length} ${doc.add_only_violations.length}`];
+      for (const f of doc.findings) lines.push(`  ${f.file}:${f.line}: [${f.rule}] ${f.message}`);
+      process.stdout.write(lines.join("\n"));
+    ' "$tg_out" 2>/dev/null)" || tg_report=''
+  fi
+  [ -n "$tg_report" ] ||
+    die "test-guard (trusted, against $BASE_ARG) did not run (exit $tg_rc, no JSON report); its stderr:
+$tg_stderr"
+  TG_FINDINGS="$(printf '%s\n' "$tg_report" | head -n 1 | cut -d' ' -f1)"
+  TG_ADD_ONLY="$(printf '%s\n' "$tg_report" | head -n 1 | cut -d' ' -f2)"
+  if [ "$TG_FINDINGS" != 0 ]; then
+    die "test-guard (trusted, against $BASE_ARG): $TG_FINDINGS finding(s); CI's guard-git fails on them and the owner label cannot let them through: fix them first, then run red again
+$(printf '%s\n' "$tg_report" | sed '1d')"
+  fi
+  if [ "$TG_ADD_ONLY" != 0 ]; then
+    log "verify-container: test-guard: $TG_ADD_ONLY add-only finding(s) (changed frozen test assets): CI lets them through only with the owner approval label"
+  fi
+  # Which trusted Vitest project runs each file (CR2-04); a file without one stops the run.
   red_list="$RUNS/.red-expected.$ID.$$"
   printf '%s\n' "$RED_FILES" >"$red_list"
   RED_PLAN="$(cd "$TRUSTED" && node tools/ops/red-plan.ts --expected "$red_list" 2>&1)" || {
@@ -432,14 +472,15 @@ if [ "$DRY_RUN" = 1 ]; then
   dry_tree='null'
   if [ "$IS_TOP" = 1 ]; then dry_tree="\"$(tree_of_worktree "$RUNS/.dry-index.$ID.$$")\""; fi
   node -e '
-    const [script, commit, tree, files, plan] = process.argv.slice(1);
+    const [script, commit, tree, files, plan, tgFindings, tgAddOnly] = process.argv.slice(1);
     const out = { script, commit: commit === "" ? null : commit, tree: JSON.parse(tree) };
     if (script === "red") {
       out.red_files = files.split("\n").filter((l) => l !== "");
       out.red_plan = JSON.parse(plan).groups;
+      out.test_guard = { findings: Number(tgFindings), add_only_violations: Number(tgAddOnly) };
     }
     process.stdout.write(JSON.stringify(out) + "\n");
-  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN"
+  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY"
   exit 0
 fi
 
