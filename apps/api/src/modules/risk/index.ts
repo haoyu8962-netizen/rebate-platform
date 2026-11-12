@@ -1,4 +1,5 @@
 // Public surface of the risk module. Other modules import only from this file.
+export { countProcessingAppeals } from './application/appeal-pending-count.ts';
 export { createOrderBlocklistPorts } from './application/order-blocklist.ts';
 export type {
   OrderBlocklistDimension,
