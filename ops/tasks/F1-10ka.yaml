@@ -1,0 +1,24 @@
+id: F1-10ka
+repo: rebate-platform
+title: 后台 AI 助手记录：会话留痕列表与明细、AI 举报列表与标记已处理（规划/05 F1-10k 的 D1 页面，编排 D10-1308；接口 agent-traces 四个仍 planned，按契约类型与假数据做）
+type: impl
+# 2026-11-12 入账（前端线 f1-frontend-7，编排 D10-1308）。依据：契约 CT-24zzi（#3239）adminListAgentSessions / adminGetAgentSession / adminListAgentReports / adminHandleAgentReport 的说明；规划/01 F-ADM-19、04 §11.1（agent.trace 看留痕与举报列表；agent.report 标记已处理）、BR-AI-19、BR-ID-15；变更记录 20261112-Agent模型路径与缺口补全 §2.10、§3.4 D1。
+# 口径一律取契约与服务端字段，页面不另定：48 小时只看行里的 deadline_at 与 overdue（服务端按 BR-ID-15 算，与工作台卡 agent_report_overdue 同口径），页面不用本机时钟另算；列表不带对话文本和手机号（契约行里没有，页面也不拼）；留痕明细每打开一次服务端记一条 agent_trace_view 审计，所以只在用户明确打开时请求一次，不预取、不因重渲染重复请求；明细文本只显示服务端给的脱敏形式，注销后 text 为 null 显示占位。
+# 位置：菜单 agent-traces（AI 助手记录）下两个页签「会话留痕」「AI 举报」；工作台卡 route /agent/reports?overdue=true 打开该菜单的 AI 举报页签并带上超时筛选。四个接口用 usePlanned 声明（接口上线前正式环境显示开发中占位；规则测试不传 planned 清单、挂假服务端）。
+# 不做：工具开关只读状态与跳转（不在 D1 四个接口内，紧急开关页已有）、prompt 版本以外的模型配置、举报理由枚举与 badcase 手动标记（F-ADM-19 记为上线后一月内）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/pages/agent-traces/**'
+  - 'apps/admin/src/texts/agent-traces.ts'
+  - 'apps/admin/src/App.tsx'
+test_paths:
+  - 'test/spec/frontend/admin-agent-traces/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-agent-traces/**'
+status: todo
+pr: null
