@@ -506,6 +506,68 @@ it(
   CLI_TIMEOUT,
 );
 
+// CT-06zzzzza (D10-1372): the replay group (red-projects.json `replay`, database: true) starts
+// its services the way spec-int does. QA-03a's trusted ledger has test_paths test/replay/**.
+it(
+  '[CT-06zzzzza] --red: a replay group gets PostgreSQL, Redis and both URLs on the internal network, like spec-int',
+  () => {
+    const res = run([
+      'QA-03a',
+      '--worktree',
+      redFixture('red-replay', {
+        'test/replay/scenario-1/follow.test.ts': "it('[BR-FUND-02] y', () => {});\n",
+      }),
+      '--red',
+      '--base',
+      'main',
+    ]);
+    // The stub writes no report, so the run stops after the red container (exit 2).
+    expect(res.status, res.stderr).toBe(2);
+    expect(res.stderr).not.toContain('cannot run every rule-test file');
+    expect(res.stderr).toContain('wrote no report for replay');
+    const net =
+      res.calls.find((c) => c.args[0] === 'network' && c.args[1] === 'create')?.args.at(-1) ?? '';
+    expect(net).toMatch(/^couli-stubtest-net-qa-03a-\d+-\d+$/);
+    expect(
+      res.calls.find((c) => c.args[0] === 'network' && c.args[1] === 'create')?.args,
+    ).toContain('--internal');
+    const redis = containerRuns(res.calls, REDIS_IMAGE);
+    expect(redis).toHaveLength(1);
+    expect(valueOf(redis[0]?.args ?? [], '--network')).toBe(net);
+    const pg = containerRuns(res.calls, PG_IMAGE);
+    expect(pg).toHaveLength(1);
+    expect(valueOf(pg[0]?.args ?? [], '--network')).toBe(net);
+    const reds = res.calls.filter((c) => c.args.includes('couli-verify-entrypoint'));
+    expect(reds).toHaveLength(1);
+    const red = reds[0];
+    expect(red?.args.at(-1)).toBe('red');
+    expect(valueOf(red?.args ?? [], '--network')).toBe(net);
+    expect(passedEnv(red?.args ?? [])).toContain('TEST_REDIS_URL');
+    expect(red?.env['TEST_REDIS_URL']).toBe(REDIS_URL);
+    const pgPassword = pg[0]?.env['POSTGRES_PASSWORD'] ?? '';
+    expect(pgPassword).toMatch(/^[0-9a-f]{32}$/);
+    expect(pgUrls(red)).toEqual([`postgres://postgres:${pgPassword}@pg:5432/postgres`]);
+    const plan = JSON.parse(red?.env['RED_PLAN'] ?? '{}') as { groups?: unknown };
+    expect(plan.groups).toEqual([
+      {
+        name: 'replay',
+        dir: 'test',
+        config: 'vitest.replay.config.ts',
+        database: true,
+        browser: false,
+        files: ['replay/scenario-1/follow.test.ts'],
+      },
+    ]);
+    const redisName = valueOf(redis[0]?.args ?? [], '--name') ?? '';
+    const pgName = valueOf(pg[0]?.args ?? [], '--name') ?? '';
+    expect(res.calls.find((c) => c.args[0] === 'rm')?.args).toEqual(
+      expect.arrayContaining([pgName, redisName]),
+    );
+    expect(res.calls.some((c) => c.args[0] === 'network' && c.args[1] === 'rm')).toBe(true);
+  },
+  CLI_TIMEOUT,
+);
+
 it(
   '--red: a unit-only plan gets no service, no network and no database URL',
   () => {

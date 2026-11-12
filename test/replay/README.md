@@ -8,7 +8,13 @@
 - 每个录制目录带 `provenance.json`（来源 `probe` / `doc-derived` / `synthetic`、CAP 编号、抓取时间、脱敏前原文 sha256、脱敏器版本）。
 - 遇到非 `probe` 来源的录制，验收记录不写通过。没有真实录制时只用领域层的演示适配器造数据，不伪造平台报文格式。
 
-怎么跑：回放要完整的应用与真实 PostgreSQL，只在沙箱外运行，不进 `verify:fast`。本目录目前不在任何 vitest 配置的 `include` 里。
+怎么跑：回放要完整的应用与真实 PostgreSQL，只在沙箱外运行，不进 `verify:fast`。本目录目前不在任何 vitest 配置的 `include` 里。（CT-06zzzzza 起已过时：本目录的 `*.test.ts` 由 `test/vitest.replay.config.ts` 收录，见下。）
+
+运行入口（CT-06zzzzza，D10-1372）：`test/vitest.replay.config.ts` 收录 `replay/**/*.test.ts`，真实 PostgreSQL（测试库底座同 integration 配置），`passWithNoTests` 保持 false；没有场景时由 CI 作业 `verify-replay` 先查本目录有无 `*.test.ts`，没有就跳过 `test:replay` 步骤并打 notice（D10-1389）。
+
+- 本机：`pnpm --filter @couli/spec-tests run test:replay`（沙箱外，要 Docker 或 `TEST_PG_ADMIN_URL`）。
+- 先红：`tools/ops/verify-container.sh <编号> --red`，`replay` 组和 `spec-int` 一样起一次性 PostgreSQL 与 Redis。
+- CI：作业 `verify-replay`，与 `verify-int-*` 并行；目前不挡合并（不在 `ci-gate` 必需项里），QA-03c 做完且连续稳定后转为必需项。
 
 TODO(规划/11 §4.5): 回放框架与运行配置（测试库底座就绪、联盟账号到位后录首批场景） — blocked on B1-01
 

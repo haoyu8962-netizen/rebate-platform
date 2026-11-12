@@ -1,0 +1,28 @@
+id: CT-06zzzzza
+repo: rebate-platform
+title: 回放测试运行入口（QA-03 前置，D10-1372）：新增 test/vitest.replay.config.ts（真实 PostgreSQL、globalSetup 同 integration、include replay/**/*.test.ts、passWithNoTests）与 test:replay 脚本；red-projects.json 加 replay 组让 --red 能跑 test/replay；CI 新增 verify-replay 作业（跑 test:replay、带 PG，与 verify-int 各组并行，暂不进 ci-gate 必需项）；README 补怎么跑与何时转必需
+type: guard-change
+# 2026-11-13 be 入账（编排 D10-1372；起因：QA-03a 的回放场景放在 test/replay，但 tools/ops/verify-image/red-projects.json 五组都不认领 test/replay/**，red-plan 直接失败，先红无法执行）。
+# 只新增：现有五组的 include / exclude、verify:fast、verify、ci-gate 的必需项与判定逻辑一字不改。red-plan 工具测试补一条：test/replay/** 只被 replay 组认领、其他组的认领范围不变。verify-container --red 的 database 组服务起法照 spec-int。
+# verify-replay：跑 pnpm test:replay，PG 服务同 verify-int；不进 ci-gate needs 与判定（红了可见、不挡合并），QA-03c 做完且连续稳定后由编排定转必需项。现在没有场景，passWithNoTests 保证作业绿。
+# test/replay/README.md 属第一类（只增不改），这里补几行说明属对既有文件的修改，随门禁改动由编排按 #16 / #24 核后加标签放行。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex general 对抗评审。approvals 由编排补（排 83）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/vitest.replay.config.ts'
+  - 'test/package.json'
+  - 'tools/ops/verify-image/red-projects.json'
+  - 'tools/ops/**'
+  - 'tools/ci/**'
+  - '.github/workflows/ci.yml'
+  - 'tools/README.md'
+  - 'test/replay/README.md'
+  - 'ops/tasks/CT-06zzzzza.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null

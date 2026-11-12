@@ -1,9 +1,11 @@
 // The plan of the isolated red run (Codex review CR2-04).
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
+import { matchesAny } from '../lib/glob.ts';
 import { repoRoot } from '../lib/paths.ts';
-import { loadRedProjects, planRed } from './red-plan.ts';
+import { loadRedProjects, planRed, type RedProject } from './red-plan.ts';
 
 const projects = loadRedProjects();
 
@@ -104,7 +106,6 @@ it('[CR2-04] acceptance and packages/testing files get their own entry; a file w
       'test/spec/db/ledger.int.test.ts',
       'test/acceptance/order.test.ts',
       'packages/testing/src/arb.test.ts',
-      'test/replay/orders.test.ts',
       'db/invariants/ledger.test.ts',
     ],
     projects,
@@ -135,7 +136,8 @@ it('[CR2-04] acceptance and packages/testing files get their own entry; a file w
       files: ['src/arb.test.ts'],
     },
   ]);
-  expect(plan.unrunnable).toEqual(['test/replay/orders.test.ts', 'db/invariants/ledger.test.ts']);
+  // test/replay/** has its own entry since CT-06zzzzza (the replay project, tests below).
+  expect(plan.unrunnable).toEqual(['db/invariants/ledger.test.ts']);
 });
 
 it('[F1-01j] spec browser rule tests (.ts, .tsx) go to spec-browser only; elsewhere the unit tier takes them', () => {
@@ -210,4 +212,192 @@ it('[F1-01k] spec build smoke rule tests go to build-smoke only; elsewhere the u
     },
   ]);
   expect(plan.unrunnable).toEqual([]);
+});
+
+// --- CT-06zzzzza (D10-1372): the replay project ---------------------------------------------------
+// QA-03a puts its replay scenarios under test/replay/, which none of the five projects took, so
+// red-plan failed and the red run could not start. A sixth project, `replay`, takes exactly
+// test/replay/**/*.test.ts with the replay config (real PostgreSQL); the five are unchanged.
+
+/** The five projects as they are on main before CT-06zzzzza, field for field. */
+const MAIN_PROJECTS: RedProject[] = [
+  {
+    name: 'spec-unit',
+    dir: 'test',
+    config: 'vitest.config.ts',
+    include: ['properties/**/*.test.ts', 'spec/**/*.test.ts'],
+    exclude: ['**/*.int.test.ts', 'spec/**/*.browser.test.{ts,tsx}', 'spec/**/*.smoke.test.ts'],
+    database: false,
+    browser: false,
+  },
+  {
+    name: 'spec-int',
+    dir: 'test',
+    config: 'vitest.integration.config.ts',
+    include: ['spec/**/*.int.test.ts', 'acceptance/**/*.test.ts', 'smoke/**/*.int.test.ts'],
+    exclude: [],
+    database: true,
+    browser: false,
+  },
+  {
+    name: 'spec-browser',
+    dir: 'test',
+    config: 'vitest.browser.config.ts',
+    include: ['spec/**/*.browser.test.{ts,tsx}'],
+    exclude: [],
+    database: false,
+    browser: true,
+  },
+  {
+    name: 'build-smoke',
+    dir: 'test',
+    config: 'vitest.build-smoke.config.ts',
+    include: ['spec/**/*.smoke.test.ts'],
+    exclude: [],
+    database: false,
+    browser: true,
+  },
+  {
+    name: 'testing-unit',
+    dir: 'packages/testing',
+    config: 'vitest.config.ts',
+    include: ['src/**/*.test.ts'],
+    exclude: ['**/*.int.test.ts'],
+    database: false,
+    browser: false,
+  },
+];
+
+const REPLAY_PROJECT: RedProject = {
+  name: 'replay',
+  dir: 'test',
+  config: 'vitest.replay.config.ts',
+  include: ['replay/**/*.test.ts'],
+  exclude: [],
+  database: true,
+  browser: false,
+};
+
+/** The projects whose dir, include and exclude take `file` (planRed takes the first of them). */
+function takers(file: string): string[] {
+  return projects
+    .filter((p) => {
+      if (!file.startsWith(`${p.dir}/`)) return false;
+      const rel = file.slice(p.dir.length + 1);
+      return matchesAny(rel, p.include) && !matchesAny(rel, p.exclude);
+    })
+    .map((p) => p.name);
+}
+
+it('[CT-06zzzzza] red-projects.json has a replay project: test, vitest.replay.config.ts, replay/**/*.test.ts only, database, no browser', () => {
+  const replay = projects.filter((p) => p.name === 'replay');
+  expect(replay, 'exactly one project named replay').toHaveLength(1);
+  // `exclude` is not named by the task; an empty list is the only value that takes nothing away.
+  expect(replay[0]).toMatchObject({
+    name: 'replay',
+    dir: 'test',
+    config: 'vitest.replay.config.ts',
+    include: ['replay/**/*.test.ts'],
+    database: true,
+    browser: false,
+  });
+  expect(replay[0]?.include).toEqual(['replay/**/*.test.ts']);
+  expect(replay[0]?.exclude ?? []).toEqual([]);
+});
+
+it('[CT-06zzzzza] the five existing projects are unchanged, field for field and in their order; replay is the only addition', () => {
+  expect(projects.filter((p) => p.name !== 'replay')).toEqual(MAIN_PROJECTS);
+  expect(projects.map((p) => p.name).sort()).toEqual(
+    [...MAIN_PROJECTS.map((p) => p.name), 'replay'].sort(),
+  );
+  // The Chromium projects and their order (verify-container.sh --browser) are unchanged.
+  expect(projects.filter((p) => p.browser).map((p) => p.name)).toEqual([
+    'spec-browser',
+    'build-smoke',
+  ]);
+  // The database projects: spec-int and replay.
+  expect(
+    projects
+      .filter((p) => p.database)
+      .map((p) => p.name)
+      .sort(),
+  ).toEqual(['replay', 'spec-int']);
+});
+
+it('[CT-06zzzzza] the replay project mirrors test/vitest.replay.config.ts (include) and the config file exists', async () => {
+  const path = join(repoRoot(), 'test', 'vitest.replay.config.ts');
+  expect(existsSync(path), 'test/vitest.replay.config.ts exists').toBe(true);
+  const config = ((await import(pathToFileURL(path).href)) as { default: unknown }).default as {
+    test?: { include?: string[] };
+  };
+  expect(config.test?.include).toEqual(projects.find((p) => p.name === 'replay')?.include);
+  expect(config.test?.include).toEqual(REPLAY_PROJECT.include);
+});
+
+it('[CT-06zzzzza] test/replay/** test files go to the replay group only, whatever their sub-directory or suffix', () => {
+  const files = [
+    'test/replay/orders.test.ts',
+    'test/replay/scenario-1/follow-estimate-receive.test.ts',
+    'test/replay/scenarios/jd/deep/settle.test.ts',
+    'test/replay/driver/clock.int.test.ts',
+  ];
+  for (const f of files) expect(takers(f), f).toEqual(['replay']);
+  const plan = planRed(files, projects);
+  expect(plan.unrunnable).toEqual([]);
+  expect(plan.groups).toEqual([
+    {
+      name: 'replay',
+      dir: 'test',
+      config: 'vitest.replay.config.ts',
+      database: true,
+      browser: false,
+      files: files.map((f) => f.slice('test/'.length)),
+    },
+  ]);
+});
+
+it('[CT-06zzzzza] files under test/replay/ that are not *.test.ts are taken by no project', () => {
+  const files = [
+    'test/replay/README.md',
+    'test/replay/scenario-1/provenance.json',
+    'test/replay/driver/run.ts',
+    'test/replay/scenario-1/orders.test.tsx',
+  ];
+  for (const f of files) expect(takers(f), f).toEqual([]);
+  expect(planRed(files, projects)).toEqual({ groups: [], unrunnable: files });
+});
+
+it('[CT-06zzzzza] the replay project takes nothing outside test/replay/: the claims of the five are unchanged', () => {
+  const outside = [
+    'test/spec/money/split.test.ts',
+    'test/properties/money/sum.test.ts',
+    'test/spec/db/ledger.int.test.ts',
+    'test/acceptance/order.test.ts',
+    'test/smoke/boot.int.test.ts',
+    'test/spec/frontend/x.browser.test.tsx',
+    'test/spec/frontend/entries.smoke.test.ts',
+    'packages/testing/src/arb.test.ts',
+    'test/spec/union/replay/recording.test.ts',
+    'test/replayed/orders.test.ts',
+  ];
+  const before = planRed(outside, MAIN_PROJECTS);
+  expect(planRed(outside, projects)).toEqual(before);
+  for (const f of outside) expect(takers(f), f).not.toContain('replay');
+  // A file under test/replay/ is one no main project took: the replay project fills a gap only.
+  expect(planRed(['test/replay/orders.test.ts'], MAIN_PROJECTS).unrunnable).toEqual([
+    'test/replay/orders.test.ts',
+  ]);
+});
+
+it('[CT-06zzzzza] a mixed plan keeps spec-int and replay as two database groups', () => {
+  const plan = planRed(
+    ['test/spec/db/ledger.int.test.ts', 'test/replay/orders.test.ts', 'test/spec/money/a.test.ts'],
+    projects,
+  );
+  expect(plan.unrunnable).toEqual([]);
+  expect(plan.groups.map((g) => [g.name, g.database, g.files])).toEqual([
+    ['spec-int', true, ['spec/db/ledger.int.test.ts']],
+    ['replay', true, ['replay/orders.test.ts']],
+    ['spec-unit', false, ['spec/money/a.test.ts']],
+  ]);
 });

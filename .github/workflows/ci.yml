@@ -19,6 +19,11 @@
 # fifteen heavy verify jobs are skipped; verify-static (with the task ledger check) and guard-git
 # still run, and ci-gate accepts those skips only when the detection itself succeeded and said
 # only=true.
+#
+# Replay tests (D10-1372, CT-06zzzzza): verify-replay runs `test:replay` (test/replay) beside the
+# verify-int jobs. It is not a required check yet: ci-gate does not need or judge it, and
+# verify-reuse and the ledger-only path's job lists do not name it (it is still skipped on a
+# ledger-only pull request). It becomes required after QA-03c, once stable.
 name: ci
 
 on:
@@ -1531,6 +1536,84 @@ jobs:
           path: ${{ runner.temp }}/verified-tree.txt
           retention-days: 7
           if-no-files-found: error
+
+  # CT-06zzzzza (D10-1372, QA-03 prerequisite): the replay tests (test/replay/**/*.test.ts, the
+  # `test:replay` script of @couli/spec-tests, test/vitest.replay.config.ts) in a job of their own,
+  # with the set-up of verify-int-1: Testcontainers starts the one-shot PostgreSQL, the one-shot
+  # Redis is the same service and the same "Configure the one-shot Redis" step. It needs no verify
+  # job, so it runs beside verify-int-1 … -6, and is skipped on a ledger-only pull request.
+  # Not required yet: ci-gate neither needs nor judges it (red is visible, it does not block a
+  # merge), and verify-reuse does not reuse it (no `verified-…` artifact). The orchestrator makes it
+  # required once QA-03c is done and the job has stayed green (D10-1372). No scenario exists yet;
+  # passWithNoTests stays false, so the step "Find replay scenarios" checks test/replay for any
+  # *.test.ts and, when there is none, prints a notice and test:replay is skipped (D10-1389).
+  verify-replay:
+    # Needs Docker (Testcontainers starts the one-shot PostgreSQL): ubuntu-latest, never ubuntu-slim.
+    needs: [ledger-only-detect]
+    if: ${{ !cancelled() && needs.ledger-only-detect.outputs.only != 'true' }}
+    runs-on: ubuntu-latest
+    # No timing yet (no scenario); install and build take about 4 minutes in the int jobs.
+    timeout-minutes: 30
+    services:
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --tmpfs /data
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # passWithNoTests stays false (D10-1389): with no *.test.ts under test/replay (at any depth),
+      # test:replay is skipped and a notice says so; the job stays green.
+      - name: Find replay scenarios
+        id: scenarios
+        run: |
+          found="$(find test/replay -type f -name '*.test.ts' -print -quit 2>/dev/null || true)"
+          if [ -n "$found" ]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::test/replay holds no *.test.ts yet: the replay tests are skipped'
+          fi
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # As in verify-int-1: a service container takes no command, so the redis-server settings of
+      # infra/local/compose.yaml are applied at run time.
+      - name: Configure the one-shot Redis
+        run: |
+          reply="$(docker exec "$REDIS_ID" redis-cli CONFIG SET save '' appendonly no maxmemory 256mb maxmemory-policy noeviction)"
+          if [ "$reply" != OK ]; then
+            echo "::error::CONFIG SET on the one-shot Redis replied: ${reply}"
+            exit 1
+          fi
+          # From the runner, the way the tests connect (TEST_REDIS_URL): the published port answers.
+          pong=''
+          if exec 3<>/dev/tcp/127.0.0.1/6379; then
+            printf 'PING\r\n' >&3
+            IFS= read -r -t 5 pong <&3 || true
+            exec 3>&-
+          fi
+          if [ "${pong%$'\r'}" != '+PONG' ]; then
+            echo "::error::the one-shot Redis does not answer PING on 127.0.0.1:6379 (got: ${pong})"
+            exit 1
+          fi
+        env:
+          REDIS_ID: ${{ job.services.redis.id }}
+      - if: steps.scenarios.outputs.present == 'true'
+        run: pnpm --filter @couli/spec-tests run test:replay
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
 
   guard-git:
     # Git-dependent guards run from the BASE copy of tools/guard against the PR tree, so a branch

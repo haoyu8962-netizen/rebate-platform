@@ -45,6 +45,15 @@
       "exclude": ["**/*.int.test.ts"],
       "database": false,
       "browser": false
+    },
+    {
+      "name": "replay",
+      "dir": "test",
+      "config": "vitest.replay.config.ts",
+      "include": ["replay/**/*.test.ts"],
+      "exclude": [],
+      "database": true,
+      "browser": false
     }
   ]
 }

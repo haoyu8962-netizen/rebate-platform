@@ -39,6 +39,8 @@
 
 标签轮遇到 PR 头已变就提前结束（D10-1046 ②，CT-06zzzzj，FU-CI-LABEL-RUN-STALE-HEAD）：`labeled` / `unlabeled` 事件下，`verify-reuse` 的 find 步骤在等待的每一轮（紧跟本轮运行列表查询之后，所以没有要等的时候、等待结束开始判定之前、到达等待上限放弃之前也都各查一次）用 `gh api repos/<仓库>/pulls/<github.event.pull_request.number> --jq .head.sha` 查 PR 当前头。答回的是 40 位十六进制、且不等于本事件 `pull_request.head.sha` 时，在日志里写一行 `PR #<号> head moved from <旧头> to <新头>`，往 `$GITHUB_OUTPUT` 写 `moved=true`（作业输出 `moved`），随即以退出码 1 结束这一步：不再 sleep、不再查别的接口，也不输出 `reuse=true`。`verify-static` 与 15 个重作业的 `if` 都带 `needs.verify-reuse.outputs.moved != 'true'`，于是全部跳过，`ci-gate` 判红，红的只是旧头的检查，新头有自己那一轮。查询失败（gh 非零退出，如 HTTP 502 / 404）或答回的不是完整提交号，都按「头没变」照原规则往下走，下一轮再查。`verify-reuse` 因别的原因失败（超时、运行列表查询出错）时不写 `moved`，各作业照旧都跑。主干推送轮（B2）与代码事件不读 `pulls/<号>`；权限仍是三项只读；`ci-gate` 的判定与必需检查名不变。
 
+回放测试的运行入口（CT-06zzzzza，D10-1372，QA-03 前置）：`test/vitest.replay.config.ts`（真实 PostgreSQL，globalSetup 同 `vitest.integration.config.ts`；只认 `replay/**/*.test.ts`；`passWithNoTests` 保持 false，同其他配置），由 `@couli/spec-tests` 的 `test:replay` 运行，不进 `verify:fast` 与 `verify`。本机跑：`pnpm --filter @couli/spec-tests run test:replay`（要 Docker 或 `TEST_PG_ADMIN_URL`，只在沙箱外）；先红：`ops/verify-image/red-projects.json` 的 `replay` 组认领 `test/replay/**/*.test.ts`，`tools/ops/verify-container.sh <编号> --red` 照 `spec-int` 给它起一次性 PostgreSQL 与 Redis。`ci.yml` 的作业 `verify-replay` 先查 `test/replay` 下（任意深度）有没有 `*.test.ts`：没有就打一条 notice、跳过 `test:replay` 步骤（作业为绿，D10-1389），有才跑 `test:replay`；服务与 Redis 配置同 `verify-int-1`，与 `verify-int-1…6` 并行，只改台账或文档的 PR 跳过；它目前**不挡合并**：不在 `ci-gate` 的 needs 与判定里，也不在 `verify-reuse` 的复用名单里。QA-03c 做完且连续稳定后，由编排定转为必需项（D10-1372）。
+
 ## guard/ 各守卫
 
 | 命令 | 检查什么 | 出处 |

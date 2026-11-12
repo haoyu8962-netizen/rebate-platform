@@ -8,7 +8,8 @@
     "test:int": "PROP_RUNS=${PROP_RUNS:-2000} vitest run --config vitest.integration.config.ts",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:smoke": "vitest run --config vitest.build-smoke.config.ts",
-    "test:longrun": "vitest run --config vitest.longrun.config.ts"
+    "test:longrun": "vitest run --config vitest.longrun.config.ts",
+    "test:replay": "vitest run --config vitest.replay.config.ts"
   },
   "devDependencies": {
     "@couli/admin": "workspace:*",
