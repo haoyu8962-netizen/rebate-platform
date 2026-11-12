@@ -305,6 +305,8 @@ it('[AC-CT-01c#3] limits 20902 resources to active contracts (04 §7)', () => {
     'union_receipt',
     // CT-24zv: settle-adjust batch approve / reject, nothing pending left (BR-FUND-09 ②, D10-770).
     'settle_adjust_batch',
+    // CT-24zzi: AI reply report handle CAS (04 §6.6 agent-traces, BR-ID-15).
+    'agent_report',
   ]);
 });
 

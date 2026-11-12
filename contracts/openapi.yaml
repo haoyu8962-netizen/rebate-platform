@@ -122,6 +122,8 @@ tags:
     description: Admin platform fund ledger — the union collection entry and its whole-record reversal (permission point fund.cash_entry, totp step-up), the list of union collection records and the fund ledger overview, the last two read only (permission point fund.view; 01 F-ADM-08, 04 §3.2 union_receipts, §11; BR-FUND-20, BR-WDR-18). The entry of the enterprise Alipay balance W belongs to the payout console (design/specs/admin-payouts.md).
   - name: admin-product-feedbacks
     description: Admin product feedback records — the feedback users and guests sent from the product detail page, page by page with filters, read only (permission point feedback.view; 01 F-PROD-15; BR-ID-30 细则「商品反馈记录」; 编排 D10-757（S-16；04 §11.1 权限点与 §6.3 后台查看接口待编排回写）).
+  - name: admin-agent-traces
+    description: Admin Agent trace console — Agent sessions with their trace counts and one session with its messages, runs, tool calls and cards (permission point agent.trace, opening a session is audited, always the masked form stored, pii.* reveals nothing), and the AI reply reports with the 48-hour deadline and overdue flag, marked handled with a note (agent.report, audited; 01 F-ADM-19, 04 §6.6 agent-traces, §11.1; BR-AI-19, BR-ID-15).
   - name: agent
     description: Agent sessions, history, the reply stream, stop, feedback and report (04 §6.5, §8).
 paths:
@@ -30232,6 +30234,476 @@ paths:
                   $ref: '#/components/examples/AdminTokenExpired'
         5XX:
           $ref: '#/components/responses/ServerError'
+  /admin/v1/agent-traces/sessions:
+    get:
+      operationId: adminListAgentSessions
+      tags:
+        - admin-agent-traces
+      summary: Agent sessions with their trace counts, newest first
+      description: |
+        The Agent sessions of the console's app, one row per session (04 §3.2 agent_sessions, agent_runs, agent_messages; 04 §6.6 agent-traces; 01 F-ADM-19; BR-AI-19).
+        Permission point `agent.trace` (04 §11.1), read only, no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+        The list does not write an audit record: it carries no conversation content (opening one session with GET /admin/v1/agent-traces/sessions/{session_id} is what is audited).
+        Lists only the console's app sessions; sessions of other apps never appear.
+        A guest session (BR-AI-20, owned by a device) has `user_id` null; a session of a signed-in user carries that user_id.
+        Filters combine with AND and are all optional: `user_id`, `session_id`, `badcase` (true = only sessions with at least one badcase reply, false = only sessions without one), `reported` (true = only sessions with at least one reported reply, false = only sessions without one) and the start time window on `started_at`, `from` (inclusive) and `to` (exclusive), ISO 8601 times with offset (04 §5).
+        `from` not earlier than `to` (equal included) is 20001 with `data.fields=[from, to]`.
+        Rows are sorted by `started_at` descending, then by the server-internal order for equal times.
+        `run_count` counts the session's runs, `badcase_count` its replies marked badcase and `report_count` its reported replies (pending or handled).
+        Pages with `page` (a page past the last one is `items=[]`) and `page_size` ≤ 200 (above 200 is 20001, as AdminPageSize); `total` counts all rows matching the filters.
+        Undeclared query parameters follow the global rule.
+        The rows carry no device identifier, phone number or message text.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminPageSize'
+        - name: user_id
+          in: query
+          required: false
+          description: Only sessions of this user (guest sessions never match).
+          schema:
+            $ref: '#/components/schemas/Id'
+        - name: session_id
+          in: query
+          required: false
+          description: Only this session.
+          schema:
+            $ref: '#/components/schemas/Id'
+        - name: from
+          in: query
+          required: false
+          description: Earliest session start (started_at), inclusive (ISO 8601 with offset).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Latest session start (started_at), exclusive (ISO 8601 with offset).
+          schema:
+            type: string
+            format: date-time
+        - name: badcase
+          in: query
+          required: false
+          description: true = only sessions with a badcase reply; false = only sessions without one; absent = all.
+          schema:
+            type: boolean
+        - name: reported
+          in: query
+          required: false
+          description: true = only sessions with a reported reply; false = only sessions without one; absent = all.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: One page of Agent sessions, newest first.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAgentSessionPageResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  items:
+                    - session_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02
+                      user_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04
+                      started_at: '2026-09-29T11:20:00+08:00'
+                      last_active_at: '2026-09-29T11:26:00+08:00'
+                      expired: true
+                      run_count: 3
+                      badcase_count: 1
+                      report_count: 0
+                    - session_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01
+                      user_id: null
+                      started_at: '2026-09-29T09:50:00+08:00'
+                      last_active_at: '2026-09-29T10:05:00+08:00'
+                      expired: false
+                      run_count: 2
+                      badcase_count: 0
+                      report_count: 1
+                  page: 1
+                  page_size: 20
+                  total: 2
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                pageSizeTooLarge:
+                  $ref: '#/components/examples/AdminPageSizeInvalid'
+                fromNotBeforeTo:
+                  $ref: '#/components/examples/AdminAgentTraceTimeRangeInvalid'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /admin/v1/agent-traces/sessions/{session_id}:
+    get:
+      operationId: adminGetAgentSession
+      tags:
+        - admin-agent-traces
+      summary: One Agent session with its messages, runs, tool calls and cards
+      description: |
+        One Agent session of the console's app with its whole trace as stored (04 §3.2 agent_sessions, agent_messages, agent_runs, agent_tool_calls, agent_cards; 04 §6.6 agent-traces; 01 F-ADM-19; BR-AI-19).
+        Permission point `agent.trace` (04 §11.1), read only, no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+        Each successful read writes one audit record `agent_trace_view` with the operator and the session_id (BR-AI-19: viewing a trace is audited); a request that fails writes none.
+        An unknown session and a session of another app are both 20001 with `data.fields=[session_id]`, the same answer (not probed).
+        The response is the session header (`session_id`, `user_id`, null for a guest session, `started_at`, `last_active_at`, `expired`) and four lists: `messages` in time order, `runs` in time order of `accepted_at`, `tool_calls` by run and then by `seq`, and `cards` in the order they were sent.
+        Only the masked form stored at write time is returned (user_text and tool arguments are masked before they are stored, BR-AI-19, BR-AI-14).
+        Permission points `pii.*` reveal nothing here: on this resource the text is always masked, whatever points the account holds (未勾 pii.* 时脱敏 means 恒为脱敏形式 here).
+        No original user text, full phone number or device identifier is returned.
+        After account deletion the message `text` is null and the row is kept (BR-AI-22).
+        An earnings_summary card carries no amounts (earnings_summary_history only, as in the user's own history).
+        Message reports (`reported_at`, `report_reason`, `report_status`, `report_note`) are null for a message that was never reported; handling a report is POST /admin/v1/agent-traces/reports/{message_id}/handle.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminAgentSessionIdPath'
+      responses:
+        '200':
+          description: The session with its trace.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAgentSessionDetailResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  session_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01
+                  user_id: null
+                  started_at: '2026-09-29T09:50:00+08:00'
+                  last_active_at: '2026-09-29T10:05:00+08:00'
+                  expired: false
+                  messages:
+                    - message_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c01
+                      role: user
+                      text: 我现在有多少收益
+                      card_ids: []
+                      feedback: null
+                      badcase: false
+                      reported_at: null
+                      report_reason: null
+                      report_status: null
+                      report_note: null
+                    - message_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                      role: assistant
+                      text: 这是你当时的收益概况，以钱包页为准。
+                      card_ids:
+                        - c1
+                      feedback: down
+                      badcase: true
+                      reported_at: '2026-09-29T10:00:00+08:00'
+                      report_reason: 回答内容与事实不符
+                      report_status: pending
+                      report_note: null
+                  runs:
+                    - run_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8d01
+                      intent: earnings_query
+                      model: qwen-plus
+                      model_snapshot: qwen-plus-2026-09-01
+                      prompt_version: p-2026-09-01
+                      input_tokens: 1200
+                      output_tokens: 300
+                      cost_mfen: 4500
+                      ttft_ms: 800
+                      latency_ms: 3200
+                      finish_reason: stop
+                      filter_hits: []
+                      accepted_at: '2026-09-29T09:55:00+08:00'
+                      ended_at: '2026-09-29T09:55:03+08:00'
+                  tool_calls:
+                    - run_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8d01
+                      seq: 1
+                      name: get_my_earnings
+                      args: {}
+                      status: ok
+                      latency_ms: 120
+                  cards:
+                    - card_id: c1
+                      type: earnings_summary
+                      schema_version: 1
+                      data:
+                        as_of: '2026-09-29T09:55:02+08:00'
+                        actions:
+                          - route: Wallet
+                            text_key: agent.earnings.open_wallet
+                      fallback_text: 收益以钱包页显示为准。
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                unknownSession:
+                  $ref: '#/components/examples/AdminAgentSessionUnknown'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /admin/v1/agent-traces/reports:
+    get:
+      operationId: adminListAgentReports
+      tags:
+        - admin-agent-traces
+      summary: AI reply reports with the 48-hour deadline and the overdue flag
+      description: |
+        The AI reply reports of the console's app, one row per reported message (04 §3.2 agent_messages; 04 §6.6 agent-traces; 01 F-ADM-19; BR-ID-15 细则「举报的处理」).
+        Permission point `agent.trace` (04 §11.1; it covers viewing the report list), read only, no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+        The list does not write an audit record (handling a report does).
+        Lists only the console's app reports; reports of other apps never appear.
+        The 48 hours run from the report's submission (BR-ID-15): `deadline_at` = `reported_at` + 48 hours (e.g. reported 2026-09-29 10:00, handled at the latest before 2026-10-01 10:00).
+        `overdue` is true when the report is still pending and the current time is ≥ `deadline_at`, the same rule as the workbench card agent_report_overdue.
+        A handled report always has `overdue` false.
+        Filters combine with AND and are all optional: `status` (pending / handled), `overdue` (true = only pending reports past `deadline_at`, false = only the others) and the report time window on `reported_at`, `from` (inclusive) and `to` (exclusive), ISO 8601 times with offset (04 §5).
+        With `status` omitted all reports are listed, pending and handled.
+        `from` not earlier than `to` (equal included) is 20001 with `data.fields=[from, to]`.
+        Order: pending reports first, by `reported_at` ascending (the oldest on top).
+        Then handled reports come after them, by `handled_at` descending.
+        `user_id` is null for a guest session; `handler_name` is the handling admin account's display name, null once that account is deleted.
+        Pages with `page` (a page past the last one is `items=[]`) and `page_size` ≤ 200 (above 200 is 20001, as AdminPageSize); `total` counts all rows matching the filters.
+        Undeclared query parameters follow the global rule.
+        The rows carry no device identifier, phone number or message text; the conversation is opened with GET /admin/v1/agent-traces/sessions/{session_id}.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminPageSize'
+        - name: status
+          in: query
+          required: false
+          description: pending or handled; absent = all.
+          schema:
+            $ref: '#/components/schemas/AdminAgentReportStatus'
+        - name: overdue
+          in: query
+          required: false
+          description: true = only pending reports at or past deadline_at; false = only the others; absent = all.
+          schema:
+            type: boolean
+        - name: from
+          in: query
+          required: false
+          description: Earliest report time (reported_at), inclusive (ISO 8601 with offset).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Latest report time (reported_at), exclusive (ISO 8601 with offset).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: One page of reports, pending first.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAgentReportPageResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  items:
+                    - message_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                      session_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01
+                      user_id: null
+                      reported_at: '2026-09-29T10:00:00+08:00'
+                      report_reason: 回答内容与事实不符
+                      report_status: pending
+                      deadline_at: '2026-10-01T10:00:00+08:00'
+                      overdue: true
+                      handled_at: null
+                      handler_id: null
+                      handler_name: null
+                      report_note: null
+                      row_version: 1
+                    - message_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c05
+                      session_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02
+                      user_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04
+                      reported_at: '2026-09-28T09:00:00+08:00'
+                      report_reason: 推荐的商品和我问的不一样
+                      report_status: handled
+                      deadline_at: '2026-09-30T09:00:00+08:00'
+                      overdue: false
+                      handled_at: '2026-09-28T15:30:00+08:00'
+                      handler_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01
+                      handler_name: 运营小王
+                      report_note: 已核对，答复口径已修正
+                      row_version: 2
+                  page: 1
+                  page_size: 20
+                  total: 2
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                pageSizeTooLarge:
+                  $ref: '#/components/examples/AdminPageSizeInvalid'
+                fromNotBeforeTo:
+                  $ref: '#/components/examples/AdminAgentTraceTimeRangeInvalid'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /admin/v1/agent-traces/reports/{message_id}/handle:
+    post:
+      operationId: adminHandleAgentReport
+      tags:
+        - admin-agent-traces
+      summary: Mark an AI reply report handled with a handling note (returns the report row)
+      description: |
+        Marks one reported AI reply as handled and records the handling note (04 §3.2 agent_messages; 04 §6.6 agent-traces; 01 F-ADM-19; BR-ID-15 细则「举报的处理」).
+        Permission point `agent.report` (04 §11.1), no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+        No Idempotency-Key: a repeated submit is stopped by CAS on `expected_row_version` (compare-and-set on the message's row_version).
+        Request: `note` (at most 500 characters as sent) is trimmed of leading and trailing whitespace and must then keep 1–500 characters, else 20001 with `data.fields=[note]`; the trimmed text is stored.
+        `expected_row_version` is the report's `row_version` as the console showed it.
+        Unknown fields in the body are 20001.
+        A message that does not exist, belongs to another app or was never reported is 20001 with `data.fields=[message_id]`.
+        These three cases are the same answer (not probed).
+        Pending → handled in one transaction: it writes `report_status=handled`, `report_handler_id` (the operator), `report_handled_at` (now) and `report_note` (the trimmed note), and `row_version` + 1.
+        An `expected_row_version` that does not match, or a report already handled, is 20902 with `data.resource=agent_report`; nothing changes.
+        Writes one audit record `agent_report_handle` with the before and after values of the status and the note, without the message text.
+        An overdue report (past the 48 hours of BR-ID-15) can still be marked handled: overdue is only a flag, it is not rejected.
+        The response is the report row after the change, the same shape as a row of GET /admin/v1/agent-traces/reports (`overdue` false).
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+        - 20902
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminAgentReportMessageIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAgentReportHandleRequest'
+            example:
+              note: 已核对，答复口径已修正
+              expected_row_version: 1
+      responses:
+        '200':
+          description: The report row after it was marked handled.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAgentReportResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  message_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02
+                  session_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01
+                  user_id: null
+                  reported_at: '2026-09-29T10:00:00+08:00'
+                  report_reason: 回答内容与事实不符
+                  report_status: handled
+                  deadline_at: '2026-10-01T10:00:00+08:00'
+                  overdue: false
+                  handled_at: '2026-10-01T11:00:00+08:00'
+                  handler_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01
+                  handler_name: 运营小王
+                  report_note: 已核对，答复口径已修正
+                  row_version: 2
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not handled (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                noteInvalid:
+                  $ref: '#/components/examples/AdminAgentReportNoteInvalid'
+                unknownReport:
+                  $ref: '#/components/examples/AdminAgentReportUnknown'
+                conflict:
+                  $ref: '#/components/examples/AdminAgentReportConflict'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
 components:
   securitySchemes:
     bearerAuth:
@@ -30921,6 +31393,24 @@ components:
       description: |
         message_id from meta.message_id or a history item. A message that does not exist or whose
         session is not the caller's is 30504 either way (BR-AI-20).
+      schema:
+        $ref: '#/components/schemas/Id'
+    AdminAgentSessionIdPath:
+      name: session_id
+      in: path
+      required: true
+      description: |
+        session_id of the Agent session; unknown or of another app → 20001 with
+        data.fields=[session_id] (not probed).
+      schema:
+        $ref: '#/components/schemas/Id'
+    AdminAgentReportMessageIdPath:
+      name: message_id
+      in: path
+      required: true
+      description: |
+        message_id of the reported reply; unknown, of another app or never reported → 20001 with
+        data.fields=[message_id] (not probed).
       schema:
         $ref: '#/components/schemas/Id'
     AdminUnionAccountIdPath:
@@ -31854,6 +32344,51 @@ components:
           fields:
             - from
             - to
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminAgentTraceTimeRangeInvalid:
+      summary: 20001 Agent session or report list with from not earlier than to
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - from
+            - to
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminAgentSessionUnknown:
+      summary: 20001 unknown Agent session, or a session of another app (the same answer)
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - session_id
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminAgentReportNoteInvalid:
+      summary: 20001 handling note empty after trimming or longer than 500 characters
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - note
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminAgentReportUnknown:
+      summary: 20001 unknown message, a message of another app, or a message never reported (the same answer)
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - message_id
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminAgentReportConflict:
+      summary: 20902 the report was already handled or its row_version moved on; refresh to see the result
+      value:
+        code: 20902
+        msg: 状态已变化，请刷新后重试
+        data:
+          resource: agent_report
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminUnknownAuditLog:
       summary: 20001 unknown audit record, or another account's record without audit.view_all
@@ -50464,6 +50999,531 @@ components:
           $ref: '#/components/schemas/AdminProductFeedbackPage'
         trace_id:
           $ref: '#/components/schemas/TraceId'
+    AdminAgentReportStatus:
+      type: string
+      description: agent_messages.report_status of a reported message (04 §3.2; BR-ID-15 细则「举报的处理」).
+      enum:
+        - pending
+        - handled
+    AdminAgentSessionListItem:
+      type: object
+      description: |
+        One Agent session (04 §3.2 agent_sessions) with its trace counts. No device identifier,
+        phone number or message text.
+      additionalProperties: false
+      required:
+        - session_id
+        - user_id
+        - started_at
+        - last_active_at
+        - expired
+        - run_count
+        - badcase_count
+        - report_count
+      properties:
+        session_id:
+          $ref: '#/components/schemas/Id'
+        user_id:
+          description: The signed-in user who owns the session; null for a guest session (BR-AI-20).
+          anyOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        started_at:
+          type: string
+          format: date-time
+        last_active_at:
+          type: string
+          format: date-time
+        expired:
+          type: boolean
+          description: true once the session has expired (agent_sessions.expired_at set or passed, BR-AI-20).
+        run_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Runs of the session (agent_runs).
+        badcase_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Replies of the session marked badcase.
+        report_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Replies of the session that were reported (pending or handled).
+    AdminAgentSessionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAgentSessionListItem'
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+        page_size:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+    AdminAgentSessionPageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminAgentSessionPage'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminAgentTraceMessage:
+      type: object
+      description: |
+        One agent_messages row as stored (04 §3.2): text in its masked form (BR-AI-19, BR-AI-14),
+        null after account deletion (BR-AI-22). The four report fields are null for a message
+        that was never reported.
+      additionalProperties: false
+      required:
+        - message_id
+        - role
+        - text
+        - card_ids
+        - feedback
+        - badcase
+        - reported_at
+        - report_reason
+        - report_status
+        - report_note
+      properties:
+        message_id:
+          $ref: '#/components/schemas/Id'
+        role:
+          type: string
+          description: agent_messages.role (04 §3.2).
+          enum:
+            - user
+            - assistant
+        text:
+          type:
+            - string
+            - 'null'
+          description: The stored masked text; null after account deletion (BR-AI-22).
+        card_ids:
+          type: array
+          description: Cards of this reply, in the order sent (always empty for user).
+          items:
+            type: string
+            pattern: '^c[1-9][0-9]*$'
+        feedback:
+          description: up / down from the user (agent_messages.feedback); null when none.
+          anyOf:
+            - type: string
+              enum:
+                - up
+                - down
+            - type: 'null'
+        badcase:
+          type: boolean
+          description: Marked badcase (a down vote marks it automatically, BR-AI-19).
+        reported_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: When the user reported the reply; null when never reported.
+        report_reason:
+          type:
+            - string
+            - 'null'
+          description: The reason as the user sent it (free text, 1–200 characters); null when never reported, or after the user's data is deleted (BR-AI-22).
+        report_status:
+          description: pending / handled; null when never reported.
+          anyOf:
+            - $ref: '#/components/schemas/AdminAgentReportStatus'
+            - type: 'null'
+        report_note:
+          type:
+            - string
+            - 'null'
+          description: The handling note; null until the report is handled.
+    AdminAgentTraceRun:
+      type: object
+      description: |
+        One agent_runs row (04 §3.2); the columns 04 allows to be null (no model on a fallback
+        run, or a run still going) are null. Never carries user_text.
+      additionalProperties: false
+      required:
+        - run_id
+        - intent
+        - model
+        - model_snapshot
+        - prompt_version
+        - input_tokens
+        - output_tokens
+        - cost_mfen
+        - ttft_ms
+        - latency_ms
+        - finish_reason
+        - filter_hits
+        - accepted_at
+        - ended_at
+      properties:
+        run_id:
+          $ref: '#/components/schemas/Id'
+        intent:
+          type:
+            - string
+            - 'null'
+          description: The recognised intent (enum agent_intent); null when none was recognised.
+        model:
+          type:
+            - string
+            - 'null'
+          description: Model name; null when no model was called.
+        model_snapshot:
+          type:
+            - string
+            - 'null'
+          description: Model snapshot (version) used; null when no model was called.
+        prompt_version:
+          type: string
+          description: Prompt version of the run.
+        input_tokens:
+          type:
+            - integer
+            - 'null'
+          format: int32
+          minimum: 0
+        output_tokens:
+          type:
+            - integer
+            - 'null'
+          format: int32
+          minimum: 0
+        cost_mfen:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          minimum: 0
+          description: Model cost in milli-fen (1/1000 fen); null when no model was called.
+        ttft_ms:
+          type:
+            - integer
+            - 'null'
+          format: int32
+          minimum: 0
+          description: Time to the first token in milliseconds.
+        latency_ms:
+          type:
+            - integer
+            - 'null'
+          format: int32
+          minimum: 0
+          description: Whole run time in milliseconds; null while the run is going.
+        finish_reason:
+          description: finish_reason of the done frame; null while the run is going.
+          anyOf:
+            - $ref: '#/components/schemas/AgentFinishReason'
+            - type: 'null'
+        filter_hits:
+          type: array
+          description: Output filter hits of the run (amount / url / tpwd / banned_word), empty when none.
+          items:
+            type: string
+            enum:
+              - amount
+              - url
+              - tpwd
+              - banned_word
+        accepted_at:
+          type: string
+          format: date-time
+        ended_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: null while the run is going.
+    AdminAgentTraceToolCall:
+      type: object
+      description: One agent_tool_calls row (04 §3.2); args in the masked form stored (BR-AI-19, BR-AI-14).
+      additionalProperties: false
+      required:
+        - run_id
+        - seq
+        - name
+        - args
+        - status
+        - latency_ms
+      properties:
+        run_id:
+          $ref: '#/components/schemas/Id'
+        seq:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Order of the call inside the run, from 1.
+        name:
+          type: string
+          minLength: 1
+          description: Tool name (BR-AI-02 whitelist).
+        args:
+          description: Tool arguments as stored, masked; null when none were stored.
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        status:
+          type: string
+          minLength: 1
+          description: Call status as stored.
+        latency_ms:
+          type:
+            - integer
+            - 'null'
+          format: int32
+          minimum: 0
+    AdminAgentSessionDetail:
+      type: object
+      description: |
+        One Agent session with its whole trace (BR-AI-19). Only the masked forms stored; no
+        original text, full phone number or device identifier.
+      additionalProperties: false
+      required:
+        - session_id
+        - user_id
+        - started_at
+        - last_active_at
+        - expired
+        - messages
+        - runs
+        - tool_calls
+        - cards
+      properties:
+        session_id:
+          $ref: '#/components/schemas/Id'
+        user_id:
+          description: The signed-in user who owns the session; null for a guest session (BR-AI-20).
+          anyOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        started_at:
+          type: string
+          format: date-time
+        last_active_at:
+          type: string
+          format: date-time
+        expired:
+          type: boolean
+        messages:
+          type: array
+          description: Messages in time order.
+          items:
+            $ref: '#/components/schemas/AdminAgentTraceMessage'
+        runs:
+          type: array
+          description: Runs in time order of accepted_at.
+          items:
+            $ref: '#/components/schemas/AdminAgentTraceRun'
+        tool_calls:
+          type: array
+          description: Tool calls by run, then by seq.
+          items:
+            $ref: '#/components/schemas/AdminAgentTraceToolCall'
+        cards:
+          type: array
+          description: Cards in the order sent, the same shape as the user's history (earnings_summary carries no amounts).
+          items:
+            $ref: '#/components/schemas/AgentHistoryCard'
+    AdminAgentSessionDetailResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminAgentSessionDetail'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminAgentReport:
+      type: object
+      description: |
+        One reported reply (04 §3.2 agent_messages; BR-ID-15 细则「举报的处理」). `deadline_at` is
+        `reported_at` + 48 hours; `overdue` is true only while pending at or after `deadline_at`
+        (the same rule as the workbench card agent_report_overdue). No message text.
+      additionalProperties: false
+      required:
+        - message_id
+        - session_id
+        - user_id
+        - reported_at
+        - report_reason
+        - report_status
+        - deadline_at
+        - overdue
+        - handled_at
+        - handler_id
+        - handler_name
+        - report_note
+        - row_version
+      properties:
+        message_id:
+          $ref: '#/components/schemas/Id'
+        session_id:
+          $ref: '#/components/schemas/Id'
+        user_id:
+          description: The signed-in user who owns the session; null for a guest session.
+          anyOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        reported_at:
+          type: string
+          format: date-time
+        report_reason:
+          type:
+            - string
+            - 'null'
+          description: The reason as the user sent it (free text, no enum); null after the user's data is deleted (BR-AI-22), the report itself is kept.
+        report_status:
+          $ref: '#/components/schemas/AdminAgentReportStatus'
+        deadline_at:
+          type: string
+          format: date-time
+          description: reported_at + 48 hours (BR-ID-15).
+        overdue:
+          type: boolean
+          description: Pending and the current time ≥ deadline_at; false once handled.
+        handled_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: report_handled_at; null while pending.
+        handler_id:
+          description: report_handler_id, the admin account that handled it; null while pending.
+          anyOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        handler_name:
+          type:
+            - string
+            - 'null'
+          description: Display name of the handling admin account; null while pending or once that account is deleted.
+        report_note:
+          type:
+            - string
+            - 'null'
+          description: The handling note; null while pending.
+        row_version:
+          type: integer
+          format: int32
+          minimum: 0
+          description: The message's row_version, sent back as expected_row_version when handling.
+    AdminAgentReportPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAgentReport'
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+        page_size:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+    AdminAgentReportPageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminAgentReportPage'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminAgentReportResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminAgentReport'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminAgentReportHandleRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - note
+        - expected_row_version
+      properties:
+        note:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '\S'
+          description: Handling note; trimmed of leading and trailing whitespace, then 1–500 characters (else 20001 [note]).
+        expected_row_version:
+          type: integer
+          format: int32
+          minimum: 0
+          description: The report's row_version as the console showed it; a mismatch is 20902 (agent_report).
     AdminOrderSyncPlatformLimit:
       type: object
       description: The manual sync limits of one platform (02 §7.1, 01 F-ORD-10).

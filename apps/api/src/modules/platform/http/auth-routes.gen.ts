@@ -1515,5 +1515,25 @@ export const CONTRACT_AUTH_ROUTES = [
     "method": "GET",
     "path": "/admin/v1/product-feedbacks",
     "auth": "admin"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/agent-traces/sessions",
+    "auth": "admin"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/agent-traces/sessions/:session_id",
+    "auth": "admin"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/agent-traces/reports",
+    "auth": "admin"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/agent-traces/reports/:message_id/handle",
+    "auth": "admin"
   }
 ] as const;

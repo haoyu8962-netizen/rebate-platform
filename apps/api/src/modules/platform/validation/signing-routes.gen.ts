@@ -1515,5 +1515,25 @@ export const CONTRACT_SIGNING_ROUTES = [
     "method": "GET",
     "path": "/admin/v1/product-feedbacks",
     "signed": false
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/agent-traces/sessions",
+    "signed": false
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/agent-traces/sessions/:session_id",
+    "signed": false
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/agent-traces/reports",
+    "signed": false
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/agent-traces/reports/:message_id/handle",
+    "signed": false
   }
 ] as const;

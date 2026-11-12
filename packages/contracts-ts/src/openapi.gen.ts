@@ -11101,6 +11101,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/agent-traces/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent sessions with their trace counts, newest first
+         * @description The Agent sessions of the console's app, one row per session (04 §3.2 agent_sessions, agent_runs, agent_messages; 04 §6.6 agent-traces; 01 F-ADM-19; BR-AI-19).
+         *     Permission point `agent.trace` (04 §11.1), read only, no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+         *     The list does not write an audit record: it carries no conversation content (opening one session with GET /admin/v1/agent-traces/sessions/{session_id} is what is audited).
+         *     Lists only the console's app sessions; sessions of other apps never appear.
+         *     A guest session (BR-AI-20, owned by a device) has `user_id` null; a session of a signed-in user carries that user_id.
+         *     Filters combine with AND and are all optional: `user_id`, `session_id`, `badcase` (true = only sessions with at least one badcase reply, false = only sessions without one), `reported` (true = only sessions with at least one reported reply, false = only sessions without one) and the start time window on `started_at`, `from` (inclusive) and `to` (exclusive), ISO 8601 times with offset (04 §5).
+         *     `from` not earlier than `to` (equal included) is 20001 with `data.fields=[from, to]`.
+         *     Rows are sorted by `started_at` descending, then by the server-internal order for equal times.
+         *     `run_count` counts the session's runs, `badcase_count` its replies marked badcase and `report_count` its reported replies (pending or handled).
+         *     Pages with `page` (a page past the last one is `items=[]`) and `page_size` ≤ 200 (above 200 is 20001, as AdminPageSize); `total` counts all rows matching the filters.
+         *     Undeclared query parameters follow the global rule.
+         *     The rows carry no device identifier, phone number or message text.
+         */
+        get: operations["adminListAgentSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/agent-traces/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One Agent session with its messages, runs, tool calls and cards
+         * @description One Agent session of the console's app with its whole trace as stored (04 §3.2 agent_sessions, agent_messages, agent_runs, agent_tool_calls, agent_cards; 04 §6.6 agent-traces; 01 F-ADM-19; BR-AI-19).
+         *     Permission point `agent.trace` (04 §11.1), read only, no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+         *     Each successful read writes one audit record `agent_trace_view` with the operator and the session_id (BR-AI-19: viewing a trace is audited); a request that fails writes none.
+         *     An unknown session and a session of another app are both 20001 with `data.fields=[session_id]`, the same answer (not probed).
+         *     The response is the session header (`session_id`, `user_id`, null for a guest session, `started_at`, `last_active_at`, `expired`) and four lists: `messages` in time order, `runs` in time order of `accepted_at`, `tool_calls` by run and then by `seq`, and `cards` in the order they were sent.
+         *     Only the masked form stored at write time is returned (user_text and tool arguments are masked before they are stored, BR-AI-19, BR-AI-14).
+         *     Permission points `pii.*` reveal nothing here: on this resource the text is always masked, whatever points the account holds (未勾 pii.* 时脱敏 means 恒为脱敏形式 here).
+         *     No original user text, full phone number or device identifier is returned.
+         *     After account deletion the message `text` is null and the row is kept (BR-AI-22).
+         *     An earnings_summary card carries no amounts (earnings_summary_history only, as in the user's own history).
+         *     Message reports (`reported_at`, `report_reason`, `report_status`, `report_note`) are null for a message that was never reported; handling a report is POST /admin/v1/agent-traces/reports/{message_id}/handle.
+         */
+        get: operations["adminGetAgentSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/agent-traces/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * AI reply reports with the 48-hour deadline and the overdue flag
+         * @description The AI reply reports of the console's app, one row per reported message (04 §3.2 agent_messages; 04 §6.6 agent-traces; 01 F-ADM-19; BR-ID-15 细则「举报的处理」).
+         *     Permission point `agent.trace` (04 §11.1; it covers viewing the report list), read only, no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+         *     The list does not write an audit record (handling a report does).
+         *     Lists only the console's app reports; reports of other apps never appear.
+         *     The 48 hours run from the report's submission (BR-ID-15): `deadline_at` = `reported_at` + 48 hours (e.g. reported 2026-09-29 10:00, handled at the latest before 2026-10-01 10:00).
+         *     `overdue` is true when the report is still pending and the current time is ≥ `deadline_at`, the same rule as the workbench card agent_report_overdue.
+         *     A handled report always has `overdue` false.
+         *     Filters combine with AND and are all optional: `status` (pending / handled), `overdue` (true = only pending reports past `deadline_at`, false = only the others) and the report time window on `reported_at`, `from` (inclusive) and `to` (exclusive), ISO 8601 times with offset (04 §5).
+         *     With `status` omitted all reports are listed, pending and handled.
+         *     `from` not earlier than `to` (equal included) is 20001 with `data.fields=[from, to]`.
+         *     Order: pending reports first, by `reported_at` ascending (the oldest on top).
+         *     Then handled reports come after them, by `handled_at` descending.
+         *     `user_id` is null for a guest session; `handler_name` is the handling admin account's display name, null once that account is deleted.
+         *     Pages with `page` (a page past the last one is `items=[]`) and `page_size` ≤ 200 (above 200 is 20001, as AdminPageSize); `total` counts all rows matching the filters.
+         *     Undeclared query parameters follow the global rule.
+         *     The rows carry no device identifier, phone number or message text; the conversation is opened with GET /admin/v1/agent-traces/sessions/{session_id}.
+         */
+        get: operations["adminListAgentReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/agent-traces/reports/{message_id}/handle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark an AI reply report handled with a handling note (returns the report row)
+         * @description Marks one reported AI reply as handled and records the handling note (04 §3.2 agent_messages; 04 §6.6 agent-traces; 01 F-ADM-19; BR-ID-15 细则「举报的处理」).
+         *     Permission point `agent.report` (04 §11.1), no step-up; lacking it is 10403 with `data.reason=admin_permission_denied`.
+         *     No Idempotency-Key: a repeated submit is stopped by CAS on `expected_row_version` (compare-and-set on the message's row_version).
+         *     Request: `note` (at most 500 characters as sent) is trimmed of leading and trailing whitespace and must then keep 1–500 characters, else 20001 with `data.fields=[note]`; the trimmed text is stored.
+         *     `expected_row_version` is the report's `row_version` as the console showed it.
+         *     Unknown fields in the body are 20001.
+         *     A message that does not exist, belongs to another app or was never reported is 20001 with `data.fields=[message_id]`.
+         *     These three cases are the same answer (not probed).
+         *     Pending → handled in one transaction: it writes `report_status=handled`, `report_handler_id` (the operator), `report_handled_at` (now) and `report_note` (the trimmed note), and `row_version` + 1.
+         *     An `expected_row_version` that does not match, or a report already handled, is 20902 with `data.resource=agent_report`; nothing changes.
+         *     Writes one audit record `agent_report_handle` with the before and after values of the status and the note, without the message text.
+         *     An overdue report (past the 48 hours of BR-ID-15) can still be marked handled: overdue is only a flag, it is not rejected.
+         *     The response is the report row after the change, the same shape as a row of GET /admin/v1/agent-traces/reports (`overdue` false).
+         */
+        post: operations["adminHandleAgentReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -18627,6 +18755,249 @@ export interface components {
             data: components["schemas"]["AdminProductFeedbackPage"];
             trace_id: components["schemas"]["TraceId"];
         };
+        /**
+         * @description agent_messages.report_status of a reported message (04 §3.2; BR-ID-15 细则「举报的处理」).
+         * @enum {string}
+         */
+        AdminAgentReportStatus: "pending" | "handled";
+        /**
+         * @description One Agent session (04 §3.2 agent_sessions) with its trace counts. No device identifier,
+         *     phone number or message text.
+         */
+        AdminAgentSessionListItem: {
+            session_id: components["schemas"]["Id"];
+            /** @description The signed-in user who owns the session; null for a guest session (BR-AI-20). */
+            user_id: components["schemas"]["Id"] | null;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            last_active_at: string;
+            /** @description true once the session has expired (agent_sessions.expired_at set or passed, BR-AI-20). */
+            expired: boolean;
+            /**
+             * Format: int32
+             * @description Runs of the session (agent_runs).
+             */
+            run_count: number;
+            /**
+             * Format: int32
+             * @description Replies of the session marked badcase.
+             */
+            badcase_count: number;
+            /**
+             * Format: int32
+             * @description Replies of the session that were reported (pending or handled).
+             */
+            report_count: number;
+        };
+        AdminAgentSessionPage: {
+            items: components["schemas"]["AdminAgentSessionListItem"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int32 */
+            total: number;
+        };
+        AdminAgentSessionPageResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminAgentSessionPage"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description One agent_messages row as stored (04 §3.2): text in its masked form (BR-AI-19, BR-AI-14),
+         *     null after account deletion (BR-AI-22). The four report fields are null for a message
+         *     that was never reported.
+         */
+        AdminAgentTraceMessage: {
+            message_id: components["schemas"]["Id"];
+            /**
+             * @description agent_messages.role (04 §3.2).
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** @description The stored masked text; null after account deletion (BR-AI-22). */
+            text: string | null;
+            /** @description Cards of this reply, in the order sent (always empty for user). */
+            card_ids: string[];
+            /** @description up / down from the user (agent_messages.feedback); null when none. */
+            feedback: ("up" | "down") | null;
+            /** @description Marked badcase (a down vote marks it automatically, BR-AI-19). */
+            badcase: boolean;
+            /**
+             * Format: date-time
+             * @description When the user reported the reply; null when never reported.
+             */
+            reported_at: string | null;
+            /** @description The reason as the user sent it (free text, 1–200 characters); null when never reported, or after the user's data is deleted (BR-AI-22). */
+            report_reason: string | null;
+            /** @description pending / handled; null when never reported. */
+            report_status: components["schemas"]["AdminAgentReportStatus"] | null;
+            /** @description The handling note; null until the report is handled. */
+            report_note: string | null;
+        };
+        /**
+         * @description One agent_runs row (04 §3.2); the columns 04 allows to be null (no model on a fallback
+         *     run, or a run still going) are null. Never carries user_text.
+         */
+        AdminAgentTraceRun: {
+            run_id: components["schemas"]["Id"];
+            /** @description The recognised intent (enum agent_intent); null when none was recognised. */
+            intent: string | null;
+            /** @description Model name; null when no model was called. */
+            model: string | null;
+            /** @description Model snapshot (version) used; null when no model was called. */
+            model_snapshot: string | null;
+            /** @description Prompt version of the run. */
+            prompt_version: string;
+            /** Format: int32 */
+            input_tokens: number | null;
+            /** Format: int32 */
+            output_tokens: number | null;
+            /**
+             * Format: int64
+             * @description Model cost in milli-fen (1/1000 fen); null when no model was called.
+             */
+            cost_mfen: number | null;
+            /**
+             * Format: int32
+             * @description Time to the first token in milliseconds.
+             */
+            ttft_ms: number | null;
+            /**
+             * Format: int32
+             * @description Whole run time in milliseconds; null while the run is going.
+             */
+            latency_ms: number | null;
+            /** @description finish_reason of the done frame; null while the run is going. */
+            finish_reason: components["schemas"]["AgentFinishReason"] | null;
+            /** @description Output filter hits of the run (amount / url / tpwd / banned_word), empty when none. */
+            filter_hits: ("amount" | "url" | "tpwd" | "banned_word")[];
+            /** Format: date-time */
+            accepted_at: string;
+            /**
+             * Format: date-time
+             * @description null while the run is going.
+             */
+            ended_at: string | null;
+        };
+        /** @description One agent_tool_calls row (04 §3.2); args in the masked form stored (BR-AI-19, BR-AI-14). */
+        AdminAgentTraceToolCall: {
+            run_id: components["schemas"]["Id"];
+            /**
+             * Format: int32
+             * @description Order of the call inside the run, from 1.
+             */
+            seq: number;
+            /** @description Tool name (BR-AI-02 whitelist). */
+            name: string;
+            /** @description Tool arguments as stored, masked; null when none were stored. */
+            args: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Call status as stored. */
+            status: string;
+            /** Format: int32 */
+            latency_ms: number | null;
+        };
+        /**
+         * @description One Agent session with its whole trace (BR-AI-19). Only the masked forms stored; no
+         *     original text, full phone number or device identifier.
+         */
+        AdminAgentSessionDetail: {
+            session_id: components["schemas"]["Id"];
+            /** @description The signed-in user who owns the session; null for a guest session (BR-AI-20). */
+            user_id: components["schemas"]["Id"] | null;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            last_active_at: string;
+            expired: boolean;
+            /** @description Messages in time order. */
+            messages: components["schemas"]["AdminAgentTraceMessage"][];
+            /** @description Runs in time order of accepted_at. */
+            runs: components["schemas"]["AdminAgentTraceRun"][];
+            /** @description Tool calls by run, then by seq. */
+            tool_calls: components["schemas"]["AdminAgentTraceToolCall"][];
+            /** @description Cards in the order sent, the same shape as the user's history (earnings_summary carries no amounts). */
+            cards: components["schemas"]["AgentHistoryCard"][];
+        };
+        AdminAgentSessionDetailResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminAgentSessionDetail"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description One reported reply (04 §3.2 agent_messages; BR-ID-15 细则「举报的处理」). `deadline_at` is
+         *     `reported_at` + 48 hours; `overdue` is true only while pending at or after `deadline_at`
+         *     (the same rule as the workbench card agent_report_overdue). No message text.
+         */
+        AdminAgentReport: {
+            message_id: components["schemas"]["Id"];
+            session_id: components["schemas"]["Id"];
+            /** @description The signed-in user who owns the session; null for a guest session. */
+            user_id: components["schemas"]["Id"] | null;
+            /** Format: date-time */
+            reported_at: string;
+            /** @description The reason as the user sent it (free text, no enum); null after the user's data is deleted (BR-AI-22), the report itself is kept. */
+            report_reason: string | null;
+            report_status: components["schemas"]["AdminAgentReportStatus"];
+            /**
+             * Format: date-time
+             * @description reported_at + 48 hours (BR-ID-15).
+             */
+            deadline_at: string;
+            /** @description Pending and the current time ≥ deadline_at; false once handled. */
+            overdue: boolean;
+            /**
+             * Format: date-time
+             * @description report_handled_at; null while pending.
+             */
+            handled_at: string | null;
+            /** @description report_handler_id, the admin account that handled it; null while pending. */
+            handler_id: components["schemas"]["Id"] | null;
+            /** @description Display name of the handling admin account; null while pending or once that account is deleted. */
+            handler_name: string | null;
+            /** @description The handling note; null while pending. */
+            report_note: string | null;
+            /**
+             * Format: int32
+             * @description The message's row_version, sent back as expected_row_version when handling.
+             */
+            row_version: number;
+        };
+        AdminAgentReportPage: {
+            items: components["schemas"]["AdminAgentReport"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int32 */
+            total: number;
+        };
+        AdminAgentReportPageResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminAgentReportPage"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        AdminAgentReportResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminAgentReport"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        AdminAgentReportHandleRequest: {
+            /** @description Handling note; trimmed of leading and trailing whitespace, then 1–500 characters (else 20001 [note]). */
+            note: string;
+            /**
+             * Format: int32
+             * @description The report's row_version as the console showed it; a mismatch is 20902 (agent_report).
+             */
+            expected_row_version: number;
+        };
         /** @description The manual sync limits of one platform (02 §7.1, 01 F-ORD-10). */
         AdminOrderSyncPlatformLimit: {
             platform: components["schemas"]["PlatformCode"];
@@ -21908,6 +22279,16 @@ export interface components {
          *     session is not the caller's is 30504 either way (BR-AI-20).
          */
         AgentMessageId: components["schemas"]["Id"];
+        /**
+         * @description session_id of the Agent session; unknown or of another app → 20001 with
+         *     data.fields=[session_id] (not probed).
+         */
+        AdminAgentSessionIdPath: components["schemas"]["Id"];
+        /**
+         * @description message_id of the reported reply; unknown, of another app or never reported → 20001 with
+         *     data.fields=[message_id] (not probed).
+         */
+        AdminAgentReportMessageIdPath: components["schemas"]["Id"];
         /** @description union_account_id from GET /admin/v1/union-accounts; unknown or of another app → 20001 with data.fields=[union_account_id]. */
         AdminUnionAccountIdPath: components["schemas"]["Id"];
         /** @description session_id from POST …/reauthorize or POST /admin/v1/union-accounts/oauth/callback; unknown or of another account → 20001 with data.fields=[session_id]. */
@@ -44570,6 +44951,389 @@ export interface operations {
             };
             429: components["responses"]["TooManyRequests"];
             /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminListAgentSessions: {
+        parameters: {
+            query?: {
+                /** @description Page number of an admin list, from 1 (04 §5 后台分页). */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Page size of an admin list, at most 200 (04 §5 后台分页); above that → 20001. */
+                page_size?: components["parameters"]["AdminPageSize"];
+                /** @description Only sessions of this user (guest sessions never match). */
+                user_id?: components["schemas"]["Id"];
+                /** @description Only this session. */
+                session_id?: components["schemas"]["Id"];
+                /** @description Earliest session start (started_at), inclusive (ISO 8601 with offset). */
+                from?: string;
+                /** @description Latest session start (started_at), exclusive (ISO 8601 with offset). */
+                to?: string;
+                /** @description true = only sessions with a badcase reply; false = only sessions without one; absent = all. */
+                badcase?: boolean;
+                /** @description true = only sessions with a reported reply; false = only sessions without one; absent = all. */
+                reported?: boolean;
+            };
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of Agent sessions, newest first. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "session_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02",
+                     *             "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04",
+                     *             "started_at": "2026-09-29T11:20:00+08:00",
+                     *             "last_active_at": "2026-09-29T11:26:00+08:00",
+                     *             "expired": true,
+                     *             "run_count": 3,
+                     *             "badcase_count": 1,
+                     *             "report_count": 0
+                     *           },
+                     *           {
+                     *             "session_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01",
+                     *             "user_id": null,
+                     *             "started_at": "2026-09-29T09:50:00+08:00",
+                     *             "last_active_at": "2026-09-29T10:05:00+08:00",
+                     *             "expired": false,
+                     *             "run_count": 2,
+                     *             "badcase_count": 0,
+                     *             "report_count": 1
+                     *           }
+                     *         ],
+                     *         "page": 1,
+                     *         "page_size": 20,
+                     *         "total": 2
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminAgentSessionPageResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminGetAgentSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path: {
+                /**
+                 * @description session_id of the Agent session; unknown or of another app → 20001 with
+                 *     data.fields=[session_id] (not probed).
+                 */
+                session_id: components["parameters"]["AdminAgentSessionIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session with its trace. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "session_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01",
+                     *         "user_id": null,
+                     *         "started_at": "2026-09-29T09:50:00+08:00",
+                     *         "last_active_at": "2026-09-29T10:05:00+08:00",
+                     *         "expired": false,
+                     *         "messages": [
+                     *           {
+                     *             "message_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c01",
+                     *             "role": "user",
+                     *             "text": "我现在有多少收益",
+                     *             "card_ids": [],
+                     *             "feedback": null,
+                     *             "badcase": false,
+                     *             "reported_at": null,
+                     *             "report_reason": null,
+                     *             "report_status": null,
+                     *             "report_note": null
+                     *           },
+                     *           {
+                     *             "message_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02",
+                     *             "role": "assistant",
+                     *             "text": "这是你当时的收益概况，以钱包页为准。",
+                     *             "card_ids": [
+                     *               "c1"
+                     *             ],
+                     *             "feedback": "down",
+                     *             "badcase": true,
+                     *             "reported_at": "2026-09-29T10:00:00+08:00",
+                     *             "report_reason": "回答内容与事实不符",
+                     *             "report_status": "pending",
+                     *             "report_note": null
+                     *           }
+                     *         ],
+                     *         "runs": [
+                     *           {
+                     *             "run_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8d01",
+                     *             "intent": "earnings_query",
+                     *             "model": "qwen-plus",
+                     *             "model_snapshot": "qwen-plus-2026-09-01",
+                     *             "prompt_version": "p-2026-09-01",
+                     *             "input_tokens": 1200,
+                     *             "output_tokens": 300,
+                     *             "cost_mfen": 4500,
+                     *             "ttft_ms": 800,
+                     *             "latency_ms": 3200,
+                     *             "finish_reason": "stop",
+                     *             "filter_hits": [],
+                     *             "accepted_at": "2026-09-29T09:55:00+08:00",
+                     *             "ended_at": "2026-09-29T09:55:03+08:00"
+                     *           }
+                     *         ],
+                     *         "tool_calls": [
+                     *           {
+                     *             "run_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8d01",
+                     *             "seq": 1,
+                     *             "name": "get_my_earnings",
+                     *             "args": {},
+                     *             "status": "ok",
+                     *             "latency_ms": 120
+                     *           }
+                     *         ],
+                     *         "cards": [
+                     *           {
+                     *             "card_id": "c1",
+                     *             "type": "earnings_summary",
+                     *             "schema_version": 1,
+                     *             "data": {
+                     *               "as_of": "2026-09-29T09:55:02+08:00",
+                     *               "actions": [
+                     *                 {
+                     *                   "route": "Wallet",
+                     *                   "text_key": "agent.earnings.open_wallet"
+                     *                 }
+                     *               ]
+                     *             },
+                     *             "fallback_text": "收益以钱包页显示为准。"
+                     *           }
+                     *         ]
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminAgentSessionDetailResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminListAgentReports: {
+        parameters: {
+            query?: {
+                /** @description Page number of an admin list, from 1 (04 §5 后台分页). */
+                page?: components["parameters"]["AdminPage"];
+                /** @description Page size of an admin list, at most 200 (04 §5 后台分页); above that → 20001. */
+                page_size?: components["parameters"]["AdminPageSize"];
+                /** @description pending or handled; absent = all. */
+                status?: components["schemas"]["AdminAgentReportStatus"];
+                /** @description true = only pending reports at or past deadline_at; false = only the others; absent = all. */
+                overdue?: boolean;
+                /** @description Earliest report time (reported_at), inclusive (ISO 8601 with offset). */
+                from?: string;
+                /** @description Latest report time (reported_at), exclusive (ISO 8601 with offset). */
+                to?: string;
+            };
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of reports, pending first. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "message_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02",
+                     *             "session_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01",
+                     *             "user_id": null,
+                     *             "reported_at": "2026-09-29T10:00:00+08:00",
+                     *             "report_reason": "回答内容与事实不符",
+                     *             "report_status": "pending",
+                     *             "deadline_at": "2026-10-01T10:00:00+08:00",
+                     *             "overdue": true,
+                     *             "handled_at": null,
+                     *             "handler_id": null,
+                     *             "handler_name": null,
+                     *             "report_note": null,
+                     *             "row_version": 1
+                     *           },
+                     *           {
+                     *             "message_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c05",
+                     *             "session_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b02",
+                     *             "user_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c04",
+                     *             "reported_at": "2026-09-28T09:00:00+08:00",
+                     *             "report_reason": "推荐的商品和我问的不一样",
+                     *             "report_status": "handled",
+                     *             "deadline_at": "2026-09-30T09:00:00+08:00",
+                     *             "overdue": false,
+                     *             "handled_at": "2026-09-28T15:30:00+08:00",
+                     *             "handler_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
+                     *             "handler_name": "运营小王",
+                     *             "report_note": "已核对，答复口径已修正",
+                     *             "row_version": 2
+                     *           }
+                     *         ],
+                     *         "page": 1,
+                     *         "page_size": 20,
+                     *         "total": 2
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminAgentReportPageResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminHandleAgentReport: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path: {
+                /**
+                 * @description message_id of the reported reply; unknown, of another app or never reported → 20001 with
+                 *     data.fields=[message_id] (not probed).
+                 */
+                message_id: components["parameters"]["AdminAgentReportMessageIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "note": "已核对，答复口径已修正",
+                 *       "expected_row_version": 1
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminAgentReportHandleRequest"];
+            };
+        };
+        responses: {
+            /** @description The report row after it was marked handled. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "message_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8c02",
+                     *         "session_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f8b01",
+                     *         "user_id": null,
+                     *         "reported_at": "2026-09-29T10:00:00+08:00",
+                     *         "report_reason": "回答内容与事实不符",
+                     *         "report_status": "handled",
+                     *         "deadline_at": "2026-10-01T10:00:00+08:00",
+                     *         "overdue": false,
+                     *         "handled_at": "2026-10-01T11:00:00+08:00",
+                     *         "handler_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01",
+                     *         "handler_name": "运营小王",
+                     *         "report_note": "已核对，答复口径已修正",
+                     *         "row_version": 2
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminAgentReportResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not handled (codes in contracts/error-codes.yaml). */
             "4XX": {
                 headers: {
                     "X-Trace-Id": components["headers"]["TraceId"];

@@ -1,0 +1,137 @@
+{
+  "risk_note": "RV1 (contract, planned; D10-1287, change record 20261112 §3.4 D1, 05 F1-10k). Admin Agent trace query and AI report handling under tag admin-agent-traces: adminListAgentSessions and adminGetAgentSession (agent.trace; every successful detail read writes audit agent_trace_view; always the masked form, pii.* unmasks nothing; text null after the user's data is deleted, BR-AI-22; owner user_id or device_id, BR-AI-20), adminListAgentReports (agent.trace; deadline_at = reported_at + 48 hours, overdue = pending and now >= deadline_at, BR-ID-15), adminHandleAgentReport (agent.report, no step-up; note 1-500 characters after trim; pending -> handled with CAS, mismatch or already handled 20902 resource=agent_report; audit agent_report_handle). error-codes.yaml 20902 data.resource gains agent_report (catalog.test list updated, as CT-24zh / CT-24zv did). No new table: fields are main's agent_* columns and agent2's A1-A3 shapes. Host: codegen and the four route generators no drift, contracts:check 0, contracts-ts pass, rule tests 33/33, lint / format 0, tsc -b apps/api test apps/admin 0.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "codex-run.sh review --review-type contract (D10-1075, medium). Round 1: fail, S1 filter_hits lacked banned_word (04 §3.2 at SPEC_REF) - fixed; out-of-scope S1 report_reason must be nullable after the user's data is deleted (BR-AI-22) - fixed; S2 note raw length 500 rejects ' '+500 characters - kept, the frozen rule test [AC-CT-24zzi#28] pins rejection of 501 characters and the description matches the schema. Round 2 over the increment: pass, no findings. couli-runs/CT-24zzi/review-contract-r1.json, review-contract-r2.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests in test/spec/contracts/admin-agent-traces/** by a fresh independent Claude (claude-run.sh, tester claude-independent, approvals #36; spec-test stays independent Claude per D10-1080). spec-test r1 (fresh independent Claude): pass with 5 out-of-scope S2; three taken in attempt 2 (detail audit asserted positively, pii.* never-unmask, CAS case-sensitive). spec-test r2: pass. Container red/1 ok, problems 0, 33 red. couli-runs/CT-24zzi/review-spec-r1.json, review-spec-r2.json."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#27] 处理接口只有 X-Trace-Id 与必填路径参数 message_id；请求体必填、封闭，恰为 note 与 expected_row_version",
+    "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#28] note 至多 500 字、不可为空；expected_row_version 为非负整数；请求示例过 schema",
+    "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#29] 描述：agent.report；note 去首尾空白后 1–500 字否则 20001 [note]；未知字段 20001；消息不存在、别的 app 或未被举报 → 20001 [message_id]（不探测）",
+    "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#30] 描述：待处理 → 已处理写 report_status=handled、处理人、处理时间与说明，row_version + 1；expected_row_version 不符或已是已处理 → 20902 data.resource=agent_report；无 Idempotency-Key（CAS）",
+    "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#31] 描述：写一条审计 agent_report_handle（前后值为状态与说明，不含消息文本）；超时后照样可以标已处理",
+    "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#32] 成功响应的 data 是该举报行，与举报列表的行同形（13 个字段封闭）；200 示例为已处理且未超时",
+    "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#33] 错误示例：20001 data.fields=[note]、20001 data.fields=[message_id]、20902 data.resource=agent_report",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#1] 登记 GET /admin/v1/agent-traces/sessions：adminListAgentSessions、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#2] 登记 GET /admin/v1/agent-traces/sessions/{session_id}：adminGetAgentSession、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#3] 登记 GET /admin/v1/agent-traces/reports：adminListAgentReports、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#4] 登记 POST /admin/v1/agent-traces/reports/{message_id}/handle：adminHandleAgentReport、admin、planned、agent.report、无 step-up 与 Idempotency-Key、错误码恰为 10001/10403/20001/20902",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单含这四个操作",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#6] 错误码目录 20902 的 data.resource 登记 agent_report",
+    "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#20] 举报列表参数恰为 X-Trace-Id、page、page_size、status、overdue、from、to；status 取 pending / handled，筛选都可选",
+    "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#21] 举报列表描述：agent.trace 只读、不写审计；status 不传为全部；from（含）/ to（不含）按 reported_at，from 不早于 to → 20001 [from, to]",
+    "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#22] 举报列表描述：48 小时从举报提交起算，deadline_at = reported_at + 48 小时；overdue 为待处理且当前时刻 ≥ deadline_at，与 agent_report_overdue 同一口径；已处理的 overdue 为 false",
+    "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#23] 举报列表排序：待处理在前按 reported_at 升序（最久的在最上），已处理在后按 handled_at 倒序",
+    "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#24] 举报列表 200 是后台分页信封，行封闭且恰为 13 个字段、全部 required",
+    "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#25] 举报行各字段的取值：状态 pending / handled，overdue 布尔，处理人与处理时间、说明可为 null，row_version 非负整数",
+    "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#26] 举报列表 200 示例过 schema，含一条超时待处理与一条已处理；每行 deadline_at 恰为 reported_at + 48 小时，已处理的 overdue 为 false",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#7] 会话列表参数恰为 X-Trace-Id、page、page_size、user_id、session_id、from、to、badcase、reported，前三个引用现有组件，筛选都可选",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#8] 会话列表描述：agent.trace 只读、列表不写审计；from（含）/ to（不含）按 started_at，from 不早于 to → 20001 [from, to]；按 started_at 倒序；游客会话 user_id 为 null",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#9] 会话列表 200 是后台分页信封，行封闭且恰为 8 个字段、全部 required，不含设备标识、手机号与消息文本",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#10] 会话列表 200 示例过 schema，含一条游客会话（user_id null）与一条登录用户会话",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#11] 单会话明细只有 X-Trace-Id 与必填路径参数 session_id，无请求体",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#12] 单会话明细描述：agent.trace 只读，每次成功读取写一条审计 agent_trace_view；不存在或别的 app 的会话 → 20001 data.fields=[session_id]（不探测）",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#13] 单会话明细描述：只给落库的脱敏形式，pii.* 不解开任何东西；不返回原文、完整手机号、设备标识；注销后消息 text 为 null；收益卡不带金额",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#14] 单会话明细 data 含会话头（session_id、user_id、started_at、last_active_at、expired）与 messages、runs、tool_calls、cards 四个数组",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#15] messages 的元素封闭、含 message_id、role、text、card_ids、feedback、badcase 与举报四项，取值与 04 §3.2 一致",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#16] runs 的元素封闭且恰为任务书所列 14 个字段，计数非负、可空列按 04 §3.2 可为 null",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#17] tool_calls 的元素封闭且恰为 run_id、seq、name、args、status、latency_ms；seq 从 1 起",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#18] cards 的元素与 AgentHistoryCard 同形（card_id、type、schema_version、data、fallback_text）",
+    "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#19] 单会话明细响应不出现设备标识、手机号、app_id、原文 user_text 等字段；200 示例过 schema"
+  ],
+  "task": "CT-24zzi",
+  "spec_commit": "47bfc4e027ef1cb631baf83f669347aea92f9d42",
+  "spec_ref": "a36eb9360fdae7c0216e9d7f8aab4285d9f05b15",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "47bfc4e027ef1cb631baf83f669347aea92f9d42",
+      "tree": "a9be64ece24c518a65493cc0848aae8f37960dfd",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-12T06:59:55Z",
+      "finished_at": "2026-11-12T06:59:58Z",
+      "red_tests": [
+        "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#27] 处理接口只有 X-Trace-Id 与必填路径参数 message_id；请求体必填、封闭，恰为 note 与 expected_row_version",
+        "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#28] note 至多 500 字、不可为空；expected_row_version 为非负整数；请求示例过 schema",
+        "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#29] 描述：agent.report；note 去首尾空白后 1–500 字否则 20001 [note]；未知字段 20001；消息不存在、别的 app 或未被举报 → 20001 [message_id]（不探测）",
+        "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#30] 描述：待处理 → 已处理写 report_status=handled、处理人、处理时间与说明，row_version + 1；expected_row_version 不符或已是已处理 → 20902 data.resource=agent_report；无 Idempotency-Key（CAS）",
+        "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#31] 描述：写一条审计 agent_report_handle（前后值为状态与说明，不含消息文本）；超时后照样可以标已处理",
+        "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#32] 成功响应的 data 是该举报行，与举报列表的行同形（13 个字段封闭）；200 示例为已处理且未超时",
+        "test/spec/contracts/admin-agent-traces/handle.test.ts > [AC-CT-24zzi#33] 错误示例：20001 data.fields=[note]、20001 data.fields=[message_id]、20902 data.resource=agent_report",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#1] 登记 GET /admin/v1/agent-traces/sessions：adminListAgentSessions、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#2] 登记 GET /admin/v1/agent-traces/sessions/{session_id}：adminGetAgentSession、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#3] 登记 GET /admin/v1/agent-traces/reports：adminListAgentReports、admin、planned、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#4] 登记 POST /admin/v1/agent-traces/reports/{message_id}/handle：adminHandleAgentReport、admin、planned、agent.report、无 step-up 与 Idempotency-Key、错误码恰为 10001/10403/20001/20902",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单含这四个操作",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#6] 错误码目录 20902 的 data.resource 登记 agent_report",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#20] 举报列表参数恰为 X-Trace-Id、page、page_size、status、overdue、from、to；status 取 pending / handled，筛选都可选",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#21] 举报列表描述：agent.trace 只读、不写审计；status 不传为全部；from（含）/ to（不含）按 reported_at，from 不早于 to → 20001 [from, to]",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#22] 举报列表描述：48 小时从举报提交起算，deadline_at = reported_at + 48 小时；overdue 为待处理且当前时刻 ≥ deadline_at，与 agent_report_overdue 同一口径；已处理的 overdue 为 false",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#23] 举报列表排序：待处理在前按 reported_at 升序（最久的在最上），已处理在后按 handled_at 倒序",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#24] 举报列表 200 是后台分页信封，行封闭且恰为 13 个字段、全部 required",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#25] 举报行各字段的取值：状态 pending / handled，overdue 布尔，处理人与处理时间、说明可为 null，row_version 非负整数",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts > [AC-CT-24zzi#26] 举报列表 200 示例过 schema，含一条超时待处理与一条已处理；每行 deadline_at 恰为 reported_at + 48 小时，已处理的 overdue 为 false",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#7] 会话列表参数恰为 X-Trace-Id、page、page_size、user_id、session_id、from、to、badcase、reported，前三个引用现有组件，筛选都可选",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#8] 会话列表描述：agent.trace 只读、列表不写审计；from（含）/ to（不含）按 started_at，from 不早于 to → 20001 [from, to]；按 started_at 倒序；游客会话 user_id 为 null",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#9] 会话列表 200 是后台分页信封，行封闭且恰为 8 个字段、全部 required，不含设备标识、手机号与消息文本",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#10] 会话列表 200 示例过 schema，含一条游客会话（user_id null）与一条登录用户会话",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#11] 单会话明细只有 X-Trace-Id 与必填路径参数 session_id，无请求体",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#12] 单会话明细描述：agent.trace 只读，每次成功读取写一条审计 agent_trace_view；不存在或别的 app 的会话 → 20001 data.fields=[session_id]（不探测）",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#13] 单会话明细描述：只给落库的脱敏形式，pii.* 不解开任何东西；不返回原文、完整手机号、设备标识；注销后消息 text 为 null；收益卡不带金额",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#14] 单会话明细 data 含会话头（session_id、user_id、started_at、last_active_at、expired）与 messages、runs、tool_calls、cards 四个数组",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#15] messages 的元素封闭、含 message_id、role、text、card_ids、feedback、badcase 与举报四项，取值与 04 §3.2 一致",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#16] runs 的元素封闭且恰为任务书所列 14 个字段，计数非负、可空列按 04 §3.2 可为 null",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#17] tool_calls 的元素封闭且恰为 run_id、seq、name、args、status、latency_ms；seq 从 1 起",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#18] cards 的元素与 AgentHistoryCard 同形（card_id、type、schema_version、data、fallback_text）",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts > [AC-CT-24zzi#19] 单会话明细响应不出现设备标识、手机号、app_id、原文 user_text 等字段；200 示例过 schema"
+      ],
+      "expected": [
+        "test/spec/contracts/admin-agent-traces/handle.test.ts",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts",
+        "test/spec/contracts/admin-agent-traces/reports.test.ts",
+        "test/spec/contracts/admin-agent-traces/sessions.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "637b15e547f4e5df1b1dc4da429671034af7522b377d0f67fecdef89dfd90c92"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1b6d915660ef3c5a44f120915ead1a142b3563d4",
+    "specs": "f78e529ad2f2d314556b8c6b89ba069325a3ff9f"
+  }
+}

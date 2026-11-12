@@ -322,6 +322,7 @@ codes:
         - bad_debt_writeoff
         - union_receipt
         - settle_adjust_batch
+        - agent_report
     sources:
       - BR-FUND-09
       - BR-FUND-01
@@ -344,6 +345,7 @@ codes:
       - BR-FUND-12
       - BR-FUND-16
       - BR-FUND-20
+      - BR-ID-15
   - code: 20903
     http: 409
     meaning: 幂等键已作废（需要二次验证的四个操作中结果未知的一次提交已被用户放弃，作废接口在该键没有记录时写入作废记录；之后带同一个键的请求在幂等检查一步返回本码，不比较请求体、不执行业务；业务结果写入时发现该键已作废也整笔回滚并返回本码）
