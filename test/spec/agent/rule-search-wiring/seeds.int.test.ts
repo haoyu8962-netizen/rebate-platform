@@ -34,10 +34,9 @@ const EARLIER_KEYS = [
 
 const ALL_KEYS: readonly string[] = [SEARCH_RULES_SWITCH, ...EARLIER_KEYS];
 
-/** Code defaults cover these; no seed writes them (P1 tools default off, D32 get_my_earnings). */
+/** Code defaults cover these; no seed writes them (P1 tools default off). */
 const UNSEEDED = [
   'agent.rag.min_score',
-  'agent.tools.get_my_earnings.enabled',
   'agent.tools.create_watch.enabled',
   'agent.tools.list_watches.enabled',
   'agent.tools.cancel_watch.enabled',
@@ -152,7 +151,7 @@ it('[AC-B3-08l#7] 跑种子前库里已有人工写的 search_rules 开关 false
   expect(await valuesOf(pg.db, EARLIER_KEYS)).toEqual(allTrue(EARLIER_KEYS));
 }, 120_000);
 
-it('[AC-B3-08l#7][BR-AI-07] 不种 agent.rag.min_score（代码默认 0.2）与 P1 / 只读收益工具开关（get_my_earnings、create_watch、list_watches、cancel_watch）', async () => {
+it('[AC-B3-08l#7][BR-AI-07] 不种 agent.rag.min_score（代码默认 0.2）与 P1 工具开关（create_watch、list_watches、cancel_watch）', async () => {
   requireSeedFile();
   await runSeeds(pg.db);
   expect(await rowsOf(pg.db, UNSEEDED)).toEqual({});
@@ -174,4 +173,73 @@ it('[AC-B3-08l#7][BR-AI-02] 静态检查 0005：只有 INSERT INTO app.config_it
     (match) => ({ app_id: match[1], key: match[2] }),
   );
   expect(rows).toEqual([{ app_id: 'couli', key: SEARCH_RULES_SWITCH }]);
+});
+
+const SEED_0006 = `${SEEDS}0006_agent-earnings-tool-switch.sql`;
+const EARNINGS_SWITCH = 'agent.tools.get_my_earnings.enabled';
+
+function requireSeed0006(): void {
+  expect(existsSync(SEED_0006), 'db/seeds/0006_agent-earnings-tool-switch.sql exists').toBe(true);
+}
+
+/** The statements of 0006 (`--` comments removed), trimmed, empty ones dropped. */
+function seed0006Statements(): string[] {
+  const text = readFileSync(SEED_0006, 'utf8')
+    .split('\n')
+    .map((line) => line.replace(/--.*$/, ''))
+    .join('\n');
+  return text
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+}
+
+it('[AC-B1-22z#1][BR-AI-02] 新建库跑完全部种子后 couli 的 agent.tools.get_my_earnings.enabled 在，值为 jsonb 布尔 true，updated_by = seed', async () => {
+  requireSeed0006();
+  await runSeeds(pg.db);
+  const rows = await rowsOf(pg.db, [EARNINGS_SWITCH]);
+  expect(rows[EARNINGS_SWITCH]).toMatchObject({
+    value: true,
+    type: 'boolean',
+    updated_by: 'seed',
+  });
+}, 120_000);
+
+it('[AC-B1-22z#2][BR-AI-02] 先人工把 get_my_earnings 开关写成 false 再跑两遍全部种子 → 仍 false，version / updated_by 不变', async () => {
+  requireSeed0006();
+  await pg.db
+    .insertInto('config_items')
+    .values({
+      app_id: 'couli',
+      key: EARNINGS_SWITCH,
+      value: sql`'false'::jsonb`,
+      updated_by: 'b1-22z-rule-test',
+    })
+    .execute();
+  const before = await rowsOf(pg.db, [EARNINGS_SWITCH]);
+  expect(before[EARNINGS_SWITCH]).toMatchObject({
+    value: false,
+    type: 'boolean',
+    updated_by: 'b1-22z-rule-test',
+  });
+  await runSeeds(pg.db);
+  await runSeeds(pg.db);
+  const after = await rowsOf(pg.db, [EARNINGS_SWITCH]);
+  expect(after[EARNINGS_SWITCH]?.value).toBe(false);
+  expect(after).toEqual(before);
+}, 120_000);
+
+it('[AC-B1-22z#3][BR-AI-02] 静态检查 0006：只有 INSERT INTO app.config_items … ON CONFLICT (app_id, key) DO NOTHING，无 UPDATE / DELETE / TRUNCATE，只写 app_id = couli 的 agent.tools.get_my_earnings.enabled', () => {
+  requireSeed0006();
+  const statements = seed0006Statements();
+  expect(statements.length).toBeGreaterThan(0);
+  for (const statement of statements) {
+    expect(statement).toMatch(/^INSERT\s+INTO\s+app\.config_items\s*\(/i);
+    expect(statement).toMatch(/ON\s+CONFLICT\s*\(\s*app_id\s*,\s*key\s*\)\s*DO\s+NOTHING$/i);
+    expect(statement).not.toMatch(/\b(UPDATE|DELETE|TRUNCATE)\b/i);
+  }
+  const rows = [...statements.join('\n').matchAll(/\(\s*'([^']*)'\s*,\s*'([^']*)'/g)].map(
+    (match) => ({ app_id: match[1], key: match[2] }),
+  );
+  expect(rows).toEqual([{ app_id: 'couli', key: EARNINGS_SWITCH }]);
 });
