@@ -19,6 +19,7 @@ paths:
 test_paths:
   - 'test/spec/agent/degraded-routing/**'
   - 'test/spec/agent/orchestrator-degraded/degraded.test.ts'
+  - 'test/spec/agent/stream-mount/redact.int.test.ts'
 modify_existing:
   - file: 'test/spec/agent/orchestrator-degraded/degraded.test.ts'
     test: '[AC-B3-05c#1][BR-AI-14] 只将模型形态剩余文本传入关键词计划，不还原长数字或抽取条件'
@@ -35,6 +36,12 @@ modify_existing:
     reason: tighten_only
     ruling: D10-1295
     note: '本行断言不变（D10-1295 no_platform 不动）；共用回调随 no_keyword 改动，按 CT-06zzzk 逐行声明'
+  - file: 'test/spec/agent/stream-mount/redact.int.test.ts'
+    test: '[AC-B3-03f#6][BR-AI-19][BR-AI-14] 存储形态：agent_runs.user_text 与用户消息文本逐字等于手写期望（手机号 138****8000、长数字只留后 4 位、其余文字一字不少），原值不出现在任何 agent_* 表；模型形态：searchKeyword 的关键词里是 <num_k>、没有原值'
+    retitle_to: '[AC-B3-03f#6][BR-AI-19][BR-AI-14] 存储形态：agent_runs.user_text 与用户消息文本逐字等于手写期望（手机号 138****8000、长数字只留后 4 位、其余文字一字不少），原值不出现在任何 agent_* 表；模型形态：searchKeyword 的关键词不含长数字占位符与原值、仍含商品词'
+    reason: tighten_only
+    ruling: D10-1327
+    note: 'BR-AI-14 ⑥：取词用脱敏后的自由文本本身，不带不可信定界的标签，长数字占位符不进检索词（不随开关回退）'
 impl: claude
 tester: codex
 accept:
