@@ -9,7 +9,7 @@ type: impl
 # 风险 RV2（app.module.ts 在白名单外）。新鲜独立 Claude 写规则测试，Opus 实现，Codex 评审（额度不足时新鲜独立 Claude）。
 refs: [BR-AI-19, BR-AI-14]
 refs_hash:
-  BR-AI-19: 533bd70d3d18
+  BR-AI-19: 966f895b4033
   BR-AI-14: c009637e9cb0
 deps: [B3-08m]
 paths:

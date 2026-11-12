@@ -13,9 +13,9 @@ type: impl
 # refs_hash 入账前用 node tools/ops/task.ts hash B3-03i 生成并替换下行。
 refs: [BR-AI-12, BR-AI-11, BR-AI-13]
 refs_hash:
-  BR-AI-12: d041fa7220df
+  BR-AI-12: d45a7ac17d5a
   BR-AI-11: 0ce4651ba7c3
-  BR-AI-13: 870069e3ab76
+  BR-AI-13: 6309509106ac
 deps: [B1-02r, B3-03d]
 paths:
   - 'apps/api/src/modules/agent/stream/access/**'

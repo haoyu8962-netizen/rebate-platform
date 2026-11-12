@@ -11,10 +11,10 @@ type: impl
 # 不在本段：HTTP 接线与 ①～⑥（B3-03d）、Orchestrator 本体（B3-05）、OutputGuard（B3-06）、trace（B3-09）。
 refs: [BR-AI-12, BR-AI-14, BR-AI-23, BR-AI-13]
 refs_hash:
-  BR-AI-12: d041fa7220df
+  BR-AI-12: d45a7ac17d5a
   BR-AI-14: c009637e9cb0
   BR-AI-23: 5ebdbaff580d
-  BR-AI-13: 870069e3ab76
+  BR-AI-13: 6309509106ac
 deps: [B3-03a, B3-03c]
 paths:
   - 'apps/api/src/modules/agent/stream/run/**'

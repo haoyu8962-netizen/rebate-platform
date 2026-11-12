@@ -8,7 +8,7 @@ type: impl
 # 2026-10-17 编排者：paths 加 stream/run/manager.ts、types.ts——core 只经 RunContext.card 写卡（返回 void），编号在流层 manager 里分配，需给 card 加可选回执回调（只增参数，约 4 行，不改既有行为）；manager.ts 在额度结算路径上，评审按资金清单。
 refs: [BR-AI-05, BR-AI-06]
 refs_hash:
-  BR-AI-05: 1e8f6bba94a4
+  BR-AI-05: 2ac35e2cd8ef
   BR-AI-06: bf97647decbd
 deps: [B3-05b]
 paths:

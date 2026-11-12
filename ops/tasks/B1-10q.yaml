@@ -6,7 +6,7 @@ type: impl
 # 与 agent2 约定（公告 2026-11-12 13:50）：不碰 agent/stream/**、agent/http/index.ts、agent/store/index.ts、agent/store/results/**。别的 app 或不存在的会话回 20001 [session_id]；列表不带文本与手机号；明细恒为脱敏形式。
 refs: [BR-AI-19, BR-AI-20, BR-AI-22]
 refs_hash:
-  BR-AI-19: 533bd70d3d18
+  BR-AI-19: 966f895b4033
   BR-AI-20: ed15f04bab16
   BR-AI-22: d412bc8a631a
 deps: [CT-24zzi]

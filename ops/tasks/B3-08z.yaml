@@ -8,7 +8,7 @@ type: impl
 # 风险 RV2（platform/metrics、entry.ts、infra/monitoring 不在白名单）。新鲜独立 Claude 写规则测试，Opus 实现，独立 Claude 评审。
 refs: [BR-AI-19]
 refs_hash:
-  BR-AI-19: 533bd70d3d18
+  BR-AI-19: 966f895b4033
 deps: [B3-08y, B3-08za]
 paths:
   - 'apps/api/src/modules/platform/metrics/**'

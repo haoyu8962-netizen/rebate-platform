@@ -11,8 +11,8 @@ type: impl
 refs: [BR-AI-04, BR-AI-01, BR-AI-05]
 refs_hash:
   BR-AI-04: 34cc76da510c
-  BR-AI-01: f4d453462e15
-  BR-AI-05: 1e8f6bba94a4
+  BR-AI-01: 8162dc4297fb
+  BR-AI-05: 2ac35e2cd8ef
 # 2026-10-17 编排者：deps 加 B3-05i（卡片编号回填，见 B3-05i 注释）。
 deps: [B3-04a, B1-07b, B1-05i, B3-05i]
 paths:

@@ -14,7 +14,7 @@ type: impl
 refs: [BR-AI-14, BR-AI-19]
 refs_hash:
   BR-AI-14: c009637e9cb0
-  BR-AI-19: 533bd70d3d18
+  BR-AI-19: 966f895b4033
 deps: [B1-07a]
 paths:
   - 'apps/api/src/modules/agent/preprocess/redact/**'

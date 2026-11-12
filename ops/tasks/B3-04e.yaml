@@ -7,7 +7,7 @@ type: impl
 refs: [BR-AI-08, BR-AI-05]
 refs_hash:
   BR-AI-08: e932a052720f
-  BR-AI-05: 1e8f6bba94a4
+  BR-AI-05: 2ac35e2cd8ef
 deps: [B3-04b]
 paths:
   - 'apps/api/src/modules/agent/tools/search/**'

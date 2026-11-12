@@ -17,7 +17,7 @@ type: migration
 refs: [BR-AI-23, BR-AI-19]
 refs_hash:
   BR-AI-23: 5ebdbaff580d
-  BR-AI-19: 533bd70d3d18
+  BR-AI-19: 966f895b4033
 deps: []
 paths:
   - 'db/migrations/**'

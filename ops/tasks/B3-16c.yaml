@@ -9,7 +9,7 @@ type: test-change
 # 分工：新鲜独立 Claude 写，评审 Codex 优先（不可用时另一位新鲜独立 Claude）；非 task 分支、不带证据文件，标签由编排核后加。RV2。
 refs: [BR-AI-01, BR-AI-04]
 refs_hash:
-  BR-AI-01: f4d453462e15
+  BR-AI-01: 8162dc4297fb
   BR-AI-04: 34cc76da510c
 deps: [B3-16a]
 paths:

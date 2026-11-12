@@ -9,8 +9,8 @@ type: impl
 # RV1（agent 模块）。新鲜独立 Claude 写规则测试，Opus 实现，评审 Codex（额度不足时新鲜独立 Claude general）。
 refs: [BR-AI-01, BR-AI-19, BR-AI-20]
 refs_hash:
-  BR-AI-01: f4d453462e15
-  BR-AI-19: 533bd70d3d18
+  BR-AI-01: 8162dc4297fb
+  BR-AI-19: 966f895b4033
   BR-AI-20: ed15f04bab16
 deps: [B3-08q]
 paths:

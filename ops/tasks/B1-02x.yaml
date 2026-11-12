@@ -6,7 +6,7 @@ type: impl
 # 依据：BR-AI-12（访问放行与 require_phone → 10005）；另参考 BR-AI-11（身份范围）、BR-ID-03（未绑手机主体与游客额度），二者连一跳引用会让任务书超 24KB，refs 只列 BR-AI-12（ops/brief.test 生成首个 todo 任务书须在上限内）。分工：Codex 写规则测试，Claude Opus 5.5 实现（负责人 2026-10-17 17:2x），Codex 对抗评审。
 refs: [BR-AI-12]
 refs_hash:
-  BR-AI-12: d041fa7220df
+  BR-AI-12: d45a7ac17d5a
 deps: [B1-02r]
 paths:
   - 'apps/api/src/modules/identity/ports/agent-caller.ts'

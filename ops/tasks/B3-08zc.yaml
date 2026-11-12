@@ -9,11 +9,11 @@ type: impl
 # prettier-ignore
 refs: [BR-AI-19, BR-AI-20, BR-AI-23, BR-AI-14, BR-AI-05]
 refs_hash:
-  BR-AI-19: 533bd70d3d18
+  BR-AI-19: 966f895b4033
   BR-AI-20: ed15f04bab16
   BR-AI-23: 5ebdbaff580d
   BR-AI-14: c009637e9cb0
-  BR-AI-05: 1e8f6bba94a4
+  BR-AI-05: 2ac35e2cd8ef
 deps: []
 paths:
   - 'apps/api/src/modules/agent/stream/**'

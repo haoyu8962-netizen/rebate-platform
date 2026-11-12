@@ -10,7 +10,7 @@ type: impl
 # 守冻结：trace-persist/** 不改；首次失败只一条 warn、runtime.close() 必返回、createOrderCardRefs(db) 语义不变。风险 RV1。新鲜独立 Claude 写规则测试，Opus 实现，独立 Claude 评审（Codex 额度至 11-15）。
 refs: [BR-AI-19, BR-AI-22, BR-AI-03, BR-AI-07]
 refs_hash:
-  BR-AI-19: 533bd70d3d18
+  BR-AI-19: 966f895b4033
   BR-AI-22: d412bc8a631a
   BR-AI-03: 2131432de5c6
   BR-AI-07: a704165181b4

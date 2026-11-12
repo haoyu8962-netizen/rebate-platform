@@ -10,7 +10,7 @@ type: impl
 # 分工：清单外新台账，Codex 先写规则测试，Opus 实现，Codex 评审。风险 RV1（agent/**）。refs_hash 入账前用 node tools/ops/task.ts hash B3-06b 生成并替换下行。
 refs: [BR-AI-18]
 refs_hash:
-  BR-AI-18: 20e1500ad932
+  BR-AI-18: 81915a2d5a19
 deps: [B3-06a]
 paths:
   - 'apps/api/src/modules/agent/guard/review/**'

@@ -9,7 +9,7 @@ type: impl
 # 规则测试由独立 Claude 写（先红），Opus 实现，Codex contract 评审（content 模块按 RV2 一并看）。
 refs: [BR-AI-13]
 refs_hash:
-  BR-AI-13: 870069e3ab76
+  BR-AI-13: 6309509106ac
 deps: []
 paths:
   - 'contracts/openapi.yaml'

@@ -13,7 +13,7 @@ type: impl
 # BR-ID-12（同意记录的写入与版本口径）只作指针，不嵌入任务书（任务书 24KB 上限）；规则测试作者按需读 08 原文。
 refs: [BR-AI-13]
 refs_hash:
-  BR-AI-13: 870069e3ab76
+  BR-AI-13: 6309509106ac
 deps: [B1-02f]
 paths:
   - 'apps/api/src/modules/identity/ports/ai-consent.ts'

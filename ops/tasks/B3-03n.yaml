@@ -11,9 +11,9 @@ type: impl
 # 2026-10-23：Codex 用量上限至 10-30 01:09（编排 10:27），tester 改 claude-independent（approvals #36）；Codex 第 1 次被上限打断的半截测试已丢弃，按原计数由独立 Claude 重写。
 refs: [BR-AI-05, BR-AI-04, BR-AI-18]
 refs_hash:
-  BR-AI-05: 1e8f6bba94a4
+  BR-AI-05: 2ac35e2cd8ef
   BR-AI-04: 34cc76da510c
-  BR-AI-18: 20e1500ad932
+  BR-AI-18: 81915a2d5a19
 deps: [B3-03j, B3-03m]
 paths:
   - 'apps/api/src/app.module.ts'
