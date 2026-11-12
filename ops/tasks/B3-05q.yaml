@@ -1,0 +1,28 @@
+id: B3-05q
+repo: rebate-platform
+title: 情境入口（A6，BR-AI-01 细则「情境入口」）：带 context 的消息先过输入审核，再按入口出卡——product_key 走确定性报价出 1 张 rebate_quote 后照常处理文字（无模型到出卡为止）；order_id 按 order_query 出 order_status 卡与 T5 文字、本轮结束（游客 / 未绑手机 auth_required，订单工具关闭出 OrderList，不在名下同 0 笔）；context.text 不读不落库；本条自带链接或口令时 context 不用
+type: impl
+# 2026-11-13 agent 线入账（规划 couli #329 §2.3 / §3.1 A6；编排 D10-1287、D10-1378）。现状：context 由 http/message-schema.ts 校验（不合法 20001）后原样传进 ToolContext，没有任何路径据此出卡；只有 tools/quote 的 product_key 参数在等于 context.product_key 时被接受（Explore 核于 501cdaa0d 之后的主干）。
+# 模型看见入口卡（上下文块 ②）归 B1，本单只出卡并把卡记进会话结果，B1 接上下文块。get_rebate_quote 去掉 product_key 参数会改 6 个冻结文件（tools-quote/references、stream-model-prereq/product-refs 等），另开单；现行实现已对模型自编的 product_key 返回 invalid_args。
+# 报价因服务端原因失败的结束与退还（BR-AI-15 细则）按现有链接消息的处理复用。D10-1378 提醒：订单与找货的 platform 只取本条消息点名的平台，规则测试钉住。
+refs: [BR-AI-01, BR-AI-05, BR-AI-07, BR-AI-14, BR-AI-15]
+refs_hash:
+  BR-AI-01: 8162dc4297fb
+  BR-AI-05: 2ac35e2cd8ef
+  BR-AI-07: a704165181b4
+  BR-AI-14: a24a409d186b
+  BR-AI-15: d3070a739c03
+deps: [B3-05p]
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/http/**'
+test_paths:
+  - 'test/spec/agent/scenario-entry/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/scenario-entry/**'
+status: todo
+pr: null
