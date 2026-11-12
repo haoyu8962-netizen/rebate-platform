@@ -1,0 +1,20 @@
+id: CT-06zzzzx
+repo: rebate-platform
+title: CT-06zzzzx：[CT-06zzzx] 槽位等待用例的偶发红——放锁那一刻的一行「unknown holder」等待报告不再判失败，其余报告仍须带持有者任务号与 pid（FU-FLAKE-CT06ZZZX-SLOT-WAIT，编排 2026-11-12 22:11）
+type: guard-change
+# 2026-11-12 ops 入账（编排 22:11：#3273 的 CI verify-unit 偶发红）。CI 原文（run 43222696109 第 1 次）：Received "verify-container: waiting for the verify slot held by an unknown holder
+#   (no owner file in …/slots/live/slot.lock): 3s of 30s"。原因：测试约 2.5 s 时移除持有者的锁，verify-container 的等待循环在「mkdir 失败」与「读 owner」之间
+#   读到空，若此时正到报告时点（已等满 2 s），就报一行 unknown holder，下一轮才拿到槽。脚本行为正确，用例要求「每一行」都带 X9-04 过严。
+# 只改用例：unknown holder 的等待行最多一行且必须是最后一行（放锁那一刻），其余行仍须带 X9-04 与 pid，且不少于两行；其余断言不变。
+# 脚本侧可选改进（锁目录已不在时直接重试 mkdir、不报）要动 verify-container.sh，与 #3263 重叠，等它合并后另议。flake_fix：证据为本机循环全绿与 CI 原文。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container-slot.test.ts'
+  - 'ops/tasks/CT-06zzzzx.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

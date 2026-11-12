@@ -541,9 +541,16 @@ it(
     const res = await started.done;
     expect(res.status, res.stderr).toBe(0);
     const waits = res.stderr.split('\n').filter((line) => line.includes(WAITING));
+    // FU-FLAKE-CT06ZZZX-SLOT-WAIT: the holder may release the slot between a failed mkdir and the
+    // owner read; that one iteration then reports "an unknown holder", and only as the last waiting
+    // line (the next iteration takes the slot). Every other report names the holder.
+    const unknown = waits.filter((line) => line.includes('an unknown holder'));
+    const named = waits.filter((line) => !line.includes('an unknown holder'));
+    expect(unknown.length, res.stderr).toBeLessThanOrEqual(1);
+    if (unknown.length === 1) expect(waits.at(-1), res.stderr).toBe(unknown[0]);
     // Reported at the start of the wait and again while waiting: the holder and the time waited.
-    expect(waits.length, res.stderr).toBeGreaterThanOrEqual(2);
-    for (const line of waits) {
+    expect(named.length, res.stderr).toBeGreaterThanOrEqual(2);
+    for (const line of named) {
       expect(line).toContain('X9-04');
       expect(line).toContain(String(process.pid));
       expect(line).toMatch(/\d+ ?s\b/);
