@@ -1,0 +1,20 @@
+id: B1-22za
+repo: rebate-platform
+title: 种子 0007：agent.enabled、agent.page_guide.enabled 写成 true（负责人 2026-11-12 选 A，Q-A14；只 INSERT、已有行不覆盖），带三条正向断言（D10-1333）
+type: impl
+# 2026-11-12 content 入账（D10-1333 ①，SPEC_REF ea7850e2f45f：08 BR-AI-12 细则「/v1/config.agent.enabled 的派生」写明默认 on 由种子写入）。写法同 0003–0006：app_id couli、updated_by seed、ON CONFLICT (app_id, key) DO NOTHING、只 INSERT。不等于对公众开放：whitelist_only 缺行按开、内测名单默认空（BR-AI-12）。staging 已有 false 行时种子不改，届时后台另开。
+# 规则测试（独立 Claude，新目录）照 B1-22z：新库种完两键为 jsonb true、updated_by = seed；人工写 false 后跑两遍种子整行不变；静态检查 0007 只有 INSERT … ON CONFLICT DO NOTHING、只写 couli 的这两个键。入账前静态排查读种子的 12 个 spec 无依赖；test-run --related 受信脚本尚不支持，读种子的集成组在本机逐组跑（local-heavy）。
+refs: [BR-AI-12]
+refs_hash:
+  BR-AI-12: d45a7ac17d5a
+deps: []
+paths:
+  - 'db/seeds/0007_agent-master-switches.sql'
+test_paths:
+  - 'test/spec/agent/master-switch-seeds/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/master-switch-seeds/**'
+status: todo
