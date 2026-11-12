@@ -1,0 +1,29 @@
+id: B3-05o
+repo: rebate-platform
+title: 意图兜底、不空回复、比较提示（A5，BR-AI-01 细则「意图兜底与不空回复」、BR-AI-18 细则「比较与适用性的提示」）：模型只给意图未调工具时服务端代调只读工具（计 4 次上限、按单号查计每日上限、platform 只取本句点名的）；stop / limit 结束而无任何下发时补 agent.reply.empty 与三个快捷问法；只给说明文字且有商品卡时附 title_based；无结果建议的 {q_short} 取检索词前 8 字符
+type: impl
+# 2026-11-12 agent 线入账（规划 couli #329 §2.4 / §2.6 / §3.1 A5；编排 D10-1287、D10-1353）。现状 createRefinement(...).run 对 refine / ref_ordinal 以外的意图直接 done()（A1 §7.7），空白输出照常结束，title_based 无触发，{q_short} 未替换（A1 §7.14）。
+# 比较提示的「上下文块里有商品卡」：上下文块归 B1，本单先按已有的当前结果集与情境入口卡判断，B1 落地时接上下文块。search / find_by_link 代调复用 B3-05n 降级 ⑥ 的关键词取词（orchestrator/degraded）。配置 agent.orders.default_span_days 读不到按 30（登记归 content A10）。新文案键由 content A9 入，按键取、取不到用回落。
+# Codex 额度到 11-17，规则测试与评审按 approvals 36 由新鲜独立 Claude 承担。
+refs: [BR-AI-01, BR-AI-07, BR-AI-18, BR-AI-08]
+refs_hash:
+  BR-AI-01: 8162dc4297fb
+  BR-AI-07: a704165181b4
+  BR-AI-18: 81915a2d5a19
+  BR-AI-08: e932a052720f
+deps: [B3-05n]
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/core/**'
+  - 'apps/api/src/modules/agent/orchestrator/intents/**'
+  - 'apps/api/src/modules/agent/orchestrator/results/**'
+  - 'apps/api/src/modules/agent/orchestrator/degraded/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+test_paths:
+  - 'test/spec/agent/intent-fallback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/intent-fallback/**'
+status: todo
+pr: null
