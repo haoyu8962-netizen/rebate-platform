@@ -1,0 +1,125 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#1] 只持 agent.report（没有 agent.trace）：菜单可见，两个页签都显示无权限，不发任何 agent-traces 请求，也没有【标记已处理】",
+    "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#2] 工作台卡地址只持 agent.report：仍落在 AI 助手记录的 AI 举报页签，显示无权限、不发举报列表请求",
+    "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#3] 服务端 10403（权限已撤回）：会话留痕显示无权限，不显示行，也不自动重读",
+    "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#4] 举报列表网络失败：显示读取失败与【重试】，点一次只重读一次并显示行",
+    "test/spec/frontend/admin-agent-traces/entry.test.ts > [AC-F1-10ka-ENTRY#1] 菜单「AI 助手记录」：侧栏高亮，页内两个页签「会话留痕」「AI 举报」；会话留痕只按 page / page_size 读列表，AI 举报首读不带 status / overdue；全程不读明细",
+    "test/spec/frontend/admin-agent-traces/entry.test.ts > [AC-F1-10ka-ENTRY#2] 工作台卡地址 /agent/reports?overdue=true：侧栏高亮 AI 助手记录、打开 AI 举报页签、举报列表请求带 overdue=true，只显示超时的举报",
+    "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#1] 超时的待处理举报照样能标记：填说明（首尾空白去掉）提交，请求体只有 note 与 expected_row_version（行上的 row_version）；成功后该行显示已处理、处理人与说明，按钮与超时标识消失",
+    "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#2] 说明为空、全是空白或超过 500 码点（501 个，含「𠮷」）：不发请求、在说明旁提示；499 汉字 + 1 个「𠮷」（500 码点）不截断照常提交",
+    "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#3] 服务端 20902（已被他人处理）：提示已被处理或已变化并刷新列表，该行显示服务端最新的已处理状态、没有按钮",
+    "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#4] 服务端 20001 data.fields=[note]：在说明旁提示不合格，对话框不关，该行仍待处理",
+    "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#5] 持 agent.trace 与 agent.report：待处理行（超时与否）都有可用的【标记已处理】，已处理行没有",
+    "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#6] 只持 agent.trace：举报列表照常显示，任何行都没有可用的【标记已处理】，不发 POST",
+    "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#1] 举报行：会话、用户（访客）、举报时间、理由、状态、截止时间、处理时间 / 处理人 / 说明（北京时间）；理由或处理人为 null 不显示 null；列表无对话文本、不读明细",
+    "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#2] 超时标识只看行里的 overdue：时钟未到 deadline_at 但 overdue=true 的行有醒目超时标识；时钟已过 deadline_at 但 overdue=false 的待处理行与已处理行都没有",
+    "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#3] 行顺序照服务端返回，不在页面重排",
+    "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#4] 筛选状态待处理、只看超时与举报时间 from / to（北京时间、带时区）一次提交，回第一页",
+    "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#1] 会话留痕行：会话、用户（user_id 为 null 显示访客）、开始 / 最近活跃北京时间、是否过期、run / badcase / 举报数；按服务端顺序；不出现对话文本、null 字样，也不读明细",
+    "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#2] 筛选 user_id、session_id、badcase=true、reported=false 与开始时间 from / to（北京时间、带时区）以 AND 一次提交，回第一页",
+    "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#3] 开始时间 from 不早于 to（相等或倒置）：不按该区间读出列表，在时间筛选处给出提示",
+    "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#4] 翻页带着当前筛选（page=2）；改筛选再查询回到 page=1，page_size 不变",
+    "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#1] 明细只在点开某行时读一次：挂载、切页签、刷新列表都不读；打开期间不重复读；关闭再打开才再读一次",
+    "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#2] 明细内容：消息按服务端脱敏文本原样、角色、反馈与 badcase、举报时间 / 理由 / 状态；run 的 intent、model、prompt_version、token、耗时、finish_reason、filter_hits；工具调用；卡片类型与 fallback_text",
+    "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#3] 注销后的会话：text 为 null 的消息显示占位而不是 null，举报理由为 null 不显示 null；降级 run 的空字段也不显示 null",
+    "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#4] 服务端 20001（未知会话）：明细处显示不存在，只读一次不自动重读",
+    "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#5] 从 AI 举报行打开对应会话的留痕：读该行 session_id 的明细一次，关闭再打开再读一次"
+  ],
+  "risk_note": "F1-10ka (orchestrator D10-1308; planning/05 F1-10k, the D1 page of the 2026-11-12 Agent change record). Admin menu agent-traces (AI 助手记录) gets two tabs on contract CT-24zzi (#3239), whose four operations are still x-implementation: planned and declared with usePlanned (the planned placeholder shows until the backend lands; rule tests mount without the planned list and a fake server). Sessions tab: adminListAgentSessions with filters user_id / session_id / badcase / reported / from-to and paging; rows carry no message text or phone. Trace drawer: adminGetAgentSession requested only from the click that opens it, once per opening (the server audits every read as agent_trace_view), stale answers dropped; text shown as stored (masked), null text as a placeholder; input and output tokens labelled separately, cost only as integer milli-fen. Reports tab: adminListAgentReports with status / overdue / from-to; the 48-hour state comes only from the row's deadline_at and overdue (BR-ID-15, the same rule as the workbench card agent_report_overdue), never from the local clock; overdue rows are flagged. Handling (agent.report): note trimmed and counted in code points 1-500 via text-length.ts, body note + expected_row_version, 20902 refreshes with a conflict notice. The workbench route /agent/reports?overdue=true opens the reports tab with the overdue filter under the agent-traces menu. A standing notice lists what is not wired yet (tool switch status, report reason enum, manual badcase), which also keeps the frozen admin-dashboard todo test green. Rule tests by an independent Claude (claude-run.sh); tsc -b test 0 errors before commit; Codex spec-test r1 pass (one S2 out-of-scope: input / output tokens could be swapped, handled in the implementation); red on couli-ci (25 tests, right reason). Implementation by Opus 5.5: couli-ci fast run 2 and browser run 1 green, run.ts static 10/10. The review tool classifies the task as RV2: Codex money review r1 pass, no findings. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 pass, no findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass (one S2 out of scope); tests by an independent Claude (claude-run.sh)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-10ka",
+  "spec_ref": "a36eb9360fdae7c0216e9d7f8aab4285d9f05b15",
+  "spec_commit": "5d8f073e1c5bf303599d1e949048a41ba356d2d8",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5d8f073e1c5bf303599d1e949048a41ba356d2d8",
+      "tree": "abc9a1e5a6e1d715c79758eda56e76d766bf883f",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-12T09:35:26Z",
+      "finished_at": "2026-11-12T09:37:48Z",
+      "red_tests": [
+        "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#1] 只持 agent.report（没有 agent.trace）：菜单可见，两个页签都显示无权限，不发任何 agent-traces 请求，也没有【标记已处理】",
+        "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#2] 工作台卡地址只持 agent.report：仍落在 AI 助手记录的 AI 举报页签，显示无权限、不发举报列表请求",
+        "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#3] 服务端 10403（权限已撤回）：会话留痕显示无权限，不显示行，也不自动重读",
+        "test/spec/frontend/admin-agent-traces/access.test.ts > [AC-F1-10ka-ACCESS#4] 举报列表网络失败：显示读取失败与【重试】，点一次只重读一次并显示行",
+        "test/spec/frontend/admin-agent-traces/entry.test.ts > [AC-F1-10ka-ENTRY#1] 菜单「AI 助手记录」：侧栏高亮，页内两个页签「会话留痕」「AI 举报」；会话留痕只按 page / page_size 读列表，AI 举报首读不带 status / overdue；全程不读明细",
+        "test/spec/frontend/admin-agent-traces/entry.test.ts > [AC-F1-10ka-ENTRY#2] 工作台卡地址 /agent/reports?overdue=true：侧栏高亮 AI 助手记录、打开 AI 举报页签、举报列表请求带 overdue=true，只显示超时的举报",
+        "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#1] 超时的待处理举报照样能标记：填说明（首尾空白去掉）提交，请求体只有 note 与 expected_row_version（行上的 row_version）；成功后该行显示已处理、处理人与说明，按钮与超时标识消失",
+        "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#2] 说明为空、全是空白或超过 500 码点（501 个，含「𠮷」）：不发请求、在说明旁提示；499 汉字 + 1 个「𠮷」（500 码点）不截断照常提交",
+        "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#3] 服务端 20902（已被他人处理）：提示已被处理或已变化并刷新列表，该行显示服务端最新的已处理状态、没有按钮",
+        "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#4] 服务端 20001 data.fields=[note]：在说明旁提示不合格，对话框不关，该行仍待处理",
+        "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#5] 持 agent.trace 与 agent.report：待处理行（超时与否）都有可用的【标记已处理】，已处理行没有",
+        "test/spec/frontend/admin-agent-traces/handle.test.ts > [AC-F1-10ka-HANDLE#6] 只持 agent.trace：举报列表照常显示，任何行都没有可用的【标记已处理】，不发 POST",
+        "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#1] 举报行：会话、用户（访客）、举报时间、理由、状态、截止时间、处理时间 / 处理人 / 说明（北京时间）；理由或处理人为 null 不显示 null；列表无对话文本、不读明细",
+        "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#2] 超时标识只看行里的 overdue：时钟未到 deadline_at 但 overdue=true 的行有醒目超时标识；时钟已过 deadline_at 但 overdue=false 的待处理行与已处理行都没有",
+        "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#3] 行顺序照服务端返回，不在页面重排",
+        "test/spec/frontend/admin-agent-traces/reports.test.ts > [AC-F1-10ka-REPORTS#4] 筛选状态待处理、只看超时与举报时间 from / to（北京时间、带时区）一次提交，回第一页",
+        "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#1] 会话留痕行：会话、用户（user_id 为 null 显示访客）、开始 / 最近活跃北京时间、是否过期、run / badcase / 举报数；按服务端顺序；不出现对话文本、null 字样，也不读明细",
+        "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#2] 筛选 user_id、session_id、badcase=true、reported=false 与开始时间 from / to（北京时间、带时区）以 AND 一次提交，回第一页",
+        "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#3] 开始时间 from 不早于 to（相等或倒置）：不按该区间读出列表，在时间筛选处给出提示",
+        "test/spec/frontend/admin-agent-traces/sessions.test.ts > [AC-F1-10ka-SESSIONS#4] 翻页带着当前筛选（page=2）；改筛选再查询回到 page=1，page_size 不变",
+        "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#1] 明细只在点开某行时读一次：挂载、切页签、刷新列表都不读；打开期间不重复读；关闭再打开才再读一次",
+        "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#2] 明细内容：消息按服务端脱敏文本原样、角色、反馈与 badcase、举报时间 / 理由 / 状态；run 的 intent、model、prompt_version、token、耗时、finish_reason、filter_hits；工具调用；卡片类型与 fallback_text",
+        "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#3] 注销后的会话：text 为 null 的消息显示占位而不是 null，举报理由为 null 不显示 null；降级 run 的空字段也不显示 null",
+        "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#4] 服务端 20001（未知会话）：明细处显示不存在，只读一次不自动重读",
+        "test/spec/frontend/admin-agent-traces/trace.test.ts > [AC-F1-10ka-TRACE#5] 从 AI 举报行打开对应会话的留痕：读该行 session_id 的明细一次，关闭再打开再读一次"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-agent-traces/access.test.ts",
+        "test/spec/frontend/admin-agent-traces/entry.test.ts",
+        "test/spec/frontend/admin-agent-traces/handle.test.ts",
+        "test/spec/frontend/admin-agent-traces/reports.test.ts",
+        "test/spec/frontend/admin-agent-traces/sessions.test.ts",
+        "test/spec/frontend/admin-agent-traces/trace.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4eeb7b1d3a261ee3e54b5fd1c1bd20e0b0e5972984fea7ec7faf93a7fe331f4d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6092dc433024e3ea084cdcd4d15fda395f74cfeb",
+    "specs": "f78e529ad2f2d314556b8c6b89ba069325a3ff9f"
+  }
+}

@@ -37,6 +37,7 @@ import { LoadFailedPage, NoPermissionPage, PagePending, WelcomePage } from './la
 import { Sidebar } from './layout/Sidebar.tsx';
 import { TopBar } from './layout/TopBar.tsx';
 import { AdminsPage } from './pages/admins/index.ts';
+import { AgentTracesPage, overdueOf } from './pages/agent-traces/index.ts';
 import { APP_VERSIONS_MENU_ID, AppVersionsPage, editTargetOf } from './pages/app-versions/index.ts';
 import { ClaimReviewPage, ClaimsPage } from './pages/claims/index.ts';
 import { AuditLogDetailPage, AuditLogsPage } from './pages/audit-logs/index.ts';
@@ -111,6 +112,9 @@ const USERS_MENU_ID = 'users';
 const CLAIMS_MENU_ID = 'claims';
 const RECON_MENU_ID = 'recon';
 const FUND_LEDGER_MENU_ID = 'fund-ledger';
+const AGENT_TRACES_MENU_ID = 'agent-traces';
+/** The workbench card agent_report_overdue (/agent/reports?overdue=true): AI 助手记录, AI 举报 tab. */
+const AGENT_REPORTS_ROUTE = 'agent/reports';
 const SETTLE_BILLS_MENU_ID = 'settle-bills';
 const SETTLE_BILL_DETAIL = /^settle-bills\/([^/]+)$/;
 const PAY_ORDERS_MENU_ID = 'pay-orders';
@@ -541,6 +545,8 @@ function ShellFrame({
   const unionCallback = path === UNION_CALLBACK_ROUTE;
   // 邀请奖励发放记录 (/invite-rewards) is a subpage of 配置中心 (sidebar, crumbs).
   const inviteRewardsRoute = path === INVITE_REWARDS_ROUTE;
+  // The workbench card's /agent/reports belongs to AI 助手记录 (sidebar, crumbs).
+  const agentReportsRoute = path === AGENT_REPORTS_ROUTE;
   const menuId =
     auditSubpage !== undefined
       ? AUDIT_LOGS_MENU_ID
@@ -548,7 +554,9 @@ function ShellFrame({
         ? UNIONS_MENU_ID
         : inviteRewardsRoute
           ? CONFIG_MENU_ID
-          : path;
+          : agentReportsRoute
+            ? AGENT_TRACES_MENU_ID
+            : path;
   const searchUser = menuId === USERS_MENU_ID ? searchUserOf(location.state) : undefined;
   // A claim's review page (/claims/<claim_id>) belongs to the claims menu (sidebar, crumbs).
   const claimId = claimIdOf(menuId);
@@ -715,6 +723,19 @@ function ShellFrame({
       content = <UsersPage access={access} />;
     } else if (match !== undefined && match.item.id === AUDIT_LOGS_MENU_ID) {
       content = <AuditLogsPage access={access} />;
+    } else if (match !== undefined && match.item.id === AGENT_TRACES_MENU_ID) {
+      // AI 助手记录: agent.trace reads both lists and the trace; agent.report alone shows the menu
+      // (the page says there is no permission and sends nothing). The workbench card's address opens
+      // the AI 举报 tab with its overdue filter. Keyed by the history entry: a new address starts
+      // afresh.
+      content = (
+        <AgentTracesPage
+          key={location.key}
+          access={access}
+          initialTab={agentReportsRoute ? 'reports' : 'sessions'}
+          initialOverdue={agentReportsRoute && overdueOf(location.search)}
+        />
+      );
     } else if (match !== undefined) {
       content = <PagePending title={match.item.label} />;
     } else if (menuId === 'users' && (snapshot.isSuper || snapshot.permissions.length > 0)) {
