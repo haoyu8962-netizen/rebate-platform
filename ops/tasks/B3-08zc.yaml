@@ -1,0 +1,32 @@
+id: B3-08zc
+repo: rebate-platform
+title: B3-08zc：助手回复落库与会话历史接口——run 收尾时把过滤后的文字与本轮卡片编号写进 agent_messages、卡片内容写进 agent_cards，与终态同一事务；卡片不再随留痕异步写、去掉进程内待写卡；实现 GET /v1/agent/sessions/{id}/messages（规划 11-12 A1，BR-AI-19 细则「助手回复落库」）
+type: impl
+# 2026-11-12 agent2 入账（规划会话 11-12 → 编排 D10-1287，变更记录 docs/changes/20261112-Agent模型路径与缺口补全.md §2.9、§3.1 A1；SPEC_REF a36eb9360fda）。
+# 现状：admit.ts 受理时插一行 text NULL 的助手消息，之后无人回写；卡片经 stream/mount/trace.ts 异步写 agent_cards，订单卡引用先读进程内待写卡（trace-retry withPendingCards / sharePendingCards）再读库；历史接口契约 planned。
+# 做法：过滤后的文字与卡片在 stream/run/manager.ts 的 ctx.text / 卡片下发处累积（不改 orchestrator/**），finalize 的终态事务里写 agent_messages.text / card_ids 与 agent_cards；断线后跑完的照写，崩溃由别的请求收尾的这条回复文字为空、不带卡片、结束原因照实；历史与下一轮卡片引用只读已提交数据。历史接口：形状照契约，收益卡走历史投影不带金额，非所有者 30504，过期只读，用户消息返回落库的脱敏形式。
+# 契约（去 planned、用户文本改脱敏形式）归 content 的 A9，接口部分以 A9 合并为前置；落库部分不依赖。stream/mount/** 与 agent 线 B3-05n（A4）有交叠，先后在 notices 约。验收 10 AC-S1-190 ③。RV1，独立 Claude 写测试，Opus 实现，Codex 评审。
+# prettier-ignore
+refs: [BR-AI-19, BR-AI-20, BR-AI-23, BR-AI-14, BR-AI-05]
+refs_hash:
+  BR-AI-19: 533bd70d3d18
+  BR-AI-20: ed15f04bab16
+  BR-AI-23: 5ebdbaff580d
+  BR-AI-14: c009637e9cb0
+  BR-AI-05: 1e8f6bba94a4
+deps: []
+paths:
+  - 'apps/api/src/modules/agent/stream/**'
+  - 'apps/api/src/modules/agent/http/**'
+  - 'apps/api/src/modules/agent/store/**'
+test_paths:
+  - 'test/spec/agent/reply-persist/**'
+  - 'test/spec/agent/session-history/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/reply-persist/**'
+  - 'test/spec/agent/session-history/**'
+status: todo
+pr: null
