@@ -9,6 +9,7 @@ type: impl
 #   节点脚本要求目标文件已存在、属主与执行者相同（节点上即 root）、权限 600；写前留同权限备份，同名行原位替换、没有就追加、其余行逐字不动，
 #   临时文件同目录同权限、改名到位，成功后删备份；任何一步失败都不动目标文件。全程不 set -x，值不进命令行参数、进程列表、输出与日志。
 # 本单不运行同步、不读该文件内容；同步、重新部署、合成文本实测等合并后照 D10-1290 ② 做。规则测试由新鲜 Claude 子代理先写（Agent 工具，独立上下文），Codex 对抗评审。
+# 完成 2026-11-12（#3250，头 78c987acf63c，ops 做、编排 D10-1316 核过）：规则测试 test/spec/infra/staging-aliyun-review/sync.test.ts（先红 39 条）与脚本、README 1.13 同一张 PR；合并后 ops 照 D10-1290 ② 跑 --check、同步、重新部署 b487f7a296a4、合成文本实测通过（notices 11-12 17:12 / 17:16）。台账当时未置 done，content 11-13 补（D10-1369 派工时发现）。
 refs: []
 refs_hash: {}
 deps: []
@@ -23,4 +24,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/infra/staging-aliyun-review/**'
-status: todo
+status: done
+pr: 3250
