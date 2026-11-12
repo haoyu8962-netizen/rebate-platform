@@ -31,11 +31,22 @@ function fixture(name: string, verify: string): string {
 }
 
 function run(args: string[], env: Record<string, string> = {}) {
+  // CT-06zzzzu: a COULI_VERIFY_MEMORY of the machine running these tests (the LAN test machine
+  // sets one) must not reach the cases that expect it unset; a case that needs it passes it here.
+  const inherited: NodeJS.ProcessEnv = { ...process.env };
+  Reflect.deleteProperty(inherited, 'COULI_VERIFY_MEMORY');
   const res = spawnSync('bash', [SCRIPT, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, COULI_RUNS: runs, COULI_TRUSTED_ROOT: repoRoot(), ...env },
+    env: { ...inherited, COULI_RUNS: runs, COULI_TRUSTED_ROOT: repoRoot(), ...env },
   });
   return { status: res.status ?? -1, stdout: res.stdout, stderr: res.stderr };
+}
+
+/** The --dry-run plan without its `memory` field, which the [CT-06zzzzu] tests check on their own. */
+function planWithoutMemory(stdout: string): Record<string, unknown> {
+  const plan = JSON.parse(stdout) as Record<string, unknown>;
+  Reflect.deleteProperty(plan, 'memory');
+  return plan;
 }
 
 beforeAll(() => {
@@ -284,7 +295,11 @@ it(
 
     const plan = run(['V1-05', '--worktree', repo, '--dry-run']);
     expect(plan.status, plan.stderr).toBe(0);
-    expect(JSON.parse(plan.stdout)).toEqual({ script: 'verify', commit: head, tree: headTree });
+    expect(planWithoutMemory(plan.stdout)).toEqual({
+      script: 'verify',
+      commit: head,
+      tree: headTree,
+    });
 
     // Uncommitted work changes the tree, not the commit; the real index stays untouched.
     writeFileSync(join(repo, 'new-file.txt'), 'uncommitted\n');
@@ -300,7 +315,7 @@ it(
     expect(fixtureGit(repo, ['status', '--porcelain'])).toBe('?? new-file.txt');
     const browser = run(['V1-05', '--worktree', repo, '--browser', '--dry-run']);
     expect(browser.status, browser.stderr).toBe(0);
-    expect(JSON.parse(browser.stdout)).toEqual({
+    expect(planWithoutMemory(browser.stdout)).toEqual({
       script: 'browser',
       commit: head,
       tree: dirty.tree,
@@ -542,10 +557,219 @@ it(
       const res = run(['B1-02b', '--worktree', repo, ...extra, '--dry-run']);
       expect(res.status, `${extra.join(' ')}: ${res.stderr}`).toBe(0);
       const plan = JSON.parse(res.stdout) as Record<string, unknown>;
-      expect(Object.keys(plan).sort(), extra.join(' ')).toEqual(['commit', 'script', 'tree']);
+      // CT-06zzzzu added memory to every dry-run plan; test_guard stays --red only.
+      expect(Object.keys(plan).sort(), extra.join(' ')).toEqual([
+        'commit',
+        'memory',
+        'script',
+        'tree',
+      ]);
       expect(res.stderr, extra.join(' ')).not.toContain('test-guard');
     }
     expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
   },
   CLI_TIMEOUT,
 );
+
+// --- CT-06zzzzu (FU-VERIFY-CONTAINER-MEMORY, D10-1219 / D10-1283 ③): COULI_VERIFY_MEMORY --------
+
+/** A committed fixture repository (the plan then names its commit and tree). */
+function committedFixture(name: string): string {
+  const repo = fixture(name, 'node -e "process.exit(0)"');
+  fixtureGit(repo, ['init', '-q', '-b', 'main']);
+  fixtureGit(repo, ['add', '-A']);
+  fixtureGit(repo, ['commit', '-q', '-m', 'fixture']);
+  return repo;
+}
+
+/** A committed fixture with one rule test of B1-02b (as [CR3-01]), so that --red has a plan. */
+function redFixture(name: string): string {
+  const repo = committedFixture(name);
+  writeFiles(repo, { 'test/spec/identity/devices.test.ts': "it('[BR-ID-05] x', () => {});\n" });
+  return repo;
+}
+
+const MEMORY_MODES: { name: string; task: string; args: (wt: string) => string[] }[] = [
+  { name: 'verify', task: 'V1-07', args: (wt) => ['--worktree', wt] },
+  { name: 'verify:fast', task: 'V1-07', args: (wt) => ['--worktree', wt, '--fast'] },
+  { name: 'browser', task: 'V1-07', args: (wt) => ['--worktree', wt, '--browser'] },
+  {
+    name: 'red',
+    task: 'B1-02b',
+    args: (wt) => ['--worktree', wt, '--red', '--base', 'main'],
+  },
+];
+
+it(
+  '[CT-06zzzzu] --dry-run: memory is null when COULI_VERIFY_MEMORY is unset or empty',
+  () => {
+    const plain = committedFixture('memory-unset');
+    const red = redFixture('memory-unset-red');
+    for (const mode of MEMORY_MODES) {
+      const wt = mode.name === 'red' ? red : plain;
+      for (const env of [{}, { COULI_VERIFY_MEMORY: '' }]) {
+        const res = run([mode.task, ...mode.args(wt), '--dry-run'], env);
+        expect(res.status, `${mode.name} ${res.stderr}`).toBe(0);
+        const plan = JSON.parse(res.stdout) as Record<string, unknown>;
+        expect(plan['script'], mode.name).toBe(mode.name);
+        expect(Object.keys(plan), mode.name).toContain('memory');
+        expect(plan['memory'], mode.name).toBeNull();
+      }
+    }
+    expect(existsSync(join(runs, 'V1-07'))).toBe(false);
+    expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzu] --dry-run: memory is the value of COULI_VERIFY_MEMORY when it is valid',
+  () => {
+    const plain = committedFixture('memory-set');
+    const red = redFixture('memory-set-red');
+    for (const mode of MEMORY_MODES) {
+      const wt = mode.name === 'red' ? red : plain;
+      const res = run([mode.task, ...mode.args(wt), '--dry-run'], { COULI_VERIFY_MEMORY: '9g' });
+      expect(res.status, `${mode.name} ${res.stderr}`).toBe(0);
+      const plan = JSON.parse(res.stdout) as Record<string, unknown>;
+      expect(plan['script'], mode.name).toBe(mode.name);
+      expect(plan['memory'], mode.name).toBe('9g');
+    }
+    // The other valid forms: megabytes, and up to six digits.
+    for (const value of ['12g', '512m', '1m', '999999m', '100000g']) {
+      const res = run(['V1-07', '--worktree', plain, '--dry-run'], { COULI_VERIFY_MEMORY: value });
+      expect(res.status, `${value} ${res.stderr}`).toBe(0);
+      expect((JSON.parse(res.stdout) as Record<string, unknown>)['memory'], value).toBe(value);
+    }
+    expect(existsSync(join(runs, 'V1-07'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+const BAD_MEMORY = [
+  '9',
+  '9G',
+  '0g',
+  '9gb',
+  '-1g',
+  ' 9g',
+  '9g ',
+  '9.5g',
+  'g',
+  '09g',
+  '1234567g',
+  '9k',
+];
+
+it(
+  '[CT-06zzzzu] an invalid COULI_VERIFY_MEMORY stops a --dry-run with exit 2, naming the variable',
+  () => {
+    const plain = committedFixture('memory-bad-dry');
+    const red = redFixture('memory-bad-dry-red');
+    for (const value of BAD_MEMORY) {
+      for (const mode of MEMORY_MODES) {
+        const wt = mode.name === 'red' ? red : plain;
+        const res = run([mode.task, ...mode.args(wt), '--dry-run'], { COULI_VERIFY_MEMORY: value });
+        expect(res.status, `${mode.name} '${value}'`).toBe(2);
+        expect(res.stderr, `${mode.name} '${value}'`).toContain('COULI_VERIFY_MEMORY');
+        expect(res.stdout, `${mode.name} '${value}'`).toBe('');
+      }
+    }
+    expect(existsSync(join(runs, 'V1-07'))).toBe(false);
+    expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
+  },
+  CLI_TIMEOUT * 2,
+);
+
+it(
+  '[CT-06zzzzu] an invalid COULI_VERIFY_MEMORY stops a real run before any docker call and any run directory',
+  () => {
+    // A stub docker first on PATH records every call; nothing may reach it.
+    const bin = join(base, 'memory-bin');
+    const calls = join(base, 'memory-docker-calls.txt');
+    writeFiles(bin, {
+      docker: '#!/bin/sh\nprintf \'%s\\n\' "$*" >>"$COULI_TEST_DOCKER_CALLS"\nexit 1\n',
+    });
+    chmodSync(join(bin, 'docker'), 0o755);
+    const ws = fixture('memory-bad-real', 'true');
+    for (const value of ['9', '9G', '0g', '9gb', '-1g', ' 9g', '9.5g']) {
+      for (const extra of [[], ['--fast'], ['--browser']]) {
+        const res = run(['V1-08', '--worktree', ws, ...extra], {
+          COULI_VERIFY_MEMORY: value,
+          COULI_TEST_DOCKER_CALLS: calls,
+          COULI_VERIFY_SLOT_DIR: join(base, 'memory-slot'),
+          PATH: `${bin}:${process.env['PATH'] ?? ''}`,
+        });
+        expect(res.status, `${extra.join(' ')} '${value}'`).toBe(2);
+        expect(res.stderr, `${extra.join(' ')} '${value}'`).toContain('COULI_VERIFY_MEMORY');
+        expect(existsSync(join(runs, 'V1-08')), `${extra.join(' ')} '${value}'`).toBe(false);
+      }
+    }
+    expect(existsSync(calls)).toBe(false);
+  },
+  CLI_TIMEOUT * 2,
+);
+
+/**
+ * The docker run commands of the script whose first line contains `head` (comment lines skipped),
+ * each with its continuation lines joined into one string.
+ */
+function dockerRuns(text: string, head: string): string[] {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? '';
+    i += 1;
+    if (line.trimStart().startsWith('#') || !line.includes(head)) continue;
+    let cmd = line;
+    while (cmd.endsWith('\\') && i < lines.length) {
+      cmd = `${cmd.slice(0, -1)} ${lines[i] ?? ''}`;
+      i += 1;
+    }
+    out.push(cmd);
+  }
+  return out;
+}
+
+it('[CT-06zzzzu] only the containers that run tests get --memory and --memory-swap of one value', () => {
+  const text = readFileSync(SCRIPT, 'utf8');
+  // The array (or arrays) that carry the limit: --memory and --memory-swap from the same variable.
+  const assigns = [
+    ...text.matchAll(
+      /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)\+?=\([^)\n]*--memory[ =]"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"[^)\n]*--memory-swap[ =]"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"/gm,
+    ),
+  ];
+  expect(assigns.length).toBeGreaterThan(0);
+  for (const m of assigns) expect(m[3], m[0]).toBe(m[2]);
+  const names = [...new Set(assigns.map((m) => m[1] ?? ''))];
+  // Expanded the set -u safe way, so that an empty array adds nothing on bash 3.2.
+  const uses = (cmd: string) => names.some((n) => cmd.includes(`\${${n}[@]+"\${${n}[@]}"}`));
+  const mentions = (cmd: string) =>
+    names.some((n) => cmd.includes(`\${${n}[@]`)) || /(^|\s)--memory(-swap)?[\s=]/.test(cmd);
+
+  // Test containers: --browser, --fast and the full verify (one line for both service modes) …
+  const verifyRuns = dockerRuns(text, 'docker run --rm --name "$VERIFY_NAME"');
+  expect(verifyRuns).toHaveLength(3);
+  // … and the --red groups (red_container, with or without a database).
+  const redRuns = dockerRuns(text, 'docker run --rm --name "$1"');
+  expect(redRuns).toHaveLength(1);
+  for (const cmd of [...verifyRuns, ...redRuns]) expect(uses(cmd), cmd).toBe(true);
+
+  // pnpm fetch, PostgreSQL and Redis: never.
+  const others = [
+    ...dockerRuns(text, 'docker run --rm --name "$FETCH_NAME"'),
+    ...dockerRuns(text, 'docker run -d --name "$PG_NAME"'),
+    ...dockerRuns(text, 'docker run -d --name "$REDIS_NAME"'),
+  ];
+  expect(others).toHaveLength(3);
+  for (const cmd of others) expect(mentions(cmd), cmd).toBe(false);
+  // The image build neither.
+  for (const cmd of dockerRuns(text, 'docker build ')) expect(mentions(cmd), cmd).toBe(false);
+});
+
+it('[CT-06zzzzu] the variable is documented in the script header and in tools/ops/README.md', () => {
+  const header = readFileSync(SCRIPT, 'utf8').split('\nset -')[0] ?? '';
+  expect(header).toMatch(/^#.*COULI_VERIFY_MEMORY/m);
+  expect(readFileSync(join(OPS_DIR, 'README.md'), 'utf8')).toContain('COULI_VERIFY_MEMORY');
+});

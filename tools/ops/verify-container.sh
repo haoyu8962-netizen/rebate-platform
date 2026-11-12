@@ -78,6 +78,11 @@
 #   container that runs tests. turbo runs every package's tests at once and each vitest would start one
 #   worker per CPU less one, which starved the AppModule start-up tests past their 5 s on this Mac.
 #   prefix of every container, network and volume this script creates);
+#   COULI_VERIFY_MEMORY (CT-06zzzzu, FU-VERIFY-CONTAINER-MEMORY, D10-1219): unset or empty, no memory
+#   limit (as before); else <1..6 digits, no leading 0><m|g> (e.g. 9g, 512m; anything else: exit 2
+#   before any docker call or run directory). Every container that runs tests (the --red groups,
+#   --browser, --fast, pnpm verify) starts with `--memory <value> --memory-swap <value>` (no swap);
+#   pnpm fetch, PostgreSQL, Redis and the image build get no limit. --dry-run prints it as `memory`.
 #   PROP_SEED (default 20261001) reaches every run. PROP_RUNS has no default here (D10-499): it is
 #   passed only when the caller sets it, and result.json records it as prop_runs (null when unset).
 #   Unset, the pure property tests keep the 10000 of @couli/testing (规划/11 §4.2) and the integration
@@ -317,6 +322,17 @@ if ! [[ "$PROP_SEED_VALUE" =~ ^[0-9]+$ ]]; then die "PROP_SEED must be a non-neg
 if [ -n "${PROP_RUNS:-}" ] && ! [[ "$PROP_RUNS" =~ ^[1-9][0-9]*$ ]]; then die "PROP_RUNS must be a positive integer"; fi
 PREFIX="${COULI_VERIFY_PREFIX:-couli-verify}"
 if ! [[ "$PREFIX" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then die "COULI_VERIFY_PREFIX must match [a-z0-9][a-z0-9-]*"; fi
+# CT-06zzzzu (FU-VERIFY-CONTAINER-MEMORY, D10-1219): the memory limit of the containers that run tests,
+# set at docker run (the LAN machine's docker update after the start left a gap). Same value for
+# --memory-swap: no swap. Unset or empty: no limit, every docker run exactly as before.
+VERIFY_MEMORY="${COULI_VERIFY_MEMORY:-}"
+MEMORY_ARGS=()
+if [ -n "$VERIFY_MEMORY" ]; then
+  if ! [[ "$VERIFY_MEMORY" =~ ^[1-9][0-9]{0,5}[mg]$ ]]; then
+    die "COULI_VERIFY_MEMORY must be <1..6 digits, no leading 0><m|g> (e.g. 9g, 512m) or empty: '$VERIFY_MEMORY'"
+  fi
+  MEMORY_ARGS=(--memory "$VERIFY_MEMORY" --memory-swap "$VERIFY_MEMORY")
+fi
 
 # The verify slot (header: CT-06zzzx): only the two modes that run verify:fast in the container
 # take it, and only for a real run; their settings are checked here, before anything else runs.
@@ -472,15 +488,15 @@ if [ "$DRY_RUN" = 1 ]; then
   dry_tree='null'
   if [ "$IS_TOP" = 1 ]; then dry_tree="\"$(tree_of_worktree "$RUNS/.dry-index.$ID.$$")\""; fi
   node -e '
-    const [script, commit, tree, files, plan, tgFindings, tgAddOnly] = process.argv.slice(1);
-    const out = { script, commit: commit === "" ? null : commit, tree: JSON.parse(tree) };
+    const [script, commit, tree, files, plan, tgFindings, tgAddOnly, memory] = process.argv.slice(1);
+    const out = { script, commit: commit === "" ? null : commit, tree: JSON.parse(tree), memory: memory === "" ? null : memory };
     if (script === "red") {
       out.red_files = files.split("\n").filter((l) => l !== "");
       out.red_plan = JSON.parse(plan).groups;
       out.test_guard = { findings: Number(tgFindings), add_only_violations: Number(tgAddOnly) };
     }
     process.stdout.write(JSON.stringify(out) + "\n");
-  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY"
+  ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY" "$VERIFY_MEMORY"
   exit 0
 fi
 
@@ -1667,7 +1683,7 @@ if [ "$SCRIPT" = red ]; then
       fi
     fi
     local red_rc=0
-    RED_PLAN="$2" svc_run docker run --rm --name "$1" "${LABELS[@]}" "${HARDEN[@]}" "${TMPFS[@]}" \
+    RED_PLAN="$2" svc_run docker run --rm --name "$1" "${LABELS[@]}" "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
       "${net[@]}" \
       -v "$SRC:/src:ro" \
       -v "$STORE_VOL:/store:ro" \
@@ -1730,7 +1746,7 @@ if [ "$SCRIPT" = browser ]; then
     -e "BROWSER_PROJECTS=$BROWSER_PROJECTS")
   [ -z "${PROP_RUNS:-}" ] || BROWSER_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
   rc=0
-  docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" "${HARDEN[@]}" "${TMPFS[@]}" \
+  docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
     --network none \
     -v "$SRC:/src:ro" \
     -v "$STORE_VOL:/store:ro" \
@@ -1760,7 +1776,7 @@ if [ "$SCRIPT" = 'verify:fast' ]; then
   FAST_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" -e "VERIFY_SCRIPT=verify:fast")
   [ -z "${PROP_RUNS:-}" ] || FAST_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
   rc=0
-  docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" "${TMPFS[@]}" \
+  docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
     --network none \
     -v "$SRC:/src:ro" \
     -v "$STORE_VOL:/store:ro" \
@@ -1784,7 +1800,7 @@ ENV_ARGS=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e TEST_PG_ADMIN_URL -e TEST_REDI
   -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
 [ -z "${PROP_RUNS:-}" ] || ENV_ARGS+=(-e "PROP_RUNS=$PROP_RUNS")
 rc=0
-svc_run docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" "${TMPFS[@]}" \
+svc_run docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
   "${VERIFY_NET[@]}" \
   -v "$SRC:/src:ro" \
   -v "$STORE_VOL:/store:ro" \

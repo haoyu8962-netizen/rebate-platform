@@ -1,0 +1,22 @@
+id: CT-06zzzzu
+repo: rebate-platform
+title: CT-06zzzzu：verify-container 加 COULI_VERIFY_MEMORY——跑测试的容器带 --memory / --memory-swap 同值（不用 swap），默认不设不限；dry-run 计划带 memory（FU-VERIFY-CONTAINER-MEMORY，D10-1219 / D10-1283 ③）
+type: guard-change
+# 2026-11-12 ops 入账（编排 D10-1283 ③；登记 D10-1219）。现状：couli-ci 上由 couli-runs/scripts/lan-memcap.sh 在容器起来后 docker update 设上限（9g，--browser 12g，D10-1241），
+#   有一两秒空档、又是旁路脚本；改由 verify-container 在 docker run 时就带上限，lan-run 改传这个变量，之后撤掉 lan-memcap（couli-runs 内，不进仓库）。
+# 取值：COULI_VERIFY_MEMORY 为 <正整数><m|g>（例如 9g、512m，正则 ^[1-9][0-9]{0,5}[mg]$），不设或为空时不加任何内存参数（与现在相同）；不合法时 exit 2、什么都不跑。
+# 只加在跑测试的容器上（--red 各组、--browser、--fast、完整 verify 的 run 容器），pnpm fetch、PostgreSQL、Redis 容器不加；--memory 与 --memory-swap 同值。
+# 测试先写（新鲜 Claude 子代理），Opus 实现，Codex 对抗评审（general）；门禁改动按 approvals 第 16 条 / #24 由编排补 approvals、核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzu.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
