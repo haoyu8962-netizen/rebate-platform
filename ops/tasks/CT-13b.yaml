@@ -7,6 +7,7 @@ type: impl
 # 只改 sdui_card_error.page_version：required: false，note 写清「首页等配置化页面（03 §6.2）必带；AI 助手页的卡片（03 §7.2）不带」；version 递增；其余字段与其他事件不动。
 #   事件没有入库的生成物（packages/contracts-ts/scripts/events.ts 只校验），codegen 不产出新文件。三端在本单合并前不自编 page_version。
 # 规则测试由独立 Claude 写（先红）：带 page_version 的首页事件照旧通过；不带 page_version 的 AI 助手页卡片事件通过；type、reason 等其他必填字段缺了仍拒。Opus 实现，Codex contract 评审。
+# 完成 2026-11-13（#3315，头 bbcd18060165）：page_version required false、note 写 03 §6.2 必带 / §7.2 不带、source 补 §7.2、version 4；规则测试 4 条（独立 Claude 第 2 次，第 1 次因本线建分支被位置断言拒、未用）。kit.ts 随 CT-13c 补丁改（D10-1392）。
 refs: []
 refs_hash: {}
 deps: []
@@ -19,4 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/contracts/sdui-card-error-page-version/**'
-status: todo
+status: done
+pr: 3315

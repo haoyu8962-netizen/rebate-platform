@@ -8,6 +8,9 @@ type: impl
 #   首页卡片（03 §6.2）的 schema_version 填卡片自带 version 转成的字符串还是 "unknown"；bridge_call 的 schema_version 取哪一版桥 schema；「H5 发出的事件由原生补这两项」指哪两项。
 # 动手前核过（D10-1377）：contracts/openapi.yaml 没有声明 POST /v1/events，apps/api 也没有收事件的路由，服务端现在不校验也不拒收这两个事件，契约收紧不会让未跟上的客户端被拒。
 # 规则测试由独立 Claude 写（先红），写法照 test/spec/contracts/agent-stream-events/**；Opus 实现，Codex contract 评审。依赖 CT-13b 先合并（同改 sdui_card_error 与 version）。
+# 2026-11-13 补丁 1（编排 D10-1392）：本单实现会打红已合并的 CT-13b 规则测试 #1 / #3 / #4（钉了 sdui_card_error 恰好四个字段、bridge_call 不变，样例不带诊断字段）。照 D10-1351 先例同一张 PR 处理：
+#   新鲜独立 Claude 只改 test/spec/contracts/sdui-card-error-page-version/kit.ts 三处（两事件期望字段各加四项、两个样例补四项，取值照 D10-1381），进本单规则测试提交、先红；
+#   该目录进 test_paths；读 kit.ts 而未改、规格提交上仍绿的 [AC-CT-13b#2] 写 red_exempt；另一位只读复核只动了这三处。
 refs: []
 refs_hash: {}
 deps: [CT-13b]
@@ -15,9 +18,14 @@ paths:
   - 'specs/events.yaml'
 test_paths:
   - 'test/spec/contracts/card-bridge-diagnostic-fields/**'
+  - 'test/spec/contracts/sdui-card-error-page-version/**'
 impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/contracts/card-bridge-diagnostic-fields/**'
 status: todo
+red_exempt:
+  - file: test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts
+    test: '[AC-CT-13b#2] page_version 的 note 同时写到首页等配置化页面（03 §6.2）必带与 AI 助手页卡片（03 §7.2）不带'
+    reason: '冻结 CT-13b 用例，测试体未改；本任务只改同目录 kit.ts 的两事件期望字段与样例（D10-1392），此条只读 page_version 的 note，规格提交上本就绿'
