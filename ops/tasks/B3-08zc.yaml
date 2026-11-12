@@ -62,13 +62,13 @@ modify_existing:
     note: '同上：卡片随终态同事务写；工具调用断言不动'
   - file: test/spec/agent/trace-persist/async.int.test.ts
     test: '[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；只记一条 warn（agent_trace_write_failed，带 run_id，不含卡片与用户文本），该 run 不落卡'
-    retitle_to: '[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；只记一条 warn（agent_trace_write_failed，带 run_id，不含卡片与用户文本），该 run 的卡随终态落库、与写者无关'
+    retitle_to: '[AC-B3-08q#5][BR-AI-19] trace 写者抛错：降级 run 的 SSE 帧序列与结局（fallback）与写入正常时一致；降级 run 没有工具调用，写者对该 run 不被调用、不记 warn；该 run 的卡随终态落库'
     reason: tighten_only
     ruling: D10-1297
-    note: '卡片随终态同事务写，写者失败不再影响卡片'
+    note: '卡片随终态同事务写，写者失败不再影响卡片；降级 run 无工具调用、写者不被调用，原「一条 warn」与「写者被调到」断言改为写者未被调用、无 warn（D10-1347）'
   - file: test/spec/agent/trace-persist/async.int.test.ts
     test: '[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；写入放行后该 run 的卡才落库'
-    retitle_to: '[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；该 run 的卡在终态时已落库、不等写入放行'
+    retitle_to: '[AC-B3-08q#5][BR-AI-19] trace 写者变慢（写入挂起）：回复照常结束，帧序列与结局与正常时一致；该 run 的卡在终态时已落库、不等写入放行，写者对该 run 不被调用'
     reason: tighten_only
     ruling: D10-1297
     note: '卡片随终态同事务写、不等 trace 写入放行'
