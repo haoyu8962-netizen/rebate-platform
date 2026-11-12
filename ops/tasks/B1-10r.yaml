@@ -26,4 +26,5 @@ modify_existing:
     reason: tighten_only
     ruling: D10-1341
     note: '编排核对 #3256：六条工具调用的 created_at 沿期望顺序递减，按 created_at 倒序的实现也能过；打乱 created_at（既不单调增也不单调减），期望顺序与断言不变'
-status: todo
+status: done
+pr: 3292
