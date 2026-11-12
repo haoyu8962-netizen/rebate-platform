@@ -1,0 +1,26 @@
+id: QA-03a
+repo: rebate-platform
+title: 回放 E2E 第一段（05 QA-03 拆出）：演示联盟适配器 listOrders 的合成订单流（按种子与注入时钟确定性产出下单 / 收货 / 退款状态序列，只用统一领域 DTO）+ test/replay 回放驱动骨架（真实 PostgreSQL、启完整应用、CLOCK_NOW 注入推进时钟、每段跑台账不变量与 BR-FUND-19 日终校验、声明最低业务量）+ 场景一：跟单 → 预估 → 收货
+type: impl
+# 2026-11-13 be 入账（编排 D10-1369；方案 couli-runs/QA-03/plan.md，摘要已发 notices）。QA-03b（账单日出账 → 校验 → 确认替身 → 批次入账）、QA-03c（扣回含结算后失效 → 提现 FakeChannel 脚本到账）随后另入账。
+# 数据只用合成数据与领域层演示适配器，不伪造平台报文格式；场景目录带 provenance.json（source: synthetic）；公开仓库不放真实录制；验收记录只写「合成数据回放绿」（test/replay/README.md 的规矩）。
+# 实现：演示适配器 listOrders 现在抛 adapter_unimplemented（demo-adapter.ts:560），补成确定性合成订单流（不碰真实适配器、prod 仍拒绝构造）；回放专用 vitest 配置 test/vitest.replay.config.ts 与 test/package.json 的 test:replay 脚本（第二类保护路径，合并前须负责人同意，D10-1369 方案摘要问题 ①），不进 verify:fast 与现有 test:int。
+# 断言：每段结束 db/invariants/ledger/* 差异 0、该会计日 BR-FUND-19 日终校验差异 0；场景声明最低业务量；金额期望只按 08 写，不用实现反推，对不上停下报编排。接进 CI 先不做（D10-1369 ⑥）。
+# 场景与驱动由独立方写（Codex 先实跑，额度错再按 approvals 36 换独立 Claude），Opus 只实现 listOrders 与配置。
+refs: [BR-FUND-02]
+refs_hash:
+  BR-FUND-02: 382c4075d2cb
+deps: []
+paths:
+  - 'apps/api/src/modules/union/infra/demo/**'
+  - 'test/vitest.replay.config.ts'
+  - 'test/package.json'
+test_paths:
+  - 'test/replay/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/replay/**'
+status: todo
+pr: null
