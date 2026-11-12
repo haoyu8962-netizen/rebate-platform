@@ -1,0 +1,82 @@
+{
+  "task": "B2-10b",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "spec_commit": "e4e28366060632190cb151c046d1916ee6536318",
+  "red_tests": [
+    "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#1] specs/loss-scenarios.md 存在，文首第一段（可在一级标题之后）含「草稿，待财务过目」",
+    "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#2] 至少一条场景；以 LS- 开头的标题都是三级标题「LS-nn 标题」，nn 两位数，从 01 起连续编号、不重复",
+    "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#3] 每条场景恰有一行「- 测试：」与一行「- 核对规则：」；测试行非空，核对规则非空",
+    "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#4] 「- 测试：缺口」行不带任何测试 ID；其余测试行是逗号分隔的测试 ID（方括号编号或 db/invariants/ 下的 .sql 路径），至少一个",
+    "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#5] 测试行里每个方括号测试 ID 都在 test/spec/**、test/properties/** 的测试标题（it / test 的标题）里出现，本任务目录除外",
+    "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#6] 测试行里每个 db/invariants/ 路径都是真实存在的 .sql 文件",
+    "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#7] #5 的测试 ID 只认能确认存在的具体编号：静态标题照原文；模板与参数化标题只按同文件字面数据源枚举出的实际编号；解析不了的不认，同前缀的虚构编号（如 AC-B2-04zza#999）被拒"
+  ],
+  "risk_note": "RV2 by path (specs/, not in the risk-map allow list), document only (B2-10b; 规划/05 B2-10; BR-FUND-02; D10-1369). specs/loss-scenarios.md is a draft list of 25 fund-loss scenarios, each mapped to existing rule-test IDs and db/invariants, with a one-line check rule; three are listed as gaps (LS-08, LS-16, LS-17). Marked as a draft for finance to review. No code, fund calculation or test changes besides the new structure-only rule tests (test/spec/settlement/loss-scenarios), which reject made-up test IDs.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e4e28366060632190cb151c046d1916ee6536318",
+      "tree": "78e415fd7df8b1fb69b9328de628d4ed51c2e8f9",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-12T17:52:12Z",
+      "finished_at": "2026-11-12T17:52:16Z",
+      "red_tests": [
+        "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#1] specs/loss-scenarios.md 存在，文首第一段（可在一级标题之后）含「草稿，待财务过目」",
+        "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#2] 至少一条场景；以 LS- 开头的标题都是三级标题「LS-nn 标题」，nn 两位数，从 01 起连续编号、不重复",
+        "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#3] 每条场景恰有一行「- 测试：」与一行「- 核对规则：」；测试行非空，核对规则非空",
+        "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#4] 「- 测试：缺口」行不带任何测试 ID；其余测试行是逗号分隔的测试 ID（方括号编号或 db/invariants/ 下的 .sql 路径），至少一个",
+        "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#5] 测试行里每个方括号测试 ID 都在 test/spec/**、test/properties/** 的测试标题（it / test 的标题）里出现，本任务目录除外",
+        "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#6] 测试行里每个 db/invariants/ 路径都是真实存在的 .sql 文件",
+        "test/spec/settlement/loss-scenarios/structure.test.ts > [AC-B2-10b#7] #5 的测试 ID 只认能确认存在的具体编号：静态标题照原文；模板与参数化标题只按同文件字面数据源枚举出的实际编号；解析不了的不认，同前缀的虚构编号（如 AC-B2-04zza#999）被拒"
+      ],
+      "expected": ["test/spec/settlement/loss-scenarios/structure.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "9e42317280461826055d29615dbd333cde5d6bcb489ff2312566b122a72665ef"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base the spec commit: pass with five S2 on the document's accuracy (LS-02 voucher cardinality, LS-04 conservation formula missing the actual Taolijin deduction, LS-07 time-source coverage, LS-17 an existing test, invariant 05's scope='none' row). All five addressed in r2; for LS-17 the suggested test has a parameterised title the structure test cannot confirm, so it stays a gap and the note names the existing coverage."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Structure-only rule tests by a fresh independent Claude in 2 attempts. Codex spec-test r1 fail (1 S1: template titles were treated as wildcards so a made-up ID with an existing prefix passed); r2 pass, no findings, with a counterexample test."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ca818c6e14bd7c578401dc0a83d8abb81dab5153",
+    "specs": "0e2feca4eb4f366af5803ce7c82f2c417e2d65f7"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
