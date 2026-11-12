@@ -77,5 +77,5 @@ modify_existing:
     reason: tighten_only
     ruling: D10-1297
     note: '卡片已随终态落库并由注销清理处理；队列再写不新增卡片行（只改卡片断言的基准）'
-status: todo
-pr: null
+status: done
+pr: 3269
