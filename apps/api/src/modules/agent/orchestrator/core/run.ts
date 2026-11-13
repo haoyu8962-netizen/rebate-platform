@@ -13,6 +13,15 @@
 // provider refusal. Only the OutputGuard's emits are released (never raw deltas, no guard.end()).
 // 请求即算: a round asking for an offered template tool counts it as called before any of the
 // round's calls runs (countRequested), so a call the run never reaches still counts.
+// B3-05q · BR-AI-01 细则「情境入口」: context.text is dropped before anything sees the run input
+// (withoutClipboard). With an entry path (deps.entry), a message without links or tokens whose
+// context names an entry (scenario-entry.ts) gets the entry's card after the input check:
+// context.order_id ends the run with the entry path's order result (no model); context.product_key
+// writes the link path's quote first, then the words go on as usual — to the model when there is
+// one, while a run without a model (no prompt, degraded router) ends at the entry's output
+// (done stop; a server-side quote failure without a model: error 50401; with a model the
+// agent.notice.quote_failed notice before the model's output, BR-AI-15 细则). In the same run the
+// model quoting the entry product by its own card_id gets that id back, no second card (BR-AI-05).
 import { platform as platformEnum } from '@couli/contracts-ts';
 import type { Platform } from '@couli/contracts-ts';
 import type { RunBodyInput } from '../../http/index.ts';
@@ -26,6 +35,9 @@ import { StreamProtocolError } from '../../stream/writer/index.ts';
 import { openCardCall } from './card-references.ts';
 import type { CardCall } from './card-references.ts';
 import { RunOutput } from './output.ts';
+import { withoutClipboard } from '../../http/context.ts';
+import { wrapUntrusted } from '../../guard/index.ts';
+import { scenarioEntryOf } from './scenario-entry.ts';
 import { ReplyTemplateCalls, isReplyTemplateTool } from './reply-templates.ts';
 import type { CardWrite } from './output.ts';
 import { openDegradedRoute } from './degraded-intent.ts';
@@ -37,6 +49,7 @@ import type {
   AgentRunBodyDeps,
   OrchestratorToolCall,
   DeliveredProductReceipt,
+  EntryQuoteResult,
   InputProceed,
   OrchestratorTrace,
   ToolContext,
@@ -61,6 +74,17 @@ const LINK_INTENT = 'find_by_link';
 const DEGRADED_INTENT = 'search';
 /** The tool the deterministic path reports, one start → end / failed pair per url link. */
 const QUOTE_TOOL = 'get_rebate_quote';
+/** B3-05q: intent of a context.order_id run (BR-AI-19 细则「运行级字段」). */
+const ORDER_INTENT = 'order_query';
+
+/** B3-05q · BR-AI-05: the entry product as the model may quote it again in this run. */
+interface EntryProduct {
+  /** The product's own card_id (its frame's next number, 04 §8.2). */
+  readonly cardId: string;
+  readonly title: string;
+  readonly platform: string;
+  readonly benefitTags: readonly string[];
+}
 
 type ToolStatus = OrchestratorTrace['tool_calls'][number]['status'];
 type CardSource = NonNullable<ToolTraceFragment['card_sources']>[number];
@@ -272,6 +296,14 @@ class AgentRun {
    * written at the port's first write or non-template server call, dropped by a template one.
    */
   private pendingHeld: readonly { readonly text: string; readonly model: boolean }[] | null = null;
+  /** B3-05q: the entry quote of this run (context.product_key), null without one. */
+  private entryQuote: EntryQuoteResult | null = null;
+  /** B3-05q: the quoted entry product (a written rebate_quote with a receipt), for BR-AI-05. */
+  private entryProduct: EntryProduct | null = null;
+  /** B3-05q: agent.notice.quote_failed was written (the model took the words). */
+  private entryNoticed = false;
+  /** B3-05q: the trace intent of an entry run when nothing else set one. */
+  private entryIntent: string | null = null;
 
   constructor(deps: AgentRunBodyDeps, input: RunBodyInput, ctx: RunContext) {
     this.deps = deps;
@@ -374,7 +406,102 @@ class AgentRun {
       if (this.out.limitHit) return done('limit');
     }
     if (checked.links.length > 0) return this.linkPath(checked);
+    // B3-05q: the entry's card, only for a message without links or tokens (BR-AI-01 细则「情境入口」).
+    const entryPath = this.deps.entry;
+    const entry = entryPath === undefined ? null : scenarioEntryOf(this.input.context);
+    if (entryPath !== undefined && entry !== null) {
+      if (entry.kind === 'order') {
+        this.intent = ORDER_INTENT;
+        const result = await this.wait(
+          entryPath.order(
+            { input: this.input, proceed: checked },
+            entry.orderId,
+            this.pathContext(),
+            this.entryReport(),
+          ),
+        );
+        return result === ABORTED ? done('stop') : this.final(result);
+      }
+      this.entryIntent = LINK_INTENT;
+      const quoted = await this.wait(
+        entryPath.product(
+          { input: this.input, proceed: checked },
+          entry.productKey,
+          this.pathContext(),
+          this.entryReport(),
+        ),
+      );
+      if (quoted === ABORTED || quoted.kind === 'stopped') return done('stop');
+      this.entryQuote = quoted;
+      if (quoted.kind === 'quoted') this.entryProduct = entryProductOf(quoted);
+      if (this.out.limitHit) return done('limit');
+    }
     return this.modelPath(checked);
+  }
+
+  /** B3-05q: the entry path's calls in the trace, server-initiated, with value-free args. */
+  private entryReport(): (
+    name: string,
+    args: Readonly<Record<string, string>>,
+    status: 'ok' | 'failed',
+  ) => void {
+    return (name, args, status) => {
+      if (this.traced || this.signal.aborted) return;
+      this.traceCall(name, args, status, true);
+    };
+  }
+
+  /**
+   * B3-05q · BR-AI-01 细则「情境入口」: a product entry run without a model (no prompt, the router
+   * degraded, or an invalid answer before any delivery) ends at the entry's output: done stop, or
+   * error 50401 when the quote failed for a server-side reason and nothing was written for it
+   * (BR-AI-15 细则). null: no product entry in this run.
+   */
+  private async entryEnd(): Promise<RunBodyResult | null> {
+    const quoted = this.entryQuote;
+    const entryPath = this.deps.entry;
+    if (quoted === null || entryPath === undefined) return null;
+    if (quoted.kind === 'server_failed' && !this.entryNoticed) {
+      const result = await this.wait(entryPath.serverFailure(this.appId));
+      return result === ABORTED ? done('stop') : result;
+    }
+    // Earlier rounds' held model text is settled as at any other end.
+    const settled = await this.settleHeld();
+    if (settled !== null) return settled;
+    return this.final(done('stop'));
+  }
+
+  /** B3-05q · BR-AI-15 细则: with a model, a server-side entry quote failure gets its notice first. */
+  private async entryNotice(): Promise<boolean> {
+    const entryPath = this.deps.entry;
+    if (this.entryQuote?.kind !== 'server_failed' || entryPath === undefined) return true;
+    const notice = await this.wait(entryPath.quoteFailedNotice(this.appId));
+    if (notice === ABORTED) return false;
+    this.entryNoticed = true;
+    return (await this.card(notice)) !== ABORTED;
+  }
+
+  /**
+   * B3-05q · BR-AI-05: the model quotes the entry product by its own card_id in the run that wrote
+   * the entry card: no second card, the model gets that id back (the BR-AI-05 product view).
+   */
+  private entryRequote(name: string, args: unknown): { readonly view: unknown } | null {
+    const product = this.entryProduct;
+    if (product === null || name !== QUOTE_TOOL || !isRecord(args)) return null;
+    const keys = Object.keys(args);
+    if (keys.length !== 1 || args['card_id'] !== product.cardId) return null;
+    return {
+      view: {
+        products: [
+          {
+            card_id: product.cardId,
+            title: wrapUntrusted(product.title),
+            platform: product.platform,
+            benefit_tags: [...product.benefitTags],
+          },
+        ],
+      },
+    };
   }
 
   /** Fixed server text by key; false when cancelled. */
@@ -494,6 +621,9 @@ class AgentRun {
   }
 
   private async degrade(proceed: InputProceed, reason: DegradeReason): Promise<RunBodyResult> {
+    // B3-05q: a product entry run without a model ends at the entry (no 问法分流, no search).
+    const entryEnd = await this.entryEnd();
+    if (entryEnd !== null) return entryEnd;
     // An intent the model already gave is kept; otherwise the intent the no-model path registers
     // on the context of this run call (B3-05n · BR-AI-14 细则「无模型降级」 ①–⑥, so the next run's
     // 承接 reads it), read when the trace is recorded (also after a stop), else the keyword
@@ -512,6 +642,8 @@ class AgentRun {
     if (prompt === ABORTED) return done('stop');
     if (prompt === null) return this.degrade(proceed, 'route_no_model');
     this.promptVersion = prompt.version;
+    if (!(await this.entryNotice())) return done('stop');
+    if (this.out.limitHit) return done('limit');
     const tools = await this.wait(this.deps.tools.definitions(this.appId, this.input.caller));
     if (tools === ABORTED) return done('stop');
     const known = new Set(tools.map((tool) => tool.name));
@@ -997,6 +1129,15 @@ class AgentRun {
     const start = await this.wait(texts.toolDisplay(this.appId, name, 'start', platform));
     if (start === ABORTED) return done('stop');
     this.out.status(name, 'start', start);
+    const requoted = parsed.ok ? this.entryRequote(name, parsed.args) : null;
+    if (requoted !== null) {
+      // B3-05q: answered from the entry card of this run; nothing executes, no card goes out.
+      const end = await this.wait(texts.toolDisplay(this.appId, name, 'end', platform));
+      if (end === ABORTED) return done('stop');
+      this.out.status(name, 'end', end);
+      this.traceCall(name, parsed.args, 'ok');
+      return requoted;
+    }
     // B3-05i: each call gets its own copy of the run's placeholders table; that object's identity
     // binds cardReference to this call (card-references.ts header). Same entries, frozen.
     const placeholders = Object.freeze({ ...this.placeholders });
@@ -1129,6 +1270,7 @@ class AgentRun {
     this.traced = true;
     const routed = this.routed?.close() ?? null;
     if (routed !== null) this.intent = routed;
+    if (this.intent === null && this.entryIntent !== null) this.intent = this.entryIntent;
     const sink = this.deps.trace;
     if (sink === undefined) return;
     const summary = this.guard?.summary();
@@ -1161,5 +1303,26 @@ export function runAgent(
   input: RunBodyInput,
   ctx: RunContext,
 ): Promise<RunBodyResult> {
-  return new AgentRun(deps, input, ctx).run();
+  // B3-05q: context.text is never read, stored or given to the model (BR-AI-01 细则「情境入口」).
+  return new AgentRun(deps, withoutClipboard(input), ctx).run();
+}
+
+/** B3-05q: the entry product of a written rebate_quote card (quotedProductOf's numbering). */
+function entryProductOf(
+  quoted: Extract<EntryQuoteResult, { kind: 'quoted' }>,
+): EntryProduct | null {
+  if (quoted.card === null || quoted.frameCardId === null) return null;
+  const receipt = quotedProductOf(quoted.card, quoted.frameCardId);
+  const product = quoted.card.data['product'];
+  if (receipt === null || !isRecord(product)) return null;
+  const title = product['title'];
+  const tags = product['benefit_tags'];
+  return {
+    cardId: receipt.card_id,
+    title: typeof title === 'string' ? title : '',
+    platform: receipt.platform,
+    benefitTags: Array.isArray(tags)
+      ? tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+  };
 }

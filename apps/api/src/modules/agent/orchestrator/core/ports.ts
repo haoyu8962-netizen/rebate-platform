@@ -315,6 +315,57 @@ export interface AgentRunBodyDeps {
   /** B3-05o 比较提示 (intent-fallback.ts rule 4): whether the session has product cards in
    * context (its current result set). Absent, or a failed read: no title-based notice. */
   readonly sessionProducts?: SessionProductsPort;
+  /** B3-05q · BR-AI-01 细则「情境入口」: the entry path of a message with context.product_key or
+   * context.order_id (../entry/index.ts). Absent: the context is passed on unchanged and no path
+   * answers for it (B3-05b runs). context.text is dropped by the core either way. */
+  readonly entry?: ScenarioEntryPath;
+}
+
+/** B3-05q: one entry call for the run's trace (tool name, value-free args, status). */
+export type EntryCallReport = (
+  name: string,
+  args: Readonly<Record<string, string>>,
+  status: 'ok' | 'failed',
+) => void;
+
+/** B3-05q: the entry quote as written — quoted (a rebate_quote frame went out), answered (the link
+ * path's notice for an upstream answer about the product), server_failed (nothing written:
+ * upstream timeout, 5xx or circuit), stopped (cancelled). */
+export type EntryQuoteResult =
+  | {
+      readonly kind: 'quoted';
+      /** The written rebate_quote card and its frame's card_id, when the context confirmed it. */
+      readonly card: UnnumberedCard | null;
+      readonly frameCardId: string | null;
+    }
+  | { readonly kind: 'answered' }
+  | { readonly kind: 'server_failed' }
+  | { readonly kind: 'stopped' };
+
+/**
+ * B3-05q · BR-AI-01 细则「情境入口」: the entry path (../entry/index.ts). The core calls it after the
+ * input check, only for a message without links or tokens, on its guarded path context.
+ */
+export interface ScenarioEntryPath {
+  /** context.product_key: the link path's quote of that product (no text). */
+  product(
+    request: PathInput,
+    productKey: string,
+    ctx: RunContext,
+    report: EntryCallReport,
+  ): Promise<EntryQuoteResult>;
+  /** BR-AI-15 细则: the notice of a server-side quote failure when a model takes the words. */
+  quoteFailedNotice(appId: string): Promise<UnnumberedCard>;
+  /** BR-AI-15 细则: the end of a run whose entry quote failed for a server-side reason without a
+   * model: error 50401, retryable false. */
+  serverFailure(appId: string): Promise<RunBodyResult>;
+  /** context.order_id: order_query on this one order; the run ends with its result. */
+  order(
+    request: PathInput,
+    orderId: string,
+    ctx: RunContext,
+    report: EntryCallReport,
+  ): Promise<RunBodyResult>;
 }
 
 /** B3-05o: one call per run filled with agent.reply.empty. */
