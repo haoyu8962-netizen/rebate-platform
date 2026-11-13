@@ -1,0 +1,17 @@
+id: CT-13j
+repo: rebate-platform
+title: CT-13i 拆出（test-change，D10-1553）：events 写入函数现有行为钉住——同键并发确实等待未提交事务（胜者接受一条、等待者重复一条）、会前进的 Clock 在每次调用只读一次（同批 server_at 完全相同），主干绿 + 变异实跑代替先红
+type: test-change
+# 2026-11-14 be 入账（编排 D10-1553；先例 B3-08zg、QA-03bt、B3-05t）。来源：CT-13i 规则测试（Codex 写）里主干即绿的两条 #3、#6，red_exempt 对新文件不生效，故拆出。由不是原写手的新鲜独立 Claude 机械搬运、测试体逐字不改，只新增 test/spec/analytics/record-events-behaviour/behaviour.int.test.ts（夹具自带，不引 CT-13i 目录）；AC 号改为 [AC-CT-13j#1]（原 #3）、[AC-CT-13j#2]（原 #6）。
+# 验收：测试机主干基线 2/2 绿；变异 M1（先查后插）→ #1 红，M2（逐条读时钟）→ #2 红，跑后还原；清单与结果进 PR 说明（补丁 couli-runs/CT-13i/mutations/）。非 task 分支、不带证据文件，标签由编排按 #24 核后加。可先于 CT-13i 合并；合并后为冻结用例，CT-13i 实现须保持其绿。
+refs: []
+refs_hash: {}
+deps: [CT-13g]
+paths:
+  - 'test/spec/analytics/record-events-behaviour/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
