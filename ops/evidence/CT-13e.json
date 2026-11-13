@@ -1,0 +1,102 @@
+{
+  "risk_note": "CT-13e (C-31 step 2, analytics event storage; 编排 D10-1487 / D10-1488 / D10-1489 / D10-1492). Only db/migrations/0140_analytics-events.sql (D10-1494 改号: renamed from 0141, content unchanged — the gate wants the next free, contiguous number and CT-13e lands before B1-34q; the only test change is the migration number in a comment on line 1 of test/spec/db/events/kit.ts; mechanical, review rounds not reopened) plus the regenerated db/schema.sql and packages/db/src/db.gen.ts (pnpm db:snapshot on this Mac via Colima + OPS-lane/pg18-shim, D10-1492). app.events: RANGE (server_at) per +08:00 day + DEFAULT, columns per 04 §3.2 plus event_id / event_type / app_id; no unique key on the partitioned table; global dedup in the unpartitioned app.event_dedup, PRIMARY KEY (event_type, event_id) (D10-1488 option 1; the write path is CT-13g). Dedicated functions app.ensure_events_day_partition / app.drop_expired_events_day_partitions / app.purge_expired_events_default (SECURITY DEFINER, couli_maint EXECUTE only); the shared ensure_day_partition / drop_expired_day_partitions are unchanged (frozen test/spec/db/partitions/day-functions.int.test.ts:172, :243 pin that they refuse 'events'; agreed 21:49). purge_expired_events_default closes Codex money r1 S1 (rows in events_default were never removed, BR-ID-30 ③ 90 days). Grants: couli_app SELECT/INSERT on both tables + UPDATE (user_id) on events; trigger events_detach_only allows only user_id non-null -> null (D10-1489 default for account deletion, pending owner confirmation); couli_maint SELECT/DELETE on event_dedup. Rule tests (Codex, 3 attempts): test/spec/db/events/** 16 tests, container red red/3 16/16 PASS; after the D10-1494 renumbering re-red on the rebased spec commit red/5 16/16 PASS and after the implementation the same --red path red/6 16/16 passed. No money / attribution path.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex via codex-run.sh. r1 fail with one S1 (events_default rows never purged -> BR-ID-30 ③ not enforced; couli-runs/CT-13e/review-codex-money-r1.json), fixed by app.purge_expired_events_default with rule test [AC-CT-13e#16]; r2 (incremental) pass, no findings (review-codex-money-r2.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (tester codex, 3 attempts: the 2nd switched events to dedicated partition functions to keep the frozen day-functions tests, the 3rd added [AC-CT-13e#16] for the DEFAULT purge). Reviewed by a fresh independent Claude (claude-run.sh): spec-test r1 pass, no findings; r2 (incremental, #16) pass, no findings (couli-runs/CT-13e/review-claude-spec-test-r1.json, -r2.json). D10-1505：depcruise 机械调整由编排核增量，未另跑 spec-test（spec-test 次数 2/2 已用满）。#46 首推的 verify-static 红在 depcruise testcontainers-only-in-int-tests（test/spec/db/events/kit.ts → @couli/db/testing）；新鲜独立 Claude（非原写手）把 kit.ts 改为不引测试库、open() 接收调用方传入的建库函数，三个 .int 文件各自 import createTestDatabase 并传入，断言 / 标题 / AC 编号 / 顺序未动（四个文件 +12 −6）。旧 spec 提交 b3e3f45b0（#46 首推，基于 4b11bc840）→ 新 spec 提交 cebb62e08（基于 6b0c99176），先红 red/8 16/16 PASS，实现后 red/9 16/16。"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/db/events/access.int.test.ts > [AC-CT-13e#5] app may INSERT/SELECT both tables; only events.user_id has column UPDATE permission",
+    "test/spec/db/events/access.int.test.ts > [AC-CT-13e#6] detachment clears only user_id, in both DEFAULT and a runtime daily partition",
+    "test/spec/db/events/access.int.test.ts > [AC-CT-13e#7] BEFORE UPDATE guard rejects reassignment, attaching guests and repeated/no-op detachment",
+    "test/spec/db/events/access.int.test.ts > [AC-CT-13e#8] app cannot smuggle any other field change into a detachment, including moving partitions",
+    "test/spec/db/events/access.int.test.ts > [AC-CT-13e#9] maint can delete dedup rows by created_at while app cannot; cleanup leaves boundary/new rows",
+    "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#10] migration creates only DEFAULT; ensure routes server_at across exact +08:00 day boundaries",
+    "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#11] DEFAULT rows prevent overlapping partition creation without losing data",
+    "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#12] drop uses supplied +08:00 midnight minus 90 days, preserving cutoff day and DEFAULT; link_logs still works",
+    "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#13] shared functions still reject events with 22023; dedicated functions validate arguments without mutating partitions",
+    "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#14] functions retain owner, SECURITY DEFINER, fixed search_path/settings and maint-only execution; maint has no DDL",
+    "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#15] ensure and drop retain their shared bounded advisory lock, with no partial creation/deletion",
+    "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#16] maint-only DEFAULT purge validates time and deletes only rows before the +08:00 90-day cutoff",
+    "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#1] events has the analytics columns, nullable identities and RANGE(server_at); dedup is unpartitioned",
+    "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#2] dedup rejects repeats across dates and apps; distinct type or UUID remains insertable",
+    "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#3] concurrent dedup inserts have exactly one winner at the PG unique constraint",
+    "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#4] events stores JSON and both clocks; global event uniqueness belongs to the separate dedup table"
+  ],
+  "task": "CT-13e",
+  "spec_commit": "14a8a25132ea1f5956ca5e01dbc603869d2f73a9",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "14a8a25132ea1f5956ca5e01dbc603869d2f73a9",
+      "tree": "6b4420f0254938c80fd2cf8074e604a47bd1da3d",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T16:20:40Z",
+      "finished_at": "2026-11-13T16:20:46Z",
+      "red_tests": [
+        "test/spec/db/events/access.int.test.ts > [AC-CT-13e#5] app may INSERT/SELECT both tables; only events.user_id has column UPDATE permission",
+        "test/spec/db/events/access.int.test.ts > [AC-CT-13e#6] detachment clears only user_id, in both DEFAULT and a runtime daily partition",
+        "test/spec/db/events/access.int.test.ts > [AC-CT-13e#7] BEFORE UPDATE guard rejects reassignment, attaching guests and repeated/no-op detachment",
+        "test/spec/db/events/access.int.test.ts > [AC-CT-13e#8] app cannot smuggle any other field change into a detachment, including moving partitions",
+        "test/spec/db/events/access.int.test.ts > [AC-CT-13e#9] maint can delete dedup rows by created_at while app cannot; cleanup leaves boundary/new rows",
+        "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#10] migration creates only DEFAULT; ensure routes server_at across exact +08:00 day boundaries",
+        "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#11] DEFAULT rows prevent overlapping partition creation without losing data",
+        "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#12] drop uses supplied +08:00 midnight minus 90 days, preserving cutoff day and DEFAULT; link_logs still works",
+        "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#13] shared functions still reject events with 22023; dedicated functions validate arguments without mutating partitions",
+        "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#14] functions retain owner, SECURITY DEFINER, fixed search_path/settings and maint-only execution; maint has no DDL",
+        "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#15] ensure and drop retain their shared bounded advisory lock, with no partial creation/deletion",
+        "test/spec/db/events/partitions.int.test.ts > [AC-CT-13e#16] maint-only DEFAULT purge validates time and deletes only rows before the +08:00 90-day cutoff",
+        "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#1] events has the analytics columns, nullable identities and RANGE(server_at); dedup is unpartitioned",
+        "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#2] dedup rejects repeats across dates and apps; distinct type or UUID remains insertable",
+        "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#3] concurrent dedup inserts have exactly one winner at the PG unique constraint",
+        "test/spec/db/events/storage.int.test.ts > [AC-CT-13e#4] events stores JSON and both clocks; global event uniqueness belongs to the separate dedup table"
+      ],
+      "expected": [
+        "test/spec/db/events/access.int.test.ts",
+        "test/spec/db/events/partitions.int.test.ts",
+        "test/spec/db/events/storage.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "761ba3e4cc0831159c8e623614c1067389d05793de3caf207da70897e78a8419"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b37fd2dff93934f7d286e2f1708820e433f88fe6",
+    "specs": "178edfb25fe89c968a1e78d4ab0963c3a18100bc"
+  }
+}
