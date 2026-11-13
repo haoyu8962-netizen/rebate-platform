@@ -1,0 +1,23 @@
+id: F1-08dc
+repo: rebate-platform
+title: 后台月结账单列表加「待确认」筛选（listAdminSettleBills 的 awaiting_confirm），工作台卡 settle_bill_pending 打开的 /settle-bills?awaiting_confirm=true 落在已带该筛选的列表上（编排 D10-1402；契约 CT-24zzj）
+type: impl
+# 2026-11-13 入账（前端线 fe，账号 3）。依据：契约 CT-24zzj 的 AdminSettleBillAwaitingConfirm 与 listAdminSettleBills 描述（true = 最近一轮有 DRAFT 批次待确认；与 status 求交；非布尔 20001）；adminGetDashboard 里 settle_bill_pending 的 route /settle-bills?awaiting_confirm=true、计数等于该筛选下的 total（D10-1402）。
+# 页面：筛选表单加一个「只看待确认」开关 / 勾选，勾上时请求带 awaiting_confirm=true，不勾不带；与月份、状态筛选求交，翻页与重置照现有写法。从地址 ?awaiting_confirm=true 进来时初始即勾上并按此请求；改筛选后地址与表单一致。口径不在页面另算，只把参数交给服务端。
+# 后端实现是资金与收款桌面线的 B2-09zm，合并前规则测试与联调用契约形状的假服务端。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/pages/settle-bills/**'
+  - 'apps/admin/src/texts/settle-bills.ts'
+  - 'apps/admin/src/App.tsx'
+test_paths:
+  - 'test/spec/frontend/admin-settle-bills-awaiting/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-settle-bills-awaiting/**'
+status: todo
+pr: null
