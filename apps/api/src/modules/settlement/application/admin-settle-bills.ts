@@ -85,6 +85,20 @@ function latestRound(batches: readonly AdminSettleRoundBatch[]): AdminSettleRoun
 }
 
 /**
+ * AdminSettleBillAwaitingConfirm of a bill (B2-09zm, D10-1402): generated (`generatedAt`, i.e.
+ * settle_bills.generated_at, not null) and a DRAFT batch in the latest round of `batches` (every
+ * settle_batches row of the bill, any order). Exactly the issued bills of the branch "a batch of
+ * the round is DRAFT"; a DRAFT outside the latest round does not count (D10-444). No clock: the
+ * one decision behind deriveAdminSettleBill, the list's awaiting_confirm and the workbench count.
+ */
+export function settleBillAwaitingConfirm(
+  generatedAt: Date | null,
+  batches: readonly AdminSettleRoundBatch[],
+): boolean {
+  return generatedAt !== null && latestRound(batches).some((batch) => batch.status === 'DRAFT');
+}
+
+/**
  * AdminSettleBillStatus of a bill: `generatedAt` is settle_bills.generated_at, `batches` every
  * settle_batches row of the bill (any order), `now` the server clock.
  */
@@ -97,10 +111,10 @@ export function deriveAdminSettleBill(
   const currentRound = round.map((batch) => batch.batch_id);
   // The first rule that holds wins, in the contract's order.
   if (generatedAt === null) return { status: 'generating', currentRound };
+  // A DRAFT batch is never CANCELLED: "a live batch of the round is DRAFT" is this decision.
+  if (settleBillAwaitingConfirm(generatedAt, batches)) return { status: 'issued', currentRound };
   const live = round.filter((batch) => batch.status !== 'CANCELLED');
-  if (live.length === 0 || live.some((batch) => batch.status === 'DRAFT')) {
-    return { status: 'issued', currentRound };
-  }
+  if (live.length === 0) return { status: 'issued', currentRound };
   if (live.every((batch) => batch.status === 'DONE')) return { status: 'settled', currentRound };
   const due = (batch: AdminSettleRoundBatch): boolean =>
     batch.status === 'EXECUTING' ||
@@ -131,6 +145,7 @@ export interface AdminSettleBillReadDeps {
 }
 
 export interface AdminSettleBillListQuery {
+  readonly awaiting_confirm?: boolean;
   readonly page?: number;
   readonly page_size?: number;
   readonly bill_from?: string;
@@ -205,6 +220,32 @@ const ROUND_COLUMNS = [
   'created_at',
 ] as const;
 
+/**
+ * Every settle_batches row of the app's bills in the bill month range (bounds optional), as the
+ * derivation reads them, grouped by bill_id. Read only.
+ */
+export async function readSettleRoundBatches(
+  db: Kysely<DB>,
+  appId: string,
+  from?: string,
+  to?: string,
+): Promise<Map<string, AdminSettleRoundBatch[]>> {
+  let batches = db
+    .withSchema('app')
+    .selectFrom('settle_batches')
+    .select([...ROUND_COLUMNS, CREATED_MICROS])
+    .where('app_id', '=', appId);
+  if (from !== undefined) batches = batches.where('bill_id', '>=', from);
+  if (to !== undefined) batches = batches.where('bill_id', '<=', to);
+  const byBill = new Map<string, AdminSettleRoundBatch[]>();
+  for (const batch of await batches.execute()) {
+    const list = byBill.get(batch.bill_id);
+    if (list === undefined) byBill.set(batch.bill_id, [batch]);
+    else list.push(batch);
+  }
+  return byBill;
+}
+
 /** One page of the app's bills, bill_id descending, each with its status derived now. */
 export async function listAdminSettleBills(
   deps: AdminSettleBillReadDeps,
@@ -225,32 +266,20 @@ export async function listAdminSettleBills(
     .selectFrom('settle_bills')
     .selectAll()
     .where('app_id', '=', appId);
-  let batches = deps.db
-    .withSchema('app')
-    .selectFrom('settle_batches')
-    .select([...ROUND_COLUMNS, CREATED_MICROS])
-    .where('app_id', '=', appId);
-  if (from !== undefined) {
-    bills = bills.where('bill_id', '>=', from);
-    batches = batches.where('bill_id', '>=', from);
-  }
-  if (to !== undefined) {
-    bills = bills.where('bill_id', '<=', to);
-    batches = batches.where('bill_id', '<=', to);
-  }
+  if (from !== undefined) bills = bills.where('bill_id', '>=', from);
+  if (to !== undefined) bills = bills.where('bill_id', '<=', to);
   const billRows = await bills.orderBy('bill_id', 'desc').execute();
-  const byBill = new Map<string, AdminSettleRoundBatch[]>();
-  for (const batch of await batches.execute()) {
-    const list = byBill.get(batch.bill_id);
-    if (list === undefined) byBill.set(batch.bill_id, [batch]);
-    else list.push(batch);
-  }
+  const byBill = await readSettleRoundBatches(deps.db, appId, from, to);
   const now = deps.now();
   const rows: Bill[] = [];
   for (const row of billRows) {
     const own = byBill.get(row.bill_id) ?? [];
     const derived = deriveAdminSettleBill(row.generated_at, own, now);
     if (query.status !== undefined && derived.status !== query.status) continue;
+    // The same decision as the status' issued branch; the row itself is unchanged by the filter.
+    if (query.awaiting_confirm === true && !settleBillAwaitingConfirm(row.generated_at, own)) {
+      continue;
+    }
     rows.push(billView(row, own, derived));
   }
   const offset = (page - 1) * pageSize;

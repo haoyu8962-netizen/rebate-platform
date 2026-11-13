@@ -1,0 +1,87 @@
+{
+  "risk_note": "RV2 settlement (B2-09zm; BR-FUND-04; D10-1402, D10-1409; contract CT-24zzj). listAdminSettleBills now applies the optional awaiting_confirm filter (previously validated but ignored), and the workbench card settle_bill_pending gets a per-app read-only count countSettleBillPending(db, appId) exported from settlement/index.ts. One judgement only: settleBillAwaitingConfirm(generatedAt, batches) = generated_at not null and the latest round (unchanged latestRound: the main batches one round, each supplement launch by platform and creation instant another; tie by largest batch_id) has a DRAFT batch. deriveAdminSettleBill's issued/DRAFT branch, the list filter (after derivation and status, before paging; total = filtered count; rows identical to the unfiltered ones) and the count all call it; no clock. Batches are read by the shared readSettleRoundBatches (same SQL as before, microsecond created_at). Read only, no write, no audit, no amount. Behaviour without awaiting_confirm is unchanged. No migration, no contract change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base the branch point with main: pass, no findings; the checklist items are n/a (read-only list filter and count, no amounts, no posting)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests (10, test/spec/settlement/settle-bill-pending-count/) by Codex (test phase). The spec-test review is by a fresh independent Claude: an in-session Opus subagent of the desktop lane, read-only, not the implementing context (claude-run.sh's terminal accounts are logged out, D10-1448). r1 pass with two S2 gaps (filtered rows not compared field by field with the unfiltered ones; same-instant tie between rounds with several batches); the implementation satisfies both (rows from the same billView; latestRound keeps the largest-batch_id tie-break) and its unit tests cover the tie-break."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-09zm",
+  "spec_commit": "c494daaa1ddee619a3922baa7a5880a20d5abc6e",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "red_tests": [
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#1] 同一数据集的 HTTP 列表、total 与导出计数一致；只含最近一轮有 DRAFT 的已生成账单，混合批次算一张，排除生成中、空轮、全驳回及轮外 DRAFT",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#2] 主批次 DONE 后新增补充 DRAFT 从 0 变 1；补充轮全部驳回后回到 issued 但计数变 0，不能回退到较早轮的 DRAFT",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#3] awaiting_confirm 与 status、月份范围取交集；false 与缺省保持全量和原筛选结果",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#4] 过滤先于分页：page_size=1、缺省 20、越界页的 total 都为 23，计数不受页长截断",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#5] 跨 app 的同月批次不串用，另一应用独有待确认月份不泄露；空 app 计数为 0",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#6] 最近一轮沿用状态口径：所有 main 合轮；补充按平台与创建时刻合轮；同刻按最大 batch_id 决胜，不能只取最新一条批次",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#7] 判定不受定时到期影响，计数可在 PG 只读事务反复调用；列表与计数不改表也不写审计",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#8] HTTP 非布尔 awaiting_confirm 返回 20001 且 fields 精确指名；合法 true 必须真正筛掉无候选账单",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#9] 只有无候选 issued、generating 或轮外 DRAFT 的应用以及完全空应用，返回数字 0",
+    "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#10] PG 创建时刻的微秒差不能被 Date 毫秒截断而合轮，时间顺序优先于 batch_id"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c494daaa1ddee619a3922baa7a5880a20d5abc6e",
+      "tree": "4f3265efb97df709196378c69624866ab5138df3",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T13:49:37Z",
+      "finished_at": "2026-11-13T13:49:51Z",
+      "red_tests": [
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#1] 同一数据集的 HTTP 列表、total 与导出计数一致；只含最近一轮有 DRAFT 的已生成账单，混合批次算一张，排除生成中、空轮、全驳回及轮外 DRAFT",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#2] 主批次 DONE 后新增补充 DRAFT 从 0 变 1；补充轮全部驳回后回到 issued 但计数变 0，不能回退到较早轮的 DRAFT",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#3] awaiting_confirm 与 status、月份范围取交集；false 与缺省保持全量和原筛选结果",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#4] 过滤先于分页：page_size=1、缺省 20、越界页的 total 都为 23，计数不受页长截断",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#5] 跨 app 的同月批次不串用，另一应用独有待确认月份不泄露；空 app 计数为 0",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#6] 最近一轮沿用状态口径：所有 main 合轮；补充按平台与创建时刻合轮；同刻按最大 batch_id 决胜，不能只取最新一条批次",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#7] 判定不受定时到期影响，计数可在 PG 只读事务反复调用；列表与计数不改表也不写审计",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#8] HTTP 非布尔 awaiting_confirm 返回 20001 且 fields 精确指名；合法 true 必须真正筛掉无候选账单",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#9] 只有无候选 issued、generating 或轮外 DRAFT 的应用以及完全空应用，返回数字 0",
+        "test/spec/settlement/settle-bill-pending-count/pending.int.test.ts > [AC-B2-09zm#10] PG 创建时刻的微秒差不能被 Date 毫秒截断而合轮，时间顺序优先于 batch_id"
+      ],
+      "expected": ["test/spec/settlement/settle-bill-pending-count/pending.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "db10bbe706d76d359832111a6047abeb26f6352569f6003d122ecde472a0ca39"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c0bf8b5f13b3cc008e8b50df9c4842665192ab3c",
+    "specs": "8f76891b6e53531f480a4626a10b8dc9c1e82a28"
+  }
+}
