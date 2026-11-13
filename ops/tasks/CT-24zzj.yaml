@@ -23,4 +23,6 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
-status: todo
+status: done
+# pr 是原仓库 zora4523-bot/rebate-platform 的编号（2026-11-13 迁到 haoyu8962-netizen 前合并）。
+pr: 3349

@@ -1,0 +1,27 @@
+id: B2-09zm
+repo: rebate-platform
+title: 后台账单列表 awaiting_confirm 筛选的实现 + 工作台卡片 settle_bill_pending 的按 app 只读计数——计数与列表共用同一判定，计数 = GET /admin/v1/settle-bills?awaiting_confirm=true 的 total（CT-24zzj 的实现，D10-1402 / D10-1409）
+type: impl
+# 2026-11-13 资金与收款桌面线入账（原 funds；编排 D10-1402 选 (c)、D10-1409 排最优先；方案 couli-runs/DASHBOARD/plan-20261113.md）。
+# 现状：CT-24zzj 契约已在主干，listAdminSettleBills 收 awaiting_confirm 但不筛（校验放行、不生效）。
+# 判定：把 deriveAdminSettleBill 里 issued 的 DRAFT 分支抽成一个函数（generated_at 非空，且最近一轮里有 status=DRAFT 的批次），列表的 awaiting_confirm=true 与计数都调它，不另写条件；同一「最近一轮」定义（D10-444：轮外的 DRAFT 不算；generating、最近一轮没有未取消批次的 issued 都不算）。判定不看时钟。
+# 列表：awaiting_confirm=true 与 status 取交集（status=issued 时等于该集合，其他 status 为空页）；false 或缺省不筛；非布尔由路由校验给 20001 data.fields=[awaiting_confirm]。响应与其他行为不变。
+# 计数：settlement/index.ts 导出 countSettleBillPending(db, appId): Promise<number>，按 app 只读，权限由工作台检查；工作台组装归 admin。
+# RV2 settlement：规则测试先跑 Codex（钉「计数 = 同 app 列表 awaiting_confirm=true 的 total」、交集、轮外 DRAFT、无候选 issued、generating、跨 app 隔离），money 评审 Codex medium。
+refs: [BR-FUND-04]
+refs_hash:
+  BR-FUND-04: 497806f6f068
+deps: [CT-24zzj, B2-09d]
+paths:
+  - 'apps/api/src/modules/settlement/application/admin-settle-bills*.ts'
+  - 'apps/api/src/modules/settlement/application/settle-bill-pending-count*.ts'
+  - 'apps/api/src/modules/settlement/index.ts'
+test_paths:
+  - 'test/spec/settlement/settle-bill-pending-count/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/settle-bill-pending-count/**'
+status: todo
+pr: null
