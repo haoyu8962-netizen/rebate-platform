@@ -463,7 +463,7 @@ const TEST_FILE = /\.test\.tsx?$/;
 const VITEST_CONFIG = /(^|\/)[^/]*vitest[^/]*\.config\.ts$/;
 
 /** Every project of `table` that takes `file` (planRed takes the first; the table must have one). */
-function takers(file: string, table: readonly RedProject[]): RedProject[] {
+function takersIn(file: string, table: readonly RedProject[]): RedProject[] {
   return table.filter((p) => {
     if (!file.startsWith(`${p.dir}/`)) return false;
     const rel = file.slice(p.dir.length + 1);
@@ -573,7 +573,7 @@ it('[CT-06zzzzz] tests-projects.json: every test file of the repository (infra/ 
   expect(files.length).toBeGreaterThan(100);
   const problems: string[] = [];
   for (const f of files) {
-    const t = takers(f, table);
+    const t = takersIn(f, table);
     if (t.length !== 1) {
       problems.push(`${f}: ${String(t.length)} projects (${t.map((p) => p.name).join(', ')})`);
       continue;
