@@ -17,6 +17,13 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/analytics/record-events-harden/**'
+red_exempt:
+  - file: test/spec/analytics/record-events-harden/concurrency.int.test.ts
+    test: '[AC-CT-13i#3] 同键并发确实等待未提交事务，胜者接受一条、等待者重复一条'
+    reason: 收紧 CT-13g 评审 S2（原 #6 并发两次未必真重叠）——把现有「同键并发只落一行」的行为用确定的重叠钉死；主干实现已满足（主键冲突等待未提交事务），先红时为绿属预期（测试机 couli-runs/CT-13i/red/1），D10-1519 ③
+  - file: test/spec/analytics/record-events-harden/batch.int.test.ts
+    test: '[AC-CT-13i#6] 会前进的 Clock 在每次调用只读一次，同批所有 server_at 完全相同'
+    reason: 收紧 CT-13g 评审 S2（固定 Clock 测不出每条事件各读一次时钟）——钉住现有「一次调用只读一次 Clock」的行为；主干实现已满足，先红时为绿属预期（测试机 couli-runs/CT-13i/red/1），D10-1519 ③
 impl: claude
 tester: codex
 accept:
