@@ -20,7 +20,7 @@ paths:
 test_paths:
   - 'test/spec/platform/agent-reply-empty-metric/**'
 impl: claude
-tester: claude-independent # Codex 额度至 11-19（be 11-13 17:07），按 approvals 36
+tester: codex # D10-1450 编排 18:31：Codex 已恢复（D10-1437），规则测试用 Codex
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/agent-reply-empty-metric/**'
