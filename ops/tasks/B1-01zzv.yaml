@@ -24,4 +24,5 @@ tester: codex # D10-1450 编排 18:31：Codex 已恢复（D10-1437），规则�
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/agent-reply-empty-metric/**'
-status: todo
+status: done
+pr: 42
