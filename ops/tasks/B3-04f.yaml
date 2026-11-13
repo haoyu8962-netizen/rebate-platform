@@ -6,7 +6,7 @@ type: impl
 # 口令解析依赖平台能力（09 未验证的不得当承诺），解析端口缺省按不可用处置。分工：Codex 写规则测试，Claude Opus 5.5 实现，Codex 评审。风险 RV1。
 refs: [BR-AI-01, BR-AI-04]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4
   BR-AI-04: 34cc76da510c
 deps: [B3-04c, B3-05e]
 paths:

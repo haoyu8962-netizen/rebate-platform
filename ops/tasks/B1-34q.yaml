@@ -6,7 +6,7 @@ type: impl
 # D10-1403 已定：Q1 est 按 F-ADM-26 / BR-TEXT-21 细则（ESTIMATED 且 platform_status≠DEPOSIT_PAID），不动钱包口径，说明写清与钱包 estimated_fen 的差别；Q2 links 只计 event=convert；Q3 返回不晚于昨天的最新一行（date、as_of 如实），一行都没有返回空，契约 AdminDashboard.yesterday 改可空（brief 超 24KB，拆到 CT-24zzk）；Q4 告警规则随本单。没有数据的 app 也写全 0 行；三张大表加索引照先例与 ADR-0001，迁移说明写清锁与耗时。RV2（settlement 在 MONEY_PATHS）：规则测试新鲜独立 Claude，spec-test / money 先跑 Codex，money medium。迁移号 0140 由编排留给本单，落地前报编排设冻结。
 refs: [BR-TEXT-21, BR-FUND-18, BR-CALC-02, BR-FUND-01]
 refs_hash:
-  BR-TEXT-21: 98c84e1bad14
+  BR-TEXT-21: 52b1125604db
   BR-FUND-18: c7ebd23ee75e
   BR-CALC-02: 0ffe8a4d0b65
   BR-FUND-01: 71daaebae9bd

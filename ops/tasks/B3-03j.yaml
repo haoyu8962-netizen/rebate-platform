@@ -9,7 +9,7 @@ type: impl
 # 文案缺键由 content 的 CT-16 续段补（D10-135），本任务规则测试用替身文案，合并前须已补齐。分工：Codex 写规则测试，Opus 5.5 实现（高推理），Codex 资金类评审（RV2）。
 refs: [BR-AI-01, BR-AI-02, BR-AI-03, BR-AI-04, BR-AI-05, BR-AI-14]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4
   BR-AI-02: 40bc4f6f4109
   BR-AI-03: 2131432de5c6
   BR-AI-04: 34cc76da510c

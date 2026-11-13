@@ -7,7 +7,7 @@ type: impl
 # 报价因服务端原因失败的结束与退还（BR-AI-15 细则）按现有链接消息的处理复用。D10-1378 提醒：订单与找货的 platform 只取本条消息点名的平台，规则测试钉住。
 refs: [BR-AI-01, BR-AI-05, BR-AI-07, BR-AI-14, BR-AI-15]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4
   BR-AI-05: 2ac35e2cd8ef
   BR-AI-07: a704165181b4
   BR-AI-14: a24a409d186b
