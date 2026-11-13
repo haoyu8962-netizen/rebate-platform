@@ -20641,5 +20641,112 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       ],
       "additionalProperties": false
     }
+  },
+  "adminListAgentReports": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "querystring": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "default": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20
+        },
+        "status": {
+          "type": "string",
+          "description": "agent_messages.report_status of a reported message (04 §3.2; BR-ID-15 细则「举报的处理」).",
+          "enum": [
+            "pending",
+            "handled"
+          ]
+        },
+        "overdue": {
+          "type": "boolean"
+        },
+        "from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "adminHandleAgentReport": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": []
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "note",
+        "expected_row_version"
+      ],
+      "properties": {
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "\\S",
+          "description": "Handling note; trimmed of leading and trailing whitespace, then 1–500 characters (else 20001 [note])."
+        },
+        "expected_row_version": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0,
+          "description": "The report's row_version as the console showed it; a mismatch is 20902 (agent_report)."
+        }
+      }
+    }
   }
 } as const;

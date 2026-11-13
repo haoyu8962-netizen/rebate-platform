@@ -5034,7 +5034,15 @@ export class AppModule {
         // AdminOperationGuard (agent.trace, read only, no step-up); reads only agent's own tables,
         // scoped to the console's app; each successful session read writes one agent_trace_view
         // audit row (AUDIT_PORT), the list none.
-        ...(options.entry === 'admin' ? [AgentAdminModule.forAdmin()] : []),
+        ...(options.entry === 'admin'
+          ? [
+              AgentAdminModule.forAdmin({
+                auditWriter: (db, clock) =>
+                  createAuditWriter({ db, clock, sensitiveKeys: SENSITIVE_KEYS }),
+                adminNames: createAdminDisplayNameReader,
+              }),
+            ]
+          : []),
         // risk's /admin/v1 appeal console reads (B1-03zd, CT-24r; BR-ID-36): guarded by
         // AdminOperationGuard (risk.appeal, read only); identity's masked phones, normaliser and
         // phone holders, admin's display names and orders' sub-order numbers through ports; only a
