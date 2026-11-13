@@ -10,6 +10,9 @@
 //   the day that are still ESTIMATED and not DEPOSIT_PAID (BR-TEXT-21 ESTIMATED; D10-1403 Q1). Its
 //   ports are wired as app.module wires the wallet's: commission's readCommissionSnapshot and
 //   readTljDeductFen (an absent split throws, never a default 0), content's configuration reader.
+// Every read runs on the snapshot transaction the aggregation hands in (one REPEATABLE READ
+// read-only transaction per row, admin/application/dashboard-days.ts), never on a handle of its
+// own, so the four figures are of one instant. `db` is not used for the reads.
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
 import { readCommissionSnapshot, readTljDeductFen } from '../../commission/index.ts';
@@ -21,20 +24,11 @@ import type { Clock } from '../../platform/index.ts';
 import { createPendingEarningsSource } from '../../settlement/index.ts';
 import type { DashboardDaySources } from '../application/dashboard-days.ts';
 
-/** Runs on the caller's transaction, or on a read-only one of its own. */
-function onReadTransaction<T>(
-  db: Kysely<DB>,
-  run: (trx: Transaction<DB>) => Promise<T>,
-): Promise<T> {
-  if (db.isTransaction) return run(db as Transaction<DB>);
-  return db.transaction().setAccessMode('read only').execute(run);
-}
-
 export function createDashboardDaySources(deps: {
   readonly db: Kysely<DB>;
   readonly clock: Clock;
 }): DashboardDaySources {
-  const { db, clock } = deps;
+  const { clock } = deps;
   const pricing = (trx: Transaction<DB>) =>
     createPendingEarningsSource({
       clock,
@@ -46,15 +40,13 @@ export function createDashboardDaySources(deps: {
       readTljDeductFen,
     });
   return {
-    countLinks: (appId, range) =>
-      countConvertLinkLogs(db, { appId, start: range.start, end: range.end }),
-    countPaidOrders: (appId, range) =>
-      countPaidOrders(db, { appId, start: range.start, end: range.end }),
-    countNewUsers: (appId, range) =>
-      countRegisteredUsers(db, { appId, start: range.start, end: range.end }),
-    sumEstimatedRebateFen: (appId, range) =>
-      onReadTransaction(db, (trx) =>
-        pricing(trx).estimatedForPaidRange(trx, { appId, start: range.start, end: range.end }),
-      ),
+    countLinks: (trx, appId, range) =>
+      countConvertLinkLogs(trx, { appId, start: range.start, end: range.end }),
+    countPaidOrders: (trx, appId, range) =>
+      countPaidOrders(trx, { appId, start: range.start, end: range.end }),
+    countNewUsers: (trx, appId, range) =>
+      countRegisteredUsers(trx, { appId, start: range.start, end: range.end }),
+    sumEstimatedRebateFen: (trx, appId, range) =>
+      pricing(trx).estimatedForPaidRange(trx, { appId, start: range.start, end: range.end }),
   };
 }

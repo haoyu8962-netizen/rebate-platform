@@ -2,14 +2,27 @@
 // yesterday overview, one row per (app_id, accounting day) in app.admin_dashboard_days (migration
 // 0140), aggregated after the day instead of live.
 //
-// - aggregateDashboardDay: the four figures of (app, D) from the sources (each through its owning
-//   module's index.ts), upserted on (app_id, stat_date) with as_of = the Clock's instant. An app
-//   without data gets a row of true zeros; a rerun overwrites the four figures and as_of in place.
-//   The stored row is the state at as_of: later changes to orders leave it as it is.
+// - aggregateDashboardDay: the explicit (re)aggregation of (app, D): the four figures from the
+//   sources (each through its owning module's index.ts), upserted on (app_id, stat_date) with
+//   as_of = the Clock's instant; a rerun overwrites the four figures and as_of in place. An app
+//   without data gets a row of true zeros. The stored row is the state at as_of: later changes to
+//   orders leave it as it is.
+// - One snapshot per row (BR-TEXT-21 数据截至时刻, BR-FUND-18; Codex funds review r1 S0): the four
+//   figures are read inside ONE read-only REPEATABLE READ transaction handed to every source, so
+//   links, orders, new_users and est_rebate_fen all see the same committed state (an order synced
+//   between two reads is in all of them or in none). as_of is the Clock's instant taken inside that
+//   transaction right before its first read: PostgreSQL takes a REPEATABLE READ snapshot at the
+//   transaction's first statement, not at BEGIN, so that instant is the closest to the snapshot the
+//   Clock can give, and the snapshot holds everything committed before as_of. The row is written
+//   after the snapshot transaction ends, in a statement of its own on the caller's handle (a
+//   read-only transaction cannot write); the figures written are exactly those of the snapshot.
 // - tickDashboardDays: one scheduler tick, no process memory (the rows are their own completion
 //   mark). D falls due at D+1 00:10:00 +08:00. For every app with an admin account (admin_users),
-//   every missing day of the window of the 7 newest due days is aggregated, oldest first; a stored
-//   row is never recomputed by a tick, and a gap before the window is not filled. One app's failure
+//   every missing day of the window of the 7 newest due days is aggregated, oldest first; a gap
+//   before the window is not filled. A tick only fills (Codex funds review r1 S1): its write is
+//   INSERT … ON CONFLICT DO NOTHING, so when two workers tick the same (app, D) at once the first
+//   row stays (figures and as_of) and a stored row is never recomputed by a tick; only an explicit
+//   aggregateDashboardDay overwrites. One app's failure
 //   stops that app's newer days until the next tick and never the other apps; it leaves one error
 //   line admin_dashboard_day_failed with the app, the day and the error class only (no message, no
 //   amount).
@@ -20,7 +33,7 @@
 // written as SQL over app.admin_dashboard_days.
 import type { DB } from '@couli/db';
 import { accountingDate, chinaDayRange } from '@couli/domain';
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import type { Clock, RootLogger } from '../../platform/index.ts';
 
 /** [start, end) of one accounting day as ISO instants (as @couli/domain chinaDayRange). */
@@ -29,12 +42,19 @@ export interface DashboardDayRange {
   readonly end: string;
 }
 
-/** The four figures of one (app, day), each read through its owning module's index.ts. */
+/**
+ * The four figures of one (app, day), each read through its owning module's index.ts, all on the
+ * snapshot transaction `trx` the aggregation hands in (never on a handle of their own).
+ */
 export interface DashboardDaySources {
-  countLinks(appId: string, range: DashboardDayRange): Promise<bigint>;
-  countPaidOrders(appId: string, range: DashboardDayRange): Promise<bigint>;
-  countNewUsers(appId: string, range: DashboardDayRange): Promise<bigint>;
-  sumEstimatedRebateFen(appId: string, range: DashboardDayRange): Promise<bigint>;
+  countLinks(trx: Transaction<DB>, appId: string, range: DashboardDayRange): Promise<bigint>;
+  countPaidOrders(trx: Transaction<DB>, appId: string, range: DashboardDayRange): Promise<bigint>;
+  countNewUsers(trx: Transaction<DB>, appId: string, range: DashboardDayRange): Promise<bigint>;
+  sumEstimatedRebateFen(
+    trx: Transaction<DB>,
+    appId: string,
+    range: DashboardDayRange,
+  ): Promise<bigint>;
 }
 
 export interface DashboardDayDeps {
@@ -139,43 +159,100 @@ function nonNegative(name: string, value: bigint): bigint {
   return value;
 }
 
-/** The four figures of (app, day), upserted with as_of = clock.now(); returns the row. */
-export async function aggregateDashboardDay(
+/** The four figures of one snapshot and the instant they are as of. */
+interface DayFigures {
+  readonly links: bigint;
+  readonly orders: bigint;
+  readonly newUsers: bigint;
+  readonly estRebateFen: bigint;
+  readonly asOf: Date;
+}
+
+/** Runs on the caller's transaction, or on a read-only REPEATABLE READ one of its own. */
+function onSnapshot<T>(db: Kysely<DB>, run: (trx: Transaction<DB>) => Promise<T>): Promise<T> {
+  if (db.isTransaction) return run(db as Transaction<DB>);
+  return db
+    .transaction()
+    .setIsolationLevel('repeatable read')
+    .setAccessMode('read only')
+    .execute(run);
+}
+
+/** The four figures of (app, range) on one snapshot; as_of right before its first read. */
+function readFigures(
+  deps: DashboardDayDeps,
+  appId: string,
+  range: DashboardDayRange,
+): Promise<DayFigures> {
+  const { db, clock, sources } = deps;
+  return onSnapshot(db, async (trx) => {
+    // Before the first statement: the snapshot is taken by that statement (see the file header).
+    const asOf = clock.now();
+    const links = nonNegative('links', await sources.countLinks(trx, appId, range));
+    const orders = nonNegative('orders', await sources.countPaidOrders(trx, appId, range));
+    const newUsers = nonNegative('new_users', await sources.countNewUsers(trx, appId, range));
+    const estRebateFen = nonNegative(
+      'est_rebate_fen',
+      await sources.sumEstimatedRebateFen(trx, appId, range),
+    );
+    return { links, orders, newUsers, estRebateFen, asOf };
+  });
+}
+
+/**
+ * How a row is written: 'overwrite' (an explicit aggregation: ON CONFLICT DO UPDATE) or 'fill'
+ * (the tick: ON CONFLICT DO NOTHING, a row already there is kept as it is).
+ */
+export type DashboardDayWriteMode = 'overwrite' | 'fill';
+
+/** The (app, day) row from one snapshot; null when mode 'fill' found the row already stored. */
+export async function writeDashboardDay(
   deps: DashboardDayDeps,
   input: DashboardDayInput,
-): Promise<DashboardDayRow> {
-  const { db, clock, sources } = deps;
+  mode: DashboardDayWriteMode,
+): Promise<DashboardDayRow | null> {
   const { appId, day } = input;
   if (typeof appId !== 'string' || appId === '') {
     throw new RangeError('appId must be a non-empty string');
   }
   // Strict YYYY-MM-DD of an existing day; [D 00:00, D+1 00:00) +08:00.
   const range = chinaDayRange(day);
-  // The aggregation instant: every figure is read at or after it.
-  const asOf = clock.now();
-  const links = nonNegative('links', await sources.countLinks(appId, range));
-  const orders = nonNegative('orders', await sources.countPaidOrders(appId, range));
-  const newUsers = nonNegative('new_users', await sources.countNewUsers(appId, range));
-  const estRebateFen = nonNegative(
-    'est_rebate_fen',
-    await sources.sumEstimatedRebateFen(appId, range),
-  );
-  const { rows } = await sql<StoredRow>`
-    INSERT INTO app.admin_dashboard_days
-      (app_id, stat_date, links, orders, est_rebate_fen, new_users, as_of, created_at, updated_at)
-    VALUES (${appId}, ${day}::date, ${links}, ${orders}, ${estRebateFen}, ${newUsers}, ${asOf},
-      ${asOf}, ${asOf})
-    ON CONFLICT (app_id, stat_date) DO UPDATE SET
+  const f = await readFigures(deps, appId, range);
+  const conflict =
+    mode === 'fill'
+      ? sql`ON CONFLICT (app_id, stat_date) DO NOTHING`
+      : sql`ON CONFLICT (app_id, stat_date) DO UPDATE SET
       links = EXCLUDED.links,
       orders = EXCLUDED.orders,
       est_rebate_fen = EXCLUDED.est_rebate_fen,
       new_users = EXCLUDED.new_users,
       as_of = EXCLUDED.as_of,
-      updated_at = EXCLUDED.updated_at
-    RETURNING stat_date::text AS date, links, orders, est_rebate_fen, new_users, as_of`.execute(db);
+      updated_at = EXCLUDED.updated_at`;
+  const { rows } = await sql<StoredRow>`
+    INSERT INTO app.admin_dashboard_days
+      (app_id, stat_date, links, orders, est_rebate_fen, new_users, as_of, created_at, updated_at)
+    VALUES (${appId}, ${day}::date, ${f.links}, ${f.orders}, ${f.estRebateFen}, ${f.newUsers},
+      ${f.asOf}, ${f.asOf}, ${f.asOf})
+    ${conflict}
+    RETURNING stat_date::text AS date, links, orders, est_rebate_fen, new_users, as_of`.execute(
+    deps.db,
+  );
   const row = rows[0];
-  if (row === undefined) throw new Error('admin_dashboard_days upsert returned no row');
+  if (row === undefined) {
+    if (mode === 'fill') return null;
+    throw new Error('admin_dashboard_days upsert returned no row');
+  }
   return { app_id: appId, ...yesterdayOfRow(row) };
+}
+
+/** The explicit (re)aggregation of (app, day): overwrites the row with as_of = its snapshot. */
+export async function aggregateDashboardDay(
+  deps: DashboardDayDeps,
+  input: DashboardDayInput,
+): Promise<DashboardDayRow> {
+  const row = await writeDashboardDay(deps, input, 'overwrite');
+  if (row === null) throw new Error('admin_dashboard_days upsert returned no row');
+  return row;
 }
 
 /** The apps of the tick: those with an admin account. */
@@ -221,7 +298,8 @@ export async function tickDashboardDays(opts: DashboardDaysTickOptions): Promise
       for (const day of window) {
         if (stored.has(day)) continue;
         current = day;
-        await aggregateDashboardDay(opts, { appId, day });
+        // Fill only: a row another worker stored meanwhile is kept (null), never overwritten.
+        await writeDashboardDay(opts, { appId, day }, 'fill');
       }
     } catch (error: unknown) {
       // The app's newer days wait for the next tick, which restarts from its oldest missing day.
