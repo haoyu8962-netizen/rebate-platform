@@ -4,6 +4,7 @@ title: B1-34q：工作台「昨日汇总」——按 app、会计日一行的表
 type: impl
 # 2026-11-13 收款线入账（编排 D10-1401；设计 couli-runs/B1-34q/plan.md）。admin 新表 app.admin_dashboard_days（0140，主键 app_id + stat_date：links、orders、est_rebate_fen、new_users、as_of），0140 顺带给 orders(app_id, paid_at)、users(app_id, created_at)、link_logs(app_id, created_at) 加索引；四个数经 linking / orders / identity / settlement 的 index 新导出读（est 复用 PendingEarningsSource 计价），会计日用 domain 的 chinaDayRange；worker 60 秒 tick，D 在 D+1 00:10 到期，补最近 7 天缺行，同一 upsert 重跑覆盖、as_of 更新，失败日志 + 落后天数指标 + 告警规则。RV2：规则测试新鲜独立 Claude，spec-test / money 先跑 Codex（money medium）；迁移 0140 落地前报编排设冻结。
 # D10-1403 已定：Q1 est 按 F-ADM-26 / BR-TEXT-21 细则（ESTIMATED 且 platform_status≠DEPOSIT_PAID），不动钱包口径，说明写清与钱包 estimated_fen 的差别；Q2 links 只计 event=convert；Q3 返回不晚于昨天的最新一行（date、as_of 如实），一行都没有返回空，契约 AdminDashboard.yesterday 改可空（brief 超 24KB，拆到 CT-24zzk）；Q4 告警规则随本单。没有数据的 app 也写全 0 行；三张大表加索引照先例与 ADR-0001，迁移说明写清锁与耗时。RV2（settlement 在 MONEY_PATHS）：规则测试新鲜独立 Claude，spec-test / money 先跑 Codex，money medium。迁移号 0140 由编排留给本单，落地前报编排设冻结。
+# 2026-11-13 D10-1464 ①：落后天数指标随本单——platform/metrics 新增 dashboard-day-lag（每个 app 最新一行落后最近到期日的天数），registry / index 登记、entry.ts 在 worker 入口接线，couli.yaml 告警规则；规则测试补一条「聚合落后 N 天时指标值为 N、追平后回 0」。
 refs: [BR-TEXT-21, BR-FUND-18, BR-CALC-02, BR-FUND-01]
 refs_hash:
   BR-TEXT-21: 98c84e1bad14
@@ -23,6 +24,10 @@ paths:
   - 'apps/api/src/modules/settlement/reads/pending-earnings{,.test}.ts'
   - 'apps/api/src/app.module.ts'
   - 'infra/monitoring/rules/couli.yaml'
+  - 'apps/api/src/modules/platform/metrics/dashboard-day-lag{,.test}.ts'
+  - 'apps/api/src/modules/platform/metrics/registry.ts'
+  - 'apps/api/src/modules/platform/metrics/index.ts'
+  - 'apps/api/src/entry.ts'
   - 'ops/evidence/B1-34q.json'
 test_paths:
   - 'test/spec/admin/dashboard-yesterday/**'
