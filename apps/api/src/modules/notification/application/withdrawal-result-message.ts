@@ -22,6 +22,7 @@ import type {
   RootLogger,
 } from '../../platform/index.ts';
 import type { PushEvent, PushSendCore } from './push-send.ts';
+import { withdrawRejectReasonText } from './withdraw-reject-texts.ts';
 
 /** D10-260: the wallet.withdrawal_changed payload, frozen. */
 export interface WithdrawalResultMessagePayload extends JobPayload {
@@ -96,16 +97,6 @@ const CHANNEL_NAMES: Readonly<Record<string, string>> = Object.freeze({
   wechat: '微信零钱',
 });
 
-/** BR-TEXT-08 驳回原因表 (dictionary withdraw_reject_reason), verbatim. */
-const REJECT_REASONS: Readonly<Record<string, string>> = Object.freeze({
-  RISK_SUSPECT: '账户存在异常，需要核实，请联系客服',
-  ORDER_ABNORMAL: '部分订单状态待核实，请稍后重新申请',
-  PAYEE_INFO_INVALID: '收款信息有误，请核对后重新申请',
-  USER_REQUEST: '已按你的要求取消本次提现',
-  OTHER: '其他原因，请联系客服',
-  NEGATIVE_BALANCE: '有订单被扣回，冻结金额已用于抵扣',
-});
-
 /** BR-TEXT-08 失败原因映射 (withdraw_fail_reason), and its WeChat items (BR-WDR-33 ⑥). */
 const FAIL_REASONS: Readonly<Record<string, string>> = Object.freeze({
   PAYEE_NOT_EXIST: '收款支付宝账号不存在',
@@ -129,8 +120,6 @@ const ACCOUNT_FAILURE_CODES: ReadonlySet<string> = new Set([
 const FAIL_FALLBACK = '收款渠道未能完成这笔转账';
 /** Appended after the WD_FAILED sentence for an account-type failure code. */
 const CHANGE_ACCOUNT = '，可修改收款账号后重试';
-/** A REJECTED reason code outside the dictionary: OTHER's text (contact customer service). */
-const REJECT_FALLBACK = '其他原因，请联系客服';
 
 function isAccountFailure(code: string | null): boolean {
   return code !== null && ACCOUNT_FAILURE_CODES.has(code);
@@ -141,8 +130,8 @@ function lookup(table: Readonly<Record<string, string>>, code: string | null): s
 }
 
 function reasonOf(code: WithdrawalResultCode, facts: WithdrawalResultFacts): string {
-  if (code === 'WD_REJECTED')
-    return lookup(REJECT_REASONS, facts.reject_reason_code) ?? REJECT_FALLBACK;
+  // BR-TEXT-08 驳回原因: contracts/texts.default.json withdraw_reject_reason.<CODE>.title (CT-26zo).
+  if (code === 'WD_REJECTED') return withdrawRejectReasonText(facts.reject_reason_code);
   if (code === 'WD_FAILED') return lookup(FAIL_REASONS, facts.fail_code) ?? FAIL_FALLBACK;
   return '';
 }

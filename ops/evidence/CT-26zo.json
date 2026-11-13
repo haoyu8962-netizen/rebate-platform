@@ -1,0 +1,96 @@
+{
+  "risk_note": "RV1 (contracts, notification). CT-26zo (D10-1523 ②, D10-1525): the six withdraw_reject_reason.<CODE>.title keys enter contracts/texts.default.json, sentences word for word from 08 BR-TEXT-08 驳回原因（默认）; notification's WD_REJECTED {reason} now reads them (application/withdraw-reject-texts.ts, read once synchronously like agent/stream/mount/texts.ts) and the REJECT_REASONS / REJECT_FALLBACK constants are gone, so there is one copy; push sentences unchanged. The App withdrawal detail gets only reason_code and looks the sentence up in /v1/dict, which had no key before. Host (local-heavy): test/spec content + notification + contracts 5187, notification + content unit 984, tsc -b apps/api test / depcruise 0. The implementation was a fresh desktop Claude subagent (model opus) in place of claude -p on the terminal accounts (DESKTOP-common-20261113).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "codex-run.sh review --review-type general (RV1, medium), base = rule-test head e1bff3d90. Round 1: pass, no findings. couli-runs/CT-26zo/review-general-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests test/spec/content/withdraw-reject-reason-texts/** by Codex (tester codex), so Codex cannot review them. Round 1 by a fresh desktop Claude subagent (model opus, prompt = claude-run.sh --dry-run, read-only), output checked by validate-output.ts: pass, no findings, 1 out-of-scope (payout display clauses, logged). Container red/1 ok, problems 0, 15 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#1] 字典恰含六个驳回原因键、逐字原句且与契约编码集合一致，版本不变",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#2] 六个实际登记的文案键均由已有前缀唯一归为资金术语",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] RISK_SUSPECT 取字典原句，WD_REJECTED 完整推送逐字不变",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] ORDER_ABNORMAL 取字典原句，WD_REJECTED 完整推送逐字不变",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] PAYEE_INFO_INVALID 取字典原句，WD_REJECTED 完整推送逐字不变",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] USER_REQUEST 取字典原句，WD_REJECTED 完整推送逐字不变",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] OTHER 取字典原句，WD_REJECTED 完整推送逐字不变",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] NEGATIVE_BALANCE 取字典原句，WD_REJECTED 完整推送逐字不变",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 UNKNOWN_REASON 使用 OTHER 原句及默认推送",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码  使用 OTHER 原句及默认推送",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 toString 使用 OTHER 原句及默认推送",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 constructor 使用 OTHER 原句及默认推送",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 __proto__ 使用 OTHER 原句及默认推送",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 null 使用 OTHER 原句及默认推送",
+    "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#5] 通知渲染及字典读取入口不再另存六句驳回文案（含 OTHER 兜底）"
+  ],
+  "task": "CT-26zo",
+  "spec_commit": "05c855ec75edc264dcc9ff0aee41438f9a38437e",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "05c855ec75edc264dcc9ff0aee41438f9a38437e",
+      "tree": "ae1fcbe4ee65567db16755290c60321e2fed01f2",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T18:05:38Z",
+      "finished_at": "2026-11-13T18:05:44Z",
+      "red_tests": [
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#1] 字典恰含六个驳回原因键、逐字原句且与契约编码集合一致，版本不变",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#2] 六个实际登记的文案键均由已有前缀唯一归为资金术语",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] RISK_SUSPECT 取字典原句，WD_REJECTED 完整推送逐字不变",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] ORDER_ABNORMAL 取字典原句，WD_REJECTED 完整推送逐字不变",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] PAYEE_INFO_INVALID 取字典原句，WD_REJECTED 完整推送逐字不变",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] USER_REQUEST 取字典原句，WD_REJECTED 完整推送逐字不变",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] OTHER 取字典原句，WD_REJECTED 完整推送逐字不变",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#3] NEGATIVE_BALANCE 取字典原句，WD_REJECTED 完整推送逐字不变",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 UNKNOWN_REASON 使用 OTHER 原句及默认推送",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码  使用 OTHER 原句及默认推送",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 toString 使用 OTHER 原句及默认推送",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 constructor 使用 OTHER 原句及默认推送",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 __proto__ 使用 OTHER 原句及默认推送",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#4] 未知或缺失编码 null 使用 OTHER 原句及默认推送",
+        "test/spec/content/withdraw-reject-reason-texts/rules.test.ts > [AC-CT-26zo#5] 通知渲染及字典读取入口不再另存六句驳回文案（含 OTHER 兜底）"
+      ],
+      "expected": ["test/spec/content/withdraw-reject-reason-texts/rules.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a192a8c9bb9b79494234b4013f2afd116e62924181155d0ed4542165956c12d4"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6093b7f3a2340f40235824f10ccb60d7e1f5f964",
+    "specs": "178edfb25fe89c968a1e78d4ab0963c3a18100bc"
+  }
+}
