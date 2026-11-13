@@ -29,7 +29,7 @@ import { platform as platformEnum } from '@couli/contracts-ts';
 import type { Platform } from '@couli/contracts-ts';
 import type { RunBodyInput } from '../../http/index.ts';
 import { createOutputGuard } from '../../guard/index.ts';
-import type { GuardEmit, OutputGuard } from '../../guard/index.ts';
+import type { FilterHit, GuardEmit, OutputGuard, SentenceReviewPort } from '../../guard/index.ts';
 import type { DegradeReason } from '../../model-gateway/degraded/index.ts';
 import type { AssembledToolCall, ChatMessage } from '../../model-gateway/openai-compat/index.ts';
 import type { AttemptRecord } from '../../model-gateway/routing/index.ts';
@@ -48,6 +48,7 @@ import type { DegradedRoute } from './degraded-intent.ts';
 import { copyOf } from '../degraded/replies.ts';
 import { bindServerCalls } from './intent-fallback.ts';
 import type { ServerToolCallResult, ServerToolCalls } from './intent-fallback.ts';
+import { bindQueryCheck, checkQuery } from './query-check.ts';
 import type {
   AgentRunBodyDeps,
   OrchestratorToolCall,
@@ -309,6 +310,12 @@ class AgentRun {
   private entryProceed: InputProceed | null = null;
   /** B3-05q: the trace intent of an entry run when nothing else set one. */
   private entryIntent: string | null = null;
+  /** B3-03p / B3-05s: this run's sentence review, resolved once (the guard's and the term check's). */
+  private review: SentenceReviewPort | null = null;
+  /** B3-05s: a model-supplied search term was filtered or blocked (query-check.ts). */
+  private queryFiltered = false;
+  /** B3-05s: the BR-AI-06 filter hits of the model-supplied search terms checked in this run. */
+  private readonly queryHits: FilterHit[] = [];
 
   constructor(deps: AgentRunBodyDeps, input: RunBodyInput, ctx: RunContext) {
     this.deps = deps;
@@ -323,6 +330,31 @@ class AgentRun {
     this.onAbort = () => resolveAbort(ABORTED);
     if (this.signal.aborted) this.onAbort();
     else this.signal.addEventListener('abort', this.onAbort, { once: true });
+    // B3-05s: the search decorator checks model-supplied terms through this run (query-check.ts).
+    bindQueryCheck(this.signal, input.runId, { allows: (term) => this.allowsQuery(term) });
+  }
+
+  /**
+   * B3-03p · BR-AI-18: this run's app's sentence review (its own budget), when wired; resolved
+   * once per run, on the first use (the model path's guard, or a term check).
+   */
+  private runReview(): SentenceReviewPort {
+    this.review ??= this.deps.outputReview?.forRun(this.appId, this.signal) ?? this.deps.review;
+    return this.review;
+  }
+
+  /**
+   * B3-05s · BR-AI-06 (C-32): one model-supplied search term (q_short) through its own OutputGuard
+   * over the run's review; a hit or a blocking review is recorded for the trace (output_filtered,
+   * filter_hits) like a filtered explanation. The run's own guard is not touched.
+   */
+  private async allowsQuery(term: string): Promise<boolean> {
+    const verdict = await checkQuery(this.runReview(), term);
+    if (!this.traced) {
+      if (verdict.filtered) this.queryFiltered = true;
+      for (const hit of verdict.hits) if (!this.queryHits.includes(hit)) this.queryHits.push(hit);
+    }
+    return verdict.allowed;
   }
 
   async run(): Promise<RunBodyResult> {
@@ -683,8 +715,7 @@ class AgentRun {
     this.holding = tools.some((tool) => isReplyTemplateTool(tool.name));
     const clock = this.deps.modelClock();
     // B3-03p · BR-AI-18: this run's app's sentence review (its own budget), when wired.
-    const review = this.deps.outputReview?.forRun(this.appId, this.signal) ?? this.deps.review;
-    this.guard = createOutputGuard({ review });
+    this.guard = createOutputGuard({ review: this.runReview() });
     const messages: ChatMessage[] = [{ role: 'user', content: proceed.modelText }];
     for (let round = 1; ; round += 1) {
       const outcome = await this.wait(
@@ -1306,14 +1337,17 @@ class AgentRun {
     const sink = this.deps.trace;
     if (sink === undefined) return;
     const summary = this.guard?.summary();
+    // B3-05s: model-supplied search terms filtered in this run count like filtered explanation.
+    const filterHits = [...(summary?.filterHits ?? [])];
+    for (const hit of this.queryHits) if (!filterHits.includes(hit)) filterHits.push(hit);
     const trace: OrchestratorTrace = {
       intent: this.intent,
       model: this.model,
       attempts: [...this.attempts],
       prompt_version: this.promptVersion,
       tool_calls: [...this.toolTrace],
-      output_filtered: summary?.outputFiltered ?? false,
-      filter_hits: summary?.filterHits ?? [],
+      output_filtered: (summary?.outputFiltered ?? false) || this.queryFiltered,
+      filter_hits: filterHits,
       output_truncated: summary?.outputTruncated ?? false,
       model_format_invalid: this.formatInvalid,
       ...(this.replaced ? { text_replaced_by_template: true } : {}),

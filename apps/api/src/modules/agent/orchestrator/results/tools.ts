@@ -11,6 +11,11 @@
 // as it was before the search (new conditions, the chain's own status), so 换平台 and price
 // follow-ups continue the query the user just asked, but its page never runs ahead of the batch
 // shown (D10-333); 再便宜点 without result still records nothing.
+// B3-05s · BR-AI-06 (C-32): a search term the model supplied — its own call's q, or q inherited by
+// a server continuation of a chain a model call started (shared.ts isModelChain) — fills
+// 「只搜{q_short}」 only after the run's term check (core/query-check.ts) let q_short through; a
+// hit leaves that suggestion out. Terms of the server's own keyword chains are not checked.
+import type { SentenceReviewPort } from '../../guard/index.ts';
 import type { AgentProductCard } from '../../tools/search/index.ts';
 import { isTaolijinClosed, priceRangeInvalidView } from '../../tools/search/index.ts';
 import { assignMatchTags } from '../../tools/match/index.ts';
@@ -22,11 +27,14 @@ import type {
   ToolContext,
   ToolOutcome,
 } from '../core/ports.ts';
+import { qShort } from '../core/intent-fallback.ts';
+import { checkQuery, queryCheckOf } from '../core/query-check.ts';
 import {
   clarifyOptions,
   conditionsOf,
   currentChain,
   hasProducts,
+  isModelChain,
   isRecord,
   listItems,
   newChainId,
@@ -48,6 +56,32 @@ import type { ResultsDeps, SearchConditions } from './types.ts';
 
 type Ok = Extract<ToolOutcome, { kind: 'ok' }>;
 type Args = Readonly<Record<string, unknown>>;
+
+/** B3-05s: this search's term and whether the model supplied it. */
+interface Term {
+  readonly q: string | null;
+  readonly model: boolean;
+}
+
+/** No run review outside a core run: only the guard's code filters apply there. */
+const NO_REVIEW: SentenceReviewPort = { review: async () => 'pass' };
+
+/**
+ * B3-05s · BR-AI-06 (C-32): the term for 「只搜{q_short}」. A model-supplied term passes the run's
+ * term check on its q_short first (null when it does not: the second suggestion is left out).
+ * Outside a core run (the decorator on its own, no run bound to the call) there is no run review
+ * or trace: q_short still goes through the same OutputGuard's filters (amount, URL / scheme /
+ * short link, passcode). A server-supplied term is used as it is.
+ */
+async function shownTerm(ctx: ToolContext, term: Term): Promise<string | null> {
+  const q = term.q;
+  if (!term.model || q === null || q.trim() === '') return q;
+  const short = qShort(q);
+  const check = queryCheckOf(ctx);
+  const allowed =
+    check === null ? (await checkQuery(NO_REVIEW, short)).allowed : await check.allows(short);
+  return allowed ? q : null;
+}
 
 function failedOutcome(): ToolOutcome {
   return { kind: 'failed', modelView: { error: 'tool_failed' } };
@@ -176,7 +210,12 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     ) {
       return current;
     }
-    return { chainId: serverChainId ?? newChainId(), conditions: null, status: 'searching' };
+    // B3-05s: a chain a model call starts is marked as carrying a model-supplied term.
+    return {
+      chainId: serverChainId ?? newChainId('model'),
+      conditions: null,
+      status: 'searching',
+    };
   }
 
   async function search(
@@ -211,7 +250,11 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     let outcome: ToolOutcome;
     // B3-05o: the intent fallback's keyword search (BR-AI-14 细则 ⑥) never asks and never relaxes.
     const keyword = server?.kind === 'keyword';
-    const term = typeof args['q'] === 'string' ? args['q'] : null;
+    // B3-05s: the model's own call, or a continuation of a chain a model call started.
+    const term: Term = {
+      q: typeof args['q'] === 'string' ? args['q'] : null,
+      model: server === undefined || (!keyword && isModelChain(chainId)),
+    };
 
     const askPrice = async () => {
       if (attempt) {
@@ -290,7 +333,7 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     ctx: ToolContext,
     last: ToolOutcome,
     notices: readonly string[],
-    term: string | null,
+    term: Term,
   ): Promise<ToolOutcome> {
     const base: Ok =
       last.kind === 'ok' ? last : { kind: 'ok', modelView: { items: [] }, cards: [] };
@@ -303,7 +346,7 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     outcome: Ok,
     keys: readonly string[],
     suggest: boolean,
-    term: string | null,
+    term: Term,
   ): Promise<ToolOutcome> {
     const appId = ctx.subject.appId;
     const tail = keys.at(-1);
@@ -312,8 +355,11 @@ export function createResultsTools(inner: OrchestratorTools, deps: ResultsDeps):
     for (const key of head) cards.push(await noticeCard(deps.texts, appId, key));
     cards.push(...outcome.cards);
     if (tail !== undefined) cards.push(await noticeCard(deps.texts, appId, tail));
-    // BR-TEXT-22: {q_short} from this search's term (B3-05o).
-    const suggestions = suggest ? await noResultSuggestions(deps.texts, appId, term) : undefined;
+    // BR-TEXT-22: {q_short} from this search's term (B3-05o), a model-supplied one checked first
+    // (B3-05s).
+    const suggestions = suggest
+      ? await noResultSuggestions(deps.texts, appId, await shownTerm(ctx, term))
+      : undefined;
     const { suggestions: own, ...rest } = outcome;
     void own;
     const moved = shifted(ctx, outcome, head.length);

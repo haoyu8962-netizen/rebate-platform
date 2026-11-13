@@ -64,8 +64,24 @@ export function chainPort(store: ResultSetStore): ChainPort {
   return memory;
 }
 
-export function newChainId(): string {
-  return randomUUID();
+/**
+ * B3-05s · BR-AI-06 (C-32): a chain a model search_products call started carries this prefix in
+ * its id. Every server continuation (换一批 / 换平台 / 价格 / a price answer / withoutCondition /
+ * 再便宜点) runs on its chain's id, so the id alone tells whether the inherited q came from the
+ * model; it lives wherever the chain does (the chain row, the result sets, the clarify asks) and
+ * never reaches a model or a client. Chains the server starts (keyword searches) have plain ids.
+ */
+const MODEL_CHAIN_PREFIX = 'model-';
+
+/** A new chain id; `origin` 'model' for a chain a model tool call starts. */
+export function newChainId(origin: 'server' | 'model' = 'server'): string {
+  const id = randomUUID();
+  return origin === 'model' ? `${MODEL_CHAIN_PREFIX}${id}` : id;
+}
+
+/** B3-05s: the chain's search term was supplied by the model (newChainId('model')). */
+export function isModelChain(chainId: string): boolean {
+  return chainId.startsWith(MODEL_CHAIN_PREFIX);
 }
 
 /** The chain in use: the store's latest appended chain of the session, else (nothing appended
