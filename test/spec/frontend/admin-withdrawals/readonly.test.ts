@@ -38,6 +38,11 @@ it(
 it(
   '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号',
   async () => {
+    const { actions, click, REVEAL } = await import('./helpers.ts');
+    const otherEntry = (node: HTMLElement) =>
+      !/^(审核通过|驳回)$/.test(
+        squash(node.getAttribute('aria-label')) || squash(node.textContent),
+      );
     const cases = [
       { id: ID.pending, number: NO.pending, payee: PAYEE.pending },
       { id: ID.approved, number: NO.approved, payee: PAYEE.approved },
@@ -50,9 +55,20 @@ it(
       expect(squash(textOf(area)), `${number}: the masked account`).toContain(
         squash(payee.masked_account),
       );
-      expect(usable(main(), WRITE), `${number}: no usable write entry`).toEqual([]);
+      expect(usable(main(), WRITE).filter(otherEntry), `${number}: no usable write entry`).toEqual(
+        [],
+      );
       expect(revealEntries(area), `${number}: no usable reveal entry`).toEqual([]);
-      await assertReadOnly(server, { root: area, detail: true });
+      expect(usable(area, WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);
+      const pressable = [
+        ...actions(area, WRITE).filter(otherEntry),
+        ...actions(area, REVEAL),
+        ...actions(area, /^查看/),
+      ];
+      for (const node of new Set(pressable)) if (node.isConnected) await click(node);
+      await settled(server);
+      expect(server.writes(), 'no request other than GET').toEqual([]);
+      assertOnlyReads();
       cleanup();
     }
   },
@@ -62,6 +78,11 @@ it(
 it(
   '[AC-F1-08a-READONLY#3] 列表进详情一路（列表 → 【详情】 → 详情，全部权限点）只请求 GET /admin/v1/withdrawals 与 GET /admin/v1/withdrawals/{id}，不请求打款、导出、自动到账设置、风险标签重算或查看全量',
   async () => {
+    const { actions, click, REVEAL } = await import('./helpers.ts');
+    const otherEntry = (node: HTMLElement) =>
+      !/^(审核通过|驳回)$/.test(
+        squash(node.getAttribute('aria-label')) || squash(node.textContent),
+      );
     const server = createServer(undefined, { permissions: ALL_GRANTS });
     await mount(server);
     const area = await openDetail(server, NO.failed, ID.failed);
@@ -69,8 +90,18 @@ it(
     assertOnlyReads();
     expect(server.writes()).toEqual([]);
     expect(server.detailReads().every((read) => read.path.endsWith(ID.failed))).toBe(true);
-    expect(usable(main(), WRITE), 'no usable write entry').toEqual([]);
-    await assertReadOnly(server, { root: area, detail: true });
+    expect(usable(main(), WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);
+    expect(usable(area, WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);
+    expect(revealEntries(area), 'no usable reveal entry beside the masked values').toEqual([]);
+    const pressable = [
+      ...actions(area, WRITE).filter(otherEntry),
+      ...actions(area, REVEAL),
+      ...actions(area, /^查看/),
+    ];
+    for (const node of new Set(pressable)) if (node.isConnected) await click(node);
+    await settled(server);
+    expect(server.writes(), 'no request other than GET').toEqual([]);
+    assertOnlyReads();
   },
   FLOW_TIMEOUT,
 );

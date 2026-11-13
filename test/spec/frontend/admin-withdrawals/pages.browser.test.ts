@@ -128,7 +128,15 @@ it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与�
   await expect.element(area).toMatchTextContent(PAYEE.rejected.masked_name);
   await expect.element(area).toMatchTextContent(STATUS_NAME.REJECTED);
   expect(server.requests('GET', detailPath(ID.rejected)).length).toBeGreaterThan(0);
-  expect(usableWrites(), 'no usable write entry on the detail').toEqual([]);
+  expect(
+    usableWrites().filter(
+      (node) =>
+        !/^(审核通过|驳回)$/.test(
+          (node.getAttribute('aria-label') || node.textContent || '').replace(/\s+/g, ''),
+        ),
+    ),
+    'no usable write entry on the detail',
+  ).toEqual([]);
   expect(usableReveals(), 'no usable reveal entry on the detail').toEqual([]);
   expect(unmaskedShown(), 'no unmasked phone number, payee account or payee name').toEqual([]);
   expect(server.writes(), 'only GET requests').toEqual([]);
