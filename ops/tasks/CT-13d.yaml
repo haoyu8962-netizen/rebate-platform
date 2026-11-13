@@ -1,0 +1,30 @@
+id: CT-13d
+repo: rebate-platform
+title: 契约：声明 POST /v1/events（埋点批量上报，C-31 第一步）——批量、每条带 event_id、按 (event_type, event_id) 去重，link_jump 带 attempt_id 与 result ∈ {requested, failed, unknown}；版本闸门受约束；specs/events.yaml 的 link_jump.result 同步为三值（D10-1469）
+type: contract
+# 2026-11-13 w1 入账（编排 D10-1469 C-31 第一步；Jev 存档 couli-runs/JEV/d10-1469-*.json）。依据 04 §6.4 `POST /v1/events` 行、03 §4.5「启动结果只有三种」与 §4.7、§6.2 第 9 条、08 BR-ID-01 细则接口表（`POST /v1/events` 受约束）、BR-ATTR-21 细则「待跟单卡按实际外跳选」。
+# 现状（主干 f856d7c2f 之后）：openapi 没有 /v1/events；specs/events.yaml（version 5）link_jump.result 仍是旧值 [launched, failed, sdk_init_failed, copied]，03 §4.5 已定为 requested / failed / unknown 并写明「由下一个契约任务同步」——本单就是那个契约任务。
+# 契约要点：① 请求体 {events: [...]}，每条带公共字段（event_id 等，以 specs/events.yaml common_fields 为准）与事件字段；批量上限写进契约（03 §4.7 每 10 条或 10 秒上报，离线缓存 ≤500 条——上限取值由实现者按 03 定，写明出处）。② 响应只说「已受理」（不承诺已保存；第一步其余事件不落库），不回每条结果。③ x-auth 取 optional（游客照常可报；带令牌时服务端认出本人，link_jump 才用于待跟单卡）——04 §6.4 写的是 none，平台的 none 不读令牌，用 optional 才符合「带本人令牌的上报」；规划回写由编排记进下一批。④ 不签名（同 04 本节其他非 S 行）；版本闸门受约束（min-version-routes 生成物）。⑤ events.yaml：link_jump.result 改 [requested, failed, unknown]，version 递增；phase=startup 的百川初始化失败原记 result=sdk_init_failed，与三值冲突时照 03 §4.5 末段（`link_jump` 记 `sdk_init_failed`）处理方式写进 note 并在输出里列明取舍，不自行删事件。错误码只用 contracts 已有的。
+# 任务书：04 §6.4 全节 17KB，生成的任务书约 26KB 超上限；派工时照 B3-05p / B1-01zzv 先例由编排者手摘 §6.4 的 POST /v1/events 一行与 03 §4.5 三值一段。
+# 契约槽：排在 CT-24zzk、B3-08zf 之后，谁先齐谁先用（D10-1469）；齐了在 notices 报「CT-13d 准备落地契约」等叫号。后端实现另单 B1-06zo（deps 本单）。
+refs: []
+refs_hash: {}
+contract_sections: ['6.4']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'specs/events.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/events-ingest/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
