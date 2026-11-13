@@ -14,6 +14,13 @@ deps: [CT-13d]
 paths:
   - 'apps/api/src/modules/linking/**'
   - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml' # 实现阶段：ingestEvents 去 x-implementation planned；X-Device-Id 改 OptionalDeviceId（规则测试 [AC-B1-06zo#8] 无设备头 200，站外 H5 可无设备头，与 CT-13g 草案 deviceId|null 一致）
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/linking/link-jump-report/**'
 impl: claude
