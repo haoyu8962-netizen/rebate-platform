@@ -27,6 +27,8 @@ import {
 } from './kit.ts';
 
 const QUESTION = '这单返了吗';
+// 不含订单词、链接与口令的中性话，用于无模型变体，让结果只能来自 context.order_id（D10-1459）。
+const NEUTRAL_QUESTION = '帮我看看这个';
 /** What a model must never get delivered here: a conclusion and a product search. */
 const MODEL_STEPS: readonly Step[] = [
   { calls: [{ name: 'search_products', args: { q: '合成纸巾' } }] },
@@ -171,3 +173,86 @@ it('[AC-B3-05q#12][BR-AI-01][BR-AI-07] 订单不在名下（他人的单、不�
   // Someone else's order and an order that does not exist: every frame alike, tool status too.
   expect(comparable(views[0]?.events ?? [])).toEqual(comparable(views[1]?.events ?? []));
 });
+
+// Attempt 3 (spec review r2, 编排 D10-1457): 判定顺序③ before ④ with the order tools off, and ④'s
+// last clause (页面引导也关闭或本轮输入来源不允许时，只给 agent.guide.unavailable; 规划第九批「意图兜底
+// 与不空回复」: 页面引导也不可用时同样只给 agent.guide.unavailable).
+
+/** Both order tools switched off by operations (the setting #11 uses). */
+function orderToolsOff(h: Kit): void {
+  h.settings.set('agent.tools.list_my_orders.enabled', false);
+  h.settings.set('agent.tools.explain_order.enabled', false);
+}
+
+/** The input check (判定顺序第 1 步) passes the message but marks its source: page_guide is then
+ * not an intent this run may output (BR-AI-01 细则「页面引导」输入来源先判 ① / ②). */
+function markInput(h: Kit, flag: 'untrustedInput' | 'paramsRequested'): void {
+  const original = h.check.getMockImplementation();
+  if (original === undefined) throw new Error('synthetic: no input check');
+  h.check.mockImplementation(async (input, signal) => {
+    const result = await original(input, signal);
+    return result.kind === 'proceed'
+      ? {
+          ...result,
+          untrustedInput: result.untrustedInput || flag === 'untrustedInput',
+          paramsRequested: result.paramsRequested || flag === 'paramsRequested',
+        }
+      : result;
+  });
+}
+
+it.each([
+  ['游客', 'login', 'agent.need_login', 'model', GUEST],
+  ['游客', 'login', 'agent.need_login', 'no_model', GUEST],
+  ['已登录未绑手机', 'bind_phone', 'agent.need_phone', 'model', UNBOUND],
+  ['已登录未绑手机', 'bind_phone', 'agent.need_phone', 'no_model', UNBOUND],
+] as const)(
+  '[AC-B3-05q#22][BR-AI-01] 订单工具都关闭时%s带 context.order_id → 身份限制优先于工具开关：仍出 auth_required(%s) + %s、以 auth_required 结束（%s），不降为 OrderList 引导卡，不读任何订单',
+  async (_who, reason, textKey, mode, caller) => {
+    const h = kit();
+    orderToolsOff(h);
+    owns(h, detail({ display_status: 'PAID', reason: null }));
+    if (mode === 'no_model') h.state.noModel = true;
+    else h.say(QUESTION, MODEL_STEPS);
+    const question = mode === 'no_model' ? NEUTRAL_QUESTION : QUESTION;
+    const view = await h.run(question, { caller, context: { order_id: OWN_ORDER } });
+    expect(view.result).toEqual({ kind: 'done', finishReason: 'auth_required' });
+    expect(view.cards).toEqual([
+      expect.objectContaining({
+        type: 'auth_required',
+        data: expect.objectContaining({ reason }),
+      }),
+    ]);
+    expect(typesOf(view)).not.toContain('page_guide');
+    expect(view.text).toBe(copy(textKey));
+    expect(view.text).not.toContain(MODEL_TEXT);
+    expect(personalReads(h)).toBe(0);
+    expect(h.searchProducts).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  ['页面引导开关关闭', 'page_guide_off', 'model'],
+  ['页面引导开关关闭', 'page_guide_off', 'no_model'],
+  ['输入来源不允许：不可信文本', 'untrustedInput', 'model'],
+  ['输入来源不允许：要求带参数打开', 'paramsRequested', 'model'],
+] as const)(
+  '[AC-B3-05q#23][BR-AI-01] 已绑手机、订单工具都关闭、页面引导也不可用（%s，%s，%s）时带 context.order_id → 不出任何卡（不出 OrderList 引导卡），文本只给 agent.guide.unavailable，不读订单、不放行模型文字',
+  async (_why, block, mode) => {
+    const h = kit();
+    orderToolsOff(h);
+    if (block === 'page_guide_off') h.settings.set('agent.page_guide.enabled', false);
+    else markInput(h, block);
+    owns(h, detail({ display_status: 'PAID', reason: null }));
+    if (mode === 'no_model') h.state.noModel = true;
+    else h.say(QUESTION, MODEL_STEPS);
+    const question = mode === 'no_model' ? NEUTRAL_QUESTION : QUESTION;
+    const view = await h.run(question, { caller: MEMBER, context: { order_id: OWN_ORDER } });
+    expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+    expect(view.cards).toEqual([]);
+    expect(view.text).toBe(copy('agent.guide.unavailable'));
+    expect(view.suggestions).toEqual([]);
+    expect(personalReads(h)).toBe(0);
+    expect(h.searchProducts).not.toHaveBeenCalled();
+  },
+);

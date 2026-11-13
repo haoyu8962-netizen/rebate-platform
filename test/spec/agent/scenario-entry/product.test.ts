@@ -303,3 +303,70 @@ it('[AC-B3-05q#21][BR-AI-15][BR-AI-14][BR-AI-04] 无模型时入口商品已下�
   expect(h.chunks).not.toHaveBeenCalled();
   expect(personalReads(h)).toBe(0);
 });
+
+// Attempt 3 (spec review r2, 编排 D10-1457): the catalog has the entry product but the quote's card
+// entry answers price_unavailable — an upstream's explicit answer about the product (BR-AI-15 细则:
+// 取不到价格 归商品本身, 照常以 stop 结束), handled as a link message is (BR-AI-01 细则「情境入口」:
+// 取不到价格等情形与链接消息同样处理). Business result: done stop, no error frame (the 50401 / quota
+// refund boundary for server-side failures belongs to B3-05r and is not asserted here).
+
+/**
+ * A message carrying its own link whose product the card entry answers price_unavailable, through
+ * the real deterministic link path: the reference for "handled like a link message".
+ */
+async function priceUnavailableLink(noModel: boolean): Promise<RunView> {
+  const link = kit();
+  link.state.noModel = noModel;
+  link.assemble.mockResolvedValue({ kind: 'price_unavailable' });
+  const view = await link.run(`${QUESTION} ${LINK}`, { caller: MEMBER });
+  expect(link.assemble).toHaveBeenCalledTimes(1);
+  expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+  expect(productCards(view)).toEqual([]);
+  expect(nonNotices(view)).toEqual([]);
+  expect(noticeFrames(view)).toHaveLength(1);
+  return view;
+}
+
+it('[AC-B3-05q#24][BR-AI-15][BR-AI-14][BR-AI-04] 无模型时入口商品 catalog 查得到、报价结果是 price_unavailable（上游明确答复的业务结果，不是服务端原因）：与取不到价格的链接消息同样处理——同一张 notice、无报价卡、以 stop 结束、不出 error 帧，也不改做问法分流与关键词搜索', async () => {
+  const h = kit();
+  h.state.noModel = true;
+  h.assemble.mockResolvedValue({ kind: 'price_unavailable' });
+  const view = await h.run('帮我找合成纸巾', { caller: MEMBER, context: ENTRY });
+  expect(h.readProduct).toHaveBeenCalledTimes(1);
+  expect(h.readProduct.mock.calls[0]?.[0]).toBe(ENTRY_KEY);
+  expect(h.assemble.mock.calls.map(([input]) => input.ref.productKey)).toEqual([ENTRY_KEY]);
+  expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+  expect(productCards(view)).toEqual([]);
+  const link = await priceUnavailableLink(true);
+  expect(noticeFrames(view)).toEqual(noticeFrames(link));
+  expect(serialized(noticeFrames(view))).not.toContain('agent.notice.quote_failed');
+  // The notice is the answer: nothing else goes out, as for the link.
+  expect(comparable(content(view))).toEqual(comparable(content(link)));
+  expect(view.text).toBe('');
+  expect(view.suggestions).toEqual([]);
+  expect(h.searchProducts).not.toHaveBeenCalled();
+  expect(h.chunks).not.toHaveBeenCalled();
+  expect(personalReads(h)).toBe(0);
+});
+
+it('[AC-B3-05q#25][BR-AI-15][BR-AI-01][BR-AI-04] 有模型时入口商品报价结果是 price_unavailable：与取不到价格的链接消息同一张 notice（不是 agent.notice.quote_failed）、无报价卡，接着把文字交给模型，以 stop 结束', async () => {
+  const h = kit();
+  h.assemble.mockResolvedValue({ kind: 'price_unavailable' });
+  h.say(QUESTION, [says(REPLY)]);
+  const view = await h.run(QUESTION, { caller: MEMBER, context: ENTRY });
+  expect(h.readProduct).toHaveBeenCalledTimes(1);
+  expect(h.readProduct.mock.calls[0]?.[0]).toBe(ENTRY_KEY);
+  expect(h.assemble.mock.calls.map(([input]) => input.ref.productKey)).toEqual([ENTRY_KEY]);
+  expect(productCards(view)).toEqual([]);
+  expect(nonNotices(view)).toEqual([]);
+  const link = await priceUnavailableLink(false);
+  expect(noticeFrames(view)).toEqual(noticeFrames(link));
+  expect(serialized(noticeFrames(view))).not.toContain('agent.notice.quote_failed');
+  // The entry is handled first; then the typed words go to the model as usual.
+  expect(content(view)[0]).toMatchObject({ kind: 'card', card: { type: 'notice' } });
+  expect(h.complete).toHaveBeenCalled();
+  expect(serialized(h.complete.mock.calls[0]?.[0].messages)).toContain(QUESTION);
+  expect(view.text).toContain(REPLY);
+  expect(h.searchProducts).not.toHaveBeenCalled();
+  expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+});
