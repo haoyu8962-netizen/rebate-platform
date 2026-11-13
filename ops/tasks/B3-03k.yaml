@@ -10,7 +10,8 @@ type: impl
 # 2026-10-24：deps 加 B3-03r（模型 / 续答路径写出后再切当前链，followups 第 57 条）。
 refs: []
 refs_hash: {}
-deps: [B3-03j, B3-03m, B3-03n, B3-03p, B3-03q, B3-03r]
+# 2026-11-13：deps 加 B3-05s（C-32：模型给的检索词填 {q_short} 前过 OutputGuard，D10-1469）。
+deps: [B3-03j, B3-03m, B3-03n, B3-03p, B3-03q, B3-03r, B3-05s]
 paths:
   - 'apps/api/src/modules/agent/stream/mount/**'
 test_paths:
