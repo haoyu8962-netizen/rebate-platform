@@ -1,0 +1,24 @@
+id: B3-05s
+repo: rebate-platform
+title: B3-05o 跟进（C-32 / FU-QSHORT-OUTPUT-FILTER，D10-1469，须在模型路径启用 B3-03k 之前合并）：检索词来自模型工具调用参数时，「只搜{q_short}」填入前先过 OutputGuard，命中就不出这一条
+type: impl
+# 2026-11-13 桌面线「AI 助手」入账（编排 D10-1469 定 08 §14.3 C-32，Jev 0.88；规划回写记进下一批小修）。BR-AI-06 细则已写「suggestions……若将来改由模型生成，必须同样经过 OutputGuard」：
+# 检索词来自模型的工具调用参数时，agent.suggest.no_result.2 的 {q_short} 填入前先过与说明文字相同的 OutputGuard（apps/api/src/modules/agent/guard），命中任何一类（金额、链接 / 口令 / 短链、内容审核）就不出第 2 条，第 1、3 条照出，trace 照记 output_filtered。
+# 服务端代调（检索词由代码从用户原话取）的不变；前 8 个码点、为空不出的取值不变；冻结用例 [AC-B3-05o#48]–[#53] 不动，只新增命中时的规则测试。排在 AI 助手线在途单之后。
+refs: [BR-AI-06, BR-TEXT-22]
+refs_hash:
+  BR-AI-06: bf97647decbd
+  BR-TEXT-22: 8a3aa03c38b2
+deps: [B3-05p]
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+test_paths:
+  - 'test/spec/agent/q-short-output-guard/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/q-short-output-guard/**'
+status: todo
+pr: null
