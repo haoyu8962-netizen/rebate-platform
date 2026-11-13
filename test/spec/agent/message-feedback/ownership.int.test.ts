@@ -18,6 +18,37 @@ import { actions, answer, seedMessages, url, validBody, withHttp } from './kit.t
 const pg = usePgEach(createTestDatabase);
 
 it.each(actions)(
+  '[AC-B3-08zf#20][BR-AI-20] %s：另一设备游客的消息与不存在的消息响应一致，拒绝后数据不变',
+  async (action) => {
+    await withHttp(pg.db, 'guest', async (f) => {
+      const stranger = await newGuest(f.db, f.owner.appId);
+      expect(stranger.deviceId).not.toBe(f.owner.deviceId);
+      await consent(f.db, stranger);
+      const call = guestClient(f.app, stranger);
+      const before = await agentSnapshot(f.db);
+      const foreign = await call('POST', url(action, f.messages.assistantId), validBody[action]);
+      const a = await answer(action, foreign, 30504);
+      expect(await agentSnapshot(f.db)).toBe(before);
+      const absent = await call('POST', url(action, randomUUID()), validBody[action]);
+      const b = await answer(action, absent, 30504);
+      expect({
+        status: foreign.response.statusCode,
+        code: a['code'],
+        msg: a['msg'],
+        data: a['data'],
+      }).toEqual({
+        status: absent.response.statusCode,
+        code: b['code'],
+        msg: b['msg'],
+        data: b['data'],
+      });
+      expect(await agentSnapshot(f.db)).toBe(before);
+    });
+  },
+  120_000,
+);
+
+it.each(actions)(
   '[AC-B3-08zf#5][BR-AI-20] %s：别人的消息与不存在的消息响应一致，自己的 user 消息也不可写',
   async (action) => {
     await withHttp(pg.db, 'member', async (f) => {

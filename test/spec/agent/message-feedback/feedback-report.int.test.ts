@@ -1,9 +1,33 @@
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
 import { usePgEach } from '../stream-mount/kit.ts';
-import { answer, messageRow, seedAdmin, seedReport, url, withHttp } from './kit.ts';
+import {
+  answer,
+  messageRow,
+  seedAdmin,
+  seedReport,
+  url,
+  withHttp,
+  type HttpFixture,
+} from './kit.ts';
 
 const pg = usePgEach(createTestDatabase);
+
+// BR-AI-20: feedback and reports do not accept a user message or extend session activity.
+async function sessionAndRuns(f: HttpFixture) {
+  const session = await f.db
+    .selectFrom('agent_sessions')
+    .selectAll()
+    .where('id', '=', f.messages.sessionId)
+    .executeTakeFirstOrThrow();
+  const runs = await f.db
+    .selectFrom('agent_runs')
+    .selectAll()
+    .where('session_id', '=', f.messages.sessionId)
+    .orderBy('id')
+    .execute();
+  return { session, runs };
+}
 
 it.each(['member', 'guest'] as const)(
   '[AC-B3-08zf#1][BR-AI-19] %s 对自己的助手消息点赞、点踩并改选，反馈时间来自注入时钟',
@@ -12,6 +36,7 @@ it.each(['member', 'guest'] as const)(
       const { assistantId, controlId, userId } = f.messages;
       const control = await messageRow(f.db, controlId);
       const user = await messageRow(f.db, userId);
+      const activityBefore = await sessionAndRuns(f);
       f.clock.advanceMs(12_345);
       await answer(
         'feedback',
@@ -22,6 +47,7 @@ it.each(['member', 'guest'] as const)(
         feedback_at: f.clock.now(),
         badcase: false,
       });
+      expect(await sessionAndRuns(f)).toEqual(activityBefore);
       expect(await messageRow(f.db, controlId)).toEqual(control);
       f.clock.advanceMs(23_456);
       await answer(
@@ -33,6 +59,7 @@ it.each(['member', 'guest'] as const)(
         feedback_at: f.clock.now(),
         badcase: true,
       });
+      expect(await sessionAndRuns(f)).toEqual(activityBefore);
       expect(await messageRow(f.db, controlId)).toEqual(control);
       // Also pin down as the very first selection, independently of the up -> down path.
       f.clock.advanceMs(1_000);
@@ -47,6 +74,7 @@ it.each(['member', 'guest'] as const)(
         report_status: control.report_status,
         reported: control.reported,
       });
+      expect(await sessionAndRuns(f)).toEqual(activityBefore);
       expect(await messageRow(f.db, userId)).toEqual(user);
     });
   },
@@ -59,6 +87,7 @@ it.each(['member', 'guest'] as const)(
     await withHttp(pg.db, who, async (f) => {
       const { assistantId, controlId } = f.messages;
       const control = await messageRow(f.db, controlId);
+      const activityBefore = await sessionAndRuns(f);
       const reason = '  这条回复有误\n请核查原文！  ';
       f.clock.advanceMs(10_000);
       const reportedAt = f.clock.now();
@@ -75,6 +104,7 @@ it.each(['member', 'guest'] as const)(
         feedback_at: null,
         badcase: false,
       });
+      expect(await sessionAndRuns(f)).toEqual(activityBefore);
       f.clock.advanceMs(60_000);
       await answer(
         'report',
@@ -89,6 +119,7 @@ it.each(['member', 'guest'] as const)(
         report_handled_at: null,
         report_note: null,
       });
+      expect(await sessionAndRuns(f)).toEqual(activityBefore);
       expect(await messageRow(f.db, controlId)).toEqual(control);
     });
   },
