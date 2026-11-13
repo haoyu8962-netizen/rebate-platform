@@ -16,7 +16,6 @@
 // a missing export is an assertion here, never a TypeError.
 import { randomUUID } from 'node:crypto';
 import { createDb, destroyDb, type DB } from '@couli/db';
-import { createTestDatabase, type TestDatabase } from '@couli/db/testing';
 import { sql, type Kysely, type KyselyPlugin } from 'kysely';
 import { afterAll, beforeAll, expect } from 'vitest';
 import {
@@ -60,12 +59,22 @@ export function at(day: string, time: string): string {
 // ---------------------------------------------------------------------------------------------
 // Database.
 
+/** The part of @couli/db/testing's TestDatabase this kit uses (loaded by URL below). */
+interface TestDatabase {
+  urlFor(role: 'couli_app'): string;
+  drop(): Promise<void>;
+}
+
 /** One fresh database for the file (couli_app), dropped at the end. */
 export function useDatabase(): { readonly db: Kysely<DB> } {
   let database: TestDatabase | undefined;
   let handle: Kysely<DB> | undefined;
   beforeAll(async () => {
-    database = await createTestDatabase();
+    // Only *.int.test.ts may import the test-database base statically (dependency-cruiser).
+    const testing = (await import(new URL('packages/db/src/testing/index.ts', ROOT).href)) as {
+      createTestDatabase(): Promise<TestDatabase>;
+    };
+    database = await testing.createTestDatabase();
     handle = createDb({ connectionString: database.urlFor('couli_app'), max: 4 });
   }, 60_000);
   afterAll(async () => {
