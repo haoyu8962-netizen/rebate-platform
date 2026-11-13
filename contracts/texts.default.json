@@ -1028,7 +1028,13 @@
     "withdraw_detail.sub_text.wechat_confirm_expired": "确认时间已过，正在取消这笔转账，结果会通知你",
     "withdraw_detail.sub_text.wechat_processing": "微信处理中，结果会通知你",
     "withdraw_detail.sub_text.wechat_wait_confirm": "请在 {confirm_deadline} 前到微信确认收款，逾期未确认会退回可提现余额",
-    "withdraw_detail.trade_no": "交易流水号"
+    "withdraw_detail.trade_no": "交易流水号",
+    "withdraw_reject_reason.NEGATIVE_BALANCE.title": "有订单被扣回，冻结金额已用于抵扣",
+    "withdraw_reject_reason.ORDER_ABNORMAL.title": "部分订单状态待核实，请稍后重新申请",
+    "withdraw_reject_reason.OTHER.title": "其他原因，请联系客服",
+    "withdraw_reject_reason.PAYEE_INFO_INVALID.title": "收款信息有误，请核对后重新申请",
+    "withdraw_reject_reason.RISK_SUSPECT.title": "账户存在异常，需要核实，请联系客服",
+    "withdraw_reject_reason.USER_REQUEST.title": "已按你的要求取消本次提现"
   },
   "fallbacks": {
     "app_update.optional.title": "凑狸新版本已发布",
