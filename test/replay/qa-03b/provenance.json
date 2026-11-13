@@ -1,0 +1,15 @@
+{
+  "source": "synthetic",
+  "cap_ids": [],
+  "captured_at": null,
+  "original_sha256": null,
+  "redactor_version": null,
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "description": "复用 QA-03a 显式 orderStream；领域输入佣金固定 1000 分、服务费 0；收货后显式输入合成 SETTLED DTO，不含平台报文。验收仅称合成数据回放绿。",
+  "minimum_volume": {
+    "bills": 1,
+    "validated_orders": 3,
+    "confirmed_batches": 1,
+    "credited_orders": 3
+  }
+}
