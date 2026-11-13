@@ -8,6 +8,9 @@
 #   permissions  每条 {type, platform, system_key, feature, purpose_key, phase, builds, source}
 #     type         权限类型（03 §4.9：MVP 为 push、photos；camera 留到 P1）
 #                  另有 vibrate（鸿蒙触感反馈，system_grant 不弹窗；03 §4.9 由下一批规划回写，D10-1160）
+#                  另有 network（网络访问，Android normal / 鸿蒙 system_grant，安装即授予、不弹窗）与
+#                  dynamic_receiver（androidx.core 合并进来的应用内签名级权限，保护不导出的动态广播接收器，
+#                  不弹窗）：均为事实登记，03 §4.9 的类型枚举回写待定（CT-15u）
 #     platform     ios / android / harmony
 #     system_key   iOS 的用途说明键，Android 与鸿蒙的权限名；null = 该端没有要写进工程的键（如 iOS 通知授权
 #                  不需要 Info.plist 用途说明），生成器不写工程声明，但隐私中心「系统权限」一节照样列出
@@ -23,9 +26,14 @@
 # 测试确需 App 内扫码时，相关代码与权限声明只进 Debug、Staging 配置，接入时在本清单登记一条 builds 只含
 # debug、staging 的相机权限（现在没有接入，不登记）。
 #
-# TODO(规划/03 §4.9): Android、鸿蒙的对应权限（含通知、相册写入）与各 SDK 带进来的权限 — blocked on 各端
+# 原 TODO(规划/03 §4.9): Android、鸿蒙的对应权限（含通知、相册写入）与各 SDK 带进来的权限 — blocked on 各端
 #   工程接入时按系统文档核对（不臆造权限名）。
-version: '2'
+# 2026-11-14 已按安卓、鸿蒙两端工程事实登记（CT-15u；iOS 条目本单未改）：安卓 rebate-android origin/main de810b614（各模块 AndroidManifest.xml 的
+#   uses-permission，及本机 Gradle 缓存里依赖 AAR 清单可确认的合并权限）、鸿蒙 rebate-harmony origin/main c7c48e1ea
+#   （各模块 module.json5 的 requestPermissions）。两端工程目前都只声明网络权限；通知、相册写入尚未接入，不登记。
+# TODO(规划/03 §4.9): SDK 权限逐项核对（以合并后清单 / 最终产物为准）、network 与 dynamic_receiver 两类的规划回写、
+#   新增条目的用途文案键（purpose_key 现为 null，等法务，06 Q-F14）— blocked on 规划回写与法务文案。
+version: '3'
 permissions:
   - type: photos
     platform: ios
@@ -43,11 +51,38 @@ permissions:
     phase: MVP
     builds: [debug, staging, release]
     source: own
+  # 注意（CT-15u 核对）：rebate-harmony origin/main c7c48e1ea 的各模块 module.json5 未声明 ohos.permission.VIBRATE，
+  # 本条是先于工程登记的计划条目；保留不动，工程与清单的差异待鸿蒙端接入触感反馈时消除。
   - type: vibrate
     platform: harmony
     system_key: ohos.permission.VIBRATE
     feature: 触感反馈（FEEL-KIT，操作时的轻微震动；system_grant，安装即授予、不弹窗）
     purpose_key: perm.vibrate.system_purpose
+    phase: MVP
+    builds: [debug, staging, release]
+    source: own
+  # 以下为 CT-15u 事实登记，规划回写待定（03 §4.9 未列）；purpose_key 为 null：texts.default.json 没有对应用途键。
+  - type: network
+    platform: android
+    system_key: android.permission.INTERNET
+    feature: 网络访问（接口请求、WebView 页面；normal 权限，安装即授予、不弹窗）
+    purpose_key: null
+    phase: MVP
+    builds: [debug, staging, release]
+    source: own
+  - type: dynamic_receiver
+    platform: android
+    system_key: com.couli.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+    feature: androidx.core 合并进来的应用内签名级权限（保护不导出的动态广播接收器；不弹窗）
+    purpose_key: null
+    phase: MVP
+    builds: [debug, staging, release]
+    source: sdk:androidx.core
+  - type: network
+    platform: harmony
+    system_key: ohos.permission.INTERNET
+    feature: 网络访问（接口请求、Web 组件页面；system_grant，安装即授予、不弹窗）
+    purpose_key: null
     phase: MVP
     builds: [debug, staging, release]
     source: own
