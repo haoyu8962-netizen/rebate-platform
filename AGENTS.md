@@ -61,6 +61,7 @@
 | `apps/api/src/modules/orders/**` | Claude | Codex | Claude + Codex | RV2 |
 | `apps/api/src/modules/admin/**` | Claude | Codex | Claude + Codex | RV2 |
 | `apps/api/src/modules/content/**` | Claude | Codex | Claude + Codex | RV2 |
+| `apps/api/src/modules/analytics/**` | Claude | Codex | Claude + Codex | RV2 |
 | `apps/api/src/modules/linking/**` | Claude | Codex | Claude + Codex | RV2 |
 | `apps/api/src/modules/growth/**` | Claude | Codex | Claude + Codex | RV2 |
 | `apps/api/src/modules/catalog/**` | Claude | Codex | Codex | RV1 |
@@ -124,8 +125,7 @@
 
 - 测试标题带 AC 编号（多断言点写 `[AC-xxx#n]`）；每个测试有断言；无 `.skip` / `.only` / `retry`。
 - 单元测试不连库、不 `listen`、不引用 testcontainers；集成测试的数据库入口读 `TEST_PG_ADMIN_URL`。资金包规则测试写顶层 `it`，不套 `describe`（规划/11 §4.3）。
-- 输出按任务书给的 JSON 结构返回：做了什么、改了哪些文件、跑了哪些命令及退出码、需要的依赖、没做完的原因。
-- 任务成败由编排者在沙箱外重跑验证命令判定。
+- 输出按任务书给的 JSON 结构返回：做了什么、改了哪些文件、跑了哪些命令及退出码、需要的依赖、没做完的原因；任务成败由编排者在沙箱外重跑验证命令判定。
 
 ## 8. 评审口径
 

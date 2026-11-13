@@ -112,6 +112,12 @@ rules:
     impl: claude
     tester: codex
     review: claude+codex
+  # analytics：规划/11 §1.1 没有单列，按 §1.2 为 RV2，同 admin、content；存 user_id / device_id，注销处理见 C-36；D10-1529
+  - path: 'apps/api/src/modules/analytics/**'
+    risk: RV2
+    impl: claude
+    tester: codex
+    review: claude+codex
   # linking: 归属（规划/11 §1.1 第 3 行：orders、linking、union）为 RV2，评审另加 Claude 新子代理。
   - path: 'apps/api/src/modules/linking/**'
     risk: RV2
