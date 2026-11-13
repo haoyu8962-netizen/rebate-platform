@@ -1,0 +1,70 @@
+{
+  "risk_note": "CT-06zzzzzd (FU-REPLAY-TEARDOWN-57P01; 编排 D10-1453 chose (B)). Change only in packages/db/src/testing/index.ts (+ packages/db/README.md): the test-database drop() now polls pg_stat_activity (datname = the database, pid <> pg_backend_pid(), every 25 ms) on the factory connection and waits up to DROP_GRACE_MS = 3000 ms for other backends to exit on their own before DROP DATABASE ... WITH (FORCE); with none left the first poll drops at once; still connected after the grace limit they are terminated by FORCE and receive 57P01 as before. No error is swallowed and no ignoring error listener is attached. Cause (be 11-13 18:3x): pg-pool end() resolves after calling client.end() without waiting for the socket to close, so the immediate FORCE drop killed backends still exiting and their FATAL 57P01 landed on a pool nobody listened to (3 unhandled errors in replay/qa-03b on main 0bea8205 verify-replay). Rule tests (Codex): container red red/1 PASS (#1 got 57P01, #2 dropped after 4 ms < 1000 ms); after the implementation the same --red path red/2 runs both green. Test tooling only; no production path, no money / attribution code.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh (RV2 requires the money checklist; a general request was refused and not counted), couli-runs/CT-06zzzzzd/review-codex-money-r1.json: one S2 — the poll query has no client-side timeout, so a half-open connection could hang drop() past the bound; the previous asFactory had the same property; left as a follow-up, not blocking."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (tester codex, 1 attempt): test/spec/db/test-database-drop/drop.int.test.ts, container red red/1 (2 red for the right reason). Reviewed by a fresh independent Claude (claude-run.sh): spec-test r1 pass, one S2 — an implementation that always sleeps the full grace period would also pass; the no-leftover fast path is evidenced by measurement (verify-int durations on the PR vs main) instead of a rule test, which would be green on main (D10-1453 ④ allows a measurement)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/db/test-database-drop/drop.int.test.ts > [AC-CT-06zzzzzd#1] 等待延迟自然退出的后端再删库，不产生 57P01",
+    "test/spec/db/test-database-drop/drop.int.test.ts > [AC-CT-06zzzzzd#2] 后端一直不退出时先等待、再强制删库，57P01 仍传给连接"
+  ],
+  "task": "CT-06zzzzzd",
+  "spec_commit": "9890ba048cf8bb771656696caa9140a7662ad36a",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9890ba048cf8bb771656696caa9140a7662ad36a",
+      "tree": "475f9c716686deea27d9e30aaf00a6c298220585",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T11:58:17Z",
+      "finished_at": "2026-11-13T11:58:24Z",
+      "red_tests": [
+        "test/spec/db/test-database-drop/drop.int.test.ts > [AC-CT-06zzzzzd#1] 等待延迟自然退出的后端再删库，不产生 57P01",
+        "test/spec/db/test-database-drop/drop.int.test.ts > [AC-CT-06zzzzzd#2] 后端一直不退出时先等待、再强制删库，57P01 仍传给连接"
+      ],
+      "expected": ["test/spec/db/test-database-drop/drop.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "310b9f3364f29a76475e977803050cbda332f45b2507b621e732060dfa3d3537"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "140b0797b2c7a8b4dafd173b0f7395f96ac863f2",
+    "specs": "8f76891b6e53531f480a4626a10b8dc9c1e82a28"
+  }
+}
