@@ -531,3 +531,9 @@ approvals:
     granted: true
     date: '2026-11-13'
     note: '负责人 2026-11-13 在对话中决定把开发整体切到 haoyu8962-netizen（原账号 zora4523-bot 被 GitHub 停用），编排会话据此登记。只改规划仓库的地址，不改任何检查、必需检查名单与判定。引导说明：登记本条的 PR 自身的 verify-static 因主干 ci.yml 仍检出旧地址而必红，属迁移引导的一次性情况，处理办法见编排裁定 D10-1444。'
+  - id: 86
+    row: 4
+    title: 'CT-06zzzzz：verify-container 新增 --tests——在 PR 头代码上跑指定的测试文件或目录（开发中把测试搬上测试机的入口，不是门禁、不进证据）；并收 #3263 评审留下的七条收紧；报告须与计划逐组对账（计划里的文件没跑、报告多出计划外文件、某组 0 个用例都按用法错误退出）'
+    granted: true
+    date: '2026-11-13'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/ops 的追加）：--tests 只新增一个不取验证槽、不产出验证证据的运行模式，不改 --fast、--red 与完整验证的判定，不改必需检查；其余为收紧。原仓库 PR 3318 的三轮评审与第 3 轮增量已由编排核过（D10-1410），仓库迁移后在新仓库重开并变基，变基中的内容改动（tests-projects.json 增 replay 项目、red-plan 测试把 test/replay 计入集成层、辅助函数改名）已核（D10-1465）。整文件 describe.skip 仍报绿一条记 FU-TESTS-REPORT-SKIPPED-ONLY，合并后修。'
