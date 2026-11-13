@@ -1,0 +1,24 @@
+id: F1-08ak
+repo: rebate-platform
+title: F1-08ah 跟进 FU-F108AH-DICT2-EXACT——[AC-F1-08ah-DICT#2] 缺键回退的中文名断言由包含式收紧为全文精确匹配（tighten_only，D10-1559）
+type: test-change
+# 2026-11-14 前端线 fe 入账（编排 D10-1559）。F1-08ah（#88）落地时 Codex 碰到每任务 10 次熔断，DICT#2 第 100 行停在 toContain('风险嫌疑')；按编排口径（断言精确匹配，带固定内容写全文）收紧为 toBe('风险嫌疑（RISK_SUSPECT）用户看到：风险嫌疑')，同一用例其余断言不动。
+# 由 Codex 改这一行（新任务号，熔断按任务计）；证据记 mutation：实现回退文案多带一段字符（如「风险嫌疑X」）时旧断言放过、新断言变红。排在 F1-08ai 之前。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/frontend/admin-withdrawal-review/dictionary.test.ts'
+  - 'ops/tasks/F1-08ak.yaml'
+modify_existing:
+  - file: 'test/spec/frontend/admin-withdrawal-review/dictionary.test.ts'
+    test: '[AC-F1-08ah-DICT#2] 原因文案的 .title 缺失时只显示原因码中文名，不回退到写死的用户文案'
+    reason: tighten_only
+    ruling: D10-1559
+    note: 第 100 行 toContain('风险嫌疑') 收紧为 toBe('风险嫌疑（RISK_SUSPECT）用户看到：风险嫌疑')（去空白后比较），其余断言不动
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
