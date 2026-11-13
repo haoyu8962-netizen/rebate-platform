@@ -1,0 +1,24 @@
+id: B1-06zo
+repo: rebate-platform
+title: linking：POST /v1/events 服务端第一步——收下整批、照 specs/events.yaml 校验；link_jump 按 BR-ATTR-21 细则写 link_open_attempts.jump_reported_at（本人令牌、尝试属于本人、link_id 一致、首个 requested / unknown 才记、之后不改）；其余事件收下不落库（C-31 第一步，D10-1469）
+type: impl
+# 2026-11-13 w1 入账（编排 D10-1469；契约 CT-13d）。现状：link_open_attempts.jump_reported_at 已建列、couli_app 有 UPDATE(jump_reported_at) 授权、触发器禁止非空后再改（schema.sql:1662）；pending-attempts.ts:87 / orders/domain/pending-tracks.ts:88 在读；主干没有任何非测试代码写它，选卡永远落到未上报那档。不需要迁移。
+# 行为（BR-ATTR-21 细则「待跟单卡按实际外跳选」第二点）：只认带本人令牌、attempt_id 属于该用户、上报 link_id 与尝试所属 link 一致的 link_jump；第一次收到 result ∈ {requested, unknown} 的上报时记服务端当前时刻（注入 Clock），failed 不记；已记过不改（同批多条、重发、迟到都只认第一次）；不带编号 / 编号不存在 / 属于别人 / 无令牌 / link_id 不符的只当埋点、不报错。整批：照 specs/events.yaml 校验（不认识的事件名、缺必填字段按契约的拒绝口径），按 (event_type, event_id) 去重（第一步不落库时，去重只要求同一批与重发不重复记 jump_reported_at）；其余事件收下不落库，响应不承诺已保存。单一写者：link_open_attempts 只由 linking 写。
+# 任务书：BR-ATTR-21 连一跳约 20KB，生成的任务书约 28KB 超上限；派工时照先例手摘细则「待跟单卡按实际外跳选」与 04 §6.4 POST /v1/events 一行。
+# 顺手：FU-LINKING-COMMENT-AP26（编排 11-10 20:40）——union-bindings-pdd.ts:15、link-open-pdd-auth.ts:28 两行注释的 approvals #26 改指 CT-10a / B1-06zm。
+# 第二步（events 表按日分区、90 天清理配置、其余事件校验与落库、三端与 H5 生成代码）不在本单，编排之后另派。
+refs: [BR-ATTR-21]
+refs_hash:
+  BR-ATTR-21: a52b09dcf09d
+deps: [CT-13d]
+paths:
+  - 'apps/api/src/modules/linking/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/linking/link-jump-report/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/link-jump-report/**'
+status: todo
