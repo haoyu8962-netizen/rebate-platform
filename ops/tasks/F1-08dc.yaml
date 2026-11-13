@@ -19,5 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-settle-bills-awaiting/**'
-status: todo
-pr: null
+status: done
+pr: 33
