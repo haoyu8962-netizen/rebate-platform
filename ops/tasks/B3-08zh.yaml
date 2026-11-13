@@ -34,26 +34,26 @@ modify_existing:
     test: '[AC-B3-08y#2][BR-AI-19] 写者一直失败：退避 1s→2s→4s… 封顶 5 分钟，同一 run 两路同一节奏；截止前不记 lost；24h 后恰好一条 agent.trace_lost（reason expired，只带 run_id 与计数）、onLost 一次；之后不再调写者'
     reason: rule_change
     br: [BR-AI-19]
-    ruling: D10-1522
-    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+    ruling: D10-1550
+    note: '依 D10-1314 / D10-1347 / D10-1522 / D10-1550：本用例里原来的 queue.pendingCard(...) 断言（1–2 条）在原位置各换成一条「队列上没有 pendingCard」的断言（写法同 [AC-B3-08zh#1]），旧实现会把本条打红（反向检查），其余断言、标题、顺序不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
   - file: 'test/spec/agent/trace-retry/queue.test.ts'
     test: '[AC-B3-08y#3][BR-AI-19] SQLSTATE 22 / 23 / 42 类（如 23514 CHECK）：不再写，立即记 lost（reason rejected，已写成的一半计 0），onLost(rejected)'
     reason: rule_change
     br: [BR-AI-19]
-    ruling: D10-1522
-    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+    ruling: D10-1550
+    note: '依 D10-1314 / D10-1347 / D10-1522 / D10-1550：本用例里原来的 queue.pendingCard(...) 断言（1–2 条）在原位置各换成一条「队列上没有 pendingCard」的断言（写法同 [AC-B3-08zh#1]），旧实现会把本条打红（反向检查），其余断言、标题、顺序不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
   - file: 'test/spec/agent/trace-retry/queue.test.ts'
     test: '[AC-B3-08y#4][BR-AI-19] 队列满（上限 2）：再进一个 run 时丢最旧的一项并记 lost（reason overflow），新的照常进队；恢复后只写留下的两个'
     reason: rule_change
     br: [BR-AI-19]
-    ruling: D10-1522
-    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+    ruling: D10-1550
+    note: '依 D10-1314 / D10-1347 / D10-1522 / D10-1550：本用例里原来的 queue.pendingCard(...) 断言（1–2 条）在原位置各换成一条「队列上没有 pendingCard」的断言（写法同 [AC-B3-08zh#1]），旧实现会把本条打红（反向检查），其余断言、标题、顺序不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
   - file: 'test/spec/agent/trace-retry/queue.test.ts'
     test: '[AC-B3-08y#6][BR-AI-22] 首次失败进队、再写时写者答 skipped（期间完成了注销）：出队，不再写，不记 lost，一条 info'
     reason: rule_change
     br: [BR-AI-19]
-    ruling: D10-1522
-    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+    ruling: D10-1550
+    note: '依 D10-1314 / D10-1347 / D10-1522 / D10-1550：本用例里原来的 queue.pendingCard(...) 断言（1–2 条）在原位置各换成一条「队列上没有 pendingCard」的断言（写法同 [AC-B3-08zh#1]），旧实现会把本条打红（反向检查），其余断言、标题、顺序不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
 red_exempt:
   - file: 'test/spec/agent/trace-retry/queue.test.ts'
     test: '[AC-B3-08y#1][BR-AI-19] 卡片一半写入失败、工具调用一半成功：run 进队，1 秒后（不早于）只再写卡片一半，写成后出队；全过程只一条 warn agent_trace_write_failed（run_id、error_name），无 lost'
