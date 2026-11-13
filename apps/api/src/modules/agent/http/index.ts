@@ -82,6 +82,7 @@ import type { RunBody, RunManager, RunRegistry, RunSink, RunTexts } from '../str
 import { isUuid } from '../store/index.ts';
 import type { AgentOwner, AgentSessionRow, AgentSessionStore } from '../store/index.ts';
 import { encodeFrame } from '../stream/writer/index.ts';
+import { contextWithoutClipboard } from './context.ts';
 import { invalidFields, messageValidator } from './message-schema.ts';
 import { trackSink } from './sink.ts';
 
@@ -463,6 +464,9 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
         }
         streaming = true;
         sink = trackSink(reply.stream(SSE_HEADERS));
+        // B3-05q · BR-AI-01 细则「情境入口」: context.text is not read, stored or given to the model;
+        // the run gets the message as one without it.
+        const context = contextWithoutClipboard(body.context);
         const runInput: RunBodyInput = {
           caller,
           sessionId,
@@ -472,7 +476,7 @@ export function createAgentHttp(deps: AgentHttpDeps): AgentHttp {
           text: body.text,
           redactedText,
           limits,
-          ...(body.context === undefined ? {} : { context: body.context }),
+          ...(context === undefined ? {} : { context }),
         };
         await deps.runs.start(
           {

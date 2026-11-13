@@ -29,6 +29,10 @@ import type {
   ToolTraceFragment,
 } from '../../orchestrator/core/ports.ts';
 import type { ResolvedRoute } from '../../model-gateway/routing/index.ts';
+import {
+  createScenarioEntryPath,
+  type ScenarioEntryReaders,
+} from '../../orchestrator/entry/index.ts';
 import { maskForTrace, restorePlaceholders } from '../../preprocess/redact/index.ts';
 import type { RunBody } from '../run/index.ts';
 
@@ -37,7 +41,7 @@ import type { RunBody } from '../run/index.ts';
  */
 export interface AgentBodyAssemblyDeps extends Omit<
   AgentRunBodyDeps,
-  'degraded' | 'limits' | 'traceMask'
+  'degraded' | 'limits' | 'traceMask' | 'entry'
 > {
   errorMsg(appId: string, code: number): Promise<string>;
   onTrace?: (fragment: ToolTraceFragment) => void;
@@ -52,6 +56,9 @@ export interface AgentBodyAssemblyDeps extends Omit<
   /** B3-05n: the tools of the degraded path when they differ from the model's (production: the
    * registry without the model path's relaxation, so the no-model search is never relaxed). */
   degradedTools?: OrchestratorTools;
+  /** B3-05q · BR-AI-01 细则「情境入口」: the entry path's data side (the business assembly's). With
+   * config and routes as well: the core's entry path (orchestrator/entry); otherwise none. */
+  entryReaders?: ScenarioEntryReaders;
 }
 
 export interface AgentBodyAssembly {
@@ -76,6 +83,7 @@ export function createAgentBodyAssembly(deps: AgentBodyAssemblyDeps): AgentBodyA
     routes,
     previousIntent,
     degradedTools,
+    entryReaders,
     ...ports
   } = deps;
   const traceMask = (args: unknown, table: Readonly<Record<string, string>>): unknown =>
@@ -93,8 +101,20 @@ export function createAgentBodyAssembly(deps: AgentBodyAssemblyDeps): AgentBodyA
     previousIntent !== undefined
       ? createRoutedDegradedPath({ ...shared, config, clock, routes, previousIntent })
       : createDegradedPath(shared);
+  const entry =
+    entryReaders !== undefined && config !== undefined && routes !== undefined
+      ? createScenarioEntryPath({
+          readers: entryReaders,
+          tools: ports.tools,
+          texts: ports.texts,
+          config,
+          routes,
+          errorMsg,
+        })
+      : undefined;
   const body = createAgentRunBody({
     ...ports,
+    ...(entry === undefined ? {} : { entry }),
     degraded,
     limits: orchestratorLimitsDefaults(),
     traceMask,

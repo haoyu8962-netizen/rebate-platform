@@ -72,6 +72,8 @@ import {
   type SearchProductsDeps,
 } from '../../tools/search/index.ts';
 import type { AgentEarningsProvidedPorts } from './earnings.ts';
+import { createScenarioEntryReaders } from './entry.ts';
+import type { ScenarioEntryReaders } from '../../orchestrator/entry/index.ts';
 import type { DailyCounter } from './orders.ts';
 
 /**
@@ -197,6 +199,9 @@ export interface AgentStreamAssembly {
   readonly intents: IntentPort;
   readonly results: ResultSetStore;
   readonly texts: AgentRunTexts;
+  /** B3-05q · BR-AI-01 细则「情境入口」: the entry path's data side (./entry.ts); absent on legacy
+   * assemblies (the context then gets no entry card). */
+  readonly entry?: ScenarioEntryReaders;
 }
 
 /** Optional on the module/runtime: absence preserves B3-03f's minimal mount. */
@@ -298,6 +303,8 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
   const handlers: ToolHandler[] = [searchHandler, createRebateQuoteHandler(quoteDeps)];
   // Identity reaches every port only from the server-built call context (BR-AI-03).
   const dictionary = (appId: string, key: string) => texts.text(appId, key);
+  // B3-05q: the entry path's order reader uses the order tools' deps (set below with ports.orders).
+  let entryOrders: OrderToolsDeps | undefined;
   if (ports.orders !== undefined) {
     // B3-08g: the order tools and handoff; with ports.rules (B3-08m) registered =
     // specs/agent-tools.allowlist.
@@ -322,6 +329,7 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
       cardReference,
       texts: dictionary,
     };
+    entryOrders = orderDeps;
     handlers.push(
       createHandoffHandler(handoff),
       createPrefillClaimHandler(claim),
@@ -443,12 +451,20 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
       'agent_result_chain_failed',
     );
   });
+  // B3-05q: the entry path's quote is the deterministic runner's (no card reference); its order
+  // read is explain_order's own lookup (./entry.ts).
+  const entry = createScenarioEntryReaders({
+    quote: runnerDeps,
+    ...(entryOrders === undefined ? {} : { orders: entryOrders }),
+    handoff: { texts: dictionary },
+  });
   return {
     tools: productView(results),
     deterministic: linkPath(createLinkQuoteRunner(runnerDeps), texts),
     intents,
     results: receipts,
     texts,
+    entry,
     degraded: {
       tools: degradedTools(
         inner,

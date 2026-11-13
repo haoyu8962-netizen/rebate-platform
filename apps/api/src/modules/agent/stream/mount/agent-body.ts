@@ -182,6 +182,8 @@ export function createStreamAgentBody(deps: StreamAgentBodyDeps): AgentBodyAssem
     results: deliveryReceipts(business.results, logger),
     emptyReplies: emptyReplyPort(logger, deps.emptyReplies),
     sessionProducts: sessionProducts(business.results, logger, degraded?.config),
+    // B3-05q: the entry path's data side (BR-AI-01 细则「情境入口」).
+    ...(business.entry === undefined ? {} : { entryReaders: business.entry }),
     // B3-05n: the routed no-model path (BR-AI-14 细则「无模型降级」), over the assembly's ports.
     ...(degraded === undefined
       ? {}
