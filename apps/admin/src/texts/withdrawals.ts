@@ -1,5 +1,6 @@
 // 提现审核页文案（规格 admin-withdrawals.md、admin-withdrawal-detail.md，画板 AdmWithdrawList /
-// AdmWithdrawDetail / AdmWithdrawAutoDecision / AdmWithdrawDetailWechat；F1-08a 第一段只读）。
+// AdmWithdrawDetail / AdmWithdrawAutoDecision / AdmWithdrawDetailWechat；F1-08a 第一段只读，
+// F1-08ah 详情加【审核通过】【驳回】）。
 // 提现状态、审核方式、转人工原因、风险标签的中文名只从后台字典读（BR-TEXT-25，
 // contracts/texts.admin.default.json），缺键显示编码，所以这里不写这些名字。错误措辞按
 // contracts/error-codes.yaml（BR-TEXT-14）。
@@ -17,7 +18,7 @@ export const withdrawalsTexts = {
   forbiddenDescription:
     '当前账号没有提现查看权限点（withdraw.review 或 fund.view），请联系超管勾选。',
   readOnlyNotice:
-    '本页当前只读：审核通过 / 驳回、批量操作、打款、导出与自动到账设置尚未接入，接口定稿后开放。',
+    '本页当前只读：批量操作、打款、导出与自动到账设置尚未接入，接口定稿后开放；单张审核通过 / 驳回在提现单详情办理。',
   statusTabs: {
     all: '全部',
     pendingReview: '待审',
@@ -170,6 +171,77 @@ export const withdrawalsTexts = {
     historyHold: '退回待执行',
     historyPaid: '打款成功',
     historyUpdated: '最近更新',
+  },
+  review: {
+    approve: '审核通过',
+    reject: '驳回',
+    cancel: '取消',
+    approveTitle: (number: string): string => `审核通过 · ${number}`,
+    rejectTitle: (number: string): string => `驳回 · ${number}`,
+    approveSubmit: '确认通过',
+    rejectSubmit: '确认驳回',
+    number: '提现单号',
+    amount: '申请金额',
+    status: '当前状态',
+    approveConsequence:
+      '通过后单据进入待执行打款，金额仍冻结，打款另由【执行打款】办理；冻结、余额为负等阻断由服务端判定，被跳过时这里会写明原因。',
+    rejectConsequence:
+      '驳回后冻结的金额退回用户可用余额；用户看到所选原因的用户文案，看不到内部备注。',
+    holdsNotice: (count: number): string =>
+      `该用户有 ${count} 条生效的提现冻结：审核不受冻结限制，执行打款时由服务端再判定。`,
+    reasonLabel: '驳回原因',
+    reasonEmpty: '请选择驳回原因',
+    userTextLabel: '用户看到：',
+    noteLabel: '内部备注',
+    noteExtra: (count: number, max: number): string =>
+      `选填（用户申请撤销时必填），仅内部可见；${count} / ${max} 字`,
+    noteRequired: '用户申请撤销须填写内部备注（去掉首尾空白后不能为空）',
+    noteTooLong: (count: number, max: number): string =>
+      `内部备注最多 ${max} 字，当前 ${count} 字，请删减后再提交`,
+    operationApprove: '提现审核通过',
+    operationReject: '提现驳回',
+    stepUpTarget: (number: string): string => `提现单：${number}`,
+    stepUpAgain: '动态码凭证已失效，请重新输入动态码',
+    approved: '已审核通过，待执行打款',
+    rejected: '已驳回，金额已退回用户可用余额',
+    skipped: {
+      not_found: '未找到该提现单（不存在或不属于本应用），本次未处理',
+      not_pending: '提现单状态已变化，不再是待审核，已刷新为最新状态',
+      negative_balance: '用户可用余额为负，本次未处理',
+      blocked: '提现单被阻断（已记录阻断原因），本次未处理',
+    } as Readonly<Record<string, string>>,
+    skippedOther: (reason: string): string => `本次未处理：${reason}`,
+    changed: '提现单状态已变化（已被他人处理或状态更新），已刷新为最新状态，请核对后再操作',
+    forbidden: '无权限执行此操作（需要 withdraw.review 权限点）',
+    idsInvalid: '提现单编号有误，请刷新页面后重试',
+    noteInvalid: '内部备注不符合要求，请修改后重试',
+    missing: '提现单不存在或不属于本应用',
+    attemptExists: '该提现单已有转账记录（处理中、成功或结果未知），不能驳回，请按人工处理流程办结',
+    queryRequired: '该单需要先查询通道结果后才能驳回',
+    querySuccess: '最近一次查询显示通道已打款，不能驳回',
+    invalid: '提交内容有误，请检查后重试',
+    network: '网络错误，请检查网络后重试；未确认前不会重复提交',
+    failed: '提交失败，请稍后重试',
+    refreshFailed: '刷新提现单失败，请手动刷新页面',
+    /** 人工可选的五个驳回原因的中文名（contracts/enums/fund.yaml withdraw_reject_reason）。 */
+    reasonNames: {
+      RISK_SUSPECT: '风险嫌疑',
+      ORDER_ABNORMAL: '订单异常',
+      PAYEE_INFO_INVALID: '收款信息无效',
+      USER_REQUEST: '用户申请撤销',
+      OTHER: '其他',
+    } as Readonly<Record<string, string>>,
+    /**
+     * 用户字典 withdraw_reject_reason.<编码> 缺键时的兜底（BR-TEXT-08 默认文案原文）。用户字典补齐
+     * 后以字典为准；TODO(规划/11 §7): 去掉兜底 — blocked on 内容线 CT-26zo 补字典键。
+     */
+    reasonDefaults: {
+      RISK_SUSPECT: '账户存在异常，需要核实，请联系客服',
+      ORDER_ABNORMAL: '部分订单状态待核实，请稍后重新申请',
+      PAYEE_INFO_INVALID: '收款信息有误，请核对后重新申请',
+      USER_REQUEST: '已按你的要求取消本次提现',
+      OTHER: '其他原因，请联系客服',
+    } as Readonly<Record<string, string>>,
   },
   batchKinds: { manual: '手动批次', auto: '自动批次' } as Readonly<Record<string, string>>,
   itemResults: {
