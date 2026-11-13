@@ -795,6 +795,121 @@ $_$;
 
 
 --
+-- Name: drop_expired_events_day_partitions(timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.drop_expired_events_day_partitions(p_now timestamp with time zone) RETURNS text[]
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    SET lock_timeout TO '5s'
+    SET "DateStyle" TO 'ISO, YMD'
+    SET "TimeZone" TO 'UTC'
+    AS $_$
+DECLARE
+  v_parent     oid;
+  v_cutoff     timestamptz;
+  v_partition  record;
+  v_bounds     text[];
+  v_candidates text[] := ARRAY[]::text[];
+  v_name       text;
+  v_dropped    text[] := ARRAY[]::text[];
+BEGIN
+  IF p_now IS NULL THEN
+    RAISE EXCEPTION 'drop_expired_events_day_partitions: p_now is required'
+      USING ERRCODE = 'null_value_not_allowed';
+  END IF;
+
+  IF NOT isfinite(p_now) THEN
+    RAISE EXCEPTION 'drop_expired_events_day_partitions: p_now must be finite'
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- Serialise deletion calls before listing so each drop is reported once.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('app.drop_expired_events_day_partitions', 0)
+  );
+
+  SELECT c.oid INTO v_parent
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'app' AND c.relname = 'events' AND c.relkind = 'p';
+  IF v_parent IS NULL THEN
+    RAISE EXCEPTION 'drop_expired_events_day_partitions: app.events is not a partitioned table'
+      USING ERRCODE = 'undefined_table';
+  END IF;
+
+  -- BR-ID-30 ③: midnight of the supplied +08:00 calendar day minus 90 days.
+  v_cutoff := (((p_now AT TIME ZONE INTERVAL '8 hours')::date - 90)::timestamp
+    AT TIME ZONE INTERVAL '8 hours');
+
+  FOR v_partition IN
+    SELECT c.relname::text AS name, pg_get_expr(c.relpartbound, c.oid) AS bound
+    FROM pg_inherits i
+    JOIN pg_class c ON c.oid = i.inhrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE i.inhparent = v_parent AND n.nspname = 'app' AND c.relkind = 'r'
+      AND c.relname::text ~ '^events_p[0-9]{8}$'
+    ORDER BY c.relname COLLATE "C"
+  LOOP
+    -- Use actual catalogue bounds, never infer age from a partition's name.
+    -- DEFAULT, unbounded ranges and unfamiliar bound shapes are left untouched.
+    v_bounds := regexp_match(v_partition.bound,
+      $bound$^FOR VALUES FROM \('([^']+)'\) TO \('([^']+)'\)$bound$);
+    IF v_bounds IS NOT NULL AND isfinite(v_bounds[2]::timestamptz)
+      AND v_bounds[2]::timestamptz <= v_cutoff THEN
+      v_candidates := array_append(v_candidates, v_partition.name);
+    END IF;
+  END LOOP;
+
+  -- Empty runs do not request a lock on app.events or any of its partitions.
+  IF cardinality(v_candidates) = 0 THEN
+    RETURN v_dropped;
+  END IF;
+
+  -- Take ALL candidate creation locks before the parent lock. Otherwise an
+  -- ensure caller could hold a later candidate lock while waiting for our parent.
+  FOREACH v_name IN ARRAY v_candidates LOOP
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended('app.ensure_events_day_partition:' || v_name, 0)
+    );
+  END LOOP;
+
+  -- Parent before children follows writer lock order; ONLY avoids unrelated and
+  -- DEFAULT partitions. Every wait, including advisory locks, has a 5s bound.
+  -- Do not catch 55P03: the whole statement must roll back, including earlier drops.
+  LOCK TABLE ONLY app.events IN ACCESS EXCLUSIVE MODE;
+
+  -- Membership and actual bounds are checked again after the wait under lock.
+  FOR v_partition IN
+    SELECT c.relname::text AS name, pg_get_expr(c.relpartbound, c.oid) AS bound
+    FROM pg_inherits i
+    JOIN pg_class c ON c.oid = i.inhrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE i.inhparent = v_parent AND n.nspname = 'app' AND c.relkind = 'r'
+      AND c.relname::text = ANY (v_candidates)
+    ORDER BY c.relname COLLATE "C"
+  LOOP
+    v_bounds := regexp_match(v_partition.bound,
+      $bound$^FOR VALUES FROM \('([^']+)'\) TO \('([^']+)'\)$bound$);
+    IF v_bounds IS NULL THEN
+      CONTINUE;
+    END IF;
+    IF NOT isfinite(v_bounds[2]::timestamptz) OR v_bounds[2]::timestamptz > v_cutoff THEN
+      CONTINUE;
+    END IF;
+
+    -- server_at is the partition key: an upper bound <= cutoff guarantees that
+    -- every row is strictly older than cutoff, without scanning or deleting rows.
+    EXECUTE format('DROP TABLE app.%I', v_partition.name);
+    v_dropped := array_append(v_dropped, v_partition.name);
+  END LOOP;
+
+  RETURN v_dropped;
+END
+$_$;
+
+
+--
 -- Name: drop_expired_month_partitions(text, timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -1156,6 +1271,86 @@ $$;
 
 
 --
+-- Name: ensure_events_day_partition(date); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.ensure_events_day_partition(p_day date) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    SET lock_timeout TO '5s'
+    SET "DateStyle" TO 'ISO, YMD'
+    SET "TimeZone" TO 'UTC'
+    AS $$
+DECLARE
+  v_name   text;
+  v_parent oid;
+  v_child  oid;
+  v_start  timestamptz;
+  v_end    timestamptz;
+BEGIN
+  IF p_day IS NULL THEN
+    RAISE EXCEPTION 'ensure_events_day_partition: p_day is required'
+      USING ERRCODE = 'null_value_not_allowed';
+  END IF;
+
+  IF NOT isfinite(p_day) OR p_day < DATE '2000-01-01' OR p_day > DATE '9999-12-31' THEN
+    RAISE EXCEPTION 'ensure_events_day_partition: p_day must be between 2000-01-01 and 9999-12-31'
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  v_name := 'events_p' || to_char(p_day::timestamp, 'YYYYMMDD');
+
+  -- Share this transaction lock with deletion. Catalogue queries after the wait
+  -- see a preceding caller's committed DDL under READ COMMITTED.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('app.ensure_events_day_partition:' || v_name, 0)
+  );
+
+  SELECT c.oid INTO v_parent
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'app' AND c.relname = 'events' AND c.relkind = 'p';
+  IF v_parent IS NULL THEN
+    RAISE EXCEPTION 'ensure_events_day_partition: app.events is not a partitioned table'
+      USING ERRCODE = 'undefined_table';
+  END IF;
+
+  SELECT c.oid INTO v_child
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'app' AND c.relname = v_name;
+  IF v_child IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM pg_inherits i WHERE i.inhrelid = v_child AND i.inhparent = v_parent
+    ) THEN
+      -- No DDL or relation lock when the requested partition already exists.
+      RETURN v_name;
+    END IF;
+    RAISE EXCEPTION 'ensure_events_day_partition: app.% exists but is not a partition of app.events',
+      v_name
+      USING ERRCODE = 'duplicate_table';
+  END IF;
+
+  -- Add a calendar day before converting to an instant, including 9999-12-31's
+  -- upper boundary. Fixed offsets avoid session time zones and historical DST.
+  v_start := p_day::timestamp AT TIME ZONE INTERVAL '8 hours';
+  v_end := (p_day + 1)::timestamp AT TIME ZONE INTERVAL '8 hours';
+
+  -- PostgreSQL checks DEFAULT rows and clones constraints/indexes/triggers.
+  -- Propagate 23514 unchanged if DEFAULT contains rows of this day. All waits
+  -- (advisory, parent, DEFAULT and app.users) are bounded by 5s; 55P03 aborts
+  -- the statement and releases its locks without a partial creation.
+  EXECUTE format(
+    'CREATE TABLE app.%I PARTITION OF app.events FOR VALUES FROM (%L) TO (%L)',
+    v_name, v_start, v_end
+  );
+
+  RETURN v_name;
+END
+$$;
+
+
+--
 -- Name: ensure_month_partition(text, date); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -1370,6 +1565,46 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
+$$;
+
+
+--
+-- Name: purge_expired_events_default(timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.purge_expired_events_default(p_now timestamp with time zone) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    SET lock_timeout TO '5s'
+    SET "DateStyle" TO 'ISO, YMD'
+    SET "TimeZone" TO 'UTC'
+    AS $$
+DECLARE
+  v_cutoff  timestamptz;
+  v_deleted bigint;
+BEGIN
+  IF p_now IS NULL THEN
+    RAISE EXCEPTION 'purge_expired_events_default: p_now is required'
+      USING ERRCODE = 'null_value_not_allowed';
+  END IF;
+
+  IF NOT isfinite(p_now) THEN
+    RAISE EXCEPTION 'purge_expired_events_default: p_now must be finite'
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- BR-ID-30 ③: the same cutoff as drop_expired_events_day_partitions — midnight of the supplied
+  -- +08:00 calendar day minus 90 days. Rows strictly before it are expired.
+  v_cutoff := (((p_now AT TIME ZONE INTERVAL '8 hours')::date - 90)::timestamp
+    AT TIME ZONE INTERVAL '8 hours');
+
+  -- DEFAULT partition only: day partitions are removed whole by the drop function, and
+  -- app.event_dedup has its own cleanup. Waits (ensure's DEFAULT scan) are bounded by 5s.
+  DELETE FROM ONLY app.events_default WHERE server_at < v_cutoff;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  RETURN v_deleted;
+END
 $$;
 
 
@@ -1640,6 +1875,28 @@ BEGIN
       ROW(OLD.app_id, OLD.device_hash, OLD.user_id, OLD.register_method, OLD.created_at)
   THEN
     RAISE EXCEPTION 'device_registrations only permits setting an empty merge target once'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+
+--
+-- Name: reject_event_rewrite(); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.reject_event_rewrite() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+  -- Only detachment passes: user_id non-null -> null, every other column unchanged (whole row
+  -- compared, so a column added later is covered too).
+  IF OLD.user_id IS NULL OR NEW.user_id IS NOT NULL
+    OR (to_jsonb(NEW) - 'user_id') IS DISTINCT FROM (to_jsonb(OLD) - 'user_id')
+  THEN
+    RAISE EXCEPTION 'events rows are immutable except clearing user_id once'
       USING ERRCODE = 'restrict_violation';
   END IF;
   RETURN NEW;
@@ -3428,6 +3685,18 @@ CREATE TABLE app.dict_items (
 
 
 --
+-- Name: event_dedup; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.event_dedup (
+    app_id text NOT NULL,
+    event_type text NOT NULL,
+    event_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: event_log; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -3469,6 +3738,43 @@ ALTER TABLE app.event_log ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: events; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.events (
+    app_id text NOT NULL,
+    event_id uuid NOT NULL,
+    event_type text NOT NULL,
+    name text NOT NULL,
+    props jsonb NOT NULL,
+    user_id uuid,
+    device_id uuid,
+    client_at timestamp with time zone NOT NULL,
+    server_at timestamp with time zone NOT NULL,
+    CONSTRAINT events_props_object_check CHECK ((jsonb_typeof(props) = 'object'::text))
+)
+PARTITION BY RANGE (server_at);
+
+
+--
+-- Name: events_default; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.events_default (
+    app_id text CONSTRAINT events_app_id_not_null NOT NULL,
+    event_id uuid CONSTRAINT events_event_id_not_null NOT NULL,
+    event_type text CONSTRAINT events_event_type_not_null NOT NULL,
+    name text CONSTRAINT events_name_not_null NOT NULL,
+    props jsonb CONSTRAINT events_props_not_null NOT NULL,
+    user_id uuid,
+    device_id uuid,
+    client_at timestamp with time zone CONSTRAINT events_client_at_not_null NOT NULL,
+    server_at timestamp with time zone CONSTRAINT events_server_at_not_null NOT NULL,
+    CONSTRAINT events_props_object_check CHECK ((jsonb_typeof(props) = 'object'::text))
 );
 
 
@@ -6764,6 +7070,13 @@ ALTER TABLE ONLY app.event_log ATTACH PARTITION app.event_log_default DEFAULT;
 
 
 --
+-- Name: events_default; Type: TABLE ATTACH; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.events ATTACH PARTITION app.events_default DEFAULT;
+
+
+--
 -- Name: ledger_entries_default; Type: TABLE ATTACH; Schema: app; Owner: -
 --
 
@@ -7378,6 +7691,14 @@ ALTER TABLE ONLY app.devices
 
 ALTER TABLE ONLY app.dict_items
     ADD CONSTRAINT dict_items_pkey PRIMARY KEY (app_id, dict, code, version);
+
+
+--
+-- Name: event_dedup event_dedup_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.event_dedup
+    ADD CONSTRAINT event_dedup_pkey PRIMARY KEY (event_type, event_id);
 
 
 --
@@ -9401,6 +9722,13 @@ CREATE UNIQUE INDEX devices_app_id_id_key ON app.devices USING btree (app_id, id
 
 
 --
+-- Name: event_dedup_created_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX event_dedup_created_idx ON app.event_dedup USING btree (created_at);
+
+
+--
 -- Name: event_log_created_at_idx; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -9426,6 +9754,20 @@ CREATE INDEX event_log_event_id_idx ON ONLY app.event_log USING btree (event_id)
 --
 
 CREATE INDEX event_log_default_event_id_idx ON app.event_log_default USING btree (event_id);
+
+
+--
+-- Name: events_user_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX events_user_idx ON ONLY app.events USING btree (app_id, user_id) WHERE (user_id IS NOT NULL);
+
+
+--
+-- Name: events_default_app_id_user_id_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX events_default_app_id_user_id_idx ON app.events_default USING btree (app_id, user_id) WHERE (user_id IS NOT NULL);
 
 
 --
@@ -10500,6 +10842,13 @@ ALTER INDEX app.event_log_pkey ATTACH PARTITION app.event_log_default_pkey;
 
 
 --
+-- Name: events_default_app_id_user_id_idx; Type: INDEX ATTACH; Schema: app; Owner: -
+--
+
+ALTER INDEX app.events_user_idx ATTACH PARTITION app.events_default_app_id_user_id_idx;
+
+
+--
 -- Name: ledger_entries_default_account_id_account_version_idx; Type: INDEX ATTACH; Schema: app; Owner: -
 --
 
@@ -10707,6 +11056,13 @@ CREATE TRIGGER device_registrations_no_rewrite BEFORE UPDATE ON app.device_regis
 --
 
 CREATE TRIGGER event_log_append_only BEFORE DELETE OR UPDATE ON app.event_log FOR EACH ROW EXECUTE FUNCTION app.reject_update_delete();
+
+
+--
+-- Name: events events_detach_only; Type: TRIGGER; Schema: app; Owner: -
+--
+
+CREATE TRIGGER events_detach_only BEFORE UPDATE ON app.events FOR EACH ROW EXECUTE FUNCTION app.reject_event_rewrite();
 
 
 --
@@ -11497,6 +11853,14 @@ ALTER TABLE ONLY app.devices
 
 ALTER TABLE ONLY app.dict_items
     ADD CONSTRAINT dict_items_created_by_fkey FOREIGN KEY (created_by) REFERENCES app.admin_users(id);
+
+
+--
+-- Name: events events_user_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE app.events
+    ADD CONSTRAINT events_user_fkey FOREIGN KEY (app_id, user_id) REFERENCES app.users(app_id, id);
 
 
 --
@@ -12630,6 +12994,14 @@ GRANT ALL ON FUNCTION app.drop_expired_day_partitions(p_table text, p_now timest
 
 
 --
+-- Name: FUNCTION drop_expired_events_day_partitions(p_now timestamp with time zone); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.drop_expired_events_day_partitions(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION app.drop_expired_events_day_partitions(p_now timestamp with time zone) TO couli_maint;
+
+
+--
 -- Name: FUNCTION drop_expired_month_partitions(p_table text, p_now timestamp with time zone); Type: ACL; Schema: app; Owner: -
 --
 
@@ -12651,6 +13023,14 @@ GRANT ALL ON FUNCTION app.drop_expired_union_raw_payload_partitions(p_now timest
 
 REVOKE ALL ON FUNCTION app.ensure_day_partition(p_table text, p_day date) FROM PUBLIC;
 GRANT ALL ON FUNCTION app.ensure_day_partition(p_table text, p_day date) TO couli_maint;
+
+
+--
+-- Name: FUNCTION ensure_events_day_partition(p_day date); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.ensure_events_day_partition(p_day date) FROM PUBLIC;
+GRANT ALL ON FUNCTION app.ensure_events_day_partition(p_day date) TO couli_maint;
 
 
 --
@@ -12688,6 +13068,14 @@ REVOKE ALL ON FUNCTION app.pay_refunds_reject_immutable_update() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION app.payout_accounts_reject_identifier_update() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION purge_expired_events_default(p_now timestamp with time zone); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.purge_expired_events_default(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION app.purge_expired_events_default(p_now timestamp with time zone) TO couli_maint;
 
 
 --
@@ -12752,6 +13140,13 @@ REVOKE ALL ON FUNCTION app.reject_agent_tool_call_rewrite() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION app.reject_device_registration_rewrite() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION reject_event_rewrite(); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.reject_event_rewrite() FROM PUBLIC;
 
 
 --
@@ -14819,12 +15214,34 @@ GRANT SELECT ON TABLE app.dict_items TO couli_readonly;
 
 
 --
+-- Name: TABLE event_dedup; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.event_dedup TO couli_app;
+GRANT SELECT,DELETE ON TABLE app.event_dedup TO couli_maint;
+
+
+--
 -- Name: TABLE event_log; Type: ACL; Schema: app; Owner: -
 --
 
 GRANT SELECT,INSERT ON TABLE app.event_log TO couli_app;
 GRANT SELECT,INSERT ON TABLE app.event_log TO couli_payout;
 GRANT SELECT ON TABLE app.event_log TO couli_readonly;
+
+
+--
+-- Name: TABLE events; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.events TO couli_app;
+
+
+--
+-- Name: COLUMN events.user_id; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(user_id) ON TABLE app.events TO couli_app;
 
 
 --
