@@ -23,4 +23,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/risk/appeal-pending-count/**'
-status: todo
+status: done
+pr: 39
