@@ -1,0 +1,22 @@
+id: CT-06zzzzzg
+repo: rebate-platform
+title: CT-06zzzzzg：ops/risk-map.yaml 登记新模块 apps/api/src/modules/analytics/**（RV2，claude / codex / claude+codex），重生成根 AGENTS.md 分工表，补模块 AGENTS.md / CLAUDE.md 与 risk.test 清单一行（D10-1529）
+type: guard-change
+# 2026-11-14 be 入账（编排 D10-1529）。起因：CT-13g（#63）新建 analytics 模块，guard:static 的 risk-map-coverage 报「apps/api/src/modules/analytics: no explicit rule」。规划/11 §1.1 没有单列 analytics，按 §1.2 为 RV2（同 admin、content），这一行只把默认写明，门禁既不放宽也不收紧；存 user_id / device_id，注销处理见 C-36。
+# 范围照 B1-28r 先例：a) risk-map 在 content 之后加一条；b) agents-table --write 重生成根 AGENTS.md 分工表，根 AGENTS.md 在 150 行上限，把 §7 两条相邻要点并成一行、文字不变；c) 新增 apps/api/src/modules/analytics/AGENTS.md 与一行 @AGENTS.md 的 CLAUDE.md；d) tools/guard/lib/risk.test.ts 清单只增一行；e) 本台账。第三类保护路径，编排按 #16 / #24 核后加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'ops/risk-map.yaml'
+  - 'AGENTS.md'
+  - 'apps/api/src/modules/analytics/AGENTS.md'
+  - 'apps/api/src/modules/analytics/CLAUDE.md'
+  - 'tools/guard/lib/risk.test.ts'
+  - 'ops/tasks/CT-06zzzzzg.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
