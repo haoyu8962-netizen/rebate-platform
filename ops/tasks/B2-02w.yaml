@@ -21,4 +21,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/dashboard-recon-diff-count/**'
-status: todo
+status: done
+pr: 32
