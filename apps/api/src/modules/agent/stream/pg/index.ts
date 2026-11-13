@@ -57,6 +57,8 @@
 //   max(0, L_i − today's unrefunded runs of subject i) (today = dayKeyOf(now) of this
 //   finalization). F5 one UPDATE: settle_result, settled_at now, final_event =
 //   toStored(withQuota(draft, quotaLeft)), ended_at GREATEST(now, accepted_at), finish_reason.
+//   B3-08zh (BR-AI-22): a session the purge detached (user_id NULL, user_hash set; read under F1's
+//   lock) gets final_event and end_draft as redactedStored (data.msg / data.fallback_q → null).
 //   F5a (B3-08zc, BR-AI-19 细则「助手回复落库」) in the same transaction, live mode only (settle's
 //   reply, the 4th argument): the run's assistant row gets text and card_ids, its cards go to
 //   agent_cards (./reply.ts), and the cards kept while the client was gone (reply.unframed) get
@@ -74,9 +76,10 @@
 //   RETURNING into the memo; recordFacts(runId, {ending: null, cards}) = S3 (card_delivered = true
 //   WHERE end_reason IS NULL, when cards > 0); recordFacts with an ending = S4′ (same decision
 //   UPDATE); facts / draft / final read the run row; finish(runId, terminal) returns
-//   fromStored(final_event) (S6; the manager sends that frame); cancelRequested: signals first,
-//   otherwise cancel_requested_at IS NOT NULL read at most every cancelPgPollMs; requestCancel is
-//   not used by B3-03d (cancel below).
+//   fromStored(final_event) (S6; the manager sends that frame; B3-08zh: `terminal` itself when the
+//   stored form is its BR-AI-22 redaction, the session detached during the run); cancelRequested:
+//   signals first, otherwise cancel_requested_at IS NOT NULL read at most every cancelPgPollMs;
+//   requestCancel is not used by B3-03d (cancel below).
 // cancel({appId, runId}) — the cancel endpoint's write (design §5.2, §13 S2-2, S2-3): in one
 //   transaction take the run row lock, then read the clock; UPDATE cancel_requested_at =
 //   GREATEST(now, accepted_at) WHERE end_reason IS NULL AND final_event IS NULL AND

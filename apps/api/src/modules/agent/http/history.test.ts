@@ -156,3 +156,19 @@ it('[AC-B3-08zc#6] 查询参数：limit 1..50（字符串数字可），cursor �
   expect(bad.calls[0]?.body).toMatchObject({ code: 20001, data: { fields: ['limit', 'cursor'] } });
   expect(decodeHistoryCursor(encodeHistoryCursor('not-a-uuid'))).toBeNull();
 });
+
+it('[AC-B3-08zh#5][BR-AI-20] 读侧答 null（游标不是本会话的消息）：20001，data.fields 为 cursor，不是空页', async () => {
+  const d = deps();
+  d.page.mockResolvedValueOnce(null);
+  const r = capture();
+  await createAgentHistoryHttp(d.value).listMessages(
+    caller,
+    SESSION,
+    { cursor: encodeHistoryCursor(MESSAGE), limit: '3' },
+    r.reply,
+  );
+  expect(d.page).toHaveBeenCalledWith(caller.appId, SESSION, { cursor: MESSAGE, limit: 3 });
+  expect(r.calls).toHaveLength(1);
+  expect(r.calls[0]?.status).toBe(400);
+  expect(r.calls[0]?.body).toMatchObject({ code: 20001, data: { fields: ['cursor'] } });
+});

@@ -221,16 +221,17 @@ async function run(
         // its delivery records, so later rounds can reference it (BR-AI-19, the reply is stored).
         if (!written) {
           unframed.push(numbered.card.card_id);
+          // B3-08zh (D10-1361): what a receipt would have recorded in order (the batch's chain),
+          // before the run's next step; best effort, never ends the run.
+          try {
+            await deps.onUnframedCard?.(runId, structuredClone(numbered.card));
+          } catch {
+            // An observer never changes the run.
+          }
           return;
         }
         // Notices are delivered as card frames but do not count toward quota refund eligibility.
         if (numbered.card.type !== 'notice') cardsDelivered += 1;
-        // B3-08q: told of the written frame (best effort, never ends the run).
-        try {
-          deps.onCardWritten?.(runId, numbered.card);
-        } catch {
-          // An observer never changes the run.
-        }
         // B3-05i: the receipt, only for a frame actually written.
         delivered?.(numbered.card.card_id);
         const facts = { ending: null, cardsDelivered };

@@ -102,7 +102,7 @@ export function cleanCard(card: CardInput): CardInput {
 }
 
 /** Detached by the account deletion's purge: no user any more, the user hash kept (BR-AI-22). */
-function detached(session: SessionRow): boolean {
+export function detached(session: Pick<SessionRow, 'user_id' | 'user_hash'>): boolean {
   return session.user_id === null && session.user_hash !== null;
 }
 

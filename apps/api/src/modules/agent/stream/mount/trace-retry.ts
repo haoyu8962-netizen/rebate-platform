@@ -5,8 +5,9 @@
 // B3-08zc (BR-AI-19 细则「助手回复落库」, D10-1297): the stream runtime no longer hands cards to this
 // queue (they are written with the run's terminal state) and nothing reads its pending cards any
 // more: withPendingCards / processPendingCards / sharePendingCards are gone, card references read
-// committed agent_cards only. The queue itself still writes a record's cards when given some, and
-// keeps pendingCard as a queue method (its own rule tests, trace-retry/queue.test.ts).
+// committed agent_cards only. The queue itself still writes a record's cards when given some.
+// B3-08zh (D10-1522, [AC-B3-08zh#1]): pendingCard / PendingCardSource are retired too — there is
+// no in-process pending card any more; card references read committed data only.
 //
 // traceRedoDefaults(): a fresh {maxRuns: 5000, firstDelayMs: 1000, maxDelayMs: 300000,
 //   windowMs: 86400000} (agent's own injectable defaults, like runTimingsDefaults; not a content
@@ -46,9 +47,6 @@
 //     shutdown, cards, tool_calls} per lost run, where cards / tool_calls are the numbers of that
 //     run's cards / tool calls left unwritten (a written half counts 0); no card, data, argument,
 //     user text or fallback text; and one call deps.onLost(reason) (default: nothing).
-//   pendingCard(appId, sessionId, cardId): the stored-form card of that app + session from a run
-//     whose cards are not yet confirmed written (first attempt in flight or queued), else null;
-//     cleared once written, skipped or lost.
 //   queued(): the number of runs waiting to be written again.
 //   close(boundMs): stops every timer, makes one last attempt for each queued run (and waits for
 //     first attempts in flight), all bounded by boundMs on deps.scheduler; whatever is still
@@ -117,12 +115,7 @@ export interface TraceRedoQueueDeps {
   readonly onLost?: (reason: TraceLostReason) => void;
 }
 
-/** Cards of a queued record not yet confirmed stored (the queue's own view; nothing reads it). */
-export interface PendingCardSource {
-  pendingCard(appId: string, sessionId: string, cardId: string): CardInput | null;
-}
-
-export interface TraceRedoQueue extends PendingCardSource {
+export interface TraceRedoQueue {
   persist(record: RunTraceRecord): Promise<void>;
   queued(): number;
   close(boundMs: number): Promise<void>;
@@ -190,10 +183,6 @@ async function half(call: () => Promise<unknown>): Promise<HalfResult> {
   }
 }
 
-function scopeKey(appId: string, sessionId: string): string {
-  return JSON.stringify([appId, sessionId]);
-}
-
 export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
   const params = deps.params ?? traceRedoDefaults();
   const { logger, scheduler } = deps;
@@ -201,25 +190,8 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
   const queue = new Set<RedoEntry>();
   /** Runs whose first attempt is in flight. */
   const firsts = new Set<RedoEntry>();
-  /** Runs whose cards are not yet confirmed written, by app + session. */
-  const unwritten = new Map<string, Set<RedoEntry>>();
   let closed = false;
   let closing: Promise<void> | undefined;
-
-  function keepCards(entry: RedoEntry): void {
-    const key = scopeKey(entry.record.appId, entry.record.sessionId);
-    const scope = unwritten.get(key) ?? new Set<RedoEntry>();
-    scope.add(entry);
-    unwritten.set(key, scope);
-  }
-
-  function dropCards(entry: RedoEntry): void {
-    const key = scopeKey(entry.record.appId, entry.record.sessionId);
-    const scope = unwritten.get(key);
-    if (scope === undefined) return;
-    scope.delete(entry);
-    if (scope.size === 0) unwritten.delete(key);
-  }
 
   function finish(entry: RedoEntry): void {
     entry.phase = 'over';
@@ -229,7 +201,6 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
     entry.timer = undefined;
     entry.deadlineTimer?.abort();
     entry.deadlineTimer = undefined;
-    dropCards(entry);
   }
 
   function lose(entry: RedoEntry, reason: TraceLostReason): void {
@@ -327,12 +298,8 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
     let skipped = false;
     for (const [which, result] of results) {
       if (result.ok) {
-        if (which === 'cards') {
-          entry.cardsLeft = false;
-          dropCards(entry);
-        } else {
-          entry.toolsLeft = false;
-        }
+        if (which === 'cards') entry.cardsLeft = false;
+        else entry.toolsLeft = false;
         skipped ||= result.skipped;
       } else {
         failure ??= { error: result.error };
@@ -410,19 +377,7 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
         skipLogged: false,
       };
       firsts.add(entry);
-      if (entry.cardsLeft) keepCards(entry);
       await write(entry);
-    },
-
-    pendingCard(appId, sessionId, cardId) {
-      const scope = unwritten.get(scopeKey(appId, sessionId));
-      if (scope === undefined) return null;
-      for (const entry of scope) {
-        if (entry.phase === 'over' || !entry.cardsLeft) continue;
-        const card = entry.record.cards.find((candidate) => candidate.card_id === cardId);
-        if (card !== undefined) return card;
-      }
-      return null;
     },
 
     queued() {

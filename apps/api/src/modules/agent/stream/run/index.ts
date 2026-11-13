@@ -57,9 +57,10 @@
 //      settles server_error. The draft contains complete error data or done.finish_reason; recovery
 //      reads registry.draft(runId) and adds quota_left only after settlement, before finish.
 //   ctx.card reserves numbers with cards.reserve(sessionId, used) and writes the numbered card; an
-//   invalid card rejects with StreamProtocolError('invalid_frame') and the run goes on. B3-08q:
-//   deps.onCardWritten, when given, gets (runId, the written card) right after each card frame
-//   write that succeeded; a throw there is ignored.
+//   invalid card rejects with StreamProtocolError('invalid_frame') and the run goes on. B3-08zh:
+//   the B3-08q onCardWritten hook is retired (no in-process pending card; BR-AI-19).
+//   B3-08zh (D10-1361): deps.onUnframedCard, when given, gets (runId, the numbered card) for every
+//   card kept without a frame, awaited before ctx.card resolves; a rejection or throw is ignored.
 //   B3-08zc (BR-AI-19 细则「助手回复落库」): the run keeps its reply — every text.delta (the timeout
 //   notice included) and every numbered card, in order — also after the client went away (within
 //   the grace the run goes on: its cards are still numbered and kept, not framed, not counted in

@@ -173,7 +173,7 @@ function expectExpired(r: ReturnType<typeof rig>, toolCalls = 0): void {
   expect(lost[0]?.[0]).toMatchObject({ reason: 'expired', cards: 1, tool_calls: toolCalls });
   expect(r.onLost.mock.calls).toEqual([['expired']]);
   expect(r.queue.queued()).toBe(0);
-  expect(r.queue.pendingCard('synthetic-app', record().sessionId, 'c1')).toBeNull();
+  expect('pendingCard' in r.queue).toBe(false);
 }
 
 describe('createTraceRedoQueue · 截止口径（B3-08y review S1）', () => {

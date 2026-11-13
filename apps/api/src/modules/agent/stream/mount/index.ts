@@ -68,8 +68,10 @@
 //   B3-08y (BR-AI-19 / BR-AI-22; rule tests test/spec/agent/trace-retry/**): the records go through
 //   ONE createTraceRedoQueue (./trace-retry.ts) built here over that writer, on the runtime's Clock
 //   and scheduler (seams.schedule; without it an unref'd system scheduler) with traceRedoDefaults():
-//   a failed write is written again for up to 24 hours, agent.trace_lost when given up. Nothing
-//   reads the queue's pending cards (B3-08zc: card references read committed agent_cards only).
+//   a failed write is written again for up to 24 hours, agent.trace_lost when given up. The queue
+//   keeps no pending card at all any more (B3-08zh: card references read committed data only).
+//   B3-08zh (D10-1361): the RunManager's onUnframedCard hands a product_list kept without a frame
+//   (its client gone) to the assembly's keptList (its batch's chain, as a receipt would switch it).
 //   close(): stops accepting (a message after close() started is refused and opens no run), waits
 //   for the runs in progress to end (at most timings.runMaxMs plus a margin; a run still live after
 //   that is left to the worker's sweeper), then closes the trace queue within timings.lockGraceMs
@@ -165,6 +167,7 @@ import { createStreamAgentBody } from './agent-body.ts';
 import { agentEmptyReplyCounter } from './empty-reply-counter.ts';
 import { createRunTraceRecorder } from './trace.ts';
 import { createTraceRedoQueue, unrefScheduler } from './trace-retry.ts';
+import { deliveryReceiptOf } from '../pg/deliveries.ts';
 import { createAgentHistoryRuntime } from './history.ts';
 import type { AgentHistoryHttp } from '../../http/history.ts';
 import {
@@ -403,7 +406,20 @@ export function createAgentStreamRuntime(
     texts,
     ...(deps.signals === undefined ? {} : { signals: deps.signals }),
   });
+  // B3-03j: the business assembly is built once, with nothing running (no query, no timer).
+  // B3-08k: the context keeps the handle for agent's own stores; content's reads are contentReader.
+  const business = deps.assembly?.({ db: deps.db, clock, logger, scheduler, contentReader });
+  const keptList = business?.keptList;
   const runs = createRunManager({
+    ...(keptList === undefined
+      ? {}
+      : {
+          // B3-08zh: a list kept without a frame switches its batch's chain before the next step.
+          async onUnframedCard(_runId, card) {
+            const receipt = deliveryReceiptOf(card);
+            if (receipt?.kind === 'list') await keptList(receipt.resultSetId);
+          },
+        }),
     admission: pg.admission,
     registry: pg.registry,
     clock,
@@ -426,9 +442,6 @@ export function createAgentStreamRuntime(
       },
     },
   });
-  // B3-03j: the business assembly is built once, with nothing running (no query, no timer).
-  // B3-08k: the context keeps the handle for agent's own stores; content's reads are contentReader.
-  const business = deps.assembly?.({ db: deps.db, clock, logger, scheduler, contentReader });
   const tools = seams?.tools ?? business?.tools ?? emptyOrchestratorTools();
   const runTexts: AgentRunTexts = business?.texts ?? {
     text: async (_appId, key) => agentText(key),

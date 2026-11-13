@@ -187,11 +187,12 @@ export interface RunManagerDeps {
   /** Inject ROOT_LOGGER (or a child) when wiring the stream entry. */
   readonly logger?: Pick<RootLogger, 'error'>;
   /**
-   * B3-08q (only added; BR-AI-19): told of every card frame actually written, with the run id and
-   * the numbered card exactly as written, synchronously after the write and before ctx.card
-   * resolves; never for a card that was not written. A throw is ignored (the run goes on).
+   * B3-08zh (BR-AI-19 细则「助手回复落库」, D10-1361): told of every card kept for the reply without
+   * a frame (the client is gone; no receipt), with the run id and the numbered card, in delivery
+   * order and before ctx.card resolves (awaited, so whatever it records precedes the run's next
+   * step, as a framed card's receipt does). A rejection or throw is ignored (the run goes on).
    */
-  readonly onCardWritten?: (runId: string, card: CardInput) => void;
+  readonly onUnframedCard?: (runId: string, card: CardInput) => Promise<void> | void;
 }
 
 export function runConfigDefaults(): RunConfig {

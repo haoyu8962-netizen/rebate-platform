@@ -108,3 +108,23 @@ it('[AC-B3-03q#5] 没写出的一批不切链；回执记录失败仍切链并�
   void recordQuoted;
   expect(keepsQuoted(createKeywordResults(plain).receipts(() => undefined))).toBe(false);
 });
+
+it('[AC-B3-08zh#7][BR-AI-19] kept：断线后保留的列表即刻切到本批的链（与回执同形），只切一次、不写下发记录；未知结果集不动', async () => {
+  const store = createMemoryResultSetStore();
+  const append = vi.spyOn(store, 'appendChain');
+  const deliver = vi.spyOn(store, 'recordDelivered');
+  const keyword = createKeywordResults(store);
+  const receipts = keyword.receipts(() => undefined);
+  await keyword.kept('unknown-set');
+  expect(append).not.toHaveBeenCalled();
+  await keyword.save(PLAN, ctx(), [list('set-a'), list('set-b')]);
+  await keyword.kept('set-a');
+  expect(await receipts.currentChain?.(APP, SESSION)).toMatchObject({
+    status: 'has_products',
+    conditions: { q: PLAN.q, page: 1 },
+  });
+  await keyword.kept('set-b');
+  await receipts.recordDelivered('set-a', [item('c2')]);
+  expect(append).toHaveBeenCalledTimes(1);
+  expect(deliver).toHaveBeenCalledTimes(1);
+});

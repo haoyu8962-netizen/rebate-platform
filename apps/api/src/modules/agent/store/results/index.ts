@@ -24,10 +24,21 @@
 //     `turns` runs (agent_runs of the app and session, accepted_at desc, id desc, the asking run
 //     excluded) has a delivery in its quoted result set; turns ≤ 0 or a non-UUID session → false.
 //   findDelivered — the session's delivery of a card_id (session-wide unique), any round.
+//     B3-08zh (BR-AI-19 细则「助手回复落库」, BR-AI-05; [AC-B3-08zd#3]): only a delivery whose run
+//     has not ended yet (the asking run itself: admission ends every other run of the session
+//     first) or ended with its reply committed (the terminal transaction always writes the
+//     assistant text, '' at least). A run that ended without its reply — its terminal transaction
+//     rolled back and another request finished it, or a crash — never had its cards committed, so
+//     the delivery records its receipts wrote before the terminal state resolve nothing.
 //   takeOnce — INSERT agent_clarify_asks … ON CONFLICT DO NOTHING RETURNING: one winner per key.
 //   currentChain / appendChain — agent_result_chains, the largest seq is current; appends take
 //     max(seq) + 1 under an advisory lock per session so concurrent appends get 1..N. Invalid
 //     chains are rejected by chainProblem first (the table CHECKs are the backstop).
+//   B3-08zh (BR-AI-22, review r1 S2 ①): save, recordDelivered, recordQuoted and appendChain each
+//     run in ONE transaction that first locks the session row FOR SHARE (exclusive with the
+//     deletion purge's FOR NO KEY UPDATE) and writes nothing when the session is detached from its
+//     user (user_id NULL with user_hash set): a purge committing concurrently is waited for, so no
+//     search term is left behind by a write checked before the purge and inserted after it.
 // createPgAgentTraceWriter — agent_cards / agent_tool_calls records (idempotent by their unique
 // keys; a run outside the given app / session rejects with AgentTraceRejected and writes nothing).
 // B3-05p: each agent_tool_calls row stores its record's initiator ('server' only when the record
@@ -127,6 +138,26 @@ async function advisoryLock(connection: Kysely<DB>, key: readonly string[]): Pro
   await advisoryLockSql(key).execute(connection);
 }
 
+/** The session row as the result writers see it (B3-08zh): who it belongs to now. */
+interface SessionHolder {
+  readonly user_id: string | null;
+  readonly user_hash: string | null;
+}
+
+/**
+ * B3-08zh (BR-AI-22): locks the session row FOR SHARE in `tx` (held until it commits; exclusive
+ * with the purge's FOR NO KEY UPDATE) and tells whether the purge already detached it from its
+ * user. A missing row is not detached (the foreign keys decide as before).
+ */
+async function sessionDetached(tx: Kysely<DB>, appId: string, sessionId: string): Promise<boolean> {
+  if (!isUuid(sessionId)) return false;
+  const { rows } = await sql<SessionHolder>`SELECT user_id::text AS user_id, user_hash
+    FROM app.agent_sessions WHERE app_id = ${appId} AND id = ${sessionId}::uuid
+    FOR SHARE`.execute(tx);
+  const row = rows[0];
+  return row !== undefined && row.user_id === null && row.user_hash !== null;
+}
+
 interface DeliveryOwner {
   readonly app_id: string;
   readonly session_id: string;
@@ -211,16 +242,20 @@ export function createPgResultSetStore(deps: {
       if (run === undefined) {
         throw new Error('save: run not found in this app and session');
       }
-      await db
-        .insertInto('agent_result_sets')
-        .values({
-          id: value.id,
-          app_id: value.appId,
-          run_id: value.runId,
-          conditions: JSON.stringify(value.conditions),
-        })
-        .onConflict((oc) => oc.column('id').doNothing())
-        .execute();
+      await db.transaction().execute(async (tx) => {
+        // B3-08zh: a detached session keeps no search conditions (BR-AI-22).
+        if (await sessionDetached(tx, value.appId, value.sessionId)) return;
+        await tx
+          .insertInto('agent_result_sets')
+          .values({
+            id: value.id,
+            app_id: value.appId,
+            run_id: value.runId,
+            conditions: JSON.stringify(value.conditions),
+          })
+          .onConflict((oc) => oc.column('id').doNothing())
+          .execute();
+      });
     },
 
     async recordDelivered(resultSetId, items) {
@@ -236,6 +271,7 @@ export function createPgResultSetStore(deps: {
           .executeTakeFirst();
         // A receipt for a set never saved has no trusted app/session: it is ignored.
         if (owner === undefined) return;
+        if (await sessionDetached(tx, owner.app_id, owner.session_id)) return;
         await appendDeliveries(tx, owner, resultSetId, items);
       });
     },
@@ -256,6 +292,7 @@ export function createPgResultSetStore(deps: {
         throw new Error('recordQuoted: run not found in this app and session');
       }
       await db.transaction().execute(async (tx) => {
+        if (await sessionDetached(tx, scope.appId, scope.sessionId)) return;
         // One quoted set per run: concurrent first calls insert the same id, one row stays.
         const set = await tx
           .insertInto('agent_result_sets')
@@ -343,13 +380,18 @@ export function createPgResultSetStore(deps: {
 
     async findDelivered(appId, sessionId, cardId) {
       if (!isUuid(sessionId)) return null;
-      const row = await db
-        .selectFrom('agent_result_deliveries')
-        .select(['card_id', 'product_key', 'platform', 'final_price_fen', 'card'])
-        .where('app_id', '=', appId)
-        .where('session_id', '=', sessionId)
-        .where('card_id', '=', cardId)
-        .executeTakeFirst();
+      // B3-08zh: a delivery of a run that ended without its committed reply resolves nothing.
+      const { rows } = await sql<DeliveryRow>`SELECT d.card_id, d.product_key, d.platform,
+          d.final_price_fen, d.card
+        FROM app.agent_result_deliveries d
+        JOIN app.agent_runs r ON r.app_id = d.app_id AND r.id = d.run_id
+        WHERE d.app_id = ${appId} AND d.session_id = ${sessionId}::uuid AND d.card_id = ${cardId}
+          AND (r.final_event IS NULL OR EXISTS (
+            SELECT 1 FROM app.agent_messages m
+            WHERE m.app_id = r.app_id AND m.session_id = r.session_id AND m.run_id = r.id
+              AND m.role = 'assistant' AND m.text IS NOT NULL))
+        LIMIT 1`.execute(deps.db);
+      const row = rows[0];
       return row === undefined ? null : deliveredOf(row);
     },
 
@@ -391,6 +433,8 @@ export function createPgResultSetStore(deps: {
       const problem = chainProblem(chain);
       if (problem !== null) throw new Error(`appendChain: ${problem}`);
       await db.transaction().execute(async (tx) => {
+        // B3-08zh: a detached session gets no new chain conditions (BR-AI-22).
+        if (await sessionDetached(tx, appId, sessionId)) return;
         await advisoryLock(tx, ['agent.result.chains', appId, sessionId]);
         const last = await tx
           .selectFrom('agent_result_chains')
