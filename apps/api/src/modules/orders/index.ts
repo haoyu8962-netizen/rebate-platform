@@ -1,6 +1,9 @@
 // Public surface of the orders module (规划/02 §4.1); other modules import only from this file.
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Transaction } from 'kysely';
+// B1-34q (01 F-ADM-26 ②): sub-orders paid in an accounting day, for admin's workbench aggregation.
+export { countPaidOrders } from './application/paid-order-counts.ts';
+export type { PaidOrderCountRange } from './application/paid-order-counts.ts';
 export { recordOrderRights, adminHoldOrder, adminUnholdOrder } from './application/rights-ports.ts';
 export type {
   RightsRecordResult,

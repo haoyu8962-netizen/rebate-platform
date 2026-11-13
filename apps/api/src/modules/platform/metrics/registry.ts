@@ -10,6 +10,7 @@
 // The three payout failure gauges (B2-09zj) only on the worker, filled by `collectWithdrawalFail`.
 // The empty reply counter (B1-01zzv) only on the stream, filled by `collectAgentReplyEmpty` from
 // agent's in-process counter.
+// The workbench daily row lag gauge (B1-34q) only on the worker, filled by `collectDashboardDayLag`.
 // The text exposition format 0.0.4 is written here from Node built-ins only: the client library
 // cannot be loaded in the test environment (its @opentelemetry/api dependency resolves to an ESM
 // build Node cannot import), so no third-party metrics library is used at runtime.
@@ -22,6 +23,7 @@ import {
 import type { AutoPayoutDailySnapshot } from './auto-payout.ts';
 import type { WorkerCollection, WorkerMetricsSnapshot } from './collect.ts';
 import { CREDIT_POSTCHECK_GAUGE, type CreditPostcheckSnapshot } from './credit-postcheck.ts';
+import { DASHBOARD_DAY_LAG_GAUGE, type DashboardDayLagSnapshot } from './dashboard-day-lag.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
 import { pddServiceFeeMissingTotal } from './pdd-service-fee.ts';
 import { serviceFeeMissingSamples } from './service-fee-missing.ts';
@@ -59,6 +61,8 @@ export interface MetricsRegistryOptions {
   readonly collectCreditPostcheck?: () => Promise<CreditPostcheckSnapshot>;
   /** The payout failure gauges (B2-09zj). Used only on 'worker'; called once per render(). */
   readonly collectWithdrawalFail?: () => Promise<WithdrawalFailSnapshot>;
+  /** The workbench daily row lag gauge (B1-34q). Used only on 'worker'; called once per render(). */
+  readonly collectDashboardDayLag?: () => Promise<DashboardDayLagSnapshot>;
   /** couli_taobao_search_total (B1-04zy). Used only on 'api', never 'worker'; once per render(). */
   readonly collectTaobaoSearch?: () => TaobaoSearchMetricsSnapshot;
 }
@@ -428,6 +432,21 @@ function withdrawalFailFamilies(snapshot: WithdrawalFailSnapshot): Family[] {
   }));
 }
 
+/** The workbench daily row lag gauge (B1-34q): only this snapshot's app_ids, none made up. */
+function dashboardDayLagFamilies(snapshot: DashboardDayLagSnapshot): Family[] {
+  return [
+    {
+      name: DASHBOARD_DAY_LAG_GAUGE.name,
+      help: DASHBOARD_DAY_LAG_GAUGE.help,
+      type: 'gauge',
+      samples: Object.entries(snapshot.lagDays).map(([appId, value]) => ({
+        labels: { [DASHBOARD_DAY_LAG_GAUGE.label]: appId },
+        value,
+      })),
+    },
+  ];
+}
+
 /** The review overdue gauge (B2-05o): always exported, 0 included (the rule compares with > 0). */
 function reviewOverdueFamilies(snapshot: ReviewOverdueSnapshot): Family[] {
   return [
@@ -476,6 +495,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
   const collectWaterStale = worker ? options.collectWaterStale : undefined;
   const collectCreditPostcheck = worker ? options.collectCreditPostcheck : undefined;
   const collectWithdrawalFail = worker ? options.collectWithdrawalFail : undefined;
+  const collectDashboardDayLag = worker ? options.collectDashboardDayLag : undefined;
   const collectTaobaoSearch = options.entry === 'api' ? options.collectTaobaoSearch : undefined;
   const collectAgentReplyEmpty =
     options.entry === 'stream' ? options.collectAgentReplyEmpty : undefined;
@@ -495,6 +515,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         waterStale,
         creditPostcheck,
         withdrawalFail,
+        dashboardDayLag,
       ] = await Promise.all([
         collect === undefined ? [] : collect().then(businessFamilies),
         collectFund === undefined ? [] : collectFund().then(fundFamilies),
@@ -519,6 +540,9 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         collectWithdrawalFail === undefined
           ? []
           : Promise.resolve().then(collectWithdrawalFail).then(withdrawalFailFamilies),
+        collectDashboardDayLag === undefined
+          ? []
+          : Promise.resolve().then(collectDashboardDayLag).then(dashboardDayLagFamilies),
       ]);
       const taobaoSearch =
         collectTaobaoSearch === undefined ? [] : taobaoSearchFamilies(collectTaobaoSearch());
@@ -536,6 +560,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...waterStale,
         ...creditPostcheck,
         ...withdrawalFail,
+        ...dashboardDayLag,
         ...taobaoSearch,
         ...agentReplyEmpty,
         pddServiceFeeFamily(),

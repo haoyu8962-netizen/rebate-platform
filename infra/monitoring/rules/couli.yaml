@@ -5,6 +5,8 @@
 # Sources of the metrics:
 # - couli_queue_* / couli_evt_* / couli_sync_*: the worker's internal /metrics listener
 #   (METRICS_PORT; apps/api/src/modules/platform/metrics), whole-database gauges read per scrape.
+# - couli_admin_dashboard_day_lag_days: the worker's /metrics listener as well (B1-34q,
+#   platform/metrics/dashboard-day-lag.ts), one sample per app with an admin account, cached 60s.
 # - couli_taobao_search_total: the api's internal /metrics listener (METRICS_PORT), a counter of
 #   that process; the worker does not export it.
 # - redis_*: redis_exporter (deployment and Alertmanager routing are not in this file, B1-25).
@@ -114,3 +116,13 @@ groups:
         annotations:
           summary: 'Agent runs of {{ $labels.app_id }} ended over 24 hours ago without their card trace'
           description: 'Runs that emitted cards yet have no card rows 24 hours after they ended (erased sessions are not counted; BR-AI-19, B3-08z). Read by the worker from agent_runs and agent_cards at scrape time.'
+  - name: couli-admin
+    rules:
+      - alert: CouliAdminDashboardDayLag
+        expr: 'couli_admin_dashboard_day_lag_days > 0'
+        for: '50m'
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Workbench yesterday overview of {{ $labels.app_id }} is not aggregated'
+          description: 'Days between the newest due accounting day and the newest admin_dashboard_days row (B1-34q, 01 F-ADM-26). D falls due at D+1 00:10 +08:00 and the worker tick writes it within a minute, so 1 is normal for a few minutes after 00:10; held 50 minutes, the rule fires when yesterday is still missing at about D+1 01:00 +08:00. 7 means the app has no row at all. See the admin_dashboard_day_failed error lines (app_id, stat_date, error_name) of the worker.'

@@ -148,6 +148,8 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
     'couli-union',
     // B3-08za（D10-1060 / D10-1087）：Agent trace 缺失告警自成一组，追加在最后。
     'couli-agent',
+    // B1-34q（D10-1464 ①）：工作台昨日汇总落后天数告警自成一组，追加在最后。
+    'couli-admin',
   ]);
   // B1-04zy adds the Taobao search fallback alert in a group of its own, after the others. Its
   // window, threshold and hold are not this file's: [AC-B1-04zy#58] pins the expression's shape.
@@ -191,6 +193,14 @@ it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名
       alert: 'CouliAgentTraceMissing',
       expr: 'couli_agent_trace_missing_runs > 0',
       for: '5m',
+      labels: { severity: 'warning' },
+    },
+    // B1-34q（D10-1464 ①）：couli-admin 组的工作台昨日汇总落后天数告警。
+    {
+      group: 'couli-admin',
+      alert: 'CouliAdminDashboardDayLag',
+      expr: 'couli_admin_dashboard_day_lag_days > 0',
+      for: '50m',
       labels: { severity: 'warning' },
     },
   ]);

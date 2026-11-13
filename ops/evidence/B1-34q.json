@@ -1,0 +1,136 @@
+{
+  "risk_note": "RV2 admin + settlement read (B1-34q; BR-TEXT-21, BR-FUND-18, BR-CALC-02, BR-FUND-01; D10-1401, D10-1403, D10-1464, D10-1494). Workbench 「昨日汇总」: migration 0141 (renamed from 0140, which went to CT-13e, D10-1494) adds app.admin_dashboard_days (PK app_id + stat_date; links, orders, est_rebate_fen, new_users ≥ 0; as_of; grants in the same migration) and indexes orders(app_id, paid_at), users(app_id, created_at), link_logs(app_id, created_at) (plain CREATE INDEX in the migration transaction as 0132; lock_timeout 5 s, statement_timeout 5 min; the header states the write lock on the three tables while building). aggregateDashboardDay reads the four numbers in one REPEATABLE READ read-only snapshot, as_of taken at the snapshot (money r1 S0), through the new exports of linking / orders / identity and settlement's estimatedForPaidRange (the wallet's own pricing: settle commission if not null else estimate, open rights deductions first, reserve_bp and Taolijin deduction, per-beneficiary floor, forfeited shares excluded; selection ESTIMATED and platform_status ≠ DEPOSIT_PAID, D10-1403 Q1). The worker tick (60 s) fills missing due days (D due at D+1 00:10 +08:00, last 7) with INSERT … ON CONFLICT DO NOTHING (money r1 S1); explicit re-aggregation overwrites. readDashboardYesterday returns the newest row not later than yesterday, or null. Lag gauge couli_admin_dashboard_day_lag_days (worker, per app with an admin account; 7 when no row) and alert CouliAdminDashboardDayLag (> 0 for 50m; see plan §3). Commits reordered (as D10-1482): the five test(spec) commits first, then the four implementation commits; final tree identical to the reviewed head. The comment in test/spec/admin/dashboard-yesterday/kit.ts still says 0140 (left as is: the rule test is committed).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium. r1 (base the branch point) fail: S0 the four numbers and as_of not one snapshot; S1 two workers' ticks overwrite a written row. Both fixed in the r3 implementation (one REPEATABLE READ read-only transaction shared by the four sources, as_of at the snapshot; tick INSERT … ON CONFLICT DO NOTHING, explicit re-aggregation overwrites). r2 (increment from the lag-gauge commit) pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by a fresh independent Claude (in-session Opus subagent of the desktop lane, D10-1448; the first run on the terminal account was cut by 403 and not counted). Codex spec-test r1 fail, 3 S1 (floor vs round invisible; settle_commission_fen = 0 must not fall back to the estimate; negative commission / Taolijin deduction above the base must give 0) → second write #18–#20; r2 pass. Lag gauge tests #21–#23 (D10-1464 ①): r3 (increment) pass. The two frozen alert tests (ledger #34): r4 (increment 992f1f1cd..56e1848fb) pass, confirming the modify_existing of [AC-B1-01zzo#10] (only the couli-admin group and rule appended) and both red_exempt rows of [AC-B1-25b#8] with red_exempt_outside (only collectDashboardDayLag added to the registry fixture outside the test bodies). The kit.ts change to a dynamic import of the test database (depcruise testcontainers-only-in-int-tests) is mechanical and not counted."
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/metrics-followups/rules.test.ts",
+      "test": "[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名、表达式、for 与标签与 B1-01zzh 一致，只有拒绝写入一条的窗口变成 [10m]，couli-sync 组另加 CouliPddServiceFeeMissing 一条",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名、表达式、for 与标签与 B1-01zzh 一致，只有拒绝写入一条的窗口变成 [10m]，couli-sync 组另加 CouliPddServiceFeeMissing 一条', () => {\n  const all = rules();\n  const lastSync = EXPECTED.findIndex((rule) => rule.alert === 'CouliSyncWatermarkLag');\n  expect([...new Set(all.map((rule) => rule.group))]).toEqual([\n    'couli-queue',\n    'couli-sync',\n    'couli-redis',\n    'couli-union',\n    // B3-08za（D10-1060 / D10-1087）：Agent trace 缺失告警自成一组，追加在最后。\n    'couli-agent',\n  ]);\n  // B1-04zy adds the Taobao search fallback alert in a group of its own, after the others. Its\n  // window, threshold and hold are not this file's: [AC-B1-04zy#58] pins the expression's shape.\n  const fallbackAlert = {\n    group: 'couli-union',\n    alert: 'CouliTaobaoSearchFallbackHigh',\n    expr: expect.stringContaining('couli_taobao_search_total'),\n    for: expect.stringMatching(/^[1-9][0-9]*[smh]$/),\n    labels: { severity: 'warning' },\n  };\n  expect(\n    all.map(({ group, alert, expr, for: holdFor, labels }) => ({\n      group,\n      alert,\n      expr,\n      for: holdFor,\n      labels,\n    })),\n  ).toEqual([\n    ...EXPECTED.slice(0, lastSync + 1),\n    {\n      group: 'couli-sync',\n      alert: 'CouliPddServiceFeeMissing',\n      expr: 'increase(couli_pdd_service_fee_missing_total[1h]) > 0',\n      for: '5m',\n      labels: { severity: 'warning' },\n    },\n    // B1-08zy（D10-1003）：couli-sync 组在 CouliPddServiceFeeMissing 之后追加按 platform 分组的新告警。\n    {\n      group: 'couli-sync',\n      alert: 'CouliServiceFeeMissing',\n      expr: 'sum by (platform) (increase(couli_service_fee_missing_total[1h])) > 0',\n      for: '5m',\n      labels: { severity: 'warning' },\n    },\n    ...EXPECTED.slice(lastSync + 1),\n    fallbackAlert,\n    // B3-08za（D10-1060 / D10-1087）：couli-agent 组的 Agent trace 缺失告警（运维类，夜间静默）。\n    {\n      group: 'couli-agent',\n      alert: 'CouliAgentTraceMissing',\n      expr: 'couli_agent_trace_missing_runs > 0',\n      for: '5m',\n      labels: { severity: 'warning' },\n    },\n  ]);\n  for (const rule of all) {\n    const summary = rule.annotations['summary'];\n    expect(summary, `${rule.alert}.annotations.summary`).toEqual(expect.any(String));\n    expect((summary as string).trim().length, `${rule.alert} summary`).toBeGreaterThan(0);\n  }\n});",
+      "after": "it('[AC-B1-01zzo#10] couli.yaml 其余规则不变：分组、顺序、alert 名、表达式、for 与标签与 B1-01zzh 一致，只有拒绝写入一条的窗口变成 [10m]，couli-sync 组另加 CouliPddServiceFeeMissing 一条', () => {\n  const all = rules();\n  const lastSync = EXPECTED.findIndex((rule) => rule.alert === 'CouliSyncWatermarkLag');\n  expect([...new Set(all.map((rule) => rule.group))]).toEqual([\n    'couli-queue',\n    'couli-sync',\n    'couli-redis',\n    'couli-union',\n    // B3-08za（D10-1060 / D10-1087）：Agent trace 缺失告警自成一组，追加在最后。\n    'couli-agent',\n    // B1-34q（D10-1464 ①）：工作台昨日汇总落后天数告警自成一组，追加在最后。\n    'couli-admin',\n  ]);\n  // B1-04zy adds the Taobao search fallback alert in a group of its own, after the others. Its\n  // window, threshold and hold are not this file's: [AC-B1-04zy#58] pins the expression's shape.\n  const fallbackAlert = {\n    group: 'couli-union',\n    alert: 'CouliTaobaoSearchFallbackHigh',\n    expr: expect.stringContaining('couli_taobao_search_total'),\n    for: expect.stringMatching(/^[1-9][0-9]*[smh]$/),\n    labels: { severity: 'warning' },\n  };\n  expect(\n    all.map(({ group, alert, expr, for: holdFor, labels }) => ({\n      group,\n      alert,\n      expr,\n      for: holdFor,\n      labels,\n    })),\n  ).toEqual([\n    ...EXPECTED.slice(0, lastSync + 1),\n    {\n      group: 'couli-sync',\n      alert: 'CouliPddServiceFeeMissing',\n      expr: 'increase(couli_pdd_service_fee_missing_total[1h]) > 0',\n      for: '5m',\n      labels: { severity: 'warning' },\n    },\n    // B1-08zy（D10-1003）：couli-sync 组在 CouliPddServiceFeeMissing 之后追加按 platform 分组的新告警。\n    {\n      group: 'couli-sync',\n      alert: 'CouliServiceFeeMissing',\n      expr: 'sum by (platform) (increase(couli_service_fee_missing_total[1h])) > 0',\n      for: '5m',\n      labels: { severity: 'warning' },\n    },\n    ...EXPECTED.slice(lastSync + 1),\n    fallbackAlert,\n    // B3-08za（D10-1060 / D10-1087）：couli-agent 组的 Agent trace 缺失告警（运维类，夜间静默）。\n    {\n      group: 'couli-agent',\n      alert: 'CouliAgentTraceMissing',\n      expr: 'couli_agent_trace_missing_runs > 0',\n      for: '5m',\n      labels: { severity: 'warning' },\n    },\n    // B1-34q（D10-1464 ①）：couli-admin 组的工作台昨日汇总落后天数告警。\n    {\n      group: 'couli-admin',\n      alert: 'CouliAdminDashboardDayLag',\n      expr: 'couli_admin_dashboard_day_lag_days > 0',\n      for: '50m',\n      labels: { severity: 'warning' },\n    },\n  ]);\n  for (const rule of all) {\n    const summary = rule.annotations['summary'];\n    expect(summary, `${rule.alert}.annotations.summary`).toEqual(expect.any(String));\n    expect((summary as string).trim().length, `${rule.alert} summary`).toBeGreaterThan(0);\n  }\n});",
+      "mutation": [
+        {
+          "mutant": "infra/monitoring/rules/couli.yaml: CouliAdminDashboardDayLag for '50m' changed to '10m'",
+          "result": "killed"
+        }
+      ],
+      "note": "Only the couli-admin group and the CouliAdminDashboardDayLag rule appended at the end of the two expected lists (as B3-08za appended couli-agent); every other assertion unchanged (ledger #34, D10-1464 ①). Mutant run on the test machine with verify-container.sh --tests on a copy of head 4610719ef (couli-runs/B1-34q/tests): red at rules.test.ts:171 (the rule list), green unmutated (verify:fast on the same tree, 01:36)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B1-34q",
+  "spec_commit": "83c8ad237588489aace91edbcdba5b897276f60c",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "red_tests": [
+    "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#1] F-ADM-26 ② 转链数：本 app、event=convert、created_at ∈ [D 00:00, D+1 00:00) +08:00",
+    "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#2] F-ADM-26 ② 成交订单数：paid_at 落在 D 的子订单，不看现状态（之后作废、扣回、未归属也计）",
+    "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#3] F-ADM-26 ② 新增用户数：created_at 落在 D 的 users 行，已注销（status=deleted）的也计",
+    "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#4] D10-1403：没有任何数据的 app 也写一行，四个数为真 0、as_of 为聚合时刻；没聚合的日子没有行",
+    "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#5] BR-CALC-02 份额计价：多受益人、结算佣金覆盖预估、forfeited、淘礼金扣减、未结维权扣减、取整",
+    "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#6] F-ADM-26 ② ≠DEPOSIT_PAID：ESTIMATED + RECEIVED 计入（钱包 estimated_fen 限 =PAID，不计；两者在此不同）",
+    "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#7] BR-TEXT-21 ESTIMATED：DEPOSIT_PAID、WAITING、CREDITED、VOID、UNATTRIBUTED、CLAWED_BACK 不计",
+    "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#8] F-ADM-26 ② 只取 paid_at 落在 D（+08:00）的本 app 子订单：首尾毫秒计入，相邻两天与别的 app 不计",
+    "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#18] BR-CALC-02 / BR-CALC-08 取整：预留后与各份额都向下取整到分，不四舍五入",
+    "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#19] BR-CALC-02 有效佣金：settle_commission_fen=0 非空即取 0，不退回预估；预估再变、重聚合仍为 0",
+    "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#20] BR-CALC-02 基数下限 0：有效佣金为负或 0、淘礼金扣减等于或超过预留后金额的单贡献 0，汇总照写",
+    "test/spec/admin/dashboard-yesterday/lag.int.test.ts > [AC-B1-34q#21] 落后天数：最新一行比最近到期日早 3 天时为 3（中间的空洞不另算），补齐到最近到期日后回 0",
+    "test/spec/admin/dashboard-yesterday/lag.int.test.ts > [AC-B1-34q#22] 到期边界 D+1 00:10:00 +08:00：最新一行为 06-14 时，06-16 00:09:59.999 为 0，00:10:00.000 为 1",
+    "test/spec/admin/dashboard-yesterday/lag.int.test.ts > [AC-B1-34q#23] 每个有后台账号的 app 各一个值、互不串：落后 2、追平 0、一行都没有按窗口 7；无后台账号的 app 没有值",
+    "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#14] 有昨天（accountingDate(now) 的前一天）那行就返回它：date、四个数与 as_of 照存",
+    "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#15] 昨天按 now 的 +08:00 会计日取：06-15 23:59:59.999 读 06-14 的行，06-16 00:00:00.000 读 06-15 的行",
+    "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#16] 没有昨天那行：返回不晚于昨天的最新一行，date 与 as_of 如实；今天及以后的行不返回",
+    "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#17] 一行都没有返回 null，别的 app 的行不读；聚合过的空 app 返回真 0 行而不是 null",
+    "test/spec/admin/dashboard-yesterday/rerun.int.test.ts > [AC-B1-34q#9] 聚合后订单状态再变、数据再增，已存的行不变；重跑按新的聚合时刻覆盖四个数与 as_of，不新增行",
+    "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#10] D 在 D+1 00:10:00 +08:00 到期：00:09:59.999 的 tick 不聚合 D（聚合 D−1），00:10:00 的 tick 聚合 D",
+    "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#11] app 列表取有后台账号（admin_users）的 app：没有后台账号的 app 不写；有账号无数据的 app 写全 0 行",
+    "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#12] 窗口为最近 7 个到期日：缺哪天补哪天、从最早的缺口开始；已有的行不重算；窗口外的缺口不补",
+    "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#13] 一个 app 失败不挡其他 app：失败写错误日志 admin_dashboard_day_failed，只带 app_id、日期、错误类别"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "83c8ad237588489aace91edbcdba5b897276f60c",
+      "tree": "ce756bf9e716e6eb417258fae0e4b71cd677c857",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T17:42:17Z",
+      "finished_at": "2026-11-13T17:42:27Z",
+      "red_tests": [
+        "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#1] F-ADM-26 ② 转链数：本 app、event=convert、created_at ∈ [D 00:00, D+1 00:00) +08:00",
+        "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#2] F-ADM-26 ② 成交订单数：paid_at 落在 D 的子订单，不看现状态（之后作废、扣回、未归属也计）",
+        "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#3] F-ADM-26 ② 新增用户数：created_at 落在 D 的 users 行，已注销（status=deleted）的也计",
+        "test/spec/admin/dashboard-yesterday/counts.int.test.ts > [AC-B1-34q#4] D10-1403：没有任何数据的 app 也写一行，四个数为真 0、as_of 为聚合时刻；没聚合的日子没有行",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#5] BR-CALC-02 份额计价：多受益人、结算佣金覆盖预估、forfeited、淘礼金扣减、未结维权扣减、取整",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#6] F-ADM-26 ② ≠DEPOSIT_PAID：ESTIMATED + RECEIVED 计入（钱包 estimated_fen 限 =PAID，不计；两者在此不同）",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#7] BR-TEXT-21 ESTIMATED：DEPOSIT_PAID、WAITING、CREDITED、VOID、UNATTRIBUTED、CLAWED_BACK 不计",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#8] F-ADM-26 ② 只取 paid_at 落在 D（+08:00）的本 app 子订单：首尾毫秒计入，相邻两天与别的 app 不计",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#18] BR-CALC-02 / BR-CALC-08 取整：预留后与各份额都向下取整到分，不四舍五入",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#19] BR-CALC-02 有效佣金：settle_commission_fen=0 非空即取 0，不退回预估；预估再变、重聚合仍为 0",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts > [AC-B1-34q#20] BR-CALC-02 基数下限 0：有效佣金为负或 0、淘礼金扣减等于或超过预留后金额的单贡献 0，汇总照写",
+        "test/spec/admin/dashboard-yesterday/lag.int.test.ts > [AC-B1-34q#21] 落后天数：最新一行比最近到期日早 3 天时为 3（中间的空洞不另算），补齐到最近到期日后回 0",
+        "test/spec/admin/dashboard-yesterday/lag.int.test.ts > [AC-B1-34q#22] 到期边界 D+1 00:10:00 +08:00：最新一行为 06-14 时，06-16 00:09:59.999 为 0，00:10:00.000 为 1",
+        "test/spec/admin/dashboard-yesterday/lag.int.test.ts > [AC-B1-34q#23] 每个有后台账号的 app 各一个值、互不串：落后 2、追平 0、一行都没有按窗口 7；无后台账号的 app 没有值",
+        "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#14] 有昨天（accountingDate(now) 的前一天）那行就返回它：date、四个数与 as_of 照存",
+        "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#15] 昨天按 now 的 +08:00 会计日取：06-15 23:59:59.999 读 06-14 的行，06-16 00:00:00.000 读 06-15 的行",
+        "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#16] 没有昨天那行：返回不晚于昨天的最新一行，date 与 as_of 如实；今天及以后的行不返回",
+        "test/spec/admin/dashboard-yesterday/read.int.test.ts > [AC-B1-34q#17] 一行都没有返回 null，别的 app 的行不读；聚合过的空 app 返回真 0 行而不是 null",
+        "test/spec/admin/dashboard-yesterday/rerun.int.test.ts > [AC-B1-34q#9] 聚合后订单状态再变、数据再增，已存的行不变；重跑按新的聚合时刻覆盖四个数与 as_of，不新增行",
+        "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#10] D 在 D+1 00:10:00 +08:00 到期：00:09:59.999 的 tick 不聚合 D（聚合 D−1），00:10:00 的 tick 聚合 D",
+        "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#11] app 列表取有后台账号（admin_users）的 app：没有后台账号的 app 不写；有账号无数据的 app 写全 0 行",
+        "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#12] 窗口为最近 7 个到期日：缺哪天补哪天、从最早的缺口开始；已有的行不重算；窗口外的缺口不补",
+        "test/spec/admin/dashboard-yesterday/tick.int.test.ts > [AC-B1-34q#13] 一个 app 失败不挡其他 app：失败写错误日志 admin_dashboard_day_failed，只带 app_id、日期、错误类别"
+      ],
+      "expected": [
+        "test/spec/admin/dashboard-yesterday/counts.int.test.ts",
+        "test/spec/admin/dashboard-yesterday/est-rebate.int.test.ts",
+        "test/spec/admin/dashboard-yesterday/lag.int.test.ts",
+        "test/spec/admin/dashboard-yesterday/read.int.test.ts",
+        "test/spec/admin/dashboard-yesterday/rerun.int.test.ts",
+        "test/spec/admin/dashboard-yesterday/tick.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "5612783ca4b1a3e4fc0ab2728ef8388feab209dcec44aebd58256e670b2c7d27"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6b93d0ad90fc77059a8524a206047417ee3215a3",
+    "specs": "178edfb25fe89c968a1e78d4ab0963c3a18100bc"
+  }
+}

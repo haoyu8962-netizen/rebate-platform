@@ -1,5 +1,5 @@
 import type { DB } from '@couli/db';
-import type { Transaction } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { expectedSettlementCredit } from '@couli/domain';
 import { addFen, subFen } from '@couli/money';
 import type { Clock } from '../../platform/index.ts';
@@ -57,6 +57,23 @@ export interface PendingEarningsSource {
     input: { readonly appId: string; readonly userId: string },
   ): Promise<UserPendingEarnings>;
   forApp(trx: Transaction<DB>, input: { readonly appId: string }): Promise<AppPendingEarnings>;
+}
+
+/** B1-34q：按 paid_at 区间取一个 app 的子订单，[start, end) 为带偏移的 ISO 时刻（chinaDayRange）。 */
+export interface PaidRangeInput {
+  readonly appId: string;
+  readonly start: string;
+  readonly end: string;
+}
+
+/**
+ * B1-34q（01 F-ADM-26 ② 预估返利合计；BR-TEXT-21 ESTIMATED；D10-1403 Q1）：paid_at 落在区间内、
+ * 读取时刻仍 rebate_status=ESTIMATED 且 platform_status≠DEPOSIT_PAID 的子订单的受益人份额合计
+ * （不含平台预留与留存）。计价与钱包同一套（priceOrders）；与钱包 estimated_fen 的差别只在
+ * 平台状态：钱包限 =PAID，这里含 RECEIVED / SETTLED 等仍停在 ESTIMATED 的单（BR-FUND-01 R4 守卫）。
+ */
+export interface PaidRangeEstimateSource {
+  estimatedForPaidRange(trx: Transaction<DB>, input: PaidRangeInput): Promise<bigint>;
 }
 
 export interface PendingEarningsDependencies {
@@ -133,6 +150,39 @@ async function selectPendingOrders(
 }
 
 /**
+ * 只读（B1-34q）：本 app paid_at ∈ [start, end) 且仍 ESTIMATED、平台状态不是 DEPOSIT_PAID 的子订单，
+ * 按 order_id 稳定排序。列与 selectPendingOrders 相同，计价走同一个 priceOrders。
+ */
+async function selectPaidRangeEstimatedOrders(
+  trx: Transaction<DB>,
+  input: PaidRangeInput,
+): Promise<PendingOrderRow[]> {
+  return trx
+    .withSchema('app')
+    .selectFrom('orders')
+    .select([
+      'order_id',
+      'platform',
+      'platform_status',
+      'rebate_status',
+      'hold',
+      'rights_pending',
+      'settle_period',
+      'union_settled_at',
+      'est_commission_fen',
+      'settle_commission_fen',
+      'commission_version',
+    ])
+    .where('app_id', '=', input.appId)
+    .where('paid_at', '>=', sql<Date>`${input.start}::timestamptz`)
+    .where('paid_at', '<', sql<Date>`${input.end}::timestamptz`)
+    .where('rebate_status', '=', 'ESTIMATED')
+    .where('platform_status', '<>', 'DEPOSIT_PAID')
+    .orderBy('order_id')
+    .execute();
+}
+
+/**
  * B2-03r（BR-FUND-18、D10-474 ①、D10-483）：预估中订单的 N 减未关闭应扣，下限 0，与 R5 入账同一写法；
  * 没有未关闭应扣时原样返回（负数、null 都不动）。CREDITED 不走这里。
  */
@@ -145,7 +195,7 @@ export function netOfOpenDeduction(nFen: bigint | null, openFen: bigint): bigint
 /** BR-FUND-18：只读调用方事务，时间取 Clock，日期计算交给 domain。 */
 export function createPendingEarningsSource(
   deps: PendingEarningsDependencies,
-): PendingEarningsSource {
+): PendingEarningsSource & PaidRangeEstimateSource {
   /** 单次读取内按 (app, key) 复用配置值；不跨调用缓存，读取总是反映调用方事务的现态。 */
   function configReader(appId: string): (key: string) => Promise<unknown> {
     const cache = new Map<string, Promise<unknown>>();
@@ -160,8 +210,11 @@ export function createPendingEarningsSource(
   }
 
   /** BR-CALC-02：份额按有效联盟佣金（结算优先）与快照的预留比例、淘礼金扣减、受益比例重算。 */
-  async function priceOrders(trx: Transaction<DB>, appId: string): Promise<PricedOrder[]> {
-    const rows = await selectPendingOrders(trx, appId);
+  async function priceOrders(
+    trx: Transaction<DB>,
+    appId: string,
+    rows: readonly PendingOrderRow[],
+  ): Promise<PricedOrder[]> {
     const open = await readOpenDeductionTotals(
       trx,
       appId,
@@ -198,7 +251,7 @@ export function createPendingEarningsSource(
       const { appId, userId } = input;
       const config = configReader(appId);
       const now = deps.clock.now();
-      const orders = await priceOrders(trx, appId);
+      const orders = await priceOrders(trx, appId, await selectPendingOrders(trx, appId));
       let estimated = 0n;
       let pending = 0n;
       let paused = 0n;
@@ -262,7 +315,11 @@ export function createPendingEarningsSource(
     },
 
     async forApp(trx, input) {
-      const orders = await priceOrders(trx, input.appId);
+      const orders = await priceOrders(
+        trx,
+        input.appId,
+        await selectPendingOrders(trx, input.appId),
+      );
       let waiting = 0n;
       let estimated = 0n;
       for (const order of orders) {
@@ -271,6 +328,20 @@ export function createPendingEarningsSource(
         else estimated = addFen(estimated, amount);
       }
       return { total_waiting_fen: waiting, total_estimated_fen: estimated };
+    },
+
+    async estimatedForPaidRange(trx, input) {
+      // 受益人份额（被剥夺的已在 splitPendingShares 里归平台、不出现在 shares 中）逐单相加。
+      const orders = await priceOrders(
+        trx,
+        input.appId,
+        await selectPaidRangeEstimatedOrders(trx, input),
+      );
+      let total = 0n;
+      for (const order of orders) {
+        for (const share of order.shares) total = addFen(total, share.amountFen);
+      }
+      return total;
     },
   };
 }

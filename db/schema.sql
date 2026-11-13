@@ -2428,6 +2428,27 @@ END)),
 
 
 --
+-- Name: admin_dashboard_days; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.admin_dashboard_days (
+    app_id text NOT NULL,
+    stat_date date NOT NULL,
+    links bigint NOT NULL,
+    orders bigint NOT NULL,
+    est_rebate_fen bigint NOT NULL,
+    new_users bigint NOT NULL,
+    as_of timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT admin_dashboard_days_est_rebate_fen_check CHECK ((est_rebate_fen >= 0)),
+    CONSTRAINT admin_dashboard_days_links_check CHECK ((links >= 0)),
+    CONSTRAINT admin_dashboard_days_new_users_check CHECK ((new_users >= 0)),
+    CONSTRAINT admin_dashboard_days_orders_check CHECK ((orders >= 0))
+);
+
+
+--
 -- Name: admin_permissions; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -7150,6 +7171,14 @@ ALTER TABLE ONLY app.admin_adjustments
 
 
 --
+-- Name: admin_dashboard_days admin_dashboard_days_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.admin_dashboard_days
+    ADD CONSTRAINT admin_dashboard_days_pkey PRIMARY KEY (app_id, stat_date);
+
+
+--
 -- Name: admin_permissions admin_permissions_admin_permission_key; Type: CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -9911,6 +9940,20 @@ CREATE INDEX level_change_logs_user_effective_idx ON app.level_change_logs USING
 
 
 --
+-- Name: link_logs_created_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX link_logs_created_idx ON ONLY app.link_logs USING btree (app_id, created_at);
+
+
+--
+-- Name: link_logs_default_app_id_created_at_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX link_logs_default_app_id_created_at_idx ON app.link_logs_default USING btree (app_id, created_at);
+
+
+--
 -- Name: link_logs_link_created_idx; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -10062,6 +10105,20 @@ CREATE INDEX orders_link_idx ON ONLY app.orders USING btree (app_id, link_id);
 --
 
 CREATE INDEX orders_default_app_id_link_id_idx ON app.orders_default USING btree (app_id, link_id);
+
+
+--
+-- Name: orders_paid_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX orders_paid_idx ON ONLY app.orders USING btree (app_id, paid_at);
+
+
+--
+-- Name: orders_default_app_id_paid_at_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX orders_default_app_id_paid_at_idx ON app.orders_default USING btree (app_id, paid_at);
 
 
 --
@@ -10688,6 +10745,13 @@ CREATE INDEX user_risk_state_state_idx ON app.user_risk_state USING btree (app_i
 
 
 --
+-- Name: users_created_idx; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE INDEX users_created_idx ON app.users USING btree (app_id, created_at);
+
+
+--
 -- Name: users_phone_hmac_key; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -10877,6 +10941,13 @@ ALTER INDEX app.ledger_entries_pkey ATTACH PARTITION app.ledger_entries_default_
 
 
 --
+-- Name: link_logs_default_app_id_created_at_idx; Type: INDEX ATTACH; Schema: app; Owner: -
+--
+
+ALTER INDEX app.link_logs_created_idx ATTACH PARTITION app.link_logs_default_app_id_created_at_idx;
+
+
+--
 -- Name: link_logs_default_app_id_link_id_created_at_idx; Type: INDEX ATTACH; Schema: app; Owner: -
 --
 
@@ -10895,6 +10966,13 @@ ALTER INDEX app.link_logs_pkey ATTACH PARTITION app.link_logs_default_pkey;
 --
 
 ALTER INDEX app.orders_link_idx ATTACH PARTITION app.orders_default_app_id_link_id_idx;
+
+
+--
+-- Name: orders_default_app_id_paid_at_idx; Type: INDEX ATTACH; Schema: app; Owner: -
+--
+
+ALTER INDEX app.orders_paid_idx ATTACH PARTITION app.orders_default_app_id_paid_at_idx;
 
 
 --
@@ -13303,6 +13381,56 @@ GRANT UPDATE(voucher_id) ON TABLE app.admin_adjustments TO couli_app;
 --
 
 GRANT UPDATE(row_version) ON TABLE app.admin_adjustments TO couli_app;
+
+
+--
+-- Name: TABLE admin_dashboard_days; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.admin_dashboard_days TO couli_app;
+GRANT SELECT ON TABLE app.admin_dashboard_days TO couli_readonly;
+
+
+--
+-- Name: COLUMN admin_dashboard_days.links; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(links) ON TABLE app.admin_dashboard_days TO couli_app;
+
+
+--
+-- Name: COLUMN admin_dashboard_days.orders; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(orders) ON TABLE app.admin_dashboard_days TO couli_app;
+
+
+--
+-- Name: COLUMN admin_dashboard_days.est_rebate_fen; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(est_rebate_fen) ON TABLE app.admin_dashboard_days TO couli_app;
+
+
+--
+-- Name: COLUMN admin_dashboard_days.new_users; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(new_users) ON TABLE app.admin_dashboard_days TO couli_app;
+
+
+--
+-- Name: COLUMN admin_dashboard_days.as_of; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(as_of) ON TABLE app.admin_dashboard_days TO couli_app;
+
+
+--
+-- Name: COLUMN admin_dashboard_days.updated_at; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(updated_at) ON TABLE app.admin_dashboard_days TO couli_app;
 
 
 --

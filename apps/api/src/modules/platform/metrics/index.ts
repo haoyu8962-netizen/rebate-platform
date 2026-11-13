@@ -38,6 +38,13 @@ export { cacheCreditPostcheckCollector } from './credit-postcheck.ts';
 export type { CreditPostcheckSnapshot } from './credit-postcheck.ts';
 export { cacheWithdrawalFailCollector } from './withdrawal-fail.ts';
 export type { WithdrawalFailSnapshot } from './withdrawal-fail.ts';
+// B1-34q (D10-1464 ①): the workbench daily row lag gauge.
+export {
+  cacheDashboardDayLagCollector,
+  collectDashboardDayLag,
+  readDashboardDayLag,
+} from './dashboard-day-lag.ts';
+export type { DashboardDayLagSample, DashboardDayLagSnapshot } from './dashboard-day-lag.ts';
 export { createMetricsRegistry } from './registry.ts';
 export type {
   MetricsRegistry,

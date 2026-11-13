@@ -1,6 +1,9 @@
 // Public surface of the identity module. Other modules import only from this file.
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Transaction } from 'kysely';
+// B1-34q (01 F-ADM-26 ②): users registered in an accounting day, for admin's workbench aggregation.
+export { countRegisteredUsers } from './application/registered-user-counts.ts';
+export type { RegisteredUserCountRange } from './application/registered-user-counts.ts';
 export { createPushSessionValidity } from './ports/push-session-validity.ts';
 // B1-02zq: BR-WDR-03 ③b, the verdict payout's rules chain reads through its ReverifyGatePort.
 export { createReverifyGate } from './application/reverify-gate.ts';

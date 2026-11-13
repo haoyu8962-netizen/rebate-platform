@@ -15,6 +15,7 @@ import {
   ADMIN_ACTIVE_STATUS,
   ADMIN_CHECK,
   AdminAuthModule,
+  AdminDashboardDaysModule,
   AdminModule,
   ExportWorkerModule,
   createAdminDisplayNameReader,
@@ -5511,6 +5512,10 @@ export class AppModule {
               ledgerCreditPostcheckModule(),
               // B2-04zo (BR-FUND-18): the asset daily snapshot timer, D+1 00:01 +08:00 per app.
               ledgerAssetSnapshotModule(),
+              // B1-34q (01 F-ADM-26 ②): the workbench's yesterday overview, one row per app with an
+              // admin account and accounting day, D due at D+1 00:10 +08:00, on a timer; the four
+              // figures through linking / orders / identity / settlement's exports.
+              AdminDashboardDaysModule.forWorker(),
               // B2-12f (BR-FUND-12): the daily generation of the bad debt write-off candidates,
               // after the day's R3 (the completion record of D − 1), on a timer.
               LedgerBadDebtWriteoffModule.forWorker({ ports: badDebtWriteoffPorts }),
