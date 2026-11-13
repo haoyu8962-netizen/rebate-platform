@@ -1,0 +1,21 @@
+id: CT-06zzzzzd
+repo: rebate-platform
+title: CT-06zzzzzd：测试库 drop() 先有界等待其它后端自然退出（≤5 秒，轮询 pg_stat_activity）再删，等满仍有连接才 WITH (FORCE)——修 pool.end() 不等 socket 关、紧接着 FORCE 删库把还没退干净的后端强杀而冒出的偶发 57P01（FU-REPLAY-TEARDOWN-57P01，D10-1453）
+type: impl
+# 2026-11-13 be 入账（编排 D10-1453，选 (B)；原因 be 18:3x：pg-pool 的 end() 对 idle 连接只调 client.end() 就回调，不等 socket 关；随后 DROP DATABASE … WITH (FORCE) 强杀尚未退出的后端，FATAL 57P01 落到无人监听的池上成未处理错误。主干 0bea8205 push 的 verify-replay 3 条均出在 replay/qa-03b）。
+# 只改 packages/db/src/testing（drop() 与必要的说明）；回放驱动不改（(A) 不做）。条件：① 不吞任何错误、不给池挂忽略错误的监听；② 等待有上限（≤5 秒），不让测试挂死；等满仍有连接才 FORCE，此时再冒 57P01 是真有人没关连接，照常报错；③ 正常情况（无残留连接）drop() 不因此明显变慢（规则测试给耗时上限或说明里给实测）。
+# 规则测试（Codex，test_paths，集成测试读 TEST_PG_ADMIN_URL 经 @couli/db/testing）钉两件：连接在删库前一小段时间内自然退出时 drop() 等它退完、不产生 57P01；一直不退的连接等满上限后仍被 FORCE 且错误照常冒出来。照常先红；RV2 Codex 规则测试与对抗评审（不可用按 approvals 36 换独立 Claude）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'packages/db/src/testing/index.ts'
+  - 'packages/db/README.md'
+test_paths:
+  - 'test/spec/db/test-database-drop/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
