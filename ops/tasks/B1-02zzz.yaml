@@ -37,5 +37,17 @@ modify_existing:
     test: '[BR-ID-05] HTTP step_up 发码成功，响应过契约，验证码与 captcha_token 不出现在响应或日志'
     reason: rule_change
     br: [BR-ID-08]
-    ruling: D10-1572
-    note: '依 D10-1567 / D10-1572：it.each 三行与标题保留；只让 step_up 这一行换请求——带已绑手机会员的本人令牌、不带 phone（D10-1567：step_up 带 phone 即 20001），断言不变（短信发往该账号绑定手机）；login / bind 两行一字不动；BR-ID-08「已绑手机用户向绑定手机号发 purpose=step_up 验证码」；由新鲜 Codex 会话改，编排在 PR 上看前后原文'
+    ruling: D10-1579
+    note: '依 D10-1567 / D10-1572 / D10-1579：step_up 行改请求——带已绑手机会员的本人令牌、不带 phone（step_up 带 phone 即 20001）；断言不变（短信发往该账号绑定手机）；BR-ID-08「已绑手机用户向绑定手机号发 purpose=step_up 验证码」；回调里造会员签令牌只动态导入未被本单改过的模块；反向验证：放回旧规则（匿名带 phone 发 step_up）→ 本行变红'
+  - file: 'test/spec/identity/sms-codes/http.int.test.ts'
+    test: '[BR-ID-05] HTTP login 发码成功，响应过契约，验证码与 captcha_token 不出现在响应或日志'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1579
+    note: '依 D10-1579：login 行的请求、行为与断言都没变，只因三行共用的回调体改了（加了 step_up 分支）才登记；反向验证用探针变异（如发码成功但不落发件箱）证明仍有牙，记为「探针，非旧规则」，测试机实跑后还原'
+  - file: 'test/spec/identity/sms-codes/http.int.test.ts'
+    test: '[BR-ID-05] HTTP bind 发码成功，响应过契约，验证码与 captcha_token 不出现在响应或日志'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1579
+    note: '依 D10-1579：bind 行的请求、行为与断言都没变，只因三行共用的回调体改了（加了 step_up 分支）才登记；反向验证用探针变异（如发码成功但不落发件箱）证明仍有牙，记为「探针，非旧规则」，测试机实跑后还原'
