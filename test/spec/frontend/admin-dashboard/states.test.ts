@@ -47,7 +47,9 @@ it('[AC-F1-14a-STATES#2] 刷新只重新请求一次并显示新值，不重复�
   expect(server.log).toHaveLength(1);
   const { todo: items } = server.state;
   items[0]!.count = 2468;
-  server.state.yesterday.as_of = '2026-10-12T00:09:00Z';
+  const yesterday = server.state.yesterday;
+  expect(yesterday).not.toBeNull();
+  yesterday!.as_of = '2026-10-12T00:09:00Z';
   await click(button(mainElement(), /^刷新$/));
   await waitFor(() => expect(mainElement().textContent).toContain('2,468'));
   await settled(server);

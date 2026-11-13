@@ -25,17 +25,21 @@ export interface TodoCard {
   readonly detail: string | undefined;
 }
 
+export interface YesterdayView {
+  /** Accounting day of the latest row not later than yesterday; may be before yesterday. */
+  readonly date: string;
+  readonly day: string;
+  readonly links: number;
+  readonly orders: number;
+  readonly rebate: string;
+  readonly newUsers: number;
+  readonly asOf: string;
+}
+
 export interface DashboardView {
   readonly todo: readonly TodoCard[];
-  readonly yesterday: {
-    readonly date: string;
-    readonly day: string;
-    readonly links: number;
-    readonly orders: number;
-    readonly rebate: string;
-    readonly newUsers: number;
-    readonly asOf: string;
-  };
+  /** null: no aggregate row at all yet (the page shows no numbers and no as-of time). */
+  readonly yesterday: YesterdayView | null;
   readonly status: DashboardStatus | undefined;
 }
 
@@ -54,6 +58,12 @@ export function beijingDateTime(iso: string): string {
   const date = beijing(iso);
   if (date === undefined) return iso;
   return `${date.getUTCFullYear()}-${two(date.getUTCMonth() + 1)}-${two(date.getUTCDate())} ${two(date.getUTCHours())}:${two(date.getUTCMinutes())}`;
+}
+
+/** Yesterday's accounting day (`YYYY-MM-DD`, +08:00) at the given instant (epoch ms). */
+export function beijingYesterday(nowMs: number): string {
+  const date = new Date(nowMs + BEIJING_OFFSET_MS - 24 * 60 * 60 * 1000);
+  return `${date.getUTCFullYear()}-${two(date.getUTCMonth() + 1)}-${two(date.getUTCDate())}`;
 }
 
 /** `MM-DD HH:mm` in Beijing time; the raw text when it is not a date-time. */
@@ -121,11 +131,11 @@ function statusOf(value: unknown): DashboardStatus | undefined {
 
 /**
  * The page's view of one answer. Unknown to-do keys (a newer server) are left out quietly; a
- * malformed answer throws, and the page shows its load failure instead of half a page.
+ * malformed answer throws, and the page shows its load failure instead of half a page. A null
+ * yesterday (no aggregate row yet) is a valid answer, not a malformed one.
  */
 export function toView(data: unknown): DashboardView {
-  if (!isRecord(data) || !Array.isArray(data['todo']) || !isRecord(data['yesterday']))
-    throw new TypeError('dashboard shape');
+  if (!isRecord(data) || !Array.isArray(data['todo'])) throw new TypeError('dashboard shape');
   const todo: TodoCard[] = [];
   for (const item of data['todo'] as unknown[]) {
     if (!isRecord(item) || !isKnownTodo(item['key'])) continue;
@@ -137,8 +147,13 @@ export function toView(data: unknown): DashboardView {
       detail: detailOf(item['key'], item),
     });
   }
-  const y = data['yesterday'];
+  return { todo, yesterday: yesterdayOf(data['yesterday']), status: statusOf(data['status']) };
+}
+
+function yesterdayOf(y: unknown): YesterdayView | null {
+  if (y === null) return null;
   if (
+    !isRecord(y) ||
     typeof y['date'] !== 'string' ||
     typeof y['as_of'] !== 'string' ||
     !isCount(y['links']) ||
@@ -147,17 +162,13 @@ export function toView(data: unknown): DashboardView {
   )
     throw new TypeError('dashboard yesterday shape');
   return {
-    todo,
-    yesterday: {
-      date: y['date'],
-      day: y['date'].replace(/^\d{4}-/, ''),
-      links: y['links'],
-      orders: y['orders'],
-      // parseFen rejects anything but an integer amount (no floats reach the display).
-      rebate: formatYuanAdmin(parseFen(y['est_rebate_fen'])),
-      newUsers: y['new_users'],
-      asOf: beijingDateTime(y['as_of']),
-    },
-    status: statusOf(data['status']),
+    date: y['date'],
+    day: y['date'].replace(/^\d{4}-/, ''),
+    links: y['links'],
+    orders: y['orders'],
+    // parseFen rejects anything but an integer amount (no floats reach the display).
+    rebate: formatYuanAdmin(parseFen(y['est_rebate_fen'])),
+    newUsers: y['new_users'],
+    asOf: beijingDateTime(y['as_of']),
   };
 }

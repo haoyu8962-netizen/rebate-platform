@@ -86,6 +86,10 @@ export const dashboardTexts = {
   yesterday: {
     heading: (date: string): string => `昨日概览（${date} 整日）`,
     hint: '与报表同口径、不实时；今日实时数看 Grafana 看板',
+    /** No aggregate row at all yet (CT-24zzk, D10-1468). */
+    empty: '暂无数据',
+    /** The latest row is older than yesterday; same date writing as the heading (D10-1468). */
+    asOfDay: (date: string): string => `数据截至 ${date}`,
     links: (day: string): string => `转链数（昨日 ${day}）`,
     linksHint: 'link_logs 创建时间落在昨日',
     orders: '成交订单数（昨日）',

@@ -42,7 +42,9 @@ it('[AC-F1-14a-YESTERDAY#1] 昨日四项独立数值与分转元两位小数、�
 
 it('[AC-F1-14a-YESTERDAY#2] 一分显示 0.01；昨日各项为零仍保留四项概览', async () => {
   const server = createServer();
-  Object.assign(server.state.yesterday, { links: 0, orders: 0, est_rebate_fen: 1, new_users: 0 });
+  const yesterday = server.state.yesterday;
+  expect(yesterday).not.toBeNull();
+  Object.assign(yesterday!, { links: 0, orders: 0, est_rebate_fen: 1, new_users: 0 });
   await mount(server);
   await loaded();
   const stats = Array.from(mainElement().querySelectorAll('.ant-statistic'));

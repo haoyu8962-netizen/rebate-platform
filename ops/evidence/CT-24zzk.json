@@ -1,0 +1,128 @@
+{
+  "risk_note": "RV1 contract + RV1 admin front end (CT-24zzk; D10-1403 ③, D10-1464 ③, D10-1466, D10-1482). adminGetDashboard: AdminDashboard.yesterday becomes nullable (still a required key): null when the app has no aggregate row yet (new app, never aggregated), never a fake zero; the description, the AdminDashboardYesterday component and its date now say: the latest row not later than yesterday, date is that row's accounting day (may be earlier than yesterday). Fields, types and required unchanged; the operation is still planned, so no route artefact changes and oasdiff does not compare it. Same PR (D10-1466): apps/admin dashboard model.ts accepts null, DashboardPage shows 「暂无数据」 for null and 「数据截至 {date}」 when date is earlier than yesterday. Commits reordered per D10-1482 from main by cherry-pick, content unchanged, trees identical to the reviewed head b462e092e: a8b26b7ce→4ebeaeebb (contract tests), f108c7090→8335721c7 (front tests + frozen narrowing; the single spec commit), ef3669a8e→bc31ddde9 (contract + codegen), b462e092e→7ee054a86 (front implementation). D10-1482 重排，树与评审时一致。",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base origin/main, on the reordered head 7ee054a86 (tree identical to b462e092e): pass, no findings."
+    },
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Front-end code review by the fe lane (Codex via codex-run.sh; the tool classed the admin paths RV2 and ran money) on b462e092e: pass, 3 S2 not blocking (two point at files this branch does not change — a reverse diff against a newer main; one says the frozen tests were not narrowed, read on the old state; they are narrowed in 8335721c7). couli-runs/fe-runs/CT-24zzk/review-codex-code-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Two rule-test sets. Contract tests (test/spec/contracts/admin-dashboard-yesterday/, 5) by a fresh independent Claude (in-session Opus subagent of the desktop lane, D10-1448): Codex spec-test r1 pass. Front tests (test/spec/frontend/admin-dashboard-yesterday-null/ and the two frozen narrowings) by Codex in the fe lane: spec-test by a fresh independent Claude r1 pass, r2 pass (couli-runs/fe-runs/CT-24zzk/review-spec-r2.json). The reviewer of each set is not its author."
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-dashboard/overview.test.ts",
+      "test": "[AC-F1-14a-YESTERDAY#2] 一分显示 0.01；昨日各项为零仍保留四项概览",
+      "reason": "tighten_only",
+      "before": "it('[AC-F1-14a-YESTERDAY#2] 一分显示 0.01；昨日各项为零仍保留四项概览', async () => {\n  const server = createServer();\n  Object.assign(server.state.yesterday, { links: 0, orders: 0, est_rebate_fen: 1, new_users: 0 });\n  await mount(server);\n  await loaded();\n  const stats = Array.from(mainElement().querySelectorAll('.ant-statistic'));\n  for (const title of ['转链数', '成交订单数', '新增用户']) {\n    const statistic = stats.find((node) => node.textContent?.includes(title));\n    expect(statistic, title).toBeDefined();\n    expect(statistic!.querySelector('.ant-statistic-content')?.textContent).toContain('0');\n  }\n  expect(stats.find((node) => node.textContent?.includes('预估返利合计'))?.textContent).toContain(\n    '0.01',\n  );\n});",
+      "after": "it('[AC-F1-14a-YESTERDAY#2] 一分显示 0.01；昨日各项为零仍保留四项概览', async () => {\n  const server = createServer();\n  const yesterday = server.state.yesterday;\n  expect(yesterday).not.toBeNull();\n  Object.assign(yesterday!, { links: 0, orders: 0, est_rebate_fen: 1, new_users: 0 });\n  await mount(server);\n  await loaded();\n  const stats = Array.from(mainElement().querySelectorAll('.ant-statistic'));\n  for (const title of ['转链数', '成交订单数', '新增用户']) {\n    const statistic = stats.find((node) => node.textContent?.includes(title));\n    expect(statistic, title).toBeDefined();\n    expect(statistic!.querySelector('.ant-statistic-content')?.textContent).toContain('0');\n  }\n  expect(stats.find((node) => node.textContent?.includes('预估返利合计'))?.textContent).toContain(\n    '0.01',\n  );\n});",
+      "mutation": [
+        {
+          "mutant": "dashboard-fixtures.ts: the fixture's default yesterday set to null (the value the contract now allows)",
+          "result": "killed"
+        }
+      ],
+      "note": "Only a null check added before the existing use (type narrowing for the now nullable yesterday, D10-1466); assertions unchanged. Mutant run on the test machine with verify-container.sh --tests on a copy of head 7ee054a86 (couli-runs/CT-24zzk/tests/1): red at overview.test.ts:46 'expected null not to be null'; green unmutated (verify:fast on the same head)."
+    },
+    {
+      "file": "test/spec/frontend/admin-dashboard/states.test.ts",
+      "test": "[AC-F1-14a-STATES#2] 刷新只重新请求一次并显示新值，不重复加载其他接口",
+      "reason": "tighten_only",
+      "before": "it('[AC-F1-14a-STATES#2] 刷新只重新请求一次并显示新值，不重复加载其他接口', async () => {\n  const server = createServer();\n  const { directFetch } = await mount(server);\n  await loaded();\n  expect(server.log).toHaveLength(1);\n  const { todo: items } = server.state;\n  items[0]!.count = 2468;\n  server.state.yesterday.as_of = '2026-10-12T00:09:00Z';\n  await click(button(mainElement(), /^刷新$/));\n  await waitFor(() => expect(mainElement().textContent).toContain('2,468'));\n  await settled(server);\n  expect(mainElement().textContent).toContain('2026-10-12 08:09');\n  expect(server.log.map(({ method, path }) => `${method} ${path}`)).toEqual([\n    `GET ${ENDPOINT}`,\n    `GET ${ENDPOINT}`,\n  ]);\n  expect(directFetch).not.toHaveBeenCalled();\n});",
+      "after": "it('[AC-F1-14a-STATES#2] 刷新只重新请求一次并显示新值，不重复加载其他接口', async () => {\n  const server = createServer();\n  const { directFetch } = await mount(server);\n  await loaded();\n  expect(server.log).toHaveLength(1);\n  const { todo: items } = server.state;\n  items[0]!.count = 2468;\n  const yesterday = server.state.yesterday;\n  expect(yesterday).not.toBeNull();\n  yesterday!.as_of = '2026-10-12T00:09:00Z';\n  await click(button(mainElement(), /^刷新$/));\n  await waitFor(() => expect(mainElement().textContent).toContain('2,468'));\n  await settled(server);\n  expect(mainElement().textContent).toContain('2026-10-12 08:09');\n  expect(server.log.map(({ method, path }) => `${method} ${path}`)).toEqual([\n    `GET ${ENDPOINT}`,\n    `GET ${ENDPOINT}`,\n  ]);\n  expect(directFetch).not.toHaveBeenCalled();\n});",
+      "mutation": [
+        {
+          "mutant": "dashboard-fixtures.ts: the fixture's default yesterday set to null (the value the contract now allows)",
+          "result": "killed"
+        }
+      ],
+      "note": "Only a null check added before the existing use (type narrowing for the now nullable yesterday, D10-1466); assertions unchanged. Mutant run on the test machine with verify-container.sh --tests on a copy of head 7ee054a86 (couli-runs/CT-24zzk/tests/1): red at states.test.ts:51 'expected null not to be null'; green unmutated (verify:fast on the same head)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-24zzk",
+  "spec_commit": "21a0df8817b12f1b5c9d5252815b7f18790f8882",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "red_tests": [
+    "test/spec/contracts/admin-dashboard-yesterday/description.test.ts > [AC-CT-24zzk#5] adminGetDashboard 描述的 yesterday 一条写明没有任何聚合行时为 null，取不晚于昨天的最新一行，date 与 as_of 如实",
+    "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#1] 没有任何聚合行时 yesterday 为 null 合法：有无 status、todo 是否为空都一样",
+    "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#2] yesterday 仍是 required 键：缺键不合法（有无 status 都一样）；可空不等于可省，带上 yesterday: null 才合法",
+    "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#3] yesterday 恰为完整的 AdminDashboardYesterday 或 null：组件不变，六个字段缺一或多一都不合法，计数 minimum 0 不变",
+    "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#4] 除 null 外，yesterday 不接受其它非对象值（0、字符串、空对象、数组、布尔）",
+    "test/spec/frontend/admin-dashboard-yesterday-null/page.test.ts > [AC-CT-24zzk-FE-NULL#1] 从未聚合时显示暂无数据，保留待办和系统状态且不伪造统计或聚合时间",
+    "test/spec/frontend/admin-dashboard-yesterday-null/page.test.ts > [AC-CT-24zzk-FE-DATE#1] 北京时间昨天的行正常显示，较早的行显示与标题同格式的数据截至日期",
+    "test/spec/frontend/admin-dashboard-yesterday-null/page.test.ts > [AC-CT-24zzk-FE-REFRESH#1] 刷新后非空转 null 清除旧数字与时间，再次刷新恢复四项"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "21a0df8817b12f1b5c9d5252815b7f18790f8882",
+      "tree": "511bc30b33d610079584b91a87d80b5347860880",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T17:00:26Z",
+      "finished_at": "2026-11-13T17:01:04Z",
+      "red_tests": [
+        "test/spec/contracts/admin-dashboard-yesterday/description.test.ts > [AC-CT-24zzk#5] adminGetDashboard 描述的 yesterday 一条写明没有任何聚合行时为 null，取不晚于昨天的最新一行，date 与 as_of 如实",
+        "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#1] 没有任何聚合行时 yesterday 为 null 合法：有无 status、todo 是否为空都一样",
+        "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#2] yesterday 仍是 required 键：缺键不合法（有无 status 都一样）；可空不等于可省，带上 yesterday: null 才合法",
+        "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#3] yesterday 恰为完整的 AdminDashboardYesterday 或 null：组件不变，六个字段缺一或多一都不合法，计数 minimum 0 不变",
+        "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts > [AC-CT-24zzk#4] 除 null 外，yesterday 不接受其它非对象值（0、字符串、空对象、数组、布尔）",
+        "test/spec/frontend/admin-dashboard-yesterday-null/page.test.ts > [AC-CT-24zzk-FE-NULL#1] 从未聚合时显示暂无数据，保留待办和系统状态且不伪造统计或聚合时间",
+        "test/spec/frontend/admin-dashboard-yesterday-null/page.test.ts > [AC-CT-24zzk-FE-DATE#1] 北京时间昨天的行正常显示，较早的行显示与标题同格式的数据截至日期",
+        "test/spec/frontend/admin-dashboard-yesterday-null/page.test.ts > [AC-CT-24zzk-FE-REFRESH#1] 刷新后非空转 null 清除旧数字与时间，再次刷新恢复四项"
+      ],
+      "expected": [
+        "test/spec/contracts/admin-dashboard-yesterday/description.test.ts",
+        "test/spec/contracts/admin-dashboard-yesterday/schema.test.ts",
+        "test/spec/frontend/admin-dashboard-yesterday-null/page.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "782eacd3ae5bfb05ed25ad9aaa5c66746e24bbeee89ea973780c56c520670b96"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bdc8ae19f87e793588e144c836f678ae2f7c74b9",
+    "specs": "178edfb25fe89c968a1e78d4ab0963c3a18100bc"
+  }
+}
