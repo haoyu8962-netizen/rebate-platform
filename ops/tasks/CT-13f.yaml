@@ -1,0 +1,24 @@
+id: CT-13f
+repo: rebate-platform
+title: 'CT-13f：events 留存清理——每日 04:00（+08:00）删任务按日删 events 分区（BR-ID-30 ③ 90 天），同一配置项 retention.events_days（默认 90）同时管去重表；先删 events 分区、再删去重表里早于截断点的行（D10-1488 ①）'
+type: impl
+# 2026-11-13 be 入账（编排 D10-1487 / D10-1488；C-31 第二步的服务端落库部分，第九批 docs/changes/20261113-裁定回写第九批.md §3.1）。不动 contracts/openapi.yaml、不占契约槽；接口契约与接收路由归 w1（CT-13d / B1-06zo），三端与 H5 生成代码、报表查询不在范围。
+# 截断点照 BR-ID-30 正文：运行当日 00:00（+08:00）− 留存天数；按日分区整区删除（照 platform/maintenance 里 link_logs 的按日删分区，B1-01zk）；去重表按 created_at 删同一截断点之前的行，顺序先 events 后去重表，免得中间态把已删事件重新放进来。配置项登记在 content 的 config-registry（照 retention.login_logs_days 的写法，受 retention.purge.enabled 总开关）。
+# 注销 / 多 app 清除：08 BR-ID-28 正文与细则、BR-ID-30 都未要求注销时处理 events 的带 user_id 行（03 §4.7：游客事件只带 device_id，登录后在报表层关联、不回写），本单不做，已报编排登记待确认（D10-1488 ③）。依赖 CT-13e 的表、分区函数与清理权限。
+# 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
+refs: [BR-ID-30]
+refs_hash:
+  BR-ID-30: 8ea92988c8cd
+deps: [CT-13e]
+paths:
+  - 'apps/api/src/modules/platform/maintenance/**'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+test_paths:
+  - 'test/spec/platform/events-retention/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

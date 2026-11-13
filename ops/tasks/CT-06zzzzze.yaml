@@ -1,0 +1,21 @@
+id: CT-06zzzzze
+repo: rebate-platform
+title: 'CT-06zzzzze：测试库 drop() 的工厂连接查询加客户端超时（FU-TESTDB-DROP-QUERY-TIMEOUT）——轮询 pg_stat_activity 与 DROP 在半开连接上不再无限等待，超时关连接并把错误交给调用方，整体仍受等待上限约束'
+type: impl
+# 2026-11-13 be 入账（编排 D10-1487 ②：入账，排在 C-31 第二步 CT-13e–h 之后）。来源：CT-06zzzzzd（#28）Codex money r1 的 S2——drop() 轮询查询与原 asFactory 都没有客户端超时，半开连接时可能越过 DROP_GRACE_MS 挂住，直到测试清理钩子超时。
+# 只改 packages/db/src/testing/index.ts（必要时 README）；不吞错误、不挂忽略错误的监听；超时后关闭连接并向调用方传播错误。规则测试钉：工厂连接上的查询卡住时 drop() 在有界时间内以错误结束（可用一个不返回的查询或可控的代理模拟），正常路径不变。
+# 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzd]
+paths:
+  - 'packages/db/src/testing/index.ts'
+  - 'packages/db/README.md'
+test_paths:
+  - 'test/spec/db/test-database-drop-timeout/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
