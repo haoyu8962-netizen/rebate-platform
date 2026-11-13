@@ -20,6 +20,7 @@ paths:
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
   - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/h5/src/shared/api/anonymous.ts' # 测试机 verify:fast 红在 h5 单测 anonymous.test.ts：手维护的免登 / optional 接口清单要随契约加 POST /v1/events（一行）
 test_paths:
   - 'test/spec/contracts/events-ingest/**'
   - 'test/spec/contracts/card-bridge-diagnostic-fields/kit.ts' # D10-1480：只改 untouchedEvents.link_jump 一项（result 三值、加原因码字段），依据 03 §4.5、04 §6.4、D10-1470 ④、D10-1480；[AC-CT-13c#4] 测试体不动，故不登 modify_existing（它只认改了块的 *.test.ts）
