@@ -14,6 +14,11 @@ paths:
   - 'apps/api/src/modules/agent/application/admin-reports*.ts'
   - 'apps/api/src/modules/agent/store/admin-reports/**'
   - 'apps/api/src/app.module.ts' # 2026-11-14 补：AgentAdminModule.forAdmin 由 app.module 传入 admin 的审计写入器与展示名读口（agent 不能 import admin，先例 RiskRulesAdminModule）
+  # 2026-11-14 补（D10-1539 选 (b)）：冻结规则 [AC-B3-08k#1]（BR-AI-02 ③）不许 agent 把句柄交给外部函数，处理接口挪到 admin：admin 开事务 → 调 agent 导出的 handleAgentReport(trx, …) → 同一 trx 写审计 → 提交；接口路径与 operationId 不变
+  - 'apps/api/src/modules/agent/index.ts'
+  - 'apps/api/src/modules/admin/http/admin/agent-reports.controller{,.test}.ts'
+  - 'apps/api/src/modules/admin/application/agent-report-handle{,.test}.ts'
+  - 'apps/api/src/modules/admin/admin.module.ts'
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/src/*.gen.ts'
   - 'apps/api/src/modules/platform/**/*.gen.ts'
