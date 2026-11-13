@@ -23,6 +23,9 @@ export function agentStreamController(runtimeToken: symbol): typeof AgentStreamC
     // B3-08ze: the history read side (B3-08zc's createAgentHistoryRuntime), same caller resolver.
     ['history', 'sessions/:id/messages', 'listAgentSessionMessages', Get],
     ['cancel', 'runs/:run_id/cancel', 'cancelAgentRun', Post],
+    // B3-08zf: 👍/👎 and reports on a reply (runtime.messages), same caller resolver.
+    ['feedback', 'messages/:message_id/feedback', 'setAgentMessageFeedback', Post],
+    ['report', 'messages/:message_id/report', 'reportAgentMessage', Post],
   ] as const) {
     const descriptor = Object.getOwnPropertyDescriptor(prototype, method)!;
     Req()(prototype, method, 0);
@@ -76,6 +79,18 @@ class AgentStreamController {
   cancel(request: AgentStreamRequest, reply: StreamReply): Promise<void> {
     return this.#handle(request, reply, (runtime, caller, response) =>
       runtime.http.cancelRun(caller, request.params.run_id ?? '', response),
+    );
+  }
+
+  feedback(request: AgentStreamRequest, reply: StreamReply): Promise<void> {
+    return this.#handle(request, reply, (runtime, caller, response) =>
+      runtime.messages.setFeedback(caller, request.params.message_id ?? '', request.body, response),
+    );
+  }
+
+  report(request: AgentStreamRequest, reply: StreamReply): Promise<void> {
+    return this.#handle(request, reply, (runtime, caller, response) =>
+      runtime.messages.report(caller, request.params.message_id ?? '', request.body, response),
     );
   }
 

@@ -1,5 +1,6 @@
 // The agent module's only public entry (apps/api/AGENTS.md): other modules import from here.
-export { createAgentReportAdminPort } from './application/agent-report.ts';
+// B3-08zf: the admin side of a report (BR-ID-15 ④), for B1-10t's handling inside its transaction.
+export { createAgentReportAdminPort, handleAgentReport } from './application/agent-report.ts';
 export type {
   AgentReportAdminPort,
   HandleAgentReportInput,

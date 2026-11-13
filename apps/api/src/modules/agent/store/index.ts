@@ -37,6 +37,7 @@ import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 import { sql } from 'kysely';
 import type { Clock } from '../../platform/index.ts';
+import { ownerSessions } from './owner.ts';
 
 export type AgentOwner =
   | {
@@ -83,15 +84,7 @@ export function createPgAgentSessionStore(deps: PgAgentSessionStoreDeps): AgentS
     throw new RangeError('Invalid session idle duration');
   }
   const db = deps.db.withSchema('app');
-  function sessions(connection: Kysely<DB>, owner: AgentOwner) {
-    const query = connection.selectFrom('agent_sessions').where('app_id', '=', owner.appId);
-    return owner.kind === 'user'
-      ? query.where('user_id', '=', owner.userId)
-      : query
-          .where('user_id', 'is', null)
-          .where('user_hash', 'is', null)
-          .where('device_id', '=', owner.deviceId);
-  }
+  const sessions = ownerSessions;
   function live(connection: Kysely<DB>, owner: AgentOwner, now: Date) {
     const cutoff = structuredClone(now);
     cutoff.setTime(now.getTime() - deps.idleMs);
