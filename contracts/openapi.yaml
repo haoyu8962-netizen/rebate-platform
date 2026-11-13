@@ -8621,12 +8621,17 @@ paths:
           `breakdown` (optional) splits the count by a card-specific sub-key (for
           claim_review_pending `auto_matched` and `manual_review`); clients ignore keys they do
           not know.
-        - `yesterday`: always returned with `dashboard.view`. Yesterday's whole accounting day
-          (`date`), aggregated daily with the report rules, not live (01 F-ADM-26 ②): `links`
-          (link_logs created that day), `orders` (sub-orders with paid_at that day, not reduced by
-          later invalidation), `est_rebate_fen` (users' share of those sub-orders still
-          rebate_status=ESTIMATED and platform_status≠DEPOSIT_PAID at aggregation time, BR-TEXT-21),
-          `new_users` (users registered that day); `as_of` is the aggregation time.
+        - `yesterday`: always returned with `dashboard.view` (the key is required; its value may be
+          null). One whole accounting day (`date`), aggregated daily with the report rules, not
+          live (01 F-ADM-26 ②): `links` (link_logs created that day), `orders` (sub-orders with
+          paid_at that day, not reduced by later invalidation), `est_rebate_fen` (users' share of
+          those sub-orders still rebate_status=ESTIMATED and platform_status≠DEPOSIT_PAID at
+          aggregation time, BR-TEXT-21), `new_users` (users registered that day); `as_of` is the
+          aggregation time. The server returns the latest aggregate row not later than yesterday
+          (Asia/Shanghai accounting day); `date` and `as_of` are that row's actual values, so they
+          may be earlier than yesterday when later aggregations have not succeeded. When there is
+          no aggregate row at all (a new app, or aggregation has never succeeded) `yesterday` is
+          null, never a row of zeros (编排裁定 D10-1403 ③).
         - `status`: only with `fund.view`, otherwise the whole object is absent: payout queue
           paused (`payout.queue_paused`), the payout channels paused one by one
           (`payout.channel_paused.<channel>`), monthly auto settlement (`settle.auto.enabled`) and
@@ -44051,7 +44056,7 @@ components:
             $ref: '#/components/schemas/AdminDashboardTodoBreakdown'
     AdminDashboardYesterday:
       type: object
-      description: Yesterday's whole day, aggregated daily with the report rules (01 F-ADM-26 ②).
+      description: The latest daily aggregate row not later than yesterday, aggregated with the report rules (01 F-ADM-26 ②; 编排裁定 D10-1403 ③, D10-1464).
       additionalProperties: false
       required:
         - date
@@ -44064,7 +44069,7 @@ components:
         date:
           type: string
           format: date
-          description: The day aggregated (yesterday, Asia/Shanghai).
+          description: The accounting day of this row (Asia/Shanghai); may be earlier than yesterday.
         links:
           type: integer
           format: int64
@@ -44132,7 +44137,10 @@ components:
           items:
             $ref: '#/components/schemas/AdminDashboardTodo'
         yesterday:
-          $ref: '#/components/schemas/AdminDashboardYesterday'
+          description: The latest aggregate row not later than yesterday (Asia/Shanghai); null when there is none (D10-1403 ③).
+          anyOf:
+            - $ref: '#/components/schemas/AdminDashboardYesterday'
+            - type: 'null'
         status:
           $ref: '#/components/schemas/AdminDashboardStatus'
     AdminDashboardResponse:
