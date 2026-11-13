@@ -6,12 +6,14 @@ type: impl
 # ① app.events：name、props JSON、user_id / device_id（可空）、client_at、server_at（分区键，按日，+08:00 日界），另带去重所需的 event_id；ADR-0001 §4.2 #4 #5 #8：分区由 couli_maint 调属主 SECURITY DEFINER 函数建删——把 app.ensure_day_partition 与按日删分区的函数扩到 'events'（照 0012 link_logs 的写法，CREATE OR REPLACE）。② 去重表（如 app.event_dedup）：event_type、event_id、created_at，主键 (event_type, event_id)；同一事务先插去重表、新行才写 events 的写法由 CT-13g 实现，本单只建表与约束。
 # ③ 授权写在建对象的这条迁移里：couli_app 对 events 与去重表只 INSERT / SELECT；去重表的清理权限（couli_maint 的 SECURITY DEFINER 函数或等价做法，照现有 purge）也在本单给，供 CT-13f 用。④ db/schema.sql 与 packages/db 生成类型由编排者在沙箱外 db:snapshot 生成（outside_needed）；迁移号 0141（0140 留给 B1-34q），落地前报编排设冻结。
 # 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
-refs: [BR-ID-30]
+# 2026-11-13 更正（be）：① 迁移号改 0140（D10-1494：门禁要求取下一个空号、编号连续，CT-13e 先落地；title 里的「0141」按台账守卫不改，以 paths 为准；0141 改给 B1-34q）。② 分区维护不扩共享函数（冻结 test/spec/db/partitions/day-functions.int.test.ts:172、:243 钉着它们只认 link_logs，编排 21:49 同意），改为 events 专用的 ensure_events_day_partition / drop_expired_events_day_partitions，另加 purge_expired_events_default 删 DEFAULT 里过期行（Codex money r1 S1，编排 22:07 同意）。③ D10-1489：events.user_id 只许非空 → 空（列级 UPDATE (user_id) + 触发器），注销时解除关联的默认待负责人确认，refs 补 BR-ID-28。
+refs: [BR-ID-28, BR-ID-30]
 refs_hash:
+  BR-ID-28: 205ab4bdd1d4
   BR-ID-30: 8ea92988c8cd
 deps: []
 paths:
-  - 'db/migrations/0141_*.sql'
+  - 'db/migrations/0140_*.sql'
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
 test_paths:
