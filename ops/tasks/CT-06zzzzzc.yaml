@@ -1,0 +1,22 @@
+id: CT-06zzzzzc
+repo: rebate-platform
+title: CT-06zzzzzc：仓库迁到 GitHub 账号 haoyu8962-netizen——CI 检出规划仓库的两处地址、AGENTS.md 第 11 行与 tools/ci/tokens-lag.ts 注释里的旧账号名改为新账号，AGENTS.md 加一句迁移说明（D10-1442 / D10-1443）
+type: guard-change
+# 2026-11-13 be 入账（编排 D10-1443；负责人 D10-1442 定「切」：开发整体切到 haoyu8962-netizen，PR 编号从 1 重新开始）。新仓库的第一张代码 PR：在它合并前，带代码改动的 PR 的 verify-static、verify-unit 两个作业会红在检出 zora4523-bot/couli。
+# 只改三处：① .github/workflows/ci.yml 两处 `repository: zora4523-bot/couli` → `haoyu8962-netizen/couli`；② AGENTS.md 第 11 行同一地址，并加一句「2026-11-13 起仓库在 haoyu8962-netizen 下；此前台账与证据里的 PR 号（≤3360）是原仓库 zora4523-bot/rebate-platform 的编号」；③ tools/ci/tokens-lag.ts 第 11 行注释。
+# ops/approvals.yaml、ops/evidence/**、旧台账里的旧名是历史记录，不动。判定逻辑、必过检查与其它工作流一字不改。
+# 第三类保护路径（.github/**、AGENTS.md、tools/**）：合并前须负责人同意（编排开 approvals 85）；对抗评审 Codex（不可用按 approvals 36 换独立 Claude）；本地先过 typecheck 与 tools/ci 的工作流检查（check-workflows）。分支 chore/guard-change-CT-06zzzzzc，台账同 PR 改 done。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'AGENTS.md'
+  - 'tools/ci/tokens-lag.ts'
+  - 'ops/tasks/CT-06zzzzzc.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
