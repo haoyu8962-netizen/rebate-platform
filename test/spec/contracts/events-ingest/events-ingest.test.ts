@@ -236,45 +236,15 @@ it('[AC-CT-13d#6] link_jump.result 恰好三值、版本递增，公共字段与
 it('[AC-CT-13d#7] 初始化失败作为 failed 的原因码保留，不再占 result；失败有步骤与原因码', () => {
   const fields = jumpFields();
   expect(list(at(fields, 'result')['values']).toSorted()).toEqual(results.toSorted());
-  const reasons = Object.entries(fields).filter(
-    ([name, field]) =>
-      name !== 'result' && name !== 'phase' && /sdk_init_failed/u.test(JSON.stringify(field)),
-  );
-  expect(reasons.length).toBeGreaterThan(0);
-  for (const [name, field] of reasons) {
-    expect(name).toMatch(/^[a-z][a-z0-9_]*$/u);
-    expect(
-      name
-        .split('_')
-        .some((part) =>
-          [
-            'url',
-            'href',
-            'link',
-            'deeplink',
-            'tpwd',
-            'pid',
-            'adzone',
-            'relation',
-            'promo',
-          ].includes(part),
-        ),
-    ).toBe(false);
-    expect(name).not.toMatch(/sub_union_id|custom_parameters/u);
-    expect(['string', 'enum']).toContain(object(field)['type']);
-  }
+  // D10-1480：原因码字段固定为 failure_reason，不接受换名或仅在 note 中声明。
+  const reason = at(fields, 'failure_reason');
+  expect(reason['type']).toBe('enum');
+  expect(list(reason['values']).toSorted()).toEqual(['sdk_init_failed', 'step_failed']);
+  expect(reason['required_when']).toEqual({ result: 'failed' });
   expect(at(fields, 'step')).toMatchObject({ type: 'enum', required: true });
   const notes = JSON.stringify(fields);
   expect(notes).toMatch(/failed/u);
   expect(notes).not.toMatch(/result\s*=\s*sdk_init_failed/u);
-  expect(
-    reasons.some(
-      ([, field]) =>
-        object(field)['required'] === true ||
-        JSON.stringify(object(field)['required_when']) === JSON.stringify({ result: 'failed' }) ||
-        /failed.{0,120}(?:必带|必填|required|must)/iu.test(String(object(field)['note'])),
-    ),
-  ).toBe(true);
 });
 
 it('[AC-CT-13d#8] 三值外跳保留淘宝 SDK 必带 sdk_open_by 与可选 sdk_error_code 的约束', () => {

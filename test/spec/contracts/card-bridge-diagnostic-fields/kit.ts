@@ -113,7 +113,12 @@ export const untouchedEvents: Readonly<Record<string, Readonly<Record<string, Fi
     result: {
       type: 'enum',
       required: true,
-      values: ['launched', 'failed', 'sdk_init_failed', 'copied'],
+      values: ['requested', 'failed', 'unknown'],
+    },
+    failure_reason: {
+      type: 'enum',
+      required_when: { result: 'failed' },
+      values: ['sdk_init_failed', 'step_failed'],
     },
     sdk_open_by: { type: 'enum', required: false, values: ['url', 'code'] },
     sdk_error_code: { type: 'string', required: false },
