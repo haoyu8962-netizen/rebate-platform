@@ -33,6 +33,8 @@
 1. 每次运行用一个一次性的 PostgreSQL：设了 `TEST_PG_ADMIN_URL` 就直连（verify 容器、CI），没设就用 Testcontainers 起 `pgvector/pgvector:0.8.6-pg18-trixie`。
 2. globalSetup 以超级用户建角色和扩展，再以 `couli_migrator` 跑全部迁移，得到模板库 `couli_tpl_<运行号>`。迁移只跑这一次。
 3. 每个测试文件调用 `createTestDatabase()`，从模板克隆自己的库（本机约 20–80 毫秒），用完 `drop()`。
+   `drop()` 先轮询 `pg_stat_activity`（每 25 毫秒），等这个库上的其它连接自己退出，最多等 `DROP_GRACE_MS`（3 秒），再 `DROP DATABASE … WITH (FORCE)`；没有残留连接时第一次查询就删，不变慢。
+   原因：pg-pool 的 `end()` 不等 socket 关就返回，立刻强制删库会把还没退完的后端杀掉，57P01 落到已经没人监听的池上成未处理错误。等满仍未退出的连接照常收到 57P01。
 4. 测试只拿到一个只能建库的角色和四个业务角色的密码，**拿不到超级用户连接串**；用例以 `couli_app` 等身份连接，权限和触发器都被真实检验。
 5. 脚本会拒绝含有 `couli` 库的集群，避免误连本地栈或真实环境。
 

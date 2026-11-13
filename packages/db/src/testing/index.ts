@@ -3,6 +3,8 @@
 // packages/db/src/testing/global-setup.ts (e.g. '../packages/db/src/testing/global-setup.ts' in
 // test/vitest.integration.config.ts), never as the package specifier: Vitest resolves globalSetup
 // without the `couli-src` condition, so the specifier would load packages/db/dist.
+import { setTimeout as delay } from 'node:timers/promises';
+
 import pg from 'pg';
 import { inject } from 'vitest';
 
@@ -22,7 +24,10 @@ export type TestDatabase = {
   name: string;
   /** Connection URL for one of the business roles. Tests never connect as superuser. */
   urlFor(role: TestDbRole): string;
-  /** Drops the database, terminating connections that are still open. */
+  /**
+   * Drops the database. Waits up to DROP_GRACE_MS for other connections to exit on their own,
+   * then terminates any that are still open (they receive 57P01).
+   */
   drop(): Promise<void>;
 };
 
@@ -39,15 +44,28 @@ function context(): TestDbContext {
   return value;
 }
 
-async function asFactory(ctx: TestDbContext, statement: string): Promise<void> {
+async function withFactory<T>(
+  ctx: TestDbContext,
+  work: (client: pg.Client) => Promise<T>,
+): Promise<T> {
   const client = new pg.Client({ connectionString: ctx.factoryUrl });
   await client.connect();
   try {
-    await client.query(statement);
+    return await work(client);
   } finally {
     await client.end();
   }
 }
+
+async function asFactory(ctx: TestDbContext, statement: string): Promise<void> {
+  await withFactory(ctx, async (client) => {
+    await client.query(statement);
+  });
+}
+
+/** Upper bound on how long `drop()` waits for other backends to exit before forcing. */
+export const DROP_GRACE_MS = 3000;
+const DROP_POLL_MS = 25;
 
 /**
  * Clones a fresh database from the migrated template. Call it once per test file (in
@@ -67,7 +85,22 @@ export async function createTestDatabase(): Promise<TestDatabase> {
       });
     },
     async drop(): Promise<void> {
-      await asFactory(ctx, `DROP DATABASE IF EXISTS ${quoteIdent(name)} WITH (FORCE)`);
+      // pg-pool's end() resolves once client.end() is called, before the socket has closed, so
+      // the backend may still be connected here. Forcing at once would kill it with 57P01, which
+      // lands on a pool nobody listens to any more. Poll until such backends are gone (bounded);
+      // only connections still open after the grace period are terminated by FORCE.
+      await withFactory(ctx, async (client) => {
+        const deadline = performance.now() + DROP_GRACE_MS;
+        for (;;) {
+          const { rows } = await client.query<{ n: number }>(
+            'SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()',
+            [name],
+          );
+          if (rows[0]?.n === 0 || performance.now() >= deadline) break;
+          await delay(DROP_POLL_MS);
+        }
+        await client.query(`DROP DATABASE IF EXISTS ${quoteIdent(name)} WITH (FORCE)`);
+      });
     },
   };
 }
