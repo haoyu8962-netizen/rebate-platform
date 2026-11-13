@@ -1,0 +1,33 @@
+id: B1-02zzz
+repo: rebate-platform
+title: 注销等二次验证取号：sendSmsCode 可选登录、purpose=step_up 必须带本人令牌且不收 phone，服务端发到绑定手机；GET /v1/me 加 masked_phone（N-37 ②，D10-1566 W-2 / D10-1567）
+type: impl
+# 2026-11-14 w1 入账（编排 D10-1566 W-2、D10-1567 确认方案；依据 NATIVE/needs-triage-20261114.md N-37 ②、APP-13a G02 / G03、APP-09 G31）。
+# 现状：sendSmsCode 是 x-auth none、phone 必填；GET /v1/me 只有 phone_bound，客户端拿不到号码，三端 Release 的注销二次验证与换号第 1 步都发不了码。
+# BR-ID-08：已绑手机用户「向绑定手机号」发 purpose=step_up 验证码；未绑手机用户（只可能发起注销）走 user_oauth 重新授权（现有 oauth-attempts step_up，不变）。
+# 契约（contracts/openapi.yaml）：① sendSmsCode 的 x-auth 由 none 改 optional；purpose=step_up 时必须带本人令牌（未带 → 10001），请求里出现 phone 字段 → 20001（data.fields=[phone]）（D10-1567：不要「带了也忽略」）；服务端取该账号绑定手机发码，限流仍按手机号计；令牌账号未绑手机 → 照 BR-ID-08 走第三方重新授权的既有错误口径（实现者照现有码，不新造码，拿不准写 blocked_reason）。purpose=login / bind 不变（仍要 phone）。deletion_only 受限会话仍只放行 login 与 step_up+account_deletion。② GET /v1/me 加 masked_phone（string | null，脱敏格式照 BR-TEXT-02 细则手机号脱敏；未绑为 null），只供界面展示「验证码将发送至…」。描述里写明出处。重生成生成物，不手改。
+# identity：sms-codes 发码按上口径取号；me 读取加 masked_phone。step-up 校验（POST /v1/auth/step-up）本来就按绑定手机比对，不变。
+# 顺带核（D10-1567）：提现、新增 / 修改收款账号、更换手机号等其他要 step_up 的操作，在本单合并后发码是否同样走通——在实现输出 notes 里逐个写结论与证据（文件:行），不另改它们的代码；不通的另报。
+# 契约槽：排在 B1-10t 之后，等编排点名。
+refs: [BR-ID-08]
+refs_hash:
+  BR-ID-08: 9ae5b5206173
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/identity/**'
+test_paths:
+  - 'test/spec/identity/step-up-bound-phone/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+  - 'test/spec/identity/step-up-bound-phone/**'
+status: todo
