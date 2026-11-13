@@ -167,6 +167,11 @@ export const CONTRACT_SIGNING_ROUTES = [
     "signed": false
   },
   {
+    "method": "POST",
+    "path": "/v1/events",
+    "signed": false
+  },
+  {
     "method": "GET",
     "path": "/v1/messages",
     "signed": false

@@ -126,6 +126,8 @@ tags:
     description: Admin Agent trace console — Agent sessions with their trace counts and one session with its messages, runs, tool calls and cards (permission point agent.trace, opening a session is audited, always the masked form stored, pii.* reveals nothing), and the AI reply reports with the 48-hour deadline and overdue flag, marked handled with a note (agent.report, audited; 01 F-ADM-19, 04 §6.6 agent-traces, §11.1; BR-AI-19, BR-ID-15).
   - name: agent
     description: Agent sessions, history, the reply stream, stop, feedback and report (04 §6.5, §8).
+  - name: events
+    description: Batch upload of client analytics events (04 §6.4 POST /v1/events, 03 §4.7; event fields in specs/events.yaml).
 paths:
   /healthz:
     get:
@@ -2687,6 +2689,115 @@ paths:
                   route:
                     route: WithdrawRecords
                     params: {}
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          $ref: '#/components/responses/ClientError'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /v1/events:
+    post:
+      operationId: ingestEvents
+      tags:
+        - events
+      summary: Upload a batch of analytics events
+      description: |
+        Batch upload of the client analytics events (03 §4.7: every 10 events or 10 seconds, at
+        most 500 cached offline; a client splits its queue into batches of at most 100). Each event
+        is one object of specs/events.yaml (common fields plus the fields of its event); the
+        event_type is its `name`. Every event carries a client-generated `event_id` (UUID) created
+        when the state transition happens and stored with it; 网络重试与队列重投沿用同一个 event_id，
+        不换 (retries and redeliveries reuse it unchanged). The server deduplicates by
+        (event_type, event_id) (按 (event_type, event_id) 去重, 03 §6.2 第 9 条): a replayed
+        exposure, click or link_jump yields no second business event, and a duplicate is not an
+        error and is not counted as dropped.
+
+        受理语义 (D10-1471): one non-conforming event never fails the batch. The batch is accepted
+        as a whole; each event that is not an object or does not conform to specs/events.yaml
+        (unknown event name, a missing required field, an `event_id` that is not a UUID, a value
+        outside its enum, such as an old link_jump result) is 不合规，逐条丢弃 (dropped one by
+        one) and counted in `data.dropped_count`; the other events of the batch are processed.
+        Whole-request rejections are only: a body that is not an object, `events` missing or not an
+        array, more than 100 events, or a top-level field other than `events` → 20001 with
+        data.fields=[events] (or the offending field); the version gate (10405); rate limiting
+        (42901). 客户端收到受理响应（code=0）即从本地队列删除这一批 (the accepted response is the
+        client's acknowledgement: on code=0 it removes the batch from its queue); on any failure it
+        keeps the batch and later resends the same batch, which is safe because of the
+        deduplication above. 受理只表示已收到并校验，不承诺已保存 (accepted does not mean
+        persisted): in the first step only the link_jump reports are stored (B1-06zo); the other
+        events are accepted and not stored.
+
+        link_jump (外跳每一步的结果) carries the `attempt_id` of the open (or H5 convert) response
+        (§8.4) and `result` ∈ {requested, failed, unknown} (03 §4.5; replaces the former launched /
+        copied / sdk_init_failed values: sdk_init_failed is now a failed result with
+        `failure_reason` sdk_init_failed). Only reports sent with the user's own access token
+        (带本人令牌的上报) are used for the pending-track card (待跟单卡, BR-ATTR-21 细则「待跟单卡按
+        实际外跳选」); reports without a token, or a link_jump without attempt_id, are analytics
+        only. For BR-ATTR-21「至少一步执行成功」 a step with result requested or unknown counts as
+        成功 (unknown: the user may already have left the app, D10-1470 ③); failed 不算 (does not
+        count). Not signed (04 §6 marks neither S nor I); no Idempotency-Key, the per-event
+        deduplication makes a resend harmless. Login is optional (a guest's events carry only
+        device_id, 02 §12.6). Version gate: applied (BR-ID-01 细则 interface table: 受约束).
+      x-auth: optional
+      x-signed: false
+      x-idempotent: false
+      x-min-version-gate: true
+      x-implementation: planned
+      x-error-codes:
+        - 20001
+        - 10405
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+        - $ref: '#/components/parameters/Platform'
+        - $ref: '#/components/parameters/AppVersion'
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/Channel'
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestEventsRequest'
+            example:
+              events:
+                - event_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a90
+                  name: link_jump
+                  client_at: '2026-11-13T10:00:00+08:00'
+                  session_id: example-session
+                  device_id: example-device
+                  platform: ios
+                  app_version: '1.0.0'
+                  page: ProductDetail
+                  phase: purchase
+                  attempt_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a91
+                  link_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a92
+                  union_platform: taobao
+                  step: sdk
+                  result: requested
+                  sdk_open_by: url
+                  duration_ms: 120
+                  installed: 'true'
+      responses:
+        '200':
+          description: The batch is accepted (the client removes it from its queue); dropped_count events were non-conforming and dropped.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestEventsResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  dropped_count: 0
                 trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
         '429':
           $ref: '#/components/responses/TooManyRequests'
@@ -40144,6 +40255,47 @@ components:
           format: int32
           minimum: 0
           description: Unread messages of the account left after the call.
+    IngestEventsRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          minItems: 0
+          maxItems: 100
+          description: The events of the batch. Items are deliberately not constrained here; each one is checked against specs/events.yaml on its own and a non-conforming one is dropped and counted, never rejecting the batch.
+          items:
+            description: One event as defined by specs/events.yaml (common fields plus the fields of its event).
+    IngestEventsData:
+      type: object
+      additionalProperties: false
+      required:
+        - dropped_count
+      properties:
+        dropped_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of events of this batch that were non-conforming and dropped (0 when all conformed); duplicates are not counted.
+    IngestEventsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/IngestEventsData'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
     MarkMessagesReadResponse:
       type: object
       additionalProperties: false

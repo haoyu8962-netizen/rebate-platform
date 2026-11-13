@@ -345,6 +345,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": false
   },
   {
+    "operationId": "ingestEvents",
+    "method": "POST",
+    "path": "/v1/events",
+    "gate": true,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "listMessages",
     "method": "GET",
     "path": "/v1/messages",

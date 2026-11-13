@@ -167,6 +167,11 @@ export const CONTRACT_AUTH_ROUTES = [
     "auth": "login"
   },
   {
+    "method": "POST",
+    "path": "/v1/events",
+    "auth": "optional"
+  },
+  {
     "method": "GET",
     "path": "/v1/messages",
     "auth": "login"

@@ -1009,6 +1009,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a batch of analytics events
+         * @description Batch upload of the client analytics events (03 §4.7: every 10 events or 10 seconds, at
+         *     most 500 cached offline; a client splits its queue into batches of at most 100). Each event
+         *     is one object of specs/events.yaml (common fields plus the fields of its event); the
+         *     event_type is its `name`. Every event carries a client-generated `event_id` (UUID) created
+         *     when the state transition happens and stored with it; 网络重试与队列重投沿用同一个 event_id，
+         *     不换 (retries and redeliveries reuse it unchanged). The server deduplicates by
+         *     (event_type, event_id) (按 (event_type, event_id) 去重, 03 §6.2 第 9 条): a replayed
+         *     exposure, click or link_jump yields no second business event, and a duplicate is not an
+         *     error and is not counted as dropped.
+         *
+         *     受理语义 (D10-1471): one non-conforming event never fails the batch. The batch is accepted
+         *     as a whole; each event that is not an object or does not conform to specs/events.yaml
+         *     (unknown event name, a missing required field, an `event_id` that is not a UUID, a value
+         *     outside its enum, such as an old link_jump result) is 不合规，逐条丢弃 (dropped one by
+         *     one) and counted in `data.dropped_count`; the other events of the batch are processed.
+         *     Whole-request rejections are only: a body that is not an object, `events` missing or not an
+         *     array, more than 100 events, or a top-level field other than `events` → 20001 with
+         *     data.fields=[events] (or the offending field); the version gate (10405); rate limiting
+         *     (42901). 客户端收到受理响应（code=0）即从本地队列删除这一批 (the accepted response is the
+         *     client's acknowledgement: on code=0 it removes the batch from its queue); on any failure it
+         *     keeps the batch and later resends the same batch, which is safe because of the
+         *     deduplication above. 受理只表示已收到并校验，不承诺已保存 (accepted does not mean
+         *     persisted): in the first step only the link_jump reports are stored (B1-06zo); the other
+         *     events are accepted and not stored.
+         *
+         *     link_jump (外跳每一步的结果) carries the `attempt_id` of the open (or H5 convert) response
+         *     (§8.4) and `result` ∈ {requested, failed, unknown} (03 §4.5; replaces the former launched /
+         *     copied / sdk_init_failed values: sdk_init_failed is now a failed result with
+         *     `failure_reason` sdk_init_failed). Only reports sent with the user's own access token
+         *     (带本人令牌的上报) are used for the pending-track card (待跟单卡, BR-ATTR-21 细则「待跟单卡按
+         *     实际外跳选」); reports without a token, or a link_jump without attempt_id, are analytics
+         *     only. For BR-ATTR-21「至少一步执行成功」 a step with result requested or unknown counts as
+         *     成功 (unknown: the user may already have left the app, D10-1470 ③); failed 不算 (does not
+         *     count). Not signed (04 §6 marks neither S nor I); no Idempotency-Key, the per-event
+         *     deduplication makes a resend harmless. Login is optional (a guest's events carry only
+         *     device_id, 02 §12.6). Version gate: applied (BR-ID-01 细则 interface table: 受约束).
+         */
+        post: operations["ingestEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/messages": {
         parameters: {
             query?: never;
@@ -13472,6 +13527,23 @@ export interface components {
              */
             unread_count: number;
         };
+        IngestEventsRequest: {
+            /** @description The events of the batch. Items are deliberately not constrained here; each one is checked against specs/events.yaml on its own and a non-conforming one is dropped and counted, never rejecting the batch. */
+            events: unknown[];
+        };
+        IngestEventsData: {
+            /**
+             * Format: int32
+             * @description Number of events of this batch that were non-conforming and dropped (0 when all conformed); duplicates are not counted.
+             */
+            dropped_count: number;
+        };
+        IngestEventsResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["IngestEventsData"];
+            trace_id: components["schemas"]["TraceId"];
+        };
         MarkMessagesReadResponse: {
             code: components["schemas"]["SuccessCode"];
             msg: string;
@@ -24696,6 +24768,84 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["InboxMessageResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            "4XX": components["responses"]["ClientError"];
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    ingestEvents: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description App (brand) the request belongs to; before login it must match the app_id the device was registered with (10403, BR-ID-07). */
+                "X-App-Id": components["parameters"]["AppId"];
+                /** @description Client platform (enum client_platform, 03 §4.2). */
+                "X-Platform": components["parameters"]["Platform"];
+                /** @description SemVer, the same number on all three apps (拍板第二批 TECH-07). */
+                "X-App-Version": components["parameters"]["AppVersion"];
+                /** @description Build number of the client. */
+                "X-Build"?: components["parameters"]["Build"];
+                /** @description Install channel of the app package (enum install_channel); absent for H5. */
+                "X-Channel"?: components["parameters"]["Channel"];
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /** @description device_id issued by POST /v1/devices; anything else is 10402 (BR-ID-09). */
+                "X-Device-Id": components["parameters"]["DeviceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "events": [
+                 *         {
+                 *           "event_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a90",
+                 *           "name": "link_jump",
+                 *           "client_at": "2026-11-13T10:00:00+08:00",
+                 *           "session_id": "example-session",
+                 *           "device_id": "example-device",
+                 *           "platform": "ios",
+                 *           "app_version": "1.0.0",
+                 *           "page": "ProductDetail",
+                 *           "phase": "purchase",
+                 *           "attempt_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a91",
+                 *           "link_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a92",
+                 *           "union_platform": "taobao",
+                 *           "step": "sdk",
+                 *           "result": "requested",
+                 *           "sdk_open_by": "url",
+                 *           "duration_ms": 120,
+                 *           "installed": "true"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["IngestEventsRequest"];
+            };
+        };
+        responses: {
+            /** @description The batch is accepted (the client removes it from its queue); dropped_count events were non-conforming and dropped. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "dropped_count": 0
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["IngestEventsResponse"];
                 };
             };
             429: components["responses"]["TooManyRequests"];
