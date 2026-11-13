@@ -14,20 +14,28 @@ it('[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份�
   const event = jump({ ...attempt, user_id: randomUUID(), device_id: 'forged-device' });
   const before = await h.row(attempt);
   h.clearObserved();
-  await accepted(
-    await h.post(
-      owner,
-      { events: [event] },
-      { authorization: undefined, 'x-device-id': undefined },
-    ),
-  );
+  await accepted(await h.post(owner, { events: [event] }, { authorization: undefined }));
   expect(await h.row(attempt)).toEqual(before);
   expect(h.prepared()).toHaveLength(1);
   expect(h.prepared()[0]?.batch).toMatchObject({
     appId: owner.appId,
     userId: null,
-    deviceId: null,
+    deviceId: owner.deviceId,
   });
+  expect(h.mutations).toEqual([]);
+
+  h.clearObserved();
+  await rejected(
+    await h.post(
+      owner,
+      { events: [event] },
+      { authorization: undefined, 'x-device-id': undefined },
+    ),
+    400,
+    20001,
+  );
+  expect(h.prepared()).toHaveLength(0);
+  expect(await h.row(attempt)).toEqual(before);
   expect(h.mutations).toEqual([]);
 
   h.clearObserved();
@@ -50,9 +58,6 @@ it('[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份�
   h.clearObserved();
   await accepted(await h.post(owner, { events: [common()] }, { 'x-device-id': headerDevice }));
   expect(h.prepared()[0]?.batch).toMatchObject({ userId: owner.uid, deviceId: headerDevice });
-  h.clearObserved();
-  await accepted(await h.post(owner, { events: [common()] }, { 'x-device-id': undefined }));
-  expect(h.prepared()[0]?.batch).toMatchObject({ userId: owner.uid, deviceId: null });
 });
 
 it.each(['requested', 'unknown'] as const)(
