@@ -1569,6 +1569,46 @@ $$;
 
 
 --
+-- Name: purge_expired_event_dedup(timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.purge_expired_event_dedup(p_now timestamp with time zone) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    SET lock_timeout TO '5s'
+    SET "DateStyle" TO 'ISO, YMD'
+    SET "TimeZone" TO 'UTC'
+    AS $$
+DECLARE
+  v_cutoff  timestamptz;
+  v_deleted bigint;
+BEGIN
+  IF p_now IS NULL THEN
+    RAISE EXCEPTION 'purge_expired_event_dedup: p_now is required'
+      USING ERRCODE = 'null_value_not_allowed';
+  END IF;
+
+  IF NOT isfinite(p_now) THEN
+    RAISE EXCEPTION 'purge_expired_event_dedup: p_now must be finite'
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- BR-ID-30 ③: the same cutoff as drop_expired_events_day_partitions and
+  -- purge_expired_events_default — midnight of the supplied +08:00 calendar day minus 90 days.
+  -- Rows strictly before it are expired.
+  v_cutoff := (((p_now AT TIME ZONE INTERVAL '8 hours')::date - 90)::timestamp
+    AT TIME ZONE INTERVAL '8 hours');
+
+  -- Served by event_dedup_created_idx; row locks held by concurrent writers are waited for at most 5s.
+  DELETE FROM app.event_dedup WHERE created_at < v_cutoff;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  RETURN v_deleted;
+END
+$$;
+
+
+--
 -- Name: purge_expired_events_default(timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -13146,6 +13186,14 @@ REVOKE ALL ON FUNCTION app.pay_refunds_reject_immutable_update() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION app.payout_accounts_reject_identifier_update() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION purge_expired_event_dedup(p_now timestamp with time zone); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.purge_expired_event_dedup(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION app.purge_expired_event_dedup(p_now timestamp with time zone) TO couli_maint;
 
 
 --

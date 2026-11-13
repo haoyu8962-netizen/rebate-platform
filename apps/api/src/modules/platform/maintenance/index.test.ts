@@ -80,8 +80,14 @@ async function fixture(instant = '2026-11-20T03:04:05Z', dayPartitions = false) 
       if (query.sql.includes('current_user')) rows = [{ role: 'couli_maint' }];
       else if (/ensure_(month|day)_partition/.test(query.sql)) {
         rows = [{ partition: `${String(query.parameters[0])}:${String(query.parameters[1])}` }];
-      } else if (/drop_expired_(month|day|union_raw_payload)_partitions/.test(query.sql)) {
+      } else if (query.sql.includes('ensure_events_day_partition')) {
+        rows = [{ partition: `events_p${String(query.parameters[0]).replaceAll('-', '')}` }];
+      } else if (
+        /drop_expired_(month|day|union_raw_payload|events_day)_partitions/.test(query.sql)
+      ) {
         rows = [{ partitions: [] }];
+      } else if (/purge_expired_(events_default|event_dedup)/.test(query.sql)) {
+        rows = [{ deleted: 0n }];
       } else if (query.sql.includes('delete_expired_agent_traces')) {
         rows = AGENT_TRACE_TABLES.map((table_name) => ({ table_name, deleted: 0n }));
       } else if (query.sql.includes('delete_expired_')) rows = [{ deleted: 0n }];
@@ -174,6 +180,8 @@ it.each([
         ['event_log', f.now.mock.results[0]!.value],
         ['link_logs', f.now.mock.results[0]!.value],
         [f.now.mock.results[0]!.value, 180],
+        // Section N (CT-13f): the events day partitions, after the other drops.
+        [f.now.mock.results[0]!.value],
       ]);
       expect(report.dropped).toEqual(['event_log_p202603', 'link_logs_p20260710']);
       expect(f.logger.info.mock.calls.slice(0, 2)).toEqual([
@@ -1448,4 +1456,115 @@ it('[AC-B3-08s#21] 04:00 起第 M 节与第 K 节共用一次配置读取，排�
   const agent = order.findIndex((sql) => sql.includes(AGENT_CALL));
   expect(order.findLastIndex((sql) => RETENTION_CALL.test(sql))).toBeLessThan(agent);
   expect(agent).toBeLessThan(order.findIndex((sql) => sql.includes('partition_default_rows')));
+});
+
+/** Section N (CT-13f): the three events cleanup calls, in call order. */
+const EVENTS_CLEANUP =
+  /app\.(drop_expired_events_day_partitions|purge_expired_events_default|purge_expired_event_dedup)\(/;
+
+it('[AC-CT-13f#1] 第 N 节：清理在第 M 节之后、DEFAULT 检查之前；events 预建不计入 ensured；0 行不写日志', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const report = await f.maintenance.runOnce();
+  const order = f.queries.map((q) => q.sql);
+  const cleanup = order.flatMap((sql) => EVENTS_CLEANUP.exec(sql)?.[1] ?? []);
+  expect(cleanup).toEqual([
+    'drop_expired_events_day_partitions',
+    'purge_expired_events_default',
+    'purge_expired_event_dedup',
+  ]);
+  expect(order.findIndex((sql) => sql.includes(AGENT_CALL))).toBeLessThan(
+    order.findIndex((sql) => EVENTS_CLEANUP.test(sql)),
+  );
+  expect(order.findLastIndex((sql) => EVENTS_CLEANUP.test(sql))).toBeLessThan(
+    order.findIndex((sql) => sql.includes('partition_default_rows')),
+  );
+  expect(order.filter((sql) => sql.includes('ensure_events_day_partition'))).toHaveLength(
+    DAYS_AHEAD + 1,
+  );
+  expect(report).toMatchObject({ failed: 0, dropped: [] });
+  expect(report.ensured).toHaveLength(ALL_ENSURED);
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ ensured: ALL_ENSURED, dropped: 0, failed: 0 }, 'partition_maintenance_done'],
+  ]);
+});
+
+it('[AC-CT-13f#1] 第 N 节只在 dayPartitions 开启时运行', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', false);
+  await f.maintenance.runOnce();
+  expect(
+    f.queries.filter((q) => EVENTS_CLEANUP.test(q.sql) || q.sql.includes('ensure_events_')),
+  ).toEqual([]);
+});
+
+it('[AC-CT-13f#4] 第 N 节失败：其余各节照常跑完并写 done，随后以原错误拒绝；同日下一轮重试', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const failure = { code: '55P03', message: 'private SQL' };
+  let fail = true;
+  f.control.respond = async (query) => {
+    if (query.sql.includes('purge_expired_events_default') && fail) throw failure;
+    if (query.sql.includes('drop_expired_events_day_partitions')) {
+      return [{ partitions: ['events_p20260710'] }];
+    }
+    return undefined;
+  };
+  await expect(f.maintenance.runOnce()).rejects.toBe(failure);
+  const order = f.queries.map((q) => q.sql);
+  expect(order.some((sql) => sql.includes('purge_expired_event_dedup'))).toBe(false);
+  expect(order.at(-1)).toContain('partition_default_rows');
+  expect(f.logger.error.mock.calls).toEqual([
+    [{ table: 'events_default', sqlstate: '55P03' }, 'events_retention_failed'],
+  ]);
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ table: 'events', partition: 'events_p20260710' }, 'partition_dropped'],
+    [{ ensured: ALL_ENSURED, dropped: 1, failed: 1 }, 'partition_maintenance_done'],
+  ]);
+  expect(JSON.stringify(f.logger.error.mock.calls)).not.toContain('private');
+
+  fail = false;
+  f.queries.length = 0;
+  expect(await f.maintenance.runOnce()).toMatchObject({ failed: 0 });
+  expect(f.queries.filter((q) => EVENTS_CLEANUP.test(q.sql))).toHaveLength(3);
+  f.queries.length = 0;
+  await f.maintenance.runOnce();
+  expect(f.queries.filter((q) => EVENTS_CLEANUP.test(q.sql))).toEqual([]);
+});
+
+it('[AC-CT-13f#3] events 预建失败：不清理 events，记 events_retention_failed，以原错误拒绝', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const failure = { code: '23514', message: 'private row data' };
+  f.control.respond = async (query) => {
+    if (query.sql.includes('ensure_events_day_partition') && query.parameters[0] === '2026-10-10') {
+      throw failure;
+    }
+    return undefined;
+  };
+  await expect(f.maintenance.runOnce()).rejects.toBe(failure);
+  expect(f.queries.filter((q) => q.sql.includes('ensure_events_day_partition'))).toHaveLength(2);
+  expect(f.queries.filter((q) => EVENTS_CLEANUP.test(q.sql))).toEqual([]);
+  expect(f.queries.some((q) => q.sql.includes('drop_expired_day_partitions'))).toBe(true);
+  expect(f.logger.error.mock.calls).toEqual([
+    [{ table: 'events', sqlstate: '23514' }, 'events_retention_failed'],
+  ]);
+});
+
+it('[AC-CT-13f#5] 第 N 节删除行数 > 0 时各记一行 retention_purged；超出安全整数则按失败拒绝', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  f.control.respond = async (query) => {
+    if (query.sql.includes('purge_expired_events_default')) return [{ deleted: 2n }];
+    if (query.sql.includes('purge_expired_event_dedup')) return [{ deleted: '3' }];
+    return undefined;
+  };
+  await f.maintenance.runOnce();
+  expect(f.logger.info.mock.calls.slice(0, 2)).toEqual([
+    [{ table: 'events_default', rows: 2 }, 'retention_purged'],
+    [{ table: 'event_dedup', rows: 3 }, 'retention_purged'],
+  ]);
+
+  const g = await fixture('2026-10-08T20:00:00.000Z', true);
+  g.control.respond = async (query) =>
+    query.sql.includes('purge_expired_event_dedup') ? [{ deleted: 2n ** 60n }] : undefined;
+  await expect(g.maintenance.runOnce()).rejects.toBeInstanceOf(RangeError);
+  expect(g.logger.error.mock.calls).toEqual([
+    [{ table: 'event_dedup', sqlstate: null }, 'events_retention_failed'],
+  ]);
 });

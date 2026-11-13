@@ -427,6 +427,30 @@
 //      `agent_trace_purge_failed` (error) { sqlstate }, failed += 1, no further call in this run.
 //      Nothing when nothing was deleted and nothing failed. Report and `partition_maintenance_done`
 //      unchanged.
+//
+// N. Events retention (task CT-13f). Basis: BR-ID-30 正文 and ③ (events 90 天); orchestrator rulings
+//    D10-1488 (1), D10-1500 (a). The contract is test/spec/platform/events-retention/**; the SQL
+//    functions are in `0140_analytics-events.sql` (ensure_events_day_partition(p_day),
+//    drop_expired_events_day_partitions(p_now), purge_expired_events_default(p_now)) and
+//    `0142_events-dedup-purge.sql` (purge_expired_event_dedup(p_now)). No configuration item: the 90
+//    days live only in those functions, so retention.purge.enabled does not apply (like link_logs).
+//    Module — only when `dayPartitions` is true, with the same single `now`:
+//    - Pre-create, every run, right after I2's link_logs days: `SELECT
+//      app.ensure_events_day_partition(<day>)` for each day of dayPartitionDays(now), one statement
+//      each (the function bounds its lock waits). The first failure stops the events pre-creation and
+//      skips the events cleanup of this run.
+//    - Cleanup, after section M and before C.5: gate 04:00 (+08:00) as C.4, and at most one
+//      successful cleanup per +08:00 day per instance (a failed one is tried again by the next run).
+//      Strictly one after the other, each awaited: drop_expired_events_day_partitions(now) →
+//      purge_expired_events_default(now) → purge_expired_event_dedup(now) (events before their dedup
+//      rows, D10-1488 (1)). The first failure stops the remaining steps.
+//    - Logs: each dropped partition `partition_dropped` (info) { table: 'events', partition } (also
+//      appended to `dropped`); `retention_purged` (info) { table: 'events_default' | 'event_dedup',
+//      rows } when rows > 0. Events partitions are not counted in `ensured` (its count stays the C.3
+//      and I2 tables).
+//    - Errors are not swallowed: a failure logs `events_retention_failed` (error) { table, sqlstate },
+//      counts in `failed`, the rest of the run (other tables, C.5, the done line) still goes on, and
+//      runOnce then rejects with that very error instead of resolving the report.
 import {
   MONTH_PARTITIONED_TABLES,
   MONTHS_AHEAD,
@@ -519,6 +543,17 @@ function agentTraceDays(value: unknown): number {
     return AGENT_TRACE_DEFAULT_DAYS;
   }
   return Math.min(value, RETENTION_MAX_DAYS);
+}
+
+/** A row count returned by an events cleanup function as a safe non-negative number (section N). */
+function deletedCount(rows: readonly { deleted?: bigint | number | string | null }[]): number {
+  // A scalar SELECT yields one row; an absent row is read as nothing deleted.
+  const value = rows[0]?.deleted ?? 0;
+  const count = Number(value);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new RangeError('deleted row count out of range');
+  }
+  return count;
 }
 
 /** Days pre-created after the current +08:00 day (section I2; ADR-0001 §4.2 #4). */
@@ -659,6 +694,51 @@ export function createPartitionMaintenance(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let scheduled: Promise<void> | undefined;
+  /** The +08:00 day ('YYYY-MM-DD') of this instance's last successful events cleanup (section N). */
+  let eventsCleanedDay: string | undefined;
+
+  /** Section N: pre-create the events day partitions; the first failure rejects. */
+  async function ensureEventsDays(days: readonly string[]): Promise<void> {
+    for (const day of days) {
+      try {
+        // The SQL function bounds its lock waits for this independent statement.
+        await sql`SELECT app.ensure_events_day_partition(${day}::date) AS partition`.execute(db);
+      } catch (error) {
+        logger.error({ table: 'events', sqlstate: sqlstate(error) }, 'events_retention_failed');
+        throw error;
+      }
+    }
+  }
+
+  /** Section N: the three cleanup functions strictly in order; the first failure rejects. */
+  async function cleanupEvents(now: Date, dropped: string[]): Promise<void> {
+    let table = 'events';
+    try {
+      const partitions = await sql<{ partitions: string[] | null }>`
+        SELECT app.drop_expired_events_day_partitions(${now}::timestamptz) AS partitions
+      `.execute(db);
+      for (const partition of partitions.rows[0]?.partitions ?? []) {
+        dropped.push(partition);
+        logger.info({ table, partition }, 'partition_dropped');
+      }
+      // Events rows go before their dedup rows (D10-1488 (1)).
+      table = 'events_default';
+      const purged = await sql<{ deleted: bigint }>`
+        SELECT app.purge_expired_events_default(${now}::timestamptz) AS deleted
+      `.execute(db);
+      const defaultRows = deletedCount(purged.rows);
+      if (defaultRows > 0) logger.info({ table, rows: defaultRows }, 'retention_purged');
+      table = 'event_dedup';
+      const dedup = await sql<{ deleted: bigint }>`
+        SELECT app.purge_expired_event_dedup(${now}::timestamptz) AS deleted
+      `.execute(db);
+      const dedupRows = deletedCount(dedup.rows);
+      if (dedupRows > 0) logger.info({ table, rows: dedupRows }, 'retention_purged');
+    } catch (error) {
+      logger.error({ table, sqlstate: sqlstate(error) }, 'events_retention_failed');
+      throw error;
+    }
+  }
 
   /** Section J: bounded batches, each its own statement; resolves false when a batch failed. */
   async function deleteExpiredOpenAttempts(now: Date): Promise<boolean> {
@@ -879,6 +959,8 @@ export function createPartitionMaintenance(
     const dropped: string[] = [];
     const defaultRows: DefaultRows[] = [];
     let failed = 0;
+    // Section N: the first events failure, passed on after the rest of the run.
+    let eventsFailure: { readonly error: unknown } | undefined;
     // Section K's configuration: read at most once per run, on first use (K from 04:00, M from 03:00).
     let settings: ReadonlyMap<string, unknown> | null | undefined;
     const loadSettings = async (): Promise<ReadonlyMap<string, unknown> | null> => {
@@ -911,8 +993,8 @@ export function createPartitionMaintenance(
       }
     }
 
+    const days = dayPartitionDays(now);
     if (dayPartitions) {
-      const days = dayPartitionDays(now);
       for (const table of DAY_PARTITIONED_TABLES) {
         for (const day of days) {
           try {
@@ -928,6 +1010,12 @@ export function createPartitionMaintenance(
             if (code === '55P03') break;
           }
         }
+      }
+      try {
+        await ensureEventsDays(days);
+      } catch (error) {
+        failed += 1;
+        eventsFailure = { error };
       }
     }
 
@@ -975,6 +1063,18 @@ export function createPartitionMaintenance(
       failed += await purgeAgentTraces(now, loaded);
     }
 
+    // Section N: once per +08:00 day from 04:00, only after the events days were ensured.
+    const today = days[0]!;
+    if (dayPartitions && hour >= 4 && eventsFailure === undefined && eventsCleanedDay !== today) {
+      try {
+        await cleanupEvents(now, dropped);
+        eventsCleanedDay = today;
+      } catch (error) {
+        failed += 1;
+        eventsFailure = { error };
+      }
+    }
+
     try {
       const result = await db.transaction().execute(async (trx) => {
         await sql`SELECT set_config('lock_timeout', '5s', true)`.execute(trx);
@@ -1009,6 +1109,8 @@ export function createPartitionMaintenance(
       { ensured: ensured.length, dropped: dropped.length, failed },
       'partition_maintenance_done',
     );
+    // Section N: never swallowed — the caller gets the original error.
+    if (eventsFailure !== undefined) throw eventsFailure.error;
     return { ensured, dropped, defaultRows, failed };
   }
 
