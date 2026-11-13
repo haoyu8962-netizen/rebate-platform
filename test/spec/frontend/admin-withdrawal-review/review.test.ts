@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { HOLD_ID, HOLD_SOURCE } from '../admin-withdrawals/fixtures.ts';
 import {
   APPROVE,
   ENTRY,
@@ -95,6 +96,69 @@ it(
 );
 
 it(
+  '[AC-F1-08ah-HOLD#1] 待审核单有生效的提现冻结仍显示两个审核入口，动态码后只提交一次通过，按服务端结果刷新',
+  { timeout: 60_000 },
+  async () => {
+    const item = fixture();
+    item.holds = [
+      {
+        hold_id: HOLD_ID,
+        reason: 'recon_diff',
+        source_ref: HOLD_SOURCE,
+        created_at: '2026-10-21T01:05:00+08:00',
+        hold_until: null,
+      },
+    ];
+    const server = serverFor(item);
+    server.once('POST', APPROVE, () => succeed(server, 'approve'));
+    await mount(server, REVIEW);
+    expect(main().textContent).toContain('recon_diff');
+    expect(disabled(button(main(), ENTRY.approve))).toBe(false);
+    expect(disabled(button(main(), ENTRY.reject))).toBe(false);
+    const before = server.detailReads(ID.pending).length;
+    await start(server, 'approve');
+    await verify();
+    await refreshed(server, before, /已通过待打款/);
+    assertRequest(server, 'approve', { withdrawal_ids: [ID.pending] });
+    expect(disabled(button(main(), ENTRY.reject))).toBe(false);
+    expect(main().textContent).toContain('recon_diff');
+  },
+);
+
+it(
+  '[AC-F1-08ah-HOLD#2] 待审核和已通过单有生效的提现冻结仍可驳回，动态码后各只提交一次并刷新为已驳回',
+  { timeout: 90_000 },
+  async () => {
+    for (const status of ['PENDING_REVIEW', 'APPROVED'] as const) {
+      const item = fixture(status);
+      item.holds = [
+        {
+          hold_id: HOLD_ID,
+          reason: 'recon_diff',
+          source_ref: HOLD_SOURCE,
+          created_at: '2026-10-21T01:05:00+08:00',
+          hold_until: null,
+        },
+      ];
+      const server = serverFor(item);
+      server.once('POST', REJECT, () => succeed(server, 'reject'));
+      await mount(server, REVIEW);
+      expect(main().textContent).toContain('recon_diff');
+      expect(disabled(button(main(), ENTRY.reject))).toBe(false);
+      if (status === 'PENDING_REVIEW') expect(disabled(button(main(), ENTRY.approve))).toBe(false);
+      else expect(actions(main(), ENTRY.approve)).toEqual([]);
+      const before = server.detailReads(ID.pending).length;
+      await start(server, 'reject');
+      await verify();
+      await refreshed(server, before, /已驳回/);
+      assertRequest(server, 'reject', { reason_code: 'OTHER' });
+      expect(main().textContent).toContain('recon_diff');
+      cleanup();
+    }
+  },
+);
+
+it(
   '[AC-F1-08ah-APPROVE#1] 确认再验动态码，只批量通过当前一张，body 不带行版本；收到成功后 GET 新状态，保留驳回入口',
   { timeout: 60_000 },
   async () => {
@@ -139,10 +203,18 @@ it(
       await start(server, 'approve');
       await verify();
       await waitFor(() => expect(notices()).toMatch(one.message));
-      expect(notices()).not.toMatch(/审核成功|审核通过成功|已成功通过/);
+      expect(main().textContent).not.toMatch(/成功/);
+      expect(notices()).not.toMatch(/成功/);
       assertRequest(server, 'approve', { withdrawal_ids: [ID.pending] });
       if (one.reason === 'not_pending') await refreshed(server, before, /已通过待打款/);
       await settled(server);
+      expect(main().textContent).not.toMatch(/成功/);
+      expect(notices()).not.toMatch(/成功/);
+      // not_pending 刷新后可展示真实的已通过状态，其余 skipped 不得伪装成已通过。
+      if (one.reason !== 'not_pending') {
+        expect(main().textContent).not.toMatch(/已通过/);
+        expect(notices()).not.toMatch(/已通过/);
+      }
       expect(writes(server)).toHaveLength(1);
       cleanup();
     }
