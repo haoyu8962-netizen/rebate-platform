@@ -54,5 +54,5 @@ red_exempt:
   - file: test/spec/contracts/agent-history/http.test.ts
     test: '[AC-CT-08e#8][AC-CT-08e#9] 新举报契约使用 reason，废弃草稿的三个枚举均不出现'
     reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
-status: todo
-pr: null
+status: done
+pr: 31
