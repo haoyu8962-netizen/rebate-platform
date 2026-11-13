@@ -1,0 +1,13 @@
+{
+  "source": "synthetic",
+  "cap_ids": [],
+  "captured_at": null,
+  "original_sha256": null,
+  "redactor_version": null,
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "description": "QA-03a 合成订单流与 QA-03b worker；三单联盟佣金各 1000 分，两单在入账后失效；收款资料和 dry_run FakeChannel 成功响应均为合成数据。仅验收合成数据回放绿，不作为真实平台能力证据。",
+  "minimum_volume": {
+    "clawed_back_orders": 2,
+    "paid_withdrawals": 1
+  }
+}
