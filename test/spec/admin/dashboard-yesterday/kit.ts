@@ -428,6 +428,22 @@ export async function setStatus(
     .execute();
 }
 
+/** Changes an order's est_commission_fen directly (a later estimate from the union). */
+export async function setEstFen(
+  db: Kysely<DB>,
+  appId: string,
+  orderId: string,
+  estFen: bigint,
+): Promise<void> {
+  await db
+    .withSchema('app')
+    .updateTable('orders')
+    .set({ est_commission_fen: estFen })
+    .where('app_id', '=', appId)
+    .where('order_id', '=', orderId)
+    .execute();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Clocks and logs.
 

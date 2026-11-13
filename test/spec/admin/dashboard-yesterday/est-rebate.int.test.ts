@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import {
+  AGG_AGAIN_AT,
   AGG_AT,
   D,
   D_LAST,
@@ -23,6 +24,7 @@ import {
   orderOf,
   rowOf,
   rulesOf,
+  setEstFen,
   useDatabase,
 } from './kit.ts';
 
@@ -151,6 +153,113 @@ it(
     await aggregate(db, app, D, AGG_AT);
 
     expect(await rowOf(db, app, D)).toMatchObject({ orders: 2n, est_rebate_fen: 850n });
+  },
+  TIMEOUT,
+);
+
+it(
+  '[AC-B1-34q#18] BR-CALC-02 / BR-CALC-08 取整：预留后与各份额都向下取整到分，不四舍五入',
+  async () => {
+    const { db } = world;
+    const app = newApp('est-floor');
+    const rules = await rulesOf(db, app);
+
+    // O1 N=1007, reserve 1500: B = floor(1007 × 8500 / 10000) = floor(855.95) = 855 (round: 856);
+    //    self 5000 → floor(427.5) = 427 (round: 428), direct 1000 → floor(85.5) = 85 (round: 86),
+    //    indirect 500 → floor(42.75) = 42 (round: 43); users 554 (round: 557).
+    await orderOf(db, app, rules, {
+      paidAt: D_NOON,
+      estFen: 1007n,
+      people: [
+        { userId: randomUUID(), role: 'self', ratioBp: 5000 },
+        { userId: randomUUID(), role: 'direct', ratioBp: 1000 },
+        { userId: randomUUID(), role: 'indirect', ratioBp: 500 },
+      ],
+    });
+    // O2 N=1013, reserve 1500: B = floor(1013 × 8500 / 10000) = floor(861.05) = 861;
+    //    self 3333 → floor(861 × 3333 / 10000) = floor(286.9713) = 286 (round: 287).
+    await orderOf(db, app, rules, {
+      paidAt: D_NOON,
+      estFen: 1013n,
+      people: [{ userId: randomUUID(), role: 'self', ratioBp: 3333 }],
+    });
+
+    await aggregate(db, app, D, AGG_AT);
+
+    // 554 + 286 = 840.
+    expect(await rowOf(db, app, D)).toMatchObject({ orders: 2n, est_rebate_fen: 840n });
+  },
+  TIMEOUT,
+);
+
+it(
+  '[AC-B1-34q#19] BR-CALC-02 有效佣金：settle_commission_fen=0 非空即取 0，不退回预估；预估再变、重聚合仍为 0',
+  async () => {
+    const { db } = world;
+    const app = newApp('est-settle-zero');
+    const rules = await rulesOf(db, app);
+    // Settle 0 present: N = 0 → B = max(0, floor(0 × 8500 / 10000) − 0) = 0 → self 0
+    // (the estimate 2000 would give B = 1700, self 850; after the change 3000 → 2550, 1275).
+    const zero = await orderOf(db, app, rules, { paidAt: D_NOON, estFen: 2000n, settleFen: 0n });
+    // Reference: N=1000, B=850, self 5000 → 425.
+    await orderOf(db, app, rules, { paidAt: D_NOON });
+
+    await aggregate(db, app, D, AGG_AT);
+    expect(await rowOf(db, app, D)).toMatchObject({
+      orders: 2n,
+      est_rebate_fen: 425n,
+      as_of: AGG_AT,
+    });
+
+    await setEstFen(db, app, zero, 3000n);
+    await aggregate(db, app, D, AGG_AGAIN_AT);
+    expect(await rowOf(db, app, D)).toMatchObject({
+      orders: 2n,
+      est_rebate_fen: 425n,
+      as_of: AGG_AGAIN_AT,
+    });
+  },
+  TIMEOUT,
+);
+
+it(
+  '[AC-B1-34q#20] BR-CALC-02 基数下限 0：有效佣金为负或 0、淘礼金扣减等于或超过预留后金额的单贡献 0，汇总照写',
+  async () => {
+    const { db } = world;
+    const app = newApp('est-floor-zero');
+    const rules = await rulesOf(db, app);
+    // N = −100 (estimate): N ≤ 0 is taken as 0 → B = max(0, 0 − 0) = 0 → 0.
+    await orderOf(db, app, rules, { paidAt: D_NOON, estFen: -100n });
+    // N = 0 (estimate): B = 0 → 0.
+    await orderOf(db, app, rules, { paidAt: D_NOON, estFen: 0n });
+    // Settle −50 present (estimate 1000 ignored): N = −50 → 0 → B = 0 → 0.
+    await orderOf(db, app, rules, { paidAt: D_NOON, estFen: 1000n, settleFen: -50n });
+    // N=1000, reserve 1500, tlj 800 < 850: B = 850 − 800 = 50;
+    //    self 5000 → 25, direct 1000 → 5, indirect 500 → floor(2.5) = 2; users 32.
+    await orderOf(db, app, rules, {
+      paidAt: D_NOON,
+      tljDeductFen: 800n,
+      people: [
+        { userId: randomUUID(), role: 'self', ratioBp: 5000 },
+        { userId: randomUUID(), role: 'direct', ratioBp: 1000 },
+        { userId: randomUUID(), role: 'indirect', ratioBp: 500 },
+      ],
+    });
+    // tlj 850 = 850: B = max(0, 0) = 0 → 0.
+    await orderOf(db, app, rules, { paidAt: D_NOON, tljDeductFen: 850n });
+    // tlj 900 > 850: B = max(0, 850 − 900) = max(0, −50) = 0 → 0 (never −25).
+    await orderOf(db, app, rules, { paidAt: D_NOON, tljDeductFen: 900n });
+    // Reference: N=1000, B=850, self 5000 → 425.
+    await orderOf(db, app, rules, { paidAt: D_NOON });
+
+    await aggregate(db, app, D, AGG_AT);
+
+    // 0 + 0 + 0 + 32 + 0 + 0 + 425 = 457; the row is written (rowOf asserts exactly one).
+    expect(await rowOf(db, app, D)).toMatchObject({
+      orders: 7n,
+      est_rebate_fen: 457n,
+      as_of: AGG_AT,
+    });
   },
   TIMEOUT,
 );
