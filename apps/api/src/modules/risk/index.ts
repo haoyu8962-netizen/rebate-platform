@@ -1,4 +1,5 @@
 // Public surface of the risk module. Other modules import only from this file.
+// B1-03zo: dashboard card appeal_pending (BR-ID-36; read only, same predicate as the console list).
 export { countProcessingAppeals } from './application/appeal-pending-count.ts';
 export { createOrderBlocklistPorts } from './application/order-blocklist.ts';
 export type {
