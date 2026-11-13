@@ -98,6 +98,8 @@ export type {
   ReconDiffRestoreInput,
   ReconDiffRestoreRow,
 } from './application/admin-recon-diff-restore.ts';
+// B2-02w (D10-1401): the dashboard's recon_diff_open count, the console list's status=open rule.
+export { countReconDiffOpen } from './application/admin-recon-diffs-open-count.ts';
 export { createDailyCheck } from './application/daily-check.ts';
 export type {
   DailyCheckDependencies,

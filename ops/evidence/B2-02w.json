@@ -1,0 +1,79 @@
+{
+  "risk_note": "RV2 ledger (B2-02w; BR-FUND-22; D10-1401). The workbench card recon_diff_open gets a per-app read-only count, countReconDiffOpen(db, appId), exported from ledger/index.ts. It reuses the console list's own judgement: the filter builder of listAdminReconDiffs is extracted as reconDiffListFilter(appId, query) and the count calls countAdminReconDiffs with reconDiffListFilter(appId, { status: 'open' }), so the card equals the total of GET /admin/v1/recon-diffs?status=open (R1-R3 only, as the list; processing not counted, D10-1401, confirmed D10-1464 ②). No write, no audit, no amount; list behaviour unchanged. No migration, no contract.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, reasoning effort medium, base the branch point with main: pass, no findings; the checklist items are n/a (read-only count, no amounts, no posting)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests (6, test/spec/ledger/dashboard-recon-diff-count/) by a fresh independent Claude: an in-session Opus subagent of the desktop lane (claude-run.sh's terminal accounts are logged out, D10-1448), not the implementing context. Codex spec-test r1 pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-02w",
+  "spec_commit": "3c205981a6ea357197673c4efe376b67f55b8b1c",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "red_tests": [
+    "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#1] 各类型各状态混合：只数本应用 source R1–R3 且 status=open 的差错单（十种 R1–R3 类型都算），processing / adjusted / written_off / closed 与 R4 收款差错（即使 open）都不算；计数等于差错单列表 status=open 的 total，且只读",
+    "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#2] 只有 processing、已结案与 R4 open 的差错单时计数为 0，等于列表 status=open 的空 total；其中一张 processing 改回 open 后计数与列表 total 一起变为 1",
+    "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#3] 按 app 隔离：另一应用新增同批差错单（并多两张 open）不改变本应用计数，两应用各自等于本应用列表 status=open 的 total",
+    "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#4] 新应用没有差错单时计数为数字 0，等于空列表 total，即使别的应用有未关闭差错单",
+    "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#5] 数据变化立即反映：open 依次改为 processing、closed、written_off、adjusted，计数与列表 total 逐次一起下降；新增 R4 open 不变；新增 R1–R3 open 一起上升",
+    "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#6] 超过一页：205 张 open（多于默认 20 与上限 200 的每页条数）加 processing 与 R4 open 若干，计数为 205，等于列表 status=open 的 total，不受分页限制"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "3c205981a6ea357197673c4efe376b67f55b8b1c",
+      "tree": "b31f85bdf3d1de8a88e5c24b2e7b080e4da2c00a",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T13:48:03Z",
+      "finished_at": "2026-11-13T13:48:16Z",
+      "red_tests": [
+        "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#1] 各类型各状态混合：只数本应用 source R1–R3 且 status=open 的差错单（十种 R1–R3 类型都算），processing / adjusted / written_off / closed 与 R4 收款差错（即使 open）都不算；计数等于差错单列表 status=open 的 total，且只读",
+        "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#2] 只有 processing、已结案与 R4 open 的差错单时计数为 0，等于列表 status=open 的空 total；其中一张 processing 改回 open 后计数与列表 total 一起变为 1",
+        "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#3] 按 app 隔离：另一应用新增同批差错单（并多两张 open）不改变本应用计数，两应用各自等于本应用列表 status=open 的 total",
+        "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#4] 新应用没有差错单时计数为数字 0，等于空列表 total，即使别的应用有未关闭差错单",
+        "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#5] 数据变化立即反映：open 依次改为 processing、closed、written_off、adjusted，计数与列表 total 逐次一起下降；新增 R4 open 不变；新增 R1–R3 open 一起上升",
+        "test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts > [AC-B2-02w#6] 超过一页：205 张 open（多于默认 20 与上限 200 的每页条数）加 processing 与 R4 open 若干，计数为 205，等于列表 status=open 的 total，不受分页限制"
+      ],
+      "expected": ["test/spec/ledger/dashboard-recon-diff-count/count.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "96ce184fd3949ced884b2a0a14cae62519c170737c425ff94038206a1566b3ab"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d87cc6411372baab5c945e3a5c0e82fe667dbb45",
+    "specs": "8f76891b6e53531f480a4626a10b8dc9c1e82a28"
+  }
+}
