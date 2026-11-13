@@ -3,6 +3,7 @@ repo: rebate-platform
 title: 契约：工作台 adminGetDashboard 的 yesterday 改为可空——还没有任何聚合行（新 app、从未聚合成功）时返回 null，不返回假的 0；描述补「不晚于昨天的最新一行，date 与 as_of 如实」（D10-1403 Q3）
 type: contract
 # 2026-11-13 收款线入账（编排 D10-1403 ③；原放 B1-34q，B1-34q 的任务书超 24KB，按 规划/11 §5.3 拆出）。只改 AdminDashboard.yesterday 的可空性与 adminGetDashboard 描述里 yesterday 一句，AdminDashboardYesterday 的字段、类型、必填不变，只改描述（D10-1464 ③：组件描述与 date 的描述改成「不晚于昨天的最新一行、date 是这一行所属的会计日（可能早于昨天）」）；重生成生成物。前端处理空值由 fe 跟（编排合并后拉）。契约槽等编排叫号。
+# 2026-11-13 D10-1466 ②：契约与前端同一张 PR 落地，由本单带——apps/admin 工作台 model.ts 与页面在 yesterday 为 null 时显示空状态（不抛错、不显示假的 0），由 fe 在 task/CT-24zzk 分支接着提交；两条冻结测试只加类型收窄（modify_existing，断言不变）；空状态规则测试放 test/spec/frontend/admin-dashboard-yesterday-null/。契约评审与前端代码评审各走各的，证据都记在本单名下。
 refs: []
 refs_hash: {}
 contract_sections: ['6.6']
@@ -15,8 +16,23 @@ paths:
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
   - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/admin/src/pages/dashboard/{model.ts,model.test.ts,DashboardPage.tsx}'
+  - 'apps/admin/src/texts/dashboard.ts'
 test_paths:
   - 'test/spec/contracts/admin-dashboard-yesterday/**'
+  - 'test/spec/frontend/admin-dashboard-yesterday-null/**'
+  - 'test/spec/frontend/admin-dashboard/{overview,states}.test.ts'
+modify_existing:
+  - file: 'test/spec/frontend/admin-dashboard/overview.test.ts'
+    test: '[AC-F1-14a-YESTERDAY#2] 一分显示 0.01；昨日各项为零仍保留四项概览'
+    reason: tighten_only
+    ruling: D10-1466
+    note: 契约 yesterday 改可空后只加类型收窄（先断言夹具里的 yesterday 不为 null），原断言不变
+  - file: 'test/spec/frontend/admin-dashboard/states.test.ts'
+    test: '[AC-F1-14a-STATES#2] 刷新只重新请求一次并显示新值，不重复加载其他接口'
+    reason: tighten_only
+    ruling: D10-1466
+    note: 契约 yesterday 改可空后只加类型收窄（先断言夹具里的 yesterday 不为 null），原断言不变
 impl: claude
 tester: claude-independent
 accept:
