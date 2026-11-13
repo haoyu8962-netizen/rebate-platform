@@ -543,3 +543,9 @@ approvals:
     granted: true
     date: '2026-11-13'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/ops）：只收紧 --tests 这个测试机入口的报告判定（approvals 86 留下的 FU-TESTS-REPORT-SKIPPED-ONLY），不改 --fast、--red 与完整验证，不改必需检查。只动 tools/ops/tests-report.ts、tests-report.test.ts、tools/ops/README.md 与台账；测试与实现由两个不同的全新子代理做，测试机先红 4 / 28、实现后 28 / 28，Codex general r1 通过，verify:fast 通过；编排核过实际差异（D10-1501）。'
+  - id: 88
+    row: 4
+    title: 'B1-02zzz 任务专属一次性追加：写规则测试第 4 次——只改已冻结的 test/spec/identity/sms-codes/http.int.test.ts 里 it.each 回调体内的 step_up 分支（请求改为带本人令牌、不带 phone，断言不变；login / bind 两行的请求与断言不动），回调内只动态导入未被本任务改过的模块；其余口径与次数上限不变'
+    granted: true
+    date: '2026-11-14'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动）：前三次里第 1 次是 Codex 写完本任务 27 条规则测试；第 2、3 次都只是在改那一条冻结用例的 step_up 行时被先红检查拒掉（一次因为在用例块外加了导入与辅助函数，一次因为冻结文件去加载了本任务改过的支撑文件），不是测试内容有缺陷，是摸清「共用回调体的 it.each 三行都要登记、冻结文件不得加载本任务改过的文件」这两条门禁要求用掉的。改法已由 D10-1572 / D10-1579 定死、台账三行登记已合并（PR 94），所以放一次试次把它改完。收口：这一次若先红检查或证据检查仍不接受，停下把报错原文报编排，转由门禁与工具线给「共用回调的未变行」加登记方式，不再追加试次。编排按 approvals 16 / 24 登记。'
