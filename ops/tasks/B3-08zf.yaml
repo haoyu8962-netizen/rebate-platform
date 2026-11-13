@@ -32,5 +32,27 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/message-feedback/**'
+red_exempt:
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#2] post /v1/agent/messages/{message_id}/feedback（setAgentMessageFeedback）覆盖归属与目标检查所需的有效错误码'
+    reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#2] post /v1/agent/messages/{message_id}/report（reportAgentMessage）覆盖归属与目标检查所需的有效错误码'
+    reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#7] feedback 只接受必填 up/down，拒绝撤销值和多余字段'
+    reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#8] reason 是必填的 1–200 字自由文本，封闭且不自造原因枚举'
+    reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#7][AC-CT-08e#8] /v1/agent/messages/{message_id}/feedback 成功响应复用 EmptyResponse'
+    reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#7][AC-CT-08e#8] /v1/agent/messages/{message_id}/report 成功响应复用 EmptyResponse'
+    reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
+  - file: test/spec/contracts/agent-history/http.test.ts
+    test: '[AC-CT-08e#8][AC-CT-08e#9] 新举报契约使用 reason，废弃草稿的三个枚举均不出现'
+    reason: 测试体未改；同文件 [AC-CT-08e#1] 的 .each 回调里只把 planned 断言改为无未实现标记（D10-1385 / D10-1455），文件因此被整体评判
 status: todo
 pr: null
