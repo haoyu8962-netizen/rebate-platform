@@ -7,6 +7,7 @@ type: impl
 # ② FU-CT13G-DEDUP-HARDEN：recordEvents 在事务内先批内去重（同键只留首条）、再按 (app_id, event_type, event_id) 排序插入，消掉两个并发批次相反顺序含相同键时的 40P01；计数语义不变。
 # 规则测试（Codex，新目录只新增，CT-13g 的冻结用例一字不动、不需要 modify_existing，D10-1520）：两个 app 用同一个 event_id 各自都落库、互不可见；两次并发调用真的重叠（如用 advisory 锁 / 屏障让两边都进事务后再继续）；每条事件各读一次时钟测不过（用会前进的 Clock）；反序并发批次不死锁、各自计数正确。
 # 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。depcruise：只有 *.int.test.ts 能 import @couli/db/testing。
+# 2026-11-14 补（编排 D10-1553；以本条为准，取代 D10-1551 的 red_exempt）：原 #3（同键并发真重叠）、#6（每次调用只读一次 Clock）主干即绿，red_exempt 对新文件不生效，已由新鲜独立 Claude 逐字搬到 CT-13j（test/spec/analytics/record-events-behaviour/，改号 [AC-CT-13j#1] / [AC-CT-13j#2]）、以变异代替先红；本单只留 5 条照常先红，CT-13j 合并后那两条是冻结用例，本单实现须保持其绿。
 refs: []
 refs_hash: {}
 deps: [CT-13g]
@@ -17,13 +18,6 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/analytics/record-events-harden/**'
-red_exempt:
-  - file: test/spec/analytics/record-events-harden/concurrency.int.test.ts
-    test: '[AC-CT-13i#3] 同键并发确实等待未提交事务，胜者接受一条、等待者重复一条'
-    reason: 收紧 CT-13g 评审 S2（原 #6 并发两次未必真重叠）——把现有「同键并发只落一行」的行为用确定的重叠钉死；主干实现已满足（主键冲突等待未提交事务），先红时为绿属预期（测试机 couli-runs/CT-13i/red/1），D10-1519 ③
-  - file: test/spec/analytics/record-events-harden/batch.int.test.ts
-    test: '[AC-CT-13i#6] 会前进的 Clock 在每次调用只读一次，同批所有 server_at 完全相同'
-    reason: 收紧 CT-13g 评审 S2（固定 Clock 测不出每条事件各读一次时钟）——钉住现有「一次调用只读一次 Clock」的行为；主干实现已满足，先红时为绿属预期（测试机 couli-runs/CT-13i/red/1），D10-1519 ③
 impl: claude
 tester: codex
 accept:
