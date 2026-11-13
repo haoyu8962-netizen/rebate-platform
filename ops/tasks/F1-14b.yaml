@@ -4,6 +4,7 @@ title: 后台工作台：昨日概览为空（yesterday null）时显示空状�
 type: impl
 # 2026-11-13 入账（前端线 fe，账号 3）。前置：CT-24zzk（AdminDashboard.yesterday 改可空，还没有聚合行时返回 null）合并到主干；未合并前本单不开工。工作台待办卡契约与 admin 的组装（七张接齐、beneficiary_held_overdue 暂不返回，D10-1402 ③）以合并时主干为准。
 # 页面：yesterday 为 null 时昨日概览区显示空状态（不显示 0、不显示 null），空状态文案取现有文案；没有合适的现成说法先报编排定，不自造。待办卡只认契约 AdminDashboardTodoKey 里的键、服务端返回哪些显示哪些；beneficiary_held_overdue 不返回时不出、也不补 0 卡。其余行为不变，冻结 admin-dashboard 全绿。
+# 2026-11-13 置 void（编排 D10-1466 ③）：yesterday 可空的前端部分并入 CT-24zzk 同一张 PR（task/CT-24zzk）；七张卡不出 beneficiary_held_overdue 无需前端改动——model.ts 只显示服务端返回且本端认识的待办键，不补 0 卡。
 refs: []
 refs_hash: {}
 deps: [CT-24zzk]
@@ -17,5 +18,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-dashboard-yesterday-empty/**'
-status: todo
+status: void
 pr: null
