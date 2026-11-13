@@ -8,6 +8,7 @@ type: impl
 # (7) 历史翻页真库逐页翻到底、同一轮时间相同时用户在前（造助手 id 小于用户 id 的轮）、不属于本会话的游标 → 20001；个人信息副本里的 Agent 对话同样「时间相同时用户在前」；(8) 已并进 B3-08ze（挂路由同一张 PR）；
 # (9) 断线补写结果链（保序，D10-1361）：终态才补写会丢掉列表与搜索尝试之间的先后，须在列表产生时按序登记，或给结果集与尝试带同轮序号、终态按序重放；规则测试先红至少五串——单次搜索、同轮两次不同搜索、awaiting_price 同词不同价格上限、断线期间无列表、先出列表再有一次无结果搜索——每串与正常送达写出的 agent_result_chains 逐行相同、当前条件相同（B3-08zc 第 4 轮留档 couli-runs/B3-08zc/backfill-chain-r4.patch 可接着用）。
 # 分工：Opus 实现，Codex 评审。RV1。2026-11-13 桌面线「AI 助手」接手：规则测试作者改为 Codex（Codex 已恢复先用 Codex，D10-1437 / D10-1455 ④；Codex 报错再换独立 Claude 并改回台账）；B3-08zf（A3）已合并，本单按 (1)–(7)、(9) 一次写规则测试。
+# 2026-11-13 置 void（编排 D10-1522）：Codex 写的 15 条规则测试先红 red/1 里 11 条主干已绿、4 条真红；照 D10-1506 拆成 B3-08zg（test-change，收已绿的 11 条）与 B3-08zh（impl，收 4 条真红与 pendingCard 机制退役）。守卫不许改已有任务的 type（D10-1429）。
 # prettier-ignore
 refs: [BR-AI-19, BR-AI-20, BR-AI-22, BR-AI-23, BR-AI-05]
 refs_hash:
@@ -31,5 +32,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/reply-persist-tighten/**'
-status: todo
+status: void
 pr: null

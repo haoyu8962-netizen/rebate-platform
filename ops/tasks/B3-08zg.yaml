@@ -1,0 +1,22 @@
+id: B3-08zg
+repo: rebate-platform
+title: B3-08zd 拆出（test-change，D10-1522）：历史接口与助手回复落库——主干已满足的 11 条刻画现有行为（白名单 30501、回复与终态同事务、回滚后 card_id 不可引用、别的 app 30504、断线卡下一轮可引用、断线补写结果链五串与正常送达逐行相同），主干绿 + 变异实跑代替先红
+type: test-change
+# 2026-11-13 桌面线「AI 助手」入账（编排 D10-1522；取代 B3-08zd 中已绿的部分）。规则测试由 Codex 写（原 B3-08zd 写测试第 1 次），只新增 test/spec/agent/reply-persist-tighten/**（chains / references / history / lifecycle 四个用例文件 + fault.ts），不改实现与已有用例；真红的 4 条已由新鲜独立 Claude 机械拆到 test/spec/agent/reply-persist-gaps/**（B3-08zh）。
+# 验收：主干上全部用例绿；变异逐处单独实跑、跑后还原，每组至少一处，#9（断线补写结果链）至少三处，每条用例至少被一处变异打红，打不红的收紧或撤下；#9 若三处变异里有哪一串始终打不红，先报编排。变异清单与结果进 PR 说明。非 task 分支、不带证据文件，标签由编排核对后加（先例 QA-03bt、B3-05t）。
+# prettier-ignore
+refs: [BR-AI-19, BR-AI-20, BR-AI-23, BR-AI-05]
+refs_hash:
+  BR-AI-19: 3c0c40a3ed93
+  BR-AI-20: ed15f04bab16
+  BR-AI-23: 5ebdbaff580d
+  BR-AI-05: 2ac35e2cd8ef
+deps: [B3-08zc]
+paths:
+  - 'test/spec/agent/reply-persist-tighten/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
