@@ -1,0 +1,20 @@
+id: CT-13g
+repo: rebate-platform
+title: 'CT-13g：analytics 模块写入函数——收一批已校验的事件，同一事务先插去重表、只有新 (event_type, event_id) 才写 events，返回 { accepted, duplicates }；server_at 取注入的 Clock，user_id / device_id 由调用方（服务端）给'
+type: impl
+# 2026-11-13 be 入账（编排 D10-1487 / D10-1488；C-31 第二步的服务端落库部分，第九批 docs/changes/20261113-裁定回写第九批.md §3.1）。不动 contracts/openapi.yaml、不占契约槽；接口契约与接收路由归 w1（CT-13d / B1-06zo），三端与 H5 生成代码、报表查询不在范围。
+# 新建 apps/api/src/modules/analytics/**（未列入 risk-map 白名单，按 RV2）。入参草案（已抄 w1 对齐，D10-1487）：recordEvents(db, { appId, userId | null, deviceId | null, events: [{ eventId, eventType, props, clientAt }] }) → { accepted, duplicates }；同批内重复也只算一次；幂等最后落在去重表主键（AGENTS 硬规则 4）；不做校验（由接收处照 specs/events.yaml 校验后传入）、不做报表查询。依赖 CT-13e。
+# 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
+refs: []
+refs_hash: {}
+deps: [CT-13e]
+paths:
+  - 'apps/api/src/modules/analytics/**'
+test_paths:
+  - 'test/spec/analytics/record-events/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

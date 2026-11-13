@@ -1,0 +1,22 @@
+id: CT-13h
+repo: rebate-platform
+title: 'CT-13h：POST /v1/events 接收处接线——B1-06zo 校验通过的事件交给 analytics 的写入函数落库（去重），接收结果照契约；等 B1-06zo 落地后再开'
+type: impl
+# 2026-11-13 be 入账（编排 D10-1487 / D10-1488；C-31 第二步的服务端落库部分，第九批 docs/changes/20261113-裁定回写第九批.md §3.1）。不动 contracts/openapi.yaml、不占契约槽；接口契约与接收路由归 w1（CT-13d / B1-06zo），三端与 H5 生成代码、报表查询不在范围。
+# 只接线：接收处（B1-06zo 在 linking 模块里）把整批已校验事件连同服务端注入的 user_id / device_id 交给 CT-13g 的写入函数；link_jump 写 link_open_attempts 的既有逻辑不变。入参以 w1 在 notices 里回的已校验形状为准。依赖 B1-06zo 与 CT-13g。
+# 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
+refs: []
+refs_hash: {}
+deps: [B1-06zo, CT-13g]
+paths:
+  - 'apps/api/src/modules/linking/**'
+  - 'apps/api/src/modules/analytics/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/analytics/events-intake-wiring/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
