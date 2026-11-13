@@ -38,12 +38,12 @@ export class IngestEventsController {
 
   async ingest(request: IngestEventsHttpRequest): Promise<IngestEventsResponse> {
     const principal = tokenPrincipal(request);
-    const deviceId = header(request, 'x-device-id');
     const { droppedCount } = await this.#intake.ingest(
       {
         appId: principal?.app_id ?? header(request, 'x-app-id'),
         userId: principal?.uid ?? null,
-        deviceId: deviceId === '' ? null : deviceId,
+        // Required by the contract: the route schema rejects a batch without X-Device-Id (20001).
+        deviceId: header(request, 'x-device-id'),
       },
       request.body.events,
     );
