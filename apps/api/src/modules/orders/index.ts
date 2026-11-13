@@ -174,6 +174,9 @@ export { OrdersModule } from './orders.module.ts';
 export { OrdersAdminModule } from './orders-admin.module.ts';
 export type { AdminOrderWritePorts, OrdersAdminOptions } from './orders-admin.module.ts';
 export type { AdminClaimPorts } from './application/admin-claims.ts';
+// B1-10v: the dashboard card claim_review_pending — per app, the claims waiting for review (read only).
+export { countClaimsPendingReview } from './application/claim-review-count.ts';
+export type { ClaimReviewCount } from './application/claim-review-count.ts';
 // B1-10i: the admin entry's order reads (GET /admin/v1/orders, /admin/v1/orders/{order_id}).
 export type {
   AdminOrderLinkRecord,

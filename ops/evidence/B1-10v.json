@@ -1,0 +1,74 @@
+{
+  "risk_note": "RV2 (orders). B1-10v (D10-1401): the dashboard card claim_review_pending gets a per-app read-only count exported by orders — countClaimsPendingReview(db, appId) reuses the console claim list's counts read (infra/admin-claim-reads.ts, filter { appId } only) and the list's own claimCounts, returns { count, breakdown: { auto_matched, manual_review } } with count = the sum; no new status predicate, no writes. Host: integration spec/orders/claim-review-count 4/4; unit claim-review-count.test.ts 4; eslint / prettier / tsc -b apps/api test / depcruise 0. Implementation and the round-3 rule-test writer were fresh desktop Claude subagents (model opus) in place of claude -p on the terminal accounts, which are no longer usable (DESKTOP-common-20261113).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "codex-run.sh review --review-type money (RV2, medium), base = rule-test head bcfc61ad0. Round 1: pass, no findings. couli-runs/B1-10v/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Rule tests test/spec/orders/claim-review-count/** by independent Claude (tester claude-independent, approvals #36): rounds 1-2 via claude-run.sh, round 3 by a fresh desktop Claude subagent (terminal accounts unusable). spec-test r1 (claude-independent): fail, 2 S1 (closed strong-evidence claim, multi-item claim) taken in round 2. r2: the claude-independent run was cut by a 403 (no output, not counted, D10-1412), rerun by Codex: fail, 1 S1 (a manual_review claim whose weak items are all decided and whose undecided items are all strong). Round 3 allowed by ruling D10-1454 (last round): only that fixture added (+49 lines) with assertions in #1 and #3. r3 (Codex, incremental): pass. Container red/1 ok, problems 0, 4 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#1] 只计本 app 的 auto_matched 与 manual_review，分项各自正确；其余全部状态与别的 app 不计",
+    "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#2] 没有待审时 count 与两项都是 0；只有一类待审时另一项为 0",
+    "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#3] 计数等于后台找回列表页：不加筛选的 GET /admin/v1/claims 的 counts.auto_matched + counts.manual_review，两项分别相等",
+    "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#4] 只读：调用前后 claims、claim_items、orders、link_logs、audit_logs 不变，重复调用结果相同"
+  ],
+  "task": "B1-10v",
+  "spec_commit": "a0772179ba461a566a33c9db5dea5ff9d1d6eafb",
+  "spec_ref": "62b5c99338f8ebe3030d55e5d282adbc7493c637",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a0772179ba461a566a33c9db5dea5ff9d1d6eafb",
+      "tree": "309e9c5a9b0b4897c5ee8fca6d5eb00b566d67c2",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T11:18:12Z",
+      "finished_at": "2026-11-13T11:18:20Z",
+      "red_tests": [
+        "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#1] 只计本 app 的 auto_matched 与 manual_review，分项各自正确；其余全部状态与别的 app 不计",
+        "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#2] 没有待审时 count 与两项都是 0；只有一类待审时另一项为 0",
+        "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#3] 计数等于后台找回列表页：不加筛选的 GET /admin/v1/claims 的 counts.auto_matched + counts.manual_review，两项分别相等",
+        "test/spec/orders/claim-review-count/count.int.test.ts > [AC-B1-10v#4] 只读：调用前后 claims、claim_items、orders、link_logs、audit_logs 不变，重复调用结果相同"
+      ],
+      "expected": ["test/spec/orders/claim-review-count/count.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "10995c67e21cde7db68311581bd69d3e30123ed6cb9f4c26c0b97c82f6ef2ca5"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "480e33187f6f1f7f1914299f2358a23e504e4475",
+    "specs": "8f76891b6e53531f480a4626a10b8dc9c1e82a28"
+  }
+}
