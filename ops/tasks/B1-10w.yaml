@@ -1,0 +1,32 @@
+id: B1-10w
+repo: rebate-platform
+title: 工作台接口 adminGetDashboard 组装（D10-1401）——GET /admin/v1/dashboard 按权限点裁剪返回七张待办卡（计数一律调用各模块已导出的计数函数）、yesterday 与 status，契约去 planned
+type: impl
+# 2026-11-13 入账（后台与工作台桌面线，编排 D10-1401 / D10-1402 / D10-1403；方案 couli-runs/DASHBOARD/plan-20261113.md，进度表 DASHBOARD/progress.md）。等计数导出与昨日汇总都到齐再合，不拆成只返回部分卡（D10-1401）。
+# 依据：契约 adminGetDashboard 描述与 AdminDashboard* schema、enums admin_dashboard_todo_key（04 §11.1、01 F-ADM-26）。计数口径不在本单：每张卡只调用所属模块 index.ts 导出的计数函数（countWithdrawReviewPending、countClaimsPendingReview、countSettleBillPending、countReconDiffOpen、countProcessingAppeals、B1-10u 的举报超时计数、countUnionAuthPending），不另写判定。
+# 裁剪：无 dashboard.view → 10403；todo[] 只含账号持有该卡权限点的卡，可见时 count=0 也返回；beneficiary_held_overdue 这次不返回（D10-1402，契约描述随本单写明）；route 按契约（settle_bill_pending 为 /settle-bills?awaiting_confirm=true）；claim_review_pending 带 breakdown。yesterday 有 dashboard.view 就返回（读 B1-34q 的导出，可空按 CT-24zzk）；status 只给 fund.view（payout.queue_paused、逐个通道 payout.channel_paused.<channel>、settle.auto.enabled 经已有配置读取，W 未上线回 null）。只读，不写库、不写审计。
+# 规则测试要点：每张卡 count = 该卡列表页同筛选的 total（经 HTTP 对比）；按权限点逐张裁剪（含超级管理员、只有 dashboard.view、缺某点）；跨 app 不串；beneficiary_held_overdue 不出现；status 有无 fund.view 两种；yesterday 有行 / 无行（null）。
+refs: []
+refs_hash: {}
+deps: [B1-10u, B1-34q, CT-24zzk, B2-09zl, B1-22zc, B1-10v, B1-03zo, B2-09zm, B2-02w]
+paths:
+  - 'apps/api/src/modules/admin/application/dashboard*.ts'
+  - 'apps/api/src/modules/admin/http/admin/dashboard.controller*.ts'
+  - 'apps/api/src/modules/admin/admin.module.ts'
+  - 'apps/api/src/modules/admin/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'ops/evidence/B1-10w.json'
+test_paths:
+  - 'test/spec/admin/dashboard/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/dashboard/**'
+status: todo
