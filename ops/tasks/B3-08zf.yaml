@@ -6,7 +6,7 @@ type: contract
 # 用户侧：feedback up/down（down 置 badcase，可改选，写 feedback_at），report 写 reported、reason、reported_at、report_status pending；只限本人会话里的助手消息（归属同历史接口，非本人 / 不存在 30504），注销后的会话同 B3-08zd (8)。重复举报：保留首次 reported_at 与原因、不改状态（08 未定，按幂等处理并在 PR 写明）。
 # 状态机 specs/state-machines/agent-report.yaml：field report_status，null --report--> pending --handle--> handled；生成 packages/domain/src/state-machines/agent-report.gen.ts。
 # 导出端口（agent/index.ts）：createAgentReportAdminPort(deps).handle(trx, {appId, messageId, handlerId, note, expectedRowVersion}) → {kind: 'handled', rowVersion, handledAt} | 'not_found' | 'not_reported' | 'already_handled' | 'cas_conflict'；在调用方事务里按 row_version CAS 写 report_status handled、report_handler_id、report_handled_at（注入 Clock）、report_note、row_version + 1；不抛冲突，调用方映射 20902（data.resource=agent_report）。note 的 1–500 字校验归调用方。
-# 契约去 planned 并重生成，占契约槽（与 B3-08ze 前后排）。RV1，新鲜独立 Claude 写测试，Opus 实现，Codex 评审。
+# 契约去 planned 并重生成，占契约槽（与 B3-08ze 前后排）。RV1，Opus 实现，Codex 评审；规则测试作者 11-13 改为 Codex（D10-1455 ④：Codex 已恢复先用 Codex，Codex 报错才换独立 Claude 并改回台账）。
 # 2026-11-13 桌面线「AI 助手」补：① 冻结 test/spec/contracts/agent-history/http.test.ts [AC-CT-08e#1] 的 .each（只剩 feedback、report 两行）断言 x-implementation 为 planned，本单两行都去 planned，按 D10-1385 只改 .each 回调里这一句为「无未实现标记」、其余断言与 kit.ts 不动，列进 test_paths，编排按 #24 核。② 应 admin 11-13 02:49（冻结 [AC-B3-08k#1] 不许把句柄交给注入的函数值）：除 index.ts 的 createAgentReportAdminPort 外，另从 apps/api/src/modules/agent/application/agent-report.ts 导出带函数体的 handleAgentReport(trx, clock, input)，返回同一联合体，port 只是包它；B1-10t 在 agent 模块内直接 import 它。③ B1-10t 规则测试评审的两条范围外 S1：举报入口、👎 置 badcase 在本单钉住；ai_label 已由 agent-stream 契约用例钉住、TraceWriter 24 小时与 agent.trace_lost 已由 B3-08y trace-retry 用例钉住，不在本单。
 # prettier-ignore
 refs: [BR-AI-19, BR-ID-15, BR-AI-20]
@@ -28,7 +28,7 @@ test_paths:
   - 'test/spec/agent/message-feedback/**'
   - 'test/spec/contracts/agent-history/http.test.ts'
 impl: claude
-tester: claude-independent
+tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/message-feedback/**'
