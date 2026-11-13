@@ -20,8 +20,11 @@ export const EVENTS_SPEC_FILE = new URL('../../../../../../specs/events.yaml', i
 export interface EventBatchContext {
   readonly appId: string;
   readonly userId: string | null;
-  /** X-Device-Id, required by the contract (the route schema rejects a batch without it). */
-  readonly deviceId: string;
+  /**
+   * Generic unit-level shape (CT-13g). Over HTTP it always carries the required X-Device-Id
+   * (the route schema rejects a batch without it, 20001); null only from non-HTTP callers.
+   */
+  readonly deviceId: string | null;
 }
 
 export interface PreparedEvent {
