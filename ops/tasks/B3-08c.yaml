@@ -10,7 +10,7 @@ type: impl
 # 不进 allowlist、不接线：注册与 specs/agent-tools.allowlist 归 B3-08g。风险 RV1。分工：Codex 先写规则测试，Opus 实现，Codex 评审。
 refs: [BR-AI-01]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4
 deps: [B3-04a, B3-05i]
 paths:
   - 'apps/api/src/modules/agent/tools/handoff/**'

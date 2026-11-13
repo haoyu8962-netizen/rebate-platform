@@ -12,7 +12,7 @@ type: contract
 # 2026-10-06 补 packages/contracts-ts/**：改 enums/ops.yaml 与 routes.json 须同 PR 重新生成生成物，routes.json 新键要 bridge.ts 认（contracts/README）。
 refs: [BR-AI-01, BR-AI-18, BR-ID-10]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4
   BR-AI-18: 81915a2d5a19
   BR-ID-10: c574b92360bb
 contract_sections: ['8.3', '8.5']

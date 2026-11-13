@@ -6,7 +6,7 @@ type: impl
 # store/results/** 与 db 改动在 agent2 的地盘：只动 agent_tool_calls 写入那一处，落地前在 notices 与 agent2 约先后；迁移槽请编排排。不空回复计数接 /metrics 改 platform，另记 FU-EMPTY-REPLY-METRIC，不在本单。
 refs: [BR-AI-01, BR-AI-18, BR-AI-19]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4
   BR-AI-18: 81915a2d5a19
   BR-AI-19: 3c0c40a3ed93
 deps: [B3-05o]

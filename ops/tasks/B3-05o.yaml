@@ -7,7 +7,7 @@ type: impl
 # Codex 额度到 11-17，规则测试与评审按 approvals 36 由新鲜独立 Claude 承担。
 refs: [BR-AI-01, BR-AI-07, BR-AI-18, BR-AI-08]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4
   BR-AI-07: a704165181b4
   BR-AI-18: 81915a2d5a19
   BR-AI-08: e932a052720f

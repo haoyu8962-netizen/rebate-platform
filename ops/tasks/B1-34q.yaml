@@ -7,7 +7,7 @@ type: impl
 # 2026-11-13 D10-1464 ①：落后天数指标随本单——platform/metrics 新增 dashboard-day-lag（每个 app 最新一行落后最近到期日的天数），registry / index 登记、entry.ts 在 worker 入口接线，couli.yaml 告警规则；规则测试补一条「聚合落后 N 天时指标值为 N、追平后回 0」。
 refs: [BR-TEXT-21, BR-FUND-18, BR-CALC-02, BR-FUND-01]
 refs_hash:
-  BR-TEXT-21: 98c84e1bad14
+  BR-TEXT-21: 52b1125604db
   BR-FUND-18: c7ebd23ee75e
   BR-CALC-02: 0ffe8a4d0b65
   BR-FUND-01: 71daaebae9bd
