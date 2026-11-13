@@ -1,0 +1,23 @@
+id: CT-26zo
+repo: rebate-platform
+title: 契约文案：提现驳回原因用户文案入 contracts/texts.default.json——08 BR-TEXT-08「驳回原因（默认）」表（字典 withdraw_reject_reason）五个人工可选原因 + NEGATIVE_BALANCE，键 withdraw_reject_reason.<CODE>.title，句子逐字；notification 的提现结果消息改读这六个键，不再另存一份（D10-1523 ②）
+type: impl
+# 2026-11-14 入账（后台与工作台桌面线·内容，编排 D10-1523 ②；fe F1-08ah 落地前要有）。编码以 BR-WDR-10 为准：RISK_SUSPECT、ORDER_ABNORMAL、PAYEE_INFO_INVALID、USER_REQUEST、OTHER（人工可选）、NEGATIVE_BALANCE（系统专用）；ORDER_ABNORMAL、USER_REQUEST 08 标「默认处理，待财务确认」，照默认登。
+# 键名照同类 claim_reject_reason.<CODE>.title；specs/fund-term-keys.yaml 已有 withdraw_reject_reason. 前缀（资金术语），不改归类。texts.default.json 的 version 照同类单不改。不动 openapi，不占契约槽。
+# 服务端另一份：apps/api/src/modules/notification/application/withdrawal-result-message.ts 的 REJECT_REASONS 常量（WD_REJECTED 推送的 {reason}）——改为从 contracts/texts.default.json 读这六个键（同步读一次，先例 agent/stream/mount/texts.ts），推送句子不变；App 提现详情只拿 reason_code，{reason} 由客户端按 /v1/dict 的这六个键取。
+refs: [BR-TEXT-08]
+refs_hash:
+  BR-TEXT-08: b3178ff2da40
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'apps/api/src/modules/notification/application/withdrawal-result-message{,.test}.ts'
+  - 'apps/api/src/modules/notification/application/withdraw-reject-texts{,.test}.ts'
+test_paths:
+  - 'test/spec/content/withdraw-reject-reason-texts/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/withdraw-reject-reason-texts/**'
+status: todo
