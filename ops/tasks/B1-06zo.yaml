@@ -14,6 +14,13 @@ deps: [CT-13d]
 paths:
   - 'apps/api/src/modules/linking/**'
   - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml' # 实现阶段：ingestEvents 去 x-implementation planned（设备头保持必填，D10-1535）
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/linking/link-jump-report/**'
 impl: claude
