@@ -6,11 +6,12 @@ type: impl
 # 范围：只做详情页这两个按钮与对话框、结果后刷新详情；状态与权限显隐按 BR-WDR-10 / BR-WDR-11（服务端为准）。不做：执行打款、手动成功、撤销微信转账、重新计算风险标签（契约里没有对应单张接口或属 ②）。
 # 2026-11-14 台账补丁（编排 D10-1523 ①）：refs 补 BR-WDR-05、BR-WDR-10、BR-TEXT-08；两份 F1-08a 冻结只读测试随本单改（rule_change），改动由不是原写手的一方做。驳回原因的用户文案键由后台与工作台线补（D10-1523 ②），补齐前只显示原因码中文名。
 # 资金页面（apps/admin/src/**/withdrawals/** 属 RV2）：规则测试 Codex 写、独立 Claude 审；实现 Claude Opus；代码评审 money。写操作每次 StepUpModal（totp 档，BR-ID-34），提交中禁用、对话框保留，CAS / 状态已变（20902）提示后刷新；按钮按状态与权限点隐藏不置灰（规格 §6）；金额只经 @couli/money。任务书带 D10-1477（本机不裸跑全量检查）、D10-1503（推送前测试机 verify:fast）。
-refs: [BR-WDR-05, BR-WDR-10, BR-TEXT-08]
+refs: [BR-WDR-05, BR-WDR-10, BR-TEXT-08, BR-ID-34]
 refs_hash:
   BR-WDR-05: 99e2e2654ce0
   BR-WDR-10: 1db6b508e224
   BR-TEXT-08: b3178ff2da40
+  BR-ID-34: 6a2bdd4ca3ce
 deps: []
 paths:
   - 'apps/admin/src/pages/withdrawals/**'
@@ -19,6 +20,7 @@ test_paths:
   - 'test/spec/frontend/admin-withdrawal-review/**'
   - 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
   - 'test/spec/frontend/admin-withdrawals/pages.browser.test.ts'
+  - 'test/spec/frontend/admin-withdrawals/source.test.ts'
 modify_existing:
   - file: 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
     test: '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号'
@@ -38,6 +40,12 @@ modify_existing:
     br: [BR-WDR-10]
     ruling: D10-1523
     note: F1-08a 阶段性禁止项解除，写接口已落地：只把【审核通过】【驳回】从本用例的写入口禁止中拿掉（在用例块内排除这两个名字，不改共用 WRITE 正则与帮手），其余写入口仍禁止、断言不动；只有持 withdraw.review 才看得到这两个按钮由新测试 admin-withdrawal-review 钉
+  - file: 'test/spec/frontend/admin-withdrawals/source.test.ts'
+    test: '[AC-F1-08a-SOURCE#1] 页面在 pages/withdrawals 并由 App.tsx 登记，文案在 texts/withdrawals.ts，读取经 data provider、不直接 fetch、不用动态码'
+    reason: rule_change
+    br: [BR-WDR-10, BR-ID-34]
+    ruling: D10-1543
+    note: F1-08a 阶段性禁止项解除，写接口已落地：只去掉本用例里「不用动态码」那一句（pages/withdrawals 不得引 components/step-up），审核通过 / 驳回须弹共用 StepUpModal；页面位置、文案文件、经 data provider、不直接 fetch 等其余断言不动
 impl: claude
 tester: codex
 accept:
