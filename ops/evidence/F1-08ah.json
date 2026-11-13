@@ -1,0 +1,167 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-withdrawal-review/dictionary.test.ts > [AC-F1-08ah-DICT#1] 每个人工原因下方读取相应用户字典文案，不能硬编码默认文案或把内部备注当用户文案",
+    "test/spec/frontend/admin-withdrawal-review/dictionary.test.ts > [AC-F1-08ah-DICT#2] 原因文案的 .title 缺失时只显示原因码中文名，不回退到写死的用户文案",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ENTRY#1] 待审核且持 withdraw.review 或超管才出现可用审核入口；只读及打款权限不能替代审核权限",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ENTRY#2] 以真实状态决定显隐：APPROVED 仅可驳回；打款中、成功、失败、已驳回均无入口；待审可审核且不提前触发打款",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-HOLD#1] 待审核单有生效的提现冻结仍显示两个审核入口，动态码后只提交一次通过，按服务端结果刷新",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-HOLD#2] 待审核和已通过单有生效的提现冻结仍可驳回，动态码后各只提交一次并刷新为已驳回",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-APPROVE#1] 确认再验动态码，只批量通过当前一张，body 不带行版本；收到成功后 GET 新状态，保留驳回入口",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-APPROVE#2] 批量接口 HTTP 成功但当前单 skipped：四种原因分别提示，不能误报审核成功；not_pending 刷新状态",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-REJECT#1] 五个人工原因 Radio 必选，每项展示用户文案，系统码不可选；空选确认不验证不提交，选择后才进入动态码",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-REJECT#2] 待审与已通过均可驳回，五种原因准确编码；备注可选，USER_REQUEST 必带备注；成功重新 GET",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-NOTE#1] USER_REQUEST 缺备注或纯空白不可提交，补上非空备注后才验动态码",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-NOTE#2] 内部备注按 Unicode 码点限 500：500 个非 BMP 字符完整送出，不能按 UTF-16 截半",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-NOTE#3] 501 码点备注不能提交，改到 500 码点可确认；不静默截断用户备注",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-SUBMIT#1] 两种操作连点确认、验证以及请求在途再次点击只提交一次；提交中保留原对话框并禁用提交按钮",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-CANCEL#1] 两种确认对话框取消后焦点回触发按钮，动态码取消不提交；重新操作仍需验证",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ERROR#1] 驳回返回 20902 提示状态变化并刷新，不自动重发；状态已驳回后隐藏入口",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ERROR#2] 两种操作返回 10003 重新要动态码，等待期间不重发；验证后新凭据、原幂等标识和原 body 提交",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ERROR#3] 10403 提示无权限；20001 按 fields 与 reason 区分备注、无此单、已有转账、先查询、查询已成功，不误报成功或重发",
+    "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-STEPUP#1] 审核通过后再驳回是新操作：再次动态码，换幂等标识，不沿用上次凭据"
+  ],
+  "risk_note": "F1-08ah (orchestrator D10-1517 batch 1 item 1, first of three; D10-1523, D10-1525, D10-1543, D10-1554, D10-1559). The admin withdrawal detail page gets 审核通过 and 驳回: approve sends POST /admin/v1/withdrawals/batch-approve with only this withdrawal (the contract has no single approve), reject sends POST /admin/v1/withdrawals/{id}/reject with one of the five manual reason codes and an optional note; both go through the shared StepUpModal (totp tier, BR-ID-34) and are sent once, 10003 asks for the code again, 20902 refreshes, 20001 shows the fields / reason; the buttons show only with withdraw.review and a reviewable status and stay shown when the member has holds (blocking is the server's W2 guard, BR-WDR-10 / BR-WDR-05); a skipped result never shows a success message. Under each reason the user copy comes only from withdraw_reject_reason.<CODE>.title (CT-26zo #72); a missing key shows the code's Chinese name, no hard-coded text. Four frozen F1-08a read-only cases change (rule_change): READONLY#2, READONLY#3 and BROWSER#1 exclude only these two buttons from the write-entry ban (D10-1523, br BR-WDR-10); SOURCE#1 drops only its no-step-up line (D10-1543, br BR-WDR-10 and BR-ID-34); every other assertion stays. Rule tests by Codex in several rounds; independent Claude spec-test r1 void (exit 12, branch moved), r2 fail (S1 holds fixture, S2 false success), r3 pass after Codex added both; the frozen-case edits by Codex (not the F1-08a writer); DICT#1 key renamed to .title and DICT#2 added for the missing-key fallback (D10-1554, not counted). Red on couli-ci for spec commit 55d5ee4ce (19 tests, right reason). Implementation by Opus 5.5 in two rounds (r2 removed a hard-coded BR-TEXT-08 fallback); couli-ci --tests admin-withdrawal-review 19/19 green and --browser green; run.ts static 10/10. Codex money review r1 pass, r2 pass with one S2: [AC-F1-08ah-DICT#2] line 100 asserts toContain('风险嫌疑') instead of the exact full text. Tightening it hit the per-task Codex limit (task_calls 10, 规划/11 §2.5); by D10-1559 this lands as is and the tightening is follow-up FU-F108AH-DICT2-EXACT (tighten_only, Codex, to toBe('风险嫌疑（RISK_SUSPECT）用户看到：风险嫌疑')), ahead of the next page task. The same case still asserts that neither the BR-TEXT-08 default sentence nor the dictionary test sentence appears. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 pass, r2 pass; the one S2 (DICT#2 line 100 not exact) is follow-up FU-F108AH-DICT2-EXACT per D10-1559 after the Codex task_calls breaker opened"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "tests by Codex; independent Claude spec-test r1 void (exit 12), r2 fail (S1/S2), r3 pass"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-withdrawals/readonly.test.ts",
+      "test": "[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号',\n  async () => {\n    const cases = [\n      { id: ID.pending, number: NO.pending, payee: PAYEE.pending },\n      { id: ID.approved, number: NO.approved, payee: PAYEE.approved },\n      { id: ID.paying, number: NO.paying, payee: PAYEE.paying },\n    ];\n    for (const { id, number, payee } of cases) {\n      const server = createServer(undefined, { permissions: ALL_GRANTS });\n      await mount(server, { route: detailRoute(id) });\n      const area = await detailShown(server, id, number);\n      expect(squash(textOf(area)), `${number}: the masked account`).toContain(\n        squash(payee.masked_account),\n      );\n      expect(usable(main(), WRITE), `${number}: no usable write entry`).toEqual([]);\n      expect(revealEntries(area), `${number}: no usable reveal entry`).toEqual([]);\n      await assertReadOnly(server, { root: area, detail: true });\n      cleanup();\n    }\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号',\n  async () => {\n    const { actions, click, REVEAL } = await import('./helpers.ts');\n    const otherEntry = (node: HTMLElement) =>\n      !/^(审核通过|驳回)$/.test(\n        squash(node.getAttribute('aria-label')) || squash(node.textContent),\n      );\n    const cases = [\n      { id: ID.pending, number: NO.pending, payee: PAYEE.pending },\n      { id: ID.approved, number: NO.approved, payee: PAYEE.approved },\n      { id: ID.paying, number: NO.paying, payee: PAYEE.paying },\n    ];\n    for (const { id, number, payee } of cases) {\n      const server = createServer(undefined, { permissions: ALL_GRANTS });\n      await mount(server, { route: detailRoute(id) });\n      const area = await detailShown(server, id, number);\n      expect(squash(textOf(area)), `${number}: the masked account`).toContain(\n        squash(payee.masked_account),\n      );\n      expect(usable(main(), WRITE).filter(otherEntry), `${number}: no usable write entry`).toEqual(\n        [],\n      );\n      expect(revealEntries(area), `${number}: no usable reveal entry`).toEqual([]);\n      expect(usable(area, WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);\n      const pressable = [\n        ...actions(area, WRITE).filter(otherEntry),\n        ...actions(area, REVEAL),\n        ...actions(area, /^查看/),\n      ];\n      for (const node of new Set(pressable)) if (node.isConnected) await click(node);\n      await settled(server);\n      expect(server.writes(), 'no request other than GET').toEqual([]);\n      assertOnlyReads();\n      cleanup();\n    }\n  },\n  FLOW_TIMEOUT,\n);",
+      "br": ["BR-WDR-10"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (temporary commit b99eecda62fa, reverted, not pushed): WithdrawalDetailPage renders an extra 【执行打款】 button beside ReviewActions with every permission point; couli-ci --tests readonly.test.ts / source.test.ts (tests/3) and --browser (browser run) put this test red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/frontend/admin-withdrawals/readonly.test.ts",
+      "test": "[AC-F1-08a-READONLY#3] 列表进详情一路（列表 → 【详情】 → 详情，全部权限点）只请求 GET /admin/v1/withdrawals 与 GET /admin/v1/withdrawals/{id}，不请求打款、导出、自动到账设置、风险标签重算或查看全量",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08a-READONLY#3] 列表进详情一路（列表 → 【详情】 → 详情，全部权限点）只请求 GET /admin/v1/withdrawals 与 GET /admin/v1/withdrawals/{id}，不请求打款、导出、自动到账设置、风险标签重算或查看全量',\n  async () => {\n    const server = createServer(undefined, { permissions: ALL_GRANTS });\n    await mount(server);\n    const area = await openDetail(server, NO.failed, ID.failed);\n    await settled(server);\n    assertOnlyReads();\n    expect(server.writes()).toEqual([]);\n    expect(server.detailReads().every((read) => read.path.endsWith(ID.failed))).toBe(true);\n    expect(usable(main(), WRITE), 'no usable write entry').toEqual([]);\n    await assertReadOnly(server, { root: area, detail: true });\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-08a-READONLY#3] 列表进详情一路（列表 → 【详情】 → 详情，全部权限点）只请求 GET /admin/v1/withdrawals 与 GET /admin/v1/withdrawals/{id}，不请求打款、导出、自动到账设置、风险标签重算或查看全量',\n  async () => {\n    const { actions, click, REVEAL } = await import('./helpers.ts');\n    const otherEntry = (node: HTMLElement) =>\n      !/^(审核通过|驳回)$/.test(\n        squash(node.getAttribute('aria-label')) || squash(node.textContent),\n      );\n    const server = createServer(undefined, { permissions: ALL_GRANTS });\n    await mount(server);\n    const area = await openDetail(server, NO.failed, ID.failed);\n    await settled(server);\n    assertOnlyReads();\n    expect(server.writes()).toEqual([]);\n    expect(server.detailReads().every((read) => read.path.endsWith(ID.failed))).toBe(true);\n    expect(usable(main(), WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);\n    expect(usable(area, WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);\n    expect(revealEntries(area), 'no usable reveal entry beside the masked values').toEqual([]);\n    const pressable = [\n      ...actions(area, WRITE).filter(otherEntry),\n      ...actions(area, REVEAL),\n      ...actions(area, /^查看/),\n    ];\n    for (const node of new Set(pressable)) if (node.isConnected) await click(node);\n    await settled(server);\n    expect(server.writes(), 'no request other than GET').toEqual([]);\n    assertOnlyReads();\n  },\n  FLOW_TIMEOUT,\n);",
+      "br": ["BR-WDR-10"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (temporary commit b99eecda62fa, reverted, not pushed): WithdrawalDetailPage renders an extra 【执行打款】 button beside ReviewActions with every permission point; couli-ci --tests readonly.test.ts / source.test.ts (tests/3) and --browser (browser run) put this test red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/frontend/admin-withdrawals/pages.browser.test.ts",
+      "test": "[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET",
+      "reason": "rule_change",
+      "before": "it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET', async () => {\n  await page.viewport(1440, 1080);\n  const server = await show();\n  const area = page.getByRole('main');\n  const tab = area.getByRole('tab', { name: /^审核列表/ });\n  const row = area.getByRole('row').filter({ hasText: NO.rejected });\n  // With tabs, the 审核列表 tab is chosen first; without tabs the list is the page itself.\n  await expect.poll(() => tab.elements().length + row.elements().length, FIRST).toBeGreaterThan(0);\n  if (tab.elements().length > 0) await tab.first().click();\n  await expect.element(row, FIRST).toBeVisible();\n  await expect.element(row).toMatchTextContent(STATUS_NAME.REJECTED);\n  await expect.element(row).toMatchTextContent(RISK_NAME.same_device_multi_account!);\n  await expect\n    .element(area.getByRole('row').filter({ hasText: NO.pending }))\n    .toMatchTextContent(STATUS_NAME.PENDING_REVIEW);\n  expect(usableWrites(), 'no usable write entry on the list').toEqual([]);\n\n  const buttons = row.getByRole('button', { name: ENTRY });\n  const links = row.getByRole('link', { name: ENTRY });\n  await expect.poll(() => buttons.elements().length + links.elements().length).toBeGreaterThan(0);\n  await (buttons.elements().length > 0 ? buttons.first() : links.first()).click();\n\n  await expect.poll(() => window.location.pathname, FIRST).toBe(`/withdrawals/${ID.rejected}`);\n  await expect.element(page.getByText(PAYEE.rejected.masked_account).first(), FIRST).toBeVisible();\n  await expect.element(area).toMatchTextContent(PAYEE.rejected.masked_name);\n  await expect.element(area).toMatchTextContent(STATUS_NAME.REJECTED);\n  expect(server.requests('GET', detailPath(ID.rejected)).length).toBeGreaterThan(0);\n  expect(usableWrites(), 'no usable write entry on the detail').toEqual([]);\n  expect(usableReveals(), 'no usable reveal entry on the detail').toEqual([]);\n  expect(unmaskedShown(), 'no unmasked phone number, payee account or payee name').toEqual([]);\n  expect(server.writes(), 'only GET requests').toEqual([]);\n  expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);\n});",
+      "after": "it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET', async () => {\n  await page.viewport(1440, 1080);\n  const server = await show();\n  const area = page.getByRole('main');\n  const tab = area.getByRole('tab', { name: /^审核列表/ });\n  const row = area.getByRole('row').filter({ hasText: NO.rejected });\n  // With tabs, the 审核列表 tab is chosen first; without tabs the list is the page itself.\n  await expect.poll(() => tab.elements().length + row.elements().length, FIRST).toBeGreaterThan(0);\n  if (tab.elements().length > 0) await tab.first().click();\n  await expect.element(row, FIRST).toBeVisible();\n  await expect.element(row).toMatchTextContent(STATUS_NAME.REJECTED);\n  await expect.element(row).toMatchTextContent(RISK_NAME.same_device_multi_account!);\n  await expect\n    .element(area.getByRole('row').filter({ hasText: NO.pending }))\n    .toMatchTextContent(STATUS_NAME.PENDING_REVIEW);\n  expect(usableWrites(), 'no usable write entry on the list').toEqual([]);\n\n  const buttons = row.getByRole('button', { name: ENTRY });\n  const links = row.getByRole('link', { name: ENTRY });\n  await expect.poll(() => buttons.elements().length + links.elements().length).toBeGreaterThan(0);\n  await (buttons.elements().length > 0 ? buttons.first() : links.first()).click();\n\n  await expect.poll(() => window.location.pathname, FIRST).toBe(`/withdrawals/${ID.rejected}`);\n  await expect.element(page.getByText(PAYEE.rejected.masked_account).first(), FIRST).toBeVisible();\n  await expect.element(area).toMatchTextContent(PAYEE.rejected.masked_name);\n  await expect.element(area).toMatchTextContent(STATUS_NAME.REJECTED);\n  expect(server.requests('GET', detailPath(ID.rejected)).length).toBeGreaterThan(0);\n  expect(\n    usableWrites().filter(\n      (node) =>\n        !/^(审核通过|驳回)$/.test(\n          (node.getAttribute('aria-label') || node.textContent || '').replace(/\\s+/g, ''),\n        ),\n    ),\n    'no usable write entry on the detail',\n  ).toEqual([]);\n  expect(usableReveals(), 'no usable reveal entry on the detail').toEqual([]);\n  expect(unmaskedShown(), 'no unmasked phone number, payee account or payee name').toEqual([]);\n  expect(server.writes(), 'only GET requests').toEqual([]);\n  expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);\n});",
+      "br": ["BR-WDR-10"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (temporary commit b99eecda62fa, reverted, not pushed): WithdrawalDetailPage renders an extra 【执行打款】 button beside ReviewActions with every permission point; couli-ci --tests readonly.test.ts / source.test.ts (tests/3) and --browser (browser run) put this test red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/frontend/admin-withdrawals/source.test.ts",
+      "test": "[AC-F1-08a-SOURCE#1] 页面在 pages/withdrawals 并由 App.tsx 登记，文案在 texts/withdrawals.ts，读取经 data provider、不直接 fetch、不用动态码",
+      "reason": "rule_change",
+      "before": "it('[AC-F1-08a-SOURCE#1] 页面在 pages/withdrawals 并由 App.tsx 登记，文案在 texts/withdrawals.ts，读取经 data provider、不直接 fetch、不用动态码', () => {\n  expect(existsSync(textsFile), 'texts/withdrawals.ts').toBe(true);\n  const pages = pageSources().map(parse);\n  expect(pages.length, 'source files under pages/withdrawals').toBeGreaterThan(0);\n  const { imports, names } = scan(pages);\n  expect(imports.some((name) => /texts\\/withdrawals(?:\\.ts)?$/.test(name))).toBe(true);\n  expect(\n    ['useDataProvider', 'useCustom', 'useCustomMutation', 'custom', 'useList', 'useOne'].some(\n      (name) => names.has(name),\n    ),\n  ).toBe(true);\n  for (const banned of ['fetch', 'XMLHttpRequest', 'dangerouslySetInnerHTML'])\n    expect(names.has(banned), banned).toBe(false);\n  const stepUp = /components\\/step-up(?:\\/|$)|\\/useStepUp(?:\\.tsx?)?$/;\n  expect(\n    imports.filter((name) => stepUp.test(name)),\n    'no step-up on this read-only page',\n  ).toEqual([]);\n  const app = scan([parse(join(root, 'App.tsx'))]);\n  expect(app.imports.some((name) => /^\\.\\/pages\\/withdrawals(?:\\/|$)/.test(name))).toBe(true);\n});",
+      "after": "it('[AC-F1-08a-SOURCE#1] 页面在 pages/withdrawals 并由 App.tsx 登记，文案在 texts/withdrawals.ts，读取经 data provider、不直接 fetch、不用动态码', () => {\n  expect(existsSync(textsFile), 'texts/withdrawals.ts').toBe(true);\n  const pages = pageSources().map(parse);\n  expect(pages.length, 'source files under pages/withdrawals').toBeGreaterThan(0);\n  const { imports, names } = scan(pages);\n  expect(imports.some((name) => /texts\\/withdrawals(?:\\.ts)?$/.test(name))).toBe(true);\n  expect(\n    ['useDataProvider', 'useCustom', 'useCustomMutation', 'custom', 'useList', 'useOne'].some(\n      (name) => names.has(name),\n    ),\n  ).toBe(true);\n  for (const banned of ['fetch', 'XMLHttpRequest', 'dangerouslySetInnerHTML'])\n    expect(names.has(banned), banned).toBe(false);\n  const app = scan([parse(join(root, 'App.tsx'))]);\n  expect(app.imports.some((name) => /^\\.\\/pages\\/withdrawals(?:\\/|$)/.test(name))).toBe(true);\n});",
+      "br": ["BR-WDR-10", "BR-ID-34"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (temporary commit b99eecda62fa, reverted, not pushed): WithdrawalDetailPage references the global fetch (export const mutantProbe = typeof fetch), i.e. a direct network call outside the data provider; couli-ci --tests source.test.ts (tests/3) put this test red",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "F1-08ah",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "6e5865f34d2e0e394e48ab32355e2d7d6482a6e8",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6e5865f34d2e0e394e48ab32355e2d7d6482a6e8",
+      "tree": "39a991b7578cab7e3f88c6804d2c14059088ee5f",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-13T22:21:14Z",
+      "finished_at": "2026-11-13T22:21:25Z",
+      "red_tests": [
+        "test/spec/frontend/admin-withdrawal-review/dictionary.test.ts > [AC-F1-08ah-DICT#1] 每个人工原因下方读取相应用户字典文案，不能硬编码默认文案或把内部备注当用户文案",
+        "test/spec/frontend/admin-withdrawal-review/dictionary.test.ts > [AC-F1-08ah-DICT#2] 原因文案的 .title 缺失时只显示原因码中文名，不回退到写死的用户文案",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ENTRY#1] 待审核且持 withdraw.review 或超管才出现可用审核入口；只读及打款权限不能替代审核权限",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ENTRY#2] 以真实状态决定显隐：APPROVED 仅可驳回；打款中、成功、失败、已驳回均无入口；待审可审核且不提前触发打款",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-HOLD#1] 待审核单有生效的提现冻结仍显示两个审核入口，动态码后只提交一次通过，按服务端结果刷新",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-HOLD#2] 待审核和已通过单有生效的提现冻结仍可驳回，动态码后各只提交一次并刷新为已驳回",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-APPROVE#1] 确认再验动态码，只批量通过当前一张，body 不带行版本；收到成功后 GET 新状态，保留驳回入口",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-APPROVE#2] 批量接口 HTTP 成功但当前单 skipped：四种原因分别提示，不能误报审核成功；not_pending 刷新状态",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-REJECT#1] 五个人工原因 Radio 必选，每项展示用户文案，系统码不可选；空选确认不验证不提交，选择后才进入动态码",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-REJECT#2] 待审与已通过均可驳回，五种原因准确编码；备注可选，USER_REQUEST 必带备注；成功重新 GET",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-NOTE#1] USER_REQUEST 缺备注或纯空白不可提交，补上非空备注后才验动态码",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-NOTE#2] 内部备注按 Unicode 码点限 500：500 个非 BMP 字符完整送出，不能按 UTF-16 截半",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-NOTE#3] 501 码点备注不能提交，改到 500 码点可确认；不静默截断用户备注",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-SUBMIT#1] 两种操作连点确认、验证以及请求在途再次点击只提交一次；提交中保留原对话框并禁用提交按钮",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-CANCEL#1] 两种确认对话框取消后焦点回触发按钮，动态码取消不提交；重新操作仍需验证",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ERROR#1] 驳回返回 20902 提示状态变化并刷新，不自动重发；状态已驳回后隐藏入口",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ERROR#2] 两种操作返回 10003 重新要动态码，等待期间不重发；验证后新凭据、原幂等标识和原 body 提交",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-ERROR#3] 10403 提示无权限；20001 按 fields 与 reason 区分备注、无此单、已有转账、先查询、查询已成功，不误报成功或重发",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts > [AC-F1-08ah-STEPUP#1] 审核通过后再驳回是新操作：再次动态码，换幂等标识，不沿用上次凭据"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-withdrawal-review/dictionary.test.ts",
+        "test/spec/frontend/admin-withdrawal-review/review.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "5aa4fa244973a444b083319f3c42a561a9ab542dd55153245424903f00763f21"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5f9e1af4f7ee82d3921a531f5bc7a81967e74121",
+    "specs": "e28c922334b9d4ca38a47135693492d446f33e5e"
+  }
+}

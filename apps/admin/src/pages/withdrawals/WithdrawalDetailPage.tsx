@@ -2,9 +2,10 @@
 // GET /admin/v1/withdrawals/{withdrawal_id}（CT-24y getAdminWithdrawal）——单据摘要、金额明细、
 // 自动到账判定（结论、未满足条件、预警实际值、执行受阻）、风险标签快照、收款账号（只显示契约给的
 // 脱敏值）、批次与批次明细、转账尝试摘要、生效的提现冻结、处理记录（单据上的各时间点）。
-// 持 withdraw.review 或 fund.view 可看；20001 显示未找到，10403 显示无权限。
-// TODO(规划/11 §7): 【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】与手机号 /
-// 收款账号的【查看】全量 — blocked on 契约未出
+// 持 withdraw.review 或 fund.view 可看；20001 显示未找到，10403 显示无权限。标题行的【审核通过】
+// 【驳回】见 ReviewActions.tsx（F1-08ah，持 withdraw.review 且状态可审时显示），写后重新拉详情。
+// TODO(规划/11 §7): 【执行打款】【手动成功】【撤销微信转账】【重新计算】与手机号 / 收款账号的
+// 【查看】全量 — blocked on 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -42,6 +43,7 @@ import {
   statusLabel,
   type WithdrawalDetail,
 } from './model.ts';
+import { ReviewActions } from './ReviewActions.tsx';
 import { Forbidden, marksOf } from './WithdrawalsPage.tsx';
 
 const t = withdrawalsTexts.detail;
@@ -68,10 +70,16 @@ export function WithdrawalDetailPage({
   withdrawalId,
 }: WithdrawalDetailPageProps): ReactElement {
   if (!canRead(access)) return <Forbidden />;
-  return <DetailContent withdrawalId={withdrawalId} />;
+  return <DetailContent access={access} withdrawalId={withdrawalId} />;
 }
 
-function DetailContent({ withdrawalId }: { readonly withdrawalId: string }): ReactElement {
+function DetailContent({
+  access,
+  withdrawalId,
+}: {
+  readonly access: AccessControl;
+  readonly withdrawalId: string;
+}): ReactElement {
   const getProvider = useDataProvider();
   const navigate = useNavigate();
   const [attempt, setAttempt] = useState(0);
@@ -102,6 +110,8 @@ function DetailContent({ withdrawalId }: { readonly withdrawalId: string }): Rea
     setState({ status: 'loading' });
     setAttempt((value) => value + 1);
   };
+  /** Read again after a review write, keeping the current content until the answer arrives. */
+  const reload = () => setAttempt((value) => value + 1);
 
   let body: ReactElement;
   if (state.status === 'loading') {
@@ -140,6 +150,11 @@ function DetailContent({ withdrawalId }: { readonly withdrawalId: string }): Rea
         <Typography.Title level={4} style={{ margin: 0 }}>
           {state.status === 'ready' ? state.data.out_biz_no : t.crumb}
         </Typography.Title>
+        {state.status === 'ready' ? (
+          <div style={{ marginInlineStart: 'auto' }}>
+            <ReviewActions item={state.data} access={access} onChanged={reload} />
+          </div>
+        ) : null}
       </Flex>
       {body}
     </Flex>

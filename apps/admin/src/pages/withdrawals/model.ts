@@ -280,3 +280,74 @@ export const codeOf = (cause: unknown): number | undefined =>
 /** Whether the account may read withdrawals (withdraw.review or fund.view, CT-24y). */
 export const canRead = (access: { can(permission: string): boolean }): boolean =>
   access.can('withdraw.review') || access.can('fund.view');
+
+/** POST adminBatchApproveWithdrawals (the detail sends just its own withdrawal). */
+export const APPROVE_URL = `${LIST_URL}/batch-approve`;
+/** POST adminRejectWithdrawal. */
+export const rejectUrl = (id: string): string => `${itemUrl(id)}/reject`;
+export const STEP_UP_URL = '/admin/v1/auth/step-up';
+/** The permission point of 【审核通过】【驳回】 (a super admin holds every point). */
+export const REVIEW_PERMISSION = 'withdraw.review';
+/** AdminWithdrawalRejectRequest.note maxLength (Unicode code points). */
+export const REJECT_NOTE_MAX = 500;
+
+export type RejectReason = Schema<'AdminWithdrawalRejectRequest'>['reason_code'];
+/** The five reasons a person can choose (contract order); NEGATIVE_BALANCE is the system's. */
+export const REJECT_REASONS: readonly RejectReason[] = [
+  'RISK_SUSPECT',
+  'ORDER_ABNORMAL',
+  'PAYEE_INFO_INVALID',
+  'USER_REQUEST',
+  'OTHER',
+];
+
+/** 【审核通过】 only from PENDING_REVIEW (W2). */
+export const canApprove = (status: WithdrawalStatus): boolean => status === 'PENDING_REVIEW';
+/** 【驳回】 from PENDING_REVIEW or APPROVED (W3). */
+export const canReject = (status: WithdrawalStatus): boolean =>
+  status === 'PENDING_REVIEW' || status === 'APPROVED';
+
+interface UserDictionary {
+  readonly texts: Readonly<Record<string, string>>;
+}
+
+// 随包的用户字典（contracts/texts.default.json，BR-TEXT-08 withdraw_reject_reason）：驳回原因的
+// 用户文案只读 withdraw_reject_reason.<编码>.title；缺键时只显示原因码中文名，不写死用户文案。
+const userLoaded = import.meta.glob<UserDictionary>('../../../../../contracts/texts.default.json', {
+  eager: true,
+  import: 'default',
+});
+const userDictionary: Readonly<Record<string, string>> = Object.values(userLoaded)[0]?.texts ?? {};
+
+function userText(key: string): string | undefined {
+  const value = Object.hasOwn(userDictionary, key) ? userDictionary[key] : undefined;
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/** The member's text of a reject reason: withdraw_reject_reason.<code>.title, else its enum name. */
+export function rejectReasonText(code: string): string {
+  return userText(`withdraw_reject_reason.${code}.title`) ?? t.review.reasonNames[code] ?? code;
+}
+
+/** A new Idempotency-Key for one review operation (kept across a 10003 re-verification). */
+export function newRequestKey(): string {
+  return globalThis.crypto.randomUUID();
+}
+
+/** data.fields of a 20001, else []. */
+export function fieldsOf(cause: unknown): readonly unknown[] {
+  if (!(cause instanceof AdminApiError)) return [];
+  const data = cause.data;
+  if (typeof data === 'object' && data !== null && 'fields' in data && Array.isArray(data.fields))
+    return data.fields as unknown[];
+  return [];
+}
+
+/** data.reason of an error, else undefined. */
+export function reasonOf(cause: unknown): string | undefined {
+  if (!(cause instanceof AdminApiError)) return undefined;
+  const data = cause.data;
+  if (typeof data === 'object' && data !== null && 'reason' in data)
+    return typeof data.reason === 'string' ? data.reason : undefined;
+  return undefined;
+}
