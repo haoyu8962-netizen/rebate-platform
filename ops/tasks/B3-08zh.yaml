@@ -1,0 +1,100 @@
+id: B3-08zh
+repo: rebate-platform
+title: B3-08zd 拆出（impl，D10-1522）：终态回滚后同进程不得经提前写入的下发记录解析 card_id、run 进行中注销后收尾不回写、历史真库翻页与同时间用户在前（含个人信息副本）；退役 TraceRedoQueue.pendingCard / PendingCardSource / onCardWritten
+type: impl
+# 2026-11-13 桌面线「AI 助手」入账（编排 D10-1522；取代 B3-08zd 中真红的部分）。规则测试由 Codex 写（原 B3-08zd 写测试第 1 次），4 条真红由新鲜独立 Claude 机械拆到 test/spec/agent/reply-persist-gaps/**（测试体逐字未改）：(3) 商品卡已发帧但终态回滚，同进程下一轮不得通过提前写入的下发记录解析 card_id；(4) run 进行中清理账号、断线后收尾，自由文本保持清空、不新增卡片与下发记录；(7) 真库逐页翻到底（limit 跨轮切页、不重不漏、末页无游标、同轮同时间用户在前、外会话游标 20001）与个人信息副本同时间用户在前。
+# (3) 另要退役 pendingCard 机制：实现删 TraceRedoQueue.pendingCard、PendingCardSource、onCardWritten 钩子；冻结 test/spec/agent/trace-retry/queue.test.ts 四个用例里删与之直接相关的五条断言（modify_existing rule_change，br BR-AI-19），kit.ts 文件头删 withPendingCards 描述；两个失用导入一并删，文件整份评判，未改的 13 条 red_exempt + red_exempt_outside（同 B1-34q）。证据留五条断言的前后原文，编排按 #24 逐条看。
+# 分工：Codex 写规则测试，Opus 实现，Codex 评审。RV1。B3-08zg 先合（本单测试导入它的 fault.ts 等夹具）。
+# prettier-ignore
+refs: [BR-AI-19, BR-AI-20, BR-AI-22, BR-AI-23, BR-AI-05]
+refs_hash:
+  BR-AI-19: 3c0c40a3ed93
+  BR-AI-20: ed15f04bab16
+  BR-AI-22: d412bc8a631a
+  BR-AI-23: 5ebdbaff580d
+  BR-AI-05: 2ac35e2cd8ef
+deps: [B3-08zg]
+paths:
+  - 'apps/api/src/modules/agent/stream/**'
+  - 'apps/api/src/modules/agent/store/**'
+  - 'apps/api/src/modules/agent/http/**'
+  - 'apps/api/src/modules/agent/orchestrator/results/**'
+  - 'apps/api/src/modules/agent/application/personal-data-copy-read.ts'
+test_paths:
+  - 'test/spec/agent/reply-persist-gaps/**'
+  - 'test/spec/agent/trace-retry/{kit.ts,queue.test.ts}'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/reply-persist-gaps/**'
+modify_existing:
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#2][BR-AI-19] 写者一直失败：退避 1s→2s→4s… 封顶 5 分钟，同一 run 两路同一节奏；截止前不记 lost；24h 后恰好一条 agent.trace_lost（reason expired，只带 run_id 与计数）、onLost 一次；之后不再调写者'
+    reason: rule_change
+    br: [BR-AI-19]
+    ruling: D10-1522
+    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#3][BR-AI-19] SQLSTATE 22 / 23 / 42 类（如 23514 CHECK）：不再写，立即记 lost（reason rejected，已写成的一半计 0），onLost(rejected)'
+    reason: rule_change
+    br: [BR-AI-19]
+    ruling: D10-1522
+    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#4][BR-AI-19] 队列满（上限 2）：再进一个 run 时丢最旧的一项并记 lost（reason overflow），新的照常进队；恢复后只写留下的两个'
+    reason: rule_change
+    br: [BR-AI-19]
+    ruling: D10-1522
+    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#6][BR-AI-22] 首次失败进队、再写时写者答 skipped（期间完成了注销）：出队，不再写，不记 lost，一条 info'
+    reason: rule_change
+    br: [BR-AI-19]
+    ruling: D10-1522
+    note: '依 D10-1314 / D10-1347 / D10-1522：只删与已退役的 pendingCard 机制直接相关的断言（本用例 1–2 条，queue.pendingCard(...)），其余断言不改；依据 BR-AI-19 细则「助手回复落库」：卡片随终态同事务写、下一轮只读已提交的数据，不再有进程内待写卡片；编排按 #24 逐条核'
+red_exempt:
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#1][BR-AI-19] 卡片一半写入失败、工具调用一半成功：run 进队，1 秒后（不早于）只再写卡片一半，写成后出队；全过程只一条 warn agent_trace_write_failed（run_id、error_name），无 lost'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#1][BR-AI-19] 两路都失败（工具调用一路同步抛错）：persist 不抛、照常返回；恢复后两路各写成一次；只一条 warn；之后不再调写者'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#1][BR-AI-19] 写入正常：每路只写一次，不进队，不记 warn / lost'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#2][BR-AI-19] 截止从该 run 首次失败起算：两个 run 先后失败，各自在自己的 24h 到期时记 lost'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#2] traceRedoDefaults()：队列上限 5000 个 run、退避 1 秒起翻倍、上限 5 分钟、截止 24 小时'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#3][BR-AI-19] 工具调用一路永久失败、卡片一路成功：lost 计 cards 0、tool_calls 为该 run 的调用数'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#3][BR-AI-19] 其余错误（连接断开 08、并发 40、停机 57、资源 53、不带 SQLSTATE 的错误）都是暂时性的：进队、1 秒后再写，不记 lost'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#4][BR-AI-19] 默认上限 5000：第 5001 个失败的 run 进队时只丢最早的一个'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#5][BR-AI-19] close 时队列非空、写者挂起：立刻做最后一次写入，在时限内返回，剩下的记 lost（reason shutdown）；之后没有定时器再调写者'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#5][BR-AI-19] close 时写者已恢复：最后一次写入写成，不记 lost，close 不等时钟即返回'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#5][BR-AI-19] close 时最后一次写入仍失败：记 shutdown lost，close 不等时钟即返回；warn 仍只一条'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#5][BR-AI-19] close 时首次写入还挂着（未进队）：在时限内等它，等不到记 shutdown lost；队列空时 close 立即返回'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    test: '[AC-B3-08y#6][BR-AI-22] 首次写入即 skipped：不 warn、不进队、不记 lost，一条 info agent_trace_skipped_erased（run_id）'
+    reason: '冻结用例体未改；本文件只因删了 pendingCard 断言而删掉两个失用导入（APP、SESSION），被整份评判（D10-1522）'
+red_exempt_outside:
+  - file: 'test/spec/agent/trace-retry/queue.test.ts'
+    reason: '用例外只删了两个失用导入（APP、SESSION，随 pendingCard 断言删除而失用），未改的用例体一字不动'
+status: todo
+pr: null
