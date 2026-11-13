@@ -1,0 +1,24 @@
+id: CT-17h
+repo: rebate-platform
+title: 契约：apps.json 入站回调登记自有 scheme `couli` 与深链主域（只填 06 Q-A5 已定的取值；N-14 G17 / N-05，D10-1566 W-1）
+type: contract
+# 2026-11-14 w1 入账（编排 D10-1566 W-1；依据 NATIVE/needs-triage-20261114.md：contracts/apps.json 末尾 inbound 为 []，$comment 写「等给出取值」）。
+# 规划/06 Q-A5「已定（2026-10-06）」：scheme `couli`；主域名 couliapp.com，子域 api / stream / h5 / admin / admin-api / l（深链），分享页主机 s.couliapp.cn。
+# 本单只登记入站回调：custom_scheme `couli`；深链 verified_link（host l.couliapp.com）只在 apps.json 的入站结构允许登记「已定但尚未完成系统域名验证」时才写，否则不写并在 $comment 说明「等 Apple Team ID 与 Associated Domains（06 Q-C9 / N-04）」——不臆造 verified=true。
+# 没定的留空并在 $comment 列出：安卓 App 包名、鸿蒙 bundle / scheme 以外的取值、微信通用链接（06 Q-C12）、百川回调细节（CAP-TB-11）。不改 apps / sdk_queries 既有条目。
+refs: []
+refs_hash: {}
+contract_sections: ['9']
+deps: []
+paths:
+  - 'contracts/apps.json'
+  - 'contracts/README.md'
+  - 'packages/contracts-ts/**'
+test_paths:
+  - 'test/spec/contracts/apps-inbound-own/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo

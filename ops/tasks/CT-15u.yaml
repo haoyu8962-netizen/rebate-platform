@@ -1,0 +1,17 @@
+id: CT-15u
+repo: rebate-platform
+title: 规格：system-permissions.yaml 补安卓、鸿蒙条目——按三端工程实际声明的权限登记事实（N-21 ②，D10-1566 W-4）
+type: contract
+# 2026-11-14 w1 入账（编排 D10-1566 W-4；依据 NATIVE/needs-triage-20261114.md N-21 ②：清单只有 iOS 与鸿蒙 vibrate 条目，文件内 TODO(规划/03 §4.9) 写着安卓、鸿蒙「各端接入时按系统文档核对」）。
+# 做法：读三端 main 的工程清单（安卓 app/src/main/AndroidManifest.xml 及各模块合并来源的 uses-permission、鸿蒙各模块 module.json5 的 requestPermissions），把实际声明的权限照文件头结构逐条登记（type / platform / system_key / feature / purpose_key / phase / builds / source），只登记事实：清单里没有的权限不加，SDK 带进来的写 source sdk:<名>；工程里声明了、但 03 §4.9 没列的，照登记并在注释写明「事实登记，规划回写待定」。
+# purpose_key 只引用 contracts/texts.default.json 已有的键；缺键的条目 purpose_key 置 null 并在注释列出，不新写用途文案（隐私与权限文案等法务，06 Q-F14）。version 递增。证据（三端仓库、提交号、文件:行）写进 PR 说明。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'specs/system-permissions.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
