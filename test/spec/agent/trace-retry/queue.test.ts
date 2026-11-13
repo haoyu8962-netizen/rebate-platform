@@ -5,7 +5,6 @@
 import { expect, it } from 'vitest';
 import { traceRedoDefaults } from '../../../../apps/api/src/modules/agent/stream/mount/trace-retry.ts';
 import {
-  APP,
   DAY,
   DEFAULTS,
   HOUR,
@@ -13,7 +12,6 @@ import {
   LOST,
   MINUTE,
   SECOND,
-  SESSION,
   SKIPPED,
   WRITE_FAILED,
   advanceTo,
@@ -131,7 +129,6 @@ it('[AC-B3-08y#2][BR-AI-19] 写者一直失败：退避 1s→2s→4s… 封顶 5
   expect(last, 'written again until the window ends').toBeGreaterThanOrEqual(DAY - 300_000);
   expect(last, 'never after the window').toBeLessThanOrEqual(DAY);
   expect(queue.queued()).toBe(0);
-  expect(queue.pendingCard(APP, SESSION, 'c2')).toBeNull();
 
   await advanceTo(q.time, 2 * DAY + HOUR, 10 * MINUTE);
   expect(callsOf(q, run.runId)).toHaveLength(all.length);
@@ -185,7 +182,6 @@ it('[AC-B3-08y#3][BR-AI-19] SQLSTATE 22 / 23 / 42 类（如 23514 CHECK）：不
     expectLost(q.logs.all(), { run_id: run.runId, reason: 'rejected', cards: 2, tool_calls: 0 });
     expect(q.onLost.mock.calls, code).toEqual([['rejected']]);
     expect(queue.queued(), code).toBe(0);
-    expect(queue.pendingCard(APP, SESSION, 'c2'), code).toBeNull();
     q.w.set('pass');
     await advanceTo(q.time, HOUR);
     expect(q.w.of('recordCards', run.runId), code).toHaveLength(1);
@@ -249,8 +245,6 @@ it('[AC-B3-08y#4][BR-AI-19] 队列满（上限 2）：再进一个 run 时丢最
   expect(q.logs.of(LOST)).toHaveLength(1);
   expect(q.onLost.mock.calls).toEqual([['overflow']]);
   expect(queue.queued()).toBe(2);
-  expect(queue.pendingCard(APP, oldest.sessionId, 'c2')).toBeNull();
-  expect(queue.pendingCard(APP, third.sessionId, 'c2')).toEqual(orderCard('c2'));
 
   q.w.set('pass');
   await advanceTo(q.time, 10 * SECOND, SECOND);
@@ -385,11 +379,16 @@ it('[AC-B3-08y#6][BR-AI-22] 首次失败进队、再写时写者答 skipped（�
   await advanceTo(q.time, 5 * SECOND, SECOND);
   expect(callsOf(q, run.runId)).toHaveLength(4);
   expect(queue.queued()).toBe(0);
-  expect(queue.pendingCard(APP, SESSION, 'c2')).toBeNull();
   expect(q.logs.of(SKIPPED)).toHaveLength(1);
   await advanceTo(q.time, DAY + HOUR, 10 * MINUTE);
   expect(callsOf(q, run.runId)).toHaveLength(4);
   expect(q.logs.of(LOST)).toEqual([]);
   expect(q.onLost).not.toHaveBeenCalled();
   expect(q.logs.of(WRITE_FAILED)).toHaveLength(1);
+});
+
+it('[AC-B3-08zh#1][BR-AI-19] 队列不再提供 pendingCard：卡片随终态同事务写，没有进程内待写卡片', () => {
+  const q = queueRig();
+  const queue = q.build();
+  expect('pendingCard' in queue).toBe(false);
 });
