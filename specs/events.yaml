@@ -18,7 +18,7 @@
 #
 # TODO(规划/05 CT-13): app_launch、page_view、exposure、click、search、convert、h5_white_screen 与 funnel_first_order.*
 #   的事件字段 — blocked on 用到它们的任务（首页、搜索、漏斗）给出字段；现在只登记名字与出处。
-version: '5'
+version: '6'
 common_fields:
   event_id:
     type: string
@@ -65,14 +65,14 @@ common_fields:
     required: false
 events:
   link_jump:
-    description: 外跳的每一步结果（BR-ATTR-27 ③；BR-ATTR-21 细则「待跟单卡按实际外跳选」）；另记百川初始化失败（BR-ATTR-27 淘宝行）
-    source: 规划/03 §4.5、§4.7；08 BR-ATTR-21、BR-ATTR-27
+    description: 外跳的每一步结果（BR-ATTR-27 ③；BR-ATTR-21 细则「待跟单卡按实际外跳选」）；另记百川初始化失败（BR-ATTR-27 淘宝行，result=failed 且 failure_reason=sdk_init_failed）
+    source: 规划/03 §4.5、§4.7、§6.2 第 9 条；04 §6.4 POST /v1/events；08 BR-ATTR-21、BR-ATTR-27；编排裁定 D10-1470 ③ ④
     fields:
       phase:
         type: enum
         required: true
         values: [purchase, startup]
-        note: purchase 是一次购买外跳的某一步；startup 只用于同意隐私政策后、还没有购买时的百川初始化失败（result=sdk_init_failed），这时没有 link 与尝试
+        note: purchase 是一次购买外跳的某一步；startup 只用于同意隐私政策后、还没有购买时的百川初始化失败（result=failed、failure_reason=sdk_init_failed），这时没有 link 与尝试
       attempt_id:
         type: string
         required_when:
@@ -95,8 +95,14 @@ events:
       result:
         type: enum
         required: true
-        values: [launched, failed, sdk_init_failed, copied]
-        note: launched 拉起了目标 App 或页面；copied 已复制口令；sdk_init_failed 百川初始化失败（与已初始化但拉起失败的 failed 分开，BR-ATTR-27 淘宝行）
+        values: [requested, failed, unknown]
+        note: 启动结果只有三种（03 §4.5）。requested 系统或 SDK 接受了启动请求，或已复制口令（取代原 launched 与 copied）；failed 明确失败，必带 failure_reason（原因码）；unknown 系统返回不确定、SDK 回调超时或提交后进程重启。BR-ATTR-21「至少一步执行成功」按 requested 或 unknown 计，failed 不计；漏斗与看板把 unknown 单列，不并入 requested。requested 不等于用户看到了商品页，更不等于成交（BR-ATTR-23）
+      failure_reason:
+        type: enum
+        required_when:
+          result: failed
+        values: [sdk_init_failed, step_failed]
+        note: failed 的原因码，result=failed 时必带、其他结果不带。sdk_init_failed 百川初始化失败（原 result 的同名取值，BR-ATTR-27 淘宝行；phase=startup 时只会是它）；step_failed 已初始化但这一步明确失败（原 result=failed）。步骤类型见 step
       sdk_open_by:
         type: enum
         required: false
@@ -105,7 +111,7 @@ events:
       sdk_error_code:
         type: string
         required: false
-        note: 百川回调返回的错误码原样记录（result=failed 或 sdk_init_failed 且 SDK 给出错误码时带），用来区分 SDK 报错与目标 App 未拉起；不带错误描述里的链接或参数
+        note: 百川回调返回的错误码原样记录（result=failed 且 SDK 给出错误码时带，含 failure_reason=sdk_init_failed），用来区分 SDK 报错与目标 App 未拉起；不带错误描述里的链接或参数
       duration_ms:
         type: integer
         required_when:

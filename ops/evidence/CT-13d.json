@@ -1,0 +1,87 @@
+{
+  "task": "CT-13d",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "1aa91f09ccdf698a11772d0fb3964454d9a29d3f",
+  "red_tests": [
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#1] 游客可报、令牌可识别本人、不签名且受最低版本闸门约束，错误码来自现有目录",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#2] 请求是 events 数组，声明有限批量上限并拒绝不成形或超限的整批请求",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#3] 缺字段、非法 UUID、未知事件、旧 result 或非对象事件均不能让整批 schema 拒绝",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#4] 契约写明逐条丢弃、受理清队列、UUID 重试不换和按事件类型加 ID 去重",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#5] 受理响应必须给被丢弃条数，零条和正数合法、负数小数或缺失非法",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#6] link_jump.result 恰好三值、版本递增，公共字段与购买外跳 attempt_id 保留",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#7] 初始化失败作为 failed 的原因码保留，不再占 result；失败有步骤与原因码",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#8] 三值外跳保留淘宝 SDK 必带 sdk_open_by 与可选 sdk_error_code 的约束",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#9] 待跟单卡仅用本人令牌，requested 或 unknown 计成功、failed 不计，明确规则出处",
+    "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#10] 鉴权、签名和版本生成表都包含新接口，生成类型及 planned 路由 schema 同步"
+  ],
+  "risk_note": "Contract task (RV1 by contracts/** plus the h5 anonymous list, which follows the contract). Declares POST /v1/events (operationId ingestEvents, x-implementation planned until B1-06zo): x-auth optional, x-signed false, x-min-version-gate true, error codes 20001 / 10405 only; request {events: array, at most 100 items, items not constrained so one bad event never fails the batch}; response data.dropped_count (int32 >= 0): the server accepts the batch, drops non-conforming events one by one and counts them, and the accept response is the client's acknowledgement (dedup by (event_type, event_id)) (D10-1471). specs/events.yaml v6: link_jump.result is [requested, failed, unknown] (03 §4.5, D10-1470 ③); sdk_init_failed moves to the new failure_reason enum [sdk_init_failed, step_failed], required when result is failed (D10-1470 ④); sdk_open_by stays required as written. The frozen test/spec/contracts/card-bridge-diagnostic-fields/kit.ts changes only untouchedEvents.link_jump to that shape (D10-1480; [AC-CT-13c#4] body unchanged; owner-approved per #24). apps/h5 anonymous.ts lists POST /v1/events (optional operations belong in it). Generated files regenerated, none hand-edited. No money, ledger, attribution runtime or migration change; the server side is B1-06zo.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1aa91f09ccdf698a11772d0fb3964454d9a29d3f",
+      "tree": "5a648ce8d500f0e1d48f2240b7494ae2273d34c5",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-13T17:57:09Z",
+      "finished_at": "2026-11-13T17:57:13Z",
+      "red_tests": [
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#1] 游客可报、令牌可识别本人、不签名且受最低版本闸门约束，错误码来自现有目录",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#2] 请求是 events 数组，声明有限批量上限并拒绝不成形或超限的整批请求",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#3] 缺字段、非法 UUID、未知事件、旧 result 或非对象事件均不能让整批 schema 拒绝",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#4] 契约写明逐条丢弃、受理清队列、UUID 重试不换和按事件类型加 ID 去重",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#5] 受理响应必须给被丢弃条数，零条和正数合法、负数小数或缺失非法",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#6] link_jump.result 恰好三值、版本递增，公共字段与购买外跳 attempt_id 保留",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#7] 初始化失败作为 failed 的原因码保留，不再占 result；失败有步骤与原因码",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#8] 三值外跳保留淘宝 SDK 必带 sdk_open_by 与可选 sdk_error_code 的约束",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#9] 待跟单卡仅用本人令牌，requested 或 unknown 计成功、failed 不计，明确规则出处",
+        "test/spec/contracts/events-ingest/events-ingest.test.ts > [AC-CT-13d#10] 鉴权、签名和版本生成表都包含新接口，生成类型及 planned 路由 schema 同步"
+      ],
+      "expected": ["test/spec/contracts/events-ingest/events-ingest.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f50090926e2b1547623fefb3629ccb720b1e1d160fe5a7fb9e806f9f9d2559c6"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex contract r1 pass; one S2 out of this task: the h5 app-api sends every listed anonymous / optional operation through the client without a token manager, so a signed-in H5 link_jump would carry no token. No caller of /v1/events exists yet; recorded as FU-H5-OPTIONAL-AUTH for the C-31 step-2 H5 wiring (D10-1499 ③). Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by Codex (ledger tester codex): attempt 1 wrote 10 contract tests (red 10/10); attempt 2 pinned failure_reason and synced the frozen kit's link_jump entry (D10-1480), red 10/10 again; spec-test r1 by a fresh independent Claude covered both, including the kit change: pass, one S2 out of scope (B1-06zo runtime)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "10f62e51abcb30c1cb239ed90ae5a6fbaa8fa8e9",
+    "specs": "e28c922334b9d4ca38a47135693492d446f33e5e"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

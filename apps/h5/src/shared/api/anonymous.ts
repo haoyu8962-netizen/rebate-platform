@@ -38,6 +38,8 @@ const ANONYMOUS_OPERATIONS: readonly (readonly [method: string, path: string])[]
   ['POST', '/v1/links/{link_id}/open'],
   ['GET', '/v1/share-pages/{link_id}'],
   ['POST', '/v1/share-pages/{link_id}/tpwd'],
+  // C-31 埋点上报（CT-13d）：x-auth optional，未登录也上报。
+  ['POST', '/v1/events'],
   ['POST', '/v1/landing/sms-codes'],
   ['POST', '/v1/invites/landing-register'],
   ['POST', '/v1/agent/sessions'],
