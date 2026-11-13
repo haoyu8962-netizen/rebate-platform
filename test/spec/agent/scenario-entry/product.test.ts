@@ -4,13 +4,21 @@
 // model the model gets them, without a model the run ends at the card. BR-AI-15 细则: a quote that
 // fails for a server-side reason. 编排 D10-1378: later product searches take the platform named
 // in this message only, never the entry product's.
+// Attempt 2 (spec review r1): the entry card is the session's card (BR-AI-05: the model quotes it
+// again by its product's own card_id; in the same run that gives back the same id, no second
+// card), and a delisted entry product is handled as a delisted link is (the deterministic link
+// path's notice, done stop; with and without a model).
 import { expect, it } from 'vitest';
+import { OFF_SHELF } from '../../../../apps/api/src/modules/parsing/index.ts';
+import { DemoUnionError } from '../../../../apps/api/src/modules/union/index.ts';
 import {
   ENTRY_KEY,
   GUEST,
+  LINK,
   MEMBER,
   MISSING_KEY,
   UNBOUND,
+  comparable,
   content,
   copy,
   intent,
@@ -22,11 +30,67 @@ import {
   says,
   serialized,
   typesOf,
+  type Kit,
+  type RunView,
 } from './kit.ts';
 
 const ENTRY = { product_key: ENTRY_KEY } as const;
 const QUESTION = '这个值得买吗';
 const REPLY = '可以先看看卡片里的信息再决定。';
+/** The entry card is the session's first frame (c1); its product takes the next number (04 §8.2
+ * numberCard): the product's own card_id, the one the model may quote again (BR-AI-05). */
+const ENTRY_FRAME_CARD = 'c1';
+const ENTRY_PRODUCT_CARD = 'c2';
+
+/** The tool results handed back to the model in the last model call (role tool, parsed). */
+function toolResults(h: Kit): unknown[] {
+  const last = h.complete.mock.calls.at(-1)?.[0];
+  return (last?.messages ?? [])
+    .filter((message) => message.role === 'tool')
+    .map((message) => JSON.parse(message.content ?? 'null') as unknown);
+}
+
+/** Every value under a `card_id` key, depth first. */
+function cardIdsIn(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value.flatMap((inner: unknown) => cardIdsIn(inner));
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value as Readonly<Record<string, unknown>>).flatMap(([key, inner]) =>
+      key === 'card_id' ? [inner] : cardIdsIn(inner),
+    );
+  }
+  return [];
+}
+
+/** The product card_id of the run's first rebate_quote card. */
+function quotedProductCard(view: RunView): unknown {
+  const quote = view.cards.find((c) => c.type === 'rebate_quote');
+  return (quote?.data['product'] as Readonly<Record<string, unknown>> | undefined)?.['card_id'];
+}
+
+/** Notice frames as the user sees them (no card numbers), in order. */
+function noticeFrames(view: RunView): unknown[] {
+  return comparable(view.events.filter((e) => e.kind === 'card' && e.card.type === 'notice'));
+}
+
+/**
+ * A message carrying its own link whose product the union reports delisted (the demo adapter's
+ * delisted answer: 30141, a business answer about the product, not a server fault), through the
+ * real deterministic link path. Anchors what "handled like a link message" means here.
+ */
+async function delistedLink(noModel: boolean): Promise<RunView> {
+  const link = kit();
+  link.state.noModel = noModel;
+  link.resolveLink.mockRejectedValue(
+    new DemoUnionError('demo_delisted', 'synthetic: delisted at the union', 'taobao'),
+  );
+  const view = await link.run(`${QUESTION} ${LINK}`, { caller: MEMBER });
+  expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+  expect(productCards(view)).toEqual([]);
+  expect(view.cards.map((c) => [c.type, c.data['text_key']])).toEqual([
+    ['notice', `error.${String(OFF_SHELF)}`],
+  ]);
+  return view;
+}
 
 it.each([
   ['已绑手机', MEMBER],
@@ -83,7 +147,7 @@ it.each([
   },
 );
 
-it('[AC-B3-05q#3][BR-AI-05][BR-AI-04] product_key 格式不合法：不查 catalog、不出商品卡；格式合法但 catalog 查不到（已下架）：与链接消息一样不出报价卡、不拿别的商品顶替，文字照常交给模型', async () => {
+it('[AC-B3-05q#3][BR-AI-05][BR-AI-04] product_key 格式不合法：不查 catalog、不出商品卡；格式合法但 catalog 查不到（已下架）：与链接消息一样不出报价卡、不拿别的商品顶替，出与已下架链接同一张 notice，文字照常交给模型', async () => {
   const malformed = kit();
   malformed.say(QUESTION, [says(REPLY)]);
   const bad = await malformed.run(QUESTION, { context: { product_key: 'TB::不合法 key#1' } });
@@ -102,6 +166,11 @@ it('[AC-B3-05q#3][BR-AI-05][BR-AI-04] product_key 格式不合法：不查 catal
   expect(h.searchProducts).not.toHaveBeenCalled();
   expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
   expect(view.text).toContain(REPLY);
+  // Handled like a link message whose product is delisted (deterministic path quoteLink): exactly
+  // that one notice, the same text_key and fallback text, and it comes before the model's words
+  // (the entry is handled first); the product is never silently dropped.
+  expect(noticeFrames(view)).toEqual(noticeFrames(await delistedLink(false)));
+  expect(content(view)[0]).toMatchObject({ kind: 'card', card: { type: 'notice' } });
 });
 
 it('[AC-B3-05q#4][BR-AI-15] 有模型时入口报价因服务端原因失败（上游超时）：出 notice agent.notice.quote_failed，接着把文字交给模型，按那一段的结果以 stop 结束', async () => {
@@ -159,4 +228,78 @@ it('[AC-B3-05q#7][BR-AI-01][BR-AI-14] 入口商品是淘宝的、这条文字没
     'taobao',
   ]);
   expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+});
+
+it('[AC-B3-05q#19][BR-AI-01][BR-AI-05] 有模型：入口卡出过之后，模型在本轮用入口商品自己的 card_id 再调 get_rebate_quote → 不重复出卡，返回给模型的就是这个编号（不按 invalid_args 拒绝）', async () => {
+  const h = kit();
+  h.say(QUESTION, [
+    { calls: [{ name: 'get_rebate_quote', args: { card_id: ENTRY_PRODUCT_CARD } }] },
+    says(REPLY),
+  ]);
+  const view = await h.run(QUESTION, { caller: MEMBER, context: ENTRY });
+  // The entry card is the first frame of the session; the model quotes its product's own id.
+  expect(content(view)[0]).toMatchObject({
+    kind: 'card',
+    card: {
+      type: 'rebate_quote',
+      card_id: ENTRY_FRAME_CARD,
+      data: { product: { card_id: ENTRY_PRODUCT_CARD, product_key: ENTRY_KEY } },
+    },
+  });
+  // 不重复出卡: one rebate_quote card for the entry product in this run.
+  expect(quotedKeys(view)).toEqual([ENTRY_KEY]);
+  // 返回已有的这个编号: the get_rebate_quote result the model got names the entry product's card
+  // and no other card (not a rejection, not a new number).
+  const results = toolResults(h);
+  expect(results).toHaveLength(1);
+  expect(serialized(results)).not.toContain('invalid_args');
+  expect(cardIdsIn(results)).toEqual([ENTRY_PRODUCT_CARD]);
+  expect(view.text).toContain(REPLY);
+  expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+});
+
+it('[AC-B3-05q#20][BR-AI-05][BR-AI-01] 入口卡记进会话结果：下一条消息里模型用入口商品的 card_id 调 get_rebate_quote，照常从 catalog 重新取数报价，不按 invalid_args 拒绝', async () => {
+  const h = kit();
+  h.say(QUESTION, [says(REPLY)]);
+  const first = await h.run(QUESTION, { caller: MEMBER, context: ENTRY });
+  expect(quotedKeys(first)).toEqual([ENTRY_KEY]);
+  const entryProduct = quotedProductCard(first);
+  expect(entryProduct).toBe(ENTRY_PRODUCT_CARD);
+
+  const followUp = '刚才那个再帮我看看';
+  h.say(followUp, [
+    { calls: [{ name: 'get_rebate_quote', args: { card_id: entryProduct } }] },
+    says(REPLY),
+  ]);
+  const view = await h.run(followUp, { caller: MEMBER });
+  const results = toolResults(h);
+  expect(results).toHaveLength(1);
+  expect(serialized(results)).not.toContain('invalid_args');
+  expect(cardIdsIn(results)).toHaveLength(1);
+  // A later round quotes afresh (BR-AI-04): the entry product again, from a new catalog lookup.
+  expect(quotedKeys(view)).toEqual([ENTRY_KEY]);
+  expect(h.readProduct.mock.calls.map(([key]) => key)).toEqual([ENTRY_KEY, ENTRY_KEY]);
+  expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+});
+
+it('[AC-B3-05q#21][BR-AI-15][BR-AI-14][BR-AI-04] 无模型时入口商品已下架（上游明确答复，归商品本身，不是服务端原因）：与已下架链接消息同样处理——同一张 notice、以 stop 结束，不以 error 50401 结束，也不改做问法分流与关键词搜索', async () => {
+  const h = kit();
+  h.state.noModel = true;
+  const view = await h.run('帮我找合成纸巾', {
+    caller: MEMBER,
+    context: { product_key: MISSING_KEY },
+  });
+  expect(h.readProduct).toHaveBeenCalledTimes(1);
+  expect(h.readProduct.mock.calls[0]?.[0]).toBe(MISSING_KEY);
+  expect(view.result).toEqual({ kind: 'done', finishReason: 'stop' });
+  expect(productCards(view)).toEqual([]);
+  const link = await delistedLink(true);
+  expect(noticeFrames(view)).toEqual(noticeFrames(link));
+  // The notice is the answer (不空回复 does not apply): nothing else goes out, as for the link.
+  expect(comparable(content(view))).toEqual(comparable(content(link)));
+  expect(view.text).toBe('');
+  expect(view.suggestions).toEqual([]);
+  expect(h.searchProducts).not.toHaveBeenCalled();
+  expect(h.chunks).not.toHaveBeenCalled();
+  expect(personalReads(h)).toBe(0);
 });
