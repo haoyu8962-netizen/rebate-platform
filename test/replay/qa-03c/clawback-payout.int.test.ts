@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createDb, destroyDb } from '@couli/db';
 import { acquireTestRedis, createTestDatabase } from '@couli/db/testing';
-import { accountingDate } from '@couli/domain';
 import { sql } from 'kysely';
 import { expect, it, vi } from 'vitest';
 import { createContentReader } from '../../../apps/api/src/modules/content/index.ts';
@@ -72,7 +71,8 @@ it('[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请�
         index === 0
           ? '2026-11-25T11:00:00+08:00'
           : index === 1
-            ? '2026-11-27T11:00:00+08:00'
+            ? // 07:00 +08:00 = 2026-11-26T23:00Z: the second clawback lands in 00:00–08:00 +08:00.
+              '2026-11-27T07:00:00+08:00'
             : null,
     }));
     const sync = await h.syncDriver(seeds);
@@ -168,7 +168,7 @@ it('[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请�
     await worker.deliver('bill', {
       app_id: appId,
       platform: 'pdd',
-      accounting_date: accountingDate(clock.now()),
+      accounting_date: '2026-11-24',
     });
     const bills = await db
       .selectFrom('settle_bills')
@@ -259,12 +259,36 @@ it('[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请�
     expect(await balance()).toMatchObject({ available_fen: 1500n, frozen_fen: 0n });
     await checkpoint(db, clock, appId);
 
-    async function invalidate(from: string, to: string, expectedAvailable: bigint, count: number) {
+    // BR-FUND-08: rights_event_id of a platform-status invalidation from the order sync is
+    // `P{platform_status 迁移后的 row_version}`; the BR-FUND-01 P7 row (SETTLED → 失效, status
+    // unchanged) fixes it as "row_version 取承载这次事件的那次同步更新写入的值". The sync update is
+    // one CAS write (ADR 0001: CAS + row_version) on the row read just before the sync, so the
+    // expected n is that pre-sync row_version + 1. The current row cannot be used: the R8 rebate
+    // CAS later in the same transaction advances row_version again.
+    const rightsEventIds = new Map<string, string>();
+    // BR-FUND-16: accounting_date is the injected Clock's date with the day cut at 00:00 +08:00.
+    // Expected days are written by hand from the scenario inputs, never via accountingDate().
+    const clawbackDays: string[] = [];
+    async function invalidate(
+      from: string,
+      to: string,
+      day: string,
+      expectedAvailable: bigint,
+      count: number,
+    ) {
+      const beforeSync = await orders();
       time.moveTo(to);
       await refundSync(from, to);
       const current = await orders();
       const clawed = current.filter((order) => order.rebate_status === 'CLAWED_BACK');
       expect(clawed, 'CLAWBACK_VOLUME').toHaveLength(count);
+      for (const order of clawed) {
+        if (rightsEventIds.has(order.order_id)) continue;
+        const prior = beforeSync.find((row) => row.order_id === order.order_id)!;
+        expect(prior.rebate_status, 'CLAWBACK_KEY').toBe('CREDITED');
+        rightsEventIds.set(order.order_id, `P${String(prior.row_version + 1)}`);
+      }
+      expect(rightsEventIds.size, 'CLAWBACK_KEY').toBe(count);
       expect(
         await db
           .selectFrom('order_status_history')
@@ -300,12 +324,26 @@ it('[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请�
         .select(['id', sql<string>`to_char(accounting_date, 'YYYY-MM-DD')`.as('day')])
         .where('app_id', '=', appId)
         .where('voucher_kind', '=', 'CLAWBACK')
-        .where('accounting_date', '=', sql<Date>`${accountingDate(clock.now())}::date`)
+        .where('accounting_date', '=', sql<Date>`${day}::date`)
         .execute();
       expect(
-        writtenToday.map(({ day }) => ({ day })),
+        writtenToday.map((row) => ({ day: row.day })),
         'CLAWBACK_CLOCK',
-      ).toEqual([{ day: accountingDate(clock.now()) }, { day: accountingDate(clock.now()) }]);
+      ).toEqual([{ day }, { day }]);
+      clawbackDays.push(day, day);
+      expect(
+        (
+          await db
+            .selectFrom('ledger_vouchers')
+            .select(sql<string>`to_char(accounting_date, 'YYYY-MM-DD')`.as('day'))
+            .where('app_id', '=', appId)
+            .where('voucher_kind', '=', 'CLAWBACK')
+            .execute()
+        )
+          .map((row) => row.day)
+          .sort(),
+        'CLAWBACK_CLOCK',
+      ).toEqual([...clawbackDays].sort());
       const todayIds = new Set(writtenToday.map(({ id }) => id));
       const todayEntries = posted.entries.filter((entry) => todayIds.has(entry.voucher_id));
       expect(todayEntries).toHaveLength(4);
@@ -316,8 +354,25 @@ it('[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请�
         .selectAll()
         .where('app_id', '=', appId)
         .execute();
+      // BR-FUND-08 uniq_key, full string: beneficiary
+      // `{order_key}:{user_id}:{role}:CLAWBACK:{rights_event_id}` and platform
+      // `{order_key}:PLATFORM:CLAWBACK:{rights_event_id}`; order_key is the order row's
+      // `{platform}:{sub_order_id}` (BR-FUND-05); the only beneficiary is the user, role self.
+      const expectedKeys = new Map<string, { own: boolean }>();
+      for (const order of clawed) {
+        const orderKey = `${order.platform}:${order.sub_order_id}`;
+        const eventId = rightsEventIds.get(order.order_id)!;
+        expectedKeys.set(`${orderKey}:${userId}:self:CLAWBACK:${eventId}`, { own: true });
+        expectedKeys.set(`${orderKey}:PLATFORM:CLAWBACK:${eventId}`, { own: false });
+      }
+      expect(vouchers.map((voucher) => voucher.uniq_key).sort(), 'CLAWBACK_KEY').toEqual(
+        [...expectedKeys.keys()].sort(),
+      );
       for (const voucher of vouchers) {
         expect(voucher.uniq_key, 'CLAWBACK_KEY').toMatch(/:CLAWBACK:P\d+$/);
+        expect(expectedKeys.get(voucher.uniq_key), 'CLAWBACK_KEY').toEqual({
+          own: voucher.beneficiary_user_id === userId,
+        });
         const entries = posted.entries.filter((entry) => entry.voucher_id === voucher.id);
         expect(entries, 'CLAWBACK_DOUBLE_ENTRY').toHaveLength(2);
         const amounts = entries
@@ -354,7 +409,13 @@ it('[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请�
       expect(await orders(), 'CLAWBACK_REDELIVERY_ORDER').toEqual(current);
       await checkpoint(db, clock, appId);
     }
-    await invalidate('2026-11-25T11:00:00+08:00', '2026-11-25T11:10:00+08:00', 1000n, 1);
+    await invalidate(
+      '2026-11-25T11:00:00+08:00',
+      '2026-11-25T11:10:00+08:00',
+      '2026-11-25',
+      1000n,
+      1,
+    );
 
     async function daily(day: string, next: string, opening: bigint, closing: bigint) {
       time.moveTo(next);
@@ -641,7 +702,14 @@ it('[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请�
     await checkpoint(db, clock, appId);
     await daily('2026-11-26', '2026-11-27T01:00:00+08:00', -1000n, 0n);
 
-    await invalidate('2026-11-27T11:00:00+08:00', '2026-11-27T11:10:00+08:00', -500n, 2);
+    // 07:10 +08:00 is 2026-11-26T23:10Z: a UTC day cut would date these vouchers 2026-11-26.
+    await invalidate(
+      '2026-11-27T07:00:00+08:00',
+      '2026-11-27T07:10:00+08:00',
+      '2026-11-27',
+      -500n,
+      2,
+    );
     expect(await api.rules.getRules(db, actor), 'NEGATIVE_WITHDRAWABLE').toMatchObject({
       withdrawable_fen: 0,
       max_withdrawable_fen: 0,
