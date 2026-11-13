@@ -9,7 +9,7 @@ type: impl
 # ③ entry.ts 在 entry === 'stream' 时按令牌取计数器交给 openMetrics；api / admin / worker / payout 不变。不改日志、不改话术、不改 run 判定。
 refs: [BR-AI-01]
 refs_hash:
-  BR-AI-01: 8162dc4297fb
+  BR-AI-01: 654d69df14f4 # 2026-11-13 编排：SPEC_REF 升到 009592348c33（#13）时本单刚入账、漏在那 26 行之外；第九批只给 BR-AI-01 细则加了「订单工具只关一部分 → OrderList 引导卡」一条，不涉及本单的计数接线
 deps: []
 paths:
   - 'apps/api/src/entry.ts'
