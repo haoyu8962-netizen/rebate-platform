@@ -79,5 +79,5 @@ red_exempt:
   - file: test/spec/contracts/agent-history/examples.test.ts
     test: '[AC-CT-08e#5] 示例逐卡按流协议校验，收益卡仅保留 as_of/actions 且拒绝实时金额'
     reason: 测试体未改；kit.ts 的 endpoints 表只去掉历史一行，该行移到新文件 http-history.test.ts 单独成条（D10-1390）
-status: todo
-pr: null
+status: done
+pr: 3340
