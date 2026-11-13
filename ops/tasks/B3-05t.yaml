@@ -1,0 +1,19 @@
+id: B3-05t
+repo: rebate-platform
+title: B3-05q 跟进（test-change，取代 B3-05r，D10-1411 / D10-1506）：商品情境入口报价因服务端原因失败的配额退还——刻画主干现有行为（无模型 50401 退还、业务结果与有模型正常答复照常计数、模型也降级 50401 退还、同键重放不重复扣退），主干绿 + 至少三处变异实跑代替先红
+type: test-change
+# 2026-11-13 桌面线「AI 助手」入账（编排 D10-1506 ② a；取代 B3-05r，后者 type impl 而主干已满足、守卫不许改 type，置 void）。BR-AI-15 细则：服务端原因只指上游超时、5xx 与熔断；商品情境入口报价因服务端原因失败时，无模型以 error 50401 结束并退还；有模型时出 quote_failed notice 后按模型那一段的结果结束、照常计数；退还判定里 notice 不算出卡。
+# 只新增 test/spec/agent/entry-quote-refund/**（Codex 写的 refund.int.test.ts，10 条，走真实受理与 PG 收尾）；不改实现与已有用例。#9 的失败来自夹具（withScenario 先在同一会话发种子消息出过 rebate_quote，第二轮触发既有的 agent.notice.title_based 比较提示，B3-05o / B3-05p），由不是原写手的新鲜独立方机械修夹具（让 #9 在没有先前报价的会话里跑），期望不改、不计次数。
+# 验收：主干上全部 10 条绿；至少三处变异逐处单独实跑、各让相应用例变红（如 notice 也算出卡、server_error 不退、上游业务结果误判为服务端失败），跑后实现还原，变异清单与结果进 PR 说明。非 task 分支、不带证据文件，标签由编排核对后加（先例 QA-03bt）。
+refs: [BR-AI-15]
+refs_hash:
+  BR-AI-15: d3070a739c03
+deps: [B3-05q]
+paths:
+  - 'test/spec/agent/entry-quote-refund/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
