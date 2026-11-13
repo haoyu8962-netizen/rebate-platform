@@ -2,11 +2,9 @@
 // overview. A timer, not a queue (unref, first tick after bootstrap, no overlap; stopped on destroy,
 // which waits for the tick in flight up to a bound), written like ledger's asset snapshot timer.
 // Every tick is tickDashboardDays over the rows themselves (no process memory), with the production
-// sources of infra/dashboard-day-sources.ts. Without a database nothing runs.
-// TODO(规划/11 §2.3): the gauge of how many days each app's newest row lags behind the newest due
-// day, and its alert rule in infra/monitoring/rules/couli.yaml — blocked on the worker's metrics
-// registry (platform/metrics, entry.ts), which lies outside task B1-34q's paths; until then a
-// missing day shows as the admin_dashboard_day_failed error line of every tick.
+// sources of infra/dashboard-day-sources.ts. Without a database nothing runs. How far each app's
+// rows lag is the worker's gauge couli_admin_dashboard_day_lag_days (platform/metrics/
+// dashboard-day-lag.ts), alerted on in infra/monitoring/rules/couli.yaml.
 import type { DynamicModule } from '@nestjs/common';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';

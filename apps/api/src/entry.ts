@@ -76,17 +76,20 @@ import {
 import {
   cacheAutoPayoutCollector,
   cacheCreditPostcheckCollector,
+  cacheDashboardDayLagCollector,
   cacheFundCollector,
   cacheReviewOverdueCollector,
   cacheWaterLowCollector,
   cacheWaterStaleCollector,
   cacheWithdrawalFailCollector,
   collectAutoPayoutDaily,
+  collectDashboardDayLag,
   createAgentTraceMissingCollector,
   type AgentTraceMissingSnapshot,
   type AutoPayoutCapFenOf,
   type AutoPayoutDailySnapshot,
   type CreditPostcheckSnapshot,
+  type DashboardDayLagSnapshot,
   type FundMetricsSnapshot,
   type ReviewOverdueSnapshot,
   type WaterLowSnapshot,
@@ -324,10 +327,11 @@ function startGenerationRenewal(
  * read-only port) and, since B2-02v, `collectCreditPostcheck` (unresolved post-credit confirmation
  * diffs per app, ledger's read-only port) and, since B2-09zj, `collectWithdrawalFail` (today's W6
  * and W5 + W6 and the longest run of W6 ending in the last 24 hours, per app, payout's read-only
- * port). Since B1-04zy only the api passes `collectTaobaoSearch` (union's in-process
- * search counter, read at scrape time); since B1-01zzv only the stream passes
- * `collectAgentReplyEmpty` (agent's in-process empty reply counter, resolved once by its token;
- * absent when the token does not resolve to a counter).
+ * port) and, since B1-34q, `collectDashboardDayLag` (days the workbench's daily rows lag behind the
+ * newest due day, per app with an admin account, read-only SQL in platform/metrics). Since B1-04zy
+ * only the api passes `collectTaobaoSearch` (union's in-process search counter, read at scrape
+ * time); since B1-01zzv only the stream passes `collectAgentReplyEmpty` (agent's in-process empty
+ * reply counter, resolved once by its token; absent when the token does not resolve to a counter).
  * Not on the Nest application, not in the OAS.
  */
 /** Resolves a provider by token; null when it is absent or resolution throws. */
@@ -385,6 +389,7 @@ async function openMetrics(
         readonly collectWaterStale: () => Promise<WaterStaleSnapshot>;
         readonly collectCreditPostcheck: () => Promise<CreditPostcheckSnapshot>;
         readonly collectWithdrawalFail: () => Promise<WithdrawalFailSnapshot>;
+        readonly collectDashboardDayLag: () => Promise<DashboardDayLagSnapshot>;
       }
     | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot }
     | { readonly collectAgentReplyEmpty: () => number },
@@ -610,6 +615,12 @@ async function start(
           // and is read again next time.
           collectWithdrawalFail: cacheWithdrawalFailCollector(
             () => readPayoutWithdrawalFail(dbHandles.db, clock),
+            clock,
+          ),
+          // The workbench daily row lag gauge (B1-34q; D10-1464 ①): cached 60 seconds and within
+          // the +08:00 day; a failed read fails the scrape (no value in its place).
+          collectDashboardDayLag: cacheDashboardDayLagCollector(
+            () => collectDashboardDayLag(dbHandles.db, clock),
             clock,
           ),
         });
