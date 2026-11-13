@@ -1,0 +1,150 @@
+{
+  "task": "B1-06zo",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "8b8e3d430be8b3b2de7d154c92c779d8779128f0",
+  "red_tests": [
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份与 deviceId 从服务端取并整理为约定形状",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#9] 本人 requested 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#9] 本人 unknown 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#10] failed 不抢首次时间，后续复制口令步骤的 requested 才记；已记后 failed 不改",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#11] 无令牌、冒用本人字段、别人的尝试、未知或非法编号、错 link 均只是埋点，dropped_count=0",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#12] 认尝试发起人而非 link 分享者；new_link_id 对应的尝试不能拿原 link 上报",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#13] 同批多步、同 event_id 重发、新 event_id 后续步骤均不改首次时间，也不重复 UPDATE",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#14] 同 link 不同尝试与其他 link 各记各的，迟到旧上报不污染新的尝试",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#15] 并发同尝试报告全部受理，只发生一次逻辑写入，之后重发仍无错误或改时",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#16] 混合批中坏事件准确计数且不阻断前后有效写入；全坏、空批、100 条和重复事件均 200",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#17] 非对象、无 events、events 非数组、101 条与顶层额外字段整批 20001，合法前缀不写入",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#18] 最低版本闸门 10405、无效令牌 10002、令牌 app 不符 10403 均先拒绝且不写尝试",
+    "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#19] 其他全部已登记事件收下且不写库，不承诺 saved，也不生成业务事件或修改点击证据",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#1] 接线形状只信服务端身份，props 不含运输字段或客户端身份，不修改原事件",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#2] specs/events.yaml 全部已登记事件都受理，非 link_jump 也保留给未来接线点",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#3] 坏条目逐条丢弃，合法的前后两条不受牵连，丢弃数准确",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] link_jump 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] external_page_union_host 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] external_page_nav_host 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] external_page_blocked_nav 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] route_entry_blocked 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] route_params_dropped 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] bridge_call 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] sdui_card_error 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_seq_gap 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_frame_too_large 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_limit 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_unknown_event 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] app_launch 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] page_view 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] exposure 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] click 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] search 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] convert 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] h5_white_screen 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#5] 购买条件字段必带，但 BR-ATTR-21 明许缺 attempt_id 只当埋点；startup 无尝试也合规",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#6] 三种结果与 SDK 两种 open_by 可受理，失败原因必填；复制口令 requested 也是有效事件",
+    "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#7] 同批相同 name/event_id 不重复整理且不计丢弃，不同 name 可共用 event_id"
+  ],
+  "risk_note": "RV2 by path (linking, plus the contract and its generated files for ingestEvents). Implements POST /v1/events (C-31 step 1, D10-1469 / 1470 / 1471 / 1535): x-auth optional, X-Device-Id required (missing header is rejected by the platform route schema, 20001, nothing written), version-gated, unsigned. The batch is accepted; each event is validated against specs/events.yaml and non-conforming ones are dropped one by one and counted in data.dropped_count; duplicates of (name, event_id) in a batch are kept once. link_jump writes link_open_attempts.jump_reported_at only for the caller's own token, an attempt the caller started, the attempt's own link_id, and result requested or unknown (failed never): UPDATE ... WHERE id, user_id, link_id, app_id match AND jump_reported_at IS NULL, time from the injected Clock; later or repeated reports never change it (also guarded by the existing write-once trigger). Every other event is accepted and not stored in this step (events table is CT-13e/f/g/h). The contract only drops ingestEvents' x-implementation: planned; regenerated files changed: planned-operations.gen.ts and route-schemas.gen.ts. Also fixes two comments that pointed at approvals #26 (FU-LINKING-COMMENT-AP26). No money, ledger or migration change; no new table writes besides the one column.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8b8e3d430be8b3b2de7d154c92c779d8779128f0",
+      "tree": "50056c1b4b21345a009698625fd09c968ffaa7f6",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-13T20:38:48Z",
+      "finished_at": "2026-11-13T20:39:07Z",
+      "red_tests": [
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份与 deviceId 从服务端取并整理为约定形状",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#9] 本人 requested 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#9] 本人 unknown 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#10] failed 不抢首次时间，后续复制口令步骤的 requested 才记；已记后 failed 不改",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#11] 无令牌、冒用本人字段、别人的尝试、未知或非法编号、错 link 均只是埋点，dropped_count=0",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#12] 认尝试发起人而非 link 分享者；new_link_id 对应的尝试不能拿原 link 上报",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#13] 同批多步、同 event_id 重发、新 event_id 后续步骤均不改首次时间，也不重复 UPDATE",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#14] 同 link 不同尝试与其他 link 各记各的，迟到旧上报不污染新的尝试",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#15] 并发同尝试报告全部受理，只发生一次逻辑写入，之后重发仍无错误或改时",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#16] 混合批中坏事件准确计数且不阻断前后有效写入；全坏、空批、100 条和重复事件均 200",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#17] 非对象、无 events、events 非数组、101 条与顶层额外字段整批 20001，合法前缀不写入",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#18] 最低版本闸门 10405、无效令牌 10002、令牌 app 不符 10403 均先拒绝且不写尝试",
+        "test/spec/linking/link-jump-report/http.int.test.ts > [AC-B1-06zo#19] 其他全部已登记事件收下且不写库，不承诺 saved，也不生成业务事件或修改点击证据",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#1] 接线形状只信服务端身份，props 不含运输字段或客户端身份，不修改原事件",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#2] specs/events.yaml 全部已登记事件都受理，非 link_jump 也保留给未来接线点",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#3] 坏条目逐条丢弃，合法的前后两条不受牵连，丢弃数准确",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] link_jump 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] external_page_union_host 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] external_page_nav_host 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] external_page_blocked_nav 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] route_entry_blocked 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] route_params_dropped 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] bridge_call 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] sdui_card_error 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_seq_gap 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_frame_too_large 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_limit 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] agent_stream_unknown_event 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] app_launch 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] page_view 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] exposure 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] click 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] search 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] convert 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#4] h5_white_screen 的公共及事件字段按规格校验必填、类型和枚举，不做类型强转",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#5] 购买条件字段必带，但 BR-ATTR-21 明许缺 attempt_id 只当埋点；startup 无尝试也合规",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#6] 三种结果与 SDK 两种 open_by 可受理，失败原因必填；复制口令 requested 也是有效事件",
+        "test/spec/linking/link-jump-report/prepare.test.ts > [AC-B1-06zo#7] 同批相同 name/event_id 不重复整理且不计丢弃，不同 name 可共用 event_id"
+      ],
+      "expected": [
+        "test/spec/linking/link-jump-report/http.int.test.ts",
+        "test/spec/linking/link-jump-report/prepare.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "db7f3ca81a41dce1ffe79ed4891cb1c3702fd8ce3c49fa5254eea16cdf0b1375"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7c2e292ac440d55d5c97e516051edc60814fa6974a2300face6d3ba895ee1f95"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money (effort medium): r1 pass with no findings on the full diff (own token, attempt and link match, requested/unknown, repeats and concurrency); r2 incremental after the only later change (EventBatchContext.deviceId back to string | null at the unit level; HTTP still requires the header): pass, no findings. Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by Codex in 3 attempts (ledger tester codex): attempt 2 fixed 4 type errors and a test-guard hit; attempt 3 changed only [AC-B1-06zo#8] to the required device header (D10-1535); red 38/38 each time; spec-test by a fresh independent Claude on the final tests: pass, no findings (an earlier round was stopped by me when #8 changed and is void). Host: the integration file ran green 38/38 on the test machine (--tests) before landing."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d79a24e9112f3233a422d37e4c2aea2474b1628d",
+    "specs": "e28c922334b9d4ca38a47135693492d446f33e5e"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
