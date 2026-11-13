@@ -160,7 +160,8 @@ import type {
 import { agentStreamPortsToken } from './production.ts';
 import type { StreamReviewOptions } from './review.ts';
 import { createAgentBodyAssembly } from './body.ts';
-import { createEmptyReplyCounter, createStreamAgentBody } from './agent-body.ts';
+import { createStreamAgentBody } from './agent-body.ts';
+import { agentEmptyReplyCounter } from './empty-reply-counter.ts';
 import { createRunTraceRecorder } from './trace.ts';
 import { createTraceRedoQueue, unrefScheduler } from './trace-retry.ts';
 import { createAgentHistoryRuntime } from './history.ts';
@@ -468,8 +469,8 @@ export function createAgentStreamRuntime(
           route,
           errorMsg,
           logger,
-          // TODO(规划/11 §2.3): 不空回复计数接入 /metrics — blocked on platform 指标注册表开放给 stream 入口（platform 另单）
-          emptyReplies: createEmptyReplyCounter(),
+          // B1-01zzv: the process-local counter, exported as agentEmptyReplyCounterToken() for /metrics.
+          emptyReplies: agentEmptyReplyCounter(),
         });
 
   let stopping = false;
