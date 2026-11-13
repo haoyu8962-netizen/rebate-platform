@@ -35,7 +35,11 @@ export interface AgentStreamRequest {
   readonly id: string;
   readonly ip: string;
   readonly headers: Readonly<Record<string, string | string[] | undefined>>;
-  readonly params: { readonly id?: string; readonly run_id?: string };
+  readonly params: {
+    readonly id?: string;
+    readonly run_id?: string;
+    readonly message_id?: string;
+  };
   readonly body?: unknown;
 }
 

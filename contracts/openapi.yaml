@@ -29995,7 +29995,6 @@ paths:
       x-signed: false
       x-idempotent: false
       x-min-version-gate: true
-      x-implementation: planned
       x-error-codes:
         - 30501
         - 10001
@@ -30062,7 +30061,6 @@ paths:
       x-signed: false
       x-idempotent: false
       x-min-version-gate: true
-      x-implementation: planned
       x-error-codes:
         - 30501
         - 10001

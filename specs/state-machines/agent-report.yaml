@@ -1,0 +1,29 @@
+# AI 助手回复举报 agent_messages.report_status 的状态机（规划/08 BR-ID-15 ④ 与细则、BR-AI-19；任务 B3-08zf）。
+# 08 没有给举报编号的迁移表；本文件按 BR-ID-15 转写，AR 编号与英文事件名是本任务的技术命名。
+# 生成 packages/domain/src/state-machines/agent-report.gen.ts
+# （node packages/domain/scripts/state-machines.ts；--verify 只比对）。生成物勿手改，改这里再生成。
+#
+# 写法约定（同 CT-04a、B2-03j、B2-04d）：
+# - from 中 null 表示「—」（未被举报：report_status 为空）。
+# - guard 只作说明，transition() 不求值；归属判定、条件写与审计由服务层负责。
+# - 状态值与 db/schema.sql agent_messages.report_status 的检查约束一致（小写）。
+#
+# 表外说明：重复举报不是迁移（保留首次举报的原因、时刻与状态，照常成功）；已处理的举报不重开。
+name: agent-report
+field: report_status
+states: [pending, handled]
+# REPORT 用户举报一条助手回复；HANDLE 后台处理人标记已处理并填写处理说明。
+events: [REPORT, HANDLE]
+transitions:
+  - id: AR1
+    from: [null]
+    event: REPORT
+    to: pending
+    guard: '调用方本人会话里的助手消息（BR-AI-20），首次举报：写 reported、report_reason、reported_at（注入时钟）；48 小时时限从此刻起算'
+    test_id: AC-B3-08zf#16
+  - id: AR2
+    from: [pending]
+    event: HANDLE
+    to: handled
+    guard: '后台处理人查看对话后标记已处理并填写处理说明（BR-ID-15 ④ 细则）：写 report_handler_id、report_handled_at（注入时钟）、report_note，row_version 条件写并加一，写审计（审计由调用方负责）'
+    test_id: AC-B3-08zf#16

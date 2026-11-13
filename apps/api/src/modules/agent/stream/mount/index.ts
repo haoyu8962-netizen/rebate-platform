@@ -17,8 +17,9 @@
 //   signals?, assembly?, contentReader, consentReader}) (B3-08k: both readers from app.module; a
 //   DB handle without them is a wiring error and throws).
 //   The four routes of B3-03d (createAgentSession, getCurrentAgentSession, sendAgentMessage,
-//   cancelAgentRun) and B3-08ze's listAgentSessionMessages are registered either way; without a
-//   runtime each answers the JSON 50001 envelope. On application shutdown runtime.close() resolves before the platform closes the
+//   cancelAgentRun), B3-08ze's listAgentSessionMessages and B3-08zf's setAgentMessageFeedback and
+//   reportAgentMessage are registered either way; without a runtime each answers the JSON 50001
+//   envelope. On application shutdown runtime.close() resolves before the platform closes the
 //   database handles (Nest lifecycle; entry.ts unchanged).
 // createAgentStreamRuntime(deps, seams?) → AgentStreamRuntime, built with nothing running (no
 //   timer, no query):
@@ -166,6 +167,11 @@ import { createRunTraceRecorder } from './trace.ts';
 import { createTraceRedoQueue, unrefScheduler } from './trace-retry.ts';
 import { createAgentHistoryRuntime } from './history.ts';
 import type { AgentHistoryHttp } from '../../http/history.ts';
+import {
+  createAgentMessageFeedbackHttp,
+  type AgentMessageFeedbackHttp,
+} from '../../http/feedback.ts';
+import { createPgAgentMessageFeedbackStore } from '../../store/feedback/index.ts';
 export { createAgentStreamAssembly } from './assembly.ts';
 export type {
   AgentStreamAssembly,
@@ -246,6 +252,11 @@ export interface AgentStreamRuntime {
    * createAgentHistoryRuntime over this runtime's deps and its one consent reader.
    */
   readonly history: AgentHistoryHttp;
+  /**
+   * B3-08zf: setAgentMessageFeedback and reportAgentMessage (../../http/feedback.ts) over the same
+   * access / identity / consent ports as `http` and agent/store/feedback on deps.db.
+   */
+  readonly messages: AgentMessageFeedbackHttp;
   readonly timings: RunTimings;
   readonly runConfig: RunConfig;
   /** The one QuotaLimitsSource of the HTTP layer and the PG ports. */
@@ -476,10 +487,13 @@ export function createAgentStreamRuntime(
   let stopping = false;
   let closing: Promise<void> | undefined;
   const active = new Set<Promise<void>>();
+  const access = createAgentAccessPort({ reader: switches });
+  const identity = createAgentIdentityPort({ reader: switches });
+  const consentPort = createAgentConsentPort({ consent, version });
   const http = createAgentHttp({
-    access: createAgentAccessPort({ reader: switches }),
-    identity: createAgentIdentityPort({ reader: switches }),
-    consent: createAgentConsentPort({ consent, version }),
+    access,
+    identity,
+    consent: consentPort,
     sessions: createPgAgentSessionStore({ db, clock, ...agentSessionDefaults() }),
     admission: {
       admit: (request, currentLimits) => {
@@ -509,6 +523,16 @@ export function createAgentStreamRuntime(
     contentReader,
     consentReader: () => consent,
   });
+  // B3-08zf: 👍/👎 and reports (BR-AI-19, BR-ID-15 ④) behind the same BR-AI-23 ①–③ ports.
+  const messages = createAgentMessageFeedbackHttp({
+    access,
+    identity,
+    consent: consentPort,
+    store: createPgAgentMessageFeedbackStore({ db: deps.db }),
+    texts,
+    clock,
+    logger,
+  });
   function tracked<T extends unknown[]>(
     operation: (...args: T) => Promise<void>,
     ...args: T
@@ -528,6 +552,7 @@ export function createAgentStreamRuntime(
     texts,
     traceMask,
     history,
+    messages,
     http: {
       ...http,
       sendMessage(caller, sessionId, message, reply) {
