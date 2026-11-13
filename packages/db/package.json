@@ -35,14 +35,14 @@
     "dev:stack:down": "node scripts/dev-stack.ts down"
   },
   "dependencies": {
-    "kysely": "0.29.6",
-    "pg": "8.23.0"
+    "kysely": "0.29.8",
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
     "kysely-codegen": "0.20.0",
     "node-pg-migrate": "9.0.0",
-    "pg-boss": "12.34.0",
-    "testcontainers": "12.1.0"
+    "pg-boss": "12.38.1",
+    "testcontainers": "12.2.1"
   }
 }

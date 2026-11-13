@@ -21,7 +21,7 @@
     "openapi-fetch": "0.17.0"
   },
   "devDependencies": {
-    "@redocly/cli": "2.54.2",
+    "@redocly/cli": "2.76.0",
     "openapi-typescript": "7.13.0"
   }
 }
