@@ -525,3 +525,9 @@ approvals:
     granted: true
     date: '2026-11-13'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动）：这是 approvals 79（CT-06zzzzw）评审时留下的四项跟进（D10-1356），只收紧、不放宽——台账里 rule_change 引的规则条目不在任务引用内时，原先只有 task check 拒，现在三个工具都拒；另两项是补测试和补说明，一项是多出一行提示、不改判定。编排按 approvals 16 / 24 核 diff 后加标签（#3339，头 42bcfb9ef00d）：逐行读了台账解析、task check 与先红检查的改动——task check 里被删掉的那段检查已由解析层更早地拒掉，全部现有台账照常通过；先红检查只新增一条说明文字的输出。Codex general r1 通过。事后向负责人报告；D10-1356、D10-1404。'
+  - id: 85
+    row: 4
+    title: 'CT-06zzzzzc：仓库迁到 GitHub 账号 haoyu8962-netizen——CI 检出规划仓库的两处地址、AGENTS.md 与 tools/ci/tokens-lag.ts 注释里的旧账号名改为新账号'
+    granted: true
+    date: '2026-11-13'
+    note: '负责人 2026-11-13 在对话中决定把开发整体切到 haoyu8962-netizen（原账号 zora4523-bot 被 GitHub 停用），编排会话据此登记。只改规划仓库的地址，不改任何检查、必需检查名单与判定。引导说明：登记本条的 PR 自身的 verify-static 因主干 ci.yml 仍检出旧地址而必红，属迁移引导的一次性情况，处理办法见编排裁定 D10-1444。'
