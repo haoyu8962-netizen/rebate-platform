@@ -1,0 +1,27 @@
+id: B1-01zzv
+repo: rebate-platform
+title: 不空回复计数接 /metrics——stream 入口暴露 couli_agent_reply_empty_total（agent 进程内计数器经 Nest 令牌交给 platform 指标注册表，照淘宝搜索计数的接法；FU-EMPTY-REPLY-METRIC，D10-1378 ⑤ / D10-1450）
+type: impl
+# 2026-11-13 w1 入账（D10-1450 派；来源 B3-05p 台账注释与 D10-1378 ⑤）。08 BR-AI-01 细则「意图兜底与不空回复」：服务端补 agent.reply.empty 时「记一条日志与计数指标」。
+# 主干现状（f856d7c2f）：日志已有（agent-body.ts emptyReplyPort 的 agent_reply_empty）；计数器 createEmptyReplyCounter() 在 stream/mount/index.ts:472 现建现用、进程内累计，没有任何出口（同行 TODO「blocked on platform 指标注册表开放给 stream 入口」）。
+# 做法：① agent 把进程内计数器做成模块级单例、经令牌导出（agent/index.ts 出 agentEmptyReplyCounterToken() 与只读 total()），stream 运行时用这一个，去掉 TODO；EmptyReplyCounter.record() 签名不变（冻结 test/spec/agent/intent-fallback 的 kit 用它）。
+# ② platform/metrics 注册表加 collectAgentReplyEmpty（只在 entry 'stream' 生效，其余入口不出该指标），counter 族 couli_agent_reply_empty_total，无标签（record() 不带 app_id；按 app 分标签归 FU-METRICS-APP-ID，第二个 App 前做）；取不到计数器时出 0 还是不出：不出（同淘宝计数取不到时为空）。
+# ③ entry.ts 在 entry === 'stream' 时按令牌取计数器交给 openMetrics；api / admin / worker / payout 不变。不改日志、不改话术、不改 run 判定。
+refs: [BR-AI-01]
+refs_hash:
+  BR-AI-01: 8162dc4297fb
+deps: []
+paths:
+  - 'apps/api/src/entry.ts'
+  - 'apps/api/src/modules/platform/metrics/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/agent.module.ts'
+  - 'apps/api/src/modules/agent/index.ts'
+test_paths:
+  - 'test/spec/platform/agent-reply-empty-metric/**'
+impl: claude
+tester: claude-independent # Codex 额度至 11-19（be 11-13 17:07），按 approvals 36
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/agent-reply-empty-metric/**'
+status: todo

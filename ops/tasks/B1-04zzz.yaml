@@ -19,4 +19,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/orders/rescan-config-wiring/**'
 status: done
+# 原仓库 zora4523-bot/rebate-platform 的编号
 pr: 2746
