@@ -12,6 +12,9 @@
 //   fromStored(toStored(f), kind) deep-equals f for every valid frame of that kind.
 // withQuota(draft, quotaLeft): a done draft gets data.quota_left = quotaLeft; an error draft is
 //   returned as it is (error frames carry no quota_left).
+// redactedStored(stored) (B3-08zh): the envelope with data.msg / data.fallback_q set to JSON null
+//   where present (BR-AI-22, as the deletion purge leaves a run's terminal state). Such an error
+//   envelope no longer passes fromStored (msg is not a string).
 //
 // Rules for the implementation: erasable syntax only, `import type` for type-only imports,
 // relative imports with `.ts`.
@@ -82,6 +85,19 @@ export function fromStored(value: unknown, kind: 'final' | 'draft'): TerminalFra
     throw new StoredFrameInvalid('Invalid stored error data');
   }
   return { event, data } as TerminalFrame | TerminalDraft;
+}
+
+/**
+ * B3-08zh (BR-AI-22 细则「立即删除的做法」, review r1 S2 ②): a terminal envelope as the deletion
+ * purge leaves it — data.msg and data.fallback_q set to JSON null where present, no key added,
+ * everything else kept (the agent_runs guard admits exactly this one-way rewrite).
+ */
+export function redactedStored(stored: StoredFrame): StoredFrame {
+  const data: Record<string, unknown> = { ...stored.data };
+  for (const key of ['msg', 'fallback_q']) {
+    if (Object.hasOwn(data, key)) data[key] = null;
+  }
+  return { type: stored.type, data };
 }
 
 export function withQuota(draft: TerminalDraft, quotaLeft: number): TerminalFrame {

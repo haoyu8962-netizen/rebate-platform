@@ -11,8 +11,8 @@ import { createFrameValidator } from '../writer/index.ts';
 import type { FinalizeHold, FinalizeOutcome, PgRunDeps } from './types.ts';
 import { defaultDraft, decideEnding } from './ending.ts';
 import type { EndingMemo } from './ending.ts';
-import { fromStored, StoredFrameInvalid, toStored, withQuota } from './frames.ts';
-import { writeReply } from './reply.ts';
+import { fromStored, redactedStored, StoredFrameInvalid, toStored, withQuota } from './frames.ts';
+import { detached, writeReply } from './reply.ts';
 import { dailyUsage, isRunning, lockSession, lockSubjects, readRun, remaining } from './store.ts';
 import type { RunRow, SessionRow } from './store.ts';
 import { errorCode, retryable, TransactionFailure, unavailable } from './transaction.ts';
@@ -105,9 +105,18 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
       const frame = fromStored(toStored(withQuota(draft, quotaLeft)), 'final');
       if (!createFrameValidator()({ ...frame, id: 1 }).ok)
         throw new StoredFrameInvalid('Invalid terminal frame');
+      // B3-08zh (BR-AI-22): the session was detached from its user while the run went on (the purge
+      // holds the session lock this transaction now has): the stored terminal state and draft keep
+      // no answer text or search term, as the purge would have left them; the rest as usual.
+      const erased = detached(session);
+      const stored = erased ? redactedStored(toStored(frame)) : toStored(frame);
+      const endDraft =
+        erased && row.end_draft !== null
+          ? sql`${JSON.stringify(redactedStored(toStored(draft)))}::jsonb`
+          : sql`end_draft`;
       await q.query(sql`UPDATE app.agent_runs SET
         settle_result = ${refunded ? 'refunded' : 'counted'}, settled_at = ${now},
-        final_event = ${JSON.stringify(toStored(frame))}::jsonb,
+        final_event = ${JSON.stringify(stored)}::jsonb, end_draft = ${endDraft},
         ended_at = GREATEST(${now}, accepted_at),
         finish_reason = COALESCE(finish_reason, ${frame.event === 'done' ? frame.data.finish_reason : 'error'})
         WHERE app_id = ${row.app_id} AND id = ${row.id} AND final_event IS NULL`);

@@ -7,6 +7,11 @@
 // the card limit or written without a receipt leaves the current chain as it was, so 「换一批」
 // and 「第 N 个」 keep addressing what the user saw last. B3-03r: the same pending table serves the
 // model and follow-up path (createResultsTools' `chains`, PendingChains.defer).
+// B3-08zh (D10-1361, BR-AI-19 细则「助手回复落库」): a product_list kept for the reply without a
+// frame (the client went away; the run goes on, the terminal transaction writes its delivery
+// records) switches its batch's chain at that very moment, through `kept`, exactly as its receipt
+// would have: the chain rows of a disconnected run come in the same order, with the same reuse
+// and conditions, as when it was delivered (a later search of the same round reads that chain).
 import type { KeywordSearchPlan } from '../../model-gateway/degraded/index.ts';
 import type { UnnumberedCard } from '../../stream/run/index.ts';
 import type { ToolContext } from '../core/ports.ts';
@@ -52,6 +57,12 @@ export interface KeywordResults extends PendingChains {
   receipts(
     onChainError: (error: unknown, resultSetId: string) => void,
   ): ResultSetStore & Partial<QuotedReceiptStore> & Partial<RecentQuoteReader>;
+  /**
+   * B3-08zh: a pending batch's product_list (at least one product) was kept without a frame: its
+   * chain becomes the session's current chain once, as a receipt's would (nothing else is
+   * written; the delivery records go with the terminal state). Unknown ids do nothing.
+   */
+  kept(resultSetId: string): Promise<void>;
 }
 
 export function createKeywordResults(store: ResultSetStore): KeywordResults {
@@ -87,6 +98,7 @@ export function createKeywordResults(store: ResultSetStore): KeywordResults {
 
   return {
     defer,
+    kept: confirm,
 
     async save(plan, ctx, cards) {
       const ids: string[] = [];

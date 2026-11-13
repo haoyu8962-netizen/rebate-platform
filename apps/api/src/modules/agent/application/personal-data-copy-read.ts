@@ -7,7 +7,10 @@
 // user's sessions in the app
 // (agent_sessions.user_id = the user; a guest session of the same device, user_id NULL, is not the
 // user's) that are not yet past the retention of BR-ID-30 ① (190 days, agent.trace.retention_days
-// default) at clock.now(), each with its messages oldest first (role, text, created_at). A session
+// default) at clock.now(), each with its messages oldest first (role, text, created_at; B3-08zh:
+// ordered as the history of listAgentSessionMessages — created_at, then the run, then the user
+// message before the assistant reply of the same turn even when the reply's id is smaller, then
+// id). A session
 // that BR-AI-20 calls expired (24 hours idle, or expired_at passed) is still within the retention
 // and is included. Nothing of the console's report handling (handler, note) or of another person.
 // Plain SELECTs on the caller's handle (a READ ONLY transaction included): no locking clause, no
@@ -111,6 +114,9 @@ export function createPersonalDataCopyAgentReader(
         sessions.map((session) => session.id),
       )
       .orderBy('created_at')
+      .orderBy(sql`COALESCE(run_id, id)`)
+      // B3-08zh ([AC-B3-08zd#7]): a turn's two rows share created_at; the user's comes first.
+      .orderBy(sql`role = 'assistant'`)
       .orderBy('id')
       .execute();
     const bySession = new Map<string, PersonalDataCopyAgentMessageRow[]>();

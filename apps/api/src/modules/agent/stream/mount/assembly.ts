@@ -202,6 +202,13 @@ export interface AgentStreamAssembly {
   /** B3-05q · BR-AI-01 细则「情境入口」: the entry path's data side (./entry.ts); absent on legacy
    * assemblies (the context then gets no entry card). */
   readonly entry?: ScenarioEntryReaders;
+  /**
+   * B3-08zh (D10-1361): a product_list (with at least one product) of result set `resultSetId` was
+   * kept for the reply without a frame (the client is gone): its batch's chain is switched now, as
+   * its receipt would have (KeywordResults.kept). Never rejects (a failure is one warn line).
+   * Absent on legacy assemblies.
+   */
+  readonly keptList?: (resultSetId: string) => Promise<void>;
 }
 
 /** Optional on the module/runtime: absence preserves B3-03f's minimal mount. */
@@ -442,7 +449,7 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
   // B3-03n: `results` is also the core's delivery receipt port (createAgentStreamRuntime); B3-03q /
   // B3-03r: the same store whose receipts also switch a confirmed batch's chain (degraded, model
   // and follow-up searches alike).
-  const receipts = keywordResults.receipts((error, resultSetId) => {
+  const chainFailed = (error: unknown, resultSetId: string): void => {
     deps.logger.warn(
       {
         result_set_id: resultSetId,
@@ -450,7 +457,16 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
       },
       'agent_result_chain_failed',
     );
-  });
+  };
+  const receipts = keywordResults.receipts(chainFailed);
+  // B3-08zh: a list kept without a frame switches its chain as its receipt would (same warn line).
+  const keptList = async (resultSetId: string): Promise<void> => {
+    try {
+      await keywordResults.kept(resultSetId);
+    } catch (error) {
+      chainFailed(error, resultSetId);
+    }
+  };
   // B3-05q: the entry path's quote is the deterministic runner's (no card reference); its order
   // read is explain_order's own lookup (./entry.ts).
   const entry = createScenarioEntryReaders({
@@ -465,6 +481,7 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
     results: receipts,
     texts,
     entry,
+    keptList,
     degraded: {
       tools: degradedTools(
         inner,

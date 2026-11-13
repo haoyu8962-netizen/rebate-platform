@@ -73,11 +73,21 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
  * The committed history of a session: agent_messages newest first by (created_at, run, user before
  * assistant, id) — a turn's two rows share created_at and run_id — `limit` of them below the
  * cursor row, given back oldest first; the cards of card_ids from agent_cards of the session, in
- * card_ids order; finish_reason of the run once it has its terminal state (final_event).
+ * card_ids order; finish_reason of the run once it has its terminal state (final_event). A cursor
+ * that is not a message of the session gives null (B3-08zh).
  */
 export function createPgAgentHistoryReader(db: Kysely<DB>): AgentHistoryReader {
   return {
     async page(appId, sessionId, query) {
+      if (query.cursor !== null) {
+        // B3-08zh: the cursor must be a message of this very session (BR-AI-20: nothing of another
+        // session is ever read through it); otherwise the caller answers 20001.
+        const anchor = await sql<{ readonly id: string }>`SELECT c.id::text AS id
+          FROM app.agent_messages c
+          WHERE c.app_id = ${appId} AND c.session_id = ${sessionId}
+            AND c.id = ${query.cursor}`.execute(db);
+        if (anchor.rows.length === 0) return null;
+      }
       const below =
         query.cursor === null
           ? sql``

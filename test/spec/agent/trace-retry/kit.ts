@@ -5,9 +5,8 @@
 // Contract pinned by the tests of this directory (the implementation's freedom ends here):
 // - Entry: apps/api/src/modules/agent/stream/mount/trace-retry.ts
 //   createTraceRedoQueue({writer, clock, scheduler, logger, params?, onLost?}) → TraceRedoQueue
-//   {persist(record), pendingCard(appId, sessionId, cardId), queued(), close(boundMs)};
+//   {persist(record), queued(), close(boundMs)};
 //   traceRedoDefaults() = DEFAULTS below (agent's own injectable defaults, never a content key);
-//   withPendingCards(refs, pending) wraps createOrderCardRefs(db) (unchanged) for S2.
 // - persist writes tool calls and cards (each only when present); resolves once the first attempt
 //   settled, never rejects. Transient failure (anything but a permanent one): the run is queued,
 //   only its failed half is written again, after 1 s, 2 s, 4 s, … capped at 5 min, until 24 h after
@@ -25,17 +24,12 @@
 //   same bound); what is left is lost 'shutdown'; resolves within boundMs of scheduler time; no
 //   timer calls the writer afterwards. The stream runtime's close() does this with
 //   timings.lockGraceMs after its runs ended, and still returns.
-// - pendingCard: a card of a run not yet confirmed written (in flight or queued), by app + session +
-//   card_id; null once written, skipped or lost. withPendingCards resolves an 'order_status' pending
-//   card with a non-empty data.order_id to {kind: 'order', orderId}; everything else goes to the
-//   wrapped refs. App and session come from the tool context only (BR-AI-03).
 // - The writer (agent/store/results createPgAgentTraceWriter): a session detached from its user
 //   (user_id NULL, user_hash set — purgeAgentDataForUser) makes recordCards / recordToolCalls resolve
 //   'skipped' and write nothing, also when the purge is committing concurrently (the write waits for
 //   it); a guest session (user_hash NULL) and a live member session are written as before.
 // - The production stream runtime (createAgentStreamRuntime, no new dependency or seam) routes every
-//   run's trace through such a queue on its own Clock and scheduler, and its OrderCardRefs read the
-//   queue's pending cards first (withPendingCards).
+//   run's trace through such a queue on its own Clock and scheduler.
 // - Frozen and kept: test/spec/agent/trace-persist/** (one warn within 500 ms for a failing writer,
 //   runtime.close() returns, createOrderCardRefs(db) semantics).
 // Everything under test is built inside the tests (never in hooks). Synthetic values only.

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { sql } from 'kysely';
 import { AdmissionUnavailableError } from '../admission/index.ts';
 import type { RunEnding } from '../admission/index.ts';
@@ -7,7 +8,7 @@ import { createAdmission } from './admit.ts';
 import { defaultDraft, decideEnding } from './ending.ts';
 import type { EndingMemo } from './ending.ts';
 import { createFinalization } from './finalize.ts';
-import { fromStored } from './frames.ts';
+import { fromStored, redactedStored, StoredFrameInvalid, toStored } from './frames.ts';
 import { readRun } from './store.ts';
 import type { RunRow } from './store.ts';
 import { createTransactions, port, retryable, unavailable } from './transaction.ts';
@@ -135,12 +136,25 @@ export function buildPgRunPorts(deps: PgRunDeps): PgRunPorts {
           return row.final_event === null ? null : fromStored(row.final_event, 'final');
         }),
       ),
-    finish: (runId) =>
+    finish: (runId, terminal) =>
       port(async () => {
         const frame = await transaction('finish', async (q) => {
           const row = await readRun(q, runId);
           if (row.final_event === null) throw new AdmissionUnavailableError('rolled_back');
-          return fromStored(row.final_event, 'final');
+          try {
+            return fromStored(row.final_event, 'final');
+          } catch (error) {
+            // B3-08zh (BR-AI-22): the session was detached while the run went on, so its terminal
+            // state was stored without msg / fallback_q; the frame sent is the one this process
+            // finalized, exactly when the stored form is its redaction.
+            if (
+              error instanceof StoredFrameInvalid &&
+              isDeepStrictEqual(row.final_event, redactedStored(toStored(terminal)))
+            ) {
+              return terminal;
+            }
+            throw error;
+          }
         });
         memo.delete(runId);
         polled.delete(runId);

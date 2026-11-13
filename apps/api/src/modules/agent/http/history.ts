@@ -13,6 +13,9 @@
 //   query: the query string of the operation (cursor, limit ≤ 50, default 20); a malformed query is
 //   20001 with data.fields (checked after ④, like POST's ⑤). The cursor is opaque: the base64url
 //   form of the message id the reader's page starts below (AgentHistoryPage.nextCursor is that id).
+//   B3-08zh ([AC-B3-08zd#7]): a well-formed cursor that is not a message of THIS session (another
+//   session's, or no message at all) is 20001 with data.fields ['cursor'] too — the reader answers
+//   null for it — never an empty 200 page.
 //   200 AgentHistoryResponse {code 0, msg '', data {items, next_cursor, expired}, trace_id}: items
 //   oldest first, one per agent_messages row of the session: user (text = the stored, redacted
 //   text, cards [], finish_reason null) and assistant (text = the stored reply text, '' when none;
@@ -67,12 +70,15 @@ export interface AgentHistoryPage {
 
 /** Committed history of one session (agent_messages, agent_cards, agent_runs). */
 export interface AgentHistoryReader {
-  /** cursor: a message id of the session (rows strictly older than it), or null for the newest. */
+  /**
+   * cursor: a message id of the session (rows strictly older than it), or null for the newest.
+   * null when the cursor is not a message of this app + session (B3-08zh: answered as 20001).
+   */
   page(
     appId: string,
     sessionId: string,
     query: { readonly cursor: string | null; readonly limit: number },
-  ): Promise<AgentHistoryPage>;
+  ): Promise<AgentHistoryPage | null>;
 }
 
 export interface AgentHistoryDeps {
@@ -267,6 +273,11 @@ export function createAgentHistoryHttp(deps: AgentHistoryDeps): AgentHistoryHttp
           cursor: parsed.cursor,
           limit: parsed.limit,
         });
+        if (page === null) {
+          // B3-08zh: a cursor of another session (or of no message) is a malformed query.
+          refuse(caller, reply, 20001, { fields: ['cursor'] });
+          return;
+        }
         const body: Schema<'AgentHistoryResponse'> = {
           code: 0,
           msg: '',

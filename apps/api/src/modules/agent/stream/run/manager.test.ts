@@ -4,7 +4,14 @@ import type { RedisNamespace, Scheduler } from '../../../platform/index.ts';
 import { createRunManager } from './manager.ts';
 import { createRedisRunRegistry } from './registry.ts';
 import { runConfigDefaults } from './types.ts';
-import type { RunBodyResult, RunContext, RunGuard, RunStart, TerminalDraft } from './types.ts';
+import type {
+  RunBodyResult,
+  RunContext,
+  RunGuard,
+  RunManagerDeps,
+  RunStart,
+  TerminalDraft,
+} from './types.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -18,7 +25,7 @@ async function flush(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
-function fixture() {
+function fixture(extra: Pick<RunManagerDeps, 'onUnframedCard'> = {}) {
   const clock = new FixedClock('2026-10-07T00:00:00Z');
   let now = 0;
   const waits: { due: number; resolve: () => void }[] = [];
@@ -104,6 +111,7 @@ function fixture() {
     texts: { text: () => '本轮超时', errorMsg: (code) => `错误提示-${code}` },
     guard: { check },
     config: runConfigDefaults(),
+    ...extra,
   });
   return { manager, registry, redis, clock, start, check, settle, chunks, logger, advance };
 }
@@ -290,4 +298,58 @@ it('[AC-B3-08zc#2][BR-AI-19] 断线后不合法的卡片仍以 invalid_frame 拒
   const reply = (f.settle.mock.calls[0] as unknown[] | undefined)?.[3] as
     { cards: unknown[] } | undefined;
   expect(reply?.cards).toEqual([]);
+});
+
+it('[AC-B3-08zh#6][BR-AI-19] 断线后保留的卡片按序告知 onUnframedCard（编号后、ctx.card 返回前，等它完成）；写出帧的卡不告知；钩子抛错不影响 run', async () => {
+  const seen: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const f = fixture({
+    onUnframedCard: async (runId, card) => {
+      seen.push(`${runId}:${card.card_id}:start`);
+      if (card.card_id === 'c2') await gate;
+      seen.push(`${runId}:${card.card_id}:end`);
+      if (card.card_id === 'c3') throw new Error('synthetic hook failure');
+    },
+  });
+  let close!: () => void;
+  const start: RunStart = {
+    ...f.start,
+    sink: {
+      write: () => undefined,
+      onClose: (listener) => {
+        close = listener;
+      },
+    },
+  };
+  const notice = {
+    type: 'notice',
+    schema_version: 1,
+    data: { level: 'info', text_key: 'agent.degraded.empty', actions: [] },
+    fallback_text: '合成卡片',
+  };
+  const runId = f.start.ticket.runId;
+  const order: string[] = [];
+  const final = await f.manager.start(start, async (ctx) => {
+    await ctx.card(notice);
+    close();
+    const second = ctx.card(notice).then(() => order.push('c2 resolved'));
+    await flush();
+    expect(order, 'ctx.card waits for the hook').toEqual([]);
+    release();
+    await second;
+    await ctx.card(notice);
+    order.push('c3 resolved');
+    return { kind: 'done', finishReason: 'stop' };
+  });
+  expect(final.ending).toBe('stop');
+  expect(order).toEqual(['c2 resolved', 'c3 resolved']);
+  expect(seen).toEqual([
+    `${runId}:c2:start`,
+    `${runId}:c2:end`,
+    `${runId}:c3:start`,
+    `${runId}:c3:end`,
+  ]);
 });
