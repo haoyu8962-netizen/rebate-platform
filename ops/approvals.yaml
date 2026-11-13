@@ -537,3 +537,9 @@ approvals:
     granted: true
     date: '2026-11-13'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/ops 的追加）：--tests 只新增一个不取验证槽、不产出验证证据的运行模式，不改 --fast、--red 与完整验证的判定，不改必需检查；其余为收紧。原仓库 PR 3318 的三轮评审与第 3 轮增量已由编排核过（D10-1410），仓库迁移后在新仓库重开并变基，变基中的内容改动（tests-projects.json 增 replay 项目、red-plan 测试把 test/replay 计入集成层、辅助函数改名）已核（D10-1465）。整文件 describe.skip 仍报绿一条记 FU-TESTS-REPORT-SKIPPED-ONLY，合并后修。'
+  - id: 87
+    row: 4
+    title: 'CT-06zzzzzf：verify-container --tests 的报告判定再收紧一条——计划内的测试文件没有一条用例真正跑过（全是 skipped / todo 等）且不是加载失败时，按报告不可信退出 2 并点名文件，不再报绿'
+    granted: true
+    date: '2026-11-13'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/ops）：只收紧 --tests 这个测试机入口的报告判定（approvals 86 留下的 FU-TESTS-REPORT-SKIPPED-ONLY），不改 --fast、--red 与完整验证，不改必需检查。只动 tools/ops/tests-report.ts、tests-report.test.ts、tools/ops/README.md 与台账；测试与实现由两个不同的全新子代理做，测试机先红 4 / 28、实现后 28 / 28，Codex general r1 通过，verify:fast 通过；编排核过实际差异（D10-1501）。'
