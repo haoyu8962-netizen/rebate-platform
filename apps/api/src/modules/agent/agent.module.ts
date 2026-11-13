@@ -88,6 +88,10 @@ import {
 import { agentCallerProvider } from './stream/mount/caller.ts';
 import { agentStreamController } from './stream/mount/controller.ts';
 import {
+  agentEmptyReplyCounter,
+  agentEmptyReplyCounterToken,
+} from './stream/mount/empty-reply-counter.ts';
+import {
   agentStreamProvider,
   agentStreamToken,
   type AgentStreamModuleOptions,
@@ -209,8 +213,10 @@ export class AgentModule {
             },
           }),
         },
+        // B1-01zzv: the process-local 不空回复 counter; entry.ts reads its total() for /metrics.
+        { provide: agentEmptyReplyCounterToken(), useValue: agentEmptyReplyCounter() },
       ],
-      exports: [agentStreamToken()],
+      exports: [agentStreamToken(), agentEmptyReplyCounterToken()],
     };
   }
 

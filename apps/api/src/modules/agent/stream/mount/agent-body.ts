@@ -150,17 +150,6 @@ export function sessionProducts(
   };
 }
 
-/** A process-local 不空回复 counter (the stream entry's; read by total()). */
-export function createEmptyReplyCounter(): EmptyReplyCounter & { total(): number } {
-  let count = 0;
-  return {
-    record() {
-      count += 1;
-    },
-    total: () => count,
-  };
-}
-
 export function createStreamAgentBody(deps: StreamAgentBodyDeps): AgentBodyAssembly {
   const { business, logger } = deps;
   const outputReview = business.safety?.outputReview;

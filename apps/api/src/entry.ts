@@ -1,9 +1,11 @@
 // Shared runner behind the five `main.<entry>.ts` files.
 import { createHttpApp, createWorkerContext } from './bootstrap.ts';
 import {
+  agentEmptyReplyCounterToken,
   agentRuleSyncToken,
   agentSweeperToken,
   createPgAgentTraceMissingPort,
+  type AgentEmptyReplyCounter,
   type AgentRuleSyncRuntime,
   type AgentSweeperRuntime,
 } from './modules/agent/index.ts';
@@ -323,9 +325,51 @@ function startGenerationRenewal(
  * diffs per app, ledger's read-only port) and, since B2-09zj, `collectWithdrawalFail` (today's W6
  * and W5 + W6 and the longest run of W6 ending in the last 24 hours, per app, payout's read-only
  * port). Since B1-04zy only the api passes `collectTaobaoSearch` (union's in-process
- * search counter, read at scrape time).
+ * search counter, read at scrape time); since B1-01zzv only the stream passes
+ * `collectAgentReplyEmpty` (agent's in-process empty reply counter, resolved once by its token;
+ * absent when the token does not resolve to a counter).
  * Not on the Nest application, not in the OAS.
  */
+/** Resolves a provider by token; null when it is absent or resolution throws. */
+function resolveOptional<T>(
+  app: { get<V>(token: symbol, options: { strict: false }): V },
+  token: symbol,
+): T | null {
+  try {
+    return app.get<T | null | undefined>(token, { strict: false }) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The HTTP entries' in-process counters for /metrics: the api's Taobao search counter (B1-04zy)
+ * and the stream's empty reply counter (B1-01zzv, BR-AI-01). The stream resolves its counter once
+ * here; without one (absent, null or undefined) the family is not exported at all, not made up as 0.
+ */
+function httpCollectors(
+  entry: EntryName,
+  app: { get<V>(token: symbol, options: { strict: false }): V },
+):
+  | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot }
+  | { readonly collectAgentReplyEmpty: () => number }
+  | undefined {
+  if (entry === 'api') {
+    return {
+      collectTaobaoSearch: () =>
+        app
+          .get<TaobaoSearchCounter | null>(taobaoSearchCounterToken(), { strict: false })
+          ?.snapshot() ?? [],
+    };
+  }
+  if (entry === 'stream') {
+    const counter = resolveOptional<AgentEmptyReplyCounter>(app, agentEmptyReplyCounterToken());
+    if (counter === null || typeof counter.total !== 'function') return undefined;
+    return { collectAgentReplyEmpty: () => counter.total() };
+  }
+  return undefined;
+}
+
 async function openMetrics(
   entry: EntryName,
   config: AppConfig,
@@ -342,7 +386,8 @@ async function openMetrics(
         readonly collectCreditPostcheck: () => Promise<CreditPostcheckSnapshot>;
         readonly collectWithdrawalFail: () => Promise<WithdrawalFailSnapshot>;
       }
-    | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot },
+    | { readonly collectTaobaoSearch: () => TaobaoSearchMetricsSnapshot }
+    | { readonly collectAgentReplyEmpty: () => number },
 ): Promise<MetricsServer | undefined> {
   if (config.metrics === undefined) return undefined;
   const registry = createMetricsRegistry(
@@ -462,19 +507,7 @@ async function start(
       }
       const port = portOf(entry, config);
       await app.listen(port, config.apiHost);
-      metricsServer = await openMetrics(
-        entry,
-        config,
-        logger,
-        entry === 'api'
-          ? {
-              collectTaobaoSearch: () =>
-                app
-                  .get<TaobaoSearchCounter | null>(taobaoSearchCounterToken(), { strict: false })
-                  ?.snapshot() ?? [],
-            }
-          : undefined,
-      );
+      metricsServer = await openMetrics(entry, config, logger, httpCollectors(entry, app));
       await signals.serve(close, { listening: true, host: config.apiHost, port });
     } catch (error) {
       signals.fail();

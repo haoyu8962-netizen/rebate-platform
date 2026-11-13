@@ -8,6 +8,8 @@
 // The agent trace missing gauge (B3-08za) only on the worker, filled by `collectAgentTraceMissing`.
 // The open post-credit diffs gauge (B2-02v) only on the worker, filled by `collectCreditPostcheck`.
 // The three payout failure gauges (B2-09zj) only on the worker, filled by `collectWithdrawalFail`.
+// The empty reply counter (B1-01zzv) only on the stream, filled by `collectAgentReplyEmpty` from
+// agent's in-process counter.
 // The text exposition format 0.0.4 is written here from Node built-ins only: the client library
 // cannot be loaded in the test environment (its @opentelemetry/api dependency resolves to an ESM
 // build Node cannot import), so no third-party metrics library is used at runtime.
@@ -180,6 +182,12 @@ const AUTO_PAYOUT_LABEL = 'app_id';
 const TAOBAO_SEARCH_COUNTER = {
   name: 'couli_taobao_search_total',
   help: 'Taobao search attempts per source and outcome (fallback: the official attempt handed over to dataoke).',
+} as const;
+
+/** The empty reply counter (B1-01zzv, BR-AI-01): unlabelled, agent's process-local total. */
+const AGENT_REPLY_EMPTY_COUNTER = {
+  name: 'couli_agent_reply_empty_total',
+  help: 'Agent runs ended by stop or limit without any text, card or suggestions, answered with the empty reply fallback.',
 } as const;
 
 function escapeHelp(text: string): string {
@@ -432,6 +440,17 @@ function reviewOverdueFamilies(snapshot: ReviewOverdueSnapshot): Family[] {
   ];
 }
 
+function agentReplyEmptyFamilies(total: number): Family[] {
+  return [
+    {
+      name: AGENT_REPLY_EMPTY_COUNTER.name,
+      help: AGENT_REPLY_EMPTY_COUNTER.help,
+      type: 'counter',
+      samples: [{ value: total }],
+    },
+  ];
+}
+
 function taobaoSearchFamilies(snapshot: TaobaoSearchMetricsSnapshot): Family[] {
   return [
     {
@@ -458,6 +477,8 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
   const collectCreditPostcheck = worker ? options.collectCreditPostcheck : undefined;
   const collectWithdrawalFail = worker ? options.collectWithdrawalFail : undefined;
   const collectTaobaoSearch = options.entry === 'api' ? options.collectTaobaoSearch : undefined;
+  const collectAgentReplyEmpty =
+    options.entry === 'stream' ? options.collectAgentReplyEmpty : undefined;
   return {
     contentType: CONTENT_TYPE,
     async render() {
@@ -501,6 +522,10 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
       ]);
       const taobaoSearch =
         collectTaobaoSearch === undefined ? [] : taobaoSearchFamilies(collectTaobaoSearch());
+      const agentReplyEmpty =
+        collectAgentReplyEmpty === undefined
+          ? []
+          : agentReplyEmptyFamilies(collectAgentReplyEmpty());
       return [
         ...business,
         ...fund,
@@ -512,6 +537,7 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...creditPostcheck,
         ...withdrawalFail,
         ...taobaoSearch,
+        ...agentReplyEmpty,
         pddServiceFeeFamily(),
         serviceFeeMissingFamily(),
         ...processFamilies(),
