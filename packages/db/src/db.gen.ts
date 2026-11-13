@@ -733,6 +733,13 @@ export interface DictItems {
   version: number;
 }
 
+export interface EventDedup {
+  app_id: string;
+  created_at: Generated<Timestamp>;
+  event_id: string;
+  event_type: string;
+}
+
 export interface EventLog {
   app_id: string;
   created_at: Generated<Timestamp>;
@@ -741,6 +748,18 @@ export interface EventLog {
   name: string;
   occurred_at: Timestamp;
   payload: Json;
+}
+
+export interface Events {
+  app_id: string;
+  client_at: Timestamp;
+  device_id: string | null;
+  event_id: string;
+  event_type: string;
+  name: string;
+  props: Json;
+  server_at: Timestamp;
+  user_id: string | null;
 }
 
 export interface ExportTasks {
@@ -2385,7 +2404,9 @@ export interface DB {
   device_registrations: DeviceRegistrations;
   devices: Devices;
   dict_items: DictItems;
+  event_dedup: EventDedup;
   event_log: EventLog;
+  events: Events;
   export_tasks: ExportTasks;
   favorites: Favorites;
   idempotency_keys: IdempotencyKeys;
