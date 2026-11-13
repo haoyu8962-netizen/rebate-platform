@@ -1,0 +1,25 @@
+id: CT-26zp
+repo: rebate-platform
+title: 契约文案：提现失败原因用户文案入 contracts/texts.default.json——08 BR-TEXT-08「失败原因映射」三个码 + 作 {reason} 代入的兜底句、BR-WDR-33 ⑥ 微信两项（字典 withdraw_fail_reason），键 withdraw_fail_reason.<CODE>.title、兜底 withdraw_fail_reason.default.title，句子逐字；notification 提现结果消息改读这些键，不再另存一份（D10-1525）
+type: impl
+# 2026-11-14 入账（后台与工作台桌面线·内容，编排 D10-1525；与 CT-26zo 同样的缺口：App 提现详情只拿 reason_code / fail_code，主干 texts 无键，{reason} 取不到）。
+# 码与句子：PAYEE_NOT_EXIST、PAYEE_USER_INFO_ERROR、PAYEE_ACCOUNT_STATUS_ERROR 取 12_TEXT BR-TEXT-08 失败原因映射表「用户文案」列；兜底取同节「兜底句代入 {reason} 时用不带金额的一版」（D10-228，不取表里自带金额那句）；USER_CONFIRM_TIMEOUT、USER_REQUEST_CANCEL 取 07_WDR BR-WDR-33 ⑥。逐字照抄，主干 notification 常量已与之一致，推送句子不许变（D10-1525）。
+# specs/fund-term-keys.yaml 已有 withdraw_fail_reason. 前缀，不改归类；version 不改；不动 openapi，不占契约槽。与 CT-26zo 改同一个文件，排在它之后。
+refs: [BR-TEXT-08, BR-WDR-33]
+refs_hash:
+  BR-TEXT-08: b3178ff2da40
+  BR-WDR-33: '7886471e9297'
+deps: [CT-26zo]
+paths:
+  - 'contracts/texts.default.json'
+  - 'apps/api/src/modules/notification/application/withdrawal-result-message{,.test}.ts'
+  - 'apps/api/src/modules/notification/application/withdraw-reject-texts{,.test}.ts'
+  - 'apps/api/src/modules/notification/application/withdraw-fail-texts{,.test}.ts'
+test_paths:
+  - 'test/spec/content/withdraw-fail-reason-texts/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/withdraw-fail-reason-texts/**'
+status: todo
