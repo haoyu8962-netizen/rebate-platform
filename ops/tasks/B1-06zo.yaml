@@ -28,4 +28,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/link-jump-report/**'
-status: todo
+status: done
+pr: 81
