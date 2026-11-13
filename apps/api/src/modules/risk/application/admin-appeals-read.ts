@@ -17,6 +17,7 @@ import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import type { AuditPort, Clock, FieldCrypto } from '../../platform/index.ts';
+import { processingAppealOf } from './appeal-pending-count.ts';
 import { blocklistHmacContexts } from './blocklist.ts';
 
 export type AdminAppealRevokePermission = Schema<'AdminAppealRevokePermission'>;
@@ -321,13 +322,15 @@ export class AdminAppealsRead {
       }
       return b;
     };
+    // "Processing" is the one predicate the dashboard's appeal_pending count shares (B1-03zo).
+    const processing = processingAppealOf(actor.appId);
     const countsRow = await base()
-      .select([
-        sql<string>`count(*) filter (where status = 'processing')`.as('processing'),
-        sql<string>`count(*) filter (where status = 'processing' and deadline_at < ${now})`.as(
+      .select((eb) => [
+        sql<string>`count(*) filter (where ${processing(eb)})`.as('processing'),
+        sql<string>`count(*) filter (where ${processing(eb)} and deadline_at < ${now})`.as(
           'overdue',
         ),
-        sql<string>`count(*) filter (where status <> 'processing')`.as('closed'),
+        sql<string>`count(*) filter (where not (${processing(eb)}))`.as('closed'),
         sql<string>`count(*)`.as('all'),
       ])
       .executeTakeFirstOrThrow();
@@ -339,9 +342,10 @@ export class AdminAppealsRead {
     };
 
     let filtered = base();
-    if (query.status !== undefined) filtered = filtered.where('status', '=', query.status);
+    if (query.status === 'processing') filtered = filtered.where(processing);
+    else if (query.status !== undefined) filtered = filtered.where('status', '=', query.status);
     if (query.overdue === true) {
-      filtered = filtered.where('status', '=', 'processing').where('deadline_at', '<', now);
+      filtered = filtered.where(processing).where('deadline_at', '<', now);
     }
     const totalRow = await filtered
       .select(sql<string>`count(*)`.as('total'))

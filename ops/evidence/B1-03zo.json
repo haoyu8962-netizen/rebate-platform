@@ -1,0 +1,92 @@
+{
+  "risk_note": "RV1 (risk). B1-03zo (D10-1401): the dashboard card appeal_pending gets a per-app read-only count exported by risk — countProcessingAppeals(db, appId). The one predicate processingAppealOf(appId) (app_id = ? AND status = 'processing', status as a literal so appeals_processing_deadline_idx stays usable) is shared by the new count and by the console appeal list's status=processing filter, overdue filter and counts (processing / overdue / closed); no target_type, deadline or source filter; no writes. Host (local-heavy): integration spec/risk/appeal-pending-count + spec/risk/admin-appeals-read 78/78; unit appeal-pending-count.test.ts + admin-appeals-read.test.ts 15; eslint / prettier on changed files, tsc -b apps/api test, depcruise 0. The implementation was a fresh desktop Claude subagent (model opus) in place of claude -p on the terminal accounts, which are no longer usable (DESKTOP-common-20261113).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "codex-run.sh review --review-type general (RV1, medium), base = rule-test head c47051d32. Round 1: pass, no findings. couli-runs/B1-03zo/review-general-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests test/spec/risk/appeal-pending-count/** by Codex (tester codex), so Codex cannot review them. The 2026-11-13 03:53 claude-run.sh spec-test run was cut by a 403 (no output, not counted). Round 1 rerun by a fresh desktop Claude subagent (model opus, prompt = claude-run.sh --dry-run, read-only), output checked by validate-output.ts: pass, 1 S2 (all fixtures source='app'; a source filter would go unnoticed — guarded in the implementation, which does not filter on source), 1 out-of-scope (dashboard wiring, logged). Container red/1 ok, problems 0, 13 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 仅账户：逾期、到期时刻、未到期都计入，已结案都排除",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 仅订单：逾期、到期时刻、未到期都计入，已结案都排除",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 仅无账号被拦请求：逾期、到期时刻、未到期都计入，已结案都排除",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 三类混合：逾期、到期时刻、未到期都计入，已结案都排除",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 超过默认一页：逾期、到期时刻、未到期都计入，已结案都排除",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#2] 同一数据库交替读取两个 App，只计各自的 processing",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#3] 本 App 没有申诉时为数字 0，其他 App 的 processing 不影响",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#4] 本 App 只有已维持、已撤销申诉时也为 0",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#5] processing → upheld 每结案一条就少 1，三类对象同口径且重复读取不漂移",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#5] processing → revoked 每结案一条就少 1，三类对象同口径且重复读取不漂移",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#6] 按申诉行计数：同一用户多个对象都算，无账号注册与四种被拦请求都算",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#7] 模块入口导出的计数可在 PG 只读事务内重复调用，申诉、状态、命中、订单与审计不变",
+    "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#8] 越过 deadline 后只增加 overdue，卡片计数与 processing 总数不变"
+  ],
+  "task": "B1-03zo",
+  "spec_commit": "926c83e847a0db9030180c29ab3cc834a9ce3088",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "926c83e847a0db9030180c29ab3cc834a9ce3088",
+      "tree": "ba1c9f1b478bcdb8ed223ed0f40fa9f93bd87ec2",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T13:45:28Z",
+      "finished_at": "2026-11-13T13:45:47Z",
+      "red_tests": [
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 仅账户：逾期、到期时刻、未到期都计入，已结案都排除",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 仅订单：逾期、到期时刻、未到期都计入，已结案都排除",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 仅无账号被拦请求：逾期、到期时刻、未到期都计入，已结案都排除",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 三类混合：逾期、到期时刻、未到期都计入，已结案都排除",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#1] 超过默认一页：逾期、到期时刻、未到期都计入，已结案都排除",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#2] 同一数据库交替读取两个 App，只计各自的 processing",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#3] 本 App 没有申诉时为数字 0，其他 App 的 processing 不影响",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#4] 本 App 只有已维持、已撤销申诉时也为 0",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#5] processing → upheld 每结案一条就少 1，三类对象同口径且重复读取不漂移",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#5] processing → revoked 每结案一条就少 1，三类对象同口径且重复读取不漂移",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#6] 按申诉行计数：同一用户多个对象都算，无账号注册与四种被拦请求都算",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#7] 模块入口导出的计数可在 PG 只读事务内重复调用，申诉、状态、命中、订单与审计不变",
+        "test/spec/risk/appeal-pending-count/count.int.test.ts > [AC-B1-03zo#8] 越过 deadline 后只增加 overdue，卡片计数与 processing 总数不变"
+      ],
+      "expected": ["test/spec/risk/appeal-pending-count/count.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a22e0059e779e9f2899d40442d44c30d7e88481295be559fae8c541725be9117"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e23da030413650d13c24a588030e9200d955ec03",
+    "specs": "8f76891b6e53531f480a4626a10b8dc9c1e82a28"
+  }
+}
