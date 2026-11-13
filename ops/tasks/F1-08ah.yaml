@@ -51,5 +51,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-review/**'
-status: todo
-pr: null
+status: done
+pr: 88
