@@ -131,6 +131,7 @@ export interface AdminSettleBillReadDeps {
 }
 
 export interface AdminSettleBillListQuery {
+  readonly awaiting_confirm?: boolean;
   readonly page?: number;
   readonly page_size?: number;
   readonly bill_from?: string;
