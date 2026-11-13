@@ -24,18 +24,29 @@ import { dashboardTexts as t } from '../../texts/dashboard.ts';
 import {
   DASHBOARD_URL,
   STATUS_ROUTES,
+  beijingYesterday,
   formatCount,
   toView,
   type Dashboard,
   type DashboardStatus,
   type DashboardView,
   type TodoCard,
+  type YesterdayView,
 } from './model.ts';
+
+/** Time source of the page (AGENTS.md §4 rule 5): the console's injected clock, in epoch ms. */
+export interface DashboardClock {
+  now(): number;
+}
+
+const SYSTEM_CLOCK: DashboardClock = { now: () => Date.now() };
 
 export interface DashboardPageProps {
   readonly access: AccessControl;
   /** Where to go when the server refuses the page (10403): the first other permitted menu. */
   readonly fallback?: string;
+  /** Injected clock; tells whether the overview row is yesterday's (+08:00 accounting day). */
+  readonly clock?: DashboardClock | undefined;
 }
 
 type Load =
@@ -265,8 +276,46 @@ function StatusSection({ status }: { readonly status: DashboardStatus }) {
   );
 }
 
-function Loaded({ view }: { readonly view: DashboardView }) {
-  const y = view.yesterday;
+function YesterdaySection(props: {
+  readonly yesterday: YesterdayView | null;
+  /** Yesterday's accounting day by the page clock (`YYYY-MM-DD`). */
+  readonly expected: string;
+}) {
+  const y = props.yesterday;
+  if (y === null)
+    return (
+      <section className="dashboard-section">
+        <SectionHeading title={t.yesterday.heading(props.expected)} hint={t.yesterday.hint} />
+        <Typography.Text type="secondary">{t.yesterday.empty}</Typography.Text>
+      </section>
+    );
+  return (
+    <section className="dashboard-section">
+      <SectionHeading title={t.yesterday.heading(y.date)} hint={t.yesterday.hint} />
+      {y.date < props.expected ? (
+        <Typography.Text type="secondary" className="dashboard-small">
+          {t.yesterday.asOfDay(y.date)}
+        </Typography.Text>
+      ) : null}
+      <div className="dashboard-grid">
+        <OverviewCard
+          title={t.yesterday.links(y.day)}
+          value={y.links}
+          hint={t.yesterday.linksHint}
+        />
+        <OverviewCard title={t.yesterday.orders} value={y.orders} hint={t.yesterday.ordersHint} />
+        <OverviewCard title={t.yesterday.rebate} value={y.rebate} hint={t.yesterday.rebateHint} />
+        <OverviewCard
+          title={t.yesterday.newUsers}
+          value={y.newUsers}
+          hint={t.yesterday.newUsersHint}
+        />
+      </div>
+    </section>
+  );
+}
+
+function Loaded({ view, clock }: { readonly view: DashboardView; readonly clock: DashboardClock }) {
   return (
     <>
       <section className="dashboard-section">
@@ -281,23 +330,7 @@ function Loaded({ view }: { readonly view: DashboardView }) {
           </div>
         )}
       </section>
-      <section className="dashboard-section">
-        <SectionHeading title={t.yesterday.heading(y.date)} hint={t.yesterday.hint} />
-        <div className="dashboard-grid">
-          <OverviewCard
-            title={t.yesterday.links(y.day)}
-            value={y.links}
-            hint={t.yesterday.linksHint}
-          />
-          <OverviewCard title={t.yesterday.orders} value={y.orders} hint={t.yesterday.ordersHint} />
-          <OverviewCard title={t.yesterday.rebate} value={y.rebate} hint={t.yesterday.rebateHint} />
-          <OverviewCard
-            title={t.yesterday.newUsers}
-            value={y.newUsers}
-            hint={t.yesterday.newUsersHint}
-          />
-        </div>
-      </section>
+      <YesterdaySection yesterday={view.yesterday} expected={beijingYesterday(clock.now())} />
       {view.status === undefined ? null : <StatusSection status={view.status} />}
     </>
   );
@@ -334,7 +367,11 @@ export function DashboardPage(props: DashboardPageProps): ReactElement {
   return planned ? <PlannedPage title={t.title} /> : <DashboardContent {...props} />;
 }
 
-function DashboardContent({ access, fallback = '/' }: DashboardPageProps): ReactElement {
+function DashboardContent({
+  access,
+  fallback = '/',
+  clock = SYSTEM_CLOCK,
+}: DashboardPageProps): ReactElement {
   void access;
   const getProvider = useDataProvider();
   const navigate = useNavigate();
@@ -386,7 +423,7 @@ function DashboardContent({ access, fallback = '/' }: DashboardPageProps): React
 
   let body: ReactNode = null;
   if (load.status === 'loading') body = <LoadingCards />;
-  else if (load.status === 'ready') body = <Loaded view={load.view} />;
+  else if (load.status === 'ready') body = <Loaded view={load.view} clock={clock} />;
   else if (load.status === 'failed')
     body = (
       <Card {...CARD} className="dashboard-card" role="alert">
@@ -416,7 +453,9 @@ function DashboardContent({ access, fallback = '/' }: DashboardPageProps): React
         </Typography.Title>
         <Flex align="center" gap="middle">
           <Typography.Text type="secondary" className="dashboard-small">
-            {load.status === 'ready' ? t.headerNote(load.view.yesterday.asOf) : t.readOnly}
+            {load.status === 'ready' && load.view.yesterday !== null
+              ? t.headerNote(load.view.yesterday.asOf)
+              : t.readOnly}
           </Typography.Text>
           <Button icon={<ReloadOutlined aria-hidden="true" />} onClick={() => again(false)}>
             {t.refresh}
