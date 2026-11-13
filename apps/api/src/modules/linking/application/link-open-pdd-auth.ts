@@ -25,7 +25,7 @@
 //   30111 with data.auth_jump only, a one-time state bound to uid + device record + the link this
 //   open serves (BR-ID-22 细则, the auth-url jump construction); the port missing or failing →
 //   50303, nothing written.
-// Binding writes (single writer linking; approvals #26): every status written is first judged by
+// Binding writes (single writer linking; CT-10a / B1-06zm): every status written is first judged by
 // canTransitionBinding, then a row_version compare-and-set; the unreleased row (pending_auth /
 // invalid) is set active in place, else a stored `unbound` row (a projection value, judged as no
 // binding), else a new active row of the account used — released history is never touched. The

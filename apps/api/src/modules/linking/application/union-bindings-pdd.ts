@@ -12,7 +12,7 @@
 //   self_buy identity (custom_parameters {app:'n', uid=attr_code, sc:'self_buy'}, never a user_id)
 //   is sent to UnionAdapter.queryPddAuthority. Authorized → one short transaction, opened only after
 //   the query returned (the query never holds a connection), writes the binding active through
-//   pdd-authority.ts activatePddBinding — the open's single entry (approvals #26:
+//   pdd-authority.ts activatePddBinding — the open's single entry (CT-10a / B1-06zm:
 //   canTransitionBinding + row_version CAS, savepoint retries on a lost unique race, blocked never
 //   overwritten) — and resolves the user's unresolved pdd conflict rows in the same transaction
 //   (BR-ID-18 补句, bound_active). Not authorized → nothing written: no 30111, no state, no
