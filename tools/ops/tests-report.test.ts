@@ -861,3 +861,226 @@ it('[CT-06zzzzz] tests-report.ts reuses the parsing and cleaning of related-repo
     /function (printableLine|redLines|summarizeRelated|parseFile|parseAssertion)\b/,
   );
 });
+
+// --- CT-06zzzzzf (FU-TESTS-REPORT-SKIPPED-ONLY, #3318 Codex r4 S2): a planned file that ran no test ---
+// A whole-file describe.skip or a file of it.todo still lists the file in Vitest's JSON report
+// (file status passed, its tests counted in numTotalTests, exit 0). A planned file none of whose
+// assertionResults is passed or failed (and that did not fail to load) did not run: exit 2 naming
+// it. A file with some tests run and some skipped is fine; the tests count is unchanged.
+
+/** One file of a report whose tests all have `status` (skipped, todo, …). */
+function notRun(rel: string, status: string, fileStatus = 'passed'): ReportFile {
+  return {
+    rel,
+    status: fileStatus,
+    tests: [
+      { ancestors: ['whole'], title: `${status} a`, status },
+      { ancestors: ['whole'], title: `${status} b`, status },
+    ],
+  };
+}
+
+it(
+  '[CT-06zzzzzf] tests-report CLI: the only planned file is in the report but every test is skipped (exit 0) → exit 2, nothing on stdout, the file named as one that ran no test',
+  () => {
+    for (const fileStatus of ['passed', 'skipped']) {
+      const report = vitestReport([notRun('test/spec/alpha/one.test.ts', 'skipped', fileStatus)]);
+      // The fixture is the shape that reads green today: the file listed, its tests counted.
+      expect(JSON.parse(report)).toMatchObject({ numTotalTests: 2, numFailedTests: 0 });
+      const res = cli(setup([UNIT_ONE], groupFiles('spec-unit', '0', '5', report)));
+      expect(res.status, `[CT-06zzzzzf#1] file ${fileStatus}: ${res.stderr}`).toBe(2);
+      expect(res.stdout, `[CT-06zzzzzf#2] file ${fileStatus}`).toBe('');
+      expect(res.stderr, `[CT-06zzzzzf#3] file ${fileStatus}`).toContain(
+        'test/spec/alpha/one.test.ts',
+      );
+      expect(res.stderr, `[CT-06zzzzzf#4] file ${fileStatus}`).toContain('ran no test');
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzf] tests-report CLI: the only planned file has only todo tests (it.todo, exit 0) → exit 2 naming the file as one that ran no test',
+  () => {
+    const report = vitestReport([notRun('test/spec/alpha/one.test.ts', 'todo')]);
+    const res = cli(setup([UNIT_ONE], groupFiles('spec-unit', '0', '5', report)));
+    expect(res.status, `[CT-06zzzzzf#1] ${res.stderr}`).toBe(2);
+    expect(res.stdout, '[CT-06zzzzzf#2]').toBe('');
+    expect(res.stderr, '[CT-06zzzzzf#3]').toContain('test/spec/alpha/one.test.ts');
+    expect(res.stderr, '[CT-06zzzzzf#4]').toContain('ran no test');
+    // Skipped and todo mixed in one file: still not one test run.
+    const mixed = vitestReport([
+      {
+        rel: 'test/spec/alpha/one.test.ts',
+        status: 'passed',
+        tests: [
+          { title: 'later', status: 'todo' },
+          { title: 'off', status: 'skipped' },
+        ],
+      },
+    ]);
+    const both = cli(setup([UNIT_ONE], groupFiles('spec-unit', '0', '5', mixed)));
+    expect(both.status, `[CT-06zzzzzf#5] ${both.stderr}`).toBe(2);
+    expect(both.stdout, '[CT-06zzzzzf#6]').toBe('');
+    expect(both.stderr, '[CT-06zzzzzf#7]').toContain('test/spec/alpha/one.test.ts');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzf] tests-report CLI: a group of two planned files, one with passed tests and one all skipped → exit 2 naming only the skipped file',
+  () => {
+    const report = vitestReport([
+      {
+        rel: 'test/spec/alpha/one.test.ts',
+        status: 'passed',
+        tests: [
+          { ancestors: ['one'], title: '[AC-T-01] a', status: 'passed' },
+          { title: '[AC-T-01] b', status: 'passed' },
+        ],
+      },
+      notRun('test/spec/alpha/two.test.ts', 'skipped'),
+    ]);
+    const res = cli(setup([UNIT], groupFiles('spec-unit', '0', '5', report)));
+    expect(res.status, `[CT-06zzzzzf#1] ${res.stderr}`).toBe(2);
+    expect(res.stdout, '[CT-06zzzzzf#2]').toBe('');
+    expect(res.stderr, '[CT-06zzzzzf#3]').toContain('test/spec/alpha/two.test.ts');
+    expect(res.stderr, '[CT-06zzzzzf#4]').toContain('ran no test');
+    // The file whose tests ran is not named.
+    expect(res.stderr, '[CT-06zzzzzf#5]').not.toContain('spec/alpha/one.test.ts');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzf] tests-report CLI: the first group green, the second with a planned file all skipped → exit 2 naming the second group and that file',
+  () => {
+    const skipped = vitestReport([notRun('packages/testing/src/five.test.ts', 'skipped')]);
+    const res = cli(
+      setup([UNIT, TESTING], {
+        ...groupFiles('spec-unit', '0', '5', UNIT_GREEN),
+        ...groupFiles('testing-unit', '0', '3', skipped),
+      }),
+    );
+    expect(res.status, `[CT-06zzzzzf#1] ${res.stderr}`).toBe(2);
+    expect(res.stdout, '[CT-06zzzzzf#2]').toBe('');
+    expect(res.stderr, '[CT-06zzzzzf#3]').toContain('testing-unit');
+    expect(res.stderr, '[CT-06zzzzzf#4]').toContain('packages/testing/src/five.test.ts');
+    expect(res.stderr, '[CT-06zzzzzf#5]').toContain('ran no test');
+    // The green group's files are not named.
+    expect(res.stderr, '[CT-06zzzzzf#6]').not.toContain('spec/alpha/one.test.ts');
+    expect(res.stderr, '[CT-06zzzzzf#7]').not.toContain('spec/alpha/two.test.ts');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzf] tests-report CLI: a file with passed and skipped tests stays green (exit 0); skipped tests still count in tests as before',
+  () => {
+    const report = vitestReport([
+      {
+        rel: 'test/spec/alpha/one.test.ts',
+        status: 'passed',
+        tests: [
+          { ancestors: ['one'], title: '[AC-T-01] a', status: 'passed' },
+          { title: '[AC-T-01] later', status: 'skipped' },
+          { title: '[AC-T-01] someday', status: 'todo' },
+        ],
+      },
+    ]);
+    const res = cli(setup([UNIT_ONE], groupFiles('spec-unit', '0', '5', report)));
+    expect(res.status, `[CT-06zzzzzf#1] ${res.stderr}`).toBe(0);
+    const summary = JSON.parse(res.stdout) as Summary;
+    expect(summary, '[CT-06zzzzzf#2]').toMatchObject({
+      files: 1,
+      tests: 3,
+      duration_s: 5,
+      failed: [],
+      load_errors: [],
+      status: 'green',
+    });
+    expect(summary.groups, '[CT-06zzzzzf#3]').toEqual([
+      {
+        name: 'spec-unit',
+        database: false,
+        files: 1,
+        tests: 3,
+        exit: 0,
+        duration_s: 5,
+        failed: [],
+        load_errors: [],
+        status: 'green',
+      },
+    ]);
+    expect(res.stderr, '[CT-06zzzzzf#4]').not.toContain('ran no test');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzf] tests-report CLI: a file with a failed test and skipped ones stays red (exit 1), the failed test listed',
+  () => {
+    const report = vitestReport([
+      {
+        rel: 'test/spec/alpha/one.test.ts',
+        status: 'failed',
+        tests: [
+          { ancestors: ['one'], title: '[AC-T-01] a', status: 'failed' },
+          { title: '[AC-T-01] later', status: 'skipped' },
+          { title: '[AC-T-01] someday', status: 'todo' },
+        ],
+      },
+    ]);
+    const res = cli(setup([UNIT_ONE], groupFiles('spec-unit', '1', '5', report)));
+    expect(res.status, `[CT-06zzzzzf#1] ${res.stderr}`).toBe(1);
+    const summary = JSON.parse(res.stdout) as Summary;
+    expect(summary.status, '[CT-06zzzzzf#2]').toBe('red');
+    expect(summary.failed, '[CT-06zzzzzf#3]').toEqual([
+      { file: 'test/spec/alpha/one.test.ts', test: 'one > [AC-T-01] a' },
+    ]);
+    expect(summary.tests, '[CT-06zzzzzf#4]').toBe(3);
+    expect(res.stderr.split('\n'), '[CT-06zzzzzf#5]').toContain(
+      'test/spec/alpha/one.test.ts > one > [AC-T-01] a',
+    );
+    expect(res.stderr, '[CT-06zzzzzf#6]').not.toContain('ran no test');
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzf] tests-report CLI: a planned file that failed to load (no assertionResults) still counts as run and red (exit 1), not exit 2',
+  () => {
+    // Alone in its group.
+    const alone = cli(setup([INT], groupFiles('spec-int', '1', '5', INT_LOAD_ERROR)));
+    expect(alone.status, `[CT-06zzzzzf#1] ${alone.stderr}`).toBe(1);
+    const aloneSummary = JSON.parse(alone.stdout) as Summary;
+    expect(aloneSummary.status, '[CT-06zzzzzf#2]').toBe('red');
+    expect(aloneSummary.load_errors, '[CT-06zzzzzf#3]').toEqual([
+      { file: 'test/spec/alpha/three.int.test.ts', message: "Error: Cannot find module '../x.ts'" },
+    ]);
+    expect(alone.stderr, '[CT-06zzzzzf#4]').not.toContain('ran no test');
+    // Next to a file whose tests passed, in the same group.
+    const report = vitestReport([
+      {
+        rel: 'test/spec/alpha/one.test.ts',
+        status: 'passed',
+        tests: [{ title: '[AC-T-01] a', status: 'passed' }],
+      },
+      {
+        rel: 'test/spec/alpha/two.test.ts',
+        status: 'failed',
+        tests: [],
+        message: 'SyntaxError: Unexpected token',
+      },
+    ]);
+    const mixed = cli(setup([UNIT], groupFiles('spec-unit', '1', '5', report)));
+    expect(mixed.status, `[CT-06zzzzzf#5] ${mixed.stderr}`).toBe(1);
+    const mixedSummary = JSON.parse(mixed.stdout) as Summary;
+    expect(mixedSummary.status, '[CT-06zzzzzf#6]').toBe('red');
+    expect(mixedSummary.load_errors, '[CT-06zzzzzf#7]').toEqual([
+      { file: 'test/spec/alpha/two.test.ts', message: 'SyntaxError: Unexpected token' },
+    ]);
+    expect(mixed.stderr, '[CT-06zzzzzf#8]').not.toContain('ran no test');
+  },
+  CLI_TIMEOUT,
+);

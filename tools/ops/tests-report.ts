@@ -25,9 +25,10 @@
 // exactly the group's planned files (D10-1388: the tree under test chooses the Vitest config, and
 // a narrowed include, passWithNoTests or a whole-file describe.skip must not read green): a planned
 // file (<dir>/<file>) missing from the report (at most MISSING_NAMED named, the rest as a count),
-// a test file in the report that the group did not plan, or a group with 0 tests and no file that
-// failed to load (a file that failed to load counts as run). Nothing is printed on stdout with
-// exit 2.
+// a test file in the report that the group did not plan, a planned file that ran no test (none of
+// its assertionResults is passed or failed: a whole-file describe.skip or a file of it.todo is
+// still listed, its tests counted; CT-06zzzzzf), or a group with 0 tests and no file that failed
+// to load (a file that failed to load counts as run). Nothing is printed on stdout with exit 2.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -176,6 +177,33 @@ function reportFiles(report: unknown, root: string): Set<string> {
   return files;
 }
 
+/** A test whose status is one of these ran; skipped, todo, pending and the like did not. */
+const RAN = new Set(['passed', 'failed']);
+
+/**
+ * The test files of a report (shape already checked by summarizeRelated: each testResults entry
+ * has a string name and a list of assertionResults with a string status), relative to `root` as
+ * reportFiles makes them, that have at least one test that ran (passed or failed).
+ */
+function filesWithTestsRun(report: unknown, root: string): Set<string> {
+  const results = isRecord(report) ? report['testResults'] : undefined;
+  const files = new Set<string>();
+  if (!Array.isArray(results)) return files;
+  for (const r of results) {
+    const name = isRecord(r) ? r['name'] : undefined;
+    const assertions = isRecord(r) ? r['assertionResults'] : undefined;
+    if (typeof name !== 'string' || !Array.isArray(assertions)) continue;
+    const ran = assertions.some((a) => {
+      const status = isRecord(a) ? a['status'] : undefined;
+      return typeof status === 'string' && RAN.has(status);
+    });
+    if (ran) {
+      files.add(relative(name, root));
+    }
+  }
+  return files;
+}
+
 function judgeGroup(g: PlanGroup, out: string, root: string, maxBytes: number): TestsGroup {
   const exit = readSmall(out, `${g.name}.exit`);
   const seconds = readSmall(out, `${g.name}.seconds`);
@@ -224,6 +252,17 @@ function judgeGroup(g: PlanGroup, out: string, root: string, maxBytes: number): 
   if (unplanned.length > 0) {
     throw new OutError(
       `group ${g.name}: ${nameFiles(unplanned, 'test file(s) in its report that it did not plan')}`,
+    );
+  }
+  // Every planned file ran at least one test (CT-06zzzzzf): a whole-file describe.skip or a file of
+  // it.todo is still listed in the report, its tests counted, the file passed and Vitest exits 0.
+  // A file that failed to load counts as run (it is red, among load_errors).
+  const testsRan = filesWithTestsRun(report, root);
+  const loadFailed = new Set(s.load_errors.map((e) => e.file));
+  const noTestRun = [...planned].filter((f) => !testsRan.has(f) && !loadFailed.has(f)).sort();
+  if (noTestRun.length > 0) {
+    throw new OutError(
+      `group ${g.name}: ${nameFiles(noTestRun, 'planned test file(s) that ran no test (every test skipped, todo or the like)')}`,
     );
   }
   const red = s.failed.length > 0 || s.load_errors.length > 0;

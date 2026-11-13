@@ -1,0 +1,24 @@
+id: CT-06zzzzzf
+repo: rebate-platform
+title: CT-06zzzzzf：verify-container --tests 的报告判定——计划内文件没有一条用例真正跑过（全是 skipped / todo）且不是加载失败时，按报告不可信退出 2 并点名，不再报绿（FU-TESTS-REPORT-SKIPPED-ONLY，#3318 Codex r4 S2）
+type: guard-change
+# 2026-11-13 门禁与工具桌面线入账（编排 D10-1410 排在 CT-06zzzzz 合并之后；CT-06zzzzz 已在新仓库 #17 合并）。
+# 问题：tests-report.ts 的 judgeGroup 只核「计划的文件都在报告里」与「整组用例数不为 0」。计划内一个文件整份 describe.skip（或全是 it.todo）时，
+#   Vitest 的 JSON 仍列出该文件、numTotalTests 计入跳过的用例、文件状态 passed、退出码 0，于是整组报绿，实际一条用例没跑。仓库规则禁止 .skip（test-guard），属非正常用法，但 --tests 不跑 test-guard。
+# 改法：按每个文件 assertionResults 里状态为 passed / failed 的用例数判断它是否真跑过；计划内的文件（加载失败的除外，照旧算跑过、记红）一条都没有就 OutError 退出 2，
+#   报错点名这些文件（与「计划的文件不在报告里」同一写法）。同一文件里有跑过的也有跳过的不算错。tests 计数的口径不改。
+# 只改 tools/ops/tests-report.ts、它的测试与 tools/ops/README.md 里 --tests 退出 2 的说明；verify-container.sh、red-plan、related-report 不改。
+refs: []
+refs_hash: {}
+deps:
+  - CT-06zzzzz
+paths:
+  - 'tools/ops/tests-report.ts'
+  - 'tools/ops/tests-report.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzzf.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
