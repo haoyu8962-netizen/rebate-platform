@@ -96,6 +96,28 @@ async function multiItem(s: Scenario, user?: string, platform = 'jd') {
   await linked(s, auto, { evidence: 'strong' });
 }
 
+/**
+ * A manual_review claim whose weak child orders are all decided (rejected) while every undecided
+ * child order is strong. The claim keeps its own status: +1 manual_review, +0 auto_matched (a count
+ * that reclassifies by the weakest undecided item would wrongly move it to auto_matched).
+ */
+async function decidedWeak(s: Scenario, user?: string, platform = 'jd') {
+  const review = await claim(s, {
+    status: 'manual_review',
+    evidence_level: 'weak',
+    user_id: user ?? s.userId,
+    platform,
+  });
+  await linked(s, review, { evidence: 'strong' });
+  await linked(s, review, { evidence: 'strong' });
+  await linked(s, review, { evidence: 'weak', decision: 'rejected', reject_reason: 'NO_EVIDENCE' });
+  await linked(s, review, {
+    evidence: 'weak',
+    decision: 'rejected',
+    reject_reason: 'EXPIRED_CLICK',
+  });
+}
+
 it('[AC-B1-10v#1] 只计本 app 的 auto_matched 与 manual_review，分项各自正确；其余全部状态与别的 app 不计', async () => {
   const count = await load();
   expect(NOT_PENDING).toEqual(
@@ -133,6 +155,17 @@ it('[AC-B1-10v#1] 只计本 app 的 auto_matched 与 manual_review，分项各�
     breakdown: { auto_matched: 3, manual_review: 1 },
   });
   expect(await count(h.db, `claims_${randomUUID().replaceAll('-', '')}`)).toEqual(NONE);
+  // manual_review claim whose weak items are all decided and whose undecided items are all strong:
+  // it still counts once, under manual_review only.
+  await decidedWeak(s);
+  expect(await count(h.db, s.appId)).toEqual({
+    count: 8,
+    breakdown: { auto_matched: 3, manual_review: 5 },
+  });
+  expect(await count(h.db, other.appId)).toEqual({
+    count: 4,
+    breakdown: { auto_matched: 3, manual_review: 1 },
+  });
 });
 
 it('[AC-B1-10v#2] 没有待审时 count 与两项都是 0；只有一类待审时另一项为 0', async () => {
@@ -216,6 +249,22 @@ it('[AC-B1-10v#3] 计数等于后台找回列表页：不加筛选的 GET /admin
   expect(await count(h.db, s.appId)).toEqual({
     count: 9,
     breakdown: { auto_matched: 4, manual_review: 5 },
+  });
+  // manual_review claim with all weak items decided and only strong items undecided: the list
+  // counts it once under manual_review, and so does the card.
+  await decidedWeak(s, second, 'pdd');
+  const after = await page(await s.get());
+  expect(after.counts).toMatchObject({ auto_matched: 4, manual_review: 6 });
+  expect(await count(h.db, s.appId)).toEqual({
+    count: after.counts.auto_matched + after.counts.manual_review,
+    breakdown: {
+      auto_matched: after.counts.auto_matched,
+      manual_review: after.counts.manual_review,
+    },
+  });
+  expect(await count(h.db, s.appId)).toEqual({
+    count: 10,
+    breakdown: { auto_matched: 4, manual_review: 6 },
   });
 });
 
