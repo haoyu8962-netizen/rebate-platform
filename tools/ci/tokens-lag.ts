@@ -8,7 +8,7 @@
 //     [--lock <name>=<contract.lock>]... [--h5] [--client-vectors <specs/client dir>]
 //     [--now <ISO time>]
 //
-//   --planning      local git checkout of the planning repository (zora4523-bot/couli).
+//   --planning      local git checkout of the planning repository (haoyu8962-netizen/couli).
 //   --planning-ref  ref whose history is the token source; default origin/main when it resolves,
 //                   else HEAD.
 //   --platform      this repository (default: current directory). Its working tree supplies the

@@ -394,7 +394,7 @@ jobs:
       - name: Check out the planning repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: zora4523-bot/couli
+          repository: haoyu8962-netizen/couli
           path: .tmp/spec-repo
           fetch-depth: 0
           persist-credentials: false
@@ -468,7 +468,7 @@ jobs:
       - name: Check out the planning repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: zora4523-bot/couli
+          repository: haoyu8962-netizen/couli
           path: .tmp/spec-repo
           fetch-depth: 0
           persist-credentials: false
