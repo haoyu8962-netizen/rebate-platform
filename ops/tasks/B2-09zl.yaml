@@ -25,3 +25,4 @@ accept:
   - 'test/spec/payout/withdraw-review-pending-count/**'
 status: done
 pr: 3346
+# pr 是原仓库 zora4523-bot/rebate-platform 的编号（2026-11-13 迁到 haoyu8962-netizen 前合并）。
