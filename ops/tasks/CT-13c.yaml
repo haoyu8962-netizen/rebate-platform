@@ -24,7 +24,9 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/contracts/card-bridge-diagnostic-fields/**'
-status: todo
+status: done
+pr: 3342
+# pr 是原仓库 zora4523-bot/rebate-platform 的编号（2026-11-13 迁到 haoyu8962-netizen 前合并）。
 red_exempt:
   - file: test/spec/contracts/sdui-card-error-page-version/sdui-card-error-page-version.test.ts
     test: '[AC-CT-13b#2] page_version 的 note 同时写到首页等配置化页面（03 §6.2）必带与 AI 助手页卡片（03 §7.2）不带'
