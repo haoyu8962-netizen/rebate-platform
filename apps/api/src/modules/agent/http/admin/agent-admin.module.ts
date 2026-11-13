@@ -3,15 +3,14 @@
 // AdminOperationGuard (agent.trace, read only, no step-up); the detail's audit record goes through
 // platform's AUDIT_PORT, provided globally by the admin module on this entry. Without the database
 // or the audit port every call fails closed (50001).
-// B1-10t adds the report list and handling (agent.trace / agent.report): the handling's audit
-// record is written by admin's writer bound to the handling's transaction and the handlers'
-// display names come from admin's reader, both passed in by app.module (agent never imports
-// admin); the report column write is agent's own port (application/agent-report.ts).
+// B1-10t adds the report list (agent.trace): the handlers' display names come from admin's reader,
+// which app.module binds to the pool and provides here (adminNames); agent calls it with ids only
+// and never hands it a database handle (BR-AI-02 ③, 编排 D10-1539). The report handling
+// (adminHandleAgentReport) is admin's own route (admin/http/admin/agent-reports.controller.ts).
 import type { DB as Database } from '@couli/db';
-import { type DynamicModule, Module } from '@nestjs/common';
-import type { Kysely, Transaction } from 'kysely';
+import { type DynamicModule, type FactoryProvider, Module } from '@nestjs/common';
+import type { Kysely } from 'kysely';
 import { AUDIT_PORT, CLOCK, DB, type AuditPort, type Clock } from '../../../platform/index.ts';
-import { createAgentReportAdminPort } from '../../application/agent-report.ts';
 import {
   createAdminReportService,
   type AdminDisplayNames,
@@ -24,11 +23,16 @@ import {
   AdminAgentTracesController,
 } from './agent-traces.controller.ts';
 
+/** Nest token of the handlers' display name reader (null in a process without the database). */
+export const ADMIN_AGENT_REPORT_NAMES = Symbol('AGENT_ADMIN_REPORT_NAMES');
+
 export interface AgentAdminOptions {
-  /** Binds the audit port to a transaction handle (app.module: admin's createAuditWriter). */
-  readonly auditWriter: (db: Kysely<Database>, clock: Clock) => AuditPort;
-  /** admin's display name reader over a handle (app.module: admin's createAdminDisplayNameReader). */
-  readonly adminNames: (db: Kysely<Database>) => AdminDisplayNames;
+  /**
+   * The provider of admin's display name reader, already bound to the pool (app.module:
+   * createAdminDisplayNameReader(db); null without the database). Nest builds it; agent only
+   * injects its value.
+   */
+  readonly adminNames: Omit<FactoryProvider<AdminDisplayNames | null>, 'provide'>;
 }
 
 export class AgentAdminModule {
@@ -49,22 +53,18 @@ export class AgentAdminModule {
               ? null
               : createAdminTraceReaders({ db, clock, audit }),
         },
+        { ...options.adminNames, provide: ADMIN_AGENT_REPORT_NAMES },
         {
           provide: ADMIN_AGENT_REPORTS,
-          inject: [CLOCK, { token: DB, optional: true }],
+          inject: [CLOCK, { token: DB, optional: true }, ADMIN_AGENT_REPORT_NAMES],
           useFactory: (
             clock: Clock,
             db: Kysely<Database> | undefined,
+            names: AdminDisplayNames | null,
           ): AdminReportService | null =>
-            db === undefined
+            db === undefined || names === null
               ? null
-              : createAdminReportService({
-                  db,
-                  clock,
-                  reports: createAgentReportAdminPort({ clock }),
-                  auditOn: (trx: Transaction<Database>) => options.auditWriter(trx, clock),
-                  adminNames: options.adminNames,
-                }),
+              : createAdminReportService({ db, clock, names }),
         },
       ],
     };

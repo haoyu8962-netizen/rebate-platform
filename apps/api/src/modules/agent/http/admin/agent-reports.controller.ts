@@ -1,28 +1,12 @@
-// B1-10t: GET /admin/v1/agent-traces/reports (adminListAgentReports) and
-// POST /admin/v1/agent-traces/reports/{message_id}/handle (adminHandleAgentReport), CT-24zzi,
-// 编排 D10-1287 ⑤ / D10-1310; BR-ID-15 细则「举报的处理」. Mounted only by AgentAdminModule on the
-// admin entry. The admin request check has verified the admin_token and the route schema the
-// parameters and the body before this runs; the operation guard re-reads the account and checks
-// the permission point: the list agent.trace, read only (no step-up; an X-Step-Up-Token header is
-// ignored); the handling agent.report, whose step-up tier is null (specs/permissions.yaml). The
-// list writes no audit record; a successful handling writes one agent_report_handle record in its
-// own transaction (application/admin-reports.ts). No Idempotency-Key (04 §6.6): the row_version
-// compare-and-set makes a repeat a 20902. The answer is no-store. Only authorisation, the
-// parameters and the calls into the use cases live here. Without the database (or the audit
-// writer) the routes still register and every call fails closed (50001).
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpException,
-  Inject,
-  Param,
-  Post,
-  Query,
-  Req,
-  Res,
-} from '@nestjs/common';
+// B1-10t: GET /admin/v1/agent-traces/reports (adminListAgentReports), CT-24zzi, 编排 D10-1287 ⑤ /
+// D10-1310; BR-ID-15 细则「举报的处理」. Mounted only by AgentAdminModule on the admin entry. The
+// admin request check has verified the admin_token and the route schema the parameters before this
+// runs; the operation guard re-reads the account and checks the permission point agent.trace, read
+// only (no step-up; an X-Step-Up-Token header is ignored). The list writes no audit record. The
+// answer is no-store. Only authorisation, the parameters and the call into the use case live here.
+// Without the database the route still registers and every call fails closed (50001). The
+// handling (adminHandleAgentReport) is admin's route (编排 D10-1539).
+import { Controller, Get, HttpException, Inject, Query, Req, Res } from '@nestjs/common';
 import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
 import {
@@ -32,21 +16,17 @@ import {
   type AdminActor,
 } from '../../../platform/index.ts';
 import {
-  AdminReportConflictError,
   AdminReportFieldsError,
   type AdminReportQuery,
   type AdminReportService,
 } from '../../application/admin-reports.ts';
 import type { AdminAgentTracesRequest } from './agent-traces.controller.ts';
 
-/** Nest token of the report use cases (null in a process without the database). */
+/** Nest token of the report list use case (null in a process without the database). */
 export const ADMIN_AGENT_REPORTS = Symbol('AGENT_ADMIN_REPORTS');
 
-/** specs/permissions.yaml (CT-24zzi): agent.trace and agent.report, step-up null. */
+/** specs/permissions.yaml (CT-24zzi): agent.trace, step-up null. */
 const TRACE = 'agent.trace';
-const REPORT = 'agent.report';
-
-type HandleBody = Schema<'AdminAgentReportHandleRequest'>;
 
 interface HeaderReply {
   header(name: string, value: string): unknown;
@@ -73,39 +53,17 @@ export class AdminAgentReportsController {
     query: AdminReportQuery,
     reply: HeaderReply,
   ): Promise<Schema<'AdminAgentReportPageResponse'>> {
-    return this.#run(request, reply, TRACE, true, (reports, actor) =>
-      reports.list(actor.appId, query),
-    );
-  }
-
-  handle(
-    request: AdminAgentTracesRequest,
-    messageId: string,
-    body: HandleBody,
-    reply: HeaderReply,
-  ): Promise<Schema<'AdminAgentReportResponse'>> {
-    return this.#run(request, reply, REPORT, false, (reports, actor) =>
-      reports.handle({
-        appId: actor.appId,
-        adminId: actor.adminId,
-        messageId,
-        note: body.note,
-        expectedRowVersion: body.expected_row_version,
-        ip: typeof request.ip === 'string' && request.ip.length > 0 ? request.ip : null,
-      }),
-    );
+    return this.#run(request, reply, (reports, actor) => reports.list(actor.appId, query));
   }
 
   async #run<T>(
     request: AdminAgentTracesRequest,
     reply: HeaderReply,
-    permission: string,
-    readOnly: boolean,
     business: (reports: AdminReportService, actor: AdminActor) => Promise<T>,
   ): Promise<Envelope<T>> {
     reply.header('Cache-Control', 'no-store');
     let response: Envelope<T> | undefined;
-    await this.#guard.run({ request, permission, readOnly }, async (actor) => {
+    await this.#guard.run({ request, permission: TRACE, readOnly: true }, async (actor) => {
       const reports = this.#reports;
       if (reports === null) throw new Error('agent: the admin report console needs the database');
       try {
@@ -127,17 +85,6 @@ function refusal(error: unknown, traceId: string): unknown {
     const refused = fieldsErrorEnvelope(error.fields, traceId);
     return new HttpException(refused.body, refused.statusCode);
   }
-  if (error instanceof AdminReportConflictError) {
-    return new HttpException(
-      {
-        code: 20902,
-        msg: '状态已变化，请刷新后重试',
-        data: { resource: 'agent_report' },
-        trace_id: traceId,
-      },
-      409,
-    );
-  }
   return error;
 }
 
@@ -152,13 +99,5 @@ function refusal(error: unknown, traceId: string): unknown {
   Res({ passthrough: true })(prototype, 'list', 2);
   Get('agent-traces/reports')(prototype, 'list', list);
   RouteSchema(contractRouteSchema('adminListAgentReports'))(prototype, 'list', list);
-  const handle = Object.getOwnPropertyDescriptor(prototype, 'handle')!;
-  Req()(prototype, 'handle', 0);
-  Param('message_id')(prototype, 'handle', 1);
-  Body()(prototype, 'handle', 2);
-  Res({ passthrough: true })(prototype, 'handle', 3);
-  Post('agent-traces/reports/:message_id/handle')(prototype, 'handle', handle);
-  HttpCode(200)(prototype, 'handle', handle);
-  RouteSchema(contractRouteSchema('adminHandleAgentReport'))(prototype, 'handle', handle);
   Controller('admin/v1')(AdminAgentReportsController);
 }
