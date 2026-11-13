@@ -79,6 +79,25 @@ export function detailView(row: ReconDiffRow): Schema<'AdminReconDiffDetail'> {
   };
 }
 
+/**
+ * The store filter of a list query (every given field ANDed, absent = all). B2-02w: the dashboard's
+ * recon_diff_open count builds its filter here too, so it and the list's total are one judgement.
+ */
+export function reconDiffListFilter(
+  appId: string,
+  query: Omit<ReconDiffListQuery, 'page' | 'page_size'>,
+): AdminReconDiffFilter {
+  return {
+    appId,
+    type: query.type,
+    source: query.source,
+    status: query.status,
+    periodFrom: query.period_from,
+    periodTo: query.period_to,
+    refId: query.ref_id,
+  };
+}
+
 /** One page of the app's R1–R3 recon diffs, created_at then id descending. */
 export async function listAdminReconDiffs(
   db: Kysely<DB>,
@@ -95,15 +114,7 @@ export async function listAdminReconDiffs(
   }
   const page = query.page ?? DEFAULT_PAGE;
   const pageSize = query.page_size ?? DEFAULT_PAGE_SIZE;
-  const filter: AdminReconDiffFilter = {
-    appId,
-    type: query.type,
-    source: query.source,
-    status: query.status,
-    periodFrom: query.period_from,
-    periodTo: query.period_to,
-    refId: query.ref_id,
-  };
+  const filter = reconDiffListFilter(appId, query);
   const total = await countAdminReconDiffs(db, filter);
   const offset = (page - 1) * pageSize;
   const rows = offset >= total ? [] : await pageAdminReconDiffs(db, filter, offset, pageSize);
