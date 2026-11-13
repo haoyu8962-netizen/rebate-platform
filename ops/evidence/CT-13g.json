@@ -1,0 +1,104 @@
+{
+  "risk_note": "CT-13g (C-31 step 2, analytics writer; 编排 D10-1487 / D10-1488 / D10-1489; caller contract aligned with w1 B1-06zo on 11-14 00:50). Only apps/api/src/modules/analytics/index.ts (new module) plus rule tests test/spec/analytics/record-events/**. recordEvents(db, {appId, userId|null, deviceId|null, events, clock}): one transaction; per event INSERT INTO app.event_dedup ... ON CONFLICT (event_type, event_id) DO NOTHING RETURNING, and only a newly acquired key writes app.events (name = event_type = eventType; props JSON-serialised, the 0140 object CHECK rejects non-objects; user_id / device_id only from the caller; client_at passed through; server_at = clock.now() once per call); returns {accepted, duplicates}; any error rolls the whole batch back; no validation (the receiver validates). detachUserEvents(db, {appId, userId}): UPDATE app.events SET user_id = NULL WHERE app_id AND user_id, returns the affected count (D10-1489 default, pending owner confirmation; wiring into account deletion belongs to identity, not here). Rule tests (Codex, 1 attempt): originally 18 tests (red/1 18/18 PASS, implementation red/2 18/18). D10-1520：#4 撤下，跨 app 去重口径由 CT-13i 按 02 §多 App 隔离（业务唯一键以 app_id 开头）重定 — a fresh independent Claude (not the writer) removed only the top-level test [AC-CT-13g#4] (12 lines; nothing else changed; mechanical, not a test attempt; the orchestrator checks the increment, no extra spec-test). Rebased spec commit b1d8906a5: container red red/4 17/17 PASS; implementation unchanged (from 7ed11b30f): red/5 17/17 passed. No money / attribution path. Rebased after CT-06zzzzzg (#76, risk-map registers analytics as RV2, D10-1529); the new main commits touch analytics only with #76's AGENTS.md / CLAUDE.md and db only with B1-34q's unrelated 0141, so per D10-1529 ③ only guard:static was re-run (10/10; tsc -b apps/api test also 0); the earlier test-machine verify:fast (couli-runs/CT-13g/verify-fast/1) failed only on that missing risk-map rule.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-13g/review-codex-money-r1.json: pass with two S2 — (1) two concurrent batches [A,B] / [B,A] can deadlock (40P01) and one call fails (rolled back, no duplicates; availability only); (2) the dedup key (event_type, event_id) has no app_id (CT-13e design, merged), so app B reusing app A's UUID gets duplicates=1. Both left as follow-ups for the orchestrator. The S2 about the app-less dedup key is taken up by CT-13i (D10-1519 / D10-1520); [AC-CT-13g#4] that pinned it was removed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (tester codex, 1 attempt), reviewed by a fresh independent Claude (claude-run.sh): spec-test r1 pass with three S2 — #6 concurrency test may not overlap and would not catch a read-then-write variant; FixedClock cannot catch per-event clock.now(); no test pins the reverse-order deadlock behaviour (couli-runs/CT-13g/review-claude-spec-test-r1.json). Left as follow-ups. D10-1520：[AC-CT-13g#4] removed after r1 (the deduplication key moves to (app_id, event_type, event_id) in CT-13i); the remaining 17 tests are those reviewed in r1, unchanged."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#10] 清空目标用户所有事件的 user_id，保留其它用户、匿名行及所有其它字段和去重行；重跑为零",
+    "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#11] 用错误 app 调用不得解除另一 app 的同一 user_id，也不得解除本 app 的其他用户",
+    "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#12] 没有该用户事件返回零，不更改匿名事件",
+    "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#13] 解除关联后事件重试仍被去重，不重新挂回用户",
+    "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#1] 空批返回两个零，不写任何行",
+    "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#2] 批内按类型和 ID 去重；相同 ID 不同类型、相同类型不同 ID 都接受，首条内容保留",
+    "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#3] 跨批跨日重试不改原行，混合新旧批次分别计数",
+    "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#5] 存储所有字段且 server_at 取每次调用注入的 Clock，身份只取服务端参数",
+    "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#6] 并发两连接上报同一事件，只能一个接受、一个重复，内容来自胜者",
+    "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#14] 写入层不重复执行事件目录校验，匿名设备由调用方给，props 不能冒充用户",
+    "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#7] 先插去重行再写事件；提交前两表对另一连接不可见，事件写完后失败整体回滚",
+    "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#8] 去重写入失败时不写事件、不报成功，恢复后同一批可以全部接受",
+    "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 null 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+    "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 array 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+    "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 string 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+    "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 number 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+    "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 boolean 时整批拒绝，之前的新事件也回滚，既有行保持不变"
+  ],
+  "task": "CT-13g",
+  "spec_commit": "b6bb82c83322bb01e7094058f675b0b196595286",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b6bb82c83322bb01e7094058f675b0b196595286",
+      "tree": "ec7b2a0bff0262ba946d10c0c40c2d8dc27ad947",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T19:44:50Z",
+      "finished_at": "2026-11-13T19:44:58Z",
+      "red_tests": [
+        "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#10] 清空目标用户所有事件的 user_id，保留其它用户、匿名行及所有其它字段和去重行；重跑为零",
+        "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#11] 用错误 app 调用不得解除另一 app 的同一 user_id，也不得解除本 app 的其他用户",
+        "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#12] 没有该用户事件返回零，不更改匿名事件",
+        "test/spec/analytics/record-events/detach-user.int.test.ts > [AC-CT-13g#13] 解除关联后事件重试仍被去重，不重新挂回用户",
+        "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#1] 空批返回两个零，不写任何行",
+        "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#2] 批内按类型和 ID 去重；相同 ID 不同类型、相同类型不同 ID 都接受，首条内容保留",
+        "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#3] 跨批跨日重试不改原行，混合新旧批次分别计数",
+        "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#5] 存储所有字段且 server_at 取每次调用注入的 Clock，身份只取服务端参数",
+        "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#6] 并发两连接上报同一事件，只能一个接受、一个重复，内容来自胜者",
+        "test/spec/analytics/record-events/record-events.int.test.ts > [AC-CT-13g#14] 写入层不重复执行事件目录校验，匿名设备由调用方给，props 不能冒充用户",
+        "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#7] 先插去重行再写事件；提交前两表对另一连接不可见，事件写完后失败整体回滚",
+        "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#8] 去重写入失败时不写事件、不报成功，恢复后同一批可以全部接受",
+        "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 null 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+        "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 array 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+        "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 string 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+        "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 number 时整批拒绝，之前的新事件也回滚，既有行保持不变",
+        "test/spec/analytics/record-events/transaction.int.test.ts > [AC-CT-13g#9] props 为 boolean 时整批拒绝，之前的新事件也回滚，既有行保持不变"
+      ],
+      "expected": [
+        "test/spec/analytics/record-events/detach-user.int.test.ts",
+        "test/spec/analytics/record-events/record-events.int.test.ts",
+        "test/spec/analytics/record-events/transaction.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e4f4e301a8bccc279bddebdade794537835debead1f5644a592a7ca6e5708eb5"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "86d391c11e6066b002ac5308c3581b906bbd0916",
+    "specs": "e28c922334b9d4ca38a47135693492d446f33e5e"
+  }
+}
