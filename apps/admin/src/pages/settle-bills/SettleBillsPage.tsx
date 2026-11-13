@@ -9,6 +9,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Empty,
   Flex,
   Form,
@@ -23,7 +24,7 @@ import {
   type TablePaginationConfig,
 } from 'antd';
 import { useEffect, useId, useState, type ReactElement } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import type { Schema } from '@couli/contracts-ts';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
@@ -33,6 +34,7 @@ import {
   EMPTY_DRAFT,
   LIST_URL,
   PAGE_SIZE,
+  awaitingInSearch,
   beijingTime,
   billStatusLabel,
   checkDraft,
@@ -41,6 +43,7 @@ import {
   listQuery,
   money,
   platformEntries,
+  searchWithAwaiting,
   type Draft,
   type DraftErrors,
   type Filters,
@@ -97,11 +100,20 @@ function SettleBillsContent(): ReactElement {
   const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const navigate = useNavigate();
+  const location = useLocation();
   const { token } = theme.useToken();
   const ids = { from: useId(), to: useId(), status: useId() };
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  // /settle-bills?awaiting_confirm=true (workbench card settle_bill_pending) starts with 「待确认」
+  // on, so the very first read carries it. Which bills wait is the server's call (CT-24zzj).
+  const [initialAwaiting] = useState(() => awaitingInSearch(location.search));
+  const [draft, setDraft] = useState<Draft>(() => ({
+    ...EMPTY_DRAFT,
+    awaitingConfirm: initialAwaiting,
+  }));
   const [draftErrors, setDraftErrors] = useState<DraftErrors>({});
-  const [filters, setFilters] = useState<Filters>({});
+  const [filters, setFilters] = useState<Filters>(() =>
+    initialAwaiting ? { awaitingConfirm: true } : {},
+  );
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<ListStatus>('loading');
@@ -139,6 +151,15 @@ function SettleBillsContent(): ReactElement {
     setAttempt((value) => value + 1);
   };
 
+  // The address follows the applied 「待确认」 (other parameters kept).
+  const syncAddress = (awaiting: boolean) => {
+    if (awaitingInSearch(location.search) === awaiting) return;
+    void navigate(
+      { pathname: location.pathname, search: searchWithAwaiting(location.search, awaiting) },
+      { replace: true },
+    );
+  };
+
   const runQuery = () => {
     const checked = checkDraft(draft);
     if ('errors' in checked) {
@@ -148,6 +169,7 @@ function SettleBillsContent(): ReactElement {
     setDraftErrors({});
     setFilters(checked.filters);
     setPage(1);
+    syncAddress(checked.filters.awaitingConfirm === true);
     reload();
   };
 
@@ -156,6 +178,7 @@ function SettleBillsContent(): ReactElement {
     setDraftErrors({});
     setFilters({});
     setPage(1);
+    syncAddress(false);
     reload();
   };
 
@@ -380,6 +403,17 @@ function SettleBillsContent(): ReactElement {
                   setDraft((previous) => ({ ...previous, status: value ?? undefined }))
                 }
               />
+            </Form.Item>
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Checkbox
+                checked={draft.awaitingConfirm}
+                onChange={(event) => {
+                  const on = event.target.checked;
+                  setDraft((previous) => ({ ...previous, awaitingConfirm: on }));
+                }}
+              >
+                {t.filter.awaitingConfirm}
+              </Checkbox>
             </Form.Item>
             <Flex gap={8}>
               <Button onClick={reset}>{t.filter.reset}</Button>

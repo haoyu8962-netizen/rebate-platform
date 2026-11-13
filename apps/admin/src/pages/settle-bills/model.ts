@@ -102,6 +102,8 @@ export interface Filters {
   readonly billFrom?: string;
   readonly billTo?: string;
   readonly status?: SettleBillStatus;
+  /** 「待确认」 on: awaiting_confirm=true (CT-24zzj); off leaves the parameter out. */
+  readonly awaitingConfirm?: true;
 }
 
 /** Draft of the filter form (months as typed). */
@@ -109,9 +111,31 @@ export interface Draft {
   readonly billFrom: string;
   readonly billTo: string;
   readonly status: SettleBillStatus | undefined;
+  readonly awaitingConfirm: boolean;
 }
 
-export const EMPTY_DRAFT: Draft = { billFrom: '', billTo: '', status: undefined };
+export const EMPTY_DRAFT: Draft = {
+  billFrom: '',
+  billTo: '',
+  status: undefined,
+  awaitingConfirm: false,
+};
+
+/** The address parameter of the 「待确认」 filter (workbench card settle_bill_pending, D10-1402). */
+export const AWAITING_PARAM = 'awaiting_confirm';
+
+/** 「待确认」 is on in the address (?awaiting_confirm=true). */
+export const awaitingInSearch = (search: string): boolean =>
+  new URLSearchParams(search).get(AWAITING_PARAM) === 'true';
+
+/** The address search with awaiting_confirm=true set (on) or removed (off), others kept. */
+export function searchWithAwaiting(search: string, on: boolean): string {
+  const params = new URLSearchParams(search);
+  if (on) params.set(AWAITING_PARAM, 'true');
+  else params.delete(AWAITING_PARAM);
+  const next = params.toString();
+  return next === '' ? '' : `?${next}`;
+}
 
 const MONTH = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
 
@@ -138,6 +162,7 @@ export function checkDraft(draft: Draft): { filters: Filters } | { errors: Draft
       ...(from === '' ? {} : { billFrom: from }),
       ...(to === '' ? {} : { billTo: to }),
       ...(draft.status === undefined ? {} : { status: draft.status }),
+      ...(draft.awaitingConfirm ? { awaitingConfirm: true as const } : {}),
     },
   };
 }
@@ -150,6 +175,7 @@ export function listQuery(filters: Filters, page: number): Record<string, string
     ...(filters.billFrom === undefined ? {} : { bill_from: filters.billFrom }),
     ...(filters.billTo === undefined ? {} : { bill_to: filters.billTo }),
     ...(filters.status === undefined ? {} : { status: filters.status }),
+    ...(filters.awaitingConfirm === true ? { [AWAITING_PARAM]: 'true' } : {}),
   };
 }
 
