@@ -85,7 +85,7 @@ function parseFile(v: unknown, i: number): FileResult {
 }
 
 /** The test file's path relative to the repository root of the report. */
-function relative(name: string, root: string): string {
+export function relative(name: string, root: string): string {
   const prefix = root.endsWith('/') ? root : `${root}/`;
   return name.startsWith(prefix) ? name.slice(prefix.length) : name;
 }
@@ -101,11 +101,11 @@ export function summarizeRelated(
   opts: { sources: string[]; durationSeconds: number; overCapAt: number; root: string },
 ): RelatedSummary {
   if (!isRecord(report)) throw new Error('report: not a JSON object');
+  const results = report['testResults'];
+  if (!Array.isArray(results)) throw new Error('report: testResults is not a list');
   const total = report['numTotalTests'];
   if (!isCount(total)) throw new Error('report: numTotalTests is not a count');
   if (!isCount(report['numFailedTests'])) throw new Error('report: numFailedTests is not a count');
-  const results = report['testResults'];
-  if (!Array.isArray(results)) throw new Error('report: testResults is not a list');
   const files = results.map((r, i) => parseFile(r, i));
 
   const failed: RelatedFailure[] = [];
@@ -139,9 +139,11 @@ export function summarizeRelated(
 }
 
 /**
- * One printed line: control characters (U+0000–U+001F, U+007F) and the line and paragraph
- * separators become visible escapes, so that one entry is one line; then at most LINE_MAX
- * characters, a cut line ending in "…". related.json keeps the original text.
+ * One printed line: control characters (C0 U+0000–U+001F, U+007F, C1 U+0080–U+009F), the line and
+ * paragraph separators and the bidirectional controls (U+202A–U+202E, U+2066–U+2069; they reorder
+ * what a terminal shows; CT-06zzzzz ⑤) become visible escapes, so that one entry is one line that
+ * reads as it is; then at most LINE_MAX characters, a cut line ending in "…". related.json keeps
+ * the original text.
  */
 export function printableLine(text: string): string {
   let out = '';
@@ -150,22 +152,35 @@ export function printableLine(text: string): string {
     if (ch === '\n') out += '\\n';
     else if (ch === '\t') out += '\\t';
     else if (ch === '\r') out += '\\r';
-    else if (code < 0x20 || code === 0x7f) out += `\\x${code.toString(16).padStart(2, '0')}`;
-    else if (code === 0x2028 || code === 0x2029) out += `\\u${code.toString(16)}`;
-    else out += ch;
+    else if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
+      out += `\\x${code.toString(16).padStart(2, '0')}`;
+    } else if (
+      code === 0x2028 ||
+      code === 0x2029 ||
+      (code >= 0x202a && code <= 0x202e) ||
+      (code >= 0x2066 && code <= 0x2069)
+    ) {
+      out += `\\u${code.toString(16)}`;
+    } else out += ch;
   }
   return out.length > LINE_MAX ? `${out.slice(0, LINE_MAX - 1)}…` : out;
 }
 
-/** The lines printed for a red summary: each red test, then each load error; at most LINES_MAX. */
-export function redLines(summary: RelatedSummary): string[] {
+/**
+ * The lines printed for a red summary: each red test, then each load error; at most LINES_MAX,
+ * then one line naming the file that has the rest (`where`; tests-report.ts passes tests.json).
+ */
+export function redLines(
+  summary: Pick<RelatedSummary, 'failed' | 'load_errors'>,
+  where = 'related.json',
+): string[] {
   const all = [
     ...summary.failed.map((f) => `${f.file} > ${f.test}`),
     ...summary.load_errors.map((e) => `${e.file} (failed to load: ${e.message})`),
   ];
   const shown = all.slice(0, LINES_MAX).map(printableLine);
   if (all.length > LINES_MAX) {
-    shown.push(`… and ${String(all.length - LINES_MAX)} more in related.json`);
+    shown.push(`… and ${String(all.length - LINES_MAX)} more in ${where}`);
   }
   return shown;
 }
@@ -174,7 +189,7 @@ export function redLines(summary: RelatedSummary): string[] {
  * Reads the report only when it is a regular file (not a symbolic link, FIFO, device or
  * directory) of at most `maxBytes`: it comes from a directory the tests' code could write.
  */
-function readReport(path: string, maxBytes: number): string {
+export function readReport(path: string, maxBytes: number): string {
   const st = lstatSync(path);
   if (!st.isFile()) throw new Error(`report: ${path} is not a regular file`);
   if (st.size > maxBytes) {
@@ -194,7 +209,7 @@ function readReport(path: string, maxBytes: number): string {
   }
 }
 
-function count(value: string | undefined, flag: string, fallback?: number): number {
+export function count(value: string | undefined, flag: string, fallback?: number): number {
   if (value === undefined && fallback !== undefined) return fallback;
   if (value === undefined || !/^(0|[1-9][0-9]*)$/.test(value)) {
     throw new UsageError(`${flag} must be a non-negative integer: ${String(value)}`);

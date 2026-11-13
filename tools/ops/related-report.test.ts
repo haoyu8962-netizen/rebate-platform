@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { summarizeRelated } from './related-report.ts';
+import { printableLine, summarizeRelated } from './related-report.ts';
 import { CLI_TIMEOUT, OPS_DIR, removeDir, runCli, scratchDir } from './test-helpers.ts';
 
 const ROOT = '/w/repo';
@@ -552,6 +552,85 @@ it(
     const twoLines = two.stderr.split('\n').filter((l) => l !== '');
     expect(twoLines.filter((l) => l.startsWith('test/spec/many.test.ts > '))).toHaveLength(200);
     expect(twoLines.filter((l) => l.startsWith('… and '))).toHaveLength(0);
+  },
+  CLI_TIMEOUT,
+);
+
+// --- CT-06zzzzz ⑤ (D10-1350): bidirectional controls and C1 controls are escaped too ---------------
+// U+202A–U+202E, U+2066–U+2069 (they reorder what a terminal shows) and U+0080–U+009F (C1; U+0085 is
+// a line break to some readers) become visible escapes like the existing ones: \u202e, \x85.
+
+const BIDI = [0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069].map((c) =>
+  String.fromCharCode(c),
+);
+const C1 = Array.from({ length: 0x20 }, (_, i) => String.fromCharCode(0x80 + i));
+
+function hasBidiOrC1(text: string): boolean {
+  return [...text].some((ch) => BIDI.includes(ch) || C1.includes(ch));
+}
+
+it('[CT-06zzzzz] printableLine escapes U+202A–U+202E, U+2066–U+2069 as \\uXXXX and U+0080–U+009F as \\xHH', () => {
+  for (const ch of BIDI) {
+    const code = ch.charCodeAt(0).toString(16);
+    const line = printableLine(`a${ch}b`);
+    expect(hasBidiOrC1(line), code).toBe(false);
+    expect(line.toLowerCase(), code).toBe(`a\\u${code}b`);
+  }
+  for (const ch of C1) {
+    const code = ch.charCodeAt(0).toString(16).padStart(2, '0');
+    const line = printableLine(`a${ch}b`);
+    expect(hasBidiOrC1(line), code).toBe(false);
+    expect(line.toLowerCase(), code).toBe(`a\\x${code}b`);
+  }
+  // Neighbours stay as they are: U+00A0, U+00E9, U+2029's neighbour U+202F, U+2065, U+206A, CJK.
+  for (const ch of [' ', 'é', ' ', '⁥', '⁪', '名']) {
+    expect(printableLine(`a${ch}b`)).toBe(`a${ch}b`);
+  }
+});
+
+it(
+  '[CT-06zzzzz] related-report CLI: a red test named with U+202E and U+0085 is one line on stderr, escaped, without the raw characters; the JSON keeps it',
+  () => {
+    const title = 'evil\u202edesrever and\u0085next line \u2066iso\u2069';
+    const res = cli(
+      writeJson(
+        'bidi-c1.json',
+        report([file('test/spec/bidi.test.ts', 'failed', [assertion(['s'], title, 'failed')])]),
+      ),
+    );
+    expect(res.status, res.stderr).toBe(1);
+    expect(hasBidiOrC1(res.stderr)).toBe(false);
+    expect(hasRawControl(res.stderr)).toBe(false);
+    const printed = res.stderr.split('\n').filter((l) => l.startsWith('test/spec/bidi.test.ts'));
+    expect(printed).toHaveLength(1);
+    const line = (printed[0] ?? '').toLowerCase();
+    expect(line).toContain('evil\\u202edesrever');
+    expect(line).toContain('and\\x85next line');
+    expect(line).toContain('\\u2066iso\\u2069');
+    // Nothing of the name spills onto another line.
+    expect(res.stderr.split('\n').filter((l) => l.includes('next line'))).toHaveLength(1);
+    const summary = JSON.parse(res.stdout) as { failed: { test: string }[] };
+    expect(summary.failed).toEqual([{ file: 'test/spec/bidi.test.ts', test: `s > ${title}` }]);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzz] related-report CLI: a load-error message with U+202E and U+0085 prints on one line, escaped',
+  () => {
+    const res = cli(
+      writeJson(
+        'bidi-c1-load.json',
+        report([
+          file('test/spec/bidi-load.test.ts', 'failed', [], 'Error: \u202ekcatta\u0085 x\nsecond'),
+        ]),
+      ),
+    );
+    expect(res.status, res.stderr).toBe(1);
+    expect(hasBidiOrC1(res.stderr)).toBe(false);
+    const printed = res.stderr.split('\n').filter((l) => l.includes('test/spec/bidi-load.test.ts'));
+    expect(printed).toHaveLength(1);
+    expect((printed[0] ?? '').toLowerCase()).toContain('error: \\u202ekcatta\\x85 x');
   },
   CLI_TIMEOUT,
 );

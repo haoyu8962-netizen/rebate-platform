@@ -3,7 +3,11 @@
 // project takes has no execution entry: the plan fails (exit 1) instead of leaving it out.
 //
 //   node tools/ops/red-plan.ts --expected <file>   (one repository path per line)
+//                              [--projects <table>]  (default verify-image/red-projects.json)
 //
+// --projects names another table of the same format: verify-container.sh --tests passes
+// verify-image/tests-projects.json (CT-06zzzzz); --red keeps the default. A table that cannot be
+// read or is malformed exits 2 naming it.
 // Prints one JSON document: { groups: [{ name, dir, config, database, browser, files }] } with
 // `files` relative to `dir`; `browser` marks a group that needs a real Chromium (the verify image
 // must have Playwright's browser). Exit codes: 0 planned, 1 a file has no execution entry, 2 usage.
@@ -36,9 +40,9 @@ export type RedGroup = {
   files: string[];
 };
 
-export function loadRedProjects(
-  file = join(import.meta.dirname, 'verify-image', 'red-projects.json'),
-): RedProject[] {
+const DEFAULT_PROJECTS = join(import.meta.dirname, 'verify-image', 'red-projects.json');
+
+export function loadRedProjects(file = DEFAULT_PROJECTS): RedProject[] {
   const doc = JSON.parse(readFileSync(file, 'utf8')) as { projects?: RedProject[] };
   if (!Array.isArray(doc.projects)) throw new Error(`${file}: projects missing`);
   for (const p of doc.projects) {
@@ -47,6 +51,28 @@ export function loadRedProjects(
     }
   }
   return doc.projects;
+}
+
+/** Reads a --projects table; every project needs its fields, else the error names the file. */
+function loadTable(file: string): RedProject[] {
+  let projects: RedProject[];
+  try {
+    projects = loadRedProjects(file);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new UsageError(msg.includes(file) ? msg : `${file}: ${msg}`);
+  }
+  const strings = (v: unknown) => Array.isArray(v) && v.every((s) => typeof s === 'string');
+  for (const p of projects) {
+    const fields = [p.name, p.dir, p.config] as unknown[];
+    if (!fields.every((v) => typeof v === 'string' && v !== '')) {
+      throw new UsageError(`${file}: a project needs name, dir and config`);
+    }
+    if (!strings(p.include) || !strings(p.exclude)) {
+      throw new UsageError(`${file}: project ${p.name} needs include and exclude lists`);
+    }
+  }
+  return projects;
 }
 
 /** Groups the expected files by project; `unrunnable` lists the files no project takes. */
@@ -81,16 +107,28 @@ export function planRed(
 }
 
 function main(argv: string[]): number {
-  const { values } = parseArgs({ args: argv, options: { expected: { type: 'string' } } });
-  if (values.expected === undefined) throw new UsageError('red-plan.ts --expected <file>');
+  const { values } = parseArgs({
+    args: argv,
+    options: { expected: { type: 'string' }, projects: { type: 'string' } },
+  });
+  if (values.expected === undefined) {
+    throw new UsageError('red-plan.ts --expected <file> [--projects <table>]');
+  }
+  if (values.projects === '') throw new UsageError('--projects needs a file');
   const expected = readFileSync(values.expected, 'utf8')
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l !== '');
-  const plan = planRed(expected, loadRedProjects());
+  const table = values.projects ?? DEFAULT_PROJECTS;
+  const plan = planRed(
+    expected,
+    values.projects === undefined ? loadRedProjects() : loadTable(values.projects),
+  );
   if (plan.unrunnable.length > 0) {
+    const named =
+      values.projects === undefined ? 'tools/ops/verify-image/red-projects.json' : table;
     throw new CheckError(
-      `no execution entry for: ${plan.unrunnable.join(', ')} (none of the Vitest projects in tools/ops/verify-image/red-projects.json runs them)`,
+      `no execution entry for: ${plan.unrunnable.join(', ')} (none of the Vitest projects in ${named} runs them)`,
     );
   }
   console.log(JSON.stringify({ groups: plan.groups }));
