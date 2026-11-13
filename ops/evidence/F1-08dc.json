@@ -1,0 +1,85 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-settle-bills-awaiting/entry.test.ts > [AC-F1-08dc-ENTRY#1] 直接打开 /settle-bills?awaiting_confirm=true：「待确认」一进来就是勾上的，第一次列表请求就带 awaiting_confirm=true（此前没有不带它的列表请求），只列服务端返回的待确认账单，侧栏高亮月结账单",
+    "test/spec/frontend/admin-settle-bills-awaiting/entry.test.ts > [AC-F1-08dc-ENTRY#2] 点工作台卡「待确认月结账单」（route /settle-bills?awaiting_confirm=true）：落在月结账单列表，「待确认」已勾上，进入后的第一次列表请求就带 awaiting_confirm=true，侧栏高亮月结账单",
+    "test/spec/frontend/admin-settle-bills-awaiting/entry.test.ts > [AC-F1-08dc-ENTRY#3] 从 /settle-bills?awaiting_confirm=true 进入后取消「待确认」并【查询】：之后的列表请求不带 awaiting_confirm（不发 false），全部账单重新列出，地址不再是 awaiting_confirm=true",
+    "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#1] 列表筛选区有可访问名含「待确认」的开关 / 勾选，默认不勾；不勾时首读与按状态查询都不带 awaiting_confirm（不发 awaiting_confirm=false）",
+    "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#2] 勾上「待确认」并选账单月区间与状态后【查询】：请求带 awaiting_confirm=true 且保留 bill_from / bill_to / status，从第 1 页起、无契约外参数；只列服务端返回的账单",
+    "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#3] 勾上「待确认」查询后翻到第 2 页：第 2 页的请求仍带 awaiting_confirm=true，列出该筛选下第 21–24 张账单",
+    "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#4] 勾上「待确认」查询后【重置】：开关回到不勾，之后的请求都不带 awaiting_confirm，四张样例账单重新列出"
+  ],
+  "risk_note": "F1-08dc (orchestrator D10-1402; contract CT-24zzj). The admin monthly settlement bill list gets a 只看待确认 checkbox: when applied the list request carries awaiting_confirm=true (with the month and status filters, kept on paging, removed on reset); unchecked sends no awaiting_confirm (never false). Opening /settle-bills?awaiting_confirm=true (the workbench card settle_bill_pending) starts with the box checked and the first list read carrying it; query / reset replace the address so it matches the form. Which bills are awaiting confirmation is decided by the server only; the page does not judge batches. Backend B2-09zm is not merged; rule tests use a contract-shaped fake server. Three files under apps/admin/src/pages/settle-bills and texts/settle-bills.ts; App.tsx untouched. Rule tests by an independent Claude in two rounds (r2 only renamed a .todo member access flagged by the no-restricted-syntax rule); tsc -b test 0 errors before commit; Codex spec-test r1 pass; red on couli-ci (7 tests, right reason). Implementation by Opus 5.5: couli-ci fast run 2 green, run.ts static 10/10. The review tool classifies the task as RV2: Codex money r1 fail with one S1 on test/replay/qa-03c/clawback-payout.int.test.ts, a file this task does not touch (the branch was based before QA-03cz #7 merged, so the review saw main's tightening as reverted); after rebasing on the current main, Codex money r2 pass. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 fail (S1 outside the diff: stale base before QA-03cz #7) -> rebased -> r2 pass"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex spec-test r1 pass; tests by an independent Claude (claude-run.sh), two rounds"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08dc",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "94b50673b8241e0a842299bce9d294ef51d57681",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "94b50673b8241e0a842299bce9d294ef51d57681",
+      "tree": "ddeb7336e0379f517eb4827b4117a0f06b975883",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-13T13:22:53Z",
+      "finished_at": "2026-11-13T13:23:04Z",
+      "red_tests": [
+        "test/spec/frontend/admin-settle-bills-awaiting/entry.test.ts > [AC-F1-08dc-ENTRY#1] 直接打开 /settle-bills?awaiting_confirm=true：「待确认」一进来就是勾上的，第一次列表请求就带 awaiting_confirm=true（此前没有不带它的列表请求），只列服务端返回的待确认账单，侧栏高亮月结账单",
+        "test/spec/frontend/admin-settle-bills-awaiting/entry.test.ts > [AC-F1-08dc-ENTRY#2] 点工作台卡「待确认月结账单」（route /settle-bills?awaiting_confirm=true）：落在月结账单列表，「待确认」已勾上，进入后的第一次列表请求就带 awaiting_confirm=true，侧栏高亮月结账单",
+        "test/spec/frontend/admin-settle-bills-awaiting/entry.test.ts > [AC-F1-08dc-ENTRY#3] 从 /settle-bills?awaiting_confirm=true 进入后取消「待确认」并【查询】：之后的列表请求不带 awaiting_confirm（不发 false），全部账单重新列出，地址不再是 awaiting_confirm=true",
+        "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#1] 列表筛选区有可访问名含「待确认」的开关 / 勾选，默认不勾；不勾时首读与按状态查询都不带 awaiting_confirm（不发 awaiting_confirm=false）",
+        "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#2] 勾上「待确认」并选账单月区间与状态后【查询】：请求带 awaiting_confirm=true 且保留 bill_from / bill_to / status，从第 1 页起、无契约外参数；只列服务端返回的账单",
+        "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#3] 勾上「待确认」查询后翻到第 2 页：第 2 页的请求仍带 awaiting_confirm=true，列出该筛选下第 21–24 张账单",
+        "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts > [AC-F1-08dc-FILTER#4] 勾上「待确认」查询后【重置】：开关回到不勾，之后的请求都不带 awaiting_confirm，四张样例账单重新列出"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-settle-bills-awaiting/entry.test.ts",
+        "test/spec/frontend/admin-settle-bills-awaiting/filter.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "338d8dfb3029b10bcf87b937dc5edf55da306b1703dfe7b8103764f7e76e534a"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "1dc4dd1a47c44cb45298cb71fb585ec500e0e9c0",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "63a04fe9a4241b1f5fdeb33beb1770928776d4da",
+    "specs": "8f76891b6e53531f480a4626a10b8dc9c1e82a28"
+  }
+}
