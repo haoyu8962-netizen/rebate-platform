@@ -1,0 +1,24 @@
+id: B3-05r
+repo: rebate-platform
+title: B3-05q 跟进（FU-ENTRY-QUOTE-REFUND，D10-1411，开放内测名单前必做）：商品情境入口报价因服务端原因失败、本轮以 50401 结束时退还 1 条配额（BR-AI-15 细则）
+type: impl
+# 2026-11-13 桌面线「AI 助手」入账（编排 D10-1411；B3-05q spec-test r1 范围外 S1）。BR-AI-15 细则：服务端原因只指上游超时、5xx 与熔断，含链接的消息全部因服务端原因失败时以 50401 结束并退还；
+# 无模型时商品情境入口报价因服务端原因失败同样以 50401 结束并退还 1 条配额。B3-05q 只钉了 50401 帧，本单在 stream runtime 上跑「无模型 + context.product_key + 上游失败」，断言当日计数回到原值；
+# 对照：上游明确答复的业务结果（下架、price_unavailable）照常 stop 并计数（B3-05q #21 / #24 / #25 已钉，本单只需在退还侧加一条不退的对照）。
+# 现主干 stream/admission shouldRefund 按「没有下发非 notice 卡 + 结束原因属服务端类」退还；若 B3-05q 合并后主干已经退了，本单只有测试，按先红豁免的规矩写清原因；没退就一并改 manager.ts（或 admission 判定）。
+refs: [BR-AI-15]
+refs_hash:
+  BR-AI-15: d3070a739c03
+deps: [B3-05q]
+paths:
+  - 'apps/api/src/modules/agent/stream/run/manager.ts'
+  - 'apps/api/src/modules/agent/stream/admission/index.ts'
+test_paths:
+  - 'test/spec/agent/entry-quote-refund/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/entry-quote-refund/**'
+status: todo
+pr: null
