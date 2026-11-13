@@ -1,0 +1,37 @@
+{
+  "task": "CT-15u",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "f8f9c3d036e06e8dd8840e5db8d197e3646d515b",
+  "red_tests": [],
+  "risk_note": "RV2 by path (specs/ is not in the risk-map allowlist); content is data only. specs/system-permissions.yaml v3 (CT-15u, D10-1566 W-4): adds the Android and Harmony facts found in the three native projects — Android INTERNET and DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION (merged in by androidx.core), Harmony INTERNET — each with purpose_key null (no user-facing prompt). The existing Harmony VIBRATE entry is kept with a note that the Harmony project does not declare it yet (D10-1582: keep and annotate; follow-up FU-HM-VIBRATE-DECLARE). No code, contract, openapi or generated file, no money or ownership change. Ledger tester none: no rule tests, so no red run.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money (effort medium): r1 fail with 1 S1 'withdrawal review entry removed' that came only from the branch being behind main (#88 added ReviewActions after this branch was cut; this task's commit touches only specs/system-permissions.yaml); rebased onto main with no content change, r2 incremental pass, no findings. Static only. (Two earlier general / money calls were refused before running because the review brief was missing; rounds given back.)"
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5f9e1af4f7ee82d3921a531f5bc7a81967e74121",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
