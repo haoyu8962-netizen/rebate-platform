@@ -5,6 +5,7 @@ type: impl
 # 2026-11-13 桌面线「AI 助手」入账（编排 D10-1522；取代 B3-08zd 中真红的部分）。规则测试由 Codex 写（原 B3-08zd 写测试第 1 次），4 条真红由新鲜独立 Claude 机械拆到 test/spec/agent/reply-persist-gaps/**（测试体逐字未改）：(3) 商品卡已发帧但终态回滚，同进程下一轮不得通过提前写入的下发记录解析 card_id；(4) run 进行中清理账号、断线后收尾，自由文本保持清空、不新增卡片与下发记录；(7) 真库逐页翻到底（limit 跨轮切页、不重不漏、末页无游标、同轮同时间用户在前、外会话游标 20001）与个人信息副本同时间用户在前。
 # (3) 另要退役 pendingCard 机制：实现删 TraceRedoQueue.pendingCard、PendingCardSource、onCardWritten 钩子；冻结 test/spec/agent/trace-retry/queue.test.ts 四个用例里删与之直接相关的五条断言（modify_existing rule_change，br BR-AI-19），kit.ts 文件头删 withPendingCards 描述；两个失用导入一并删，文件整份评判，未改的 13 条 red_exempt + red_exempt_outside（同 B1-34q）。证据留五条断言的前后原文，编排按 #24 逐条看。
 # 分工：Codex 写规则测试，Opus 实现，Codex 评审。RV1。B3-08zg 先合（本单测试导入它的 fault.ts 等夹具）。
+# 2026-11-13 补（编排 D10-1524；守卫不许改标题，以本注释为准）：(9) 断线补写结果链并进本单——夹具修正后主干真红的四串（单次搜索、同轮两次不同搜索、awaiting_price 同词不同价格上限、先出列表再无结果搜索）机械移到 test/spec/agent/reply-persist-gaps/chains.int.test.ts（测试体逐字未改）；实现照 couli-runs/B3-08zc/backfill-chain-r4.patch 的思路（列表产生时按序登记，或结果集与尝试带同轮序号、终态按序重放），以规则测试为准：断线补写的 agent_result_chains 与正常送达逐行相同、当前条件相同。
 # prettier-ignore
 refs: [BR-AI-19, BR-AI-20, BR-AI-22, BR-AI-23, BR-AI-05]
 refs_hash:
