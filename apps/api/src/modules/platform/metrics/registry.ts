@@ -34,6 +34,8 @@ import {
 
 export interface MetricsRegistryOptions {
   readonly entry: EntryName;
+  /** BR-AI-01: process-local empty replies; collected only on the stream entry. */
+  readonly collectAgentReplyEmpty?: () => number;
   /**
    * Used only when entry is 'worker'; called once per render(). Its optional rescan positions
    * (B1-01zzr) fill couli_sync_rescan_position_seconds in the same scrape.

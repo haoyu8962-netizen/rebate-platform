@@ -6,6 +6,8 @@ export * from './http/index.ts';
 export * from './store/index.ts';
 export * from './agent.module.ts';
 export * from './stream/mount/index.ts';
+export { agentEmptyReplyCounterToken } from './stream/mount/empty-reply-counter.ts';
+export type { AgentEmptyReplyCounter } from './stream/mount/empty-reply-counter.ts';
 export {
   createAgentDataPurge,
   readAgentUserHashKey,
