@@ -312,7 +312,7 @@ interface UserDictionary {
 }
 
 // 随包的用户字典（contracts/texts.default.json，BR-TEXT-08 withdraw_reject_reason）：驳回原因的
-// 用户文案只从这里读；缺键时用 texts/withdrawals.ts 的 BR-TEXT-08 默认文案兜底。
+// 用户文案只读 withdraw_reject_reason.<编码>.title；缺键时只显示原因码中文名，不写死用户文案。
 const userLoaded = import.meta.glob<UserDictionary>('../../../../../contracts/texts.default.json', {
   eager: true,
   import: 'default',
@@ -324,15 +324,9 @@ function userText(key: string): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
-/** The member's text of a reject reason: withdraw_reject_reason.<code>(.title), else the default. */
+/** The member's text of a reject reason: withdraw_reject_reason.<code>.title, else its enum name. */
 export function rejectReasonText(code: string): string {
-  return (
-    userText(`withdraw_reject_reason.${code}.title`) ??
-    userText(`withdraw_reject_reason.${code}`) ??
-    t.review.reasonDefaults[code] ??
-    t.review.reasonNames[code] ??
-    code
-  );
+  return userText(`withdraw_reject_reason.${code}.title`) ?? t.review.reasonNames[code] ?? code;
 }
 
 /** A new Idempotency-Key for one review operation (kept across a 10003 re-verification). */

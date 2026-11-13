@@ -231,17 +231,6 @@ export const withdrawalsTexts = {
       USER_REQUEST: '用户申请撤销',
       OTHER: '其他',
     } as Readonly<Record<string, string>>,
-    /**
-     * 用户字典 withdraw_reject_reason.<编码> 缺键时的兜底（BR-TEXT-08 默认文案原文）。用户字典补齐
-     * 后以字典为准；TODO(规划/11 §7): 去掉兜底 — blocked on 内容线 CT-26zo 补字典键。
-     */
-    reasonDefaults: {
-      RISK_SUSPECT: '账户存在异常，需要核实，请联系客服',
-      ORDER_ABNORMAL: '部分订单状态待核实，请稍后重新申请',
-      PAYEE_INFO_INVALID: '收款信息有误，请核对后重新申请',
-      USER_REQUEST: '已按你的要求取消本次提现',
-      OTHER: '其他原因，请联系客服',
-    } as Readonly<Record<string, string>>,
   },
   batchKinds: { manual: '手动批次', auto: '自动批次' } as Readonly<Record<string, string>>,
   itemResults: {
