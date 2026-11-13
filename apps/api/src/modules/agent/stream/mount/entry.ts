@@ -9,6 +9,9 @@
 //     order_id: orders.get in the caller's scope (名下订单, BR-AI-07 判定规则 1), the order_status
 //     card cut from the detail. Not in scope reads as 0 orders: the handoff card, as list_my_orders
 //     gives without orders, never telling whether the order exists.
+//   · resolve: get_rebate_quote's own reference resolution, so the core can tell a later quote of
+//     the entry product in the same run (by another card_id or ref_ordinal) and answer it with the
+//     entry card's id instead of a second card (BR-AI-05).
 import { ParsingError } from '../../../parsing/index.ts';
 import type { EntryQuoteOutcome, ScenarioEntryReaders } from '../../orchestrator/entry/index.ts';
 import type { ToolOutcome } from '../../orchestrator/index.ts';
@@ -93,6 +96,9 @@ export function createScenarioEntryReaders(deps: ScenarioEntryReaderDeps): Scena
       }
       return { kind: 'server_failed' };
     },
+
+    // The same resolver get_rebate_quote uses (the session's result store), read only.
+    resolve: (reference, ctx) => deps.quote.references.resolve(reference, ctx),
 
     async order(orderId, ctx): Promise<ToolOutcome> {
       const orders = deps.orders;

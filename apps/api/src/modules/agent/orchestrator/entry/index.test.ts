@@ -106,9 +106,14 @@ function rig(options: RigOptions = {}) {
         trace: PAID_TRACE,
       })),
   );
+  const resolve = vi.fn<ScenarioEntryPathDeps['readers']['resolve']>(async (reference) =>
+    'card_id' in reference && reference.card_id === 'c5'
+      ? { kind: 'product', productKey: 'tb:synthetic-entry' }
+      : { kind: 'invalid_args' },
+  );
   const offered = options.offered ?? ['list_my_orders', 'explain_order'];
   const deps: ScenarioEntryPathDeps = {
-    readers: { quote, order },
+    readers: { quote, order, resolve },
     tools: {
       definitions: async () =>
         offered.map((name) => ({ name, description: 'synthetic', parameters: {} })),
@@ -128,7 +133,17 @@ function rig(options: RigOptions = {}) {
   const report = (...args: unknown[]) => {
     reports.push(args);
   };
-  return { log, ctx, deps, path: createScenarioEntryPath(deps), quote, order, reports, report };
+  return {
+    log,
+    ctx,
+    deps,
+    path: createScenarioEntryPath(deps),
+    quote,
+    order,
+    resolve,
+    reports,
+    report,
+  };
 }
 
 it.each([
@@ -283,4 +298,26 @@ it('[B3-05q][BR-AI-15] quote_failed notice 与 50401 结束', async () => {
       fallback_q: null,
     },
   });
+});
+
+it('[B3-05q][BR-AI-05] quotedKey：只认 card_id / ref_ordinal 其一，经同一解析器得到商品 key；其他形状不解析', async () => {
+  const r = rig();
+  expect(await r.path.quotedKey(request(), { card_id: 'c5' }, r.ctx)).toBe('tb:synthetic-entry');
+  expect(r.resolve.mock.calls[0]?.[0]).toEqual({ card_id: 'c5' });
+  expect(r.resolve.mock.calls[0]?.[1]).toMatchObject({
+    userId: 'synthetic-user',
+    runId: 'synthetic-run',
+  });
+  expect(await r.path.quotedKey(request(), { ref_ordinal: 2 }, r.ctx)).toBeNull();
+  expect(r.resolve.mock.calls[1]?.[0]).toEqual({ ref_ordinal: 2 });
+  for (const args of [
+    { product_key: 'tb:synthetic-entry' },
+    { card_id: 'c5', ref_ordinal: 1 },
+    { card_id: 'x5' },
+    { ref_ordinal: 0 },
+    null,
+  ]) {
+    expect(await r.path.quotedKey(request(), args, r.ctx)).toBeNull();
+  }
+  expect(r.resolve).toHaveBeenCalledTimes(2);
 });

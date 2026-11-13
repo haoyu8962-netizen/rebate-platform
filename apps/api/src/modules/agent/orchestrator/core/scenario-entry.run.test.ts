@@ -137,9 +137,17 @@ function rig(options: RigOptions = {}) {
     path.text('合成订单模板');
     return { kind: 'done', finishReason: 'stop' };
   });
+  // c5 / ref_ordinal 1: the same product in a search list of this run; c7: another product.
+  const quotedKey = vi.fn<ScenarioEntryPath['quotedKey']>(async (_request, args) => {
+    const value = JSON.stringify(args);
+    if (value === '{"card_id":"c5"}' || value === '{"ref_ordinal":1}') return ENTRY_KEY;
+    if (value === '{"card_id":"c7"}') return 'tb:synthetic-other';
+    return null;
+  });
   const entry: ScenarioEntryPath = {
     product,
     order,
+    quotedKey,
     quoteFailedNotice: async () => notice('agent.notice.quote_failed'),
     serverFailure: async () => ({
       kind: 'error',
@@ -198,7 +206,7 @@ function rig(options: RigOptions = {}) {
   };
   const run = (context?: Readonly<Record<string, unknown>>): Promise<RunBodyResult> =>
     createAgentRunBody(deps)(input(context))(ctx);
-  return { log, run, product, order, complete, execute, check, degraded, traces, deps };
+  return { log, run, product, order, quotedKey, complete, execute, check, degraded, traces, deps };
 }
 
 it('[B3-05q][BR-AI-01][BR-AI-14] 商品入口、无模型：入口卡出完即 stop，不进无模型分流；留痕意图 find_by_link', async () => {
@@ -221,7 +229,7 @@ it('[B3-05q][BR-AI-15] 商品入口服务端原因失败、无模型：以 error
   expect(r.degraded).not.toHaveBeenCalled();
 });
 
-it('[B3-05q][BR-AI-15] 商品入口服务端原因失败、有模型：先出 quote_failed notice 再交模型；模型随后降级也以 stop 结束', async () => {
+it('[B3-05q][BR-AI-15] 商品入口服务端原因失败、有模型：先出 quote_failed notice 再交模型；模型随后降级、什么也没产出时与无模型同样以 error 50401（retryable=false）结束', async () => {
   const withModel = rig({ quote: 'server_failed' });
   expect(await withModel.run({ product_key: ENTRY_KEY })).toEqual({
     kind: 'done',
@@ -233,12 +241,66 @@ it('[B3-05q][BR-AI-15] 商品入口服务端原因失败、有模型：先出 qu
     quote: 'server_failed',
     rounds: [{ kind: 'degraded', reason: 'models_failed', attempts: [] }],
   });
-  expect(await degrading.run({ product_key: ENTRY_KEY })).toEqual({
-    kind: 'done',
-    finishReason: 'stop',
+  expect(await degrading.run({ product_key: ENTRY_KEY })).toMatchObject({
+    kind: 'error',
+    error: { code: 50401, retryable: false },
   });
   expect(degrading.log).toEqual(['card:notice:agent.notice.quote_failed']);
   expect(degrading.degraded).not.toHaveBeenCalled();
+
+  // An upstream's answer about the product (delisted, price_unavailable …) still ends stop.
+  const answered = rig({
+    quote: 'answered',
+    rounds: [{ kind: 'degraded', reason: 'models_failed', attempts: [] }],
+  });
+  expect(await answered.run({ product_key: ENTRY_KEY })).toEqual({
+    kind: 'done',
+    finishReason: 'stop',
+  });
+  expect(answered.log).toEqual(['card:notice:error.30141']);
+});
+
+it.each([
+  ['card_id 指向本轮搜索结果里的同一商品', { card_id: 'c5' }],
+  ['ref_ordinal 指向本轮搜索结果里的同一商品', { ref_ordinal: 1 }],
+] as const)(
+  '[B3-05q][BR-AI-05][BR-AI-01] 同一轮模型按%s再报价：按商品身份认出是入口商品，不执行工具、不再出卡，返回入口商品的编号 c2',
+  async (_how, args) => {
+    const r = rig({
+      rounds: [round('', { name: 'get_rebate_quote', args }), round('合成回答')],
+    });
+    expect(await r.run({ product_key: ENTRY_KEY })).toEqual({
+      kind: 'done',
+      finishReason: 'stop',
+    });
+    expect(r.quotedKey).toHaveBeenCalledTimes(1);
+    expect(r.quotedKey.mock.calls[0]?.[1]).toEqual(args);
+    expect(r.execute).not.toHaveBeenCalled();
+    expect(r.log).toEqual(['card:rebate_quote:c1', 'text:合成回答']);
+    const tool = r.complete.mock.calls[1]?.[0].messages.find((m) => m.role === 'tool');
+    expect(JSON.parse(tool?.content ?? 'null')).toMatchObject({ products: [{ card_id: 'c2' }] });
+    expect(r.traces[0]?.tool_calls.at(-1)).toEqual({
+      name: 'get_rebate_quote',
+      args,
+      status: 'ok',
+    });
+  },
+);
+
+it('[B3-05q][BR-AI-05] 同一轮按引用再报价、解析到别的商品或解析失败：照常执行工具', async () => {
+  for (const args of [{ card_id: 'c7' }, { card_id: 'c9' }]) {
+    const r = rig({
+      rounds: [round('', { name: 'get_rebate_quote', args }), round('合成回答')],
+    });
+    await r.run({ product_key: ENTRY_KEY });
+    expect(r.execute).toHaveBeenCalledTimes(1);
+  }
+  const failing = rig({
+    rounds: [round('', { name: 'get_rebate_quote', args: { card_id: 'c5' } }), round('')],
+  });
+  failing.quotedKey.mockRejectedValue(new Error('synthetic store failure'));
+  await failing.run({ product_key: ENTRY_KEY });
+  expect(failing.execute).toHaveBeenCalledTimes(1);
 });
 
 it('[B3-05q][BR-AI-05] 同一轮模型用入口商品自己的 card_id 再报价：不执行工具、不再出卡，返回这个编号', async () => {

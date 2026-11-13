@@ -354,6 +354,12 @@ export interface ScenarioEntryPath {
     ctx: RunContext,
     report: EntryCallReport,
   ): Promise<EntryQuoteResult>;
+  /**
+   * BR-AI-05: the product key a get_rebate_quote reference resolves to (exactly one of card_id /
+   * ref_ordinal, the session's result store, server side), else null — nothing is quoted, no
+   * card is written. The core compares it with the entry product's key (no second entry card).
+   */
+  quotedKey(request: PathInput, args: unknown, ctx: RunContext): Promise<string | null>;
   /** BR-AI-15 细则: the notice of a server-side quote failure when a model takes the words. */
   quoteFailedNotice(appId: string): Promise<UnnumberedCard>;
   /** BR-AI-15 细则: the end of a run whose entry quote failed for a server-side reason without a

@@ -20,8 +20,11 @@
 // writes the link path's quote first, then the words go on as usual — to the model when there is
 // one, while a run without a model (no prompt, degraded router) ends at the entry's output
 // (done stop; a server-side quote failure without a model: error 50401; with a model the
-// agent.notice.quote_failed notice before the model's output, BR-AI-15 细则). In the same run the
-// model quoting the entry product by its own card_id gets that id back, no second card (BR-AI-05).
+// agent.notice.quote_failed notice before the model's output, BR-AI-15 细则 — and when the model
+// then gives nothing either (degraded before any delivery), error 50401 all the same). In the same
+// run the model quoting the entry product again — by its own card_id, or by any card_id /
+// ref_ordinal that resolves to the same product — gets the entry product's card_id back, no
+// second card and no second lookup or link registration (BR-AI-05).
 import { platform as platformEnum } from '@couli/contracts-ts';
 import type { Platform } from '@couli/contracts-ts';
 import type { RunBodyInput } from '../../http/index.ts';
@@ -84,6 +87,8 @@ interface EntryProduct {
   readonly title: string;
   readonly platform: string;
   readonly benefitTags: readonly string[];
+  /** Its product keys: the card's, and the entry's as sent (an alias resolved by the catalog). */
+  readonly keys: readonly string[];
 }
 
 type ToolStatus = OrchestratorTrace['tool_calls'][number]['status'];
@@ -300,8 +305,8 @@ class AgentRun {
   private entryQuote: EntryQuoteResult | null = null;
   /** B3-05q: the quoted entry product (a written rebate_quote with a receipt), for BR-AI-05. */
   private entryProduct: EntryProduct | null = null;
-  /** B3-05q: agent.notice.quote_failed was written (the model took the words). */
-  private entryNoticed = false;
+  /** B3-05q: the input check's result of a product entry run (for reference resolution). */
+  private entryProceed: InputProceed | null = null;
   /** B3-05q: the trace intent of an entry run when nothing else set one. */
   private entryIntent: string | null = null;
 
@@ -433,7 +438,10 @@ class AgentRun {
       );
       if (quoted === ABORTED || quoted.kind === 'stopped') return done('stop');
       this.entryQuote = quoted;
-      if (quoted.kind === 'quoted') this.entryProduct = entryProductOf(quoted);
+      if (quoted.kind === 'quoted') {
+        this.entryProduct = entryProductOf(quoted, entry.productKey);
+        this.entryProceed = checked;
+      }
       if (this.out.limitHit) return done('limit');
     }
     return this.modelPath(checked);
@@ -454,14 +462,16 @@ class AgentRun {
   /**
    * B3-05q · BR-AI-01 细则「情境入口」: a product entry run without a model (no prompt, the router
    * degraded, or an invalid answer before any delivery) ends at the entry's output: done stop, or
-   * error 50401 when the quote failed for a server-side reason and nothing was written for it
-   * (BR-AI-15 细则). null: no product entry in this run.
+   * error 50401 (retryable false) when the quote failed for a server-side reason — also after the
+   * agent.notice.quote_failed notice, when the model then degraded without delivering anything:
+   * the user got neither a quote nor an answer (BR-AI-15 细则). An upstream's answer about the
+   * product (delisted, price_unavailable …) still ends done stop. null: no product entry.
    */
   private async entryEnd(): Promise<RunBodyResult | null> {
     const quoted = this.entryQuote;
     const entryPath = this.deps.entry;
     if (quoted === null || entryPath === undefined) return null;
-    if (quoted.kind === 'server_failed' && !this.entryNoticed) {
+    if (quoted.kind === 'server_failed') {
       const result = await this.wait(entryPath.serverFailure(this.appId));
       return result === ABORTED ? done('stop') : result;
     }
@@ -477,19 +487,40 @@ class AgentRun {
     if (this.entryQuote?.kind !== 'server_failed' || entryPath === undefined) return true;
     const notice = await this.wait(entryPath.quoteFailedNotice(this.appId));
     if (notice === ABORTED) return false;
-    this.entryNoticed = true;
     return (await this.card(notice)) !== ABORTED;
   }
 
   /**
-   * B3-05q · BR-AI-05: the model quotes the entry product by its own card_id in the run that wrote
-   * the entry card: no second card, the model gets that id back (the BR-AI-05 product view).
+   * B3-05q · BR-AI-05 / BR-AI-01 细则「情境入口」: the model quotes the entry product again in the run
+   * that wrote the entry card — by that product's own card_id, or by any card_id / ref_ordinal the
+   * entry path resolves (server side, the session's result store) to the same product key (e.g. the
+   * same product in a search list of this run): no second card, no second lookup, the model gets
+   * the entry product's card_id back. Anything else (or a failed resolution): null, the call runs.
    */
-  private entryRequote(name: string, args: unknown): { readonly view: unknown } | null {
+  private async entryRequote(
+    name: string,
+    args: unknown,
+  ): Promise<{ readonly view: unknown } | null | Aborted> {
     const product = this.entryProduct;
-    if (product === null || name !== QUOTE_TOOL || !isRecord(args)) return null;
-    const keys = Object.keys(args);
-    if (keys.length !== 1 || args['card_id'] !== product.cardId) return null;
+    const entryPath = this.deps.entry;
+    const proceed = this.entryProceed;
+    if (product === null || entryPath === undefined || proceed === null) return null;
+    if (name !== QUOTE_TOOL) return null;
+    if (!isRecord(args) || Object.keys(args).length !== 1) return null;
+    if (args['card_id'] !== product.cardId) {
+      let key: string | null | Aborted;
+      try {
+        key = await this.wait(
+          entryPath
+            .quotedKey({ input: this.input, proceed }, args, this.out.context())
+            .catch(() => null),
+        );
+      } catch {
+        key = null;
+      }
+      if (key === ABORTED) return ABORTED;
+      if (key === null || !product.keys.includes(key)) return null;
+    }
     return {
       view: {
         products: [
@@ -1129,7 +1160,8 @@ class AgentRun {
     const start = await this.wait(texts.toolDisplay(this.appId, name, 'start', platform));
     if (start === ABORTED) return done('stop');
     this.out.status(name, 'start', start);
-    const requoted = parsed.ok ? this.entryRequote(name, parsed.args) : null;
+    const requoted = parsed.ok ? await this.entryRequote(name, parsed.args) : null;
+    if (requoted === ABORTED) return done('stop');
     if (requoted !== null) {
       // B3-05q: answered from the entry card of this run; nothing executes, no card goes out.
       const end = await this.wait(texts.toolDisplay(this.appId, name, 'end', platform));
@@ -1310,6 +1342,7 @@ export function runAgent(
 /** B3-05q: the entry product of a written rebate_quote card (quotedProductOf's numbering). */
 function entryProductOf(
   quoted: Extract<EntryQuoteResult, { kind: 'quoted' }>,
+  entryKey: string,
 ): EntryProduct | null {
   if (quoted.card === null || quoted.frameCardId === null) return null;
   const receipt = quotedProductOf(quoted.card, quoted.frameCardId);
@@ -1324,5 +1357,6 @@ function entryProductOf(
     benefitTags: Array.isArray(tags)
       ? tags.filter((tag): tag is string => typeof tag === 'string')
       : [],
+    keys: receipt.product_key === entryKey ? [entryKey] : [receipt.product_key, entryKey],
   };
 }

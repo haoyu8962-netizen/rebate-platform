@@ -182,3 +182,23 @@ it('[B3-05q][BR-AI-07][BR-AI-01] order：只在调用者名下取这一笔；名
     modelView: { error: 'tool_failed' },
   });
 });
+
+it('[B3-05q][BR-AI-05] resolve：就是 get_rebate_quote 自己的引用解析（只读，不查 catalog）', async () => {
+  const readProduct = vi.fn<RebateQuoteDeps['catalog']['readProduct']>(async () => PRODUCT);
+  const deps = quoteDeps(readProduct);
+  const resolve = vi.fn<RebateQuoteDeps['references']['resolve']>(async () => ({
+    kind: 'product',
+    productKey: KEY,
+  }));
+  const readers = createScenarioEntryReaders({
+    quote: { ...deps, references: { resolve } },
+    handoff: { texts },
+  });
+  const ctx = context();
+  expect(await readers.resolve({ ref_ordinal: 1 }, ctx)).toEqual({
+    kind: 'product',
+    productKey: KEY,
+  });
+  expect(resolve).toHaveBeenCalledExactlyOnceWith({ ref_ordinal: 1 }, ctx);
+  expect(readProduct).not.toHaveBeenCalled();
+});

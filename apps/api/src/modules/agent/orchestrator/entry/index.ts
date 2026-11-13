@@ -24,7 +24,11 @@
 // this message (the intent port and the no-model path read the message, never the entry).
 import type { CatalogConfigReader } from '../../../catalog/index.ts';
 import type { RunBodyResult, RunContext, UnnumberedCard } from '../../stream/run/index.ts';
-import type { LinkQuoteOutcome } from '../../tools/quote/index.ts';
+import type {
+  LinkQuoteOutcome,
+  QuoteReference,
+  QuoteReferenceResult,
+} from '../../tools/quote/index.ts';
 import type { ToolCallContext } from '../../tools/registry/index.ts';
 import type {
   AgentRunTexts,
@@ -50,6 +54,8 @@ export interface ScenarioEntryReaders {
   /** This one order out of the caller's 名下订单 (explain_order's own lookup); 0 orders: the
    * handoff card, as list_my_orders without orders. */
   order(orderId: string, ctx: ToolCallContext): Promise<ToolOutcome>;
+  /** get_rebate_quote's own reference resolution (card_id / ref_ordinal → product key), read only. */
+  resolve(reference: QuoteReference, ctx: ToolCallContext): Promise<QuoteReferenceResult>;
 }
 
 export interface ScenarioEntryPathDeps {
@@ -71,6 +77,30 @@ const UNAVAILABLE = 50301;
 const PAGE_GUIDE_ENABLED = 'agent.page_guide.enabled';
 const GUIDE_UNAVAILABLE = 'agent.guide.unavailable';
 const ORDER_LIST = 'OrderList';
+/** 04 §8.3 card_id pattern (the same one get_rebate_quote's schema uses). */
+const CARD_ID = /^c[1-9][0-9]{0,15}$/u;
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** get_rebate_quote's reference forms only: exactly one of card_id or ref_ordinal. */
+function quoteReference(args: unknown): QuoteReference | null {
+  if (!isRecord(args)) return null;
+  const keys = Object.keys(args);
+  if (keys.length !== 1) return null;
+  const cardId = args['card_id'];
+  if (keys[0] === 'card_id') {
+    return typeof cardId === 'string' && CARD_ID.test(cardId) ? { card_id: cardId } : null;
+  }
+  const ordinal = args['ref_ordinal'];
+  if (keys[0] === 'ref_ordinal') {
+    return typeof ordinal === 'number' && Number.isSafeInteger(ordinal) && ordinal >= 1
+      ? { ref_ordinal: ordinal }
+      : null;
+  }
+  return null;
+}
 
 function done(finishReason: Done['finishReason']): Done {
   return { kind: 'done', finishReason };
@@ -184,6 +214,13 @@ class EntryPath implements ScenarioEntryPath {
       }
     }
     return { kind: 'quoted', card: quoted, frameCardId };
+  }
+
+  async quotedKey(request: PathInput, args: unknown, ctx: RunContext): Promise<string | null> {
+    const reference = quoteReference(args);
+    if (reference === null) return null;
+    const resolved = await this.deps.readers.resolve(reference, toolCallContext(request, ctx));
+    return resolved.kind === 'product' ? resolved.productKey : null;
   }
 
   quoteFailedNotice(appId: string): Promise<UnnumberedCard> {
