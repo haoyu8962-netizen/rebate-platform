@@ -25,6 +25,7 @@ export const settleBillsTexts = {
     monthPlaceholder: 'YYYY-MM',
     status: '账单状态',
     all: '全部',
+    awaitingConfirm: '只看待确认',
     query: '查询',
     reset: '重置',
     monthInvalid: '账单月写成 YYYY-MM',
