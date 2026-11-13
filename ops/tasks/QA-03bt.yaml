@@ -1,0 +1,21 @@
+id: QA-03bt
+repo: rebate-platform
+title: 回放 E2E 第二段（05 QA-03，test-change）：在 QA-03a 驱动上推注入时钟——账单日出账 → 一致性校验 → 人工确认替身（应用层 confirmAdminSettleBill）→ 批次入账；刻画主干现有行为，合成数据回放绿，12 处变异代替先红
+type: test-change
+# 2026-11-13 be 入账（编排 D10-1429；取代 QA-03b，后者入账时类型误写 impl、守卫不许改 type 而作废）。方案 couli-runs/QA-03/plan.md；D10-1370 ④ / D10-1422：主干上直接绿的段按「刻画现有行为的测试」处理。
+# 只新增 test/replay/qa-03b/** 四个文件（settlement.int.test.ts、worker.ts、provenance.json、README.md；目录名沿用），与 #3354 头 111eed4bddce 上逐字相同，不改实现与已有用例；复用 test/replay/qa-03a/ 驱动与合成订单流，只用合成数据，验收说法「合成数据回放绿」。
+# 主干基线绿：测试机 red/5 3/3（账单日 22 / 24 / 28）；12 处变异（出账 / 校验 / 确认 / 入账各 3 处）逐处单独实跑 red/6–17 全部变红、红在预期断言，跑后实现已还原，代替先红（清单在 README，结果 couli-runs/QA-03b/mutations/results.tsv）。金额期望按 08（用户负债分录 −500、日余额期末 −1500、余额缓存 +1500）。
+# 分工：场景由 Codex 写（codex-run impl --phase test），独立 Claude spec-test r1 pass、Codex money r1 pass，均 0 发现；README 两段与一处类型写法由新鲜独立 Claude 机械调整（D10-1424 / D10-1427，不计次数）。非 task 分支（chore/test-change-QA-03bt）、不带证据文件，标签由编排核对后加（先例 B2-09zd）。RV2。
+refs: [BR-FUND-02, BR-FUND-19]
+refs_hash:
+  BR-FUND-02: 382c4075d2cb
+  BR-FUND-19: 34f619112535
+deps: [QA-03a]
+paths:
+  - 'test/replay/qa-03b/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
