@@ -1,4 +1,8 @@
 // Public surface of the linking module (规划/02 §4.1); other modules import only from this file.
+// B1-34q (01 F-ADM-26 ② 转链数): event=convert link_logs of an accounting day, for admin's
+// workbench aggregation.
+export { countConvertLinkLogs } from './application/link-log-counts.ts';
+export type { LinkLogCountRange } from './application/link-log-counts.ts';
 export { createClaimEntryReader } from './application/claim-entry-reader.ts';
 export type {
   ClaimEntryScope,

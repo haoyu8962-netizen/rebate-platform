@@ -63,6 +63,18 @@ export interface AdminAdjustments {
   voucher_id: string | null;
 }
 
+export interface AdminDashboardDays {
+  app_id: string;
+  as_of: Timestamp;
+  created_at: Generated<Timestamp>;
+  est_rebate_fen: ColumnType<bigint, bigint, bigint>;
+  links: ColumnType<bigint, bigint, bigint>;
+  new_users: ColumnType<bigint, bigint, bigint>;
+  orders: ColumnType<bigint, bigint, bigint>;
+  stat_date: Timestamp;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface AdminPermissions {
   admin_id: string;
   app_id: string;
@@ -2360,6 +2372,7 @@ export interface WithdrawHolds {
 export interface DB {
   account_balances: AccountBalances;
   admin_adjustments: AdminAdjustments;
+  admin_dashboard_days: AdminDashboardDays;
   admin_permissions: AdminPermissions;
   admin_union_auth_sessions: AdminUnionAuthSessions;
   admin_users: AdminUsers;

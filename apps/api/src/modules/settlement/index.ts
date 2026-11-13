@@ -28,6 +28,9 @@ export type {
   PendingSnapshotInput,
   UserPendingEarnings,
   AppPendingEarnings,
+  // B1-34q (01 F-ADM-26 ②): the ESTIMATED shares of the sub-orders paid in a range, for admin.
+  PaidRangeEstimateSource,
+  PaidRangeInput,
 } from './reads/pending-earnings.ts';
 // B1-09p: the per-order figures behind orders' OrderFiguresReader (read only; app.module).
 export { createOrderFiguresReader } from './reads/order-figures.ts';
