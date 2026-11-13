@@ -13,6 +13,7 @@ paths:
   - 'apps/api/src/modules/agent/http/admin/**'
   - 'apps/api/src/modules/agent/application/admin-reports*.ts'
   - 'apps/api/src/modules/agent/store/admin-reports/**'
+  - 'apps/api/src/app.module.ts' # 2026-11-14 补：AgentAdminModule.forAdmin 由 app.module 传入 admin 的审计写入器与展示名读口（agent 不能 import admin，先例 RiskRulesAdminModule）
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/src/*.gen.ts'
   - 'apps/api/src/modules/platform/**/*.gen.ts'
