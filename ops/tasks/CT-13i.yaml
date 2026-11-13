@@ -1,0 +1,25 @@
+id: CT-13i
+repo: rebate-platform
+title: CT-13i：events 去重收紧（FU-CT13G-DEDUP-HARDEN + FU-EVENT-DEDUP-APP-KEY）——去重主键改 (app_id, event_type, event_id)，写入函数批内先去重、按键排序插入消掉反序并发死锁，规则测试补两 app 同 event_id 各自落库、并发真重叠、每条事件各读一次时钟
+type: impl
+# 2026-11-14 be 入账（编排 D10-1519、D10-1520；来源：CT-13g（#63）独立 Claude spec-test r1 与 Codex money r1 的 S2）。两张跟进合成一张（D10-1519「可以合成一张 PR」），排在 CT-13h 接线之前。
+# ① FU-EVENT-DEDUP-APP-KEY（编排定，不报负责人：表的形状，不涉钱 / 归属 / 授权）：新迁移（编号落地时取下一个空号，文件名以 _event-dedup-app-key.sql 结尾）把 app.event_dedup 主键改成 (app_id, event_type, event_id)（规划/02 §多 App 隔离：业务唯一键以 app_id 开头；表现在是空的），写入函数的冲突目标跟着改；04 §6.4 回写记入下一批小修。
+# ② FU-CT13G-DEDUP-HARDEN：recordEvents 在事务内先批内去重（同键只留首条）、再按 (app_id, event_type, event_id) 排序插入，消掉两个并发批次相反顺序含相同键时的 40P01；计数语义不变。
+# 规则测试（Codex，新目录只新增，CT-13g 的冻结用例一字不动、不需要 modify_existing，D10-1520）：两个 app 用同一个 event_id 各自都落库、互不可见；两次并发调用真的重叠（如用 advisory 锁 / 屏障让两边都进事务后再继续）；每条事件各读一次时钟测不过（用会前进的 Clock）；反序并发批次不死锁、各自计数正确。
+# 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。depcruise：只有 *.int.test.ts 能 import @couli/db/testing。
+refs: []
+refs_hash: {}
+deps: [CT-13g]
+paths:
+  - 'apps/api/src/modules/analytics/**'
+  - 'db/migrations/*_event-dedup-app-key.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/analytics/record-events-harden/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

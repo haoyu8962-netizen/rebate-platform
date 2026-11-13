@@ -7,6 +7,7 @@ type: impl
 # 注销 / 多 app 清除：08 BR-ID-28 正文与细则、BR-ID-30 都未要求注销时处理 events 的带 user_id 行（03 §4.7：游客事件只带 device_id，登录后在报表层关联、不回写），本单不做，已报编排登记待确认（D10-1488 ③）。依赖 CT-13e 的表、分区函数与清理权限。
 # 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
 # 2026-11-13 更正（be，编排 D10-1500 选 (a)）：不设配置项 retention.events_days——title 里的说法作废（台账守卫不许改 title，以本注释与 paths 为准）。90 天只在数据库函数里一处：CT-13e（#46，迁移 0140）的 drop_expired_events_day_partitions 与 purge_expired_events_default 已写死同一截断（p_now 所在 +08:00 日 00:00 − 90 天）；本单新增一条迁移（编号落地时取下一个空号，文件名以 _events-dedup-purge.sql 结尾）加 app.purge_expired_event_dedup(p_now) RETURNS bigint（SECURITY DEFINER、只授 couli_maint，同一截断算法与常数，按 created_at 删去重表），04:00 任务依次调：删 events 日分区 → 清 events_default → 清去重表。以后负责人定了别的天数，走一条替换三个函数的迁移。
+# 2026-11-14 落地（#78）：迁移号按 D10-1530 取 0142（B1-34q #68 先占 0141）。跟进 FU-CT13F-PURGE-FAIL-NOT-DONE（spec-test r1 的 S2，D10-1530）：规则测试未钉「清理失败不得把当日记成已完成」（实现是成功后才记），收紧留后续。
 refs: [BR-ID-30]
 refs_hash:
   BR-ID-30: 8ea92988c8cd
@@ -22,5 +23,5 @@ impl: claude
 tester: codex
 accept:
   - 'pnpm verify'
-status: todo
-pr: null
+status: done
+pr: 78
