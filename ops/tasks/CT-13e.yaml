@@ -11,7 +11,7 @@ refs_hash:
   BR-ID-30: 8ea92988c8cd
 deps: []
 paths:
-  - 'db/migrations/0141_*.sql'
+  - 'db/migrations/0140_*.sql' # 2026-11-13 编排 D10-1494：本单先于 B1-34q 落地，门禁要求新迁移取下一个空号（主干最大 0139），由 0141 改 0140；标题里的「迁移 0141」是入账时的号，台账守卫不许改标题，以这里为准
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
 test_paths:
