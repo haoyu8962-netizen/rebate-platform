@@ -29,4 +29,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
-status: todo
+status: done
+pr: 70
