@@ -8,7 +8,7 @@
 
 ## 1. 依据在哪里
 
-规划仓库在 `../couli`（公开仓库 `zora4523-bot/couli`）；本仓库对应的规划版本是根目录 `SPEC_REF` 里的提交号，读规划原文一律 `git -C ../couli show $(cat SPEC_REF):<路径>`，不读它的工作区。
+规划仓库在 `../couli`（公开仓库 `haoyu8962-netizen/couli`）；本仓库对应的规划版本是根目录 `SPEC_REF` 里的提交号，读规划原文一律 `git -C ../couli show $(cat SPEC_REF):<路径>`，不读它的工作区。2026-11-13 起仓库在 haoyu8962-netizen 下；此前台账与证据里的 PR 号（≤3360）是原仓库 zora4523-bot/rebate-platform 的编号。
 
 | 要查什么 | 看哪里 |
 | --- | --- |
