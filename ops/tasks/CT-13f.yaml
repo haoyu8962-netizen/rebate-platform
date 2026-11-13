@@ -6,14 +6,16 @@ type: impl
 # 截断点照 BR-ID-30 正文：运行当日 00:00（+08:00）− 留存天数；按日分区整区删除（照 platform/maintenance 里 link_logs 的按日删分区，B1-01zk）；去重表按 created_at 删同一截断点之前的行，顺序先 events 后去重表，免得中间态把已删事件重新放进来。配置项登记在 content 的 config-registry（照 retention.login_logs_days 的写法，受 retention.purge.enabled 总开关）。
 # 注销 / 多 app 清除：08 BR-ID-28 正文与细则、BR-ID-30 都未要求注销时处理 events 的带 user_id 行（03 §4.7：游客事件只带 device_id，登录后在报表层关联、不回写），本单不做，已报编排登记待确认（D10-1488 ③）。依赖 CT-13e 的表、分区函数与清理权限。
 # 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
+# 2026-11-13 更正（be，编排 D10-1500 选 (a)）：不设配置项 retention.events_days——title 里的说法作废（台账守卫不许改 title，以本注释与 paths 为准）。90 天只在数据库函数里一处：CT-13e（#46，迁移 0140）的 drop_expired_events_day_partitions 与 purge_expired_events_default 已写死同一截断（p_now 所在 +08:00 日 00:00 − 90 天）；本单新增一条迁移（编号落地时取下一个空号，文件名以 _events-dedup-purge.sql 结尾）加 app.purge_expired_event_dedup(p_now) RETURNS bigint（SECURITY DEFINER、只授 couli_maint，同一截断算法与常数，按 created_at 删去重表），04:00 任务依次调：删 events 日分区 → 清 events_default → 清去重表。以后负责人定了别的天数，走一条替换三个函数的迁移。
 refs: [BR-ID-30]
 refs_hash:
   BR-ID-30: 8ea92988c8cd
 deps: [CT-13e]
 paths:
   - 'apps/api/src/modules/platform/maintenance/**'
-  - 'apps/api/src/modules/content/domain/config-registry.ts'
-  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'db/migrations/*_events-dedup-purge.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/platform/events-retention/**'
 impl: claude
