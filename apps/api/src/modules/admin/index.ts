@@ -56,6 +56,9 @@ export type {
   AdminVerifyPhoneReader,
   AdminVerifyPhoneReaderDeps,
 } from './application/verify-phone-read.ts';
+// B1-34q (01 F-ADM-26 ②): the workbench's yesterday row of an app.
+export { readDashboardYesterday } from './application/dashboard-days.ts';
+export type { DashboardYesterday } from './application/dashboard-days.ts';
 // Test double only; production uses createPgTotpReplayStore.
 export { createMemoryTotpReplayStore } from './infra/totp-replay-memory.ts';
 export { createSuperVerifier } from './application/verify-super.ts';
