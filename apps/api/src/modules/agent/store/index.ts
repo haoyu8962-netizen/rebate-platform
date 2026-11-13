@@ -37,17 +37,9 @@ import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 import { sql } from 'kysely';
 import type { Clock } from '../../platform/index.ts';
-import { ownerSessions } from './owner.ts';
+import { ownerSessions, type AgentOwner } from './owner.ts';
 
-export type AgentOwner =
-  | {
-      readonly kind: 'user';
-      readonly appId: string;
-      readonly userId: string;
-      /** The device of the request; written as device_id when a session is created. */
-      readonly deviceId: string;
-    }
-  | { readonly kind: 'device'; readonly appId: string; readonly deviceId: string };
+export type { AgentOwner } from './owner.ts';
 
 export interface AgentSessionRow {
   readonly id: string;

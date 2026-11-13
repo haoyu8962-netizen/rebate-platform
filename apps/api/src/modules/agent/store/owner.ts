@@ -3,7 +3,17 @@
 // of the agent module's public entry.
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
-import type { AgentOwner } from './index.ts';
+
+// Defined here (and re-exported unchanged by ./index.ts) so that this file never imports ./index.ts.
+export type AgentOwner =
+  | {
+      readonly kind: 'user';
+      readonly appId: string;
+      readonly userId: string;
+      /** The device of the request; written as device_id when a session is created. */
+      readonly deviceId: string;
+    }
+  | { readonly kind: 'device'; readonly appId: string; readonly deviceId: string };
 
 /** The agent_sessions rows `owner` owns, scoped by app_id; `connection` carries the app schema. */
 export function ownerSessions(connection: Kysely<DB>, owner: AgentOwner) {
