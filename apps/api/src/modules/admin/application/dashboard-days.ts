@@ -1,6 +1,6 @@
 // B1-34q (01 F-ADM-26 ②, contract AdminDashboardYesterday; D10-1401, D10-1403): the workbench's
 // yesterday overview, one row per (app_id, accounting day) in app.admin_dashboard_days (migration
-// 0140), aggregated after the day instead of live.
+// 0141), aggregated after the day instead of live.
 //
 // - aggregateDashboardDay: the explicit (re)aggregation of (app, D): the four figures from the
 //   sources (each through its owning module's index.ts), upserted on (app_id, stat_date) with
@@ -29,7 +29,7 @@
 // - readDashboardYesterday: yesterday = the +08:00 accounting day before the one of `now`; that row,
 //   else the newest row not later than it (with its own date and as_of), else null.
 // The day bounds come from @couli/domain (chinaDayRange, accountingDate); time only from the Clock.
-// The new table's Kysely types come with the schema snapshot of 0140, so the statements on it are
+// The new table's Kysely types come with the schema snapshot of 0141, so the statements on it are
 // written as SQL over app.admin_dashboard_days.
 import type { DB } from '@couli/db';
 import { accountingDate, chinaDayRange } from '@couli/domain';
