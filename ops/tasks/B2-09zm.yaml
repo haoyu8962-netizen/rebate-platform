@@ -23,5 +23,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/settle-bill-pending-count/**'
-status: todo
-pr: null
+status: done
+pr: 41
