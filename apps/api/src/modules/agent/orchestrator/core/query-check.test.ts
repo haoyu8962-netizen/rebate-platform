@@ -37,6 +37,19 @@ it.each([
   expect(verdict.hits).toContain(hit);
 });
 
+it('[AC-B3-05s#1][BR-AI-06] a multi-sentence term is checked whole: an amount after the second sentence still hits', async () => {
+  const port = review('pass');
+  const verdict = await checkQuery(port, '茶。杯。好。9元');
+  expect(verdict).toEqual({ allowed: false, hits: ['amount'], filtered: true });
+});
+
+it('[AC-B3-05s#7][BR-AI-18] a multi-sentence term is reviewed whole: a block on its third sentence rejects it', async () => {
+  const port = review((text) => (text.includes('拦') ? 'block' : 'pass'));
+  const verdict = await checkQuery(port, '茶。杯。好。拦');
+  expect(verdict).toEqual({ allowed: false, hits: [], filtered: true });
+  expect(port.review).toHaveBeenCalledWith('茶。杯。好。拦');
+});
+
 it('[AC-B3-05s#7][BR-AI-18] a blocking review rejects the term and counts as filtered without a hit', async () => {
   const verdict = await checkQuery(review('block'), '合成审核拦截词');
   expect(verdict).toEqual({ allowed: false, hits: [], filtered: true });
