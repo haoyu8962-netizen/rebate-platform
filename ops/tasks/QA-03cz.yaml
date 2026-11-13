@@ -1,0 +1,27 @@
+id: QA-03cz
+repo: rebate-platform
+title: 回放第三段收紧（FU-QA03C-TIGHTEN，D10-1434，test-change）：QA-03c 场景的会计日期望改为手写日期并加一个跨 UTC 日界（00:00–08:00 +08:00）的写入时点；扣回凭证 uniq_key 断言全串
+type: test-change
+# 2026-11-13 be 入账（编排 D10-1434；来源：QA-03c 独立 Claude spec-test r1 的两条 S2，#3359 已合并）。不挡 QA-03c，排在本线现有活之后。
+# ① 会计日：CLAWBACK_CLOCK / DAILY_SIGNED_BALANCE 等的期望日期不再由实现里的 accountingDate() 算，改为照输入手写（'2026-11-25' 等）；并让至少一次扣回或提现写入落在 00:00–08:00 +08:00（UTC 前一日），使按 UTC 日切的实现会变红（BR-FUND-16 会计日按 +08:00 日切）。
+# ② uniq_key：CLAWBACK_KEY 由只配后缀改为断言全串——受益人 `{order_key}:{user_id}:self:CLAWBACK:P{row_version}`、平台 `{order_key}:PLATFORM:CLAWBACK:P{row_version}`（BR-FUND-08；order_key 取订单行、row_version 取承载失效那次同步写入的值），不从实现输出抄。
+# 只收紧、不放宽（modify_existing tighten_only）：其余断言、标题与 AC 编号不动，同目录辅助文件只在必要时新增。主干须绿；证据要反向验证：每处收紧各给一处变异（例：accountingDate 改按 UTC 日切、uniq_key 去掉 role 段）实跑让场景变红。写手照 approvals 36 / D10-1309 由新鲜独立方做；推前本地 typecheck / build；落地走 chore/test-change-QA-03cz、不带证据文件，标签由编排核后加。RV2。
+refs: [BR-FUND-08, BR-FUND-16]
+refs_hash:
+  BR-FUND-08: 4135d1b47230
+  BR-FUND-16: 077f6d412d5a
+deps: [QA-03c]
+paths:
+  - 'test/replay/qa-03c/**'
+modify_existing:
+  - file: 'test/replay/qa-03c/clawback-payout.int.test.ts'
+    test: '[AC-QA-03c#1] 合成数据回放：结算后失效扣回→日终→申请→自动判定→脚本到账→负余额；重复投递不增账'
+    reason: tighten_only
+    ruling: D10-1434
+    note: 会计日期望改手写并加跨 UTC 日界的写入时点；扣回 uniq_key 断言全串；其余断言不变
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
