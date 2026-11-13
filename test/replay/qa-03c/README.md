@@ -18,7 +18,7 @@
 | 11-26 10:00 | 真实应用服务申请 1000 分，真实 worker 自动审批、执行 | 0 / 1000 |
 | 11-26 10:01 / 10:02 | transfer → review → release → 脚本成功 → land | 0 / 0 |
 | 11-27 01:00 | 生产日终任务校验 11-26 | 0 / 0 |
-| 11-27 11:10 | 第二单结算后失效，扣回 500 分；申请 100 分被拒绝 | −500 / 0 |
+| 11-27 07:10（UTC 11-26 23:10） | 第二单结算后失效，扣回 500 分；申请 100 分被拒绝 | −500 / 0 |
 | 11-28 01:00 | 生产日终任务校验 11-27 | −500 / 0 |
 
 每单联盟佣金 N=1000 分、预留 0、本人份额 5000bp、无上级，所以本人与平台各得 500 分。
@@ -88,3 +88,15 @@ C1 是等价变异、C1b 红在生产代码抛错而非所列断言，两者都�
 | P3 转账金额 | `apps/api/src/modules/payout/jobs/transfer-job.ts:735`，渠道请求的 `netFen: row.net_fen` 改成 `netFen: 900n` | `TRANSFER_REQUEST`：应向脚本渠道提交 1000 分 | red/12：在 `TRANSFER_REQUEST` 变红 |
 
 基线或变异如因业务缺口不能得到预期结果，保留失败证据，另开实现任务；不改期望来迁就生产输出。
+
+## 收紧（QA-03cz，D10-1434）
+
+- 会计日：`CLAWBACK_CLOCK` 的期望日期照输入手写（`'2026-11-25'`、`'2026-11-27'`），并核对全部扣回凭证的日期累计为 2×11-25 + 2×11-27；出账任务的 `accounting_date` 输入也改为手写 `'2026-11-24'`，本文件不再调用 `accountingDate()`。第二单失效移到 11-27 07:00–07:10 +08:00（UTC 前一日 23:00–23:10），落在 00:00–08:00 窗口；仍晚于 11-27 01:00 的 11-26 日终、早于 11-28 01:00 的 11-27 日终，金额与日终期初 / 期末不变（11-27：0 → +500）。
+- uniq_key：`CLAWBACK_KEY` 对每个失效单断言两张凭证全串——受益人 `{platform}:{sub_order_id}:{user_id}:self:CLAWBACK:P{n}`、平台 `{platform}:{sub_order_id}:PLATFORM:CLAWBACK:P{n}`；order_key 取订单行，n 取失效同步之前订单行的 row_version + 1，即承载这次失效的同步更新写入的值（BR-FUND-08「P{platform_status 迁移后的 row_version}」，BR-FUND-01 P7 行「row_version 取承载这次事件的那次同步更新写入的值」）；不能取同步后的当前行，因为同一事务里的 R8 返利 CAS 还会再推进 row_version。
+
+### 反向变异（编排者实跑，每次只施加一处）
+
+| 编号 | 文件:行与变异 | 应变红的断言 |
+| --- | --- | --- |
+| T1 会计日按 UTC 日切 | `apps/api/src/modules/ledger/application/ledger.ts:450`，`const day = accountingDate(at);` 改成 `const day = at.toISOString().slice(0, 10);` | 第二次失效（11-27 07:10 +08:00）的 `CLAWBACK_CLOCK`：按 `'2026-11-27'` 查不到凭证（变异下记为 2026-11-26） |
+| T2 扣回键去掉 role 段 | `packages/domain/src/ledger/ledger.ts:131`，`CLAWBACK` 分支删去 `:${roleComponent(input.role)}`（扣回模板经 `build-vouchers.ts` 的 `fillUniqKey` 走这里） | 第一次失效的 `CLAWBACK_KEY`：排序后的全串与期望不等（受益人键缺 `:self`）；原后缀正则仍会通过 |
