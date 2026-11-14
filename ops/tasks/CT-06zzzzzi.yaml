@@ -1,0 +1,40 @@
+id: CT-06zzzzzi
+repo: rebate-platform
+title: CT-06zzzzzi：modify_existing 加文件级「支撑文件」条目 （file、scope=support、reason、br / ruling、note，无 test 字段）——冻结的共用夹具与顶层辅助只改块外、不改断言时可登记（D10-1662）
+type: guard-change
+# 2026-11-14 门禁与工具桌面线入账（编排 D10-1662，合并后登记 approvals 92，规划/11 §7.1 第 5 行例外）。起因：B1-02zzzb（二次验证令牌绑业务摘要）要在约 18 个冻结的
+#   共用夹具 / 顶层辅助里补摘要，这些文件没有 it 块，现行 modify_existing 只能按块登记（块外差异被 evidence-check 拒）。方案 couli-runs/B1-02zzzb/frozen-declare-plan.md。
+# 形状照 red_exempt_outside（CT-06zzzc）：条目没有 test 字段，写 scope: support。五条要求：① 只用于 test/spec/**、test/properties/**、test/replay/** 下、在基线（受信根）已存在的文件；该文件的改动必须全在 it / test 块之外。块内有改动的块仍须逐块登记，
+#   文件级条目不替它放行；同一文件可同时有文件级条目与块级条目，各管各的。同一文件至多一条文件级条目。
+# ② reason 与 br / ruling（含 ruling_correction 的 overturned / basis）的校验与块级条目完全相同；资金与归属类文件（isMoneyOrAttributionTest，CT-06zzzzzh 名单原样）
+#   只能用 rule_change，且照旧要负责人标签（D10-1356），不得用 ruling_correction。
+# ③ 改动行里不得出现断言：文件级条目覆盖的块外差异行（加的、删的）只要含断言调用就拒——expect( / expectTypeOf( / assert( 与 assert.<名>( / 任意 .to<大写开头>( 匹配器
+#   （toBe、toEqual、toStrictEqual、toThrow、toMatchObject …）/ .rejects / .resolves。支撑文件只许改造数据和调用方式，断言改动回到 it 块逐条登记。
+# ④ 证据（evidence-check）：每条文件级条目记整文件 before / after 的 sha256（before 取基线、after 取头，与仓库实际一致），以及反向验证——把该文件改回基线后，
+#   依赖它的用例在新实现上变红（至少一条用例全名）；记录缺、哈希不符、反向验证为空都拒。
+# ⑤ 计入 modify_existing + red_exempt ≤ RED_EXEMPT_MAX（300）的合计。red-check 不把文件级条目当成要跑的用例，只在报告里列出（与 red_exempt_outside 同样写清）。
+# 读者一致：tools/lib/task-file.ts（解析与①②⑤）、tools/ops/task.ts check、tools/guard/lib/red-check.ts、tools/guard/lib/test-blocks.ts（块外差异行）、tools/ci/evidence-check.ts（①③④）；
+#   tools/README.md 与 tools/ops/README.md 各补一段。规则测试 test/spec/ci/modify-existing-support/**（独立子代理写、先红）；实现方另补单元测试。
+# 分工：规则测试与对抗评审都是桌面全新子代理（claude-independent，Codex 到 11-20 不可用，approvals 36），实现是另一个子代理；本机不跑全量（D10-1477），测试机跑。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/ops/task.ts'
+  - 'tools/ops/task.test.ts'
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzzi.yaml'
+test_paths:
+  - 'test/spec/ci/modify-existing-support/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/modify-existing-support/**'
+status: todo
