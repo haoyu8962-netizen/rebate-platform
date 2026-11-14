@@ -560,7 +560,7 @@ export function createWriteServer(options: WriteServerOptions = {}) {
   /** Writes a form in effect (status APPROVED, reviewed by its creator). */
   function execute(draft: Draft): Executed {
     written += 1;
-    const at = `2026-12-0${String(1 + written)}T10:00:00+08:00`;
+    const at = `2026-12-${String(1 + written).padStart(2, '0')}T10:00:00+08:00`;
     const adjustment: Adjustment = {
       ...draft,
       adjust_id: createdId(written),
