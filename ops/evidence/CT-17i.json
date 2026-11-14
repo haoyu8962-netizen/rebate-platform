@@ -1,0 +1,37 @@
+{
+  "task": "CT-17i",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "7761a87ad882bd9432289d073c5ce7e5a34f224c",
+  "red_tests": [],
+  "risk_note": "RV1 by path (contracts/**, packages/contracts-ts/**). CT-17i (D10-1566 W-3, corrected by D10-1611): contracts/routes.json DeleteAccount since.android and since.harmony null → \"1.0.0\" (the step_up send to the bound phone landed with B1-02zzz #109); since.ios stays null; phase stays M-公开 (08 BR-ID-27 detail 「内测包不显示注销入口」, owner-confirmed 2026-10-04). 机械改动，D10-1611: a fresh independent Claude put the phase line back to main's M-公开 after the first implementation had set M-内测 per the earlier W-3 wording. bridge.gen.ts regenerated from routes.json (only the two since values differ from main); pnpm contracts:check passes. No openapi or its generated files (D10-1582 class ②). No code, money or ownership change. Ledger tester none: no rule tests, so no red run.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Independent Claude contract review via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20, D10-1604; ops/approvals.yaml #36): r1 pass with one S2 — phase M-内测 contradicted 01 §4.2 / 04 §6 and BR-ID-27; the orchestrator ruled to keep M-公开 (D10-1611) and the phase line was put back to main (mechanical change), which closes it; the remaining diff is the two since values the review already accepted. Static only."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bacc416624935d355b44756e56585e5a073d9c13",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head. Test machine before push: --tests test/spec/agent + test/spec/contracts 4513/4513 green, --browser green (includes h5-messages), verify:fast passed.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
