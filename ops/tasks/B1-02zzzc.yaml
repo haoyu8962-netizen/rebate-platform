@@ -1,0 +1,31 @@
+id: B1-02zzzc
+repo: rebate-platform
+title: 提现免二次验证：POST /v1/withdrawals 去掉 step-up（契约 StepUpAction 去 withdraw、去 StepUpSummaryWithdraw；abandon 另起 IdempotencyAbandonAction 仍含 withdraw）（D10-1665 / D10-1666）
+type: impl
+# 2026-11-14 w1 入账（负责人 2026-11-14 定「用户提现不需要二次验证了，因为用户已经登录了」，编排 D10-1665 / D10-1666；方案 couli-runs/FU-STEPUP-TOKEN-BIND-DIGEST/plan-d10-1665.md）。不变：提现仍只能原生 App 发起，access_token、请求签名、Idempotency-Key、风控加验（reverify）照旧；改收款账号、换手机号、注销照旧要 step-up。
+# 契约（contracts/openapi.yaml）：StepUpAction 去 withdraw；StepUpSummary 去 StepUpSummaryWithdraw；POST /v1/withdrawals 去 x-step-up、StepUpToken 参数、x-error-codes 的 10003 与相关描述；AbandonIdempotencyKeyRequest.action 改用新枚举 IdempotencyAbandonAction（withdraw、payout_account_change、phone_change、account_deletion），放弃上一笔提现照旧可用；oasdiff 去枚举值属破坏兼容，accepted 加行注明 D10-1665；重生成生成物；packages/contracts-ts/scripts/conformance.ts 的 STEP_UP_OPERATIONS 去 withdraw。
+# 实现：identity application/step-up-verify.ts 的 ⑫ 映射去 'POST /v1/withdrawals'；payout 提现控制器去掉 withStepUp 包装，服务层 stepUpValid 照传 true（直调服务的冻结用例不动）；risk-state.ts 的敏感操作表不动（提现仍是 realname 敏感操作）。
+# 冻结用例：「提现无令牌 → 10003」改「照常受理」、「用 withdraw 取令牌」改用仍需 step-up 的动作或改断言为 20001——资金类，按 D10-1356 由负责人确认后 rule_change 登记（br 待 refs 定后填）。
+# 契约槽：openapi 类，排 B1-10w 之后；deps B1-02zzzb。refs 等规划回写 PR（docs/changes/20261114-提现免二次验证.md）合并、SPEC_REF 升级后再填并哈希（预计 BR-ID-08、BR-WDR-01、BR-WDR-03）。
+refs: []
+refs_hash: {}
+deps: [B1-02zzzb]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/identity/**'
+  - 'apps/api/src/modules/payout/**'
+test_paths:
+  - 'test/spec/payout/withdraw-no-step-up/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+  - 'test/spec/payout/withdraw-no-step-up/**'
+status: todo

@@ -8,16 +8,15 @@ type: impl
 # 比对：提现 payout/application/withdraw-apply.ts 在 ④ 锁内复核处，用锁内读到的当前绑定行 id 与请求 amount_fen 拼 `w:` 串比对；收款 identity payout-account / payout-bank-card / 微信保存在 users 行锁内，把请求体账号规范化算 HMAC 拼 `p:` 串比对（微信比 attempt_id）。不符 → 10003，走现有锁内拒绝回滚，withStepUp 释放预留、不核销。claims 无 summary 的令牌对这两个 action 一律 10003（D10-1629 (a)）。幂等回放不比对（现有顺序保证）。换手机号、注销不绑摘要。不动 openapi（契约已在 CT-26c），不占契约槽。
 # 冻结用例（D10-1629 (c)）：先实现，在测试机跑 test/spec/{payout,identity,risk,platform/idempotency} 整目录，把受影响的冻结文件 / 用例与改法列精确清单报编排；资金类用例改动按 D10-1356 由负责人本人确认，确认前不改冻结文件。
 # 评审：Codex 额度用尽（D10-1604），按 approvals 36 由两个互不相干的独立 Claude 各审一遍（RV2）。随单备注：D10-1595 的 S2「Me 测试只用 11 位大陆号，非 11 位号脱敏格式没钉」记在此，不单开。
-refs: [BR-ID-08, BR-WDR-02, BR-WDR-07, BR-WDR-33]
+# D10-1665 / D10-1666 收窄（标题不改，以本条为准）：负责人定提现不再要二次验证，本单只做 payout_account_change 的摘要绑定；提现那一半（withdraw 摘要、提现锁内比对、payout/** 改动）全部不做、回主干；签发对 withdraw 不要 summary，带了 → 20001 fields=[summary]（与 phone_change / account_deletion 同口径）。规则测试删 withdraw 部分，「withdraw 带 summary → 20001」一条按 D10-1666 改断言。提现去掉 step-up 由 B1-02zzzc 做。
+refs: [BR-ID-08, BR-WDR-02, BR-WDR-33]
 refs_hash:
   BR-ID-08: 9ae5b5206173
   BR-WDR-02: b8ce66617ed9
-  BR-WDR-07: 488ce83ba0e3
   BR-WDR-33: '7886471e9297'
 deps: [B1-02zzz]
 paths:
   - 'apps/api/src/modules/identity/**'
-  - 'apps/api/src/modules/payout/**'
 test_paths:
   - 'test/spec/identity/step-up-digest/**'
 impl: claude
