@@ -33,6 +33,7 @@ import {
   type TablePaginationConfig,
 } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { useLocation } from 'react-router';
 import type { Schema } from '@couli/contracts-ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { reconTexts as t } from '../../texts/recon.ts';
@@ -56,6 +57,7 @@ import {
   clawbackReason,
   codeOf,
   conflictResource,
+  draftFromSearch,
   guardReason,
   isNetwork,
   listQuery,
@@ -192,9 +194,15 @@ function ReconContent({
     to: useId(),
     ref: useId(),
   };
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const location = useLocation();
+  // The address's status (a workbench card) is only the starting filter, applied from the first
+  // read on; from then on the page's own draft and applied filters are all there is.
+  const [initial] = useState<Draft>(() => draftFromSearch(location.search));
+  const [draft, setDraft] = useState<Draft>(initial);
   const [draftErrors, setDraftErrors] = useState<DraftErrors>({});
-  const [filters, setFilters] = useState<Filters>({});
+  const [filters, setFilters] = useState<Filters>(() =>
+    initial.status === undefined ? {} : { status: initial.status },
+  );
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<ListStatus>('loading');

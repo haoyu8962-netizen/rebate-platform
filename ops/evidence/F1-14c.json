@@ -1,0 +1,99 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#1] 进页 /recon?status=open：首个（也是唯一一个）列表请求即带 status=open，状态控件显示「待处理」，只列待处理的两条差错单，不报错",
+    "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#2] 地址里的其他参数不影响：/recon?dashboard_probe=case3&status=written_off&page=2&source=R2 首个列表请求只带 page=1、page_size 与 status=written_off，控件显示「已核销」，只列该条",
+    "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#3] 带 status=open 进页后点【重置】：只重读一次且不带 status，控件清空，六条差错单重新列出",
+    "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#4] 带 status=open 进页后把状态改为「处理中」并【查询】：改选时不发请求，【查询】只发一次、带 status=processing，控件显示「处理中」，只列处理中的差错单",
+    "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#5] 带 status=open 进页后换页照常：第 2 页请求 page=2（同一 page_size）仍带 status=open，控件仍显示「待处理」",
+    "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#6] status 缺省或为空照旧：合法的 status=closed 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，六条差错单全列，不报错",
+    "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#7] status 不是契约枚举值照旧：合法的 status=adjusted 生效；而 OPEN（大写）、Open（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，六条差错单全列，不报错",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错"
+  ],
+  "risk_note": "F1-14c (FU-ADMIN-ROUTE-STATUS-PARAM; orchestrator D10-1638 ③, D10-1650, D10-1653). The dashboard cards link to /withdrawals?status=PENDING_REVIEW and /recon?status=open, but the withdrawal review page and the recon difference page did not read the address. Now each page reads `status` from the address once, on entry: a value of the contract enum (WithdrawalStatus / AdminReconDiffStatus, exact case) becomes the initial status filter, the control shows it and the first and only first-screen list read carries status=<value>; a missing, empty or invalid value is ignored (no parameter, no error). After entry the value is just the page's own filter: clearing the select and pressing 查询 sends no status (no fallback to the address value), 重置 clears it, other values work as before; the address is never rewritten and other parameters are not read. No write path, no amount and no step-up are touched; claims, settle-bills and agent/reports already read the address and are unchanged; no card guard (D10-1653: the shell's 尚未接入 placeholder already prevents unknown pages) and no frozen case is modified. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context; ledger tester claude-independent): 14 tests in 2 files; another independent Claude spec-test r1 pass with two S2 (a cleared select falling back to the address value; required in the implementation brief). Red on couli-ci for the spec commit (14 tests, right reason). Implementation by Opus 5.5 (another context), changing only model.ts and the page file of each of the two pages; couli-ci verify:fast run 2 green (30604 spec tests) and --browser run 1 green. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context r1 pass, two S2 (cleared select fallback) covered in the implementation brief"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-14c",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "f7cc3d73bcbff57487b94d7197ef7d3113de7708",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f7cc3d73bcbff57487b94d7197ef7d3113de7708",
+      "tree": "660337f5605777762ee4bdca5785806195eb05bd",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-14T11:52:05Z",
+      "finished_at": "2026-11-14T11:52:14Z",
+      "red_tests": [
+        "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#1] 进页 /recon?status=open：首个（也是唯一一个）列表请求即带 status=open，状态控件显示「待处理」，只列待处理的两条差错单，不报错",
+        "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#2] 地址里的其他参数不影响：/recon?dashboard_probe=case3&status=written_off&page=2&source=R2 首个列表请求只带 page=1、page_size 与 status=written_off，控件显示「已核销」，只列该条",
+        "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#3] 带 status=open 进页后点【重置】：只重读一次且不带 status，控件清空，六条差错单重新列出",
+        "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#4] 带 status=open 进页后把状态改为「处理中」并【查询】：改选时不发请求，【查询】只发一次、带 status=processing，控件显示「处理中」，只列处理中的差错单",
+        "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#5] 带 status=open 进页后换页照常：第 2 页请求 page=2（同一 page_size）仍带 status=open，控件仍显示「待处理」",
+        "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#6] status 缺省或为空照旧：合法的 status=closed 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，六条差错单全列，不报错",
+        "test/spec/frontend/admin-route-status-param/recon.test.ts > [AC-F1-14c-RECON#7] status 不是契约枚举值照旧：合法的 status=adjusted 生效；而 OPEN（大写）、Open（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，六条差错单全列，不报错",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-route-status-param/recon.test.ts",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "dab569fedd15630eecf0c6b778f35e27064059ea632bcf8a453e578acec1df7d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b0296e059a914619d38b199e208c946eb2ba27f4",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}

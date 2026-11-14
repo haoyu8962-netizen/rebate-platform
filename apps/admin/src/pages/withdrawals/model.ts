@@ -184,6 +184,17 @@ export const EMPTY_DRAFT: Draft = {
   dateTo: '',
 };
 
+/**
+ * The starting draft of a page opened at `search` (a workbench card opens /withdrawals?status=…):
+ * its `status` when it is a WithdrawalStatus (exact case), else the empty draft; nothing else of
+ * the address is taken.
+ */
+export function draftFromSearch(search: string): Draft {
+  const value = new URLSearchParams(search).get('status');
+  const status = STATUSES.find((item) => item === value);
+  return status === undefined ? EMPTY_DRAFT : { ...EMPTY_DRAFT, status };
+}
+
 export const sameDraft = (a: Draft, b: Draft): boolean =>
   (Object.keys(a) as (keyof Draft)[]).every((name) => a[name] === b[name]);
 

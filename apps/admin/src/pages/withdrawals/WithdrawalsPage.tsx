@@ -36,7 +36,7 @@ import {
   type Key,
   type ReactElement,
 } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
 import { BatchApprove } from './BatchApprove.tsx';
@@ -58,6 +58,7 @@ import {
   codeOf,
   conditionLabel,
   detailRoute,
+  draftFromSearch,
   listQuery,
   money,
   reviewModeLabel,
@@ -133,11 +134,17 @@ function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactEle
     from: useId(),
     to: useId(),
   };
+  const location = useLocation();
+  // The address's status (a workbench card) is only the starting filter, applied from the first
+  // read on; from then on the page's own draft and applied filters are all there is.
+  const [initial] = useState<Draft>(() => draftFromSearch(location.search));
   const [tab, setTab] = useState<StatusTab>('all');
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
-  const [applied, setApplied] = useState<Draft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<Draft>(initial);
+  const [applied, setApplied] = useState<Draft>(initial);
   const [draftErrors, setDraftErrors] = useState<DraftErrors>({});
-  const [filters, setFilters] = useState<Filters>({});
+  const [filters, setFilters] = useState<Filters>(() =>
+    initial.status === undefined ? {} : { status: initial.status },
+  );
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<ListStatus>('loading');

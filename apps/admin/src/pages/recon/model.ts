@@ -228,6 +228,17 @@ export const EMPTY_DRAFT: Draft = {
   refId: '',
 };
 
+/**
+ * The starting draft of a page opened at `search` (a workbench card opens /recon?status=…): its
+ * `status` when it is an AdminReconDiffStatus (exact case), else the empty draft; nothing else of
+ * the address is taken.
+ */
+export function draftFromSearch(search: string): Draft {
+  const value = new URLSearchParams(search).get('status');
+  const status = STATUSES.find((item) => item === value);
+  return status === undefined ? EMPTY_DRAFT : { ...EMPTY_DRAFT, status };
+}
+
 const PERIOD = /^[0-9]{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?$/;
 
 export interface DraftErrors {
