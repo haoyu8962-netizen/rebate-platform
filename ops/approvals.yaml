@@ -561,3 +561,9 @@ approvals:
     granted: true
     date: '2026-11-14'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/lib、tools/ci、tools/guard）：起因 D10-1580——CT-13i 把 event_dedup 主键改为以 app_id 开头（D10-1519 推翻 D10-1488，依据 规划/02 §12.3「业务唯一键以 app_id 开头」），CT-13e 的冻结用例钉着旧口径，而 rule_change 只能引 08 的 BR，形状规则没有 BR，硬挂不相干的 BR 等于造假。本条只给这种情形一个如实的名字与更多留痕（两个裁定号与出处），不放宽任何判定：ruling_correction 在三个读者里都走 rule_change 的同一段校验，只是把 br 换成 overturned / ruling / basis；资金与归属类用例被工具拒绝使用它（这类仍只能走 rule_change 并由负责人本人确认，D10-1356），拦截名单只宽不窄——MONEY_PATHS 原样从 evidence-check 移到 tools/lib/task-file.ts 共用，evidence-check 照旧导出同名常量。编排核过实际差异（D10-1603）。'
+  - id: 91
+    row: 4
+    title: 'B1-02zzzb 任务专属一次性追加：代码评审第 4 次——只审实现 r2（994d2188d）与 r3（只修 payout 值导入 identity/index.ts 那一处）相对已评审版本的增量，由与实现者、前三次评审者都互不相干的新鲜独立 Claude 按资金评审口径做；照常不调 bump-attempt（上限已满，按编排例外轮记），其余口径与次数上限不变'
+    granted: true
+    date: '2026-11-14'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-1654：三次评审里第 1 次是工具输出校验失败（checklist 指到 diff 之外的行号）作废，没有评审结论却计了数；第 2 次 fail（S1 摘要不符的 10003 响应体与 ⑫ 的不同、可据此区分失败原因；S2 stepUpSummary 为 undefined 时放行），第 3 次全量 pass（同一条 S2 另加一条与契约一致的 S2）。r2 修了 S1、S2：四处 10003 统一成同一响应体、stepUpSummary 改必填，这是资金安全相关的行为改动，不能按机械处理、必须有人审。收口：这一次若 fail，停下报编排，按 规划/11 §2.5 三轮不过重新考虑方案，不再追加评审试次。编排按 approvals 16 / 24 登记。'
