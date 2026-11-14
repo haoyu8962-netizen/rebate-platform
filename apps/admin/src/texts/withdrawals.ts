@@ -571,4 +571,55 @@ export const withdrawalsTexts = {
     network: '网络错误，请检查网络后重试；未确认前不会重复提交',
     failed: '提交失败，请稍后重试',
   },
+  /**
+   * 【暂停队列】【解除暂停】（标题行）与【解除通道暂停】（暂停的通道卡）（F1-08bd；契约
+   * adminUpdateKillSwitch，BR-WDR-17、BR-WDR-33 ①）。
+   */
+  pause: {
+    entries: {
+      pause: '暂停队列',
+      resume: '解除暂停',
+      channel: '解除通道暂停',
+    },
+    titles: {
+      pause: '暂停打款队列',
+      resume: '解除打款队列暂停',
+      channel: (channel: string): string => `解除通道暂停 · ${channel}`,
+    },
+    texts: {
+      pause:
+        '暂停后【执行所选】不可用，不再发起新的转账；已投递但还没发出转账的单回到待执行，已发出转账的单照常查询。',
+      resume:
+        '解除后可以重新执行待执行的单；执行时仍要通过水位检查（所在通道的余额 W 未录入、已过期或低于预计提现 P 时仍会被拒绝）。已暂停的通道不随队列解除，需在通道卡上分别解除。',
+      channel: (channel: string): string =>
+        `解除后${channel}通道恢复发起转账，其他通道不受影响；打款队列的暂停不随通道解除。执行时仍要通过水位检查（所在通道的余额 W 未录入、已过期或低于预计提现 P 时仍会被拒绝）。`,
+    },
+    submits: {
+      pause: '确认暂停',
+      resume: '确认解除',
+      channel: '确认解除',
+    },
+    done: {
+      pause: '打款队列已暂停',
+      resume: '打款队列已解除暂停',
+      channel: (channel: string): string => `${channel}通道已解除暂停`,
+    },
+    operations: {
+      pause: '暂停打款队列',
+      resume: '解除打款队列暂停',
+      channel: '解除通道暂停',
+    },
+    stepUpTarget: (target: string): string => `开关：${target}`,
+    reason: '原因（选填）',
+    reasonExtra: (count: number, max: number): string => `${count} / ${max} 字`,
+    reasonLong: '原因不能超过 200 字',
+    serverReason: '原因不符合要求（1–200 字），请修改后再提交',
+    cancel: '取消',
+    stepUpAgain: '动态码凭证已失效，请重新输入动态码',
+    conflict: '开关状态已被他人修改，已刷新为最新状态，请核对后重试',
+    forbidden: '无权限执行此操作（需要 switch.payout 或 switch.all 权限点）',
+    invalid: '提交内容有误，请检查后重试',
+    network: '网络错误，请检查网络后重试；未确认前不会重复提交',
+    failed: '提交失败，请稍后重试',
+  },
 } as const;
