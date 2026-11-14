@@ -1,0 +1,31 @@
+id: CT-06zzzzzh
+repo: rebate-platform
+title: CT-06zzzzzh：modify_existing 新增原因 ruling_correction（裁定更正）——冻结用例钉的是一条后来被推翻的编排裁定、依据在规划/02 或 04 的形状规则而不在 08 时使用；须带被推翻与推翻它的两个裁定号和依据出处，其余校验同 rule_change；资金与归属类用例不得使用
+type: guard-change
+# 2026-11-14 be 入账（编排 D10-1580 ②c，approvals 90 由编排开）。起因：CT-13i（#92）把 app.event_dedup 主键改成 (app_id, event_type, event_id)（D10-1519 推翻 D10-1488），CT-13e 的冻结用例 test/spec/db/events/storage.int.test.ts #1 / #2 钉着旧口径；改冻结用例期望只能登 rule_change，而 rule_change 必须引 08 的 BR，去重键是表的形状（规划/02 §12.3、04 §3），没有对应 BR。本单合并后 #92 变基，把那两条按新原因登记修改。
+# 做法（照 CT-06zzzzw 加 rule_change 的先例，逐个读者都改）：
+# ① tools/lib/task-file.ts：MODIFY_EXISTING_REASONS 加 'ruling_correction'。该原因的条目必须带 overturned（被推翻的裁定，RULING_PATTERN，不得等于 ruling）、ruling（推翻它的裁定）、basis（依据出处，非空，以「规划/」或「docs/adr/」开头，如「规划/02 §12.3」）；不得带 br；其余字段与 rule_change 相同。
+# ② 资金与归属类用例不得用这个原因（D10-1356，这类仍只能走 rule_change 并由负责人本人确认），由 parseTaskFile 拒绝，各读者一致：file 匹配 MONEY_TEST_PATHS 即拒。名单与 evidence-check 的 MONEY_PATHS 同口径：test/spec/{ledger,ledger-rules,commission,settlement,payout,payment,orders,linking,union,money,domain}/**、test/properties/**、packages/{money,domain}/**。名单请编排在本台账 PR 里核。
+# ③ tools/guard/lib/red-check.ts：与 rule_change 同处理（旧实现下多半是红；在旧实现下为绿时另起一行 ATTENTION，写明 ruling_correction 与两个裁定号）。
+# ④ tools/ci/evidence-check.ts：记录要求同 rule_change（before / after 逐字、mutation 反向验证），另带与台账一致的 overturned、basis；owner 标签要求不变。
+# ⑤ 单元测试：task-file / red-check / evidence-check 各补用例（接受、缺 overturned、overturned 等于 ruling、带 br、basis 不合格、资金与归属路径被拒）；tools/README.md 与 tools/ops/README.md 说明各补一段。
+# 第三类保护路径：实现 Opus（不提交），Codex general 评审；编排按 #16 / #24 核后加标签。本机重活（D10-1477）：只在测试机跑 verify:fast。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/lib/task-file.ts'
+  - 'tools/lib/task-file.test.ts'
+  - 'tools/guard/lib/red-check.ts'
+  - 'tools/guard/lib/red-check.test.ts'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzzh.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
