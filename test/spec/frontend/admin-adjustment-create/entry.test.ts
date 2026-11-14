@@ -70,7 +70,7 @@ it(
     expect(buttons(panel(), TEXT.createEntry)).toEqual([]);
     expect(rowsWithReverse()).toEqual(REVERSIBLE);
     expect(usableReverses()).toEqual([1, 1, 1]);
-    expect(laterEntries()).toEqual([]);
+    expect(laterEntries()).toEqual(['批准']);
     expect(server.unexpected()).toEqual([]);
     expect(server.others()).toEqual([]);
   },
@@ -91,7 +91,9 @@ it(
     for (const adjustId of [ADJ.recovery, ADJ.reversal, ADJ.prefilled, ADJ.rejected]) {
       await openDetail(server, adjustId);
       expect(buttons(drawer(), TEXT.reverseEntry), adjustId).toEqual([]);
-      expect(laterEntries(), adjustId).toEqual([]);
+      expect(laterEntries(), adjustId).toEqual(['批准']);
+      const inDetail = LATER_ENTRIES.filter((name) => buttons(drawer(), name).length > 0);
+      expect(inDetail, adjustId).toEqual(adjustId === ADJ.prefilled ? ['批准'] : []);
     }
     expect(server.others()).toEqual([]);
   },
@@ -142,6 +144,6 @@ it(
     expect(usable(main(), TEXT.createEntry)).toHaveLength(1);
     expect(rowsWithReverse()).toEqual(REVERSIBLE);
     expect(usableReverses()).toEqual([1, 1, 1]);
-    expect(laterEntries()).toEqual([]);
+    expect(laterEntries()).toEqual(['批准']);
   },
 );
