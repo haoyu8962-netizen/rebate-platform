@@ -1,6 +1,6 @@
 // 提现审核页文案（规格 admin-withdrawals.md、admin-withdrawal-detail.md，画板 AdmWithdrawList /
 // AdmWithdrawDetail / AdmWithdrawAutoDecision / AdmWithdrawDetailWechat；F1-08a 第一段只读，
-// F1-08ah 详情加【审核通过】【驳回】）。
+// F1-08ah 详情加【审核通过】【驳回】，F1-08ai 列表加勾选与【批量通过】）。
 // 提现状态、审核方式、转人工原因、风险标签的中文名只从后台字典读（BR-TEXT-25，
 // contracts/texts.admin.default.json），缺键显示编码，所以这里不写这些名字。错误措辞按
 // contracts/error-codes.yaml（BR-TEXT-14）。
@@ -18,7 +18,7 @@ export const withdrawalsTexts = {
   forbiddenDescription:
     '当前账号没有提现查看权限点（withdraw.review 或 fund.view），请联系超管勾选。',
   readOnlyNotice:
-    '本页当前只读：批量操作、打款、导出与自动到账设置尚未接入，接口定稿后开放；单张审核通过 / 驳回在提现单详情办理。',
+    '勾选待审核的单可【批量通过】；批量打款、导出与自动到账设置尚未接入，接口定稿后开放；单张审核通过 / 驳回在提现单详情办理。',
   statusTabs: {
     all: '全部',
     pendingReview: '待审',
@@ -231,6 +231,29 @@ export const withdrawalsTexts = {
       USER_REQUEST: '用户申请撤销',
       OTHER: '其他',
     } as Readonly<Record<string, string>>,
+  },
+  batchApprove: {
+    entry: '批量通过',
+    selected: (count: number, total: string): string => `已选 ${count} 张，合计实付 ${total}`,
+    title: (count: number): string => `批量通过 · ${count} 张`,
+    resultTitle: (count: number): string => `批量通过结果 · ${count} 张`,
+    number: '提现单号',
+    user: '用户',
+    amount: '金额',
+    plan: '本次处理',
+    result: '处理结果',
+    willApprove: '将通过',
+    consequence:
+      '通过后单据进入待执行打款，金额仍冻结，打款另由【执行打款】办理；余额为负、受阻等不能通过的单由服务端判定，被跳过时这里会写明原因。',
+    submit: '确认通过',
+    cancel: '取消',
+    close: '关闭',
+    operation: '提现批量审核通过',
+    stepUpTarget: (count: number): string => `提现单：${count} 张`,
+    approved: '已通过',
+    noResult: '服务端未返回该单的处理结果，请刷新后核对',
+    summary: (approved: number, skipped: number): string =>
+      `通过 ${approved} 张，跳过 ${skipped} 张；列表已刷新。`,
   },
   batchKinds: { manual: '手动批次', auto: '自动批次' } as Readonly<Record<string, string>>,
   itemResults: {

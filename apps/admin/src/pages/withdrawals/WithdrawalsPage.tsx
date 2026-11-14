@@ -3,7 +3,9 @@
 // 风险标签、提现单号、用户 ID、申请日期区间；改了未点【查询】不发请求）、页码分页，
 // GET /admin/v1/withdrawals（CT-24y listAdminWithdrawals）；行【详情】进 withdrawals/{id}。
 // 持 withdraw.review 或 fund.view 可看；两者都没有时本页说明无权限、不发请求。
-// TODO(规划/11 §7): 【批量通过】【批量手动打款】【批量自动打款】与一键组批、【导出】、「打款队列」
+// 持 withdraw.review（超管持有全部点）时待审核（PENDING_REVIEW）行可勾选，勾选后出现批量栏与
+// 【批量通过】（F1-08ai，BatchApprove.tsx）；【查询】【重置】、换页签或换页清空已选。
+// TODO(规划/11 §7): 【批量手动打款】【批量自动打款】与一键组批、【导出】、「打款队列」
 // 「结果待确认」「自动到账设置」页签与各页签计数 — blocked on 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
@@ -25,20 +27,31 @@ import {
   type TableColumnsType,
   type TablePaginationConfig,
 } from 'antd';
-import { useEffect, useId, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type Key,
+  type ReactElement,
+} from 'react';
 import { useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
+import { BatchApprove } from './BatchApprove.tsx';
 import {
   CHANNELS,
   EMPTY_DRAFT,
   LIST_URL,
   PAGE_SIZE,
   REVIEW_MODES,
+  REVIEW_PERMISSION,
   RISK_FLAGS,
   STATUSES,
   STATUS_TABS,
   beijingTime,
+  canApprove,
   canRead,
   channelLabel,
   checkDraft,
@@ -91,7 +104,7 @@ export function Forbidden(): ReactElement {
 
 export function WithdrawalsPage({ access }: WithdrawalsPageProps): ReactElement {
   if (!canRead(access)) return <Forbidden />;
-  return <WithdrawalsList />;
+  return <WithdrawalsList reviewer={access.can(REVIEW_PERMISSION)} />;
 }
 
 /** The marks shown under a row's status (「暂停」, 执行受阻, needs_manual, hold_reason). */
@@ -105,7 +118,7 @@ export function marksOf(row: WithdrawalRow): string[] {
   return marks;
 }
 
-function WithdrawalsList(): ReactElement {
+function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactElement {
   const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const navigate = useNavigate();
@@ -129,6 +142,8 @@ function WithdrawalsList(): ReactElement {
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<ListStatus>('loading');
   const [data, setData] = useState<ListData>();
+  const [selected, setSelected] = useState<readonly string[]>([]);
+  const [batchBusy, setBatchBusy] = useState(false);
 
   // The list: page `page` of the status tab under the applied `filters`; `attempt` reads again.
   useEffect(() => {
@@ -162,6 +177,21 @@ function WithdrawalsList(): ReactElement {
     setAttempt((value) => value + 1);
   };
 
+  // The selected PENDING_REVIEW rows of the current answer, in list order.
+  const selectedRows = useMemo(
+    () =>
+      reviewer && data !== undefined
+        ? data.items.filter((row) => canApprove(row.status) && selected.includes(row.withdrawal_id))
+        : [],
+    [reviewer, data, selected],
+  );
+
+  const batchFinished = useCallback(() => {
+    setSelected([]);
+    setStatus('loading');
+    setAttempt((value) => value + 1);
+  }, []);
+
   const runQuery = () => {
     const checked = checkDraft(draft);
     if ('errors' in checked) {
@@ -172,6 +202,7 @@ function WithdrawalsList(): ReactElement {
     setApplied(draft);
     setFilters(checked.filters);
     setPage(1);
+    setSelected([]);
     reload();
   };
 
@@ -181,6 +212,7 @@ function WithdrawalsList(): ReactElement {
     setDraftErrors({});
     setFilters({});
     setPage(1);
+    setSelected([]);
     reload();
   };
 
@@ -189,12 +221,14 @@ function WithdrawalsList(): ReactElement {
     if (next === undefined || next === tab) return;
     setTab(next);
     setPage(1);
+    setSelected([]);
     reload();
   };
 
   const changePage = (pagination: TablePaginationConfig) => {
     if (pagination.current === undefined || pagination.current === page) return;
     setStatus('loading');
+    setSelected([]);
     setPage(pagination.current);
   };
 
@@ -373,6 +407,19 @@ function WithdrawalsList(): ReactElement {
         <Table<WithdrawalRow>
           rowKey="withdrawal_id"
           columns={columns}
+          {...(reviewer
+            ? {
+                rowSelection: {
+                  selectedRowKeys: selectedRows.map((row) => row.withdrawal_id),
+                  onChange: (keys: readonly Key[]) => {
+                    if (!batchBusy) setSelected(keys.map(String));
+                  },
+                  getCheckboxProps: (row: WithdrawalRow) => ({
+                    disabled: batchBusy || !canApprove(row.status),
+                  }),
+                },
+              }
+            : {})}
           dataSource={data.items as WithdrawalRow[]}
           loading={delayedLoading(status === 'loading', loadingClock)}
           scroll={{ x: 'max-content' }}
@@ -541,6 +588,13 @@ function WithdrawalsList(): ReactElement {
           style={{ paddingInline: 16 }}
           items={STATUS_TABS.map((key) => ({ key, label: t.statusTabs[key] }))}
         />
+        {reviewer ? (
+          <BatchApprove
+            rows={selectedRows}
+            onFinished={batchFinished}
+            onBusyChange={setBatchBusy}
+          />
+        ) : null}
         {body}
       </Card>
     </Flex>
