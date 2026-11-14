@@ -5,8 +5,12 @@ type: impl
 # 2026-11-14 入账（前端线 fe，编排 D10-1517 第一批 ①，提现审核写操作的第 2 张，三张依次做、不并行）。规格 couli design/specs/admin-withdrawals.md 与 admin-withdrawal-detail.md（负责人 2026-10-18 后台第 2 批定稿），写操作以主干契约为准：POST /admin/v1/withdrawals/batch-approve，响应里的逐单结果逐行显示（不通过的原因码），完成后清空已选并刷新计数（规格 §6）。
 # 范围：列表勾选（只能勾可审的单）、批量栏统计（aria-live）、批量通过确认框（画板 AdmWithdrawBatchApprove）、逐单结果。不做：批量手动打款、批量自动打款与一键组批、自动到账设置、导出（属 ② 或另单）。
 # 资金页面（apps/admin/src/**/withdrawals/** 属 RV2）：规则测试 Codex 写、独立 Claude 审；实现 Claude Opus；代码评审 money。写操作每次 StepUpModal（totp 档，BR-ID-34），提交中禁用、对话框保留，CAS / 状态已变（20902）提示后刷新；按钮按状态与权限点隐藏不置灰（规格 §6）；金额只经 @couli/money。任务书带 D10-1477（本机不裸跑全量检查）、D10-1503（推送前测试机 verify:fast）。
-refs: []
-refs_hash: {}
+# 2026-11-14 补丁 1（fe）：补 refs。批量栏（已选统计与【批量通过】）只在勾选至少一张后出现（规格 §2「勾选后点【批量通过】」、§6 隐藏不置灰），未勾选时列表与 F1-08a 冻结用例 READONLY#1 / BROWSER#1 的列表部分照旧没有可点的写入口，故不登记 modify_existing；红跑若显示冻结用例受影响再另补。
+refs: [BR-WDR-05, BR-WDR-10, BR-ID-34]
+refs_hash:
+  BR-WDR-05: 99e2e2654ce0
+  BR-WDR-10: 1db6b508e224
+  BR-ID-34: 6a2bdd4ca3ce
 deps: [F1-08ah]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'
