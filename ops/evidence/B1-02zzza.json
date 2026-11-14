@@ -1,0 +1,116 @@
+{
+  "task": "B1-02zzza",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "d03f2ec702dc4535fcf0da482c5f5079efcf2c70",
+  "red_tests": [
+    "test/spec/identity/me-masked-phone/contract.test.ts > [AC-B1-02zzza#3] Me 契约必须返回 masked_phone，接受脱敏字符串或 null",
+    "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#15] full 会话显示本人手机的前三后四位，不泄露原号或密文",
+    "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#15] deletion_only 会话显示本人手机的前三后四位，不泄露原号或密文",
+    "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#16] 未绑定手机号明确返回 masked_phone=null，不省略字段",
+    "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#17] 同 app 不同账号、不同 app 的手机号展示互不串号",
+    "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#18] 同一会话换绑后 GET /v1/me 显示新绑定手机"
+  ],
+  "risk_note": "RV2 by path (identity, contract and its generated files). B1-02zzza (split from B1-02zzz by D10-1598; D10-1610): GET /v1/me returns masked_phone (string | null, required) — null when phone_hmac is empty; otherwise users.phone_cipher decrypted with FIELD_CRYPTO (context users.phone) and masked per BR-TEXT-02 (e.g. 138****8000), the same cipher step-up.ts decrypts to send step_up codes (B1-02zzz). D10-1610: phone_hmac set but phone_cipher empty or undecryptable → masked_phone null, /v1/me still 200, one warn log with user id and reason only (phone_cipher_missing / phone_decrypt_failed), no number or cipher; pinned by unit tests [AC-B1-02zzza-UNIT#1..3] (maskedBoundPhone). Contract: Me.masked_phone with description and the GET /v1/me example; regenerated openapi.gen.ts (route generators unchanged: request side only). oasdiff: adding a response property is not breaking, nothing added to oasdiff-accepted (left to CI). No money, ledger or migration change; read-only on users.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d03f2ec702dc4535fcf0da482c5f5079efcf2c70",
+      "tree": "bcf97430603329831b37a56973ca6eb493067dfa",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-14T06:23:07Z",
+      "finished_at": "2026-11-14T06:23:22Z",
+      "red_tests": [
+        "test/spec/identity/me-masked-phone/contract.test.ts > [AC-B1-02zzza#3] Me 契约必须返回 masked_phone，接受脱敏字符串或 null",
+        "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#15] full 会话显示本人手机的前三后四位，不泄露原号或密文",
+        "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#15] deletion_only 会话显示本人手机的前三后四位，不泄露原号或密文",
+        "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#16] 未绑定手机号明确返回 masked_phone=null，不省略字段",
+        "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#17] 同 app 不同账号、不同 app 的手机号展示互不串号",
+        "test/spec/identity/me-masked-phone/me.int.test.ts > [AC-B1-02zzza#18] 同一会话换绑后 GET /v1/me 显示新绑定手机"
+      ],
+      "expected": [
+        "test/spec/identity/me-masked-phone/contract.test.ts",
+        "test/spec/identity/me-masked-phone/me.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "c13cb3039166a0268f912d8d29289cb7107326c7d85e622f92292e7508413e59"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "184e55738b813fd6d7cb87cd8a5d8b7253df00c63d47140d083f825b1604b82f"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude money review via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20, D10-1604; ops/approvals.yaml #36): r1 on the full diff: pass, no findings, no out-of-scope items (masked_phone from the same users.phone_cipher step-up decrypts, null paths, warn log without the number, app_id isolation). Static only."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by a fresh independent Claude via claude-run.sh (ledger tester claude-independent, Codex usage limit, approvals #36) in 2 attempts: attempt 1 only did the frozen me.int row (its session cannot run git, so it could not read the reviewed originals; it did not rewrite them); attempt 2 moved B1-02zzz's reviewed Me tests verbatim into me-masked-phone/ (only the AC tags changed) and did the frozen me-invite row per D10-1610 (b). Red before the implementation. spec-test r1 by another fresh independent Claude: pass, no in-scope findings (out-of-scope: the step_up_token summary binding gap, BR-ID-08 trial clause, pre-existing; the D10-1610 undecryptable-cipher case is pinned by unit tests only). Host (test machine, before push): test/spec/identity 2831/2831 green (tests/1) and verify:fast passed; main commits since then touch neither identity nor openapi."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "686d1500f4981497cb628f00cd9ddd7db74e4af8",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/identity/me/me.int.test.ts",
+      "test": "[AC-B1-02z#1] 新微信号：member、未绑手机、默认昵称头像、可补填且截止为建号 +168h、余额 0、两平台未授权、实名 none",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02z#1] 新微信号：member、未绑手机、默认昵称头像、可补填且截止为建号 +168h、余额 0、两平台未授权、实名 none', async () => {\n  const f = await fixture(kit);\n  await consentAll(kit, f);\n  const data = me(kit, await f.get());\n  // invite_code 取值改由 [AC-B1-11k#*] 覆盖（E4）：这里只断言 invite_code 键存在（字符串或 null），\n  // 其余字段照旧整体比对。\n  expect(data).toHaveProperty('invite_code');\n  const { invite_code: inviteCode, ...rest } = data;\n  expect(inviteCode === null || typeof inviteCode === 'string').toBe(true);\n  expect(rest).toEqual({\n    user_id: f.uid,\n    nickname: NICKNAME,\n    avatar_url: DEFAULT_AVATAR_URL,\n    inviter_bound: false,\n    invite_backfill: { eligible: true, deadline_at: expect.any(String) },\n    identity_level: 'member',\n    phone_bound: false,\n    balance: ZERO,\n    union_bindings: UNBOUND,\n    realname_status: 'none',\n    need_reconsent: false,\n    // Not appealing → prev_risk_state null (04 §6.1).\n    risk: riskExpected(NORMAL, null),\n  });\n  at(data.invite_backfill.deadline_at, instant(BACKFILL_MS));\n  // OPS-20: no user level (L1–L3) in the response.\n  expect(Object.keys(data)).not.toContain('level');\n});",
+      "after": "it('[AC-B1-02z#1] 新微信号：member、未绑手机、默认昵称头像、可补填且截止为建号 +168h、余额 0、两平台未授权、实名 none', async () => {\n  const f = await fixture(kit);\n  await consentAll(kit, f);\n  const data = me(kit, await f.get());\n  // invite_code 取值改由 [AC-B1-11k#*] 覆盖（E4）：这里只断言 invite_code 键存在（字符串或 null），\n  // 其余字段照旧整体比对。\n  expect(data).toHaveProperty('invite_code');\n  const { invite_code: inviteCode, ...rest } = data;\n  expect(inviteCode === null || typeof inviteCode === 'string').toBe(true);\n  expect(rest).toEqual({\n    user_id: f.uid,\n    nickname: NICKNAME,\n    avatar_url: DEFAULT_AVATAR_URL,\n    inviter_bound: false,\n    invite_backfill: { eligible: true, deadline_at: expect.any(String) },\n    identity_level: 'member',\n    phone_bound: false,\n    masked_phone: null,\n    balance: ZERO,\n    union_bindings: UNBOUND,\n    realname_status: 'none',\n    need_reconsent: false,\n    // Not appealing → prev_risk_state null (04 §6.1).\n    risk: riskExpected(NORMAL, null),\n  });\n  at(data.invite_backfill.deadline_at, instant(BACKFILL_MS));\n  // OPS-20: no user level (L1–L3) in the response.\n  expect(Object.keys(data)).not.toContain('level');\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check (old rule put back): the rule-test tree 4c1eb894b still carries main's implementation, whose Me has no masked_phone; verify-container --tests me/me.int.test.ts + me-invite/me-invite.int.test.ts on the test machine (tests/2, tree 5f88ca3dd597): this row red (toEqual misses masked_phone: null), 55 others green",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/me-invite/me-invite.int.test.ts",
+      "test": "[AC-B1-11k#12] 本人未成年隐藏本人码但保留已绑定状态，其余字段不变，不透露邀请人或实名资料",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-11k#12] 本人未成年隐藏本人码但保留已绑定状态，其余字段不变，不透露邀请人或实名资料', async () => {\n  const parent = await fixture(kit);\n  const f = await fixture(kit, { appId: parent.appId });\n  await sql`UPDATE app.users SET parent_id = ${parent.uid}, parent_bind_source = 'register',\n    parent_bound_at = ${new Date(CREATED)}, self_bind_used = true\n    WHERE app_id = ${f.appId} AND id = ${f.uid}`.execute(kit.db);\n  await sql`UPDATE app.users SET nickname = '私有邀请人昵称'\n    WHERE app_id = ${parent.appId} AND id = ${parent.uid}`.execute(kit.db);\n  await verified(kit, f, '2010-05-20');\n  const userBefore = await sql`SELECT * FROM app.users WHERE id = ${f.uid}`.execute(kit.db);\n  const realnameBefore = await sql`SELECT * FROM app.realname WHERE user_id = ${f.uid}`.execute(\n    kit.db,\n  );\n  const data = await f.get();\n  expect(data).toEqual({\n    user_id: f.uid,\n    nickname: '邀请字段测试用户',\n    avatar_url: AVATAR,\n    invite_code: null,\n    inviter_bound: true,\n    invite_backfill: { eligible: false, deadline_at: null },\n    identity_level: 'realname',\n    phone_bound: true,\n    balance: { available_fen: 0, withdrawable_fen: 0, estimated_total_fen: 0 },\n    union_bindings: [\n      { platform: 'taobao', status: 'unbound' },\n      { platform: 'pdd', status: 'unbound' },\n    ],\n    realname_status: 'verified',\n    need_reconsent: true,\n    // Normal → prev_risk_state null (04 §6.1).\n    risk: riskExpected({ state: 'normal', reason_category: null, frozen_until: null }, null),\n  });\n  const response = JSON.stringify(data);\n  for (const value of [parent.uid, parent.inviteCode, '私有邀请人昵称', NAME, '2010-05-20']) {\n    expect(response).not.toContain(value);\n  }\n  expect(kit.lines.join('\\n')).not.toContain(NAME);\n  expect(kit.lines.join('\\n')).not.toContain('2010-05-20');\n  expect((await sql`SELECT * FROM app.users WHERE id = ${f.uid}`.execute(kit.db)).rows).toEqual(\n    userBefore.rows,\n  );\n  expect(\n    (await sql`SELECT * FROM app.realname WHERE user_id = ${f.uid}`.execute(kit.db)).rows,\n  ).toEqual(realnameBefore.rows);\n});",
+      "after": "it('[AC-B1-11k#12] 本人未成年隐藏本人码但保留已绑定状态，其余字段不变，不透露邀请人或实名资料', async () => {\n  const parent = await fixture(kit);\n  const f = await fixture(kit, { appId: parent.appId });\n  await sql`UPDATE app.users SET parent_id = ${parent.uid}, parent_bind_source = 'register',\n    parent_bound_at = ${new Date(CREATED)}, self_bind_used = true\n    WHERE app_id = ${f.appId} AND id = ${f.uid}`.execute(kit.db);\n  await sql`UPDATE app.users SET nickname = '私有邀请人昵称'\n    WHERE app_id = ${parent.appId} AND id = ${parent.uid}`.execute(kit.db);\n  // B1-02zzza: phone_bound=true needs a real encrypted number so masked_phone can be derived.\n  const number = '13800138000';\n  const { FIELD_CRYPTO } = await import('../../../../apps/api/src/modules/platform/index.ts');\n  type FieldCrypto = import('../../../../apps/api/src/modules/platform/index.ts').FieldCrypto;\n  const crypto = kit.app.get<FieldCrypto>(FIELD_CRYPTO);\n  await kit.db\n    .withSchema('app')\n    .updateTable('users')\n    .set({\n      phone_hmac: crypto.blindIndex(number, 'users.phone'),\n      phone_cipher: Buffer.from(crypto.encrypt(number, 'users.phone'), 'utf8'),\n    })\n    .where('app_id', '=', f.appId)\n    .where('id', '=', f.uid)\n    .execute();\n  await verified(kit, f, '2010-05-20');\n  const userBefore = await sql`SELECT * FROM app.users WHERE id = ${f.uid}`.execute(kit.db);\n  const realnameBefore = await sql`SELECT * FROM app.realname WHERE user_id = ${f.uid}`.execute(\n    kit.db,\n  );\n  const data = await f.get();\n  expect(data).toEqual({\n    user_id: f.uid,\n    nickname: '邀请字段测试用户',\n    avatar_url: AVATAR,\n    invite_code: null,\n    inviter_bound: true,\n    invite_backfill: { eligible: false, deadline_at: null },\n    identity_level: 'realname',\n    phone_bound: true,\n    masked_phone: '138****8000',\n    balance: { available_fen: 0, withdrawable_fen: 0, estimated_total_fen: 0 },\n    union_bindings: [\n      { platform: 'taobao', status: 'unbound' },\n      { platform: 'pdd', status: 'unbound' },\n    ],\n    realname_status: 'verified',\n    need_reconsent: true,\n    // Normal → prev_risk_state null (04 §6.1).\n    risk: riskExpected({ state: 'normal', reason_category: null, frozen_until: null }, null),\n  });\n  const response = JSON.stringify(data);\n  for (const value of [parent.uid, parent.inviteCode, '私有邀请人昵称', NAME, '2010-05-20']) {\n    expect(response).not.toContain(value);\n  }\n  expect(kit.lines.join('\\n')).not.toContain(NAME);\n  expect(kit.lines.join('\\n')).not.toContain('2010-05-20');\n  expect((await sql`SELECT * FROM app.users WHERE id = ${f.uid}`.execute(kit.db)).rows).toEqual(\n    userBefore.rows,\n  );\n  expect(\n    (await sql`SELECT * FROM app.realname WHERE user_id = ${f.uid}`.execute(kit.db)).rows,\n  ).toEqual(realnameBefore.rows);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check (old rule put back): the rule-test tree 4c1eb894b still carries main's implementation, whose Me has no masked_phone; verify-container --tests me/me.int.test.ts + me-invite/me-invite.int.test.ts (tests/2, tree 5f88ca3dd597): this row red (toEqual misses masked_phone '138****8000'), 55 others green; the encrypted phone the block writes (D10-1610 (b)) only gives the bound account a real cipher",
+          "result": "killed"
+        }
+      ]
+    }
+  ]
+}
