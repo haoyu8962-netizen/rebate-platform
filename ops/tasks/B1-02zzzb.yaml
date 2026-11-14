@@ -1,0 +1,28 @@
+id: B1-02zzzb
+repo: rebate-platform
+title: 二次验证令牌绑定业务摘要：withdraw / payout_account_change 的 step_up_token 写入 summary，提现建单锁内、收款保存用户锁内比对，不符 10003（BR-ID-08 细则「绑定业务摘要」；FU-STEPUP-TOKEN-BIND-DIGEST）
+type: impl
+# 2026-11-14 w1 入账（编排 D10-1595 / D10-1619 / D10-1626 / D10-1629；方案 couli-runs/FU-STEPUP-TOKEN-BIND-DIGEST/plan.md）。资金安全缺口：契约 CT-26c 已有、实现未接——拿 100 元的提现令牌能提交 200 元，收款令牌能换账号。
+# 签发（identity application/step-up.ts）：action ∈ {withdraw, payout_account_change} 必须带与 action 配对的 summary，缺、形状不配或别的 action 带 summary → 20001 fields=[summary]（契约 POST /v1/auth/step-up 描述）；服务端算摘要串写进 claims.summary：withdraw `w:<payout_account_id>:<amount_fen>`（照抄，不查归属与余额）；支付宝 / 银行卡按 BR-WDR-02 规范化后算收款 HMAC，`p:<payout_method>:<hmac>`，不收客户端指纹；微信 `p:wechat:<attempt_id>`。日志不带摘要原文。
+# ⑫（application/step-up-verify.ts）：只把 claims.summary 透传进 withStepUp 上下文给业务，⑫ 本身不比摘要。
+# 比对：提现 payout/application/withdraw-apply.ts 在 ④ 锁内复核处，用锁内读到的当前绑定行 id 与请求 amount_fen 拼 `w:` 串比对；收款 identity payout-account / payout-bank-card / 微信保存在 users 行锁内，把请求体账号规范化算 HMAC 拼 `p:` 串比对（微信比 attempt_id）。不符 → 10003，走现有锁内拒绝回滚，withStepUp 释放预留、不核销。claims 无 summary 的令牌对这两个 action 一律 10003（D10-1629 (a)）。幂等回放不比对（现有顺序保证）。换手机号、注销不绑摘要。不动 openapi（契约已在 CT-26c），不占契约槽。
+# 冻结用例（D10-1629 (c)）：先实现，在测试机跑 test/spec/{payout,identity,risk,platform/idempotency} 整目录，把受影响的冻结文件 / 用例与改法列精确清单报编排；资金类用例改动按 D10-1356 由负责人本人确认，确认前不改冻结文件。
+# 评审：Codex 额度用尽（D10-1604），按 approvals 36 由两个互不相干的独立 Claude 各审一遍（RV2）。随单备注：D10-1595 的 S2「Me 测试只用 11 位大陆号，非 11 位号脱敏格式没钉」记在此，不单开。
+refs: [BR-ID-08, BR-WDR-02, BR-WDR-07, BR-WDR-33]
+refs_hash:
+  BR-ID-08: 9ae5b5206173
+  BR-WDR-02: b8ce66617ed9
+  BR-WDR-07: 488ce83ba0e3
+  BR-WDR-33: '7886471e9297'
+deps: [B1-02zzz]
+paths:
+  - 'apps/api/src/modules/identity/**'
+  - 'apps/api/src/modules/payout/**'
+test_paths:
+  - 'test/spec/identity/step-up-digest/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/step-up-digest/**'
+status: todo
