@@ -1414,7 +1414,7 @@ export const routes = {
     "kind": "native",
     "h5_path": null,
     "auth": "login",
-    "phase": "M-内测",
+    "phase": "M-公开",
     "since": {
       "ios": null,
       "android": "1.0.0",
