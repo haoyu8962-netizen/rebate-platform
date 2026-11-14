@@ -108,10 +108,10 @@ it('[AC-F1-14a-MENU#3] 直接打开工作台但没有权限：落第一个获准
   await mount(server, {
     permissionsProvider: async () => ({
       isSuper: false,
-      permissions: ['content.pool', 'fund.adjust'],
+      permissions: ['config.business', 'content.agreement'],
     }),
   });
-  await waitFor(() => expect(window.location.pathname).toBe('/adjustments'));
+  await waitFor(() => expect(window.location.pathname).toBe('/content'));
   expect(mainElement().textContent).toContain('尚未接入');
   expect(
     within(screen.getByRole('navigation', { name: '主导航' })).queryByRole('link', {
@@ -127,10 +127,10 @@ it('[AC-F1-14a-MENU#4] 服务端 10403 权限已撤回，跳过工作台落首�
   await mount(server, {
     permissionsProvider: async () => ({
       isSuper: false,
-      permissions: ['dashboard.view', 'fund.adjust', 'content.pool'],
+      permissions: ['dashboard.view', 'content.agreement', 'config.business'],
     }),
   });
-  await waitFor(() => expect(window.location.pathname).toBe('/adjustments'));
+  await waitFor(() => expect(window.location.pathname).toBe('/content'));
   expect(mainElement().textContent).toContain('尚未接入');
   await settled(server);
   expect(server.log.map(({ path }) => path)).toEqual([ENDPOINT]);
