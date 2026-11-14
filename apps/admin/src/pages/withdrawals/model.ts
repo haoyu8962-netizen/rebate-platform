@@ -409,3 +409,71 @@ export function parseBeijingTime(value: string): string | undefined {
     return undefined;
   return `${text.slice(0, 10)}T${text.slice(11)}+08:00`;
 }
+
+// ---- 打款队列 / 结果待确认（F1-08ba，只读） ------------------------------------------------------
+
+export type PayoutOverview = Schema<'AdminPayoutOverview'>;
+export type PayoutOverviewChannel = Schema<'AdminPayoutOverviewChannel'>;
+export type UnknownPayoutItem = Schema<'AdminUnknownPayoutItem'>;
+export type UnknownPayoutPage = Schema<'AdminUnknownPayoutPage'>;
+export type PayoutAttempt = WithdrawalDetail['payout_attempts'][number];
+
+/** GET adminGetPayoutOverview (payout.execute or fund.view, no parameters). */
+export const OVERVIEW_URL = '/admin/v1/payout-overview';
+/** GET adminListUnknownPayouts (payout.execute, page / page_size). */
+export const UNKNOWN_URL = '/admin/v1/unknown-payouts';
+
+/** The read-only payout tabs are there for fund.view or payout.execute (a super admin holds both). */
+export const canSeePayouts = (access: { can(permission: string): boolean }): boolean =>
+  access.can('fund.view') || access.can(EXECUTE_PERMISSION);
+
+/** admin_dict.admin_fund_water_level.<code>, else the code. */
+export const waterLevelLabel = (code: string): string =>
+  dictName(`admin_dict.admin_fund_water_level.${code}`, code);
+
+/** The queue tabs: 全部 (待执行 and 打款中), 打款中 (PAYING), 待执行 (APPROVED). */
+export type QueueTab = 'all' | 'paying' | 'approved';
+export const QUEUE_TABS: readonly QueueTab[] = ['all', 'paying', 'approved'];
+
+/** The statuses one queue tab reads (listAdminWithdrawals takes one status per read). */
+export function queueStatuses(tab: QueueTab): readonly WithdrawalStatus[] {
+  if (tab === 'paying') return ['PAYING'];
+  if (tab === 'approved') return ['APPROVED'];
+  return ['APPROVED', 'PAYING'];
+}
+
+/** Query of one queue read: the contract's paging and status only. */
+export const queueQuery = (
+  status: WithdrawalStatus,
+  page: number,
+): Record<string, string | number> => ({
+  page,
+  page_size: PAGE_SIZE,
+  status,
+});
+
+const timeOf = (iso: string): number => {
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+};
+
+/** Rows newest applied first (the merged 全部 of two reads). */
+export function newestFirst(rows: readonly WithdrawalRow[]): WithdrawalRow[] {
+  return [...rows].sort((a, b) => timeOf(b.created_at) - timeOf(a.created_at));
+}
+
+/** Attempts oldest first. */
+export function oldestFirst(attempts: readonly PayoutAttempt[]): PayoutAttempt[] {
+  return [...attempts].sort((a, b) => timeOf(a.at) - timeOf(b.at));
+}
+
+/** The marks shown beside a row's status (「暂停」, 执行受阻, needs_manual, hold_reason). */
+export function marksOf(row: WithdrawalRow): string[] {
+  const marks: string[] = [];
+  if (row.blocked_reason !== null) marks.push(t.paused(row.blocked_reason));
+  const blocked = row.auto_decision?.execute_blocked ?? null;
+  if (blocked !== null) marks.push(t.executeBlocked(blocked));
+  if (row.needs_manual) marks.push(t.needsManual);
+  if (row.hold_reason !== null) marks.push(t.holdReason(row.hold_reason));
+  return marks;
+}
