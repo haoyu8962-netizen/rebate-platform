@@ -43,6 +43,7 @@ import {
   panel,
   pick,
   pressSubmit,
+  prompted,
   reverseDialog,
   rowReverse,
   rowWith,
@@ -115,7 +116,9 @@ it(
     assertWrite(server, request, body, passOf(1));
     expect(server.writes()).toHaveLength(1);
 
-    await waitFor(() => expect(hasText(document.body, TEXT.reversed(createdId(1)))).toBe(true));
+    expect(yuan(50000 - 123456789)).toBe('-¥1,234,067.89');
+    const prompt = TEXT.reversedPrompt(createdId(1), '¥500.00', '-¥1,234,067.89');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await waitFor(() => expect(dialogsTitled(TEXT.reverseTitle)).toEqual([]));
     await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
     expect(server.tableReads(ADJUSTMENTS).length).toBeGreaterThan(reads);
@@ -159,7 +162,8 @@ it(
     const body: CreateReversal = { reverses_adjust_id: ADJ.otherNote, note: NOTE.reversal };
     assertWrite(server, request, body, passOf(1));
 
-    await waitFor(() => expect(hasText(document.body, TEXT.reversed(createdId(1)))).toBe(true));
+    const prompt = TEXT.reversedPrompt(createdId(1), '¥500.00', '¥499.95');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await waitFor(() => expect(server.detailReads(ADJ.otherNote).length).toBeGreaterThan(reads));
     await waitFor(() => expect(server.tableReads(ADJUSTMENTS).length).toBeGreaterThan(listReads));
     await settled(server);

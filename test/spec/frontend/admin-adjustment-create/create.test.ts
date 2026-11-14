@@ -35,6 +35,7 @@ import {
   openCreate,
   panel,
   pick,
+  prompted,
   refRows,
   rowWith,
   selectsLabelled,
@@ -138,7 +139,9 @@ it(
     expect(server.codeSends()).toHaveLength(1);
     expect(server.verifications()).toHaveLength(1);
 
-    await waitFor(() => expect(hasText(document.body, TEXT.created(createdId(1)))).toBe(true));
+    expect(yuan(50000 + amount)).toBe('¥1,235,067.89');
+    const prompt = TEXT.createdPrompt(createdId(1), '¥500.00', '¥1,235,067.89');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await waitFor(() => expect(dialogsTitled(TEXT.createTitle)).toEqual([]));
     await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
     expect(server.tableReads(ADJUSTMENTS).length).toBeGreaterThan(reads);
@@ -190,7 +193,9 @@ it(
       ],
     };
     assertWrite(server, request, body, passOf(1));
-    await waitFor(() => expect(hasText(document.body, TEXT.created(createdId(1)))).toBe(true));
+    expect(yuan(50000 - 1999)).toBe('¥480.01');
+    const prompt = TEXT.createdPrompt(createdId(1), '¥500.00', '¥480.01');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
     expect(pick(rowWith(panel(), COLUMN.id, createdId(1)), ROW_TITLES)).toEqual({
       [COLUMN.user]: USER.payee,
@@ -231,7 +236,8 @@ it(
       contra_platform: 'pdd',
     };
     assertWrite(server, once, body, passOf(1));
-    await waitFor(() => expect(hasText(document.body, TEXT.created(createdId(1)))).toBe(true));
+    const onePrompt = TEXT.createdPrompt(createdId(1), '¥500.00', '¥500.05');
+    await waitFor(() => expect(prompted(onePrompt)).toBe(true));
     await waitFor(() => expect(dialogsTitled(TEXT.createTitle)).toEqual([]));
     await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
 
@@ -260,7 +266,8 @@ it(
     };
     assertWrite(server, twice, next, passOf(2));
     expect(idemOf(twice)).not.toBe(idemOf(once));
-    await waitFor(() => expect(hasText(document.body, TEXT.created(createdId(2)))).toBe(true));
+    const twoPrompt = TEXT.createdPrompt(createdId(2), '¥500.00', '¥497.00');
+    await waitFor(() => expect(prompted(twoPrompt)).toBe(true));
     await waitColumn(COLUMN.id, [createdId(2), createdId(1), ...ADJUSTMENT_ORDER]);
     expect(server.writes()).toHaveLength(2);
     expect(server.unexpected()).toEqual([]);

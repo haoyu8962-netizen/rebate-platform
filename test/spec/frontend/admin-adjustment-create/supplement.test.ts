@@ -52,6 +52,7 @@ import {
   panel,
   pick,
   pressSubmit,
+  prompted,
   refRows,
   rowReverse,
   rowWith,
@@ -165,7 +166,8 @@ it(
     assertWrite(server, request, body, passOf(1));
     expect(server.writes()).toHaveLength(1);
 
-    await waitFor(() => expect(hasText(document.body, TEXT.reversed(createdId(1)))).toBe(true));
+    const prompt = TEXT.reversedPrompt(createdId(1), '¥500.00', '¥530.00');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await waitFor(() => expect(dialogsTitled(TEXT.reverseTitle)).toEqual([]));
     await waitColumn(COLUMN.id, [createdId(1), ...WITH_DECREASE]);
     expect(pick(rowWith(panel(), COLUMN.id, createdId(1)), ROW_TITLES)).toEqual({
@@ -315,6 +317,9 @@ it(
       contra_subject: 'BAD_DEBT',
     };
     assertWrite(server, request, body, passOf(1));
+    expect(yuan(AVAILABLE_BEFORE + 3000000000)).toBe('¥30,000,500.00');
+    const prompt = TEXT.createdPrompt(createdId(1), '¥500.00', '¥30,000,500.00');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await created(1);
     await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
     expect(pick(rowWith(panel(), COLUMN.id, createdId(1)), ROW_TITLES)).toEqual({

@@ -88,6 +88,33 @@ export const TEXT = {
   /** Success prompts (the new adjust_id of the response). */
   created: (adjustId: string): string => `调账已生效，调账单号 ${adjustId}`,
   reversed: (adjustId: string): string => `红冲已生效，红冲单号 ${adjustId}`,
+  /**
+   * The whole success prompt of a new adjustment (编排 D10-1732, BR-FUND-24 ④): three lines, each
+   * an element of its own inside one prompt — the line with the new adjust_id, then
+   * `available_before_fen` and `available_after_fen` of the response (AdminAdjustmentExecuted),
+   * each through @couli/money (a negative after is shown as the negative it is).
+   */
+  createdPrompt: (adjustId: string, before: string, after: string): readonly string[] => [
+    `调账已生效，调账单号 ${adjustId}`,
+    `调账前可用余额：${before}`,
+    `调账后可用余额：${after}`,
+  ],
+  /** The whole success prompt of a reversal (the same response schema, the reversal's labels). */
+  reversedPrompt: (adjustId: string, before: string, after: string): readonly string[] => [
+    `红冲已生效，红冲单号 ${adjustId}`,
+    `红冲前可用余额：${before}`,
+    `红冲后可用余额：${after}`,
+  ],
+  /**
+   * 编排 D10-1731: a submission that got no reply in the unified envelope (a network error, a
+   * reply that cannot be parsed) may have taken effect. The drawer / dialog then shows this notice,
+   * locks every input and offers only 【重试】 (the same Idempotency-Key and the same body) and
+   * 【去列表核对】 (close and refresh the list).
+   */
+  unknown:
+    '上次提交结果未知：可能已经生效。请按【重试】用原内容原样重新提交（不会重复记账），或按【去列表核对】查看是否已生效。',
+  retry: '重试',
+  check: '去列表核对',
 } as const;
 
 /** Labels of the drawer's controls (direction is a radio group of 调增 / 调减). */
@@ -320,6 +347,17 @@ export function stillRunning(): Response {
 export function conflict(): Response {
   return failure(20901, undefined, '幂等键冲突');
 }
+/** A gateway page instead of the unified envelope (the write did not reach the service). */
+export function unparsable(): Response {
+  return new Response('<html><body><h1>502 Bad Gateway</h1></body></html>', {
+    status: 502,
+    headers: { 'Content-Type': 'text/html' },
+  });
+}
+/** The connection drops before any reply (a write it answers did not reach the service). */
+export function networkDown(): Promise<Response> {
+  return Promise.reject(new TypeError('Failed to fetch'));
+}
 
 // ---- fake server ---------------------------------------------------------------------------
 
@@ -484,6 +522,10 @@ export function createWriteServer(options: WriteServerOptions = {}) {
   const forms: Adjustment[] = structuredClone([...adjustments(), ...(options.extra ?? [])]);
   const candidates = structuredClone(writeoffs());
   const log: RequestLog[] = [];
+  /** The body of each request exactly as sent (for byte-for-byte comparisons). */
+  const raws = new WeakMap<RequestLog, string>();
+  /** The writes that passed the permission and step-up checks (reached the body checks). */
+  const admitted = new WeakSet<RequestLog>();
   const overrides: { method: string; path: string; when: When | undefined; reply: Reply }[] = [];
   const permissions: Grants = options.permissions ?? ['fund.adjust'];
   const verifyPhone = options.verifyPhone ?? true;
@@ -655,6 +697,7 @@ export function createWriteServer(options: WriteServerOptions = {}) {
     const pass = request.headers.get('X-Step-Up-Token');
     if (pass === null || !passes.has(pass)) return stepUpRequired();
     passes.delete(pass);
+    admitted.add(request);
     const idem = request.headers.get('Idempotency-Key') ?? '';
     if (idem === '') return rejected(['Idempotency-Key']);
     const text = JSON.stringify(request.body);
@@ -695,6 +738,7 @@ export function createWriteServer(options: WriteServerOptions = {}) {
       body: typeof raw === 'string' && raw !== '' ? (JSON.parse(raw) as unknown) : undefined,
     };
     log.push(request);
+    raws.set(request, typeof raw === 'string' ? raw : '');
     inFlight += 1;
     try {
       const index = overrides.findIndex(
@@ -756,6 +800,29 @@ export function createWriteServer(options: WriteServerOptions = {}) {
     },
     once(method: string, path: string, reply: Reply, when?: When) {
       overrides.push({ method, path, when, reply });
+    },
+    /** `request` is a write that passed the permission and step-up checks. */
+    admitted(request: RequestLog): boolean {
+      return admitted.has(request);
+    },
+    /** The body text of `request` exactly as the page sent it. */
+    rawOf(request: RequestLog): string | undefined {
+      return raws.get(request);
+    },
+    /**
+     * The next matching request is handled as usual (a write takes effect and its result is kept
+     * under its Idempotency-Key), then the reply is lost: the page sees a network error.
+     */
+    lose(method: string, path: string, when?: When) {
+      overrides.push({
+        method,
+        path,
+        when,
+        reply: (request) => {
+          normal(request);
+          return networkDown();
+        },
+      });
     },
     hold(method: string, path: string, when?: When) {
       const gate = Promise.withResolvers<void>();
