@@ -6,11 +6,13 @@
 //   user's attempt of that link in that app (UPDATE … WHERE jump_reported_at IS NULL; the column
 //   also has a write-once trigger). failed does not count. No token, no / unknown / foreign
 //   attempt_id, a link_id other than the attempt's: analytics only, nothing written, no error.
-// - Every other event is accepted and not stored (the events table is CT-13e…h); the prepared
-//   batch is the connection point for the future recordEvents (CT-13h).
+// - CT-13h: the whole validated batch (link_jump included, dropped events never) is stored by
+//   analytics' recordEvents with the server-injected app / user / device and the injected Clock;
+//   repeats are deduplicated there and are neither errors nor counted as dropped.
 // linking is the only writer of link_open_attempts (规划/02 §4.1).
 import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
+import { recordEvents, type AnalyticsEvent } from '../../analytics/index.ts';
 import type { Clock } from '../../platform/index.ts';
 import { prepareEvents, type EventBatchContext, type PreparedEventBatch } from './ingest-events.ts';
 
@@ -48,6 +50,27 @@ export function createJumpReportStore(db: Kysely<DB> | undefined): JumpReportSto
   };
 }
 
+export interface EventStore {
+  /** Stores the validated events of a non-empty batch; repeats are deduplicated, not errors. */
+  record(batch: PreparedEventBatch, clock: Clock): Promise<void>;
+}
+
+export function createEventStore(db: Kysely<DB> | undefined): EventStore {
+  return {
+    async record({ appId, userId, deviceId, events }, clock) {
+      if (db === undefined) throw new Error('linking: no database handle for analytics events');
+      // props hold JSON values only: they are fields of the parsed request body.
+      await recordEvents(db, {
+        appId,
+        userId,
+        deviceId,
+        events: events as readonly AnalyticsEvent[],
+        clock,
+      });
+    },
+  };
+}
+
 /** The own-token link_jump reports of a prepared batch that may mark an attempt (once each). */
 export function jumpReportsOf(batch: PreparedEventBatch): JumpReport[] {
   const userId = batch.userId;
@@ -72,10 +95,12 @@ export interface IngestEventsResult {
 
 export class EventIntakeService {
   readonly #jumps: JumpReportStore;
+  readonly #events: EventStore;
   readonly #clock: Clock;
 
-  constructor(jumps: JumpReportStore, clock: Clock) {
+  constructor(jumps: JumpReportStore, events: EventStore, clock: Clock) {
     this.#jumps = jumps;
+    this.#events = events;
     this.#clock = clock;
   }
 
@@ -90,7 +115,8 @@ export class EventIntakeService {
       const at = this.#clock.now();
       for (const report of reports) await this.#jumps.record(report, at);
     }
-    // Connection point for CT-13h: `batch` goes to recordEvents once it exists (not in this step).
+    // CT-13h: identity comes from the batch context (server-injected), server_at from the Clock.
+    if (batch.events.length > 0) await this.#events.record(batch, this.#clock);
     return { droppedCount };
   }
 }

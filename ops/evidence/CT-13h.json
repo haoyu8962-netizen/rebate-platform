@@ -1,0 +1,143 @@
+{
+  "risk_note": "CT-13h (C-31 step 2 wiring; 编排 D10-1487 / D10-1488 / D10-1557 / D10-1589). apps/api/src/modules/linking/application/event-intake.ts gets an EventStore (createEventStore(db), like createJumpReportStore) that hands the whole validated batch of POST /v1/events (link_jump included, dropped events never) to analytics recordEvents with the server-injected app / user / device from the batch context and the injected Clock; the existing link_jump attempt marking is unchanged (one Clock instant per batch); response unchanged ({dropped_count}, duplicates neither errors nor dropped); empty batch skips the call. linking.module.ts wires it. No contract, schema or migration change. Rule tests (Codex): attempt 1 = 9 cases in test/spec/analytics/events-intake-wiring/** (one comment line reworded by a fresh independent Claude for the admin-url test-guard), red/1 9/9 PASS. Attempt 2 (D10-1589, rule_change br BR-ID-30, ruling D10-1589): only the four declared rows of the frozen B1-06zo file test/spec/linking/link-jump-report/http.int.test.ts — #19 retitled (retitle_to) and now expects the events in app.events with server identity, still no business events or click-evidence change; #8 and #9 requested/unknown compare h.evidence without its events part and allow new writes only as inserts into app.events / app.event_dedup, every other table still compared exactly. Red with the current trusted root: red/3 PASS (every change in the 4 declared blocks). Reverse checks on the test machine (couli-runs/CT-13h/reverse/): without wiring the B1-06zo file has only #19 red (tests/2); with the implementation test/spec/analytics + test/spec/linking 177 files 1788/1788 green (tests/3); probe (wiring also sets dismissed_at on the app's open attempts; probe, not the old rule, D10-1579) turns #8, #9 requested, #9 unknown red (and #10, #11, #19; tests/4). verify:fast green (verify-fast/2). #8 / #9 are attribution-evidence cases: owner-approved waits for the owner's own confirmation (D10-1356).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via codex-run.sh, couli-runs/CT-13h/review-codex-money-r1.json: pass, no findings (wiring, contract response, identity injection, redelivery, transaction boundary, BR-ID-30 retention chain)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Fresh independent Claude via claude-run.sh, couli-runs/CT-13h/review-claude-spec-test-r1.json: pass; confirms the four modify_existing entries and that no other test, http-kit.ts or vectors.ts changed. Two out-of-scope S2: (1) events 90-day deletion not pinned — already implemented by CT-13f maintenance section N (drop_expired_events_day_partitions / purge_expired_events_default / purge_expired_event_dedup); the cited maintenance/index.ts:240 comment predates the events table; (2) uncommitted wiring in the tree during review — moot, the red runs were made without the implementation."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#1] authenticated：HTTP 合规事件落库，身份取令牌与请求头，时间取注入 Clock",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#1] anonymous：HTTP 合规事件落库，身份取令牌与请求头，时间取注入 Clock",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#2] 混合批只存校验通过的事件，坏事件不占去重键，修正后仍可落库",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#3] 批内重复只落一次且不算 dropped，同 ID 不同类型与同类型不同 ID 都落库",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#4] 跨请求跨日重发不改原事件；混合新旧事件仍成功，重复不计 dropped",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#5] 并发 HTTP 重发同一事件均按契约成功，事件与去重记录各一行",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#6] link_jump requested 同时落埋点与原尝试首次时间，重发不改两者",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#6] link_jump unknown 同时落埋点与原尝试首次时间，重发不改两者",
+    "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#7] 不参与尝试标记的合规 link_jump 仍落库：失败、匿名和缺 attempt_id"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/linking/link-jump-report/http.int.test.ts",
+      "test": "[AC-B1-06zo#19] 其他全部已登记事件收下且不写库，不承诺 saved，也不生成业务事件或修改点击证据",
+      "retitle_to": "[AC-B1-06zo#19] 其他全部已登记事件收下并落进 app.events（app / 用户 / 设备取自服务端），不承诺 saved，仍不生成业务事件、不修改点击证据",
+      "reason": "rule_change",
+      "br": ["BR-ID-30"],
+      "before": "it('[AC-B1-06zo#19] 其他全部已登记事件收下且不写库，不承诺 saved，也不生成业务事件或修改点击证据', async () => {\n  const owner = await h.user();\n  const attempt = await h.attempt(owner);\n  const before = await h.row(attempt);\n  const evidence = await h.evidence(owner.appId);\n  h.clearObserved();\n  await accepted(\n    await h.post(owner, { events: allEvents().filter((event) => event['name'] !== 'link_jump') }),\n  );\n  expect(await h.evidence(owner.appId)).toEqual(evidence);\n  expect(await h.row(attempt)).toEqual(before);\n  expect(h.mutations).toEqual([]);\n});",
+      "after": "it('[AC-B1-06zo#19] 其他全部已登记事件收下并落进 app.events（app / 用户 / 设备取自服务端），不承诺 saved，仍不生成业务事件、不修改点击证据', async () => {\n  const owner = await h.user();\n  const attempt = await h.attempt(owner);\n  const before = await h.row(attempt);\n  const evidence = await h.evidence(owner.appId);\n  const events = allEvents()\n    .filter((event) => event['name'] !== 'link_jump')\n    .map((event): Record<string, unknown> => ({\n      ...event,\n      app_id: 'forged-app',\n      user_id: randomUUID(),\n      device_id: randomUUID(),\n    }));\n  h.clearObserved();\n  await accepted(await h.post(owner, { events }));\n  const after = await h.evidence(owner.appId);\n  expect(without(after, 'events')).toEqual(without(evidence, 'events'));\n  expect(after.events).toHaveLength(events.length);\n  expect(after.events.map((row) => row.event_id).sort()).toEqual(\n    events.map((event) => event['event_id']).sort(),\n  );\n  for (const event of events) {\n    expect(after.events.find((row) => row.event_id === event['event_id'])).toMatchObject({\n      event_id: event['event_id'],\n      name: event['name'],\n      app_id: owner.appId,\n      user_id: owner.uid,\n      device_id: owner.deviceId,\n    });\n  }\n  expect(await h.row(attempt)).toEqual(before);\n  for (const mutation of h.mutations) {\n    expect(JSON.parse(mutation)).toMatchObject({\n      kind: 'InsertQueryNode',\n      into: {\n        table: {\n          schema: { name: 'app' },\n          identifier: { name: expect.stringMatching(/^(events|event_dedup)$/u) },\n        },\n      },\n    });\n  }\n});",
+      "mutation": [
+        {
+          "mutant": "the old rule: CT-13h wiring removed (main behaviour, implementation not in the tree); couli-ci --tests test/spec/linking/link-jump-report/http.int.test.ts (CT-13h tests/2) put this test red, every other test of the file green",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/linking/link-jump-report/http.int.test.ts",
+      "test": "[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份与 deviceId 从服务端取并整理为约定形状",
+      "reason": "rule_change",
+      "br": ["BR-ID-30"],
+      "before": "it('[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份与 deviceId 从服务端取并整理为约定形状', async () => {\n  const owner = await h.user();\n  const attempt = await h.attempt(owner);\n  const event = jump({ ...attempt, user_id: randomUUID(), device_id: 'forged-device' });\n  const before = await h.row(attempt);\n  h.clearObserved();\n  await accepted(await h.post(owner, { events: [event] }, { authorization: undefined }));\n  expect(await h.row(attempt)).toEqual(before);\n  expect(h.prepared()).toHaveLength(1);\n  expect(h.prepared()[0]?.batch).toMatchObject({\n    appId: owner.appId,\n    userId: null,\n    deviceId: owner.deviceId,\n  });\n  expect(h.mutations).toEqual([]);\n\n  h.clearObserved();\n  await rejected(\n    await h.post(\n      owner,\n      { events: [event] },\n      { authorization: undefined, 'x-device-id': undefined },\n    ),\n    400,\n    20001,\n  );\n  expect(h.prepared()).toHaveLength(0);\n  expect(await h.row(attempt)).toEqual(before);\n  expect(h.mutations).toEqual([]);\n\n  h.clearObserved();\n  await accepted(await h.post(owner, { events: [event] }));\n  expect((await h.row(attempt)).jump_reported_at?.toISOString()).toBe(NOW);\n  expect(h.prepared()).toHaveLength(1);\n  const batch = h.prepared()[0]!.batch;\n  expect(batch).toMatchObject({ appId: owner.appId, userId: owner.uid, deviceId: owner.deviceId });\n  expect(batch.events).toHaveLength(1);\n  expect(batch.events[0]).toMatchObject({\n    eventId: event['event_id'],\n    eventType: 'link_jump',\n    clientAt: CLIENT_AT,\n  });\n  for (const key of ['event_id', 'name', 'client_at', 'user_id', 'device_id']) {\n    expect(batch.events[0]?.props).not.toHaveProperty(key);\n  }\n  // CT-13g specifies X-Device-Id, even when the access token names another device.\n  const headerDevice = randomUUID();\n  h.clearObserved();\n  await accepted(await h.post(owner, { events: [common()] }, { 'x-device-id': headerDevice }));\n  expect(h.prepared()[0]?.batch).toMatchObject({ userId: owner.uid, deviceId: headerDevice });\n});",
+      "after": "it('[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份与 deviceId 从服务端取并整理为约定形状', async () => {\n  const owner = await h.user();\n  const attempt = await h.attempt(owner);\n  const event = jump({ ...attempt, user_id: randomUUID(), device_id: 'forged-device' });\n  const before = await h.row(attempt);\n  const evidence = await h.evidence(owner.appId);\n  h.clearObserved();\n  await accepted(await h.post(owner, { events: [event] }, { authorization: undefined }));\n  expect(await h.row(attempt)).toEqual(before);\n  expect(h.prepared()).toHaveLength(1);\n  expect(h.prepared()[0]?.batch).toMatchObject({\n    appId: owner.appId,\n    userId: null,\n    deviceId: owner.deviceId,\n  });\n  expect(without(await h.evidence(owner.appId), 'events')).toEqual(without(evidence, 'events'));\n  // Any newly inserted rows may belong only to the two analytics tables.\n  for (const mutation of h.mutations) {\n    expect(JSON.parse(mutation)).toMatchObject({\n      kind: 'InsertQueryNode',\n      into: {\n        table: {\n          schema: { name: 'app' },\n          identifier: { name: expect.stringMatching(/^(events|event_dedup)$/u) },\n        },\n      },\n    });\n  }\n\n  h.clearObserved();\n  await rejected(\n    await h.post(\n      owner,\n      { events: [event] },\n      { authorization: undefined, 'x-device-id': undefined },\n    ),\n    400,\n    20001,\n  );\n  expect(h.prepared()).toHaveLength(0);\n  expect(await h.row(attempt)).toEqual(before);\n  expect(h.mutations).toEqual([]);\n\n  h.clearObserved();\n  await accepted(await h.post(owner, { events: [event] }));\n  expect((await h.row(attempt)).jump_reported_at?.toISOString()).toBe(NOW);\n  expect(h.prepared()).toHaveLength(1);\n  const batch = h.prepared()[0]!.batch;\n  expect(batch).toMatchObject({ appId: owner.appId, userId: owner.uid, deviceId: owner.deviceId });\n  expect(batch.events).toHaveLength(1);\n  expect(batch.events[0]).toMatchObject({\n    eventId: event['event_id'],\n    eventType: 'link_jump',\n    clientAt: CLIENT_AT,\n  });\n  for (const key of ['event_id', 'name', 'client_at', 'user_id', 'device_id']) {\n    expect(batch.events[0]?.props).not.toHaveProperty(key);\n  }\n  // CT-13g specifies X-Device-Id, even when the access token names another device.\n  const headerDevice = randomUUID();\n  h.clearObserved();\n  await accepted(await h.post(owner, { events: [common()] }, { 'x-device-id': headerDevice }));\n  expect(h.prepared()[0]?.batch).toMatchObject({ userId: owner.uid, deviceId: headerDevice });\n});",
+      "mutation": [
+        {
+          "mutant": "probe, not the old rule (D10-1579 / D10-1589; uncommitted, reverted, not pushed; diff couli-runs/CT-13h/reverse/probe-on-impl.diff): on top of the CT-13h implementation the wiring also sets dismissed_at on the app's open link_open_attempts before recordEvents; couli-ci --tests test/spec/linking/link-jump-report/http.int.test.ts (CT-13h tests/4) put this test red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/linking/link-jump-report/http.int.test.ts",
+      "test": "[AC-B1-06zo#9] 本人 requested 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变",
+      "reason": "rule_change",
+      "br": ["BR-ID-30"],
+      "before": "it.each(['requested', 'unknown'] as const)(\n  '[AC-B1-06zo#9] 本人 %s 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变',\n  async (result) => {\n    const owner = await h.user();\n    const attempt = await h.attempt(owner);\n    const another = await h.attempt(owner, attempt.link_id);\n    const original = await h.row(attempt);\n    const untouched = await h.row(another);\n    const evidence = await h.evidence(owner.appId);\n    h.clearObserved();\n    await accepted(await h.post(owner, { events: [jump({ ...attempt, result })] }));\n    const row = await h.row(attempt);\n    expect(row.jump_reported_at?.toISOString()).toBe(NOW);\n    expect(row).toMatchObject({\n      attempt_id: original.attempt_id,\n      app_id: original.app_id,\n      user_id: original.user_id,\n      link_id: original.link_id,\n      opened_at: original.opened_at,\n      created_at: original.created_at,\n      dismissed_at: original.dismissed_at,\n    });\n    expect(await h.row(another)).toEqual(untouched);\n    expect(await h.evidence(owner.appId)).toEqual(evidence);\n    expect(h.mutations.length).toBeGreaterThan(0);\n    for (const mutation of h.mutations) {\n      expect(JSON.parse(mutation)).toMatchObject({\n        kind: 'UpdateQueryNode',\n        table: { kind: 'TableNode', table: { identifier: { name: 'link_open_attempts' } } },\n      });\n    }\n  },\n);\n// .each row 1 of 2: 'requested'",
+      "after": "it.each(['requested', 'unknown'] as const)(\n  '[AC-B1-06zo#9] 本人 %s 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变',\n  async (result) => {\n    const owner = await h.user();\n    const attempt = await h.attempt(owner);\n    const another = await h.attempt(owner, attempt.link_id);\n    const original = await h.row(attempt);\n    const untouched = await h.row(another);\n    const evidence = await h.evidence(owner.appId);\n    h.clearObserved();\n    await accepted(await h.post(owner, { events: [jump({ ...attempt, result })] }));\n    const row = await h.row(attempt);\n    expect(row.jump_reported_at?.toISOString()).toBe(NOW);\n    expect(row).toMatchObject({\n      attempt_id: original.attempt_id,\n      app_id: original.app_id,\n      user_id: original.user_id,\n      link_id: original.link_id,\n      opened_at: original.opened_at,\n      created_at: original.created_at,\n      dismissed_at: original.dismissed_at,\n    });\n    expect(await h.row(another)).toEqual(untouched);\n    expect(without(await h.evidence(owner.appId), 'events')).toEqual(without(evidence, 'events'));\n    const businessMutations = h.mutations.filter((mutation) => {\n      const node = JSON.parse(mutation) as { kind: string };\n      if (node.kind !== 'InsertQueryNode') return true;\n      // New rows are allowed only in analytics; all other writes retain the original checks.\n      expect(node).toMatchObject({\n        kind: 'InsertQueryNode',\n        into: {\n          table: {\n            schema: { name: 'app' },\n            identifier: { name: expect.stringMatching(/^(events|event_dedup)$/u) },\n          },\n        },\n      });\n      return false;\n    });\n    expect(businessMutations.length).toBeGreaterThan(0);\n    for (const mutation of businessMutations) {\n      expect(JSON.parse(mutation)).toMatchObject({\n        kind: 'UpdateQueryNode',\n        table: { kind: 'TableNode', table: { identifier: { name: 'link_open_attempts' } } },\n      });\n    }\n  },\n);\n// .each row 1 of 2: 'requested'",
+      "mutation": [
+        {
+          "mutant": "probe, not the old rule (D10-1579 / D10-1589; uncommitted, reverted, not pushed; diff couli-runs/CT-13h/reverse/probe-on-impl.diff): on top of the CT-13h implementation the wiring also sets dismissed_at on the app's open link_open_attempts before recordEvents; couli-ci --tests test/spec/linking/link-jump-report/http.int.test.ts (CT-13h tests/4) put this test red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/linking/link-jump-report/http.int.test.ts",
+      "test": "[AC-B1-06zo#9] 本人 unknown 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变",
+      "reason": "rule_change",
+      "br": ["BR-ID-30"],
+      "before": "it.each(['requested', 'unknown'] as const)(\n  '[AC-B1-06zo#9] 本人 %s 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变',\n  async (result) => {\n    const owner = await h.user();\n    const attempt = await h.attempt(owner);\n    const another = await h.attempt(owner, attempt.link_id);\n    const original = await h.row(attempt);\n    const untouched = await h.row(another);\n    const evidence = await h.evidence(owner.appId);\n    h.clearObserved();\n    await accepted(await h.post(owner, { events: [jump({ ...attempt, result })] }));\n    const row = await h.row(attempt);\n    expect(row.jump_reported_at?.toISOString()).toBe(NOW);\n    expect(row).toMatchObject({\n      attempt_id: original.attempt_id,\n      app_id: original.app_id,\n      user_id: original.user_id,\n      link_id: original.link_id,\n      opened_at: original.opened_at,\n      created_at: original.created_at,\n      dismissed_at: original.dismissed_at,\n    });\n    expect(await h.row(another)).toEqual(untouched);\n    expect(await h.evidence(owner.appId)).toEqual(evidence);\n    expect(h.mutations.length).toBeGreaterThan(0);\n    for (const mutation of h.mutations) {\n      expect(JSON.parse(mutation)).toMatchObject({\n        kind: 'UpdateQueryNode',\n        table: { kind: 'TableNode', table: { identifier: { name: 'link_open_attempts' } } },\n      });\n    }\n  },\n);\n// .each row 2 of 2: 'unknown'",
+      "after": "it.each(['requested', 'unknown'] as const)(\n  '[AC-B1-06zo#9] 本人 %s 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变',\n  async (result) => {\n    const owner = await h.user();\n    const attempt = await h.attempt(owner);\n    const another = await h.attempt(owner, attempt.link_id);\n    const original = await h.row(attempt);\n    const untouched = await h.row(another);\n    const evidence = await h.evidence(owner.appId);\n    h.clearObserved();\n    await accepted(await h.post(owner, { events: [jump({ ...attempt, result })] }));\n    const row = await h.row(attempt);\n    expect(row.jump_reported_at?.toISOString()).toBe(NOW);\n    expect(row).toMatchObject({\n      attempt_id: original.attempt_id,\n      app_id: original.app_id,\n      user_id: original.user_id,\n      link_id: original.link_id,\n      opened_at: original.opened_at,\n      created_at: original.created_at,\n      dismissed_at: original.dismissed_at,\n    });\n    expect(await h.row(another)).toEqual(untouched);\n    expect(without(await h.evidence(owner.appId), 'events')).toEqual(without(evidence, 'events'));\n    const businessMutations = h.mutations.filter((mutation) => {\n      const node = JSON.parse(mutation) as { kind: string };\n      if (node.kind !== 'InsertQueryNode') return true;\n      // New rows are allowed only in analytics; all other writes retain the original checks.\n      expect(node).toMatchObject({\n        kind: 'InsertQueryNode',\n        into: {\n          table: {\n            schema: { name: 'app' },\n            identifier: { name: expect.stringMatching(/^(events|event_dedup)$/u) },\n          },\n        },\n      });\n      return false;\n    });\n    expect(businessMutations.length).toBeGreaterThan(0);\n    for (const mutation of businessMutations) {\n      expect(JSON.parse(mutation)).toMatchObject({\n        kind: 'UpdateQueryNode',\n        table: { kind: 'TableNode', table: { identifier: { name: 'link_open_attempts' } } },\n      });\n    }\n  },\n);\n// .each row 2 of 2: 'unknown'",
+      "mutation": [
+        {
+          "mutant": "probe, not the old rule (D10-1579 / D10-1589; uncommitted, reverted, not pushed; diff couli-runs/CT-13h/reverse/probe-on-impl.diff): on top of the CT-13h implementation the wiring also sets dismissed_at on the app's open link_open_attempts before recordEvents; couli-ci --tests test/spec/linking/link-jump-report/http.int.test.ts (CT-13h tests/4) put this test red",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "CT-13h",
+  "spec_commit": "4f098129b546bfaf4af1da88e9e37c182ac827ee",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "4f098129b546bfaf4af1da88e9e37c182ac827ee",
+      "tree": "990c5f31dda46abc2e8a6c8128a50cd268795c52",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-14T02:20:21Z",
+      "finished_at": "2026-11-14T02:20:34Z",
+      "red_tests": [
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#1] authenticated：HTTP 合规事件落库，身份取令牌与请求头，时间取注入 Clock",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#1] anonymous：HTTP 合规事件落库，身份取令牌与请求头，时间取注入 Clock",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#2] 混合批只存校验通过的事件，坏事件不占去重键，修正后仍可落库",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#3] 批内重复只落一次且不算 dropped，同 ID 不同类型与同类型不同 ID 都落库",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#4] 跨请求跨日重发不改原事件；混合新旧事件仍成功，重复不计 dropped",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#5] 并发 HTTP 重发同一事件均按契约成功，事件与去重记录各一行",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#6] link_jump requested 同时落埋点与原尝试首次时间，重发不改两者",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#6] link_jump unknown 同时落埋点与原尝试首次时间，重发不改两者",
+        "test/spec/analytics/events-intake-wiring/http.int.test.ts > [AC-CT-13h#7] 不参与尝试标记的合规 link_jump 仍落库：失败、匿名和缺 attempt_id"
+      ],
+      "expected": ["test/spec/analytics/events-intake-wiring/http.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "9a5424cee37fad95faba80a91b87267891beb565a6294bd644d9b478aa20abd1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e609b9cf50076abd26c2309635bc15849723320e",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}

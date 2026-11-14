@@ -104,7 +104,11 @@ import { SharesController } from './http/public/shares.controller.ts';
 import { LinkOpenController } from './http/public/open.controller.ts';
 import { LinkConvertController } from './http/public/convert.controller.ts';
 import { IngestEventsController } from './http/public/events.controller.ts';
-import { EventIntakeService, createJumpReportStore } from './application/event-intake.ts';
+import {
+  EventIntakeService,
+  createEventStore,
+  createJumpReportStore,
+} from './application/event-intake.ts';
 import { UNION_AUTH_URL, UnionAuthUrlController } from './http/public/auth-url.controller.ts';
 import { createUnionAuthUrl, type UnionAuthUrlService } from './application/union-auth-url.ts';
 import { createDemoUnionAuthApps, type UnionAuthApps } from './infra/auth-apps.ts';
@@ -615,12 +619,13 @@ export class LinkingModule {
       ],
       providers: [
         {
-          // B1-06zo: POST /v1/events. Writes only link_open_attempts.jump_reported_at (own-token
-          // link_jump reports); without a database handle such a write fails at call time.
+          // B1-06zo / CT-13h: POST /v1/events. Writes link_open_attempts.jump_reported_at (own-token
+          // link_jump reports) and, through analytics, the validated events; without a database
+          // handle such a write fails at call time.
           provide: EventIntakeService,
           inject: [{ token: DB, optional: true }, CLOCK],
           useFactory: (db: Kysely<Database> | undefined, clock: Clock): EventIntakeService =>
-            new EventIntakeService(createJumpReportStore(db), clock),
+            new EventIntakeService(createJumpReportStore(db), createEventStore(db), clock),
         },
         {
           provide: LINK_OPEN_PROCESS,
